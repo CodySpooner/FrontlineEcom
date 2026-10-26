@@ -96,9 +96,9 @@ test('missions: 4 per store; completing one pays the commander once', async () =
   db.prepare(`UPDATE agents SET enabled = 0 WHERE id = 'peak:product_hunter'`).run();
   expect(await get<Mission[]>('/api/missions?stores=peak')).toHaveLength(3);
 
-  const before = (await get<Commander>('/api/commander')).xp;
   for (const r of db.prepare(`SELECT id FROM approvals WHERE store_id = 'glow' AND status = 'pending'`).all()) decide(db, String(r.id), 'approve');
   await tick();
+  const before = (await get<Commander>('/api/commander')).xp; // after the approvals: the demo add-products request now really adds them (XP of its own)
   const seen = await xpMessages(() => get('/api/missions?stores=glow'));
   expect(seen.map((s) => s.xp.reason)).toContain('Mission complete: Clear all agent requests');
   expect(await xpMessages(() => get('/api/missions?stores=glow'))).toEqual([]);

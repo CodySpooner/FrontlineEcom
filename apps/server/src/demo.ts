@@ -136,9 +136,16 @@ const PRODUCTS: Record<string, [title: string, price: number, compareAt: number,
 };
 
 const APPROVALS = [
-  { storeId: 'peak', role: 'ad_strategist', title: 'Pause 2 losing ad sets', reason: 'Losing $45/day for 4 days straight', action: { kind: 'ads.pause_adsets', payload: { campaignId: 'peak-c3', adsets: 2 } } },
+  { storeId: 'peak', role: 'ad_strategist', title: 'Pause "Spark Ads · UGC"', reason: 'Losing $45/day for 4 days straight', action: { kind: 'ads.pause_campaign', payload: { network: 'tiktok', campaignId: 'peak-c3' } } },
   { storeId: 'pawsome', role: 'ad_strategist', title: 'Raise daily budget 20% ($60 → $72)', reason: 'ROAS above 3.0 for 5 days', action: { kind: 'ads.set_budget', payload: { campaignId: 'pawsome-c1', from: 60, to: 72 } } },
-  { storeId: 'glow', role: 'product_hunter', title: 'Add 3 trending products to the store', reason: 'AI score 85+, about 60% margin', action: { kind: 'store.add_products', payload: { count: 3 } } },
+  {
+    storeId: 'glow', role: 'product_hunter', title: 'Add 3 trending products to the store', reason: 'AI score 85+, about 60% margin',
+    action: { kind: 'store.add_products', payload: { products: [
+      { title: 'Gua Sha Stone Set', price: 24.99, compareAt: 39.99, cost: 5.2 },
+      { title: 'Heated Eyelash Curler', price: 29.99, compareAt: 44.99, cost: 6.8 },
+      { title: 'Blue Light Acne Pen', price: 34.99, compareAt: 59.99, cost: 8.4 },
+    ] } },
+  },
 ];
 
 const SUPPLIERS = ['CJ Dropshipping', 'DSers', 'Zendrop'];
@@ -243,6 +250,9 @@ export function seedDemo(db: Db, today = localDate()) {
       const appr = db.prepare('INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
       APPROVALS.forEach((a, i) => appr.run(`demo-appr-${i + 1}`, a.storeId, `${a.storeId}:${a.role}`, a.title, a.reason, JSON.stringify(a.action), 'pending', new Date(Date.now() - (i + 1) * 3600000).toISOString()));
     }
+    // Seeded requests still waiting get the current wording and payload (earlier seeds had kinds nothing executes).
+    const fix = db.prepare("UPDATE approvals SET title = ?, action_json = ? WHERE id = ? AND status = 'pending'");
+    APPROVALS.forEach((a, i) => fix.run(a.title, JSON.stringify(a.action), `demo-appr-${i + 1}`));
     for (const { id } of db.prepare('SELECT id FROM stores WHERE demo = 1').all()) topUp(db, String(id), today);
   });
 }
