@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
-import { CREDITS, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
+import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
 import { searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
 import { getPageDraft, listPageDrafts, savePageDraft, unsafeHtml } from './pages';
@@ -381,19 +381,28 @@ export const APP_TOOLS: AppTool[] = [
       if (!prompt) return 'Not generated: media needs a prompt (the visual brief).';
       const credits = CREDITS[kind];
       const used = creditsToday(ctx.db, ctx.store.id);
+      const asked = creditsAsked(ctx.db, ctx.store.id);
       const cap = ctx.caps?.(ctx.store.id).higgsfieldCreditsPerDay ?? Infinity;
-      if (used + credits > cap) return `Not generated: it needs ${credits} credits and ${used} of today's ${cap}-credit cap are used. Suggest it for tomorrow instead.`;
+      if (used + asked + credits > cap) {
+        return `Not generated: it needs ${credits} credits and ${used} of today's ${cap}-credit cap are used${asked ? ` (${asked} more asked, waiting on the owner)` : ''}. Suggest it for tomorrow instead.`;
+      }
       const { approved, message } = await requestApproval(ctx, {
         title: `Generate ${aspect} ${kind} ad: ${headline}`.slice(0, 80),
         reason: `${credits} generation credits (${used}/${cap} used today). Brief: ${prompt}`.slice(0, 400),
         action: { kind: 'creative.generate', payload: { kind, aspect, prompt, headline, primaryText, cta, credits } },
       });
       if (!approved) return message;
+      // Other renders may have been approved while this one waited.
+      const now = creditsToday(ctx.db, ctx.store.id);
+      if (now + credits > cap) return `${message}, but not generated: other renders used ${now} of today's ${cap}-credit cap meanwhile. Suggest it for tomorrow instead.`;
+      // ponytail: charged before the render, so a failure after Higgsfield took it (timeout, download) still counts; a
+      // request it refused counts too, on the cap's side.
+      chargeCredits(ctx.db, ctx.store.id, credits);
       let mediaUrl: string | undefined;
       try {
         mediaUrl = await ctx.generateMedia?.({ kind, aspect, prompt }, ctx.signal);
       } catch (e) {
-        return `${message}, but generation failed: ${(e as Error).message}. Nothing was saved; failed renders are not charged by Higgsfield.`;
+        return `${message}, but generation failed: ${(e as Error).message}. Nothing was saved; its ${credits} credits still count toward today's cap (Higgsfield may have charged them), so don't retry it unasked.`;
       }
       if (mediaUrl) {
         const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'higgsfield', mediaUrl });

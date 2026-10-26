@@ -23,7 +23,7 @@ export { APP_TOOLS, OUTLIVE_RUN, budgetAddedToday, cash, toolsFor, callTool, req
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
 export { createRunManager, getRun, listRuns, costToday, runGist, type RunManager, type RunManagerOptions } from './runs';
 export { XP, xpForLevel, levelForXp, levelProgress, rankForLevel, demoXp, awardXp, commander, profitStreak, dailyMissions, ACHIEVEMENTS, checkAchievements, type Award, type Facts, type StoreDay } from './gamification';
-export { CREDITS, saveCreative, listCreatives, deleteCreative, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
+export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats, type Economics, type Verdict } from './ads';
 export { DEFAULT_JOBS, createDefaultJobs, enableDefaultJobs } from './jobs';
 export { nicheKey, addNicheLearning, listNicheLearnings, deleteNicheLearning } from './niche';

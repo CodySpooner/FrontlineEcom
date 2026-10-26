@@ -35,12 +35,24 @@ export function listCreatives(db: DatabaseSync, q: { storeIds?: string[]; kind?:
 
 export const deleteCreative = (db: DatabaseSync, id: string) => db.prepare('DELETE FROM creatives WHERE id = ?').run(id).changes > 0;
 
+/** Records generation credits as spent, before the render: deleting the creative later doesn't give them back. */
+export const chargeCredits = (db: DatabaseSync, storeId: string, credits: number) =>
+  db.prepare('INSERT INTO creative_credits (store_id, credits, created_at) VALUES (?, ?, ?)').run(storeId, credits, new Date().toISOString());
+
 /** Generation credits the store spent since local midnight. */
 export function creditsToday(db: DatabaseSync, storeId: string): number {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
-  return Number(db.prepare('SELECT coalesce(sum(credits), 0) AS n FROM creatives WHERE store_id = ? AND created_at >= ?').get(storeId, midnight.toISOString())?.n ?? 0);
+  return Number(db.prepare('SELECT coalesce(sum(credits), 0) AS n FROM creative_credits WHERE store_id = ? AND created_at >= ?').get(storeId, midnight.toISOString())?.n ?? 0);
 }
+
+/** Credits of the store's render requests still waiting on the owner. */
+export const creditsAsked = (db: DatabaseSync, storeId: string) =>
+  Number(
+    db
+      .prepare(`SELECT coalesce(sum(json_extract(action_json, '$.payload.credits')), 0) AS n FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') = 'creative.generate'`)
+      .get(storeId)?.n ?? 0,
+  );
 
 const SIZE: Record<AspectRatio, [number, number]> = { '1:1': [1080, 1080], '4:5': [1080, 1350], '9:16': [1080, 1920], '16:9': [1920, 1080] };
 const xml = (s: string) => s.replace(/[<>&"']/g, (ch) => `&#${ch.charCodeAt(0)};`);

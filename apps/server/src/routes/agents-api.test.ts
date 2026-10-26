@@ -81,7 +81,7 @@ test("usage: today's AI cost, credits and added ad budget per store, the counter
   expect(before.map((u) => u.storeId)).toEqual(['glow']);
   db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, cost_usd, created_at) VALUES ('u1', 'glow', 'glow:copywriter', 't', 0.25, ?)`).run(now);
   db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, cost_usd, created_at) VALUES ('u2', 'glow', 'glow:copywriter', 't', 9, '2020-01-01T00:00:00Z')`).run();
-  db.prepare(`INSERT INTO creatives (id, store_id, agent_id, kind, headline, primary_text, credits, source, created_at) VALUES ('u3', 'glow', 'glow:creative_studio', 'image', 'h', 'p', 2, 'demo', ?)`).run(now);
+  db.prepare(`INSERT INTO creative_credits (store_id, credits, created_at) VALUES ('glow', 2, ?)`).run(now);
   const budget = (id: string, status: string) =>
     db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'glow', 'glow:ad_strategist', 't', 'r', ?, ?, ?)`)
       .run(id, JSON.stringify({ kind: 'ads.set_budget', payload: {}, amountUsd: 12 }), status, now);

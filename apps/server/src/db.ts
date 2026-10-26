@@ -442,6 +442,15 @@ export const MIGRATIONS = [
   /* 27 (core: the owner's optional reason for a denial) */ `
   ALTER TABLE approvals ADD COLUMN decision_note TEXT;
   `,
+  /* 28 (agents lane: generation credits spent, kept when a creative is deleted) */ `
+  CREATE TABLE creative_credits (
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    credits INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX creative_credits_by_store ON creative_credits (store_id, created_at);
+  INSERT INTO creative_credits SELECT store_id, credits, created_at FROM creatives WHERE credits > 0;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

@@ -1,4 +1,4 @@
-import { demoMedia, wrap, fakeEngine, getAgent, listCreatives, runAgent, type FakeStep, type RunInput, type ToolEnv } from '@frontline/agents';
+import { chargeCredits, creditsToday, demoMedia, wrap, fakeEngine, getAgent, listCreatives, runAgent, type FakeStep, type RunInput, type ToolEnv } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, Creative } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -72,6 +72,38 @@ test("the store's daily credit cap stops generation before asking", async () => 
   expect(outputs[0]).toBe("Not generated: it needs 20 credits and 20 of today's 30-credit cap are used. Suggest it for tomorrow instead.");
   expect(requests).toHaveLength(1); // the image still fits
   expect((await run('glow:creative_studio', [ad('image', { prompt: undefined })])).outputs[0]).toBe('Not generated: media needs a prompt (the visual brief).');
+});
+
+test("credits stay spent when a creative is deleted or its render fails, and asked renders hold the cap's room", async () => {
+  updateCaps(db, 'glow', { higgsfieldCreditsPerDay: 50 });
+  await run('glow:creative_studio', [ad('video')]);
+  const [video] = listCreatives(db, { storeIds: ['glow'] });
+  expect((await app.request(`/api/creatives/${video!.id}`, { method: 'DELETE' })).status).toBe(204);
+  expect(creditsToday(db, 'glow')).toBe(20);
+
+  generateMedia = async () => {
+    throw new Error('Higgsfield render still running after 10 min (request r-9)');
+  };
+  expect((await run('glow:creative_studio', [ad('video')])).outputs[0]).toMatch(/its 20 credits still count toward today's cap/);
+  expect(creditsToday(db, 'glow')).toBe(40);
+
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('w', 'glow', 'glow:copywriter', 't', 'r', ?, 'pending', ?)`).run(
+    JSON.stringify({ kind: 'creative.generate', payload: { credits: 9 } }), new Date().toISOString(),
+  );
+  const asked = await run('glow:creative_studio', [ad('image')]); // 40 + 2 fits, but not with the 9 already asked
+  expect(asked.outputs[0]).toBe("Not generated: it needs 2 credits and 40 of today's 50-credit cap are used (9 more asked, waiting on the owner). Suggest it for tomorrow instead.");
+});
+
+test('a render approved after the cap filled up meanwhile is not generated', async () => {
+  updateCaps(db, 'glow', { higgsfieldCreditsPerDay: 30 });
+  const outputs: string[] = [];
+  for await (const e of runAgent(input('glow:creative_studio'), fakeEngine(() => [ad('video')]))) {
+    if (e.type === 'approval_request') chargeCredits(db, 'glow', 20), decide(db, e.approval.id, 'approve'); // another render took the room
+    if (e.type === 'tool_result') outputs.push(e.output);
+  }
+  expect(outputs[0]).toMatch(/but not generated: other renders used 20 of today's 30-credit cap meanwhile/);
+  expect(creditsToday(db, 'glow')).toBe(20);
+  expect(listCreatives(db, { storeIds: ['glow'] })).toEqual([]);
 });
 
 test('demo renders escape the text they draw', () => {
