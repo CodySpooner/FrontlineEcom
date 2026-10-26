@@ -115,6 +115,7 @@ test('GET /api/health lists each connector state without secrets', async () => {
   expect(JSON.parse(res)).toEqual({
     ok: true,
     uptimeSec: expect.any(Number),
+    version: 'dev',
     connectors: [
       { id: 'cj:global', kind: 'cj', status: 'connected', syncedAt: '2026-10-26T10:00:00.000Z' },
       { id: 'shopify:glow', kind: 'shopify', storeId: 'glow', status: 'error', error: 'Shopify rejected the access token' },

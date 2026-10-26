@@ -135,5 +135,5 @@ export function health(db: Db): Health {
       ...(r.error ? { error: String(r.error) } : {}),
       ...(r.synced_at ? { syncedAt: String(r.synced_at) } : {}),
     }));
-  return { ok: true, uptimeSec: Math.round(process.uptime()), connectors };
+  return { ok: true, uptimeSec: Math.round(process.uptime()), version: process.env.FRONTLINE_VERSION ?? 'dev', connectors };
 }

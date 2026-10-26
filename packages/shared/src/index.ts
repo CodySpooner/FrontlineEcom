@@ -838,6 +838,8 @@ export interface ActionLogEntry {
 export interface Health {
   ok: true;
   uptimeSec: number;
+  /** The installed app's version, e.g. "0.1.3" (Settings shows it); "dev" when run from the repo. */
+  version?: string;
   connectors: { id: string; kind: IntegrationKind; storeId?: string; status: IntegrationStatus; error?: string; syncedAt?: string }[];
 }
 

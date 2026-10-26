@@ -171,6 +171,7 @@ async function startApi() {
     API_PORT: String(port),
     FRONTLINE_DATA_DIR: join(userData, 'data'),
     FRONTLINE_WEB_DIR: WEB_DIR,
+    FRONTLINE_VERSION: app.getVersion(),
     FRONTLINE_SECRET_KEY: loadKey(join(userData, 'secret.key.enc'), safeStorage, confirmKeyReset).toString('base64'),
   };
   const url = `http://127.0.0.1:${port}`;

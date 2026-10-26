@@ -14,7 +14,13 @@ const app = createApp(db);
 
 test('health responds ok', async () => {
   const res = await app.request('/api/health');
-  expect(await res.json()).toMatchObject({ ok: true, connectors: [] });
+  expect(await res.json()).toMatchObject({ ok: true, connectors: [], version: 'dev' }); // run from the repo
+  process.env.FRONTLINE_VERSION = '1.2.3'; // set by the desktop app: its installed version
+  try {
+    expect(await (await app.request('/api/health')).json()).toMatchObject({ version: '1.2.3' });
+  } finally {
+    delete process.env.FRONTLINE_VERSION;
+  }
 });
 
 test('stores lists the demo stores', async () => {
