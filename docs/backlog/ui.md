@@ -323,6 +323,8 @@ Orca's browser against the reference before ticking it.
       off with no way to see them. A "Show all N" / "Show fewer" button (Orders' pattern) appears past 8.
 - [x] UI-127 Dashboard's "Autopilot · last 24h" listed 3 auto-approved changes and silently dropped the rest. It now ends
       with "+N more in the last 24h" (same sweep as UI-126; the other capped lists already say so or link on).
+- [x] UI-128 Since AGT-163 the Store Developer doesn't save a draft the app can't publish on the store's platform (it
+      answers in chat), but Builder's brief still promised "It drafts the page here". A note under the store picker says so up front.
 
 ## Blocked
 
@@ -495,3 +497,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-125: `PlatformSplit` (exported, 2 Analytics tests) renders core's `byPlatform` at the foot of the Revenue & Profit panel when it has 2+ entries: per platform its name (StoreForm's PLATFORM_NAME), revenue, a share bar like Channels', orders (singular/plural) and "% of sales". Nothing for one platform. Chrome at 1440 with All stores: Shopify $52,763 · 1,141 orders · 80.9% and TikTok Shop $12,462 · 305 orders · 19.1% (adds up to the $65,225 total)
 - 2026-10-26 — UI-126: `Missions` (now exported) keeps open-first order and shows 8 until "Show all N". New Dashboard test: 12 missions show 8, then 12, then 8 again. Chrome at 1440 with All stores: "Show all 12" brings in Peak Fit's row (Hit $500 revenue, Get 12 orders, Clear requests, Launch 2 creatives) with "Show fewer" under it. The AI Agents strip's empty space beside a tall Agent Requests board is the approved mockup v3 layout (one row of 5), left as is
 - 2026-10-26 — UI-127: `Autopiloted` keeps the whole 24h list and shows the first 3 plus a muted "+N more in the last 24h". New Dashboard test (5 auto approvals: 3 listed, "+2 more"). Orca at 800px with a client-side patch of 5 auto-approved requests: 3 rows then "+2 more in the last 24h". Patch dropped by reload. Sweep of other `.slice(0, N)` lists: Unit costs says how many more come, Competitor briefs are the latest 5 (all in the analyst's History), the bell's "recently decided" is meant to be short, the agents strip links to all agents
+- 2026-10-26 — UI-128: Brief uses `byHand` against PRODUCT_PAGE_PLATFORMS (no page at all: Amazon, TikTok Shop, Walmart) and PRODUCT_WRITE_PLATFORMS (store pages: Etsy gets "only product pages publish from here"). Demo stores show nothing. New Builder test (Amazon, Etsy, Shopify). Orca at 800px with a client-side patch marking Peak Fit (TikTok Shop) connected: "The app can't publish pages to TikTok Shop stores yet: the Store Developer writes the page in chat for you to add by hand." under Store. Patch dropped by reload

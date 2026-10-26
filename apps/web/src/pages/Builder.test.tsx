@@ -43,3 +43,17 @@ describe('Builder › publishing a draft', () => {
     expect(screen.getByText(/couldn't be pushed to Clay Co\. Try again, or apply it by hand/)).toBeTruthy();
   });
 });
+
+describe('Builder › brief', () => {
+  it("says up front where the Store Developer can't save a draft that could go live", async () => {
+    render('amazon');
+    expect(await screen.findByText("The app can't publish pages to Amazon stores yet: the Store Developer writes the page in chat for you to add by hand.")).toBeTruthy();
+    cleanup();
+    render('etsy');
+    expect(await screen.findByText('On Etsy, only product pages publish from here: other pages come back in chat for you to add by hand.')).toBeTruthy();
+    cleanup();
+    render('shopify');
+    await screen.findByRole('option', { name: 'Clay Co' });
+    expect(screen.queryByText(/add by hand/)).toBeNull();
+  });
+});

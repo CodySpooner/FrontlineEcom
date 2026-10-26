@@ -84,6 +84,9 @@ function Brief() {
   const [task, setTask] = useState('');
   const start = useStartRun();
   const send = () => store && start.mutate({ agentId: `${store.id}:store_developer`, task: `${task.trim()} Save it as a page draft for the owner to review.` }, { onSuccess: () => setTask('') });
+  // The Store Developer only saves drafts the app can publish there (AGT-163); anything else comes back in its answer.
+  const noPages = byHand(store, PRODUCT_PAGE_PLATFORMS);
+  const productOnly = !noPages && byHand(store, PRODUCT_WRITE_PLATFORMS);
   return (
     <Panel title="Brief the Store Developer" sub="It drafts the page here. Nothing goes live until you publish.">
       <form
@@ -102,6 +105,13 @@ function Brief() {
             ))}
           </select>
         </Field>
+        {(noPages || productOnly) && (
+          <p className="-mt-1 text-xs text-muted">
+            {noPages
+              ? `The app can't publish pages to ${noPages} stores yet: the Store Developer writes the page in chat for you to add by hand.`
+              : `On ${productOnly}, only product pages publish from here: other pages come back in chat for you to add by hand.`}
+          </p>
+        )}
         <Field label="What should it build?">
           <textarea value={task} onChange={(e) => setTask(e.target.value)} required rows={3} placeholder={IDEAS[0]} className={cx(inputClass, 'resize-y')} />
         </Field>
