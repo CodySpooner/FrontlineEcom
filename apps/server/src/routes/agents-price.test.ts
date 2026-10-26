@@ -174,6 +174,27 @@ test("a price test on a product with no unit cost isn't called a win: its profit
   expect(db.prepare(`SELECT title, body FROM notifications WHERE body = ?`).all(text)).toEqual([{ title: 'Market Analyst: result unclear without unit costs', body: text }]);
 });
 
+test('a price test on a few units sold is not judged on one order either way', () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01'));
+  const day = addDays(localDate(), -20);
+  db.prepare(`INSERT INTO price_tests (approval_id, store_id, product_id, agent_id, title, from_price, to_price, changed_on) VALUES ('a-few', 'peak', '77', 'peak:market_analyst', 'Grip Socks', 20, 25, ?)`).run(day);
+  const sell = (n: number, on: string, price: number) => {
+    for (let k = 0; k < n; k++) {
+      db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('peak', ?, ?, ?, 'paid', 'delivered', ?)`).run(`o-${on}-${k}`, `${on}T12:00:00Z`, price, on);
+      db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('peak', ?, '77', 1, ?, 8)`).run(`o-${on}-${k}`, price);
+    }
+  };
+  sell(2, addDays(day, -5), 20);
+  sell(2, addDays(day, 5), 25); // +10 profit on the same two units
+  const xp = getAgent(db, 'peak:market_analyst')!.xp;
+  checkPriceOutcomes(db);
+  expect(listMemory(db, 'peak').filter((m) => m.tags.includes('pricing')).map((m) => m.text)).toEqual([
+    `Pricing "Grip Socks" $20 → $25 can't be judged on 4 units sold (it takes 10): profit 24 USD → 34 USD, 2 → 2 units (14 days before vs after).`,
+  ]);
+  expect(getAgent(db, 'peak:market_analyst')!.xp).toBe(xp);
+});
+
 test("connected stores get the price on Shopify or WooCommerce; other platforms aren't asked and write errors tell the owner; neither starts a test", async () => {
   const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'peak' ORDER BY price DESC LIMIT 1`).get()!;
   const [id, from] = [String(p.id), Number(p.price)];

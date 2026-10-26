@@ -33,6 +33,23 @@ test("a page for a product that hadn't sold before has no baseline: no verdict, 
   expect(getAgent(db, 'peak:store_developer')!.xp).toBe(before);
 });
 
+test('a page on a product that sells a few units is not judged on one order either way', async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01'));
+  const draft = savePageDraft(db, { storeId: 'peak', agentId: 'peak:store_developer', runId: 'run-few', kind: 'product', productId: 'peak-p1', title: 'Jump Rope', html: '<p>New copy</p>', notes: 'Benefit-first rewrite' });
+  const day = addDays(localDate(), -20);
+  db.prepare('UPDATE page_drafts SET published_at = ? WHERE id = ?').run(`${day}T15:00:00Z`, draft.id);
+  sell(2, addDays(day, -3));
+  sell(3, addDays(day, 3)); // one more order: no win
+  const before = getAgent(db, 'peak:store_developer')!.xp;
+  await app.request('/api/achievements');
+  expect(listMemory(db, 'peak').filter((m) => m.tags.includes('page')).map((m) => [m.text, m.confidence])).toEqual([
+    ['The new "Jump Rope" page can\'t be judged on 5 units sold (it takes 10): profit 28 USD → 42 USD, 2 → 3 units (14 days before vs after).', 0.5],
+  ]);
+  expect(getAgent(db, 'peak:store_developer')!.xp).toBe(before);
+  expect(db.prepare(`SELECT title FROM notifications WHERE kind = 'info' AND title LIKE 'Store Developer:%'`).get()?.title).toBe('Store Developer: result unclear on too few sales');
+});
+
 test('a product page published on a real store is judged on the 14 days before vs after, once', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
   once(db, 'activate:peak', new Date('2020-01-01')); // live long before

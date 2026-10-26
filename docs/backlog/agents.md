@@ -292,11 +292,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-164 A demo store's learning isn't shared with a niche that has a live store. `promote_niche_learning` took evidence from a demo store's seeded numbers, and once approved every store of the niche saw it, live ones included.
 - [x] AGT-165 Going live clears the niche learnings a store shared in its demo phase. They came from its seeded numbers like the memories go-live already clears, and every store of the niche kept reading them.
 - [x] AGT-166 A pause or budget cut is judged on what the spend it took away was bringing. Judged on blended ROAS, which rises whenever spend goes (even spend that paid back above break-even), every cut read as a win and taught the Ad Strategist to cut; a pause of all spend was never judged.
+- [x] AGT-167 A price test or new page isn't judged on a handful of sales. Any profit change counted, so on a product selling 2-3 units a fortnight one order decided a win (XP, confidence up) or a loss.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-167: price tests and product pages with under 10 units across their 28 days are recorded as "can't be judged on N units sold" (confidence 0.5, no XP, no confidence move on the run's learnings; the owner's notice says "result unclear on too few sales").
 - 2026-10-26 — AGT-166: an approved pause or budget cut whose spend did fall is judged on revenue lost per spend saved (per day, 3 after vs 7 before) against 30-day break-even ROAS: under it worked, at or over it didn't. Same uncosted-sales fallback to blended ROAS as raises (AGT-155); a pause that left no spend is judged now.
 - 2026-10-26 — AGT-165: `startFresh` deletes the store's own `niche_learnings` rows and counts them in its "starts fresh on real numbers" notice; other stores' learnings stay.
 - 2026-10-26 — AGT-164: a store that isn't connected can't propose a niche learning while a connected store shares its niche (`nicheKey`); with only demo stores in the niche it still can, so demo mode shows the feature. The automatic promotion offers already used live stores only.
