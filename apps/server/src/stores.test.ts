@@ -15,6 +15,16 @@ const setup = () => {
 };
 const send = (method: string, body: unknown) => ({ method, body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
 
+test("a store made after one was deleted never takes its id, so it starts clear of the old one's sync history", async () => {
+  const { app } = setup();
+  const make = async () => ((await (await app.request('/api/stores', send('POST', { name: 'Volt Lab', platform: 'shopify', niche: 'tech' }))).json()) as Store).id;
+  expect(await make()).toBe('volt-lab');
+  await app.request('/api/stores/volt-lab', { method: 'DELETE' });
+  expect(await make()).toBe('volt-lab-2');
+  await app.request('/api/stores/peak', { method: 'DELETE' }); // a showcase store too
+  expect(((await (await app.request('/api/stores', send('POST', { name: 'Peak', platform: 'shopify', niche: 'fitness' }))).json()) as Store).id).toBe('peak-2');
+});
+
 test('create → get → update → delete a store', async () => {
   const { app } = setup();
   const res = await app.request('/api/stores', send('POST', { name: 'Glow Haus', platform: 'etsy', niche: 'beauty', nicheDetail: 'K-beauty' }));

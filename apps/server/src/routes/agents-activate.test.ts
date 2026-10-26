@@ -36,7 +36,7 @@ test('a store deleted and created again under the same name gets its jobs, and t
   expect((await app.request(`/api/stores/${first.id}`, { method: 'DELETE' })).status).toBe(204);
 
   const again = await create();
-  expect(again.id).toBe(first.id);
+  expect(again.id).not.toBe(first.id); // a deleted store's id is never reused (CORE-91)
   const jobs = db.prepare('SELECT name FROM automation_rules WHERE store_id = ?').all(again.id).map((r) => r.name);
   expect(jobs.sort()).toEqual(DEFAULT_JOBS.map((j) => j.name).sort());
   switchToReal(db, again.id);

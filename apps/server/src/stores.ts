@@ -1,7 +1,7 @@
 import { NICHES, PLATFORMS, type Store, type StoreInput, type StoreUpdate } from '@frontline/shared';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { dataDir, tx, type Db } from './db';
+import { dataDir, once, tx, type Db } from './db';
 import { seedDemoStore } from './demo';
 import { setStoreTimezone } from './connectors/common';
 
@@ -88,7 +88,10 @@ export function createStore(db: Db, input: StoreInput): Store {
   return tx(db, () => {
     const base = slug(input.name);
     let id = base;
-    for (let n = 2; getStore(db, id); n++) id = `${base}-${n}`;
+    // Never a deleted store's id: its sync positions and once-per-store flags (keyed by the id) would carry over.
+    // ponytail: only stores deleted since this check are known.
+    const deleted = db.prepare('SELECT 1 FROM done_once WHERE ref = ?');
+    for (let n = 2; getStore(db, id) || deleted.get(`deleted-store:${id}`); n++) id = `${base}-${n}`;
     const store: Store = {
       id,
       name: input.name,
@@ -126,6 +129,7 @@ export function deleteStore(db: Db, id: string, mediaDir = join(dataDir(), 'crea
   const files = db.prepare('SELECT media_url FROM creatives WHERE store_id = ?').all(id)
     .map((r) => String(r.media_url ?? '').match(/^\/api\/creatives\/media\/([\w-]+\.(?:jpg|png|webp|mp4))$/)?.[1]);
   if (!db.prepare('DELETE FROM stores WHERE id = ?').run(id).changes) return false;
+  once(db, `deleted-store:${id}`); // see createStore
   for (const f of files) {
     try {
       if (f) rmSync(join(mediaDir, f), { force: true });
