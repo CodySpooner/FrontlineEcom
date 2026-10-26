@@ -362,6 +362,11 @@ function advanceSquadMissions(db: Db) {
   if (!runs) return; // a restart retry ended while the manager was being built: agentRoutes advances once it's ready
   for (const m of advanceMissions(db, runs.start)) {
     publish({ type: 'mission', mission: m });
+    for (const s of m.steps) {
+      if (s.note && once(db, `mission-wait:${m.id}:${s.id}:${s.note}`)) {
+        notify(db, { kind: 'info', title: `Mission waiting: ${m.title}`, body: `The ${AGENT_ROLES[s.role].name} can't take its step yet: ${s.note}`, storeId: m.storeId, link: '/ecosystem' });
+      }
+    }
     if (m.status === 'running') continue;
     const stuck = m.steps.find((s) => s.status === 'error' || s.status === 'cancelled');
     notify(db, m.status === 'done'

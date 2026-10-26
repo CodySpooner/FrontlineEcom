@@ -117,10 +117,13 @@ test('a step its agent turned down starts when the owner brings the agent back',
     steps: [
       { id: 'numbers', role: 'market_analyst', task: 'Pull the numbers for the copy.' },
       { id: 'copy', role: 'copywriter', task: 'Write the ad copy from the numbers.', dependsOn: ['numbers'] },
+      { id: 'ads', role: 'ad_strategist', task: 'Review the campaigns beside the copy.', dependsOn: ['numbers'] },
     ],
   });
   const waiting = await settle(created.id);
-  expect([waiting.status, waiting.steps[1]!.status, waiting.steps[1]!.note]).toEqual(['running', 'waiting', 'This agent is offline. Redeploy it first.']);
+  expect([waiting.status, ...waiting.steps.map((s) => s.status), waiting.steps[1]!.note]).toEqual(['running', 'done', 'waiting', 'done', 'This agent is offline. Redeploy it first.']);
+  // Told once, though the mission moved again (the ads step finished) while the copy step still waited.
+  expect(notes()).toEqual([{ title: 'Mission waiting: Paused copy', body: "The Copywriter can't take its step yet: This agent is offline. Redeploy it first." }]);
   await send('PATCH', '/api/agents/glow:copywriter', { enabled: true });
   expect((await settle(created.id)).status).toBe('done');
 });
