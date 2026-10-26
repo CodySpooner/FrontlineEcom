@@ -2,7 +2,7 @@
 // Secrets go in and never come back out: the API only says which secret fields are set.
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { INTEGRATION_KINDS, type Integration, type IntegrationCategory, type IntegrationKind, type OAuthStart, type Store } from '@frontline/shared';
-import { useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds } from '../api/client';
+import { useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds, useSyncIntegration } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Button, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot } from '../components/ui';
@@ -85,8 +85,14 @@ export function Integrations() {
   );
 }
 
-function Connection({ store, i, onOpen }: { store?: Store; i?: Integration; onOpen: () => void }) {
+export function Connection({ store, i, onOpen }: { store?: Store; i?: Integration; onOpen: () => void }) {
   const imp = i && importing(i);
+  const sync = useSyncIntegration();
+  useEffect(() => {
+    if (!sync.isSuccess) return;
+    const t = setTimeout(sync.reset, 30_000); // the server's loop has run it by then
+    return () => clearTimeout(t);
+  }, [sync.isSuccess, sync.reset]);
   const status = !i
     ? 'Demo data'
     : i.status === 'error'
@@ -104,11 +110,22 @@ function Connection({ store, i, onOpen }: { store?: Store; i?: Integration; onOp
           {store ? store.name : 'All stores'}
           <span className="text-xs text-muted"> · {status}</span>
         </span>
+        {/* Creative tools (Higgsfield) have nothing to sync. */}
+        {i && INTEGRATION_KINDS[i.kind].category !== 'creative' && (
+          <Button size="sm" disabled={sync.isPending || sync.isSuccess} onClick={() => sync.mutate(i.id)}>
+            {sync.isSuccess ? 'Sync queued' : 'Sync now'}
+          </Button>
+        )}
         <Button size="sm" onClick={onOpen}>
           {i ? 'Manage' : 'Connect'}
         </Button>
       </div>
       {i?.status === 'error' && i.error && <p className="mt-1 truncate pl-4 text-xs text-red">{i.error}</p>}
+      {sync.isError && (
+        <p role="alert" className="mt-1 pl-4 text-xs text-red">
+          {sync.error.message}
+        </p>
+      )}
     </li>
   );
 }

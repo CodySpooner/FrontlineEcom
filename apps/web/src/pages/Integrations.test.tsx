@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Integration } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { ConnectForm } from './Integrations';
+import { ConnectForm, Connection } from './Integrations';
 
 const saved: Integration = { id: 'i1', kind: 'cj', status: 'connected', settings: { email: 'ops@shop.test' }, secretsSet: ['apiKey'], updatedAt: '2026-10-26T08:00:00Z' };
 const sent = (fetch: ReturnType<typeof stubApi>) => JSON.parse(String(fetch.mock.calls.find(([, init]) => init?.method === 'PUT')?.[1]?.body));
@@ -42,5 +42,22 @@ describe('connect form', () => {
 
     expect((await screen.findByRole('alert')).textContent).toContain('CJ rejected the API key');
     expect(sent(fetch)).toEqual({ kind: 'cj', values: { email: 'ops@shop.test', apiKey: 'test-key-1' } });
+  });
+});
+
+describe('Sync now', () => {
+  it('asks for a sync of a connection that failed, then waits for the loop to run it', async () => {
+    const fetch = stubApi((_url, init) => (init?.method === 'POST' ? reply({}, 202) : undefined));
+    renderApp(<Connection i={{ ...saved, kind: 'shopify', status: 'error', error: 'Missing read_orders scope' }} onOpen={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Sync now' }));
+    const queued = await screen.findByRole('button', { name: 'Sync queued' });
+    expect((queued as HTMLButtonElement).disabled).toBe(true);
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url)).toEqual(['/api/integrations/i1/sync']);
+  });
+
+  it("isn't offered for a tool that doesn't sync data", () => {
+    stubApi(() => undefined);
+    renderApp(<Connection i={{ ...saved, kind: 'higgsfield' }} onOpen={() => {}} />);
+    expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull();
   });
 });

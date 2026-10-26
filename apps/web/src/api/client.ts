@@ -310,6 +310,9 @@ export function useIntegrationActions() {
   };
 }
 
+/** Queues a sync now (202); the server's loop runs it within 30 s and the 10 s integrations poll shows the result. */
+export const useSyncIntegration = () => useMutation({ mutationFn: (id: string) => api<unknown>(`/api/integrations/${id}/sync`, { method: 'POST' }) });
+
 export const useOAuthKinds = () => useQuery({ queryKey: ['oauth-kinds'], queryFn: () => api<IntegrationKind[]>('/api/integrations/oauth'), staleTime: Infinity });
 
 /** Connect button: start gets the provider URL to open; paste-style flows finish with the address the browser landed on. */
