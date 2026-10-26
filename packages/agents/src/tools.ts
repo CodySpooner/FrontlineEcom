@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps } from '@frontline/shared';
+import { AGENT_ROLES, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
@@ -29,6 +29,8 @@ export interface ToolEnv {
   generateMedia?: (req: { kind: Exclude<CreativeKind, 'copy'>; aspect: AspectRatio; prompt: string }, signal?: AbortSignal) => Promise<string | undefined>;
   /** Queues a run for a squadmate (the app's run manager); returns the run or why it can't start. */
   startRun?: (agentId: string, task: string, parentRunId?: string) => AgentRun | string;
+  /** Core's supplier catalog search (CJ Dropshipping; demo listings without credentials). */
+  searchSuppliers?: (q: string, limit: number) => Promise<SupplierProduct[]>;
   /** Core's research feed (scored trending products). */
   research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number }) => Promise<ResearchProduct[]>;
   runId?: string;
@@ -194,6 +196,19 @@ export const APP_TOOLS: AppTool[] = [
       if (!ctx.recordFind) return 'The research feed is not available.';
       const p = await ctx.recordFind({ ...find, niche: ctx.store.niche });
       return `Added to the research feed as ${p.id}: AI score ${p.score} (margin ${p.scoreParts.margin}, trend ${p.scoreParts.trend}, competition ${p.scoreParts.competition}, shipping ${p.scoreParts.shipping}), margin ${p.margin}%.`;
+    },
+  }),
+  defineTool({
+    name: 'search_suppliers',
+    description:
+      'Supplier listings (CJ Dropshipping) for a product keyword: SKU, title, supplier price in USD before shipping (lowest variant) and how many sellers list it (CSV). Use it for a real cost before pricing a candidate.',
+    input: { q: z.string().min(2).max(80), limit: z.number().int().min(1).max(20).optional() },
+    run: async ({ q, limit }, ctx) => {
+      if (!ctx.searchSuppliers) return 'Supplier search is not available.';
+      const rows = await ctx.searchSuppliers(q, limit ?? 10);
+      if (!rows.length) return `No supplier listings for "${q}".`;
+      const table = csv(rows.map((p) => ({ sku: p.sku, title: p.title, price_usd: p.price, listed_by_sellers: p.listed })));
+      return rows[0]!.demo ? `# Demo supplier data (CJ is not connected)\n${table}` : table;
     },
   }),
   defineTool({

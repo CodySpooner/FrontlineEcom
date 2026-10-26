@@ -37,6 +37,7 @@ import { pageRoutes } from './agents-pages';
 import { issueRoutes } from './agents-issues';
 import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
+import { demoSupplierProducts, searchCj } from '../connectors/cj';
 import { createProducts, publishPage, publishProductPage } from '../connectors/shopify';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
@@ -89,6 +90,7 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
     ).run(id, find.title, find.category, find.niche, find.image ?? null, find.source, find.cost, find.price, find.compareAt, find.trend, find.competition, find.shippingDays);
     return (await (await researchRoutes(db).request(`/api/research/${id}`)).json()) as ResearchProduct;
   },
+  searchSuppliers: async (q, limit) => (await searchCj(db, loadKey(dataDir()), q, limit)) ?? demoSupplierProducts(db, q, limit),
   research: async (q) => {
     const params = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
     const res = await researchRoutes(db).request(`/api/research?${params}`);

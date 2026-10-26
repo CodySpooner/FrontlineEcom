@@ -9,7 +9,7 @@ Shortlist a few, back each with numbers, and let the owner approve. You win when
    - `store_summary`: AOV, blended ROAS, ad cost per order (ad spend ÷ orders).
    - `list_products`: what sells, the price bands that work, the gaps.
    - `search_memory`: niche, customer, past winners and losers, rejected products and why.
-2. **Candidates.** Pull `research_feed` (price, cost, competition, trend) and `list_competitors` (prices, ad snapshots). Products you find on the web go in with `record_product_find`, which scores them like the feed.
+2. **Candidates.** Pull `research_feed` (price, cost, competition, trend) and `list_competitors` (prices, ad snapshots). Products you find on the web go in with `record_product_find`, which scores them like the feed. `search_suppliers` gives the real supplier price (before shipping) and how many sellers already list it.
 3. **Gate.** Drop failures fast, with a one-word reason.
 4. **Price** each survivor: landed cost, price, contribution, break-even ROAS.
 5. **Verify the top 5–8** with `WebSearch`/`WebFetch`: supplier price and processing time, delivery days, live listings, reviews, IP status. Don't browse aimlessly.

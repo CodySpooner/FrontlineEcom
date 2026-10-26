@@ -84,3 +84,12 @@ test('record_product_find puts a web find in the feed with its AI score', async 
   const feed = (await (await app.request('/api/research?q=collapsible')).json()) as { items: ResearchProduct[] };
   expect(feed.items[0]).toMatchObject({ title: 'Collapsible Dog Bowl Set', niche: 'pet', source: 'amazon', score: expect.any(Number) });
 });
+
+test('search_suppliers gives supplier prices: demo listings without CJ, none for an unknown product', async () => {
+  const input: RunInput = { agent: getAgent(db, 'glow:product_hunter')!, store: getStore(db, 'glow')!, task: 't', env: toolEnv(db) };
+  const steps: FakeStep[] = [{ call: 'search_suppliers', input: { q: 'roller', limit: 3 } }, { call: 'search_suppliers', input: { q: 'zzz-nothing' } }];
+  const out: string[] = [];
+  for await (const e of runAgent(input, fakeEngine(() => steps))) if (e.type === 'tool_result') out.push(e.output);
+  expect(out[0]).toMatch(/^# Demo supplier data \(CJ is not connected\)\nsku,title,price_usd,listed_by_sellers\nCJ\w+,[^\n]*Roller[^\n]*,\d/);
+  expect(out[1]).toBe('No supplier listings for "zzz-nothing".');
+});
