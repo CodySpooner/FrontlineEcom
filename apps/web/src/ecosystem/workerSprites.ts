@@ -1,14 +1,15 @@
-import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js';
+import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
 import type { OfficeSeat } from '@frontline/shared';
 import { CELL, frameAt, paintCharacters, type Animation, type Direction } from './characters';
 import { ENTRANCE, deskTile, iso, tileKey, walkable, type Tile } from './world';
 import { advanceMotion, nearestFree, startMotion, type Motion } from './pathfinding';
+import type { OfficeStatus } from './events';
 
-export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation; target?: Tile }
+export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation; target?: Tile; status?: OfficeStatus; tool?: string }
 
 export function workerSprites(world: Container, select: (deskId: string) => void) {
   const layer = new Container(); layer.sortableChildren = true; world.addChild(layer);
-  const workers = new Map<string, { data: OfficeWorker; root: Container; sprite: Sprite; name: Text; elapsed: number; direction: Direction; index: number }>();
+  const workers = new Map<string, { data: OfficeWorker; root: Container; sprite: Sprite; name: Text; status: Graphics; elapsed: number; direction: Direction; index: number }>();
   let atlas: Texture | undefined;
   let signature = '';
   const frames = new Map<string, Texture>();
@@ -31,9 +32,10 @@ export function workerSprites(world: Container, select: (deskId: string) => void
       if (!worker) {
         const root = new Container(), sprite = new Sprite(), name = new Text({ text: data.name, style: { fontFamily: 'Inter, sans-serif', fontSize: 12, fill: '#f3ecf0', stroke: { color: '#0a0b13', width: 4 } } });
         sprite.anchor.set(.5, 1); sprite.scale.set(1.5); name.anchor.set(.5, 0); name.y = 3;
-        root.addChild(sprite, name); layer.addChild(root); sprite.eventMode = 'static'; sprite.cursor = 'pointer';
+        const status = new Graphics().circle(0, -62, 3).fill('#ffffff');
+        root.addChild(sprite, name, status); layer.addChild(root); sprite.eventMode = 'static'; sprite.cursor = 'pointer';
         sprite.on('pointertap', () => select(workers.get(data.seat.agentId)!.data.seat.deskId));
-        worker = { data, root, sprite, name, elapsed: 0, direction: 2, index };
+        worker = { data, root, sprite, name, status, elapsed: 0, direction: 2, index };
         workers.set(data.seat.agentId, worker);
         const occupied = new Set([...motions.values()].flatMap((m) => [tileKey(m.cell), ...(m.next ? [tileKey(m.next)] : [])]));
         const saved = data.seat.position;
@@ -42,6 +44,8 @@ export function workerSprites(world: Container, select: (deskId: string) => void
       }
       if (worker.data.animation !== data.animation) worker.elapsed = 0;
       worker.data = data; worker.index = index; worker.name.text = data.name;
+      worker.root.alpha = data.status === 'offline' ? .45 : 1;
+      worker.status.tint = data.status === 'failed' ? '#ff3953' : data.status === 'awaiting_approval' ? '#f4bc53' : data.status === 'running' || data.status === 'using_tool' ? '#3ddc84' : '#8993a9';
       motions.get(data.seat.agentId)!.target = data.target ?? deskTile(data.seat.deskId);
     });
     tick(0, true);

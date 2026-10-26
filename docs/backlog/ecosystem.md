@@ -57,7 +57,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-05 Camera: drag pan, wheel zoom, double-click focus, jump to department, reset, fit, fullscreen; sharp pixels at every zoom step.
 - [x] ECO-06 Characters: sprite sheets with the 10 animations (spec §4), per-agent appearance variation, isometric walk directions, animation state machine.
 - [x] ECO-07 Movement: A* on the grid with occupancy, walk to desk / meeting table / another desk; tests for the pathfinder.
-- [ ] ECO-08 Real state → behavior: `AgentOfficeEvent` adapter over existing live messages + REST snapshot; state table from spec §5; idempotent on reconnect, ignores stale/out-of-order events; tests.
+- [x] ECO-08 Real state → behavior: `AgentOfficeEvent` adapter over existing live messages + REST snapshot; state table from spec §5; idempotent on reconnect, ignores stale/out-of-order events; tests.
 - [ ] ECO-09 Agent panel: click a character → profile, live activity, performance (runs, cost/tokens where present), actions (chat, assign task, output, history, configure, pause/cancel, focus) using existing endpoints.
 - [ ] ECO-10 Assign Task: compact command panel → real run on that agent; loading / success / failure / awaiting-approval states shown in the panel and on the character.
 - [ ] ECO-11 Deploy wizard: "+ Deploy Agent" picks an existing agent, department, free desk, name override, appearance; entry walk-in animation; counter `n / 30`; capacity block; archive keeps history.
@@ -75,6 +75,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-08: Typed office events over existing runs/tools/approvals/parent links; REST + active transcripts restore state, WebSocket reconnects, terminal states and approval decisions reject stale regressions, tool IDs deduplicate late/replayed messages. Real status drives poses, tint and selected-worker text. Fake-store Product Hunter run completed through existing backend at $0; Orca .agent/eco-08.png inspected. 115 files / 615 tests pass.
 
 - 2026-10-26 ECO-07: Cached A* routes, current/next-tile reservations, separate motion simulation, entry walk, arbitrary walkable destinations and saved arrival positions outside rendering. All 30 workers reach desks without overlap in simulation; browser entry movement and Copywriter arrival persistence verified (.agent/eco-07*.png). pnpm check 113 files / 608 tests pass. Orca browser rAF itself measured ~1 FPS (30 callbacks / 29.5 s); ECO-20 needs an unthrottled browser for meaningful renderer FPS. Acknowledged agents Inbox: mission dependencies and engine identity now available for ECO-09/14.
 

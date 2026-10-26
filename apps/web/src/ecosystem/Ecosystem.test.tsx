@@ -5,6 +5,7 @@ import { renderApp } from '../test-utils';
 import { Ecosystem } from './Ecosystem';
 
 vi.mock('./OfficeScene', () => ({ OfficeScene: () => <div>Office canvas</div> }));
+vi.mock('./useOffice', () => ({ useOffice: () => ({ state: { agents: [], runs: {}, approvals: {}, tools: {}, events: [] }, connected: true, error: '' }) }));
 
 afterEach(cleanup);
 test('office tabs and collapsible activity are keyboard-addressable', () => {
