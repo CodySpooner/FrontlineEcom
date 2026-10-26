@@ -322,7 +322,7 @@ export function Dialog({ open, onClose, title, side = 'center', children }: { op
       aria-label={title}
       className={cx(
         'card p-0 text-text backdrop:bg-black/60 backdrop:backdrop-blur-sm',
-        side === 'right' ? 'my-0 mr-0 ml-auto h-dvh max-h-none w-[min(440px,100vw)] rounded-none rounded-l-xl' : 'm-auto w-[min(520px,calc(100vw-32px))]',
+        side === 'right' ? 'drawer my-0 mr-0 ml-auto h-dvh max-h-none w-[min(440px,100vw)] rounded-none rounded-l-xl' : 'm-auto w-[min(520px,calc(100vw-32px))]',
       )}
     >
       <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">

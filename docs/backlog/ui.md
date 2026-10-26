@@ -240,6 +240,8 @@ Orca's browser against the reference before ticking it.
       the one to restore if an update goes wrong.
 - [x] UI-90 Six actions failed silently (no global mutation error handler): the Flow Library starter run, Stop on a
       running chat, Delete creative, forget a memory, stop sharing a niche learning, Reopen an order issue. Each now says why.
+- [x] UI-91 Desktop app: right-hand drawers (Notifications, Commander, connect, rule and store editors, the ecosystem's
+      worker panel) started at the window's top edge, so their Close button sat under Windows' own close button.
 
 ## Blocked
 
@@ -367,3 +369,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-89: a `Before update` badge on backups named `…-before-update.db` (core d392940). `Backups` is exported for Settings.test. Orca at 800px with a fixture copy: "Oct 26, 1:52 PM · Before update · 1.5 MB · Restore", and only on that row. Fixture file removed
 - 2026-10-26 — UI-90: found by listing every mutation-hook variable in pages/components whose `.error`/`.isError` is never read (Dashboard's decide was a false positive: it has its own `failed` state). Each fix is the `role=alert` text-xs red line already used on Knowledge and Automation. The Flow Library starter also gets `FixLink`. New FlowLibrary.test. Orca at 800px with a $0 fixture budget on Glow's Email & SMS: "Design a welcome series" → "Today's budget for this agent ($0) is used up… Raise the agent's budget" (→ its settings). No run was created. Budget restored
 - 2026-10-26 — Core inbox (version): Settings › Your Data's header shows `Version 0.1.3` from `/api/health` `version`, or "Development build" for `dev`, and nothing before health loads. Settings.test covers both. Orca at 800px (repo build): "Your Data · … · Development build"
+- 2026-10-26 — UI-91: `Dialog side="right"` gets `.drawer`. Under `:root[data-wco]` (frameless Electron, `titleBarOverlay` 40px) it starts at `env(titlebar-area-height, 40px)` and is shorter by the same. CSS only, in index.css next to the `.titlebar` WCO rules. Orca with `data-wco` set by hand on the open Notifications drawer: margin 0→40px, height 1761→1721, Close top 15→55, and no change without it. Not run in Electron itself

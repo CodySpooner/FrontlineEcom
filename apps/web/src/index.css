@@ -103,3 +103,8 @@ body {
   -webkit-app-region: no-drag;
   app-region: no-drag;
 }
+/* A right-hand drawer starts below the title-bar area, or its Close button would sit under Windows' own close. */
+:root[data-wco] dialog.drawer {
+  margin-top: env(titlebar-area-height, 40px);
+  height: calc(100dvh - env(titlebar-area-height, 40px));
+}
