@@ -16,6 +16,9 @@ import { startSyncLoop } from './sync';
 
 initLog(dataDir());
 process.on('uncaughtExceptionMonitor', (e) => log('error', 'crash', { error: e.stack ?? String(e) }));
+// A background job's failed promise (a sync, a watch, an automation) is logged, not fatal: exiting would also end every
+// agent run in progress. Thrown exceptions still exit (logged above), and the desktop app starts the API again.
+process.on('unhandledRejection', (e) => log('error', 'unhandled rejection', { error: e instanceof Error ? (e.stack ?? e.message) : String(e) }));
 const db = openDb(dbFile());
 seedDemo(db);
 seedCreatives(db);
