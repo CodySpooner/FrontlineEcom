@@ -2,7 +2,8 @@
 import { Link } from 'react-router';
 import { ExternalLink } from 'lucide-react';
 import type { ApprovalAction } from '@frontline/shared';
-import { addedProducts, draftLink, fileList, themeChange } from '../lib/approvals';
+import { useProducts } from '../api/client';
+import { addedProducts, draftLink, fileList, marginAt, priceChange, themeChange } from '../lib/approvals';
 import { cents } from '../lib/format';
 import { useStoreSelection } from './StoreFilter';
 
@@ -25,6 +26,8 @@ export function ApprovalExtras({ action, storeId }: { action: ApprovalAction; st
         {added.length > SHOWN && <li>+{added.length - SHOWN} more</li>}
       </ul>
     );
+  const price = priceChange(action);
+  if (price && storeId) return <PriceMargin storeId={storeId} {...price} />;
   const draft = draftLink(action);
   if (draft)
     return (
@@ -48,5 +51,19 @@ export function ApprovalExtras({ action, storeId }: { action: ApprovalAction; st
         </span>
       )}
     </div>
+  );
+}
+
+/** A price request's margin before and after, net of the unit cost and fee estimate. Nothing until the product has a cost. */
+function PriceMargin({ storeId, productId, from, to }: { storeId: string; productId: string; from: number; to: number }) {
+  const store = useStoreSelection().stores.find((s) => s.id === storeId);
+  const p = useProducts([storeId]).data?.items.find((x) => x.id === productId);
+  if (!p?.cost) return null;
+  const fees = store?.feePercent || store?.feePerOrder;
+  return (
+    <p className="mt-1.5 text-xs text-muted">
+      Margin <span className="font-semibold text-text-2">{marginAt(from, p.cost, store)}%</span> →{' '}
+      <span className="font-semibold text-text-2">{marginAt(to, p.cost, store)}%</span> after the unit cost{fees ? ' and fees' : ''}
+    </p>
   );
 }

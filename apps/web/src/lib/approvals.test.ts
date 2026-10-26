@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addedProducts, draftLink, expiredWhy, fileList, themeChange } from './approvals';
+import { addedProducts, draftLink, expiredWhy, fileList, marginAt, priceChange, themeChange } from './approvals';
 
 const theme = (payload: unknown) => themeChange({ kind: 'store.publish_theme', payload });
 
@@ -31,6 +31,23 @@ describe('expiredWhy', () => {
     expect(expiredWhy({ status: 'denied', reason: 'ROAS under 1. [Expired: asked on demo data before the store went live.]' })).toBe('Asked on demo data before the store went live');
     expect(expiredWhy({ status: 'denied', reason: 'x [Expired: the agent run ended before a decision.]' })).toBe('The agent run ended before a decision');
     expect(expiredWhy({ status: 'denied', reason: 'ROAS under 1 for 4 days' })).toBeUndefined();
+  });
+});
+
+describe('priceChange', () => {
+  it('reads the product and both prices of a price request, nothing for a malformed one', () => {
+    const action = (payload: unknown) => ({ kind: 'store.set_price', payload }) as never;
+    expect(priceChange(action({ productId: 'p1', title: 'Mug', from: 24, to: 26.5 }))).toEqual({ productId: 'p1', from: 24, to: 26.5 });
+    expect(priceChange(action({ productId: 'p1', from: 24 }))).toBeUndefined();
+    expect(priceChange({ kind: 'ads.set_budget', payload: { productId: 'p1', from: 1, to: 2 } } as never)).toBeUndefined();
+  });
+});
+
+describe('marginAt', () => {
+  it('takes the unit cost and the store fee estimate off the price', () => {
+    expect(marginAt(20, 8)).toBe(60);
+    // Etsy-like: 9.5% + 0.25 per order → 20 − 8 − 1.90 − 0.25 = 9.85.
+    expect(marginAt(20, 8, { feePercent: 9.5, feePerOrder: 0.25 })).toBe(49);
   });
 });
 

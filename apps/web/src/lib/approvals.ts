@@ -1,4 +1,4 @@
-import type { ApprovalAction, ApprovalRequest } from '@frontline/shared';
+import type { ApprovalAction, ApprovalRequest, Store } from '@frontline/shared';
 
 /**
  * Why the app closed a request nobody decided, from the marker the server appends to its reason (agents: the run ended
@@ -31,6 +31,18 @@ export function addedProducts(action: ApprovalAction) {
     return [{ title: p.title, price, ...(compareAt && { compareAt }), ...(cost && { margin: Math.round(((price - cost) / price) * 100) }) }];
   });
 }
+
+/** The product and prices behind a `store.set_price` request (agent-written payload, so it's checked). */
+export function priceChange(action: ApprovalAction) {
+  if (action.kind !== 'store.set_price') return undefined;
+  const p = (action.payload ?? {}) as { productId?: unknown; from?: unknown; to?: unknown };
+  const ok = (v: unknown): v is number => typeof v === 'number' && v > 0;
+  return typeof p.productId === 'string' && ok(p.from) && ok(p.to) ? { productId: p.productId, from: p.from, to: p.to } : undefined;
+}
+
+/** Margin % at `price` after the unit cost and the store's fee estimate (the same costs profit nets). */
+export const marginAt = (price: number, cost: number, fees?: Pick<Store, 'feePercent' | 'feePerOrder'>) =>
+  Math.round(((price - cost - (price * (fees?.feePercent ?? 0)) / 100 - (fees?.feePerOrder ?? 0)) / price) * 100);
 
 /** Where to review the draft behind a `store.publish_page` request (Store Builder opens on it). */
 export function draftLink(action: ApprovalAction) {
