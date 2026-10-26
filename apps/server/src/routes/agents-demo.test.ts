@@ -29,6 +29,9 @@ test('demo runs do one real, non-blocking piece of each role’s work', async ()
   db.prepare(`UPDATE orders SET fulfillment_status = 'unfulfilled', local_date = ? WHERE store_id = 'glow' AND id = ?`).run(addDays(localDate(), -9), orderId);
   await go('glow:operations', 'Daily order check');
   expect(listOrderIssues(db, { storeIds: ['glow'] }).map((i) => [i.orderId, i.kind])).toContainEqual([orderId, 'late']);
+  db.prepare(`UPDATE order_issues SET status = 'resolved' WHERE order_id = ?`).run(orderId);
+  await go('glow:operations', 'Daily order check');
+  expect(listOrderIssues(db, { storeIds: ['glow'], status: 'open' }).map((i) => i.orderId)).not.toContain(orderId); // resolved stays resolved
 
   await go('glow:email_sms', 'Plan retention flows');
   expect(listFlowDrafts(db, { storeIds: ['glow'] }).map((f) => f.name)).toEqual(['Checkout abandonment']);

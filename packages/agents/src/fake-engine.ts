@@ -24,8 +24,13 @@ function demoWork(input: RunInput): FakeStep[] {
     case 'product_hunter':
       return [{ call: 'research_feed', input: { limit: 5 } }];
     case 'operations': {
+      // The oldest late order not flagged before, so a resolved issue doesn't come back with the next daily check.
       const late = db
-        .prepare(`SELECT id, local_date FROM orders WHERE store_id = ? AND fulfillment_status = 'unfulfilled' AND local_date <= date('now', '-3 days') ORDER BY local_date LIMIT 1`)
+        .prepare(
+          `SELECT id, local_date FROM orders o WHERE store_id = ? AND fulfillment_status = 'unfulfilled' AND local_date <= date('now', '-3 days')
+             AND NOT EXISTS (SELECT 1 FROM order_issues i WHERE i.store_id = o.store_id AND i.order_id = o.id AND i.kind = 'late')
+           ORDER BY local_date LIMIT 1`,
+        )
         .get(storeId);
       const flag: FakeStep[] = late
         ? [{ call: 'flag_order_issue', input: { orderId: String(late.id), kind: 'late', severity: 'medium', note: `Unfulfilled since ${late.local_date}, past the 3-day handling promise.`, suggestedAction: 'Ask the supplier for tracking today.' } }]
