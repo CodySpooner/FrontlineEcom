@@ -68,3 +68,16 @@ test('issues the order has since answered close themselves: delivered, or suppli
     'Delivered; closed automatically.', 'Delivered; closed automatically.', 'Supplier shipped (tracking CJ123); closed automatically.',
   ]);
 });
+
+test('list_orders scores each supplier over every order in the window, not just the rows shown', async () => {
+  const [late, slow, refunded] = db.prepare(`SELECT id FROM orders WHERE store_id = 'peak' ORDER BY created_at DESC LIMIT 3`).all().map((r) => String(r.id));
+  const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  const set = db.prepare(`UPDATE orders SET supplier = 'Slow Co', created_at = ?, fulfillment_status = ?, status = ? WHERE store_id = 'peak' AND id = ?`);
+  set.run(ago(5), 'unfulfilled', 'paid', late!);
+  set.run(ago(12), 'in_transit', 'paid', slow!);
+  set.run(ago(20), 'delivered', 'refunded', refunded!);
+  orderId = late!;
+  const [, out] = await run([flag(), { call: 'list_orders', input: { days: 30, limit: 1 } }]);
+  expect(out).toMatch(/\n# By supplier\nsupplier,orders,unfulfilled_3d_plus,in_transit_10d_plus,refunded,open_issues\n/);
+  expect(out).toContain('\nSlow Co,3,1,1,1,1\n');
+});

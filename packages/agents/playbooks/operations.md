@@ -6,7 +6,7 @@ Get every paid order delivered on time, catch problems before the customer or pl
 ## Operating loop
 1. `search_memory`: real supplier lead times, backups, open issues, owner's refund policy.
 2. `store_summary`: orders/day, AOV, platform. Platform-pack SLAs override the defaults below.
-3. `list_orders` (30-60 days): bucket by `fulfillment_status` and age (`created_at`): unfulfilled past SLA, no tracking/movement, in transit too long, refunded. Split by `supplier` and product.
+3. `list_orders` (30-60 days): bucket by `fulfillment_status` and age (`created_at`): unfulfilled past SLA, no tracking/movement, in transit too long, refunded. Its "By supplier" scorecard covers every order in the window: the worst supplier per order is usually the root cause.
 4. `list_products`: avg daily units per SKU (from orders), days of cover, reorder point.
 5. Compute on-time fulfillment %, refund rate %, open issues (count, %).
 6. Rank by orders affected × value × customer impact. Put each problem order in the owner's queue with `flag_order_issue` (facts + next step); when one cause (a supplier, a carrier) hits many orders, say so in each note and lead the summary with it.

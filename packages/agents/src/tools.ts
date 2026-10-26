@@ -146,7 +146,9 @@ export const APP_TOOLS: AppTool[] = [
   }),
   defineTool({
     name: 'list_orders',
-    description: 'Orders from the last N days, newest first, with fulfillment status, supplier and tracking (CSV), plus counts per fulfillment status.',
+    description:
+      'Orders from the last N days, newest first, with fulfillment status, supplier and tracking (CSV), plus counts per fulfillment status and a ' +
+      'scorecard per supplier over all orders in the window (unfulfilled 3+ days, in transit 10+ days, refunded, open issues).',
     input: {
       days: z.number().int().min(1).max(90).default(14),
       fulfillment: z.enum(['unfulfilled', 'fulfilled', 'in_transit', 'delivered']).optional(),
@@ -163,7 +165,23 @@ export const APP_TOOLS: AppTool[] = [
            WHERE store_id = ? AND created_at >= ? ${fulfillment ? 'AND fulfillment_status = ?' : ''} ORDER BY created_at DESC LIMIT ?`,
         )
         .all(...([ctx.store.id, from, ...(fulfillment ? [fulfillment] : []), limit] as string[]));
-      return `counts: ${counts.map((c) => `${c.status} ${c.n}`).join(', ') || 'none'}\n${csv(rows)}`;
+      const suppliers = ctx.db
+        .prepare(
+          `SELECT coalesce(o.supplier, '(none)') AS supplier, count(*) AS orders,
+             sum(o.fulfillment_status = 'unfulfilled' AND o.created_at < ?) AS unfulfilled_3d_plus,
+             sum(o.fulfillment_status = 'in_transit' AND o.created_at < ?) AS in_transit_10d_plus,
+             sum(o.status = 'refunded') AS refunded,
+             sum(EXISTS (SELECT 1 FROM order_issues i WHERE i.store_id = o.store_id AND i.order_id = o.id AND i.status = 'open')) AS open_issues
+           FROM orders o WHERE o.store_id = ? AND o.created_at >= ? GROUP BY 1 ORDER BY 2 DESC`,
+        )
+        .all(since(3), since(10), ctx.store.id, from);
+      return [
+        `counts: ${counts.map((c) => `${c.status} ${c.n}`).join(', ') || 'none'}`,
+        '# By supplier',
+        csv(suppliers),
+        '# Orders',
+        csv(rows),
+      ].join('\n');
     },
   }),
   defineTool({
