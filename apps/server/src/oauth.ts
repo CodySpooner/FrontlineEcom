@@ -49,7 +49,7 @@ const PROVIDERS: Partial<Record<IntegrationKind, Provider>> = {
     redirect: PASTE_REDIRECT,
     authorizeUrl: ({ values, redirectUri, state, challenge }) =>
       `https://www.etsy.com/oauth/connect?${new URLSearchParams({
-        response_type: 'code', client_id: values.apiKey!, redirect_uri: redirectUri, scope: 'transactions_r listings_r', state, code_challenge: challenge, code_challenge_method: 'S256',
+        response_type: 'code', client_id: values.apiKey!, redirect_uri: redirectUri, scope: 'transactions_r listings_r listings_w', state, code_challenge: challenge, code_challenge_method: 'S256',
       })}`,
     exchange: async ({ values, redirectUri, code, verifier }, fetchFn, now) => {
       const t = await tokenPost('https://api.etsy.com/v3/public/oauth/token', { grant_type: 'authorization_code', client_id: values.apiKey!, redirect_uri: redirectUri, code, code_verifier: verifier }, fetchFn, 'Etsy');

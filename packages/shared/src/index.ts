@@ -9,6 +9,8 @@ export type Platform = 'shopify' | 'tiktok_shop' | 'etsy' | 'amazon' | 'woocomme
  * are Shopify only. A demo store takes them anywhere as local drafts.
  */
 export const PRODUCT_WRITE_PLATFORMS: readonly Platform[] = ['shopify', 'woocommerce'];
+/** Platforms whose live prices an approved `store.set_price` can change. */
+export const PRICE_WRITE_PLATFORMS: readonly Platform[] = ['shopify', 'woocommerce', 'etsy'];
 export const PLATFORMS: Platform[] = ['shopify', 'tiktok_shop', 'etsy', 'amazon', 'woocommerce', 'walmart'];
 
 export type Niche = 'beauty' | 'pet' | 'tech' | 'fitness' | 'home' | 'fashion' | 'kids' | 'outdoor' | 'other';

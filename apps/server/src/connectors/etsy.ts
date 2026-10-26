@@ -1,9 +1,11 @@
 import type { ProductStatus } from '@frontline/shared';
+import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
 
-// Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r).
+// Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r, and
+// listings_w for approved price changes: setEtsyListingPrice).
 const API = 'https://openapi.etsy.com/v3/application';
 const TOKEN_URL = 'https://api.etsy.com/v3/public/oauth/token';
 /** First sync pulls this many days of receipts (1Y range + the previous year for deltas). */
@@ -48,16 +50,21 @@ async function refreshEtsy(db: Db, key: Buffer, id: string, creds: Record<string
   return body.access_token;
 }
 
+/** The shop ID and request headers, renewing the access token when it has under 5 minutes left. */
+async function etsyAuth(db: Db, key: Buffer, id: string, creds: Record<string, string>, fetchFn: Fetch, now: Date) {
+  const shopId = creds.shopId!.trim();
+  if (!/^\d+$/.test(shopId)) throw new Error('Shop ID must be the number of your Etsy shop');
+  const fresh = Number(creds.accessTokenExpiresAt) * 1000 - now.getTime() > 5 * 60_000;
+  const token = fresh ? creds.accessToken! : await refreshEtsy(db, key, id, creds, fetchFn, now);
+  return { shopId, headers: { 'x-api-key': `${creds.apiKey}:${creds.sharedSecret}`, authorization: `Bearer ${token}` } };
+}
+
 export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `etsy:${storeId}`;
   const creds = getCredentials(db, key, 'etsy', storeId);
   if (!creds) return;
   try {
-    const shopId = creds.shopId!.trim();
-    if (!/^\d+$/.test(shopId)) throw new Error('Shop ID must be the number of your Etsy shop');
-    const fresh = Number(creds.accessTokenExpiresAt) * 1000 - now.getTime() > 5 * 60_000;
-    const token = fresh ? creds.accessToken! : await refreshEtsy(db, key, id, creds, fetchFn, now);
-    const headers = { 'x-api-key': `${creds.apiKey}:${creds.sharedSecret}`, authorization: `Bearer ${token}` };
+    const { shopId, headers } = await etsyAuth(db, key, id, creds, fetchFn, now);
     const get = async <T>(path: string, params: Record<string, string>) => {
       const res = await fetchFn(`${API}${path}?${new URLSearchParams(params)}`, { headers });
       const body = (await res.json().catch(() => ({}))) as { results?: T[]; count?: number; error?: string };
@@ -118,4 +125,56 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Etsy sync failed');
   }
+}
+
+interface Inventory {
+  products: {
+    sku: string;
+    is_deleted?: boolean;
+    property_values: { property_id: number; property_name?: string | null; scale_id?: number | null; value_ids: number[]; values: string[] }[];
+    offerings: { price: Money; quantity: number; is_enabled: boolean; is_deleted?: boolean; readiness_state_id?: number | null }[];
+  }[];
+  price_on_property: number[];
+  quantity_on_property: number[];
+  sku_on_property: number[];
+  readiness_state_on_property?: number[] | null;
+}
+
+/**
+ * Sets a live listing's price. Call only for an approved request. Same contract as Shopify's setProductPrice, except that
+ * Etsy has no compare-at price (sales are Shop Manager promotions) and a listing priced per variation is refused, not flattened.
+ */
+export async function setEtsyListingPrice(db: Db, key: Buffer, storeId: string, productId: string, { price, compareAt }: { price: number; compareAt?: number | null }, fetchFn: Fetch = fetch, now = new Date()) {
+  if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be more than 0');
+  if (compareAt != null) throw new Error('Etsy has no compare-at price; put the listing on sale from Shop Manager → Marketing → Sales and discounts');
+  const listingId = /^etsy-(\d+)$/.exec(productId)?.[1];
+  if (!listingId) throw new Error(`${productId} is not an Etsy listing`);
+  const creds = getCredentials(db, key, 'etsy', storeId);
+  if (!creds) throw new Error('Etsy is not connected for this store');
+  await logAction(db, storeId, 'price_change', productId, { price }, async () => {
+    const { headers } = await etsyAuth(db, key, `etsy:${storeId}`, creds, fetchFn, now);
+    const call = async <T>(body?: object) => {
+      const res = await fetchFn(`${API}/listings/${listingId}/inventory`, body ? { method: 'PUT', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) } : { headers });
+      const json = (await res.json().catch(() => ({}))) as Partial<T> & { error?: string };
+      // Shops connected before listings_w was asked for get a 403 here.
+      if (res.status === 401 || res.status === 403) throw new Error(`Etsy refused the change (${json.error ?? `HTTP ${res.status}`}); connect Etsy again so the app may edit listings`);
+      if (!res.ok) throw new Error(`Etsy: ${json.error ?? `HTTP ${res.status}`}`);
+      return json;
+    };
+    const inv = (await call<Inventory>()) as Inventory;
+    if (inv.price_on_property?.length) throw new Error(`Etsy: listing ${productId} is priced per variation; change its prices in Shop Manager`);
+    // The PUT replaces the whole inventory: every product goes back as read, minus the read-only ids, at the new price.
+    await call({
+      products: inv.products.filter((p) => !p.is_deleted).map((p) => ({
+        sku: p.sku,
+        property_values: p.property_values.map(({ property_id, property_name, scale_id, value_ids, values }) => ({ property_id, ...(property_name ? { property_name } : {}), scale_id: scale_id ?? null, value_ids, values })),
+        offerings: p.offerings.filter((o) => !o.is_deleted).map((o) => ({ price, quantity: o.quantity, is_enabled: o.is_enabled, readiness_state_id: o.readiness_state_id ?? null })),
+      })),
+      price_on_property: [],
+      quantity_on_property: inv.quantity_on_property,
+      sku_on_property: inv.sku_on_property,
+      ...(inv.readiness_state_on_property ? { readiness_state_on_property: inv.readiness_state_on_property } : {}),
+    });
+  });
+  db.prepare('UPDATE products SET price = ?, compare_at = NULL WHERE store_id = ? AND id = ?').run(price, storeId, productId);
 }

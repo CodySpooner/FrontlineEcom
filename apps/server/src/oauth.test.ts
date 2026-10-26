@@ -49,7 +49,7 @@ test('Etsy: the owner pastes the https address they land on; tokens and expiry a
   const start = (await (await app.request('/api/integrations/oauth/start', post({ kind: 'etsy', storeId: 'pawsome', values }))).json()) as OAuthStart;
   expect(start).toMatchObject({ finish: 'paste', redirectUri: PASTE_REDIRECT });
   const state = new URL(start.url).searchParams.get('state');
-  expect(new URL(start.url).searchParams.get('scope')).toBe('transactions_r listings_r');
+  expect(new URL(start.url).searchParams.get('scope')).toBe('transactions_r listings_r listings_w');
 
   const saved = (await (await app.request('/api/integrations/oauth/finish', post({ url: ` ${PASTE_REDIRECT}?code=etsy-code&state=${state} ` }))).json()) as Integration;
   expect(saved).toMatchObject({ id: 'etsy:pawsome', status: 'connected', settings: { shopId: '987' } });

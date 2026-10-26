@@ -2,8 +2,8 @@ import { randomBytes } from 'node:crypto';
 import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
-import { getCredentials, saveIntegration } from '../integrations';
-import { syncEtsy } from './etsy';
+import { getCredentials, saveIntegration, updateSecrets } from '../integrations';
+import { setEtsyListingPrice, syncEtsy } from './etsy';
 
 const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
@@ -98,4 +98,45 @@ test("an Etsy store takes its shop's currency from the receipts", async () => {
   await syncEtsy(db, key, 'pawsome', fetchFn, NOW);
   expect(db.prepare("SELECT currency FROM stores WHERE id = 'pawsome'").get()?.currency).toBe('EUR');
   expect(db.prepare("SELECT total FROM orders WHERE store_id = 'pawsome' AND id = 'etsy-7'").get()?.total).toBe(31);
+});
+
+test('an approved Etsy price goes back with the whole inventory as read; per-variation prices and compare-at are refused', async () => {
+  const db = setup();
+  updateSecrets(db, key, 'etsy:pawsome', { accessTokenExpiresAt: String(T('2026-10-27T00:00:00Z')) });
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('pawsome', 'etsy-555', 'Mug', 20, 0, 9, 'active')").run();
+  const offering = (id: number, qty: number) => ({ offering_id: id, quantity: qty, is_enabled: true, is_deleted: false, price: usd(2000), readiness_state_id: 7 });
+  const color = (id: number, value: string) => [{ property_id: 200, property_name: 'Color', scale_id: null, scale_name: null, value_ids: [id], values: [value] }];
+  let inventory = {
+    products: [
+      { product_id: 1, sku: 'M-RED', is_deleted: false, property_values: color(1, 'Red'), offerings: [offering(11, 5)] },
+      { product_id: 2, sku: 'M-BLUE', is_deleted: false, property_values: color(2, 'Blue'), offerings: [offering(12, 4)] },
+    ],
+    price_on_property: [] as number[], quantity_on_property: [200], sku_on_property: [200], readiness_state_on_property: [],
+  };
+  const puts: unknown[] = [];
+  const fetchFn = (async (url: string, init: RequestInit = {}) => {
+    expect(url).toBe('https://openapi.etsy.com/v3/application/listings/555/inventory');
+    expect(new Headers(init.headers).get('authorization')).toBe('Bearer 123.at_old');
+    if (init.method === 'PUT') puts.push(JSON.parse(String(init.body)));
+    return Response.json(inventory);
+  }) as typeof fetch;
+
+  await setEtsyListingPrice(db, key, 'pawsome', 'etsy-555', { price: 24.5 }, fetchFn, NOW);
+  const offer = (qty: number) => [{ price: 24.5, quantity: qty, is_enabled: true, readiness_state_id: 7 }];
+  const prop = (id: number, value: string) => [{ property_id: 200, property_name: 'Color', scale_id: null, value_ids: [id], values: [value] }];
+  expect(puts).toEqual([{
+    products: [{ sku: 'M-RED', property_values: prop(1, 'Red'), offerings: offer(5) }, { sku: 'M-BLUE', property_values: prop(2, 'Blue'), offerings: offer(4) }],
+    price_on_property: [], quantity_on_property: [200], sku_on_property: [200], readiness_state_on_property: [],
+  }]);
+  expect(db.prepare("SELECT price FROM products WHERE store_id = 'pawsome' AND id = 'etsy-555'").get()?.price).toBe(24.5);
+
+  await expect(setEtsyListingPrice(db, key, 'pawsome', 'etsy-555', { price: 20, compareAt: 30 }, fetchFn, NOW)).rejects.toThrow('Etsy has no compare-at price');
+  inventory = { ...inventory, price_on_property: [200] };
+  await expect(setEtsyListingPrice(db, key, 'pawsome', 'etsy-555', { price: 20 }, fetchFn, NOW)).rejects.toThrow('priced per variation');
+  expect(puts).toHaveLength(1);
+  const denied = (async () => Response.json({ error: 'insufficient scope' }, { status: 403 })) as typeof fetch;
+  await expect(setEtsyListingPrice(db, key, 'pawsome', 'etsy-555', { price: 20 }, denied, NOW)).rejects.toThrow('connect Etsy again');
+  expect(db.prepare("SELECT action, error IS NULL AS ok FROM action_log WHERE store_id = 'pawsome' ORDER BY rowid").all()).toEqual([
+    { action: 'price_change', ok: 1 }, { action: 'price_change', ok: 0 }, { action: 'price_change', ok: 0 },
+  ]);
 });
