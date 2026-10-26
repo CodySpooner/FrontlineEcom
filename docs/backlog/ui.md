@@ -7,6 +7,7 @@ Orca's browser against the reference before ticking it.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from core) Fixed: demo orders no longer have future `createdAt`. They are seeded only on first run, so delete your worktree's `apps/server/.data/frontline.db*` (keep `secret.key`) to reseed.
 - [ ] (from core) Supplier search: `GET /api/suppliers/products?q=&limit=` → `SupplierProduct[]` (CJ catalog: sku, title, image, price before shipping, `listed` demand signal; `demo: true` when CJ isn't connected). It could back a "Find supplier" action on Product Research. Orders' `supplier` / `tracking` now fill in from CJ.
 - [ ] (from agents) For UI-16 Knowledge Base: shared `KnowledgeDoc`. `GET /api/knowledge` → index (kind playbook/platform/niche, key, title, chars, `custom` for owner custom niche packs keyed `other:<slug>`), `GET /api/knowledge/:kind/:key` → with `markdown`. Store memory stays at `GET/POST /api/stores/:id/memory` + `PATCH/DELETE /api/memory/:id`; shared niche learnings at `/api/niche-learnings?niche=` (same niche keys).
 - [x] (from agents) For UI-12 issues queue: shared `OrderIssue` (kind late/stuck/refund/supplier/address/other, severity low/medium/high, note, suggestedAction, status open/resolved, resolution). `GET /api/order-issues?stores=&status=&limit=` (open first, newest first) and `PATCH /api/order-issues/:id { status: 'resolved' | 'open', resolution? }`. Issues come from the Operations agent (`flag_order_issue`, and the new daily "Daily order check" job).

@@ -141,7 +141,9 @@ function seedCatalog(db: Db, storeId: string, today: string) {
     for (let k = 0; k < demoDay(storeId, date).orders; k++) {
       const [, price] = products[Math.floor(r() * products.length)]!;
       const qty = r() < 0.8 ? 1 : 2;
-      const at = new Date(`${date}T00:00:00Z`).getTime() + Math.floor(r() * 86400000);
+      // Within the local day; today's orders (all of them, so the count matches daily_metrics) only up to now.
+      const midnight = new Date(`${date}T00:00:00`).getTime();
+      const at = midnight + Math.floor(r() * Math.min(86400000, Math.max(60_000, Date.now() - midnight)));
       const fulfillment = ago >= 4 ? 'delivered' : ago >= 2 ? 'in_transit' : ago === 1 ? 'fulfilled' : 'unfulfilled';
       const tracking = fulfillment === 'unfulfilled' ? null : `YT${2600000000 + Math.floor(r() * 99999999)}`;
       order.run(storeId, `#${n++}`, new Date(at).toISOString(), cents(price * qty), r() < 0.03 ? 'refunded' : 'paid', fulfillment, SUPPLIERS[Math.floor(r() * SUPPLIERS.length)]!, tracking);

@@ -5,8 +5,8 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from agents) FYI migration 18 (agents lane) adds `product_tests`; it reads your `order_items` (thanks) for product outcomes on non-demo stores. No action needed.
-- [ ] (from ui) Demo orders have `createdAt` later than now. At about 05:45 local the newest is "Oct 26, 7:59 PM" (`2026-10-26T23:59Z`), so today's orders seem to be spread over the whole day. Could the generator stop at the current time? Orders, the Needs You queue and the live feed all show these future times.
+- [x] (from agents) FYI migration 18 (agents lane) adds `product_tests`; it reads your `order_items` (thanks) for product outcomes on non-demo stores. No action needed.
+- [x] (from ui) Demo orders have `createdAt` later than now. At about 05:45 local the newest is "Oct 26, 7:59 PM" (`2026-10-26T23:59Z`), so today's orders seem to be spread over the whole day. Could the generator stop at the current time? Orders, the Needs You queue and the live feed all show these future times.
 - [x] (from agents) FYI migration 17 (agents lane) adds `order_issues`; no action needed.
 - [x] (from agents) Store Builder publishing (AGT-26): approved `store.publish_page` on connected Shopify stores only notifies the owner. When the connector can push it, export e.g. `publishProductPage(db, key, storeId, productId, { title, descriptionHtml, seoTitle?, seoDescription? })` (productUpdate) and `publishPage(db, key, storeId, { title, bodyHtml })` (pageCreate, needs `write_content`) and I'll call them from `publishDraft`. FYI migration 15 (agents lane) adds `page_drafts`.
 - [x] (from agents) FYI migration 14 (agents lane) adds table `niche_learnings`; no action needed.
@@ -60,6 +60,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Inbox (ui): demo orders were seeded across the UTC day, so some were in the future. They now fall within the local day and stop at the current time
 - 2026-10-26 — CORE-13: `GET /api/suppliers/products?q=&limit=` → `SupplierProduct[]` (CJ catalog search, lowest variant price; demo matches from the research catalog without CJ). DSers has no public API, so it is skipped
 - 2026-10-26 — CORE-13 (1/2): CJ Dropshipping connector (global): order status + tracking matched to store orders by order number (store name breaks ties), status only moves forward; platform resyncs keep supplier tracking
 - 2026-10-26 — Inbox (agents AGT-26): `publishProductPage` (productUpdate: title, description, SEO) and `publishPage` (pageCreate, published) in the Shopify connector; Shopify help text lists `write_online_store_pages`

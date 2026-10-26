@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { openDb } from './db';
+import { addDays, localDate } from './dates';
 import { DEMO_DAYS, demoDay, seedDemo } from './demo';
 
 const TODAY = '2026-10-26';
@@ -43,4 +44,15 @@ test('seedDemo on a later day only tops up the missing days', () => {
   expect(count(db, 'SELECT count(*) AS n FROM daily_metrics')).toBe(3 * (DEMO_DAYS + 3));
   expect(count(db, "SELECT count(*) AS n FROM approvals")).toBe(3);
   expect(db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'peak' AND date = '2026-10-28'").get()?.revenue).toBe(demoDay('peak', '2026-10-28').revenue);
+});
+
+test('demo orders are never in the future and fall within their local day', () => {
+  const db = openDb();
+  const today = localDate();
+  seedDemo(db, today);
+  const now = Date.now();
+  const midnight = new Date(`${addDays(today, -6)}T00:00:00`).getTime();
+  const times = db.prepare('SELECT created_at FROM orders').all().map((r) => Date.parse(String(r.created_at)));
+  expect(times.length).toBeGreaterThan(0);
+  expect(times.every((t) => t <= now && t >= midnight)).toBe(true);
 });
