@@ -67,9 +67,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-27 Sync-failure notifications: when an integration's sync flips to `error` (expired token, revoked key), raise one `error` notification (integration + store name, readable message, link `/integrations`), not one per retry; an `info` one when it recovers.
 - [x] CORE-28 Action log (DESIGN §11 "every executed action is logged"): every live write (ad budget/pause, product create, price change, page/product-page publish) appends to `action_log` (store, action, target, detail, ok/error, at), and `GET /api/actions?stores=&limit=` lists them newest first.
 
+- [x] CORE-29 Start with Windows: tray checkbox (installed app) registers a login item that starts Frontline Ecom hidden in the tray, so scheduled agent jobs, syncs and backups run without opening the window (M4).
+
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-29: tray menu "Start with Windows" checkbox (installed app) sets an Electron login item with `--hidden`. Started that way, the app runs API, syncs, scheduler and backups in the tray with no window until opened (tray click or launching it again). Verified the hidden start and re-open from the repo build. I didn't toggle the login item itself (it writes the owner's HKCU Run key)
 - 2026-10-26 — CORE-28: `action_log` (migration 24) + `logAction()`. Every live write (ad budget and pause, Shopify product create, price change, product page and page publish) is recorded with its outcome at the connector layer, whoever called it. `GET /api/actions?stores=&limit=` → `ActionLogEntry[]`
 - 2026-10-26 — CORE-27: the sync loop raises one `error` notification when an integration goes from working to `error` ("Shopify for Glow Haus stopped syncing", with the reason, link `/integrations`), and one `info` when it recovers. Retries that keep failing stay quiet
 - 2026-10-26 — Inbox (agents): `setProductPrice(db, key, storeId, productId, { price, compareAt? }, fetchFn?)` in `connectors/shopify.ts` reprices every variant (productVariantsBulkUpdate) and the local product. compareAt: a number sets it, null clears it, omitted leaves it. Throws "Shopify: …" (not found, over 250 variants, userErrors) or "not connected"

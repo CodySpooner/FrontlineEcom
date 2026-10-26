@@ -12,6 +12,9 @@ const API_ENTRY = app.isPackaged ? join(process.resourcesPath, 'server/server.mj
 const WEB_DIR = app.isPackaged ? join(process.resourcesPath, 'web') : join(root, 'apps/web/dist');
 const ICON = join(app.getAppPath(), 'build/icon.png');
 const BG = '#08080a';
+// Login item (tray → Start with Windows): Windows starts the app with --hidden, so it waits in the tray.
+const LOGIN = { args: ['--hidden'] };
+const HIDDEN = process.argv.includes('--hidden');
 
 let win: BrowserWindow | undefined;
 let tray: Tray | undefined;
@@ -50,7 +53,7 @@ async function start() {
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: BG, symbolColor: '#d4d4d8', height: 40 },
   });
-  win.once('ready-to-show', show);
+  if (!HIDDEN) win.once('ready-to-show', show);
   // Closing hides to the tray so automations and agents keep running; Quit is in the tray menu.
   win.on('close', (e) => {
     if (quitting) return;
@@ -70,7 +73,11 @@ async function start() {
   tray = new Tray(nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 }));
   tray.setToolTip('Frontline Ecom');
   tray.on('click', show);
-  tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Frontline Ecom', click: show }, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));
+  // ponytail: installed app only; from the repo the login item would point at the bare electron.exe.
+  const startWithWindows: Electron.MenuItemConstructorOptions[] = app.isPackaged
+    ? [{ label: 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings(LOGIN).openAtLogin, click: (item) => app.setLoginItemSettings({ ...LOGIN, openAtLogin: item.checked }) }]
+    : [];
+  tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Frontline Ecom', click: show }, ...startWithWindows, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));
 }
 
 /** Runs the API in a utility process on a free localhost port and resolves its URL once it answers. */
