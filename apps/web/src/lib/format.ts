@@ -8,6 +8,12 @@ export const money = (n: number, currency = 'USD') => (n < 0 ? '−' : '') + fmt
 
 export const cents = (n: number, currency = 'USD') => fmt(currency).format(n);
 
+/** Dashboard KPI tiles: the full amount while it fits a 5-across tile ($6,526,927), else compact ($71.2M, MX$68M, ¥150M). */
+export const fitMoney = (n: number, currency = 'USD') =>
+  money(Math.abs(n), currency).length <= 10
+    ? money(n, currency)
+    : (n < 0 ? '−' : '') + new Intl.NumberFormat('en-US', { style: 'currency', currency, notation: 'compact', maximumSignificantDigits: 3 }).format(Math.abs(n));
+
 const symbol = (currency: string) => fmt(currency).formatToParts(0).find((p) => p.type === 'currency')?.value ?? '';
 
 /** Axis labels: $850, $4.5K, $1.2M */

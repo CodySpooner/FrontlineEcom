@@ -1,11 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { ago, cents, day, modelName, money, noBaseline, shortMoney, signedPct } from './format';
+import { ago, cents, day, fitMoney, modelName, money, noBaseline, shortMoney, signedPct } from './format';
 
 describe('format', () => {
   it('formats money with a real minus sign for losses', () => {
     expect(money(24532.4)).toBe('$24,532');
     expect(money(-1200.6)).toBe('−$1,201');
   });
+  it("keeps a KPI's full amount while it fits a tile, else goes compact", () => {
+    expect(fitMoney(6_526_927)).toBe('$6,526,927');
+    expect(fitMoney(71_195_706)).toBe('$71.2M');
+    expect(fitMoney(-1_459_212)).toBe('−$1,459,212');
+    expect(fitMoney(-71_195_706)).toBe('−$71.2M');
+    expect(fitMoney(68_000_000, 'MXN')).toBe('MX$68M');
+    expect(fitMoney(150_000_000, 'JPY')).toBe('¥150M');
+  });
+
   it('shortens axis money', () => {
     expect(shortMoney(850)).toBe('$850');
     expect(shortMoney(4500)).toBe('$4.5K');

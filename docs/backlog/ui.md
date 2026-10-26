@@ -332,6 +332,9 @@ Orca's browser against the reference before ticking it.
       are added) from Agents, the Dashboard's empty agents panel and a "No stores yet" panel on Integrations.
 - [x] UI-131 With no stores, Settings' Caps & Autopilot showed loading skeletons forever (`!storeId || q.isPending`). It now
       says "Caps are set per store: add a store above, then set its limits here."
+- [x] UI-132 Dashboard KPI tiles (5 across from 1280px, 191px each) overflowed for big amounts: "MX$68,000,000" ran 34px past
+      the card, "¥150,000,000" 7px, and anything 11+ characters squeezed the sparkline to nothing. Amounts past 10
+      characters now read compact ($71.2M, MX$68M, ¥150M); smaller stores keep the exact figure.
 
 ## Blocked
 
@@ -508,3 +511,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-129: every page has one h1 first and, after this, no skipped levels (Orca audit of all 14 routes). Research's count line is an `h2` styled 12px/400/muted like the old `p`, and reads "1 product" for one result. New Research test (h2 "1 product, best first" over the h3 card). My Lists already had list titles as h2
 - 2026-10-26 — UI-130: audited every page with zero stores on a throwaway API (temp FRONTLINE_DATA_DIR, FRONTLINE_AGENT_ENGINE=fake, port 18797) + Vite (15183), the 3 seeded stores deleted there only; the dev DB kept its 3. Integrations renders a Store Platforms panel with "No stores yet" + "Add a store" when `useStores().data` is empty (not while loading). New Agents and Integrations tests. Orca: all three links go to /settings, clicking one lands there
 - 2026-10-26 — UI-131: found on the UI-130 zero-store instance. New Settings test (red on the old code, green now). The rest of the zero-store sweep is clean: Builder, Competitors, Creative and Research disable their submit with no store, Knowledge's Store memory shows its empty state, every other page shows zeros or its empty state. Orca at 800px: the line under the Caps heading, Stores' "Add store" above it
+- 2026-10-26 — UI-132: `fitMoney` in lib/format (Intl compact, 3 significant digits, the 10-character limit on the unsigned amount so losses match) for Revenue, Profit and Ad Spend. New format test. Chrome with a client-side ×100 summary patch, 1Y, body pinned to 1280px: "$71.2M / $15.5M / $26.7M" with 66–71px sparklines (were ~0); unpatched 30D still "$65,269 / $14,589 / $24,230". Orca at 800px fit even before. Analytics' stat row had no overflow at 1280 with the same patch. Reduced motion is already handled globally in index.css

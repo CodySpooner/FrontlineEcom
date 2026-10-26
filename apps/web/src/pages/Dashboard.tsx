@@ -13,7 +13,7 @@ import { Hero } from '../components/Hero';
 import { DemoMixNote, StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
 import { PERIOD, RANGES, sparkPoints, weekly } from '../lib/chart';
-import { ago, cents, fmtDay, money, noBaseline, signedPct } from '../lib/format';
+import { ago, cents, fitMoney, fmtDay, money, noBaseline, signedPct } from '../lib/format';
 import { importing } from '../lib/sync';
 import { NAV } from '../nav';
 
@@ -113,7 +113,7 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
   const series = s.series.slice(0, -1);
   return (
     <div className={cx(grid, 'transition-opacity', q.isPlaceholderData && 'opacity-60')}>
-      <Kpi label="Total Revenue" value={money(t.revenue, s.currency)} d={d.revenue} fresh={fresh('revenue')} series={series.map((p) => p.revenue)} />
+      <Kpi label="Total Revenue" value={fitMoney(t.revenue, s.currency)} d={d.revenue} fresh={fresh('revenue')} series={series.map((p) => p.revenue)} />
       <Kpi
         hero
         label={
@@ -130,13 +130,13 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
             </Link>
           )
         }
-        value={money(t.profit, s.currency)}
+        value={fitMoney(t.profit, s.currency)}
         negative={t.profit < 0}
         d={d.profit}
         fresh={fresh('profit')}
         series={series.map((p) => p.profit)}
       />
-      <Kpi label="Ad Spend" value={money(t.adSpend, s.currency)} d={d.adSpend} fresh={fresh('adSpend')} series={series.map((p) => p.adSpend)} />
+      <Kpi label="Ad Spend" value={fitMoney(t.adSpend, s.currency)} d={d.adSpend} fresh={fresh('adSpend')} series={series.map((p) => p.adSpend)} />
       <Kpi label="ROAS" value={t.adSpend ? `${t.roas.toFixed(1)}x` : '–'} d={d.roas} fresh={fresh('roas')} series={series.map((p) => p.roas)} />
       <Kpi label="Total Orders" extra={`AOV ${cents(t.aov, s.currency)}`} value={t.orders.toLocaleString('en-US')} d={d.orders} fresh={fresh('orders')} series={series.map((p) => p.orders)} />
     </div>
