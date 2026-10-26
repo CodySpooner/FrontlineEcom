@@ -31,4 +31,11 @@ describe("an agent's daily AI budget", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save budget' }));
     await vi.waitFor(() => expect(patches(fetch)).toEqual([['/api/agents/peak%3Aad_strategist', { dailyBudgetUsd: null }]]));
   });
+
+  it("shows how much of its budget the agent used today", async () => {
+    const today = new Date().toISOString();
+    stubApi((url) => (url.startsWith('/api/runs') ? [{ id: 'r1', agentId: agent.id, storeId: 'peak', status: 'done', createdAt: today, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0.42 } }] : []));
+    renderApp(<AgentBudget agent={{ ...agent, dailyBudgetUsd: 1 }} />);
+    expect(await screen.findByText('$0.42 of $1.00 used today')).toBeTruthy();
+  });
 });

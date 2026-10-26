@@ -12,6 +12,7 @@ import { useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, buttonClass, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
 import { describeTrigger, when } from '../lib/automation';
 import { ago, cents, money } from '../lib/format';
+import { spentToday } from '../lib/usage';
 import { NAV } from '../nav';
 
 const TABS = [
@@ -364,6 +365,7 @@ export function AgentBudget({ agent, storeCap }: { agent: Agent; storeCap?: numb
   const budget = value.trim() === '' ? null : Number(value);
   const valid = budget === null || (Number.isFinite(budget) && budget >= 0 && budget <= 1000);
   const changed = budget !== (agent.dailyBudgetUsd ?? null);
+  const runs = useRuns(agent.id).data;
   const save = (e: FormEvent) => {
     e.preventDefault();
     if (valid && changed) update.mutate({ id: agent.id, dailyBudgetUsd: budget });
@@ -389,6 +391,11 @@ export function AgentBudget({ agent, storeCap }: { agent: Agent; storeCap?: numb
           Save budget
         </Button>
       </div>
+      {agent.dailyBudgetUsd !== undefined && runs && (
+        <div className="mt-2.5">
+          <UsageMeter label="This agent's AI usage" used={spentToday(runs)} cap={agent.dailyBudgetUsd} fmt={(n) => cents(n)} />
+        </div>
+      )}
       <p className="mt-2 text-xs text-muted">
         USD per day, inside the store's AI cap{storeCap !== undefined && ` of ${money(storeCap)}/day`}. Blank: only the store's cap applies.
       </p>
