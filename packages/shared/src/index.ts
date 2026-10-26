@@ -150,6 +150,19 @@ export interface MetricTotals {
   aov: number;
 }
 
+export type StoreHealthStatus = 'winning' | 'steady' | 'bleeding';
+
+/**
+ * Store health (DESIGN §8): net margin = profit ÷ revenue over the period. Bleeding = losing money, Winning = 15%+ net
+ * margin, else Steady. `bar` fills 0..1 at 30% margin. One definition for the dashboard badges and the agents.
+ */
+// ponytail: fixed thresholds; per-niche targets if beauty-style 30% margins make every other niche look bad.
+export function storeHealth({ revenue, profit }: Pick<MetricTotals, 'revenue' | 'profit'>): { status: StoreHealthStatus; marginPct: number; bar: number } {
+  const marginPct = revenue > 0 ? Math.round((1000 * profit) / revenue) / 10 : 0;
+  const status = profit < 0 ? 'bleeding' : marginPct >= 15 ? 'winning' : 'steady';
+  return { status, marginPct, bar: Math.min(1, Math.max(0, marginPct / 30)) };
+}
+
 /** Percent change vs the previous period of the same length, e.g. 18.4 = +18.4%. 0 when the previous value is 0. */
 export type MetricDeltas = MetricTotals;
 

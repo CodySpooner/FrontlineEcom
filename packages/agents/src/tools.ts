@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct } from '@frontline/shared';
+import { AGENT_ROLES, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
@@ -73,11 +73,11 @@ const since = (days: number) => new Date(Date.now() - days * 86_400_000).toISOSt
 export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'store_summary',
-    description: 'Revenue, profit, ad spend, ROAS, orders and AOV for the last N days, with the previous period and % deltas.',
+    description: 'Revenue, profit, ad spend, ROAS, orders and AOV for the last N days, with the previous period, % deltas and store health (net margin: bleeding / steady / winning).',
     input: { range: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(365)]).default(30).describe('days') },
     run: async ({ range }, ctx) => {
       const s = ctx.summary(ctx.store.id, range);
-      return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas });
+      return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals) });
     },
   }),
   defineTool({
