@@ -7,7 +7,7 @@ import { officeApi, useSeats } from './api';
 import type { OfficeWorker } from './workerSprites';
 import { workerActivity, type OfficeState } from './events';
 
-export function OfficeScene({ office }: { office: OfficeState }) {
+export function OfficeScene({ office, onSelect, focus }: { office: OfficeState; onSelect: (agentId: string) => void; focus?: { id: string; at: number } }) {
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeRenderer>(undefined);
   const [desk, setDesk] = useState('');
@@ -19,10 +19,14 @@ export function OfficeScene({ office }: { office: OfficeState }) {
     return { seat, name: seat.displayName || (agent ? AGENT_ROLES[agent.role].name : seat.agentId), ...workerActivity(office, seat.agentId) };
   });
   const latestWorkers = useRef(workers); latestWorkers.current = workers;
+  const select = useRef(onSelect); select.current = onSelect;
+  const latestFocus = useRef(focus); latestFocus.current = focus;
+  const choose = (deskId: string) => { setDesk(deskId); const worker = latestWorkers.current.find((w) => w.seat.deskId === deskId); if (worker) select.current(worker.seat.agentId); };
   useEffect(() => { scene.current?.setWorkers(workers); }, [seats.data, office]);
+  useEffect(() => { if (focus) scene.current?.focusWorker(focus.id); }, [focus]);
   useEffect(()=>{
     let disposed=false; let renderer:OfficeRenderer|undefined;
-    createOffice(host.current!,setDesk).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setWorkers(latestWorkers.current); } }).catch((e:unknown)=>{if(!disposed)setError(e instanceof Error ? e.message : 'Renderer unavailable');});
+    createOffice(host.current!,choose).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setWorkers(latestWorkers.current);if(latestFocus.current)r.focusWorker(latestFocus.current.id); } }).catch((e:unknown)=>{if(!disposed)setError(e instanceof Error ? e.message : 'Renderer unavailable');});
     const changed=()=>setFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange',changed);
     // Persist settled tiles outside the rendering loop; motion never waits for a network request.
@@ -47,6 +51,6 @@ export function OfficeScene({ office }: { office: OfficeState }) {
     {error && <p role="alert" className="eco-scene-note">Office renderer unavailable: {error}</p>}
     {seats.isError && <p role="alert" className="eco-scene-note">Could not load workers: {seats.error.message}</p>}
     <div className="eco-scene-note" role="status">{occupant ? `${occupant.name} · ${occupant.status?.replaceAll('_', ' ')}${occupant.tool ? ` · ${occupant.tool}` : ''}` : selected ? `${ROOMS.find((r)=>r.id===selected.department)!.name} · Workstation ${selected.id.split('-').at(-1)}` : 'HEADQUARTERS · Select a workstation to inspect it'}</div>
-    <details className="eco-desk-access"><summary>Workstation directory</summary><div>{DESKS.map((d)=><button key={d.id} onClick={()=>{setDesk(d.id);scene.current?.focus(d);}}>{d.id}</button>)}</div></details>
+    <details className="eco-desk-access"><summary>Workstation directory</summary><div>{DESKS.map((d)=><button key={d.id} onClick={()=>{choose(d.id);scene.current?.focus(d);}}>{d.id}</button>)}</div></details>
   </>;
 }

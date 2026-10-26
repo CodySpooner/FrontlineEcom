@@ -58,7 +58,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-06 Characters: sprite sheets with the 10 animations (spec §4), per-agent appearance variation, isometric walk directions, animation state machine.
 - [x] ECO-07 Movement: A* on the grid with occupancy, walk to desk / meeting table / another desk; tests for the pathfinder.
 - [x] ECO-08 Real state → behavior: `AgentOfficeEvent` adapter over existing live messages + REST snapshot; state table from spec §5; idempotent on reconnect, ignores stale/out-of-order events; tests.
-- [ ] ECO-09 Agent panel: click a character → profile, live activity, performance (runs, cost/tokens where present), actions (chat, assign task, output, history, configure, pause/cancel, focus) using existing endpoints.
+- [x] ECO-09 Agent panel: click a character → profile, live activity, performance (runs, cost/tokens where present), actions (chat, assign task, output, history, configure, pause/cancel, focus) using existing endpoints.
 - [ ] ECO-10 Assign Task: compact command panel → real run on that agent; loading / success / failure / awaiting-approval states shown in the panel and on the character.
 - [ ] ECO-11 Deploy wizard: "+ Deploy Agent" picks an existing agent, department, free desk, name override, appearance; entry walk-in animation; counter `n / 30`; capacity block; archive keeps history.
 - [ ] ECO-12 Live activity feed + stat cards from real data (deployed n/30, active tasks, success rate, active teams); click an event → focus agent / open task.
@@ -75,6 +75,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-09: Select worker/desk to open an accessible profile drawer with pixel portrait, real model/provider, live status/tool/task, latest-50-run usage and output links. Existing chat/settings/history routes and pause/resume/cancel endpoints reused; camera focuses the worker's current position. Browser Product Hunter profile verified (.agent/eco-09.png); 117 files / 622 tests pass. Compact inline assignment follows in ECO-10.
 
 - 2026-10-26 ECO-08: Typed office events over existing runs/tools/approvals/parent links; REST + active transcripts restore state, WebSocket reconnects, terminal states and approval decisions reject stale regressions, tool IDs deduplicate late/replayed messages. Real status drives poses, tint and selected-worker text. Fake-store Product Hunter run completed through existing backend at $0; Orca .agent/eco-08.png inspected. 115 files / 615 tests pass.
 

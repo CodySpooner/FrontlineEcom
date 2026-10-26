@@ -71,6 +71,6 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     meridians.scale.x=.75+Math.sin(elapsed/2400)*.2;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, setWorkers: workers.update, drainPositions: workers.drainPositions, destroy:()=>{ resize.disconnect();app.destroy(true,{children:true});workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, drainPositions: workers.drainPositions, destroy:()=>{ resize.disconnect();app.destroy(true,{children:true});workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;

@@ -35,6 +35,12 @@ export function paintCharacters(looks: OfficeAppearance[]) {
   return canvas;
 }
 
+export function paintPortrait(look: OfficeAppearance) {
+  const canvas = document.createElement('canvas'); canvas.width = CELL.width; canvas.height = CELL.height;
+  paintPerson(canvas.getContext('2d')!, look, 'idle', 0, false);
+  return canvas;
+}
+
 function paintPerson(c: CanvasRenderingContext2D, look: OfficeAppearance, state: Animation, frame: number, back: boolean) {
   const r = (x: number, y: number, w: number, h: number, color: string) => { c.fillStyle = color; c.fillRect(x, y, w, h); };
   const skin = ['#e9b48c', '#c88862', '#966149', '#6e4536'][look.skin]!;

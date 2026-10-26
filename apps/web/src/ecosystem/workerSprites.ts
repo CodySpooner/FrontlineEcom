@@ -68,5 +68,5 @@ export function workerSprites(world: Container, select: (deskId: string) => void
       worker.sprite.texture = frame;
     }
   }
-  return { update, tick, drainPositions: () => { const entries = [...positions]; positions.clear(); return entries; }, destroy: () => { for (const frame of frames.values()) frame.destroy(); atlas?.destroy(true); } };
+  return { update, tick, position: (id: string) => motions.get(id)?.position, drainPositions: () => { const entries = [...positions]; positions.clear(); return entries; }, destroy: () => { for (const frame of frames.values()) frame.destroy(); atlas?.destroy(true); } };
 }
