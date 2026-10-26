@@ -93,8 +93,11 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
         ...opts.queryOptions?.(input),
       },
     });
+    // A resumed session's results carry its running total (checked 2026-10-26): this query's cost is the difference.
+    const own = (e: AgentEvent): AgentEvent =>
+      (e.type === 'done' || e.type === 'error') && e.usage && input.sessionCostUsd ? { ...e, usage: { ...e.usage, costUsd: Math.max(0, e.usage.costUsd - input.sessionCostUsd) } } : e;
     (async () => {
-      for await (const message of messages) for (const event of toAgentEvents(message)) events.push(event);
+      for await (const message of messages) for (const event of toAgentEvents(message)) events.push(own(event));
     })().then(() => events.end(), events.end);
     yield* events.drain();
   };
@@ -126,20 +129,13 @@ export function toAgentEvents(message: SDKMessage): AgentEvent[] {
       );
     }
     case 'result': {
-      if (message.subtype !== 'success') return [{ type: 'error', message: STOPPED[message.subtype] ?? (message.errors.join('; ') || message.subtype) }];
-      if (message.is_error) return [{ type: 'error', message: message.result || 'Claude returned an error' }];
       const u = message.usage;
-      return [
-        {
-          type: 'done',
-          sessionId: message.session_id,
-          usage: {
-            inputTokens: u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens,
-            outputTokens: u.output_tokens,
-            costUsd: message.total_cost_usd,
-          },
-        },
-      ];
+      // A run that stops early still spent money: errors carry it too, so the store's daily AI budget sees it.
+      const usage = u && { inputTokens: u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens, outputTokens: u.output_tokens, costUsd: message.total_cost_usd };
+      const failed = (text: string): AgentEvent[] => [{ type: 'error', message: text, ...(usage ? { usage } : {}) }];
+      if (message.subtype !== 'success') return failed(STOPPED[message.subtype] ?? (message.errors.join('; ') || message.subtype));
+      if (message.is_error) return failed(message.result || 'Claude returned an error');
+      return [{ type: 'done', sessionId: message.session_id, usage }];
     }
     default:
       return [];

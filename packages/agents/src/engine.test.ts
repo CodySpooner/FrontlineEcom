@@ -156,6 +156,15 @@ describe('Claude engine', () => {
     });
   });
 
+  test("a resumed session's running total becomes this query's own cost; errors carry what was spent", async () => {
+    const result = (o: object) => sdk({ type: 'result', session_id: 'abc', total_cost_usd: 0.5, usage: { input_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: 2 }, ...o });
+    const engine = (frame: SDKMessage) => claudeEngine({ query: () => (async function* () { yield frame; })() });
+    const ok = await collect(runAgent({ ...input, resume: 'abc', sessionCostUsd: 0.2 }, engine(result({ subtype: 'success', is_error: false, result: 'x' }))));
+    expect(ok.at(-1)).toEqual({ type: 'done', sessionId: 'abc', usage: { inputTokens: 10, outputTokens: 2, costUsd: 0.3 } });
+    const stopped = await collect(runAgent(input, engine(result({ subtype: 'error_max_turns', is_error: true, errors: [] }))));
+    expect(stopped.at(-1)).toMatchObject({ type: 'error', usage: { costUsd: 0.5 } });
+  });
+
   test('caps every run at 40 turns and at what is left of the daily AI budget', async () => {
     let seen: Options | undefined;
     const engine = claudeEngine({

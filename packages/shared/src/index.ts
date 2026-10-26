@@ -610,7 +610,8 @@ export type AgentEvent =
   | { type: 'memory_written'; memory: StoreMemory }
   /** `sessionId` continues the conversation when passed back as `resume`. */
   | { type: 'done'; sessionId: string; usage: RunUsage }
-  | { type: 'error'; message: string };
+  /** `usage`: what the run spent before it stopped, when the engine reports it. */
+  | { type: 'error'; message: string; usage?: RunUsage };
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Integrations (core lane). Secret values never leave the server; the API only says which secret fields are set.

@@ -230,6 +230,28 @@ test("the store's open requests are in the prompt, so nobody asks twice", async 
   expect(prompt).toContain("# Waiting for the owner\nAlready asked in this store; don't ask for these again:\n- Add 2 products (Product Hunter, 2026-10-24)\n\nToday is");
 });
 
+test('a follow-up and a reflection are told what their session already cost; a run that stops early is charged', async () => {
+  const seen: (number | undefined)[] = [];
+  const engine: Engine = async function* (input) {
+    seen.push(input.sessionCostUsd);
+    if (input.task === 'Look' && !input.resume) yield { type: 'tool_call', id: 't', name: 'store_summary', input: {} };
+    if (input.task === 'Too big') {
+      yield { type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.', usage: { ...usage, costUsd: 0.4 } };
+      return;
+    }
+    yield { type: 'done', sessionId: 's1', usage };
+  };
+  const m = manager({ engine });
+  const first = ok(m.start('glow:copywriter', 'Look'));
+  await m.idle();
+  ok(m.start('glow:copywriter', 'More', first.id));
+  await m.idle();
+  expect(seen).toEqual([undefined, 0.02, 0.04]); // run, its reflection (after the run's $0.02), the follow-up (run + reflection)
+  const big = ok(m.start('glow:market_analyst', 'Too big'));
+  await m.idle();
+  expect(getRun(db, big.id)).toMatchObject({ status: 'error', usage: { costUsd: 0.4 } });
+});
+
 test('a restart marks runs that were in flight as interrupted', () => {
   db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at) VALUES ('r1', 'glow', 'glow:copywriter', 't', 'running', '2026-10-26T00:00:00Z')`).run();
   manager();

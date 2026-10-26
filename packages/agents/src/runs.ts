@@ -154,11 +154,12 @@ export function createRunManager(opts: RunManagerOptions) {
           systemPrompt: assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id) }),
           signal,
           env: { ...env, runId: run.id },
-          ...(resume ? { resume: String(resume) } : {}),
+          ...(resume ? { resume: String(resume), sessionCostUsd: sessionCost(String(resume)) } : {}),
           ...(cap !== undefined ? { budgetUsd: Math.max(0, cap - costToday(db, store.id)) } : {}),
         };
         let toolCalls = 0;
-        for (let attempt = input; ; attempt = recapped(attempt)) {
+        let attempt = input;
+        for (; ; attempt = recapped(attempt)) {
           for await (const event of runAgent(attempt, engine)) {
             if (event.type === 'done' || event.type === 'error') end = event;
             else {
@@ -170,7 +171,7 @@ export function createRunManager(opts: RunManagerOptions) {
           if (end.type !== 'error' || !attempt.resume || !end.message.startsWith('No conversation found')) break;
         }
         // ponytail: only runs that looked at data (tool calls) reflect; a chat reply rarely teaches anything durable.
-        if (end.type === 'done' && toolCalls > 0 && !signal.aborted) end = await reflect(input, end, emit);
+        if (end.type === 'done' && toolCalls > 0 && !signal.aborted) end = await reflect(attempt, end, emit);
       }
     } catch (err) {
       end = { type: 'error', message: err instanceof Error ? err.message : String(err) };
@@ -178,7 +179,7 @@ export function createRunManager(opts: RunManagerOptions) {
     emit(end);
 
     const status: RunStatus = end.type === 'done' ? 'done' : signal.aborted ? 'cancelled' : 'error';
-    const usage = end.type === 'done' ? end.usage : { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+    const usage = end.type === 'done' ? end.usage : (end.type === 'error' && end.usage) || { inputTokens: 0, outputTokens: 0, costUsd: 0 };
     db.prepare(
       `UPDATE agent_runs SET status = ?, session_id = ?, input_tokens = ?, output_tokens = ?, cost_usd = ?, error = ?, transcript_json = ?, ended_at = ?
        WHERE id = ?`,
@@ -197,6 +198,9 @@ export function createRunManager(opts: RunManagerOptions) {
     opts.onRun?.(getRun(db, run.id)!);
   }
 
+  /** What a session has cost so far: every run that continued it. */
+  const sessionCost = (sessionId: string) => Number(db.prepare('SELECT coalesce(sum(cost_usd), 0) AS n FROM agent_runs WHERE session_id = ?').get(sessionId)?.n ?? 0);
+
   /** The store's open requests, newest first: "<title> (<agent>, <date>)". */
   function waitingFor(storeId: string) {
     return db
@@ -206,7 +210,7 @@ export function createRunManager(opts: RunManagerOptions) {
   }
 
   /** A fresh session for a follow-up whose session is gone, with the last exchange as context. */
-  function recapped({ resume, ...input }: RunInput): RunInput {
+  function recapped({ resume, sessionCostUsd: _, ...input }: RunInput): RunInput {
     const prev = db.prepare('SELECT task, transcript_json FROM agent_runs WHERE session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(resume!);
     if (!prev) return input;
     // ponytail: only the last exchange; walk the `resume` chain if longer chats need more.
@@ -221,9 +225,10 @@ export function createRunManager(opts: RunManagerOptions) {
     // The reflection spends from what the run left of today's budget; nothing left, no reflection.
     const left = input.budgetUsd === undefined ? undefined : input.budgetUsd - done.usage.costUsd;
     if (left !== undefined && left <= 0) return done;
-    for await (const event of runAgent({ ...input, task: REFLECTION_PROMPT, resume: done.sessionId, ...(left !== undefined ? { budgetUsd: left } : {}) }, engine)) {
+    const sessionCostUsd = (input.sessionCostUsd ?? 0) + done.usage.costUsd;
+    for await (const event of runAgent({ ...input, task: REFLECTION_PROMPT, resume: done.sessionId, sessionCostUsd, ...(left !== undefined ? { budgetUsd: left } : {}) }, engine)) {
       if (event.type === 'text_delta') reply += event.text;
-      if (event.type === 'done') usage = addUsage(usage, event.usage);
+      if ((event.type === 'done' || event.type === 'error') && event.usage) usage = addUsage(usage, event.usage);
     }
     for (const learning of parseLearnings(reply)) {
       const runId = input.env?.runId;

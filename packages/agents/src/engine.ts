@@ -16,6 +16,8 @@ export interface RunInput {
   env?: ToolEnv;
   /** What is left of the store's daily AI budget (USD); engines that bill stop the run there. */
   budgetUsd?: number;
+  /** What the resumed session already cost (USD). Engines report each query's own cost, so they subtract it from running totals. */
+  sessionCostUsd?: number;
 }
 
 /** Streams one agent run. Engines may throw or stop early; `runAgent` normalizes that. */
