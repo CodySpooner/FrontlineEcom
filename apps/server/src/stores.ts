@@ -1,6 +1,7 @@
 import { NICHES, PLATFORMS, type Store, type StoreInput, type StoreUpdate } from '@frontline/shared';
 import { tx, type Db } from './db';
 import { seedDemoStore } from './demo';
+import { setStoreTimezone } from './connectors/common';
 
 type Row = Record<string, unknown>;
 
@@ -110,9 +111,12 @@ export function updateStore(db: Db, id: string, u: StoreUpdate): Store | undefin
     name: 'name', platform: 'platform', niche: 'niche', nicheDetail: 'niche_detail', currency: 'currency', timezone: 'timezone', color: 'color',
     feePercent: 'fee_percent', feePerOrder: 'fee_per_order',
   };
-  const keys = Object.keys(u) as (keyof StoreInput)[];
-  if (keys.length) db.prepare(`UPDATE stores SET ${keys.map((k) => `${cols[k]} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => u[k]!), id);
-  return getStore(db, id);
+  const keys = (Object.keys(u) as (keyof StoreInput)[]).filter((k) => k !== 'timezone');
+  return tx(db, () => {
+    if (keys.length) db.prepare(`UPDATE stores SET ${keys.map((k) => `${cols[k]} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => u[k]!), id);
+    if (u.timezone) setStoreTimezone(db, id, u.timezone); // re-dates a real store's orders
+    return getStore(db, id);
+  });
 }
 
 export const deleteStore = (db: Db, id: string) => db.prepare('DELETE FROM stores WHERE id = ?').run(id).changes > 0;

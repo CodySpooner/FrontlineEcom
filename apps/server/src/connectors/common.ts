@@ -50,6 +50,29 @@ export function rebuildAdSpend(db: Db, storeId: string, dates: Iterable<string>)
 }
 
 /**
+ * Sets a store's timezone. On a real store a change re-dates its orders on the new zone's days and rebuilds those days, so
+ * history and "today" share one calendar, and Amazon re-reads its daily totals (dated in the store's zone). Demo stores
+ * just take the zone: their days are seeded, not built from orders.
+ */
+export function setStoreTimezone(db: Db, storeId: string, zone: string) {
+  const s = db.prepare('SELECT timezone, demo FROM stores WHERE id = ?').get(storeId);
+  if (!s || s.timezone === zone) return;
+  db.prepare('UPDATE stores SET timezone = ? WHERE id = ?').run(zone, storeId);
+  if (s.demo) return;
+  const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: zone });
+  const set = db.prepare('UPDATE orders SET local_date = ? WHERE store_id = ? AND id = ?');
+  const days = new Set<string>();
+  for (const o of db.prepare('SELECT id, created_at, local_date FROM orders WHERE store_id = ?').all(storeId)) {
+    const day = dayOf.format(new Date(String(o.created_at)));
+    if (day === o.local_date) continue;
+    set.run(day, storeId, String(o.id));
+    days.add(day).add(String(o.local_date));
+  }
+  rebuildRevenue(db, storeId, days);
+  db.prepare("UPDATE integrations SET cursor = NULL WHERE store_id = ? AND kind = 'amazon'").run(storeId);
+}
+
+/**
  * daily_metrics revenue/cogs/orders = paid orders from every store platform that day, plus channels that only report daily
  * totals (channel_daily, e.g. Amazon). ad_spend is left to the ad connectors.
  */

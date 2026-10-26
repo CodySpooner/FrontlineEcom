@@ -1,7 +1,8 @@
 import { expect, test, vi } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
-import { retrying, setStoreCurrency } from './common';
+import { updateStore } from '../stores';
+import { rebuildRevenue, retrying, setStoreCurrency, switchToReal } from './common';
 
 test('a rate-limited sync request waits Retry-After and asks again; it gives up after 5 tries', async () => {
   const statuses = [429, 429, 200];
@@ -63,4 +64,28 @@ test("a store's currency changing re-syncs its ad accounts and Amazon from scrat
   expect(Object.values(cursors())).toEqual(Array(5).fill('2026-10-26'));
   setStoreCurrency(db, 'glow', currency === 'EUR' ? 'GBP' : 'EUR');
   expect(cursors()).toEqual({ shopify: '2026-10-26', meta_ads: null, google_ads: null, tiktok_ads: null, amazon: null });
+});
+
+test("a real store's new timezone re-dates its orders, rebuilds both calendars' days and has Amazon re-read its daily totals", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow'); // America/Chicago
+  const ord = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES ('glow', ?, ?, ?, 'paid', 'unfulfilled', 0, ?)");
+  ord.run('#1', '2026-10-25T03:30:00.000Z', 40, '2026-10-24'); // 22:30 on the 24th in Chicago, 04:30 on the 25th in London
+  ord.run('#2', '2026-10-25T15:00:00.000Z', 10, '2026-10-25');
+  rebuildRevenue(db, 'glow', ['2026-10-24', '2026-10-25']);
+  db.prepare("INSERT INTO integrations (id, kind, store_id, encrypted_credentials, updated_at, cursor) VALUES ('amazon:glow', 'amazon', 'glow', 'x', 'now', '2026-10-26')").run();
+  const days = () => db.prepare("SELECT date, revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date IN ('2026-10-24', '2026-10-25') ORDER BY date").all();
+  expect(days()).toEqual([{ date: '2026-10-24', revenue: 40, orders: 1 }, { date: '2026-10-25', revenue: 10, orders: 1 }]);
+
+  updateStore(db, 'glow', { timezone: 'Europe/London', name: 'Glow Haus UK' });
+  expect(db.prepare("SELECT id, local_date FROM orders WHERE store_id = 'glow' ORDER BY id").all()).toEqual([{ id: '#1', local_date: '2026-10-25' }, { id: '#2', local_date: '2026-10-25' }]);
+  expect(days()).toEqual([{ date: '2026-10-24', revenue: 0, orders: 0 }, { date: '2026-10-25', revenue: 50, orders: 2 }]);
+  expect(db.prepare("SELECT cursor FROM integrations WHERE id = 'amazon:glow'").get()?.cursor).toBeNull();
+  expect(db.prepare("SELECT name, timezone FROM stores WHERE id = 'glow'").get()).toEqual({ name: 'Glow Haus UK', timezone: 'Europe/London' });
+
+  // A demo store just takes the zone: its days are seeded, not built from its orders.
+  const before = db.prepare("SELECT sum(revenue) AS r FROM daily_metrics WHERE store_id = 'peak'").get()?.r;
+  updateStore(db, 'peak', { timezone: 'Asia/Tokyo' });
+  expect(db.prepare("SELECT sum(revenue) AS r FROM daily_metrics WHERE store_id = 'peak'").get()?.r).toBe(before);
 });

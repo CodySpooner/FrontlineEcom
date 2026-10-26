@@ -4,7 +4,7 @@ import { localDate } from '../dates';
 import { tx, type Db } from '../db';
 import { convertRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, setStoreTimezone, switchToReal } from './common';
 import type { NewProduct, ProductPage } from './shopify';
 
 // WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
@@ -185,7 +185,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     tx(db, () => {
       switchToReal(db, storeId);
       if (base) setStoreCurrency(db, storeId, base);
-      if (zone) db.prepare('UPDATE stores SET timezone = ? WHERE id = ?').run(zone, storeId);
+      if (zone) setStoreTimezone(db, storeId, zone);
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
