@@ -21,6 +21,7 @@ import type {
   CompetitorSnapshot,
   Creative,
   CreativeKind,
+  FlowDraft,
   FulfillmentStatus,
   Health,
   Integration,
@@ -360,6 +361,13 @@ export function useDeleteCreative() {
   });
 }
 
+export const useFlowDrafts = (storeId: string) => useQuery({ queryKey: ['flow-drafts', storeId], queryFn: () => api<FlowDraft[]>(`/api/flow-drafts?stores=${storeId}`) });
+
+export function useDeleteFlowDraft() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (id: string) => api<void>(`/api/flow-drafts/${id}`, { method: 'DELETE' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['flow-drafts'] }) });
+}
+
 /** Mount once: streams /api/live into the react-query cache, reconnecting if the server restarts. */
 export function useLive() {
   const qc = useQueryClient();
@@ -382,6 +390,7 @@ export function useLive() {
         qc.invalidateQueries({ queryKey: ['memory', m.run.storeId] });
         qc.invalidateQueries({ queryKey: ['creatives'] });
         qc.invalidateQueries({ queryKey: ['order-issues'] });
+        qc.invalidateQueries({ queryKey: ['flow-drafts'] });
       }
       if (m.type === 'approval' || m.type === 'run' || m.type === 'xp') {
         qc.invalidateQueries({ queryKey: ['missions'] });

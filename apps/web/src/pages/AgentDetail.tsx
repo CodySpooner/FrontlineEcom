@@ -6,6 +6,7 @@ import { AGENT_ROLES, type Agent, type AgentRole, type Autonomy, type MemoryKind
 import { useAddMemory, useAgents, useCaps, useForgetMemory, useForgetNicheLearning, useMemory, useNicheLearnings, useRun, useRuns, useStores, useUpdateAgent } from '../api/client';
 import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
+import { FlowLibrary } from '../components/FlowLibrary';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, XPBar } from '../components/ui';
@@ -16,23 +17,27 @@ const TABS = [
   { value: 'chat', label: 'Chat' },
   { value: 'history', label: 'History' },
   { value: 'memory', label: 'Memory' },
+  { value: 'flows', label: 'Flows' },
   { value: 'settings', label: 'Settings' },
 ] as const;
 type Tab = (typeof TABS)[number]['value'];
+// Tabs only some roles have.
+const ROLE_TABS: Partial<Record<Tab, AgentRole>> = { flows: 'email_sms' };
 
 export function AgentDetail() {
   const { id = '' } = useParams();
   const agents = useAgents();
   const { name } = useStoreSelection();
   const [params, setParams] = useSearchParams();
-  const tab: Tab = TABS.find((t) => t.value === params.get('tab'))?.value ?? 'chat';
+  const agent = agents.data?.find((a) => a.id === id);
+  const tabs = TABS.filter((t) => !ROLE_TABS[t.value] || ROLE_TABS[t.value] === agent?.role);
+  const tab: Tab = tabs.find((t) => t.value === params.get('tab'))?.value ?? 'chat';
   const runs = useRuns(id);
   // The open conversation; until the owner picks one it's ?run= (a deep link) or the latest run.
   const [picked, setThread] = useState<string[]>();
   const linked = params.get('run');
   const thread = picked ?? (linked ? [linked] : runs.data?.[0] ? [runs.data[0].id] : []);
 
-  const agent = agents.data?.find((a) => a.id === id);
   const role = agent && AGENT_ROLES[agent.role];
   const nav = NAV[1]!;
   const go = (t: Tab) => setParams(t === 'chat' ? {} : { tab: t }, { replace: true });
@@ -72,7 +77,7 @@ export function AgentDetail() {
           <XPBar level={agent.level} rank={agent.rank} xp={agent.levelProgress?.xp ?? 0} next={agent.levelProgress?.needed ?? 100} />
         </div>
       </div>
-      <Tabs label="Agent" tabs={[...TABS]} value={tab} onChange={go} />
+      <Tabs label="Agent" tabs={tabs} value={tab} onChange={go} />
       <div className="mt-4">
         {tab === 'chat' && <Chat agent={agent} thread={thread} onThread={setThread} />}
         {tab === 'history' && (
@@ -89,6 +94,15 @@ export function AgentDetail() {
             <Memory agent={agent} />
             <NicheLearnings storeId={agent.storeId} />
           </div>
+        )}
+        {tab === 'flows' && (
+          <FlowLibrary
+            agent={agent}
+            onOpen={(runId) => {
+              setThread([runId]);
+              go('chat');
+            }}
+          />
         )}
         {tab === 'settings' && <AgentSettings agent={agent} />}
       </div>
