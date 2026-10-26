@@ -75,6 +75,8 @@ like the scheduled jobs.
 - **Ad spend** (`adSpendChangePerDay`): only increases count toward it, on the day they're approved (a waiting one
   counts whenever it was asked). Pauses and cuts count toward the autopilot caps for those kinds. A pause of a
   campaign with no campaign budget (ad set or lifetime budgets) has no amount, so the owner decides it.
+- **Budget steps** (`propose_ad_change`): a raise is at most 30% of the current daily budget, and a campaign gets one
+  applied budget change per 3 days (the window it's judged on). Cuts can go further; pauses always go.
 - **Autopilot** is read from the agent at each request, so taking an agent off it mid-run takes effect at once.
 
 ## Restarts and repeats
