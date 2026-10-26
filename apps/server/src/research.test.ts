@@ -93,6 +93,7 @@ test("add to store converts the research's USD prices into the store's currency"
   db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-23', fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1.25, JPY: 187.5 } }));
   const app = createApp(db);
   const add = async (currency: string) => {
+    db.prepare("UPDATE approvals SET status = 'denied' WHERE store_id = 'pawsome' AND status = 'pending'").run(); // else the same request comes back
     db.prepare("UPDATE stores SET currency = ? WHERE id = 'pawsome'").run(currency);
     const a = (await (await app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'pawsome' }))).json()) as ApprovalRequest;
     return { reason: a.reason, product: (a.action.payload as { products: { price: number; compareAt: number; cost: number }[] }).products[0]! };
@@ -104,4 +105,17 @@ test("add to store converts the research's USD prices into the store's currency"
   const usd = await add('XOF'); // no rate: kept in USD, and the request says so
   expect(usd.product).toMatchObject({ price: 14.75, compareAt: 44.99, cost: 5.1 });
   expect(usd.reason).toContain('Prices are in USD');
+});
+
+test('add to store twice gives back the pending request instead of a second card (an agent request for that product too)', async () => {
+  const app = setup();
+  const add = () => app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'pawsome' }));
+  const first = (await (await add()).json()) as ApprovalRequest;
+  const again = await add();
+  expect(again.status).toBe(200);
+  expect(((await again.json()) as ApprovalRequest).id).toBe(first.id);
+  const pending = (await (await app.request('/api/approvals?status=pending&stores=pawsome')).json()) as ApprovalRequest[];
+  expect(pending.filter((a) => a.action.kind === 'store.add_products')).toHaveLength(1);
+  // Another store gets its own.
+  expect((await app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'glow' }))).status).toBe(201);
 });

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Niche, type ProductList, type ResearchProduct, type ResearchSource, type ResearchTab } from '@frontline/shared';
-import { approvalsHook } from './approvals';
+import { approvalsHook, getApproval } from './approvals';
 import { tx, type Db } from './db';
 import { convertRate } from './fx';
 import { getStore } from './stores';
@@ -115,6 +115,14 @@ export function researchRoutes(db: Db) {
       if (!store) return c.json({ error: 'storeId must be an existing store' }, 400);
       // Approving would do nothing on a platform the app doesn't write products to.
       if (store.connected && !PRODUCT_WRITE_PLATFORMS.includes(store.platform)) return c.json({ error: `Products are only added automatically to Shopify and WooCommerce stores for now. Add "${p.title}" to ${store.name} by hand.` }, 400);
+      // Already asked (here, or by an agent): that request again rather than a second card for one product.
+      const asked = db
+        .prepare(
+          `SELECT a.id FROM approvals a, json_each(a.action_json, '$.payload.products') p
+           WHERE a.store_id = ? AND a.status = 'pending' AND a.action_json ->> '$.kind' = 'store.add_products' AND lower(trim(p.value ->> '$.title')) = lower(trim(?))`,
+        )
+        .get(store.id, p.title);
+      if (asked) return c.json(getApproval(db, String(asked.id)));
       // Research prices are USD: converted to the store's currency, rounded to its minor unit. No rate: kept in USD, and the request says so.
       const rate = await convertRate(db, 'USD', store.currency);
       const digits = new Intl.NumberFormat('en', { style: 'currency', currency: store.currency }).resolvedOptions().maximumFractionDigits ?? 2;
