@@ -6,6 +6,7 @@ import { addDays, localDate } from '../dates';
 import { cachedRate, fxFor } from '../fx';
 import type { Db } from '../db';
 import { publish } from '../live';
+import { log } from '../log';
 import { onApproved } from './agents-actions';
 import { notify } from '../settings';
 import { listStores } from '../stores';
@@ -298,16 +299,33 @@ function missions(db: Db, storeIds?: string[]): Mission[] {
     });
 }
 
+/** Every outcome check, then the achievements they (and everything else) may have unlocked. */
+function judge(db: Db) {
+  checkAdOutcomes(db);
+  checkProductOutcomes(db);
+  checkPriceOutcomes(db);
+  checkPageOutcomes(db);
+  checkThemeOutcomes(db);
+  return checkAchievements(db, facts(db), (a) => award(db, a));
+}
+
+/** Outcomes judged hourly as well as on dashboard reads, so the squad learns what worked while the app sits unopened. */
+export function startOutcomeLoop(db: Db, everyMs = 3_600_000) {
+  const check = () => {
+    try {
+      judge(db);
+    } catch (e) {
+      log('error', 'outcome check failed', { error: e instanceof Error ? e.message : String(e) });
+    }
+  };
+  check();
+  const timer = setInterval(check, everyMs);
+  return () => clearInterval(timer);
+}
+
 export function gamificationRoutes(db: Db) {
   watchApprovals(db);
-  const achievements = () => {
-    checkAdOutcomes(db);
-    checkProductOutcomes(db);
-    checkPriceOutcomes(db);
-    checkPageOutcomes(db);
-    checkThemeOutcomes(db);
-    return checkAchievements(db, facts(db), (a) => award(db, a));
-  };
+  const achievements = () => judge(db);
   return new Hono()
     .get('/api/missions', (c) => c.json(missions(db, c.req.query('stores')?.split(',').filter(Boolean))))
     .get('/api/achievements', (c) => c.json(achievements()))

@@ -10,7 +10,7 @@ import { updateCaps } from '../settings';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
 import { applyAdChange } from './agents-actions';
-import { checkAdOutcomes } from './agents-gamification';
+import { checkAdOutcomes, startOutcomeLoop } from './agents-gamification';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -169,6 +169,12 @@ function approvedChange(id: string, title: string, revenueFactorAfter: number) {
 }
 const outcomes = () => listMemory(db, 'peak').filter((m) => m.tags.includes('outcome'));
 const basis = (title: string) => listMemory(db, 'peak').find((m) => m.text === `Basis for ${title}`)?.confidence;
+
+test('outcomes are judged without the dashboard open: the server loop checks them at start', () => {
+  approvedChange('unattended', 'Raise Broad', 1.5);
+  startOutcomeLoop(db)(); // started, then stopped before the hourly tick
+  expect(outcomes().map((m) => m.text)).toEqual([expect.stringMatching(/^"Raise Broad" worked/)]);
+});
 
 test("an ad change is judged once: an outcome the owner deleted doesn't come back", () => {
   approvedChange('judged', 'Raise Broad', 1.5);

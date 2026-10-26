@@ -9,6 +9,7 @@ import { seedCreatives, seedDemo } from './demo';
 import { startDemoEmitter } from './live';
 import { seedResearch } from './research';
 import { runManager } from './routes/agents';
+import { startOutcomeLoop } from './routes/agents-gamification';
 import { initLog, log } from './log';
 import { loadKey } from './secrets';
 import { startSyncLoop } from './sync';
@@ -27,6 +28,7 @@ startFxLoop(db);
 startDigestLoop(db);
 startCompetitorWatch(db);
 startScheduler(db, (agentId, task) => runManager(db).start(agentId, task));
+startOutcomeLoop(db);
 
 startServer(db, Number(process.env.API_PORT ?? 8787), (port) => {
   console.log(`Frontline API on http://127.0.0.1:${port}`);
