@@ -41,14 +41,16 @@ test('products added on a real store are judged on their first 14 days of sales'
   sell('peak', '901', 12, addDays(added, 3));
   sell('peak', '902', 2, addDays(added, 5));
   sell('peak', '902', 30, addDays(added, 16)); // after the 14-day window
+  sell('peak', '902', 1, addDays(added, 14)); // its 15th day: out too
+  db.prepare(`UPDATE stores SET fee_percent = 10 WHERE id = 'peak'`).run();
   const xp = () => getAgent(db, 'peak:product_hunter')!.xp;
   const before = xp();
   await app.request('/api/achievements');
   await app.request('/api/achievements');
 
   expect(outcomes('peak')).toEqual([
-    '"Grip Socks" did not take off: 2 units, 40 USD revenue, 28 USD profit in its first 14 days.',
-    '"Smart Jump Rope" sold: 12 units, 240 USD revenue, 168 USD profit in its first 14 days.',
+    '"Grip Socks" did not take off: 2 units, 40 USD revenue, 24 USD profit in its first 14 days.',
+    '"Smart Jump Rope" sold: 12 units, 240 USD revenue, 144 USD profit in its first 14 days.',
   ]);
   expect(xp()).toBe(before + 50);
 });

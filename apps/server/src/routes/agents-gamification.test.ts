@@ -90,6 +90,18 @@ test('an approved request pays the agent that made it; a denied one does not', a
   if (a!.agent !== b!.agent) expect(xpOf(b!.agent)).toBe(before[1]);
 });
 
+test("the third mission pays once a day though it turns from briefing the squad into clearing requests", async () => {
+  db.prepare(`DELETE FROM approvals WHERE store_id = 'glow'`).run();
+  const run = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at) VALUES (?, 'glow', 'glow:copywriter', 't', 'done', ?)`);
+  for (const id of ['r1', 'r2']) run.run(id, new Date().toISOString());
+  const paid = async () => (await xpMessages(() => get('/api/missions?stores=glow'))).map((s) => s.xp.reason);
+  expect(await paid()).toContain('Mission complete: Give your squad 2 tasks');
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('late', 'glow', 'glow:copywriter', 't', 'r', '{"kind":"x"}', 'pending', ?)`).run(new Date().toISOString());
+  decide(db, 'late', 'deny');
+  expect(await paid()).not.toContain('Mission complete: Clear all agent requests');
+  expect((await get<Mission[]>('/api/missions?stores=glow'))[2]).toMatchObject({ title: 'Clear all agent requests', progress: 1, target: 1 }); // done, paid already
+});
+
 test('missions: 4 per store; completing one pays the commander once', async () => {
   expect(await get<Mission[]>('/api/missions')).toHaveLength(12);
   expect((await get<Mission[]>('/api/missions?stores=glow')).map((m) => m.id.split(':').at(-1))).toEqual(['revenue', 'orders', 'requests', expect.stringMatching(/^(creatives|product)$/)]);

@@ -20,6 +20,19 @@ function sell(n: number, on: string) {
   }
 }
 
+test("a page for a product that hadn't sold before has no baseline: no verdict, no win", async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01'));
+  const draft = savePageDraft(db, { storeId: 'peak', agentId: 'peak:store_developer', kind: 'product', productId: 'peak-p1', title: 'Jump Rope', html: '<p>New copy for the rope</p>', notes: 'Benefit-first rewrite' });
+  const day = addDays(localDate(), -20);
+  db.prepare('UPDATE page_drafts SET published_at = ? WHERE id = ?').run(`${day}T15:00:00Z`, draft.id);
+  sell(3, addDays(day, 3)); // a new product's first sales: its product test judges them
+  const before = getAgent(db, 'peak:store_developer')!.xp;
+  await app.request('/api/achievements');
+  expect(listMemory(db, 'peak').filter((m) => m.tags.includes('page'))).toEqual([]);
+  expect(getAgent(db, 'peak:store_developer')!.xp).toBe(before);
+});
+
 test('a product page published on a real store is judged on the 14 days before vs after, once', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
   once(db, 'activate:peak', new Date('2020-01-01')); // live long before

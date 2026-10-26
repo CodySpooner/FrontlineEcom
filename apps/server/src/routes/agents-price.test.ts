@@ -119,6 +119,15 @@ test("on a real store a price test is judged on profit after the store's fee %, 
   refund.run('r2', `o-${addDays(day, 5)}-1`, 25, '78');
   refund.run('r3', `o-${addDays(day, 5)}-8`, 25, '77');
   refund.run('r4', 'o-elsewhere', 25, '77');
+  // The shop last synced before the after window was over, then its sync failed: not judged yet (it's judged once).
+  const pricing = () => listMemory(db, 'peak').filter((m) => m.tags.includes('pricing'));
+  db.prepare(`INSERT INTO integrations (id, kind, store_id, status, encrypted_credentials, updated_at, synced_at) VALUES ('tiktok_shop:peak', 'tiktok_shop', 'peak', 'connected', 'x', ?1, ?1)`).run(`${addDays(day, 14)}T15:00:00Z`);
+  checkPriceOutcomes(db);
+  expect(pricing()).toEqual([]);
+  db.prepare(`UPDATE integrations SET status = 'error', synced_at = ? WHERE id = 'tiktok_shop:peak'`).run(new Date().toISOString());
+  checkPriceOutcomes(db);
+  expect(pricing()).toEqual([]);
+  db.prepare(`UPDATE integrations SET status = 'connected' WHERE id = 'tiktok_shop:peak'`).run();
   const xp = () => getAgent(db, 'peak:market_analyst')!.xp;
   const before = xp();
   await app.request('/api/achievements');

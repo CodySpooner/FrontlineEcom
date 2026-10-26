@@ -39,7 +39,18 @@ const storeDay = (db: Db, storeId: string, at: string | number = Date.now()) => 
 // The 15-days-on checks pre-filter loosely in SQL (a store's day, or a UTC date, can sit up to 3 days off this machine's
 // date), then gate each row on its store's own today.
 const roughly15DaysAgo = (today?: string) => addDays(today ?? localDate(), -12);
-const settled = (db: Db, storeId: string, day: string, today?: string) => day <= addDays(today ?? storeDay(db, storeId), -15);
+/**
+ * Every sync feeding the store's numbers (its platform, ad accounts, GA4: the per-store integrations) has finished since
+ * `end` was over in the store's zone, and none is failing. Each check judges once, so judging before the last days'
+ * orders arrived (the app reopened after a weekend, a broken login) would be wrong for good. Demo stores have none.
+ * ponytail: Amazon's daily totals land a day or two late; only the ad check reads them.
+ */
+const synced = (db: Db, storeId: string, end: string) =>
+  db
+    .prepare('SELECT status, synced_at FROM integrations WHERE store_id = ?')
+    .all(storeId)
+    .every((i) => i.status !== 'error' && i.synced_at != null && storeDay(db, storeId, String(i.synced_at)) > end);
+const settled = (db: Db, storeId: string, day: string, today?: string) => day <= addDays(today ?? storeDay(db, storeId), -15) && synced(db, storeId, addDays(day, 14));
 
 const watched = new WeakSet<Db>();
 
@@ -76,6 +87,7 @@ export function checkAdOutcomes(db: Db, today?: string) {
   for (const r of rows) {
     const day = storeDay(db, String(r.store_id), String(r.decided_at));
     if (addDays(day, 3) >= (today ?? storeDay(db, String(r.store_id)))) continue; // the 3 days after aren't complete yet
+    if (!synced(db, String(r.store_id), addDays(day, 3))) continue;
     const before = blendedRoas(db, String(r.store_id), addDays(day, -7), addDays(day, -1));
     const after = blendedRoas(db, String(r.store_id), addDays(day, 1), addDays(day, 3));
     if (before === undefined || after === undefined) continue;
@@ -111,15 +123,8 @@ export function checkProductOutcomes(db: Db, today?: string) {
     .all(roughly15DaysAgo(today));
   for (const t of tests) {
     if (!settled(db, String(t.store_id), String(t.added_on), today)) continue;
-    const end = addDays(String(t.added_on), 14);
-    const s = db
-      .prepare(
-        `SELECT coalesce(sum(i.quantity), 0) AS units, coalesce(sum(i.revenue), 0) AS revenue, coalesce(sum(i.revenue - i.cost), 0) AS profit
-         FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
-         WHERE i.store_id = ? AND i.product_id = ? AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?`,
-      )
-      .get(String(t.store_id), String(t.product_id), String(t.added_on), end)!;
-    const [units, revenue, profit] = [Number(s.units), Number(s.revenue), Number(s.profit)];
+    const end = addDays(String(t.added_on), 13); // its first 14 days, the day it was added included
+    const { units, revenue, profit } = productSales(db, String(t.store_id), String(t.product_id), String(t.added_on), end);
     // Still a draft with no sales: the owner never put it on sale, which says nothing about demand. Archived or removed
     // without a sale is judged: it flopped, or the owner turned the pick down after approving it.
     if (!units && t.status === 'draft') {
@@ -150,7 +155,7 @@ export function checkProductOutcomes(db: Db, today?: string) {
 const productSales = (db: Db, storeId: string, productId: string, from: string, to: string) => {
   const r = db
     .prepare(
-      `SELECT coalesce(sum(units), 0) AS units,
+      `SELECT coalesce(sum(units), 0) AS units, coalesce(sum(revenue), 0) AS revenue,
          coalesce(sum(revenue - cost), 0) - coalesce(sum(revenue), 0) * (SELECT fee_percent FROM stores WHERE id = ?1) / 100 AS profit
        FROM (
          SELECT i.quantity AS units, i.revenue, i.cost FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
@@ -160,7 +165,7 @@ const productSales = (db: Db, storeId: string, productId: string, from: string, 
        )`,
     )
     .get(storeId, productId, from, to)!;
-  return { units: Number(r.units), profit: Number(r.profit) };
+  return { units: Number(r.units), revenue: Number(r.revenue), profit: Number(r.profit) };
 };
 
 /**
@@ -181,7 +186,7 @@ export function checkPriceOutcomes(db: Db, today?: string) {
     const before = productSales(db, storeId, productId, addDays(day, -14), addDays(day, -1));
     const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
     db.prepare('UPDATE price_tests SET judged_at = ? WHERE approval_id = ?').run(new Date().toISOString(), String(t.approval_id));
-    if (!before.units && !after.units) continue; // no sales either side: nothing to learn
+    if (!before.units) continue; // no sales before (new, or not selling): no baseline, so nothing to compare
     const worked = after.profit > before.profit;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
     const price = (n: unknown) => cash(Number(n), String(t.currency));
@@ -216,7 +221,7 @@ export function checkPageOutcomes(db: Db, today?: string) {
     if (!settled(db, storeId, day, today) || !once(db, `page-outcome:${d.id}`)) continue;
     const before = productSales(db, storeId, productId, addDays(day, -14), addDays(day, -1));
     const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
-    if (!before.units && !after.units) continue;
+    if (!before.units) continue; // a new product's page (it had no sales before) has no baseline: its product test judges the sales
     const worked = after.profit > before.profit;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${d.currency}`;
     recordOutcome(db, `page:${d.id}`, worked, {
@@ -317,7 +322,9 @@ function missions(db: Db, storeIds?: string[]): Mission[] {
           s.id, since,
         ),
       });
-      for (const m of list) if (m.progress >= m.target) award(db, { ref: `mission:${m.id}`, amount: m.xp, reason: `Mission complete: ${m.title}`, storeId: s.id });
+      // One payout per slot a day: the third (requests or a briefing) and fourth (creatives or a product) swap as the day goes.
+      const slot = (id: string) => id.replace(/:brief$/, ':requests').replace(/:product$/, ':creatives');
+      for (const m of list) if (m.progress >= m.target) award(db, { ref: `mission:${slot(m.id)}`, amount: m.xp, reason: `Mission complete: ${m.title}`, storeId: s.id });
       return list;
     });
 }
