@@ -87,27 +87,38 @@ function SystemStatus({ online }: { online: boolean }) {
   const down = agents.filter((a) => a.status === 'error' || a.status === 'offline').length;
   const failing = useHealth().data?.connectors.filter((c) => c.status === 'error').length ?? 0;
   const ok = !isError && down === 0 && failing === 0;
+  const text = !online
+    ? 'Reconnecting…'
+    : isError
+      ? 'Agents unreachable'
+      : down
+        ? `${down} agent${down > 1 ? 's need' : ' needs'} attention`
+        : failing
+          ? `${failing} connector${failing > 1 ? 's need' : ' needs'} attention`
+          : 'All agents online';
+  const dot = <StatusDot tone={!online ? 'idle' : ok ? 'good' : 'red'} pulse={!online} />;
   return (
-    <div className="mt-auto hidden rounded-[11px] border border-line bg-panel p-3 min-[900px]:block">
-      <div className="text-xs text-muted">System Status</div>
-      <div role="status" className="mt-1.5 mb-[9px] flex items-center gap-2 text-[13px]">
-        <StatusDot tone={!online ? 'idle' : ok ? 'good' : 'red'} pulse={!online} />
-        {!online ? (
-          'Reconnecting…'
-        ) : isError ? (
-          'Agents unreachable'
-        ) : down ? (
-          `${down} agent${down > 1 ? 's need' : ' needs'} attention`
-        ) : failing ? (
-          <Link to="/integrations" className="hover:underline">
-            {failing} connector{failing > 1 ? 's need' : ' needs'} attention
-          </Link>
-        ) : (
-          'All agents online'
-        )}
+    <>
+      {/* Collapsed sidebar: just the dot, the words on hover and for screen readers. */}
+      <div role="status" title={`System status: ${text}`} className="mt-auto grid place-items-center py-2 min-[900px]:hidden">
+        {dot}
+        <span className="sr-only">System status: {text}</span>
       </div>
-      <ProgressBar value={agents.length ? (agents.length - down) / agents.length : 0} tone={!online ? 'muted' : ok ? 'good' : 'red'} label="Agents online" />
-    </div>
+      <div className="mt-auto hidden rounded-[11px] border border-line bg-panel p-3 min-[900px]:block">
+        <div className="text-xs text-muted">System Status</div>
+        <div role="status" className="mt-1.5 mb-[9px] flex items-center gap-2 text-[13px]">
+          {dot}
+          {online && !isError && !down && failing ? (
+            <Link to="/integrations" className="hover:underline">
+              {text}
+            </Link>
+          ) : (
+            text
+          )}
+        </div>
+        <ProgressBar value={agents.length ? (agents.length - down) / agents.length : 0} tone={!online ? 'muted' : ok ? 'good' : 'red'} label="Agents online" />
+      </div>
+    </>
   );
 }
 

@@ -128,6 +128,12 @@ Orca's browser against the reference before ticking it.
       panel, mission toast, skip link, Reconnecting status. No page-level horizontal scroll, nothing clipped.
 - [x] UI-40 Zero-data store: a just-connected store mid-first-sync (no metrics, orders, products) renders KPIs,
       sparklines and charts without NaN/Infinity/"$NaN" or broken SVG paths; chart helpers tested with empty series.
+- [x] UI-41 Narrow status dot: below 900px the System Status card is hidden, so "Reconnecting…" and "needs attention"
+      never show in Orca or small windows. Add a compact status dot to the collapsed sidebar (label as title + sr text).
+- [ ] UI-42 Recent decisions: the bell drawer lists the last few approved/denied requests (outcome, who, when) under
+      the waiting ones, so a mis-tapped Deny is visible right where it happened.
+- [ ] UI-43 First-sync progress: while a newly connected store imports its history, Integrations and the Dashboard say
+      so ("Importing order history: through Mar 2025") instead of showing a half-empty dashboard. Needs core: see Inbox.
 
 ## Blocked
 
@@ -191,3 +197,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-38: Dashboard re-compared with mockup v3 + reference at 1440. Layout, panel order and hierarchy still match. One drift fixed: the revenue axis drew quarters of a "nice" max ($750 / $1.5K / $2.3K, where $2.3K was really 2,250). `niceTicks` (3–5 steps of 1/2/5×10ⁿ, tested) now gives $0/$1K/$2K/$3K (1Y: $5K steps), and Analytics gets it too. Left as is: the AI Agents panel stretches to the Requests panel height (same in the mockup)
 - 2026-10-26 — UI-39: Orca 800px. Agent Schedule panel and bell drawer (440px, request cards) fit with no page or panel overflow, and the skip link sits over the collapsed logo. Found and fixed: XP/mission toasts rendered under any open modal (blurred behind the drawer, where approving earns XP). The toast stack is now a manual popover, re-shown per toast so it sits above the modal; checked over the open drawer. Schedule rows: trigger line brighter than the agent-prompt line. Note: System Status (and so "Reconnecting…") is hidden below 900px, as before
 - 2026-10-26 — UI-40: zero-data fixture store (ui-fx-empty; generated rows deleted, store deleted after, no rows left). All 11 pages had no NaN/Infinity/undefined text and no NaN SVG attributes (empty sparklines/charts handled; `niceTicks(0)` tested). Fixed: a period with nothing before it showed a green "+0.0%". KPI tiles and the Analytics headline now say a muted "New" (grey sparkline, sr text) via `noBaseline(prev, now)` (tested). The per-store table keeps the muted +0.0% (byStore has no `previous`)
+- 2026-10-26 — UI-41: below 900px the collapsed sidebar ends in the System Status dot (role=status, "System status: …" as title + sr text; same tone/pulse as the card, whose text is now computed once). Orca 800: dot at the bottom of the rail, and across an API restart it read Reconnecting… → All agents online
