@@ -302,11 +302,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-174 `compare_stores` doesn't rank a live store against demo stores' sample numbers. With one store connected and the rest still demo, the Market Analyst compared real sales with seeded ones ("Glow Haus makes 4x your revenue").
 - [x] AGT-175 A new product sold with no unit cost isn't called a win on revenue alone. Its order lines carried cost 0, so its revenue read as profit: 10 units of a product with no cost set was "sold" and paid the Product Hunter XP (price and page checks already call this unclear).
 - [x] AGT-176 `store_summary` names the TikTok Shop sales in its totals. It split out Amazon's but not a Shopify store's `tt-` orders, so the daily briefing read a TikTok Shop spike as the site selling more.
+- [x] AGT-177 A product sold on TikTok Shop or Amazon next to the store isn't repriced or paged through the store's platform. A Shopify store's `tt-`/`amz-` products could get a price test or a page: on approval the app sent them to Shopify, which has no such product, and the change failed after the owner said yes.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-177: `productGone` (used by `propose_price_change`, `draft_page`, `publish_page`) refuses a `tt-` product on a non-TikTok-Shop store and an `amz-` one on a non-Amazon store, saying to make the change on that channel by hand.
 - 2026-10-26 — AGT-176: `store_summary` adds `tiktokShop` (paid `tt-` orders' revenue and count over its window, with a note) when a non-TikTok-Shop store has any.
 - 2026-10-26 — AGT-175: `checkProductOutcomes` records a product with 10+ units and an uncosted order line as "its profit can't be judged: it has no unit cost" (confidence 0.5, no XP, its run unjudged, "result unclear without unit costs"); under 10 units it still didn't take off.
 - 2026-10-26 — AGT-174: from a connected store, `compare_stores` lists only connected stores and names the demo ones left out; from a demo store it's unchanged.

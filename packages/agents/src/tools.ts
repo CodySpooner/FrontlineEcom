@@ -114,6 +114,10 @@ const productGone = (ctx: ToolContext, productId: string) => {
   const status = ctx.db.prepare('SELECT status FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId)?.status;
   if (status === undefined) return `No product ${productId} in this store. Use list_products for ids.`;
   if (status === 'archived') return `Product ${productId} is archived (deleted or trashed on the platform). Pick an active product from list_products.`;
+  // A channel next to the store (core's `tt-`/`amz-` products): the app writes to the store's own platform only, where
+  // that product doesn't exist, so an approved change would fail.
+  const channel = productId.startsWith('tt-') && ctx.store.platform !== 'tiktok_shop' ? 'TikTok Shop' : productId.startsWith('amz-') && ctx.store.platform !== 'amazon' ? 'Amazon' : undefined;
+  if (channel) return `Product ${productId} sells on ${channel}, next to the store, and the app only changes the ${ctx.store.platform} store. Put the change in your answer for the owner to make on ${channel}.`;
 };
 
 const noStoreWrites = (store: Store, platforms = PRODUCT_WRITE_PLATFORMS) =>
