@@ -94,6 +94,8 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
     }
     // Listings can't be filtered by change time: page newest-changed first and stop at the first one older than the cursor.
     // The first sync and once a day after read them all, so a listing deleted on Etsy (in no state any more) is archived.
+    // ponytail: Etsy's spec says sort_on may only apply to keyword searches; if it's ignored here, changes the early stop
+    // misses still arrive with the daily full read.
     const today = localDate(now);
     const full = !cursor || catalogPassDue(db, id, today);
     const listedSince = full ? 0 : since;
