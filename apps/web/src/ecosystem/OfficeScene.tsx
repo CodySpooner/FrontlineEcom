@@ -7,6 +7,7 @@ import { officeApi, useSeats } from './api';
 import type { OfficeWorker } from './workerSprites';
 import { workerActivity, type OfficeState } from './events';
 import { recentHandoff } from './communications';
+import { kickoff } from './meetings';
 
 export function OfficeScene({ office, onSelect, focus }: { office: OfficeState; onSelect: (agentId: string) => void; focus?: { id: string; at: number } }) {
   const host = useRef<HTMLDivElement>(null);
@@ -15,9 +16,10 @@ export function OfficeScene({ office, onSelect, focus }: { office: OfficeState; 
   const [error, setError] = useState('');
   const [fullscreen, setFullscreen] = useState(false);
   const seats = useSeats();
+  const meeting = kickoff(Object.values(office.missions), seats.data ?? []);
   const workers: OfficeWorker[] = (seats.data ?? []).filter((s) => !s.archived).map((seat) => {
     const agent = office.agents.find((a) => a.id === seat.agentId);
-    return { seat, name: seat.displayName || (agent ? AGENT_ROLES[agent.role].name : seat.agentId), ...workerActivity(office, seat.agentId), handoff: recentHandoff(office, seat.agentId) };
+    return { seat, name: seat.displayName || (agent ? AGENT_ROLES[agent.role].name : seat.agentId), ...workerActivity(office, seat.agentId), handoff: recentHandoff(office, seat.agentId), meeting };
   });
   const latestWorkers = useRef(workers); latestWorkers.current = workers;
   const select = useRef(onSelect); select.current = onSelect;

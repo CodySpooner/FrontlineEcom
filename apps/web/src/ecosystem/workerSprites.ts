@@ -5,8 +5,9 @@ import { ENTRANCE, deskTile, iso, tileKey, walkable, type Tile } from './world';
 import { advanceMotion, nearestFree, startMotion, type Motion } from './pathfinding';
 import type { OfficeStatus } from './events';
 import { startVisit, visitFinished, type Handoff, type Visit } from './communications';
+import { meetingFinished, type Meeting, type MeetingPlan } from './meetings';
 
-export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation; target?: Tile; status?: OfficeStatus; tool?: string; handoff?: Handoff }
+export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation; target?: Tile; status?: OfficeStatus; tool?: string; handoff?: Handoff; meeting?: MeetingPlan }
 
 export function workerSprites(world: Container, select: (deskId: string) => void) {
   const connections = new Graphics(); world.addChild(connections);
@@ -18,8 +19,12 @@ export function workerSprites(world: Container, select: (deskId: string) => void
   const motions = new Map<string, Motion>();
   const positions = new Map<string, Tile>();
   const visits = new Map<string, Visit>(), seen = new Set<string>();
+  let meeting: Meeting | undefined;
+  const meetingsSeen = new Set<string>();
   function update(data: OfficeWorker[]) {
     const active = data.filter((w) => !w.seat.archived).slice(0, 30);
+    const plan = active.find((w) => w.meeting)?.meeting;
+    if (plan && !meetingsSeen.has(plan.id)) { meeting = { plan, elapsed: 0, together: 0 }; meetingsSeen.add(plan.id); }
     const next = JSON.stringify(active.map((w) => [w.seat.agentId, w.seat.appearance]));
     if (next !== signature) {
       const old = atlas;
@@ -52,7 +57,7 @@ export function workerSprites(world: Container, select: (deskId: string) => void
       worker.data = data; worker.index = index; worker.name.text = data.name;
       worker.root.alpha = data.status === 'offline' ? .45 : 1;
       worker.status.tint = data.status === 'failed' ? '#ff3953' : data.status === 'awaiting_approval' ? '#f4bc53' : data.status === 'running' || data.status === 'using_tool' ? '#3ddc84' : '#8993a9';
-      motions.get(data.seat.agentId)!.target = visits.get(data.seat.agentId)?.target ?? data.target ?? deskTile(data.seat.deskId);
+      motions.get(data.seat.agentId)!.target = meeting?.plan.targets[data.seat.agentId] ?? visits.get(data.seat.agentId)?.target ?? data.target ?? deskTile(data.seat.deskId);
     });
     const occupied = new Set([...active.map((w) => tileKey(deskTile(w.seat.deskId))), ...[...motions.values()].flatMap((m) => [tileKey(m.cell), ...(m.next ? [tileKey(m.next)] : [])]), ...[...visits.values()].map((v) => tileKey(v.target))]);
     for (const worker of active) {
@@ -60,16 +65,21 @@ export function workerSprites(world: Container, select: (deskId: string) => void
       if (!handoff || !receiver || seen.has(handoff.id)) continue;
       const visit = startVisit(handoff, deskTile(receiver.data.seat.deskId), occupied);
       seen.add(handoff.id);
-      if (visit) { visits.set(worker.seat.agentId, visit); motions.get(worker.seat.agentId)!.target = visit.target; occupied.add(tileKey(visit.target)); }
+      if (visit) { visits.set(worker.seat.agentId, visit); if (!meeting?.plan.targets[worker.seat.agentId]) motions.get(worker.seat.agentId)!.target = visit.target; occupied.add(tileKey(visit.target)); }
     }
     tick(0, true);
   }
   function tick(delta: number, reduced: boolean) {
     if (!atlas) return;
     for (const id of advanceMotion(motions, delta / 1000)) positions.set(id, { ...motions.get(id)!.cell });
+    if (meeting && meetingFinished(meeting, Object.keys(meeting.plan.targets).every((id) => !motions.has(id) || motions.get(id)!.arrived), delta)) {
+      meeting = undefined;
+      for (const [id, worker] of workers) motions.get(id)!.target = visits.get(id)?.target ?? worker.data.target ?? deskTile(worker.data.seat.deskId);
+    }
     connections.clear();
     for (const [id, visit] of visits) {
       const motion = motions.get(id)!;
+      if (meeting?.plan.targets[id]) continue;
       if (!workers.has(visit.event.toAgentId) || visitFinished(visit, motion.arrived, delta)) { visits.delete(id); motion.target = workers.get(id)!.data.target ?? deskTile(workers.get(id)!.data.seat.deskId); continue; }
       const from = iso(motion.position), to = iso(motions.get(visit.event.toAgentId)!.position);
       connections.moveTo(from.x, from.y).lineTo(to.x, to.y).stroke({ color: '#c87eed', width: 2, alpha: .35 });
@@ -77,7 +87,8 @@ export function workerSprites(world: Container, select: (deskId: string) => void
     for (const worker of workers.values()) {
       worker.elapsed += delta;
       const motion = motions.get(worker.data.seat.agentId)!;
-      const visit = visits.get(worker.data.seat.agentId);
+      const inMeeting = !!meeting?.plan.targets[worker.data.seat.agentId];
+      const visit = inMeeting ? undefined : visits.get(worker.data.seat.agentId);
       const speech = visit ? `Handoff → ${workers.get(visit.event.toAgentId)?.data.name}\n${visit.event.summary.slice(0, 110)}${visit.event.summary.length > 110 ? '…' : ''}` : '';
       if (worker.bubble.text !== speech) {
         worker.bubble.text = speech; worker.bubbleBack.clear();
@@ -91,12 +102,12 @@ export function workerSprites(world: Container, select: (deskId: string) => void
       } else if (motion.arrived) worker.direction = 2;
       const pos = iso(motion.position); worker.root.position.set(pos.x, pos.y + 12); worker.root.zIndex = pos.y;
       const receiving = [...visits.values()].some((v) => v.event.toAgentId === worker.data.seat.agentId && v.atDesk > 0);
-      const p = frameAt(motion.next ? 'walk' : motion.arrived ? visit || receiving ? 'collaborate' : worker.data.animation : 'idle', reduced ? 0 : worker.elapsed, worker.direction, worker.index);
+      const p = frameAt(motion.next ? 'walk' : motion.arrived ? visit || receiving || inMeeting ? 'collaborate' : worker.data.animation : 'idle', reduced ? 0 : worker.elapsed, worker.direction, worker.index);
       const key = `${p.x},${p.y}`;
       let frame = frames.get(key);
       if (!frame) { frame = new Texture({ source: atlas.source, frame: new Rectangle(p.x, p.y, CELL.width, CELL.height) }); frames.set(key, frame); }
       worker.sprite.texture = frame;
     }
   }
-  return { update, tick, position: (id: string) => motions.get(id)?.position, drainPositions: () => { const entries = [...positions]; positions.clear(); return entries; }, destroy: () => { for (const frame of frames.values()) frame.destroy(); atlas?.destroy(true); } };
+  return { update, tick, meetingTitle: () => meeting?.plan.title ?? '', position: (id: string) => motions.get(id)?.position, drainPositions: () => { const entries = [...positions]; positions.clear(); return entries; }, destroy: () => { for (const frame of frames.values()) frame.destroy(); atlas?.destroy(true); } };
 }

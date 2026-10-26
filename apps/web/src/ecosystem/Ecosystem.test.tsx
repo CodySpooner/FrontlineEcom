@@ -5,7 +5,7 @@ import { renderApp } from '../test-utils';
 import { Ecosystem } from './Ecosystem';
 
 vi.mock('./OfficeScene', () => ({ OfficeScene: () => <div>Office canvas</div> }));
-vi.mock('./useOffice', () => ({ useOffice: () => ({ state: { agents: [], runs: {}, approvals: {}, tools: {}, events: [] }, connected: true, error: '' }) }));
+vi.mock('./useOffice', () => ({ useOffice: () => ({ state: { agents: [], runs: {}, approvals: {}, tools: {}, events: [], missions: {} }, connected: true, error: '' }) }));
 vi.mock('./api', () => ({ useSeats: () => ({ data: [] }), useOfficeStats: () => ({ data: { activeTasks: 0, activeTeams: 0, successRate: null } }) }));
 
 afterEach(cleanup);

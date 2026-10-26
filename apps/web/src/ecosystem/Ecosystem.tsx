@@ -8,6 +8,7 @@ import { useOfficeStats, useSeats } from './api';
 import { AgentPanel } from './AgentPanel';
 import { DeployWizard } from './DeployWizard';
 import { ActivityFeed } from './ActivityFeed';
+import { MissionPanel } from './MissionPanel';
 
 const TABS = ['Office View', 'Department View', 'Agent List', 'Task Board', 'Performance'].map((label) => ({ value: label, label }));
 
@@ -15,6 +16,7 @@ export function Ecosystem() {
   const [tab, setTab] = useState('Office View');
   const [feed, setFeed] = useState(true);
   const [deploy, setDeploy] = useState(false);
+  const [createTeam, setCreateTeam] = useState(false);
   const office = useOffice();
   const seats = useSeats();
   const stats = useOfficeStats();
@@ -42,6 +44,7 @@ export function Ecosystem() {
         </section>
         {feed && <ActivityFeed office={office.state} seats={seats.data ?? []} onFocus={(id) => { setFocus({ id, at: Date.now() }); setTab('Office View'); }} />}
       </div>
+      <MissionPanel office={office.state} create={createTeam} onCreate={() => setCreateTeam(true)} onCloseCreate={() => setCreateTeam(false)} />
       <footer className="eco-bottom"><div><small>AGENT STATUS KEY</small><p><i className="eco-dot" />Working <i className="eco-dot waiting" />Waiting <i className="eco-dot collab" />Collaborating <i className="eco-dot idle" />Idle <i className="eco-dot blocked" />Blocked</p></div><div><small>OFFICE CAPACITY</small><p>30 desks · 10 departments</p></div></footer>
       {agent && seat && <AgentPanel key={agent.id} agent={agent} seat={seat} office={office.state} onClose={() => setSelected('')} onFocus={() => { setFocus({ id: agent.id, at: Date.now() }); setTab('Office View'); setSelected(''); }} />}
       {deploy && <DeployWizard agents={office.state.agents} seats={seats.data ?? []} onClose={() => setDeploy(false)} />}

@@ -40,6 +40,8 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   for(let i=0;i<60;i++) { const x=Math.sin(i*1.9)*35, y=Math.cos(i*2.7)*32; if(Math.sin(x*.14)+Math.cos(y*.18)>.1) continents.rect(Math.round(x/3)*3,Math.round(y/3)*3,3,3).fill('#ff6686'); }
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const workers = workerSprites(world, (desk) => { if (!dragged) onDesk(desk); });
+  const objective = new Text({ text: '', style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 19, fontWeight: '600', fill: '#ffd9e3', stroke: { color: '#100810', width: 6 }, wordWrap: true, wordWrapWidth: 300, align: 'center' } });
+  objective.anchor.set(.5, 1); objective.position.set(hub.x, hub.y - 135); world.addChild(objective);
   let camera = fitCamera(host.clientWidth,host.clientHeight);
   world.scale.set(camera.scale); world.position.set(camera.x,camera.y);
   const fit = () => { camera = fitCamera(host.clientWidth,host.clientHeight); };
@@ -65,6 +67,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     const smooth=reduced.matches?1:1-Math.exp(-ticker.deltaMS/65);
     world.x+=(camera.x-world.x)*smooth;world.y+=(camera.y-world.y)*smooth;world.scale.set(world.scale.x+(camera.scale-world.scale.x)*smooth);
     workers.tick(ticker.deltaMS,reduced.matches);
+    objective.text = workers.meetingTitle() ? `TEAM KICKOFF\n${workers.meetingTitle()}` : '';
     if(reduced.matches) return;
     elapsed+=ticker.deltaMS;
     globe.y=hub.y-60+Math.sin(elapsed/1600)*3;
