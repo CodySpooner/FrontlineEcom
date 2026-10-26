@@ -3,7 +3,7 @@ import { switchToReal } from './connectors/common';
 import { openDb } from './db';
 import { addDays, dayFraction, localDate } from './dates';
 import { seedCompetitors } from './competitors';
-import { advanceDemoDay, DEMO_DAYS, demoDay, demoSoFar, seedDemo } from './demo';
+import { advanceDemoDay, DEMO_DAYS, demoDay, demoSoFar, seedCreatives, seedDemo } from './demo';
 
 const TODAY = '2026-10-26';
 const count = (db: ReturnType<typeof openDb>, sql: string) => Number(db.prepare(sql).get()?.n);
@@ -162,4 +162,21 @@ test('demo stores and competitors are seeded once: deleted ones stay deleted aft
   seedDemo(db, TODAY); // the next startup
   seedCompetitors(db, TODAY);
   expect([count(db, 'SELECT count(*) AS n FROM stores'), count(db, 'SELECT count(*) AS n FROM competitors')]).toEqual([0, 0]);
+});
+
+test("each demo store's Creative Studio starts with two images, a video and a copy, none billed today", () => {
+  const db = openDb();
+  seedDemo(db, TODAY);
+  seedCreatives(db);
+  const rows = db.prepare('SELECT store_id, kind, source, media_url, agent_id, created_at FROM creatives ORDER BY store_id, kind').all();
+  for (const store of ['glow', 'pawsome', 'peak']) {
+    const mine = rows.filter((r) => r.store_id === store);
+    expect(mine.map((r) => r.kind).sort()).toEqual(['copy', 'image', 'image', 'video']);
+    expect(mine.filter((r) => r.kind !== 'copy').every((r) => r.source === 'demo' && String(r.media_url).startsWith('data:image/svg+xml'))).toBe(true);
+    expect(mine.find((r) => r.kind === 'copy')).toMatchObject({ source: 'agent', media_url: null, agent_id: `${store}:copywriter` });
+  }
+  expect(rows.every((r) => Date.parse(String(r.created_at)) < Date.now() - 86_000_000)).toBe(true);
+  db.prepare("DELETE FROM creatives WHERE store_id = 'glow'").run();
+  seedCreatives(db); // later startups don't add more, even to a library the owner emptied
+  expect(count(db, 'SELECT count(*) AS n FROM creatives')).toBe(8);
 });

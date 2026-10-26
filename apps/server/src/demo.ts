@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { Store, StoreEvent, StoreEventType, TopProduct } from '@frontline/shared';
+import { demoMedia, saveCreative } from '@frontline/agents';
+import { CREDITS, type AspectRatio, type CreativeKind, type Store, type StoreEvent, type StoreEventType, type TopProduct } from '@frontline/shared';
 import { once, tx, type Db } from './db';
 import { addDays, dayFraction, dayNumber, localDate } from './dates';
 import { insertStore } from './stores';
@@ -154,6 +155,46 @@ function productsFor(db: Db, storeId: string) {
   const niche = db.prepare('SELECT niche FROM stores WHERE id = ?').get(storeId)?.niche;
   // ponytail: niches without a built-in demo store (tech, home, …) borrow the pet catalog; give them their own lists if demos need it.
   return PRODUCTS[DEMO_STORES.find((s) => s.niche === niche)?.id ?? 'pawsome']!;
+}
+
+/** Creative Studio's starting library per demo store: [kind, aspect, headline, primary text, CTA]. */
+const CREATIVES: Record<string, [CreativeKind, AspectRatio | undefined, string, string, string][]> = {
+  pawsome: [
+    ['image', '1:1', 'Road trips, zero spills', 'The Collapsible Travel Water Bowl folds flat in a pocket and pops open at every rest stop.', 'Shop now'],
+    ['image', '4:5', 'Back seat, fur-free', 'Car Seat Hammock Cover: waterproof, scratch-proof, fits every car. 37% off this week.', 'Get yours'],
+    ['video', '9:16', 'No more pulling on walks', 'Watch one walk with the No-Pull Adventure Harness: from dragging to heeling in 15 seconds.', 'Shop the harness'],
+    ['copy', undefined, 'Your dog deserves the window seat', 'Long drives go easier on a bed that holds its shape. Orthopedic Travel Bed, $59.99 (was $99.99).', 'Shop the bed'],
+  ],
+  glow: [
+    ['image', '1:1', 'Spa glow in 10 minutes', 'LED Light Therapy Mask: red and blue light at home, 3 sessions a week. Dermatologist-loved.', 'Shop now'],
+    ['image', '4:5', 'De-puff before coffee', 'The Ice Facial Roller wakes up tired eyes in 60 seconds. Keep it in the freezer, thank us at 7am.', 'Get yours'],
+    ['video', '9:16', 'Sculpted, not filtered', 'A 15-second before and after with the Microcurrent Face Sculptor. Real skin, no filter.', 'See it work'],
+    ['copy', undefined, 'The scalp massage you keep booking', 'The Electric Scalp Massager brings the salon to your shower, waterproof with 4 modes. $39.99.', 'Treat yourself'],
+  ],
+  peak: [
+    ['image', '1:1', 'Cardio that counts itself', 'The Smart Jump Rope tracks every skip and calorie on your phone. 10 minutes beats a 30-minute jog.', 'Shop now'],
+    ['image', '4:5', 'A whole gym in a drawer', '5 resistance bands, 5 to 50 lb, door anchor included. Train anywhere for $24.99.', 'Get the set'],
+    ['video', '9:16', 'One kettlebell, six weights', 'Twist to switch from 5 to 20 lb in a second. Watch a full-body workout in 15 seconds.', 'Shop the kettlebell'],
+    ['copy', undefined, 'Desk posture, fixed', 'Wear the Posture Corrector for 20 minutes a day and stand taller in two weeks. $19.99 (was $34.99).', 'Stand taller'],
+  ],
+};
+
+/**
+ * Creative Studio's starting library, once per data dir: each demo store with no creatives yet gets two images, a video
+ * and a copy, the newest made yesterday (demo renders, not Higgsfield).
+ */
+export function seedCreatives(db: Db) {
+  tx(db, () => {
+    if (!once(db, 'seed:creatives')) return;
+    for (const r of db.prepare('SELECT id, name, color FROM stores WHERE demo = 1 AND id NOT IN (SELECT store_id FROM creatives)').all()) {
+      const store = { id: String(r.id), name: String(r.name), color: String(r.color) };
+      (CREATIVES[store.id] ?? []).forEach(([kind, aspect, headline, primaryText, cta], i) => {
+        const agentId = `${store.id}:${kind === 'copy' ? 'copywriter' : 'creative_studio'}`;
+        const media = aspect ? { aspect, mediaUrl: demoMedia(store, { kind, aspect, headline, cta }), source: 'demo' as const } : { source: 'agent' as const };
+        saveCreative(db, { storeId: store.id, agentId, kind, headline, primaryText, cta, credits: CREDITS[kind], ...media }, new Date(Date.now() - (i + 1) * 86_400_000));
+      });
+    }
+  });
 }
 
 const SUPPLIERS = ['CJ Dropshipping', 'DSers', 'Zendrop'];
