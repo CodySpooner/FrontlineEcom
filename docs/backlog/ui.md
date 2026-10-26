@@ -188,6 +188,8 @@ Orca's browser against the reference before ticking it.
       costs, so real stores' rows are recognizable at a glance.
 - [x] UI-69 Products the store deleted (core archives them: Woo trash, TikTok Shop and Woo daily passes) aren't asked for a
       unit cost or counted in "N costs missing", and a top seller that's since been archived reads "Archived", not "Sold out".
+- [x] UI-70 The research feed refreshes when a run ends, so the Product Hunter's new find (AI Research, AGT-78) shows on
+      returning to Product Research instead of the cached feed.
 
 ## Blocked
 
@@ -287,3 +289,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-67: RunLog (now exported) looks up `approvalId` in the pending approvals and renders the shared ApprovalCard under that log entry. It falls back to the Dashboard link when the request isn't in the waiting list. The server flips the row in its decision callback and the live handler already refetches `automation-runs`, so it settles on Started or Denied. New Automation.test covers the approve POST and the fallback. Chrome with a fixture request and log row: the entry showed "Needs you" and the card with Approve / Deny. Not clicked, to avoid firing hooks. Fixtures removed
 - 2026-10-26 — UI-68: a 36px `Thumb` in TopTable and Unit costs rows. It renders only when some product in that list has a photo, with a blank tile for the rest so titles line up; demo stores have no photos and look unchanged. Analytics.test covers the mixed and none cases. Chrome with a main-world patch adding data-URI photos to 2 top products and 1 cost-less product: photos and blank tiles aligned in both lists
 - 2026-10-26 — UI-69: Unit costs and the Dashboard's missing-cost count skip `status === 'archived'`. `stockLeft` returns "Archived" (not low) for an archived product. Tests in Analytics.test and stock.test. Chrome with Pawsome's Pet Water Fountain archived at cost 0: Unit costs listed nothing and the Dashboard had no "costs missing" link. Demo top products skip archived ones server-side, so the label is covered by the unit test only. Product restored (active, 14.75)
+- 2026-10-26 — UI-70: useLive invalidates `['research']` on a finished run message. Before, AI Research opened the agent chat, and coming back inside the 30s stale window showed the old feed. live.test covers it (not on running, yes on done). Chrome on the demo with the fake engine: AI Research → run done → client-side back to Research read "31 products" (was 30), with the new "Dog Paw Cleaner Cup bundle". Run, find, XP event (+10, agent restored to 4943), and notification removed

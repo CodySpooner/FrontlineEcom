@@ -493,6 +493,8 @@ export function useLive() {
         qc.invalidateQueries({ queryKey: ['order-issues'] });
         qc.invalidateQueries({ queryKey: ['flow-drafts'] });
         qc.invalidateQueries({ queryKey: ['page-drafts'] });
+        // Product Hunter (AI Research, the daily scan) adds its finds to the research feed.
+        if (!isLive(m.run)) qc.invalidateQueries({ queryKey: ['research'] });
       }
       if (m.type === 'approval' || m.type === 'run' || m.type === 'xp') {
         qc.invalidateQueries({ queryKey: ['missions'] });

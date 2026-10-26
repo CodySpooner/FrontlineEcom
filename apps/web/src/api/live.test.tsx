@@ -70,6 +70,19 @@ describe('useLive', () => {
     act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'approval', approval: { ...approval, status: 'denied' } }) }));
     expect(refetch).toHaveBeenCalledWith({ queryKey: ['memory', 'glow'] });
   });
+
+  it("refreshes the research feed when a run ends (Product Hunter's finds land there)", () => {
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const qc = new QueryClient();
+    const refetch = vi.spyOn(qc, 'invalidateQueries');
+    renderHook(() => useLive(), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+    const run = { id: 'r1', agentId: 'peak:product_hunter', storeId: 'peak', task: 'Find 5 products', startedAt: '2026-10-26T08:00:00Z' };
+
+    act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'run', run: { ...run, status: 'running' } }) }));
+    expect(refetch).not.toHaveBeenCalledWith({ queryKey: ['research'] });
+    act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'run', run: { ...run, status: 'done', endedAt: '2026-10-26T08:01:00Z' } }) }));
+    expect(refetch).toHaveBeenCalledWith({ queryKey: ['research'] });
+  });
 });
 
 describe('useGoLiveRefresh', () => {
