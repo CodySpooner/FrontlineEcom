@@ -196,9 +196,10 @@ export const APP_TOOLS: AppTool[] = [
       const rows = ctx.db
         .prepare(
           `SELECT date, round(revenue, 2) AS revenue, round(ad_spend, 2) AS ad_spend, round(cogs, 2) AS cogs, round(fees, 2) AS fees,
-             round(revenue - ad_spend - cogs - fees, 2) AS profit, orders, sessions, add_to_carts, checkouts, amazon_revenue, amazon_orders
+             round(revenue - ad_spend - cogs - fees, 2) AS profit, orders, sessions, add_to_carts, checkouts, amazon_revenue, amazon_orders, tiktok_orders
            FROM (SELECT d.*, d.revenue * s.fee_percent / 100 + d.orders * s.fee_per_order AS fees,
-                   round(coalesce(c.revenue, 0), 2) AS amazon_revenue, coalesce(c.orders, 0) AS amazon_orders
+                   round(coalesce(c.revenue, 0), 2) AS amazon_revenue, coalesce(c.orders, 0) AS amazon_orders,
+                   (SELECT count(*) FROM orders o WHERE o.store_id = d.store_id AND o.local_date = d.date AND o.status = 'paid' AND +o.id GLOB 'tt-*') AS tiktok_orders
                  FROM daily_metrics d JOIN stores s ON s.id = d.store_id
                  LEFT JOIN channel_daily c ON c.store_id = d.store_id AND c.date = d.date AND c.channel = 'amazon'
                  WHERE d.store_id = ? AND d.date >= ?)
@@ -221,13 +222,17 @@ export const APP_TOOLS: AppTool[] = [
       // store's ads mostly send shoppers to its own site. An Amazon store's own sales are the whole store: no split.
       const amazon = ctx.store.platform !== 'amazon' && rows.some((r) => Number(r.amazon_orders) || Number(r.amazon_revenue));
       if (!amazon) for (const r of rows) delete r.amazon_revenue, delete r.amazon_orders;
+      // TikTok Shop next to the site (`tt-` orders, core's CORE-82) is in orders, with its own costs, but not in sessions.
+      const tiktok = ctx.store.platform !== 'tiktok_shop' && rows.some((r) => Number(r.tiktok_orders));
+      if (!tiktok) for (const r of rows) delete r.tiktok_orders;
       // Today's row counts up through the day: read as a whole day, every morning would look like a collapse.
       const last = rows.at(-1);
       if (last?.date === today(ctx.store)) last.date = `${String(last.date)} (today so far)`;
       const split = amazon
         ? "(revenue and orders include Amazon's sales as a channel (amazon_revenue, amazon_orders): its shoppers aren't in sessions, its product costs aren't in cogs, and the store's ads mostly drive its own site, so take them out for conversion, margin and MER.)\n"
         : '';
-      return note + (late ? `(sessions start on ${rows[first]!.date}: work out conversion from that day on; earlier orders have no traffic data.)\n` : '') + split + csv(rows);
+      const tt = tiktok ? "(orders include TikTok Shop's (tiktok_orders): its shoppers aren't in sessions, so take them out for conversion.)\n" : '';
+      return note + (late ? `(sessions start on ${rows[first]!.date}: work out conversion from that day on; earlier orders have no traffic data.)\n` : '') + split + tt + csv(rows);
     },
   }),
   defineTool({

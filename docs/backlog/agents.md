@@ -298,11 +298,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-170 A campaign gets one budget change per 3 days. The daily campaign review could raise the same winner every morning: delivery needs 48-72 h to settle after a budget edit (the playbook's own rule), and each change is judged on the 3 days after it, so stacked changes couldn't be told apart.
 - [x] AGT-171 A price test or new page is judged against the store's season. Its profit was compared with the 14 days before as is, so in a holiday rush every change read as a win and in January as a loss.
 - [x] AGT-172 A theme change's conversion leaves out TikTok Shop's orders. The check took Amazon's channel orders out but not a Shopify store's `tt-` orders (core counts them as a channel since CORE-82), so TikTok Shop sales read as the theme converting better.
+- [x] AGT-173 `metrics_timeseries` splits out TikTok Shop's orders next to the site. A Shopify store's `tt-` orders were in its orders with no sessions behind them, so conversion worked out from the series came out too high (only Amazon's were split).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-173: `metrics_timeseries` adds `tiktok_orders` (the day's paid `tt-` orders) and a note to take them out for conversion when a non-TikTok-Shop store has any.
 - 2026-10-26 — AGT-172: `checkThemeOutcomes` subtracts each day's paid `tt-` orders from its orders, as core's funnel does.
 - 2026-10-26 — AGT-171: price and page outcomes compare the after profit with par: the before profit times how much the rest of the store's product sales moved over the same days; the text names par when that's 10%+. No other sales, or a loss before: unscaled.
 - 2026-10-26 — AGT-170: `propose_ad_change` refuses a budget change on a campaign with an applied budget change approved in the last 3 days, naming the date; pauses are never held back.

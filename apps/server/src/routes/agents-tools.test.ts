@@ -238,6 +238,24 @@ describe('agent tools on demo data', () => {
     expect(plain!.output.split('\n')[0]).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts');
   });
 
+  test("metrics_timeseries splits out TikTok Shop's orders next to the site: its shoppers aren't in sessions", async () => {
+    const glow = input('glow', 'market_analyst');
+    const day = String(db.prepare(`SELECT date FROM daily_metrics WHERE store_id = 'glow' ORDER BY date DESC LIMIT 1 OFFSET 1`).get()!.date);
+    const order = db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, ?, 25, ?, 'delivered', ?)`);
+    order.run('tt-1', `${day}T12:00:00Z`, 'paid', day);
+    order.run('tt-2', `${day}T13:00:00Z`, 'paid', day);
+    order.run('tt-3', `${day}T14:00:00Z`, 'refunded', day);
+    try {
+      const [series] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
+      const [note, header, ...rows] = series!.output.split('\n');
+      expect(note).toBe("(orders include TikTok Shop's (tiktok_orders): its shoppers aren't in sessions, so take them out for conversion.)");
+      expect(header).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts,tiktok_orders');
+      expect(rows.find((r) => r.startsWith(day))).toMatch(/,2$/);
+    } finally {
+      db.prepare(`DELETE FROM orders WHERE store_id = 'glow' AND id LIKE 'tt-%'`).run();
+    }
+  });
+
   test("metrics_timeseries says a late traffic report is not reported yet, not a day of no traffic", async () => {
     const [day] = db.prepare(`SELECT date, sessions, add_to_carts, checkouts FROM daily_metrics WHERE store_id = 'glow' AND orders > 0 ORDER BY date DESC LIMIT 1`).all();
     db.prepare(`UPDATE daily_metrics SET sessions = 0, add_to_carts = 0, checkouts = 0 WHERE store_id = 'glow' AND date = ?`).run(String(day!.date)); // GA4 a day behind
