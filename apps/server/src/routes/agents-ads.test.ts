@@ -17,6 +17,8 @@ beforeEach(() => {
   db = openDb();
   seedDemo(db);
   app = createApp(db);
+  // The demo's own pending budget request on pawsome-c1 would block new ones (one change per campaign at a time).
+  db.prepare(`UPDATE approvals SET status = 'denied' WHERE store_id = 'pawsome' AND status = 'pending'`).run();
 });
 const tick = () => new Promise((r) => setImmediate(r));
 const budget = (id: string) => db.prepare('SELECT daily_budget, status FROM campaigns WHERE id = ?').get(id) as { daily_budget: number; status: string };
@@ -103,6 +105,16 @@ test("the owner's cap on added spend and bad input stop a proposal before asking
     'No campaign glow-c1 in this store. Use review_campaigns for ids.',
     'newDailyBudget is required for a budget change.',
   ]);
+});
+
+test('a campaign with a change already waiting for the owner gets no second request', async () => {
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('w1', 'pawsome', 'pawsome:ad_strategist', 'Pause Prospecting · Broad', 'r', ?, 'pending', ?)`).run(
+    JSON.stringify({ kind: 'ads.pause_campaign', payload: { campaignId: 'pawsome-c1' } }),
+    new Date().toISOString(),
+  );
+  const { outputs, requests } = await run([propose({ campaignId: 'pawsome-c1', change: 'budget', newDailyBudget: 300 })]);
+  expect(requests).toEqual([]);
+  expect(outputs).toEqual(['Not sent: "Pause Prospecting · Broad" is already waiting for the owner. One change per campaign at a time.']);
 });
 
 test('connected stores get it on the ad account; an ad account error tells the owner and changes nothing', async () => {
