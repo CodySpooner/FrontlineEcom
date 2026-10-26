@@ -43,6 +43,20 @@ describe('agent-flagged order issue', () => {
   });
 });
 
+describe('needs you', () => {
+  it('lists recently resolved issues with what fixed them, and reopens one', async () => {
+    const done = { ...issue, status: 'resolved', resolution: 'Supplier reshipped', resolvedAt: new Date().toISOString() };
+    const fetch = stubApi((url, init) =>
+      init?.method === 'PATCH' ? { ...issue } : url.startsWith('/api/order-issues?') ? [done] : url.startsWith('/api/orders?') ? { items: [], total: 0 } : undefined,
+    );
+    renderApp(<Orders />, '/orders');
+    fireEvent.click(await screen.findByText('Recently resolved'));
+    expect(screen.getByText(/Supplier reshipped/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Reopen #1042' }));
+    await vi.waitFor(() => expect(patched(fetch)).toEqual([['/api/order-issues/oi1', { status: 'open' }]]));
+  });
+});
+
 describe('orders table', () => {
   it("links a tracking number to the carrier's page", async () => {
     const order = { id: '#1201', storeId: 'peak', createdAt: '2026-10-26T08:00:00Z', total: 30, status: 'paid', fulfillmentStatus: 'in_transit', tracking: 'LX123', trackingUrl: 'https://t.17track.net/en#nums=LX123' };

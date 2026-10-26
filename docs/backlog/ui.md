@@ -232,6 +232,8 @@ Orca's browser against the reference before ticking it.
       promoted learnings now arrive automatically since AGT-92/94, but only showed in an agent's Memory tab).
 - [x] UI-87 An agent with its own daily AI budget shows it in its header next to the autonomy badge, so a capped agent
       is visible without opening Settings.
+- [x] UI-88 Orders › Needs You: a "Recently resolved" list (what was flagged, what fixed it, auto-closed ones too) with
+      Reopen, so a mistaken "Mark resolved" can be undone and an issue the server closed doesn't just vanish.
 
 ## Blocked
 
@@ -355,3 +357,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-86: the panel moved to `components/NicheLearnings.tsx` as `SharedLearnings({ by: { store } | { niche }, niche })`. `useNicheLearnings(by)` builds `?store=` or `?niche=`. AgentDetail's `NicheLearnings` is now a store wrapper, and Knowledge renders it above the selected niche pack (doc key = niche-learning key, custom `other:<slug>` too). New Knowledge.test covers it. Orca at 800px with a fixture pet learning: it showed on Knowledge › Niche packs › Pet and on Pawsome's Market Analyst Memory tab. Fixture removed
 - 2026-10-26 — Core inbox (tracking link): the Orders table's tracking number links to `Order.trackingUrl` (the carrier's page from Shopify, else 17TRACK) with an external-link icon. It opens in the browser (`target=_blank`; Electron's window-open handler sends http(s) to the system browser). Orders.test covers it. Orca at 800px, In transit: "YT2638870881 ↗" etc. Also removed the Sync-now inbox item that a rebase merge had duplicated as open
 - 2026-10-26 — UI-87: AgentDetail header badge "AI ≤ $X.XX/day" when `dailyBudgetUsd` is set, using `cents` because `money` rounds $1.50 to $2. Orca at 800px with a $1.50 fixture on Glow's Copywriter: "Idle · Ask first · AI ≤ $1.50/day". Fixture removed
+- 2026-10-26 — UI-88: native `<details>` under the Needs You list shows the 5 latest resolved order issues (by `resolvedAt`). Each shows the note · resolution, plus Reopen (`PATCH status: open`, which the agents route already accepted). Orders.test covers it. Orca at 800px with two fixture issues (owner-resolved and "Delivered; closed automatically."): Reopen moved #1164 back into the queue. Fixtures removed

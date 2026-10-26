@@ -76,15 +76,32 @@ function Issues({ ids }: { ids: string[] }) {
         .map((i) => ({ key: `${i.order.storeId}:${i.order.id}`, check: i })),
     ];
     if (rows.length) sub = `${rows.length} order${rows.length === 1 ? '' : 's'} with a problem`;
-    body = !rows.length ? (
-      <p className="text-[13px] text-muted">All clear: nothing late, stuck at a supplier or untracked.</p>
-    ) : (
+    // Owner-resolved and auto-closed ones (delivered, refunded): what fixed them, and a way back if resolved by mistake.
+    const resolved = (flagged.data ?? [])
+      .filter((i) => i.status === 'resolved')
+      .sort((a, b) => (b.resolvedAt ?? '').localeCompare(a.resolvedAt ?? ''))
+      .slice(0, SHOWN);
+    body = (
       <>
-        <ul className="grid gap-2">{(all ? rows : rows.slice(0, SHOWN)).map((r) => ('agent' in r ? <AgentIssue key={r.key} i={r.agent} /> : <CheckIssue key={r.key} i={r.check} />))}</ul>
+        {!rows.length ? (
+          <p className="text-[13px] text-muted">All clear: nothing late, stuck at a supplier or untracked.</p>
+        ) : (
+          <ul className="grid gap-2">{(all ? rows : rows.slice(0, SHOWN)).map((r) => ('agent' in r ? <AgentIssue key={r.key} i={r.agent} /> : <CheckIssue key={r.key} i={r.check} />))}</ul>
+        )}
         {rows.length > SHOWN && (
           <Button size="sm" className="mt-3" onClick={() => setAll(!all)}>
             {all ? 'Show fewer' : `Show all ${rows.length}`}
           </Button>
+        )}
+        {resolved.length > 0 && (
+          <details className="mt-3">
+            <summary className="cursor-pointer text-xs text-muted hover:text-white">Recently resolved</summary>
+            <ul className="mt-2 grid gap-2">
+              {resolved.map((i) => (
+                <ResolvedIssue key={i.id} i={i} />
+              ))}
+            </ul>
+          </details>
         )}
       </>
     );
@@ -103,6 +120,31 @@ const IssueRow = ({ icon: Icon, children, action }: { icon: LucideIcon; children
     {action}
   </li>
 );
+
+function ResolvedIssue({ i }: { i: OrderIssue }) {
+  const { name } = useStoreSelection();
+  const set = useSetIssueStatus();
+  return (
+    <li className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
+      <CircleCheck aria-hidden className="size-4 shrink-0 text-muted" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px]">
+          <b>{i.orderId}</b>{' '}
+          <span className="text-muted">
+            {name(i.storeId)} · resolved {ago(i.resolvedAt ?? i.createdAt, Date.now())}
+          </span>
+        </p>
+        <p className="text-xs text-text-2">
+          {i.note}
+          {i.resolution && <span className="text-muted"> · {i.resolution}</span>}
+        </p>
+      </div>
+      <Button size="sm" aria-label={`Reopen ${i.orderId}`} disabled={set.isPending} onClick={() => set.mutate({ id: i.id, status: 'open' })}>
+        Reopen
+      </Button>
+    </li>
+  );
+}
 
 export function AgentIssue({ i }: { i: OrderIssue }) {
   const { name } = useStoreSelection();
