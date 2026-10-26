@@ -214,6 +214,20 @@ test("an ad change is judged once: an outcome the owner deleted doesn't come bac
   expect(outcomes()).toEqual([]);
 });
 
+test("an ad change waits for its ad account's sync to cover the 3 days after, and for a failing one to recover", () => {
+  approvedChange('waits', 'Raise Broad', 1.5);
+  const day = decided();
+  db.prepare(`INSERT INTO integrations (id, kind, store_id, status, encrypted_credentials, updated_at, synced_at) VALUES ('meta_ads:peak', 'meta_ads', 'peak', 'connected', 'x', ?1, ?1)`).run(`${addDays(day, 3)}T15:00:00Z`);
+  checkAdOutcomes(db); // last synced on the window's last day: its spend may not all be in
+  expect(outcomes()).toEqual([]);
+  db.prepare(`UPDATE integrations SET status = 'error', synced_at = ? WHERE id = 'meta_ads:peak'`).run(new Date().toISOString());
+  checkAdOutcomes(db);
+  expect(outcomes()).toEqual([]);
+  db.prepare(`UPDATE integrations SET status = 'connected' WHERE id = 'meta_ads:peak'`).run();
+  checkAdOutcomes(db);
+  expect(outcomes().map((m) => m.text)).toEqual([expect.stringMatching(/^"Raise Broad" worked/)]);
+});
+
 test("an ad change from a store's demo phase isn't judged on its real numbers", () => {
   approvedChange('demo-era', 'Pause Spark Ads', 1.5);
   once(db, 'activate:peak'); // the store went live after the change was approved
