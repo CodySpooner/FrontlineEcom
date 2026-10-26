@@ -366,6 +366,37 @@ export interface AgentRun {
   parentRunId?: string;
 }
 
+export type PageDraftKind = 'product' | 'page';
+/** draft → pending (publish requested) → published, or rejected. approved = approved, but a connected store needs it applied by hand. */
+export type PageDraftStatus = 'draft' | 'pending' | 'approved' | 'published' | 'rejected';
+
+/**
+ * A Store Developer draft (Store Builder). GET /api/page-drafts?stores=&status=&limit= → PageDraft[] newest first;
+ * GET /api/page-drafts/:id; POST /api/page-drafts/:id/publish → PageDraft (the owner publishes: approves the pending
+ * request (202), or publishes a draft directly; 409 if already approved/published); DELETE /api/page-drafts/:id → 204.
+ */
+export interface PageDraft {
+  id: string;
+  storeId: string;
+  agentId: string;
+  runId?: string;
+  kind: PageDraftKind;
+  /** kind product: the product the page is for. */
+  productId?: string;
+  title: string;
+  /** Page body HTML written by the agent: render sandboxed / sanitized. */
+  html: string;
+  seoTitle?: string;
+  seoDescription?: string;
+  /** Change list: what changed and why, with the numbers. */
+  notes: string;
+  status: PageDraftStatus;
+  /** The latest publish request for this draft. */
+  approvalId?: string;
+  createdAt: string;
+  publishedAt?: string;
+}
+
 /**
  * An owner-approved learning shared by every store of a niche (shown in their agents' prompts).
  * GET /api/niche-learnings?niche= → NicheLearning[] newest first; DELETE /api/niche-learnings/:id → 204.

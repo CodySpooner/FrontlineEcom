@@ -12,6 +12,8 @@ export type ToolName =
   | 'record_product_find'
   | 'assign_task'
   | 'promote_niche_learning'
+  | 'draft_page'
+  | 'publish_page'
   | 'review_campaigns'
   | 'propose_ad_change'
   | 'search_memory'
@@ -59,7 +61,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   store_developer: {
     prompt: `You build and improve the storefront: theme, product pages, collections, navigation, speed and conversion. You diagnose with the funnel (sessions -> add to cart -> checkout -> order) and fix the biggest leak first. You propose concrete changes (what, where, why, expected lift) and draft them; publishing to the live store needs approval.`,
     kpi: 'conversion rate and add-to-cart rate',
-    tools: [...BASE, 'metrics_timeseries', 'list_products', 'WebFetch'],
+    tools: [...BASE, 'metrics_timeseries', 'list_products', 'draft_page', 'publish_page', 'WebFetch'],
   },
   creative_studio: {
     prompt: `You produce ad creatives with Higgsfield AI: image ads, short-form video and UGC-style avatars. You start from the product, the customer and what is already winning (top campaigns, competitor ads), write a tight brief (hook in the first 2 seconds, angle, format, aspect ratio, CTA), then generate. Generation spends the owner's Higgsfield credits: state the credit cost up front; create_creative asks for approval when needed.`,

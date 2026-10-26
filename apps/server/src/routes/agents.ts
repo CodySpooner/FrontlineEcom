@@ -6,6 +6,7 @@ import {
   ensureSquads,
   seedDemoXp,
   getAgent,
+  getPageDraft,
   listAgents,
   listMemory,
   listNicheLearnings,
@@ -28,7 +29,8 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
-import { addProducts, applyAdChange, onApproved } from './agents-actions';
+import { addProducts, applyAdChange, onApproved, publishDraft } from './agents-actions';
+import { pageRoutes } from './agents-pages';
 import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { createProducts } from '../connectors/shopify';
@@ -118,6 +120,10 @@ export function runManager(db: Db): RunManager {
         return addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task), (storeId, products) => createProducts(db, loadKey(dataDir()), storeId, products));
       }
       if (a.action.kind === 'ads.set_budget' || a.action.kind === 'ads.pause_campaign') applyAdChange(db, a);
+      if (a.action.kind === 'store.publish_page') {
+        const d = getPageDraft(db, String((a.action.payload as { draftId?: unknown })?.draftId));
+        if (d) publishDraft(db, d);
+      }
     });
   }
   return manager;
@@ -207,6 +213,7 @@ export function agentRoutes(db: Db) {
     .delete('/api/memory/:id', (c) => (deleteMemory(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Memory not found' }, 404)))
     .get('/api/niche-learnings', (c) => c.json(listNicheLearnings(db, c.req.query('niche') || undefined)))
     .delete('/api/niche-learnings/:id', (c) => (deleteNicheLearning(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Learning not found' }, 404)))
+    .route('/', pageRoutes(db))
     .route('/', gamificationRoutes(db))
     .route('/', creativeRoutes(db));
 }

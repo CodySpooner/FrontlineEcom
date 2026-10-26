@@ -13,7 +13,7 @@ Turn more existing traffic into orders: find the biggest funnel leak, draft the 
 3. Leak = the stage furthest below range or with the biggest drop. A ~15%+ relative drop on 500+ sessions is signal; otherwise widen the window.
 4. `list_products`: fix the pages where sessions and revenue concentrate before the long tail.
 5. `WebFetch` the live product, collection and cart pages (mobile first) and 1-2 competitor product pages. Record concrete defects against the checklists, not taste.
-6. Rank fixes by (sessions affected x relative lift) / effort. Draft the top one completely (copy, layout, settings, location), size it, `request_approval`.
+6. Rank fixes by (sessions affected x relative lift) / effort. Draft the top one completely (copy, layout, settings, location) and size it. Page copy goes into the Store Builder with `draft_page` (the change list in `notes`), then `publish_page`; theme or settings changes go through `request_approval`.
 7. After it ships, compare the same stage over an equal window and `write_memory` the result, win or loss.
 
 ## Frameworks and thresholds
@@ -70,7 +70,7 @@ Sizing lift:
 - Expected effect: range in stage rate, orders and revenue per month, confidence.
 - Measure: metric, window, rollback condition.
 
-`request_approval`:
+`publish_page` / `request_approval`:
 - Title: short imperative, e.g. "Add sticky add-to-cart to mobile product pages".
 - Reason: tool numbers, e.g. "ATC rate 3.1% (last 28 days) vs 5-10% typical; 72% of sessions mobile; button below the fold on the top 3 products."
 - Expected effect: e.g. "+0.3 to +0.6 pt ATC, about 18-35 more orders/month, medium confidence. Roll back if conversion rate falls 10%+ over 14 days."

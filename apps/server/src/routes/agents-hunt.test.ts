@@ -30,7 +30,7 @@ test('approving "add to store" from the research screen adds a draft and has the
   await tick();
   expect(product('glow', 'research-ice-facial-roller')).toMatchObject({ title: 'Ice Facial Roller', price: 11.3, compare_at: 34.99, cost: 2.6, status: 'draft', inventory: 0 });
   const [run] = listRuns(db, { agentId: 'glow:store_developer' });
-  expect(run?.task).toMatch(/^New draft product\(s\) just added to Glow Haus: Ice Facial Roller\./);
+  expect(run?.task).toMatch(/^New draft product\(s\) just added to Glow Haus: Ice Facial Roller \(productId research-ice-facial-roller\)\. .* draft_page .* publish_page\.$/);
   await runManager(db).idle();
 });
 

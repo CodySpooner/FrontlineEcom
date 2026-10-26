@@ -1,4 +1,5 @@
-import type { ApprovalRequest } from '@frontline/shared';
+import { getPageDraft, markPublished } from '@frontline/agents';
+import type { ApprovalRequest, PageDraft } from '@frontline/shared';
 import type { Db } from '../db';
 import { subscribe } from '../live';
 import { notify } from '../settings';
@@ -24,6 +25,22 @@ export function onApproved(db: Db, fn: (db: Db, a: ApprovalRequest) => unknown) 
       }
     });
   });
+}
+
+/**
+ * Publishes a Store Builder draft: demo stores go live locally (a draft product the page is for becomes active);
+ * connected stores get a notification to apply it by hand.
+ */
+export function publishDraft(db: Db, d: PageDraft) {
+  const store = getStore(db, d.storeId);
+  if (!store || d.publishedAt) return;
+  if (store.connected) {
+    // ponytail: needs core's Shopify productUpdate (descriptionHtml, seo) / pageCreate to push it.
+    notify(db, { kind: 'info', title: `Publish on ${store.name} by hand: ${d.title}`, body: 'Approved. The page is in Store Builder; publishing to a connected store is not automated yet.', storeId: store.id });
+    return;
+  }
+  markPublished(db, d.id);
+  if (d.productId) db.prepare(`UPDATE products SET title = ?, status = 'active' WHERE store_id = ? AND id = ? AND status = 'draft'`).run(d.title, store.id, d.productId);
 }
 
 /** Approved `ads.set_budget` / `ads.pause_campaign` on a demo store's campaigns. Connected stores: the owner is told. */
@@ -62,10 +79,11 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
   const products = ((a.action.payload as { products?: unknown })?.products ?? []) as AddProduct[];
   const valid = products.filter((p) => typeof p?.title === 'string' && p.title.trim() && typeof p.price === 'number' && p.price > 0);
   if (!store || !valid.length) return [];
-  let titles = valid.map((p) => p.title.trim());
+  const titles = valid.map((p) => p.title.trim());
+  let added: { id: string; title: string }[];
   if (store.connected) {
     try {
-      titles = (await createRemote(store.id, valid.map((p, i) => ({ title: titles[i]!, price: p.price, compareAt: p.compareAt, cost: p.cost })))).map((p) => p.title);
+      added = await createRemote(store.id, valid.map((p, i) => ({ title: titles[i]!, price: p.price, compareAt: p.compareAt, cost: p.cost })));
     } catch (e) {
       notify(db, { kind: 'error', title: `Couldn't add products to ${store.name}`, body: `${(e as Error).message}. Approved: ${titles.join(', ')}. Add them by hand.`, storeId: store.id });
       return [];
@@ -75,16 +93,18 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
     const insert = db.prepare(
       `INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'draft')`,
     );
+    added = valid.map((p, i) => ({ id: p.researchProductId ? `research-${p.researchProductId}` : `approval-${a.id}-${i}`, title: titles[i]! }));
     for (const [i, p] of valid.entries()) {
-      const id = p.researchProductId ? `research-${p.researchProductId}` : `approval-${a.id}-${i}`;
+      const id = added[i]!.id;
       const img = p.researchProductId ? image.get(p.researchProductId)?.image : undefined;
       insert.run(store.id, id, titles[i]!, img == null ? null : String(img), p.price, p.compareAt ?? null, p.cost ?? 0);
     }
   }
   startRun(
     `${store.id}:store_developer`,
-    `New draft product(s) just added to ${store.name}: ${titles.join(', ')}. For each, draft the product page: title, benefit-led description, ` +
-      '5 bullets, SEO title and meta description, and check the price against list_products and competitors. Reply with copy ready to paste.',
+    `New draft product(s) just added to ${store.name}: ${added.map((p) => `${p.title} (productId ${p.id})`).join(', ')}. For each, write the product page ` +
+      '(benefit-led title, description with 5 bullets, SEO title and meta description; check the price against list_products and competitors), ' +
+      'save it with draft_page (kind product) and ask to publish it with publish_page.',
   );
-  return titles;
+  return added.map((p) => p.title);
 }

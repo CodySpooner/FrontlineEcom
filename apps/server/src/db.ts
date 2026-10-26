@@ -323,6 +323,24 @@ export const MIGRATIONS = [
   );
   CREATE UNIQUE INDEX niche_learnings_text ON niche_learnings (niche, lower(text));
   `,
+  /* 15 (agents lane: Store Builder drafts, AGT-26) */ `
+  CREATE TABLE page_drafts (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL,
+    run_id TEXT,
+    kind TEXT NOT NULL,
+    product_id TEXT,
+    title TEXT NOT NULL,
+    html TEXT NOT NULL,
+    seo_title TEXT,
+    seo_description TEXT,
+    notes TEXT NOT NULL,
+    published_at TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX page_drafts_by_store ON page_drafts (store_id, created_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

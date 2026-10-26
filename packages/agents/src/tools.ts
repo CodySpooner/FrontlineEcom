@@ -5,6 +5,7 @@ import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ad
 import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
 import { searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
+import { getPageDraft, savePageDraft } from './pages';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 
 /** What the server hands a run so its tools can read and act on app data. */
@@ -250,6 +251,42 @@ export const APP_TOOLS: AppTool[] = [
       }
       const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'demo', mediaUrl: demoMedia(ctx.store, { kind, aspect, headline, cta }) });
       return `${message}. Higgsfield isn't connected, so this is a demo render, saved to the library (${saved.id}).`;
+    },
+  }),
+  defineTool({
+    name: 'draft_page',
+    description:
+      'Save a complete page draft to the Store Builder for the owner to review: a product page (kind product + productId from list_products) or a store page (about, FAQ, shipping, landing). Nothing goes live until publish_page is approved.',
+    input: {
+      kind: z.enum(['product', 'page']),
+      productId: z.string().optional().describe('required for kind product'),
+      title: z.string().min(2).max(120),
+      html: z.string().min(20).max(20_000).describe('the page body as clean HTML: headings, paragraphs, lists; no scripts or styles'),
+      seoTitle: z.string().max(70).optional(),
+      seoDescription: z.string().max(160).optional(),
+      notes: z.string().min(10).max(1000).describe('change list: what changed vs the live page and why, with the numbers'),
+    },
+    run: async ({ kind, productId, ...d }, ctx) => {
+      if (kind === 'product' && !productId) return 'productId is required for a product page.';
+      if (productId && !ctx.db.prepare('SELECT 1 FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId)) return `No product ${productId} in this store. Use list_products for ids.`;
+      const draft = savePageDraft(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), kind, ...(productId ? { productId } : {}), ...d });
+      return `Saved draft ${draft.id} to the Store Builder. When it's ready, ask to publish it with publish_page.`;
+    },
+  }),
+  defineTool({
+    name: 'publish_page',
+    description: 'Ask the owner to publish a Store Builder draft to the store. Waits for the decision; on approval it goes live (demo stores) or the owner is told to apply it.',
+    input: { draftId: z.string() },
+    run: async ({ draftId }, ctx) => {
+      const d = getPageDraft(ctx.db, draftId);
+      if (!d || d.storeId !== ctx.store.id) return `No draft ${draftId} in this store.`;
+      if (d.status !== 'draft' && d.status !== 'rejected') return `That draft is already ${d.status}.`;
+      const { approved, message } = await requestApproval(ctx, {
+        title: `Publish "${d.title}"`.slice(0, 80),
+        reason: d.notes.slice(0, 400),
+        action: { kind: 'store.publish_page', payload: { draftId: d.id, title: d.title, ...(d.productId ? { productId: d.productId } : {}) } },
+      });
+      return approved ? `${message}. Publishing it now.` : message;
     },
   }),
   defineTool({

@@ -25,3 +25,4 @@ export { CREDITS, saveCreative, listCreatives, deleteCreative, creditsToday, dem
 export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats, type Economics, type Verdict } from './ads';
 export { DEFAULT_JOBS, createDefaultJobs } from './jobs';
 export { nicheKey, addNicheLearning, listNicheLearnings, deleteNicheLearning } from './niche';
+export { savePageDraft, getPageDraft, listPageDrafts, markPublished, deletePageDraft, type NewPageDraft } from './pages';
