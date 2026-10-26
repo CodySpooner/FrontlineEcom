@@ -1,10 +1,10 @@
 import { AGENT_ROLES, APPROVAL_KINDS, type AgentRole } from '@frontline/shared';
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
-import { APP_TOOLS, DEFAULT_JOBS, playbook, ROLES, SQUAD_RULES, toolsFor } from './index';
+import { APP_TOOLS, DEFAULT_JOBS, MISSION_TEMPLATES, playbook, ROLES, SQUAD_RULES, toolsFor } from './index';
 
 // Evals: the text an agent is given must only ask for tools that agent actually has. Catches drift whenever a
-// playbook, a role prompt, the squad rules or a scheduled job is edited without updating the role's tool list.
+// playbook, a role prompt, the squad rules, a scheduled job or a mission template is edited without updating the role's tool list.
 
 const ROLE_IDS = Object.keys(AGENT_ROLES) as AgentRole[];
 const SDK_TOOLS = ['WebSearch', 'WebFetch'];
@@ -24,7 +24,7 @@ test('every role tool exists, and app tools are all wired', () => {
 
 test.each(ROLE_IDS)('%s is only told to use tools it has', (role) => {
   expect(mentioned(playbook(role)).size, 'playbook names its tools').toBeGreaterThan(2);
-  const jobs = DEFAULT_JOBS.filter((j) => j.role === role).map((j) => j.task);
+  const jobs = [...DEFAULT_JOBS, ...MISSION_TEMPLATES.flatMap((m) => m.steps)].filter((j) => j.role === role).map((j) => j.task);
   const missing = [...mentioned([playbook(role), ROLES[role].prompt, SQUAD_RULES, ...jobs].join('\n'))].filter((t) => !ROLES[role].tools.includes(t as never));
   expect(missing).toEqual([]);
 });
