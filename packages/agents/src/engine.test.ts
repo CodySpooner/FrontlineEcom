@@ -121,6 +121,11 @@ describe('Claude engine', () => {
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: ['x'] }))[0]).toMatchObject({ message: expect.stringMatching(/^Stopped: the run used what was left of today's AI budget/) });
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_during_execution', errors: ['boom', 'bang'] }))).toEqual([{ type: 'error', message: 'boom; bang' }]);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in' }))).toEqual([{ type: 'error', message: 'Not logged in' }]);
+    // Account problems arrive on an assistant message first, worded for Claude Code ("run /login"): the owner gets Frontline's words.
+    const failed = (error: string) => toAgentEvents(sdk({ type: 'assistant', parent_tool_use_id: null, error, message: { content: [{ type: 'text', text: 'Not logged in · Please run /login' }] } }));
+    expect(failed('authentication_failed')).toEqual([{ type: 'error', message: expect.stringMatching(/^Claude isn't signed in on this computer\. Open a terminal, run `claude`/) }]);
+    expect(failed('rate_limit')[0]).toMatchObject({ message: expect.stringMatching(/usage limit/) });
+    expect(failed('server_error')).toEqual([]);
   });
 
   test('passes prompt, resume and isolation options to query()', async () => {

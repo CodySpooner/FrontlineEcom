@@ -1,7 +1,7 @@
 // Drives the Claude Agent SDK the way T3 Code's ClaudeAdapterV2 does (partial-message streaming, resume,
 // canUseTool, per-run mcpServers), minus Effect. Ideas ported from pingdotgg/t3code:
 // MIT License, Copyright (c) 2026 T3 Tools Inc.
-import { createSdkMcpServer, query, tool, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { createSdkMcpServer, query, tool, type Options, type SDKAssistantMessageError, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
 import { assemblePrompt } from './prompt';
@@ -22,6 +22,14 @@ export interface ClaudeEngineOptions {
   /** Swapped in tests so they never call Claude. */
   query?: (params: { prompt: string; options: Options }) => AsyncIterable<SDKMessage>;
 }
+
+/** Account problems the SDK flags on an assistant message, in the owner's words (Claude Code's own text says "run /login"). */
+const ACCOUNT: Partial<Record<SDKAssistantMessageError, string>> = {
+  authentication_failed: "Claude isn't signed in on this computer. Open a terminal, run `claude`, sign in with /login, then run the agent again.",
+  billing_error: "Claude reported a billing problem with your account, so agents can't run. Check your plan at claude.ai.",
+  rate_limit: "You've hit your Claude usage limit for now. Agents can run again once it resets.",
+  model_not_found: "The agent model isn't available on your Claude login. Set FRONTLINE_AGENT_MODEL to one that is.",
+};
 
 /** Runs on the owner's local Claude Code login (no API key needed). */
 export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
@@ -97,6 +105,7 @@ export function toAgentEvents(message: SDKMessage): AgentEvent[] {
     }
     case 'assistant':
       if (message.parent_tool_use_id !== null) return [];
+      if (message.error && ACCOUNT[message.error]) return [{ type: 'error', message: ACCOUNT[message.error]! }];
       return message.message.content.flatMap((block): AgentEvent[] =>
         block.type === 'tool_use' ? [{ type: 'tool_call', id: block.id, name: block.name, input: block.input }] : [],
       );
