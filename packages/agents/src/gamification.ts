@@ -159,6 +159,9 @@ export const ACHIEVEMENTS: (Omit<Achievement, 'unlockedAt'> & { check: (f: Facts
   { id: 'first_win', title: 'First Measured Win', description: "An agent's change measurably improved the numbers.", xp: 100, check: (f) => f.wins >= 1 },
   { id: 'proven_squad', title: 'Proven Squad', description: '10 measured wins across your stores.', xp: 300, check: (f) => f.wins >= 10 },
   { id: 'hundred_k_month', title: '$100K Month', description: 'A store did $100,000 in revenue over 30 days.', xp: 500, check: (f) => f.best30Revenue >= 100_000 },
+  { id: 'profit_streak_30', title: '30-Day Profit Streak', description: 'Profitable every day for 30 days.', xp: 400, check: (f) => f.profitStreak >= 30 },
+  { id: 'elite_agent', title: 'Elite Operator', description: 'An agent reached Elite rank.', xp: 300, check: (f) => f.topLevel >= RANK_FROM.Elite },
+  { id: 'legend_agent', title: 'Living Legend', description: 'An agent reached Legend rank.', xp: 500, check: (f) => f.topLevel >= RANK_FROM.Legend },
 ];
 
 /** Unlocks what the facts now satisfy (paying its XP once) and returns the whole catalog with unlock times. */
