@@ -12,7 +12,7 @@ type Obj = Record<string, unknown>;
 const DEFAULT_SETTINGS: Omit<Settings, 'dataDir'> = {
   profile: { name: 'Cody', plan: 'Pro Plan' },
   sound: false,
-  notifications: { approvals: true, agentDone: true, errors: true },
+  notifications: { approvals: true, agentDone: true, errors: true, digest: true },
   baseCurrency: 'USD',
 };
 

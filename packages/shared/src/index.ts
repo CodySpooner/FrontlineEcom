@@ -885,7 +885,8 @@ export interface Settings {
   /** UI sound effects (mission sting, XP). Off by default. */
   sound: boolean;
   /** Which events create notifications. */
-  notifications: { approvals: boolean; agentDone: boolean; errors: boolean };
+  /** `digest`: a morning summary (8:00 local) of yesterday across stores and the approvals waiting. */
+  notifications: { approvals: boolean; agentDone: boolean; errors: boolean; digest: boolean };
   /** ISO code that multi-store totals are converted to (default USD). */
   baseCurrency: string;
   /** Read-only: where the local database and key live. */
