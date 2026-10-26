@@ -36,7 +36,7 @@ export function createRunManager(opts: RunManagerOptions) {
   );
 
   /** Queues a task. Returns an error message when the agent can't take it. */
-  function start(agentId: string, task: string, resumeRunId?: string): AgentRun | string {
+  function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string): AgentRun | string {
     const agent = getAgent(db, agentId);
     if (!agent) return 'Agent not found';
     if (!agent.enabled) return 'This agent is offline. Redeploy it first.';
@@ -49,8 +49,8 @@ export function createRunManager(opts: RunManagerOptions) {
     const cap = env.caps?.(agent.storeId).agentCostPerDay;
     if (cap !== undefined && costToday(db, agent.storeId) >= cap) return `Today's AI budget for this store ($${cap}) is used up. Raise it in Settings.`;
     const id = randomUUID();
-    db.prepare('INSERT INTO agent_runs (id, store_id, agent_id, task, resume, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
-      id, agent.storeId, agentId, task, resume ?? null, new Date().toISOString(),
+    db.prepare('INSERT INTO agent_runs (id, store_id, agent_id, task, resume, parent_run_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+      id, agent.storeId, agentId, task, resume ?? null, parentRunId ?? null, new Date().toISOString(),
     );
     const run = getRun(db, id)!;
     opts.onRun?.(run);
@@ -208,7 +208,7 @@ export function listRuns(db: DatabaseSync, q: { agentId?: string; storeIds?: str
 
 function toRun(r: Record<string, unknown>): AgentRun {
   const opt = (k: string) => (r[k] == null ? undefined : String(r[k]));
-  const [sessionId, error, startedAt, endedAt] = ['session_id', 'error', 'started_at', 'ended_at'].map(opt);
+  const [sessionId, error, startedAt, endedAt, parentRunId] = ['session_id', 'error', 'started_at', 'ended_at', 'parent_run_id'].map(opt);
   return {
     id: String(r.id),
     storeId: String(r.store_id),
@@ -221,5 +221,6 @@ function toRun(r: Record<string, unknown>): AgentRun {
     createdAt: String(r.created_at),
     ...(startedAt ? { startedAt } : {}),
     ...(endedAt ? { endedAt } : {}),
+    ...(parentRunId ? { parentRunId } : {}),
   };
 }

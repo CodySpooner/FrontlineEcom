@@ -331,6 +331,8 @@ export interface AgentRun {
   createdAt: string;
   startedAt?: string;
   endedAt?: string;
+  /** Set when a squadmate assigned this task (`assign_task`): the run that assigned it. */
+  parentRunId?: string;
 }
 
 /**

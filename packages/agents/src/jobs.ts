@@ -11,7 +11,8 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
     cron: '0 8 * * *',
     task:
       'Daily briefing: compare yesterday with the 7-day average (revenue, profit, ROAS, orders, AOV) using store_summary and metrics_timeseries. ' +
-      'Say what moved and the likely why in 3 bullets, then the top 3 actions for today, each with the squad role that should own it. Under 150 words.',
+      'Say what moved and the likely why in 3 bullets, then the top 3 actions for today, each with the squad role that should own it. ' +
+      'Hand the most urgent one to its owner with assign_task. Under 150 words.',
   },
   {
     name: 'Daily campaign review',

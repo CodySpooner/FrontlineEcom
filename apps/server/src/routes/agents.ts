@@ -42,6 +42,7 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
   approvals: approvalsHook(db),
   decide: (id, decision) => decide(db, id, decision),
   caps: (storeId) => getCaps(db, storeId),
+  startRun: (agentId, task, parentRunId) => runManager(db).start(agentId, task, undefined, parentRunId),
   generateMedia: async (req, signal) => {
     const creds = db.prepare(`SELECT 1 FROM integrations WHERE kind = 'higgsfield'`).get() && getCredentials(db, key(), 'higgsfield');
     if (!creds?.keyId || !creds.keySecret) return undefined;

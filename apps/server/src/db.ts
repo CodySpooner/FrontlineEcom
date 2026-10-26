@@ -299,6 +299,9 @@ export const MIGRATIONS = [
   );
   CREATE INDEX creatives_by_store ON creatives (store_id, created_at);
   `,
+  /* 12 (agents lane: squad delegation, AGT-22) */ `
+  ALTER TABLE agent_runs ADD COLUMN parent_run_id TEXT;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

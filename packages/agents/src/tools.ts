@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps } from '@frontline/shared';
+import { AGENT_ROLES, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
@@ -25,6 +25,8 @@ export interface ToolEnv {
   recordFind?: (find: Omit<ResearchProduct, 'id' | 'margin' | 'score' | 'scoreParts'>) => Promise<ResearchProduct>;
   /** Renders media on Higgsfield and returns a local URL for it; undefined when Higgsfield isn't connected (demo render). */
   generateMedia?: (req: { kind: Exclude<CreativeKind, 'copy'>; aspect: AspectRatio; prompt: string }, signal?: AbortSignal) => Promise<string | undefined>;
+  /** Queues a run for a squadmate (the app's run manager); returns the run or why it can't start. */
+  startRun?: (agentId: string, task: string, parentRunId?: string) => AgentRun | string;
   /** Core's research feed (scored trending products). */
   research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number }) => Promise<ResearchProduct[]>;
   runId?: string;
@@ -248,6 +250,26 @@ export const APP_TOOLS: AppTool[] = [
       }
       const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'demo', mediaUrl: demoMedia(ctx.store, { kind, aspect, headline, cta }) });
       return `${message}. Higgsfield isn't connected, so this is a demo render, saved to the library (${saved.id}).`;
+    },
+  }),
+  defineTool({
+    name: 'assign_task',
+    description:
+      "Hand a concrete task to another agent of this store's squad. It runs right away on the store's AI budget. Include the numbers they need and what done looks like. At most 3 per run; a task assigned to you can't be passed on.",
+    input: {
+      role: z.enum(Object.keys(AGENT_ROLES) as [AgentRole, ...AgentRole[]]),
+      task: z.string().min(10).max(1500),
+    },
+    run: async ({ role, task }, ctx) => {
+      if (!ctx.startRun || !ctx.runId) return 'Assigning tasks is not available here.';
+      if (role === ctx.agent.role) return 'That is your own role: do it yourself.';
+      if (ctx.db.prepare('SELECT parent_run_id FROM agent_runs WHERE id = ?').get(ctx.runId)?.parent_run_id) {
+        return 'This task was assigned to you, so it cannot be passed on. Do it, or say what is blocking it.';
+      }
+      if (Number(ctx.db.prepare('SELECT count(*) AS n FROM agent_runs WHERE parent_run_id = ?').get(ctx.runId)?.n) >= 3) return 'Not assigned: 3 tasks per run is the limit.';
+      const name = AGENT_ROLES[role].name;
+      const run = ctx.startRun(`${ctx.store.id}:${role}`, `${task}\n\n(Assigned by the ${AGENT_ROLES[ctx.agent.role].name}.)`, ctx.runId);
+      return typeof run === 'string' ? `Not assigned to the ${name}: ${run}` : `Assigned to the ${name} (run ${run.id}, ${run.status}).`;
     },
   }),
   defineTool({

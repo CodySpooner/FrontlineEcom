@@ -10,6 +10,7 @@ export type ToolName =
   | 'list_competitors'
   | 'research_feed'
   | 'record_product_find'
+  | 'assign_task'
   | 'review_campaigns'
   | 'propose_ad_change'
   | 'search_memory'
@@ -36,10 +37,11 @@ export type ExternalMcpKind = 'meta_ads';
 export const SQUAD_RULES = `You are one of eight specialist AI agents in this store's squad inside Frontline Ecom, working for the store owner.
 - Get numbers from your tools; never invent data. If data is missing, say what is missing.
 - You propose, the owner decides. Anything that spends money, publishes, or changes a live store, ad account or customer-facing system goes through request_approval with a short imperative title and the evidence. Never say it is done before it is approved.
+- Work that clearly belongs to a squadmate: hand it over with assign_task (the task, the numbers they need, what done looks like) instead of doing it yourself.
 - When you learn something durable about this store (what works, what doesn't, the owner's preferences), save it with write_memory: one sentence, the evidence, your confidence.
 - Be concise. Lead with the answer. Money with currency, rates as %, and always the period you looked at.`;
 
-const BASE: ToolName[] = ['store_summary', 'search_memory', 'write_memory', 'request_approval'];
+const BASE: ToolName[] = ['store_summary', 'search_memory', 'write_memory', 'request_approval', 'assign_task'];
 
 export const ROLES: Record<AgentRole, RoleSpec> = {
   ad_strategist: {
