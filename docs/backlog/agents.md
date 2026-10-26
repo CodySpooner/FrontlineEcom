@@ -95,6 +95,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-45 A living demo: demo-engine runs did nothing but quote totals, so none of the agent screens showed agent output without spending Claude usage.
 - [x] AGT-46 The activity feed says what an agent found, not just the task it was given.
 - [x] AGT-47 Agents see what sells, and the Store Developer improves one best-seller page a week, so the page-outcome loop (AGT-43) has something to judge.
+- [x] AGT-48 The squad can see its creatives library, so the Ad Strategist launches what the Creative Studio and Copywriter made instead of asking for more.
 - [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
@@ -102,6 +103,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-48 `list_creatives` (Ad Strategist, Creative Studio, Copywriter) is the store's creatives library as CSV, newest first, filterable by kind. Media show as `demo` / `higgsfield` / `none`, never the payload. Playbooks: the Ad Strategist names library creatives to launch before asking the Creative Studio for new ones; the Creative Studio and Copywriter check it so they don't repeat an angle.
 - 2026-10-26 — AGT-47 `list_products` now sorts best sellers first and adds `units_30d` / `revenue_30d` from paid orders, so agents can tell what sells. New default job "Weekly page refresh" (Store Developer, Thu 09:00) drafts one improved page for the top seller and asks to publish it. `draft_page` allows one page test per product at a time: it refuses while a draft is open (draft, pending or approved) or within 29 days of going live. Rejected drafts don't block. Noted core's FYI: core's writers log to `action_log`, and my next migration is 25.
 - 2026-10-26 — Multi-currency (after CORE-26): ad-budget and price-test requests and refusals show amounts in the store's currency (`$40` for USD stores, `40 EUR` otherwise) instead of a hardcoded `$`. Caps stay per store, in the store's units.
 - 2026-10-26 — Test: every app tool is served by the Claude engine's in-process MCP server with a valid object input schema, checked per role over an in-memory MCP client. It catches a zod input Claude couldn't see, with zero Claude usage.

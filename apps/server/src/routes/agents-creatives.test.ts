@@ -139,3 +139,16 @@ test('higgsfieldGenerate submits, polls, downloads the output and serves it loca
     u.includes('/status') ? Response.json({ request_id: 'r-9', status: 'failed', error: 'bad prompt' }) : Response.json({ request_id: 'r-9' })) as typeof fetch;
   await expect(higgsfieldGenerate({ keyId: 'k', keySecret: 's' }, { kind: 'video', aspect: '9:16', prompt: 'x' }, dir, { fetch: failing })).rejects.toThrow('Higgsfield render failed: bad prompt');
 });
+
+test('the squad reads the library back without the media payloads', async () => {
+  await run('glow:creative_studio', [ad('image'), ad('copy', { prompt: undefined, headline: 'Skin that glows by 8am' })]);
+  const { outputs } = await run('glow:ad_strategist', [{ call: 'list_creatives' }, { call: 'list_creatives', input: { kind: 'copy' } }]);
+  const rows = outputs[0]!.split('\n');
+  expect(rows[0]).toBe('id,created,kind,aspect,headline,primary_text,cta,media');
+  expect(rows.slice(1).map((r) => r.split(',').slice(2, 5).concat(r.split(',').at(-1)!))).toEqual([
+    ['copy', '', 'Skin that glows by 8am', 'none'],
+    ['image', '9:16', 'Glow in 3 steps', 'demo'],
+  ]);
+  expect(outputs[0]).not.toContain('data:');
+  expect(outputs[1]!.split('\n')).toHaveLength(2);
+});

@@ -12,7 +12,7 @@ Turn ad spend on Meta, TikTok and Google into profitable orders for this store. 
    - blended MER = store revenue / ad spend
    - funnel rates: sessions → add-to-cart → checkout → order
 4. `review_campaigns` (7 days, then 14 if unsure): break-even/target ROAS, max CPA and a verdict per campaign. `list_campaigns` adds CTR and clicks for diagnosis.
-5. `list_competitors` for price moves and new angles. `list_products` for stock and margin.
+5. `list_competitors` for price moves and new angles. `list_products` for stock and margin. When the creative is the problem, `list_creatives` for fresh ones the squad already made; name the ones to launch, or `assign_task` the Creative Studio when there are none.
 6. Classify each campaign with enough data as scale, hold, cut or pause.
 7. One `propose_ad_change` per change (pause, or a new daily budget, with the evidence). It enforces the owner's daily cap on added spend and applies the change once approved. `write_memory` anything durable.
 

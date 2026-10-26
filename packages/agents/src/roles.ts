@@ -13,6 +13,7 @@ export type ToolName =
   | 'search_suppliers'
   | 'assign_task'
   | 'promote_niche_learning'
+  | 'list_creatives'
   | 'flag_order_issue'
   | 'draft_flow'
   | 'draft_page'
@@ -54,7 +55,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   ad_strategist: {
     prompt: `You run paid acquisition across Meta, TikTok and Google. You read campaign data, find what wastes money and what deserves more, and turn it into specific moves: pause, scale, duplicate, new test. Every recommendation names the campaign or ad set, the numbers behind it (spend, ROAS, CPA, days of data) and the expected effect. Judge on enough data: don't kill an ad set before it has spent 2-3x target CPA or run 3 days; scale winners 20-30% at a time.`,
     kpi: 'blended ROAS and CPA against the store break-even ROAS',
-    tools: [...BASE, 'metrics_timeseries', 'list_campaigns', 'review_campaigns', 'propose_ad_change', 'list_products', 'list_competitors', 'WebFetch'],
+    tools: [...BASE, 'metrics_timeseries', 'list_campaigns', 'review_campaigns', 'propose_ad_change', 'list_products', 'list_competitors', 'list_creatives', 'WebFetch'],
     mcp: ['meta_ads'],
   },
   product_hunter: {
@@ -70,7 +71,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   creative_studio: {
     prompt: `You produce ad creatives with Higgsfield AI: image ads, short-form video and UGC-style avatars. You start from the product, the customer and what is already winning (top campaigns, competitor ads), write a tight brief (hook in the first 2 seconds, angle, format, aspect ratio, CTA), then generate. Generation spends the owner's Higgsfield credits: state the credit cost up front; create_creative asks for approval when needed.`,
     kpi: 'hook rate, CTR and ROAS of the creatives you shipped',
-    tools: [...BASE, 'list_products', 'list_campaigns', 'list_competitors', 'create_creative', 'WebFetch'],
+    tools: [...BASE, 'list_products', 'list_campaigns', 'list_competitors', 'list_creatives', 'create_creative', 'WebFetch'],
     mcp: ['meta_ads'],
   },
   market_analyst: {
@@ -82,7 +83,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   copywriter: {
     prompt: `You write words that sell: ad copy (hooks, primary text, headlines), product titles and descriptions, landing pages. Write for this store's customer in their language: benefits before features, specific over generic. Respect the platform's and the niche's claim rules (no cure or medical claims, no unverifiable safety or results claims). Give 2-3 variants and name the angle of each. Publishing copy to the store or to ads needs approval.`,
     kpi: 'CTR and conversion rate of the copy that ships',
-    tools: [...BASE, 'list_products', 'list_competitors', 'create_creative', 'draft_page', 'publish_page', 'WebFetch'],
+    tools: [...BASE, 'list_products', 'list_competitors', 'list_creatives', 'create_creative', 'draft_page', 'publish_page', 'WebFetch'],
   },
   email_sms: {
     prompt: `You own retention: email and SMS flows (welcome, browse abandonment, cart abandonment, post-purchase, win-back), campaigns and list growth. You design each flow with timing, subject lines, content and segments, sized to the store's order volume and margin. Message only consented contacts and respect quiet hours. Launching or changing a live flow or campaign needs approval.`,

@@ -7,7 +7,7 @@ Make creatives that stop the scroll and sell: image ads, short-form video and UG
 1. `search_memory`: winning and losing hooks, brand rules (colors, voice, banned words), avatars that worked, credits per asset, owner feedback.
 2. `list_campaigns` for 14 days: rank by ROAS and CTR, and flag fatigue (CTR down 30%+ from week one). No hook/hold data? Say so; judge on CTR and ROAS.
 3. `list_products` and `store_summary`: pick a product with margin and stock, or the one the Ad Strategist named. Note its price, key benefit and real specs.
-4. `list_competitors`: list the saturated angles and the gap. Borrow angles, never executions.
+4. `list_competitors`: list the saturated angles and the gap. Borrow angles, never executions. `list_creatives` for what this store already has, so you don't repeat an angle.
 5. Choose 2–3 angles, write a brief for each, and estimate credits. Validate on stills or short drafts before full video.
 6. `create_creative` per brief. It asks for approval above the cap.
 7. Hand each asset to the Ad Strategist with a test plan, then `write_memory`.

@@ -2,7 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
-import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
+import { CREDITS, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
 import { searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
 import { getPageDraft, listPageDrafts, savePageDraft } from './pages';
@@ -238,6 +238,19 @@ export const APP_TOOLS: AppTool[] = [
         items.map((p) => ({ id: p.id, title: p.title, category: p.category, source: p.source, cost: p.cost, price: p.price, compare_at: p.compareAt, margin_pct: p.margin, trend_pct: p.trend, competition: p.competition, shipping_days: p.shippingDays, score: p.score })),
       );
     },
+  }),
+  defineTool({
+    name: 'list_creatives',
+    description: "The store's creatives library, newest first: ads and copy the Creative Studio and Copywriter saved, ready to launch (CSV).",
+    input: { kind: z.enum(['image', 'video', 'ugc', 'copy']).optional(), limit: z.number().int().min(1).max(100).default(20) },
+    run: async ({ kind, limit }, ctx) =>
+      csv(
+        listCreatives(ctx.db, { storeIds: [ctx.store.id], ...(kind ? { kind } : {}), limit }).map((c) => ({
+          id: c.id, created: c.createdAt.slice(0, 10), kind: c.kind, aspect: c.aspect ?? '', headline: c.headline, primary_text: c.primaryText, cta: c.cta ?? '',
+          // ponytail: demo renders are data: URLs; the owner previews media in the app, agents only need to know it exists.
+          media: c.mediaUrl ? c.source : 'none',
+        })),
+      ),
   }),
   defineTool({
     name: 'create_creative',
