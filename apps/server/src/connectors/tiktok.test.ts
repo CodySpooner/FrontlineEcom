@@ -114,6 +114,9 @@ function fakeShop(refreshError?: { code: number; message: string }, shops = [{ c
     // Get Shop Performance (TikTok Shop Analytics scope; partner docs, checked 2026-10-26): one interval a day at 1D.
     if (u.pathname === '/analytics/202609/shop/performance') {
       const day = (d: string, visitors: number) => ({ start_date: d, end_date: d, traffic: { avg_visitors: visitors, avg_page_views: visitors * 2 }, sales: {} });
+      // Older months, one a sync: September has visitors, before that the shop had none.
+      if (params.start_date_ge === '2026-08-27') return ok({ latest_available_date: '2026-10-25', performance: { intervals: [day('2026-09-01', 50)] } });
+      if (params.start_date_ge! < '2026-08-27') return ok({ latest_available_date: '2026-10-25', performance: { intervals: [day('2026-08-01', 0)] } });
       return ok({ latest_available_date: '2026-10-25', performance: { intervals: [day('2026-10-24', 120), day('2026-10-25', 95), day('2026-10-26', 40)] } });
     }
     // Search Returns (Return & Refund Basic scope; TikTok's partner docs, checked 2026-10-26).
@@ -312,9 +315,19 @@ test("TikTok Shop visitors fill a TikTok Shop store's funnel up to the last day 
   // The store's day (America/Chicago) at NOW is 2026-10-26: the last 30 days through today.
   expect(['start_date_ge', 'end_date_lt', 'granularity', 'shop_cipher'].map((k) => perf.url.searchParams.get(k))).toEqual(['2026-09-26', '2026-10-27', '1D', 'CIPHER']);
   expect(db.prepare("SELECT date, sessions FROM daily_metrics WHERE store_id = 'glow' AND sessions > 0 ORDER BY date").all()).toEqual([
+    { date: '2026-09-01', sessions: 50 }, // the month before, read alongside
     { date: '2026-10-24', sessions: 120 },
     { date: '2026-10-25', sessions: 95 }, // 10-26 isn't ready yet
   ]);
+  // Further back a month a sync, until a month has no visitors: then only the last 30 days are read.
+  const windows = (c: { url: URL }[]) => c.filter((x) => x.url.pathname === '/analytics/202609/shop/performance').map((x) => `${x.url.searchParams.get('start_date_ge')}..${x.url.searchParams.get('end_date_lt')}`);
+  expect(windows(calls)).toEqual(['2026-09-26..2026-10-27', '2026-08-27..2026-09-26']);
+  const second = fakeShop();
+  await syncTikTokShop(db, key, 'glow', second.fetchFn, NOW);
+  expect(windows(second.calls)).toEqual(['2026-09-26..2026-10-27', '2026-07-28..2026-08-27']);
+  const third = fakeShop();
+  await syncTikTokShop(db, key, 'glow', third.fetchFn, NOW);
+  expect(windows(third.calls)).toEqual(['2026-09-26..2026-10-27']);
 
   saveIntegration(db, key, { kind: 'ga4', storeId: 'glow', values: { propertyId: 'properties/987654', serviceAccountJson: '{}' } });
   const again = fakeShop();

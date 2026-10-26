@@ -165,6 +165,9 @@ interface ShopReturn {
 const REFUNDED = new Set(['RETURN_OR_REFUND_REQUEST_SUCCESS', 'RETURN_OR_REFUND_REQUEST_COMPLETE']);
 /** Settings row: where each TikTok Shop integration's returns read got to, and for which shop. */
 const RETURNS_KEY = 'tiktok_return_reads';
+/** Settings row: the oldest day each TikTok Shop integration's visitors were read back to, and for which shop. */
+const VISITORS_KEY = 'tiktok_visitor_reads';
+type ShopPerformance = { latest_available_date?: string; performance?: { intervals?: { start_date: string; traffic?: { avg_visitors?: number } }[] } };
 
 /** Request signature: HMAC-SHA256 keyed by the secret over secret + path + sorted key+value params (minus sign/access_token) + body + secret, hex. */
 export function signTikTokShop(secret: string, path: string, params: Record<string, string>, body = '') {
@@ -258,12 +261,18 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     // Product-page visitors a day are a TikTok Shop store's funnel sessions (TikTok Shop Analytics scope), unless GA4 is
     // connected (it owns the funnel there). A TikTok Shop alongside another platform leaves that one's sessions alone.
     // TikTok has no cart or checkout counts. Without the scope (or on any error) sessions stay empty.
-    // ponytail: the last 30 days each sync, no older history; TikTok documents no longest range to backfill with.
+    // Each sync reads the last 30 days, and one older 30 (TikTok documents no longest range) back to the backfill limit;
+    // a month without visitors means the shop had none before, and the backfill stops there.
     const storeDay = dayOf.format(now);
+    const performance = (from: string, to: string) =>
+      api<ShopPerformance>('GET', '/analytics/202609/shop/performance', { shop_cipher: shop.cipher, start_date_ge: from, end_date_lt: to, granularity: '1D' }).catch(() => undefined);
     const traffic = store?.platform !== 'tiktok_shop' || db.prepare('SELECT 1 FROM integrations WHERE id = ?').get(`ga4:${storeId}`) ? undefined
-      : await api<{ latest_available_date?: string; performance?: { intervals?: { start_date: string; traffic?: { avg_visitors?: number } }[] } }>('GET', '/analytics/202609/shop/performance', {
-          shop_cipher: shop.cipher, start_date_ge: addDays(storeDay, -30), end_date_lt: addDays(storeDay, 1), granularity: '1D',
-        }).catch(() => undefined);
+      : await performance(addDays(storeDay, -30), addDays(storeDay, 1));
+    const visitorReads = stateOf<{ shop: string; back: string }>(db, VISITORS_KEY);
+    const lastVisitors = visitorReads.get(id);
+    const back = lastVisitors?.shop === shop.cipher ? lastVisitors.back : addDays(storeDay, -30);
+    const limit = addDays(storeDay, -BACKFILL_DAYS);
+    const older = traffic && back > limit ? await performance(addDays(back, -30), back) : undefined;
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -297,7 +306,10 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       // At 1D an interval is one day, so its daily average is that day's count. Days after latest_available_date aren't in yet.
       const visits = db.prepare('INSERT INTO daily_metrics (store_id, date, sessions) VALUES (?, ?, ?) ON CONFLICT (store_id, date) DO UPDATE SET sessions = excluded.sessions');
       const ready = traffic?.latest_available_date?.slice(0, 10) ?? '';
-      for (const d of traffic?.performance?.intervals ?? []) if (d.start_date <= ready) visits.run(storeId, d.start_date, d.traffic?.avg_visitors ?? 0);
+      for (const d of [...(traffic?.performance?.intervals ?? []), ...(older?.performance?.intervals ?? [])]) if (d.start_date <= ready) visits.run(storeId, d.start_date, d.traffic?.avg_visitors ?? 0);
+      // A failed older read is tried again next sync.
+      const reached = !older ? back : older.performance?.intervals?.some((d) => (d.traffic?.avg_visitors ?? 0) > 0) ? addDays(back, -30) : limit;
+      if (traffic) visitorReads.set(id, { shop: shop.cipher, back: reached });
       if (returns) {
         // Into the refund lines Amazon's go to too (rebuildRevenue takes them off their order's day). One per return,
         // re-written as its status moves, so a refund only counts once TikTok has granted it; a replacement never does.

@@ -127,10 +127,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-48 The daily backup froze the server while it copied the database (VACUUM INTO is synchronous).
 - [x] CORE-49 A background job's failed promise took the whole API down (and every agent run in it).
 - [x] CORE-50 The funnel compared every order with sessions from fewer days or stores, inflating conversion.
+- [x] CORE-51 A TikTok Shop store's funnel had only 30 days of visitors, so 90D/1Y showed sessions for a third or less of the range.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-51: TikTok Shop visitors backfill one older 30-day window per sync (TikTok documents no longest range) after the last 30 days, back to BACKFILL_DAYS. A window with no visitors ends it (the shop had none before); a failed window is retried next sync. Progress per integration and shop in settings `tiktok_visitor_reads`. Two years fills in ~24 syncs (~4 h).
 - 2026-10-26 — CORE-50: `summarize`'s funnel takes its orders from the store-days that report sessions (every order when none do). Before, sessions covered only the days and stores with a traffic source while orders covered all: a TikTok Shop store on 90D (30 days of visitors) showed ~3x the real conversion, as did GA4 connected mid-range or All stores with one store lacking a source. ui told.
 - 2026-10-26 — CORE-49: `index.ts` logs an unhandled promise rejection (`unhandled rejection`, error level) instead of letting Node exit. Background loops are promise-based (syncs, competitor watch, backups, automations awaiting approvals) and agent runs live in the same process, so one stray rejection ended every run and cost one of the desktop app's 3 restarts per 10 minutes. Thrown exceptions still exit and are logged. Checked: with the handler Node keeps running (exit 0), without it exits 1.
 - 2026-10-26 — CORE-48: backups use node:sqlite's paced `backup()` (Node 24.18 here, 24.22 in Electron 44, both checked) instead of `VACUUM INTO`. Benchmarked on a 70 MB database (100k orders, 250k lines, 5k transcripts): VACUUM INTO blocked the server 548 ms; backup() 279 ms in all, never over 16 ms at a time. Written as `.part` and renamed once whole, so a failed one never lists; the loop skips a check while one is running. `backupNow`/`stageRestore` are async; routes await them.
