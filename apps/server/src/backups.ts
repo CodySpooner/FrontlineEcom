@@ -1,8 +1,9 @@
-import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import type { Backup } from '@frontline/shared';
-import { dataDir, type Db } from './db';
+import { dataDir, dbFile, MIGRATIONS, type Db } from './db';
 import { log } from './log';
 
 /** Snapshots kept in <data dir>/backups; older ones are deleted. */
@@ -55,8 +56,49 @@ export function startBackupLoop(db: Db, dir = backupDir()) {
   return () => clearInterval(timer);
 }
 
-export function backupRoutes(db: Db, dir = backupDir) {
+/** Exit code that asks the desktop app to start the API again. */
+export const RESTART_CODE = 75;
+
+/**
+ * Checks a snapshot and stages it to replace `dbPath` on the next start (see openDb), after an undo backup of the
+ * current data. Returns an error message, or undefined when staged.
+ */
+export function stageRestore(db: Db, name: string, dbPath: string, dir = backupDir()): string | undefined {
+  const file = join(dir, name);
+  if (!/^frontline-[\w-]+\.db$/.test(name) || !existsSync(file)) return 'backup not found';
+  let version: number;
+  try {
+    const snap = new DatabaseSync(file, { readOnly: true });
+    try {
+      if (snap.prepare('PRAGMA integrity_check').get()?.integrity_check !== 'ok') return 'that backup is damaged';
+      version = Number(snap.prepare('PRAGMA user_version').get()?.user_version);
+    } finally {
+      snap.close();
+    }
+  } catch {
+    return 'that backup is damaged';
+  }
+  if (version > MIGRATIONS.length) return 'that backup was made by a newer version of the app';
+  // Staged first: the undo backup may prune the snapshot being restored.
+  copyFileSync(file, `${dbPath}.restore`);
+  try {
+    backupNow(db, dir);
+  } catch (e) {
+    rmSync(`${dbPath}.restore`, { force: true });
+    throw e;
+  }
+  log('info', 'restore staged', { name });
+}
+
+export function backupRoutes(db: Db, dir = backupDir, dbPath = dbFile, restart: () => void = () => process.exit(RESTART_CODE)) {
   return new Hono()
     .get('/api/backups', (c) => c.json(listBackups(dir())))
-    .post('/api/backups', (c) => c.json(backupNow(db, dir()), 201));
+    .post('/api/backups', (c) => c.json(backupNow(db, dir()), 201))
+    .post('/api/backups/:name/restore', (c) => {
+      const error = stageRestore(db, c.req.param('name'), dbPath(), dir());
+      if (error) return c.json({ error }, error === 'backup not found' ? 404 : 400);
+      // ponytail: exit after the response is out; the desktop app restarts the API, `pnpm dev` needs a manual restart.
+      setTimeout(restart, 300);
+      return c.json({ restarting: true }, 202);
+    });
 }

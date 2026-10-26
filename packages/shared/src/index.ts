@@ -705,7 +705,10 @@ export type IntegrationStatus = 'connected' | 'error';
 
 /**
  * GET /api/backups → Backup[] (newest first); POST /api/backups → Backup (201). The API keeps a daily snapshot of its
- * database in <data dir>/backups (the newest 7). To restore: quit the app, copy a snapshot over <data dir>/frontline.db.
+ * database in <data dir>/backups (the newest 7).
+ * POST /api/backups/:name/restore → 202 { restarting: true }: the current data is backed up first (undo), then the API
+ * restarts on the snapshot (the desktop app does this by itself; wait for /api/health, then reload). 404 unknown
+ * name, 400 { error } for a damaged snapshot or one from a newer app version.
  */
 export interface Backup {
   name: string;

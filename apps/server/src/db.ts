@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -437,7 +437,14 @@ export const MIGRATIONS = [
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
 export function openDb(file = ':memory:'): Db {
-  if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
+  if (file !== ':memory:') {
+    mkdirSync(dirname(file), { recursive: true });
+    // A restore staged by POST /api/backups/:name/restore replaces the database before it opens.
+    if (existsSync(`${file}.restore`)) {
+      for (const f of [file, `${file}-wal`, `${file}-shm`]) rmSync(f, { force: true });
+      renameSync(`${file}.restore`, file);
+    }
+  }
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   const version = Number(db.prepare('PRAGMA user_version').get()?.user_version ?? 0);

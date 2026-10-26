@@ -82,11 +82,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-34 DSers (DESIGN §9 suppliers): no public DSers API exists (checked 2026-10-26). DSers writes AliExpress tracking back into Shopify fulfillments, which the Shopify connector already reads into `orders.tracking` / fulfillment status. So DSers stores are covered through Shopify, and there's no separate connector. Revisit if DSers publishes an API.
 
 - [x] CORE-35 API self-healing in the desktop app: if the local API process dies, restart it on the same port and reload the window (give up with the error dialog after 3 crashes in 10 minutes), so an unattended app keeps running agents, syncs and backups.
-- [ ] CORE-36 Restore a backup from the app: `POST /api/backups/:name/restore` checks the snapshot, takes an undo backup of the current data, stages the file and restarts the API; the staged file replaces `frontline.db` before it opens.
+- [x] CORE-36 Restore a backup from the app: `POST /api/backups/:name/restore` checks the snapshot, takes an undo backup of the current data, stages the file and restarts the API; the staged file replaces `frontline.db` before it opens.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-36: `POST /api/backups/:name/restore` checks the name, `integrity_check` and schema version, stages `frontline.db.restore`, takes an undo backup, answers 202 `{ restarting: true }`, then exits with 75. The desktop app starts the API again (CORE-35), and `openDb` swaps the staged file in. Verified end to end in the desktop app (marker value back after restore). `pnpm dev` needs a manual restart after a restore
 - 2026-10-26 — CORE-35: the desktop app restarts a dead API process on the same port and reloads the window. Exit code 75 is a requested restart and doesn't count as a crash. More than 3 crashes in 10 min shows the error dialog. Verified by killing the API utility process: it was back on the same port in ~5 s
 - 2026-10-26 — CORE-33: `onError` logs `request failed` (method, path, stack) and returns `{ error: message }` 500. `notFound` returns `{ error: "GET /api/x not found" }` 404. Before, route bugs were plain-text 500s that only reached the console, which the packaged app doesn't show
 - 2026-10-26 — Inbox (ui): demo approvals now use executable kinds and payloads. Peak: `ads.pause_campaign` `{ network: tiktok, campaignId: peak-c3 }` ("Pause \"Spark Ads · UGC\""). Glow: `store.add_products` with 3 real `products`, where `{ count: 3 }` used to add nothing. Seeded requests still pending in existing DBs are rewritten on start. One-line baseline move in agents-gamification.test (XP from the now-real add-products)
