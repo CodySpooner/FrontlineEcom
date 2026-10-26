@@ -20,6 +20,22 @@ export function onApproved(db: Db, fn: (db: Db, a: ApprovalRequest) => void) {
   });
 }
 
+/** Approved `ads.set_budget` / `ads.pause_campaign` on a demo store's campaigns. Connected stores: the owner is told. */
+export function applyAdChange(db: Db, a: ApprovalRequest) {
+  const p = (a.action.payload ?? {}) as { campaignId?: unknown; to?: unknown };
+  const store = getStore(db, a.storeId);
+  if (!store || typeof p.campaignId !== 'string') return;
+  if (store.connected) {
+    // ponytail: real ad accounts change through the Meta MCP (the agent's own call, approved there) or by hand.
+    notify(db, { kind: 'info', title: `Apply on the ad account: ${a.title}`, body: 'Approved. Ad account changes are not automated for this store yet.', storeId: store.id });
+    return;
+  }
+  if (a.action.kind === 'ads.pause_campaign') db.prepare(`UPDATE campaigns SET status = 'paused' WHERE id = ? AND store_id = ?`).run(p.campaignId, store.id);
+  if (a.action.kind === 'ads.set_budget' && typeof p.to === 'number' && p.to >= 0) {
+    db.prepare('UPDATE campaigns SET daily_budget = ? WHERE id = ? AND store_id = ?').run(p.to, p.campaignId, store.id);
+  }
+}
+
 interface AddProduct {
   researchProductId?: string;
   title: string;

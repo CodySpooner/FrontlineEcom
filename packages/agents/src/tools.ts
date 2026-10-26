@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps } from '@frontline/shared';
 import { z } from 'zod';
+import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
 import { searchMemory, writeMemory } from './memory';
 import { saveNichePack } from './niche';
@@ -239,6 +240,58 @@ export const APP_TOOLS: AppTool[] = [
     },
   }),
   defineTool({
+    name: 'review_campaigns',
+    description:
+      'Judge every campaign against break-even ROAS (from 30-day gross margin): verdict scale / hold / cut / pause / learning (not enough spend yet) / paused, with a suggested daily budget. Start every ad review here.',
+    input: { days: z.number().int().min(3).max(30).default(7) },
+    run: async ({ days }, ctx) => {
+      const econ = economics(ctx.db, ctx.store.id, since(30));
+      const t = thresholds(econ);
+      const rows = campaignStats(ctx, days);
+      return [
+        `gross margin ${r2(econ.margin * 100)}%, AOV ${r2(econ.aov)}, break-even ROAS ${r2(t.breakEven)}, target ROAS ${r2(t.target)}, max CPA ${r2(t.maxCpa)} (30 days); campaigns over ${days} days:`,
+        csv(
+          reviewCampaigns(rows, econ).map((c) => ({
+            network: c.network, id: c.id, name: c.name, status: c.status, daily_budget: c.dailyBudget, spend: r2(c.spend), roas: c.roas, cpa: c.cpa ?? '',
+            purchases: c.purchases, verdict: c.verdict, suggested_budget: c.suggestedBudget,
+          })),
+        ),
+      ].join('\n');
+    },
+  }),
+  defineTool({
+    name: 'propose_ad_change',
+    description:
+      "Ask the owner to pause a campaign or change its daily budget, with the evidence. Checks the store's daily cap on added ad spend, then waits for the decision. Applied to the ad account once approved.",
+    input: {
+      campaignId: z.string(),
+      change: z.enum(['pause', 'budget']),
+      newDailyBudget: z.number().min(1).optional().describe('required for budget'),
+      evidence: z.string().min(10).max(400).describe('the numbers and window, e.g. "7d ROAS 3.4 vs break-even 2.1, 41 purchases"'),
+    },
+    run: async ({ campaignId, change, newDailyBudget, evidence }, ctx) => {
+      const c = ctx.db.prepare('SELECT * FROM campaigns WHERE id = ? AND store_id = ?').get(campaignId, ctx.store.id);
+      if (!c) return `No campaign ${campaignId} in this store. Use review_campaigns for ids.`;
+      const from = Number(c.daily_budget);
+      if (change === 'budget' && newDailyBudget === undefined) return 'newDailyBudget is required for a budget change.';
+      const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
+      const added = Math.max(0, to - from);
+      const cap = ctx.caps?.(ctx.store.id).adSpendChangePerDay;
+      const addedToday = added ? budgetAddedToday(ctx) : 0;
+      if (cap !== undefined && added && addedToday + added > cap) {
+        return `Not sent: +$${added}/day would pass the owner's $${cap}/day cap on added ad spend ($${addedToday} already approved today). Propose a smaller step.`;
+      }
+      const { approved, message } = await requestApproval(ctx, {
+        title: (change === 'pause' ? `Pause ${c.name}` : `${to > from ? 'Raise' : 'Lower'} ${c.name} budget $${from} → $${to}/day`).slice(0, 80),
+        reason: evidence,
+        action: change === 'pause'
+          ? { kind: 'ads.pause_campaign', payload: { network: c.network, campaignId, from }, amountUsd: 0 }
+          : { kind: 'ads.set_budget', payload: { network: c.network, campaignId, from, to }, amountUsd: added },
+      });
+      return approved ? `${message}. It will be applied to the ad account.` : message;
+    },
+  }),
+  defineTool({
     name: 'search_memory',
     description: 'What the squad has learned about this store, most relevant first.',
     input: { query: z.string().describe('what you need to know'), k: z.number().int().min(1).max(20).default(8) },
@@ -314,6 +367,31 @@ export async function requestApproval(ctx: ToolContext, req: { title: string; re
   return decided.status === 'approved'
     ? { approved: true, message: `${auto ? 'Auto-approved (autopilot)' : 'Approved by the owner'}: ${req.title}` }
     : { approved: false, message: `Denied by the owner: ${req.title}. Do not do it; suggest an alternative if useful.` };
+}
+
+function campaignStats(ctx: ToolContext, days: number): CampaignStats[] {
+  return ctx.db
+    .prepare(
+      `SELECT c.network, c.id, c.name, c.status, c.daily_budget, coalesce(sum(d.spend), 0) AS spend, coalesce(sum(d.revenue), 0) AS revenue,
+         coalesce(sum(d.purchases), 0) AS purchases
+       FROM campaigns c LEFT JOIN campaign_daily d ON d.network = c.network AND d.campaign_id = c.id AND d.date >= ?
+       WHERE c.store_id = ? GROUP BY c.network, c.id ORDER BY spend DESC`,
+    )
+    .all(since(days), ctx.store.id)
+    .map((r) => ({ network: String(r.network), id: String(r.id), name: String(r.name), status: String(r.status), dailyBudget: Number(r.daily_budget), spend: Number(r.spend), revenue: Number(r.revenue), purchases: Number(r.purchases) }));
+}
+
+/** Daily ad budget added by approved or pending budget changes for this store since local midnight. */
+function budgetAddedToday(ctx: ToolContext): number {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const row = ctx.db
+    .prepare(
+      `SELECT coalesce(sum(json_extract(action_json, '$.amountUsd')), 0) AS added FROM approvals
+       WHERE store_id = ? AND json_extract(action_json, '$.kind') = 'ads.set_budget' AND status != 'denied' AND created_at >= ?`,
+    )
+    .get(ctx.store.id, midnight.toISOString());
+  return Number(row?.added ?? 0);
 }
 
 /** USD autopilot already approved for this store and action kind since local midnight. */

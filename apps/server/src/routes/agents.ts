@@ -25,7 +25,7 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
-import { addProducts, onApproved } from './agents-actions';
+import { addProducts, applyAdChange, onApproved } from './agents-actions';
 import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes } from './agents-creatives';
 import { getCredentials } from '../integrations';
@@ -105,6 +105,7 @@ export function runManager(db: Db): RunManager {
     // Approved actions that can come from outside a run (research screen, automations) are carried out here.
     onApproved(db, (db, a) => {
       if (a.action.kind === 'store.add_products') addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task));
+      if (a.action.kind === 'ads.set_budget' || a.action.kind === 'ads.pause_campaign') applyAdChange(db, a);
     });
   }
   return manager;

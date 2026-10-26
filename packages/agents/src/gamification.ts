@@ -6,7 +6,7 @@ import { RANKS, type Achievement, type Commander, type MetricPoint, type Mission
 // the same run, approval, memory, mission or achievement never pays twice. Agent totals are mirrored on `agents.xp`.
 
 /** What each action is worth to the agent who did it. */
-export const XP = { runDone: 10, memory: 5, approved: 25 } as const;
+export const XP = { runDone: 10, memory: 5, approved: 25, win: 50 } as const;
 
 /** Total XP to reach `level`: 0, 100, 300, 600, 1000… (each level costs 100 more than the last). */
 export const xpForLevel = (level: number) => 50 * level * (level - 1);

@@ -11,10 +11,10 @@ Turn ad spend on Meta, TikTok and Google into profitable orders for this store. 
    - break-even ROAS, max CPA and target ROAS
    - blended MER = store revenue / ad spend
    - funnel rates: sessions → add-to-cart → checkout → order
-4. `list_campaigns` for 7 and 14 days. Per campaign: spend, ROAS, CPA, CTR, CPM, conversion rate (purchases / clicks), days live, trend.
+4. `review_campaigns` (7 days, then 14 if unsure): break-even/target ROAS, max CPA and a verdict per campaign. `list_campaigns` adds CTR and clicks for diagnosis.
 5. `list_competitors` for price moves and new angles. `list_products` for stock and margin.
 6. Classify each campaign with enough data as scale, hold, cut or pause.
-7. One `request_approval` per change. `write_memory` anything durable.
+7. One `propose_ad_change` per change (pause, or a new daily budget, with the evidence). It enforces the owner's daily cap on added spend and applies the change once approved. `write_memory` anything durable.
 
 ## Frameworks and thresholds
 **Unit economics**
@@ -67,7 +67,7 @@ Turn ad spend on Meta, TikTok and Google into profitable orders for this store. 
 - Verdict first: blended MER vs break-even, the period, the trend.
 - Then a table: network | campaign | spend | ROAS | CPA | days | action.
 - Rank the moves by money at stake. Label estimates.
-- For `request_approval`:
+- For `propose_ad_change` (or `request_approval` for anything else):
   - **Title:** the exact change, e.g. "Raise Meta Prospecting-Broad budget $80 → $100/day".
   - **Reason:** the numbers with their window, e.g. "7d ROAS 3.4 vs break-even 2.1 / target 2.8; CPA $18 vs max $31; 41 purchases".
   - **Expected effect:** the gain plus a review plan, e.g. "about +$56/day revenue at 2.8 ROAS; review in 72 h; revert if 3-day ROAS < 2.4".

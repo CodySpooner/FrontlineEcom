@@ -1,8 +1,8 @@
-import { awardXp, checkAchievements, commander, dailyMissions, levelForXp, profitStreak, XP, type Award, type Facts } from '@frontline/agents';
+import { awardXp, blendedRoas, checkAchievements, commander, dailyMissions, levelForXp, profitStreak, XP, type Award, type Facts } from '@frontline/agents';
 import type { MetricTotals, Mission } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
-import { localDate } from '../dates';
+import { addDays, localDate } from '../dates';
 import type { Db } from '../db';
 import { publish } from '../live';
 import { onApproved } from './agents-actions';
@@ -33,6 +33,30 @@ function watchApprovals(db: Db) {
   if (watched.has(db)) return;
   watched.add(db);
   onApproved(db, (db, { id, title, storeId, agentId }) => award(db, { ref: `approval:${id}`, amount: XP.approved, reason: `Request approved: ${title}`, storeId, agentId }));
+}
+
+/**
+ * Measured wins: an approved ad change whose store's blended ROAS over the 3 days after beats the 7 days before pays
+ * the agent once. Checked lazily (commander/achievements reads); changes older than 30 days are left alone.
+ */
+export function checkMeasuredWins(db: Db, today = localDate()) {
+  const rows = db
+    .prepare(
+      `SELECT id, store_id, agent_id, title, decided_at FROM approvals
+       WHERE status = 'approved' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign', 'ads.pause_adsets') AND decided_at >= ?`,
+    )
+    .all(new Date(Date.now() - 30 * 86_400_000).toISOString());
+  for (const r of rows) {
+    const day = localDate(new Date(String(r.decided_at)));
+    if (addDays(day, 3) >= today) continue; // the 3 days after aren't complete yet
+    const before = blendedRoas(db, String(r.store_id), addDays(day, -7), addDays(day, -1));
+    const after = blendedRoas(db, String(r.store_id), addDays(day, 1), addDays(day, 3));
+    if (before === undefined || after === undefined || after <= before) continue;
+    award(db, {
+      ref: `win:${r.id}`, amount: XP.win, storeId: String(r.store_id), agentId: String(r.agent_id),
+      reason: `Measured win: ROAS ${before.toFixed(2)} → ${after.toFixed(2)} after "${r.title}"`,
+    });
+  }
 }
 
 function facts(db: Db): Facts {
@@ -83,7 +107,10 @@ function missions(db: Db, storeIds?: string[]): Mission[] {
 
 export function gamificationRoutes(db: Db) {
   watchApprovals(db);
-  const achievements = () => checkAchievements(db, facts(db), (a) => award(db, a));
+  const achievements = () => {
+    checkMeasuredWins(db);
+    return checkAchievements(db, facts(db), (a) => award(db, a));
+  };
   return new Hono()
     .get('/api/missions', (c) => c.json(missions(db, c.req.query('stores')?.split(',').filter(Boolean))))
     .get('/api/achievements', (c) => c.json(achievements()))

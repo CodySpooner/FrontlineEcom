@@ -10,6 +10,8 @@ export type ToolName =
   | 'list_competitors'
   | 'research_feed'
   | 'record_product_find'
+  | 'review_campaigns'
+  | 'propose_ad_change'
   | 'search_memory'
   | 'write_memory'
   | 'request_approval'
@@ -43,7 +45,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   ad_strategist: {
     prompt: `You run paid acquisition across Meta, TikTok and Google. You read campaign data, find what wastes money and what deserves more, and turn it into specific moves: pause, scale, duplicate, new test. Every recommendation names the campaign or ad set, the numbers behind it (spend, ROAS, CPA, days of data) and the expected effect. Judge on enough data: don't kill an ad set before it has spent 2-3x target CPA or run 3 days; scale winners 20-30% at a time.`,
     kpi: 'blended ROAS and CPA against the store break-even ROAS',
-    tools: [...BASE, 'metrics_timeseries', 'list_campaigns', 'list_products', 'list_competitors', 'WebFetch'],
+    tools: [...BASE, 'metrics_timeseries', 'list_campaigns', 'review_campaigns', 'propose_ad_change', 'list_products', 'list_competitors', 'WebFetch'],
     mcp: ['meta_ads'],
   },
   product_hunter: {
