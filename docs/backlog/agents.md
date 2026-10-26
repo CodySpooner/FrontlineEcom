@@ -87,6 +87,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-40 Email & SMS flows get a home: the agent asked to "launch" flows through approvals nothing could execute, and its flows lived only in chat.
 - [x] AGT-41 Honest approvals: requests of a kind nothing in the app carries out (price tests, customer messages...) said nothing about who applies them; approving looked like it would happen.
 - [x] AGT-42 Price tests as a real loop: the Market Analyst's main lever was a manual approval nobody measured.
+- [x] AGT-43 Page outcomes: Store Builder product pages are judged like price tests, so the Store Developer and Copywriter can earn measured wins too.
 - [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
@@ -94,6 +95,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-43 Page outcomes: product pages published from the Store Builder on real stores are judged 15+ days later on the product's gross profit, 14 days after vs before. That becomes a learning for the drafting agent, moves its run's learnings, and pays +50 XP on a rise; each page is judged once (`done_once`). Price and page checks share one `productSales` query.
 - 2026-10-26 — AGT-35 Approved ad changes reach the ad account: on connected stores `applyAdChange` calls core's `setCampaignBudget` / `pauseCampaign` (Meta, Google, TikTok), then updates the local campaign. An ad-account error notifies the owner ("Apply it by hand in the ad manager") and leaves the campaign as it was. The network falls back to the campaign row when the payload lacks it. Demo stores still change locally.
 - 2026-10-26 — AGT-42 Price tests: `propose_price_change` (Market Analyst; one product, above unit cost, within ±30%, compareAt above the price) → `store.set_price` approval (server-executed, survives the run). Demo stores change the price locally; connected stores get "change it by hand" until core has a price setter. Every test is recorded in `price_tests` (migration 23). On real stores, 15+ days later, the product's gross profit over the 14 days after vs the 14 before becomes a learning ("worked" / "did not help"), moves the requesting run's learnings, and pays +50 XP when profit rose.
 - 2026-10-26 — AGT-41 Manual approvals are labelled: for a `request_approval` kind with no executor (not in-run `ACTIONS`, not server-run `OUTLIVE_RUN`, now in tools.ts), the card's reason ends with "(You apply this one yourself; the agent lists the steps.)". On approval the agent is told to end its answer with numbered steps for the owner. The tool's `kind` help now names what the app carries out.

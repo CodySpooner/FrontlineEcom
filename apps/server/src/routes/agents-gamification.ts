@@ -1,4 +1,4 @@
-import { awardXp, blendedRoas, checkAchievements, commander, dailyMissions, judgeRun, levelForXp, profitStreak, writeMemory, XP, type Award, type Facts } from '@frontline/agents';
+import { awardXp, blendedRoas, checkAchievements, commander, dailyMissions, judgeRun, levelForXp, once, profitStreak, writeMemory, XP, type Award, type Facts } from '@frontline/agents';
 import type { MetricTotals, Mission } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
@@ -108,6 +108,18 @@ export function checkProductOutcomes(db: Db, today = localDate()) {
   }
 }
 
+/** A product's paid units and gross profit over [from, to] (core's order_items: real stores only). */
+const productSales = (db: Db, storeId: string, productId: string, from: string, to: string) => {
+  const r = db
+    .prepare(
+      `SELECT coalesce(sum(i.quantity), 0) AS units, coalesce(sum(i.revenue - i.cost), 0) AS profit
+       FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+       WHERE i.store_id = ? AND i.product_id = ? AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?`,
+    )
+    .get(storeId, productId, from, to)!;
+  return { units: Number(r.units), profit: Number(r.profit) };
+};
+
 /**
  * Price tests on real stores, 15+ days after the change: the product's gross profit in the 14 days after vs the 14
  * before (core's order_items; demo stores have none). A learning either way; more gross profit is a measured win.
@@ -120,19 +132,14 @@ export function checkPriceOutcomes(db: Db, today = localDate()) {
        WHERE t.judged_at IS NULL AND s.demo = 0 AND t.changed_on <= ?`,
     )
     .all(addDays(today, -15));
-  const sales = db.prepare(
-    `SELECT coalesce(sum(i.quantity), 0) AS units, coalesce(sum(i.revenue - i.cost), 0) AS profit
-     FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
-     WHERE i.store_id = ? AND i.product_id = ? AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?`,
-  );
   for (const t of tests) {
     const [storeId, productId, day] = [String(t.store_id), String(t.product_id), String(t.changed_on)];
-    const before = sales.get(storeId, productId, addDays(day, -14), addDays(day, -1))!;
-    const after = sales.get(storeId, productId, addDays(day, 1), addDays(day, 14))!;
+    const before = productSales(db, storeId, productId, addDays(day, -14), addDays(day, -1));
+    const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
     db.prepare('UPDATE price_tests SET judged_at = ? WHERE approval_id = ?').run(new Date().toISOString(), String(t.approval_id));
-    if (!Number(before.units) && !Number(after.units)) continue; // no sales either side: nothing to learn
-    const worked = Number(after.profit) > Number(before.profit);
-    const money = (n: unknown) => `${Math.round(Number(n)).toLocaleString('en-US')} ${t.currency}`;
+    if (!before.units && !after.units) continue; // no sales either side: nothing to learn
+    const worked = after.profit > before.profit;
+    const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
     const agentId = String(t.agent_id);
     writeMemory(db, {
       storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'pricing'],
@@ -141,6 +148,37 @@ export function checkPriceOutcomes(db: Db, today = localDate()) {
     });
     if (t.run_id) judgeRun(db, `price:${t.approval_id}`, String(t.run_id), worked);
     if (worked) award(db, { ref: `price-win:${t.approval_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" at $${t.to_price} made more gross profit` });
+  }
+}
+
+/**
+ * Product pages published from the Store Builder on real stores, 15+ days later: the product's gross profit in the 14
+ * days after publishing vs the 14 before. A learning for the agent that drafted it; more gross profit is a measured win.
+ */
+// ponytail: raw before/after like price tests; a price test on the same product in the window muddies it.
+export function checkPageOutcomes(db: Db, today = localDate()) {
+  const pages = db
+    .prepare(
+      `SELECT d.id, d.store_id, d.agent_id, d.run_id, d.product_id, d.title, substr(d.published_at, 1, 10) AS day, s.currency
+       FROM page_drafts d JOIN stores s ON s.id = d.store_id
+       WHERE d.kind = 'product' AND d.product_id IS NOT NULL AND d.published_at IS NOT NULL AND s.demo = 0 AND substr(d.published_at, 1, 10) <= ?`,
+    )
+    .all(addDays(today, -15));
+  for (const d of pages) {
+    if (!once(db, `page-outcome:${d.id}`)) continue;
+    const [storeId, productId, day, agentId] = [String(d.store_id), String(d.product_id), String(d.day), String(d.agent_id)];
+    const before = productSales(db, storeId, productId, addDays(day, -14), addDays(day, -1));
+    const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
+    if (!before.units && !after.units) continue;
+    const worked = after.profit > before.profit;
+    const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${d.currency}`;
+    writeMemory(db, {
+      storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'page'],
+      text: `The new "${d.title}" page ${worked ? 'worked' : 'did not help'}: gross profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
+      evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (draft ${d.id})`,
+    });
+    if (d.run_id) judgeRun(db, `page:${d.id}`, String(d.run_id), worked);
+    if (worked) award(db, { ref: `page-win:${d.id}`, amount: XP.win, storeId, agentId, reason: `Measured win: the new "${d.title}" page made more gross profit` });
   }
 }
 
@@ -204,6 +242,7 @@ export function gamificationRoutes(db: Db) {
     checkAdOutcomes(db);
     checkProductOutcomes(db);
     checkPriceOutcomes(db);
+    checkPageOutcomes(db);
     return checkAchievements(db, facts(db), (a) => award(db, a));
   };
   return new Hono()
