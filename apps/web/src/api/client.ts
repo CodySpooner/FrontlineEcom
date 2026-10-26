@@ -21,9 +21,10 @@ import type {
   Mission,
   NicheLearning,
   Order,
+  OrderIssue,
+  OrderIssueStatus,
   OrderStatus,
   Page,
-  Product,
   ProductList,
   ResearchProduct,
   ResearchTab,
@@ -32,6 +33,7 @@ import type {
   StoreCaps,
   StoreEvent,
   StoreMemory,
+  TopProduct,
 } from '@frontline/shared';
 import { applyRunEvent, isLive } from '../lib/transcript';
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -187,8 +189,24 @@ export const useOrders = (storeIds: string[], o: OrderQuery) =>
     placeholderData: keepPreviousData,
   });
 
-export const useProducts = (storeIds: string[]) =>
-  useQuery({ queryKey: ['products', storeIds], queryFn: () => api<Page<Product>>(`/api/products?stores=${storeIds.join(',')}&limit=200`) });
+export const useTopProducts = (storeIds: string[], range: AnalyticsRange, limit: number) =>
+  useQuery({
+    queryKey: ['top-products', storeIds, range, limit],
+    queryFn: () => api<TopProduct[]>(`/api/analytics/top-products?stores=${storeIds.join(',')}&range=${range}&limit=${limit}`),
+    placeholderData: keepPreviousData,
+  });
+
+/** Issues the Operations agent flagged, open first. */
+export const useOrderIssues = (storeIds: string[]) =>
+  useQuery({ queryKey: ['order-issues', storeIds], queryFn: () => api<OrderIssue[]>(`/api/order-issues?stores=${storeIds.join(',')}&limit=200`) });
+
+export function useSetIssueStatus() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: OrderIssueStatus }) => api<OrderIssue>(`/api/order-issues/${id}`, json('PATCH', { status })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['order-issues'] }),
+  });
+}
 
 export const useCreatives = (kind?: CreativeKind) =>
   useQuery({ queryKey: ['creatives', kind], queryFn: () => api<Creative[]>(`/api/creatives?limit=60${kind ? `&kind=${kind}` : ''}`), placeholderData: keepPreviousData });
@@ -219,6 +237,7 @@ export function useLive() {
         qc.invalidateQueries({ queryKey: ['agents'] });
         qc.invalidateQueries({ queryKey: ['memory', m.run.storeId] });
         qc.invalidateQueries({ queryKey: ['creatives'] });
+        qc.invalidateQueries({ queryKey: ['order-issues'] });
       }
       if (m.type === 'approval' || m.type === 'run' || m.type === 'xp') {
         qc.invalidateQueries({ queryKey: ['missions'] });

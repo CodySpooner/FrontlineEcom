@@ -2,9 +2,8 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats } from '@frontline/shared';
-import { useCampaigns, useProducts, useSummary } from '../api/client';
-import { stubTopProducts } from '../api/stubs';
+import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, TopProduct } from '@frontline/shared';
+import { useCampaigns, useSummary, useTopProducts } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
@@ -25,9 +24,6 @@ const TONE = { bad: 'text-red', ok: 'text-text', good: 'text-good' };
 const times = (n: number) => `${n.toFixed(2)}×`;
 const pct = (n: number) => `${n.toFixed(1)}%`;
 const num = (n: number) => n.toLocaleString('en-US');
-
-// Marks a panel drawn from stand-in data (api/stubs.ts) until its endpoint lands.
-const SAMPLE = <Badge>Estimated</Badge>;
 
 export function Analytics() {
   const nav = NAV[2]!;
@@ -56,9 +52,6 @@ export function Analytics() {
       ) : (
         <Report s={s} ids={ids} name={name} dim={summary.isPlaceholderData} />
       )}
-      <p className="mt-3.5 text-xs text-muted">
-        Top Products is estimated from your catalog until per-product sales reporting lands.
-      </p>
     </>
   );
 }
@@ -75,7 +68,7 @@ function Report({ s, ids, name, dim }: { s: AnalyticsSummary; ids: string[]; nam
       </div>
       <div className="grid gap-3.5 min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <Channels q={campaigns} be={be} />
-        <TopProducts ids={ids} days={s.series.length} name={multi ? name : undefined} />
+        <TopProducts ids={ids} range={s.range} name={multi ? name : undefined} />
       </div>
       <Campaigns q={campaigns} be={be} beOf={(id) => breakEvenRoas(s.byStore.find((b) => b.storeId === id)?.totals ?? s.totals)} name={multi ? name : undefined} />
       {multi && <ByStore s={s} name={name} />}
@@ -196,23 +189,23 @@ function Channels({ q, be }: { q: Campaigns; be: number }) {
   );
 }
 
-function TopProducts({ ids, days, name }: { ids: string[]; days: number; name?: (id: string) => string }) {
-  const q = useProducts(ids);
+function TopProducts({ ids, range, name }: { ids: string[]; range: AnalyticsRange; name?: (id: string) => string }) {
+  const q = useTopProducts(ids, range, 5);
   return (
-    <Panel title="Top Products" sub={`Best 5 by revenue, ${days} days`} action={SAMPLE}>
+    <Panel title="Top Products" sub={`Best 5 by revenue, ${PERIOD[range]}`}>
       {q.isPending ? (
         <LoadingState rows={4} />
       ) : q.isError ? (
         <ErrorState message="Couldn't load products." onRetry={() => q.refetch()} />
       ) : (
-        <TopTable rows={stubTopProducts(q.data.items, days, 5)} name={name} />
+        <TopTable rows={q.data} name={name} />
       )}
     </Panel>
   );
 }
 
-function TopTable({ rows, name }: { rows: ReturnType<typeof stubTopProducts>; name?: (id: string) => string }) {
-  if (!rows.length) return <p className="text-[13px] text-muted">No active products yet.</p>;
+function TopTable({ rows, name }: { rows: TopProduct[]; name?: (id: string) => string }) {
+  if (!rows.length) return <p className="text-[13px] text-muted">No product sales in this period.</p>;
   return (
     <Table>
       <thead>

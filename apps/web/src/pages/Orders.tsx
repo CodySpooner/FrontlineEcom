@@ -1,14 +1,14 @@
 // UI-12 Orders & Fulfillment: a queue of orders that need the owner, then every order across the selected stores.
 import { useDeferredValue, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { ChevronDown, ChevronUp, CircleCheck, Clock, PackageCheck, PackageSearch, RotateCcw, Search, Truck, type LucideIcon } from 'lucide-react';
-import type { FulfillmentStatus, OrderStatus } from '@frontline/shared';
-import { useOrders, useStartRun, type OrderQuery } from '../api/client';
+import { ChevronDown, ChevronUp, CircleCheck, CircleHelp, Clock, Factory, MapPin, PackageCheck, PackageSearch, RotateCcw, Search, Truck, type LucideIcon } from 'lucide-react';
+import type { FulfillmentStatus, OrderIssue, OrderIssueKind, OrderStatus } from '@frontline/shared';
+import { useOrderIssues, useOrders, useSetIssueStatus, useStartRun, type OrderQuery } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, Chip, EmptyState, ErrorState, LoadingState, Panel, Segmented, Table } from '../components/ui';
-import { cents } from '../lib/format';
-import { orderIssues, type IssueKind } from '../lib/orders';
+import { ago, cents } from '../lib/format';
+import { orderIssues, type Issue, type IssueKind } from '../lib/orders';
 import { NAV } from '../nav';
 
 const FULFILL: Record<FulfillmentStatus, { label: string; icon: LucideIcon }> = {
@@ -18,6 +18,7 @@ const FULFILL: Record<FulfillmentStatus, { label: string; icon: LucideIcon }> = 
   delivered: { label: 'Delivered', icon: CircleCheck },
 };
 const ISSUE_ICON: Record<IssueKind, LucideIcon> = { late: Clock, refunded: RotateCcw, tracking: PackageSearch };
+const AGENT_ISSUE_ICON: Record<OrderIssueKind, LucideIcon> = { late: Clock, stuck: Truck, refund: RotateCcw, supplier: Factory, address: MapPin, other: CircleHelp };
 const PAYMENT: { value: OrderStatus | ''; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'paid', label: 'Paid' },
@@ -44,74 +45,44 @@ export function Orders() {
   );
 }
 
-/** Problems are found among open and in-transit orders (oldest 200 of each); the Operations agent can take any of them. */
+type Row = { key: string; agent: OrderIssue } | { key: string; check: Issue };
+const SEVERITY = { high: 0, medium: 1, low: 2 };
+
+/**
+ * What needs the owner: issues the Operations agent flagged (most urgent first), then problems the page spots itself
+ * among open and in-transit orders (oldest 200 of each) that the agent hasn't flagged yet.
+ */
 function Issues({ ids }: { ids: string[] }) {
-  const { name } = useStoreSelection();
+  const flagged = useOrderIssues(ids);
   const open = useOrders(ids, { fulfillment: 'unfulfilled', sort: 'createdAt', dir: 'asc', limit: 200 });
   const transit = useOrders(ids, { fulfillment: 'in_transit', sort: 'createdAt', dir: 'asc', limit: 200 });
-  const start = useStartRun();
-  const [handed, setHanded] = useState<Record<string, string>>({});
   const [all, setAll] = useState(false);
+  const qs = [flagged, open, transit];
 
   let body: ReactNode;
-  let sub = 'Late, refunded but still open, or shipped without tracking.';
-  if (open.isPending || transit.isPending) body = <LoadingState rows={2} />;
-  else if (open.isError || transit.isError) body = <ErrorState message="Couldn't check orders for problems." onRetry={() => (open.refetch(), transit.refetch())} />;
+  let sub = 'Late, stuck, refunded but still open, or shipped without tracking.';
+  if (qs.some((q) => q.isPending)) body = <LoadingState rows={2} />;
+  else if (qs.some((q) => q.isError)) body = <ErrorState message="Couldn't check orders for problems." onRetry={() => qs.forEach((q) => q.refetch())} />;
   else {
-    const issues = orderIssues([...open.data.items, ...transit.data.items], Date.now());
-    if (issues.length) sub = `${issues.length} order${issues.length === 1 ? '' : 's'} with a problem, oldest first`;
-    body = !issues.length ? (
+    const agent = (flagged.data ?? []).filter((i) => i.status === 'open').sort((a, b) => SEVERITY[a.severity] - SEVERITY[b.severity]);
+    // An order the agent flagged (open or already resolved by the owner) isn't re-raised by the page's own checks.
+    const seen = new Set(flagged.data?.map((i) => `${i.storeId}:${i.orderId}`));
+    const rows: Row[] = [
+      ...agent.map((i) => ({ key: i.id, agent: i })),
+      ...orderIssues([...(open.data?.items ?? []), ...(transit.data?.items ?? [])], Date.now())
+        .filter((i) => !seen.has(`${i.order.storeId}:${i.order.id}`))
+        .map((i) => ({ key: `${i.order.storeId}:${i.order.id}`, check: i })),
+    ];
+    if (rows.length) sub = `${rows.length} order${rows.length === 1 ? '' : 's'} with a problem`;
+    body = !rows.length ? (
       <p className="text-[13px] text-muted">All clear: nothing late, stuck at a supplier or untracked.</p>
     ) : (
       <>
-        <ul className="grid gap-2">
-          {(all ? issues : issues.slice(0, SHOWN)).map(({ order: o, kind, detail }) => {
-            const key = `${o.storeId}:${o.id}`;
-            const Icon = ISSUE_ICON[kind];
-            return (
-              <li key={key} className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
-                <Icon aria-hidden className="size-4 shrink-0 text-red" />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px]">
-                    <b>{o.id}</b>
-                    <span className="text-muted">
-                      {' '}
-                      · {name(o.storeId)} · {cents(o.total)} · {when(o.createdAt)}
-                    </span>
-                  </p>
-                  <p className="text-xs text-text-2">{detail}</p>
-                </div>
-                {handed[key] ? (
-                  <Link to={`/agents/${encodeURIComponent(handed[key])}`} className="text-xs text-red hover:underline">
-                    Operations is on it
-                  </Link>
-                ) : (
-                  <Button
-                    size="sm"
-                    disabled={start.isPending}
-                    onClick={() =>
-                      start.mutate(
-                        { agentId: `${o.storeId}:operations`, task: `Order ${o.id} (${cents(o.total)}${o.supplier ? `, ${o.supplier}` : ''}): ${detail}. Find out why and fix it, or tell me what to do.` },
-                        { onSuccess: (r) => setHanded((h) => ({ ...h, [key]: r.agentId })) },
-                      )
-                    }
-                  >
-                    Hand to Operations
-                  </Button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-        {issues.length > SHOWN && (
+        <ul className="grid gap-2">{(all ? rows : rows.slice(0, SHOWN)).map((r) => ('agent' in r ? <AgentIssue key={r.key} i={r.agent} /> : <CheckIssue key={r.key} i={r.check} />))}</ul>
+        {rows.length > SHOWN && (
           <Button size="sm" className="mt-3" onClick={() => setAll(!all)}>
-            {all ? 'Show fewer' : `Show all ${issues.length}`}
+            {all ? 'Show fewer' : `Show all ${rows.length}`}
           </Button>
-        )}
-        {start.isError && (
-          <p role="alert" className="mt-2 text-xs text-red">
-            {start.error.message}
-          </p>
         )}
       </>
     );
@@ -120,6 +91,80 @@ function Issues({ ids }: { ids: string[] }) {
     <Panel title="Needs You" sub={sub}>
       {body}
     </Panel>
+  );
+}
+
+const IssueRow = ({ icon: Icon, children, action }: { icon: LucideIcon; children: ReactNode; action: ReactNode }) => (
+  <li className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
+    <Icon aria-hidden className="size-4 shrink-0 text-red" />
+    <div className="min-w-0 flex-1">{children}</div>
+    {action}
+  </li>
+);
+
+function AgentIssue({ i }: { i: OrderIssue }) {
+  const { name } = useStoreSelection();
+  const set = useSetIssueStatus();
+  return (
+    <IssueRow
+      icon={AGENT_ISSUE_ICON[i.kind]}
+      action={
+        <Button size="sm" disabled={set.isPending} onClick={() => set.mutate({ id: i.id, status: 'resolved' })}>
+          Mark resolved
+        </Button>
+      }
+    >
+      <p className="flex flex-wrap items-center gap-x-2 text-[13px]">
+        <b>{i.orderId}</b>
+        {i.severity === 'high' && <Badge tone="red">Urgent</Badge>}
+        <span className="text-muted">
+          {name(i.storeId)} · flagged by Operations {ago(i.createdAt, Date.now())}
+        </span>
+      </p>
+      <p className="text-xs text-text-2">{i.note}</p>
+      {i.suggestedAction && <p className="mt-0.5 text-xs text-muted">Suggested: {i.suggestedAction}</p>}
+    </IssueRow>
+  );
+}
+
+function CheckIssue({ i: { order: o, kind, detail } }: { i: Issue }) {
+  const { name } = useStoreSelection();
+  const start = useStartRun();
+  return (
+    <IssueRow
+      icon={ISSUE_ICON[kind]}
+      action={
+        start.data ? (
+          <Link to={`/agents/${encodeURIComponent(start.data.agentId)}`} className="text-xs text-red hover:underline">
+            Operations is on it
+          </Link>
+        ) : (
+          <Button
+            size="sm"
+            disabled={start.isPending}
+            onClick={() =>
+              start.mutate({ agentId: `${o.storeId}:operations`, task: `Order ${o.id} (${cents(o.total)}${o.supplier ? `, ${o.supplier}` : ''}): ${detail}. Find out why and fix it, or tell me what to do.` })
+            }
+          >
+            Hand to Operations
+          </Button>
+        )
+      }
+    >
+      <p className="text-[13px]">
+        <b>{o.id}</b>
+        <span className="text-muted">
+          {' '}
+          · {name(o.storeId)} · {cents(o.total)} · {when(o.createdAt)}
+        </span>
+      </p>
+      <p className="text-xs text-text-2">{detail}</p>
+      {start.isError && (
+        <p role="alert" className="mt-1 text-xs text-red">
+          {start.error.message}
+        </p>
+      )}
+    </IssueRow>
   );
 }
 
