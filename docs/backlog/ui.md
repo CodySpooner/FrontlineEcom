@@ -28,7 +28,7 @@ Orca's browser against the reference before ticking it.
 - [x] UI-04 Dashboard (port the mockup): KPI cards w/ sparklines + deltas (Revenue, Profit hero, Ad Spend, ROAS, Orders, AOV),
       Revenue Overview area chart (7D/30D/90D/1Y, hover tooltip, weekly buckets for 1Y), Live Store Activity, AI Agents
       strip, Agent Requests (approve/deny → API, optimistic), Daily Missions. Store filter drives everything.
-- [ ] UI-05 Hero art: per-page header art in the reference style (hooded/armored figure, red rim light, skyline,
+- [x] UI-05 Hero art: per-page header art in the reference style (hooded/armored figure, red rim light, skyline,
       diagonal texture) as inline SVG/CSS; one shared component with per-page variants.
 - [ ] UI-06 AI Agents page: store tabs; squad grid (8 roles): portrait, name, status, level + XP bar, blurb, Configure /
       Chat; Deploy Agent (enable a disabled role).
@@ -66,3 +66,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-01..04: design-system primitives (+ /dev/ui gallery), app shell with 12 routes + persisted store filter,
   typed data layer on the real API (react-query + /api/live; only missions stubbed in `src/api/stubs.ts`), Dashboard ported from mockup v3
 - 2026-10-26 — Inbox: request cards show $/day at stake, "Autopilot · last 24h" list of auto-approved actions, profile chip from `/api/settings`
+- 2026-10-26 — UI-05: hero scenes per page (duo, squad, scan rings, pulse line, lone) + red page icon by the title

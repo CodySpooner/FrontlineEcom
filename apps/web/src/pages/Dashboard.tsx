@@ -29,7 +29,7 @@ export function Dashboard() {
   const who = ids.length ? ids.map(name).join(' + ') : 'All stores';
   return (
     <>
-      <Hero title={NAV[0]!.title} subtitle={NAV[0]!.subtitle} />
+      <Hero title={NAV[0]!.title} subtitle={NAV[0]!.subtitle} art={NAV[0]!.art} />
       <div className="mb-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
         <StoreFilter />
         <span className="text-xs text-muted">Changes vs the {PERIOD[range].replace('last', 'previous')}</span>
