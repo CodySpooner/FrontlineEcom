@@ -42,6 +42,9 @@ pnpm check    # typecheck + tests
   - Amazon: prices (the consumer offer in the store's marketplace). A listing with a sale price running, or a new
     price outside its min/max in Seller Central, is left for you to change. Needs the Product Listing role.
   - TikTok Shop: agents put the change in their answer and you make it.
+- **Competitor prices:** once a day the app reads each competitor's public catalog and records price moves, in the
+  competitor's own currency. It works for Shopify storefronts, WooCommerce stores and Etsy shops (an Etsy shop needs
+  one of your stores connected to Etsy, for its app key). Other sites get no price history.
 - **Your data:** everything stays on this PC in `%APPDATA%\Frontline Ecom\data`. That folder holds the database,
   `logs\api.log`, and `backups\` (daily, newest 7 kept, plus a copy taken just before an update changes the data; all
   restorable from Settings). Connector credentials are encrypted
