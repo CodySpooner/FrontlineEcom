@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { AgentEvent, AgentRun, AgentRunDetail, RunStatus, RunUsage, Store } from '@frontline/shared';
+import { AGENT_ROLES, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type Store } from '@frontline/shared';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { parseLearnings, REFLECTION_PROMPT, searchMemory, writeMemory } from './memory';
 import { listNicheLearnings, nicheKey } from './niche';
@@ -151,7 +151,7 @@ export function createRunManager(opts: RunManagerOptions) {
           agent,
           store,
           task: run.task,
-          systemPrompt: assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20) }),
+          systemPrompt: assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id) }),
           signal,
           env: { ...env, runId: run.id },
           ...(resume ? { resume: String(resume) } : {}),
@@ -195,6 +195,14 @@ export function createRunManager(opts: RunManagerOptions) {
     );
     if (status !== 'done') expireApprovals([run.id]);
     opts.onRun?.(getRun(db, run.id)!);
+  }
+
+  /** The store's open requests, newest first: "<title> (<agent>, <date>)". */
+  function waitingFor(storeId: string) {
+    return db
+      .prepare(`SELECT title, agent_id, created_at FROM approvals WHERE store_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 15`)
+      .all(storeId)
+      .map((r) => `${r.title} (${AGENT_ROLES[String(r.agent_id).split(':')[1] as AgentRole]?.name ?? 'owner'}, ${String(r.created_at).slice(0, 10)})`);
   }
 
   /** A fresh session for a follow-up whose session is gone, with the last exchange as context. */

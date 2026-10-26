@@ -31,6 +31,8 @@ export interface PromptInput {
   memories?: StoreMemory[];
   /** Owner-approved learnings shared across the store's niche. */
   nicheLearnings?: NicheLearning[];
+  /** The store's requests still waiting for the owner, one line each, so nobody asks twice. */
+  waiting?: string[];
   /** Whole-prompt token budget. */
   budget?: number;
   /** YYYY-MM-DD in the store's timezone. Defaults to now. */
@@ -41,7 +43,7 @@ export interface PromptInput {
  * Expertise layers: role + playbook → platform pack → niche pack → store profile → store memory.
  * Stable layers come first and volatile ones (memories, date) last, so the prompt prefix stays cacheable.
  */
-export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [], budget = 8000, today }: PromptInput): string {
+export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [], waiting = [], budget = 8000, today }: PromptInput): string {
   const role = ROLES[agent.role];
   const fixed = [
     `You are the ${AGENT_ROLES[agent.role].name} of ${store.name}, a ${store.niche} store on ${store.platform}.`,
@@ -67,7 +69,8 @@ export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [
     known.push(line);
   }
   const memory = known.length ? `# What the squad has learned about ${store.name}\n${known.join('\n')}` : '';
-  return [...fixed, memory, date].filter(Boolean).join('\n\n');
+  const open = waiting.length ? `# Waiting for the owner\nAlready asked in this store; don't ask for these again:\n${waiting.map((w) => `- ${w}`).join('\n')}` : '';
+  return [...fixed, memory, open, date].filter(Boolean).join('\n\n');
 }
 
 function storeProfile(store: Store): string {

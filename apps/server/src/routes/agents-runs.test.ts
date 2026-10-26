@@ -220,6 +220,16 @@ test('an account problem (usage limit) is told once a day, not once per failed r
   expect(db.prepare(`SELECT body FROM notifications WHERE kind = 'error'`).all()).toEqual([{ body: limit }]);
 });
 
+test("the store's open requests are in the prompt, so nobody asks twice", async () => {
+  db.prepare(`DELETE FROM approvals WHERE store_id = 'pawsome'`).run();
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('w1', 'pawsome', 'pawsome:product_hunter', 'Add 2 products', 'r', '{"kind":"store.add_products"}', 'pending', '2026-10-24T09:00:00Z')`).run();
+  let prompt = '';
+  const m = manager({ engine: async function* (input) { prompt = input.systemPrompt ?? ''; yield { type: 'done', sessionId: 's', usage }; } });
+  ok(m.start('pawsome:product_hunter', 'Daily product scan'));
+  await m.idle();
+  expect(prompt).toContain("# Waiting for the owner\nAlready asked in this store; don't ask for these again:\n- Add 2 products (Product Hunter, 2026-10-24)\n\nToday is");
+});
+
 test('a restart marks runs that were in flight as interrupted', () => {
   db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at) VALUES ('r1', 'glow', 'glow:copywriter', 't', 'running', '2026-10-26T00:00:00Z')`).run();
   manager();
