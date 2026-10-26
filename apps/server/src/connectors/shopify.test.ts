@@ -396,3 +396,19 @@ test('a throttled query waits for the cost bucket to refill and runs again inste
   expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'shopify:glow'").get()).toMatchObject({ status: 'connected', error: null });
   expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow' AND id = '#1001'").get()?.n).toBe(1);
 });
+
+test('a first sync that stops partway keeps the order pages it saved, and the next one resumes from there', async () => {
+  const { db } = await setup();
+  const orders = [order('#1001', '2026-10-20T09:00:00Z', '10.00'), order('#1002', '2026-10-21T09:00:00Z', '20.00'), order('#1003', '2026-10-22T09:00:00Z', '30.00')];
+  const shop = fakeShopify(orders).fetchFn;
+  const dropsOnPage2 = (async (url: string, init: RequestInit) => (JSON.parse(String(init.body)).variables.after === '2' ? new Response('down', { status: 502 }) : shop(url, init))) as typeof fetch;
+  await syncShopify(db, key, 'glow', dropsOnPage2, NOW);
+  expect(db.prepare("SELECT id FROM orders WHERE store_id = 'glow' ORDER BY id").all().map((r) => r.id)).toEqual(['#1001', '#1002']);
+  expect(db.prepare("SELECT status, cursor FROM integrations WHERE id = 'shopify:glow'").get()).toMatchObject({ status: 'error', cursor: '2026-10-21T09:00:00Z' });
+
+  const { fetchFn, calls } = fakeShopify(orders.slice(1));
+  await syncShopify(db, key, 'glow', fetchFn, NOW);
+  expect(calls.find((c) => c.body.query.includes('orders('))!.body.variables.q).toBe("updated_at:>='2026-10-21T09:00:00Z'");
+  expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow'").get()?.n).toBe(3);
+  expect(db.prepare("SELECT status, cursor FROM integrations WHERE id = 'shopify:glow'").get()).toMatchObject({ status: 'connected', cursor: '2026-10-22T09:00:00Z' });
+});

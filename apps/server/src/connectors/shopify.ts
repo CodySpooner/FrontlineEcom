@@ -182,7 +182,11 @@ function client(db: Db, key: Buffer, storeId: string, creds: Record<string, stri
   return call;
 }
 
-/** Pulls shop, products and orders updated since the last sync and rebuilds revenue/orders/cogs for the touched days. */
+/**
+ * Pulls shop, products and orders updated since the last sync and rebuilds revenue/orders/cogs for the touched days.
+ * Orders come oldest update first and each page is saved with the cursor at its last order, so a long first sync
+ * (throttled to roughly 17k orders an hour on the base plans) fills the dashboard as it goes and resumes where it stopped.
+ */
 export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `shopify:${storeId}`;
   const creds = getCredentials(db, key, 'shopify', storeId);
@@ -194,12 +198,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const since = cursor ?? `${addDays(localDate(now), -BACKFILL_DAYS)}T00:00:00Z`;
     const filter = `updated_at:>='${since}'`;
     const products = await all((after) => q<{ products: { nodes: ShopifyProduct[]; pageInfo: PageInfo } }>(PRODUCTS_Q, { after, q: filter }).then((d) => d.products));
-    const orders = await all((after) => q<{ orders: { nodes: ShopifyOrder[]; pageInfo: PageInfo } }>(ORDERS_Q, { after, q: filter }).then((d) => d.orders));
-    for (const o of orders.filter((o) => o.lineItems.pageInfo.hasNextPage)) {
-      const rest = await all((after) => q<{ order: { lineItems: { nodes: LineItem[]; pageInfo: PageInfo } } }>(ORDER_ITEMS_Q, { id: o.id, after: after ?? o.lineItems.pageInfo.endCursor }).then((d) => d.order.lineItems));
-      o.lineItems.nodes.push(...rest);
-    }
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: shop.ianaTimezone });
+    let newest = products.reduce((m, x) => (x.updatedAt > m ? x.updatedAt : m), since);
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -215,29 +215,41 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         const compareAt = v?.compareAtPrice ? num(v.compareAtPrice) : null;
         prod.run(storeId, tail(p.id), p.title, p.featuredMedia?.preview?.image?.url ?? null, num(v?.price), compareAt, num(v?.inventoryItem?.unitCost), p.totalInventory ?? 0, p.status.toLowerCase() as ProductStatus);
       }
-
-      const ord = db.prepare(
-        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
-           tracking = coalesce(excluded.tracking, tracking), cogs = excluded.cogs`,
-      );
-      const days = new Set<string>();
-      for (const o of orders) {
-        if (o.test) continue;
-        const refunded = !!o.cancelledAt || o.displayFinancialStatus === 'REFUNDED' || o.displayFinancialStatus === 'VOIDED';
-        const cogs = o.lineItems.nodes.reduce((a, li) => a + li.quantity * num(li.variant?.inventoryItem?.unitCost), 0);
-        const day = dayOf.format(new Date(o.createdAt));
-        days.add(day);
-        ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day);
-        // Custom line items (no product) only count toward the order total.
-        setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product ? [{ productId: tail(li.product.id), quantity: li.quantity, revenue: num(li.discountedTotalSet.shopMoney.amount), cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));
-      }
-
-      rebuildRevenue(db, storeId, days);
-
-      const newest = [...products, ...orders].reduce((m, x) => (x.updatedAt > m ? x.updatedAt : m), since);
-      db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(newest, now.toISOString(), id);
     });
+
+    const ord = db.prepare(
+      `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+       ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
+         tracking = coalesce(excluded.tracking, tracking), cogs = excluded.cogs`,
+    );
+    let after: string | null = null;
+    do {
+      const page: { nodes: ShopifyOrder[]; pageInfo: PageInfo } = await q<{ orders: { nodes: ShopifyOrder[]; pageInfo: PageInfo } }>(ORDERS_Q, { after, q: filter }).then((d) => d.orders);
+      for (const o of page.nodes.filter((o) => o.lineItems.pageInfo.hasNextPage)) {
+        const rest = await all((after) => q<{ order: { lineItems: { nodes: LineItem[]; pageInfo: PageInfo } } }>(ORDER_ITEMS_Q, { id: o.id, after: after ?? o.lineItems.pageInfo.endCursor }).then((d) => d.order.lineItems));
+        o.lineItems.nodes.push(...rest);
+      }
+      tx(db, () => {
+        const days = new Set<string>();
+        for (const o of page.nodes) {
+          if (o.test) continue;
+          const refunded = !!o.cancelledAt || o.displayFinancialStatus === 'REFUNDED' || o.displayFinancialStatus === 'VOIDED';
+          const cogs = o.lineItems.nodes.reduce((a, li) => a + li.quantity * num(li.variant?.inventoryItem?.unitCost), 0);
+          const day = dayOf.format(new Date(o.createdAt));
+          days.add(day);
+          ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day);
+          // Custom line items (no product) only count toward the order total.
+          setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product ? [{ productId: tail(li.product.id), quantity: li.quantity, revenue: num(li.discountedTotalSet.shopMoney.amount), cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));
+        }
+
+        rebuildRevenue(db, storeId, days);
+        const last = page.nodes.at(-1)?.updatedAt;
+        if (last) db.prepare('UPDATE integrations SET cursor = ? WHERE id = ?').run(last, id);
+      });
+      newest = page.nodes.reduce((m, x) => (x.updatedAt > m ? x.updatedAt : m), newest);
+      after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
+    } while (after);
+    db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(newest, now.toISOString(), id);
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Shopify sync failed');
   }
