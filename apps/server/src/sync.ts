@@ -1,4 +1,4 @@
-import { INTEGRATION_KINDS, type IntegrationKind } from '@frontline/shared';
+import { INTEGRATION_KINDS, type IntegrationKind, type StoreEvent } from '@frontline/shared';
 import { syncAmazon } from './connectors/amazon';
 import { syncCj } from './connectors/cj';
 import { syncEtsy } from './connectors/etsy';
@@ -8,6 +8,7 @@ import { syncShopify } from './connectors/shopify';
 import { syncTikTokAds, syncTikTokShop } from './connectors/tiktok';
 import { syncWooCommerce } from './connectors/woocommerce';
 import type { Db } from './db';
+import { publish } from './live';
 import { log } from './log';
 import { notify } from './settings';
 
@@ -24,6 +25,21 @@ function notifyChange(db: Db, kind: IntegrationKind, storeId: string | null, bef
   const where = { link: '/integrations', ...(store ? { storeId: storeId! } : {}) };
   if (status === 'error') notify(db, { kind: 'error', title: `${what} stopped syncing`, body: `${error ?? 'Sync failed'}. Fix it in Integrations.`, ...where });
   else notify(db, { kind: 'info', title: `${what} is syncing again`, ...where });
+}
+
+/**
+ * A real store's paid orders that a sync brought in become live-feed events, once each (ids are per order, so two syncs
+ * of one store running at once don't repeat them). Only orders newer than the store's newest before the sync and from
+ * the last hour: after days offline the feed doesn't replay them all.
+ */
+function announceOrders(db: Db, storeId: string, newestBefore: string | null, now: Date) {
+  const hourAgo = new Date(now.getTime() - 3_600_000).toISOString();
+  const since = newestBefore && newestBefore > hourAgo ? newestBefore : hourAgo;
+  const add = db.prepare("INSERT OR IGNORE INTO events (id, store_id, type, amount, at) VALUES (?, ?, 'order', ?, ?)");
+  for (const o of db.prepare("SELECT id, total, created_at FROM orders WHERE store_id = ? AND status = 'paid' AND created_at > ? ORDER BY created_at").all(storeId, since)) {
+    const e: StoreEvent = { id: `order:${storeId}:${String(o.id)}`, storeId, type: 'order', amount: Number(o.total), at: String(o.created_at) };
+    if (add.run(e.id, e.storeId, e.amount, e.at).changes) publish({ type: 'event', event: e });
+  }
 }
 
 /**
@@ -44,8 +60,11 @@ export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs =
       if (!due || running.has(id)) continue;
       lastTry.set(id, now.toISOString());
       running.add(id);
+      // Demo stores have no real orders yet; their first real sync replaces the demo ones without announcing history.
+      const store = r.store_id == null ? undefined : db.prepare('SELECT demo, (SELECT max(created_at) FROM orders WHERE store_id = stores.id) AS newest FROM stores WHERE id = ?').get(r.store_id);
       syncers[r.kind as IntegrationKind]!(db, key, String(r.store_id)).finally(() => {
         running.delete(id);
+        if (store?.demo === 0) announceOrders(db, String(r.store_id), store.newest == null ? null : String(store.newest), new Date());
         const after = db.prepare('SELECT status, error FROM integrations WHERE id = ?').get(id);
         if (!after) return;
         log(after.status === 'error' ? 'warn' : 'info', 'sync', { id, ms: Date.now() - now.getTime(), status: after.status, ...(after.error ? { error: after.error } : {}) });
