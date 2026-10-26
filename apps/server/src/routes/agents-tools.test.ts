@@ -92,6 +92,27 @@ test("store_summary's change vs the previous period matches the dashboard's in t
   }
 });
 
+test("compare_stores matches the dashboard store by store when the stores' days are in different zones", async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  const saved = db.prepare('SELECT id, demo, timezone FROM stores').all();
+  try {
+    const evening = new Date();
+    evening.setHours(21, 0, 0, 0); // UTC+14 is already on tomorrow
+    vi.setSystemTime(evening);
+    // Live stores date their data in their own zone (demo ones in this machine's).
+    db.prepare(`UPDATE stores SET demo = 0, timezone = CASE id WHEN 'peak' THEN 'Pacific/Kiritimati' ELSE 'America/Chicago' END`).run();
+    const [r] = results(await run(input('glow', 'market_analyst'), [{ call: 'compare_stores', input: { range: 7 } }]));
+    const [head, ...lines] = r!.output.split('\n').slice(1).map((l) => l.split(','));
+    const tool = Object.fromEntries(lines.map((l) => [l[head!.indexOf('store')]!.replace(' (this store)', ''), Number(l[head!.indexOf('revenue_change_pct')])]));
+    const api = (await (await createApp(db).request('/api/analytics/summary?range=7')).json()) as { byStore: { storeId: string; deltas: { revenue: number } }[] };
+    const names = new Map(listStores(db).map((s) => [s.id, s.name]));
+    expect(tool).toEqual(Object.fromEntries(api.byStore.map((s) => [names.get(s.storeId), s.deltas.revenue])));
+  } finally {
+    for (const s of saved) db.prepare('UPDATE stores SET demo = ?, timezone = ? WHERE id = ?').run(s.demo!, s.timezone!, s.id!); // the db is shared by these tests
+    vi.useRealTimers();
+  }
+});
+
 describe('agent tools on demo data', () => {
   test('read tools answer from the store data', async () => {
     const events = await run(input('pawsome', 'market_analyst'), [

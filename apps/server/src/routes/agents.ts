@@ -52,11 +52,11 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Hono } from 'hono';
-import { loadRows, salesShares, summarize } from '../analytics';
+import { currentWindow, summarize } from '../analytics';
 import { convertRate, fxFor } from '../fx';
 import { approvalsHook, decide } from '../approvals';
 import { listCompetitors, priceChanges } from '../competitors';
-import { addDays, dayFraction, localDate } from '../dates';
+import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
@@ -75,7 +75,7 @@ import { setAmazonListingPrice } from '../connectors/amazon';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
-import { getStore, listStores, storeZone } from '../stores';
+import { getStore, listStores } from '../stores';
 import { publish } from '../live';
 
 /** Approved ad changes → the store's ad account (core's Meta / Google / TikTok writers). */
@@ -135,16 +135,6 @@ const setPrice =
       amazon: () => setAmazonListingPrice(db, loadKey(dataDir()), storeId, productId, change),
     });
 
-/**
- * The dashboard's window (app.ts windowEnd): today in the store's zone, with the comparison day cut to the share of its
- * sales made by this time of day (each store's own order times; the clock where it had none).
- */
-const windowEnd = (db: Db, storeIds: string[], range: number) => {
-  const tz = storeZone(db, storeIds[0]);
-  const now = Date.now();
-  const to = localDate(new Date(now), tz);
-  return { to, todayFraction: salesShares(db, storeIds, addDays(to, -range), new Date(now - range * 86_400_000), dayFraction(to, now, tz)) };
-};
 
 /** App data + approvals for agent tools. `key` decrypts integration credentials (default: the data dir's key file). */
 
@@ -197,8 +187,8 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
     return ((await res.json()) as Page<ResearchProduct>).items;
   },
   summary: (storeId, range) => {
-    const { to, todayFraction } = windowEnd(db, [storeId], range);
-    return summarize(loadRows(db, [storeId], range, to), { range, to, storeIds: [storeId], todayFraction });
+    const { to, todayFraction, rows } = currentWindow(db, [storeId], range); // the dashboard's window, so the numbers match it
+    return summarize(rows, { range, to, storeIds: [storeId], todayFraction });
   },
   themes: {
     list: (storeId) => onLiveShopify(db, storeId, () => listThemes(db, loadKey(dataDir()), storeId)),
@@ -226,9 +216,9 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
   },
   portfolio: (range) => {
     const ids = listStores(db).map((s) => s.id);
-    const { to, todayFraction } = windowEnd(db, ids, range);
+    const { to, todayFraction, rows } = currentWindow(db, ids, range);
     const { currency, unconverted } = fxFor(db, ids);
-    return { ...summarize(loadRows(db, ids, range, to), { range, to, storeIds: ids, todayFraction }), currency, ...(unconverted.length ? { unconverted } : {}) };
+    return { ...summarize(rows, { range, to, storeIds: ids, todayFraction }), currency, ...(unconverted.length ? { unconverted } : {}) };
   },
 });
 
