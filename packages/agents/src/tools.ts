@@ -847,6 +847,20 @@ export const APP_TOOLS: AppTool[] = [
       if (change === 'budget' && !(from > 0)) return `Not sent: ${String(c.name)} has no daily budget of its own (a lifetime budget, or budgets on its ad sets), so it can't be changed from here. Pause it, or say what to change in the ad manager.`;
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
       if (change === 'budget' && to === from) return `Not sent: ${cash(to, ctx.store.currency)}/day is already its budget.`;
+      // A change is judged on the 3 days after it, and delivery takes 48-72 h to settle after a budget edit: one at a
+      // time. A pause can always go: it stops a loss.
+      const recent =
+        change === 'budget' &&
+        ctx.db
+          .prepare(
+            `SELECT decided_at FROM approvals WHERE store_id = ? AND status = 'approved' AND json_extract(action_json, '$.kind') = 'ads.set_budget'
+               AND json_extract(action_json, '$.payload.campaignId') = ? AND decided_at >= ? AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'not-applied:' || approvals.id)
+             ORDER BY decided_at DESC LIMIT 1`,
+          )
+          .get(ctx.store.id, campaignId, ago(3));
+      if (recent) {
+        return `Not sent: ${String(c.name)}'s budget was changed on ${String(recent.decided_at).slice(0, 10)}. It needs 48-72 h to settle and is judged on the 3 days after, so propose the next step once those are over (a pause can go now).`;
+      }
       // Autopilot caps bound the budget a change touches (a pause stops all of it); the added-spend cap counts raises only.
       // ponytail: no rate → no amount, so the caps can't be checked and autopilot can't take it: the owner decides. Same
       // for a pause with no campaign budget (ad set or lifetime budgets, synced as 0): what it stops is unknown, not $0.

@@ -79,6 +79,21 @@ test('a campaign with no daily budget of its own gets no budget suggestion or ch
   expect(requests).toEqual([]);
 });
 
+test('a campaign gets one budget change per 3 days; a pause can still go', async () => {
+  db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 'step', 'pawsome', 'Broad', 'active', 40)`).run();
+  const first = await run([propose({ campaignId: 'step', change: 'budget', newDailyBudget: 48 })]);
+  expect(first.outputs[0]).toMatch(/^Approved by the owner/);
+  const { outputs, requests } = await run([
+    propose({ campaignId: 'step', change: 'budget', newDailyBudget: 58 }),
+    propose({ campaignId: 'step', change: 'pause' }),
+  ]);
+  expect(outputs[0]).toBe(`Not sent: Broad's budget was changed on ${new Date().toISOString().slice(0, 10)}. It needs 48-72 h to settle and is judged on the 3 days after, so propose the next step once those are over (a pause can go now).`);
+  expect(requests.map((r) => r.action.kind)).toEqual(['ads.pause_campaign']);
+  db.prepare(`UPDATE approvals SET decided_at = ? WHERE json_extract(action_json, '$.kind') = 'ads.set_budget'`).run(new Date(Date.now() - 4 * 86_400_000).toISOString());
+  db.prepare(`UPDATE campaigns SET status = 'active' WHERE id = 'step'`).run();
+  expect((await run([propose({ campaignId: 'step', change: 'budget', newDailyBudget: 58 })])).outputs[0]).toMatch(/^Approved by the owner/);
+});
+
 test("a change that changes nothing isn't sent: pausing a paused campaign, a budget on one, or the budget it already has", async () => {
   const add = db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, 'pawsome', ?, ?, 40)`);
   add.run('off', 'Old UGC', 'paused');
@@ -184,7 +199,7 @@ test("the owner's cap on added spend and bad input stop a proposal before asking
   const from = budget('pawsome-c1').daily_budget;
   await run([propose({ campaignId: 'pawsome-c1', change: 'budget', newDailyBudget: from + 20 })]);
   const { outputs, requests } = await run([
-    propose({ campaignId: 'pawsome-c1', change: 'budget', newDailyBudget: from + 30 }),
+    propose({ campaignId: 'pawsome-c2', change: 'budget', newDailyBudget: budget('pawsome-c2').daily_budget + 10 }), // the cap counts across campaigns
     propose({ campaignId: 'glow-c1', change: 'pause' }),
     propose({ campaignId: 'pawsome-c2', change: 'budget' }),
   ]);
