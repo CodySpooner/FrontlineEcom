@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, runAgent, writeMemory, type FakeStep } from '@frontline/agents';
+import { fakeEngine, getAgent, once, runAgent, writeMemory, type FakeStep } from '@frontline/agents';
 import type { AgentEvent } from '@frontline/shared';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
@@ -38,6 +38,18 @@ test("the squad log shows the week's requests with their decision and finished r
   expect(runs).toMatch(/^date,agent,task,gist\n\d{4}-\d{2}-\d{2},Copywriter,Write 3 hooks,Copywriter for Glow Haus: on it — "Write 3 hooks"\.$/);
   expect(outcomes).toMatch(/^date,agent,result\n\d{4}-\d{2}-\d{2},Ad Strategist,"Pause X" worked: blended ROAS 1\.2 → 1\.9 in the 3 days after\.$/);
   expect((await run('peak:market_analyst', [{ call: 'squad_log' }]))[0]).toMatch(/\n\nruns:\n\(none\)\n\noutcomes:\n\(none\)$/);
+});
+
+test("a live store's log starts when it went live: demo-era work isn't its track record", async () => {
+  const at = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+  const ask = (id: string, title: string, created: string) =>
+    db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'glow', 'glow:copywriter', ?, 'r', '{"kind":"tool_use"}', 'pending', ?)`).run(id, title, created);
+  ask('demo', 'Demo-era hooks', at(5));
+  once(db, 'activate:glow', new Date(at(3))); // went live 3 hours ago
+  ask('real', 'Live hooks', at(1));
+  const [log] = await run('glow:market_analyst', [{ call: 'squad_log', input: { days: 7 } }]);
+  expect(log).toContain('Live hooks');
+  expect(log).not.toContain('Demo-era hooks');
 });
 
 test("a store ahead of UTC still sees this morning's work: the log window is hours, not the store's date", async () => {
