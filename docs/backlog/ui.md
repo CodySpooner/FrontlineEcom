@@ -303,6 +303,8 @@ Orca's browser against the reference before ticking it.
       budget, budgets on its ad sets, or archived: CORE-68/69 sync those as 0), with the reason on hover.
 - [x] UI-118 Tabbing to an area chart (Dashboard revenue, Analytics trend) showed no focus at all: `outline-none` hid
       the global :focus-visible ring and the crosshair only appears after an arrow key.
+- [x] UI-119 With GA4, the funnel's cart and checkout steps count events (core's note), so "Added to cart" can outnumber
+      sessions: its bar overflowed the track and "130% of previous" went unexplained. Bars clamp, and a note says why.
 
 ## Blocked
 
@@ -465,3 +467,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-116: AskPalette builds one ask row per store the filter shows (`has`, so All stores = every store), keyed `ask:<agentId>` so only the row being asked says "Asking…". New AskPalette test: with two stores, ArrowDown + Enter starts glow:market_analyst. Orca at 800px with All stores: three rows (Pawsome Gear selected, Glow Haus, Peak Fit) under the question; no run started
 - 2026-10-26 — UI-117: the Budget/day cell is a muted dash when `dailyBudget` is 0, titled "No daily budget of its own: a lifetime budget, or budgets on its ad sets" unless the campaign is archived. Orca at 800px with a client-side patch (first campaign active with 0, second archived with 0): "– [title]", "Archived · –", and the third still reads $124. Patch dropped by reload
 - 2026-10-26 — UI-118: AreaChart's focusable svg drops `outline-none` (now `rounded-md`), so the global red :focus-visible ring shows on keyboard focus. Chrome at 1440: focus({ focusVisible }) shows a 2px red ring around the chart, and a mouse click focuses it without the ring (:focus-visible false). a11y audit (unnamed controls, unlabeled inputs, duplicate ids, missing alt) on all 14 pages in Orca: clean. Other outline-less fields have a focus border or focus-within wrapper
+- 2026-10-26 — UI-119: FunnelPanel bar widths cap at 100% of sessions. When a shown step outnumbers the one before it (only GA4's event counts can), a muted note says carts and checkouts count GA4's add-to-cart and checkout events, not sessions. New Analytics test: 100/130/40/20 gives bar widths 100/100/40/20% and the note. Orca at 800px with a client-side summary patch (1,000 / 1,300 / 400 / 200): the cart bar fills its track exactly (638/638px), "130.0% of previous" sits above the note, and the sessions-cover note still shows. Patch dropped by reload

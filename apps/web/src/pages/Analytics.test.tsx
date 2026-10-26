@@ -94,6 +94,14 @@ describe('Conversion funnel with steps the platform does not report', () => {
     expect(await screen.findByText('Added to cart')).toBeTruthy();
     expect(screen.queryByText(/left out/)).toBeNull();
   });
+
+  it("says GA4 counts cart events when a step outnumbers the one before it, and keeps that bar in its track", async () => {
+    stubApi(() => []);
+    renderApp(<FunnelPanel s={{ funnel: { sessions: 100, addToCarts: 130, checkouts: 40, orders: 20 }, totals: { orders: 20 } } as AnalyticsSummary} />);
+    expect(await screen.findByText(/count GA4's add-to-cart and checkout events, not sessions/)).toBeTruthy();
+    const widths = [...document.querySelectorAll<HTMLElement>('.bg-red.rounded-full')].map((b) => b.style.width);
+    expect(widths).toEqual(['100%', '100%', '40%', '20%']);
+  });
 });
 
 describe('product photos', () => {

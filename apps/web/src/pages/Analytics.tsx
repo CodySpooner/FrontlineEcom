@@ -131,6 +131,8 @@ export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
   ];
   // A middle step at 0 while orders came in isn't reported (Amazon has no cart or checkout data): leave it out.
   const steps = all.filter(([, n], i) => n > 0 || i === 0 || i === all.length - 1 || !f.orders);
+  // GA4's carts and checkouts are event counts (Shopify's are sessions), so a step can outnumber the one before it.
+  const events = steps.some(([, n], i) => i > 0 && n > steps[i - 1]![1]);
   return (
     <Panel title="Conversion Funnel" sub={f.sessions ? `${pct(rate(f.orders, f.sessions))} of sessions place an order` : `${num(f.orders)} orders`}>
       {!f.sessions ? (
@@ -155,11 +157,16 @@ export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
                 </span>
               </div>
               <div className="h-2 rounded-full bg-white/5">
-                <div className="h-full min-w-1 rounded-full bg-red" style={{ width: `${rate(n, f.sessions)}%` }} />
+                <div className="h-full min-w-1 rounded-full bg-red" style={{ width: `${Math.min(100, rate(n, f.sessions))}%` }} />
               </div>
             </li>
           ))}
           {steps.length < all.length && <li className="text-xs text-muted">Steps the platform doesn't report are left out.</li>}
+          {events && (
+            <li className="text-xs text-muted">
+              Carts and checkouts count GA4's add-to-cart and checkout events, not sessions: a shopper who adds several items counts more than once.
+            </li>
+          )}
           {/* Core counts only orders its sessions cover (not days before traffic data, nor Amazon sold next to the site),
               so those aren't a drop-off. */}
           {f.orders < s.totals.orders && (
