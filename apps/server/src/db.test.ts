@@ -33,3 +33,8 @@ test('deleting a store cascades to its rows', () => {
   db.prepare("DELETE FROM stores WHERE id = 'x'").run();
   expect(db.prepare('SELECT count(*) AS n FROM daily_metrics').get()?.n).toBe(0);
 });
+
+test("a day's orders are found through the (store_id, local_date) index, not a scan of the store's orders", () => {
+  const plan = openDb().prepare("EXPLAIN QUERY PLAN SELECT total FROM orders WHERE store_id = ? AND local_date = ? AND status = 'paid'").all('s', '2026-10-26');
+  expect(plan.map((r) => String(r.detail)).join(' ')).toContain('orders_by_day');
+});

@@ -433,6 +433,9 @@ export const MIGRATIONS = [
   );
   CREATE INDEX action_log_by_store ON action_log (store_id, id);
   `,
+  /* 25 (core: per-day order lookups; a 2-year first sync rebuilt revenue in 8 s, blocking the API, without it) */ `
+  CREATE INDEX orders_by_day ON orders (store_id, local_date);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
