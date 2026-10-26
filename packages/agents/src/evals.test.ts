@@ -1,0 +1,34 @@
+import { AGENT_ROLES, type AgentRole } from '@frontline/shared';
+import { expect, test } from 'vitest';
+import { APP_TOOLS, DEFAULT_JOBS, playbook, ROLES, SQUAD_RULES, toolsFor } from './index';
+
+// Evals: the text an agent is given must only ask for tools that agent actually has. Catches drift whenever a
+// playbook, a role prompt, the squad rules or a scheduled job is edited without updating the role's tool list.
+
+const ROLE_IDS = Object.keys(AGENT_ROLES) as AgentRole[];
+const SDK_TOOLS = ['WebSearch', 'WebFetch'];
+const KNOWN = new Set<string>([...APP_TOOLS.map((t) => t.name), ...SDK_TOOLS]);
+const mentioned = (text: string) => new Set((text.match(/\b(?:[a-z]+(?:_[a-z]+)+|Web(?:Search|Fetch))\b/g) ?? []).filter((w) => KNOWN.has(w)));
+
+test('tool mentions are found in prose and backticks, other words ignored', () => {
+  expect([...mentioned('Run `review_campaigns`, then WebFetch the page; skip a_word and list_things.')]).toEqual(['review_campaigns', 'WebFetch']);
+});
+
+test('every role tool exists, and app tools are all wired', () => {
+  for (const role of ROLE_IDS) {
+    for (const t of ROLES[role].tools) expect(KNOWN.has(t), `${role}: ${t}`).toBe(true);
+    expect(toolsFor(role).map((t) => t.name).sort(), role).toEqual(ROLES[role].tools.filter((t) => !SDK_TOOLS.includes(t)).sort());
+  }
+});
+
+test.each(ROLE_IDS)('%s is only told to use tools it has', (role) => {
+  expect(mentioned(playbook(role)).size, 'playbook names its tools').toBeGreaterThan(2);
+  const jobs = DEFAULT_JOBS.filter((j) => j.role === role).map((j) => j.task);
+  const missing = [...mentioned([playbook(role), ROLES[role].prompt, SQUAD_RULES, ...jobs].join('\n'))].filter((t) => !ROLES[role].tools.includes(t as never));
+  expect(missing).toEqual([]);
+});
+
+test('every app tool is used by some role', () => {
+  const used = new Set(ROLE_IDS.flatMap((r) => ROLES[r].tools));
+  expect(APP_TOOLS.map((t) => t.name).filter((t) => !used.has(t))).toEqual([]);
+});
