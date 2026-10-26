@@ -323,7 +323,7 @@ function ByStore({ s, name }: { s: AnalyticsSummary; name: (id: string) => strin
         <tbody>
           {[...s.byStore]
             .sort((a, b) => b.totals.revenue - a.totals.revenue)
-            .map(({ storeId, totals: t, deltas: d }) => {
+            .map(({ storeId, totals: t, previous: p, deltas: d }) => {
               const h = storeHealth(t);
               return (
                 <tr key={storeId}>
@@ -335,7 +335,9 @@ function ByStore({ s, name }: { s: AnalyticsSummary; name: (id: string) => strin
                     </span>
                   </td>
                   <td className="text-right">{money(t.revenue, s.currency)}</td>
-                  <td className={cx('text-right', Math.abs(d.revenue) < 0.05 ? 'text-muted' : d.revenue > 0 ? 'text-good' : 'text-red')}>{signedPct(d.revenue)}</td>
+                  <td className={cx('text-right', noBaseline(p.revenue, t.revenue) || Math.abs(d.revenue) < 0.05 ? 'text-muted' : d.revenue > 0 ? 'text-good' : 'text-red')}>
+                    {noBaseline(p.revenue, t.revenue) ? 'New' : signedPct(d.revenue)}
+                  </td>
                   <td className="text-right">{money(t.profit, s.currency)}</td>
                   <td className="text-right">{money(t.adSpend, s.currency)}</td>
                   <td className="text-right">{times(t.roas)}</td>
