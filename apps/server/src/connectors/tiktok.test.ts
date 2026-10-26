@@ -334,3 +334,16 @@ test("TikTok Shop visitors fill a TikTok Shop store's funnel up to the last day 
   await syncTikTokShop(db, key, 'glow', again.fetchFn, NOW);
   expect(again.calls.some((c) => c.url.pathname.startsWith('/analytics/'))).toBe(false);
 });
+
+test("orders are dated in the store's timezone as it is when they're written, not as it was when the sync began", async () => {
+  const db = shopSetup();
+  db.prepare("UPDATE stores SET platform = 'tiktok_shop' WHERE id = 'glow'").run();
+  const { fetchFn } = fakeShop();
+  const rezoning = (async (url: string, init?: RequestInit) => {
+    // Another sync (or the owner) moves the store to UTC+14 while TikTok's visitors are read.
+    if (url.includes('/analytics/')) db.prepare("UPDATE stores SET timezone = 'Pacific/Kiritimati' WHERE id = 'glow'").run();
+    return fetchFn(url, init);
+  }) as typeof fetch;
+  await syncTikTokShop(db, key, 'glow', rezoning, NOW);
+  expect(db.prepare("SELECT local_date FROM orders WHERE store_id = 'glow' AND id = 'tt-5761'").get()).toEqual({ local_date: '2026-10-26' }); // 12:00 UTC on 10-25
+});

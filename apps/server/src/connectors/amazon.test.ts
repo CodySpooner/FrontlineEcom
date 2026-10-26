@@ -509,3 +509,20 @@ test("refunds of an Amazon store's own orders come off the order's day (Finances
   expect(finances[2]!.get('PostedAfter')).toBe('2026-10-24T17:55:00.000Z');
   expect(revenue()).toBe(395);
 });
+
+test("a timezone change while Amazon is read drops that read; the next sync reads it again in the new zone", async () => {
+  const db = setup();
+  const { fetchFn } = fakeAmazon();
+  const rezoning = (async (url: string, init?: RequestInit) => {
+    if (url.includes('/sales/')) db.prepare("UPDATE stores SET timezone = 'Europe/Berlin' WHERE id = 'peak'").run(); // e.g. a Shopify sync meanwhile
+    return fetchFn(url, init);
+  }) as typeof fetch;
+  await syncAmazon(db, key, 'peak', rezoning, NOW);
+  expect(db.prepare("SELECT count(*) AS n FROM channel_daily WHERE store_id = 'peak'").get()).toEqual({ n: 0 });
+  expect(db.prepare("SELECT cursor FROM integrations WHERE id = 'amazon:peak'").get()).toEqual({ cursor: null });
+
+  const again = fakeAmazon();
+  await syncAmazon(db, key, 'peak', again.fetchFn, NOW);
+  expect(again.calls[1]!.url.searchParams.get('granularityTimeZone')).toBe('Europe/Berlin');
+  expect(db.prepare("SELECT count(*) AS n FROM channel_daily WHERE store_id = 'peak'").get()).toEqual({ n: 2 });
+});

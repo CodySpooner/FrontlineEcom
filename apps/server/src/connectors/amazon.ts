@@ -273,6 +273,9 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const refunds = !own ? undefined : await refundsOf(refundRead?.account === account ? refundRead : undefined, fetchFn, host, token, now).catch(() => undefined);
 
     tx(db, () => {
+      // Re-zoned while Amazon was read (another sync, or the owner): these days are the old zone's. setStoreTimezone
+      // cleared the cursor, so the next sync reads them again in the new one.
+      if (String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') !== timeZone) return;
       switchToReal(db, storeId);
       if (own && currency) setStoreCurrency(db, storeId, currency);
       const up = db.prepare(

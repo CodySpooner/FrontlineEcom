@@ -257,13 +257,12 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     const returnsSince = lastReturns?.shop === shop.cipher ? lastReturns.since : Math.floor(now.getTime() / 1000) - BACKFILL_DAYS * 86400;
     const returns = await search<ShopReturn>('/return_refund/202309/returns/search', 'return_orders', { page_size: '50', sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: returnsSince }).catch(() => undefined);
     const store = db.prepare('SELECT timezone, platform FROM stores WHERE id = ?').get(storeId);
-    const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(store?.timezone ?? 'UTC') });
     // Product-page visitors a day are a TikTok Shop store's funnel sessions (TikTok Shop Analytics scope), unless GA4 is
     // connected (it owns the funnel there). A TikTok Shop alongside another platform leaves that one's sessions alone.
     // TikTok has no cart or checkout counts. Without the scope (or on any error) sessions stay empty.
     // Each sync reads the last 30 days, and one older 30 (TikTok documents no longest range) back to the backfill limit;
     // a month without visitors means the shop had none before, and the backfill stops there.
-    const storeDay = dayOf.format(now);
+    const storeDay = new Intl.DateTimeFormat('en-CA', { timeZone: String(store?.timezone ?? 'UTC') }).format(now);
     const performance = (from: string, to: string) =>
       api<ShopPerformance>('GET', '/analytics/202609/shop/performance', { shop_cipher: shop.cipher, start_date_ge: from, end_date_lt: to, granularity: '1D' }).catch(() => undefined);
     const traffic = store?.platform !== 'tiktok_shop' || db.prepare('SELECT 1 FROM integrations WHERE id = ?').get(`ga4:${storeId}`) ? undefined
@@ -273,6 +272,8 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     const back = lastVisitors?.shop === shop.cipher ? lastVisitors.back : addDays(storeDay, -30);
     const limit = addDays(storeDay, -BACKFILL_DAYS);
     const older = traffic && back > limit ? await performance(addDays(back, -30), back) : undefined;
+    // Read after the awaits: another sync (or the owner) may have changed the store's timezone meanwhile.
+    const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 
     tx(db, () => {
       switchToReal(db, storeId);
