@@ -31,7 +31,7 @@ export function NotificationBell() {
       >
         <Bell className="size-[18px]" strokeWidth={1.8} />
         {count > 0 && (
-          <b className="absolute -top-1.5 -right-1.5 h-[19px] min-w-[19px] rounded-[10px] bg-red px-[5px] text-center text-[11px] leading-[19px] font-bold text-white shadow-glow">{count}</b>
+          <b className="absolute -top-1.5 -right-1.5 h-[19px] min-w-[19px] rounded-[10px] bg-red-fill px-[5px] text-center text-[11px] leading-[19px] font-bold text-white shadow-glow">{count}</b>
         )}
       </button>
       <Dialog open={open} onClose={() => setOpen(false)} title="Notifications" side="right">

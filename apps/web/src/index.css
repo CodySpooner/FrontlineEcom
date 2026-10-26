@@ -18,6 +18,8 @@
   --color-muted: #8b8b94;
   --color-red: #ff2a3a;
   --color-red-2: #c3121f;
+  /* Fill behind white text: #ff2a3a is 3.7:1 with white, this one 4.8:1 (WCAG AA). */
+  --color-red-fill: #e01e2d;
   --color-red-soft: rgb(255 42 58 / 0.12);
   --color-good: #3ddc84;
   --color-grid: #1f1f25;

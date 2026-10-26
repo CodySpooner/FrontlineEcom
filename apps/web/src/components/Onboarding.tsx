@@ -7,7 +7,7 @@ import { useAgents } from '../api/client';
 import { Portrait } from './Art';
 import { useStoreSelection } from './StoreFilter';
 import { nicheName, StoreForm } from './StoreForm';
-import { Button, Dialog, LoadingState } from './ui';
+import { Button, cx, Dialog, LoadingState } from './ui';
 
 // ponytail: "seen the welcome" is per device; move it to Settings if the owner runs several machines.
 const SEEN = 'frontline:onboarded';
@@ -76,9 +76,9 @@ function Choice({ icon: Icon, title, children, onClick, primary }: { icon: typeo
     <button
       type="button"
       onClick={onClick}
-      className={`grid cursor-pointer gap-1.5 rounded-xl border p-4 text-left transition hover:border-red/60 ${primary ? 'border-red/45 bg-red-soft' : 'border-line-2 bg-bg-2'}`}
+      className={cx('grid cursor-pointer gap-1.5 rounded-xl border p-4 text-left transition hover:border-red/60', primary ? 'border-red/45 bg-red-soft' : 'border-line-2 bg-bg-2')}
     >
-      <Icon className={`size-5 ${primary ? 'text-red' : 'text-text-2'}`} aria-hidden />
+      <Icon className={cx('size-5', primary ? 'text-red' : 'text-text-2')} aria-hidden />
       <b className="text-[14px]">{title}</b>
       <span className="text-xs text-muted">{children}</span>
     </button>

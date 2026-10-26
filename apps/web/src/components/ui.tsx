@@ -33,7 +33,7 @@ export const buttonClass = (variant: 'primary' | 'ghost' = 'ghost', size: 'sm' |
   cx(
     'inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border font-semibold transition duration-150 hover:brightness-115 active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-50',
     size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
-    variant === 'primary' ? 'border-red bg-red text-white shadow-glow' : 'border-line-2 bg-panel-2 text-text-2',
+    variant === 'primary' ? 'border-red-fill bg-red-fill text-white shadow-glow' : 'border-line-2 bg-panel-2 text-text-2',
   );
 
 export function Button({ variant, size, className, type = 'button', ...p }: ButtonProps) {
@@ -94,7 +94,7 @@ export function Segmented<T extends string | number>({ label, options, value, on
           onClick={() => onChange(o.value)}
           className={cx(
             'cursor-pointer rounded-[7px] px-3 py-1 font-display text-xs font-semibold transition duration-150',
-            o.value === value ? 'bg-red text-white shadow-glow' : 'text-muted hover:text-white',
+            o.value === value ? 'bg-red-fill text-white shadow-glow' : 'text-muted hover:text-white',
           )}
         >
           {o.label}
