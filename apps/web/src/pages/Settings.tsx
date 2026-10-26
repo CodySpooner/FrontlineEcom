@@ -306,7 +306,7 @@ function Preferences() {
   );
 }
 
-function Backups() {
+export function Backups() {
   const q = useBackups();
   const now = useBackupNow();
   const restore = useRestoreBackup();
@@ -350,6 +350,7 @@ function Backups() {
                 <span className="truncate text-text-2" title={b.name}>
                   {when(b.createdAt)}
                 </span>
+                {b.name.endsWith('-before-update.db') && <Badge>Before update</Badge>}
                 <span className="ml-auto text-muted tabular-nums">{(b.size / 1e6).toFixed(1)} MB</span>
                 <button
                   type="button"

@@ -234,6 +234,8 @@ Orca's browser against the reference before ticking it.
       is visible without opening Settings.
 - [x] UI-88 Orders › Needs You: a "Recently resolved" list (what was flagged, what fixed it, auto-closed ones too) with
       Reopen, so a mistaken "Mark resolved" can be undone and an issue the server closed doesn't just vanish.
+- [x] UI-89 Settings › Your Data › Backups marks the copy core takes before an update's migrations ("Before update"),
+      the one to restore if an update goes wrong.
 
 ## Blocked
 
@@ -358,3 +360,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Core inbox (tracking link): the Orders table's tracking number links to `Order.trackingUrl` (the carrier's page from Shopify, else 17TRACK) with an external-link icon. It opens in the browser (`target=_blank`; Electron's window-open handler sends http(s) to the system browser). Orders.test covers it. Orca at 800px, In transit: "YT2638870881 ↗" etc. Also removed the Sync-now inbox item that a rebase merge had duplicated as open
 - 2026-10-26 — UI-87: AgentDetail header badge "AI ≤ $X.XX/day" when `dailyBudgetUsd` is set, using `cents` because `money` rounds $1.50 to $2. Orca at 800px with a $1.50 fixture on Glow's Copywriter: "Idle · Ask first · AI ≤ $1.50/day". Fixture removed
 - 2026-10-26 — UI-88: native `<details>` under the Needs You list shows the 5 latest resolved order issues (by `resolvedAt`). Each shows the note · resolution, plus Reopen (`PATCH status: open`, which the agents route already accepted). Orders.test covers it. Orca at 800px with two fixture issues (owner-resolved and "Delivered; closed automatically."): Reopen moved #1164 back into the queue. Fixtures removed
+- 2026-10-26 — UI-89: a `Before update` badge on backups named `…-before-update.db` (core d392940). `Backups` is exported for Settings.test. Orca at 800px with a fixture copy: "Oct 26, 1:52 PM · Before update · 1.5 MB · Restore", and only on that row. Fixture file removed

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { StoreCaps } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
-import { CapsForm } from './Settings';
+import { Backups, CapsForm } from './Settings';
 
 const caps: StoreCaps = { storeId: 'peak', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {} };
 const amount = () => screen.getByLabelText('Change ad budgets: most per day in dollars');
@@ -35,5 +35,20 @@ describe('caps form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save caps' }));
     await vi.waitFor(() => expect(puts(fetch)).toHaveLength(1));
     expect(JSON.parse(String(puts(fetch)[0]![1]!.body)).autopilot['ads.set_budget']).toEqual({ enabled: false, maxUsdPerDay: 0 });
+  });
+});
+
+describe('backups', () => {
+  it('marks the copy taken before an update', async () => {
+    stubApi((url) =>
+      url === '/api/backups'
+        ? [
+            { name: 'frontline-2026-10-26T10-20-24.db', size: 2e6, createdAt: '2026-10-26T10:20:24Z' },
+            { name: 'frontline-2026-10-26T09-00-00-before-update.db', size: 2e6, createdAt: '2026-10-26T09:00:00Z' },
+          ]
+        : undefined,
+    );
+    renderApp(<Backups />);
+    expect(await screen.findAllByText('Before update')).toHaveLength(1);
   });
 });
