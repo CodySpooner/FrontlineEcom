@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { PRODUCT_PAGE_PLATFORMS, type AgentRole, type Platform } from '@frontline/shared';
 import { once } from './memory';
@@ -77,10 +77,23 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
   },
 ];
 
-/** Switches a store's default jobs on (it just got connected); returns how many were off. */
+/**
+ * Earlier task texts of the default jobs (sha256, first 12 hex), from git history: a store's job still carrying one was
+ * never edited by the owner, so it moves to the current text. When a task above changes, add its old text's hash here.
+ */
+const FORMER_TASKS: Record<string, string[]> = {
+  'Daily briefing': ['6e0cf79f6423'],
+  'Daily product scan': ['fcd2db3f4ef9'],
+  'Daily order check': ['4b257766a792', '68b5e9e81338'],
+  'Weekly price check': ['024e94fbffb1'],
+  'Weekly report': ['9f9632c36fba', '8f6e01cc2448'],
+};
+const taskHash = (task: string) => createHash('sha256').update(task).digest('hex').slice(0, 12);
+
 /** Has nothing to review until the store has campaigns (an ad account synced); a run a day on none spends Claude usage. */
 export const ADS_JOB = 'Daily campaign review';
 
+/** Switches a store's default jobs on (it just got connected); returns how many were off. */
 export function enableDefaultJobs(db: DatabaseSync, storeId: string, names = DEFAULT_JOBS.map((j) => j.name)): number {
   return Number(
     db.prepare(`UPDATE automation_rules SET enabled = 1 WHERE store_id = ? AND enabled = 0 AND name IN (${names.map(() => '?').join(',')})`).run(storeId, ...names).changes,
@@ -90,9 +103,15 @@ export function enableDefaultJobs(db: DatabaseSync, storeId: string, names = DEF
 /**
  * Adds the default jobs a store hasn't been given yet, each once: a job the owner deleted stays deleted, and stores made
  * before a job shipped get it. They start enabled only when the store is connected: on demo data they would spend the
- * owner's Claude usage on simulated numbers. The owner can switch them on in Automation. Returns the names added.
+ * owner's Claude usage on simulated numbers. The owner can switch them on in Automation. Jobs the owner never edited
+ * move to the current task text. Returns the names added.
  */
 export function createDefaultJobs(db: DatabaseSync, storeId: string, now = new Date()): string[] {
+  const setTask = db.prepare(`UPDATE automation_rules SET action_json = json_set(action_json, '$.task', ?) WHERE id = ?`);
+  for (const r of db.prepare(`SELECT id, name, json_extract(action_json, '$.task') AS task FROM automation_rules WHERE store_id = ?`).all(storeId)) {
+    const job = DEFAULT_JOBS.find((j) => j.name === r.name);
+    if (job && FORMER_TASKS[job.name]?.includes(taskHash(String(r.task)))) setTask.run(job.task, String(r.id));
+  }
   const connected = db.prepare('SELECT connected FROM stores WHERE id = ?').get(storeId)?.connected === 1;
   const has = db.prepare('SELECT 1 FROM automation_rules WHERE store_id = ? AND name = ?');
   const insert = db.prepare(

@@ -65,6 +65,8 @@ has something to show. A store's first real sync (core's `switchToReal`) wipes i
 The default jobs (`jobs.ts`) switch on at the same time (the daily campaign review once an ad account syncs campaigns;
 the weekly page refresh only on platforms where the app publishes product pages),
 since they would otherwise spend Claude usage on simulated numbers. Outcome checks and the squad log only count what happened after go-live.
+A job whose task text the owner never edited moves to the current text at startup. When you change a task, add the
+old text's hash to `FORMER_TASKS`.
 
 ## Adding things
 
