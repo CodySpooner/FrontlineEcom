@@ -298,13 +298,19 @@ export function parseMemoryInput(body: unknown, partial: boolean): string | Part
 }
 
 /**
- * A store's first real sync connects it (core's switchToReal). Once per store: its default jobs switch on (they run on
- * the owner's Claude login, so the owner is told), and a custom niche without a pack gets the Market Analyst drafting one.
+ * A store's first real sync connects it (core's switchToReal). Once per store: what the agents learned from its
+ * simulated numbers is cleared, its default jobs switch on (they run on the owner's Claude login, so the owner is told),
+ * and a custom niche without a pack gets the Market Analyst drafting one.
  */
 // ponytail: checked at startup and on squad reads (the dashboard polls them); core has no connect event to hook.
 function activateConnectedStores(db: Db, runs: RunManager) {
   for (const store of listStores(db).filter((s) => s.connected)) {
     if (!once(db, `activate:${store.id}`)) continue;
+    // Core wiped the demo rows; the agents' facts and learnings came from them. The owner's notes, pins and preferences stay.
+    const cleared = db
+      .prepare(`DELETE FROM store_memory WHERE store_id = ? AND agent_id != 'owner' AND kind IN ('fact', 'learning') AND pinned = 0`)
+      .run(store.id).changes;
+    if (cleared) notify(db, { kind: 'info', title: `${store.name}: the squad starts fresh on real numbers`, body: `Cleared ${cleared} things it learned from the demo data. Your own notes, pins and preferences stay.`, storeId: store.id, link: '/knowledge' });
     if (enableDefaultJobs(db, store.id)) {
       const jobs = DEFAULT_JOBS.map((j) => j.name).join(', ');
       notify(db, { kind: 'info', title: `${store.name} is live: the squad's scheduled jobs are on`, body: `${jobs}. They run on your Claude login; pause or change them in Automation.`, storeId: store.id, link: '/automation' });

@@ -1,4 +1,4 @@
-import { DEFAULT_JOBS, listRuns } from '@frontline/agents';
+import { DEFAULT_JOBS, listMemory, listRuns, updateMemory, writeMemory } from '@frontline/agents';
 import type { Store } from '@frontline/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -65,4 +65,23 @@ test("a store's first real sync switches its squad's jobs on once, and a custom 
   await runManager(db).idle();
 
   expect(jobsOn('glow')).toBe(0); // demo stores stay off
+});
+
+test("going live clears what the agents learned from simulated numbers, not the owner's notes, pins or preferences", async () => {
+  await app.request('/api/agents');
+  const m = (agentId: string, kind: 'fact' | 'learning' | 'preference', text: string) => writeMemory(db, { storeId: 'glow', agentId, kind, text, confidence: 0.7 });
+  m('glow:market_analyst', 'learning', 'LED masks outsell serums 3:1');
+  m('glow:ad_strategist', 'fact', 'Broad TOF runs at 2.1 ROAS');
+  m('glow:copywriter', 'preference', 'Owner wants no exclamation marks');
+  m('owner', 'fact', 'We ship from Austin');
+  updateMemory(db, m('glow:market_analyst', 'learning', 'Customers ask about sensitive skin').id, { pinned: true });
+  switchToReal(db, 'glow');
+  await app.request('/api/agents');
+  expect(listMemory(db, 'glow').map((x) => x.text).sort()).toEqual(['Customers ask about sensitive skin', 'Owner wants no exclamation marks', 'We ship from Austin']);
+  expect(notes('glow')).toContain('Glow Haus: the squad starts fresh on real numbers');
+  await app.request('/api/agents'); // once: later learnings stay
+  m('glow:market_analyst', 'learning', 'Real: mornings convert best');
+  await app.request('/api/agents');
+  expect(listMemory(db, 'glow')).toHaveLength(4);
+  await runManager(db).idle();
 });
