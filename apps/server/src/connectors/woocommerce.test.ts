@@ -45,7 +45,7 @@ test('WooCommerce sync pulls paid orders + products since the cursor and rebuild
   const { fetchFn, calls } = fakeWoo();
   await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
 
-  expect(calls.map((c) => `${c.url.pathname} ${c.url.searchParams.get('page')}`)).toEqual(['/store/wp-json/wc/v3/orders 1', '/store/wp-json/wc/v3/orders 2', '/store/wp-json/wc/v3/products 1']);
+  expect(calls.map((c) => `${c.url.pathname} ${c.url.searchParams.get('page')}`)).toEqual(['/store/wp-json/wc/v3/orders 1', '/store/wp-json/wc/v3/orders 2', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/settings/general/woocommerce_currency null']);
   expect(calls.every((c) => c.headers.get('authorization') === `Basic ${Buffer.from('ck_1:cs_2').toString('base64')}`)).toBe(true);
   expect(calls[0]!.url.searchParams.get('modified_after')).toBe('2024-10-26T18:00:00');
 
@@ -139,4 +139,25 @@ test('a partly refunded Woo order counts what the customer kept', async () => {
   await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
   expect(db.prepare("SELECT total, status FROM orders WHERE store_id = 'pawsome' AND id = 'woo-2001'").get()).toEqual({ total: 54.5, status: 'paid' });
   expect(db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()?.revenue).toBe(54.5);
+});
+
+test("orders a multi-currency plugin took in another currency are converted into the shop's own", async () => {
+  const db = setup();
+  db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-23', fetchedAt: NOW.toISOString(), rates: { EUR: 1, USD: 1.25 } }));
+  const fetchFn = (async (url: string) => {
+    const u = new URL(url);
+    if (u.pathname.endsWith('/woocommerce_currency')) return Response.json({ id: 'woocommerce_currency', value: 'EUR' });
+    if (u.pathname.endsWith('/orders')) {
+      return Response.json([
+        order('3001', 'processing', '20.00', true, { currency: 'USD', line_items: [{ product_id: 7, quantity: 1, total: '20.00' }] }), // newest first
+        order('3002', 'processing', '30.00', true),
+        order('3003', 'processing', '50.00', true, { currency: 'GBP' }), // no rate: left out
+      ], { headers: { 'x-wp-totalpages': '1' } });
+    }
+    return Response.json([], { headers: { 'x-wp-totalpages': '1' } });
+  }) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT currency FROM stores WHERE id = 'pawsome'").get()?.currency).toBe('EUR');
+  expect(db.prepare("SELECT id, total FROM orders WHERE store_id = 'pawsome' ORDER BY id").all().map((r) => [r.id, r.total])).toEqual([['woo-3001', 16], ['woo-3002', 30]]);
+  expect(db.prepare("SELECT revenue FROM order_items WHERE store_id = 'pawsome' AND order_id = 'woo-3001'").get()?.revenue).toBe(16);
 });

@@ -1,5 +1,6 @@
 import type { ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
+import { convertRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { cursorAt, rebuildRevenue, setOrderItems, switchToReal } from './common';
 
@@ -77,11 +78,18 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const changed = { modified_after: since, dates_are_gmt: 'true' };
     const orders = await all<WooOrder>('orders', changed);
     const products = await all<WooProduct>('products', changed);
+    // The shop's own currency (Settings → General), else the newest order's. A multi-currency plugin's orders in another
+    // currency are converted into it at today's ECB rate; one with no rate is left out rather than counted at par.
+    const setting = await fetchFn(`${site}/wp-json/wc/v3/settings/general/woocommerce_currency`, { headers: { authorization: auth } })
+      .then((r) => (r.ok ? (r.json() as Promise<{ value?: unknown }>) : undefined))
+      .catch(() => undefined);
+    const base = typeof setting?.value === 'string' && /^[A-Z]{3}$/.test(setting.value) ? setting.value : orders[0]?.currency;
+    const rates = new Map<string, number | undefined>();
+    for (const c of new Set(orders.map((o) => o.currency))) rates.set(c, !base || c === base ? 1 : await convertRate(db, c, base, fetchFn));
 
     tx(db, () => {
       switchToReal(db, storeId);
-      // ponytail: newest order's currency (orders come newest first); a multi-currency plugin's mixed orders aren't split.
-      if (orders[0]?.currency) db.prepare('UPDATE stores SET currency = ? WHERE id = ?').run(orders[0].currency, storeId);
+      if (base) db.prepare('UPDATE stores SET currency = ? WHERE id = ?').run(base, storeId);
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
@@ -101,14 +109,15 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       const days = new Set<string>();
       for (const o of orders) {
         // Unpaid (pending, on-hold bank transfers, failed, drafts) never counts; cancelled or refunded after payment is a refund.
-        if (!o.date_paid_gmt) continue;
+        const rate = rates.get(o.currency);
+        if (!o.date_paid_gmt || !rate) continue;
         const created = gmt(o.date_created_gmt);
         const day = o.date_created.slice(0, 10);
         days.add(day);
         const refunded = o.status === 'refunded' || o.status === 'cancelled' || o.status === 'trash';
-        const total = Math.max(0, Number(o.total) + (o.refunds ?? []).reduce((a, r) => a + Number(r.total), 0)); // net of partial refunds
+        const total = rate * Math.max(0, Number(o.total) + (o.refunds ?? []).reduce((a, r) => a + Number(r.total), 0)); // net of partial refunds
         ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', Number(o.cost_of_goods_sold?.total_value ?? 0), day);
-        setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total), cost: Number(li.cost_of_goods_sold?.value ?? 0) })));
+        setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total) * rate, cost: Number(li.cost_of_goods_sold?.value ?? 0) })));
       }
       rebuildRevenue(db, storeId, days);
       const next = cursorAt(now).toISOString().slice(0, 19);
