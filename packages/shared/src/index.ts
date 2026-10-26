@@ -639,6 +639,45 @@ export interface AgentRunDetail extends AgentRun {
   transcript: AgentEvent[];
 }
 
+/**
+ * Squad mission: a multi-agent plan over ordinary agent runs. A step starts once every step it depends on is done, as
+ * the child run (`parentRunId`) of the first one, with their final answers in its brief.
+ * GET /api/squad-missions?stores=a,b → SquadMission[] (newest first); GET /api/squad-missions/:id → SquadMission;
+ * POST /api/squad-missions NewSquadMission → 201 SquadMission (its first steps start right away);
+ * GET /api/squad-missions/templates → Omit<NewSquadMission, 'storeId'>[].
+ */
+export interface SquadMission {
+  id: string;
+  storeId: string;
+  title: string;
+  createdAt: string;
+  /** `done`: every step is; `blocked`: a step failed or was cancelled and nothing is running any more. */
+  status: 'running' | 'done' | 'blocked';
+  steps: SquadMissionStep[];
+}
+
+export interface SquadMissionStep {
+  id: string;
+  role: AgentRole;
+  task: string;
+  /** Step ids it waits on, always listed before it. */
+  dependsOn: string[];
+  /** `waiting`: not started (a step it needs isn't done, or `note` says why it couldn't start); `blocked`: a step it needs failed. Else its run's status. */
+  status: 'waiting' | 'blocked' | RunStatus;
+  /** Its run (GET /api/runs/:id) once started. */
+  runId?: string;
+  /** The first line of its final answer, once done. */
+  deliverable?: string;
+  /** Why it couldn't start yet (e.g. today's AI budget is used up); it's tried again as other runs finish. */
+  note?: string;
+}
+
+export interface NewSquadMission {
+  storeId: string;
+  title: string;
+  steps: { id: string; role: AgentRole; task: string; dependsOn?: string[] }[];
+}
+
 export interface RunUsage {
   inputTokens: number;
   outputTokens: number;

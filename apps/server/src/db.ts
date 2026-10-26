@@ -483,6 +483,17 @@ export const MIGRATIONS = [
   );
   CREATE UNIQUE INDEX ecosystem_active_desk ON ecosystem_seats (desk_id) WHERE archived = 0;
   `,
+  /* 36 (agents: squad missions, multi-agent plans over agent runs; statuses are read off the runs) */ `
+  CREATE TABLE squad_missions (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    steps_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    ended_at TEXT
+  );
+  CREATE INDEX squad_missions_by_store ON squad_missions (store_id, created_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

@@ -8,6 +8,12 @@ import {
   XP,
   ADS_JOB,
   IDLE_CAMPAIGN_STATUSES,
+  MISSION_TEMPLATES,
+  advanceMissions,
+  createMission,
+  getMission,
+  listMissions,
+  parseMission,
   createDefaultJobs,
   DEFAULT_JOBS,
   createRunManager,
@@ -244,6 +250,7 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent'> =
   },
   onRun: (run) => {
     publish({ type: 'run', run });
+    if (run.status === 'done' || run.status === 'error' || run.status === 'cancelled') advanceSquadMissions(db);
     if (run.status === 'done') award(db, { ref: `run:${run.id}`, amount: XP.runDone, reason: `Completed: ${run.task.slice(0, 80)}`, storeId: run.storeId, agentId: run.agentId });
     const agent = getAgent(db, run.agentId);
     const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
@@ -349,6 +356,19 @@ function startFresh(db: Db, store: Store) {
   }
 }
 
+/** Starts the mission steps that finished runs unblocked; the owner hears when a mission ends. */
+function advanceSquadMissions(db: Db) {
+  for (const m of advanceMissions(db, runManager(db).start)) {
+    const stuck = m.steps.find((s) => s.status === 'error' || s.status === 'cancelled');
+    notify(db, m.status === 'done'
+      ? { kind: 'agent_done', title: `Mission done: ${m.title}`, body: m.steps.at(-1)?.deliverable ?? `${m.steps.length} steps done.`, storeId: m.storeId, link: '/ecosystem' }
+      : {
+          kind: 'error', title: `Mission stuck: ${m.title}`, storeId: m.storeId, link: '/ecosystem',
+          body: `The ${stuck ? AGENT_ROLES[stuck.role].name : 'squad'}'s step ${stuck?.status === 'cancelled' ? 'was cancelled' : 'failed'}, so the steps that need it didn't start.`,
+        });
+  }
+}
+
 function activateConnectedStores(db: Db, runs: RunManager) {
   for (const store of listStores(db).filter((s) => s.connected)) {
     // A campaign that is on or spent in the last 30 days: an old account's archived ones give the review nothing to do.
@@ -389,6 +409,7 @@ export function agentRoutes(db: Db) {
   seedDemoXp(db, DEMO_STORES.map((s) => s.id));
   const runs = runManager(db);
   activateConnectedStores(db, runs);
+  advanceSquadMissions(db); // runs that ended while the app was closed
   // Default jobs that shipped after a store was made; a live store's owner hears about them (they use Claude usage).
   for (const store of listStores(db)) {
     const added = createDefaultJobs(db, store.id);
@@ -435,6 +456,18 @@ export function agentRoutes(db: Db) {
       }
       const run = runs.start(c.req.param('id'), body.task.trim(), body.resumeRunId);
       return typeof run === 'string' ? c.json({ error: run }, 409) : c.json(run, 201);
+    })
+    .get('/api/squad-missions/templates', (c) => c.json(MISSION_TEMPLATES))
+    .get('/api/squad-missions', (c) => c.json(listMissions(db, c.req.query('stores')?.split(',').filter(Boolean), limit(c.req.query('limit')))))
+    .get('/api/squad-missions/:id', (c) => {
+      const mission = getMission(db, c.req.param('id'));
+      return mission ? c.json(mission) : c.json({ error: 'Mission not found' }, 404);
+    })
+    .post('/api/squad-missions', async (c) => {
+      const input = parseMission(await c.req.json().catch(() => null));
+      if (typeof input === 'string') return c.json({ error: input }, 400);
+      if (!getStore(db, input.storeId)) return c.json({ error: 'Store not found' }, 404);
+      return c.json(createMission(db, input, runs.start), 201);
     })
     .get('/api/runs', (c) =>
       c.json(listRuns(db, { agentId: c.req.query('agent'), storeIds: c.req.query('stores')?.split(',').filter(Boolean), limit: limit(c.req.query('limit')) })),

@@ -55,9 +55,7 @@ export function createRunManager(opts: RunManagerOptions) {
 
   // In-flight runs die with the process; say so instead of leaving them "running" forever.
   const interrupted = db.prepare(`SELECT id, agent_id, task, resume, parent_run_id, created_at FROM agent_runs WHERE status IN ('queued', 'running')`).all();
-  db.prepare(`UPDATE agent_runs SET status = 'error', error = 'Interrupted by an app restart', ended_at = ? WHERE status IN ('queued', 'running')`).run(
-    new Date().toISOString(),
-  );
+  db.prepare(`UPDATE agent_runs SET status = 'error', error = ?, ended_at = ? WHERE status IN ('queued', 'running')`).run(INTERRUPTED, new Date().toISOString());
   expireApprovals(interrupted.map((r) => String(r.id)));
   trimOldTranscripts(db);
 
@@ -370,14 +368,21 @@ export function costToday(db: DatabaseSync, storeId: string, agentId?: string): 
 
 const ownUsedUp = (usd: number, stopped = false) => `${stopped ? "Stopped: today's" : "Today's"} budget for this agent ($${usd}) is used up. Raise it in its settings.`;
 
+/** The error of a run that was in flight when the app stopped (one from the last 6 hours runs again, as a new run). */
+export const INTERRUPTED = 'Interrupted by an app restart';
+
+/** The agent's final answer: the text after its last tool step. */
+export function finalText(transcript: AgentEvent[]): string {
+  const lastTool = transcript.findLastIndex((e) => e.type === 'tool_call' || e.type === 'tool_result');
+  return transcript.slice(lastTool + 1).map((e) => (e.type === 'text_delta' ? e.text : '')).join('').trim();
+}
+
 /**
- * One line for the activity feed: the first sentence of the agent's final answer (the text after its last tool step),
- * skipping headings and list markers. Undefined when the run ended without a final answer.
+ * One line for the activity feed: the first sentence of the agent's final answer, skipping headings and list markers.
+ * Undefined when the run ended without a final answer.
  */
 export function runGist(transcript: AgentEvent[], max = 160): string | undefined {
-  const lastTool = transcript.findLastIndex((e) => e.type === 'tool_call' || e.type === 'tool_result');
-  const text = transcript.slice(lastTool + 1).map((e) => (e.type === 'text_delta' ? e.text : '')).join('');
-  const line = text
+  const line = finalText(transcript)
     .split('\n')
     .map((l) => l.replace(/[*_`]/g, '').replace(/^\s*(?:[-•>]|\d+\.)\s+/, '').trim())
     .find((l) => l && !l.startsWith('#') && !/^[-=|: ]+$/.test(l));

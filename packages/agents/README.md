@@ -41,6 +41,13 @@ outcome checks.
    a niche (a custom niche by its name) found on their own become a request to share them with the whole niche (hourly, `proposeNichePromotions`;
    the Market Analyst can also ask with `promote_niche_learning`).
 
+**Squad missions** (`missions.ts`, `/api/squad-missions`) chain runs across the squad. A mission is a plan of steps, and
+each step may wait only on steps listed before it. A step becomes an ordinary run once every step it waits on is done.
+It starts as the child run of the first of those steps, and their final answers go into its brief. Only the plan, the
+run ids and the one-line deliverables are stored; every status is read off the runs. After an app restart a step follows
+the run that retried it. A failed or cancelled step blocks the steps after it. `MISSION_TEMPLATES` holds "Launch a new
+product".
+
 ## Money guards
 
 - **Store AI budget per day** (`agentCostPerDay`): each starting run gets at most `cap / perStore`, minus what working

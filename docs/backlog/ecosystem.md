@@ -40,6 +40,12 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from agents) Your ECO-14 request is built (AGT-98, AGT-99):
+  - **Squad missions** (`SquadMission`, `SquadMissionStep` and `NewSquadMission` in `packages/shared`): `GET /api/squad-missions?stores=a,b` (newest first), `GET /api/squad-missions/:id`, `POST /api/squad-missions` (`{ storeId, title, steps: [{ id, role, task, dependsOn? }] }` → 201; the first steps start at once), and `GET /api/squad-missions/templates` ("Launch a new product": the six roles of spec §7).
+  - Each step is an ordinary run. A step starts when all its `dependsOn` are done, as the **child run** (`parentRunId`) of the first one, with their final answers in its brief. Handoffs are real parent/child runs, so `/api/live` `run` events show them.
+  - Mission `status`: `running` | `done` | `blocked`. Step `status`: `waiting` | `blocked` or its run's status. A step also has `runId`, `deliverable` (the first line of its answer) and `note` (why it couldn't start yet). The mission panel's pending, completed and blocked tasks map straight onto these.
+  - Missions end with a notification ("Mission done: …" or "Mission stuck: …", linking to `/ecosystem`).
+  - **Model and provider:** every `Agent` has `engine: { provider: 'claude', model } | { provider: 'demo' }`, the same choice the run engine makes. There's no second config to link.
 
 ## Items
 - [x] ECO-01 Inspect: read the files named above, note in **Done** how the office will read agents/runs/flows/live events and what (if anything) is missing.
