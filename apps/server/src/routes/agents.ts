@@ -168,11 +168,15 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
       .map((r) => ({ competitor: String(r.name), ...(JSON.parse(String(r.data_json)) as AdSnapshotData) })),
   }),
   recordFind: async (find) => {
-    const id = `find-${randomUUID().slice(0, 8)}`;
+    // The daily scan finds the same products again: a repeat refreshes the earlier find instead of piling up copies.
+    const prior = db.prepare(`SELECT id FROM research_products WHERE niche = ? AND id LIKE 'find-%' AND lower(title) = lower(?)`).get(find.niche, find.title)?.id;
+    const id = prior ? String(prior) : `find-${randomUUID().slice(0, 8)}`;
     db.prepare(
-      'INSERT INTO research_products (id, title, category, niche, image, source, cost, price, compare_at, trend, competition, shipping_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      `INSERT INTO research_products (id, title, category, niche, image, source, cost, price, compare_at, trend, competition, shipping_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET category = excluded.category, image = coalesce(excluded.image, image), source = excluded.source, cost = excluded.cost, price = excluded.price,
+         compare_at = excluded.compare_at, trend = excluded.trend, competition = excluded.competition, shipping_days = excluded.shipping_days`,
     ).run(id, find.title, find.category, find.niche, find.image ?? null, find.source, find.cost, find.price, find.compareAt, find.trend, find.competition, find.shippingDays);
-    return (await (await researchRoutes(db).request(`/api/research/${id}`)).json()) as ResearchProduct;
+    return { ...((await (await researchRoutes(db).request(`/api/research/${id}`)).json()) as ResearchProduct), ...(prior ? { repeat: true } : {}) };
   },
   searchSuppliers: async (q, limit) => (await searchCj(db, loadKey(dataDir()), q, limit)) ?? demoSupplierProducts(db, q, limit),
   research: async (q) => {

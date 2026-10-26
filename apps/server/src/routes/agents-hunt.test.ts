@@ -83,6 +83,13 @@ test('record_product_find puts a web find in the feed with its AI score', async 
   expect(result).toMatchObject({ isError: false, output: expect.stringMatching(/^Added to the research feed as find-\w+: AI score \d+/) });
   const feed = (await (await app.request('/api/research?q=collapsible')).json()) as { items: ResearchProduct[] };
   expect(feed.items[0]).toMatchObject({ title: 'Collapsible Dog Bowl Set', niche: 'pet', source: 'amazon', score: expect.any(Number) });
+
+  // Found again the next day: the same row gets the new numbers, no copy.
+  const again: AgentEvent[] = [];
+  for await (const e of runAgent(input, fakeEngine(() => [{ call: 'record_product_find', input: { ...find, title: 'collapsible dog bowl set', trend: 120 } }]))) again.push(e);
+  expect(again.find((e) => e.type === 'tool_result')).toMatchObject({ output: expect.stringMatching(new RegExp(`^Already in the research feed as ${feed.items[0]!.id}; refreshed its numbers: AI score`)) });
+  const now = (await (await app.request('/api/research?q=collapsible')).json()) as { items: ResearchProduct[] };
+  expect(now.items.filter((p) => p.id.startsWith('find-')).map((p) => [p.id, p.trend])).toEqual([[feed.items[0]!.id, 120]]);
 });
 
 test('search_suppliers gives supplier prices: demo listings without CJ, none for an unknown product', async () => {
