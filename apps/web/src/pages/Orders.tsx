@@ -54,6 +54,7 @@ const SEVERITY = { high: 0, medium: 1, low: 2 };
  * among open and in-transit orders (oldest 200 of each) that the agent hasn't flagged yet.
  */
 function Issues({ ids }: { ids: string[] }) {
+  const { stores } = useStoreSelection();
   const flagged = useOrderIssues(ids);
   const open = useOrders(ids, { fulfillment: 'unfulfilled', sort: 'createdAt', dir: 'asc', limit: 200 });
   const transit = useOrders(ids, { fulfillment: 'in_transit', sort: 'createdAt', dir: 'asc', limit: 200 });
@@ -70,7 +71,7 @@ function Issues({ ids }: { ids: string[] }) {
     const seen = new Set(flagged.data?.map((i) => `${i.storeId}:${i.orderId}`));
     const rows: Row[] = [
       ...agent.map((i) => ({ key: i.id, agent: i })),
-      ...orderIssues([...(open.data?.items ?? []), ...(transit.data?.items ?? [])], Date.now())
+      ...orderIssues([...(open.data?.items ?? []), ...(transit.data?.items ?? [])], Date.now(), new Set(stores.filter((s) => s.platform === 'amazon').map((s) => s.id)))
         .filter((i) => !seen.has(`${i.order.storeId}:${i.order.id}`))
         .map((i) => ({ key: `${i.order.storeId}:${i.order.id}`, check: i })),
     ];

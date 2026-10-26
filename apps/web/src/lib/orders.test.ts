@@ -27,4 +27,22 @@ describe('orderIssues', () => {
       ['refunded', 'refunded', 'Refunded, but still open at DSers'],
     ]);
   });
+
+  it("leaves Amazon's cancellations alone and sends a late FBA order to Seller Central", () => {
+    const amazon = new Set(['amz']);
+    const issues = orderIssues(
+      [
+        o('cancelled-fbm', 5, { storeId: 'amz', status: 'refunded' }),
+        o('cancelled-fba', 5, { storeId: 'amz', status: 'refunded', supplier: 'Amazon FBA' }),
+        o('late-fba', 50, { storeId: 'amz', supplier: 'Amazon FBA' }),
+        o('late-fbm', 60, { storeId: 'amz' }),
+      ],
+      now,
+      amazon,
+    );
+    expect(issues.map((i) => [i.order.id, i.kind, i.detail])).toEqual([
+      ['late-fbm', 'late', 'Not shipped after 60 h'],
+      ['late-fba', 'late', "Amazon hasn't shipped it after 50 h: open a case in Seller Central"],
+    ]);
+  });
 });
