@@ -130,3 +130,12 @@ test('dayFraction reaches 1 at the end of a 23-hour DST day', () => {
   expect(dayFraction('2026-03-08', new Date('2026-03-09T00:00:00').getTime() - 60_000)).toBeGreaterThan(0.999);
   expect(dayFraction('2026-10-26', new Date('2026-10-26T12:00:00').getTime())).toBeCloseTo(0.5, 5);
 });
+
+test("the seeded budget request quotes the campaign's seeded budget, so approving it isn't refused as stale", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const budget = Number(db.prepare("SELECT daily_budget FROM campaigns WHERE id = 'pawsome-c1'").get()?.daily_budget);
+  const a = db.prepare("SELECT title, action_json FROM approvals WHERE id = 'demo-appr-2'").get()!;
+  expect(JSON.parse(String(a.action_json)).payload).toEqual({ campaignId: 'pawsome-c1', from: budget, to: Math.round(budget * 1.2) });
+  expect(a.title).toBe(`Raise daily budget 20% ($${budget} → $${Math.round(budget * 1.2)})`);
+});

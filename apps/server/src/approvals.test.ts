@@ -16,7 +16,7 @@ const list = async (app: ReturnType<typeof createApp>, q = '') => (await (await 
 test('lists pending approvals newest first, filterable by store', async () => {
   const { app } = setup();
   const pending = await list(app, '?status=pending');
-  expect(pending.map((a) => a.title)).toEqual(['Pause "Spark Ads · UGC"', 'Raise daily budget 20% ($60 → $72)', 'Add 3 trending products to the store']);
+  expect(pending.map((a) => a.title)).toEqual(['Pause "Spark Ads · UGC"', expect.stringMatching(/^Raise daily budget 20% \(\$\d+ → \$\d+\)$/), 'Add 3 trending products to the store']);
   expect(pending[0]).toMatchObject({ storeId: 'peak', agentId: 'peak:ad_strategist', status: 'pending', action: { kind: 'ads.pause_campaign', payload: { network: 'tiktok', campaignId: 'peak-c3' } } });
   expect((await list(app, '?stores=glow')).map((a) => a.storeId)).toEqual(['glow']);
   expect((await app.request('/api/approvals?status=maybe')).status).toBe(400);

@@ -201,6 +201,17 @@ export function advanceDemoDay(db: Db, storeId: string, now = new Date()): Store
 }
 
 /** First-run catalog for a demo store: campaigns, products, last week's orders. */
+/** The seeded requests; the budget one quotes pawsome-c1's seeded budget (approving checks that it hasn't moved). */
+function approvals(db: Db) {
+  const budget = db.prepare("SELECT daily_budget FROM campaigns WHERE store_id = 'pawsome' AND id = 'pawsome-c1'").get()?.daily_budget;
+  if (budget == null) return APPROVALS;
+  const from = Number(budget);
+  const to = Math.round(from * 1.2);
+  return APPROVALS.map((a) =>
+    a.action.kind === 'ads.set_budget' ? { ...a, title: `Raise daily budget 20% ($${from} → $${to})`, action: { ...a.action, payload: { ...a.action.payload, from, to } } } : a,
+  );
+}
+
 function seedCatalog(db: Db, storeId: string, today: string) {
   const r = mulberry32(hash(storeId) ^ 0x5eed);
   const camp = db.prepare('INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES (?, ?, ?, ?, ?, ?)');
@@ -266,11 +277,11 @@ export function seedDemo(db: Db, today = localDate()) {
         seedCatalog(db, s.id, today);
       }
       const appr = db.prepare('INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-      APPROVALS.forEach((a, i) => appr.run(`demo-appr-${i + 1}`, a.storeId, `${a.storeId}:${a.role}`, a.title, a.reason, JSON.stringify(a.action), 'pending', new Date(Date.now() - (i + 1) * 3600000).toISOString()));
+      approvals(db).forEach((a, i) => appr.run(`demo-appr-${i + 1}`, a.storeId, `${a.storeId}:${a.role}`, a.title, a.reason, JSON.stringify(a.action), 'pending', new Date(Date.now() - (i + 1) * 3600000).toISOString()));
     }
     // Seeded requests still waiting get the current wording and payload (earlier seeds had kinds nothing executes).
     const fix = db.prepare("UPDATE approvals SET title = ?, action_json = ? WHERE id = ? AND status = 'pending' AND store_id IN (SELECT id FROM stores WHERE demo = 1)");
-    APPROVALS.forEach((a, i) => fix.run(a.title, JSON.stringify(a.action), `demo-appr-${i + 1}`));
+    approvals(db).forEach((a, i) => fix.run(a.title, JSON.stringify(a.action), `demo-appr-${i + 1}`));
     for (const { id } of db.prepare('SELECT id FROM stores WHERE demo = 1').all()) topUp(db, String(id), today);
   });
 }
