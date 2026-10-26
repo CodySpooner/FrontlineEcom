@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
-import type { Product } from '@frontline/shared';
+import type { AnalyticsSummary, Product, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { UnitCosts } from './Analytics';
+import { FunnelPanel, UnitCosts } from './Analytics';
 
 const product = (id: string, cost: number): Product => ({ id, storeId: 'etsy-shop', title: `Mug ${id}`, price: 24, cost, inventory: 10, status: 'active', margin: 0 });
 
@@ -37,5 +37,25 @@ describe('Unit costs', () => {
     fireEvent.change(await screen.findByLabelText('Unit cost of Mug m1'), { target: { value: '3' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save cost' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Shopify keeps unit costs');
+  });
+});
+
+describe('Conversion funnel with no sessions', () => {
+  const s = { funnel: { sessions: 0, addToCarts: 0, checkouts: 0, orders: 12 } } as AnalyticsSummary;
+  const store = (platform: Store['platform'], connected: boolean): Store => ({ id: 's1', name: 'Shop', platform, niche: 'pet', currency: 'USD', timezone: 'UTC', color: '#f00', connected });
+
+  it("points a connected Shopify store at Shopify's own reports as well as GA4", async () => {
+    stubApi((url) => (url.startsWith('/api/stores') ? [store('shopify', true)] : []));
+    renderApp(<FunnelPanel s={s} />);
+    expect(await screen.findByText(/read_reports/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Connect GA4' })).toBeTruthy();
+  });
+
+  it('only mentions GA4 when no connected Shopify store is in view', async () => {
+    stubApi((url) => (url.startsWith('/api/stores') ? [store('shopify', false)] : []));
+    renderApp(<FunnelPanel s={s} />);
+    expect(await screen.findByRole('link', { name: 'Connect GA4' })).toBeTruthy();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText(/read_reports/)).toBeNull();
   });
 });

@@ -114,8 +114,11 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
   </div>
 );
 
-function FunnelPanel({ s }: { s: AnalyticsSummary }) {
+export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
   const f = s.funnel;
+  const { stores, has } = useStoreSelection();
+  // Without GA4, a connected Shopify store's sessions come from ShopifyQL, which needs the app's read_reports scope.
+  const shopify = stores.some((x) => has(x.id) && x.connected && x.platform === 'shopify');
   const steps: [string, number][] = [
     ['Sessions', f.sessions],
     ['Added to cart', f.addToCarts],
@@ -126,11 +129,11 @@ function FunnelPanel({ s }: { s: AnalyticsSummary }) {
     <Panel title="Conversion Funnel" sub={f.sessions ? `${pct(rate(f.orders, f.sessions))} of sessions place an order` : `${num(f.orders)} orders`}>
       {!f.sessions ? (
         <p className="text-[13px] text-muted">
-          Sessions, carts and checkouts come from Google Analytics.{' '}
+          Sessions, carts and checkouts come from Google Analytics{shopify && ", or for a Shopify store from Shopify's own reports"}.{' '}
           <Link to="/integrations" className="text-red hover:underline">
             Connect GA4
-          </Link>{' '}
-          to see where shoppers drop off.
+          </Link>
+          {shopify && ', or add the read_reports scope (with Level 2 protected customer data) to your Shopify app,'} to see where shoppers drop off.
         </p>
       ) : (
         <ol className="grid gap-4">
