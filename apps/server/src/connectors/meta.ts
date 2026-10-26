@@ -1,8 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
-import { convertRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { rebuildAdSpend, switchToReal, type CampaignChange } from './common';
+import { adRate, cents, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -14,7 +13,6 @@ const ATTRIBUTION_DAYS = 28;
 const CHUNK_DAYS = 90;
 /** Budgets are in the currency's minor unit (cents), except these, which have none (Marketing API currency offset 1). */
 const ZERO_DECIMAL = new Set(['CLP', 'COP', 'CRC', 'HUF', 'ISK', 'IDR', 'JPY', 'KRW', 'PYG', 'TWD', 'VND']);
-const cents = (n: number) => Math.round(n * 100) / 100;
 
 type Fetch = typeof fetch;
 type Action = { action_type: string; value: string };
@@ -75,17 +73,10 @@ async function edge<T>(url: string, token: string, fetchFn: Fetch): Promise<T[]>
   return out;
 }
 
-/**
- * Ad numbers are kept in the store's currency: the factor from the ad account's currency into it, and the account
- * currency's budget units (minor units, or 1 where it has none).
- * ponytail: today's ECB rate for every day; past spend isn't re-priced at its own day's rate.
- */
+/** The factor from the ad account's currency into the store's, and its budget units (minor units, or 1 where it has none). */
 async function accountMoney(db: Db, storeId: string, act: string, token: string, fetchFn: Fetch) {
   const { currency } = await graph<{ currency: string }>(`${GRAPH}/${act}?fields=currency`, token, fetchFn);
-  const store = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency);
-  const rate = await convertRate(db, currency, store, fetchFn);
-  if (!rate) throw new Error(`Meta: no exchange rate from the ad account's ${currency} to the store's ${store}`);
-  return { rate, units: ZERO_DECIMAL.has(currency) ? 1 : 100 };
+  return { rate: await adRate(db, storeId, currency, fetchFn, 'Meta'), units: ZERO_DECIMAL.has(currency) ? 1 : 100 };
 }
 
 export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {

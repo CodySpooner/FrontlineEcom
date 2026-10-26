@@ -15,7 +15,7 @@ const SA = JSON.stringify({ client_email: 'frontline@proj.iam.gserviceaccount.co
 
 type Call = { url: string; headers: Headers; body: string };
 /** Fake Google: token endpoint, Ads search (metrics paged once), GA4 runReport. */
-function fakeGoogle(opts: { tokenError?: unknown; adsError?: unknown } = {}) {
+function fakeGoogle(opts: { tokenError?: unknown; adsError?: unknown; currency?: string } = {}) {
   const calls: Call[] = [];
   const fetchFn = (async (url: string, init: RequestInit) => {
     const body = String(init.body);
@@ -24,7 +24,7 @@ function fakeGoogle(opts: { tokenError?: unknown; adsError?: unknown } = {}) {
     if (url.includes('googleads')) {
       if (opts.adsError) return Response.json(opts.adsError, { status: 403 });
       const { query, pageToken } = JSON.parse(body);
-      if (!query.includes('segments.date')) return Response.json({ results: [{ campaign: { id: '301', name: 'Search - Brand', status: 'ENABLED' }, campaignBudget: { amountMicros: '25000000' } }, { campaign: { id: '302', name: 'PMax', status: 'REMOVED' } }] });
+      if (!query.includes('segments.date')) return Response.json({ results: [{ campaign: { id: '301', name: 'Search - Brand', status: 'ENABLED' }, campaignBudget: { amountMicros: '25000000' }, customer: { currencyCode: opts.currency ?? 'USD' } }, { campaign: { id: '302', name: 'PMax', status: 'REMOVED' } }] });
       const row = (id: string, date: string, cost: string) => ({ campaign: { id }, segments: { date }, metrics: { costMicros: cost, conversions: 2.6, conversionsValue: 130.5, clicks: '40', impressions: '900' } });
       return pageToken
         ? Response.json({ results: [row('302', '2026-10-25', '5000000')] })
@@ -108,4 +108,13 @@ test('auth and API errors show on the integration without leaking secrets, and k
 
   await syncGoogleAds(db, key, 'glow', fakeGoogle({ adsError: { error: { message: 'The caller does not have permission', details: [{ errors: [{ message: 'User doesn\'t have permission to access customer.' }] }] } } }).fetchFn, NOW);
   expect(db.prepare("SELECT error FROM integrations WHERE id = 'google_ads:glow'").get()).toEqual({ error: "Google Ads: User doesn't have permission to access customer." });
+});
+
+test('a USD Google Ads account on a euro store: cost, conversion value and budgets are converted into euros', async () => {
+  const { db } = setup();
+  db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'glow'").run();
+  db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-26', fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1.25, JPY: 160 } }));
+  await syncGoogleAds(db, key, 'glow', fakeGoogle().fetchFn, NOW);
+  expect({ ...db.prepare("SELECT spend, revenue FROM campaign_daily WHERE network = 'google' AND campaign_id = '301' AND date = '2026-10-26'").get() }).toEqual({ spend: 8, revenue: 104.4 });
+  expect(db.prepare("SELECT daily_budget AS b FROM campaigns WHERE network = 'google' AND id = '301'").get()?.b).toBe(20);
 });

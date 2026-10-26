@@ -23,6 +23,7 @@ function fakeTikTok(error?: { code: number; message: string }) {
     expect(new Headers(init.headers).get('access-token')).toBe(TOKEN);
     if (error) return Response.json({ ...error, data: {} });
     const page = Number(u.searchParams.get('page'));
+    if (u.pathname.endsWith('/advertiser/info/')) return Response.json({ code: 0, message: 'OK', data: { list: [{ advertiser_id: '7001', currency: 'USD' }] } });
     if (u.pathname.endsWith('/campaign/get/')) return Response.json({ code: 0, message: 'OK', data: { list: [{ campaign_id: '401', campaign_name: 'Spark - UGC', operation_status: 'ENABLE', budget: 80, budget_mode: 'BUDGET_MODE_DAY' }], page_info: { page: 1, total_page: 1 } } });
     const first = calls.filter((c) => c.pathname.endsWith('/report/integrated/get/')).length <= 2;
     const list = !first ? [] : page === 1 ? [report('401', '2026-10-25', '40.00', '2.5')] : [report('499', '2026-10-25', '10.00', '-')];

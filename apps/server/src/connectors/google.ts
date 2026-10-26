@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { rebuildAdSpend, switchToReal, type CampaignChange } from './common';
+import { adRate, cents, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
 export const GOOGLE_ADS_API_VERSION = 'v26';
@@ -22,6 +22,7 @@ interface AdsRow {
   campaignBudget?: { amountMicros?: string };
   segments?: { date: string };
   metrics?: { costMicros?: string; conversions?: number; conversionsValue?: number; clicks?: string; impressions?: string };
+  customer?: { currencyCode?: string };
 }
 
 const STATUS: Record<string, string> = { ENABLED: 'active', PAUSED: 'paused', REMOVED: 'archived' };
@@ -104,7 +105,8 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
     const rows = await search(
       `SELECT campaign.id, segments.date, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.clicks, metrics.impressions FROM campaign WHERE segments.date BETWEEN '${start}' AND '${today}'`,
     );
-    const campaigns = await search('SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros FROM campaign');
+    const campaigns = await search('SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, customer.currency_code FROM campaign');
+    const rate = await adRate(db, storeId, campaigns[0]?.customer?.currencyCode, fetchFn, 'Google Ads');
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -112,7 +114,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
         `INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('google', ?, ?, ?, ?, ?)
          ON CONFLICT (network, id) DO UPDATE SET name = excluded.name, status = excluded.status, daily_budget = excluded.daily_budget`,
       );
-      for (const { campaign: c, campaignBudget } of campaigns) camp.run(c.id, storeId, c.name ?? c.id, STATUS[c.status ?? ''] ?? (c.status ?? 'unknown').toLowerCase(), micros(campaignBudget?.amountMicros));
+      for (const { campaign: c, campaignBudget } of campaigns) camp.run(c.id, storeId, c.name ?? c.id, STATUS[c.status ?? ''] ?? (c.status ?? 'unknown').toLowerCase(), cents(micros(campaignBudget?.amountMicros) * rate));
       const day = db.prepare(
         `INSERT INTO campaign_daily (network, campaign_id, date, spend, revenue, purchases, clicks, impressions) VALUES ('google', ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (network, campaign_id, date) DO UPDATE SET spend = excluded.spend, revenue = excluded.revenue, purchases = excluded.purchases,
@@ -122,7 +124,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       for (const r of rows) {
         const m = r.metrics ?? {};
         dates.add(r.segments!.date);
-        day.run(r.campaign.id, r.segments!.date, micros(m.costMicros), Number(m.conversionsValue ?? 0), Math.round(Number(m.conversions ?? 0)), Number(m.clicks ?? 0), Number(m.impressions ?? 0));
+        day.run(r.campaign.id, r.segments!.date, cents(micros(m.costMicros) * rate), cents(Number(m.conversionsValue ?? 0) * rate), Math.round(Number(m.conversions ?? 0)), Number(m.clicks ?? 0), Number(m.impressions ?? 0));
       }
       rebuildAdSpend(db, storeId, dates);
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
@@ -185,11 +187,17 @@ export async function updateGoogleCampaign(db: Db, key: Buffer, storeId: string,
     await post('campaigns:mutate', { operations: [{ update: { resourceName: `customers/${customer}/campaigns/${campaignId}`, status: change.status }, updateMask: 'status' }] });
     return;
   }
-  type Row = { campaign: { campaignBudget?: string }; campaignBudget?: { explicitlyShared?: boolean } };
-  const { results } = await post<{ results?: Row[] }>('googleAds:search', { query: `SELECT campaign.campaign_budget, campaign_budget.explicitly_shared FROM campaign WHERE campaign.id = ${campaignId}` });
+  type Row = { campaign: { campaignBudget?: string }; campaignBudget?: { explicitlyShared?: boolean }; customer?: { currencyCode?: string } };
+  const { results } = await post<{ results?: Row[] }>('googleAds:search', {
+    query: `SELECT campaign.campaign_budget, campaign_budget.explicitly_shared, customer.currency_code FROM campaign WHERE campaign.id = ${campaignId}`,
+  });
   const row = results?.[0];
   if (!row?.campaign.campaignBudget) throw new Error('Google Ads: campaign not found in this account');
   if (row.campaignBudget?.explicitlyShared) throw new Error('Google Ads: this campaign uses a shared budget; change it in Google Ads so the other campaigns sharing it are not affected');
-  // Budgets are whole cents (micros in steps of 10,000).
-  await post('campaignBudgets:mutate', { operations: [{ update: { resourceName: row.campaign.campaignBudget, amountMicros: String(Math.round(change.dailyBudget * 100) * 10_000) }, updateMask: 'amount_micros' }] });
+  // The budget comes in the store's currency (as synced); Google wants the account's, in whole minor units (cents, or yen).
+  const currency = row.customer?.currencyCode;
+  const amount = change.dailyBudget / (await adRate(db, storeId, currency, fetchFn, 'Google Ads'));
+  const digits = currency ? (new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2) : 2;
+  const amountMicros = String(Math.round(amount * 10 ** digits) * 10 ** (6 - digits));
+  await post('campaignBudgets:mutate', { operations: [{ update: { resourceName: row.campaign.campaignBudget, amountMicros }, updateMask: 'amount_micros' }] });
 }

@@ -9,7 +9,7 @@ import { pauseCampaign, setCampaignBudget } from './ads';
 const key = randomBytes(32);
 const IDS = { meta: '120210000000001', google: '987654', tiktok: '1780000000000' } as const;
 
-function setup({ sharedBudget = false, metaError = '', metaCurrency = 'USD' } = {}) {
+function setup({ sharedBudget = false, metaError = '', metaCurrency = 'USD', adCurrency = 'USD' } = {}) {
   const db = openDb();
   seedDemo(db, '2026-10-26');
   saveIntegration(db, key, { kind: 'meta_ads', storeId: 'glow', values: { adAccountId: 'act_1', accessToken: 'meta-token' } });
@@ -24,7 +24,8 @@ function setup({ sharedBudget = false, metaError = '', metaCurrency = 'USD' } = 
     if (url.endsWith('?fields=currency')) return Response.json({ id: 'act_1', currency: metaCurrency });
     if (url.startsWith('https://graph.facebook.com/')) return metaError ? Response.json({ error: { message: 'x', error_user_msg: metaError } }, { status: 400 }) : Response.json({ success: true });
     if (url === 'https://oauth2.googleapis.com/token') return Response.json({ access_token: 'g-access' });
-    if (url.endsWith('googleAds:search')) return Response.json({ results: [{ campaign: { campaignBudget: 'customers/1234567890/campaignBudgets/555' }, campaignBudget: { explicitlyShared: sharedBudget } }] });
+    if (url.endsWith('googleAds:search')) return Response.json({ results: [{ campaign: { campaignBudget: 'customers/1234567890/campaignBudgets/555' }, campaignBudget: { explicitlyShared: sharedBudget }, customer: { currencyCode: adCurrency } }] });
+    if (url.includes('/advertiser/info/')) return Response.json({ code: 0, message: 'OK', data: { list: [{ advertiser_id: '7001', currency: adCurrency }] } });
     if (url.endsWith(':mutate')) return Response.json({ results: [{}] });
     return Response.json({ code: 0, message: 'OK', data: {} });
   }) as typeof fetch;
@@ -54,7 +55,8 @@ test('budget and pause writes per network', async () => {
   calls.length = 0;
   await setCampaignBudget(db, key, 'glow', 'tiktok', IDS.tiktok, 45.5, fetchFn);
   await pauseCampaign(db, key, 'glow', 'tiktok', IDS.tiktok, fetchFn);
-  expect(calls.map((c) => [c.url.split('/v1.3')[1], c.headers.get('access-token'), JSON.parse(c.body)])).toEqual([
+  expect(calls.map((c) => [c.url.split('/v1.3')[1], c.headers.get('access-token'), c.body && JSON.parse(c.body)])).toEqual([
+    ['/advertiser/info/?advertiser_ids=%5B%227001%22%5D&fields=%5B%22currency%22%5D', 'tt-token', ''],
     ['/campaign/update/', 'tt-token', { advertiser_id: '7001', campaign_id: IDS.tiktok, budget: 45.5 }],
     ['/campaign/status/update/', 'tt-token', { advertiser_id: '7001', campaign_ids: [IDS.tiktok], operation_status: 'DISABLE' }],
   ]);
@@ -99,4 +101,15 @@ test("a Meta budget in the store's currency is converted to the ad account's bef
   db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-26', fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1.25 } }));
   await setCampaignBudget(db, key, 'glow', 'meta', IDS.meta, 72, fetchFn); // 72 EUR = 90 USD
   expect(calls.map((c) => c.body)).toEqual(['', 'daily_budget=9000']);
+});
+
+test('Google and TikTok budgets in the store currency are converted to the ad account currency (yen in whole units)', async () => {
+  const { db, calls, fetchFn } = setup({ adCurrency: 'JPY' });
+  db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'glow'").run();
+  db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-26', fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1.25, JPY: 160 } }));
+  await setCampaignBudget(db, key, 'glow', 'google', IDS.google, 72.13, fetchFn); // 11540.8 JPY
+  const mutate = calls.find((c) => c.url.endsWith('campaignBudgets:mutate'))!;
+  expect(JSON.parse(mutate.body).operations[0].update.amountMicros).toBe('11541000000');
+  await setCampaignBudget(db, key, 'glow', 'tiktok', IDS.tiktok, 50, fetchFn);
+  expect(JSON.parse(calls.find((c) => c.url.endsWith('/campaign/update/'))!.body).budget).toBe(8000);
 });

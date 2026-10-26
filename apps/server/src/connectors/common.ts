@@ -1,4 +1,5 @@
 import type { Db } from '../db';
+import { convertRate } from '../fx';
 
 /** Wipes a demo store's generated rows and marks it connected. Called by the first successful real sync of any connector. */
 export function switchToReal(db: Db, storeId: string) {
@@ -57,6 +58,21 @@ export function setOrderItems(db: Db, storeId: string, orderId: string, items: O
 
 /** An approved change to a live campaign: a new daily budget (account currency) or a pause. */
 export type CampaignChange = { dailyBudget: number } | { status: 'PAUSED' };
+
+/**
+ * Ad numbers are kept in the store's currency: the factor from the ad account's currency into it (1 when they match or
+ * the account's isn't known). Throws when the ECB publishes no rate for one of them.
+ * ponytail: today's rate for every day; past spend isn't re-priced at its own day's rate.
+ */
+export async function adRate(db: Db, storeId: string, accountCurrency: string | undefined, fetchFn: typeof fetch, network: string) {
+  const store = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency);
+  const rate = await convertRate(db, accountCurrency ?? store, store, fetchFn);
+  if (!rate) throw new Error(`${network}: no exchange rate from the ad account's ${accountCurrency} to the store's ${store}`);
+  return rate;
+}
+
+/** Money as cents (2 decimals). */
+export const cents = (n: number) => Math.round(n * 100) / 100;
 
 /**
  * For syncs: a rate-limited response (429) waits Retry-After (1 s if missing, at most a minute) and asks again, up to 5

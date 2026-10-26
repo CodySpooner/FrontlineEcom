@@ -3,7 +3,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { rebuildAdSpend, rebuildRevenue, setOrderItems, switchToReal, type CampaignChange } from './common';
+import { adRate, cents, rebuildAdSpend, rebuildRevenue, setOrderItems, switchToReal, type CampaignChange } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -43,6 +43,16 @@ async function pages<T>(path: string, params: Record<string, string>, token: str
   return out;
 }
 
+/** The advertiser account's currency (report and budget amounts are in it). */
+async function advertiserCurrency(advertiser: string, token: string, fetchFn: Fetch) {
+  const q = new URLSearchParams({ advertiser_ids: JSON.stringify([advertiser]), fields: JSON.stringify(['currency']) });
+  const res = await fetchFn(`${ADS_API}/advertiser/info/?${q}`, { headers: { 'Access-Token': token } });
+  const body = (await res.json().catch(() => ({}))) as { code?: number; message?: string; data?: { list?: { currency?: string }[] } };
+  if (body.code !== undefined && body.code >= 40100 && body.code < 40200) throw new Error('TikTok rejected the access token; generate a new one for the advertiser account');
+  if (!res.ok || body.code !== 0) throw new Error(`TikTok Ads: ${body.message ?? `HTTP ${res.status}`}`);
+  return body.data?.list?.[0]?.currency;
+}
+
 export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `tiktok_ads:${storeId}`;
   const creds = getCredentials(db, key, 'tiktok_ads', storeId);
@@ -77,6 +87,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
       );
     }
     const campaigns = await pages<CampaignRow>('/campaign/get/', { advertiser_id: advertiser }, token, fetchFn);
+    const rate = await adRate(db, storeId, await advertiserCurrency(advertiser, token, fetchFn), fetchFn, 'TikTok Ads');
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -84,7 +95,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
         `INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('tiktok', ?, ?, ?, ?, ?)
          ON CONFLICT (network, id) DO UPDATE SET name = excluded.name, status = excluded.status, daily_budget = excluded.daily_budget`,
       );
-      for (const c of campaigns) camp.run(c.campaign_id, storeId, c.campaign_name, c.operation_status === 'ENABLE' ? 'active' : 'paused', c.budget_mode === 'BUDGET_MODE_DAY' ? Number(c.budget ?? 0) : 0);
+      for (const c of campaigns) camp.run(c.campaign_id, storeId, c.campaign_name, c.operation_status === 'ENABLE' ? 'active' : 'paused', c.budget_mode === 'BUDGET_MODE_DAY' ? cents(Number(c.budget ?? 0) * rate) : 0);
       // Deleted campaigns only show up in the report but still need a row for the join.
       const seen = db.prepare("INSERT OR IGNORE INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('tiktok', ?, ?, ?, 'archived', 0)");
       const day = db.prepare(
@@ -98,7 +109,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
         const date = d.stat_time_day.slice(0, 10);
         dates.add(date);
         seen.run(d.campaign_id, storeId, `Campaign ${d.campaign_id}`);
-        day.run(d.campaign_id, date, n(m.spend), Math.round(n(m.complete_payment_roas) * n(m.spend) * 100) / 100, n(m.complete_payment), n(m.clicks), n(m.impressions));
+        day.run(d.campaign_id, date, cents(n(m.spend) * rate), cents(n(m.complete_payment_roas) * n(m.spend) * rate), n(m.complete_payment), n(m.clicks), n(m.impressions));
       }
       rebuildAdSpend(db, storeId, dates);
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
@@ -239,10 +250,11 @@ export async function updateTikTokCampaign(db: Db, key: Buffer, storeId: string,
   const creds = getCredentials(db, key, 'tiktok_ads', storeId);
   if (!creds) throw new Error('TikTok Ads is not connected for this store');
   const advertiser_id = creds.advertiserId!.trim();
+  // The budget comes in the store's currency (as synced); TikTok wants the advertiser account's.
   const [path, body] =
     'status' in change
       ? ['/campaign/status/update/', { advertiser_id, campaign_ids: [campaignId], operation_status: 'DISABLE' }]
-      : ['/campaign/update/', { advertiser_id, campaign_id: campaignId, budget: Math.round(change.dailyBudget * 100) / 100 }];
+      : ['/campaign/update/', { advertiser_id, campaign_id: campaignId, budget: cents(change.dailyBudget / (await adRate(db, storeId, await advertiserCurrency(advertiser_id, creds.accessToken!, fetchFn), fetchFn, 'TikTok Ads'))) }];
   const res = await fetchFn(`${ADS_API}${path}`, { method: 'POST', headers: { 'Access-Token': creds.accessToken!, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const json = (await res.json().catch(() => ({}))) as { code?: number; message?: string };
   if (json.code !== undefined && json.code >= 40100 && json.code < 40200) throw new Error('TikTok rejected the access token; generate a new one for the advertiser account');
