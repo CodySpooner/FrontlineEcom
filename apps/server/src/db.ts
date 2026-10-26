@@ -468,6 +468,9 @@ export const MIGRATIONS = [
   /* 33 (core: TikTok Shop re-pulls once, so orders from before it read their tax have it too) */ `
   UPDATE integrations SET cursor = NULL WHERE kind = 'tiktok_shop';
   `,
+  /* 34 (core: Amazon listings that count their own, merchant-fulfilled, stock; FBA reads leave those alone) */ `
+  ALTER TABLE products ADD COLUMN merchant_stock INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

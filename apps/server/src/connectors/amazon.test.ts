@@ -265,12 +265,13 @@ test('FBA listings get their stock from the FBA Inventory API, and keep it when 
       return Response.json({ payload: { granularity: {}, inventorySummaries: fbaUnits === 12 ? [
         { sellerSku: 'FBA-1', inventoryDetails: { fulfillableQuantity: fbaUnits } },
         { sellerSku: 'MFN-1', inventoryDetails: { fulfillableQuantity: 0 } }, // moved to merchant fulfilment; its listing's count stands
-      ] : [] } });
+      ] : [{ sellerSku: 'MFN-1', inventoryDetails: { fulfillableQuantity: 0 } }] } });
     }
     if (u.pathname.startsWith('/listings/')) {
       return Response.json({ numberOfResults: 2, items: [
         { sku: 'FBA-1', summaries: [{ status: ['BUYABLE'] }], fulfillmentAvailability: [{ fulfillmentChannelCode: 'AMAZON_NA' }] },
-        { sku: 'MFN-1', summaries: [{ status: ['BUYABLE'] }], fulfillmentAvailability: [{ fulfillmentChannelCode: 'DEFAULT', quantity: 3 }] },
+        // Later reads are changes only, and MFN-1's listing didn't change.
+        ...(fbaUnits === 12 ? [{ sku: 'MFN-1', summaries: [{ status: ['BUYABLE'] }], fulfillmentAvailability: [{ fulfillmentChannelCode: 'DEFAULT', quantity: 3 }] }] : []),
       ] });
     }
     return base(url, init);
@@ -336,7 +337,7 @@ test("an Amazon store's daily sessions come from the Sales and Traffic report: a
   await syncAmazon(db, key, 'peak', fetchFn, NOW); // nothing more today
   expect(reportCalls).toEqual([
     { call: 'POST /reports/2021-06-30/reports', token: 'Atza|access', body: {
-      reportType: 'GET_SALES_AND_TRAFFIC_REPORT', marketplaceIds: ['ATVPDKIKX0DER'], dataStartTime: '2024-10-27', dataEndTime: '2026-10-26',
+      reportType: 'GET_SALES_AND_TRAFFIC_REPORT', marketplaceIds: ['ATVPDKIKX0DER'], dataStartTime: '2024-10-27', dataEndTime: '2026-10-25',
       reportOptions: { dateGranularity: 'DAY', asinGranularity: 'PARENT' },
     } },
     { call: 'GET /reports/2021-06-30/reports/R1', token: 'Atza|access' },
@@ -350,7 +351,7 @@ test("an Amazon store's daily sessions come from the Sales and Traffic report: a
 
   // The next day: the days since three before the last report.
   await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-27T18:00:00Z'));
-  expect(reportCalls.at(-1)).toMatchObject({ call: 'POST /reports/2021-06-30/reports', body: { dataStartTime: '2026-10-23', dataEndTime: '2026-10-27' } });
+  expect(reportCalls.at(-1)).toMatchObject({ call: 'POST /reports/2021-06-30/reports', body: { dataStartTime: '2026-10-23', dataEndTime: '2026-10-26' } });
 });
 
 test("an Amazon store's orders fill the orders page and top products; revenue stays Amazon's daily totals", async () => {
@@ -403,8 +404,58 @@ test("an Amazon store's orders fill the orders page and top products; revenue st
   // The read is complete: the next one starts where Amazon said this one ended.
   await syncAmazon(db, key, 'peak', fetchFn, NOW);
   expect([queries[3]!.get('lastUpdatedAfter'), queries[3]!.get('paginationToken')]).toEqual(['2026-10-26T17:58:00Z', null]);
-  // Reconnected (the cursor starts over): so does the read.
-  db.prepare("UPDATE integrations SET cursor = NULL WHERE id = 'amazon:peak'").run();
+  // Reconnected to another seller's account: the read starts over.
+  saveIntegration(db, key, { kind: 'amazon', storeId: 'peak', values: { sellerId: 'A2OTHER', region: 'na', marketplaceId: 'ATVPDKIKX0DER', clientId: 'amzn1.application-oa2-client.x', clientSecret: 'lwa_secret', refreshToken: REFRESH } });
   await syncAmazon(db, key, 'peak', fetchFn, NOW);
   expect(queries.at(-2)!.get('lastUpdatedAfter')).toBe('2026-09-26T18:00:00.000Z');
+});
+
+test('two Amazon stores syncing at once keep their own report and order reads', async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id IN ('peak', 'glow')").run();
+  saveIntegration(db, key, { kind: 'amazon', storeId: 'glow', values: { sellerId: 'A9GLOW', region: 'na', marketplaceId: 'ATVPDKIKX0DER', clientId: 'amzn1.application-oa2-client.x', clientSecret: 'lwa_secret', refreshToken: REFRESH } });
+  let n = 0;
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) =>
+    new URL(url).pathname === '/reports/2021-06-30/reports' ? Response.json({ reportId: `R${++n}` }, { status: 202 }) : base(url, init)) as typeof fetch;
+  await Promise.all([syncAmazon(db, key, 'peak', fetchFn, NOW), syncAmazon(db, key, 'glow', fetchFn, NOW)]);
+  const state = (k: string) => JSON.parse(String(db.prepare('SELECT value_json FROM settings WHERE key = ?').get(k)?.value_json)) as Record<string, { reportId?: string }>;
+  expect(Object.entries(state('amazon_traffic')).map(([id, s]) => [id, s.reportId]).sort()).toEqual([['amazon:glow', expect.any(String)], ['amazon:peak', expect.any(String)]]);
+  expect(Object.keys(state('amazon_orders')).sort()).toEqual(['amazon:glow', 'amazon:peak']);
+});
+
+test("a failed (FATAL) traffic report isn't taken as collected, and sessions are only marked collected once written", async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  let status = 'FATAL';
+  let ordersDown = false;
+  const posts: { dataStartTime: string }[] = [];
+  const doc = gzipSync(JSON.stringify({ salesAndTrafficByDate: [{ date: '2026-10-25', trafficByDate: { sessions: 95 } }] }));
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init: RequestInit = {}) => {
+    const u = new URL(url);
+    if (u.host === 'reports.s3.example.com') return new Response(doc);
+    if (u.pathname === '/orders/2026-01-01/orders' && ordersDown) throw new TypeError('fetch failed');
+    if (u.pathname === '/reports/2021-06-30/reports') {
+      posts.push(JSON.parse(String(init.body)));
+      return Response.json({ reportId: `R${posts.length}` }, { status: 202 });
+    }
+    if (u.pathname.startsWith('/reports/2021-06-30/reports/')) return Response.json({ processingStatus: status, reportDocumentId: 'D1' }); // FATAL comes with an error document
+    if (u.pathname === '/reports/2021-06-30/documents/D1') return Response.json({ reportDocumentId: 'D1', url: 'https://reports.s3.example.com/D1', compressionAlgorithm: 'GZIP' });
+    return base(url, init);
+  }) as typeof fetch;
+  const sessions = () => db.prepare("SELECT sum(sessions) AS n FROM daily_metrics WHERE store_id = 'peak'").get()?.n;
+
+  await syncAmazon(db, key, 'peak', fetchFn, NOW); // asks
+  await syncAmazon(db, key, 'peak', fetchFn, NOW); // FATAL: dropped, nothing collected
+  status = 'DONE';
+  await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-27T18:00:00Z')); // asks again: still the two-year backfill
+  expect(posts.map((p) => p.dataStartTime)).toEqual(['2024-10-27', '2024-10-28']);
+  ordersDown = true; // the report is ready, but this sync goes on to fail
+  await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-27T18:00:00Z'));
+  ordersDown = false;
+  await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-27T18:00:00Z'));
+  expect(sessions()).toBe(95);
+  await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-28T18:00:00Z')); // collected on the 27th: from 3 days before
+  expect(posts.map((p) => p.dataStartTime)).toEqual(['2024-10-27', '2024-10-28', '2026-10-24']);
 });
