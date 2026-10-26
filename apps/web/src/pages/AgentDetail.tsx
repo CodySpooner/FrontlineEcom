@@ -9,7 +9,7 @@ import { Chat } from '../components/Chat';
 import { FlowLibrary } from '../components/FlowLibrary';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, buttonClass, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
 import { describeTrigger, when } from '../lib/automation';
 import { ago, cents, money } from '../lib/format';
 import { NAV } from '../nav';
@@ -324,6 +324,7 @@ function AgentSettings({ agent }: { agent: Agent }) {
           />
           <p className="mt-2 text-xs text-muted">{AUTONOMY[autonomy].help}</p>
         </div>
+        <AgentBudget agent={agent} storeCap={caps?.agentCostPerDay} />
         {update.isError && (
           <p role="alert" className="mt-3 text-xs text-red">
             {update.error.message}
@@ -353,6 +354,50 @@ function AgentSettings({ agent }: { agent: Agent }) {
       </Panel>
       <Schedule agent={agent} />
     </div>
+  );
+}
+
+/** The agent's own daily AI budget inside the store's cap (AGT-90). Blank removes it. */
+export function AgentBudget({ agent, storeCap }: { agent: Agent; storeCap?: number }) {
+  const update = useUpdateAgent();
+  const [value, setValue] = useState(agent.dailyBudgetUsd?.toString() ?? '');
+  const budget = value.trim() === '' ? null : Number(value);
+  const valid = budget === null || (Number.isFinite(budget) && budget >= 0 && budget <= 1000);
+  const changed = budget !== (agent.dailyBudgetUsd ?? null);
+  const save = (e: FormEvent) => {
+    e.preventDefault();
+    if (valid && changed) update.mutate({ id: agent.id, dailyBudgetUsd: budget });
+  };
+  return (
+    <form onSubmit={save} className="mt-5">
+      <label htmlFor={`budget-${agent.id}`} className="mb-2 block text-[13px] font-semibold">
+        Daily AI budget
+      </label>
+      <div className="flex items-center gap-2">
+        <input
+          id={`budget-${agent.id}`}
+          type="number"
+          min={0}
+          max={1000}
+          step={0.01}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="No own limit"
+          className={cx(inputClass, 'w-36 tabular-nums')}
+        />
+        <Button type="submit" size="sm" disabled={!valid || !changed || update.isPending}>
+          Save budget
+        </Button>
+      </div>
+      <p className="mt-2 text-xs text-muted">
+        USD per day, inside the store's AI cap{storeCap !== undefined && ` of ${money(storeCap)}/day`}. Blank: only the store's cap applies.
+      </p>
+      {update.isError && (
+        <p role="alert" className="mt-1 text-xs text-red">
+          {update.error.message}
+        </p>
+      )}
+    </form>
   );
 }
 
