@@ -134,7 +134,7 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
     try {
       added = await createRemote(store.id, valid.map((p, i) => ({ title: titles[i]!, price: p.price, compareAt: p.compareAt, cost: p.cost })));
     } catch (e) {
-      notify(db, { kind: 'error', title: `Couldn't add products to ${store.name}`, body: `${(e as Error).message}. Approved: ${titles.join(', ')}. Add them by hand.`, storeId: store.id });
+      notify(db, { kind: 'error', title: `Couldn't add products to ${store.name}`, body: `${(e as Error).message}. Approved: ${titles.join(', ')}. Add any not created yet by hand.`, storeId: store.id });
       return [];
     }
   } else {
