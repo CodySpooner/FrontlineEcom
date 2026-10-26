@@ -28,3 +28,9 @@ export const NAV: NavItem[] = [
   { path: '/knowledge', label: 'Knowledge Base', icon: BookOpen, title: 'Knowledge Base', subtitle: 'What your squad knows.', art: 'lone', item: 'UI-16' },
   { path: '/settings', label: 'Settings', icon: Settings, title: 'Settings', subtitle: 'Stores, caps and preferences.', art: 'lone', item: 'UI-17' },
 ];
+
+/** Window title: the sidebar label of the page you're on ("Orders & Fulfillment · Frontline Ecom"). */
+export function pageTitle(pathname: string) {
+  const n = NAV.find((x) => x.path === pathname || (x.path !== '/' && pathname.startsWith(`${x.path}/`)));
+  return n ? `${n.label} · Frontline Ecom` : 'Frontline Ecom';
+}

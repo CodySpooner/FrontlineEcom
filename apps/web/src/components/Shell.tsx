@@ -2,7 +2,7 @@ import { Component, useEffect, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { TriangleAlert } from 'lucide-react';
 import { useAgents, useHealth, useLive } from '../api/client';
-import { NAV } from '../nav';
+import { NAV, pageTitle } from '../nav';
 import { SvgDefs } from './Art';
 import { AskPalette } from './AskPalette';
 import { BrandLogo } from './BrandLogo';
@@ -13,6 +13,9 @@ import { Button, buttonClass, Card, ProgressBar, StatusDot, cx } from './ui';
 export function Shell() {
   useLive();
   const { pathname } = useLocation();
+  useEffect(() => {
+    document.title = pageTitle(pathname);
+  }, [pathname]);
   // Desktop app (frameless Electron): Windows' caption buttons overlay the page, so the hero strip becomes the title bar.
   useEffect(() => {
     // Not in TS's DOM lib yet (Chromium-only API).
@@ -25,6 +28,16 @@ export function Shell() {
   }, []);
   return (
     <div className="grid min-h-dvh grid-cols-[68px_minmax(0,1fr)] min-[900px]:grid-cols-[232px_minmax(0,1fr)]">
+      <a
+        href="#main"
+        onClick={(e) => {
+          e.preventDefault();
+          document.getElementById('main')?.focus();
+        }}
+        className="sr-only z-50 rounded-md bg-red-fill px-3 py-2 text-sm font-semibold text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3"
+      >
+        Skip to content
+      </a>
       <SvgDefs />
       <XpToasts />
       <AskPalette />
@@ -57,7 +70,7 @@ export function Shell() {
         </nav>
         <SystemStatus />
       </aside>
-      <main className="min-w-0 px-[22px] pb-8">
+      <main id="main" tabIndex={-1} className="min-w-0 px-[22px] pb-8 outline-none">
         {/* Keyed by path: moving to another page clears a caught error. */}
         <PageBoundary key={pathname}>
           <Outlet />
