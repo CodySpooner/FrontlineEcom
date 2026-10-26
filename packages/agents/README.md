@@ -38,7 +38,7 @@ outcome checks.
    - themes: 14 days before vs after
 
    Each judgement becomes a memory and moves the confidence of what that run learned. Learnings that 2+ live stores of
-   a niche found on their own become a request to share them with the whole niche (hourly, `proposeNichePromotions`;
+   a niche (a custom niche by its name) found on their own become a request to share them with the whole niche (hourly, `proposeNichePromotions`;
    the Market Analyst can also ask with `promote_niche_learning`).
 
 ## Money guards
