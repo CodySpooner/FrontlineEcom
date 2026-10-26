@@ -225,9 +225,10 @@ export async function publishThemeChange(db: Db, a: ApprovalRequest, publish: (s
 }
 
 /** A denied theme draft: its copy is deleted, so drafts don't fill Shopify's 20-theme library. */
-export async function discardThemeCopy(a: ApprovalRequest, del: (storeId: string, themeId: string) => Promise<unknown>) {
+export async function discardThemeCopy(db: Db, a: ApprovalRequest, del: (storeId: string, themeId: string) => Promise<unknown>) {
   const themeId = (a.action.payload as { themeId?: unknown } | undefined)?.themeId;
-  if (typeof themeId === 'string') await del(a.storeId, themeId);
+  // Only a copy draft_theme_change made: never a theme of the owner's that a request merely names.
+  if (typeof themeId === 'string' && db.prepare('SELECT 1 FROM done_once WHERE ref = ?').get(`theme-copy:${a.storeId}:${themeId}`)) await del(a.storeId, themeId);
 }
 
 /** The owner's no becomes a store memory, so the squad doesn't pitch it again without new evidence. An expired request isn't a no. */

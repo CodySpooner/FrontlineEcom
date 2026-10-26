@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, listMemory, runAgent, updateAgent, type FakeStep, type ToolEnv } from '@frontline/agents';
+import { fakeEngine, getAgent, listMemory, once, runAgent, updateAgent, type FakeStep, type ToolEnv } from '@frontline/agents';
 import type { AgentEvent, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -156,14 +156,15 @@ test('a published theme change is judged on store conversion, 14 days before vs 
   expect(getAgent(db, 'glow:store_developer')!.xp).toBeGreaterThan(xp);
 });
 
-test("a denied theme draft's copy is deleted", async () => {
+test("a denied theme draft's copy is deleted; a theme the app didn't make never is", async () => {
   const deleted: string[] = [];
-  onDecision(db, 'denied', (_, a) => discardThemeCopy(a, async (storeId, themeId) => deleted.push(`${storeId} ${themeId}`)));
-  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('d1', 'glow', 'glow:store_developer', 't', 'r', ?, 'pending', ?)`).run(
-    JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9', name: 'Frontline: x' } }),
-    new Date().toISOString(),
-  );
+  onDecision(db, 'denied', (_, a) => discardThemeCopy(db, a, async (storeId, themeId) => deleted.push(`${storeId} ${themeId}`)));
+  const ask = db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'glow', 'glow:store_developer', 't', 'r', ?, 'pending', ?)`);
+  ask.run('d1', JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9', name: 'Frontline: x' } }), new Date().toISOString());
+  ask.run('d2', JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '7', name: "The owner's summer theme" } }), new Date().toISOString());
+  once(db, 'theme-copy:glow:9'); // draft_theme_change made 9
   decide(db, 'd1', 'deny');
+  decide(db, 'd2', 'deny');
   await tick();
   expect(deleted).toEqual(['glow 9']);
 });

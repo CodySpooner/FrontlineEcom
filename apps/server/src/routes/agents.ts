@@ -158,8 +158,8 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
         return readThemeFiles(db, loadKey(dataDir()), storeId, id, filenames);
       }),
     draft: (storeId, name, files) =>
-      onLiveShopify(db, storeId, () =>
-        draftThemeCopy(
+      onLiveShopify(db, storeId, async () => {
+        const copy = await draftThemeCopy(
           {
             list: () => listThemes(db, loadKey(dataDir()), storeId),
             duplicate: (themeId, n) => duplicateTheme(db, loadKey(dataDir()), storeId, themeId, n),
@@ -168,8 +168,10 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
           },
           name,
           files,
-        ),
-      ),
+        );
+        once(db, `theme-copy:${storeId}:${copy.id}`); // ours: a denial may delete it (discardThemeCopy)
+        return copy;
+      }),
   },
   portfolio: (range) => {
     const [to, ids] = [localDate(), listStores(db).map((s) => s.id)];
@@ -219,7 +221,7 @@ export function runManager(db: Db): RunManager {
     onDecision(db, 'denied', (db, a) => {
       rememberDenial(db, a);
       if (a.action.kind === 'store.publish_theme' && getStore(db, a.storeId)?.connected) {
-        return discardThemeCopy(a, (storeId, themeId) => onLiveShopify(db, storeId, () => deleteTheme(db, loadKey(dataDir()), storeId, themeId)));
+        return discardThemeCopy(db, a, (storeId, themeId) => onLiveShopify(db, storeId, () => deleteTheme(db, loadKey(dataDir()), storeId, themeId)));
       }
     });
     onApproved(db, (db, a) => {
