@@ -1,0 +1,64 @@
+import { expect, test } from 'vitest';
+import type { AppNotification, Settings, StoreCaps } from '@frontline/shared';
+import { createApp } from './app';
+import { approvalsHook } from './approvals';
+import { openDb } from './db';
+import { seedDemo } from './demo';
+import { notify } from './settings';
+
+const setup = () => {
+  const db = openDb();
+  seedDemo(db);
+  return { db, app: createApp(db) };
+};
+const send = (method: string, body?: unknown) => ({ method, body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+
+test('settings have defaults, merge nested updates, and reject bad input', async () => {
+  const { app } = setup();
+  const s = (await (await app.request('/api/settings')).json()) as Settings;
+  expect(s).toMatchObject({ profile: { name: 'Cody', plan: 'Pro Plan' }, sound: false, notifications: { approvals: true, agentDone: true, errors: true } });
+  expect(s.dataDir).toBeTruthy();
+
+  const upd = (await (await app.request('/api/settings', send('PATCH', { profile: { name: ' Xody ' }, notifications: { errors: false } }))).json()) as Settings;
+  expect(upd).toMatchObject({ profile: { name: 'Xody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: false } });
+  expect(await (await app.request('/api/settings')).json()).toEqual(upd);
+
+  for (const body of [{ sound: 'yes' }, { theme: 'light' }, { profile: { name: '' } }, { profile: { age: 3 } }, { notifications: { spam: true } }, { dataDir: 'C:/' }]) {
+    expect((await app.request('/api/settings', send('PATCH', body))).status, JSON.stringify(body)).toBe(400);
+  }
+});
+
+test('caps default per store, merge autopilot per action kind, validate', async () => {
+  const { app } = setup();
+  const caps = (await (await app.request('/api/caps?stores=peak')).json()) as StoreCaps[];
+  expect(caps).toEqual([{ storeId: 'peak', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {} }]);
+
+  await app.request('/api/caps/peak', send('PUT', { autopilot: { 'ads.pause_adsets': { enabled: true, maxUsdPerDay: 200 } } }));
+  const upd = (await (await app.request('/api/caps/peak', send('PUT', { agentCostPerDay: 2.5, autopilot: { 'ads.set_budget': { enabled: false, maxUsdPerDay: 0 } } }))).json()) as StoreCaps;
+  expect(upd).toMatchObject({ agentCostPerDay: 2.5, autopilot: { 'ads.pause_adsets': { enabled: true, maxUsdPerDay: 200 }, 'ads.set_budget': { enabled: false, maxUsdPerDay: 0 } } });
+  // defaults are not shared between stores
+  expect(((await (await app.request('/api/caps?stores=glow')).json()) as StoreCaps[])[0]!.autopilot).toEqual({});
+
+  for (const body of [{ agentCostPerDay: -1 }, { agentCostPerDay: '5' }, { budget: 1 }, { autopilot: { 'Bad Kind': { enabled: true, maxUsdPerDay: 1 } } }, { autopilot: { 'ads.x': { enabled: 'y', maxUsdPerDay: 1 } } }]) {
+    expect((await app.request('/api/caps/peak', send('PUT', body))).status, JSON.stringify(body)).toBe(400);
+  }
+  expect((await app.request('/api/caps/nope', send('PUT', {}))).status).toBe(404);
+});
+
+test('notifications: approvals raise one, prefs silence a kind, mark read', async () => {
+  const { db, app } = setup();
+  approvalsHook(db).create({ storeId: 'glow', agentId: 'glow:copywriter', title: 'Publish 3 product descriptions', reason: 'SEO score +18', action: { kind: 'store.update_products', payload: {} } });
+  notify(db, { kind: 'agent_done', title: 'Market Analyst finished the weekly brief', storeId: 'glow' });
+  await app.request('/api/settings', send('PATCH', { notifications: { errors: false } }));
+  expect(notify(db, { kind: 'error', title: 'Shopify sync failed' })).toBeUndefined();
+
+  const all = (await (await app.request('/api/notifications')).json()) as AppNotification[];
+  expect(all.map((n) => n.kind)).toEqual(['agent_done', 'approval']);
+  expect(all[1]).toMatchObject({ title: 'Publish 3 product descriptions', body: 'SEO score +18', storeId: 'glow' });
+
+  expect(await (await app.request('/api/notifications/read', send('POST', { ids: [all[0]!.id] }))).json()).toEqual({ updated: 1 });
+  expect(((await (await app.request('/api/notifications?unread=true')).json()) as AppNotification[]).map((n) => n.id)).toEqual([all[1]!.id]);
+  expect(await (await app.request('/api/notifications/read', send('POST', {}))).json()).toEqual({ updated: 1 });
+  expect(await (await app.request('/api/notifications?unread=true')).json()).toEqual([]);
+  expect((await app.request('/api/notifications/read', send('POST', { ids: 'all' }))).status).toBe(400);
+});

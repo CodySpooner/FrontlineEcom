@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ApprovalDecision, ApprovalRequest, ApprovalsHook, ApprovalStatus } from '@frontline/shared';
 import type { Db } from './db';
 import { publish, subscribe } from './live';
+import { notify } from './settings';
 
 type Row = Record<string, unknown>;
 
@@ -53,6 +54,7 @@ export const approvalsHook = (db: Db): ApprovalsHook => ({
       a.id, a.storeId, a.agentId, a.runId ?? null, a.title, a.reason, JSON.stringify(a.action), a.status, a.createdAt,
     );
     publish({ type: 'approval', approval: a });
+    notify(db, { kind: 'approval', title: a.title, body: a.reason, storeId: a.storeId, link: '/' });
     return a;
   },
   decision(id) {

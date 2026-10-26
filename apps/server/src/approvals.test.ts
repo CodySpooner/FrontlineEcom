@@ -45,7 +45,7 @@ test('hook: an agent creates a request and awaits the owner decision', async () 
   const seen: LiveMessage[] = [];
   const off = subscribe((m) => seen.push(m));
   const req = hook.create({ storeId: 'glow', agentId: 'glow:creative_studio', runId: 'run-1', title: 'Generate 3 UGC ads', reason: '~40 Higgsfield credits', action: { kind: 'higgsfield.generate', payload: { count: 3 } } });
-  expect(seen).toEqual([{ type: 'approval', approval: req }]);
+  expect(seen).toEqual([{ type: 'approval', approval: req }, { type: 'notification', notification: expect.objectContaining({ kind: 'approval', title: req.title, storeId: 'glow' }) }]);
   expect((await list(app, '?status=pending'))[0]).toEqual(req);
 
   const decided = hook.decision(req.id);

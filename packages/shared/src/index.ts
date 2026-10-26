@@ -198,7 +198,8 @@ export interface ApprovalsHook {
 /** Messages on the `/api/live` WebSocket (JSON, one per frame). New `type`s may be added; ignore unknown ones. */
 export type LiveMessage =
   | { type: 'event'; event: StoreEvent }
-  | { type: 'approval'; approval: ApprovalRequest };
+  | { type: 'approval'; approval: ApprovalRequest }
+  | { type: 'notification'; notification: AppNotification };
 
 /** Error body for any non-2xx API response. */
 export interface ApiError {
@@ -432,3 +433,55 @@ export interface ProductList {
 export interface AddToStoreInput {
   storeId: string;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Settings, budget caps, notifications (core lane).
+
+/** GET /api/settings → Settings; PATCH /api/settings with any subset (nested objects merge) → Settings. */
+export interface Settings {
+  profile: { name: string; plan: string };
+  /** UI sound effects (mission sting, XP). Off by default. */
+  sound: boolean;
+  /** Which events create notifications. */
+  notifications: { approvals: boolean; agentDone: boolean; errors: boolean };
+  /** Read-only: where the local database and key live. */
+  dataDir: string;
+}
+
+export type SettingsUpdate = { profile?: Partial<Settings['profile']>; sound?: boolean; notifications?: Partial<Settings['notifications']> };
+
+/**
+ * Per-store hard caps the agents must respect. GET /api/caps?stores= → StoreCaps[] (defaults until saved);
+ * PUT /api/caps/:storeId with any subset → StoreCaps.
+ */
+export interface StoreCaps {
+  storeId: string;
+  /** Max USD/day of ad budget agents may add or move. */
+  adSpendChangePerDay: number;
+  /** Max Higgsfield credits/day for creative generation. */
+  higgsfieldCreditsPerDay: number;
+  /** Max USD/day of AI usage for this store's agents. */
+  agentCostPerDay: number;
+  /** Autopilot per action kind (e.g. 'ads.pause_adsets'): auto-approve within maxUsdPerDay. Absent = ask. */
+  autopilot: Record<string, { enabled: boolean; maxUsdPerDay: number }>;
+}
+
+export type StoreCapsUpdate = Partial<Omit<StoreCaps, 'storeId'>>;
+
+export type NotificationKind = 'approval' | 'agent_done' | 'error' | 'info';
+
+/** GET /api/notifications?unread=true&limit= → AppNotification[] newest first. POST /api/notifications/read { ids? } (no ids = all) → { updated }. */
+export interface AppNotification {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  body?: string;
+  storeId?: string;
+  /** In-app route to open, e.g. "/agents/glow:market_analyst". */
+  link?: string;
+  createdAt: string;
+  readAt?: string;
+}
+
+/** What server code passes to notify(). */
+export type NewNotification = Omit<AppNotification, 'id' | 'createdAt' | 'readAt'>;

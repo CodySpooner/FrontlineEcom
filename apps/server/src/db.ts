@@ -175,6 +175,27 @@ export const MIGRATIONS = [
     INSERT INTO store_memory_fts (rowid, text, tags) VALUES (new.rowid, new.text, new.tags);
   END;
   `,
+  /* 5 */ `
+  CREATE TABLE settings (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL
+  );
+  CREATE TABLE store_caps (
+    store_id TEXT PRIMARY KEY REFERENCES stores(id) ON DELETE CASCADE,
+    value_json TEXT NOT NULL
+  );
+  CREATE TABLE notifications (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    link TEXT,
+    created_at TEXT NOT NULL,
+    read_at TEXT
+  );
+  CREATE INDEX notifications_by_time ON notifications (created_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

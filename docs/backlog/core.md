@@ -42,12 +42,13 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
       single instance, frameless window with themed title bar, tray, safeStorage for secrets. Check `node:sqlite` under
       Electron's Node; fall back to better-sqlite3 if needed.
 - [ ] CORE-19 Packaging: electron-builder Windows installer + icon from brand; `pnpm package`.
-- [ ] CORE-20 Settings + budget caps + notifications API.
+- [x] CORE-20 Settings + budget caps + notifications API.
 - [ ] CORE-21 Health: `/api/health` with connector statuses, structured logs to the data dir.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-20 `GET/PATCH /api/settings`, `GET /api/caps` + `PUT /api/caps/:storeId` (budget caps + per-action autopilot), notifications table + `notify()` (live broadcast, honors prefs), `GET /api/notifications`, `POST /api/notifications/read`; approvals raise a notification
 - 2026-10-26 — CORE-15 research feed: 30-product demo dataset, `scoreProduct` (margin/trend/competition/shipping), tabs as filters, niche + search, saved lists API, "add to store" → Product Hunter approval
 - 2026-10-26 — CORE-14 `GET /api/products` + `GET /api/orders` (store filter, `q` search, status filters, whitelisted sort, `Page<T>` pagination)
 - 2026-10-26 — CORE-07 secrets: AES-256-GCM (row-bound AAD) with `secret.key` in the data dir, `integrations` table, `GET/PUT /api/integrations`, `DELETE /api/integrations/:id`, `INTEGRATION_KINDS` catalog in shared; secret values never returned

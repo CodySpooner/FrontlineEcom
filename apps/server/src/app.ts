@@ -11,6 +11,7 @@ import { localDate } from './dates';
 import { deleteIntegration, listIntegrations, saveIntegration } from './integrations';
 import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
+import { settingsRoutes } from './settings';
 import { agentRoutes } from './routes/agents';
 import { loadKey } from './secrets';
 import { createStore, deleteStore, getStore, listStores, parseStoreInput, updateStore } from './stores';
@@ -94,6 +95,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       return c.json(summarize(loadRows(db, storeIds, range, to), { range, to, storeIds }));
     })
     .route('/', researchRoutes(db))
+    .route('/', settingsRoutes(db))
     .route('/', agentRoutes(db));
 };
 
