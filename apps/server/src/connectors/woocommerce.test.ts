@@ -380,4 +380,12 @@ test("a Woo order's tracking comes from the Shipment Tracking extension's order 
     { id: 'woo-2003', tracking: 'X1', url: null }, // only https links
     { id: 'woo-2004', tracking: null, url: null },
   ]);
+
+  // Reshipped under a carrier without a link of its own: the old parcel's link goes with its number.
+  const reshipped = (async (url: string, init: RequestInit) =>
+    new URL(url).pathname.endsWith('/orders')
+      ? Response.json([order('2001', 'completed', '30.00', true, tracked([{ tracking_provider: 'usps', tracking_number: '9400222' }]))], { headers: { 'x-wp-totalpages': '1' } })
+      : woo(url, init)) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', reshipped, NOW);
+  expect(db.prepare("SELECT tracking, tracking_url AS url FROM orders WHERE store_id = 'pawsome' AND id = 'woo-2001'").get()).toEqual({ tracking: '9400222', url: null });
 });

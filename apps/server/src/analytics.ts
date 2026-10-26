@@ -72,6 +72,7 @@ export function summarize(rows: MetricRow[], { range, to, storeIds, todayFractio
     .filter((r) => r.date >= prevFrom && r.date < from)
     .map((r) => {
       const f = share(r.storeId);
+      // Spend too: ad networks pace delivery to traffic, which follows the same curve over the day as sales.
       return r.date === prevLast && f < 1 ? { ...r, revenue: r.revenue * f, adSpend: r.adSpend * f, cogs: r.cogs * f, orders: Math.round(r.orders * f) } : r;
     });
   const totals = totalsOf(cur);

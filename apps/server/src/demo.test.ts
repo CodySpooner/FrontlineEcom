@@ -54,9 +54,12 @@ test('demo orders are never in the future and fall within their local day', () =
   seedDemo(db, today);
   const now = Date.now();
   const midnight = new Date(`${addDays(today, -6)}T00:00:00`).getTime();
-  const times = db.prepare('SELECT created_at FROM orders').all().map((r) => Date.parse(String(r.created_at)));
+  const rows = db.prepare('SELECT created_at, local_date FROM orders').all();
+  const times = rows.map((r) => Date.parse(String(r.created_at)));
   expect(times.length).toBeGreaterThan(0);
   expect(times.every((t) => t <= now && t >= midnight)).toBe(true);
+  // Dated like the orders that come later: "same time before" reads a day's orders by local_date.
+  expect(rows.every((r) => r.local_date === localDate(new Date(String(r.created_at))))).toBe(true);
 });
 
 test('demoSoFar: nothing at midnight, the full day at the end, sales step with whole orders', () => {

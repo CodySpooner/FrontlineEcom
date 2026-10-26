@@ -277,7 +277,7 @@ function seedCatalog(db: Db, storeId: string, today: string) {
   products.forEach(([title, price, compareAt, cost], i) => prod.run(storeId, `${storeId}-p${i + 1}`, title, price, compareAt, cost, Math.round(20 + 400 * r()), 'active'));
 
   // ponytail: orders only for the last 7 days (count matches daily_metrics); older history lives in daily_metrics
-  const order = db.prepare('INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+  const order = db.prepare('INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
   let n = 1001;
   for (let ago = 6; ago >= 0; ago--) {
     const date = addDays(today, -ago);
@@ -290,7 +290,7 @@ function seedCatalog(db: Db, storeId: string, today: string) {
       const at = midnight + Math.floor(r() * Math.min(86400000, Math.max(60_000, Date.now() - midnight)));
       const fulfillment = ago >= 4 ? 'delivered' : ago >= 2 ? 'in_transit' : ago === 1 ? 'fulfilled' : 'unfulfilled';
       const tracking = fulfillment === 'unfulfilled' ? null : `YT${2600000000 + Math.floor(r() * 99999999)}`;
-      order.run(storeId, `#${n++}`, new Date(at).toISOString(), cents(price * qty), r() < 0.03 ? 'refunded' : 'paid', fulfillment, SUPPLIERS[Math.floor(r() * SUPPLIERS.length)]!, tracking);
+      order.run(storeId, `#${n++}`, new Date(at).toISOString(), cents(price * qty), r() < 0.03 ? 'refunded' : 'paid', fulfillment, SUPPLIERS[Math.floor(r() * SUPPLIERS.length)]!, tracking, date);
     }
   }
 }

@@ -201,7 +201,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       const ord = db.prepare(
         `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, cogs = excluded.cogs, tax = excluded.tax,
-           tracking = coalesce(excluded.tracking, tracking), tracking_url = coalesce(excluded.tracking_url, tracking_url)`,
+           tracking = coalesce(excluded.tracking, tracking), tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url)`,
       );
       const days = new Set<string>();
       for (const o of orders) {
