@@ -1,6 +1,6 @@
 // UI-20 Notification center: the bell in the top bar and its drawer.
-import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 import { Bell, CircleAlert, CircleCheck, CircleX, Info, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { AGENT_ROLES, type AppNotification, type ApprovalRequest, type NotificationKind } from '@frontline/shared';
 import { useAgents, useApprovals, useMarkRead, useNotifications } from '../api/client';
@@ -18,6 +18,9 @@ const KIND: Record<NotificationKind, { icon: LucideIcon; label: string }> = {
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
+  // A link inside the drawer (e.g. a request's "Review the draft") navigates away; the drawer closes with it.
+  const { pathname, search } = useLocation();
+  useEffect(() => setOpen(false), [pathname, search]);
   const pending = useApprovals().data?.length ?? 0;
   const list = useNotifications().data ?? [];
   // Approvals count while they wait for a decision, read or not; everything else counts until read.

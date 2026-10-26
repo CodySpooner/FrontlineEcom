@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addedProducts, fileList, themeChange } from './approvals';
+import { addedProducts, draftLink, fileList, themeChange } from './approvals';
 
 const theme = (payload: unknown) => themeChange({ kind: 'store.publish_theme', payload });
 
@@ -23,6 +23,14 @@ describe('fileList', () => {
   it('names the first few and counts the rest', () => {
     expect(fileList(['a', 'b'])).toBe('a, b');
     expect(fileList(['a', 'b', 'c', 'd', 'e'])).toBe('a, b, c +2 more');
+  });
+});
+
+describe('draftLink', () => {
+  it('opens Store Builder on the draft a publish request is for', () => {
+    expect(draftLink({ kind: 'store.publish_page', payload: { draftId: 'd 1', title: 'FAQ' } })).toBe('/builder?draft=d%201');
+    expect(draftLink({ kind: 'store.publish_page', payload: {} })).toBeUndefined();
+    expect(draftLink({ kind: 'store.publish_theme', payload: { draftId: 'd1' } })).toBeUndefined();
   });
 });
 

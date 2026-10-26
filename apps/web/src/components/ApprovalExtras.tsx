@@ -1,7 +1,8 @@
 // Kind-specific detail under an approval request (Dashboard, chat, Store Builder).
+import { Link } from 'react-router';
 import { ExternalLink } from 'lucide-react';
 import type { ApprovalAction } from '@frontline/shared';
-import { addedProducts, fileList, themeChange } from '../lib/approvals';
+import { addedProducts, draftLink, fileList, themeChange } from '../lib/approvals';
 import { cents } from '../lib/format';
 import { useStoreSelection } from './StoreFilter';
 
@@ -23,6 +24,13 @@ export function ApprovalExtras({ action, storeId }: { action: ApprovalAction; st
         ))}
         {added.length > SHOWN && <li>+{added.length - SHOWN} more</li>}
       </ul>
+    );
+  const draft = draftLink(action);
+  if (draft)
+    return (
+      <Link to={draft} className="mt-1.5 inline-block text-xs font-semibold text-text hover:underline">
+        Review the draft
+      </Link>
     );
   const t = themeChange(action);
   if (!t || (!t.previewUrl && !t.files.length)) return null;

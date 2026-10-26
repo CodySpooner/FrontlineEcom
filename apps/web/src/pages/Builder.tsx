@@ -1,6 +1,6 @@
 // UI-24 Store Builder: brief the Store Developer, review its page drafts (preview, SEO, change list), publish.
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { LayoutTemplate } from 'lucide-react';
 import type { PageDraft, PageDraftStatus } from '@frontline/shared';
 import { useApprovals, usePageDraftActions, usePageDrafts, useStartRun } from '../api/client';
@@ -31,7 +31,8 @@ export function Builder() {
   const nav = NAV.find((n) => n.path === '/builder')!;
   const { ids } = useStoreSelection();
   const q = usePageDrafts(ids);
-  const [picked, setPicked] = useState<string>();
+  // A publish request links here with ?draft=<id>.
+  const [picked, setPicked] = useState(useSearchParams()[0].get('draft') ?? undefined);
   const sel = q.data?.find((d) => d.id === picked) ?? q.data?.[0];
   return (
     <>

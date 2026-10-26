@@ -23,5 +23,11 @@ export function addedProducts(action: ApprovalAction) {
   });
 }
 
+/** Where to review the draft behind a `store.publish_page` request (Store Builder opens on it). */
+export function draftLink(action: ApprovalAction) {
+  const id = action.kind === 'store.publish_page' ? (action.payload as { draftId?: unknown } | undefined)?.draftId : undefined;
+  return typeof id === 'string' && id ? `/builder?draft=${encodeURIComponent(id)}` : undefined;
+}
+
 /** "a, b, c +2 more" */
 export const fileList = (files: string[], max = 3) => files.slice(0, max).join(', ') + (files.length > max ? ` +${files.length - max} more` : '');
