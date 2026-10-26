@@ -9,6 +9,7 @@ import { getPageDraft, listPageDrafts, savePageDraft } from './pages';
 import { saveFlowDraft } from './flows';
 import { flagOrderIssue } from './issues';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
+import { runGist } from './runs';
 
 /** What the server hands a run so its tools can read and act on app data. */
 export interface ToolEnv {
@@ -237,6 +238,24 @@ export const APP_TOOLS: AppTool[] = [
       return csv(
         items.map((p) => ({ id: p.id, title: p.title, category: p.category, source: p.source, cost: p.cost, price: p.price, compare_at: p.compareAt, margin_pct: p.margin, trend_pct: p.trend, competition: p.competition, shipping_days: p.shippingDays, score: p.score })),
       );
+    },
+  }),
+  defineTool({
+    name: 'squad_log',
+    description: "What this store's squad did in the last N days: requests to the owner with the decision, and finished runs with the gist of each answer (CSV).",
+    input: { days: z.number().int().min(1).max(30).default(7) },
+    run: async ({ days }, ctx) => {
+      const from = since(days);
+      const who = (agentId: string) => AGENT_ROLES[agentId.split(':')[1] as AgentRole]?.name ?? agentId;
+      const requests = ctx.db
+        .prepare(`SELECT created_at, agent_id, title, status, json_extract(action_json, '$.auto') AS auto FROM approvals WHERE store_id = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 50`)
+        .all(ctx.store.id, from)
+        .map((r) => ({ date: String(r.created_at).slice(0, 10), agent: who(String(r.agent_id)), title: r.title, decision: r.auto ? 'auto-approved' : r.status }));
+      const runs = ctx.db
+        .prepare(`SELECT created_at, agent_id, task, transcript_json FROM agent_runs WHERE store_id = ? AND status = 'done' AND created_at >= ? ORDER BY created_at DESC LIMIT 40`)
+        .all(ctx.store.id, from)
+        .map((r) => ({ date: String(r.created_at).slice(0, 10), agent: who(String(r.agent_id)), task: String(r.task).slice(0, 120), gist: runGist(JSON.parse(String(r.transcript_json))) ?? '' }));
+      return `requests:\n${csv(requests)}\n\nruns:\n${csv(runs)}`;
     },
   }),
   defineTool({

@@ -14,6 +14,7 @@ export type ToolName =
   | 'assign_task'
   | 'promote_niche_learning'
   | 'list_creatives'
+  | 'squad_log'
   | 'flag_order_issue'
   | 'draft_flow'
   | 'draft_page'
@@ -77,7 +78,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   market_analyst: {
     prompt: `You are the store's analyst and the owner's first stop for questions. You answer from the store's real data (sales, ads, products, orders) and the market (competitors, trends, the niche), and you say what it means and what to do next. Lead with the answer and the number, then the evidence. Flag anomalies (sudden drops, spikes, margin erosion) without being asked. You keep the squad's understanding of the niche current: save what you learn.`,
     kpi: 'accuracy of your calls and how many of your recommendations get acted on',
-    tools: [...BASE, 'metrics_timeseries', 'list_products', 'list_orders', 'list_campaigns', 'list_competitors', 'research_feed', 'promote_niche_learning', 'propose_price_change', 'WebSearch', 'WebFetch'],
+    tools: [...BASE, 'metrics_timeseries', 'list_products', 'list_orders', 'list_campaigns', 'list_competitors', 'research_feed', 'promote_niche_learning', 'propose_price_change', 'squad_log', 'WebSearch', 'WebFetch'],
     mcp: ['meta_ads'],
   },
   copywriter: {
