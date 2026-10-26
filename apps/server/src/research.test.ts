@@ -82,7 +82,7 @@ test("add to store refuses a connected store on a platform the app can't write t
   const before = pending();
   const res = await app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'pawsome' }));
   expect(res.status).toBe(400);
-  expect(((await res.json()) as { error: string }).error).toBe('Products are only added automatically to Shopify stores for now. Add "Pet Water Fountain" to Pawsome Gear by hand.');
+  expect(((await res.json()) as { error: string }).error).toBe('Products are only added automatically to Shopify and WooCommerce stores for now. Add "Pet Water Fountain" to Pawsome Gear by hand.');
   expect(pending()).toBe(before);
 });
 

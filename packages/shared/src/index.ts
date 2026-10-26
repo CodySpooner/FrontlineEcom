@@ -2,6 +2,13 @@
 // Additive changes only: never rename or remove a field another lane already uses.
 
 export type Platform = 'shopify' | 'tiktok_shop' | 'etsy' | 'amazon' | 'woocommerce' | 'walmart';
+
+/**
+ * Platforms whose connected stores the app adds products to and reprices (approved store.add_products / store.set_price:
+ * core's Shopify createProducts / setProductPrice, WooCommerce createWooProducts / setWooProductPrice). Pages and themes
+ * are Shopify only. A demo store takes them anywhere as local drafts.
+ */
+export const PRODUCT_WRITE_PLATFORMS: readonly Platform[] = ['shopify', 'woocommerce'];
 export const PLATFORMS: Platform[] = ['shopify', 'tiktok_shop', 'etsy', 'amazon', 'woocommerce', 'walmart'];
 
 export type Niche = 'beauty' | 'pet' | 'tech' | 'fitness' | 'home' | 'fashion' | 'kids' | 'outdoor' | 'other';
@@ -682,7 +689,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'clientSecret', label: 'LWA client secret', secret: true },
     { key: 'refreshToken', label: 'Refresh token', secret: true },
   ] },
-  woocommerce: { name: 'WooCommerce', category: 'platform', perStore: true, help: 'WordPress admin → WooCommerce → Settings → Advanced → REST API → Add key → Permissions: Read → copy the consumer key and secret (shown once). The site must use https and pretty permalinks (not Plain). For real profit, turn on Cost of Goods Sold (Settings → Advanced → Features) and enter product costs.', fields: [
+  woocommerce: { name: 'WooCommerce', category: 'platform', perStore: true, help: 'WordPress admin → WooCommerce → Settings → Advanced → REST API → Add key → Permissions: Read (Read/Write if agents may add products and change prices you approve) → copy the consumer key and secret (shown once). The site must use https and pretty permalinks (not Plain). For real profit, turn on Cost of Goods Sold (Settings → Advanced → Features) and enter product costs.', fields: [
     { key: 'siteUrl', label: 'Site URL', secret: false, placeholder: 'https://yourstore.com' },
     { key: 'consumerKey', label: 'Consumer key', secret: true, placeholder: 'ck_…' },
     { key: 'consumerSecret', label: 'Consumer secret', secret: true, placeholder: 'cs_…' },

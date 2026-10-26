@@ -1,10 +1,13 @@
 import type { ProductStatus } from '@frontline/shared';
+import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { convertRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
+import type { NewProduct } from './shopify';
 
-// WooCommerce REST API v3 with a read-only consumer key/secret (Basic auth, so https only).
+// WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
+// approved product writes below (createWooProducts, setWooProductPrice).
 /** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
 const BACKFILL_DAYS = 730;
 
@@ -41,6 +44,23 @@ interface WooProduct {
   cost_of_goods_sold?: { total_value: number };
 }
 
+const basic = (creds: Record<string, string>) => `Basic ${Buffer.from(`${creds.consumerKey!.trim()}:${creds.consumerSecret!.trim()}`).toString('base64')}`;
+
+/** One call to the shop's REST API for a write; a read-only key gets told how to allow writes. */
+async function wooCall<T>(db: Db, key: Buffer, storeId: string, method: 'GET' | 'POST' | 'PUT', path: string, body: object | undefined, fetchFn: Fetch): Promise<T> {
+  const creds = getCredentials(db, key, 'woocommerce', storeId);
+  if (!creds) throw new Error('WooCommerce is not connected for this store');
+  const res = await fetchFn(`${wooSite(creds.siteUrl!)}/wp-json/wc/v3/${path}`, {
+    method,
+    headers: { authorization: basic(creds), 'content-type': 'application/json' },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const json = (await res.json().catch(() => undefined)) as (T & { message?: string }) | undefined;
+  if (res.status === 401 || res.status === 403) throw new Error('WooCommerce refused the change: the key is read-only. Create a Read/Write key (WooCommerce → Settings → Advanced → REST API) and enter it in Integrations');
+  if (!res.ok || !json) throw new Error(`WooCommerce: ${json?.message ?? `HTTP ${res.status}`}`);
+  return json;
+}
+
 /** Woo's *_gmt dates have no zone suffix. */
 const gmt = (s: string) => new Date(`${s}Z`);
 
@@ -69,7 +89,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
   if (!creds) return;
   try {
     const site = wooSite(creds.siteUrl!);
-    const auth = `Basic ${Buffer.from(`${creds.consumerKey!.trim()}:${creds.consumerSecret!.trim()}`).toString('base64')}`;
+    const auth = basic(creds);
     const all = async <T>(path: string, params: Record<string, string>) => {
       const out: T[] = [];
       for (let page = 1, pages = 1; page <= pages; page++) {
@@ -141,4 +161,49 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'WooCommerce sync failed');
   }
+}
+
+/**
+ * Creates each product in WooCommerce as a simple draft and adds it to the local catalog (its cost stays local). Call only
+ * for an approved request. Same contract as Shopify's createProducts: a failure part-way names the drafts already created.
+ */
+export async function createWooProducts(db: Db, key: Buffer, storeId: string, products: NewProduct[], fetchFn: Fetch = fetch) {
+  const insert = db.prepare(`INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 'draft')`);
+  const created: { id: string; title: string }[] = [];
+  for (const p of products) {
+    try {
+      const id = await logAction(db, storeId, 'product_create', p.title, { ...p }, async () => {
+        // Woo's regular price is the compare-at and its sale price the price.
+        const sale = !!p.compareAt && p.compareAt > p.price;
+        const body = { name: p.title, type: 'simple', status: 'draft', regular_price: String(sale ? p.compareAt : p.price), ...(sale ? { sale_price: String(p.price) } : {}) };
+        return `woo-${(await wooCall<{ id: number }>(db, key, storeId, 'POST', 'products', body, fetchFn)).id}`;
+      });
+      insert.run(storeId, id, p.title, p.price, p.compareAt ?? null, p.cost ?? 0);
+      created.push({ id, title: p.title });
+    } catch (e) {
+      if (!created.length) throw e;
+      throw new Error(`${(e as Error).message} (already created as drafts: ${created.map((c) => c.title).join(', ')})`);
+    }
+  }
+  return created;
+}
+
+/**
+ * Sets a live simple product's price (compareAt: a number sets it, null clears it, omitted leaves it), as Woo's sale
+ * price over its regular price. Call only for an approved request. Same contract as Shopify's setProductPrice.
+ */
+export async function setWooProductPrice(db: Db, key: Buffer, storeId: string, productId: string, { price, compareAt }: { price: number; compareAt?: number | null }, fetchFn: Fetch = fetch) {
+  if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be more than 0');
+  if (compareAt != null && !(Number.isFinite(compareAt) && compareAt > 0)) throw new Error('Compare-at price must be more than 0');
+  const wooId = /^woo-(\d+)$/.exec(productId)?.[1];
+  if (!wooId) throw new Error(`${productId} is not a WooCommerce product`);
+  const shown = await logAction(db, storeId, 'price_change', productId, { price, ...(compareAt !== undefined ? { compareAt } : {}) }, async () => {
+    const cur = await wooCall<{ type: string; regular_price: string; sale_price: string }>(db, key, storeId, 'GET', `products/${wooId}`, undefined, fetchFn);
+    // One price for every variation would flatten e.g. S 20 / XL 25.
+    if (cur.type !== 'simple') throw new Error(`WooCommerce: product ${productId} is a ${cur.type} product; change its prices in WooCommerce`);
+    const was = compareAt === undefined ? (cur.sale_price ? Number(cur.regular_price) : 0) : (compareAt ?? 0);
+    await wooCall(db, key, storeId, 'PUT', `products/${wooId}`, was > price ? { regular_price: String(was), sale_price: String(price) } : { regular_price: String(price), sale_price: '' }, fetchFn);
+    return was > price ? was : null;
+  });
+  db.prepare('UPDATE products SET price = ?, compare_at = ? WHERE store_id = ? AND id = ?').run(price, shown, storeId, productId);
 }

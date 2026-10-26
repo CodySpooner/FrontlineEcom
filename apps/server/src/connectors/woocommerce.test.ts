@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
-import { syncWooCommerce, wooSite, wpZone } from './woocommerce';
+import { createWooProducts, setWooProductPrice, syncWooCommerce, wooSite, wpZone } from './woocommerce';
 
 const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
@@ -172,4 +172,58 @@ test("WordPress' timezone setting as an IANA zone: a city, a whole-hour offset, 
   expect(wpZone({ timezone_string: '', gmt_offset: '5.5' })).toBeUndefined();
   expect(wpZone({ timezone_string: 'Mars/Olympus' })).toBeUndefined();
   expect(wpZone(undefined)).toBeUndefined();
+});
+
+/** Fake Woo product API: records writes, serves products 41 (on sale 30, was 40), 42 (25, not on sale), 43 (variable). */
+function fakeWooWrites(status = 200) {
+  const writes: { method: string; path: string; body: unknown }[] = [];
+  const products: Record<string, object> = {
+    '41': { type: 'simple', regular_price: '40', sale_price: '30' },
+    '42': { type: 'simple', regular_price: '25', sale_price: '' },
+    '43': { type: 'variable', regular_price: '', sale_price: '' },
+  };
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    const path = new URL(url).pathname.replace('/store/wp-json/wc/v3/', '');
+    const method = init.method ?? 'GET';
+    if (status !== 200) return Response.json({ code: 'woocommerce_rest_cannot_create', message: 'Sorry, you are not allowed to create resources.' }, { status });
+    if (method === 'GET') return Response.json(products[path.split('/')[1]!]);
+    writes.push({ method, path, body: JSON.parse(String(init.body)) });
+    return Response.json({ id: 500 + writes.length });
+  }) as typeof fetch;
+  return { fetchFn, writes };
+}
+
+test('approved products become Woo drafts (sale price over regular for a compare-at); a read-only key says how to allow it', async () => {
+  const db = setup();
+  const { fetchFn, writes } = fakeWooWrites();
+  const made = await createWooProducts(db, key, 'pawsome', [{ title: 'Paw Balm', price: 19.99, compareAt: 34.99, cost: 4 }, { title: 'Dog Bowl', price: 12 }], fetchFn);
+  expect(made).toEqual([{ id: 'woo-501', title: 'Paw Balm' }, { id: 'woo-502', title: 'Dog Bowl' }]);
+  expect(writes.map((w) => w.body)).toEqual([
+    { name: 'Paw Balm', type: 'simple', status: 'draft', regular_price: '34.99', sale_price: '19.99' },
+    { name: 'Dog Bowl', type: 'simple', status: 'draft', regular_price: '12' },
+  ]);
+  expect(db.prepare("SELECT price, compare_at, cost, status FROM products WHERE store_id = 'pawsome' AND id = 'woo-501'").get()).toEqual({ price: 19.99, compare_at: 34.99, cost: 4, status: 'draft' });
+  await expect(createWooProducts(db, key, 'pawsome', [{ title: 'X', price: 5 }], fakeWooWrites(401).fetchFn)).rejects.toThrow('the key is read-only. Create a Read/Write key');
+});
+
+test('a Woo price change keeps, sets or clears the compare-at as asked, and leaves variable products alone', async () => {
+  const db = setup();
+  for (const id of ['woo-41', 'woo-42']) db.prepare("INSERT INTO products (store_id, id, title, price, compare_at, cost, inventory, status) VALUES ('pawsome', ?, 'p', 30, 40, 0, 1, 'active')").run(id);
+  const { fetchFn, writes } = fakeWooWrites();
+  const row = (id: string) => db.prepare("SELECT price, compare_at FROM products WHERE store_id = 'pawsome' AND id = ?").get(id);
+
+  await setWooProductPrice(db, key, 'pawsome', 'woo-41', { price: 27 }, fetchFn); // on sale: the regular price stays the compare-at
+  await setWooProductPrice(db, key, 'pawsome', 'woo-42', { price: 22 }, fetchFn); // not on sale: just the price
+  await setWooProductPrice(db, key, 'pawsome', 'woo-42', { price: 22, compareAt: 35 }, fetchFn);
+  await setWooProductPrice(db, key, 'pawsome', 'woo-41', { price: 27, compareAt: null }, fetchFn);
+  expect(writes.map((w) => [w.path, w.body])).toEqual([
+    ['products/41', { regular_price: '40', sale_price: '27' }],
+    ['products/42', { regular_price: '22', sale_price: '' }],
+    ['products/42', { regular_price: '35', sale_price: '22' }],
+    ['products/41', { regular_price: '27', sale_price: '' }],
+  ]);
+  expect(row('woo-41')).toEqual({ price: 27, compare_at: null });
+  expect(row('woo-42')).toEqual({ price: 22, compare_at: 35 });
+  await expect(setWooProductPrice(db, key, 'pawsome', 'woo-43', { price: 10 }, fetchFn)).rejects.toThrow('is a variable product');
+  await expect(setWooProductPrice(db, key, 'pawsome', '8001', { price: 10 }, fetchFn)).rejects.toThrow('not a WooCommerce product');
 });
