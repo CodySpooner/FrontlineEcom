@@ -123,3 +123,25 @@ test('the watch checks each real competitor once a day and never the demo .examp
     vi.useRealTimers();
   }
 });
+
+test("a WooCommerce competitor's prices come from its public Store API (minor units, HTML-escaped names)", async () => {
+  const db = openDb();
+  seedDemo(db, TODAY);
+  db.prepare("INSERT INTO competitors (id, store_id, name, url, created_at) VALUES ('woo', 'glow', 'Woo Rival', 'https://woo-rival.com/shop', '2026-10-01T00:00:00Z')").run();
+  const urls: string[] = [];
+  const fetchFn = (async (url: string) => {
+    urls.push(url);
+    if (url.includes('/products.json')) return new Response('<html>Not found</html>', { status: 404 });
+    return Response.json([
+      { name: 'Jade Roller &amp; Gua Sha', prices: { price: '1999', regular_price: '2999', currency_minor_unit: 2 } },
+      { name: 'Free Sample', prices: { price: '0', regular_price: '0', currency_minor_unit: 2 } },
+      { name: 'Face Mist', prices: { price: '1450', regular_price: '1450', currency_minor_unit: 2 } },
+    ]);
+  }) as typeof fetch;
+  expect(await watchCompetitorPrices(db, 'woo', 'https://woo-rival.com/shop', fetchFn, new Date('2026-10-25T09:00:00Z'))).toBe(2);
+  expect(urls).toEqual(['https://woo-rival.com/products.json?limit=250&page=1', 'https://woo-rival.com/wp-json/wc/store/v1/products?per_page=100&page=1']);
+  expect(db.prepare("SELECT data_json FROM competitor_snapshots WHERE competitor_id = 'woo' ORDER BY rowid").all().map((r) => JSON.parse(String(r.data_json)))).toEqual([
+    { product: 'Jade Roller & Gua Sha', price: 19.99, compareAt: 29.99 },
+    { product: 'Face Mist', price: 14.5 },
+  ]);
+});

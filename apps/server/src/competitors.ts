@@ -92,24 +92,66 @@ interface StorefrontProduct {
   title?: string;
   variants?: { price: string; compare_at_price: string | null }[];
 }
+interface WooStoreProduct {
+  name?: string;
+  /** Strings in minor units; a variable product's `price` is its lowest variation's. */
+  prices?: { price?: string; regular_price?: string; currency_minor_unit?: number };
+}
+type Priced = Omit<PriceSnapshotData, 'product'> & { product?: string };
 
-/**
- * Reads a Shopify competitor's public catalog (`/products.json`, 1,000 products at most) and records a price snapshot
- * for each product whose lowest price or its compare-at changed since the last one. Returns how many it recorded, or
- * undefined when the site isn't a Shopify storefront.
- */
-export async function watchCompetitorPrices(db: Db, competitorId: string, url: string, fetchFn: Fetch = fetch, now = new Date()) {
-  const products: StorefrontProduct[] = [];
+const get = (url: string, fetchFn: Fetch) => fetchFn(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+const decodeHtml = (s: string) =>
+  s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+/** A Shopify storefront's public `/products.json` (1,000 products at most): each product's lowest variant price. */
+async function shopifyCatalog(origin: string, fetchFn: Fetch): Promise<Priced[] | undefined> {
+  const out: Priced[] = [];
   for (let page = 1; page <= 4; page++) {
-    const res = await fetchFn(`${new URL(url).origin}/products.json?limit=250&page=${page}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+    const res = await get(`${origin}/products.json?limit=250&page=${page}`, fetchFn);
     const body = res.ok ? ((await res.json().catch(() => undefined)) as { products?: StorefrontProduct[] } | undefined) : undefined;
     if (!Array.isArray(body?.products)) {
       if (page === 1) return;
       break;
     }
-    products.push(...body.products);
+    for (const p of body.products) {
+      const v = (p.variants ?? []).map((x) => ({ price: Number(x.price), compareAt: Number(x.compare_at_price) })).filter((x) => x.price > 0).sort((a, b) => a.price - b.price)[0];
+      if (v) out.push({ product: p.title, price: v.price, ...(v.compareAt > v.price ? { compareAt: v.compareAt } : {}) });
+    }
     if (body.products.length < 250) break;
   }
+  return out;
+}
+
+/** A WooCommerce store's public Store API (`/wp-json/wc/store/v1/products`, 1,000 products at most). */
+async function wooCatalog(origin: string, fetchFn: Fetch): Promise<Priced[] | undefined> {
+  const out: Priced[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const res = await get(`${origin}/wp-json/wc/store/v1/products?per_page=100&page=${page}`, fetchFn);
+    const body = res.ok ? ((await res.json().catch(() => undefined)) as WooStoreProduct[] | undefined) : undefined;
+    if (!Array.isArray(body)) {
+      if (page === 1) return;
+      break;
+    }
+    for (const p of body) {
+      const unit = 10 ** (p.prices?.currency_minor_unit ?? 2);
+      const price = Number(p.prices?.price) / unit;
+      const regular = Number(p.prices?.regular_price) / unit;
+      if (price > 0) out.push({ product: p.name && decodeHtml(p.name), price, ...(regular > price ? { compareAt: regular } : {}) });
+    }
+    if (body.length < 100) break;
+  }
+  return out;
+}
+
+/**
+ * Reads a competitor's public catalog (a Shopify storefront, else a WooCommerce store) and records a price snapshot for
+ * each product whose lowest price or its compare-at changed since the last one. Returns how many it recorded, or
+ * undefined when the site is neither.
+ */
+export async function watchCompetitorPrices(db: Db, competitorId: string, url: string, fetchFn: Fetch = fetch, now = new Date()) {
+  const origin = new URL(url).origin;
+  const products = (await shopifyCatalog(origin, fetchFn)) ?? (await wooCatalog(origin, fetchFn));
+  if (!products) return;
   const latest = new Map(
     db.prepare("SELECT data_json FROM competitor_snapshots WHERE competitor_id = ? AND kind = 'price' ORDER BY captured_at, rowid").all(competitorId)
       .map((r) => JSON.parse(String(r.data_json)) as PriceSnapshotData)
@@ -119,11 +161,10 @@ export async function watchCompetitorPrices(db: Db, competitorId: string, url: s
   let added = 0;
   tx(db, () => {
     for (const p of products) {
-      const v = (p.variants ?? []).map((x) => ({ price: Number(x.price), compareAt: Number(x.compare_at_price) })).filter((x) => x.price > 0).sort((a, b) => a.price - b.price)[0];
-      const product = p.title?.trim().slice(0, 200);
-      if (!v || !product || seen.has(product)) continue;
+      const product = p.product?.trim().slice(0, 200);
+      if (!product || seen.has(product)) continue;
       seen.add(product);
-      const data: PriceSnapshotData = { product, price: v.price, ...(v.compareAt > v.price ? { compareAt: v.compareAt } : {}) };
+      const data: PriceSnapshotData = { ...p, product };
       const prev = latest.get(product);
       if (prev && prev.price === data.price && prev.compareAt === data.compareAt) continue;
       addSnapshot(db, competitorId, { kind: 'price', data }, now.toISOString());
