@@ -269,8 +269,8 @@ export interface IntegrationField {
 }
 
 /** Catalog for the Integrations screen: every field listed is required. `perStore` = connected per store (else global). */
-export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category: IntegrationCategory; perStore: boolean; fields: IntegrationField[] }> = {
-  shopify: { name: 'Shopify', category: 'platform', perStore: true, fields: [
+export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category: IntegrationCategory; perStore: boolean; fields: IntegrationField[]; /** Setup steps shown next to the form. */ help?: string }> = {
+  shopify: { name: 'Shopify', category: 'platform', perStore: true, help: 'Shopify admin → Settings → Apps and sales channels → Develop apps → Create an app → Configure Admin API scopes: read_products, read_inventory, read_orders, read_all_orders → Install app → copy the Admin API access token (shown once).', fields: [
     { key: 'shopDomain', label: 'Shop domain', secret: false, placeholder: 'your-store.myshopify.com' },
     { key: 'accessToken', label: 'Admin API access token', secret: true, placeholder: 'shpat_…' },
   ] },
@@ -337,6 +337,8 @@ export interface Integration {
   /** Keys of secret fields that are stored. Values are never returned. */
   secretsSet: string[];
   updatedAt: string;
+  /** Last successful sync (connectors that sync data). */
+  syncedAt?: string;
 }
 
 /**

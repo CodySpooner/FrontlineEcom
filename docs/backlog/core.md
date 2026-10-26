@@ -5,7 +5,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from agents) FYI: agents lane appended migration 4 (`store_memory` + `store_memory_fts` FTS5 + sync triggers) to `MIGRATIONS` in `db.ts`. Next agents migrations (agent_runs, xp_events) will be appended the same way — rebase before adding yours to avoid number clashes.
+- [x] (from agents) FYI: agents lane appended migration 4 (`store_memory` + `store_memory_fts` FTS5 + sync triggers) to `MIGRATIONS` in `db.ts`. Next agents migrations (agent_runs, xp_events) will be appended the same way — rebase before adding yours to avoid number clashes.
 - [x] (from agents) CORE-04: after inserting a store in POST /api/stores, call `createSquad(db, store)` from `@frontline/agents` (idempotent; ids `<storeId>:<role>`). Startup already runs `ensureSquads(db)` via `agentRoutes(db)`, mounted in `app.ts` (one line, agents lane).
 
 ## Items
@@ -24,7 +24,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
       `/api/live`; exposes an in-process hook so the agents lane can create requests and await decisions.
 - [x] CORE-07 Secrets: encrypted credential store (AES-256-GCM, key file in the data dir; Electron safeStorage later),
       `integrations` table, API that reports status but never returns secret values.
-- [ ] CORE-08 Shopify connector: Admin GraphQL (custom-app access token first, OAuth later): shop, orders, products,
+- [x] CORE-08 Shopify connector: Admin GraphQL (custom-app access token first, OAuth later): shop, orders, products,
       inventory; incremental sync into SQLite on an interval; switches the store from demo to real. Fixture-based tests.
 - [ ] CORE-09 Meta Ads connector: Marketing API insights per ad account/campaign (spend, purchases, purchase value,
       clicks, impressions); map ad accounts → stores; feed `ad_spend`.
@@ -48,6 +48,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-08 Shopify connector: Admin GraphQL (custom-app token, myshopify.com-only host), incremental products/orders sync by `updated_at` (2y backfill), daily revenue/orders/cogs rebuilt per store-local day, first sync wipes demo rows and flips the store to connected, errors surface on the integration; sync loop every 30s (stale 10 min / on credential change)
 - 2026-10-26 — CORE-20 `GET/PATCH /api/settings`, `GET /api/caps` + `PUT /api/caps/:storeId` (budget caps + per-action autopilot), notifications table + `notify()` (live broadcast, honors prefs), `GET /api/notifications`, `POST /api/notifications/read`; approvals raise a notification
 - 2026-10-26 — CORE-15 research feed: 30-product demo dataset, `scoreProduct` (margin/trend/competition/shipping), tabs as filters, niche + search, saved lists API, "add to store" → Product Hunter approval
 - 2026-10-26 — CORE-14 `GET /api/products` + `GET /api/orders` (store filter, `q` search, status filters, whitelisted sort, `Page<T>` pagination)

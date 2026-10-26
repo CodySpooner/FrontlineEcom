@@ -16,6 +16,7 @@ const toIntegration = (r: Row, key: Buffer): Integration => ({
   settings: JSON.parse(String(r.settings_json)),
   secretsSet: Object.keys(decrypt<Record<string, string>>(key, String(r.encrypted_credentials), String(r.id))),
   updatedAt: String(r.updated_at),
+  ...(r.synced_at ? { syncedAt: String(r.synced_at) } : {}),
 });
 
 /** Integrations for the given stores plus all global ones. */
@@ -69,3 +70,8 @@ export function getCredentials(db: Db, key: Buffer, kind: IntegrationKind, store
   return r && { ...JSON.parse(String(r.settings_json)), ...decrypt<Record<string, string>>(key, String(r.encrypted_credentials), id) };
 }
 
+
+/** Connectors report health here; shows on the Integrations screen. Never put credentials in `error`. */
+export function setIntegrationStatus(db: Db, id: string, status: IntegrationStatus, error?: string) {
+  db.prepare('UPDATE integrations SET status = ?, error = ? WHERE id = ?').run(status, error ?? null, id);
+}

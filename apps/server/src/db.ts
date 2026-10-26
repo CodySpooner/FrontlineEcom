@@ -196,6 +196,12 @@ export const MIGRATIONS = [
   );
   CREATE INDEX notifications_by_time ON notifications (created_at);
   `,
+  /* 6 */ `
+  ALTER TABLE orders ADD COLUMN cogs REAL;
+  ALTER TABLE orders ADD COLUMN local_date TEXT;
+  ALTER TABLE integrations ADD COLUMN synced_at TEXT;
+  ALTER TABLE integrations ADD COLUMN cursor TEXT;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
