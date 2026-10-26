@@ -2,6 +2,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
+import { switchToReal } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders.
 export const SHOPIFY_API_VERSION = '2026-07';
@@ -94,12 +95,6 @@ export function fulfillmentOf(o: Pick<ShopifyOrder, 'displayFulfillmentStatus' |
   return o.displayFulfillmentStatus === 'FULFILLED' ? 'fulfilled' : 'unfulfilled';
 }
 
-/** Wipes a demo store's generated rows and marks it connected (first successful real sync). */
-function switchToReal(db: Db, storeId: string) {
-  for (const t of ['daily_metrics', 'products', 'orders', 'campaigns', 'events']) db.prepare(`DELETE FROM ${t} WHERE store_id = ?`).run(storeId);
-  db.prepare('UPDATE stores SET demo = 0, connected = 1 WHERE id = ?').run(storeId);
-}
-
 /** Pulls shop, products and orders updated since the last sync and rebuilds revenue/orders/cogs for the touched days. */
 export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `shopify:${storeId}`;
@@ -117,7 +112,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: shop.ianaTimezone });
 
     tx(db, () => {
-      if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo === 1) switchToReal(db, storeId);
+      switchToReal(db, storeId);
       db.prepare('UPDATE stores SET connected = 1, currency = ?, timezone = ? WHERE id = ?').run(shop.currencyCode, shop.ianaTimezone, storeId);
 
       const prod = db.prepare(

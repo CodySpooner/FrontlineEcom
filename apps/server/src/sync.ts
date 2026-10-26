@@ -1,11 +1,12 @@
 import type { IntegrationKind } from '@frontline/shared';
+import { syncMeta } from './connectors/meta';
 import { syncShopify } from './connectors/shopify';
 import type { Db } from './db';
 
 type Syncer = (db: Db, key: Buffer, storeId: string) => Promise<void>;
 
 /** Connectors that pull data on a schedule. */
-const SYNCERS: Partial<Record<IntegrationKind, Syncer>> = { shopify: syncShopify };
+const SYNCERS: Partial<Record<IntegrationKind, Syncer>> = { shopify: syncShopify, meta_ads: syncMeta };
 
 /**
  * Every `everyMs`, syncs each data integration that was never tried, was last tried over `staleMs` ago, or whose

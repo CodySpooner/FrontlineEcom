@@ -296,7 +296,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'consumerKey', label: 'Consumer key', secret: true, placeholder: 'ck_…' },
     { key: 'consumerSecret', label: 'Consumer secret', secret: true, placeholder: 'cs_…' },
   ] },
-  meta_ads: { name: 'Meta Ads', category: 'ads', perStore: true, fields: [
+  meta_ads: { name: 'Meta Ads', category: 'ads', perStore: true, help: 'Meta Business Settings → Users → System users → Add (Admin) → Assign assets: the ad account (view performance) → Generate new token with ads_read → copy it. Ad account ID is in Ads Manager (act_…).', fields: [
     { key: 'adAccountId', label: 'Ad account ID', secret: false, placeholder: 'act_…' },
     { key: 'accessToken', label: 'System user access token', secret: true },
   ] },

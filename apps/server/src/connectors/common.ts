@@ -1,0 +1,15 @@
+import type { Db } from '../db';
+
+/** Wipes a demo store's generated rows and marks it connected. Called by the first successful real sync of any connector. */
+export function switchToReal(db: Db, storeId: string) {
+  if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo !== 1) return;
+  for (const t of ['daily_metrics', 'products', 'orders', 'campaigns', 'events']) db.prepare(`DELETE FROM ${t} WHERE store_id = ?`).run(storeId);
+  db.prepare('UPDATE stores SET demo = 0, connected = 1 WHERE id = ?').run(storeId);
+}
+
+/** daily_metrics.ad_spend = spend across every ad network's campaigns for that store and day. */
+export function rebuildAdSpend(db: Db, storeId: string, dates: Iterable<string>) {
+  const sum = db.prepare('SELECT coalesce(sum(d.spend), 0) AS spend FROM campaign_daily d JOIN campaigns c ON c.network = d.network AND c.id = d.campaign_id WHERE c.store_id = ? AND d.date = ?');
+  const up = db.prepare('INSERT INTO daily_metrics (store_id, date, ad_spend) VALUES (?, ?, ?) ON CONFLICT (store_id, date) DO UPDATE SET ad_spend = excluded.ad_spend');
+  for (const date of dates) up.run(storeId, date, Math.round(Number(sum.get(storeId, date)!.spend) * 100) / 100);
+}
