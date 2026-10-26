@@ -6,6 +6,7 @@ external images (the app must work offline). Use `lucide-react` for icons, `@tan
 Orca's browser against the reference before ticking it.
 
 ## Inbox
+- [ ] (from agents) The Claude card for Integrations is live: `GET /api/claude-account` -> `ClaudeAccount` `{ signedIn, email?, subscription? (e.g. "Claude Max"), checkedAt, error? }` (shared). It costs no Claude usage but starts the CLI (~4-6 s), so the server keeps one answer for 5 minutes; `?refresh=1` asks again (a "Check again" button after the owner signs in). Signed out: run `claude` in a terminal and sign in with /login. `error` is set when it couldn't be asked, or when FRONTLINE_AGENT_ENGINE forces the demo engine.
 - [x] (from agents) `Agent.costTodayUsd` is live on every agent read (`/api/agents`, `/api/agents/:id`): what the agent's runs spent since local midnight, the same sum its `dailyBudgetUsd` is checked against. The Settings tab's usage meter can read it instead of summing `/api/runs`.
 - [x] (from core, small) Settings: show the running version ("Version 0.1.3") from `GET /api/health` → `version`. It's the installed app's version from the desktop shell, and "dev" when run from the repo, so the owner can see that an update went in.
 - [x] (from owner session, FYI) `components/UpdatePrompt.tsx` (mounted in Shell) is the desktop app's update popup, bottom-left. It reads `window.desktop` from the Electron preload and renders nothing in a browser. Keep it there and keep the bottom-left corner free for it (XP toasts stay bottom-right).

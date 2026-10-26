@@ -1,7 +1,9 @@
 import {
   budgetAddedToday,
+  claudeAccount,
   claudeEngine,
   defaultEngine,
+  engineInfo,
   isAccountError,
   costToday,
   creditsToday,
@@ -47,7 +49,7 @@ import {
   type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
-import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
+import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type ClaudeAccount, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -413,6 +415,9 @@ function activateConnectedStores(db: Db, runs: RunManager) {
   }
 }
 
+// The Integrations screen's Claude card. ponytail: one answer per process, kept 5 minutes (each check starts the CLI).
+let account: { at: number; answer: Promise<ClaudeAccount> } | undefined;
+
 export function agentRoutes(db: Db) {
   ensureSquads(db);
   seedDemoXp(db, DEMO_STORES.map((s) => s.id));
@@ -469,6 +474,11 @@ export function agentRoutes(db: Db) {
       }
       const run = runs.start(c.req.param('id'), body.task.trim(), body.resumeRunId);
       return typeof run === 'string' ? c.json({ error: run }, 409) : c.json(run, 201);
+    })
+    .get('/api/claude-account', async (c) => {
+      if (engineInfo(true).provider !== 'claude') return c.json({ signedIn: false, checkedAt: new Date().toISOString(), error: 'Agents are set to the demo engine here (FRONTLINE_AGENT_ENGINE), so Claude is never used.' } satisfies ClaudeAccount);
+      if (!account || c.req.query('refresh') === '1' || Date.now() - account.at > 5 * 60_000) account = { at: Date.now(), answer: claudeAccount(agentSessions().cwd) };
+      return c.json(await account.answer);
     })
     .get('/api/squad-missions/templates', (c) => c.json(MISSION_TEMPLATES))
     .get('/api/squad-missions', (c) => c.json(listMissions(db, c.req.query('stores')?.split(',').filter(Boolean), limit(c.req.query('limit')))))

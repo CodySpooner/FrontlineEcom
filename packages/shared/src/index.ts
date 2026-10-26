@@ -72,6 +72,18 @@ export type Autonomy = 'suggest' | 'ask' | 'autopilot';
 export const AUTONOMY_LEVELS: Autonomy[] = ['suggest', 'ask', 'autopilot'];
 
 /** One agent = one role working for one store. Every store has its own squad. */
+/** GET /api/claude-account: whether Claude Code is signed in on this machine, the login live stores' agents run on. */
+export interface ClaudeAccount {
+  signedIn: boolean;
+  email?: string;
+  /** Claude Code's name for the plan, e.g. "Claude Max". */
+  subscription?: string;
+  /** When it was asked (answers are kept 5 minutes; `?refresh=1` asks again). */
+  checkedAt: string;
+  /** Why it couldn't be asked (then `signedIn` is false). */
+  error?: string;
+}
+
 export interface Agent {
   id: string;
   storeId: string;

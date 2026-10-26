@@ -16,7 +16,7 @@ outcome checks.
    the prefix caches. The owner can edit any shipped layer in the Knowledge Base; edits live in
    `<FRONTLINE_DATA_DIR>/knowledge/`.
 3. **Engine** (`engine.ts` `defaultEngine`): connected stores use `claude-engine.ts`, on the owner's local Claude Code
-   login with model `FRONTLINE_AGENT_MODEL` (default `claude-opus-5-5`). Demo stores use `fake-engine.ts`, which costs
+   login (`claudeAccount` / `GET /api/claude-account` says whether it's signed in, without spending usage) with model `FRONTLINE_AGENT_MODEL` (default `claude-opus-5-5`). Demo stores use `fake-engine.ts`, which costs
    nothing. `FRONTLINE_AGENT_ENGINE=claude|fake` forces one engine for every store, and tests always use fake.
 4. **Tools** (`tools.ts`): each role has an allowlist (`roles.ts`). Read tools return CSV or JSON from the store's rows.
    Lists have row limits, and the date windows use the store's own dates.

@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Agent, AgentEvent, AgentRole, Store } from '@frontline/shared';
 import { describe, expect, test } from 'vitest';
-import { APP_TOOLS, claudeEngine, defaultEngine, estimate, fakeEngine, ROLES, runAgent, toAgentEvents, type RunInput, type ToolEnv } from './index';
+import { APP_TOOLS, claudeAccount, claudeEngine, defaultEngine, estimate, fakeEngine, ROLES, runAgent, toAgentEvents, type RunInput, type ToolEnv } from './index';
 
 const store: Store = { id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'America/Chicago', color: '#ff8f98', connected: false };
 const agent: Agent = { id: 'glow:market_analyst', storeId: 'glow', role: 'market_analyst', status: 'idle', level: 1, xp: 0 };
@@ -39,6 +39,20 @@ describe('fake engine', () => {
     ];
     expect(await collect(runAgent(input, fakeEngine(() => script)))).toEqual(script);
   });
+});
+
+test("claudeAccount reads the login without a prompt, and says why when it can't", async () => {
+  const closed: string[] = [];
+  const fake = (info: () => Promise<object>) =>
+    (({ options }: { options: Options }) => ({ accountInfo: info, close: () => closed.push(String(options.cwd)) })) as never;
+  // The two shapes Claude Code answered on a real machine (signed in; empty config dir).
+  expect(await claudeAccount('/s', fake(async () => ({ email: 'o@x.com', organization: 'O', subscriptionType: 'Claude Max', apiProvider: 'firstParty' })))).toEqual({
+    signedIn: true, email: 'o@x.com', subscription: 'Claude Max', checkedAt: expect.any(String),
+  });
+  expect(await claudeAccount('/s', fake(async () => ({ tokenSource: 'none', apiProvider: 'firstParty' })))).toEqual({ signedIn: false, checkedAt: expect.any(String) });
+  expect((await claudeAccount('/s', fake(async () => ({ tokenSource: 'none', apiKeySource: 'ANTHROPIC_API_KEY' })))).signedIn).toBe(true);
+  expect(await claudeAccount('/s', fake(() => new Promise(() => {})), 10)).toMatchObject({ signedIn: false, error: "Claude Code didn't answer in 0.01 s." });
+  expect(closed).toEqual(['/s', '/s', '/s', '/s']); // the CLI is never left running
 });
 
 test('connected stores get Claude and demo stores the fake engine, unless the env forces one', async () => {

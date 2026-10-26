@@ -2,7 +2,7 @@
 // canUseTool, per-run mcpServers), minus Effect. Ideas ported from pingdotgg/t3code:
 // MIT License, Copyright (c) 2026 T3 Tools Inc.
 import { createSdkMcpServer, query, tool, type Options, type SDKAssistantMessageError, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AgentEvent } from '@frontline/shared';
+import type { AgentEvent, ClaudeAccount } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
 import { assemblePrompt } from './prompt';
 import { ROLES } from './roles';
@@ -33,6 +33,27 @@ const ACCOUNT: Partial<Record<SDKAssistantMessageError, string>> = {
 
 /** The model agents run on: `FRONTLINE_AGENT_MODEL` or claude-opus-5-5. */
 export const agentModel = () => process.env.FRONTLINE_AGENT_MODEL ?? 'claude-opus-5-5';
+
+/**
+ * Who Claude Code is signed in as here, asked without a prompt, so it spends no usage. It starts the CLI (~6 s).
+ * Signed out reads `tokenSource: 'none'`; an API key or a cloud provider (no email) counts as signed in.
+ */
+export async function claudeAccount(cwd?: string, run: typeof query = query, timeoutMs = 30_000): Promise<ClaudeAccount> {
+  const checkedAt = new Date().toISOString();
+  const q = run({ prompt: (async function* () { await new Promise(() => {}); })(), options: { ...(cwd && { cwd }) } }); // accountInfo needs streaming input
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const late = new Promise<never>((_, no) => (timer = setTimeout(() => no(new Error(`Claude Code didn't answer in ${timeoutMs / 1000} s.`)), timeoutMs)));
+    const info = await Promise.race([q.accountInfo(), late]);
+    const signedIn = info.tokenSource !== 'none' || (!!info.apiKeySource && info.apiKeySource !== 'none');
+    return { signedIn, ...(info.email && { email: info.email }), ...(info.subscriptionType && { subscription: info.subscriptionType }), checkedAt };
+  } catch (e) {
+    return { signedIn: false, checkedAt, error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    clearTimeout(timer);
+    q.close();
+  }
+}
 
 /** True for an account problem (signed out, usage limit…): every run fails the same way until the owner fixes it. */
 export const isAccountError = (message: string) => Object.values(ACCOUNT).includes(message);

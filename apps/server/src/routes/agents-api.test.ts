@@ -22,6 +22,8 @@ const send = (method: string, path: string, body?: unknown) =>
 test('each agent says what its runs run on: the demo engine in tests and on demo stores, Claude and its model when on', async () => {
   const engine = async () => ((await (await send('GET', '/api/agents/glow%3Amarket_analyst')).json()) as Agent).engine;
   expect(await engine()).toEqual({ provider: 'demo' });
+  // The Claude card: forced onto the demo engine (as tests are), it says so instead of starting the CLI.
+  expect(await (await send('GET', '/api/claude-account')).json()).toMatchObject({ signedIn: false, error: expect.stringContaining('demo engine') });
   const saved = { engine: process.env.FRONTLINE_AGENT_ENGINE, model: process.env.FRONTLINE_AGENT_MODEL };
   try {
     Object.assign(process.env, { FRONTLINE_AGENT_ENGINE: 'claude', FRONTLINE_AGENT_MODEL: 'claude-sonnet-5-5' });
