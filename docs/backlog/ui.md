@@ -97,7 +97,7 @@ Orca's browser against the reference before ticking it.
       the agent page. Needs `GET /api/usage` (requested from agents).
 - [x] UI-26 Narrow window: every page at 800px in Orca. No horizontal page scroll, tables scroll inside their panel, no
       clipped buttons or overlapping hero art.
-- [ ] UI-27 Component tests: onboarding (first run shows; Explore the demo remembers; add store → squad → that store
+- [x] UI-27 Component tests: onboarding (first run shows; Explore the demo remembers; add store → squad → that store
       selected) and Ask palette (Ctrl+K opens; arrows + Enter open a page; a question starts a Market Analyst run). Stub all fetches.
 
 ## Blocked
@@ -146,3 +146,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-26: Narrow window — measured all 13 pages at 800px in Orca: no page-level horizontal scroll, wide tables scroll in their panel. Fixed: the Ask AI search is an icon button (bell-sized) below 900px instead of disappearing; the Dashboard agents strip keeps one row of ≥125px cards (extras clipped, least urgent last) and "Needs you" no longer wraps
 - 2026-10-26 — Inbox (core): Dashboard + Analytics show "<codes> stores aren't included: no exchange rate. Open the store on its own to see it." under the filter row when `AnalyticsSummary.unconverted` is set (checked with a temp VND store: shown on All, gone on the store alone, which reads ₫)
 - 2026-10-26 — UI-25: Today's usage vs caps — `useUsage` (/api/usage, refreshed on run/approval events); UsageMeter (neutral bar, red from 80%, "x of cap used today") under each cap in Settings › Caps (follows the cap being typed) and in the agent's Store caps panel; autopilot list there shows kind labels instead of raw kinds
+- 2026-10-26 — UI-27: Component tests — `src/test-utils.tsx` (app providers + MemoryRouter at a path with a location readout, `stubApi` fake fetch, jsdom showModal/close shim), used by the approvals test too; onboarding (flag keeps it away; Explore the demo remembers; add store posts the niche → squad → Dashboard with the store picked) and Ask palette (Ctrl+K, filter + arrows + Enter → page; question → Market Analyst run → chat URL)

@@ -1,10 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { ApprovalRequest, Store } from '@frontline/shared';
-import { StoreSelectionProvider } from '../components/StoreFilter';
+import { renderApp, reply, stubApi } from '../test-utils';
 import { Requests } from './Dashboard';
 
 const store = { id: 'pawsome', name: 'Pawsome Gear', currency: 'USD' } as Store;
@@ -21,24 +19,13 @@ const approval: ApprovalRequest = {
 
 /** Fake API: the pending request, its store and agent; the decide POST answers with `decideStatus`. */
 function serve(decideStatus: number) {
-  const fetch = vi.fn(async (url: string, init?: RequestInit) => {
-    const body = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
-    if (init?.method === 'POST') return decideStatus === 200 ? body({ ...approval, status: 'approved' }) : body({ error: 'nope' }, decideStatus);
-    if (url.startsWith('/api/approvals?status=pending')) return body([approval]);
-    if (url.startsWith('/api/stores')) return body([store]);
-    if (url.startsWith('/api/agents')) return body([{ id: approval.agentId, storeId: 'pawsome', role: 'ad_strategist' }]);
-    return body([]);
+  const fetch = stubApi((url, init) => {
+    if (init?.method === 'POST') return decideStatus === 200 ? { ...approval, status: 'approved' } : reply({ error: 'nope' }, decideStatus);
+    if (url.startsWith('/api/approvals?status=pending')) return [approval];
+    if (url.startsWith('/api/stores')) return [store];
+    if (url.startsWith('/api/agents')) return [{ id: approval.agentId, storeId: 'pawsome', role: 'ad_strategist' }];
   });
-  vi.stubGlobal('fetch', fetch);
-  render(
-    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <StoreSelectionProvider>
-        <MemoryRouter>
-          <Requests />
-        </MemoryRouter>
-      </StoreSelectionProvider>
-    </QueryClientProvider>,
-  );
+  renderApp(<Requests />);
   return fetch;
 }
 
