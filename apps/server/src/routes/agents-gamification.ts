@@ -205,6 +205,8 @@ const productSales = (db: Db, storeId: string, productId: string, from: string, 
 
 /** Units a price test or page needs across its 28 days to be judged. ponytail: under it one order flips the verdict; no significance test. */
 const MIN_UNITS = 10;
+/** Orders a theme change needs across its 28 days to be judged on conversion. */
+const MIN_ORDERS = 30;
 
 /**
  * Price tests on real stores, 15+ days after the change: the product's profit in the 14 days after vs the 14
@@ -308,15 +310,18 @@ export function checkThemeOutcomes(db: Db, today?: string) {
     const after = funnel.get(storeId, addDays(day, 1), addDays(day, 14))!;
     if (!Number(before.sessions) || !Number(after.sessions)) continue;
     const [cr0, cr1] = [Number(before.orders) / Number(before.sessions), Number(after.orders) / Number(after.sessions)];
-    const worked = cr1 > cr0;
+    // A few orders a fortnight: one either way moves conversion more than any theme change (as MIN_UNITS for prices).
+    const orders = Number(before.orders) + Number(after.orders);
+    const worked = orders < MIN_ORDERS ? undefined : cr1 > cr0;
     const pct = (x: number) => `${(x * 100).toFixed(2)}%`;
     const name = String(t.title).replace(/^Publish theme change: /, '');
+    const verdict = worked === undefined ? `can't be judged on ${orders} orders (it takes ${MIN_ORDERS})` : worked ? 'worked' : 'did not help';
     recordOutcome(db, `theme:${t.id}`, worked, {
-      storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'theme'],
-      text: `The theme change "${name}" ${worked ? 'worked' : 'did not help'}: conversion ${pct(cr0)} → ${pct(cr1)} (14 days before vs after, ${Number(before.sessions).toLocaleString('en-US')} → ${Number(after.sessions).toLocaleString('en-US')} sessions).`,
+      storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : worked === undefined ? 0.5 : 0.6, tags: ['outcome', 'theme'],
+      text: `The theme change "${name}" ${verdict}: conversion ${pct(cr0)} → ${pct(cr1)} (14 days before vs after, ${Number(before.sessions).toLocaleString('en-US')} → ${Number(after.sessions).toLocaleString('en-US')} sessions).`,
       evidence: `daily metrics ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.id})`,
-    });
-    if (t.run_id) judgeRun(db, `theme:${t.id}`, String(t.run_id), worked);
+    }, 'on too few orders');
+    if (t.run_id && worked !== undefined) judgeRun(db, `theme:${t.id}`, String(t.run_id), worked);
     if (worked) award(db, { ref: `theme-win:${t.id}`, amount: XP.win, storeId, agentId, reason: `Measured win: the theme change "${name}" lifted conversion` });
   }
 }

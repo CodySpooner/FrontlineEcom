@@ -195,6 +195,28 @@ test("a published theme change is judged on store conversion, 14 days before vs 
   expect(getAgent(db, 'glow:store_developer')!.xp).toBeGreaterThan(xp);
 });
 
+test('a theme change on a store with a handful of orders is not judged on one order either way', async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'glow'`).run();
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('a1', 'glow', 'glow:store_developer', NULL, 'Publish theme change: Sticky ATC', 'r', ?, 'approved', ?)`).run(
+    JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9' } }),
+    new Date().toISOString(),
+  );
+  const day = addDays(localDate(), -20);
+  once(db, 'theme-live:a1', new Date(`${day}T15:00:00Z`));
+  const window = (from: number, to: number, orders: number, sessions: number) =>
+    db.prepare(`UPDATE daily_metrics SET orders = ?, sessions = ? WHERE store_id = 'glow' AND date BETWEEN ? AND ?`).run(orders, sessions, addDays(day, from), addDays(day, to));
+  window(-14, -1, 0, 50);
+  window(1, 14, 0, 50);
+  db.prepare(`UPDATE daily_metrics SET orders = 1 WHERE store_id = 'glow' AND date IN (?, ?, ?)`).run(addDays(day, -3), addDays(day, 2), addDays(day, 3)); // 1 → 2 orders
+  const xp = getAgent(db, 'glow:store_developer')!.xp;
+  checkThemeOutcomes(db);
+  expect(listMemory(db, 'glow').filter((m) => m.tags.includes('theme')).map((m) => m.text)).toEqual([
+    `The theme change "Sticky ATC" can't be judged on 3 orders (it takes 30): conversion 0.14% → 0.29% (14 days before vs after, 700 → 700 sessions).`,
+  ]);
+  expect(getAgent(db, 'glow:store_developer')!.xp).toBe(xp);
+  expect(db.prepare(`SELECT title FROM notifications WHERE title LIKE 'Store Developer:%'`).get()?.title).toBe('Store Developer: result unclear on too few orders');
+});
+
 test('a theme change is judged on the days with traffic reported, not orders from before GA4 was connected', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'glow'`).run();
   db.prepare(`INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('a1', 'glow', 'glow:store_developer', NULL, 'Publish theme change: Sticky ATC', 'r', ?, 'approved', ?)`).run(

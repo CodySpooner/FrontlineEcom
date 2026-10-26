@@ -39,7 +39,7 @@ outcome checks.
    - ads: 3 days after vs 7 before (blended ROAS; a raise on its extra spend's ROAS, a pause or cut on the ROAS of the spend it took away, vs break-even)
    - products: their first 14 days on sale (from when first seen active; else from the day added)
    - prices and pages: 14 days before vs after (10+ units across both, else "can't be judged")
-   - themes: 14 days before vs after
+   - themes: conversion 14 days before vs after (30+ orders across both)
 
    Windows are counted in the store's own days (a live store dates its data in its zone), and a change is judged only once
    its last day there is over and every one of the store's integrations has synced since, none failing (each change is
