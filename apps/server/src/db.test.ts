@@ -1,7 +1,9 @@
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import { listBackups } from './backups';
 import { MIGRATIONS, openDb } from './db';
 
 test('migrations create the Phase 1 tables and set user_version', () => {
@@ -46,4 +48,30 @@ test("a store's ad spend for a day starts from its campaigns, not a scan of ever
     .map((r) => String(r.detail));
   expect(plan).toEqual([expect.stringContaining('campaigns_by_store'), expect.stringContaining('campaign_daily')]);
   expect(plan.join(' ')).not.toContain('SCAN');
+});
+
+test("before an update's migrations run on existing data, the data is copied into the backups (restorable from Settings)", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontline-db-'));
+  try {
+    const file = join(dir, 'frontline.db');
+    openDb(file).close(); // a fresh database: nothing to keep
+    expect(readdirSync(dir)).not.toContain('backups');
+    rmSync(file);
+    const old = new DatabaseSync(file); // data from the app's first version
+    old.exec(MIGRATIONS[0]!);
+    old.exec('PRAGMA user_version = 1');
+    old.prepare("INSERT INTO stores (id, name, platform, niche) VALUES ('x', 'X', 'shopify', 'pet')").run();
+    old.close();
+    openDb(file).close();
+    const [backup] = listBackups(join(dir, 'backups'));
+    expect(backup?.name).toMatch(/^frontline-[\w-]+-before-update\.db$/);
+    const snap = new DatabaseSync(join(dir, 'backups', backup!.name), { readOnly: true });
+    expect(snap.prepare('PRAGMA user_version').get()?.user_version).toBe(1);
+    expect(snap.prepare('SELECT count(*) AS n FROM stores').get()?.n).toBe(1);
+    snap.close();
+    openDb(file).close(); // up to date: no second copy
+    expect(listBackups(join(dir, 'backups'))).toHaveLength(1);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });

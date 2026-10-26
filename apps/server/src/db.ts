@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { log } from './log';
 
 export type Db = DatabaseSync;
 
@@ -512,6 +513,16 @@ export function openDb(file = ':memory:'): Db {
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
   const version = Number(db.prepare('PRAGMA user_version').get()?.user_version ?? 0);
+  // An update's migrations change the owner's data: a copy from just before goes with the backups (Settings can restore it).
+  if (file !== ':memory:' && version > 0 && version < MIGRATIONS.length) {
+    const copy = join(dirname(file), 'backups', `frontline-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}-before-update.db`);
+    try {
+      mkdirSync(dirname(copy), { recursive: true });
+      db.exec(`VACUUM INTO '${copy.replace(/'/g, "''")}'`);
+    } catch (e) {
+      log('error', 'backup before update failed', { error: e instanceof Error ? e.message : String(e) }); // the daily backups remain
+    }
+  }
   MIGRATIONS.slice(version).forEach((sql, i) =>
     tx(db, () => {
       db.exec(sql);

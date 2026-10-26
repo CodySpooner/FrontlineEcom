@@ -116,6 +116,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - TikTok Shop price changes: the path is confirmed (`POST /product/202309/products/{id}/prices/update`, EcomPHP/tiktokshop-php), but the body (`skus[].id`, `price.amount`/`currency`?) and the scope are only in TikTok's JavaScript-rendered partner docs. Needs a verified request body or a live shop. Woo and Etsy price writers are done.
 
 ## Done
+- 2026-10-26 — Before an update's migrations run on existing data, `openDb` copies the database into the backups as `frontline-<time>-before-update.db`, which Settings can restore. With in-app updates, new migrations reach the owner's real data unattended. Before, the newest copy was the last daily backup, up to a day old. A failed copy (a full disk) is logged and the app still starts. Fresh and up-to-date databases make no copy. The test upgrades a first-version database through every migration. Test
 - 2026-10-26 — Reviewed the in-app updates commit (c653f23, `apps/desktop`):
   - The preload is sandboxed and exposes only three calls; the window never leaves the app's origin.
   - The update check is registered once and runs only in the installed app.
