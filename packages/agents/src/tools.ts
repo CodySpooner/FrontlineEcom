@@ -552,7 +552,7 @@ export const APP_TOOLS: AppTool[] = [
             channel: z.enum(['email', 'sms']),
             subject: z.string().max(80).optional(),
             preview: z.string().max(120).optional(),
-            body: z.string().min(10).max(4000).describe('email: content bullets or full copy; sms: the full text with opt-out'),
+            body: z.string().min(10).max(4000).describe('email: content bullets or full copy; sms: the full text with opt-out ("Reply STOP to opt out"), 320 characters at most'),
             offer: z.string().max(120).optional(),
           }),
         )
@@ -562,6 +562,11 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async (f, ctx) => {
       if (f.messages.some((m) => m.channel === 'email' && !m.subject)) return 'Every email step needs a subject.';
+      // An SMS step is pasted into the owner's SMS tool as written: carriers and the TCPA want the opt-out in it, and each
+      // 153 characters past 160 is another billed segment.
+      const sms = f.messages.filter((m) => m.channel === 'sms');
+      if (sms.some((m) => !/\bstop\b/i.test(m.body))) return 'Every SMS step needs its opt-out in the text, e.g. "Reply STOP to opt out" (carriers and the TCPA require it).';
+      if (sms.some((m) => m.body.length > 320)) return 'Keep each SMS step to 320 characters (2 segments): every segment past that is billed again.';
       const flow = saveFlowDraft(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), ...f });
       return `Saved "${flow.name}" (${flow.messages.length} steps) to the flow library. The owner sets it up in their email/SMS tool.`;
     },

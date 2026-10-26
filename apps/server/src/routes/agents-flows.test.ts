@@ -55,6 +55,15 @@ test('Email & SMS saves flows to the library; a redraft replaces the old one', a
   expect((await app.request(`/api/flow-drafts/${flows[0]!.id}`, { method: 'DELETE' })).status).toBe(404);
 });
 
+test('an SMS step needs its opt-out and stays within 2 segments', async () => {
+  const sms = (body: string) => flow({ messages: [{ delayHours: 24, channel: 'sms', body }] });
+  expect(await run([sms('Glow Haus: your cart is saved for 24h.'), sms(`Glow Haus: ${'so much to say. '.repeat(20)}Reply STOP to opt out.`), sms('Glow Haus: cart saved. Txt stop to end.')])).toEqual([
+    'Every SMS step needs its opt-out in the text, e.g. "Reply STOP to opt out" (carriers and the TCPA require it).',
+    'Keep each SMS step to 320 characters (2 segments): every segment past that is billed again.',
+    'Saved "Checkout abandonment" (1 steps) to the flow library. The owner sets it up in their email/SMS tool.',
+  ]);
+});
+
 test('list_flows shows what is already in the library', async () => {
   expect(await run([{ call: 'list_flows' }])).toEqual(['(none)']);
   const [, , list] = await run([flow(), flow({ name: 'Welcome series' }), { call: 'list_flows' }]);
