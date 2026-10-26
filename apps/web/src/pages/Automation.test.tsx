@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { ApprovalRequest, AutomationRule, AutomationRun } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
-import { RunLog } from './Automation';
+import { DemoJobsNote, RunLog } from './Automation';
 
 afterEach(() => {
   cleanup();
@@ -39,5 +39,14 @@ describe('automation run log', () => {
     stubApi((url) => (url.startsWith('/api/automations/runs') ? [run] : url.startsWith('/api/stores') ? [{ id: 'peak', name: 'Peak Fit', currency: 'USD' }] : []));
     renderApp(<RunLog rules={[rule]} />, '/automation');
     expect(await screen.findByRole('link', { name: 'Review it on the Dashboard' })).toBeTruthy();
+  });
+});
+
+describe('demo stores note', () => {
+  it("says a demo store's squad jobs switch on once it's connected, and leaves connected stores out", async () => {
+    stubApi((url) => (url.startsWith('/api/stores') ? [{ id: 'peak', name: 'Peak Fit', connected: false }, { id: 'glow', name: 'Glow Haus', connected: true }] : undefined));
+    renderApp(<DemoJobsNote rules={[{ ...rule, enabled: false }, { ...rule, id: 'r2', storeId: 'glow', enabled: false }]} />, '/automation');
+    expect(await screen.findByText(/Peak Fit is a demo store: its squad's jobs switch on when you connect it/)).toBeTruthy();
+    expect(screen.queryByText(/Glow Haus/)).toBeNull();
   });
 });
