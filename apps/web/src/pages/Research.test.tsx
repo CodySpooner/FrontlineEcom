@@ -36,6 +36,16 @@ describe('ProductDetails › Add to a store', () => {
     const [, init] = fetch.mock.calls.find(([u]) => String(u).includes('add-to-store'))!;
     expect(JSON.parse(String(init?.body))).toEqual({ storeId: 'shop1' });
   });
+
+  it('says a request for the product is already waiting when core hands back the pending one', async () => {
+    stubApi((url) => (url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify')] : url.includes('add-to-store') ? { id: 'a0', createdAt: '2026-10-20T08:00:00Z' } : []));
+    renderApp(<ProductDetails p={product} />);
+    await screen.findByRole('option', { name: 'Peak Fit' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Store' }), { target: { value: 'shop1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Request to add' }));
+    await screen.findByText(/Peak Fit already has a request waiting for this product/);
+    expect(screen.queryByText(/Sent to/)).toBeNull();
+  });
 });
 
 describe('AI Research', () => {

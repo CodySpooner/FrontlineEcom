@@ -337,7 +337,10 @@ export function ProductDetails({ p }: { p: ResearchProduct }) {
         <h3 className="mb-2 text-[13px] font-semibold">Add to a store</h3>
         {add.isSuccess ? (
           <p className="text-[13px] text-text-2">
-            Sent to {stores.find((s) => s.id === storeId)?.name}'s Product Hunter.{' '}
+            {/* Core hands back the request already pending for this product (the owner's or an agent's) instead of a second. */}
+            {Date.parse(add.data.createdAt) < add.submittedAt - 5_000
+              ? `${stores.find((s) => s.id === storeId)?.name} already has a request waiting for this product.`
+              : `Sent to ${stores.find((s) => s.id === storeId)?.name}'s Product Hunter.`}{' '}
             <Link to="/" className="text-red hover:underline">
               Approve it on the Dashboard
             </Link>
