@@ -55,6 +55,25 @@ test('products added on a real store are judged on their first 14 days of sales'
   expect(xp()).toBe(before + 50);
 });
 
+test("a product sold with no unit cost isn't called a win on revenue alone", async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01'));
+  await addProducts(db, approval('peak', ['Ankle Weights', 'Yoga Strap']), () => undefined, async () => [{ id: '905', title: 'Ankle Weights' }, { id: '906', title: 'Yoga Strap' }]);
+  const added = addDays(localDate(), -20);
+  db.prepare(`UPDATE product_tests SET added_on = ?`).run(added);
+  sell('peak', '905', 12, addDays(added, 3));
+  sell('peak', '906', 3, addDays(added, 3));
+  db.prepare(`UPDATE order_items SET cost = 0 WHERE store_id = 'peak' AND product_id IN ('905', '906')`).run(); // the platform has no cost for them
+  const xp = getAgent(db, 'peak:product_hunter')!.xp;
+  await app.request('/api/achievements');
+  expect(outcomes('peak')).toEqual([
+    '"Ankle Weights" sold 12 units, 240 USD revenue in its first 14 days; its profit can\'t be judged: it has no unit cost.',
+    '"Yoga Strap" did not take off: 3 units, 60 USD revenue, 60 USD profit in its first 14 days.', // too few sold, whatever the cost
+  ]);
+  expect(getAgent(db, 'peak:product_hunter')!.xp).toBe(xp);
+  expect(db.prepare(`SELECT title FROM notifications WHERE body LIKE '"Ankle Weights"%'`).get()?.title).toBe('Product Hunter: result unclear without unit costs');
+});
+
 test('a product the owner put on sale days after it was added is judged on its first 14 days on sale', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
   once(db, 'activate:peak', new Date('2020-01-01'));

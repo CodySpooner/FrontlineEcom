@@ -37,7 +37,7 @@ outcome checks.
    12 others that score best on relevance × recency × confidence; rewording a squad memory makes it the owner's. Outcome checks
    (`routes/agents-gamification.ts`, on dashboard reads and hourly) judge approved changes on real data later:
    - ads: 3 days after vs 7 before (blended ROAS; a raise on its extra spend's ROAS, a pause or cut on the ROAS of the spend it took away, vs break-even)
-   - products: their first 14 days on sale (from when first seen active; else from the day added)
+   - products: their first 14 days on sale (from when first seen active; else from the day added); 10+ units with no unit cost is unclear
    - prices and pages: 14 days before vs after, the before scaled by the rest of the store's sales (10+ units across both, else "can't be judged")
    - themes: conversion 14 days before vs after (30+ orders across both)
 

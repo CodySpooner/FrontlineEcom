@@ -156,24 +156,28 @@ export function checkProductOutcomes(db: Db, today?: string) {
     const start = t.live_at ? [String(t.added_on), storeDay(db, String(t.store_id), String(t.live_at))].sort().at(-1)! : String(t.added_on);
     if (!settled(db, String(t.store_id), start, today)) continue;
     const end = addDays(start, 13); // its first 14 days, the first one included
-    const { units, revenue, profit } = productSales(db, String(t.store_id), String(t.product_id), start, end);
+    const { units, revenue, profit, uncosted } = productSales(db, String(t.store_id), String(t.product_id), start, end);
     // Still a draft with no sales: the owner never put it on sale, which says nothing about demand. Archived or removed
     // without a sale is judged: it flopped, or the owner turned the pick down after approving it.
     if (!units && t.status === 'draft') {
       db.prepare('UPDATE product_tests SET judged_at = ? WHERE store_id = ? AND product_id = ?').run(new Date().toISOString(), String(t.store_id), String(t.product_id));
       continue;
     }
-    // ponytail: no per-product ad spend yet, so the bar is units + profit, not ROAS vs break-even.
-    const won = units >= 10 && profit > 0;
+    // ponytail: no per-product ad spend yet, so the bar is units + profit, not ROAS vs break-even. Sold with no unit cost,
+    // its revenue reads as profit: enough units, but whether it paid can't be told.
+    const won = units < 10 ? false : uncosted ? undefined : profit > 0;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
     const storeId = String(t.store_id);
     const agentId = String(t.agent_id);
     recordOutcome(db, `product:${t.approval_id}:${t.product_id}`, won, {
-      storeId, agentId, kind: 'learning', confidence: won ? 0.7 : 0.6, tags: ['outcome', 'product'],
-      text: `"${t.title}" ${won ? 'sold' : 'did not take off'}: ${units} units, ${money(revenue)} revenue, ${money(profit)} profit in its first 14 days${t.live_at ? ' on sale' : ''}.`,
+      storeId, agentId, kind: 'learning', confidence: won ? 0.7 : won === undefined ? 0.5 : 0.6, tags: ['outcome', 'product'],
+      text:
+        won === undefined
+          ? `"${t.title}" sold ${units} units, ${money(revenue)} revenue in its first 14 days${t.live_at ? ' on sale' : ''}; its profit can't be judged: it has no unit cost.`
+          : `"${t.title}" ${won ? 'sold' : 'did not take off'}: ${units} units, ${money(revenue)} revenue, ${money(profit)} profit in its first 14 days${t.live_at ? ' on sale' : ''}.`,
       evidence: `paid orders ${start} to ${end} (request ${t.approval_id})`,
     });
-    if (t.run_id) judgeRun(db, `product:${t.approval_id}:${t.product_id}`, String(t.run_id), won);
+    if (t.run_id && won !== undefined) judgeRun(db, `product:${t.approval_id}:${t.product_id}`, String(t.run_id), won);
     if (won) award(db, { ref: `product-win:${t.approval_id}:${t.product_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" sold ${units} units in 14 days` });
     db.prepare('UPDATE product_tests SET judged_at = ? WHERE store_id = ? AND product_id = ?').run(new Date().toISOString(), storeId, String(t.product_id));
   }
