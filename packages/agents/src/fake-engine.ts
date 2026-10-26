@@ -13,6 +13,17 @@ export type FakeScript = (input: RunInput) => FakeStep[];
  * creatives, flows) fill up without spending Claude usage. Only the Creative Studio's waits for an approval.
  */
 // ponytail: templated content from the store's own rows; the Claude engine does the real thinking.
+const STORE_PAGES = [
+  {
+    match: /\bFAQ\b/i, title: 'FAQ',
+    html: '<h2>Frequently asked questions</h2><h3>When will my order ship?</h3><p>Orders ship in 1-2 business days and arrive in 3-5.</p><h3>Can I return it?</h3><p>Yes: 30-day returns, no questions asked.</p><h3>How do I pick a size?</h3><p>Check the size chart on each product page, or reply to your order email and we will help.</p>',
+  },
+  {
+    match: /\b(landing|promo)\b/i, title: "This week's offer",
+    html: '<h2>This week only: 20% off everything</h2><p>Our best sellers, at the lowest price of the season.</p><ul><li>Free shipping over $50</li><li>30-day returns</li><li>Loved by thousands of customers</li></ul><p><a href="/collections/all">Shop the sale</a></p>',
+  },
+];
+
 function demoWork(input: RunInput): FakeStep[] {
   const db = input.env!.db;
   const storeId = input.store.id;
@@ -38,6 +49,9 @@ function demoWork(input: RunInput): FakeStep[] {
       return [{ call: 'list_orders', input: { days: 14, fulfillment: 'unfulfilled' } }, ...flag];
     }
     case 'store_developer': {
+      // A store page the Store Builder asks for (its FAQ / promo landing ideas), unless the task is about a product page.
+      const page = !/product page/i.test(input.task) && STORE_PAGES.find((p) => p.match.test(input.task));
+      if (page) return [{ call: 'draft_page', input: { kind: 'page', title: page.title, html: page.html, notes: 'Demo draft: the questions and offer customers ask about most, short answers up top.' } }];
       // Every product the task names ("New draft product(s) just added…"), else the top one.
       const named = [...input.task.matchAll(/\(productId ([^)]+)\)/g)].map((m) => product(m[1]));
       const todo = (named.length ? named : [product()]).filter(

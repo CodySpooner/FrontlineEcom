@@ -88,6 +88,18 @@ test("demo actions on a creative card keep the creative's kind: captions on a vi
   expect(await made('Make 3 variations of this 9:16 UGC avatar video ad with different hooks and save them: "Glow". Original brief: In a car.')).toEqual(['ugc', 'ugc', 'ugc']);
 });
 
+test("the Store Builder's FAQ and promo ideas get store page drafts in demo, product pages stay product pages", async () => {
+  const drafted = async (task: string) => {
+    const m = runManager(db);
+    if (typeof m.start('glow:store_developer', task) === 'string') throw new Error('not started');
+    await m.idle();
+    return db.prepare(`SELECT kind, title FROM page_drafts WHERE store_id = 'glow' ORDER BY rowid DESC LIMIT 1`).get();
+  };
+  expect(await drafted('Build an FAQ page from the questions customers ask most (shipping, returns, sizing). Save it as a page draft for the owner to review.')).toEqual({ kind: 'page', title: 'FAQ' });
+  expect(await drafted('Draft a landing page for this week’s promo with one hero. Save it as a page draft for the owner to review.')).toEqual({ kind: 'page', title: "This week's offer" });
+  expect((await drafted("Rewrite our best seller's product page to lift conversion: benefits first, social proof, FAQ, clear CTA."))?.kind).toBe('product');
+});
+
 test("a demo Ask AI question reads the data it's about", async () => {
   const asked = async (q: string) => {
     const m = runManager(db);

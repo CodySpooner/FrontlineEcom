@@ -160,11 +160,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-73 `packages/agents/README.md`: how a run is assembled, guarded, carried out and learned from, plus the money guards, demo vs live, and where to add a tool, a platform writer or a role (Phase 5 docs).
 - [x] AGT-74 Ad triage nets the store's fee estimate: core's new `fee_percent` / `fee_per_order` come off profit, but `economics()` still set break-even ROAS from gross margin, so on an Etsy store (about 9.5% + $0.25 per order) review_campaigns called money-losing campaigns "scale".
 - [x] AGT-75 Demo creative-card actions keep the creative's kind: "Add Captions" and "Generate Variations" on a demo video or UGC ad came back as images, because the demo matched only "<kind> ad and save it".
+- [x] AGT-76 Demo Store Builder ideas draft what they ask for: "FAQ page" and "Promo landing page" drafted the best seller's product page in demo mode, or nothing at all if that product already had a draft.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-76: the demo Store Developer drafts a store page (FAQ, or "This week's offer" for landing/promo asks) unless the task is about a product page. The weekly refresh and the after-add tasks still draft product pages. Test added.
 - 2026-10-26 — AGT-75: the demo Creative Studio takes the first "<kind> ad" in the task, and the brief after "Brief:" or "Original brief:". Test added (fails on the old matcher).
 - 2026-10-26 — Product, price and page outcomes judge profit after the store's fee % (`productSales`), matching core's product profit. A price raise can't count as a win on gross profit while net profit fell. The outcome texts and the propose_price_change description now say "profit". Test updated.
 - 2026-10-26 — Core's fee FYI: every direct profit or margin query in the lane now nets the store's fee estimate (economics, metrics_timeseries, the price floor, and now list_products margin_pct, which nets the fee % like core's product profit). Next migration noted as 32.
