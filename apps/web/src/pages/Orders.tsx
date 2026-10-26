@@ -142,6 +142,11 @@ function ResolvedIssue({ i }: { i: OrderIssue }) {
       <Button size="sm" aria-label={`Reopen ${i.orderId}`} disabled={set.isPending} onClick={() => set.mutate({ id: i.id, status: 'open' })}>
         Reopen
       </Button>
+      {set.isError && (
+        <p role="alert" className="basis-full text-xs text-red">
+          {set.error.message}
+        </p>
+      )}
     </li>
   );
 }

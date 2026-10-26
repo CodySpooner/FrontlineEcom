@@ -164,6 +164,11 @@ export function Transcript({ run, role, onRetry }: { run: AgentRunDetail; role: 
                 <button type="button" onClick={() => cancel.mutate(run.id)} disabled={cancel.isPending} className="cursor-pointer underline-offset-2 hover:text-white hover:underline">
                   Stop
                 </button>
+                {cancel.isError && (
+                  <span role="alert" className="text-red">
+                    {cancel.error.message}
+                  </span>
+                )}
               </>
             ) : run.status === 'done' ? (
               `Done${run.usage.costUsd ? ` · ${cents(run.usage.costUsd)}` : ''}`

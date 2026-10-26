@@ -252,6 +252,11 @@ function Memory({ agent }: { agent: Agent }) {
           ))}
         </ul>
       )}
+      {forget.isError && (
+        <p role="alert" className="mt-2 text-xs text-red">
+          {forget.error.message}
+        </p>
+      )}
     </Panel>
   );
 }

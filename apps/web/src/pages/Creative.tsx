@@ -252,6 +252,11 @@ function Preview({ c, onAsk, busy }: { c: CreativeT; onAsk: (task: string) => vo
           Delete
         </Button>
       </div>
+      {del.isError && (
+        <p role="alert" className="text-xs text-red">
+          {del.error.message}
+        </p>
+      )}
     </div>
   );
 }

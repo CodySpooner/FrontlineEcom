@@ -42,6 +42,11 @@ export function SharedLearnings({ by, niche }: { by: { store: string } | { niche
           ))}
         </ul>
       )}
+      {forget.isError && (
+        <p role="alert" className="mt-2 text-xs text-red">
+          {forget.error.message}
+        </p>
+      )}
     </Panel>
   );
 }

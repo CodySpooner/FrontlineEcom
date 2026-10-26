@@ -236,6 +236,8 @@ Orca's browser against the reference before ticking it.
       Reopen, so a mistaken "Mark resolved" can be undone and an issue the server closed doesn't just vanish.
 - [x] UI-89 Settings › Your Data › Backups marks the copy core takes before an update's migrations ("Before update"),
       the one to restore if an update goes wrong.
+- [x] UI-90 Six actions failed silently (no global mutation error handler): the Flow Library starter run, Stop on a
+      running chat, Delete creative, forget a memory, stop sharing a niche learning, Reopen an order issue. Each now says why.
 
 ## Blocked
 
@@ -361,3 +363,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-87: AgentDetail header badge "AI ≤ $X.XX/day" when `dailyBudgetUsd` is set, using `cents` because `money` rounds $1.50 to $2. Orca at 800px with a $1.50 fixture on Glow's Copywriter: "Idle · Ask first · AI ≤ $1.50/day". Fixture removed
 - 2026-10-26 — UI-88: native `<details>` under the Needs You list shows the 5 latest resolved order issues (by `resolvedAt`). Each shows the note · resolution, plus Reopen (`PATCH status: open`, which the agents route already accepted). Orders.test covers it. Orca at 800px with two fixture issues (owner-resolved and "Delivered; closed automatically."): Reopen moved #1164 back into the queue. Fixtures removed
 - 2026-10-26 — UI-89: a `Before update` badge on backups named `…-before-update.db` (core d392940). `Backups` is exported for Settings.test. Orca at 800px with a fixture copy: "Oct 26, 1:52 PM · Before update · 1.5 MB · Restore", and only on that row. Fixture file removed
+- 2026-10-26 — UI-90: found by listing every mutation-hook variable in pages/components whose `.error`/`.isError` is never read (Dashboard's decide was a false positive: it has its own `failed` state). Each fix is the `role=alert` text-xs red line already used on Knowledge and Automation. The Flow Library starter also gets `FixLink`. New FlowLibrary.test. Orca at 800px with a $0 fixture budget on Glow's Email & SMS: "Design a welcome series" → "Today's budget for this agent ($0) is used up… Raise the agent's budget" (→ its settings). No run was created. Budget restored

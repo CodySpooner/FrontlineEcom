@@ -5,6 +5,7 @@ import type { Agent, FlowDraft, FlowMessage } from '@frontline/shared';
 import { useDeleteFlowDraft, useFlowDrafts, useStartRun } from '../api/client';
 import { ago } from '../lib/format';
 import { CHANNEL, delayLabel, flowText, messageText } from '../lib/flows';
+import { FixLink } from './Chat';
 import { Badge, Button, cx, EmptyState, ErrorState, LoadingState, Panel } from './ui';
 
 const STARTER = 'Design a welcome series flow for new subscribers: trigger, timing, and the copy for every email and SMS. Save it to the flow library.';
@@ -21,9 +22,16 @@ export function FlowLibrary({ agent, onOpen }: { agent: Agent; onOpen: (runId: s
         <EmptyState
           title="No flows yet"
           action={
-            <Button variant="primary" disabled={start.isPending} onClick={() => start.mutate({ agentId: agent.id, task: STARTER }, { onSuccess: (r) => onOpen(r.id) })}>
-              Design a welcome series
-            </Button>
+            <>
+              <Button variant="primary" disabled={start.isPending} onClick={() => start.mutate({ agentId: agent.id, task: STARTER }, { onSuccess: (r) => onOpen(r.id) })}>
+                Design a welcome series
+              </Button>
+              {start.isError && (
+                <p role="alert" className="mt-2 text-xs text-red">
+                  {start.error.message} <FixLink message={start.error.message} agentId={agent.id} />
+                </p>
+              )}
+            </>
           }
         >
           Ask this agent for a flow in Chat (welcome, abandoned cart, post-purchase, win-back) and it lands here, ready to paste into your email tool.
