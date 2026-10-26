@@ -210,6 +210,12 @@ export interface AnalyticsSummary {
    * Always set by /api/analytics/summary; treat a missing value as USD.
    */
   currency?: string;
+  /**
+   * Store currencies with no exchange rate into `currency` (not published by the ECB, or rates not fetched yet).
+   * Stores in them are left out of every amount here (and of /campaigns and /top-products for the same stores);
+   * open such a store alone to see it in its own currency. Absent when everything converted.
+   */
+  unconverted?: string[];
 }
 
 export interface Funnel {
@@ -275,7 +281,7 @@ export interface StoreInput {
   nicheDetail?: string;
   /** Default 'USD'. */
   currency?: string;
-  /** Default 'America/Chicago'. */
+  /** Default: the timezone of the machine running the app. */
   timezone?: string;
   /** Default red accent. */
   color?: string;

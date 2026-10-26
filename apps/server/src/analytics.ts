@@ -80,9 +80,10 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
        WHERE store_id IN (${storeIds.map(() => '?').join(',')}) AND date BETWEEN ? AND ?`,
     )
     .all(...storeIds, addDays(to, 1 - 2 * range), to) as unknown as MetricRow[])
-    .map((r) => {
+    // A store with no exchange rate is left out (the summary lists its currency in `unconverted`).
+    .flatMap((r) => {
       const x = rate(r.storeId);
-      return x === 1 ? r : { ...r, revenue: r.revenue * x, adSpend: r.adSpend * x, cogs: r.cogs * x };
+      return !x ? [] : x === 1 ? [r] : [{ ...r, revenue: r.revenue * x, adSpend: r.adSpend * x, cogs: r.cogs * x }];
     });
 }
 
@@ -100,6 +101,7 @@ export function campaignStats(db: Db, storeIds: string[], from: string, to: stri
        WHERE c.store_id IN (${storeIds.map(() => '?').join(',')}) GROUP BY c.network, c.id ORDER BY spend DESC, c.name`,
     )
     .all(from, to, ...storeIds)
+    .filter((r) => rate(String(r.store_id)))
     .map((r) => {
       const x = rate(String(r.store_id));
       const spend = r2(Number(r.spend) * x);
@@ -151,6 +153,7 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
     : [];
   const { rate } = fxFor(db, storeIds);
   return [...rows, ...demo.flatMap((id) => demoTopProducts(db, id, from, to))]
+    .filter((p) => rate(p.storeId))
     .map((p) => (rate(p.storeId) === 1 ? p : { ...p, revenue: r2(p.revenue * rate(p.storeId)), profit: r2(p.profit * rate(p.storeId)) }))
     .sort((a, b) => b.revenue - a.revenue)
     .slice(0, limit);

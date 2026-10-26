@@ -132,7 +132,8 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
       const storeIds = pickStores(db, c.req.query('stores'));
       const to = localDate();
-      return c.json({ ...summarize(loadRows(db, storeIds, range, to), { range, to, storeIds, todayFraction: dayFraction(to) }), currency: fxFor(db, storeIds).currency });
+      const { currency, unconverted } = fxFor(db, storeIds);
+      return c.json({ ...summarize(loadRows(db, storeIds, range, to), { range, to, storeIds, todayFraction: dayFraction(to) }), currency, ...(unconverted.length ? { unconverted } : {}) });
     })
     .get('/api/analytics/campaigns', (c) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;

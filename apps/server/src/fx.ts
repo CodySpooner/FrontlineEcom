@@ -36,7 +36,8 @@ export async function refreshFx(db: Db, fetchFn: Fetch = fetch) {
 
 /**
  * The currency a query over `storeIds` reports in, and each store's factor into it: one store stays in its own
- * currency, several are converted to the base currency.
+ * currency, several are converted to the base currency. A store whose currency has no rate (not published by the ECB,
+ * or nothing fetched yet) gets 0: callers leave it out, and `unconverted` lists those currencies.
  */
 export function fxFor(db: Db, storeIds: string[]) {
   const stores = new Map(
@@ -44,23 +45,31 @@ export function fxFor(db: Db, storeIds: string[]) {
   );
   const currency = storeIds.length === 1 ? (stores.get(storeIds[0]!) ?? 'USD') : getSettings(db).baseCurrency;
   const rates = [...stores.values()].some((c) => c !== currency) ? cached(db)?.rates : undefined;
-  // ponytail: a currency with no ECB rate (or no rates fetched yet) is counted 1:1.
   const rate = (storeId: string) => {
     const from = stores.get(storeId) ?? currency;
-    return from !== currency && rates?.[from] && rates[currency] ? rates[currency] / rates[from] : 1;
+    if (from === currency) return 1;
+    return rates?.[from] && rates[currency] ? rates[currency] / rates[from] : 0;
   };
-  return { currency, rate };
+  const unconverted = [...new Set(storeIds.filter((id) => !rate(id)).map((id) => stores.get(id)!))];
+  return { currency, rate, unconverted };
 }
 
-/** Refetches rates older than 12 h while any store's currency differs from the base currency (checked hourly). Returns stop(). */
+/**
+ * Refetches rates older than 12 h while any store's currency differs from the base currency. Checked every 10 min, so
+ * a store that just changed currency gets rates soon; after a failure it waits an hour. Returns stop().
+ */
 export function startFxLoop(db: Db, fetchFn: Fetch = fetch) {
+  let failedAt = 0;
   const check = () => {
     if (!db.prepare('SELECT 1 FROM stores WHERE currency != ?').get(getSettings(db).baseCurrency)) return;
     const at = cached(db)?.fetchedAt;
-    if (at && Date.now() - Date.parse(at) < 12 * 3_600_000) return;
-    refreshFx(db, fetchFn).catch((e) => log('warn', 'fx refresh failed', { error: e instanceof Error ? e.message : String(e) }));
+    if ((at && Date.now() - Date.parse(at) < 12 * 3_600_000) || Date.now() - failedAt < 3_600_000) return;
+    refreshFx(db, fetchFn).catch((e) => {
+      failedAt = Date.now();
+      log('warn', 'fx refresh failed', { error: e instanceof Error ? e.message : String(e) });
+    });
   };
   check();
-  const timer = setInterval(check, 3_600_000);
+  const timer = setInterval(check, 10 * 60_000);
   return () => clearInterval(timer);
 }

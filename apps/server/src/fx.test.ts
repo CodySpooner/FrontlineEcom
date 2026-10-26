@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { AnalyticsSummary, CampaignStats, TopProduct } from '@frontline/shared';
 import { topProducts } from './analytics';
 import { createApp } from './app';
@@ -51,12 +51,17 @@ test('multi-store analytics convert to the base currency; one store keeps its ow
   const glow = await summary('glow');
   const paw = await summary('pawsome');
   expect([glow.currency, paw.currency]).toEqual(['EUR', 'USD']);
-  // No rates yet: counted 1:1 rather than failing.
-  expect((await summary('pawsome,glow')).totals.revenue).toBeCloseTo(paw.totals.revenue + glow.totals.revenue, 1);
+  // No rates yet: the EUR store is left out and flagged rather than counted 1:1.
+  const noRates = await summary('pawsome,glow');
+  expect(noRates.totals.revenue).toBeCloseTo(paw.totals.revenue, 1);
+  expect(noRates.unconverted).toEqual(['EUR']);
+  expect((await get<CampaignStats[]>('/api/analytics/campaigns?range=7&stores=pawsome,glow')).every((x) => x.storeId === 'pawsome')).toBe(true);
+  expect((await get<TopProduct[]>('/api/analytics/top-products?range=7&stores=pawsome,glow&limit=50')).every((x) => x.storeId === 'pawsome')).toBe(true);
 
   await refreshFx(db, fakeEcb().fetchFn);
   const both = await summary('pawsome,glow');
   expect(both.currency).toBe('USD');
+  expect(both.unconverted).toBeUndefined();
   expect(both.totals.revenue).toBeCloseTo(paw.totals.revenue + glow.totals.revenue * 1.25, 0);
   expect(both.byStore.find((s) => s.storeId === 'glow')!.totals.adSpend).toBeCloseTo(glow.totals.adSpend * 1.25, 0);
 
@@ -98,4 +103,31 @@ test('best sellers across currencies rank after conversion', async () => {
   item.run('glow', 'o2', 'g1', 50000);
   expect(topProducts(db, ['pawsome', 'glow'], '2026-10-20', '2026-10-26', 1).map((p) => [p.productId, p.revenue])).toEqual([['p1', 5000]]);
   expect(topProducts(db, ['pawsome', 'glow'], '2026-10-20', '2026-10-26', 2)[1]).toMatchObject({ productId: 'g1', revenue: 357.14 });
+});
+
+test('the rate loop notices a new currency within 10 minutes and waits an hour after a failed fetch', async () => {
+  vi.useFakeTimers();
+  try {
+    const db = openDb();
+    seedDemo(db, '2026-10-26');
+    let fail = true;
+    const calls: string[] = [];
+    const fetchFn = (async (url: string) => {
+      calls.push(url);
+      return fail ? new Response('', { status: 503 }) : new Response(XML);
+    }) as typeof fetch;
+    const stop = startFxLoop(db, fetchFn);
+    db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'glow'").run(); // e.g. a Shopify sync
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(calls).toHaveLength(1);
+    fail = false;
+    await vi.advanceTimersByTimeAsync(50 * 60_000);
+    expect(calls).toHaveLength(1); // an hour after the failure
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(calls).toHaveLength(2);
+    expect(fxFor(db, ['pawsome', 'glow']).unconverted).toEqual([]);
+    stop();
+  } finally {
+    vi.useRealTimers();
+  }
 });
