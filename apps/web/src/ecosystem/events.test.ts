@@ -66,3 +66,14 @@ test('mission progress deduplicates across reconnects and rejects old step snaps
   expect(state.missions.m1).toEqual(done);
   expect(state.events.filter((e) => e.type === 'workflow.advanced')).toHaveLength(2);
 });
+
+test('mission retries can recover a blocked step but cancellation cannot be undone by a stale snapshot', () => {
+  const failed: SquadMission = { id: 'retry', storeId: 'glow', title: 'Retry', createdAt: run.createdAt, status: 'blocked', steps: [{ id: 'copy', role: 'copywriter', task: 'Write', dependsOn: [], status: 'error', runId: 'r1' }] };
+  let state = mergeOfficeSnapshot(emptyOffice(), [agent], [], [], [failed]);
+  const retry: SquadMission = { ...failed, status: 'running', steps: [{ ...failed.steps[0]!, runId: 'r2', status: 'running' }] };
+  state = applyOfficeMessage(state, { type: 'mission', mission: retry });
+  expect(state.missions.retry).toEqual(retry);
+  const cancelled: SquadMission = { ...retry, status: 'cancelled', steps: [{ ...retry.steps[0]!, status: 'cancelled' }] };
+  state = applyOfficeMessage(state, { type: 'mission', mission: cancelled });
+  expect(applyOfficeMessage(state, { type: 'mission', mission: retry }).missions.retry).toEqual(cancelled);
+});

@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { listMissions } from '@frontline/agents';
 import { OFFICE_DESKS, OFFICE_GRID, type OfficeAppearance, type OfficeSeat, type OfficeStats } from '@frontline/shared';
 import { once, type Db } from '../db';
 
@@ -26,9 +27,7 @@ export function ecosystemRoutes(db: Db) {
         activeTeams: Number(db.prepare('SELECT count(*) AS n FROM squad_missions WHERE ended_at IS NULL').get()!.n),
         inputTokens: Number(r.input), outputTokens: Number(r.output), costUsd: Number(r.cost),
         teamsCreated: Number(db.prepare('SELECT count(*) AS n FROM squad_missions').get()!.n),
-        completedMissions: Number(db.prepare(`SELECT count(*) AS n FROM squad_missions m WHERE json_array_length(m.steps_json) > 0 AND NOT EXISTS (
-          SELECT 1 FROM json_each(m.steps_json) step LEFT JOIN agent_runs run ON run.id = json_extract(step.value, '$.runId') WHERE run.status IS NULL OR run.status != 'done'
-        )`).get()!.n),
+        completedMissions: listMissions(db, undefined, -1).filter((m) => m.steps.length && m.status === 'done').length,
         handoffs: Number(db.prepare('SELECT count(*) AS n FROM agent_runs child JOIN agent_runs parent ON parent.id = child.parent_run_id WHERE parent.agent_id != child.agent_id').get()!.n),
         fullOffice: !!db.prepare("SELECT 1 FROM done_once WHERE ref = 'ecosystem:full-office'").get(),
       } satisfies OfficeStats);

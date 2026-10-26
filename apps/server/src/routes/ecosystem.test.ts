@@ -68,9 +68,14 @@ test('statistics count durable runs beyond the recent feed and exclude cancellat
   const stats = await (await app.request('/api/ecosystem/stats')).json() as OfficeStats;
   expect(stats).toMatchObject({ activeTasks: 2, completedTasks: 210, failedTasks: 1, successRate: 210 / 211, activeTeams: 1, inputTokens: 2140, outputTokens: 1070 });
   expect(stats.costUsd).toBeCloseTo(21.4);
-  db.prepare("UPDATE squad_missions SET steps_json = ? WHERE id = 'm'").run(JSON.stringify([{ id: 'one', runId: '0' }, { id: 'two', runId: '1' }]));
+  db.prepare("UPDATE squad_missions SET steps_json = ? WHERE id = 'm'").run(JSON.stringify([{ id: 'one', runId: '0', role: 'copywriter', task: 'Write', dependsOn: [] }, { id: 'two', runId: '1', role: 'operations', task: 'Check', dependsOn: ['one'] }]));
   db.prepare("UPDATE agent_runs SET parent_run_id = '0', agent_id = 'one:operations' WHERE id = '1'").run();
   expect(await (await app.request('/api/ecosystem/stats')).json()).toMatchObject({ teamsCreated: 1, completedMissions: 1, handoffs: 1 });
   db.prepare("UPDATE agent_runs SET status = 'error' WHERE id = '1'").run();
+  expect(await (await app.request('/api/ecosystem/stats')).json()).toMatchObject({ completedMissions: 0 });
+  db.prepare("UPDATE agent_runs SET error = 'Interrupted by an app restart' WHERE id = '1'").run();
+  db.prepare("INSERT INTO done_once (ref, at) VALUES ('retry:1:2', '2026-10-26')").run();
+  expect(await (await app.request('/api/ecosystem/stats')).json()).toMatchObject({ completedMissions: 1 });
+  db.prepare("UPDATE squad_missions SET steps_json = ? WHERE id = 'm'").run(JSON.stringify([{ id: 'one', role: 'copywriter', task: 'Write', dependsOn: [], cancelled: true }]));
   expect(await (await app.request('/api/ecosystem/stats')).json()).toMatchObject({ completedMissions: 0 });
 });

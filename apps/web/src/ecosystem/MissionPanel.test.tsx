@@ -20,3 +20,17 @@ test('creates an existing workflow with its actual dependencies and displays del
   expect(screen.getByText('This agent is offline.')).toBeTruthy();
   expect(screen.getByText(/A product with 55% margin/)).toBeTruthy();
 });
+
+test('cancels a mission waiting on a paused agent through the existing endpoint', async () => {
+  const mission: SquadMission = { id: 'waiting', storeId: 'glow', title: 'Paused squad', status: 'running', createdAt: '', steps: [{ id: 'copy', role: 'copywriter', task: 'Write', dependsOn: [], status: 'waiting' }] };
+  const cancelled: SquadMission = { ...mission, status: 'cancelled', steps: [{ ...mission.steps[0]!, status: 'cancelled' }] };
+  const fetch = stubApi(() => cancelled);
+  const props = { office: { ...emptyOffice(), missions: { waiting: mission } }, create: false, onCreate: vi.fn(), onCloseCreate: vi.fn() };
+  const view = renderApp(<MissionPanel {...props} />);
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel mission' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Cancel mission' })).toBeNull());
+  expect(fetch).toHaveBeenCalledWith('/api/squad-missions/waiting/cancel', expect.objectContaining({ method: 'POST' }));
+  view.unmount();
+  renderApp(<MissionPanel {...props} onPreview={vi.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Cancel mission' })).toBeNull();
+});

@@ -71,9 +71,9 @@ export function applyOfficeMessage(state: OfficeState, message: LiveMessage, now
 }
 function missionEvent(state: OfficeState, mission: SquadMission, at = mission.createdAt): OfficeState {
   const old = state.missions[mission.id];
-  if (old && old.status !== 'running' && mission.status === 'running') return state;
+  if (old && ['done', 'cancelled'].includes(old.status) && mission.status !== old.status) return state;
   // A delayed snapshot must not rewind a step that has already finished.
-  if (old && old.steps.some((step) => ['done', 'error', 'cancelled'].includes(step.status) && mission.steps.find((s) => s.id === step.id)?.status !== step.status)) return state;
+  if (old && old.steps.some((step) => { const next = mission.steps.find((s) => s.id === step.id); return ['done', 'error', 'cancelled'].includes(step.status) && next?.runId === step.runId && next?.status !== step.status; })) return state;
   state = { ...state, missions: { ...state.missions, [mission.id]: mission } };
   const step = mission.steps.find((s) => s.status === 'running') ?? mission.steps.at(-1);
   if (!step) return state;
