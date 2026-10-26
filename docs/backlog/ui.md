@@ -148,8 +148,11 @@ Orca's browser against the reference before ticking it.
       resolved issues with the owner's resolution, but the UI never sent one. PATCH errors are shown too (they were silent).
 - [x] UI-49 Store form: time zone. The API takes and validates `timezone` and non-Shopify connectors date orders by it,
       but the form couldn't set it, so every store got the computer's zone.
+- [ ] UI-50 "Why not?" on Deny: Deny opens an optional one-line reason (Dashboard Requests, bell drawer, chat cards) that is
+      sent with the deny, so the denial memory tells the squad why. Needs core `decisionNote` + agents `rememberDenial`.
 
 ## Blocked
+- UI-50 Deny reason: waiting on core (`decisionNote` on deny) and agents (`rememberDenial` uses it), Inbox requests 2026-10-26.
 
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
