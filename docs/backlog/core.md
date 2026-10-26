@@ -37,7 +37,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-15 Research feed: trending products dataset (demo) with scoring (margin, competition, trend, shipping),
       tabs as filters, saved lists API.
 - [x] CORE-16 Competitors: competitors per store, price snapshots, ad snapshots; API.
-- [ ] CORE-17 Automation scheduler: rules (schedule cron | metric threshold) → action (agent task) with approval policy
+- [x] CORE-17 Automation scheduler: rules (schedule cron | metric threshold) → action (agent task) with approval policy
       and caps; run log; survives restarts.
 - [ ] CORE-18 Electron shell `apps/desktop`: starts the server in a utilityProcess, loads the web build (dev: Vite URL),
       single instance, frameless window with themed title bar, tray, safeStorage for secrets. Check `node:sqlite` under
@@ -49,6 +49,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-17 automation scheduler: rules (5-field local cron | metric threshold over N days) → agent task via the run manager; approval `ask` (approvals hook) or `auto`; daily cap + cooldown; run log; survives restarts (persisted `checked_at`, 24h catch-up, pending approvals re-attached); `GET/POST /api/automations`, `PATCH/DELETE /api/automations/:id`, `GET /api/automations/runs`
 - 2026-10-26 — CORE-16 competitors: `competitors` + `competitor_snapshots` (price | ad), `GET/POST /api/competitors`, `DELETE /api/competitors/:id`, `GET/POST /api/competitors/:id/snapshots`, `GET /api/competitors/price-changes`; demo rivals for the 3 demo stores
 - 2026-10-26 — Fix: `pnpm dev` API never started (tsx watch restarts on stdin data under `pnpm --parallel`); server dev now `node --watch --import tsx`. Verified Command Center on the real API in the browser.
 - 2026-10-26 — CORE-09 Meta Ads connector: campaigns + daily campaign insights (spend, de-duplicated purchases/value, clicks, impressions), 730-day backfill in 90-day chunks then 28-day attribution re-pull, `daily_metrics.ad_spend` rebuilt across networks; shared `switchToReal`/`rebuildAdSpend`

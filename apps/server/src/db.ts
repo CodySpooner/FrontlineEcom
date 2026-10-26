@@ -241,6 +241,33 @@ export const MIGRATIONS = [
   );
   CREATE INDEX competitor_snapshots_by_time ON competitor_snapshots (competitor_id, kind, captured_at);
   `,
+  /* 9 */ `
+  CREATE TABLE automation_rules (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    trigger_json TEXT NOT NULL,
+    action_json TEXT NOT NULL,
+    approval TEXT NOT NULL DEFAULT 'ask',
+    max_runs_per_day INTEGER NOT NULL DEFAULT 3,
+    cooldown_hours INTEGER NOT NULL DEFAULT 24,
+    created_at TEXT NOT NULL,
+    last_fired_at TEXT,
+    checked_at TEXT
+  );
+  CREATE TABLE automation_runs (
+    id TEXT PRIMARY KEY,
+    rule_id TEXT NOT NULL REFERENCES automation_rules(id) ON DELETE CASCADE,
+    store_id TEXT NOT NULL,
+    fired_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    detail TEXT,
+    run_id TEXT,
+    approval_id TEXT
+  );
+  CREATE INDEX automation_runs_by_time ON automation_runs (store_id, fired_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

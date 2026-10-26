@@ -5,6 +5,7 @@ import { WebSocketServer } from 'ws';
 import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type ApprovalStatus, type StoreInput } from '@frontline/shared';
 import { loadRows, summarize } from './analytics';
 import { decide, listApprovals } from './approvals';
+import { automationRoutes } from './automations';
 import { listOrders, listProducts } from './catalog';
 import { competitorRoutes } from './competitors';
 import { dataDir, type Db } from './db';
@@ -97,6 +98,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     })
     .route('/', researchRoutes(db))
     .route('/', competitorRoutes(db, (q) => pickStores(db, q)))
+    .route('/', automationRoutes(db, (q) => pickStores(db, q)))
     .route('/', settingsRoutes(db))
     .route('/', agentRoutes(db));
 };

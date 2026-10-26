@@ -612,3 +612,73 @@ export interface PriceChange {
   changePct: number;
   at: string;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Automation (core lane). Rules: trigger → agent task, with an approval policy and a daily cap.
+
+export type AutomationTrigger =
+  /** 5-field cron in the owner's local time, e.g. "0 9 * * *" = every day 09:00. */
+  | { type: 'schedule'; cron: string }
+  /** Fires when the store's metric over the last `windowDays` crosses `value` (checked every 15 min, then `cooldownHours`). */
+  | { type: 'metric'; metric: keyof MetricTotals; op: '<' | '>'; value: number; windowDays: number };
+
+export interface AutomationAction {
+  type: 'agent_task';
+  /** `<storeId>:<role>`, must belong to the rule's store. */
+  agentId: string;
+  task: string;
+}
+
+/**
+ * GET /api/automations?stores= → AutomationRule[]; POST /api/automations (AutomationRuleInput) → AutomationRule;
+ * PATCH /api/automations/:id (any subset) → AutomationRule; DELETE /api/automations/:id.
+ */
+export interface AutomationRule {
+  id: string;
+  storeId: string;
+  name: string;
+  enabled: boolean;
+  trigger: AutomationTrigger;
+  action: AutomationAction;
+  /** 'auto' starts the agent right away; 'ask' creates an approval request first. */
+  approval: 'auto' | 'ask';
+  /** Hard cap on fires per local day. */
+  maxRunsPerDay: number;
+  /** Metric rules: minimum hours between fires. */
+  cooldownHours: number;
+  createdAt: string;
+  lastFiredAt?: string;
+  /** Schedule rules: next fire time (ISO), when within 8 days. */
+  nextRunAt?: string;
+}
+
+export interface AutomationRuleInput {
+  storeId: string;
+  name: string;
+  trigger: AutomationTrigger;
+  action: AutomationAction;
+  /** Default true. */
+  enabled?: boolean;
+  /** Default 'ask'. */
+  approval?: 'auto' | 'ask';
+  /** Default 3. */
+  maxRunsPerDay?: number;
+  /** Default 24. */
+  cooldownHours?: number;
+}
+
+export type AutomationRunStatus = 'started' | 'awaiting_approval' | 'denied' | 'skipped' | 'failed';
+
+/** GET /api/automations/runs?stores=&rule=&limit= → AutomationRun[] newest first (the run log). */
+export interface AutomationRun {
+  id: string;
+  ruleId: string;
+  storeId: string;
+  firedAt: string;
+  status: AutomationRunStatus;
+  /** Why it fired / was skipped / failed. */
+  detail?: string;
+  /** Agent run started by this fire. */
+  runId?: string;
+  approvalId?: string;
+}
