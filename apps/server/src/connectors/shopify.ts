@@ -302,7 +302,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
           const net = o.taxesIncluded && total > 0 ? 1 - num(o.currentTotalTaxSet?.shopMoney.amount) / total : 1;
           // The units kept (refunded and removed ones out) at their price after every discount, the order's codes too. Cost
           // stays on every unit ordered, as a refund needn't be a return; a line refunded in full drops out.
-          // ponytail: Etsy lines still count what was ordered (its receipts don't split refunds by line).
+          // Etsy's receipts don't split refunds by line: there each line takes its share of a partial refund (CORE-80).
           setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product && li.currentQuantity > 0 ? [{ productId: tail(li.product.id), quantity: li.currentQuantity, revenue: Math.round(li.currentQuantity * num(li.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount) * net * 100) / 100, cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));
         }
 
