@@ -266,6 +266,8 @@ Orca's browser against the reference before ticking it.
       Integrations next to "Open the Command Center", since the squad works on demo numbers until the store is connected.
 - [x] UI-101 Error notifications show their whole body in the bell drawer. Bodies were clamped to 2 lines and clicking
       only follows the link, so recovery steps ("set it in Shopify rather than adding it again…") were never readable.
+- [x] UI-102 Editing a squad memory in the Knowledge Base says that saving makes it the owner's note (AGT-121: always
+      recalled, no longer moved by outcomes), before the owner saves.
 
 ## Blocked
 
@@ -410,3 +412,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-99: Agents makes one `useMemory(store)` call, and each deployed card counts memories with `agentId === a.id` (owner notes excluded). Nothing is shown at 0. The line sits below the fixed-height blurb so blurbs stay aligned across a row. `useMemory` got `enabled: !!storeId` (no `/api/stores//memory` while stores load). Agents.test covers count, link and no-zero. Orca at 800px with a client-side memory patch (dev DB has no memories): 3 and 1 learned, blurbs aligned at the same y. Patch dropped by reload
 - 2026-10-26 — UI-100: `done(store, to = '/')` in Onboarding. Squad's footer has a ghost Link "Connect {PLATFORM_NAME}" (href kept; its click goes through done → one navigation) beside the primary button. Onboarding.test walks add store → Connect Shopify → /integrations with the store picked. Orca at 800px: cleared the seen flag and fetch-patched POST /api/stores + the squad (no DB write; still 3 stores). Footer "Connect Shopify | Open the Command Center", click → /integrations, dialog closed. localStorage restored
 - 2026-10-26 — UI-101: Notifications body is `line-clamp-2` only when `kind !== 'error'`. Notifications.test checks an error body unclamped and an info body still clamped. Orca at 800px with a client-side patch (fake error notification carrying core's products-failure text): 5 lines, not clipped. Nothing in the drawer clicked; patch dropped by reload
+- 2026-10-26 — UI-102: Knowledge MemoryRow's edit form has a muted line "Saved, it becomes your note: always recalled, and results no longer change it." when the memory isn't already the owner's (agentId 'owner' or the `denied` tag). Knowledge.test covers squad memory → hint, owner memory → none. Orca at 800px with a client-side memory patch: hint under the edit row. Only Edit/Cancel clicked; patch dropped by reload

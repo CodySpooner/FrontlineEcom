@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
 import { renderApp, stubApi } from '../test-utils';
 import { Knowledge } from './Knowledge';
 
@@ -20,5 +20,23 @@ describe('Knowledge Base › niche packs', () => {
     expect(await screen.findByText('Bundles beat discounts for chews')).toBeTruthy();
     expect(screen.getByText('Shared with all Pet stores')).toBeTruthy();
     expect(fetch.mock.calls.map(([url]) => url)).toContain('/api/niche-learnings?niche=pet');
+  });
+});
+
+describe('Knowledge Base › store memory', () => {
+  it("says that rewording the squad's memory makes it the owner's note", async () => {
+    const mem = (id: string, agentId: string, text: string) => ({ id, storeId: 'peak', agentId, kind: 'learning', text, confidence: 0.6, tags: [], createdAt: '2026-10-26T08:00:00Z' });
+    stubApi((url) => {
+      if (url === '/api/stores') return [{ id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', color: '#ff2a3a', currency: 'USD', timezone: 'UTC' }];
+      if (url === '/api/stores/peak/memory') return [mem('m1', 'peak:copywriter', 'Short hooks win on TikTok'), mem('m2', 'owner', 'Never discount the bands')];
+    });
+    renderApp(<Knowledge />, '/knowledge?tab=memory');
+    await screen.findByText('Short hooks win on TikTok');
+    const [squad, owner] = screen.getAllByRole('button', { name: 'Edit' });
+    fireEvent.click(squad!);
+    expect(screen.getByText(/becomes your note/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(owner!);
+    expect(screen.queryByText(/becomes your note/)).toBeNull();
   });
 });

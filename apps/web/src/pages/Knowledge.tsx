@@ -225,24 +225,30 @@ function MemoryRow({ m }: { m: StoreMemory }) {
           {draft === undefined ? (
             <p className="mt-1 text-[13px]">{m.text}</p>
           ) : (
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                update.mutate({ id: m.id, text: draft.trim() }, { onSuccess: () => setDraft(undefined) });
-              }}
-              className="mt-1.5 flex flex-wrap gap-2"
-            >
-              <label htmlFor={`mem-${m.id}`} className="sr-only">
-                Memory text
-              </label>
-              <input id={`mem-${m.id}`} value={draft} onChange={(e) => setDraft(e.target.value)} minLength={5} maxLength={300} required className={cx(inputClass, 'min-w-60 flex-1')} />
-              <Button size="sm" onClick={() => setDraft(undefined)}>
-                Cancel
-              </Button>
-              <Button size="sm" type="submit" variant="primary" disabled={draft.trim().length < 5 || update.isPending}>
-                Save
-              </Button>
-            </form>
+            <>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  update.mutate({ id: m.id, text: draft.trim() }, { onSuccess: () => setDraft(undefined) });
+                }}
+                className="mt-1.5 flex flex-wrap gap-2"
+              >
+                <label htmlFor={`mem-${m.id}`} className="sr-only">
+                  Memory text
+                </label>
+                <input id={`mem-${m.id}`} value={draft} onChange={(e) => setDraft(e.target.value)} minLength={5} maxLength={300} required className={cx(inputClass, 'min-w-60 flex-1')} />
+                <Button size="sm" onClick={() => setDraft(undefined)}>
+                  Cancel
+                </Button>
+                <Button size="sm" type="submit" variant="primary" disabled={draft.trim().length < 5 || update.isPending}>
+                  Save
+                </Button>
+              </form>
+              {/* AGT-121: the owner rewording a squad memory makes it theirs. */}
+              {m.agentId !== 'owner' && !m.tags.includes('denied') && (
+                <p className="mt-1 text-xs text-muted">Saved, it becomes your note: always recalled, and results no longer change it.</p>
+              )}
+            </>
           )}
           {m.evidence && <p className="mt-0.5 text-xs text-muted">{m.evidence}</p>}
           {m.tags.length > 0 && <p className="mt-1 text-xs text-muted">{m.tags.map((t) => `#${t}`).join(' ')}</p>}
