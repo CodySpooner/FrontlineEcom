@@ -39,8 +39,16 @@ export function listOrderIssues(db: DatabaseSync, q: { storeIds?: string[]; stat
     .map(toIssue);
 }
 
-export function setIssueStatus(db: DatabaseSync, id: string, status: OrderIssueStatus, resolution?: string, now = new Date()): OrderIssue | undefined {
-  if (status === 'open') once(db, `issue-reopened:${id}`, now); // only the owner reopens: it's theirs now, closeAnsweredIssues leaves it
+/** The issue after the change; why not, if the order already has another open issue of this kind (one open per order and kind). */
+export function setIssueStatus(db: DatabaseSync, id: string, status: OrderIssueStatus, resolution?: string, now = new Date()): OrderIssue | string | undefined {
+  if (status === 'open') {
+    const twin = db
+      .prepare(`SELECT i.order_id, i.kind FROM order_issues i JOIN order_issues o ON o.store_id = i.store_id AND o.order_id = i.order_id AND o.kind = i.kind
+         AND o.status = 'open' AND o.id != i.id WHERE i.id = ?`)
+      .get(id);
+    if (twin) return `Order ${twin.order_id} already has a newer open ${twin.kind} issue: work that one.`;
+    once(db, `issue-reopened:${id}`, now); // only the owner reopens: it's theirs now, closeAnsweredIssues leaves it
+  }
   db.prepare('UPDATE order_issues SET status = ?, resolution = ?, resolved_at = ? WHERE id = ?').run(
     status, status === 'resolved' ? (resolution ?? null) : null, status === 'resolved' ? now.toISOString() : null, id,
   );

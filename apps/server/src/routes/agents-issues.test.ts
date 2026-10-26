@@ -56,6 +56,10 @@ test('Operations flags order problems once per order and kind; the owner resolve
   expect((await run([flag()]))[0]).toMatch(/^Flagged order/);
   expect(listOrderIssues(db, { storeIds: ['peak'] }).map((i) => [i.kind, i.status])).toEqual([['late', 'open'], ['refund', 'open'], ['late', 'resolved']]);
   expect((await app.request('/api/order-issues?status=closed')).status).toBe(400);
+  // Reopening the old one while the new one is open: one open issue per order and kind, so the owner is told why.
+  const res = await patch(open[1]!.id, { status: 'open' });
+  expect([res.status, await res.json()]).toEqual([409, { error: `Order ${orderId} already has a newer open late issue: work that one.` }]);
+  expect(listOrderIssues(db, { storeIds: ['peak'], status: 'open' }).map((i) => i.kind)).toEqual(['late', 'refund']);
 });
 
 test('issues the order has since answered close themselves: delivered, or supplier tracking arrived', async () => {

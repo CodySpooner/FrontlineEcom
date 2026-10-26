@@ -19,6 +19,7 @@ export function issueRoutes(db: Db) {
       if (!STATUSES.includes(body?.status as OrderIssueStatus)) return c.json({ error: 'status must be open or resolved' }, 400);
       if (body?.resolution !== undefined && (typeof body.resolution !== 'string' || body.resolution.length > 500)) return c.json({ error: 'resolution must be text up to 500 characters' }, 400);
       const issue = setIssueStatus(db, c.req.param('id'), body!.status as OrderIssueStatus, body?.resolution as string | undefined);
+      if (typeof issue === 'string') return c.json({ error: issue }, 409);
       return issue ? c.json(issue) : c.json({ error: 'Issue not found' }, 404);
     });
 }
