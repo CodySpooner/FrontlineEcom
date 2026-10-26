@@ -210,6 +210,8 @@ Orca's browser against the reference before ticking it.
       sales tax/VAT for connected Shopify, WooCommerce and Etsy stores (core 1d3b000).
 - [x] UI-80 With its own daily AI budget set, the agent's settings show how much of it today's runs used (the store caps
       panel only shows the whole store's usage).
+- [x] UI-81 "Track a competitor" says which sites the price watch reads: Shopify and WooCommerce stores, and Etsy shops
+      once an Etsy store is connected (core 2fa5e4a).
 
 ## Blocked
 
@@ -322,3 +324,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Core inbox (flaky Builder test): test-utils sets testing-library's `asyncUtilTimeout` to 3 s. Every component test imports it, so no `findBy*` hits the 1 s default during a slow first render under the parallel suite. Also UI-78 follow-up: TikTok Shop order tax now comes off profit too (core 8967714), so `profitFormula` names sales tax for connected TikTok Shop stores (tested)
 - 2026-10-26 — UI-79 (agents inbox, AGT-90): the agent Settings → Deployment panel has "Daily AI budget" under Autonomy (`AgentBudget`, exported). It's a USD number with Save; blank sends `null` to remove it, and the hint names the store's AI cap. New AgentDetail.test covers save and clear. Chrome on Peak's Ad Strategist: 1.5 saved (the API returned 1.5, and Save disabled once unchanged), then clearing it removed it
 - 2026-10-26 — UI-80: `spentToday(runs)` (lib/usage, tested) sums the agent's run costs since local midnight, the same window as the server's `costToday`. `AgentBudget` shows a UsageMeter "$X of $Y used today" under the field when a budget is set (render test). Chrome on Peak's Ad Strategist with a $1 fixture budget: "$0.00 of $1.00 used today". Fixture removed
+- 2026-10-26 — UI-81: a hint under the Name/Website fields on Competitors: "Prices are read hourly from Shopify and WooCommerce stores, and from Etsy shops (etsy.com/shop/…) once you connect an Etsy store." It matches `watchCompetitorPrices` (shopify/woo/etsy catalogs, 1 h loop). Chrome at 1440: it wraps to two lines under the fields
