@@ -65,7 +65,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-12 Live activity feed + stat cards from real data (deployed n/30, active tasks, success rate, active teams); click an event → focus agent / open task.
 - [x] ECO-13 Handoffs: when real flow steps hand work between agents, the sender walks to the receiver, speech bubble summarizes the real event; communication history.
 - [x] ECO-14 Meetings: multi-agent flows gather participants at the table, objective above it, then they return to work; mission panel (spec §7).
-- [ ] ECO-15 Other tabs: Department View, Agent List, Task Board, Performance — built from the same data, compact.
+- [x] ECO-15 Other tabs: Department View, Agent List, Task Board, Performance — built from the same data, compact.
 - [ ] ECO-16 Bottom bar + display toggles (names, bubbles, department labels, workload, connections, status icons), Office Settings.
 - [ ] ECO-17 Demo Mode provider: clearly labeled, separate from the real provider, exercises every visual (spec §15).
 - [ ] ECO-18 Customization: outfits/colors/accessories per seat, data-driven desk/decor themes so cosmetics can be added without rewriting the map.
@@ -76,6 +76,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-15: Department occupancy and worker selection, searchable deployed roster with portraits, real status/approval task columns, all-time usage totals and clearly scoped recent per-agent performance. Existing output/history routes reused. All four tabs checked in Orca (.agent/eco-15-*.png); roster navigation and terminal-state/approval classification tests. pnpm check 125 files / 647 tests pass.
 
 - 2026-10-26 ECO-14: Create Team uses existing squad templates/store agents and real task dependencies. Mission panel shows assigned roles, stages, pending/completed/blocked work, deliverables and handoff history. Fresh missions gather deployed participants at unique hub positions, show objective, then return to desks before queued handoff visits. Browser launched six-role Glow mission and inspected kickoff/status/output (.agent/eco-14-*.png); eight-worker gather/return simulation and API UI tests pass. pnpm check 124 files / 643 tests green.
 

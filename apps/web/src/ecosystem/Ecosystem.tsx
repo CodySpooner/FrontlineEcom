@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Building2, Activity, Users, Target, Network } from 'lucide-react';
+import { Activity, Users, Target, Network } from 'lucide-react';
 import { Button, StatusDot, Tabs } from '../components/ui';
 import './ecosystem.css';
 import { OfficeScene } from './OfficeScene';
@@ -9,6 +9,7 @@ import { AgentPanel } from './AgentPanel';
 import { DeployWizard } from './DeployWizard';
 import { ActivityFeed } from './ActivityFeed';
 import { MissionPanel } from './MissionPanel';
+import { OfficeViews } from './OfficeViews';
 
 const TABS = ['Office View', 'Department View', 'Agent List', 'Task Board', 'Performance'].map((label) => ({ value: label, label }));
 
@@ -40,7 +41,7 @@ export function Ecosystem() {
       <p className="eco-connection" role="status"><StatusDot tone={office.connected && !office.error ? 'good' : 'idle'} />{office.error || (office.connected ? 'Connected to agent execution' : 'Reconnecting to agent execution…')}</p>
       <div className={`eco-workspace ${feed ? '' : 'eco-no-feed'}`}>
         <section className="eco-stage" aria-label={tab}>
-          {tab === 'Office View' ? <OfficeScene office={office.state} onSelect={setSelected} focus={focus} /> : <div className="eco-empty"><Building2 size={48} /><h2>{tab}</h2><p>The office is being connected to your existing agents.</p><span>10 DEPARTMENTS <b>·</b> 30 WORKSTATIONS</span></div>}
+          {tab === 'Office View' ? <OfficeScene office={office.state} onSelect={setSelected} focus={focus} /> : <OfficeViews tab={tab} office={office.state} seats={seats.data ?? []} stats={stats.data} onSelect={setSelected} />}
         </section>
         {feed && <ActivityFeed office={office.state} seats={seats.data ?? []} onFocus={(id) => { setFocus({ id, at: Date.now() }); setTab('Office View'); }} />}
       </div>
