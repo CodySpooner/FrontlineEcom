@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate, midnight } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, archiveMissing, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal } from './common';
+import { adRate, archiveMissing, backfillRate, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal } from './common';
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
@@ -252,6 +252,8 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const currency = body.payload?.find((d) => d.totalSales?.currencyCode)?.totalSales.currencyCode;
     const own = db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform === 'amazon';
     const rate = own ? 1 : await adRate(db, storeId, currency, fetchFn, 'Amazon');
+    // A first sync reads two years back: each day at that day's rate, as ad spend's backfill does.
+    const dayRate = own || cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
     // The whole catalog until the store has Amazon products (so adding the Product Listing role later still pulls it all)
     // and once a day after (archiving listings that are gone); otherwise what changed since two days before the last sync.
     // Without the role (or on any error) sales sync on and the catalog is left as it is.
@@ -286,7 +288,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
       for (const d of body.payload ?? []) {
         const date = d.interval.slice(0, 10);
         days.add(date);
-        up.run(storeId, date, Math.round(Number(d.totalSales?.amount ?? 0) * rate * 100) / 100, d.orderCount ?? 0);
+        up.run(storeId, date, Math.round(Number(d.totalSales?.amount ?? 0) * dayRate(date) * 100) / 100, d.orderCount ?? 0);
       }
       const visits = db.prepare('INSERT INTO daily_metrics (store_id, date, sessions) VALUES (?, ?, ?) ON CONFLICT (store_id, date) DO UPDATE SET sessions = excluded.sessions');
       for (const d of traffic?.days ?? []) visits.run(storeId, d.date, d.sessions);

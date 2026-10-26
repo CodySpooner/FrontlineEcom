@@ -526,3 +526,19 @@ test("a timezone change while Amazon is read drops that read; the next sync read
   expect(again.calls[1]!.url.searchParams.get('granularityTimeZone')).toBe('Europe/Berlin');
   expect(db.prepare("SELECT count(*) AS n FROM channel_daily WHERE store_id = 'peak'").get()).toEqual({ n: 2 });
 });
+
+test("Amazon as an extra channel: a first sync converts each day at that day's ECB rate", async () => {
+  const db = setup();
+  db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-23', fetchedAt: NOW.toISOString(), rates: { EUR: 1, USD: 1.25 } }));
+  db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'peak'").run();
+  const { fetchFn } = fakeAmazon();
+  const urls: string[] = [];
+  const withHistory = (async (url: string, init?: RequestInit) => {
+    urls.push(url);
+    return url.includes('eurofxref-hist') ? new Response('<Cube time="2026-10-25"><Cube currency="USD" rate="1.1"/></Cube>') : fetchFn(url, init);
+  }) as typeof fetch;
+  await syncAmazon(db, key, 'peak', withHistory, NOW);
+  expect(db.prepare("SELECT revenue FROM channel_daily WHERE store_id = 'peak' AND date = '2026-10-25'").get()?.revenue).toBe(375); // 412.50 USD at 1.1
+  await syncAmazon(db, key, 'peak', withHistory, NOW);
+  expect(urls.filter((u) => u.includes('eurofxref-hist'))).toHaveLength(1); // later syncs re-read a few days at today's rate
+});
