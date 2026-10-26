@@ -3,6 +3,7 @@ import { ANALYTICS_RANGES, type AnalyticsRange } from '@frontline/shared';
 import { loadRows, summarize } from './analytics';
 import type { Db } from './db';
 import { localDate } from './dates';
+import { agentRoutes } from './routes/agents';
 import { listStores } from './stores';
 
 /** `?stores=a,b` → known store ids in store order; missing/empty = all stores. */
@@ -22,4 +23,5 @@ export const createApp = (db: Db) =>
       const storeIds = pickStores(db, c.req.query('stores'));
       const to = localDate();
       return c.json(summarize(loadRows(db, storeIds, range, to), { range, to, storeIds }));
-    });
+    })
+    .route('/', agentRoutes(db));

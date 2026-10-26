@@ -8,6 +8,7 @@
     "typecheck": "tsc -p ."
   },
   "dependencies": {
+    "@frontline/agents": "workspace:*",
     "@frontline/shared": "workspace:*",
     "@hono/node-server": "^2.1.5",
     "hono": "^4.13.14"

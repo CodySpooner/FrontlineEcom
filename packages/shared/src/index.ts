@@ -43,6 +43,10 @@ export const AGENT_ROLES: Record<AgentRole, { name: string; blurb: string }> = {
 
 export type AgentStatus = 'idle' | 'running' | 'waiting_approval' | 'error' | 'offline';
 
+/** suggest = recommends only; ask = side effects need approval; autopilot = auto-approved within caps (logged). */
+export type Autonomy = 'suggest' | 'ask' | 'autopilot';
+export const AUTONOMY_LEVELS: Autonomy[] = ['suggest', 'ask', 'autopilot'];
+
 /** One agent = one role working for one store. Every store has its own squad. */
 export interface Agent {
   id: string;
@@ -52,6 +56,19 @@ export interface Agent {
   level: number;
   xp: number;
   currentTask?: string;
+  /** Always set by the API. Disabled agents show as `offline`; "Deploy Agent" enables one. */
+  enabled?: boolean;
+  /** Always set by the API. */
+  autonomy?: Autonomy;
+}
+
+/** GET /api/agents?stores=a,b → Agent[] (squads in store order, roles in AGENT_ROLES order). GET /api/agents/:id → Agent. */
+export type AgentsResponse = Agent[];
+
+/** PATCH /api/agents/:id body. Response: the updated Agent. */
+export interface AgentUpdate {
+  enabled?: boolean;
+  autonomy?: Autonomy;
 }
 
 export interface DailyMetrics {

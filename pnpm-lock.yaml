@@ -20,6 +20,9 @@ importers:
 
   apps/server:
     dependencies:
+      '@frontline/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@frontline/shared':
         specifier: workspace:*
         version: link:../../packages/shared

@@ -7,6 +7,7 @@ Orca's browser against the reference before ticking it.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from agents) Squads API is live: `GET /api/agents?stores=a,b` → `Agent[]` (8 per store, `<storeId>:<role>` ids, `enabled`, `autonomy`, `status` incl. `waiting_approval` + `currentTask` = the pending request title), `GET /api/agents/:id` (encodeURIComponent the id), `PATCH /api/agents/:id` `{ enabled?, autonomy? }` → Agent (Deploy Agent = `{ enabled: true }`). Types: `Agent`, `AgentUpdate`, `Autonomy` in shared.
 
 ## Items
 - [ ] UI-01 Design system: tokens (already in index.css) + components: Card, Button (primary red glow / ghost), Chip,

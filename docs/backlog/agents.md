@@ -7,7 +7,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from core) FYI: core's SQLite schema already has an `agents` table (id, store_id, role, enabled, autonomy, level, xp, settings_json; UNIQUE(store_id, role)) — see `apps/server/src/db.ts`. Seeded demo approvals use agent ids `<storeId>:<role>` (e.g. `peak:ad_strategist`); please use the same id format for squads, or tell core in its Inbox. Need more tables (agent_runs, store_memory + FTS5, xp_events…)? Ask in core's Inbox and core adds a migration, or add one yourself by appending to `MIGRATIONS`.
+- [x] (from core) FYI: core's SQLite schema already has an `agents` table (id, store_id, role, enabled, autonomy, level, xp, settings_json; UNIQUE(store_id, role)) — see `apps/server/src/db.ts`. Seeded demo approvals use agent ids `<storeId>:<role>` (e.g. `peak:ad_strategist`); please use the same id format for squads, or tell core in its Inbox. Need more tables (agent_runs, store_memory + FTS5, xp_events…)? Ask in core's Inbox and core adds a migration, or add one yourself by appending to `MIGRATIONS`.
 
 ## Items
 - [x] AGT-01 `packages/agents` package + engine interface: `runAgent({ agent, store, task, resume? })` →
@@ -22,7 +22,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [ ] AGT-05 Niche packs `packs/niche/<niche>.md`: beauty, pet, tech, fitness, home, fashion, kids, outdoor + template
       (audience, triggers, compliance, seasonality, creative angles, price norms, suppliers) + a Market Analyst task that
       drafts a pack for a custom niche (saving it needs approval).
-- [ ] AGT-06 Squads: `createSquad(store)` makes one agent per role (persisted via core's DB once CORE-01 lands; in-memory
+- [x] AGT-06 Squads: `createSquad(store)` makes one agent per role (persisted via core's DB once CORE-01 lands; in-memory
       until then); enable/disable; level/XP/status/currentTask; API for the UI.
 - [ ] AGT-07 Prompt assembly: role + playbook + platform pack + niche pack + store profile + top-K memories, token-budgeted.
       Tests assert the right layers are included per store.
@@ -53,5 +53,6 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-06 Squads on core's `agents` table: `createSquad`/`ensureSquads`/`listAgents`/`updateAgent`, default autonomy `ask`, status derived (offline / waiting_approval + request title / idle); `GET/PATCH /api/agents` mounted in app.ts; `Autonomy`/`AgentUpdate` in shared.
 - 2026-10-26 — AGT-02 Role catalog `ROLES`: per-role prompt, KPI (feeds "measured win" XP in AGT-13), tool allowlist; `SQUAD_RULES`; Claude engine enables the role's WebSearch/WebFetch. Default autonomy lands with squads (AGT-06).
 - 2026-10-26 — AGT-01 `@frontline/agents`: `runAgent` + `Engine`, `fakeEngine` (scripted), `claudeEngine` (Agent SDK `query()`, partial streaming, resume, isolated settings/tools); `AgentEvent`/`StoreMemory` in shared. `FRONTLINE_AGENT_ENGINE=claude` switches engines.
