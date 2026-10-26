@@ -167,12 +167,16 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ range }, ctx) => {
       const p = ctx.portfolio?.(range);
       if (!p) return 'Not available in this run.';
-      const stores = new Map(ctx.db.prepare('SELECT id, name, platform, niche, currency FROM stores').all().map((s) => [String(s.id), s]));
+      const stores = new Map(ctx.db.prepare('SELECT id, name, platform, niche, currency, connected FROM stores').all().map((s) => [String(s.id), s]));
+      const name = (id: string) => String(stores.get(id)?.name ?? id);
+      // A live store next to demo stores' sample numbers would be ranked against made-up sales (core's digest drops them too).
+      const demo = (id: string) => ctx.store.connected && !Number(stores.get(id)?.connected);
       // Stores whose currency has no exchange rate are missing from the amounts (they'd read as zero): name them instead.
-      const left = (id: string) => p.unconverted?.includes(String(stores.get(id)?.currency)) ?? false;
-      const skipped = p.byStore.filter((s) => left(s.storeId)).map((s) => stores.get(s.storeId)?.name ?? s.storeId);
+      const left = (id: string) => !demo(id) && (p.unconverted?.includes(String(stores.get(id)?.currency)) ?? false);
+      const skipped = p.byStore.filter((s) => left(s.storeId)).map((s) => name(s.storeId));
+      const sample = p.byStore.filter((s) => demo(s.storeId)).map((s) => name(s.storeId));
       const rows = p.byStore
-        .filter((s) => !left(s.storeId))
+        .filter((s) => !left(s.storeId) && !demo(s.storeId))
         .map(({ storeId, totals: t, deltas: d }) => {
           const s = stores.get(storeId);
           const health = storeHealth(t);
@@ -183,7 +187,7 @@ export const APP_TOOLS: AppTool[] = [
           };
         })
         .sort((a, b) => b.revenue - a.revenue);
-      const note = skipped.length ? `; left out, no exchange rate yet: ${skipped.join(', ')}` : '';
+      const note = (skipped.length ? `; left out, no exchange rate yet: ${skipped.join(', ')}` : '') + (sample.length ? `; left out, demo data: ${sample.join(', ')}` : '');
       return `${p.from} to ${p.to}, amounts in ${p.currency ?? 'USD'}${note}\n${csv(rows)}`;
     },
   }),

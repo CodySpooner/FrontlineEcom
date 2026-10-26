@@ -345,6 +345,19 @@ describe('agent tools on demo data', () => {
     expect(revenue).toEqual([...revenue].sort((a, b) => b - a));
   });
 
+  test("compare_stores doesn't rank a live store against demo stores' sample numbers", async () => {
+    db.prepare(`UPDATE stores SET connected = 1 WHERE id IN ('glow', 'peak')`).run();
+    try {
+      const [cmp] = results(await run(input('glow', 'market_analyst'), [{ call: 'compare_stores', input: { range: 7 } }, done]));
+      const [period, , ...rows] = cmp!.output.split('\n');
+      const demo = listStores(db).filter((s) => !['glow', 'peak'].includes(s.id)).map((s) => s.name);
+      expect(period!.split('; left out, demo data: ')[1]!.split(', ').sort()).toEqual(demo.sort());
+      expect(rows.map((r) => r.split(',')[0]).sort()).toEqual(['Glow Haus (this store)', 'Peak Fit']);
+    } finally {
+      db.prepare(`UPDATE stores SET connected = 0 WHERE id IN ('glow', 'peak')`).run();
+    }
+  });
+
   test('compare_stores names stores it has no exchange rate for instead of showing them at zero', async () => {
     db.prepare(`UPDATE stores SET currency = 'XYZ' WHERE id = 'peak'`).run();
     try {
