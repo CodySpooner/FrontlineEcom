@@ -20,12 +20,13 @@ export function award(db: Db, a: Award) {
 }
 
 /** A measured outcome becomes the agent's store learning and, once per change, a note in the owner's feed. */
-function recordOutcome(db: Db, ref: string, worked: boolean, m: NewMemory) {
+function recordOutcome(db: Db, ref: string, worked: boolean | undefined, m: NewMemory) {
   writeMemory(db, m);
   if (!once(db, `outcome-note:${ref}`)) return;
   const agent = getAgent(db, m.agentId);
   const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
-  notify(db, { kind: 'info', title: worked ? `Measured win: ${name}` : `${name}: no lift this time`, body: m.text, storeId: m.storeId, link: `/agents/${m.agentId}?tab=${worked ? 'history' : 'memory'}` }); // a win's XP line, else the learning
+  const title = worked === undefined ? `${name}: result unclear without unit costs` : worked ? `Measured win: ${name}` : `${name}: no lift this time`;
+  notify(db, { kind: 'info', title, body: m.text, storeId: m.storeId, link: `/agents/${m.agentId}?tab=${worked ? 'history' : 'memory'}` }); // a win's XP line, else the learning
 }
 
 const count = (db: Db, sql: string, ...args: string[]) => Number(db.prepare(sql).get(...args)?.n ?? 0);
@@ -159,7 +160,8 @@ const productSales = (db: Db, storeId: string, productId: string, from: string, 
     .prepare(
       `SELECT coalesce(sum(units), 0) AS units, coalesce(sum(revenue), 0) AS revenue,
          coalesce(sum(revenue - cost), 0) - coalesce(sum(revenue), 0) * (SELECT fee_percent FROM stores WHERE id = ?1) / 100
-           - count(DISTINCT order_id) * (SELECT fee_per_order FROM stores WHERE id = ?1) AS profit
+           - count(DISTINCT order_id) * (SELECT fee_per_order FROM stores WHERE id = ?1) AS profit,
+         coalesce(max(order_id IS NOT NULL AND cost = 0), 0) AS uncosted
        FROM (
          SELECT i.order_id, i.quantity AS units, i.revenue, i.cost FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
          WHERE i.store_id = ?1 AND i.product_id = ?2 AND o.status = 'paid' AND o.local_date BETWEEN ?3 AND ?4
@@ -168,7 +170,7 @@ const productSales = (db: Db, storeId: string, productId: string, from: string, 
        )`,
     )
     .get(storeId, productId, from, to)!;
-  return { units: Number(r.units), revenue: Number(r.revenue), profit: Number(r.profit) };
+  return { units: Number(r.units), revenue: Number(r.revenue), profit: Number(r.profit), uncosted: !!r.uncosted };
 };
 
 /**
@@ -190,16 +192,19 @@ export function checkPriceOutcomes(db: Db, today?: string) {
     const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
     db.prepare('UPDATE price_tests SET judged_at = ? WHERE approval_id = ?').run(new Date().toISOString(), String(t.approval_id));
     if (!before.units) continue; // no sales before (new, or not selling): no baseline, so nothing to compare
-    const worked = after.profit > before.profit;
+    // Sales with no unit cost (cost 0) count their whole price as profit: a cut that sells more at a loss would read as a win.
+    const worked = before.uncosted || after.uncosted ? undefined : after.profit > before.profit;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
     const price = (n: unknown) => cash(Number(n), String(t.currency));
     const agentId = String(t.agent_id);
     recordOutcome(db, `price:${t.approval_id}`, worked, {
-      storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'pricing'],
-      text: `Pricing "${t.title}" ${price(t.from_price)} → ${price(t.to_price)} ${worked ? 'worked' : 'did not help'}: profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
+      storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : worked === undefined ? 0.5 : 0.6, tags: ['outcome', 'pricing'],
+      text: worked === undefined
+        ? `Pricing "${t.title}" ${price(t.from_price)} → ${price(t.to_price)} can't be judged: no unit cost is set, so profit before product cost went ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`
+        : `Pricing "${t.title}" ${price(t.from_price)} → ${price(t.to_price)} ${worked ? 'worked' : 'did not help'}: profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.approval_id})`,
     });
-    if (t.run_id) judgeRun(db, `price:${t.approval_id}`, String(t.run_id), worked);
+    if (t.run_id && worked !== undefined) judgeRun(db, `price:${t.approval_id}`, String(t.run_id), worked);
     if (worked) award(db, { ref: `price-win:${t.approval_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" at ${price(t.to_price)} made more profit` });
   }
 }
@@ -225,14 +230,16 @@ export function checkPageOutcomes(db: Db, today?: string) {
     const before = productSales(db, storeId, productId, addDays(day, -14), addDays(day, -1));
     const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
     if (!before.units) continue; // a new product's page (it had no sales before) has no baseline: its product test judges the sales
-    const worked = after.profit > before.profit;
+    const worked = before.uncosted || after.uncosted ? undefined : after.profit > before.profit; // as price tests
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${d.currency}`;
     recordOutcome(db, `page:${d.id}`, worked, {
-      storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'page'],
-      text: `The new "${d.title}" page ${worked ? 'worked' : 'did not help'}: profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
+      storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : worked === undefined ? 0.5 : 0.6, tags: ['outcome', 'page'],
+      text: worked === undefined
+        ? `The new "${d.title}" page can't be judged: no unit cost is set, so profit before product cost went ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`
+        : `The new "${d.title}" page ${worked ? 'worked' : 'did not help'}: profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (draft ${d.id})`,
     });
-    if (d.run_id) judgeRun(db, `page:${d.id}`, String(d.run_id), worked);
+    if (d.run_id && worked !== undefined) judgeRun(db, `page:${d.id}`, String(d.run_id), worked);
     if (worked) award(db, { ref: `page-win:${d.id}`, amount: XP.win, storeId, agentId, reason: `Measured win: the new "${d.title}" page made more profit` });
   }
 }

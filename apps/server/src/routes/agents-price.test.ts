@@ -153,6 +153,27 @@ test("on a real store a price test is judged on profit after the store's fee %, 
   expect(achievements.find((a) => a.id === 'first_win')?.unlockedAt).toEqual(expect.any(String));
 });
 
+test("a price test on a product with no unit cost isn't called a win: its profit is before product cost", async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01'));
+  const day = addDays(localDate(), -20);
+  db.prepare(`INSERT INTO price_tests (approval_id, store_id, product_id, agent_id, title, from_price, to_price, changed_on) VALUES ('a-cut', 'peak', '77', 'peak:market_analyst', 'Grip Socks', 25, 20, ?)`).run(day);
+  const sell = (n: number, on: string, price: number) => {
+    for (let k = 0; k < n; k++) {
+      db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('peak', ?, ?, ?, 'paid', 'delivered', ?)`).run(`o-${on}-${k}`, `${on}T12:00:00Z`, price, on);
+      db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('peak', ?, '77', 1, ?, 0)`).run(`o-${on}-${k}`, price); // "Cost per item" empty
+    }
+  };
+  sell(4, addDays(day, -5), 25);
+  sell(6, addDays(day, 5), 20); // more "profit" at the lower price only because the socks cost nothing here
+  const xp = getAgent(db, 'peak:market_analyst')!.xp;
+  checkPriceOutcomes(db);
+  const text = "Pricing \"Grip Socks\" $25 → $20 can't be judged: no unit cost is set, so profit before product cost went 100 USD → 120 USD, 4 → 6 units (14 days before vs after).";
+  expect(listMemory(db, 'peak').filter((m) => m.tags.includes('pricing')).map((m) => [m.text, m.confidence])).toEqual([[text, 0.5]]);
+  expect(getAgent(db, 'peak:market_analyst')!.xp).toBe(xp);
+  expect(db.prepare(`SELECT title, body FROM notifications WHERE body = ?`).all(text)).toEqual([{ title: 'Market Analyst: result unclear without unit costs', body: text }]);
+});
+
 test("connected stores get the price on Shopify or WooCommerce; other platforms aren't asked and write errors tell the owner; neither starts a test", async () => {
   const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'peak' ORDER BY price DESC LIMIT 1`).get()!;
   const [id, from] = [String(p.id), Number(p.price)];
