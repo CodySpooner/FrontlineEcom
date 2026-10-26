@@ -88,14 +88,18 @@ describe('agent tools on demo data', () => {
   test('request_approval pauses the run until the owner decides', async () => {
     const ask = { call: 'request_approval', input: { title: 'Pause Broad TOF', reason: 'ROAS 0.6 for 5 days', kind: 'pause_campaign', payload: { id: 'c1' } } } as const;
     let pendingWhileWaiting = false;
+    let reason = '';
     const approved = await run(input('peak', 'ad_strategist'), [ask, done], (e) => {
       if (e.type !== 'approval_request') return;
       pendingWhileWaiting = e.approval.status === 'pending';
+      reason = e.approval.reason;
       decide(db, e.approval.id, 'approve');
     });
     expect(pendingWhileWaiting).toBe(true);
+    expect(reason).toBe('ROAS 0.6 for 5 days (You apply this one yourself; the agent lists the steps.)');
     expect(approved.map((e) => e.type)).toEqual(['tool_call', 'approval_request', 'tool_result', 'done']);
-    expect(results(approved)[0]?.output).toBe('Approved by the owner: Pause Broad TOF');
+    // pause_campaign through request_approval has no executor (propose_ad_change does): the owner applies it.
+    expect(results(approved)[0]?.output).toBe(`Approved by the owner: Pause Broad TOF. This app can't carry out "pause_campaign" itself: end your answer with numbered steps the owner can follow to do it.`);
 
     const denied = await run(input('peak', 'ad_strategist'), [ask, done], (e) => e.type === 'approval_request' && decide(db, e.approval.id, 'deny'));
     expect(results(denied)[0]?.output).toMatch(/^Denied by the owner/);

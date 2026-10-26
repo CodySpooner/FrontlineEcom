@@ -50,7 +50,8 @@ describe('autopilot', () => {
     expect(auto).toMatchObject({ status: 'approved', action: { amountUsd: 60, auto: true }, reason: expect.stringContaining('[autopilot: $60 of $100/day cap, $0 used before]') });
     expect(asked).toMatchObject({ status: 'pending', action: { amountUsd: 60 } });
     expect(asked?.action.auto).toBeUndefined();
-    expect(outputs(events)).toEqual(['Auto-approved (autopilot): Raise budget $60 → $120', 'Approved by the owner: Raise budget $120 → $180']);
+    const byHand = `. This app can't carry out "change_budget" itself: end your answer with numbered steps the owner can follow to do it.`;
+    expect(outputs(events)).toEqual([`Auto-approved (autopilot): Raise budget $60 → $120${byHand}`, `Approved by the owner: Raise budget $120 → $180${byHand}`]);
   });
 
   test('asks when the amount is unknown, the kind has no rule, or the agent is not on autopilot', async () => {

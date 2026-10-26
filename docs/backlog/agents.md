@@ -84,6 +84,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-38 Copywriter ships page copy: its approved titles/descriptions went to a generic approval nothing executes; now they go through the Store Builder like the Store Developer's.
 - [x] AGT-39 Store health (DESIGN §8 Winning/Steady/Bleeding): one shared definition for UI-18 badges and the agents.
 - [x] AGT-40 Email & SMS flows get a home: the agent asked to "launch" flows through approvals nothing could execute, and its flows lived only in chat.
+- [x] AGT-41 Honest approvals: requests of a kind nothing in the app carries out (price tests, customer messages...) said nothing about who applies them; approving looked like it would happen.
 - [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
@@ -92,6 +93,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-35 Approved ad changes on connected stores still end as "apply on the ad account by hand": core's Meta/Google/TikTok connectors are read-only. Needs core's budget/pause writers (requested in core Inbox); then `applyAdChange` calls them like `publishDraft` does.
 
 ## Done
+- 2026-10-26 — AGT-41 Manual approvals are labelled: for a `request_approval` kind with no executor (not in-run `ACTIONS`, not server-run `OUTLIVE_RUN`, now in tools.ts), the card's reason ends with "(You apply this one yourself; the agent lists the steps.)". On approval the agent is told to end its answer with numbered steps for the owner. The tool's `kind` help now names what the app carries out.
 - 2026-10-26 — AGT-40 Flow library: `draft_flow` tool (Email & SMS) saves trigger + steps (delay, channel, subject/preview, body, offer) + sizing notes to `flow_drafts` (migration 22). A redraft with the same name replaces the old one, and email steps need a subject. `GET /api/flow-drafts?stores=&limit=`, `DELETE /api/flow-drafts/:id`. The playbook now saves flows for the owner to set up in their email/SMS tool instead of requesting a launch nothing can execute.
 - 2026-10-26 — AGT-39 Store health: shared `storeHealth({revenue, profit})` returns `{status, marginPct, bar}`. Bleeding = profit < 0; Winning = net margin ≥ 15% (judged on the rounded margin shown); bar fills at 30%. `store_summary` now includes `health`, so agents and badges agree.
 - 2026-10-26 — AGT-38 Copywriter gets `draft_page` + `publish_page`: product titles/descriptions and landing copy become Store Builder drafts the owner publishes (Shopify for connected stores), instead of a generic `request_approval` with no executor. The playbook now ships ad copy via `create_creative` and page copy via drafts. Also fixed the stale `publish_page` description (connected stores publish now).

@@ -6,7 +6,7 @@ import { parseLearnings, REFLECTION_PROMPT, searchMemory, writeMemory } from './
 import { listNicheLearnings, nicheKey } from './niche';
 import { assemblePrompt } from './prompt';
 import { getAgent } from './squads';
-import type { ToolEnv } from './tools';
+import { OUTLIVE_RUN, type ToolEnv } from './tools';
 
 // Runs live in `agent_runs` (agents-lane migration in apps/server/src/db.ts). The queue is the table itself.
 
@@ -26,8 +26,6 @@ export interface RunManagerOptions {
 
 export type RunManager = ReturnType<typeof createRunManager>;
 
-/** Approval kinds the server carries out when approved (apps/server/src/routes/agents.ts), whether or not the run that asked is still alive. */
-export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'ads.set_budget', 'ads.pause_campaign'];
 
 export function createRunManager(opts: RunManagerOptions) {
   const { db, env, concurrency = 3, perStore = 2 } = opts;

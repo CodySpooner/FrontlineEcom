@@ -480,13 +480,17 @@ export const APP_TOOLS: AppTool[] = [
       kind: z
         .string()
         .max(40)
-        .describe('action type, e.g. pause_ad_set, change_budget, publish_page; store.add_products with payload {products: [{researchProductId?, title, price, compareAt?, cost}]}'),
+        .describe('action type. Carried out by the app: store.add_products with payload {products: [{researchProductId?, title, price, compareAt?, cost}]}, save_niche_pack. Anything else (e.g. price_test, customer_message) the owner applies by hand.'),
       payload: z.record(z.string(), z.unknown()).describe('everything needed to carry the action out'),
       amountUsd: z.number().min(0).optional().describe("money at stake per day in USD (budget added, spend, refund total); lets autopilot decide within the owner's cap"),
     },
     run: async ({ title, reason, kind, payload, amountUsd }, ctx) => {
-      const { approved, message } = await requestApproval(ctx, { title, reason, action: { kind, payload, ...(amountUsd !== undefined ? { amountUsd } : {}) } });
+      // Nothing in the app carries some kinds out (price tests, customer messages...): the owner does, so say so up front.
+      const manual = !ACTIONS[kind] && !OUTLIVE_RUN.includes(kind);
+      const why = manual ? `${reason} (You apply this one yourself; the agent lists the steps.)` : reason;
+      const { approved, message } = await requestApproval(ctx, { title, reason: why, action: { kind, payload, ...(amountUsd !== undefined ? { amountUsd } : {}) } });
       if (!approved) return message;
+      if (manual) return `${message}. This app can't carry out "${kind}" itself: end your answer with numbered steps the owner can follow to do it.`;
       const outcome = await ACTIONS[kind]?.(payload);
       return `${message}${outcome ? `. ${outcome}` : ''}`;
     },
@@ -560,6 +564,9 @@ function autopilotUsedToday(db: DatabaseSync, storeId: string, kind: string): nu
     .get(storeId, kind, midnight.toISOString());
   return Number(row?.used ?? 0);
 }
+
+/** Approval kinds the server carries out when approved (apps/server/src/routes/agents.ts), whether or not the run that asked is still alive. */
+export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'ads.set_budget', 'ads.pause_campaign'];
 
 /** Actions the agents lane carries out itself once approved. Store/ad actions arrive with the connectors. */
 const ACTIONS: Record<string, (payload: Record<string, unknown>) => Promise<string>> = {
