@@ -250,9 +250,9 @@ export function checkPriceOutcomes(db: Db, today?: string) {
     db.prepare('UPDATE price_tests SET judged_at = ? WHERE approval_id = ?').run(new Date().toISOString(), String(t.approval_id));
     if (!before.units) continue; // no sales before (new, or not selling): no baseline, so nothing to compare
     const few = before.units + after.units < MIN_UNITS;
-    // Sales with no unit cost (cost 0) count their whole price as profit: a cut that sells more at a loss would read as a win.
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
     const season = par(db, storeId, productId, day, before, money);
+    // Sales with no unit cost (cost 0) count their whole price as profit: a cut that sells more at a loss would read as a win.
     const worked = few || before.uncosted || after.uncosted ? undefined : after.profit > season.profit;
     const price = (n: unknown) => cash(Number(n), String(t.currency));
     const agentId = String(t.agent_id);
