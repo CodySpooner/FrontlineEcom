@@ -1,5 +1,5 @@
 // UI-03 data layer: typed fetchers + react-query hooks over the local API, and the /api/live socket.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   Achievement,
@@ -62,6 +62,7 @@ import type {
   TopProduct,
 } from '@frontline/shared';
 import { apiUp, waitForApi } from '../lib/restart';
+import { importing } from '../lib/sync';
 import { applyRunEvent, isLive } from '../lib/transcript';
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
@@ -451,6 +452,22 @@ export function useMarkRead() {
 
 /** Mount once: streams /api/live into the react-query cache, reconnecting if the server restarts. */
 /** Mount once (Shell). Returns false while the socket is down, so the UI can say it's reconnecting. */
+/**
+ * A store's first sync swaps its demo data for real (core switchToReal, agents' startFresh) without a live message of its
+ * own: when an import finishes, refetch everything once. Mounted in the shell, so it rides the integrations poll.
+ */
+export function useGoLiveRefresh() {
+  const qc = useQueryClient();
+  const list = useIntegrations().data;
+  const prev = useRef<Set<string>>(undefined);
+  useEffect(() => {
+    if (!list) return;
+    const now = new Set(list.filter((i) => importing(i)).map((i) => i.id));
+    if (prev.current && [...prev.current].some((id) => !now.has(id))) qc.invalidateQueries();
+    prev.current = now;
+  }, [list, qc]);
+}
+
 export function useLive() {
   const qc = useQueryClient();
   const [online, setOnline] = useState(true);

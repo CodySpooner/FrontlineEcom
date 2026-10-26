@@ -1,7 +1,7 @@
 import { Component, useEffect, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { TriangleAlert } from 'lucide-react';
-import { useAgents, useHealth, useLive } from '../api/client';
+import { useAgents, useGoLiveRefresh, useHealth, useLive } from '../api/client';
 import { NAV, pageTitle } from '../nav';
 import { SvgDefs } from './Art';
 import { AskPalette } from './AskPalette';
@@ -13,6 +13,7 @@ import { Button, buttonClass, Card, ProgressBar, StatusDot, cx } from './ui';
 
 export function Shell() {
   const online = useLive();
+  useGoLiveRefresh();
   const { pathname } = useLocation();
   const title = pageTitle(pathname, useStoreSelection().name);
   useEffect(() => {

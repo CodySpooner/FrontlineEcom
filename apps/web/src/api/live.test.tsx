@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useLive } from './client';
+import { useGoLiveRefresh, useLive } from './client';
 
 class FakeSocket {
   static all: FakeSocket[] = [];
@@ -69,5 +69,26 @@ describe('useLive', () => {
     expect(refetch).not.toHaveBeenCalledWith({ queryKey: ['memory', 'glow'] });
     act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'approval', approval: { ...approval, status: 'denied' } }) }));
     expect(refetch).toHaveBeenCalledWith({ queryKey: ['memory', 'glow'] });
+  });
+});
+
+describe('useGoLiveRefresh', () => {
+  it("refetches everything once when a store's first sync lands (its demo data was swapped for real)", async () => {
+    const shopify = { id: 'i1', kind: 'shopify', storeId: 's1', status: 'connected', fields: {}, createdAt: '2026-10-26T08:00:00Z' };
+    let server: object = shopify;
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([server]), { headers: { 'content-type': 'application/json' } })));
+    const qc = new QueryClient();
+    const refetch = vi.spyOn(qc, 'invalidateQueries');
+    renderHook(() => useGoLiveRefresh(), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+    await vi.waitFor(() => expect(qc.getQueryData(['integrations'])).toBeTruthy());
+    expect(refetch).not.toHaveBeenCalled();
+
+    server = { ...shopify, syncedAt: '2026-10-26T09:00:00Z' };
+    act(() => qc.setQueryData(['integrations'], [server]));
+    await vi.waitFor(() => expect(refetch).toHaveBeenCalledWith());
+    server = { ...shopify, syncedAt: '2026-10-26T09:15:00Z' };
+    act(() => qc.setQueryData(['integrations'], [server]));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(refetch).toHaveBeenCalledTimes(1);
   });
 });

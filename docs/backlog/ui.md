@@ -178,6 +178,8 @@ Orca's browser against the reference before ticking it.
       header counts them ("· 1 failed").
 - [x] UI-63 Requests the app closed on its own (the run ended first, or AGT-71's going-live expiry) read "Expired" with why
       in the bell's Recently decided, not "Denied" as if the owner said no.
+- [x] UI-64 When a store's first sync lands (demo data swapped for real, demo learnings/requests/drafts cleared), every open
+      view refetches at once instead of showing demo numbers until the next focus.
 
 ## Blocked
 
@@ -271,3 +273,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Smoke: production build served by a fresh API (empty FRONTLINE_DATA_DIR, fake engine, port 8899). Demo seeded, onboarding → Add my store (Etsy/Home) → Meet your squad → Command Center showed the new store with demo history and 32 agents, with no console errors. Orca 800px: none of the 12 pages overflows horizontally. Accessible-name sweep: every control on every page has a name
 - 2026-10-26 — UI-62 (agents inbox; resolves the Blocked Woo item): `byHand(store, can)` takes shared's platform list. Research add-to-store uses PRODUCT_WRITE_PLATFORMS (Shopify, Woo). Builder uses agents' publish_page rule: product drafts with a product use PRODUCT_PAGE_PLATFORMS (+ Etsy), other pages PRODUCT_WRITE_PLATFORMS. The hint now reads "can't publish this kind of page to <Platform> yet". Tests: Builder (Woo page, Etsy product page, Etsy page) and Research (Woo gets the button). Chrome with Glow Haus patched as connected Etsy: the product draft offered Publish, and the FAQ page showed the hint. Fixtures removed
 - 2026-10-26 — UI-63: `expiredWhy(a)` (lib/approvals, tested) reads the `[Expired: …]` marker the server appends to a denied request's reason (runs.ts when a run ends; AGT-71's EXPIRED_DEMO when a store goes live). The drawer labels those "Expired" with the reason underneath. Notifications.test covers it. Chrome with a fixture expired request: "Expired · UI-FX Pause Spark Ads / Asked on demo data before the store went live." Fixture removed
+- 2026-10-26 — UI-64: `useGoLiveRefresh()` (api/client, mounted in Shell) watches the integrations poll. When a platform integration leaves `importing()` (lib/sync), it runs one `invalidateQueries()`. There's no live message for going live (core switchToReal, agents startFresh). live.test covers it once per transition, with no repeat on later syncs. Chrome with a main-world `/api/integrations` patch (Pawsome Shopify importing, then synced): the importing note showed, and on the synced poll the app refetched stores, summary, products, approvals, events, missions and more in the same second. The note cleared
