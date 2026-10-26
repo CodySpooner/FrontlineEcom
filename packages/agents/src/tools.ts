@@ -714,11 +714,10 @@ export const APP_TOOLS: AppTool[] = [
       const waiting = ctx.db
         .prepare(`SELECT id, title, created_at FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign') AND json_extract(action_json, '$.payload.campaignId') = ?`)
         .get(ctx.store.id, campaignId);
-      // A live store's request over 4 days old is never applied (its numbers moved), so it gives way instead of blocking.
-      if (waiting && ctx.store.connected && ctx.decide && String(waiting.created_at) < ago(4)) {
-        ctx.db.prepare('UPDATE approvals SET reason = reason || ? WHERE id = ?').run(' [Expired: asked over 4 days ago; a fresh request replaced it.]', String(waiting.id));
-        ctx.decide(String(waiting.id), 'deny');
-      } else if (waiting) return `Not sent: "${waiting.title}" is already waiting for the owner. One change per campaign at a time.`;
+      // A live store's request over 4 days old is never applied (its numbers moved), so a fresh one replaces it (below,
+      // once the fresh one passed every check) instead of being blocked by it.
+      const replace = waiting && ctx.store.connected && ctx.decide && String(waiting.created_at) < ago(4) ? String(waiting.id) : undefined;
+      if (waiting && !replace) return `Not sent: "${waiting.title}" is already waiting for the owner. One change per campaign at a time.`;
       const from = Number(c.daily_budget);
       if (change === 'budget' && newDailyBudget === undefined) return 'newDailyBudget is required for a budget change.';
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
@@ -733,6 +732,10 @@ export const APP_TOOLS: AppTool[] = [
         return `Not sent: +$${addedUsd}${more}/day would pass the owner's $${cap}/day cap on added ad spend ($${addedToday} already approved today). Propose a smaller step.`;
       }
       const amount = usd !== undefined ? { amountUsd: usd } : {};
+      if (replace) {
+        ctx.db.prepare('UPDATE approvals SET reason = reason || ? WHERE id = ?').run(' [Expired: asked over 4 days ago; a fresh request replaced it.]', replace);
+        ctx.decide!(replace, 'deny');
+      }
       const { approved, message } = await requestApproval(ctx, {
         title: (change === 'pause' ? `Pause ${c.name}` : `${to > from ? 'Raise' : 'Lower'} ${c.name} budget ${cash(from, ctx.store.currency)} → ${cash(to, ctx.store.currency)}/day`).slice(0, 80),
         reason: evidence,
@@ -885,7 +888,8 @@ export async function requestApproval(ctx: ToolContext, req: { title: string; re
  * A years-old ad account lists hundreds of paused campaigns: the ones off with no spend in the window are left out (a
  * campaign that is on but spends nothing stays: something is wrong with it).
  */
-const LIVE_CAMPAIGNS = `HAVING spend > 0 OR c.status NOT IN ('paused', 'campaign_paused', 'archived', 'deleted')`;
+// sum(), not the alias: in HAVING SQLite reads `spend` as one campaign_daily row's column.
+const LIVE_CAMPAIGNS = `HAVING coalesce(sum(d.spend), 0) > 0 OR c.status NOT IN ('paused', 'campaign_paused', 'archived', 'deleted')`;
 const idleNote = (ctx: ToolContext, shown: number) => {
   const left = Number(ctx.db.prepare('SELECT count(*) AS n FROM campaigns WHERE store_id = ?').get(ctx.store.id)?.n) - shown;
   return left > 0 ? `(${left} paused or archived campaigns with no spend in the window left out)\n` : '';

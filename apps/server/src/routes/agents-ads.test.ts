@@ -53,10 +53,14 @@ test("an old account's paused campaigns with no spend are left out; one that is 
   const add = db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, 'pawsome', ?, ?, 0)`);
   for (let i = 0; i < 3; i++) add.run(`old-${i}`, `Black Friday ${2020 + i}`, i ? 'paused' : 'archived');
   add.run('stuck', 'Stuck in review', 'with_issues');
+  add.run('just-paused', 'Paused this week', 'paused'); // spent before the pause: still judged
+  const day = db.prepare(`INSERT INTO campaign_daily (network, campaign_id, date, spend, revenue, purchases, clicks, impressions) VALUES ('meta', 'just-paused', ?, ?, 0, 0, 0, 0)`);
+  [0, 45, 0].forEach((spend, i) => day.run(new Date(Date.now() - (i + 1) * 86_400_000).toISOString().slice(0, 10), spend));
   const { outputs } = await run([{ call: 'review_campaigns' }, { call: 'list_campaigns' }], 'approve', 'pawsome:ad_strategist');
   for (const out of outputs) {
     expect(out).toContain('(3 paused or archived campaigns with no spend in the window left out)\n');
     expect(out).toContain('Stuck in review');
+    expect(out).toContain('Paused this week');
     expect(out).not.toContain('Black Friday');
   }
 });

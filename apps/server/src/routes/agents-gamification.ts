@@ -310,13 +310,25 @@ function missions(db: Db, storeIds?: string[]): Mission[] {
  * store of the niche: no Claude run needed. Demo stores' learnings come from simulated numbers, so only live stores count.
  */
 export function proposeNichePromotions(db: Db) {
-  const live = new Map(listStores(db).filter((s) => s.connected && s.niche !== 'other').map((s) => [s.id, s]));
+  // Gone live, not just connected: going live (activateConnectedStores) is what clears a store's demo learnings.
+  const activated = db.prepare('SELECT 1 FROM done_once WHERE ref = ?');
+  const live = new Map(listStores(db).filter((s) => s.connected && s.niche !== 'other' && activated.get(`activate:${s.id}`)).map((s) => [s.id, s]));
+  // Once per learning: any memory of the group already offered (the group's lead wording can change as confidence
+  // moves), or any of its wordings already asked about or shared, and it isn't asked again.
+  const offered = db.prepare(`SELECT 1 FROM done_once WHERE ref IN (SELECT 'promote-memory:' || value FROM json_each(?))`);
+  const known = db.prepare(
+    `SELECT 1 FROM (SELECT lower(text) AS t FROM niche_learnings WHERE niche = ?1
+       UNION ALL SELECT lower(json_extract(action_json, '$.payload.text')) FROM approvals WHERE json_extract(action_json, '$.kind') = 'niche.promote_learning' AND json_extract(action_json, '$.payload.niche') = ?1)
+     WHERE t IN (SELECT lower(text) FROM store_memory WHERE id IN (SELECT value FROM json_each(?2)))`,
+  );
   for (const niche of new Set([...live.values()].map((s) => s.niche))) {
     for (const c of promotionCandidates(db, niche)) {
       const stores = c.storeIds.flatMap((id) => live.get(id) ?? []);
-      if (stores.length < 2 || !live.has(c.storeIds[0]!) || !once(db, `promote:${niche}:${c.text.toLowerCase()}`)) continue;
+      if (stores.length < 2 || !live.has(c.storeIds[0]!)) continue;
       const key = nicheKey(stores[0]!);
-      if (listNicheLearnings(db, key, 1000).some((l) => l.text.toLowerCase() === c.text.trim().toLowerCase())) continue;
+      const ids = JSON.stringify(c.memoryIds);
+      if (offered.get(ids) || known.get(key, ids)) continue;
+      for (const id of c.memoryIds) once(db, `promote-memory:${id}`);
       const names = stores.map((s) => s.name).join(', ');
       approvalsHook(db).create({
         storeId: stores[0]!.id,

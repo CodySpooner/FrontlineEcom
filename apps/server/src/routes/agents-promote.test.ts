@@ -37,6 +37,24 @@ test('a learning two live stores of a niche found on their own is offered to the
   expect(listNicheLearnings(db, 'beauty').map((l) => l.text)).toEqual(['Before/after UGC beats studio shots for LED masks']);
 });
 
+test('a learning offered once is not offered again when another store words it more confidently', async () => {
+  learn('glow', 'Before/after UGC beats studio shots for LED masks');
+  learn('lumi', 'Before/after UGC beats studio shots for serums', 0.75);
+  proposeNichePromotions(db);
+  decide(db, String(requests()[0]!.id), 'deny');
+  learn('lumi', 'Before/after UGC beats studio shots for serums', 0.95); // now the group's lead wording
+  proposeNichePromotions(db);
+  expect(requests()).toHaveLength(1);
+});
+
+test("a connected store that hasn't gone live yet still holds demo learnings: they don't count", () => {
+  store('nova', 'beauty', true); // synced after startup; activateConnectedStores hasn't run for it
+  learn('glow', 'Serum bundles lift AOV by a fifth');
+  learn('nova', 'Serum bundles lift AOV by a fifth');
+  proposeNichePromotions(db);
+  expect(requests()).toEqual([]);
+});
+
 test("a demo store's simulated learning doesn't count toward sharing", () => {
   learn('pawsome', 'Lick mats sell best bundled with a spatula');
   learn('pawdemo', 'Lick mats sell best bundled with a spatula');
