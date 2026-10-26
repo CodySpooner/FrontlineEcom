@@ -3,7 +3,7 @@ import type { AnalyticsSummary, CampaignStats, TopProduct } from '@frontline/sha
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { campaignStats, currentWindow, dayShifts, loadRows, salesShares, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
+import { campaignStats, currentWindow, dayShifts, loadRows, platformSplit, salesShares, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
 
 const row = (storeId: string, date: string, revenue: number, adSpend: number, cogs: number, orders: number): MetricRow => ({ storeId, date, revenue, adSpend, cogs, orders });
 
@@ -243,4 +243,39 @@ test("Amazon next to the site costs the store's own cost ratio (last year) and A
   // Cost ratio 90 / 300 = 0.3. The site's fees: 3% + $0.30 an order. Amazon's 50: 50 × (0.3 + 0.15).
   expect(cogs('2026-10-25')).toBeCloseTo(60 + 6 + 1.2);
   expect(cogs('2026-10-26')).toBeCloseTo(30 + 3 + 0.6 + 22.5);
+});
+
+test("sales by platform split a channel next to the store's own platform (Amazon, TikTok Shop) out of its totals", async () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("DELETE FROM daily_metrics WHERE store_id = 'glow'").run();
+  // 230 in 6 orders: 100 on the Shopify site (2), 50 on Amazon (1), 90 on TikTok Shop (3) less a 10 refund.
+  db.prepare("INSERT INTO daily_metrics (store_id, date, revenue, cogs, orders) VALUES ('glow', '2026-10-26', 230, 0, 6)").run();
+  db.prepare("INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('glow', 'amazon', '2026-10-26', 50, 1)").run();
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, '2026-10-26T12:00:00Z', ?, ?, 'fulfilled', ?)");
+  order.run('tt-1', 40, 'paid', '2026-10-26');
+  order.run('tt-2', 30, 'paid', '2026-10-26');
+  order.run('tt-3', 20, 'paid', '2026-10-26');
+  order.run('tt-4', 25, 'cancelled', '2026-10-26'); // not counted
+  order.run('tt-5', 99, 'paid', '2026-10-01'); // before the window
+  db.prepare("INSERT INTO amazon_refunds (store_id, id, order_id, amount, tax) VALUES ('glow', 'r1', 'tt-1', 8, 2)").run();
+  expect(platformSplit(db, ['glow'], '2026-10-20', '2026-10-26')).toEqual([
+    { platform: 'shopify', revenue: 100, orders: 2 },
+    { platform: 'tiktok_shop', revenue: 80, orders: 3 },
+    { platform: 'amazon', revenue: 50, orders: 1 },
+  ]);
+  // A TikTok Shop store's own tt- orders are its platform's.
+  db.prepare("UPDATE stores SET platform = 'tiktok_shop' WHERE id = 'glow'").run();
+  expect(platformSplit(db, ['glow'], '2026-10-20', '2026-10-26')).toEqual([
+    { platform: 'tiktok_shop', revenue: 180, orders: 5 },
+    { platform: 'amazon', revenue: 50, orders: 1 },
+  ]);
+
+  // The summary's split is over the same days and stores as its totals.
+  const fresh = openDb();
+  seedDemo(fresh);
+  const s = (await (await createApp(fresh).request('/api/analytics/summary?stores=glow,peak&range=30')).json()) as AnalyticsSummary;
+  expect(s.byPlatform!.map((p) => p.platform).sort()).toEqual(['shopify', 'tiktok_shop']);
+  expect(s.byPlatform!.reduce((a, p) => a + p.revenue, 0)).toBeCloseTo(s.totals.revenue, 1);
+  expect(s.byPlatform!.reduce((a, p) => a + p.orders, 0)).toBe(s.totals.orders);
 });

@@ -4,7 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { WebSocketServer } from 'ws';
 import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type ApprovalStatus, type StoreInput } from '@frontline/shared';
-import { campaignStats, currentWindow, dayShifts, summarize, topProducts } from './analytics';
+import { campaignStats, currentWindow, dayShifts, platformSplit, summarize, topProducts } from './analytics';
 import { decide, listApprovals } from './approvals';
 import { automationRoutes } from './automations';
 import { actionRoutes } from './actions';
@@ -151,9 +151,10 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
       const storeIds = pickStores(db, c.req.query('stores'));
-      const { to, todayFraction, rows } = currentWindow(db, storeIds, range);
+      const { to, todayFraction, rows, shift } = currentWindow(db, storeIds, range);
       const { currency, unconverted } = fxFor(db, storeIds);
-      return c.json({ ...summarize(rows, { range, to, storeIds, todayFraction }), currency, ...(unconverted.length ? { unconverted } : {}) });
+      const byPlatform = platformSplit(db, storeIds, addDays(to, 1 - range), to, shift);
+      return c.json({ ...summarize(rows, { range, to, storeIds, todayFraction }), byPlatform, currency, ...(unconverted.length ? { unconverted } : {}) });
     })
     .get('/api/analytics/campaigns', (c) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;

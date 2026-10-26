@@ -1,4 +1,4 @@
-import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, MetricTotals, ProductStatus, TopProduct } from '@frontline/shared';
+import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, MetricTotals, Platform, ProductStatus, TopProduct } from '@frontline/shared';
 import type { Db } from './db';
 import { addDays, dayFraction, dayNumber, localDate } from './dates';
 import { demoTopProducts } from './demo';
@@ -169,7 +169,52 @@ export function currentWindow(db: Db, storeIds: string[], range: AnalyticsRange,
     Object.assign(todayFraction, salesShares(db, [id], addDays(today, -range), cutoff, dayFraction(today, now, tz)));
   }
   const rows = loadRows(db, storeIds, range, to, 1).map((r) => (shift[r.storeId] ? { ...r, date: addDays(r.date, shift[r.storeId]!) } : r));
-  return { to, todayFraction, rows };
+  return { to, todayFraction, rows, shift };
+}
+
+/** A sales channel next to a store's own platform, and its order ids (Amazon's sales are its daily totals, channel_daily). */
+const CHANNELS = { tiktok_shop: 'tt-*', amazon: 'amz-*' } as const;
+
+/**
+ * Revenue and orders over [from, to] (each store's own days, as topProducts) per sales platform, biggest first, in the
+ * summary's currency: a channel next to a store's own platform is split out of the store's totals, net of its refunds as
+ * the totals are, and the rest is the store's own platform's. Stores without an exchange rate are left out, as there.
+ */
+export function platformSplit(db: Db, storeIds: string[], from: string, to: string, shift: Record<string, number> = {}) {
+  const { rate } = fxFor(db, storeIds);
+  const platform = db.prepare('SELECT platform FROM stores WHERE id = ?');
+  const totals = db.prepare('SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(orders), 0) AS orders FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?');
+  const sales = {
+    tiktok_shop: db.prepare("SELECT coalesce(sum(total), 0) AS revenue, count(*) AS orders FROM orders WHERE store_id = ? AND id GLOB 'tt-*' AND status = 'paid' AND local_date BETWEEN ? AND ?"),
+    amazon: db.prepare("SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(orders), 0) AS orders FROM channel_daily WHERE store_id = ? AND channel = 'amazon' AND date BETWEEN ? AND ?"),
+  };
+  const refunds = db.prepare(
+    `SELECT coalesce(sum(r.amount + r.tax), 0) AS amount FROM orders o JOIN amazon_refunds r ON r.store_id = o.store_id AND r.order_id = o.id
+     WHERE o.store_id = ? AND o.id GLOB ? AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?`,
+  );
+  const out = new Map<Platform, { revenue: number; orders: number }>();
+  const add = (p: Platform, revenue: number, orders: number) => {
+    const o = out.get(p) ?? { revenue: 0, orders: 0 };
+    out.set(p, { revenue: o.revenue + revenue, orders: o.orders + orders });
+  };
+  for (const [id, f, t] of ownDays(storeIds, from, to, shift)) {
+    const x = rate(id);
+    if (!x) continue;
+    const own = platform.get(id)!.platform as Platform;
+    const all = totals.get(id, f, t)!;
+    let [revenue, orders] = [Number(all.revenue), Number(all.orders)];
+    for (const [p, ids] of Object.entries(CHANNELS) as [keyof typeof CHANNELS, string][]) {
+      if (p === own) continue;
+      const c = sales[p].get(id, f, t)!;
+      const r = Number(c.revenue) - Number(refunds.get(id, ids, f, t)!.amount);
+      if (!r && !Number(c.orders)) continue;
+      add(p, r * x, Number(c.orders));
+      revenue -= r;
+      orders -= Number(c.orders);
+    }
+    add(own, revenue * x, orders);
+  }
+  return [...out].map(([p, v]) => ({ platform: p, revenue: r2(v.revenue), orders: v.orders })).sort((a, b) => b.revenue - a.revenue);
 }
 
 const STATUS = (s: string): CampaignStats['status'] => (s === 'paused' ? 'paused' : s === 'archived' || s === 'deleted' || s === 'removed' ? 'archived' : 'active');

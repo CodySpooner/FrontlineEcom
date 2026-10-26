@@ -264,6 +264,12 @@ export interface AnalyticsSummary {
    * open such a store alone to see it in its own currency. Absent when everything converted.
    */
   unconverted?: string[];
+  /**
+   * Revenue and orders over the period per sales platform, biggest first, in `currency` (same stores and days as
+   * `totals`, which they add up to): a channel next to a store's own platform (TikTok Shop or Amazon next to a Shopify)
+   * is split out of that store's. One entry when every store sells on one platform. Set by /api/analytics/summary.
+   */
+  byPlatform?: { platform: Platform; revenue: number; orders: number }[];
 }
 
 export interface Funnel {
