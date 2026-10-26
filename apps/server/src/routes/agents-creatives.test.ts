@@ -132,13 +132,17 @@ test('library routes', async () => {
 test('with Higgsfield connected the render is saved as a higgsfield creative; a failed render saves nothing', async () => {
   generateMedia = async (req) => `/api/creatives/media/req-1.${req.kind === 'image' ? 'jpg' : 'mp4'}`;
   expect((await run('glow:creative_studio', [ad('image')])).outputs[0]).toMatch(/Rendered on Higgsfield and saved to the library/);
-  expect(listCreatives(db, { storeIds: ['glow'] })[0]).toMatchObject({ kind: 'image', source: 'higgsfield', mediaUrl: '/api/creatives/media/req-1.jpg', credits: 2 });
+  expect(listCreatives(db, { storeIds: ['glow'] })[0]).toMatchObject({ kind: 'image', aspect: '9:16', source: 'higgsfield', mediaUrl: '/api/creatives/media/req-1.jpg', credits: 2 });
+  // Its video models take no aspect: the video isn't labelled 9:16, and the agent is told to check it.
+  expect((await run('glow:creative_studio', [ad('video')])).outputs[0]).toMatch(/saved to the library \([\w-]+\)\. Higgsfield's video models take no aspect ratio, so it's in the model's own frame, not necessarily 9:16/);
+  expect(listCreatives(db, { storeIds: ['glow'], kind: 'video' })[0]).toMatchObject({ source: 'higgsfield', mediaUrl: '/api/creatives/media/req-1.mp4' });
+  expect(listCreatives(db, { storeIds: ['glow'], kind: 'video' })[0]!.aspect).toBeUndefined();
 
   generateMedia = async () => {
     throw new Error('Higgsfield render nsfw');
   };
   expect((await run('glow:creative_studio', [ad('video')])).outputs[0]).toMatch(/, but generation failed: Higgsfield render nsfw\. Nothing was saved/);
-  expect(listCreatives(db, { storeIds: ['glow'] })).toHaveLength(1);
+  expect(listCreatives(db, { storeIds: ['glow'] })).toHaveLength(2);
 });
 
 test('higgsfieldGenerate submits, polls, downloads the output and serves it locally', async () => {

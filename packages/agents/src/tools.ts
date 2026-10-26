@@ -450,7 +450,8 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'create_creative',
     description:
-      'Save an ad to the creatives library. kind "copy" saves ad copy right away. image/video/ugc generate media: costs generation credits (image 2, video 20, ugc 40), checks the daily credit cap and asks the owner first.',
+      'Save an ad to the creatives library. kind "copy" saves ad copy right away. image/video/ugc generate media: costs generation credits (image 2, video 20, ugc 40), checks the daily credit cap and asks the owner first. ' +
+      "aspect frames images; Higgsfield's video models take none and render in their own frame.",
     input: {
       kind: z.enum(['image', 'video', 'ugc', 'copy']),
       headline: z.string().min(2).max(80),
@@ -489,8 +490,11 @@ export const APP_TOOLS: AppTool[] = [
         return `${message}, but generation failed: ${(e as Error).message}. Nothing was saved; its ${credits} credits still count toward today's cap (Higgsfield may have charged them), so don't retry it unasked.`;
       }
       if (mediaUrl) {
-        const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'higgsfield', mediaUrl });
-        return `${message}. Rendered on Higgsfield and saved to the library (${saved.id}).`;
+        // Higgsfield's video endpoints have no aspect setting (its OpenAPI, checked 2026-10-26): not labelled one it wasn't made in.
+        const framed = kind === 'image';
+        const saved = saveCreative(ctx.db, { ...base, ...(framed ? { aspect } : {}), prompt, credits, source: 'higgsfield', mediaUrl });
+        const frame = framed ? '' : ` Higgsfield's video models take no aspect ratio, so it's in the model's own frame, not necessarily ${aspect}: check it before running it as a ${aspect} ad.`;
+        return `${message}. Rendered on Higgsfield and saved to the library (${saved.id}).${frame}`;
       }
       const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'demo', mediaUrl: demoMedia(ctx.store, { kind, aspect, headline, cta }) });
       return `${message}. Higgsfield isn't connected, so this is a demo render, saved to the library (${saved.id}).`;
