@@ -71,7 +71,8 @@ pnpm check    # typecheck + tests
   Integrations say when theirs is hours apart from the store's (an ad account's zone is often fixed when it's created).
 - **Currencies:** a store reports in its shop's currency. Ad spend in another currency is converted at the European
   Central Bank's rate for its day (the last few days at the latest rate until their numbers settle), and "All stores"
-  totals (in the base currency from Settings) at the latest rate.
+  totals (in the base currency from Settings) at the latest rate. Currencies the ECB doesn't publish (AED, SAR, TWD,
+  VND, most of Latin America and Africa) take the daily rate from the open currency-api feed (fawazahmed0, CC0).
 
 ## The Orca workers
 

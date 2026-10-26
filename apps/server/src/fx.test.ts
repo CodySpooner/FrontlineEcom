@@ -11,6 +11,8 @@ import { getSettings, updateSettings } from './settings';
 const XML = `<?xml version="1.0" encoding="UTF-8"?><gesmes:Envelope><Cube><Cube time='2026-10-23'>
   <Cube currency='USD' rate='1.25'/><Cube currency='GBP' rate='0.8'/></Cube></Cube></gesmes:Envelope>`;
 
+const ecbOnly = (url: string) => url.includes('eurofxref');
+
 const fakeEcb = () => {
   const calls: string[] = [];
   const fetchFn = (async (url: string) => {
@@ -36,6 +38,32 @@ test("historicRate: each day's rate, a weekend or holiday at the last one publis
   expect((await historicRate('GBP', 'EUR', (async () => new Response(hist)) as typeof fetch))('2026-10-24')).toBeUndefined(); // no GBP that Friday
 });
 
+test("currencies the ECB doesn't publish come from a second daily feed; the ECB's own rates stay", async () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("UPDATE stores SET currency = 'AED' WHERE id = 'glow'").run(); // e.g. a Dubai Shopify store
+  const urls: string[] = [];
+  const fetchFn = (async (url: string) => {
+    urls.push(url);
+    if (ecbOnly(url)) return new Response(XML);
+    if (url.includes('jsdelivr')) return new Response('', { status: 503 }); // first host down: the mirror answers
+    return Response.json({ date: '2026-10-26', eur: { usd: 1.3, aed: 4.59, '1inch': 5, gbp: 'x' } });
+  }) as typeof fetch;
+  const { rates } = await refreshFx(db, fetchFn);
+  expect(urls).toEqual([
+    'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml',
+    'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json',
+    'https://latest.currency-api.pages.dev/v1/currencies/eur.json',
+  ]);
+  expect(rates).toEqual({ EUR: 1, USD: 1.25, GBP: 0.8, AED: 4.59 }); // ECB's USD wins; non-codes and non-numbers dropped
+  expect(fxFor(db, ['pawsome', 'glow']).unconverted).toEqual([]);
+  expect(await convertRate(db, 'AED', 'USD', fetchFn)).toBeCloseTo(1.25 / 4.59);
+
+  // Both hosts down: the ECB's rates alone, as before.
+  const ecb = fakeEcb();
+  expect((await refreshFx(db, ecb.fetchFn)).rates).toEqual({ EUR: 1, USD: 1.25, GBP: 0.8 });
+});
+
 test('the rates loop only fetches while a store needs converting', async () => {
   const db = openDb();
   seedDemo(db, '2026-10-26');
@@ -46,9 +74,9 @@ test('the rates loop only fetches while a store needs converting', async () => {
   db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'glow'").run();
   startFxLoop(db, ecb.fetchFn)();
   await new Promise((r) => setTimeout(r, 0));
-  expect(ecb.calls).toEqual(['https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml']);
+  expect(ecb.calls.filter(ecbOnly)).toEqual(['https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml']);
   startFxLoop(db, ecb.fetchFn)(); // fresh cache: no second fetch
-  expect(ecb.calls).toHaveLength(1);
+  expect(ecb.calls.filter(ecbOnly)).toHaveLength(1);
 });
 
 test('multi-store analytics convert to the base currency; one store keeps its own', async () => {
@@ -135,7 +163,7 @@ test('the rate loop notices a new currency within 10 minutes and waits an hour a
     await vi.advanceTimersByTimeAsync(50 * 60_000);
     expect(calls).toHaveLength(1); // an hour after the failure
     await vi.advanceTimersByTimeAsync(10 * 60_000);
-    expect(calls).toHaveLength(2);
+    expect(calls.filter(ecbOnly)).toHaveLength(2);
     expect(fxFor(db, ['pawsome', 'glow']).unconverted).toEqual([]);
     stop();
   } finally {
@@ -150,6 +178,6 @@ test('convertRate fetches rates when it has none (or day-old ones) and converts 
   expect(calls).toHaveLength(0);
   expect(await convertRate(db, 'USD', 'GBP', fetchFn)).toBeCloseTo(0.64);
   expect(await convertRate(db, 'GBP', 'EUR', fetchFn)).toBe(1.25);
-  expect(calls).toHaveLength(1);
+  expect(calls.filter(ecbOnly)).toHaveLength(1);
   expect(await convertRate(db, 'USD', 'VND', fetchFn)).toBeUndefined();
 });

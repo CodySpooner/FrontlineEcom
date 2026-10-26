@@ -27,10 +27,23 @@ const cached = (db: Db): Rates | undefined => {
   return r ? JSON.parse(String(r.value_json)) : undefined;
 };
 
+// The ECB publishes about 30 currencies. The rest (AED, SAR, TWD, VND, most of Latin America and Africa) come from
+// fawazahmed0's currency-api: CC0, no key, daily, also per euro. Two hosts of the same files; the ECB's own rates win.
+const MORE = ['https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json', 'https://latest.currency-api.pages.dev/v1/currencies/eur.json'];
+
+async function moreRates(fetchFn: Fetch): Promise<Record<string, number>> {
+  for (const url of MORE) {
+    const body = (await fetchFn(url).then((r) => (r.ok ? r.json() : undefined)).catch(() => undefined)) as { eur?: Record<string, unknown> } | undefined;
+    if (body?.eur) return Object.fromEntries(Object.entries(body.eur).filter(([c, v]) => /^[a-z]{3}$/.test(c) && typeof v === 'number' && v > 0).map(([c, v]) => [c.toUpperCase(), v as number]));
+  }
+  return {};
+}
+
 export async function refreshFx(db: Db, fetchFn: Fetch = fetch) {
   const res = await fetchFn(ECB);
   if (!res.ok) throw new Error(`ECB rates: HTTP ${res.status}`);
-  const fx = { ...parseEcb(await res.text()), fetchedAt: new Date().toISOString() };
+  const ecb = parseEcb(await res.text());
+  const fx = { ...ecb, rates: { ...(await moreRates(fetchFn)), ...ecb.rates }, fetchedAt: new Date().toISOString() };
   db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify(fx));
   return fx;
 }
