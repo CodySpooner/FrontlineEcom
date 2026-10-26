@@ -60,3 +60,14 @@ test("each store's yesterday is its own: a shop whose day isn't over yet reports
   expect(n.title).toMatch(/^Yesterday: \$600 revenue/); // Berlin's 25th + Honolulu's 24th
   expect(n.body).toMatch(/^2 orders \(revenue \+25% vs the day before\)/); // vs 80 + 400
 });
+
+test("once a store is real, the digest is about real stores only: demo stores' sample numbers and requests stay out", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("UPDATE stores SET demo = 0, connected = 1 WHERE id = 'glow'").run();
+  db.prepare("DELETE FROM daily_metrics WHERE store_id = 'glow'").run(); // connected, nothing sold yet
+  db.prepare("DELETE FROM approvals WHERE store_id = 'glow'").run();
+  const n = sendDigest(db, new Date('2026-10-26T08:00:00'))!;
+  expect(n.title).toBe('Yesterday: $0 revenue, $0 profit');
+  expect(n.body).toBe('0 orders. No approvals waiting.');
+});
