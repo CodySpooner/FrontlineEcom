@@ -161,7 +161,6 @@ export const RUN_STATUS: Record<RunStatus, { label: string; tone: 'red' | 'good'
   cancelled: { label: 'Stopped', tone: 'muted' },
 };
 
-/** `value` 0..1. `scan` = indeterminate "working" sweep instead of a fill. */
 /** Store health from shared `storeHealth()`: only losing money gets the alarm color. */
 export const STORE_HEALTH: Record<StoreHealthStatus, { label: string; tone: keyof typeof BADGE }> = {
   winning: { label: 'Winning', tone: 'good' },
@@ -178,6 +177,7 @@ export const MEMORY_KINDS: { value: MemoryKind; label: string }[] = [
 /** Who saved a memory: the owner or one of the squad's roles. */
 export const memoryAuthor = (agentId: string) => (agentId === 'owner' ? 'You' : AGENT_ROLES[agentId.split(':')[1] as AgentRole]?.name ?? 'Agent');
 
+/** `value` 0..1. `scan` = indeterminate "working" sweep instead of a fill. */
 export function ProgressBar({ value = 0, tone = 'red', scan, label }: { value?: number; tone?: 'red' | 'good' | 'muted'; scan?: boolean; label: string }) {
   const v = Math.min(1, Math.max(0, value));
   return (

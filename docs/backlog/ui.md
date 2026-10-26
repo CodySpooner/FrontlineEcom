@@ -244,6 +244,8 @@ Orca's browser against the reference before ticking it.
       running chat, Delete creative, forget a memory, stop sharing a niche learning, Reopen an order issue. Each now says why.
 - [x] UI-91 Desktop app: right-hand drawers (Notifications, Commander, connect, rule and store editors, the ecosystem's
       worker panel) started at the window's top edge, so their Close button sat under Windows' own close button.
+- [x] UI-92 DESIGN §8 store health ("margin-based bar; status badge Winning / Steady / Bleeding") above each store's squad on
+      AI Agents. It was only a badge in Analytics' compare table, and `storeHealth().bar` was unused.
 
 ## Blocked
 
@@ -373,3 +375,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Core inbox (version): Settings › Your Data's header shows `Version 0.1.3` from `/api/health` `version`, or "Development build" for `dev`, and nothing before health loads. Settings.test covers both. Orca at 800px (repo build): "Your Data · … · Development build"
 - 2026-10-26 — UI-91: `Dialog side="right"` gets `.drawer`. Under `:root[data-wco]` (frameless Electron, `titleBarOverlay` 40px) it starts at `env(titlebar-area-height, 40px)` and is shorter by the same. CSS only, in index.css next to the `.titlebar` WCO rules. Orca with `data-wco` set by hand on the open Notifications drawer: margin 0→40px, height 1761→1721, Close top 15→55, and no change without it. Not run in Electron itself
 - 2026-10-26 — Agents inbox (costTodayUsd): the agent's Settings meter reads `agent.costTodayUsd`, the figure its budget check uses, instead of summing its 50 newest runs. `spentToday` and its test are removed, and so is the ponytail note on its ceiling. The agents query already refetches on run events. Orca with a $1.50 fixture on Glow's Copywriter: "$0.00 of $1.50 used today". Restored
+- 2026-10-26 — UI-92: `StoreHealthLine` in Agents.tsx renders the badge, a 64px `ProgressBar` (`bar`, filling at 30%) and "X% net margin, last 30 days" from `useSummary([store], 30)`. It hides while a tab switch shows the previous store's placeholder data. Moved ProgressBar's doc comment back above it in ui.tsx. New Agents.test. Orca at 800px: Pawsome "Winning · 32.5%" (bar 100), Peak Fit "Bleeding · −3.3%" (bar 0), matching `/api/analytics/summary`. Also swept every page at 1024×680 (the desktop minimum) for horizontal overflow: none

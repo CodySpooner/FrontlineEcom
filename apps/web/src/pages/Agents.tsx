@@ -2,12 +2,12 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { MessageSquare, Plus, Settings2, Users } from 'lucide-react';
-import { AGENT_ROLES, type Agent } from '@frontline/shared';
-import { useAgents, useStores, useUpdateAgent } from '../api/client';
+import { AGENT_ROLES, storeHealth, type Agent } from '@frontline/shared';
+import { useAgents, useStores, useSummary, useUpdateAgent } from '../api/client';
 import { Portrait } from '../components/Art';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { AGENT_STATUS, Badge, Button, buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState, StatusDot, Tabs, XPBar } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState, ProgressBar, StatusDot, STORE_HEALTH, Tabs, XPBar } from '../components/ui';
 import { NAV } from '../nav';
 
 const NAV_AGENTS = NAV[1]!;
@@ -47,11 +47,14 @@ export function Agents() {
         <>
           <Tabs label="Store" tabs={list.map((s) => ({ value: s.id, label: s.name, color: s.color }))} value={store.id} onChange={(id) => setParams({ store: id }, { replace: true })} />
           <div className="my-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="text-[13px] text-muted">
-              <b className="font-semibold text-text-2">{squad.length - idle.length} of {squad.length}</b> deployed · {working} working
-              {needsYou > 0 && <span className="text-red"> · {needsYou} need{needsYou === 1 ? 's' : ''} you</span>}
-              {failing > 0 && <span className="text-red"> · {failing} failed</span>}
-            </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <p className="text-[13px] text-muted">
+                <b className="font-semibold text-text-2">{squad.length - idle.length} of {squad.length}</b> deployed · {working} working
+                {needsYou > 0 && <span className="text-red"> · {needsYou} need{needsYou === 1 ? 's' : ''} you</span>}
+                {failing > 0 && <span className="text-red"> · {failing} failed</span>}
+              </p>
+              <StoreHealthLine storeId={store.id} />
+            </div>
             <Button variant="primary" onClick={() => setPicking(true)}>
               <Plus className="size-4" strokeWidth={2.2} />
               Deploy Agent
@@ -87,6 +90,26 @@ export function Agents() {
         </>
       )}
     </>
+  );
+}
+
+/** DESIGN §8 store health: the squad's store's net margin over 30 days, as a bar and a Winning / Steady / Bleeding badge. */
+function StoreHealthLine({ storeId }: { storeId: string }) {
+  const q = useSummary([storeId], 30);
+  if (!q.data || q.isPlaceholderData) return null;
+  const h = storeHealth(q.data.totals);
+  const { label, tone } = STORE_HEALTH[h.status];
+  return (
+    <span className="flex items-center gap-2 text-xs text-muted">
+      <Badge tone={tone}>{label}</Badge>
+      <span className="w-16">
+        <ProgressBar value={h.bar} tone={tone} label="Store health" />
+      </span>
+      <span>
+        {h.marginPct < 0 ? '−' : ''}
+        {Math.abs(h.marginPct)}% net margin, last 30 days
+      </span>
+    </span>
   );
 }
 
