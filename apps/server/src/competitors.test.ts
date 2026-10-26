@@ -1,7 +1,7 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { Competitor, CompetitorSnapshot, PriceChange } from '@frontline/shared';
 import { createApp } from './app';
-import { addSnapshot, seedCompetitors } from './competitors';
+import { addSnapshot, priceChanges, seedCompetitors, startCompetitorWatch, watchCompetitorPrices } from './competitors';
 import { openDb } from './db';
 import { seedDemo } from './demo';
 
@@ -67,4 +67,59 @@ test('validation and 404s', async () => {
   expect((await app.request('/api/competitors/nope/snapshots')).status).toBe(404);
   expect((await app.request(`/api/competitors/${c.id}`, { method: 'DELETE' })).status).toBe(204);
   expect((await app.request(`/api/competitors/${c.id}`, { method: 'DELETE' })).status).toBe(404);
+});
+
+test("a Shopify competitor's catalog becomes price snapshots, recorded again only when a price moves", async () => {
+  const db = openDb();
+  seedDemo(db, TODAY);
+  db.prepare("INSERT INTO competitors (id, store_id, name, url, created_at) VALUES ('rival', 'glow', 'Rival', 'https://rival.com/collections/all', '2026-10-01T00:00:00Z')").run();
+  let catalog = [
+    { title: 'LED Mask', variants: [{ price: '89.00', compare_at_price: '129.00' }, { price: '79.00', compare_at_price: null }] },
+    { title: 'Ice Roller', variants: [{ price: '24.00', compare_at_price: '20.00' }] },
+    { title: 'Gift Card', variants: [{ price: '0.00', compare_at_price: null }] },
+  ];
+  const urls: string[] = [];
+  const fetchFn = (async (url: string) => {
+    urls.push(url);
+    return Response.json({ products: catalog });
+  }) as typeof fetch;
+  const latest = () => db.prepare("SELECT data_json FROM competitor_snapshots WHERE competitor_id = 'rival' ORDER BY captured_at, rowid").all().map((r) => JSON.parse(String(r.data_json)));
+
+  expect(await watchCompetitorPrices(db, 'rival', 'https://rival.com/collections/all', fetchFn, new Date('2026-10-25T09:00:00Z'))).toBe(2);
+  expect(urls).toEqual(['https://rival.com/products.json?limit=250&page=1']);
+  expect(latest()).toEqual([{ product: 'LED Mask', price: 79 }, { product: 'Ice Roller', price: 24 }]);
+
+  expect(await watchCompetitorPrices(db, 'rival', 'https://rival.com', fetchFn, new Date('2026-10-26T09:00:00Z'))).toBe(0);
+  catalog = [{ ...catalog[0]!, variants: [{ price: '69.00', compare_at_price: '99.00' }] }, catalog[1]!];
+  expect(await watchCompetitorPrices(db, 'rival', 'https://rival.com', fetchFn, new Date('2026-10-26T10:00:00Z'))).toBe(1);
+  expect(latest().at(-1)).toEqual({ product: 'LED Mask', price: 69, compareAt: 99 });
+  expect(priceChanges(db, ['glow'], 50).find((c) => c.competitorId === 'rival')).toMatchObject({ product: 'LED Mask', from: 79, to: 69 });
+
+  const html = (async () => new Response('<html>Wix site</html>', { headers: { 'content-type': 'text/html' } })) as unknown as typeof fetch;
+  expect(await watchCompetitorPrices(db, 'rival', 'https://rival.com', html)).toBeUndefined();
+});
+
+test('the watch checks each real competitor once a day and never the demo .example ones', async () => {
+  vi.useFakeTimers({ now: new Date('2026-10-26T10:00:00') });
+  try {
+    const db = openDb();
+    seedDemo(db, TODAY);
+    seedCompetitors(db, TODAY);
+    db.prepare("INSERT INTO competitors (id, store_id, name, url, created_at) VALUES ('rival', 'glow', 'Rival', 'https://rival.com', '2026-10-01T00:00:00Z')").run();
+    const urls: string[] = [];
+    const fetchFn = (async (url: string) => {
+      urls.push(url);
+      return Response.json({ products: [] });
+    }) as typeof fetch;
+    const stop = startCompetitorWatch(db, fetchFn, 3_600_000);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(urls).toEqual(['https://rival.com/products.json?limit=250&page=1']);
+    await vi.advanceTimersByTimeAsync(3 * 3_600_000);
+    expect(urls).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(12 * 3_600_000); // the next day
+    expect(urls).toHaveLength(2);
+    stop();
+  } finally {
+    vi.useRealTimers();
+  }
 });

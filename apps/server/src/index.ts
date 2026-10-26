@@ -1,6 +1,7 @@
 import { startServer } from './app';
 import { startScheduler } from './automations';
 import { startBackupLoop } from './backups';
+import { startCompetitorWatch } from './competitors';
 import { startDigestLoop } from './digest';
 import { startFxLoop } from './fx';
 import { seedCompetitors } from './competitors';
@@ -24,6 +25,7 @@ startSyncLoop(db, loadKey(dataDir()));
 startBackupLoop(db);
 startFxLoop(db);
 startDigestLoop(db);
+startCompetitorWatch(db);
 startScheduler(db, (agentId, task) => runManager(db).start(agentId, task));
 
 startServer(db, Number(process.env.API_PORT ?? 8787), (port) => {

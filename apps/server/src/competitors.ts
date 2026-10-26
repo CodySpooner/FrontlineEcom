@@ -4,6 +4,7 @@ import type { AdSnapshotData, Competitor, CompetitorSnapshot, PriceChange, Price
 import { tx, type Db } from './db';
 import { addDays, localDate } from './dates';
 import { hash, mulberry32 } from './demo';
+import { log } from './log';
 
 type Row = Record<string, unknown>;
 type Obj = Record<string, unknown>;
@@ -84,6 +85,85 @@ export function priceChanges(db: Db, storeIds: string[], limit: number): PriceCh
     out.push({ competitorId: String(r.competitor_id), storeId: String(r.store_id), product: String(r.product), from, to, changePct: Math.round(((to - from) / from) * 10000) / 100, at: String(r.captured_at) });
   });
   return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
+}
+
+type Fetch = typeof fetch;
+interface StorefrontProduct {
+  title?: string;
+  variants?: { price: string; compare_at_price: string | null }[];
+}
+
+/**
+ * Reads a Shopify competitor's public catalog (`/products.json`, 1,000 products at most) and records a price snapshot
+ * for each product whose lowest price or its compare-at changed since the last one. Returns how many it recorded, or
+ * undefined when the site isn't a Shopify storefront.
+ */
+export async function watchCompetitorPrices(db: Db, competitorId: string, url: string, fetchFn: Fetch = fetch, now = new Date()) {
+  const products: StorefrontProduct[] = [];
+  for (let page = 1; page <= 4; page++) {
+    const res = await fetchFn(`${new URL(url).origin}/products.json?limit=250&page=${page}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+    const body = res.ok ? ((await res.json().catch(() => undefined)) as { products?: StorefrontProduct[] } | undefined) : undefined;
+    if (!Array.isArray(body?.products)) {
+      if (page === 1) return;
+      break;
+    }
+    products.push(...body.products);
+    if (body.products.length < 250) break;
+  }
+  const latest = new Map(
+    db.prepare("SELECT data_json FROM competitor_snapshots WHERE competitor_id = ? AND kind = 'price' ORDER BY captured_at, rowid").all(competitorId)
+      .map((r) => JSON.parse(String(r.data_json)) as PriceSnapshotData)
+      .map((d) => [d.product, d]),
+  );
+  const seen = new Set<string>();
+  let added = 0;
+  tx(db, () => {
+    for (const p of products) {
+      const v = (p.variants ?? []).map((x) => ({ price: Number(x.price), compareAt: Number(x.compare_at_price) })).filter((x) => x.price > 0).sort((a, b) => a.price - b.price)[0];
+      const product = p.title?.trim().slice(0, 200);
+      if (!v || !product || seen.has(product)) continue;
+      seen.add(product);
+      const data: PriceSnapshotData = { product, price: v.price, ...(v.compareAt > v.price ? { compareAt: v.compareAt } : {}) };
+      const prev = latest.get(product);
+      if (prev && prev.price === data.price && prev.compareAt === data.compareAt) continue;
+      addSnapshot(db, competitorId, { kind: 'price', data }, now.toISOString());
+      added++;
+    }
+  });
+  return added;
+}
+
+/**
+ * Checks every competitor's prices once a day (hourly ticks, one site at a time). The demo competitors live on the
+ * reserved `.example` domain and are never fetched. Returns stop().
+ */
+export function startCompetitorWatch(db: Db, fetchFn: Fetch = fetch, everyMs = 3_600_000) {
+  let running = false;
+  const check = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const today = localDate();
+      const done = JSON.parse(String(db.prepare("SELECT value_json FROM settings WHERE key = 'competitor_watch'").get()?.value_json ?? '{}')) as Record<string, string>;
+      for (const c of db.prepare('SELECT id, url FROM competitors ORDER BY created_at').all()) {
+        const [id, url] = [String(c.id), String(c.url)];
+        if (done[id] === today || new URL(url).hostname.endsWith('.example')) continue;
+        try {
+          const changes = await watchCompetitorPrices(db, id, url, fetchFn);
+          log('info', 'competitor prices', { id, ...(changes === undefined ? { skipped: 'not a Shopify storefront' } : { changes }) });
+        } catch (e) {
+          log('warn', 'competitor prices failed', { id, error: e instanceof Error ? e.message : String(e) });
+        }
+        done[id] = today;
+        db.prepare("INSERT INTO settings (key, value_json) VALUES ('competitor_watch', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify(done));
+      }
+    } finally {
+      running = false;
+    }
+  };
+  void check();
+  const timer = setInterval(() => void check(), everyMs);
+  return () => clearInterval(timer);
 }
 
 export function competitorRoutes(db: Db, pickStores: (q?: string) => string[]) {
