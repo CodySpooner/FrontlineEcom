@@ -1,7 +1,7 @@
 // UI-17 Settings: stores, per-store caps and autopilot, profile, notifications, sound, where the data lives.
 import { useState, type FormEvent } from 'react';
 import { APPROVAL_KINDS, type Store, type StoreCaps } from '@frontline/shared';
-import { useBackupNow, useBackups, useCaps, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings, useUsage } from '../api/client';
+import { useBackupNow, useBackups, useCaps, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings, useUsage } from '../api/client';
 import { Hero } from '../components/Hero';
 import { nicheName, PLATFORM_NAME, StoreForm } from '../components/StoreForm';
 import { Badge, Button, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../components/ui';
@@ -222,6 +222,7 @@ function Preferences() {
   const [name, setName] = useState<string>();
   const [base, setBase] = useState<string>();
   const [copied, setCopied] = useState(false);
+  const openDir = useOpenDataFolder();
   if (q.isPending) return <Panel title="Profile"><LoadingState rows={3} /></Panel>;
   if (q.isError) return <Panel title="Profile"><ErrorState message="Couldn't load your settings." onRetry={() => q.refetch()} /></Panel>;
   const s = q.data;
@@ -272,6 +273,7 @@ function Preferences() {
           {toggle('Approvals', 'An agent needs your yes or no.', s.notifications.approvals, (v) => ({ notifications: { approvals: v } }))}
           {toggle('Agent finished', 'A task you started is done.', s.notifications.agentDone, (v) => ({ notifications: { agentDone: v } }))}
           {toggle('Errors', 'A run or a connector failed.', s.notifications.errors, (v) => ({ notifications: { errors: v } }))}
+          {toggle('Morning digest', "Yesterday's numbers and the approvals waiting, at 8:00.", s.notifications.digest, (v) => ({ notifications: { digest: v } }))}
           {toggle('Sound', 'Mission and XP sounds.', s.sound, (v) => ({ sound: v }))}
         </div>
         {update.isError && (
@@ -288,7 +290,15 @@ function Preferences() {
           <Button size="sm" onClick={() => navigator.clipboard.writeText(s.dataDir).then(() => setCopied(true))}>
             {copied ? 'Copied' : 'Copy path'}
           </Button>
+          <Button size="sm" disabled={openDir.isPending} onClick={() => openDir.mutate()}>
+            Open folder
+          </Button>
         </div>
+        {openDir.isError && (
+          <p role="alert" className="mt-2 text-xs text-red">
+            {openDir.error.message}
+          </p>
+        )}
         <Backups />
       </Panel>
     </>

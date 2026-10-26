@@ -74,6 +74,9 @@ const json = (method: string, body: unknown): RequestInit => ({ method, headers:
 export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/api/settings') });
 export const useStores = () => useQuery({ queryKey: ['stores'], queryFn: () => api<Store[]>('/api/stores') });
 
+/** Opens the data folder (logs, backups) in Explorer on this computer. */
+export const useOpenDataFolder = () => useMutation({ mutationFn: () => api<void>('/api/settings/open-data-folder', { method: 'POST' }) });
+
 export function useUpdateSettings() {
   const qc = useQueryClient();
   return useMutation({
