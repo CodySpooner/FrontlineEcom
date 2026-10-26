@@ -56,6 +56,20 @@ test('a demo Creative Studio run asks before rendering, like a real one; approve
   expect(listCreatives(db, { storeIds: ['glow'] })[0]).toMatchObject({ kind: 'ugc', aspect: '9:16', source: 'demo', prompt: 'A creator unboxes it in a car.', credits: 40 });
 });
 
+test('demo Ad Variations makes the variations asked for, each with its own hook', async () => {
+  const m = runManager(db);
+  const run = m.start('glow:creative_studio', 'Make 3 variations of our best ad with different hooks. Make a 1:1 image ad and save it to the creatives library. Brief: Keep the shot.');
+  if (typeof run === 'string') throw new Error(run);
+  const asked: string[] = [];
+  for (let i = 0; i < 200 && asked.length < 3; i++) {
+    const p = db.prepare(`SELECT id, title FROM approvals WHERE run_id = ? AND status = 'pending'`).get(run.id);
+    if (p) asked.push(String(p.title)), decide(db, String(p.id), 'approve');
+    await new Promise((r) => setImmediate(r));
+  }
+  await m.idle();
+  expect(asked.map((t) => t.split(': ').at(-1))).toEqual(['see the difference', 'what everyone is switching to', expect.stringMatching(/^now \$/)]);
+});
+
 test("a demo Ask AI question reads the data it's about", async () => {
   const asked = async (q: string) => {
     const m = runManager(db);

@@ -70,14 +70,17 @@ function demoWork(input: RunInput): FakeStep[] {
       const p = product();
       const kind = input.task.match(/\b(UGC|video|image)\b[^.]* ad and save it/i)?.[1]?.toLowerCase() ?? 'image';
       const brief = input.task.match(/Brief: ([\s\S]+)/)?.[1]?.trim() ?? input.task;
+      // Ad Variations asks for N with different hooks (each its own request, like a real run); at most 3.
+      const hooks = ['see the difference', 'what everyone is switching to', `now ${cash(Number(p?.price), input.store.currency)}`];
+      const n = Math.min(3, Number(input.task.match(/\bMake (\d+) variations\b/i)?.[1] ?? 1));
       return p
-        ? [{
+        ? hooks.slice(0, n).map((hook) => ({
             call: 'create_creative',
             input: {
               kind, aspect: input.task.match(/\b(1:1|4:5|9:16|16:9)\b/)?.[1] ?? '1:1', prompt: brief.slice(0, 1000), cta: 'Shop now',
-              headline: `${p.title}: see the difference`.slice(0, 80), primaryText: `${p.title}, now ${cash(Number(p.price), input.store.currency)}. Tap to see it in action.`,
+              headline: `${p.title}: ${hook}`.slice(0, 80), primaryText: `${p.title}, now ${cash(Number(p.price), input.store.currency)}. Tap to see it in action.`,
             },
-          }]
+          }))
         : [];
     }
     case 'email_sms':
