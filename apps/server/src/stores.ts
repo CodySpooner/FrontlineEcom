@@ -1,5 +1,7 @@
 import { NICHES, PLATFORMS, type Store, type StoreInput, type StoreUpdate } from '@frontline/shared';
-import { tx, type Db } from './db';
+import { rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { dataDir, tx, type Db } from './db';
 import { seedDemoStore } from './demo';
 import { setStoreTimezone } from './connectors/common';
 
@@ -119,4 +121,17 @@ export function updateStore(db: Db, id: string, u: StoreUpdate): Store | undefin
   });
 }
 
-export const deleteStore = (db: Db, id: string) => db.prepare('DELETE FROM stores WHERE id = ?').run(id).changes > 0;
+/** Deletes the store (its rows cascade) and its creatives' rendered files (videos run to tens of MB). */
+export function deleteStore(db: Db, id: string, mediaDir = join(dataDir(), 'creatives')) {
+  const files = db.prepare('SELECT media_url FROM creatives WHERE store_id = ?').all(id)
+    .map((r) => String(r.media_url ?? '').match(/^\/api\/creatives\/media\/([\w-]+\.(?:jpg|png|webp|mp4))$/)?.[1]);
+  if (!db.prepare('DELETE FROM stores WHERE id = ?').run(id).changes) return false;
+  for (const f of files) {
+    try {
+      if (f) rmSync(join(mediaDir, f), { force: true });
+    } catch {
+      // A file held open elsewhere stays; the store is gone either way.
+    }
+  }
+  return true;
+}

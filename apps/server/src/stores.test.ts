@@ -3,6 +3,10 @@ import type { Agent, AnalyticsSummary, Order, Page, Product, Store, TopProduct }
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
+import { deleteStore } from './stores';
+import { mkdtempSync, readdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 const setup = () => {
   const db = openDb();
@@ -113,4 +117,21 @@ test("the owner's fee estimate is saved on the store and comes off its profit", 
   const reset = await app.request('/api/stores/pawsome', send('PATCH', { feePercent: 0, feePerOrder: 0 }));
   expect(await reset.json()).not.toHaveProperty('feePercent');
   expect((await summary()).profit).toBe(before.profit);
+});
+
+test("deleting a store deletes its creatives' rendered files, and no one else's", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const dir = mkdtempSync(join(tmpdir(), 'frontline-media-'));
+  const add = (id: string, storeId: string, media: string) => {
+    db.prepare("INSERT INTO creatives (id, store_id, agent_id, kind, headline, primary_text, media_url, source, created_at) VALUES (?, ?, 'ads', 'video', 'h', 't', ?, 'higgsfield', '2026-10-26T00:00:00Z')").run(id, storeId, media);
+  };
+  for (const f of ['a.mp4', 'b.jpg', 'keep.mp4']) writeFileSync(join(dir, f), 'x');
+  add('c1', 'peak', '/api/creatives/media/a.mp4');
+  add('c2', 'peak', '/api/creatives/media/b.jpg');
+  add('c3', 'peak', 'data:image/png;base64,AAAA'); // a demo render: no file
+  add('c4', 'peak', '/api/creatives/media/..%2Fsecret.key'); // never outside the folder
+  add('c5', 'glow', '/api/creatives/media/keep.mp4');
+  expect(deleteStore(db, 'peak', dir)).toBe(true);
+  expect(readdirSync(dir)).toEqual(['keep.mp4']);
 });
