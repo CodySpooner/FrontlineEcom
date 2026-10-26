@@ -6,7 +6,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 - [ ] (from ui) For UI-11 Store Analytics. These are stubbed in `apps/web/src/api/stubs.ts`, and the interfaces there are the proposed shapes; the page shows an "Estimated" badge until each lands. (1) Funnel: add `funnel: { sessions, addToCarts, checkouts, orders }` (period totals from daily_metrics) to `AnalyticsSummary`, which is additive. (2) `GET /api/analytics/campaigns?stores=&range=` → `CampaignStats[]` `{ network, id, storeId, name, status, dailyBudget, spend, revenue, roas, purchases, clicks, impressions }`, biggest spend first. It's the same query as agents' `list_campaigns`, and channels are grouped by network client-side. (3) `GET /api/analytics/top-products?stores=&range=&limit=` → `{ storeId, productId, title, image?, units, revenue, profit }[]`. This needs order line items; demo stores can derive them.
-- [ ] (from agents) FYI migration 12 (agents lane) adds `agent_runs.parent_run_id`; no action needed. The scheduler's `RunTask` call is unchanged (`start(agentId, task)`).
+- [x] (from agents) FYI migration 12 (agents lane) adds `agent_runs.parent_run_id`; no action needed. The scheduler's `RunTask` call is unchanged (`start(agentId, task)`).
 - [x] (from agents) Approved `store.add_products` now adds draft products to demo stores (agents lane, `routes/agents-actions.ts`). For connected Shopify stores the owner only gets a notification: when the connector can `productCreate` (needs `write_products` in the custom-app scopes/help text), export e.g. `createProducts(db, key, storeId, products[])` and I'll call it from `addProducts`.
 - [x] (from agents) Meta Ads integration help: agents now use Meta's official MCP (`https://mcp.facebook.com/ads`) with the stored token, which needs the `ads_mcp_management` permission in addition to `ads_read` (and `ads_management` for changes the owner approves). Please add those to the `meta_ads` help text. Also for AGT-15: a `higgsfield` integration kind (its MCP `mcp.higgsfield.ai/mcp` is OAuth) — tell me the field name the token lands in.
 - [x] (from agents) FYI: agents appended migration 7 (`agent_runs`) to `MIGRATIONS`, and two `LiveMessage` variants in shared (`run`, `run_event`). `apps/server/src/routes/agents.ts` calls your `notify()` for finished/failed runs and `getCaps().agentCostPerDay` before starting one.
@@ -35,7 +35,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
       clicks, impressions); map ad accounts → stores; feed `ad_spend`.
 - [x] CORE-10 Google Ads + GA4 connectors (spend/conversions; sessions/funnel).
 - [x] CORE-11 TikTok Shop + TikTok Ads connectors.
-- [ ] CORE-12 Etsy + Amazon SP-API connectors (read-only analytics first).
+- [x] CORE-12 Etsy + Amazon SP-API connectors (read-only analytics first).
 - [ ] CORE-13 Suppliers: CJ Dropshipping / DSers — product sourcing + order status (read first).
 - [x] CORE-14 Products & Orders API for the UI (filters, pagination, sort).
 - [x] CORE-15 Research feed: trending products dataset (demo) with scoring (margin, competition, trend, shipping),
@@ -55,6 +55,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-12 (2/2) Amazon SP-API connector (read-only analytics): LWA token → Sales API orderMetrics (daily, store timezone, offsets DST-correct) → new `channel_daily` table (migration 13); revenue rebuild now sums platform orders + channel totals
 - 2026-10-26 — CORE-12 (1/2) Etsy connector: Open API v3 (`x-api-key` keystring:secret), hourly token renewal with rotating refresh tokens saved encrypted, paid receipts → orders/revenue, listings newest-changed first with early stop
 - 2026-10-26 — CORE-11 (2/2) TikTok Shop connector: signed Partner API 202309 requests, access token renewed with the refresh token and saved encrypted, first authorized shop, products + paid orders (tt- ids) → shared revenue rebuild with Shopify
 - 2026-10-26 — CORE-11 (1/2) TikTok Ads connector: Marketing API v1.3 daily AUCTION_CAMPAIGN report in 30-day chunks + campaign list → campaigns/campaign_daily (network `tiktok`) → ad_spend; 28-day re-pull

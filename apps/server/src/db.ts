@@ -302,6 +302,16 @@ export const MIGRATIONS = [
   /* 12 (agents lane: squad delegation, AGT-22) */ `
   ALTER TABLE agent_runs ADD COLUMN parent_run_id TEXT;
   `,
+  /* 13 */ `
+  CREATE TABLE channel_daily (
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL,
+    date TEXT NOT NULL,
+    revenue REAL NOT NULL DEFAULT 0,
+    orders INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (store_id, channel, date)
+  );
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

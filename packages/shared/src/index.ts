@@ -417,9 +417,10 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'accessToken', label: 'OAuth access token', secret: true },
     { key: 'refreshToken', label: 'OAuth refresh token', secret: true },
   ] },
-  amazon: { name: 'Amazon SP-API', category: 'platform', perStore: true, fields: [
+  amazon: { name: 'Amazon SP-API', category: 'platform', perStore: true, help: 'Seller Central → Apps and Services → Develop Apps → add a private app with the Selling Partner Insights role → copy the LWA client ID and secret → Authorize app → copy the refresh token. Region: na (US, CA, MX, BR), eu (Europe, UK, India, Middle East) or fe (Japan, Australia, Singapore). Marketplace ID, e.g. ATVPDKIKX0DER for amazon.com. Daily sales and order counts only for now.', fields: [
     { key: 'sellerId', label: 'Seller ID', secret: false },
     { key: 'region', label: 'Region', secret: false, placeholder: 'na | eu | fe' },
+    { key: 'marketplaceId', label: 'Marketplace ID', secret: false, placeholder: 'ATVPDKIKX0DER' },
     { key: 'clientId', label: 'LWA client ID', secret: false },
     { key: 'clientSecret', label: 'LWA client secret', secret: true },
     { key: 'refreshToken', label: 'Refresh token', secret: true },
