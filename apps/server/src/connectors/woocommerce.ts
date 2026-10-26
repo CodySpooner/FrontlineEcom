@@ -12,6 +12,10 @@ import { checkNewProducts, type NewProduct, type ProductPage } from './shopify';
 // WordPress pages, written with a WordPress application password (publishWooPage).
 /** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
 const BACKFILL_DAYS = 730;
+// Only what the sync reads (WordPress's `_fields`; one that ignores it sends everything, which still works): an order's
+// billing and shipping (names, emails, addresses) never leave the shop, and a big shop's backfill is a fraction of the size.
+const ORDER_FIELDS = 'id,number,status,currency,date_created,date_created_gmt,date_paid_gmt,total,total_tax,refunds,line_items,cost_of_goods_sold,meta_data';
+const PRODUCT_FIELDS = 'id,name,status,type,price,regular_price,images,stock_quantity,manage_stock,backorders,cost_of_goods_sold';
 
 type Fetch = typeof fetch;
 
@@ -153,8 +157,9 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const since = cursor ?? new Date(now.getTime() - BACKFILL_DAYS * 86_400_000).toISOString().slice(0, 19);
     // Default order (newest created first): edits don't move an order between pages, so paging can't skip it.
     const changed = { modified_after: since, dates_are_gmt: 'true' };
+    const ordersSince = { ...changed, _fields: ORDER_FIELDS };
     // The default status (any) leaves out the trash: an order trashed after it was counted is read from there.
-    const orders = [...(await all<WooOrder>('orders', changed)), ...(await all<WooOrder>('orders', { ...changed, status: 'trash' }))];
+    const orders = [...(await all<WooOrder>('orders', ordersSince)), ...(await all<WooOrder>('orders', { ...ordersSince, status: 'trash' }))];
     // The order list has only each refund's total: a partly refunded order's refunds list says which lines lost what, one
     // request each. Read as amounts (signs vary between versions); a failed read leaves the lines as ordered, and the
     // rest of this sync's too (each failure costs ~30 s of retries).
@@ -162,7 +167,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     let refundsDown = false;
     for (const o of orders.filter((o) => o.refunds?.length && o.status !== 'refunded' && o.date_paid_gmt)) {
       if (refundsDown) break;
-      const refunds = await all<{ line_items?: { product_id: number; quantity: number; total: string }[] }>(`orders/${o.id}/refunds`, {}).catch(() => void (refundsDown = true));
+      const refunds = await all<{ line_items?: { product_id: number; quantity: number; total: string }[] }>(`orders/${o.id}/refunds`, { _fields: 'line_items' }).catch(() => void (refundsDown = true));
       const back = new Map<number, { quantity: number; total: number }>();
       for (const li of (refunds ?? []).flatMap((r) => r.line_items ?? [])) {
         const b = back.get(li.product_id) ?? { quantity: 0, total: 0 };
@@ -175,7 +180,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     // that refreshes variation stock an order may change without touching its product, and archives deleted products.
     const today = localDate(now);
     const full = !cursor || catalogPassDue(db, id, today);
-    const productsSince = full ? { dates_are_gmt: 'true' } : changed;
+    const productsSince = { ...(full ? { dates_are_gmt: 'true' } : changed), _fields: PRODUCT_FIELDS };
     const products = [...(await all<WooProduct>('products', productsSince)), ...(await all<WooProduct>('products', { ...productsSince, status: 'trash' }))];
     // A variable product (sizes, colors) usually counts stock per variation: its stock is theirs, and it's tracked only when
     // every variation counts (an uncounted one can always be bought). A failed read leaves the product as it reads alone.
@@ -184,7 +189,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const variationStock = new Map<number, { stock: number; tracked: boolean }>();
     for (const p of products) {
       if (p.type !== 'variable' || p.manage_stock || p.status === 'trash') continue;
-      const vs = await all<{ manage_stock: boolean | 'parent'; stock_quantity: number | null; backorders?: string }>(`products/${p.id}/variations`, {}).catch(() => []);
+      const vs = await all<{ manage_stock: boolean | 'parent'; stock_quantity: number | null; backorders?: string }>(`products/${p.id}/variations`, { _fields: 'manage_stock,stock_quantity,backorders' }).catch(() => []);
       const counted = vs.filter((v) => v.manage_stock === true);
       const tracked = counted.length === vs.length && vs.every((v) => (v.backorders ?? 'no') === 'no');
       if (counted.length) variationStock.set(p.id, { stock: counted.reduce((a, v) => a + (v.stock_quantity ?? 0), 0), tracked });

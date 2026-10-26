@@ -161,10 +161,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-76 A product to create with a string compare-at or cost left a $0 draft in Shopify; titles could carry HTML.
 - [x] CORE-77 A Woo price change on a product with a scheduled sale only took effect inside the owner's sale dates.
 - [x] CORE-78 Page and product-page titles (and Shopify SEO titles) went to the storefront unchecked; the body was checked, the title wasn't.
+- [x] CORE-79 The Woo sync downloaded whole orders (customer names, emails, addresses) and products (descriptions) to read a few fields.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-79: Woo order, refund, product and variation reads ask for only the fields the sync uses (`_fields`). Customers' billing and shipping details no longer reach the app, and a big shop's 2-year backfill is a fraction of the size. A WordPress that ignores `_fields` sends everything, which parses as before.
 - 2026-10-26 — (agents Inbox, AGT-156 follow-up): research's "Add to store" gives back the store's pending `store.add_products` request for a product with the same title (theirs or an agent's) with 200, instead of a second card. Another store, or after a decision, gets a new one.
 - 2026-10-26 — Live-write review, left as is (unverified vendor behaviour): the TikTok Shop price write sends `price.amount` while the sync stores `sale_price ?? tax_exclusive_price`; in a UK/EU shop these could differ by tax. Amazon's price patch relies on `op: merge` keeping the offer's other prices (sale, min/max, B2B). Research adds into a non-USD store carry USD amounts (by design; the approval's reason says so). Fine per the review: Shopify price writes, themes (live theme refused), GraphQL variables, Etsy price, cross-store id checks, atomic approvals.
 - 2026-10-26 — CORE-78 (live-write review): the agents route checks a Store Builder draft's body with `unsafeHtml`, but its title went to Shopify/WordPress as is, and themes (and WordPress for admin users) print titles unescaped: a prompt-injected agent could put a script on the owner's storefront. `publishPage`, `publishProductPage` (title and SEO title), `publishWooPage` and `publishWooProductPage` now refuse a title with a tag (`hasTag`) before any call. Etsy shows titles as text itself. Agents told.

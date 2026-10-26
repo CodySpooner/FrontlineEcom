@@ -521,3 +521,15 @@ test("a page or product title with HTML isn't published: themes print titles as 
   await expect(publishProductPage(db, key, 'pawsome', '41', { title: 'Fine', seoTitle: title, descriptionHtml: '<p>Hi</p>' }, fetchFn)).rejects.toThrow("title can't contain HTML");
   expect(calls).toHaveLength(0);
 });
+
+test("Woo reads ask only for the fields the sync uses: no customer addresses or contact details, and less to hold for a big shop's backfill", async () => {
+  const db = setup();
+  const { fetchFn, calls } = fakeWoo();
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  const fields = (path: string) => calls.find((c) => c.url.pathname.endsWith(path))?.url.searchParams.get('_fields')?.split(',');
+  expect(fields('/orders')).toEqual(expect.arrayContaining(['id', 'number', 'status', 'total', 'refunds', 'line_items', 'meta_data', 'date_paid_gmt']));
+  expect(fields('/orders')).not.toContain('billing');
+  expect(fields('/products')).toEqual(expect.arrayContaining(['id', 'name', 'price', 'images', 'stock_quantity']));
+  expect(fields('/products')).not.toContain('description');
+  expect(fields('/variations')).toEqual(['manage_stock', 'stock_quantity', 'backorders']);
+});
