@@ -10,6 +10,7 @@ import { automationRoutes } from './automations';
 import { actionRoutes } from './actions';
 import { backupRoutes } from './backups';
 import { fxFor } from './fx';
+import { log } from './log';
 import { oauthKinds, oauthRoutes } from './oauth';
 import { demoSupplierProducts, searchCj } from './connectors/cj';
 import { listOrders, listProducts } from './catalog';
@@ -40,6 +41,12 @@ const isLocal = (url: string) => URL.canParse(url) && LOCAL_HOSTS.has(new URL(ur
 export const createApp = (db: Db, secretKey?: Buffer) => {
   const key = () => (secretKey ??= loadKey(dataDir()));
   return new Hono()
+    // A bug in a route reaches the log file (the packaged app has no console) and the UI still gets JSON.
+    .onError((e, c) => {
+      log('error', 'request failed', { method: c.req.method, path: c.req.path, error: e.stack ?? String(e) });
+      return c.json({ error: e.message || 'Something went wrong' }, 500);
+    })
+    .notFound((c) => c.json({ error: `${c.req.method} ${c.req.path} not found` }, 404))
     // Only the local UI: a non-local Host is DNS rebinding, a foreign Origin is another website posting (or opening a socket) here.
     .use('*', async (c, next) => {
       const origin = c.req.header('origin');

@@ -76,9 +76,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 - [x] CORE-32 Fair deltas while today is in progress: compare today so far with the same share of the previous period's matching day, not a full day (every KPI read a few % down each morning).
 
+- [x] CORE-33 Route errors: an exception in any route is logged to `api.log` with its stack and answered as JSON `{ error }` (500); unknown paths are JSON 404s.
+
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-33: `onError` logs `request failed` (method, path, stack) and returns `{ error: message }` 500. `notFound` returns `{ error: "GET /api/x not found" }` 404. Before, route bugs were plain-text 500s that only reached the console, which the packaged app doesn't show
 - 2026-10-26 — Inbox (ui): demo approvals now use executable kinds and payloads. Peak: `ads.pause_campaign` `{ network: tiktok, campaignId: peak-c3 }` ("Pause \"Spark Ads · UGC\""). Glow: `store.add_products` with 3 real `products`, where `{ count: 3 }` used to add nothing. Seeded requests still pending in existing DBs are rewritten on start. One-line baseline move in agents-gamification.test (XP from the now-real add-products)
 - 2026-10-26 — CORE-32: `summarize(…, { todayFraction })`. The summary route passes the share of today that has passed, and the previous period's last day is scaled to it (evenly spread day assumed), for totals, `previous` and per-store deltas. Demo top-up rewrites the last stored day, so a day an earlier session left "so far" gets finalised. Fix (CORE-25): WooCommerce no longer sends `orderby=modified`, which I couldn't verify for /orders; the default paging is safe for the cursor. Packaged app re-smoked after CORE-26–31: installer builds, demo data, first backup, guard 403, UI renders
 - 2026-10-26 — CORE-31: first middleware returns 403 unless the Host is 127.0.0.1 / localhost / [::1] and any Origin is one of those too. This covers HTTP and the `/api/live` upgrade. Verified the Vite proxy UI and WebSocket still work, while an evil-origin POST and a rebound Host get 403

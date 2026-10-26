@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from 'vitest';
@@ -6,6 +6,7 @@ import type { Store } from '@frontline/shared';
 import { createApp, startServer } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
+import { initLog } from './log';
 
 const db = openDb();
 seedDemo(db);
@@ -50,4 +51,18 @@ test('only the local UI gets in: DNS-rebound hosts and foreign origins are refus
   const post = { method: 'POST', body: '{}', headers: { 'content-type': 'text/plain' } };
   expect(await status('http://127.0.0.1:8797/api/approvals/demo-appr-1/approve', { ...post, headers: { ...post.headers, origin: 'https://attacker.example' } })).toBe(403);
   expect(await status('http://127.0.0.1:8797/api/approvals/demo-appr-1/approve', { ...post, headers: { ...post.headers, origin: 'null' } })).toBe(403);
+});
+
+test('route errors become JSON and land in the log; unknown paths are JSON 404s', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontline-err-'));
+  initLog(dir);
+  const app = createApp(openDb()).get('/api/boom', () => {
+    throw new Error('kaboom');
+  });
+  const res = await app.request('/api/boom');
+  expect([res.status, await res.json()]).toEqual([500, { error: 'kaboom' }]);
+  const line = JSON.parse(readFileSync(join(dir, 'logs', 'api.log'), 'utf8').trim().split('\n').at(-1)!);
+  expect(line).toMatchObject({ level: 'error', msg: 'request failed', method: 'GET', path: '/api/boom', error: expect.stringContaining('kaboom') });
+  const missing = await app.request('/api/nope');
+  expect([missing.status, await missing.json()]).toEqual([404, { error: 'GET /api/nope not found' }]);
 });
