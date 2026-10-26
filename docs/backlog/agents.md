@@ -307,11 +307,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-178 A budget is raised at most 30% at a time. With no added-spend cap set, the Ad Strategist could double or 10x a winner in one request; a jump that big restarts the network's learning phase (the playbook says 20-30% every 48-72 h).
 - [x] AGT-179 An agent restating a measured result word for word leaves it alone. Same text merges, so an agent's note could swap its own evidence and a higher confidence into a line the prompt labels "measured" (the app's check).
 - [x] AGT-180 An SMS step in a drafted flow carries its opt-out and stays within 2 segments. The owner pastes them into their SMS tool as written; one without "STOP" breaks carrier rules and the TCPA, and a 1,000-character one bills 7 segments a send.
+- [x] AGT-181 Operations can look up a backup supplier. Its playbook says to propose one when a supplier fails (stock-out, stuck orders, silence), but it had no supplier search, so "switch supplier" came with no candidate or cost.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-181: `search_suppliers` is on the Operations allowlist and its playbook names it for the backup-supplier step.
 - 2026-10-26 — AGT-180: `draft_flow` refuses an SMS step without the word STOP or over 320 characters.
 - 2026-10-26 — AGT-179: `writeMemory` returns an `outcome`-tagged memory unchanged when a non-outcome, non-owner write has the same text (as it already does for the owner's notes).
 - 2026-10-26 — Inbox (core CORE-91 FYI): read; store ids are no longer reused, the adjusted `agents-activate` test passes, nothing to change here.

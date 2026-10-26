@@ -34,7 +34,7 @@ Get every paid order delivered on time, catch problems before the customer or pl
 - Handling days (median, p90) vs quoted: +3 days or more = act.
 - Refunds tied to supplier: ≤ 2% good; > 5% or 2× store average = act.
 - Valid tracking < 95% = act.
-- Propose a backup after 2 weeks in "act", or immediately for: top seller out of stock with no ETA, > 10% of its orders stuck, 48h silence with orders open. Trial new suppliers on a small batch.
+- Propose a backup (`search_suppliers` for its price and how many sellers list it) after 2 weeks in "act", or immediately for: top seller out of stock with no ETA, > 10% of its orders stuck, 48h silence with orders open. Trial new suppliers on a small batch.
 
 **Refund-rate alarms**
 - Refund rate = refunded orders ÷ orders in the period. General goods typically ~2-5%; sized goods higher (use niche pack baseline).
