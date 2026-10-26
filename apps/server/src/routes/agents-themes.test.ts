@@ -185,6 +185,11 @@ test("a published theme change is judged on store conversion, 14 days before vs 
   // Amazon as an extra channel adds 10 orders a day before (core's rebuild puts them in orders): not the theme's shoppers.
   db.prepare(`UPDATE daily_metrics SET orders = orders + 10 WHERE store_id = 'glow' AND date BETWEEN ? AND ?`).run(addDays(day, -14), addDays(day, -1));
   for (let d = -14; d <= -1; d++) db.prepare(`INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('glow', 'amazon', ?, 300, 10)`).run(addDays(day, d));
+  // TikTok Shop sells next to it: 5 orders a day after, in orders too (CORE-82), from shoppers who never saw the theme either.
+  db.prepare(`UPDATE daily_metrics SET orders = orders + 5 WHERE store_id = 'glow' AND date BETWEEN ? AND ?`).run(addDays(day, 1), addDays(day, 14));
+  for (let d = 1; d <= 14; d++) for (let k = 0; k < 5; k++) {
+    db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, ?, 20, 'paid', 'delivered', ?)`).run(`tt-${d}-${k}`, `${addDays(day, d)}T12:00:00Z`, addDays(day, d));
+  }
   const xp = getAgent(db, 'glow:store_developer')!.xp;
   checkThemeOutcomes(db);
   checkThemeOutcomes(db);

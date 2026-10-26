@@ -314,10 +314,13 @@ export function checkThemeOutcomes(db: Db, today?: string) {
        WHERE s.demo = 0 AND substr(o.at, 1, 10) <= ?`,
     )
     .all(roughly15DaysAgo(today));
-  // Amazon as an extra channel (core's channel_daily; a theme store is Shopify) is in orders, but its shoppers never saw the theme.
+  // Amazon as an extra channel (core's channel_daily; a theme store is Shopify) and TikTok Shop's `tt-` orders (CORE-82)
+  // are in orders, but their shoppers never saw the theme.
   // Only days with sessions: before traffic was reported (GA4 connected mid-window) a day's orders have no sessions to divide by.
   const funnel = db.prepare(
-    `SELECT coalesce(sum(d.orders - coalesce(c.orders, 0)), 0) AS orders, coalesce(sum(d.sessions), 0) AS sessions
+    `SELECT coalesce(sum(d.orders - coalesce(c.orders, 0)
+         - (SELECT count(*) FROM orders o WHERE o.store_id = d.store_id AND o.local_date = d.date AND o.status = 'paid' AND o.id LIKE 'tt-%')), 0) AS orders,
+       coalesce(sum(d.sessions), 0) AS sessions
      FROM daily_metrics d LEFT JOIN channel_daily c ON c.store_id = d.store_id AND c.date = d.date AND c.channel = 'amazon'
      WHERE d.store_id = ?1 AND d.date BETWEEN ?2 AND ?3 AND d.sessions > 0`,
   );
