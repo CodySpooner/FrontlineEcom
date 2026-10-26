@@ -1,7 +1,9 @@
-import type { Options, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { Agent, AgentEvent, Store } from '@frontline/shared';
+import type { McpSdkServerConfigWithInstance, Options, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import type { Agent, AgentEvent, AgentRole, Store } from '@frontline/shared';
 import { describe, expect, test } from 'vitest';
-import { claudeEngine, defaultEngine, fakeEngine, runAgent, toAgentEvents, type RunInput } from './index';
+import { APP_TOOLS, claudeEngine, defaultEngine, fakeEngine, ROLES, runAgent, toAgentEvents, type RunInput, type ToolEnv } from './index';
 
 const store: Store = { id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'America/Chicago', color: '#ff8f98', connected: false };
 const agent: Agent = { id: 'glow:market_analyst', storeId: 'glow', role: 'market_analyst', status: 'idle', level: 1, xp: 0 };
@@ -143,5 +145,32 @@ describe('Claude engine', () => {
       allowedTools: ['WebSearch', 'WebFetch'],
       maxTurns: 3,
     });
+  });
+
+  // What Claude sees: every app tool's zod input must come out of the in-process MCP server as a valid object schema.
+  test('serves every app tool over MCP with an object input schema', async () => {
+    const listed = new Set<string>();
+    for (const role of Object.keys(ROLES) as AgentRole[]) {
+      let options: Options | undefined;
+      const engine = claudeEngine({
+        query: (params) => {
+          options = params.options;
+          return (async function* () {
+            yield* frames;
+          })();
+        },
+      });
+      await collect(runAgent({ ...input, agent: { ...agent, role }, env: {} as ToolEnv }, engine));
+      const server = (options?.mcpServers?.frontline as McpSdkServerConfigWithInstance).instance;
+      const client = new Client({ name: 'test', version: '1.0.0' });
+      const [a, b] = InMemoryTransport.createLinkedPair();
+      await Promise.all([server.connect(a), client.connect(b)]);
+      for (const t of (await client.listTools()).tools) {
+        expect(t.inputSchema.type, t.name).toBe('object');
+        listed.add(t.name);
+      }
+      await client.close();
+    }
+    expect([...listed].sort()).toEqual(APP_TOOLS.map((t) => t.name).sort());
   });
 });

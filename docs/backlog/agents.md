@@ -100,6 +100,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — Test: every app tool is served by the Claude engine's in-process MCP server with a valid object input schema, checked per role over an in-memory MCP client. It catches a zod input Claude couldn't see, with zero Claude usage.
 - 2026-10-26 — Inbox (core): approved price tests go to Shopify through core's `setProductPrice` (every variant, plus compare-at). A write error notifies the owner and starts no test. All three Shopify writers (pages, products, prices) now sit behind one `onShopify` guard, so connected WooCommerce and other stores get "Only Shopify stores are updated automatically so far" with a by-hand note, instead of "Shopify is not connected".
 - 2026-10-26 — AGT-46 Run gist: the "<Agent> finished" notification body is the first sentence of the agent's final answer (`runGist`: the text after its last tool step, without headings, list markers or emphasis, max 160 chars). It falls back to the task when the run ended on a tool step.
 - 2026-10-26 — Inbox (ui): `APPROVAL_KINDS` in shared lists every approval kind the agents produce, with owner-facing labels. `autopilot: true` marks only the kinds that carry a USD amount (`ads.set_budget`, `ads.pause_campaign`), because autopilot only fires within a $/day cap. An eval fails if a tool or engine adds a kind without a label.
