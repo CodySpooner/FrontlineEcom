@@ -401,7 +401,8 @@ export type KnowledgeKind = 'playbook' | 'platform' | 'niche';
 
 /**
  * Knowledge Base: an expertise layer the agents read. GET /api/knowledge → KnowledgeDoc[] (no markdown);
- * GET /api/knowledge/:kind/:key → KnowledgeDoc with markdown. Store memory: /api/stores/:id/memory; niche learnings: /api/niche-learnings.
+ * GET /api/knowledge/:kind/:key → KnowledgeDoc with markdown; PUT it `{ markdown }` (1–50,000 chars) → the saved doc;
+ * DELETE → back to the shipped version (400 for custom niche packs). Store memory: /api/stores/:id/memory; niche learnings: /api/niche-learnings.
  */
 export interface KnowledgeDoc {
   kind: KnowledgeKind;
@@ -410,6 +411,8 @@ export interface KnowledgeDoc {
   title: string;
   /** A pack the Market Analyst drafted for this owner's custom niche (in the data dir). */
   custom?: boolean;
+  /** The owner edited the shipped layer (PUT); DELETE goes back to the shipped one. */
+  edited?: boolean;
   chars: number;
   markdown?: string;
 }

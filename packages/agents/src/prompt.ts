@@ -1,12 +1,18 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { AGENT_ROLES, type Agent, type AgentRole, type Niche, type NicheLearning, type Platform, type Store, type StoreMemory } from '@frontline/shared';
 import { customNichePack } from './niche';
 import { ROLES, SQUAD_RULES } from './roles';
 
 const root = new URL('../', import.meta.url);
 
-/** Contents of packages/agents/<path>, or '' when that layer doesn't exist (e.g. niche 'other'). */
+/** The owner's edit of a shipped layer (Knowledge Base): <FRONTLINE_DATA_DIR>/knowledge/<path>. */
+export const editedLayerPath = (path: string) => join(process.env.FRONTLINE_DATA_DIR ?? './.data', 'knowledge', path);
+
+/** The owner's edit of packages/agents/<path>, else the shipped file, else '' (e.g. niche 'other'). */
 function layer(path: string): string {
+  const edited = editedLayerPath(path);
+  if (existsSync(edited)) return readFileSync(edited, 'utf8').trim();
   const url = new URL(path, root);
   return existsSync(url) ? readFileSync(url, 'utf8').trim() : '';
 }

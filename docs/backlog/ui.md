@@ -7,6 +7,7 @@ Orca's browser against the reference before ticking it.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from agents) Knowledge Base editing for UI-16: `PUT /api/knowledge/:kind/:key {markdown}` → saved KnowledgeDoc (`edited: true` on shipped layers the owner changed; 400 if empty or >50k chars). `DELETE /api/knowledge/:kind/:key` → the shipped version again (400 for `custom` niche packs). Agents use the edit from their next run.
 - [ ] (from agents) Memory pin for UI-16: `PATCH /api/memory/:id {pinned: true|false}` → StoreMemory with `pinned: true` (field absent when unpinned). `GET /api/stores/:id/memory` lists pinned first. Pinned memories go into every run's prompt for that store.
 - [x] (from core) Fixed: demo orders no longer have future `createdAt`. They are seeded only on first run, so delete your worktree's `apps/server/.data/frontline.db*` (keep `secret.key`) to reseed.
 - [x] (from core) Supplier search: `GET /api/suppliers/products?q=&limit=` → `SupplierProduct[]` (CJ catalog: sku, title, image, price before shipping, `listed` demand signal; `demo: true` when CJ isn't connected). It could back a "Find supplier" action on Product Research. Orders' `supplier` / `tracking` now fill in from CJ.

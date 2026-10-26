@@ -9,6 +9,8 @@ import {
   getPageDraft,
   knowledgeDoc,
   knowledgeIndex,
+  resetKnowledge,
+  saveKnowledge,
   listAgents,
   listMemory,
   listNicheLearnings,
@@ -231,6 +233,17 @@ export function agentRoutes(db: Db) {
     .get('/api/knowledge', (c) => c.json(knowledgeIndex()))
     .get('/api/knowledge/:kind/:key', (c) => {
       const d = knowledgeDoc(c.req.param('kind'), c.req.param('key'));
+      return d ? c.json(d) : c.json({ error: 'Not found' }, 404);
+    })
+    .put('/api/knowledge/:kind/:key', async (c) => {
+      const markdown = ((await c.req.json().catch(() => null)) as { markdown?: unknown } | null)?.markdown;
+      if (typeof markdown !== 'string' || !markdown.trim() || markdown.length > 50_000) return c.json({ error: 'markdown must be 1–50,000 characters' }, 400);
+      const d = saveKnowledge(c.req.param('kind'), c.req.param('key'), markdown);
+      return d ? c.json(d) : c.json({ error: 'Not found' }, 404);
+    })
+    .delete('/api/knowledge/:kind/:key', (c) => {
+      const d = resetKnowledge(c.req.param('kind'), c.req.param('key'));
+      if (d === 'custom') return c.json({ error: 'A custom niche pack has no shipped version to go back to' }, 400);
       return d ? c.json(d) : c.json({ error: 'Not found' }, 404);
     })
     .get('/api/niche-learnings', (c) => {

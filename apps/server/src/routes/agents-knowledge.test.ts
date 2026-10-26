@@ -34,3 +34,24 @@ test('the Knowledge Base lists every layer the agents read, custom niche packs i
   expect((await app.request('/api/knowledge/niche/other')).status).toBe(404);
   expect((await app.request('/api/knowledge/recipes/x')).status).toBe(404);
 });
+
+test('the owner edits a layer: agents read the edit until it is reset to the shipped one', async () => {
+  saveNichePack('vintage-fountain-pens', '# Vintage fountain pens\n\nCollectors pay for provenance.');
+  const shipped = playbook('copywriter');
+  const send = (method: string, path: string, body?: unknown) =>
+    app.request(path, { method, headers: { 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) });
+
+  const saved = await (await send('PUT', '/api/knowledge/playbook/copywriter', { markdown: '# Copywriter playbook\n\nNo exclamation marks.\n' })).json();
+  expect(saved).toMatchObject({ kind: 'playbook', key: 'copywriter', edited: true, markdown: '# Copywriter playbook\n\nNo exclamation marks.' });
+  expect(playbook('copywriter')).toContain('No exclamation marks.');
+  expect((await get<KnowledgeDoc[]>('/api/knowledge')).find((d) => d.key === 'copywriter')?.edited).toBe(true);
+
+  expect(await (await send('DELETE', '/api/knowledge/playbook/copywriter')).json()).not.toHaveProperty('edited');
+  expect(playbook('copywriter')).toBe(shipped);
+
+  const pack = (await (await send('PUT', '/api/knowledge/niche/other:vintage-fountain-pens', { markdown: '# Vintage fountain pens\n\nNibs matter.' })).json()) as KnowledgeDoc;
+  expect(pack.markdown).toContain('Nibs matter.');
+  expect((await send('DELETE', '/api/knowledge/niche/other:vintage-fountain-pens')).status).toBe(400);
+  expect((await send('PUT', '/api/knowledge/playbook/../../etc', { markdown: '# x' })).status).toBe(404);
+  expect((await send('PUT', '/api/knowledge/niche/pet', { markdown: ' ' })).status).toBe(400);
+});
