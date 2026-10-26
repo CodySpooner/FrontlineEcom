@@ -122,6 +122,12 @@ Orca's browser against the reference before ticking it.
       "Reconnecting…" instead of "All agents online", so stale numbers aren't mistaken for live ones.
 - [x] UI-37 Console sweep: visit every page (plus drawer, palette, onboarding) and fix any React warnings or errors in
       the console (keys, nested interactive elements, uncontrolled→controlled).
+- [x] UI-38 Dashboard drift check: 35+ items have touched the Command Center since UI-04. Re-compare with
+      `dashboard-mockup-v3.html` + `ui-reference.webp` at 1440 and fix what drifted (spacing, order, hierarchy).
+- [ ] UI-39 Narrow check (Orca 800px) of what landed since the last sweep: bell drawer request cards, agent Schedule
+      panel, mission toast, skip link, Reconnecting status. No page-level horizontal scroll, nothing clipped.
+- [ ] UI-40 Zero-data store: a just-connected store mid-first-sync (no metrics, orders, products) renders KPIs,
+      sparklines and charts without NaN/Infinity/"$NaN" or broken SVG paths; chart helpers tested with empty series.
 
 ## Blocked
 
@@ -182,3 +188,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-35: `pageTitle(pathname, storeName)` names agent pages ("Ad Strategist · Pawsome Gear · Frontline Ecom"; own-key role check, no decodeURIComponent throw), Shell feeds it store names. Test + Chrome (Agents → Configure)
 - 2026-10-26 — UI-36: `useLive` returns whether the socket is up; System Status shows a pulsing grey "Reconnecting…" (role=status, muted bar) while it's down. Hook test covers online → offline → online; Chrome saw Reconnecting… → All agents online across an API restart
 - 2026-10-26 — UI-37: console sweep found nothing to fix. Full loads of all 12 pages + agent chat/flows + 404, bell drawer, Commander profile, 1Y range, Ctrl+K with a question, Automation rule editor, Research tabs, Settings add store, onboarding → Explore the demo: browser console had only the React DevTools info line; `pnpm check` output has no act/key/nesting warnings
+- 2026-10-26 — UI-38: Dashboard re-compared with mockup v3 + reference at 1440. Layout, panel order and hierarchy still match. One drift fixed: the revenue axis drew quarters of a "nice" max ($750 / $1.5K / $2.3K, where $2.3K was really 2,250). `niceTicks` (3–5 steps of 1/2/5×10ⁿ, tested) now gives $0/$1K/$2K/$3K (1Y: $5K steps), and Analytics gets it too. Left as is: the AI Agents panel stretches to the Requests panel height (same in the mockup)

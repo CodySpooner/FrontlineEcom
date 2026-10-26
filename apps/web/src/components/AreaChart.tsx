@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
-import { niceMax } from '../lib/chart';
+import { niceTicks } from '../lib/chart';
 import { fmtDay, money, shortMoney } from '../lib/format';
 
 const H = 250;
@@ -28,7 +28,8 @@ export function AreaChart({ points, weekly, partial, label, currency }: { points
 
   const n = points.length;
   if (n < 2) return null;
-  const max = niceMax(Math.max(...points.map((p) => p.value)) * 1.1);
+  const ticks = niceTicks(Math.max(...points.map((p) => p.value)) * 1.1);
+  const max = ticks.at(-1)!;
   const x = (j: number) => PL + (j / (n - 1)) * (W - PL - PR);
   const y = (v: number) => PT + (1 - Math.max(0, v) / max) * (H - PT - PB);
   const xy = points.map((p, j) => `${x(j).toFixed(1)},${y(p.value).toFixed(1)}`);
@@ -81,11 +82,11 @@ export function AreaChart({ points, weekly, partial, label, currency }: { points
           </filter>
         </defs>
         <g className="fill-muted text-[11px]">
-          {[0, 0.25, 0.5, 0.75, 1].map((f) => (
-            <g key={f}>
-              <line x1={PL} x2={W - PR} y1={y(max * f)} y2={y(max * f)} className="stroke-grid" />
-              <text x={PL - 8} y={y(max * f) + 4} textAnchor="end">
-                {shortMoney(max * f, currency)}
+          {ticks.map((t) => (
+            <g key={t}>
+              <line x1={PL} x2={W - PR} y1={y(t)} y2={y(t)} className="stroke-grid" />
+              <text x={PL - 8} y={y(t) + 4} textAnchor="end">
+                {shortMoney(t, currency)}
               </text>
             </g>
           ))}

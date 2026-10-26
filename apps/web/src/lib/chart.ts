@@ -9,11 +9,15 @@ export const RANGES: { value: AnalyticsRange; label: string }[] = [
 ];
 export const PERIOD: Record<AnalyticsRange, string> = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months' };
 
-/** Rounds an axis maximum up to a "nice" number: 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8 × 10^n. */
-export function niceMax(v: number) {
-  if (!(v > 0)) return 1;
-  const p = 10 ** Math.floor(Math.log10(v));
-  return ([1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((n) => n * p >= v) ?? 10) * p;
+/** Axis ticks from 0 to just past `v`: 3–5 equal steps of 1, 2 or 5 × 10^n, so every label is exact ($1K, $2K, $3K). */
+export function niceTicks(v: number) {
+  if (!(v > 0)) return [0, 1];
+  for (let p = 10 ** Math.floor(Math.log10(v / 5)); ; p *= 10) {
+    for (const m of [1, 2, 5]) {
+      const k = Math.ceil(v / (m * p));
+      if (k <= 5) return Array.from({ length: k + 1 }, (_, i) => +(i * m * p).toPrecision(12));
+    }
+  }
 }
 
 /** Sums daily points into 7-day buckets that end on the last day; a leading partial week is dropped. */

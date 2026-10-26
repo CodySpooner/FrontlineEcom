@@ -1,13 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { niceMax, sparkPoints, weekly } from './chart';
+import { niceTicks, sparkPoints, weekly } from './chart';
 
 describe('chart helpers', () => {
-  it('rounds axis maxima to nice numbers', () => {
-    expect(niceMax(3700)).toBe(4000);
-    expect(niceMax(2600)).toBe(3000);
-    expect(niceMax(1400)).toBe(1500);
-    expect(niceMax(81)).toBe(100);
-    expect(niceMax(0)).toBe(1);
+  it('picks 3-5 round axis steps, never quarter values like 2,250', () => {
+    expect(niceTicks(2640)).toEqual([0, 1000, 2000, 3000]);
+    expect(niceTicks(4070)).toEqual([0, 1000, 2000, 3000, 4000, 5000]);
+    expect(niceTicks(800)).toEqual([0, 200, 400, 600, 800]);
+    expect(niceTicks(1001)).toEqual([0, 500, 1000, 1500]);
+    expect(niceTicks(0.3)).toEqual([0, 0.1, 0.2, 0.3]);
+    expect(niceTicks(0)).toEqual([0, 1]);
+    for (const v of [7, 93, 1234, 56789, 2.5e6]) {
+      const t = niceTicks(v);
+      expect(t.length - 1).toBeGreaterThanOrEqual(3);
+      expect(t.length - 1).toBeLessThanOrEqual(5);
+      expect(t.at(-1)).toBeGreaterThanOrEqual(v);
+    }
   });
   it('buckets a year into weeks that end on the last day', () => {
     const pts = Array.from({ length: 365 }, (_, i) => ({ date: `d${i}`, value: 1 }));
