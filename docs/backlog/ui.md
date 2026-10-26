@@ -116,6 +116,12 @@ Orca's browser against the reference before ticking it.
       title) and a two-note sound when sound is on. Today it's an ordinary "+50 XP" line.
 - [x] UI-34 Agent schedule (DESIGN §4.2 "settings … schedule"): the agent page lists the automation rules that task
       this agent (trigger, next run, on/off) with a link to Automation to add one.
+- [x] UI-35 Agent page title names the agent ("Market Analyst · Pawsome Gear · Frontline Ecom") instead of the generic
+      "AI Agents", so two agent windows/tabs can be told apart.
+- [ ] UI-36 Reconnecting status: while `/api/live` is down (API restart, restore, sleep) the sidebar System Status says
+      "Reconnecting…" instead of "All agents online", so stale numbers aren't mistaken for live ones.
+- [ ] UI-37 Console sweep: visit every page (plus drawer, palette, onboarding) and fix any React warnings or errors in
+      the console (keys, nested interactive elements, uncontrolled→controlled).
 
 ## Blocked
 
@@ -173,3 +179,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-33: XP whose reason starts `Mission complete: ` gets a "Mission complete · +N XP" toast (title · store, red border, 5s) and a two-note sting (660→990 Hz) when sound is on; `blip` became `sting(notes)`. Component test + Chrome (main-world event on the Dashboard); the sound itself is unheard (sound off in demo settings)
 - 2026-10-26 — UI-34: agent Settings tab gets a "Schedule" panel listing the automation rules whose action targets this agent (name, trigger, next run when on, task, on/off switch) with Manage rules / New rule → /automation; `when` moved to lib/automation. Chrome: Pawsome Market Analyst shows its 3 seeded rules; switch round-tripped off → on → off
 - 2026-10-26 — Fix (UI-30 follow-up): with requests waiting, the bell drawer's empty list said "You're all caught up" right under them; it now says "Nothing else new." (test + Chrome)
+- 2026-10-26 — UI-35: `pageTitle(pathname, storeName)` names agent pages ("Ad Strategist · Pawsome Gear · Frontline Ecom"; own-key role check, no decodeURIComponent throw), Shell feeds it store names. Test + Chrome (Agents → Configure)

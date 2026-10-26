@@ -8,14 +8,16 @@ import { AskPalette } from './AskPalette';
 import { BrandLogo } from './BrandLogo';
 import { XpToasts } from './Gamification';
 import { Onboarding } from './Onboarding';
+import { useStoreSelection } from './StoreFilter';
 import { Button, buttonClass, Card, ProgressBar, StatusDot, cx } from './ui';
 
 export function Shell() {
   useLive();
   const { pathname } = useLocation();
+  const title = pageTitle(pathname, useStoreSelection().name);
   useEffect(() => {
-    document.title = pageTitle(pathname);
-  }, [pathname]);
+    document.title = title;
+  }, [title]);
   // Desktop app (frameless Electron): Windows' caption buttons overlay the page, so the hero strip becomes the title bar.
   useEffect(() => {
     // Not in TS's DOM lib yet (Chromium-only API).

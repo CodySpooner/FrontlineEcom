@@ -1,3 +1,4 @@
+import { AGENT_ROLES, type AgentRole } from '@frontline/shared';
 import type { HeroArt } from './components/Hero';
 import { BookOpen, Bot, ChartColumn, Eye, LayoutDashboard, Megaphone, Package, Plug, Settings, Store, Target, Zap, type LucideIcon } from 'lucide-react';
 
@@ -29,8 +30,10 @@ export const NAV: NavItem[] = [
   { path: '/settings', label: 'Settings', icon: Settings, title: 'Settings', subtitle: 'Stores, caps and preferences.', art: 'lone', item: 'UI-17' },
 ];
 
-/** Window title: the sidebar label of the page you're on ("Orders & Fulfillment · Frontline Ecom"). */
-export function pageTitle(pathname: string) {
+/** Window title: the sidebar label of the page you're on ("Orders & Fulfillment · Frontline Ecom"); an agent page names the agent. */
+export function pageTitle(pathname: string, storeName = (id: string) => id) {
+  const [storeId, role] = /^\/agents\/([^/]+)$/.exec(pathname)?.[1]?.replace(/%3a/i, ':').split(':') ?? [];
+  if (storeId && role && Object.hasOwn(AGENT_ROLES, role)) return `${AGENT_ROLES[role as AgentRole].name} · ${storeName(storeId)} · Frontline Ecom`;
   const n = NAV.find((x) => x.path === pathname || (x.path !== '/' && pathname.startsWith(`${x.path}/`)));
   return n ? `${n.label} · Frontline Ecom` : 'Frontline Ecom';
 }
