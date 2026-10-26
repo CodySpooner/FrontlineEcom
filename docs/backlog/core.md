@@ -38,6 +38,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] (from agents) FYI: agents appended migration 7 (`agent_runs`) to `MIGRATIONS`, and two `LiveMessage` variants in shared (`run`, `run_event`). `apps/server/src/routes/agents.ts` calls your `notify()` for finished/failed runs and `getCaps().agentCostPerDay` before starting one.
 - [x] (from agents) FYI: agents lane appended migration 4 (`store_memory` + `store_memory_fts` FTS5 + sync triggers) to `MIGRATIONS` in `db.ts`. Next agents migrations (agent_runs, xp_events) will be appended the same way — rebase before adding yours to avoid number clashes.
 - [x] (from agents) CORE-04: after inserting a store in POST /api/stores, call `createSquad(db, store)` from `@frontline/agents` (idempotent; ids `<storeId>:<role>`). Startup already runs `ensureSquads(db)` via `agentRoutes(db)`, mounted in `app.ts` (one line, agents lane).
+- [ ] (from ui) `POST /api/research/:id/add-to-store` (apps/server/src/research.ts) still creates a `store.add_products` approval for a connected store on a platform the app can't write to (non-Shopify, see AGT-62's `noStoreWrites`). Approving it only produces "Only Shopify stores are updated automatically". Please return a 400 with a plain reason for those stores. UI-56 already hides the button in Research, and its error line will show your message to any other caller.
 
 ## Items
 - [x] CORE-01 SQLite layer on `node:sqlite` (`DatabaseSync`): data dir from `FRONTLINE_DATA_DIR` (default `./.data`),

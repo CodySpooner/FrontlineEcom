@@ -6,6 +6,7 @@ import { NICHES, type Niche, type ProductList, type ResearchProduct, type Resear
 import { useAddToStore, useListActions, useLists, useResearch, useStartRun, useSupplierSearch } from '../api/client';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
+import { PLATFORM_NAME } from '../components/StoreForm';
 import { Badge, Button, cx, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Tabs } from '../components/ui';
 import { cents } from '../lib/format';
 import { NAV } from '../nav';
@@ -239,13 +240,16 @@ function ProductDialog({ product: p, onClose }: { product?: ResearchProduct; onC
   );
 }
 
-function ProductDetails({ p }: { p: ResearchProduct }) {
+export function ProductDetails({ p }: { p: ResearchProduct }) {
   const lists = useLists().data ?? [];
   const { create, toggle } = useListActions();
   const [name, setName] = useState('');
   const { ids, stores } = useStoreSelection();
   const [storeId, setStoreId] = useState(ids[0] ?? stores[0]?.id ?? '');
   const add = useAddToStore();
+  const target = stores.find((s) => s.id === storeId);
+  // The app writes products to Shopify only (AGT-62): on a connected store elsewhere, an approved request would do nothing.
+  const byHand = target?.connected && target.platform !== 'shopify' ? PLATFORM_NAME[target.platform] : undefined;
 
   const newList = (e: FormEvent) => {
     e.preventDefault();
@@ -336,10 +340,16 @@ function ProductDetails({ p }: { p: ResearchProduct }) {
                 ))}
               </select>
             </label>
-            <Button variant="primary" disabled={!storeId || add.isPending} onClick={() => add.mutate({ productId: p.id, storeId })}>
-              Request to add
-            </Button>
-            <span className="text-xs text-muted">Nothing changes until you approve it.</span>
+            {byHand ? (
+              <span className="text-xs text-text-2">The app can't add products to {byHand} stores yet. Add it in {byHand} by hand.</span>
+            ) : (
+              <>
+                <Button variant="primary" disabled={!storeId || add.isPending} onClick={() => add.mutate({ productId: p.id, storeId })}>
+                  Request to add
+                </Button>
+                <span className="text-xs text-muted">Nothing changes until you approve it.</span>
+              </>
+            )}
           </div>
         )}
         {add.isError && (

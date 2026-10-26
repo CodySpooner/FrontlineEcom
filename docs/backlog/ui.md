@@ -161,6 +161,8 @@ Orca's browser against the reference before ticking it.
       and the Dashboard instead of after the next refetch.
 - [x] UI-55 A denied request's memory ("The owner turned down X: <reason>") shows in Store memory and the agent's Memory tab
       as soon as it's written, not after the next refetch.
+- [x] UI-56 Research "Add to a store" doesn't offer a request the app can't carry out: on a connected non-Shopify store it says
+      to add the product there by hand (matches AGT-62 for agents).
 
 ## Blocked
 
@@ -243,3 +245,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-53: `draftLink(action)` (lib/approvals, tested) → ApprovalExtras "Review the draft" for `store.publish_page`. Builder reads `?draft=<id>` as its initial pick. The bell drawer closes on any route change, so links inside its cards don't leave it open over the new page. Chrome against the live API with two fixture drafts (target older than the default) and a fixture publish request: the drawer link opened /builder?draft=ui-fx-pd-a, the drawer closed, and draft A was selected and previewed. Fixtures removed
 - 2026-10-26 — UI-54: the live socket's approval handler also invalidates `products` when a request is approved (set_price and add_products change them), covered by a live.test case. Chrome against the live API: approving a fixture Glow Haus price request from the bell drawer changed the Unit costs row from $89.99 to $79.99 with no reload. The price, price_tests row, XP event and agent XP were reverted
 - 2026-10-26 — UI-55: the live approval handler invalidates `['memory', storeId]` on a denial (rememberDenial writes it), covered by a live.test case. Chrome against the live API with Knowledge Base › Store memory open: denying a fixture request from the bell drawer with a reason added "The owner turned down … : UI-FX not during the promo." with no reload. This also confirms agents' rememberDenial keeps the note. Server hooks run once per approval id, so reusing a reset fixture won't write again (a test artifact, not a bug). Fixtures removed
+- 2026-10-26 — UI-56: ProductDetails replaces "Request to add" with "The app can't add products to <Platform> stores yet. Add it in <Platform> by hand." when the chosen store is connected and not Shopify. Before, approving one only produced "Only Shopify stores are updated automatically". Research.test.tsx covers both the Etsy and Shopify paths and the POST body. Chrome with a main-world `/api/stores` patch (Glow Haus as connected Etsy, no real sync): Glow showed the hint, Pawsome kept the button. Asked core to refuse it server-side as well (core Inbox)
