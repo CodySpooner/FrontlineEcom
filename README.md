@@ -15,6 +15,23 @@ pnpm check    # typecheck + tests
 - Per-lane backlogs: [docs/backlog/](docs/backlog/)
 - Rules for the AI workers: [CLAUDE.md](CLAUDE.md)
 
+## Using the app
+
+- **Install:** `pnpm package` builds `apps/desktop/release/Frontline Ecom Setup <version>.exe`. The installer isn't
+  signed yet, so Windows SmartScreen asks first: More info → Run anyway. Closing the window keeps the app in the tray,
+  and the tray menu has Quit and Start with Windows.
+- **Demo first:** a fresh install opens on three demo stores with two years of data. Agents on demo stores run on a
+  free stand-in engine, so exploring never uses your Claude plan.
+- **Going live:** in Integrations, pick a store and connect its platform (Shopify, WooCommerce, Etsy, TikTok Shop,
+  Amazon), its ad accounts (Meta, Google, TikTok) and GA4. Each card lists its setup steps. The first sync replaces
+  that store's demo data with real data. After that, Shopify and WooCommerce refresh every 2 minutes and the rest
+  every 10. Agents on connected stores use your local Claude Code login.
+- **Safety:** agents ask before they spend, publish or change a live store or ad account. Requests wait on the
+  Dashboard unless you turned on autopilot for that action, with a cap.
+- **Your data:** everything stays on this PC in `%APPDATA%\Frontline Ecom\data`. That folder holds the database,
+  `logs\api.log`, and `backups\` (daily, newest 7 kept, restorable from Settings). Connector credentials are encrypted
+  with your Windows login and never leave the machine except to their own service.
+
 ## The three Orca workers
 
 Three Claude Code agents build this in parallel, each in its own Orca worktree
