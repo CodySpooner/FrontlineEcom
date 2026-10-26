@@ -75,6 +75,7 @@ import { createProducts, deleteTheme, duplicateTheme, listThemes, publishPage, p
 import { createWooProducts, publishWooPage, publishWooProductPage, setWooProductPrice } from '../connectors/woocommerce';
 import { publishEtsyProductPage, setEtsyListingPrice } from '../connectors/etsy';
 import { setAmazonListingPrice } from '../connectors/amazon';
+import { setTikTokProductPrice } from '../connectors/tiktok';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
@@ -136,6 +137,7 @@ const setPrice =
       woocommerce: () => setWooProductPrice(db, loadKey(dataDir()), storeId, productId, change),
       etsy: () => setEtsyListingPrice(db, loadKey(dataDir()), storeId, productId, change),
       amazon: () => setAmazonListingPrice(db, loadKey(dataDir()), storeId, productId, change),
+      tiktok_shop: () => setTikTokProductPrice(db, loadKey(dataDir()), storeId, productId, change),
     });
 
 

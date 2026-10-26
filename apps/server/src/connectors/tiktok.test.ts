@@ -2,8 +2,9 @@ import { createHmac, randomBytes } from 'node:crypto';
 import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
+import { listActions } from '../actions';
 import { getCredentials, saveIntegration } from '../integrations';
-import { signTikTokShop, syncTikTokAds, syncTikTokShop } from './tiktok';
+import { setTikTokProductPrice, signTikTokShop, syncTikTokAds, syncTikTokShop } from './tiktok';
 
 const key = randomBytes(32);
 const TOKEN = 'tt_fixture_token';
@@ -105,8 +106,10 @@ function fakeShop(refreshError?: { code: number; message: string }, shops = [{ c
     const ok = (data: unknown) => Response.json({ code: 0, message: 'Success', data });
     if (u.pathname === '/authorization/202309/shops') return ok({ shops });
     // Get Product: main_images[].urls (TikTok's partner docs, checked 2026-10-26). The draft has none yet.
-    if (u.pathname === '/product/202309/products/17301') return ok({ id: '17301', main_images: [{ uri: 'tos-1', urls: ['https://p16-oec.example/ice-roller.jpeg'], thumb_urls: ['https://p16-oec.example/ice-roller-thumb.jpeg'], width: 800, height: 800 }] });
-    if (u.pathname === '/product/202309/products/17302') return ok({ id: '17302', main_images: [] });
+    // Update Price (Product Modify scope): ACTIVATE products only; the response has no data.
+    if (u.pathname === '/product/202309/products/17301/prices/update') return ok({});
+    if (u.pathname === '/product/202309/products/17301') return ok({ id: '17301', status: 'ACTIVATE', skus: [{ id: 'S1', price: { currency: 'USD', sale_price: '24.90' } }, { id: 'S2', price: { currency: 'USD', sale_price: '24.90' } }], main_images: [{ uri: 'tos-1', urls: ['https://p16-oec.example/ice-roller.jpeg'], thumb_urls: ['https://p16-oec.example/ice-roller-thumb.jpeg'], width: 800, height: 800 }] });
+    if (u.pathname === '/product/202309/products/17302') return ok({ id: '17302', status: 'DRAFT', skus: [{ id: 'S3' }], main_images: [] });
     // Search Returns (Return & Refund Basic scope; TikTok's partner docs, checked 2026-10-26).
     if (u.pathname === '/return_refund/202309/returns/search') {
       return ok({
@@ -259,4 +262,21 @@ test("TikTok Shop without the Return & Refund scope still syncs, nets cancellati
   await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
   expect(JSON.parse(calls.find((c) => c.url.pathname.includes('/return_refund/'))!.body)).toEqual({ update_time_ge: T('2024-10-26T18:00:00Z') });
   expect(db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()?.revenue).toBe(42.6);
+});
+
+test('TikTok Shop price change sets every SKU of a live product, logged; drafts and compare-at prices are refused', async () => {
+  const db = shopSetup();
+  await syncTikTokShop(db, key, 'glow', fakeShop().fetchFn, NOW);
+  const { fetchFn, calls } = fakeShop();
+  await setTikTokProductPrice(db, key, 'glow', 'tt-17301', { price: 22 }, fetchFn, NOW);
+  const update = calls.find((c) => c.url.pathname.endsWith('/prices/update'))!;
+  expect([update.url.pathname, update.url.searchParams.get('shop_cipher')]).toEqual(['/product/202309/products/17301/prices/update', 'CIPHER']);
+  expect(JSON.parse(update.body)).toEqual({ skus: [{ id: 'S1', price: { amount: '22.00', currency: 'USD' } }, { id: 'S2', price: { amount: '22.00', currency: 'USD' } }] });
+  expect(db.prepare("SELECT price FROM products WHERE store_id = 'glow' AND id = 'tt-17301'").get()).toEqual({ price: 22 });
+  expect(listActions(db, ['glow'], 1)[0]).toMatchObject({ action: 'price_change', target: 'tt-17301', detail: { price: 22 }, ok: true });
+
+  await expect(setTikTokProductPrice(db, key, 'glow', 'tt-17302', { price: 10 }, fetchFn, NOW)).rejects.toThrow('only reprices live products; tt-17302 is DRAFT');
+  await expect(setTikTokProductPrice(db, key, 'glow', 'tt-17301', { price: 22, compareAt: 30 }, fetchFn, NOW)).rejects.toThrow('compare-at');
+  await expect(setTikTokProductPrice(db, key, 'glow', '17301', { price: 22 }, fetchFn, NOW)).rejects.toThrow('not a TikTok Shop product');
+  expect(calls.filter((c) => c.url.pathname.endsWith('/prices/update'))).toHaveLength(1);
 });

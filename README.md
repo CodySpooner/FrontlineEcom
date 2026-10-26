@@ -41,7 +41,8 @@ pnpm check    # typecheck + tests
   - Meta, Google and TikTok ads: daily budgets and pausing campaigns.
   - Amazon: prices (the consumer offer in the store's marketplace). A listing with a sale price running, or a new
     price outside its min/max in Seller Central, is left for you to change. Needs the Product Listing role.
-  - TikTok Shop: agents put the change in their answer and you make it.
+  - TikTok Shop: prices (every SKU of a live product). A product in a running promotion is left for you to change.
+    Needs the Product Modify scope.
 - **Competitor prices:** once a day the app reads each competitor's public catalog and records price moves, in the
   competitor's own currency. It works for Shopify storefronts, WooCommerce stores and Etsy shops (an Etsy shop needs
   one of your stores connected to Etsy, for its app key). Other sites get no price history.

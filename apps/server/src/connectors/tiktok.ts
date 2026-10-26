@@ -2,6 +2,7 @@ import { createHmac } from 'node:crypto';
 import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
+import { logAction } from '../actions';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import { AD_ZONES, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal, type CampaignChange } from './common';
 
@@ -190,36 +191,42 @@ async function refreshShopToken(db: Db, key: Buffer, id: string, creds: Record<s
   return data.access_token;
 }
 
+/** Signs in (renewing the token when due) and picks the shop: a signed `api` call and the shop's cipher. */
+async function shopClient(db: Db, key: Buffer, id: string, creds: Record<string, string>, fetchFn: Fetch, now: Date) {
+  // accessTokenExpiresAt (unix seconds) is only known after our first refresh, so a freshly pasted token is refreshed once.
+  const fresh = Number(creds.accessTokenExpiresAt) * 1000 - now.getTime() > 86400000;
+  const token = fresh ? creds.accessToken! : await refreshShopToken(db, key, id, creds, fetchFn);
+  const api = async <T>(method: 'GET' | 'POST', path: string, query: Record<string, string> = {}, body?: object) => {
+    const json = body ? JSON.stringify(body) : '';
+    const params = { ...query, app_key: creds.appKey!, timestamp: String(Math.floor(now.getTime() / 1000)) };
+    const res = await fetchFn(`${SHOP_API}${path}?${new URLSearchParams({ ...params, sign: signTikTokShop(creds.appSecret!, path, params, json) })}`, {
+      method,
+      headers: { 'x-tts-access-token': token, 'content-type': 'application/json' },
+      ...(body ? { body: json } : {}),
+    });
+    const b = (await res.json().catch(() => ({}))) as { code?: number; message?: string; data?: T };
+    if (!res.ok || b.code !== 0) throw new Error(`TikTok Shop: ${b.message ?? `HTTP ${res.status}`}`);
+    return b.data as T;
+  };
+
+  // An app several shops authorized (say a US and a UK shop) syncs the one named in the Shop field; with one, that one.
+  const shops = (await api<{ shops?: { cipher: string; id?: string; name?: string; code?: string }[] }>('GET', '/authorization/202309/shops')).shops ?? [];
+  const want = creds.shop?.trim().toLowerCase();
+  const shop = want ? shops.find((s) => [s.id, s.name, s.code].some((v) => v?.toLowerCase() === want)) : shops.length === 1 ? shops[0] : undefined;
+  if (!shops.length) throw new Error('TikTok Shop: no shop has authorized this app');
+  if (!shop) {
+    const why = want ? `no authorized shop is "${creds.shop!.trim()}"` : 'several shops authorized this app';
+    throw new Error(`TikTok Shop: ${why}. Enter one of ${shops.map((s) => s.name ?? s.id).join(', ')} as the Shop`);
+  }
+  return { api, shop };
+}
+
 export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `tiktok_shop:${storeId}`;
   const creds = getCredentials(db, key, 'tiktok_shop', storeId);
   if (!creds) return;
   try {
-    // accessTokenExpiresAt (unix seconds) is only known after our first refresh, so a freshly pasted token is refreshed once.
-    const fresh = Number(creds.accessTokenExpiresAt) * 1000 - now.getTime() > 86400000;
-    const token = fresh ? creds.accessToken! : await refreshShopToken(db, key, id, creds, fetchFn);
-    const api = async <T>(method: 'GET' | 'POST', path: string, query: Record<string, string> = {}, body?: object) => {
-      const json = body ? JSON.stringify(body) : '';
-      const params = { ...query, app_key: creds.appKey!, timestamp: String(Math.floor(now.getTime() / 1000)) };
-      const res = await fetchFn(`${SHOP_API}${path}?${new URLSearchParams({ ...params, sign: signTikTokShop(creds.appSecret!, path, params, json) })}`, {
-        method,
-        headers: { 'x-tts-access-token': token, 'content-type': 'application/json' },
-        ...(body ? { body: json } : {}),
-      });
-      const b = (await res.json().catch(() => ({}))) as { code?: number; message?: string; data?: T };
-      if (!res.ok || b.code !== 0) throw new Error(`TikTok Shop: ${b.message ?? `HTTP ${res.status}`}`);
-      return b.data as T;
-    };
-
-    // An app several shops authorized (say a US and a UK shop) syncs the one named in the Shop field; with one, that one.
-    const shops = (await api<{ shops?: { cipher: string; id?: string; name?: string; code?: string }[] }>('GET', '/authorization/202309/shops')).shops ?? [];
-    const want = creds.shop?.trim().toLowerCase();
-    const shop = want ? shops.find((s) => [s.id, s.name, s.code].some((v) => v?.toLowerCase() === want)) : shops.length === 1 ? shops[0] : undefined;
-    if (!shops.length) throw new Error('TikTok Shop: no shop has authorized this app');
-    if (!shop) {
-      const why = want ? `no authorized shop is "${creds.shop!.trim()}"` : 'several shops authorized this app';
-      throw new Error(`TikTok Shop: ${why}. Enter one of ${shops.map((s) => s.name ?? s.id).join(', ')} as the Shop`);
-    }
+    const { api, shop } = await shopClient(db, key, id, creds, fetchFn, now);
     const search = async <T>(path: string, list: string, query: Record<string, string>, body: object) => {
       const out: T[] = [];
       let pageToken = '';
@@ -308,6 +315,30 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'TikTok Shop sync failed');
   }
+}
+
+/**
+ * Sets every SKU of a live product to one price (Product Modify scope). Call only for an approved request. Same contract
+ * as Shopify's setProductPrice, except that a compare-at price is refused (TikTok's list price is US-only and audited) and
+ * TikTok only reprices an active product that is in no running promotion (its error says so).
+ * ponytail: sends price.amount; JP and US shops shipping from China warehouses want price.sale_price, and get TikTok's error.
+ */
+export async function setTikTokProductPrice(db: Db, key: Buffer, storeId: string, productId: string, { price, compareAt }: { price: number; compareAt?: number | null }, fetchFn: Fetch = fetch, now = new Date()) {
+  if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be more than 0');
+  if (compareAt != null) throw new Error('TikTok Shop has no compare-at price here; run a discount from Seller Center → Promotions');
+  if (!productId.startsWith('tt-')) throw new Error(`${productId} is not a TikTok Shop product`);
+  const creds = getCredentials(db, key, 'tiktok_shop', storeId);
+  if (!creds) throw new Error('TikTok Shop is not connected for this store');
+  const path = `/product/202309/products/${productId.slice(3)}`;
+  await logAction(db, storeId, 'price_change', productId, { price }, async () => {
+    const { api, shop } = await shopClient(db, key, `tiktok_shop:${storeId}`, creds, fetchFn, now);
+    const p = await api<{ status?: string; skus?: { id: string; price?: { currency?: string } }[] }>('GET', path, { shop_cipher: shop.cipher });
+    if (p.status !== 'ACTIVATE') throw new Error(`TikTok Shop only reprices live products; ${productId} is ${p.status ?? 'not live'}`);
+    const currency = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency);
+    const skus = (p.skus ?? []).map((k) => ({ id: k.id, price: { amount: price.toFixed(2), currency: k.price?.currency ?? currency } }));
+    await api('POST', `${path}/prices/update`, { shop_cipher: shop.cipher }, { skus });
+  });
+  db.prepare('UPDATE products SET price = ?, compare_at = NULL WHERE store_id = ? AND id = ?').run(price, storeId, productId);
 }
 
 /** Ad-account write (Ads Management scope). Use setCampaignBudget / pauseCampaign in ./ads, never directly. */

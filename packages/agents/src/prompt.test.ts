@@ -67,7 +67,7 @@ describe('assemblePrompt', () => {
     for (const part of [playbook('ad_strategist'), platformPack('tiktok_shop'), nichePack('fitness'), 'Live data']) expect(prompt).toContain(part);
     expect(prompt).not.toContain(nichePack('beauty'));
     expect(prompt).not.toContain('What the squad has learned');
-    expect(prompt).toContain("- The app can't change tiktok_shop stores yet: put store changes in your answer for the owner to make by hand.");
+    expect(prompt).toContain('- On tiktok_shop the app can change prices once the owner approves; any other store change goes in your answer for the owner to make by hand.');
   });
 
   test("the store's fee estimate is in its profile when the owner set one", () => {
