@@ -161,8 +161,13 @@ export type CreateProducts = (storeId: string, products: Omit<AddProduct, 'resea
 export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId: string, task: string) => unknown, createRemote: CreateProducts): Promise<string[]> {
   const store = getStore(db, a.storeId);
   const products = ((a.action.payload as { products?: unknown })?.products ?? []) as AddProduct[];
-  const valid = products.filter((p) => typeof p?.title === 'string' && p.title.trim() && typeof p.price === 'number' && p.price > 0);
-  if (!store || !valid.length) return [];
+  if (!store) return [];
+  // One an earlier request already added and the store still has (the same find asked twice, both approved) isn't made twice.
+  const have = db.prepare(
+    'SELECT 1 FROM product_tests t JOIN products p ON p.store_id = t.store_id AND p.id = t.product_id WHERE t.store_id = ? AND t.approval_id != ? AND lower(t.title) = lower(?)',
+  );
+  const valid = products.filter((p) => typeof p?.title === 'string' && p.title.trim() && typeof p.price === 'number' && p.price > 0 && !have.get(store.id, a.id, p.title.trim()));
+  if (!valid.length) return [];
   const titles = valid.map((p) => p.title.trim());
   let added: { id: string; title: string }[];
   if (store.connected) {

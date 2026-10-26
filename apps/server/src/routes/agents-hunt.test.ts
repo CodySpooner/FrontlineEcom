@@ -71,6 +71,13 @@ test('connected stores get platform drafts; a platform error tells the owner ins
   expect(titles).toEqual(['Smart Jump Rope']);
   expect(created).toEqual([['peak', [{ title: 'Smart Jump Rope', price: 19.9, compareAt: undefined, cost: 4 }]]]);
   expect(runs).toEqual(['peak:store_developer']);
+
+  // A second request for it, approved too (core's createProducts stored the first locally): nothing is made twice.
+  db.prepare(`INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('peak', '901', 'Smart Jump Rope', 19.9, 4, 0, 'draft')`).run();
+  const second = { ...approval, id: 'again', action: { kind: 'store.add_products', payload: { products: [{ title: 'smart jump rope', price: 19.9 }] } } };
+  expect(await addProducts(db, second, (agentId) => runs.push(agentId), async (storeId, products) => (created.push([storeId, products]), []))).toEqual([]);
+  expect(created).toHaveLength(1);
+  expect(runs).toHaveLength(1);
 });
 
 test('record_product_find puts a web find in the feed with its AI score', async () => {
