@@ -117,6 +117,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-55 Supplier scorecard for Operations: per supplier over 30 days, orders, unfulfilled 3+ days, in transit 10+ days and open issues, so the daily order check can name the supplier behind the problems.
 - [x] AGT-56 Competitor brief: a weekly Market Analyst job over `list_competitors` (price moves, new ads and angles) that says what changed and hands one action to its owner. DESIGN §4.8 "Market Analyst briefs".
 - [x] AGT-57 Store Developer edits the Shopify theme: copy, preview, approve to publish (DESIGN §4.6).
+- [ ] AGT-58 Delete a theme copy when its publish request is denied, so drafts don't fill Shopify's 20-theme library (waits on core `deleteTheme`).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed.
