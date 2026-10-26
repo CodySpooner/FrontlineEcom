@@ -7,12 +7,12 @@ outcome checks.
 
 ## A run, end to end
 
-1. **Start** (`runs.ts` `createRunManager().start`): refused if the agent is offline or the store's AI budget for today
-   is spent. Queued runs share the machine: 3 at once, 2 per store, one per agent. A run waiting on the owner holds no slot.
+1. **Start** (`runs.ts` `createRunManager().start`): refused if the agent is offline, or if the store's AI budget for
+   today (or the agent's own, `dailyBudgetUsd`) is spent. Queued runs share the machine: 3 at once, 2 per store, one per agent. A run waiting on the owner holds no slot.
 2. **Prompt** (`prompt.ts` `assemblePrompt`): role prompt and playbook (`playbooks/<role>.md`), then the platform pack
    (`packs/platform/`), the niche pack (`packs/niche/`, or a drafted pack for a custom niche), owner-approved niche
    learnings, the store profile (on a live store, also what the app can change there), the top store memories for
-   the task, open requests, and the date in the zone the store's data is dated in. The stable layers come first, so
+   the task, the store's scheduled jobs (so a run doesn't hand off what one does anyway), open requests, and the date in the zone the store's data is dated in. The stable layers come first, so
    the prefix caches. The owner can edit any shipped layer in the Knowledge Base; edits live in
    `<FRONTLINE_DATA_DIR>/knowledge/`.
 3. **Engine** (`engine.ts` `defaultEngine`): connected stores use `claude-engine.ts`, on the owner's local Claude Code
@@ -37,14 +37,16 @@ outcome checks.
    - prices and pages: 14 days before vs after
    - themes: 14 days before vs after
 
-   Each judgement becomes a memory and moves the confidence of what that run learned. Learnings that hold in 2+
-   stores of a niche can be promoted to the whole niche with the owner's approval.
+   Each judgement becomes a memory and moves the confidence of what that run learned. Learnings that 2+ live stores of
+   a niche found on their own become a request to share them with the whole niche (hourly, `proposeNichePromotions`;
+   the Market Analyst can also ask with `promote_niche_learning`).
 
 ## Money guards
 
 - **Store AI budget per day** (`agentCostPerDay`): each starting run gets at most `cap / perStore`, minus what working
   runs already hold. Spend is saved as the run goes (`onSpend`, an estimate from token usage), so cancelled or crashed
-  runs still count. A run stops as soon as the store's saved spend today passes the cap.
+  runs still count. A run stops as soon as the store's saved spend today passes the cap. An agent's own
+  `dailyBudgetUsd` caps its runs inside that (one run per agent, so no shares).
 - **Higgsfield credits** (`higgsfieldCreditsPerDay`): pending requests count as asked, credits are charged before the
   render, and they stay charged if it fails or the creative is deleted (`creative_credits`).
 - **Ad spend** (`adSpendChangePerDay`): only increases count toward it. Pauses and cuts count toward the autopilot
