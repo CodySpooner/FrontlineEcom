@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, screen } from '@testing-library/react';
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, expect, test, vi } from 'vitest';
 import { renderApp } from '../test-utils';
 import { Ecosystem } from './Ecosystem';
+
+vi.mock('./OfficeScene', () => ({ OfficeScene: () => <div>Office canvas</div> }));
 
 afterEach(cleanup);
 test('office tabs and collapsible activity are keyboard-addressable', () => {

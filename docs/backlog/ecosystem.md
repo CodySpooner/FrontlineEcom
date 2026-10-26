@@ -45,7 +45,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-01 Inspect: read the files named above, note in **Done** how the office will read agents/runs/flows/live events and what (if anything) is missing.
 - [x] ECO-02 Route + shell: `/ecosystem` "AI ECOSYSTEM" / "A LIVING WORKFORCE OF ECOMMERCE AGENTS" in nav, page skeleton matching the reference (header, 4 stat cards, tabs, office area, right activity panel, bottom bar). No other page changes.
 - [x] ECO-03 Seats backend: migration + `routes/ecosystem.ts` — list/deploy/update/archive seats, 30-desk capacity enforced server-side, desk uniqueness, persistence across restarts, tests.
-- [ ] ECO-04 World: isometric tile map with the 10 departments (desk counts per spec §3) + central globe area, props, ambient animation, cached static layers, collision grid.
+- [x] ECO-04 World: isometric tile map with the 10 departments (desk counts per spec §3) + central globe area, props, ambient animation, cached static layers, collision grid.
 - [ ] ECO-05 Camera: drag pan, wheel zoom, double-click focus, jump to department, reset, fit, fullscreen; sharp pixels at every zoom step.
 - [ ] ECO-06 Characters: sprite sheets with the 10 animations (spec §4), per-agent appearance variation, isometric walk directions, animation state machine.
 - [ ] ECO-07 Movement: A* on the grid with occupancy, walk to desk / meeting table / another desk; tests for the pathfinder.
@@ -67,6 +67,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-04: PixiJS office with original cached pixel map art, ten distinct departments, thirty selectable desks, plants/studio/crates/rack props, holographic globe, blinking monitors and collision tiles. Accessible desk directory; narrow screens give the scene full width. Browser selection and .agent/eco-04.png compared against reference; 109 files / 597 tests pass. Detailed zoom and workers follow in ECO-05/06.
 
 - 2026-10-26 ECO-03: Added migration 35, shared ten-department/30-desk catalog and validated list/deploy/update/archive API with a unique active-desk index. Tests fill capacity, reject conflicts/invalid inputs, reopen a file database and preserve agent/run history on archive. Browser GET /api/ecosystem/seats verified; pnpm check 108 files / 593 tests pass.
 

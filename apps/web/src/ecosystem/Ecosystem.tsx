@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Building2, Activity, Users, Target, Network } from 'lucide-react';
 import { Button, StatusDot, Tabs } from '../components/ui';
 import './ecosystem.css';
+import { OfficeScene } from './OfficeScene';
 
 const TABS = ['Office View', 'Department View', 'Agent List', 'Task Board', 'Performance'].map((label) => ({ value: label, label }));
 
@@ -23,7 +24,7 @@ export function Ecosystem() {
       <div className="eco-toolbar"><Tabs label="Ecosystem views" tabs={TABS} value={tab} onChange={setTab} /><Button size="sm" onClick={() => setFeed(!feed)} aria-expanded={feed}>Activity</Button></div>
       <div className={`eco-workspace ${feed ? '' : 'eco-no-feed'}`}>
         <section className="eco-stage" aria-label={tab}>
-          <div className="eco-empty"><Building2 size={48} /><h2>{tab === 'Office View' ? 'YOUR WORKFORCE, ONE HEADQUARTERS' : tab}</h2><p>The office is being connected to your existing agents.</p><span>10 DEPARTMENTS <b>·</b> 30 WORKSTATIONS</span></div>
+          {tab === 'Office View' ? <OfficeScene /> : <div className="eco-empty"><Building2 size={48} /><h2>{tab}</h2><p>The office is being connected to your existing agents.</p><span>10 DEPARTMENTS <b>·</b> 30 WORKSTATIONS</span></div>}
         </section>
         {feed && <aside className="eco-feed"><h2><StatusDot tone="idle" /> Live Activity</h2><p>Agent activity will appear here when the office is connected.</p></aside>}
       </div>
