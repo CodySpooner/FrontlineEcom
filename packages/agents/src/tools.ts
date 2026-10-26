@@ -190,7 +190,10 @@ export const APP_TOOLS: AppTool[] = [
     name: 'list_products',
     description:
       'The store catalog, best sellers first: price, compare-at, unit cost, margin % (after unit cost and the fee % set for the store), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last 30 days (CSV).',
-    input: { status: z.enum(['active', 'draft', 'archived']).optional(), limit: z.number().int().min(1).max(500).default(100) },
+    input: {
+      status: z.enum(['active', 'draft', 'archived']).optional().describe('default: active and draft (archived = deleted or trashed on the platform)'),
+      limit: z.number().int().min(1).max(500).default(100),
+    },
     run: async ({ status, limit }, ctx) =>
       csv(
         ctx.db
@@ -204,7 +207,7 @@ export const APP_TOOLS: AppTool[] = [
                FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
                WHERE i.store_id = ? AND o.status = 'paid' AND o.local_date >= ? GROUP BY i.product_id
              ) s ON s.product_id = p.id
-             WHERE p.store_id = ? ${status ? 'AND p.status = ?' : ''} ORDER BY revenue_30d DESC, p.title LIMIT ?`,
+             WHERE p.store_id = ? ${status ? 'AND p.status = ?' : "AND p.status != 'archived'"} ORDER BY revenue_30d DESC, p.title LIMIT ?`,
           )
           .all(...([ctx.store.id, since(30, ctx.store), ctx.store.id, ...(status ? [status] : []), limit] as string[])),
       ),

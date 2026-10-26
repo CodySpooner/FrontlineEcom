@@ -132,6 +132,17 @@ describe('agent tools on demo data', () => {
     db.prepare(`UPDATE stores SET fee_percent = 0 WHERE id = 'pawsome'`).run();
   });
 
+  test('list_products leaves archived (deleted) products out unless asked for them', async () => {
+    const p = db.prepare(`SELECT id, status FROM products WHERE store_id = 'pawsome' ORDER BY id LIMIT 1`).get()!;
+    const id = String(p.id);
+    db.prepare(`UPDATE products SET status = 'archived' WHERE store_id = 'pawsome' AND id = ?`).run(id);
+    const ids = async (args: object) =>
+      results(await run(input('pawsome', 'market_analyst'), [{ call: 'list_products', input: { limit: 500, ...args } }, done]))[0]!.output.split('\n').slice(1).map((r) => r.split(',')[0]);
+    expect(await ids({})).not.toContain(id);
+    expect(await ids({ status: 'archived' })).toContain(id);
+    db.prepare(`UPDATE products SET status = ? WHERE store_id = 'pawsome' AND id = ?`).run(String(p.status), id); // the db is shared by these tests
+  });
+
   test("list_products says 'not tracked' for stock the platform doesn't count, instead of a sold-out 0", async () => {
     db.prepare(`UPDATE products SET inventory = 0, inventory_tracked = 0 WHERE store_id = 'pawsome'`).run();
     db.prepare(`UPDATE products SET inventory = 0, inventory_tracked = 1 WHERE store_id = 'pawsome' AND id = (SELECT min(id) FROM products WHERE store_id = 'pawsome')`).run();
