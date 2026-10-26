@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, setStoreTimezone, switchToReal } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, setStoreTimezone, switchToReal } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -235,7 +235,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
 
     tx(db, () => {
       switchToReal(db, storeId);
-      setStoreCurrency(db, storeId, shop.currencyCode);
+      takeCurrency(db, storeId, 'shopify', shop.currencyCode);
       db.prepare('UPDATE stores SET connected = 1 WHERE id = ?').run(storeId);
       setStoreTimezone(db, storeId, shop.ianaTimezone);
 

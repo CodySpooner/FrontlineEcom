@@ -1,6 +1,22 @@
-import type { AdNetwork, IntegrationKind } from '@frontline/shared';
+import { INTEGRATION_KINDS, type AdNetwork, type IntegrationKind } from '@frontline/shared';
 import type { Db } from '../db';
 import { convertRate, historicRate } from '../fx';
+
+/**
+ * A store platform's sync takes its currency for the store, unless the store's own platform (e.g. Shopify for a Shopify
+ * store) has synced and sells in another: then the sync stops with an error, as its orders would add up unconverted and
+ * the two syncs would switch the store's currency back and forth (each switch re-pulls the ad accounts' history).
+ * ponytail: a second platform's orders aren't converted; it can be a store of its own.
+ */
+export function takeCurrency(db: Db, storeId: string, kind: IntegrationKind, currency: string) {
+  const store = db.prepare('SELECT name, platform, currency FROM stores WHERE id = ?').get(storeId);
+  const own = String(store?.platform);
+  const ownSynced = own !== kind && db.prepare('SELECT 1 FROM integrations WHERE id = ? AND synced_at IS NOT NULL').get(`${own}:${storeId}`);
+  if (!ownSynced) return setStoreCurrency(db, storeId, currency);
+  if (currency === store!.currency) return;
+  const name = (k: string) => INTEGRATION_KINDS[k as IntegrationKind].name;
+  throw new Error(`${name(kind)} sells in ${currency}, but ${store!.name} is in ${store!.currency} (its ${name(own)} sells in that). Add the ${name(kind)} as a store of its own to see its sales.`);
+}
 
 /** Wipes a demo store's generated rows and marks it connected. Called by the first successful real sync of any connector. */
 export function switchToReal(db: Db, storeId: string) {

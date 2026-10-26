@@ -347,3 +347,22 @@ test("orders are dated in the store's timezone as it is when they're written, no
   await syncTikTokShop(db, key, 'glow', rezoning, NOW);
   expect(db.prepare("SELECT local_date FROM orders WHERE store_id = 'glow' AND id = 'tt-5761'").get()).toEqual({ local_date: '2026-10-26' }); // 12:00 UTC on 10-25
 });
+
+test("a TikTok Shop selling in another currency than the store's own connected platform stops with a clear error, writing nothing", async () => {
+  const db = shopSetup();
+  // Glow is a Shopify store whose Shopify has synced in euros; its TikTok Shop sells in dollars.
+  saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow.myshopify.com', accessToken: 't' } });
+  db.prepare("UPDATE integrations SET synced_at = '2026-10-26T17:00:00Z' WHERE id = 'shopify:glow'").run();
+  db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'glow'").run();
+  await syncTikTokShop(db, key, 'glow', fakeShop().fetchFn, NOW);
+  expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'tiktok_shop:glow'").get()).toEqual({
+    status: 'error', error: 'TikTok Shop sells in USD, but Glow Haus is in EUR (its Shopify sells in that). Add the TikTok Shop as a store of its own to see its sales.',
+  });
+  expect(db.prepare("SELECT currency FROM stores WHERE id = 'glow'").get()).toEqual({ currency: 'EUR' });
+  expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow' AND id GLOB 'tt-*'").get()).toEqual({ n: 0 });
+
+  // In the same currency it syncs as before.
+  db.prepare("UPDATE stores SET currency = 'USD' WHERE id = 'glow'").run();
+  await syncTikTokShop(db, key, 'glow', fakeShop().fetchFn, NOW);
+  expect(db.prepare("SELECT status FROM integrations WHERE id = 'tiktok_shop:glow'").get()).toEqual({ status: 'connected' });
+});

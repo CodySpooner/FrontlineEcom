@@ -4,7 +4,7 @@ import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import type { ProductPage } from './shopify';
 import { localDate } from '../dates';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, switchToReal } from './common';
 
 // Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r, and
 // listings_w for approved listing changes: setEtsyListingPrice, publishEtsyProductPage).
@@ -115,7 +115,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       switchToReal(db, storeId);
       // Receipts and listings are in the shop's currency.
       const currency = receipts[0]?.grandtotal.currency_code ?? listings[0]?.price.currency_code;
-      if (currency) setStoreCurrency(db, storeId, currency);
+      if (currency) takeCurrency(db, storeId, 'etsy', currency);
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, inventory = excluded.inventory, status = excluded.status`,

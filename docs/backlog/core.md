@@ -135,10 +135,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-54 Exchange-rate moves showed as refunds in the live feed (Woo re-priced converted orders at today's rate on every change).
 - [x] CORE-55 A Woo store's first sync priced two years of orders in another currency at today's rate (and CORE-54 then locked it in).
 - [x] CORE-56 Amazon as an extra channel priced its first sync's two years of daily totals at today's rate.
+- [x] CORE-57 Two platforms on one store selling in different currencies switched the store's currency back and forth every sync.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-57: Shopify, Woo, Etsy and TikTok Shop syncs set the store's currency through `takeCurrency`: when the store's own platform has synced and sells in another currency, the sync stops with an error naming both (nothing written), instead of adding unconverted orders and flipping the store's currency (each flip cleared the ad networks' cursors, a two-year re-pull). Without the own platform synced it takes the currency as before. README notes it.
 - 2026-10-26 — CORE-56: Amazon as an extra channel in a store with another currency converts a first sync's daily totals at each day's ECB rate (`backfillRate`, as ad spend does); later syncs re-read their settle window at today's, as ad spend does. An Amazon store (its own marketplace's currency) is unchanged.
 - 2026-10-26 — CORE-55: a paid Woo order in another currency, more than 3 days old and with no locked rate (a first sync's backfill, or after the store's currency changed), is converted at its own day's ECB rate (`historicRate`, as ad spend's backfill does), falling back to today's. One history download per such currency and sync; later syncs find the rates locked and download nothing.
 - 2026-10-26 — (agents Inbox, AGT-131 FYI) left as is: analytics' top products keep the per-order fee out. Charging it once per order to every product in the order counts a two-product order's fee twice, so the products' profits would add up to more fees than the store paid; the dashboard's per-product numbers stay a split of the store's.
