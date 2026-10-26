@@ -3,6 +3,7 @@ import type { AgentEvent, AgentRole } from '@frontline/shared';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
+import { addDays, localDate } from '../dates';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { seedCompetitors } from '../competitors';
@@ -39,17 +40,17 @@ async function run(i: RunInput, steps: FakeStep[], onEvent?: (e: AgentEvent) => 
 }
 const results = (events: AgentEvent[]) => events.flatMap((e) => (e.type === 'tool_result' ? [e] : []));
 
-test('a 7-day window is the 7 store dates ending today, even early in the day east of UTC', async () => {
-  const tz = String(db.prepare(`SELECT timezone FROM stores WHERE id = 'glow'`).get()?.timezone);
-  db.prepare(`UPDATE stores SET timezone = 'Asia/Tokyo' WHERE id = 'glow'`).run();
+test('a 7-day window is the 7 dates ending today in the zone the data is dated in, even early in the day east of UTC', async () => {
+  const i = input('glow', 'market_analyst');
+  const first = async (store: RunInput['store']) =>
+    results(await run({ ...i, store }, [{ call: 'metrics_timeseries', input: { days: 7 } }]))[0]!.output.split('\n')[1]!.slice(0, 10);
   vi.useFakeTimers({ toFake: ['Date'] });
   try {
     vi.setSystemTime(new Date('2026-10-26T23:00:00Z')); // 08:00 on the 27th in Tokyo
-    const [r] = results(await run(input('glow', 'market_analyst'), [{ call: 'metrics_timeseries', input: { days: 7 } }]));
-    expect(r!.output.split('\n')[1]!.slice(0, 10)).toBe('2026-10-21');
+    expect(await first({ ...i.store, timezone: 'Asia/Tokyo', connected: true })).toBe('2026-10-21'); // a connected shop's own zone
+    expect(await first({ ...i.store, timezone: 'Asia/Tokyo' })).toBe(addDays(localDate(), -6)); // demo data: this machine's
   } finally {
     vi.useRealTimers();
-    db.prepare(`UPDATE stores SET timezone = ? WHERE id = 'glow'`).run(tz);
   }
 });
 
