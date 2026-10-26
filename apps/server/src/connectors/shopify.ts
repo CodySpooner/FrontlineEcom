@@ -40,7 +40,7 @@ interface ShopifyProduct {
   variants: { nodes: { price: string; compareAtPrice: string | null; inventoryPolicy?: string; inventoryItem: { unitCost: Money } | null }[] };
 }
 
-type LineItem = { quantity: number; product: { id: string } | null; discountedTotalSet: { shopMoney: { amount: string } }; variant: { inventoryItem: { unitCost: Money } | null } | null };
+type LineItem = { quantity: number; currentQuantity: number; product: { id: string } | null; discountedUnitPriceAfterAllDiscountsSet: { shopMoney: { amount: string } }; variant: { inventoryItem: { unitCost: Money } | null } | null };
 interface ShopifyOrder {
   id: string;
   name: string;
@@ -77,7 +77,7 @@ const DELETED_Q = `query ($after: String, $q: String) {
 // Shopify prices a query before running it (max 1000): objects 1, connections 2 + first × child. Per order:
 // 1 + total 2 + tax 2 + net payment 2 + fulfillment 2 + lineItems (2 + 10 × 7 + pageInfo 1) = 82, so 12 orders = 985. Products: 2 + 50 × 9 = 452.
 // An order with more line items gets the rest from ORDER_ITEMS_Q (2 + 1 + 100 × 7 + 1 = 704).
-const LINE_ITEM = 'quantity product { id } discountedTotalSet { shopMoney { amount } } variant { inventoryItem { unitCost { amount } } }';
+const LINE_ITEM = 'quantity currentQuantity product { id } discountedUnitPriceAfterAllDiscountsSet { shopMoney { amount } } variant { inventoryItem { unitCost { amount } } }';
 const ORDERS_Q = `query ($after: String, $q: String) {
   orders(first: 12, after: $after, query: $q, sortKey: UPDATED_AT) {
     nodes { id name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus taxesIncluded
@@ -296,7 +296,10 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
           // Custom line items (no product) only count toward the order total. Where prices include VAT, each line gives up
           // the order's share of it. ponytail: one rate for all lines; reduced-rate lines come out a little low.
           const net = o.taxesIncluded && total > 0 ? 1 - num(o.currentTotalTaxSet?.shopMoney.amount) / total : 1;
-          setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product ? [{ productId: tail(li.product.id), quantity: li.quantity, revenue: Math.round(num(li.discountedTotalSet.shopMoney.amount) * net * 100) / 100, cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));
+          // The units kept (refunded and removed ones out) at their price after every discount, the order's codes too. Cost
+          // stays on every unit ordered, as a refund needn't be a return; a line refunded in full drops out.
+          // ponytail: WooCommerce and Etsy lines still count what was ordered (their order reads don't split refunds by line).
+          setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product && li.currentQuantity > 0 ? [{ productId: tail(li.product.id), quantity: li.currentQuantity, revenue: Math.round(li.currentQuantity * num(li.discountedUnitPriceAfterAllDiscountsSet.shopMoney.amount) * net * 100) / 100, cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));
         }
 
         rebuildRevenue(db, storeId, days);

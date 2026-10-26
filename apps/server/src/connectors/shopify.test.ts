@@ -17,8 +17,8 @@ const order = (name: string, createdAt: string, total: string, extra: Record<str
   id: `gid://shopify/Order/${name.slice(1)}`, name, createdAt, updatedAt: createdAt, cancelledAt: null, test: false, displayFinancialStatus: 'PAID', displayFulfillmentStatus: 'UNFULFILLED',
   currentTotalPriceSet: { shopMoney: money(total) }, fulfillments: [],
   lineItems: { nodes: [
-    { quantity: 2, product: { id: 'gid://shopify/Product/111' }, discountedTotalSet: { shopMoney: money('80.00') }, variant: { inventoryItem: { unitCost: money('5.00') } } },
-    { quantity: 1, product: null, discountedTotalSet: { shopMoney: money('4.00') }, variant: null }, // custom line item, e.g. gift wrap
+    { quantity: 2, currentQuantity: 2, product: { id: 'gid://shopify/Product/111' }, discountedUnitPriceAfterAllDiscountsSet: { shopMoney: money('40.00') }, variant: { inventoryItem: { unitCost: money('5.00') } } },
+    { quantity: 1, currentQuantity: 1, product: null, discountedUnitPriceAfterAllDiscountsSet: { shopMoney: money('4.00') }, variant: null }, // custom line item, e.g. gift wrap
   ], pageInfo: { hasNextPage: false, endCursor: null } },
   ...extra,
 });
@@ -381,7 +381,7 @@ test('deleteTheme removes a draft and refuses the live theme', async () => {
 
 test('an order with more than 10 line items gets the rest before its cogs and best sellers are counted', async () => {
   const { db } = await setup();
-  const item = (n: number) => ({ quantity: 1, product: { id: `gid://shopify/Product/${n}` }, discountedTotalSet: { shopMoney: money('10.00') }, variant: { inventoryItem: { unitCost: money('2.00') } } });
+  const item = (n: number) => ({ quantity: 1, currentQuantity: 1, product: { id: `gid://shopify/Product/${n}` }, discountedUnitPriceAfterAllDiscountsSet: { shopMoney: money('10.00') }, variant: { inventoryItem: { unitCost: money('2.00') } } });
   const big = order('#2001', '2026-10-26T09:00:00Z', '120.00', { lineItems: { nodes: Array.from({ length: 10 }, (_, i) => item(i + 1)), pageInfo: { hasNextPage: true, endCursor: 'c10' } } });
   const shop = fakeShopify([big]).fetchFn;
   const asked: unknown[] = [];
@@ -582,4 +582,17 @@ test("a Shopify refund of an amount (no item returned) comes off the order: rece
     order('#23', '2026-10-25T11:00:00Z', '50.00'),
   ]).fetchFn, NOW);
   expect(db.prepare("SELECT id, total FROM orders WHERE store_id = 'glow' AND id IN ('#21', '#22', '#23') ORDER BY id").all().map((r) => [r.id, r.total])).toEqual([['#21', 80], ['#22', 60], ['#23', 50]]);
+});
+
+test("a Shopify product's numbers count the units kept, at their price after every discount (an order's code too)", async () => {
+  const { db } = await setup();
+  // 3 at $33.33 list, a 10% code on the order: $30 each; one unit refunded. Its cost stays on all 3 (a refund needn't be a return).
+  const line = { quantity: 3, currentQuantity: 2, product: { id: 'gid://shopify/Product/111' }, discountedUnitPriceAfterAllDiscountsSet: { shopMoney: money('30.00') }, variant: { inventoryItem: { unitCost: money('5.00') } } };
+  const gone = { ...line, currentQuantity: 0, product: { id: 'gid://shopify/Product/112' } }; // refunded in full
+  await syncShopify(db, key, 'glow', fakeShopify([
+    order('#31', '2026-10-25T09:00:00Z', '60.00', { displayFinancialStatus: 'PARTIALLY_REFUNDED', lineItems: { nodes: [line, gone], pageInfo: { hasNextPage: false, endCursor: null } } }),
+  ]).fetchFn, NOW);
+  expect(db.prepare("SELECT product_id, quantity, revenue, cost FROM order_items WHERE store_id = 'glow' AND order_id = '#31'").all()).toEqual([
+    { product_id: '111', quantity: 2, revenue: 60, cost: 15 },
+  ]);
 });

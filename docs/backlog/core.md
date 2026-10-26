@@ -143,10 +143,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-60 Shopify's funnel history was read only on a first sync that finished: one cut short, or read_reports added later, left 3 days.
 - [x] CORE-61 Etsy's daily full listing read could archive a live listing edited (or moved between states) while it was paging.
 - [x] CORE-62 A Shopify refund of an amount with no item returned may not lower the order's revenue.
+- [x] CORE-63 Shopify product numbers counted refunded units and left out order-level discount codes.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-63 (from the Shopify/Etsy review): Shopify order lines count `currentQuantity` (refunded and removed units out) at `discountedUnitPriceAfterAllDiscountsSet` (order-level codes in), so top products and agents' product outcomes no longer include returned items or add up past the order. Cost stays on the units ordered; a line refunded in full drops out. Query cost unchanged (985). Woo and Etsy lines unchanged: their reads don't split refunds by line.
 - 2026-10-26 — CORE-62 (from the Shopify/Etsy review): Shopify documents `currentTotalPriceSet` as "after returns" only (subtotal and tax say "after returns and refunds"), so a goodwill refund likely left revenue unchanged. A PARTIALLY_REFUNDED order now counts the lower of that and `netPaymentSet` (received less refunded, not deprecated). Never raises a total. Order query cost 985 of 1000 (12 a page).
 - 2026-10-26 — CORE-61 (from the Shopify/Etsy review): Etsy listings come in offset pages sorted by change time, one state at a time, so one edited mid-read jumps past the pages and was archived until a later sync. A listing the full read missed is now asked for (getListing): archived on a 404, kept with what Etsy returns otherwise, left as is on any other error. Usually 0 to a few calls a day.
 - 2026-10-26 — CORE-60 (from a review of the Shopify/Etsy connectors): the ShopifyQL funnel reads the whole backfill window until a read works (`done_once` `shopify-funnel:<store>:<shop host>`, so another shop backfills too), then 3 days. Before, the window followed the order cursor, which a first sync cut short (a 502 on page 40) or the read_reports scope added after the first sync both skipped for good.
