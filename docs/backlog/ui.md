@@ -90,8 +90,16 @@ Orca's browser against the reference before ticking it.
 - [x] UI-24 Store Builder: the Store Developer agent's workspace — pages/sections it's building, change list, previews,
       approve to publish (DESIGN.md §4.6).
 - [x] UI-23 Tests (vitest + @testing-library/react + jsdom): KPI formatting, store filter, approvals flow, chart range bucketing.
+- [ ] UI-25 Today's usage vs caps (DESIGN §7 "cost and credit accounting per store with daily caps"): next to each cap in
+      Settings › Caps a meter "used today / cap" (AI $, generation credits, ad budget added); a one-line "AI budget today" on
+      the agent page. Needs `GET /api/usage` (requested from agents).
+- [ ] UI-26 Narrow window: every page at 800px in Orca. No horizontal page scroll, tables scroll inside their panel, no
+      clipped buttons or overlapping hero art.
+- [ ] UI-27 Component tests: onboarding (first run shows; Explore the demo remembers; add store → squad → that store
+      selected) and Ask palette (Ctrl+K opens; arrows + Enter open a page; a question starts a Market Analyst run). Stub all fetches.
 
 ## Blocked
+- UI-25 waits for `GET /api/usage` (requested in the agents Inbox, 2026-10-26).
 
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
