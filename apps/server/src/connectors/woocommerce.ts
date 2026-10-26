@@ -119,7 +119,8 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     // Default order (newest created first): edits don't move an order between pages, so paging can't skip it.
     const changed = { modified_after: since, dates_are_gmt: 'true' };
     const orders = await all<WooOrder>('orders', changed);
-    const products = await all<WooProduct>('products', changed);
+    // The default status (any) leaves out the trash, where a deleted product goes first; trashing it counts as a change.
+    const products = [...(await all<WooProduct>('products', changed)), ...(await all<WooProduct>('products', { ...changed, status: 'trash' }))];
     // The shop's own currency (Settings → General), else the newest order's. A multi-currency plugin's orders in another
     // currency are converted into it at today's ECB rate; one with no rate is left out rather than counted at par.
     const setting = await fetchFn(`${site}/wp-json/wc/v3/settings/general/woocommerce_currency`, { headers: { authorization: auth } })
@@ -144,7 +145,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       for (const p of products) {
         const price = Number(p.price || p.regular_price || 0);
         const regular = Number(p.regular_price || 0);
-        const status: ProductStatus = p.status === 'publish' ? 'active' : 'draft';
+        const status: ProductStatus = p.status === 'publish' ? 'active' : p.status === 'trash' ? 'archived' : 'draft';
         prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), p.stock_quantity ?? 0, p.manage_stock === false ? 0 : 1, status);
       }
       // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking needs a plugin.
