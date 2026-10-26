@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { expect, test } from 'vitest';
+import { setProductCost } from '../catalog';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
@@ -390,6 +391,8 @@ test("an Amazon store's orders fill the orders page and top products; revenue st
   expect([queries[0]!.get('lastUpdatedAfter'), queries[0]!.get('includedData'), queries[0]!.get('marketplaceIds')]).toEqual(['2026-09-26T18:00:00.000Z', 'PROCEEDS,FULFILLMENT,PACKAGES', 'ATVPDKIKX0DER']);
   expect(orders()).toEqual([{ id: 'amz-111-1', day: '2026-10-25', total: 30, status: 'paid', f: 'fulfilled', supplier: null, tracking: '1Z999' }]); // 111-2 isn't paid for yet
   limited = false;
+  // Amazon has no unit costs: the owner's, set on the product, costs the lines read so far and the ones read after.
+  expect(setProductCost(db, 'peak', 'amz-MUG-1', { cost: 4 })).toMatchObject({ cost: 4 });
   await syncAmazon(db, key, 'peak', fetchFn, NOW);
   expect([queries[2]!.get('paginationToken'), queries[2]!.get('lastUpdatedAfter')]).toEqual(['n2', '2026-09-26T18:00:00.000Z']);
   expect(orders()).toEqual([
@@ -398,8 +401,9 @@ test("an Amazon store's orders fill the orders page and top products; revenue st
     { id: 'amz-111-4', day: '2026-10-26', total: 30, status: 'paid', f: 'unfulfilled', supplier: 'Amazon FBA', tracking: null },
   ]);
   expect(db.prepare("SELECT product_id, quantity, revenue FROM order_items WHERE store_id = 'peak' AND order_id = 'amz-111-1'").all()).toEqual([{ product_id: 'amz-MUG-1', quantity: 2, revenue: 25 }]);
-  // Revenue and order counts are still Amazon's daily totals, not counted twice.
-  expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'peak' AND date = '2026-10-25'").get()).toEqual({ revenue: 412.5, orders: 9 });
+  // Revenue and order counts are still Amazon's daily totals, not counted twice; the orders' costs come off the day's profit.
+  expect(db.prepare("SELECT revenue, orders, cogs FROM daily_metrics WHERE store_id = 'peak' AND date = '2026-10-25'").get()).toEqual({ revenue: 412.5, orders: 9, cogs: 8 });
+  expect(db.prepare("SELECT cogs FROM daily_metrics WHERE store_id = 'peak' AND date = '2026-10-26'").get()).toEqual({ cogs: 8 }); // 111-4 (111-3 was cancelled)
 
   // The read is complete: the next one starts where Amazon said this one ended.
   await syncAmazon(db, key, 'peak', fetchFn, NOW);

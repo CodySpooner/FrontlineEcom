@@ -266,12 +266,11 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
         days.add(date);
         up.run(storeId, date, Math.round(Number(d.totalSales?.amount ?? 0) * rate * 100) / 100, d.orderCount ?? 0);
       }
-      rebuildRevenue(db, storeId, days);
       const visits = db.prepare('INSERT INTO daily_metrics (store_id, date, sessions) VALUES (?, ?, ?) ON CONFLICT (store_id, date) DO UPDATE SET sessions = excluded.sessions');
       for (const d of traffic?.days ?? []) visits.run(storeId, d.date, d.sessions);
       traffic?.collected();
-      // Orders fill the orders page and top products; revenue and order counts stay the daily totals above (rebuildRevenue
-      // leaves amz- orders out). ponytail: no unit costs here either, so items cost 0.
+      // Orders fill the orders page and top products, and their lines cost the owner's unit cost (Amazon has none).
+      // Revenue and order counts stay the daily totals above: rebuildRevenue takes only the costs of amz- orders.
       const ord = db.prepare(
         `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
@@ -288,7 +287,9 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
           o.packages?.find((p) => p.trackingNumber)?.trackingNumber ?? null, localDate(created, timeZone),
         );
         setOrderItems(db, storeId, `amz-${o.orderId}`, items);
+        days.add(localDate(created, timeZone));
       }
+      rebuildRevenue(db, storeId, days);
       if (orders) reads.set(id, { ...orders.next, account });
       // ponytail: Amazon has no unit costs. An FBA listing keeps the stock fbaStock last gave it (its listing has no count).
       const prod = db.prepare(
