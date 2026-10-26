@@ -106,6 +106,25 @@ test('cancel stops running and queued runs', async () => {
   expect(getRun(db, queued.id)?.startedAt).toBeUndefined();
 });
 
+test("a run waiting on the owner's decision doesn't hold the store's slot", async () => {
+  const usageDone = { type: 'done', sessionId: 's', usage } as const;
+  const m = manager({
+    perStore: 1,
+    engine: fakeEngine((input) => (input.task === 'ask' ? [{ call: 'request_approval', input: { title: 'Scale Broad TOF', reason: 'ROAS 3.2 for 7 days', kind: 'k', payload: {} } }, usageDone] : [usageDone])),
+  });
+  const asking = ok(m.start('glow:ad_strategist', 'ask'));
+  const pending = () => db.prepare(`SELECT id FROM approvals WHERE run_id = ? AND status = 'pending'`).get(asking.id)?.id;
+  for (let i = 0; i < 50 && !pending(); i++) await new Promise((r) => setImmediate(r));
+  const other = ok(m.start('glow:copywriter', 'other'));
+  for (let i = 0; i < 50 && getRun(db, other.id)?.status !== 'done'; i++) await new Promise((r) => setImmediate(r));
+  expect(getRun(db, other.id)?.status).toBe('done');
+  expect(getRun(db, asking.id)?.status).toBe('running');
+  expect(typeof m.start('glow:ad_strategist', 'again')).toBe('object'); // queued: the same agent never runs twice at once
+  decide(db, String(pending()), 'approve');
+  await m.idle();
+  expect(getRun(db, asking.id)?.status).toBe('done');
+});
+
 test("the store's daily AI budget blocks new runs once spent", async () => {
   const m = manager({ engine: fakeEngine(() => [{ type: 'done', sessionId: 's', usage }]) });
   updateCaps(db, 'glow', { agentCostPerDay: 0.03 });

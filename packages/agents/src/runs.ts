@@ -30,7 +30,10 @@ export type RunManager = ReturnType<typeof createRunManager>;
 export function createRunManager(opts: RunManagerOptions) {
   const { db, env, concurrency = 3, perStore = 2 } = opts;
   const engine = opts.engine ?? defaultEngine();
-  const active = new Map<string, { storeId: string; agentId: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[] }>();
+  const active = new Map<string, { storeId: string; agentId: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[]; waiting?: boolean }>();
+  /** Runs paused on the owner's decision don't hold a slot, so one unanswered request can't stall the store's other work. */
+  // ponytail: a resumed run can briefly push past the limits; they only gate starting runs.
+  const working = () => [...active.values()].filter((a) => !a.waiting);
 
   /**
    * A run that ended without finishing can't act on its pending requests any more, so they're closed as denied with a
@@ -106,9 +109,8 @@ export function createRunManager(opts: RunManagerOptions) {
   function pump() {
     const queued = db.prepare(`SELECT * FROM agent_runs WHERE status = 'queued' ORDER BY created_at, rowid`).all().map(toRun);
     for (const run of queued) {
-      if (active.size >= concurrency) return;
-      const busy = [...active.values()];
-      if (busy.some((a) => a.agentId === run.agentId) || busy.filter((a) => a.storeId === run.storeId).length >= perStore) continue;
+      if (working().length >= concurrency) return;
+      if ([...active.values()].some((a) => a.agentId === run.agentId) || working().filter((a) => a.storeId === run.storeId).length >= perStore) continue;
       const abort = new AbortController();
       const transcript: AgentEvent[] = [];
       const done = execute(run, abort.signal, transcript).finally(() => {
@@ -124,6 +126,12 @@ export function createRunManager(opts: RunManagerOptions) {
     const run = getRun(db, queued.id)!;
     opts.onRun?.(run);
     const emit = (event: AgentEvent) => {
+      const slot = active.get(run.id);
+      const waiting = event.type === 'approval_request' && event.approval.status === 'pending';
+      if (slot && !!slot.waiting !== waiting) {
+        slot.waiting = waiting;
+        if (waiting) pump();
+      }
       const last = transcript.at(-1);
       if (event.type === 'text_delta' && last?.type === 'text_delta') transcript[transcript.length - 1] = { type: 'text_delta', text: last.text + event.text };
       else transcript.push(event);
