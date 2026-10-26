@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { OFFICE_DEPARTMENTS, OFFICE_DESKS, type OfficeSeat } from '@frontline/shared';
+import { OFFICE_DEPARTMENTS, OFFICE_DESKS, type OfficeAppearance, type OfficeSeat } from '@frontline/shared';
 import { Button, ErrorState, Field, inputClass } from '../components/ui';
 import { officeApi, useSeats } from './api';
 import { AppearanceEditor } from './AppearanceEditor';
+import { resolveAppearance } from './characters';
 
 export function SeatEditor({ seat, onSaved }: { seat: OfficeSeat; onSaved: () => void }) {
   const seats = useSeats(), qc = useQueryClient();
-  const [name, setName] = useState(seat.displayName), [appearance, setAppearance] = useState(seat.appearance), [deskId, setDeskId] = useState(seat.deskId);
+  const [name, setName] = useState(seat.displayName), [appearance, setAppearance] = useState<OfficeAppearance>(resolveAppearance(seat.appearance, seat.agentId)), [deskId, setDeskId] = useState(seat.deskId);
   const save = useMutation({ mutationFn: () => officeApi(`/api/ecosystem/seats/${encodeURIComponent(seat.agentId)}`, 'PATCH', { displayName: name.trim(), appearance, deskId }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['ecosystem', 'seats'] }); onSaved(); } });
   const desks = OFFICE_DESKS.filter((d) => !seats.data?.some((s) => s.agentId !== seat.agentId && !s.archived && s.deskId === d.id));
   return <form className="eco-command eco-deploy" onSubmit={(e) => { e.preventDefault(); if (!save.isPending) save.mutate(); }}>

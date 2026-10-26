@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AGENT_ROLES, OFFICE_DEPARTMENTS, OFFICE_DESKS, type Agent, type OfficeDepartment, type OfficeSeat } from '@frontline/shared';
+import { AGENT_ROLES, OFFICE_DEPARTMENTS, OFFICE_DESKS, type Agent, type OfficeAppearance, type OfficeDepartment, type OfficeSeat } from '@frontline/shared';
 import { Button, Dialog, ErrorState, Field, inputClass } from '../components/ui';
 import { officeApi } from './api';
-import { appearanceFor } from './characters';
+import { appearanceFor, resolveAppearance } from './characters';
 import { AppearanceEditor } from './AppearanceEditor';
 
 export function DeployWizard({ agents, seats, onClose }: { agents: Agent[]; seats: OfficeSeat[]; onClose: () => void }) {
@@ -13,7 +13,7 @@ export function DeployWizard({ agents, seats, onClose }: { agents: Agent[]; seat
   const free = OFFICE_DESKS.filter((d) => !active.some((s) => s.deskId === d.id));
   const [agentId, setAgentId] = useState(''), [name, setName] = useState(''), [deskId, setDeskId] = useState('');
   const [department, setDepartment] = useState<OfficeDepartment>('research');
-  const [appearance, setAppearance] = useState(appearanceFor(''));
+  const [appearance, setAppearance] = useState<OfficeAppearance>(appearanceFor(''));
   const agent = available.find((a) => a.id === agentId);
   const deploy = useMutation({ mutationFn: () => officeApi<OfficeSeat>('/api/ecosystem/seats', 'POST', { agentId, deskId, displayName: name.trim(), appearance }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['ecosystem', 'seats'] }); onClose(); } });
   const chooseDepartment = (id: OfficeDepartment) => { setDepartment(id); setDeskId(free.find((d) => d.department === id)?.id ?? ''); };
@@ -23,7 +23,7 @@ export function DeployWizard({ agents, seats, onClose }: { agents: Agent[]; seat
       <Field label="Agent and specialization"><select className={inputClass} value={agentId} onChange={(e) => {
         setAgentId(e.target.value); const a = available.find((a) => a.id === e.target.value)!;
         const old = seats.find((s) => s.agentId === a.id);
-        setName(old?.displayName ?? ''); setAppearance(old?.appearance ?? appearanceFor(a.id));
+        setName(old?.displayName ?? ''); setAppearance(old ? resolveAppearance(old.appearance, a.id) : appearanceFor(a.id));
         chooseDepartment(OFFICE_DEPARTMENTS.find((d) => d.role === a.role)!.id);
       }} required><option value="" disabled>Select a store agent</option>{available.map((a) => <option key={a.id} value={a.id}>{a.storeId} · {AGENT_ROLES[a.role].name}{a.status === 'offline' ? ' (paused)' : ''}</option>)}</select></Field>
       {agent && <>

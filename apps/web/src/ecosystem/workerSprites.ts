@@ -1,6 +1,6 @@
 import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
 import type { OfficeSeat } from '@frontline/shared';
-import { CELL, frameAt, paintCharacters, type Animation, type Direction } from './characters';
+import { CELL, frameAt, paintCharacters, resolveAppearance, type Animation, type Direction } from './characters';
 import { ENTRANCE, deskTile, iso, tileKey, walkable, type Tile } from './world';
 import { advanceFrame, nearestFree, startMotion, type Motion } from './pathfinding';
 import type { OfficeStatus } from './events';
@@ -30,7 +30,7 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
     const next = JSON.stringify(active.map((w) => [w.seat.agentId, w.seat.appearance]));
     if (next !== signature) {
       const old = atlas;
-      atlas = Texture.from(paintCharacters(active.map((w) => w.seat.appearance)));
+      atlas = Texture.from(paintCharacters(active.map((w) => resolveAppearance(w.seat.appearance, w.seat.agentId))));
       atlas.source.scaleMode = 'nearest';
       for (const frame of frames.values()) frame.destroy();
       frames.clear(); signature = next;
@@ -41,10 +41,10 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
       let worker = workers.get(data.seat.agentId);
       if (!worker) {
         const root = new Container(), sprite = new Sprite(), name = new Text({ text: data.name, style: { fontFamily: 'Inter, sans-serif', fontSize: 12, fill: '#f3ecf0', stroke: { color: '#0a0b13', width: 4 } } });
-        sprite.anchor.set(.5, 1); sprite.scale.set(1.5); name.anchor.set(.5, 0); name.y = 3;
-        const status = new Graphics().circle(0, -62, 3).fill('#ffffff');
+        sprite.anchor.set(.5, 1); sprite.scale.set(1.25); name.anchor.set(.5, 0); name.y = 3;
+        const status = new Graphics().circle(0, -82, 3).fill('#ffffff');
         const bubble = new Text({ text: '', style: { fontFamily: 'Inter, sans-serif', fontSize: 13, fill: '#f4d7ff', stroke: { color: '#181021', width: 5 }, wordWrap: true, wordWrapWidth: 180, align: 'center' } });
-        bubble.anchor.set(.5, 1); bubble.y = -75;
+        bubble.anchor.set(.5, 1); bubble.y = -95;
         const bubbleBack = new Graphics();
         root.addChild(sprite, name, status, bubbleBack, bubble); layer.addChild(root); sprite.eventMode = 'static'; sprite.cursor = 'pointer';
         sprite.on('pointertap', () => select(workers.get(data.seat.agentId)!.data.seat.deskId, data.seat.agentId));
@@ -98,7 +98,7 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
       if (worker.bubble.text !== speech) {
         worker.bubble.text = speech; worker.bubbleBack.clear();
         if (speech) { const w = worker.bubble.width + 16, h = worker.bubble.height + 14;
-          worker.bubbleBack.roundRect(-w / 2, -82 - h, w, h + 14, 5).fill({ color: '#1b1027', alpha: .95 }).stroke({ color: '#bc7be4', width: 1 }).poly([-5, -68, 0, -62, 5, -68]).fill('#bc7be4');
+          worker.bubbleBack.roundRect(-w / 2, -102 - h, w, h + 14, 5).fill({ color: '#1b1027', alpha: .95 }).stroke({ color: '#bc7be4', width: 1 }).poly([-5, -88, 0, -82, 5, -88]).fill('#bc7be4');
         }
       }
       if (motion.next) {

@@ -25,7 +25,7 @@ test('seats, looks and positions survive reopen; archiving frees only the seat',
   const r = await deploy();
   expect(r.status).toBe(201);
   const first = await r.json() as OfficeSeat;
-  const look = { ...first.appearance, color: '#4488ff', outfit: 'hoodie', hair: 3 };
+  const look = { ...first.appearance, color: '#4488ff', outfit: 'hoodie', hair: 3, archetype: 'netrunner', accent: '#55ffee', gear: 'reactor', variant: 7 };
   expect((await send('PATCH', '/one:copywriter', { displayName: '  Nova  ', appearance: look, position: { x: 4, y: 3 } })).status).toBe(200);
   db.prepare("INSERT INTO agent_runs (id,store_id,agent_id,task,status,created_at) VALUES ('history','one','one:copywriter','Existing task','done','2026-10-26T00:00:00Z')").run();
   db.close(); db = openDb(join(dir, 'test.db')); app = createApp(db);
@@ -57,6 +57,9 @@ test('validates untrusted inputs and refuses unknown desks and agents', async ()
   await deploy();
   for (const body of [null, {}, { archived: false }, { deskId: null }, { position: { x: 36, y: 0 } }, { position: { x: 0.5, y: 1 } }, { displayName: 'x'.repeat(61) }, { appearance: { color: 'url(evil)' } }]) expect((await send('PATCH', '/one:copywriter', body)).status).toBe(400);
   expect((await send('DELETE', '/missing')).status).toBe(404);
+  const legacy = { color: '#4488ff', outfit: 'jacket', accessory: 'none', hair: 0, skin: 0 };
+  for (const extra of [{ archetype: 'unknown' }, { gear: 'weapon' }, { accent: '#fff' }, { variant: -1 }, { variant: 8 }, { variant: 1.5 }]) expect((await send('PATCH', '/one:copywriter', { appearance: { ...legacy, ...extra } })).status).toBe(400);
+  expect((await send('PATCH', '/one:copywriter', { appearance: legacy })).status).toBe(200);
 });
 
 test('statistics count durable runs beyond the recent feed and exclude cancellations from success', async () => {

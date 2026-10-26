@@ -1229,12 +1229,18 @@ export const OFFICE_DEPARTMENTS = [
 export type OfficeDepartment = (typeof OFFICE_DEPARTMENTS)[number]['id'];
 export const OFFICE_DESKS = OFFICE_DEPARTMENTS.flatMap((d) => Array.from({ length: d.desks }, (_, i) => ({ id: `${d.id}-${i + 1}`, department: d.id })));
 export const OFFICE_GRID = { width: 36, height: 27 };
+export const OFFICE_ARCHETYPES = ['operator', 'netrunner', 'android', 'mech', 'executive', 'punk', 'pilot', 'engineer'] as const;
+export const OFFICE_GEAR = ['cyberarm', 'reactor', 'cape', 'antenna', 'belt'] as const;
 export interface OfficeAppearance {
   color: string;
   hair: number;
   skin: number;
   outfit: 'jacket' | 'suit' | 'hoodie';
   accessory: 'none' | 'headset' | 'glasses';
+  archetype?: (typeof OFFICE_ARCHETYPES)[number];
+  accent?: string;
+  gear?: (typeof OFFICE_GEAR)[number];
+  variant?: number;
 }
 export interface OfficeSeat {
   agentId: string;

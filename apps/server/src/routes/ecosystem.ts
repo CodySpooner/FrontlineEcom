@@ -1,13 +1,15 @@
 import { Hono } from 'hono';
 import { listMissions } from '@frontline/agents';
-import { OFFICE_DESKS, OFFICE_GRID, type OfficeAppearance, type OfficeSeat, type OfficeStats } from '@frontline/shared';
+import { OFFICE_ARCHETYPES, OFFICE_GEAR, OFFICE_DESKS, OFFICE_GRID, type OfficeAppearance, type OfficeSeat, type OfficeStats } from '@frontline/shared';
 import { once, type Db } from '../db';
 
 const DEFAULT_LOOK: OfficeAppearance = { color: '#ff2a3a', hair: 0, skin: 0, outfit: 'jacket', accessory: 'headset' };
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 const integer = (v: unknown, max: number) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v < max;
 const validLook = (v: unknown): v is OfficeAppearance => object(v) && typeof v.color === 'string' && /^#[\da-f]{6}$/i.test(v.color)
-  && integer(v.hair, 6) && integer(v.skin, 4) && ['jacket', 'suit', 'hoodie'].includes(String(v.outfit)) && ['none', 'headset', 'glasses'].includes(String(v.accessory));
+  && integer(v.hair, 6) && integer(v.skin, 4) && ['jacket', 'suit', 'hoodie'].includes(String(v.outfit)) && ['none', 'headset', 'glasses'].includes(String(v.accessory))
+  && (v.archetype === undefined || OFFICE_ARCHETYPES.some((x) => x === v.archetype)) && (v.gear === undefined || OFFICE_GEAR.some((x) => x === v.gear))
+  && (v.accent === undefined || typeof v.accent === 'string' && /^#[\da-f]{6}$/i.test(v.accent)) && (v.variant === undefined || integer(v.variant, 8));
 
 function seat(r: Record<string, unknown>): OfficeSeat {
   return { agentId: String(r.agent_id), deskId: String(r.desk_id), displayName: String(r.display_name), appearance: JSON.parse(String(r.appearance_json)),

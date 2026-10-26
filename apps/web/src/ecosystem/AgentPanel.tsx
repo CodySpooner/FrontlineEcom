@@ -24,7 +24,7 @@ export function AgentPanel({ agent, seat, office, onClose, onFocus, assignInitia
   const runs = history.data ?? [], recent = office.events.find((e) => e.agentId === agent.id);
   const base = `/agents/${encodeURIComponent(agent.id)}`;
   return <Dialog open onClose={onClose} title={name} side="right">
-    <div className="eco-profile"><WorkerPortrait appearance={seat.appearance} name={name} /><div><Badge>{department?.name}</Badge><h3>{role.name}</h3><p>{agent.storeId} · {seat.deskId}</p><p>Level {agent.level} · {agent.rank ?? 'Recruit'} · {agent.xp} XP</p></div></div>
+    <div className="eco-profile"><WorkerPortrait appearance={seat.appearance} name={name} agentId={seat.agentId} /><div><Badge>{department?.name}</Badge><h3>{role.name}</h3><p>{agent.storeId} · {seat.deskId}</p><p>Level {agent.level} · {agent.rank ?? 'Recruit'} · {agent.xp} XP</p></div></div>
     <p className="eco-profile-copy">{role.blurb}</p>
     {agent.costTodayUsd !== undefined && <p className="eco-profile-copy">AI spend today: <strong>{cents(agent.costTodayUsd)}</strong>{agent.dailyBudgetUsd !== undefined && <> of {cents(agent.dailyBudgetUsd)} daily limit</>} · since local midnight, across all runs.</p>}
     {agent.levelProgress && <XPBar level={agent.level} rank={agent.rank} xp={agent.levelProgress.xp} next={agent.levelProgress.needed} />}
