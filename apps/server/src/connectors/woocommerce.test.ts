@@ -359,3 +359,25 @@ test('Woo: a product or variation that takes backorders keeps selling at 0, so i
     { id: 'woo-7', inventory: 0, tracked: 0 },
   ]);
 });
+
+test("a Woo order's tracking comes from the Shipment Tracking extension's order meta (also written by Advanced Shipment Tracking)", async () => {
+  const db = setup();
+  const woo = fakeWoo().fetchFn;
+  const tracked = (items: unknown) => ({ meta_data: [{ id: 1, key: '_wc_shipment_tracking_items', value: items }] });
+  const fetchFn = (async (url: string, init: RequestInit) =>
+    new URL(url).pathname.endsWith('/orders')
+      ? Response.json([
+          order('2001', 'completed', '30.00', true, tracked([{ tracking_provider: '', custom_tracking_provider: 'YunExpress', custom_tracking_link: 'https://www.yuntrack.com/parcelTracking?id=%1$s', tracking_number: 'YT123', date_shipped: '1761400000' }])),
+          order('2002', 'completed', '30.00', true, tracked([{ tracking_provider: 'usps', custom_tracking_link: '', tracking_number: ' 9400111 ' }])),
+          order('2003', 'completed', '30.00', true, tracked([{ custom_tracking_link: 'http://track.example/1', tracking_number: 'X1' }])),
+          order('2004', 'processing', '30.00', true, { meta_data: [{ id: 2, key: '_billing_phone', value: '555' }] }),
+        ], { headers: { 'x-wp-totalpages': '1' } })
+      : woo(url, init)) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT id, tracking, tracking_url AS url FROM orders WHERE store_id = 'pawsome' AND id GLOB 'woo-200*' ORDER BY id").all()).toEqual([
+    { id: 'woo-2001', tracking: 'YT123', url: 'https://www.yuntrack.com/parcelTracking?id=YT123' },
+    { id: 'woo-2002', tracking: '9400111', url: null }, // a built-in carrier: the orders API links it on 17TRACK
+    { id: 'woo-2003', tracking: 'X1', url: null }, // only https links
+    { id: 'woo-2004', tracking: null, url: null },
+  ]);
+});

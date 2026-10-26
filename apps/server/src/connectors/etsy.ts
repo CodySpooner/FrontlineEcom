@@ -122,7 +122,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       );
       const photo = (l: Listing) => [...(l.images ?? [])].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))[0]?.url_570xN ?? null;
       for (const l of listings) prod.run(storeId, `etsy-${l.listing_id}`, l.title, photo(l), money(l.price), l.state === 'sold_out' ? 0 : l.quantity, LISTING_STATUS[l.state] ?? 'archived');
-      // ponytail: Etsy has no unit costs, so Etsy orders add revenue with cogs 0.
+      // Etsy has no unit costs: lines cost the owner's unit cost for the product (setOrderItems), else nothing.
       const ord = db.prepare(
         `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking), tax = excluded.tax`,

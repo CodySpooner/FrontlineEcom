@@ -237,7 +237,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         const inventory = (p.skus ?? []).flatMap((k) => k.inventory ?? []).reduce((a, i) => a + i.quantity, 0);
         prod.run(storeId, `tt-${p.id}`, p.title, Number(price?.sale_price ?? price?.tax_exclusive_price ?? 0), inventory, PRODUCT_STATUS[p.status] ?? 'archived');
       }
-      // ponytail: TikTok has no unit costs, so TikTok orders add revenue with cogs 0.
+      // TikTok has no unit costs: lines cost the owner's unit cost for the product (setOrderItems), else nothing.
       const ord = db.prepare(
         `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking), tax = excluded.tax`,

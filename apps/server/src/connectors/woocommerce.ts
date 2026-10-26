@@ -33,6 +33,20 @@ interface WooOrder {
   line_items?: { product_id: number; quantity: number; total: string; cost_of_goods_sold?: { value: number } }[];
   /** Only when the store has WooCommerce's Cost of Goods Sold feature on (Settings → Advanced → Features, Woo 9.5+). */
   cost_of_goods_sold?: { total_value: number };
+  meta_data?: { key: string; value: unknown }[];
+}
+
+/**
+ * An order's first tracking number, from the Shipment Tracking extension's order meta (Advanced Shipment Tracking writes
+ * the same key). A custom carrier's link has `%1$s` for the number; a built-in carrier's has none stored (null).
+ */
+function wooTracking(o: WooOrder) {
+  const items = o.meta_data?.find((m) => m.key === '_wc_shipment_tracking_items')?.value;
+  const t = (Array.isArray(items) ? items : []).find((i) => typeof i?.tracking_number === 'string' && i.tracking_number.trim());
+  if (!t) return { number: null, url: null };
+  const number = String(t.tracking_number).trim();
+  const url = typeof t.custom_tracking_link === 'string' ? t.custom_tracking_link.replaceAll('%1$s', encodeURIComponent(number)) : '';
+  return { number, url: url.startsWith('https://') ? url : null };
 }
 
 interface WooProduct {
@@ -183,10 +197,11 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         const status: ProductStatus = p.status === 'publish' ? 'active' : p.status === 'trash' ? 'archived' : 'draft';
         prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), variationStock.get(p.id)?.stock ?? p.stock_quantity ?? 0, (variationStock.get(p.id)?.tracked ?? (p.manage_stock !== false && (p.backorders ?? 'no') === 'no')) ? 1 : 0, status);
       }
-      // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking needs a plugin.
+      // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking from a tracking plugin.
       const ord = db.prepare(
-        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, cogs = excluded.cogs, tax = excluded.tax`,
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, cogs = excluded.cogs, tax = excluded.tax,
+           tracking = coalesce(excluded.tracking, tracking), tracking_url = coalesce(excluded.tracking_url, tracking_url)`,
       );
       const days = new Set<string>();
       for (const o of orders) {
@@ -200,7 +215,8 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         const total = rate * Math.max(0, Number(o.total) + (o.refunds ?? []).reduce((a, r) => a + Number(r.total), 0)); // net of partial refunds
         // A refund gives back its share of the tax. ponytail: pro rata, Woo's order list doesn't split a refund's tax out.
         const tax = Number(o.total) > 0 ? (rate * Number(o.total_tax ?? 0) * total) / (rate * Number(o.total)) : 0;
-        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', Number(o.cost_of_goods_sold?.total_value ?? 0), day, Math.round(tax * 100) / 100);
+        const tracking = wooTracking(o);
+        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', tracking.number, Number(o.cost_of_goods_sold?.total_value ?? 0), day, Math.round(tax * 100) / 100, tracking.url);
         setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total) * rate, cost: Number(li.cost_of_goods_sold?.value ?? 0) })));
       }
       rebuildRevenue(db, storeId, days);
