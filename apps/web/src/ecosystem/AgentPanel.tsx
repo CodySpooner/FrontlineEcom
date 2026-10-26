@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Link } from 'react-router';
 import { AGENT_ROLES, OFFICE_DEPARTMENTS, OFFICE_DESKS, type Agent, type OfficeSeat } from '@frontline/shared';
 import { useCancelRun, useRuns, useUpdateAgent } from '../api/client';
@@ -5,8 +6,10 @@ import { Badge, Button, Dialog, ErrorState, LoadingState, buttonClass } from '..
 import { ago, cents } from '../lib/format';
 import { activeRun, workerActivity, type OfficeState } from './events';
 import { WorkerPortrait } from './WorkerPortrait';
+import { TaskComposer } from './TaskComposer';
 
 export function AgentPanel({ agent, seat, office, onClose, onFocus }: { agent: Agent; seat: OfficeSeat; office: OfficeState; onClose: () => void; onFocus: () => void }) {
+  const [assign, setAssign] = useState(false);
   const history = useRuns(agent.id), cancel = useCancelRun(), update = useUpdateAgent();
   const current = update.data ?? agent;
   const activity = workerActivity({ ...office, agents: office.agents.map((a) => a.id === agent.id ? current : a) }, agent.id);
@@ -20,13 +23,14 @@ export function AgentPanel({ agent, seat, office, onClose, onFocus }: { agent: A
     <dl className="eco-details"><dt>Model</dt><dd>{agent.engine?.provider === 'demo' ? 'Demo engine · no API cost' : agent.engine?.model ?? 'Managed by the agent engine'}</dd><dt>Permissions</dt><dd>{agent.autonomy ?? 'ask'} · existing approval policy</dd><dt>Status</dt><dd>{activity.status.replaceAll('_', ' ')}</dd><dt>Current task</dt><dd>{activity.run && activeRun(activity.run) ? activity.run.task : 'No active task'}</dd>{activity.tool && <><dt>Current tool</dt><dd>{activity.tool}</dd></>}{recent && <><dt>Latest activity</dt><dd>{recent.summary}<small>{ago(recent.at)}</small></dd></>}</dl>
     <div className="eco-panel-actions">
       <Link className={buttonClass('primary', 'sm')} to={base}>Chat with Agent</Link>
-      <Link className={buttonClass('ghost', 'sm')} to={base}>Assign Task</Link>
+      <Button size="sm" onClick={() => setAssign(!assign)} aria-expanded={assign}>Assign Task</Button>
       <Link className={buttonClass('ghost', 'sm')} to={`${base}?tab=history`}>View Activity History</Link>
       <Link className={buttonClass('ghost', 'sm')} to={`${base}?tab=settings`}>Configure Agent</Link>
       <Button size="sm" onClick={onFocus}>Focus Camera</Button>
       <Button size="sm" disabled={update.isPending} onClick={() => update.mutate({ id: agent.id, enabled: current.status === 'offline' })}>{current.status === 'offline' ? 'Resume agent' : 'Pause agent'}</Button>
       {activity.run && activeRun(activity.run) && <Button size="sm" disabled={cancel.isPending} onClick={() => cancel.mutate(activity.run!.id)}>Cancel task</Button>}
     </div>
+    {assign && <TaskComposer agent={current} office={office} />}
     {(cancel.error || update.error) && <ErrorState message={(cancel.error ?? update.error)!.message} />}
     {cancel.isSuccess && <p role="status" className="eco-profile-copy">Task cancelled.</p>}
     <h3 className="eco-panel-heading">Recent performance · latest 50 runs</h3>
