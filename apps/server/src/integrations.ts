@@ -111,7 +111,9 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
     if (taken) return `This ${spec.name} account is already connected to ${taken.name}. An ad account feeds one store: disconnect it there first.`;
   }
 
-  const old = existing ? (JSON.parse(String(existing.settings_json)) as Record<string, string>) : {};
+  // Before a disconnect, the shop it was (its synced data stays): another shop now still drops that data.
+  const was = existing?.settings_json ?? db.prepare('SELECT value_json FROM settings WHERE key = ?').get(`shop:${id}`)?.value_json;
+  const old = was ? (JSON.parse(String(was)) as Record<string, string>) : {};
   const otherShop = (SHOP_KEYS[kind] ?? []).some((k) => old[k] !== undefined && bare(old[k]) !== bare(settings[k]));
 
   tx(db, () => {
@@ -128,7 +130,12 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
   return toIntegration(db.prepare('SELECT * FROM integrations WHERE id = ?').get(id)!, key);
 }
 
-export const deleteIntegration = (db: Db, id: string) => db.prepare('DELETE FROM integrations WHERE id = ?').run(id).changes > 0;
+/** Disconnects; the synced data stays, and which shop it came from is kept for the next connect (see saveIntegration). */
+export function deleteIntegration(db: Db, id: string) {
+  const r = db.prepare('DELETE FROM integrations WHERE id = ? RETURNING settings_json').get(id);
+  if (r) db.prepare('INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json').run(`shop:${id}`, String(r.settings_json));
+  return r !== undefined;
+}
 
 /** For connectors only: settings + decrypted secrets. Never send this to the client or a log. Undefined = don't sync. */
 export function getCredentials(db: Db, key: Buffer, kind: IntegrationKind, storeId?: string): Record<string, string> | undefined {

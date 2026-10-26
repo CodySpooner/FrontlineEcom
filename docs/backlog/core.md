@@ -172,12 +172,13 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-87 Paid orders older than the store's newest (paid later, or another platform's) never reached the live feed.
 - [x] CORE-88 A CJ tracking number kept the platform's carrier link for another parcel.
 - [x] CORE-89 A store that went live kept its demo competitors and their made-up prices.
-- [ ] CORE-90 Disconnecting a shop, then connecting another (or another platform), mixes the two shops' data.
+- [x] CORE-90 Disconnecting a shop, then connecting another (or another platform), mixes the two shops' data.
 - [ ] CORE-91 A recreated store takes a deleted one's id and its sync bookkeeping (Shopify funnel, Amazon read positions, action log).
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-90: a reconnect to another shop drops the old shop's orders, products and revenue (`forgetPlatform`), but it compared against the integration row, which a disconnect deletes while the synced data stays: disconnect `old-shop`, connect `new-shop`, and the new shop backfilled on top of the old one's (a colliding `#1001` overwritten, the rest summed). A disconnect now keeps the shop's settings under `shop:<integration id>` and the next connect compares against those. Left as is: disconnecting Shopify and connecting WooCommerce keeps the Shopify history (a store that moved platform; ids don't collide), and a TikTok Shop connected with the shop field blank can't tell a newly named shop from the same one.
 - 2026-10-26 — CORE-89: going live wiped a demo store's orders and products but not its seeded `demo-*` competitors, so the weekly price check and the price-cut mission proposed price tests on the live store from invented competitor prices. `switchToReal` drops them (their snapshots cascade); competitors the owner added stay. Also re-checked M4: `pnpm package` builds `FrontlineEcom-Setup-0.1.2.exe` (unsigned, as before).
 - 2026-10-26 — CORE-88: the CJ sync replaced an order's tracking number but kept the platform's `tracking_url`, so an order whose platform had another parcel's number linked to that parcel's carrier page. A different CJ number now clears the link (the order falls back to 17track's); the same number keeps it.
 - 2026-10-26 — CORE-86/87 (review): `orderValues` subtracted refund lines from a cancelled order too (50 → −50: "refund 100"); refund lines now count only while it's paid, as in `rebuildRevenue`. `announceOrders` took only orders newer than the store's newest before the sync, across platforms: a TikTok Shop order synced after a newer Shopify one (most of them on a store with both, Shopify polling every 2 min, TikTok every 10), or a Woo order paid after a later one was placed, never showed. It now announces the last hour's paid orders the store didn't have paid before the sync.

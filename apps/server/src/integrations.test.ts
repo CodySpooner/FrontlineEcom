@@ -7,7 +7,7 @@ import type { Integration } from '@frontline/shared';
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { getCredentials, saveIntegration } from './integrations';
+import { deleteIntegration, getCredentials, saveIntegration } from './integrations';
 import { decrypt, encrypt, loadKey } from './secrets';
 import { rebuildRevenue, switchToReal } from './connectors/common';
 
@@ -167,6 +167,22 @@ test("reconnecting a store to another shop drops the old shop's orders, products
   amazon('A1F83G8C2ARO7P');
   expect(revenue('2026-10-24')).toBe(0);
   expect(ids('orders')).toEqual(['tt-5']);
+});
+
+test("disconnecting, then connecting another shop, still drops the old shop's data; the same shop keeps it", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow');
+  db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES ('glow', '#1001', '2026-10-25T12:00:00Z', 100, 'paid', 'unfulfilled', 0, '2026-10-25')").run();
+  const shopify = (shopDomain: string) => saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain, accessToken: 't' } });
+  const orders = () => db.prepare("SELECT id FROM orders WHERE store_id = 'glow'").all().map((r) => r.id);
+  shopify('old-shop.myshopify.com');
+  deleteIntegration(db, 'shopify:glow');
+  shopify('old-shop.myshopify.com');
+  expect(orders()).toEqual(['#1001']);
+  deleteIntegration(db, 'shopify:glow');
+  shopify('new-shop.myshopify.com');
+  expect(orders()).toEqual([]);
 });
 
 test('"sync now" marks an integration changed, so the sync loop picks it up on its next tick', async () => {
