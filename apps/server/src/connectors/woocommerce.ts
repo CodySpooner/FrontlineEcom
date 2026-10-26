@@ -4,10 +4,10 @@ import { tx, type Db } from '../db';
 import { convertRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
-import type { NewProduct } from './shopify';
+import type { NewProduct, ProductPage } from './shopify';
 
 // WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
-// approved product writes below (createWooProducts, setWooProductPrice).
+// approved product writes below (createWooProducts, setWooProductPrice, publishWooProductPage).
 /** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
 const BACKFILL_DAYS = 730;
 
@@ -61,6 +61,13 @@ async function wooCall<T>(db: Db, key: Buffer, storeId: string, method: 'GET' | 
   if (res.status === 401 || res.status === 403) throw new Error('WooCommerce refused the change: the key is read-only. Create a Read/Write key (WooCommerce → Settings → Advanced → REST API) and enter it in Integrations');
   if (!res.ok || !json) throw new Error(`WooCommerce: ${json?.message ?? `HTTP ${res.status}`}`);
   return json;
+}
+
+/** 'woo-123' → '123'; another platform's product id throws. */
+function wooIdOf(productId: string) {
+  const id = /^woo-(\d+)$/.exec(productId)?.[1];
+  if (!id) throw new Error(`${productId} is not a WooCommerce product`);
+  return id;
 }
 
 /** Woo's *_gmt dates have no zone suffix. */
@@ -197,8 +204,7 @@ export async function createWooProducts(db: Db, key: Buffer, storeId: string, pr
 export async function setWooProductPrice(db: Db, key: Buffer, storeId: string, productId: string, { price, compareAt }: { price: number; compareAt?: number | null }, fetchFn: Fetch = fetch) {
   if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be more than 0');
   if (compareAt != null && !(Number.isFinite(compareAt) && compareAt > 0)) throw new Error('Compare-at price must be more than 0');
-  const wooId = /^woo-(\d+)$/.exec(productId)?.[1];
-  if (!wooId) throw new Error(`${productId} is not a WooCommerce product`);
+  const wooId = wooIdOf(productId);
   const shown = await logAction(db, storeId, 'price_change', productId, { price, ...(compareAt !== undefined ? { compareAt } : {}) }, async () => {
     const cur = await wooCall<{ type: string; regular_price: string; sale_price: string }>(db, key, storeId, 'GET', `products/${wooId}`, undefined, fetchFn);
     // One price for every variation would flatten e.g. S 20 / XL 25.
@@ -208,4 +214,16 @@ export async function setWooProductPrice(db: Db, key: Buffer, storeId: string, p
     return was > price ? was : null;
   });
   db.prepare('UPDATE products SET price = ?, compare_at = ? WHERE store_id = ? AND id = ?').run(price, shown, storeId, productId);
+}
+
+/**
+ * Replaces a live product's title and description. Call only for an approved request. Same contract as Shopify's
+ * publishProductPage. ponytail: SEO title/description are skipped, Woo has none without an SEO plugin (Yoast meta).
+ */
+export async function publishWooProductPage(db: Db, key: Buffer, storeId: string, productId: string, page: ProductPage, fetchFn: Fetch = fetch) {
+  const wooId = wooIdOf(productId);
+  await logAction(db, storeId, 'product_page_publish', productId, { title: page.title }, () =>
+    wooCall(db, key, storeId, 'PUT', `products/${wooId}`, { name: page.title, description: page.descriptionHtml }, fetchFn),
+  );
+  db.prepare('UPDATE products SET title = ? WHERE store_id = ? AND id = ?').run(page.title, storeId, productId);
 }

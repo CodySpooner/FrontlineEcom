@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
-import { createWooProducts, setWooProductPrice, syncWooCommerce, wooSite, wpZone } from './woocommerce';
+import { createWooProducts, publishWooProductPage, setWooProductPrice, syncWooCommerce, wooSite, wpZone } from './woocommerce';
 
 const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
@@ -226,4 +226,14 @@ test('a Woo price change keeps, sets or clears the compare-at as asked, and leav
   expect(row('woo-42')).toEqual({ price: 22, compare_at: 35 });
   await expect(setWooProductPrice(db, key, 'pawsome', 'woo-43', { price: 10 }, fetchFn)).rejects.toThrow('is a variable product');
   await expect(setWooProductPrice(db, key, 'pawsome', '8001', { price: 10 }, fetchFn)).rejects.toThrow('not a WooCommerce product');
+});
+
+test("an approved product page replaces the Woo product's title and description", async () => {
+  const db = setup();
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('pawsome', 'woo-42', 'Old', 25, 0, 1, 'active')").run();
+  const { fetchFn, writes } = fakeWooWrites();
+  await publishWooProductPage(db, key, 'pawsome', 'woo-42', { title: 'Travel Bowl Pro', descriptionHtml: '<p>Folds flat</p>', seoTitle: 'ignored' }, fetchFn);
+  expect(writes).toEqual([{ method: 'PUT', path: 'products/42', body: { name: 'Travel Bowl Pro', description: '<p>Folds flat</p>' } }]);
+  expect(db.prepare("SELECT title FROM products WHERE store_id = 'pawsome' AND id = 'woo-42'").get()?.title).toBe('Travel Bowl Pro');
+  expect(db.prepare("SELECT action, target FROM action_log WHERE store_id = 'pawsome'").all()).toEqual([{ action: 'product_page_publish', target: 'woo-42' }]);
 });
