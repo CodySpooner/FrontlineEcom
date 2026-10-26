@@ -202,7 +202,8 @@ export interface AnalyticsSummary {
   deltas: MetricDeltas;
   /** One point per day, oldest first (UI buckets 1Y into weeks). */
   series: MetricPoint[];
-  byStore: { storeId: string; totals: MetricTotals; deltas: MetricDeltas }[];
+  /** `previous` like the top-level one: all zero for a store with nothing in the previous period (its deltas are then 0). */
+  byStore: { storeId: string; totals: MetricTotals; previous: MetricTotals; deltas: MetricDeltas }[];
   /** Period totals. Sessions, add to carts and checkouts come from GA4 (or demo data); 0 until it is connected. */
   funnel: Funnel;
   /**

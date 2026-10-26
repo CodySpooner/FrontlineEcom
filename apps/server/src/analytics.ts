@@ -63,7 +63,8 @@ export function summarize(rows: MetricRow[], { range, to, storeIds, todayFractio
   });
   const byStore = storeIds.map((storeId) => {
     const t = totalsOf(cur.filter((r) => r.storeId === storeId));
-    return { storeId, totals: t, deltas: deltasOf(t, totalsOf(prev.filter((r) => r.storeId === storeId))) };
+    const p = totalsOf(prev.filter((r) => r.storeId === storeId));
+    return { storeId, totals: t, previous: p, deltas: deltasOf(t, p) };
   });
   const sum = (k: 'sessions' | 'addToCarts' | 'checkouts') => cur.reduce((a, r) => a + (r[k] ?? 0), 0);
   const funnel = { sessions: sum('sessions'), addToCarts: sum('addToCarts'), checkouts: sum('checkouts'), orders: totals.orders };

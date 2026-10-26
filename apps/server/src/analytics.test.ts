@@ -34,7 +34,7 @@ test('summary compares against the immediately preceding period of the same leng
   expect(s.series).toHaveLength(7);
   expect(s.series[0]).toEqual({ date: '2026-10-26', revenue: 300, profit: 140, adSpend: 100, roas: 3, orders: 6, aov: 50 });
   expect(s.series[3]).toEqual({ date: '2026-10-29', revenue: 0, profit: 0, adSpend: 0, roas: 0, orders: 0, aov: 0 });
-  expect(s.byStore.map((b) => [b.storeId, b.totals.revenue, b.deltas.revenue])).toEqual([['a', 300, 200], ['b', 100, 0]]);
+  expect(s.byStore.map((b) => [b.storeId, b.totals.revenue, b.previous.revenue, b.deltas.revenue])).toEqual([['a', 300, 100, 200], ['b', 100, 100, 0]]);
 });
 
 test('negative previous profit gives a sign-correct delta', () => {
