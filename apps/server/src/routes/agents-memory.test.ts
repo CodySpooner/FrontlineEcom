@@ -1,4 +1,4 @@
-import { adjustConfidence, deleteMemory, listMemory, parseLearnings, promotionCandidates, searchMemory, updateMemory, writeMemory, type NewMemory } from '@frontline/agents';
+import { adjustConfidence, deleteMemory, listMemory, MEMORY_CAP, parseLearnings, promotionCandidates, searchMemory, updateMemory, writeMemory, type NewMemory } from '@frontline/agents';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { openDb, type Db } from '../db';
 import { insertStore } from '../stores';
@@ -18,6 +18,19 @@ beforeEach(() => {
 });
 
 describe('store memory', () => {
+  test('past the cap the oldest unproven agent learnings go; proven ones, pins, preferences and owner notes stay', () => {
+    writeMemory(db, mem('Bundles lift AOV 18%', { confidence: 0.9 }), daysAgo(400));
+    const pinned = writeMemory(db, mem('Pinned by the owner'), daysAgo(399));
+    updateMemory(db, pinned.id, { pinned: true });
+    writeMemory(db, mem('Owner wants no emojis', { kind: 'preference' }), daysAgo(398));
+    writeMemory(db, mem('We ship from Austin', { agentId: 'owner', kind: 'fact' }), daysAgo(397));
+    for (let i = 0; i < MEMORY_CAP; i++) writeMemory(db, mem(`Learning number ${i}`), daysAgo(300 - i / 10));
+    const texts = listMemory(db, 'glow').map((m) => m.text);
+    expect(texts).toHaveLength(MEMORY_CAP + 3); // the cap, plus the pin, the preference and the owner's note
+    expect(texts).toEqual(expect.arrayContaining(['Bundles lift AOV 18%', 'Pinned by the owner', 'Owner wants no emojis', 'We ship from Austin', `Learning number ${MEMORY_CAP - 1}`]));
+    expect(texts).not.toContain('Learning number 0'); // the oldest unproven one made room
+  });
+
   test('same text merges instead of duplicating', () => {
     const a = writeMemory(db, mem('LED masks convert best with before/after UGC', { tags: ['creatives'] }), now);
     const b = writeMemory(db, mem('led masks convert best with before/after UGC ', { confidence: 0.9, evidence: '3.1 ROAS vs 1.4', tags: ['led'] }), now);

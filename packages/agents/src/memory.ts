@@ -37,8 +37,19 @@ export function writeMemory(db: DatabaseSync, m: NewMemory, now = new Date()): S
   db.prepare(
     'INSERT INTO store_memory (id, store_id, agent_id, kind, text, evidence, confidence, tags, created_at, run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
   ).run(id, m.storeId, m.agentId, m.kind, text, m.evidence ?? null, clamp(m.confidence), JSON.stringify(m.tags ?? []), now.toISOString(), m.runId ?? null);
-  return getMemory(db, id)!;
+  const written = getMemory(db, id)!;
+  // The daily jobs would pile up thousands (an unpaged Knowledge Base, a pairwise promotion scan): past the cap the
+  // weakest agent facts and learnings go, oldest first, proven ones (0.8+) last. Pins, preferences and the owner's notes stay.
+  db.prepare(
+    `DELETE FROM store_memory WHERE id IN (
+       SELECT id FROM store_memory WHERE store_id = ? AND agent_id != 'owner' AND kind IN ('fact', 'learning') AND pinned = 0
+       ORDER BY confidence >= 0.8 DESC, created_at DESC, rowid DESC LIMIT -1 OFFSET ?)`,
+  ).run(m.storeId, MEMORY_CAP);
+  return written;
 }
+
+/** Agent-written facts and learnings a store keeps (writeMemory). */
+export const MEMORY_CAP = 300;
 
 export function getMemory(db: DatabaseSync, id: string): StoreMemory | undefined {
   const row = db.prepare('SELECT * FROM store_memory WHERE id = ?').get(id);

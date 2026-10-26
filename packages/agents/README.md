@@ -29,7 +29,8 @@ outcome checks.
 6. **Carrying it out** (`apps/server/src/routes/agents-actions.ts`): `OUTLIVE_RUN` kinds are applied by the server
    when approved, even after the run ended. Writers are routed by platform (`onStore` in `routes/agents.ts`). A
    change approved on stale numbers (the price moved, or an ad change days late) is skipped and the owner is told.
-7. **Learning** (`memory.ts`): a run that used tools reflects once and writes up to 5 memories. Outcome checks
+7. **Learning** (`memory.ts`): a run that used tools reflects once and writes up to 5 memories (a store keeps its
+   300 strongest agent facts and learnings; pins, preferences and the owner's notes always stay). Outcome checks
    (`routes/agents-gamification.ts`, on dashboard reads and hourly) judge approved changes on real data later:
    - ads: 3 days
    - products: 14 days

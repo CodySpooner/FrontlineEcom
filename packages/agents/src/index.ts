@@ -17,6 +17,7 @@ export {
   parseLearnings,
   promotionCandidates,
   REFLECTION_PROMPT,
+  MEMORY_CAP,
   type NewMemory,
 } from './memory';
 export { APP_TOOLS, OUTLIVE_RUN, budgetAddedToday, cash, toolsFor, callTool, requestApproval, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
