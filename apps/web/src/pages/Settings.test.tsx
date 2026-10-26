@@ -75,3 +75,12 @@ describe('your data', () => {
     expect(fetch.mock.calls.some(([url]) => String(url).includes('open-data-folder'))).toBe(false);
   });
 });
+
+describe('Caps with no stores', () => {
+  it('says caps come with a store instead of loading forever', async () => {
+    const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, sound: false, notifications: { approvals: true, agentDone: true, errors: true, digest: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
+    stubApi((url) => (url === '/api/stores' ? [] : url === '/api/settings' ? settings : undefined));
+    renderApp(<Settings />, '/settings');
+    expect(await screen.findByText('Caps are set per store: add a store above, then set its limits here.')).toBeTruthy();
+  });
+});

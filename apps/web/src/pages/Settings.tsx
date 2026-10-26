@@ -103,7 +103,8 @@ function StoreRow({ s, onEdit }: { s: Store; onEdit: () => void }) {
 }
 
 function Caps() {
-  const stores = useStores().data ?? [];
+  const all = useStores();
+  const stores = all.data ?? [];
   const [picked, setPicked] = useState('');
   const storeId = picked || stores[0]?.id || '';
   const q = useCaps(storeId);
@@ -126,7 +127,9 @@ function Caps() {
         )
       }
     >
-      {!storeId || q.isPending ? (
+      {all.data?.length === 0 ? (
+        <p className="text-[13px] text-muted">Caps are set per store: add a store above, then set its limits here.</p>
+      ) : !storeId || q.isPending ? (
         <LoadingState rows={4} />
       ) : q.isError || !q.data ? (
         <ErrorState message="Couldn't load the caps." onRetry={() => q.refetch()} />

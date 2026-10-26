@@ -330,6 +330,8 @@ Orca's browser against the reference before ticking it.
 - [x] UI-130 With every store deleted (Settings → Delete store), the Agents page's "Connect a store" went to Integrations,
       which then showed no Store Platforms or Ad Networks at all: a dead end. "Add a store" now goes to Settings (where stores
       are added) from Agents, the Dashboard's empty agents panel and a "No stores yet" panel on Integrations.
+- [x] UI-131 With no stores, Settings' Caps & Autopilot showed loading skeletons forever (`!storeId || q.isPending`). It now
+      says "Caps are set per store: add a store above, then set its limits here."
 
 ## Blocked
 
@@ -505,3 +507,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-128: Brief uses `byHand` against PRODUCT_PAGE_PLATFORMS (no page at all: Amazon, TikTok Shop, Walmart) and PRODUCT_WRITE_PLATFORMS (store pages: Etsy gets "only product pages publish from here"). Demo stores show nothing. New Builder test (Amazon, Etsy, Shopify). Orca at 800px with a client-side patch marking Peak Fit (TikTok Shop) connected: "The app can't publish pages to TikTok Shop stores yet: the Store Developer writes the page in chat for you to add by hand." under Store. Patch dropped by reload
 - 2026-10-26 — UI-129: every page has one h1 first and, after this, no skipped levels (Orca audit of all 14 routes). Research's count line is an `h2` styled 12px/400/muted like the old `p`, and reads "1 product" for one result. New Research test (h2 "1 product, best first" over the h3 card). My Lists already had list titles as h2
 - 2026-10-26 — UI-130: audited every page with zero stores on a throwaway API (temp FRONTLINE_DATA_DIR, FRONTLINE_AGENT_ENGINE=fake, port 18797) + Vite (15183), the 3 seeded stores deleted there only; the dev DB kept its 3. Integrations renders a Store Platforms panel with "No stores yet" + "Add a store" when `useStores().data` is empty (not while loading). New Agents and Integrations tests. Orca: all three links go to /settings, clicking one lands there
+- 2026-10-26 — UI-131: found on the UI-130 zero-store instance. New Settings test (red on the old code, green now). The rest of the zero-store sweep is clean: Builder, Competitors, Creative and Research disable their submit with no store, Knowledge's Store memory shows its empty state, every other page shows zeros or its empty state. Orca at 800px: the line under the Caps heading, Stores' "Add store" above it
