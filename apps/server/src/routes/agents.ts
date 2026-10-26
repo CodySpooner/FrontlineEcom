@@ -27,6 +27,7 @@ import {
   listAgents,
   listMemory,
   listNicheLearnings,
+  addNicheLearning,
   nicheKey,
   listRuns,
   getRun,
@@ -279,6 +280,12 @@ export function runManager(db: Db): RunManager {
       if (a.action.kind === 'store.publish_page') {
         const d = getPageDraft(db, String((a.action.payload as { draftId?: unknown })?.draftId));
         if (d) return publishDraft(db, d, pushPage(db));
+      }
+      if (a.action.kind === 'niche.promote_learning') {
+        const p = (a.action.payload ?? {}) as { niche?: unknown; text?: unknown; evidence?: unknown };
+        if (typeof p.niche === 'string' && typeof p.text === 'string') {
+          return addNicheLearning(db, { niche: p.niche, text: p.text, ...(typeof p.evidence === 'string' ? { evidence: p.evidence } : {}), storeId: a.storeId });
+        }
       }
     });
   }

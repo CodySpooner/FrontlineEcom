@@ -933,7 +933,7 @@ function autopilotUsedToday(db: DatabaseSync, storeId: string, kind: string): nu
 const PATIENCE_MS = 10 * 60_000;
 
 /** Approval kinds the server carries out when approved (apps/server/src/routes/agents.ts), whether or not the run that asked is still alive. */
-export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'store.publish_theme', 'store.set_price', 'ads.set_budget', 'ads.pause_campaign'];
+export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'store.publish_theme', 'store.set_price', 'ads.set_budget', 'ads.pause_campaign', 'niche.promote_learning'];
 
 /** Request kinds only their own tool may create (request_approval refuses them). */
 const OWN_TOOL: Record<string, string> = {

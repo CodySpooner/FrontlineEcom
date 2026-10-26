@@ -1,7 +1,8 @@
-import { awardXp, blendedRoas, cash, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, once, profitStreak, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
+import { awardXp, blendedRoas, cash, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, listNicheLearnings, nicheKey, once, profitStreak, promotionCandidates, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
 import { AGENT_ROLES, type MetricTotals, type Mission } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
+import { approvalsHook } from '../approvals';
 import { addDays, localDate } from '../dates';
 import { cachedRate, fxFor } from '../fx';
 import type { Db } from '../db';
@@ -304,6 +305,30 @@ function missions(db: Db, storeIds?: string[]): Mission[] {
     });
 }
 
+/**
+ * A learning live stores of one niche each found on their own becomes one request (once per text) to share it with every
+ * store of the niche: no Claude run needed. Demo stores' learnings come from simulated numbers, so only live stores count.
+ */
+export function proposeNichePromotions(db: Db) {
+  const live = new Map(listStores(db).filter((s) => s.connected && s.niche !== 'other').map((s) => [s.id, s]));
+  for (const niche of new Set([...live.values()].map((s) => s.niche))) {
+    for (const c of promotionCandidates(db, niche)) {
+      const stores = c.storeIds.flatMap((id) => live.get(id) ?? []);
+      if (stores.length < 2 || !live.has(c.storeIds[0]!) || !once(db, `promote:${niche}:${c.text.toLowerCase()}`)) continue;
+      const key = nicheKey(stores[0]!);
+      if (listNicheLearnings(db, key, 1000).some((l) => l.text.toLowerCase() === c.text.trim().toLowerCase())) continue;
+      const names = stores.map((s) => s.name).join(', ');
+      approvalsHook(db).create({
+        storeId: stores[0]!.id,
+        agentId: `${stores[0]!.id}:market_analyst`,
+        title: `Share a learning with all ${niche} stores`,
+        reason: `${c.text} Found on its own in ${names} (confidence ${c.confidence.toFixed(1)}). Approved, every ${niche} store's squad sees it.`.slice(0, 400),
+        action: { kind: 'niche.promote_learning', payload: { niche: key, text: c.text, evidence: `Held in ${names}` } },
+      });
+    }
+  }
+}
+
 /** Every outcome check, then the achievements they (and everything else) may have unlocked. */
 function judge(db: Db) {
   checkAdOutcomes(db);
@@ -319,6 +344,7 @@ export function startOutcomeLoop(db: Db, everyMs = 3_600_000) {
   const check = () => {
     try {
       judge(db);
+      proposeNichePromotions(db); // a pairwise scan over the niche's learnings: hourly, not on every dashboard read
     } catch (e) {
       log('error', 'outcome check failed', { error: e instanceof Error ? e.message : String(e) });
     }
