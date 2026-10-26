@@ -3,7 +3,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import type { Agent, AgentEvent, AgentRole, Store } from '@frontline/shared';
 import { describe, expect, test } from 'vitest';
-import { APP_TOOLS, claudeEngine, defaultEngine, fakeEngine, ROLES, runAgent, toAgentEvents, type RunInput, type ToolEnv } from './index';
+import { APP_TOOLS, claudeEngine, defaultEngine, estimate, fakeEngine, ROLES, runAgent, toAgentEvents, type RunInput, type ToolEnv } from './index';
 
 const store: Store = { id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'America/Chicago', color: '#ff8f98', connected: false };
 const agent: Agent = { id: 'glow:market_analyst', storeId: 'glow', role: 'market_analyst', status: 'idle', level: 1, xp: 0 };
@@ -118,6 +118,7 @@ describe('Claude engine', () => {
 
   test('maps failed results to error events', () => {
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }))).toEqual([{ type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.' }]);
+    expect(estimate({ input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 10_000, output_tokens: 500 })).toBeCloseTo(0.026);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: ['x'] }))[0]).toMatchObject({ message: expect.stringMatching(/^Stopped: the run used its share of today's AI budget/) });
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_during_execution', errors: ['boom', 'bang'] }))).toEqual([{ type: 'error', message: 'boom; bang' }]);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in' }))).toEqual([{ type: 'error', message: 'Not logged in' }]);
@@ -163,6 +164,14 @@ describe('Claude engine', () => {
     expect(ok.at(-1)).toEqual({ type: 'done', sessionId: 'abc', usage: { inputTokens: 10, outputTokens: 2, costUsd: 0.3 } });
     const stopped = await collect(runAgent(input, engine(result({ subtype: 'error_max_turns', is_error: true, errors: [] }))));
     expect(stopped.at(-1)).toMatchObject({ type: 'error', usage: { costUsd: 0.5 } });
+  });
+
+  test('reports its running spend from each assistant message, once per message id', async () => {
+    const said = (id: string, output_tokens: number) => sdk({ type: 'assistant', parent_tool_use_id: null, message: { id, content: [], usage: { input_tokens: 1000, output_tokens } } });
+    const engine = claudeEngine({ query: () => (async function* () { yield* [said('m1', 0), said('m1', 500), said('m2', 1000)]; })() });
+    const spent: number[] = [];
+    await collect(runAgent({ ...input, onSpend: (usd) => spent.push(usd) }, engine));
+    expect(spent.map((n) => n.toFixed(3))).toEqual(['0.004', '0.014', '0.038']); // m1 counted once, at its final count
   });
 
   test('caps every run at 40 turns and at what is left of the daily AI budget', async () => {

@@ -30,7 +30,7 @@ export type RunManager = ReturnType<typeof createRunManager>;
 export function createRunManager(opts: RunManagerOptions) {
   const { db, env, concurrency = 3, perStore = 2 } = opts;
   const engine = opts.engine ?? defaultEngine();
-  const active = new Map<string, { storeId: string; agentId: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[]; waiting?: boolean; budget?: number }>();
+  const active = new Map<string, { storeId: string; agentId: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[]; waiting?: boolean; budget?: number; spent?: number }>();
   /** Runs paused on the owner's decision don't hold a slot, so one unanswered request can't stall the store's other work. */
   // ponytail: a resumed run can briefly push past the limits; they only gate starting runs.
   const working = () => [...active.values()].filter((a) => !a.waiting);
@@ -113,15 +113,16 @@ export function createRunManager(opts: RunManagerOptions) {
   }
 
   /**
-   * What a starting run may spend: what is left of the store's daily AI budget after the shares its other runs hold, and
-   * at most a perStore-th of the cap, so the store's runs can still go side by side and never add up past it.
+   * What a starting run may spend: what is left of the store's daily AI budget (runs in flight count what they spent so
+   * far) after the unspent shares its other runs hold, and at most a perStore-th of the cap, so the store's runs can still
+   * go side by side and never add up past it.
    */
   // ponytail: like slots, a run paused on the owner holds no share, so an unanswered request can't stall the store; once
-  // decided it may take the day past the cap by at most its own share. Exact: count spend as it happens.
+  // decided it may take the day past the cap by at most the rest of its share.
   function budgetFor(storeId: string) {
     const cap = env.caps?.(storeId).agentCostPerDay;
     if (cap === undefined) return undefined;
-    const held = working().reduce((n, a) => n + (a.storeId === storeId ? (a.budget ?? 0) : 0), 0);
+    const held = working().reduce((n, a) => n + (a.storeId === storeId ? Math.max(0, (a.budget ?? 0) - (a.spent ?? 0)) : 0), 0);
     return Math.max(0, Math.min(cap / perStore, cap - costToday(db, storeId) - held));
   }
 
@@ -163,6 +164,16 @@ export function createRunManager(opts: RunManagerOptions) {
       opts.onEvent?.(run, event);
     };
 
+    // What the run has spent so far, saved as it goes: a cancel, crash or restart (no result from the engine) still counts it.
+    let ended = false;
+    let spent = 0;
+    const spend = (usd: number) => {
+      if (ended) return;
+      spent = usd;
+      const slot = active.get(run.id);
+      if (slot) slot.spent = usd;
+      db.prepare('UPDATE agent_runs SET cost_usd = ? WHERE id = ?').run(usd, run.id);
+    };
     let end: AgentEvent = { type: 'error', message: 'Agent or store not found' };
     try {
       const agent = getAgent(db, run.agentId);
@@ -179,6 +190,7 @@ export function createRunManager(opts: RunManagerOptions) {
           env: { ...env, runId: run.id },
           ...(resume ? { resume: String(resume), sessionCostUsd: sessionCost(String(resume)) } : {}),
           ...(budget !== undefined ? { budgetUsd: budget } : {}),
+          onSpend: spend,
         };
         let toolCalls = 0;
         let attempt = input;
@@ -202,7 +214,8 @@ export function createRunManager(opts: RunManagerOptions) {
     emit(end);
 
     const status: RunStatus = end.type === 'done' ? 'done' : signal.aborted ? 'cancelled' : 'error';
-    const usage = end.type === 'done' ? end.usage : (end.type === 'error' && end.usage) || { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+    ended = true;
+    const usage = end.type === 'done' ? end.usage : (end.type === 'error' && end.usage) || { inputTokens: 0, outputTokens: 0, costUsd: spent };
     db.prepare(
       `UPDATE agent_runs SET status = ?, session_id = ?, input_tokens = ?, output_tokens = ?, cost_usd = ?, error = ?, transcript_json = ?, ended_at = ?
        WHERE id = ?`,
@@ -250,7 +263,8 @@ export function createRunManager(opts: RunManagerOptions) {
     const left = input.budgetUsd === undefined ? undefined : input.budgetUsd - done.usage.costUsd;
     if (left !== undefined && left <= 0) return done;
     const sessionCostUsd = (input.sessionCostUsd ?? 0) + done.usage.costUsd;
-    for await (const event of runAgent({ ...input, task: REFLECTION_PROMPT, resume: done.sessionId, sessionCostUsd, ...(left !== undefined ? { budgetUsd: left } : {}) }, engine)) {
+    const onSpend = (usd: number) => input.onSpend?.(done.usage.costUsd + usd);
+    for await (const event of runAgent({ ...input, task: REFLECTION_PROMPT, resume: done.sessionId, sessionCostUsd, onSpend, ...(left !== undefined ? { budgetUsd: left } : {}) }, engine)) {
       if (event.type === 'text_delta') reply += event.text;
       if ((event.type === 'done' || event.type === 'error') && event.usage) usage = addUsage(usage, event.usage);
     }

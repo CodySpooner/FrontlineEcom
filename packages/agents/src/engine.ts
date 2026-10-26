@@ -18,6 +18,8 @@ export interface RunInput {
   budgetUsd?: number;
   /** What the resumed session already cost (USD). Engines report each query's own cost, so they subtract it from running totals. */
   sessionCostUsd?: number;
+  /** Told, as the run goes, what this query has spent so far (USD, estimated), so a run that never finishes still counts. */
+  onSpend?: (usd: number) => void;
 }
 
 /** Streams one agent run. Engines may throw or stop early; `runAgent` normalizes that. */

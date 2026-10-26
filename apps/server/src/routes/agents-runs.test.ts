@@ -146,6 +146,30 @@ test("each run is told what is left of the store's daily AI budget", async () =>
   expect(budgets).toEqual([0.25]);
 });
 
+test('what a run spends is saved as it goes, so a cancelled run still counts against the daily AI budget', async () => {
+  const budgets: (number | undefined)[] = [];
+  const m = manager({
+    perStore: 1,
+    engine: async function* (input) {
+      budgets.push(input.budgetUsd);
+      if (input.task === 'next') return yield { type: 'done', sessionId: 's', usage };
+      input.onSpend?.(0.3);
+      yield { type: 'text_delta', text: 'Looking…' };
+      await new Promise((r) => (input.signal?.aborted ? r(0) : input.signal?.addEventListener('abort', r)));
+    },
+  });
+  updateCaps(db, 'glow', { agentCostPerDay: 1 });
+  const long = ok(m.start('glow:copywriter', 'long'));
+  for (let i = 0; i < 50 && !getRun(db, long.id)?.usage.costUsd; i++) await new Promise((r) => setImmediate(r));
+  expect(getRun(db, long.id)?.usage.costUsd).toBe(0.3); // in flight: an app restart now would keep it
+  m.cancel(long.id);
+  await m.idle();
+  expect(getRun(db, long.id)).toMatchObject({ status: 'cancelled', usage: { costUsd: 0.3 } });
+  ok(m.start('glow:copywriter', 'next'));
+  await m.idle();
+  expect(budgets.map((b) => b?.toFixed(2))).toEqual(['1.00', '0.70']);
+});
+
 test("runs side by side share the store's daily AI budget instead of each getting all of it", async () => {
   const budgets: (number | undefined)[] = [];
   const m = manager({ engine: fakeEngine((input) => (budgets.push(input.budgetUsd), [{ type: 'done', sessionId: 's', usage: { ...usage, costUsd: 0.1 } }])) });

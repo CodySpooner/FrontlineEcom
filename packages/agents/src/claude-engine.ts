@@ -99,12 +99,27 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     // A resumed session's results carry its running total (checked 2026-10-26): this query's cost is the difference.
     const own = (e: AgentEvent): AgentEvent =>
       (e.type === 'done' || e.type === 'error') && e.usage && input.sessionCostUsd ? { ...e, usage: { ...e.usage, costUsd: Math.max(0, e.usage.costUsd - input.sessionCostUsd) } } : e;
+    const spent = new Map<string, number>(); // assistant message id → its estimated cost (the SDK repeats a message per block)
     (async () => {
-      for await (const message of messages) for (const event of toAgentEvents(message)) events.push(own(event));
+      for await (const message of messages) {
+        if (message.type === 'assistant' && message.message.usage) {
+          spent.set(message.message.id, estimate(message.message.usage));
+          input.onSpend?.([...spent.values()].reduce((a, b) => a + b, 0));
+        }
+        for (const event of toAgentEvents(message)) events.push(own(event));
+      }
     })().then(() => events.end(), events.end);
     yield* events.drain();
   };
 }
+
+/**
+ * An assistant message's cost at Claude Opus 5.5 list prices, USD per million tokens: input $4, cache write $5, cache read
+ * $0.20, output $20. The result's exact total replaces it; it's what counts for a run that never gets one (cancelled, crashed).
+ */
+// ponytail: one price list whatever FRONTLINE_AGENT_MODEL is; a cheaper model reads high, which errs on the cap's side.
+export const estimate = (u: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null }) =>
+  (u.input_tokens * 4 + (u.cache_creation_input_tokens ?? 0) * 5 + (u.cache_read_input_tokens ?? 0) * 0.2 + u.output_tokens * 20) / 1e6;
 
 /** Maps one SDK message to our events. Subagent traffic (parent_tool_use_id set) is not surfaced. */
 export function toAgentEvents(message: SDKMessage): AgentEvent[] {
