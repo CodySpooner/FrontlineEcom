@@ -419,3 +419,26 @@ test("a converted Woo order keeps the rate it was first converted at; a failed c
   expect(db.prepare("SELECT currency FROM stores WHERE id = 'pawsome'").get()?.currency).toBe('EUR');
   expect(total()).toBe(12);
 });
+
+test("a first sync's older orders in another currency are converted at their own day's ECB rate, newer ones at today's", async () => {
+  const db = setup();
+  db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-23', fetchedAt: NOW.toISOString(), rates: { EUR: 1, USD: 1.25 } }));
+  const urls: string[] = [];
+  const fetchFn = (async (url: string) => {
+    urls.push(url);
+    const u = new URL(url);
+    if (url.includes('eurofxref-hist')) return new Response('<Cube time="2025-03-03"><Cube currency="USD" rate="1.05"/></Cube>');
+    if (u.pathname.endsWith('/woocommerce_currency')) return Response.json({ value: 'EUR' });
+    if (u.pathname.endsWith('/orders')) {
+      return Response.json([
+        order('4002', 'processing', '20.00', true, { currency: 'USD' }), // yesterday: today's rate
+        order('4001', 'completed', '21.00', true, { currency: 'USD', date_created: '2025-03-03T10:00:00', date_created_gmt: '2025-03-03T09:00:00', date_paid_gmt: '2025-03-03T09:01:00' }),
+      ], { headers: { 'x-wp-totalpages': '1' } });
+    }
+    return Response.json([], { headers: { 'x-wp-totalpages': '1' } });
+  }) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT id, total FROM orders WHERE store_id = 'pawsome' ORDER BY id").all().map((r) => [r.id, r.total])).toEqual([['woo-4001', 20], ['woo-4002', 16]]);
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(urls.filter((u) => u.includes('eurofxref-hist'))).toHaveLength(1); // their rates are kept: no history the second time
+});

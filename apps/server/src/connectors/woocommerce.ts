@@ -1,8 +1,8 @@
 import type { ProductStatus } from '@frontline/shared';
 import { logAction } from '../actions';
-import { localDate } from '../dates';
+import { addDays, localDate } from '../dates';
 import { tx, type Db } from '../db';
-import { convertRate } from '../fx';
+import { convertRate, historicRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, setStoreTimezone, switchToReal } from './common';
 import type { NewProduct, ProductPage } from './shopify';
@@ -184,6 +184,18 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const zone = wpZone(await fetchFn(`${site}/wp-json/?_fields=timezone_string,gmt_offset`, { headers: { authorization: auth } }).then((r) => (r.ok ? (r.json() as Promise<Parameters<typeof wpZone>[0]>) : undefined)).catch(() => undefined));
     const rates = new Map<string, number | undefined>();
     for (const c of new Set(orders.map((o) => o.currency))) rates.set(c, !base || c === base ? 1 : await convertRate(db, c, base, fetchFn));
+    // An order keeps the rate it was first converted at: re-pricing it at today's each time it's modified would move
+    // its revenue with the markets and show the dips as refunds in the live feed. One first converted days after it was
+    // placed (a first sync's backfill, or after the currency changed) takes its own day's ECB rate.
+    // ponytail: one history download (~1 MB) per such currency and sync.
+    const locked = db.prepare('SELECT fx_rate FROM orders WHERE store_id = ? AND id = ?');
+    const lockedRate = (o: WooOrder) => locked.get(storeId, `woo-${o.number}`)?.fx_rate as number | null | undefined;
+    const historic = new Map<string, (day: string) => number | undefined>();
+    const old = orders.filter((o) => base && o.date_paid_gmt && o.currency !== base && o.date_created.slice(0, 10) < addDays(today, -3) && lockedRate(o) == null);
+    for (const c of new Set(old.map((o) => o.currency))) {
+      const on = await historicRate(c, base!, fetchFn).catch(() => undefined);
+      if (on) historic.set(c, on);
+    }
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -207,12 +219,9 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
            tracking = coalesce(excluded.tracking, tracking), tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url)`,
       );
       const days = new Set<string>();
-      // An order keeps the rate it was first converted at: re-pricing it at today's each time it's modified would move
-      // its revenue with the markets and show the dips as refunds in the live feed.
-      const locked = db.prepare('SELECT fx_rate FROM orders WHERE store_id = ? AND id = ?');
       for (const o of orders) {
         // Unpaid (pending, on-hold bank transfers, failed, drafts) never counts; cancelled or refunded after payment is a refund.
-        const rate = (locked.get(storeId, `woo-${o.number}`)?.fx_rate as number | null | undefined) ?? rates.get(o.currency);
+        const rate = lockedRate(o) ?? historic.get(o.currency)?.(o.date_created.slice(0, 10)) ?? rates.get(o.currency);
         if (!o.date_paid_gmt || !rate) continue;
         const created = gmt(o.date_created_gmt);
         const day = o.date_created.slice(0, 10);
