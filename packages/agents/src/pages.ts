@@ -17,6 +17,9 @@ const ATTRS = new Set('href src alt title width height colspan rowspan target re
 // Whitespace is HTML's (tab, LF, FF, CR, space), not JS's \s: a browser keeps U+00A0 and other Unicode spaces inside a
 // name or value, so treating them as separators would read a different tag than the browser does.
 const TAG = /<(\/?)([a-zA-Z][^\t\n\f\r />]*)/y;
+// Comments end where a browser ends them: "<!--" at its first "-->" or "--!>" ("<!-->" and "<!--->" at once), and "<!x",
+// "<?x", "</ x" (bogus comments, doctypes) at the next ">", even one that would sit inside a quoted value in a tag.
+const COMMENT = /<!--(?:-?>|[^]*?(?:--!?>|$))|<(?:!|\?|\/(?![a-zA-Z>]))[^>]*>?/y;
 
 /**
  * Why `html` can't go on a storefront, or undefined when it's clean: structural tags only, no scripts, handlers,
@@ -30,6 +33,11 @@ export function unsafeHtml(html: string): string | undefined {
   let i = 0;
   const at = (re: RegExp) => ((re.lastIndex = i), re.exec(html)?.[0] ?? ''); // sticky: matches at i, no copies
   while ((i = html.indexOf('<', i)) !== -1) {
+    const comment = at(COMMENT);
+    if (comment) {
+      i += comment.length;
+      continue;
+    }
     const open = ((TAG.lastIndex = i), TAG.exec(html));
     if (!open) {
       i++;

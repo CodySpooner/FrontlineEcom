@@ -23,6 +23,13 @@ test('storefront HTML: structure and http(s) links pass; scripts, handlers, styl
   expect(unsafeHtml('<p title=\u00a0"x onclick=alert(1) y">x</p>')).toBe('the onclick attribute is not allowed');
   expect(unsafeHtml('<img src=x\u3000onerror=alert(1)>')).toBeUndefined(); // one unquoted value, as a browser reads it
   expect(unsafeHtml('<p class="a"\tid=b\nalt=c>Hi</p>')).toBeUndefined();
+  // A comment, doctype or bogus comment ends where a browser ends it, so what follows is markup even when it looks
+  // like the inside of a quoted value; markup inside a comment is just comment.
+  for (const start of ['<!--', '<!-- x --!', '<?', '</ ', '<!x', '<!DOCTYPE "']) {
+    const end = start.startsWith('<!--') ? '-->' : '>';
+    expect(unsafeHtml(`${start}<p title="${end}<img src=x onerror=alert(1)>">`)).toBe('the onerror attribute is not allowed');
+  }
+  expect(unsafeHtml('<!-- <script>x</script> --><p>ok</p><!--><!---><!---->')).toBeUndefined();
   expect(unsafeHtml('<a href="javascript:alert(1)">x</a>')).toBe('javascript: links are not allowed');
   expect(unsafeHtml('<a href=" jav&#x61;script&colon;alert(1)">x</a>')).toBe('javascript: links are not allowed');
   expect(unsafeHtml("<img src='data:image/svg+xml;base64,PHN2Zz4='>")).toBe('data: links are not allowed');
