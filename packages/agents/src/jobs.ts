@@ -47,6 +47,14 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
       'with the numbers to show it, propose one price test with propose_price_change; otherwise say prices hold and why, in 3 lines.',
   },
   {
+    name: 'Weekly page refresh',
+    role: 'store_developer',
+    cron: '0 9 * * 4',
+    task:
+      'Weekly page refresh: list_products and take the best seller (most revenue_30d) that draft_page accepts. Draft one improved product page for it with draft_page: ' +
+      'benefit-first headline, the objections buyers raise, proof, shipping and returns. Then ask to publish it with publish_page.',
+  },
+  {
     name: 'Weekly report',
     role: 'market_analyst',
     cron: '0 9 * * 1',

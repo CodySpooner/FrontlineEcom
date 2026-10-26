@@ -103,3 +103,18 @@ test('Store Builder routes', async () => {
   expect((await app.request(`/api/page-drafts/${all[0]!.id}`, { method: 'DELETE' })).status).toBe(204);
   expect((await app.request(`/api/page-drafts/${all[0]!.id}`)).status).toBe(404);
 });
+
+test('best sellers come first, and a product gets one page test at a time', async () => {
+  db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', 'o-roller', ?, 39.8, 'paid', 'delivered', date('now'))`).run(new Date().toISOString());
+  db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('glow', 'o-roller', 'p-new', 2, 39.8, 5.2)`).run();
+  const [catalog] = await run(() => [{ call: 'list_products' }]);
+  expect(catalog!.split('\n')[1]).toMatch(/^p-new,Ice roller,.*,2,39\.8$/);
+
+  const out = await run(() => [draft(), draft()]);
+  expect(out[1]).toBe(`Not saved: this product already has a page draft in Store Builder (${listPageDrafts(db)[0]!.id}). The owner publishes or rejects it first; work on another product.`);
+  const live = (daysAgo: number) => db.prepare(`UPDATE page_drafts SET published_at = datetime('now', ?)`).run(`-${daysAgo} days`);
+  live(10);
+  expect((await run(() => [draft()]))[0]).toMatch(/^Not saved: this product's page went live on \d{4}-\d{2}-\d{2} and is judged after 14 days of sales/);
+  live(40);
+  expect((await run(() => [draft()]))[0]).toMatch(/^Saved draft /);
+});

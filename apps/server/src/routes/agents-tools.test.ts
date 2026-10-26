@@ -53,7 +53,7 @@ describe('agent tools on demo data', () => {
     expect(JSON.parse(summary!.output)).toMatchObject({ currency: 'USD', totals: { revenue: expect.any(Number), roas: expect.any(Number) }, health: { status: expect.stringMatching(/^(winning|steady|bleeding)$/) } });
     expect(series!.output.split('\n')[0]).toBe('date,revenue,ad_spend,cogs,orders,sessions,add_to_carts,checkouts');
     expect(series!.output.split('\n').length).toBeGreaterThanOrEqual(3);
-    expect(products!.output).toMatch(/^id,title,price,compare_at,cost,margin_pct,inventory,status\n/);
+    expect(products!.output).toMatch(/^id,title,price,compare_at,cost,margin_pct,inventory,status,units_30d,revenue_30d\n/);
     expect(orders!.output).toMatch(/^counts: /);
     expect(campaigns!.output).toMatch(/^network,id,name,status,daily_budget,spend,revenue,purchases,clicks,impressions,roas,cpa,ctr_pct\n/);
     expect(events.at(-1)).toEqual(done);

@@ -5,7 +5,7 @@ import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ad
 import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
 import { searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
-import { getPageDraft, savePageDraft } from './pages';
+import { getPageDraft, listPageDrafts, savePageDraft } from './pages';
 import { saveFlowDraft } from './flows';
 import { flagOrderIssue } from './issues';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
@@ -99,16 +99,23 @@ export const APP_TOOLS: AppTool[] = [
   }),
   defineTool({
     name: 'list_products',
-    description: 'The store catalog: price, compare-at, unit cost, gross margin %, inventory and status (CSV).',
+    description:
+      'The store catalog, best sellers first: price, compare-at, unit cost, gross margin %, inventory, status, and units / revenue from paid orders in the last 30 days (CSV).',
     input: { status: z.enum(['active', 'draft', 'archived']).optional(), limit: z.number().int().min(1).max(500).default(100) },
     run: async ({ status, limit }, ctx) =>
       csv(
         ctx.db
           .prepare(
-            `SELECT id, title, price, compare_at, cost, round(100.0 * (price - cost) / nullif(price, 0), 1) AS margin_pct, inventory, status
-             FROM products WHERE store_id = ? ${status ? 'AND status = ?' : ''} ORDER BY title LIMIT ?`,
+            `SELECT p.id, p.title, p.price, p.compare_at, p.cost, round(100.0 * (p.price - p.cost) / nullif(p.price, 0), 1) AS margin_pct, p.inventory, p.status,
+               coalesce(s.units, 0) AS units_30d, round(coalesce(s.revenue, 0), 2) AS revenue_30d
+             FROM products p LEFT JOIN (
+               SELECT i.product_id, sum(i.quantity) AS units, sum(i.revenue) AS revenue
+               FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+               WHERE i.store_id = ? AND o.status = 'paid' AND o.local_date >= ? GROUP BY i.product_id
+             ) s ON s.product_id = p.id
+             WHERE p.store_id = ? ${status ? 'AND p.status = ?' : ''} ORDER BY revenue_30d DESC, p.title LIMIT ?`,
           )
-          .all(...([ctx.store.id, ...(status ? [status] : []), limit] as string[])),
+          .all(...([ctx.store.id, since(30), ctx.store.id, ...(status ? [status] : []), limit] as string[])),
       ),
   }),
   defineTool({
@@ -333,6 +340,10 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ kind, productId, ...d }, ctx) => {
       if (kind === 'product' && !productId) return 'productId is required for a product page.';
       if (productId && !ctx.db.prepare('SELECT 1 FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId)) return `No product ${productId} in this store. Use list_products for ids.`;
+      // One page per product at a time: overlapping page changes can't be judged apart (14 days of sales after publishing).
+      const prior = kind === 'product' ? listPageDrafts(ctx.db, { storeIds: [ctx.store.id], limit: 1000 }).find((d) => d.productId === productId && d.status !== 'rejected') : undefined;
+      if (prior && prior.status !== 'published') return `Not saved: this product already has a page draft ${prior.status === 'draft' ? 'in' : `${prior.status} in`} Store Builder (${prior.id}). The owner publishes or rejects it first; work on another product.`;
+      if (prior?.publishedAt && prior.publishedAt.slice(0, 10) > since(29)) return `Not saved: this product's page went live on ${prior.publishedAt.slice(0, 10)} and is judged after 14 days of sales; work on another product.`;
       const draft = savePageDraft(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), kind, ...(productId ? { productId } : {}), ...d });
       return `Saved draft ${draft.id} to the Store Builder. When it's ready, ask to publish it with publish_page.`;
     },
