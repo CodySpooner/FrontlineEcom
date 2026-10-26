@@ -124,18 +124,21 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
   const hook = approvalsHook(db);
   const setRun = db.prepare('UPDATE automation_runs SET status = ?, detail = coalesce(?, detail), run_id = ? WHERE id = ?');
 
-  const start = (logId: string, rule: AutomationRule, task: string) => {
-    const run = runTask(rule.action.agentId, task);
+  const start = (logId: string, agentId: string, task: string) => {
+    const run = runTask(agentId, task);
     if (typeof run === 'string') setRun.run('failed', run, null, logId);
     else setRun.run('started', null, run.id, logId);
   };
 
-  const awaitDecision = (logId: string, approvalId: string, ruleId: string, task: string) =>
+  // The agent and task the owner approved (the request's), not the rule's now: it may have been edited since.
+  const awaitDecision = (logId: string, approvalId: string, ruleId: string) =>
     hook.decision(approvalId).then(
       (a) => {
         const rule = getRule(db, ruleId);
         if (!rule) return;
-        if (a.status === 'approved') start(logId, rule, task);
+        const approved = (a.action.payload as { task?: unknown }).task;
+        const task = `${typeof approved === 'string' ? approved : rule.action.task}\n\n(Automation "${rule.name}": ${a.reason}.)`;
+        if (a.status === 'approved') start(logId, a.agentId, task);
         else setRun.run('denied', null, null, logId);
       },
       () => setRun.run('failed', 'approval request disappeared', null, logId),
@@ -155,11 +158,11 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
     const task = `${rule.action.task}\n\n(Automation "${rule.name}": ${reason}.)`;
     if (rule.approval === 'auto') {
       log('started', reason);
-      return start(logId, rule, task);
+      return start(logId, rule.action.agentId, task);
     }
     const a = hook.create({ storeId: rule.storeId, agentId: rule.action.agentId, title: `Run automation "${rule.name}"`, reason, action: { kind: 'automation.run', payload: { ruleId: rule.id, task: rule.action.task } } });
     log('awaiting_approval', reason, a.id);
-    void awaitDecision(logId, a.id, rule.id, task);
+    void awaitDecision(logId, a.id, rule.id);
   };
 
   const tick = () => {
@@ -189,9 +192,8 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
   };
 
   // Requests still waiting from before a restart.
-  for (const r of db.prepare("SELECT ar.id, ar.approval_id, ar.rule_id, ru.action_json, ru.name, ar.detail FROM automation_runs ar JOIN automation_rules ru ON ru.id = ar.rule_id WHERE ar.status = 'awaiting_approval'").all()) {
-    const task = `${JSON.parse(String(r.action_json)).task}\n\n(Automation "${r.name}": ${r.detail}.)`;
-    void awaitDecision(String(r.id), String(r.approval_id), String(r.rule_id), task);
+  for (const r of db.prepare("SELECT id, approval_id, rule_id FROM automation_runs WHERE status = 'awaiting_approval'").all()) {
+    void awaitDecision(String(r.id), String(r.approval_id), String(r.rule_id));
   }
   tick();
   const timer = setInterval(tick, everyMs);

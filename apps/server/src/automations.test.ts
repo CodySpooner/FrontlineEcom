@@ -198,3 +198,32 @@ test("a metric rule's oldest day gives up only the share of sales its orders had
   ord.run('#2', new Date('2026-10-25T20:00:00').toISOString(), 900);
   expect(metricValue(db, 'glow', 'revenue', 1, now)).toBeCloseTo(950, 0); // the clock would say 675
 });
+
+test('an approved run starts the agent and task the owner approved, even if the rule was edited meanwhile (or the app restarted)', async () => {
+  const { app, calls, scheduler, create, runs, setClock } = setup();
+  const rule = await create({ trigger: { type: 'schedule', cron: '0 9 * * *' } });
+  setClock(at(26, 9, 0));
+  const s = scheduler();
+  const edit = (task: string) =>
+    app.request(`/api/automations/${rule.id}`, send('PATCH', { action: { type: 'agent_task', agentId: 'glow:ad_strategist', task } }));
+
+  const [first] = await runs();
+  expect((await edit('Pause every campaign')).status).toBe(200);
+  await app.request(`/api/approvals/${first!.approvalId}/approve`, { method: 'POST' });
+  await flush();
+  expect(calls[0]![0]).toBe('glow:market_analyst');
+  expect(calls[0]![1]).toMatch(/^Write the daily brief\n/);
+  s.stop();
+
+  // Fired with the edited rule, then a restart before the owner answers: still what the request said.
+  setClock(at(27, 9, 0));
+  scheduler().stop();
+  const [second] = await runs();
+  await edit('Something else again');
+  const after = scheduler();
+  await app.request(`/api/approvals/${second!.approvalId}/approve`, { method: 'POST' });
+  await flush();
+  expect(calls.at(-1)![0]).toBe('glow:ad_strategist');
+  expect(calls.at(-1)![1]).toMatch(/^Pause every campaign\n/);
+  after.stop();
+});

@@ -166,10 +166,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-81 A TikTok Shop or Amazon product next to a connected Shopify store couldn't be given a unit cost.
 - [x] CORE-82 A TikTok Shop's orders next to a Shopify site counted in the site's conversion rate and paid its per-order fee.
 - [x] CORE-83 A restore was staged before its undo backup existed: quitting mid-way replaced the data with no undo.
+- [x] CORE-84 An approved automation ran the rule's current agent and task, not the ones the owner approved.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-84 (review): an 'ask' automation's approval named one agent and task, but on approval the scheduler re-read the rule and started its current agent (and after a restart rebuilt the task from the rule's current text, which the owner or an agent's `setTask` may have changed). The run now starts the request's agent (`approval.agentId`) and task (`payload.task`), with the request's reason.
 - 2026-10-26 — CORE-83 (review of backups/automations/sync): `stageRestore` copied the snapshot to `<db>.restore` before taking the undo backup (async, slow on a big database), and `openDb` swaps in any `.restore` it finds. Quitting during the undo backup (or a crash mid-copy) replaced the live data with no undo, or with a truncated file. The copy is now `.restore.part`, renamed to `.restore` once the undo backup is whole; `openDb` deletes a leftover `.restore.part`.
 - 2026-10-26 — CORE-82 follow-up (perf): the per-day `tt-` count made SQLite walk the store's tt- orders by id for every day: a 1Y summary over a 100k-order store took 5.4 s. `+o.id` keeps it on `orders_by_day`: 34 ms (measured with a throwaway test, deleted).
 - 2026-10-26 — CORE-82: `loadRows` counts a day's paid `tt-` orders of a store on another platform as channel orders, as Amazon's are: the funnel (site conversion) leaves them out, since their shoppers never saw the site's sessions, and they don't pay the site's per-order fee. They keep their own line costs and the store's fee % (`ponytail:` noted). README updated.
