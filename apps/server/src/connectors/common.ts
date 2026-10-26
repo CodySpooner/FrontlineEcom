@@ -138,14 +138,19 @@ export async function adRate(db: Db, storeId: string, accountCurrency: string | 
 export const cents = (n: number) => Math.round(n * 100) / 100;
 
 /**
- * For syncs: a rate-limited response (429) waits Retry-After (1 s if missing, at most a minute) and asks again, up to 5
- * tries, so a long first sync (Etsy allows 5–10 calls a second) isn't failed and restarted from scratch.
+ * For syncs, which only read: a rate-limited response (429) waits Retry-After (1 s if missing, at most a minute), and a
+ * server error (5xx) or dropped connection waits 2, 4, 8, 16 s, then it asks again, up to 5 tries. One blip in a long
+ * first sync (Etsy allows 5–10 calls a second; a WordPress host can 502 mid-backfill) then doesn't fail it and restart
+ * it from scratch.
  */
-export const retry429 = (fetchFn: typeof fetch): typeof fetch => async (input, init) => {
+export const retrying = (fetchFn: typeof fetch): typeof fetch => async (input, init) => {
   for (let attempt = 1; ; attempt++) {
-    const res = await fetchFn(input, init);
-    if (res.status !== 429 || attempt === 5) return res;
-    const seconds = Number(res.headers.get('retry-after'));
-    await new Promise((r) => setTimeout(r, Math.min(60, seconds > 0 ? seconds : 1) * 1000));
+    const res = await fetchFn(input, init).catch((e: unknown) => (e instanceof Error ? e : new Error(String(e))));
+    const wait = res instanceof Error || res.status >= 500 ? 2 ** attempt : res.status === 429 ? Math.max(1, Number(res.headers.get('retry-after')) || 1) : 0;
+    if (!wait || attempt === 5) {
+      if (res instanceof Error) throw res;
+      return res;
+    }
+    await new Promise((r) => setTimeout(r, Math.min(60, wait) * 1000));
   }
 };

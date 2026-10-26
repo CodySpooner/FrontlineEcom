@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
-import { retry429, setStoreCurrency } from './common';
+import { retrying, setStoreCurrency } from './common';
 
 test('a rate-limited sync request waits Retry-After and asks again; it gives up after 5 tries', async () => {
   const statuses = [429, 429, 200];
@@ -12,15 +12,41 @@ test('a rate-limited sync request waits Retry-After and asks again; it gives up 
   }) as unknown as typeof fetch;
   vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
   try {
-    const ok = retry429(fetchFn)('https://openapi.etsy.com/v3/x');
+    const ok = retrying(fetchFn)('https://openapi.etsy.com/v3/x');
     await vi.advanceTimersByTimeAsync(4000);
     expect((await ok).status).toBe(200);
     expect(asked.slice(1).map((t, i) => t - asked[i]!)).toEqual([2000, 2000]);
 
-    const limited = retry429(fetchFn)('https://openapi.etsy.com/v3/x');
+    const limited = retrying(fetchFn)('https://openapi.etsy.com/v3/x');
     await vi.advanceTimersByTimeAsync(8000);
     expect((await limited).status).toBe(429);
     expect(asked).toHaveLength(8);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a sync request rides out server errors and dropped connections (2, 4, 8, 16 s); other errors return at once', async () => {
+  const replies: (number | 'drop')[] = [502, 'drop', 200, 404];
+  const asked: number[] = [];
+  const fetchFn = (async () => {
+    asked.push(Date.now());
+    const r = replies.shift() ?? 503;
+    if (r === 'drop') throw new TypeError('fetch failed');
+    return new Response(null, { status: r });
+  }) as unknown as typeof fetch;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
+  try {
+    const ok = retrying(fetchFn)('https://shop.example/wp-json/wc/v3/orders');
+    await vi.advanceTimersByTimeAsync(6000);
+    expect((await ok).status).toBe(200);
+    expect(asked.slice(1).map((t, i) => t - asked[i]!)).toEqual([2000, 4000]);
+    expect((await retrying(fetchFn)('https://shop.example/x')).status).toBe(404);
+
+    const down = retrying(fetchFn)('https://shop.example/x');
+    await vi.advanceTimersByTimeAsync(30000);
+    expect((await down).status).toBe(503);
+    expect(asked).toHaveLength(9);
   } finally {
     vi.useRealTimers();
   }

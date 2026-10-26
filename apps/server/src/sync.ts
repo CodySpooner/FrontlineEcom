@@ -1,6 +1,6 @@
 import { INTEGRATION_KINDS, type IntegrationKind, type StoreEvent } from '@frontline/shared';
 import { syncAmazon } from './connectors/amazon';
-import { retry429 } from './connectors/common';
+import { retrying } from './connectors/common';
 import { syncCj } from './connectors/cj';
 import { syncEtsy } from './connectors/etsy';
 import { syncGa4, syncGoogleAds } from './connectors/google';
@@ -69,7 +69,7 @@ export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs =
       running.add(id);
       // Demo stores have no real orders yet; their first real sync replaces the demo ones without announcing history.
       const store = r.store_id == null ? undefined : db.prepare('SELECT demo, (SELECT max(created_at) FROM orders WHERE store_id = stores.id) AS newest FROM stores WHERE id = ?').get(r.store_id);
-      syncers[r.kind as IntegrationKind]!(db, key, String(r.store_id), retry429(fetch)).finally(() => {
+      syncers[r.kind as IntegrationKind]!(db, key, String(r.store_id), retrying(fetch)).finally(() => {
         running.delete(id);
         if (store?.demo === 0) announceOrders(db, String(r.store_id), store.newest == null ? null : String(store.newest), new Date());
         const after = db.prepare('SELECT status, error FROM integrations WHERE id = ?').get(id);
