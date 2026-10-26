@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
-import { Bell, ChevronDown, Search, type LucideIcon } from 'lucide-react';
-import { useApprovals, useCommander, useSettings } from '../api/client';
+import { ChevronDown, Search, type LucideIcon } from 'lucide-react';
+import { useCommander, useSettings } from '../api/client';
+import { NotificationBell } from './Notifications';
 import { cx } from './ui';
 
 /** UI-05 scene behind the title: who stands in the red light, plus one prop that hints at the page. */
@@ -47,7 +48,6 @@ function Scene({ art }: { art: HeroArt }) {
 
 // Page hero: title, subtitle, red-lit character art over a skyline, and the top bar (Ask AI, bell, profile).
 export function Hero({ title, subtitle, icon: Icon, art = 'lone', children }: { title: string; subtitle: string; icon?: LucideIcon; art?: HeroArt; children?: ReactNode }) {
-  const pending = useApprovals().data?.length ?? 0;
   const profile = useSettings().data?.profile ?? { name: 'Owner', plan: '' };
   const commander = useCommander().data;
   return (
@@ -78,12 +78,7 @@ export function Hero({ title, subtitle, icon: Icon, art = 'lone', children }: { 
             Ask AI anything…
             <kbd className="ml-auto rounded border border-line-2 px-1.5 font-sans text-[11px] text-muted">Ctrl K</kbd>
           </button>
-          <button type="button" aria-label={`Notifications: ${pending} waiting`} className="glass relative grid size-10 cursor-pointer place-items-center rounded-[11px] text-text-2 transition hover:text-white">
-            <Bell className="size-[18px]" strokeWidth={1.8} />
-            {pending > 0 && (
-              <b className="absolute -top-1.5 -right-1.5 h-[19px] min-w-[19px] rounded-[10px] bg-red px-[5px] text-center text-[11px] leading-[19px] font-bold text-white shadow-glow">{pending}</b>
-            )}
-          </button>
+          <NotificationBell />
           <button type="button" className="glass flex cursor-pointer items-center gap-2.5 rounded-[13px] py-[5px] pr-2.5 pl-[5px] text-left">
             <span className="grid size-8 place-items-center rounded-full border border-red bg-[radial-gradient(circle_at_50%_35%,#45121a,#120507)] font-display text-sm font-bold">{profile.name.charAt(0).toUpperCase()}</span>
             <span>

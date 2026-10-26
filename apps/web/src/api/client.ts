@@ -8,6 +8,7 @@ import type {
   AgentUpdate,
   AnalyticsRange,
   AnalyticsSummary,
+  AppNotification,
   ApprovalDecision,
   ApprovalRequest,
   ApprovalStatus,
@@ -368,6 +369,16 @@ export function useDeleteFlowDraft() {
   return useMutation({ mutationFn: (id: string) => api<void>(`/api/flow-drafts/${id}`, { method: 'DELETE' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['flow-drafts'] }) });
 }
 
+export const useNotifications = () => useQuery({ queryKey: ['notifications'], queryFn: () => api<AppNotification[]>('/api/notifications?limit=40') });
+
+export function useMarkRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (ids?: string[]) => api<{ updated: number }>('/api/notifications/read', json('POST', ids ? { ids } : {})),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+}
+
 /** Mount once: streams /api/live into the react-query cache, reconnecting if the server restarts. */
 export function useLive() {
   const qc = useQueryClient();
@@ -398,6 +409,7 @@ export function useLive() {
         // Automation fires start runs or ask for approval; the log and "last fired" follow.
         ['automation-runs', 'automations'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       }
+      if (m.type === 'notification') qc.setQueryData<AppNotification[]>(['notifications'], (old) => old && [m.notification, ...old]);
       if (m.type === 'xp') qc.invalidateQueries({ queryKey: ['agents'] });
       else if (m.type === 'approval') {
         qc.invalidateQueries({ queryKey: ['agents'] });
