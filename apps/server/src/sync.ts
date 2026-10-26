@@ -2,12 +2,13 @@ import type { IntegrationKind } from '@frontline/shared';
 import { syncGa4, syncGoogleAds } from './connectors/google';
 import { syncMeta } from './connectors/meta';
 import { syncShopify } from './connectors/shopify';
+import { syncTikTokAds } from './connectors/tiktok';
 import type { Db } from './db';
 
 type Syncer = (db: Db, key: Buffer, storeId: string) => Promise<void>;
 
 /** Connectors that pull data on a schedule. */
-const SYNCERS: Partial<Record<IntegrationKind, Syncer>> = { shopify: syncShopify, meta_ads: syncMeta, google_ads: syncGoogleAds, ga4: syncGa4 };
+const SYNCERS: Partial<Record<IntegrationKind, Syncer>> = { shopify: syncShopify, meta_ads: syncMeta, google_ads: syncGoogleAds, ga4: syncGa4, tiktok_ads: syncTikTokAds };
 
 /**
  * Every `everyMs`, syncs each data integration that was never tried, was last tried over `staleMs` ago, or whose

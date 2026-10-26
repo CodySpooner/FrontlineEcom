@@ -51,6 +51,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-11 (1/2) TikTok Ads connector: Marketing API v1.3 daily AUCTION_CAMPAIGN report in 30-day chunks + campaign list → campaigns/campaign_daily (network `tiktok`) → ad_spend; 28-day re-pull
 - 2026-10-26 — CORE-10 Google Ads (API v26, GAQL search, OAuth refresh token; campaigns + campaign_daily → ad_spend, 30-day re-pull) and GA4 (Data API, service-account JWT, read-only; owns sessions / add_to_carts / checkouts); both in the sync loop, help text in the catalog
 - 2026-10-26 — Inbox: Shopify `createProducts` (priced drafts via productCreate + productVariantsBulkUpdate, `write_products` in help); Meta help lists `ads_mcp_management` / `ads_management`; `higgsfield` integration kind (global, key ID + secret for api.higgsfield.ai)
 - 2026-10-26 — CORE-18 Electron shell `apps/desktop` (`pnpm desktop`): API in a utilityProcess on a free localhost port serving the web build (`FRONTLINE_DEV_URL` = load Vite instead), single instance, frameless window with themed native controls, close-to-tray, data in `%APPDATA%/Frontline Ecom/data`, credentials key in safeStorage (unreadable key → owner can reset; connectors then ask for tokens again instead of crashing). `node:sqlite` + FTS5 verified under Electron 44 (Node 24.21): no better-sqlite3 fallback needed

@@ -435,7 +435,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'developerToken', label: 'Developer token', secret: true },
     { key: 'refreshToken', label: 'Refresh token', secret: true },
   ] },
-  tiktok_ads: { name: 'TikTok Ads', category: 'ads', perStore: true, fields: [
+  tiktok_ads: { name: 'TikTok Ads', category: 'ads', perStore: true, help: 'TikTok API for Business (business-api.tiktok.com) → My apps → create a developer app with Ads Management and Reporting read scopes → authorize it for your ad account → copy the long-lived access token. Advertiser ID is in TikTok Ads Manager next to the account name.', fields: [
     { key: 'advertiserId', label: 'Advertiser ID', secret: false },
     { key: 'accessToken', label: 'Access token', secret: true },
   ] },
