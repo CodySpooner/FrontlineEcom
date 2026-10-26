@@ -24,6 +24,9 @@ export const nichePack = (niche: Niche) => layer(`packs/niche/${niche}.md`);
 // ponytail: chars/4 heuristic, swap for the SDK token counter if budgets get tight.
 export const estimateTokens = (text: string) => Math.ceil(text.length / 4);
 
+/** Tokens the store's memories always get, however big the fixed layers are. */
+const MEMORY_FLOOR = 1500;
+
 export interface PromptInput {
   agent: Agent;
   store: Store;
@@ -64,12 +67,16 @@ export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [
   const zone = store.connected ? store.timezone : Intl.DateTimeFormat().resolvedOptions().timeZone;
   const date = `Today is ${today ?? new Date().toLocaleDateString('en-CA', { timeZone: zone })} (${zone}).`;
 
-  let used = estimateTokens([...fixed, date].join('\n\n'));
+  // The fixed layers can outgrow the budget (an owner-edited playbook, 20 niche learnings): memories keep a floor, and
+  // the owner's own lines (notes, denials) go in before the squad's, so they're never the ones dropped.
+  let room = Math.max(budget - estimateTokens([...fixed, date].join('\n\n')), MEMORY_FLOOR);
   const known: string[] = [];
-  for (const m of memories) {
+  const owners = (m: StoreMemory) => author(m).startsWith('owner');
+  for (const m of [...memories.filter(owners), ...memories.filter((m) => !owners(m))]) {
     const line = `- ${m.text}${m.evidence ? ` Evidence: ${m.evidence}.` : ''} (${m.kind}, ${author(m)}, confidence ${m.confidence.toFixed(1)})`;
-    used += estimateTokens(line) + 1;
-    if (used > budget) break;
+    const cost = estimateTokens(line) + 1;
+    if (cost > room) continue; // a long one doesn't keep the shorter ones after it out
+    room -= cost;
     known.push(line);
   }
   const memory = known.length

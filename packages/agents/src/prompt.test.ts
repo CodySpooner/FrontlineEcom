@@ -93,10 +93,22 @@ describe('assemblePrompt', () => {
   test('drops the lowest-ranked memories to fit the budget, never the fixed layers', () => {
     const base = assemblePrompt({ agent: agentOf(glow, 'copywriter'), store: glow, today: '2026-10-26' });
     const memories = Array.from({ length: 50 }, (_, i) => memory(i + 1, `memory number ${i + 1} ${'x'.repeat(200)}`));
-    const prompt = assemblePrompt({ agent: agentOf(glow, 'copywriter'), store: glow, memories, budget: estimateTokens(base) + 300, today: '2026-10-26' });
+    const prompt = assemblePrompt({ agent: agentOf(glow, 'copywriter'), store: glow, memories, budget: estimateTokens(base) + 2000, today: '2026-10-26' });
     expect(prompt).toContain('memory number 1 ');
     expect(prompt).not.toContain('memory number 50 ');
-    expect(estimateTokens(prompt)).toBeLessThanOrEqual(estimateTokens(base) + 300 + 20);
-    expect(assemblePrompt({ agent: agentOf(glow, 'copywriter'), store: glow, memories, budget: 10, today: '2026-10-26' })).toBe(base);
+    expect(estimateTokens(prompt)).toBeLessThanOrEqual(estimateTokens(base) + 2000 + 60);
+  });
+
+  test("fixed layers bigger than the budget still leave the memories room, the owner's own first", () => {
+    const memories = [
+      ...Array.from({ length: 50 }, (_, i) => memory(i + 1, `memory number ${i + 1} ${'x'.repeat(200)}`)),
+      { ...memory(51, 'Never discount below $30'), agentId: 'owner', kind: 'preference' as const },
+      { ...memory(52, 'The owner turned down TikTok ads'), kind: 'preference' as const, tags: ['denied'] },
+    ];
+    const prompt = assemblePrompt({ agent: agentOf(glow, 'copywriter'), store: glow, memories, budget: 10, today: '2026-10-26' });
+    expect(prompt).toContain('- Never discount below $30 (preference, owner,');
+    expect(prompt).toContain("- The owner turned down TikTok ads (preference, owner's no,");
+    expect(prompt).toContain('memory number 1 ');
+    expect(prompt).not.toContain('memory number 50 ');
   });
 });
