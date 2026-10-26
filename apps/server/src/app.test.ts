@@ -39,3 +39,15 @@ test('with a web dir it serves the build and falls back to index.html for app ro
   expect((await get('/api/nope'))[0]).toBe(404);
   server.close();
 });
+
+test('only the local UI gets in: DNS-rebound hosts and foreign origins are refused', async () => {
+  const app = createApp(openDb());
+  const status = async (url: string, init?: RequestInit) => (await app.request(url, init)).status;
+  expect(await status('http://127.0.0.1:8797/api/health')).toBe(200);
+  expect(await status('http://[::1]:8797/api/health')).toBe(200);
+  expect(await status('http://localhost:5183/api/health', { headers: { origin: 'http://localhost:5183' } })).toBe(200);
+  expect(await status('http://attacker.example:8797/api/health')).toBe(403);
+  const post = { method: 'POST', body: '{}', headers: { 'content-type': 'text/plain' } };
+  expect(await status('http://127.0.0.1:8797/api/approvals/demo-appr-1/approve', { ...post, headers: { ...post.headers, origin: 'https://attacker.example' } })).toBe(403);
+  expect(await status('http://127.0.0.1:8797/api/approvals/demo-appr-1/approve', { ...post, headers: { ...post.headers, origin: 'null' } })).toBe(403);
+});

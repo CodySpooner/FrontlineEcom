@@ -72,9 +72,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 - [x] CORE-30 Shopify Dev Dashboard apps: since 2026-01-01 Shopify doesn't let stores create admin custom apps (the `shpat_` token flow), so connect with a Dev Dashboard app's client ID + secret (client-credentials grant, 24 h tokens) and keep the token path for older apps.
 
+- [x] CORE-31 Local-only API guard: refuse requests whose Host isn't loopback (DNS rebinding) or whose Origin is another site (cross-site POSTs or sockets to 127.0.0.1 could otherwise approve spend).
+
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-31: first middleware returns 403 unless the Host is 127.0.0.1 / localhost / [::1] and any Origin is one of those too. This covers HTTP and the `/api/live` upgrade. Verified the Vite proxy UI and WebSocket still work, while an evil-origin POST and a rebound Host get 403
 - 2026-10-26 — CORE-30: Shopify connects with a Dev Dashboard app (client ID + secret). The client-credentials token is minted, cached encrypted with its expiry, and renewed under 5 min left, for both sync and writes. A pasted Admin API token still works for pre-2026 custom apps; saving needs one or the other. Help text walks through the Dev Dashboard. Client credentials need the app and store in the same Shopify organization
 - 2026-10-26 — CORE-29: tray menu "Start with Windows" checkbox (installed app) sets an Electron login item with `--hidden`. Started that way, the app runs API, syncs, scheduler and backups in the tray with no window until opened (tray click or launching it again). Verified the hidden start and re-open from the repo build. I didn't toggle the login item itself (it writes the owner's HKCU Run key)
 - 2026-10-26 — CORE-28: `action_log` (migration 24) + `logAction()`. Every live write (ad budget and pause, Shopify product create, price change, product page and page publish) is recorded with its outcome at the connector layer, whoever called it. `GET /api/actions?stores=&limit=` → `ActionLogEntry[]`

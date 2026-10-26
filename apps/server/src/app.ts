@@ -33,10 +33,19 @@ const pickStores = (db: Db, q?: string) => {
 
 const json = (req: Request): Promise<unknown> => req.json().catch(() => undefined);
 
+const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+const isLocal = (url: string) => URL.canParse(url) && LOCAL_HOSTS.has(new URL(url).hostname);
+
 /** `secretKey` defaults to the key file in the data dir, loaded on first use. */
 export const createApp = (db: Db, secretKey?: Buffer) => {
   const key = () => (secretKey ??= loadKey(dataDir()));
   return new Hono()
+    // Only the local UI: a non-local Host is DNS rebinding, a foreign Origin is another website posting (or opening a socket) here.
+    .use('*', async (c, next) => {
+      const origin = c.req.header('origin');
+      if (!isLocal(c.req.url) || (origin !== undefined && !isLocal(origin))) return c.json({ error: 'forbidden' }, 403);
+      await next();
+    })
     .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))
     .get('/api/stores/:id', (c) => {
