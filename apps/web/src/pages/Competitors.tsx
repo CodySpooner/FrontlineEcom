@@ -127,7 +127,7 @@ function AddCompetitor() {
           <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="https://…" className={cx(inputClass, 'text-text')} />
         </label>
       </div>
-      <p className="text-xs text-muted">Prices are read hourly from Shopify and WooCommerce stores, and from Etsy shops (etsy.com/shop/…) once you connect an Etsy store.</p>
+      <p className="text-xs text-muted">Prices are checked daily for Shopify and WooCommerce stores, and for Etsy shops (etsy.com/shop/…) once you connect an Etsy store.</p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="grid flex-1 gap-1 text-xs text-muted">
           For store

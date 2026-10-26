@@ -63,6 +63,25 @@ describe('Conversion funnel with no sessions', () => {
   });
 });
 
+describe('Conversion funnel with steps the platform does not report', () => {
+  it("leaves out Amazon's missing cart and checkout steps, and compares orders to sessions", async () => {
+    stubApi(() => []);
+    renderApp(<FunnelPanel s={{ funnel: { sessions: 1000, addToCarts: 0, checkouts: 0, orders: 50 } } as AnalyticsSummary} />);
+    expect(await screen.findByText('Ordered')).toBeTruthy();
+    expect(screen.queryByText('Added to cart')).toBeNull();
+    expect(screen.queryByText('Reached checkout')).toBeNull();
+    expect(screen.getByText('5.0% of previous')).toBeTruthy();
+    expect(screen.getByText(/doesn't report are left out/)).toBeTruthy();
+  });
+
+  it('keeps a real zero: sessions but no carts and no orders', async () => {
+    stubApi(() => []);
+    renderApp(<FunnelPanel s={{ funnel: { sessions: 40, addToCarts: 0, checkouts: 0, orders: 0 } } as AnalyticsSummary} />);
+    expect(await screen.findByText('Added to cart')).toBeTruthy();
+    expect(screen.queryByText(/left out/)).toBeNull();
+  });
+});
+
 describe('product photos', () => {
   const imgs = () => [...document.querySelectorAll('img')].map((i) => i.getAttribute('src'));
 

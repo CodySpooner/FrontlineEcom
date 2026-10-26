@@ -120,12 +120,14 @@ export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
   const { stores, has } = useStoreSelection();
   // Without GA4, a connected Shopify store's sessions come from ShopifyQL, which needs the app's read_reports scope.
   const shopify = stores.some((x) => has(x.id) && x.connected && x.platform === 'shopify');
-  const steps: [string, number][] = [
+  const all: [string, number][] = [
     ['Sessions', f.sessions],
     ['Added to cart', f.addToCarts],
     ['Reached checkout', f.checkouts],
     ['Ordered', f.orders],
   ];
+  // A middle step at 0 while orders came in isn't reported (Amazon has no cart or checkout data): leave it out.
+  const steps = all.filter(([, n], i) => n > 0 || i === 0 || i === all.length - 1 || !f.orders);
   return (
     <Panel title="Conversion Funnel" sub={f.sessions ? `${pct(rate(f.orders, f.sessions))} of sessions place an order` : `${num(f.orders)} orders`}>
       {!f.sessions ? (
@@ -152,6 +154,7 @@ export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
               </div>
             </li>
           ))}
+          {steps.length < all.length && <li className="text-xs text-muted">Steps the platform doesn't report are left out.</li>}
         </ol>
       )}
     </Panel>
