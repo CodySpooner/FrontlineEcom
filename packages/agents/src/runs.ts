@@ -384,7 +384,7 @@ export function finalText(transcript: AgentEvent[]): string {
 export function runGist(transcript: AgentEvent[], max = 160): string | undefined {
   const line = finalText(transcript)
     .split('\n')
-    .map((l) => l.replace(/[*_`]/g, '').replace(/^\s*(?:[-•>]|\d+\.)\s+/, '').trim())
+    .map((l) => l.replace(/[*`]|(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, '').replace(/^\s*(?:[-•>]|\d+\.)\s+/, '').trim())
     .find((l) => l && !l.startsWith('#') && !/^[-=|: ]+$/.test(l));
   if (!line) return undefined;
   const sentence = line.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? line;
