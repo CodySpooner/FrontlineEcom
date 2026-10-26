@@ -121,7 +121,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-58 Delete a theme copy when its publish request is denied, so drafts don't fill Shopify's 20-theme library (waits on core `deleteTheme`).
 
 ## Blocked
-- AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed.
+- AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
 - 2026-10-26 — AGT-58 A denied `store.publish_theme` request deletes its theme copy (core `deleteTheme`) on connected stores, so drafts don't fill Shopify's 20-theme library. `onApproved` is now `onDecision(db, 'approved' | 'denied', fn)`, with `onApproved` kept as a wrapper.
