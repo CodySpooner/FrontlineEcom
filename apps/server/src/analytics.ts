@@ -2,6 +2,7 @@ import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, Metric
 import type { Db } from './db';
 import { addDays } from './dates';
 import { demoTopProducts } from './demo';
+import { fxFor } from './fx';
 
 export interface MetricRow {
   storeId: string;
@@ -64,12 +65,17 @@ export function summarize(rows: MetricRow[], { range, to, storeIds }: { range: A
 /** Loads both periods for the given stores from daily_metrics. */
 export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: string): MetricRow[] {
   if (!storeIds.length) return [];
-  return db
+  const { rate } = fxFor(db, storeIds);
+  return (db
     .prepare(
       `SELECT store_id AS storeId, date, revenue, ad_spend AS adSpend, cogs, orders, sessions, add_to_carts AS addToCarts, checkouts FROM daily_metrics
        WHERE store_id IN (${storeIds.map(() => '?').join(',')}) AND date BETWEEN ? AND ?`,
     )
-    .all(...storeIds, addDays(to, 1 - 2 * range), to) as unknown as MetricRow[];
+    .all(...storeIds, addDays(to, 1 - 2 * range), to) as unknown as MetricRow[])
+    .map((r) => {
+      const x = rate(r.storeId);
+      return x === 1 ? r : { ...r, revenue: r.revenue * x, adSpend: r.adSpend * x, cogs: r.cogs * x };
+    });
 }
 
 const STATUS = (s: string): CampaignStats['status'] => (s === 'paused' ? 'paused' : s === 'archived' || s === 'deleted' || s === 'removed' ? 'archived' : 'active');
@@ -77,6 +83,7 @@ const STATUS = (s: string): CampaignStats['status'] => (s === 'paused' ? 'paused
 /** Every campaign of the stores with its totals over [from, to], biggest spend first. */
 export function campaignStats(db: Db, storeIds: string[], from: string, to: string): CampaignStats[] {
   if (!storeIds.length) return [];
+  const { rate } = fxFor(db, storeIds);
   return db
     .prepare(
       `SELECT c.network, c.id, c.store_id, c.name, c.status, c.daily_budget, coalesce(sum(d.spend), 0) AS spend, coalesce(sum(d.revenue), 0) AS revenue,
@@ -86,15 +93,16 @@ export function campaignStats(db: Db, storeIds: string[], from: string, to: stri
     )
     .all(from, to, ...storeIds)
     .map((r) => {
-      const spend = r2(Number(r.spend));
-      const revenue = r2(Number(r.revenue));
+      const x = rate(String(r.store_id));
+      const spend = r2(Number(r.spend) * x);
+      const revenue = r2(Number(r.revenue) * x);
       return {
         network: r.network as AdNetwork,
         id: String(r.id),
         storeId: String(r.store_id),
         name: String(r.name),
         status: STATUS(String(r.status)),
-        dailyBudget: Number(r.daily_budget),
+        dailyBudget: r2(Number(r.daily_budget) * x),
         spend,
         revenue,
         roas: spend ? r2(revenue / spend) : 0,
@@ -102,7 +110,8 @@ export function campaignStats(db: Db, storeIds: string[], from: string, to: stri
         clicks: Number(r.clicks),
         impressions: Number(r.impressions),
       };
-    });
+    })
+    .sort((a, b) => b.spend - a.spend || a.name.localeCompare(b.name));
 }
 
 /** Best sellers over [from, to]: paid orders' line items for real stores, a revenue-consistent split for demo stores. */
@@ -131,5 +140,9 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
           profit: r2(Number(r.profit)),
         }))
     : [];
-  return [...rows, ...demo.flatMap((id) => demoTopProducts(db, id, from, to))].sort((a, b) => b.revenue - a.revenue).slice(0, limit);
+  const { rate } = fxFor(db, storeIds);
+  return [...rows, ...demo.flatMap((id) => demoTopProducts(db, id, from, to))]
+    .map((p) => (rate(p.storeId) === 1 ? p : { ...p, revenue: r2(p.revenue * rate(p.storeId)), profit: r2(p.profit * rate(p.storeId)) }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, limit);
 }

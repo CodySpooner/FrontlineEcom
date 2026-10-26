@@ -203,6 +203,12 @@ export interface AnalyticsSummary {
   byStore: { storeId: string; totals: MetricTotals; deltas: MetricDeltas }[];
   /** Period totals. Sessions, add to carts and checkouts come from GA4 (or demo data); 0 until it is connected. */
   funnel: Funnel;
+  /**
+   * ISO code of every amount in this response: the store's own currency for one store, Settings.baseCurrency for
+   * several (converted at ECB reference rates). /api/analytics/campaigns and /top-products with the same stores use it too.
+   * Always set by /api/analytics/summary; treat a missing value as USD.
+   */
+  currency?: string;
 }
 
 export interface Funnel {
@@ -848,11 +854,13 @@ export interface Settings {
   sound: boolean;
   /** Which events create notifications. */
   notifications: { approvals: boolean; agentDone: boolean; errors: boolean };
+  /** ISO code that multi-store totals are converted to (default USD). */
+  baseCurrency: string;
   /** Read-only: where the local database and key live. */
   dataDir: string;
 }
 
-export type SettingsUpdate = { profile?: Partial<Settings['profile']>; sound?: boolean; notifications?: Partial<Settings['notifications']> };
+export type SettingsUpdate = { profile?: Partial<Settings['profile']>; sound?: boolean; notifications?: Partial<Settings['notifications']>; baseCurrency?: string };
 
 /**
  * Per-store hard caps the agents must respect. GET /api/caps?stores= → StoreCaps[] (defaults until saved);
