@@ -60,7 +60,7 @@ export function createRunManager(opts: RunManagerOptions) {
   trimOldTranscripts(db);
 
   /** Queues a task. Returns an error message when the agent can't take it. */
-  function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string): AgentRun | string {
+  function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string, retryOf?: string): AgentRun | string {
     const agent = getAgent(db, agentId);
     if (!agent) return 'Agent not found';
     if (!agent.enabled) return 'This agent is offline. Redeploy it first.';
@@ -83,6 +83,8 @@ export function createRunManager(opts: RunManagerOptions) {
     db.prepare('INSERT INTO agent_runs (id, store_id, agent_id, task, resume, parent_run_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
       id, agent.storeId, agentId, task, resume ?? null, parentRunId ?? null, new Date().toISOString(),
     );
+    // A retry is linked before it can start: missions and assign_task follow `retry:<old>:<new>`.
+    if (retryOf) once(db, `retried:${id}`) && once(db, `retry:${retryOf}:${id}`);
     const run = getRun(db, id)!;
     opts.onRun?.(run);
     pump();
@@ -328,8 +330,7 @@ export function createRunManager(opts: RunManagerOptions) {
   // scheduler counts it as fired). Chat follow-ups are left for the owner to resend; a retry is never retried.
   for (const r of interrupted) {
     if (r.resume || Date.now() - Date.parse(String(r.created_at)) > 6 * 3_600_000 || !once(db, `retried:${r.id}`)) continue;
-    const again = start(String(r.agent_id), String(r.task), undefined, r.parent_run_id ? String(r.parent_run_id) : undefined);
-    if (typeof again !== 'string') once(db, `retried:${again.id}`) && once(db, `retry:${r.id}:${again.id}`); // missions follow this link
+    start(String(r.agent_id), String(r.task), undefined, r.parent_run_id ? String(r.parent_run_id) : undefined, String(r.id));
   }
 
   return { start, cancel, cancelStore, cancelAgent, get, idle };

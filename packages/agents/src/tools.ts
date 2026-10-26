@@ -681,8 +681,17 @@ export const APP_TOOLS: AppTool[] = [
       if (ctx.db.prepare('SELECT parent_run_id FROM agent_runs WHERE id = ?').get(ctx.runId)?.parent_run_id) {
         return 'This task was assigned to you, so it cannot be passed on. Do it, or say what is blocking it.';
       }
-      if (Number(ctx.db.prepare('SELECT count(*) AS n FROM agent_runs WHERE parent_run_id = ?').get(ctx.runId)?.n) >= 3) return 'Not assigned: 3 tasks per run is the limit.';
+      // A run retried after a restart (runs.ts links `retry:<old>:<new>`) carries on its earlier attempt: the same role
+      // isn't handed the work again, and the limit counts both.
+      const attempts = [
+        ctx.runId,
+        ...ctx.db.prepare(`SELECT substr(ref, 7, length(ref) - 7 - length(?1)) AS id FROM done_once WHERE ref LIKE 'retry:%:' || ?1`).all(ctx.runId).map((r) => String(r.id)),
+      ];
+      const assigned = ctx.db.prepare('SELECT id, agent_id, parent_run_id, status FROM agent_runs WHERE parent_run_id IN (SELECT value FROM json_each(?))').all(JSON.stringify(attempts));
+      if (assigned.length >= 3) return 'Not assigned: 3 tasks per run is the limit.';
       const name = AGENT_ROLES[role].name;
+      const before = assigned.find((r) => r.parent_run_id !== ctx.runId && r.agent_id === `${ctx.store.id}:${role}`);
+      if (before) return `Already assigned to the ${name} before the app restarted (run ${before.id}, ${before.status}): don't assign it again.`;
       const run = ctx.startRun(`${ctx.store.id}:${role}`, `${task}\n\n(Assigned by the ${AGENT_ROLES[ctx.agent.role].name}.)`, ctx.runId);
       return typeof run === 'string' ? `Not assigned to the ${name}: ${run}` : `Assigned to the ${name} (run ${run.id}, ${run.status}).`;
     },
