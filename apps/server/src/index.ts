@@ -1,10 +1,9 @@
 import { startServer } from './app';
 import { startScheduler } from './automations';
 import { startBackupLoop } from './backups';
-import { startCompetitorWatch } from './competitors';
 import { startDigestLoop } from './digest';
 import { startFxLoop } from './fx';
-import { seedCompetitors } from './competitors';
+import { seedCompetitors, startCompetitorWatch } from './competitors';
 import { dataDir, dbFile, openDb } from './db';
 import { seedDemo } from './demo';
 import { startDemoEmitter } from './live';

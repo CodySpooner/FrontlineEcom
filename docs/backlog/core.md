@@ -94,6 +94,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Packaged-app smoke after CORE-35..42 (rebuilt installer, unpacked exe, isolated profile): health and summary OK, and backup → restore → exit 75 → API restarted on the snapshot ("Before" came back). The window renders onboarding over the dashboard and the log has 0 errors. Deferred: Shopify authorization-code OAuth. Client credentials connect every store in the owner's organization with no browser step, and making Shopify a Connect provider would put an OAuth redirect setup on the common path. Add it when a store outside the organization needs connecting
 - 2026-10-26 — CORE-42: `POST /api/settings/open-data-folder` → 204 opens Explorer at the data dir (fixed path, no input, behind the local-only guard). Verified on the dev server: Explorer opened at `apps/server/.data`, and a foreign origin got 403
 - 2026-10-26 — Inbox (agents, AGT-58): `deleteTheme(db, key, storeId, themeId)` in `connectors/shopify.ts` (Admin `themeDelete`). It refuses the live MAIN theme and an unknown id before any write, and logs `theme_delete` with the theme name
 - 2026-10-26 — CORE-41: a failing daily backup raises one error notification ("The daily backup failed: <reason>. Check free disk space…", gated by the errors setting, so also a toast via CORE-38). An info one follows when it works again; hourly retries don't repeat it
