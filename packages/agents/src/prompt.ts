@@ -95,8 +95,11 @@ function storeProfile(store: Store): string {
     '# Store profile',
     `- ${store.name} (id ${store.id}) on ${store.platform}, niche ${store.niche}${store.nicheDetail ? `: ${store.nicheDetail}` : ''}`,
     `- Currency ${store.currency}, timezone ${store.timezone}`,
+    store.feePercent || store.feePerOrder
+      ? `- Platform and payment fees: about ${store.feePercent ?? 0}% of revenue + ${store.feePerOrder ?? 0} ${store.currency} per order (the owner's estimate). Profit, margins in review_campaigns and price floors already subtract them; count them when you size margins yourself.`
+      : '',
     store.connected
       ? `- Live data from the connected store and ad accounts.\n${storeWrites(store)}`
       : '- Demo data: no live store is connected, numbers are simulated. Say so if the owner treats them as real.',
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }

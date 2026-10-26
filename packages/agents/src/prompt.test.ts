@@ -53,6 +53,12 @@ describe('assemblePrompt', () => {
     expect(prompt).toContain("- The app can't change tiktok_shop stores yet: put store changes in your answer for the owner to make by hand.");
   });
 
+  test("the store's fee estimate is in its profile when the owner set one", () => {
+    const profile = (s: Store) => assemblePrompt({ agent: agentOf(glow, 'product_hunter'), store: s });
+    expect(profile({ ...glow, feePercent: 9.5, feePerOrder: 0.25 })).toContain('- Platform and payment fees: about 9.5% of revenue + 0.25 USD per order');
+    expect(profile(glow)).not.toContain('Platform and payment fees');
+  });
+
   test('a connected store is told what the app can change there on approval', () => {
     const writes = (platform: Store['platform']) => assemblePrompt({ agent: agentOf(peak, 'market_analyst'), store: { ...peak, platform } }).split('\n').find((l) => l.startsWith(`- On ${platform} the app can`));
     expect(writes('shopify')).toContain('add products, change prices, publish product pages, publish other pages, publish theme changes once');
