@@ -236,6 +236,22 @@ describe('agent tools on demo data', () => {
     expect(plain!.output.split('\n')[0]).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts');
   });
 
+  test("metrics_timeseries says a late traffic report is not reported yet, not a day of no traffic", async () => {
+    const [day] = db.prepare(`SELECT date, sessions, add_to_carts, checkouts FROM daily_metrics WHERE store_id = 'glow' AND orders > 0 ORDER BY date DESC LIMIT 1`).all();
+    db.prepare(`UPDATE daily_metrics SET sessions = 0, add_to_carts = 0, checkouts = 0 WHERE store_id = 'glow' AND date = ?`).run(String(day!.date)); // GA4 a day behind
+    try {
+      const [series] = results(await run(input('glow', 'market_analyst'), [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
+      const [header, ...rows] = series!.output.split('\n');
+      expect(header).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts');
+      const cells = (r: string) => r.split(',').slice(7);
+      expect(cells(rows.find((r) => r.startsWith(String(day!.date)))!)).toEqual(['not reported yet', 'not reported yet', 'not reported yet']);
+      expect(rows.slice(0, 3).every((r) => cells(r).every((c) => /^\d+$/.test(c)))).toBe(true); // settled days keep their numbers
+    } finally {
+      db.prepare(`UPDATE daily_metrics SET sessions = ?, add_to_carts = ?, checkouts = ? WHERE store_id = 'glow' AND date = ?`)
+        .run(Number(day!.sessions), Number(day!.add_to_carts), Number(day!.checkouts), String(day!.date)); // the db is shared by these tests
+    }
+  });
+
   test("metrics_timeseries marks today's row as today so far, not a whole day", async () => {
     const day = new Date().toLocaleDateString('en-CA'); // a demo store's today is this machine's
     const added = db.prepare(`INSERT OR IGNORE INTO daily_metrics (store_id, date) VALUES ('glow', ?)`).run(day).changes;

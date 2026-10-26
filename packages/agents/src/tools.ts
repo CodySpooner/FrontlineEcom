@@ -204,6 +204,9 @@ export const APP_TOOLS: AppTool[] = [
       const total = (k: string) => rows.slice(0, -2).reduce((n, r) => n + Number(r[k]), 0);
       const missing = total('orders') ? ['sessions', 'add_to_carts', 'checkouts'].filter((k) => !total(k)) : [];
       const note = missing.length ? `(${missing.join(', ')}: not reported for this store, so 0 means no data, not no traffic.)\n` : '';
+      // The newest days of a step the store does report: a 0 beside that day's orders is a late report, not lost traffic.
+      const steps = ['sessions', 'add_to_carts', 'checkouts'].filter((k) => !missing.includes(k) && total(k));
+      for (const r of rows.slice(-2)) if (Number(r.orders)) for (const k of steps) if (!Number(r[k])) r[k] = 'not reported yet';
       // Traffic that starts mid-window (GA4 connected later, TikTok's 30 days of visitors): orders before it have no
       // sessions to convert from, and counting them inflates conversion (core's funnel leaves them out the same way).
       const first = missing.includes('sessions') ? -1 : rows.findIndex((r) => Number(r.sessions) > 0);
