@@ -28,6 +28,7 @@ export const NAV: NavItem[] = [
   { path: '/integrations', label: 'Integrations', icon: Plug, title: 'Integrations', subtitle: 'Plug in your stores, ads and AI.', art: 'lone', item: 'UI-15' },
   { path: '/knowledge', label: 'Knowledge Base', icon: BookOpen, title: 'Knowledge Base', subtitle: 'What your squad knows.', art: 'lone', item: 'UI-16' },
   { path: '/settings', label: 'Settings', icon: Settings, title: 'Settings', subtitle: 'Stores, caps and preferences.', art: 'lone', item: 'UI-17' },
+  { path: '/ecosystem', label: 'AI Ecosystem', icon: Bot, title: 'AI Ecosystem', subtitle: 'A LIVING WORKFORCE OF ECOMMERCE AGENTS', art: 'squad', item: 'ECO-02' },
 ];
 
 /** Window title: the sidebar label of the page you're on ("Orders & Fulfillment · Frontline Ecom"); an agent page names the agent. */

@@ -17,6 +17,7 @@ import { Dashboard } from './pages/Dashboard';
 import { DevGallery } from './pages/DevGallery';
 import { Placeholder } from './pages/Placeholder';
 import { Research } from './pages/Research';
+import { Ecosystem } from './ecosystem/Ecosystem';
 
 const PAGES: Record<string, ReactNode> = { '/agents': <Agents />, '/research': <Research />, '/creative': <Creative />, '/analytics': <Analytics />, '/orders': <Orders />, '/competitors': <Competitors />, '/automation': <Automation />, '/integrations': <Integrations />, '/knowledge': <Knowledge />, '/settings': <Settings />, '/builder': <Builder /> };
 
@@ -26,7 +27,7 @@ export function App() {
       <Route element={<Shell />}>
         <Route index element={<Dashboard />} />
         {NAV.slice(1).map((n) => (
-          <Route key={n.path} path={n.path} element={PAGES[n.path] ?? <Placeholder nav={n} />} />
+          <Route key={n.path} path={n.path} element={n.path === '/ecosystem' ? <Ecosystem /> : PAGES[n.path] ?? <Placeholder nav={n} />} />
         ))}
         <Route path="/agents/:id" element={<AgentDetail />} />
         {import.meta.env.DEV && <Route path="/dev/ui" element={<DevGallery />} />}
