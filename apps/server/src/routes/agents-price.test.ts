@@ -56,6 +56,17 @@ test('a price test is checked, approved and applied to a demo store', async () =
   expect(await run('glow', [price(id, cost)])).toEqual([`Not sent: ${cost} EUR is at or below the unit cost (${cost} EUR).`]);
 });
 
+test("a price that covers the unit cost but not the store's fees is refused", async () => {
+  const p = db.prepare(`SELECT id, price, cost FROM products WHERE store_id = 'glow' AND cost > 5 ORDER BY price DESC LIMIT 1`).get()!;
+  const [id, cost] = [String(p.id), Number(p.cost)];
+  db.prepare(`UPDATE products SET price = ? WHERE id = ?`).run(Math.round(cost * 1.2 * 100) / 100, id); // within ±30% of the test prices
+  db.prepare(`UPDATE stores SET fee_percent = 10, fee_per_order = 0.3 WHERE id = 'glow'`).run();
+  const floor = Math.round(((cost + 0.3) / 0.9) * 100) / 100;
+  const [refused, sent] = await run('glow', [price(id, floor), price(id, Math.round((floor + 0.5) * 100) / 100)]);
+  expect(refused).toBe(`Not sent: $${floor} is at or below the unit cost plus fees ($${floor}).`);
+  expect(sent).toMatch(/^Approved by the owner/);
+});
+
 test('on a real store a price test is judged on gross profit 14 days before vs after, once', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
   const day = addDays(localDate(), -20);

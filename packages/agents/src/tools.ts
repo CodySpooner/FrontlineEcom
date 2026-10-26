@@ -736,7 +736,11 @@ export const APP_TOOLS: AppTool[] = [
       const [from, to] = [Number(p.price), r2(newPrice)];
       const $ = (n: number) => cash(n, ctx.store.currency);
       if (to === from) return `${$(to)} is already the price.`;
-      if (p.cost != null && to <= Number(p.cost)) return `Not sent: ${$(to)} is at or below the unit cost (${$(Number(p.cost))}).`;
+      // The lowest price that still covers the unit and the store's fee estimate. ponytail: the per-order fee is counted
+      // per unit, so a multi-unit order's floor is a little high.
+      const fees = ctx.store.feePercent || ctx.store.feePerOrder;
+      const floor = p.cost == null ? undefined : r2((Number(p.cost) + (ctx.store.feePerOrder ?? 0)) / (1 - (ctx.store.feePercent ?? 0) / 100));
+      if (floor !== undefined && to <= floor) return `Not sent: ${$(to)} is at or below the unit cost${fees ? ' plus fees' : ''} (${$(floor)}).`;
       if (Math.abs(to - from) / from > 0.3) return 'Not sent: test within ±30% of the current price, one step at a time.';
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
       if (compareAt !== undefined && ctx.store.connected && ctx.store.platform === 'etsy') return 'Not sent: Etsy has no compare-at price. Propose the price alone; a sale is set in Etsy Shop Manager (Marketing → Sales and discounts).';
