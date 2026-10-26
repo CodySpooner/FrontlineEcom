@@ -116,6 +116,20 @@ describe('agent tools on demo data', () => {
       expect(fees).toBeCloseTo(revenue! * 0.1 + orders! * 0.3, 1);
       expect(profit).toBeCloseTo(revenue! - adSpend! - cogs! - fees!, 1);
     }
+    db.prepare(`UPDATE stores SET fee_percent = 0, fee_per_order = 0 WHERE id = 'pawsome'`).run(); // the db is shared by these tests
+  });
+
+  test("list_products margin nets the store's fee %, like core's product profit", async () => {
+    const margin = async () => {
+      const [products] = results(await run(input('pawsome', 'market_analyst'), [{ call: 'list_products', input: { limit: 1 } }, done]));
+      const [, price, cost, margin] = products!.output.split('\n')[1]!.match(/^[^,]+,(?:"[^"]*"|[^,]*),([\d.]+),[^,]*,([\d.]+),([-\d.]+),/)!;
+      return { price: Number(price), cost: Number(cost), margin: Number(margin) };
+    };
+    const gross = await margin();
+    expect(gross.margin).toBeCloseTo((100 * (gross.price - gross.cost)) / gross.price, 1);
+    db.prepare(`UPDATE stores SET fee_percent = 10 WHERE id = 'pawsome'`).run();
+    expect((await margin()).margin).toBeCloseTo((100 * (gross.price * 0.9 - gross.cost)) / gross.price, 1);
+    db.prepare(`UPDATE stores SET fee_percent = 0 WHERE id = 'pawsome'`).run();
   });
 
   test("list_products says 'not tracked' for stock the platform doesn't count, instead of a sold-out 0", async () => {
