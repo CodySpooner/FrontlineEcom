@@ -38,8 +38,9 @@ describe('assemblePrompt', () => {
       'niche beauty: at-home skincare devices',
       'Demo data',
       '- LED masks outsell serums 3:1 (learning, confidence 0.8)',
-      'Today is 2026-10-26 (America/Chicago).',
+      `Today is 2026-10-26 (${Intl.DateTimeFormat().resolvedOptions().timeZone}).`, // demo data: this machine's zone
     ]);
+    expect(assemblePrompt({ agent: agentOf(glow, 'market_analyst'), store: { ...glow, connected: true }, today: '2026-10-26' })).toContain('Today is 2026-10-26 (America/Chicago).');
     expect(prompt).not.toContain(platformPack('tiktok_shop'));
     expect(prompt).not.toContain(playbook('copywriter'));
   });

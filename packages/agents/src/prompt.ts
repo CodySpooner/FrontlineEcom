@@ -58,7 +58,9 @@ export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [
       : '',
     storeProfile(store),
   ].filter(Boolean);
-  const date = `Today is ${today ?? new Date().toLocaleDateString('en-CA', { timeZone: store.timezone })} (${store.timezone}).`;
+  // The zone the store's data is dated in, as the tools' windows: a connected shop's own, demo data's this machine's.
+  const zone = store.connected ? store.timezone : Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const date = `Today is ${today ?? new Date().toLocaleDateString('en-CA', { timeZone: zone })} (${zone}).`;
 
   let used = estimateTokens([...fixed, date].join('\n\n'));
   const known: string[] = [];
