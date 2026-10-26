@@ -114,6 +114,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - TikTok Shop price changes: the path is confirmed (`POST /product/202309/products/{id}/prices/update`, EcomPHP/tiktokshop-php), but the body (`skus[].id`, `price.amount`/`currency`?) and the scope are only in TikTok's JavaScript-rendered partner docs. Needs a verified request body or a live shop. Woo and Etsy price writers are done.
 
 ## Done
+- 2026-10-26 — Products that keep selling at 0 read as untracked, not "Sold out": Shopify variants with `inventoryPolicy: CONTINUE` (common when dropshipping; first variant stands for all) and WooCommerce products or variations taking backorders (`notify`/`yes`). Agents' stock checks no longer flag them. Tests
 - 2026-10-26 — Inbox (ui): `TopProduct` carries `inventory?`, `inventoryTracked?` and `status?`, from the products row in the same query; demo stores fill them too. A product no longer in the catalog has none. The UI can drop its `GET /api/products?limit=200` lookup. Test
 - 2026-10-26 — Review fixes for the catalog passes:
   - WooCommerce paging no longer trusts a missing `x-wp-totalpages` header. A proxy or security plugin that strips it used to stop the read at page 1, and the daily pass then archived products 101+. Now a full page means there's another.

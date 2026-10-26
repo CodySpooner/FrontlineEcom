@@ -43,6 +43,8 @@ interface WooProduct {
   stock_quantity: number | null;
   /** Off: Woo doesn't count the product's own stock (a variable product may count it per variation instead). */
   manage_stock?: boolean;
+  /** 'notify' or 'yes': keeps selling at 0, so it can't sell out. */
+  backorders?: string;
   type?: string;
   images?: { src: string }[];
   date_modified_gmt: string;
@@ -138,9 +140,10 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const variationStock = new Map<number, { stock: number; tracked: boolean }>();
     for (const p of products) {
       if (p.type !== 'variable' || p.manage_stock || p.status === 'trash') continue;
-      const vs = await all<{ manage_stock: boolean | 'parent'; stock_quantity: number | null }>(`products/${p.id}/variations`, {}).catch(() => []);
+      const vs = await all<{ manage_stock: boolean | 'parent'; stock_quantity: number | null; backorders?: string }>(`products/${p.id}/variations`, {}).catch(() => []);
       const counted = vs.filter((v) => v.manage_stock === true);
-      if (counted.length) variationStock.set(p.id, { stock: counted.reduce((a, v) => a + (v.stock_quantity ?? 0), 0), tracked: counted.length === vs.length });
+      const tracked = counted.length === vs.length && vs.every((v) => (v.backorders ?? 'no') === 'no');
+      if (counted.length) variationStock.set(p.id, { stock: counted.reduce((a, v) => a + (v.stock_quantity ?? 0), 0), tracked });
     }
     // The shop's own currency (Settings → General), else the newest order's. A multi-currency plugin's orders in another
     // currency are converted into it at today's ECB rate; one with no rate is left out rather than counted at par.
@@ -167,7 +170,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         const price = Number(p.price || p.regular_price || 0);
         const regular = Number(p.regular_price || 0);
         const status: ProductStatus = p.status === 'publish' ? 'active' : p.status === 'trash' ? 'archived' : 'draft';
-        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), variationStock.get(p.id)?.stock ?? p.stock_quantity ?? 0, (variationStock.get(p.id)?.tracked ?? p.manage_stock !== false) ? 1 : 0, status);
+        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), variationStock.get(p.id)?.stock ?? p.stock_quantity ?? 0, (variationStock.get(p.id)?.tracked ?? (p.manage_stock !== false && (p.backorders ?? 'no') === 'no')) ? 1 : 0, status);
       }
       // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking needs a plugin.
       const ord = db.prepare(

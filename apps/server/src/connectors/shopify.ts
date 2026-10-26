@@ -36,7 +36,8 @@ interface ShopifyProduct {
   totalInventory: number | null;
   tracksInventory: boolean;
   featuredMedia: { preview: { image: { url: string } | null } | null } | null;
-  variants: { nodes: { price: string; compareAtPrice: string | null; inventoryItem: { unitCost: Money } | null }[] };
+  /** inventoryPolicy CONTINUE keeps selling at 0 (common when dropshipping). */
+  variants: { nodes: { price: string; compareAtPrice: string | null; inventoryPolicy?: string; inventoryItem: { unitCost: Money } | null }[] };
 }
 
 type LineItem = { quantity: number; product: { id: string } | null; discountedTotalSet: { shopMoney: { amount: string } }; variant: { inventoryItem: { unitCost: Money } | null } | null };
@@ -60,7 +61,7 @@ const PRODUCTS_Q = `query ($after: String, $q: String) {
   products(first: 50, after: $after, query: $q) {
     nodes { id title status updatedAt totalInventory tracksInventory
       featuredMedia { preview { image { url(transform: { maxWidth: 480 }) } } }
-      variants(first: 1) { nodes { price compareAtPrice inventoryItem { unitCost { amount } } } } }
+      variants(first: 1) { nodes { price compareAtPrice inventoryPolicy inventoryItem { unitCost { amount } } } } }
     pageInfo { hasNextPage endCursor } } }`;
 const PRODUCT_IDS_Q = `query ($after: String) { products(first: 250, after: $after) { nodes { id } pageInfo { hasNextPage endCursor } } }`;
 const DELETED_Q = `query ($after: String, $q: String) {
@@ -239,9 +240,10 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
            cost = CASE WHEN excluded.cost > 0 THEN excluded.cost ELSE cost END, inventory = excluded.inventory, inventory_tracked = excluded.inventory_tracked, status = excluded.status`,
       );
       for (const p of products) {
+        // ponytail: the first variant stands for all (price, cost, inventory policy).
         const v = p.variants.nodes[0];
         const compareAt = v?.compareAtPrice ? num(v.compareAtPrice) : null;
-        prod.run(storeId, tail(p.id), p.title, p.featuredMedia?.preview?.image?.url ?? null, num(v?.price), compareAt, num(v?.inventoryItem?.unitCost), p.totalInventory ?? 0, p.tracksInventory === false ? 0 : 1, p.status.toLowerCase() as ProductStatus);
+        prod.run(storeId, tail(p.id), p.title, p.featuredMedia?.preview?.image?.url ?? null, num(v?.price), compareAt, num(v?.inventoryItem?.unitCost), p.totalInventory ?? 0, p.tracksInventory === false || v?.inventoryPolicy === 'CONTINUE' ? 0 : 1, p.status.toLowerCase() as ProductStatus);
       }
       const archive = db.prepare("UPDATE products SET status = 'archived' WHERE store_id = ? AND id = ?");
       for (const e of deleted) if (e.subjectId) archive.run(storeId, tail(e.subjectId));

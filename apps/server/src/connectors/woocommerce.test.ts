@@ -319,3 +319,24 @@ test('Woo: with no x-wp-totalpages header (stripped by a proxy) a full page mean
   await syncWooCommerce(db, key, 'pawsome', fetchFn, new Date('2026-10-27T18:00:00Z')); // the next day's full pass
   expect(db.prepare("SELECT count(*) AS n FROM products WHERE store_id = 'pawsome' AND id GLOB 'woo-*' AND status = 'active'").get()?.n).toBe(120);
 });
+
+test('Woo: a product or variation that takes backorders keeps selling at 0, so it reads as untracked', async () => {
+  const db = setup();
+  const base = fakeWoo().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (u.pathname.endsWith('/products/10/variations')) return Response.json([{ manage_stock: true, stock_quantity: 0 }, { manage_stock: true, stock_quantity: 0, backorders: 'notify' }], { headers: { 'x-wp-totalpages': '1' } });
+    if (u.pathname.endsWith('/products') && u.searchParams.get('status') !== 'trash') {
+      return Response.json([
+        { id: 7, name: 'Bowl', status: 'publish', price: '19.00', regular_price: '19.00', sale_price: '', stock_quantity: 0, manage_stock: true, backorders: 'yes', date_modified_gmt: '2026-10-21T00:00:00' },
+        { id: 10, name: 'Harness', type: 'variable', status: 'publish', price: '30.00', regular_price: '', sale_price: '', stock_quantity: null, manage_stock: false, date_modified_gmt: '2026-10-21T00:00:00' },
+      ], { headers: { 'x-wp-totalpages': '1' } });
+    }
+    return base(url, init);
+  }) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT id, inventory, inventory_tracked AS tracked FROM products WHERE id IN ('woo-7', 'woo-10') ORDER BY id").all()).toEqual([
+    { id: 'woo-10', inventory: 0, tracked: 0 },
+    { id: 'woo-7', inventory: 0, tracked: 0 },
+  ]);
+});

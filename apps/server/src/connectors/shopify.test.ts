@@ -484,6 +484,19 @@ test("a product whose stock Shopify doesn't track reads as untracked, not sold o
   expect(p).toMatchObject({ id: '111', inventory: 0, inventoryTracked: false });
 });
 
+test('a product that keeps selling when out of stock (inventory policy CONTINUE) reads as untracked, not sold out', async () => {
+  const { db, app } = await setup();
+  const shop = fakeShopify([]).fetchFn;
+  const continues = { ...PRODUCT, totalInventory: -3, tracksInventory: true, variants: { nodes: [{ ...PRODUCT.variants.nodes[0]!, inventoryPolicy: 'CONTINUE' }] } };
+  const fetchFn = (async (url: string, init: RequestInit) =>
+    String(init.body).includes('products(first: 50')
+      ? Response.json({ data: { products: { nodes: [continues], pageInfo: { hasNextPage: false, endCursor: null } } } })
+      : shop(url, init)) as typeof fetch;
+  await syncShopify(db, key, 'glow', fetchFn, NOW);
+  const [p] = ((await (await app.request('/api/products?stores=glow')).json()) as Page<Product>).items;
+  expect(p).toMatchObject({ id: '111', inventoryTracked: false });
+});
+
 test("a product deleted in Shopify is archived from its delete event (later syncs only)", async () => {
   const { db } = await setup();
   const first = fakeShopify([], 200, false, ['gid://shopify/Product/111']);
