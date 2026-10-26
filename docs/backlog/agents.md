@@ -156,11 +156,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-70 Going live starts the squad fresh: core wipes a demo store's simulated rows when it first syncs, but the agents' facts and learnings drawn from them stayed in memory and in every prompt as if they were real.
 - [x] AGT-71 Going live clears the squad's other demo-phase leftovers: requests the agents asked on simulated numbers stayed pending and would act on the live store if approved (core removes only its seeded samples), issues flagged on demo orders stayed open forever, and drafts for demo products couldn't publish.
 - [x] AGT-72 Demo Ad Variations makes the variations it's asked for: the Creative Studio tab asks for "3 variations with different hooks", but the demo agent made one, so the tab looked broken in demo mode.
+- [x] AGT-73 `packages/agents/README.md`: how a run is assembled, guarded, carried out and learned from, plus the money guards, demo vs live, and where to add a tool, a platform writer or a role (Phase 5 docs).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-73: packages/agents/README.md, a developer map of the engine. The owner-facing summary stays in the root README (core).
 - 2026-10-26 — AGT-72: the demo Creative Studio reads "Make N variations" (at most 3) and asks for one render per hook (see the difference / what everyone is switching to / now <price>), each its own approval like a real run. Test added.
 - 2026-10-26 — squad_log on a live store starts at its go-live time (`activate:<id>`), so the first week's reports don't count demo-era requests and runs as the squad's track record. Test added.
 - 2026-10-26 — AGT-71: `startFresh` (routes/agents.ts, at first activation) extends AGT-70. Pending requests expire (denied with an `[Expired: asked on demo data ...]` note, which `rememberDenial` skips, so the squad doesn't learn the owner said no). Open order issues close as "Flagged on demo data", and unpublished product-page drafts are deleted. One owner note gives the counts. Test extended.
