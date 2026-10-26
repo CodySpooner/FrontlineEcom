@@ -1,7 +1,7 @@
 import type { Options, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { Agent, AgentEvent, Store } from '@frontline/shared';
 import { describe, expect, test } from 'vitest';
-import { claudeEngine, fakeEngine, runAgent, toAgentEvents, type RunInput } from './index';
+import { claudeEngine, defaultEngine, fakeEngine, runAgent, toAgentEvents, type RunInput } from './index';
 
 const store: Store = { id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'America/Chicago', color: '#ff8f98', connected: false };
 const agent: Agent = { id: 'glow:market_analyst', storeId: 'glow', role: 'market_analyst', status: 'idle', level: 1, xp: 0 };
@@ -35,6 +35,23 @@ describe('fake engine', () => {
     ];
     expect(await collect(runAgent(input, fakeEngine(() => script)))).toEqual(script);
   });
+});
+
+test('connected stores get Claude and demo stores the fake engine, unless the env forces one', async () => {
+  const named = (name: string) => async function* (): AsyncGenerator<AgentEvent> {
+    yield { type: 'text_delta', text: name };
+  };
+  const pick = async (connected: boolean) => text(await collect(defaultEngine(named('claude'), named('fake'))({ ...input, store: { ...store, connected } })));
+  const forced = process.env.FRONTLINE_AGENT_ENGINE;
+  try {
+    delete process.env.FRONTLINE_AGENT_ENGINE;
+    expect([await pick(true), await pick(false)]).toEqual(['claude', 'fake']);
+    process.env.FRONTLINE_AGENT_ENGINE = 'claude';
+    expect(await pick(false)).toBe('claude');
+  } finally {
+    process.env.FRONTLINE_AGENT_ENGINE = forced;
+  }
+  expect([await pick(true), process.env.FRONTLINE_AGENT_ENGINE]).toEqual(['fake', 'fake']);
 });
 
 describe('runAgent', () => {

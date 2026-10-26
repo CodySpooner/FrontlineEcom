@@ -19,9 +19,14 @@ export interface RunInput {
 /** Streams one agent run. Engines may throw or stop early; `runAgent` normalizes that. */
 export type Engine = (input: RunInput) => AsyncIterable<AgentEvent>;
 
-/** `FRONTLINE_AGENT_ENGINE=claude` uses the owner's Claude Code login; anything else is the free fake engine. */
-export function defaultEngine(): Engine {
-  return process.env.FRONTLINE_AGENT_ENGINE === 'claude' ? claudeEngine() : fakeEngine();
+/**
+ * Connected stores run on the owner's Claude Code login; demo stores on the free fake engine, so exploring the demo
+ * never spends Claude usage. `FRONTLINE_AGENT_ENGINE=claude|fake` forces one for every store (tests force fake).
+ */
+export function defaultEngine(claude: Engine = claudeEngine(), fake: Engine = fakeEngine()): Engine {
+  const forced = process.env.FRONTLINE_AGENT_ENGINE;
+  if (forced) return forced === 'claude' ? claude : fake;
+  return (input) => (input.store.connected ? claude : fake)(input);
 }
 
 /** Runs an agent and guarantees the stream ends with exactly one `done` or `error` event. */

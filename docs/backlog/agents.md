@@ -79,6 +79,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-32 Outcomes move confidence: memories carry the run that wrote them; when an approved ad change or added product is measured, that run's learnings gain (worked) or lose (didn't) confidence via `adjustConfidence`. Today it's never called, so DESIGN's "outcomes confirm or contradict" loop is open.
 - [x] AGT-33 Knowledge Base edits: owner overrides for playbooks and platform/niche packs saved in the data dir (shipped files untouched); `PUT /api/knowledge/:kind/:key {markdown}`, `DELETE` resets to shipped; prompt assembly prefers the override; `KnowledgeDoc.edited`.
 - [x] AGT-34 Issue queue closes itself: late/stuck/supplier issues resolve once the order is delivered; supplier issues also resolve once supplier tracking arrives.
+- [x] AGT-36 Real engine by default where it matters: connected stores run on the owner's Claude Code login, demo stores on the fake engine (DESIGN: Claude is the default engine). Until now everything was fake unless an env var was set.
 - [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
@@ -87,6 +88,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-35 Approved ad changes on connected stores still end as "apply on the ad account by hand": core's Meta/Google/TikTok connectors are read-only. Needs core's budget/pause writers (requested in core Inbox); then `applyAdChange` calls them like `publishDraft` does.
 
 ## Done
+- 2026-10-26 — AGT-36 Engine by store: `defaultEngine()` routes connected stores to Claude (owner's Claude Code login) and demo stores to the free fake engine; `FRONTLINE_AGENT_ENGINE=claude|fake` still forces one. The root vitest config sets `FRONTLINE_AGENT_ENGINE=fake`, so tests never spend usage, even for stores a test marks connected.
 - 2026-10-26 — AGT-34 Issue queue closes itself: on `GET /api/order-issues`, open late/stuck/supplier issues whose order is now delivered, and supplier issues whose order has tracking, are resolved with the reason ("Delivered; closed automatically."). The owner only sees what still needs them.
 - 2026-10-26 — AGT-14 Google unblocked without MCPs: core's Google Ads / TikTok Ads syncs fill `campaigns`/`campaign_daily`, so `list_campaigns` and `review_campaigns` read them like Meta. No Python MCP processes or credential files on disk.
 - 2026-10-26 — AGT-33 Knowledge Base edits: `PUT /api/knowledge/:kind/:key {markdown}` saves the owner's version to `<data dir>/knowledge/...`, which every run reads instead of the shipped file (`edited: true`); `DELETE` goes back to the shipped one. Custom niche packs are edited in place and can't be reset. Only known layers are writable.

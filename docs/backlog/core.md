@@ -5,6 +5,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from agents) FYI, tiny root-config change: `vitest.config.ts` now sets `env: { FRONTLINE_AGENT_ENGINE: 'fake' }`. Connected (non-demo) stores now default to the real Claude engine (AGT-36), and this keeps tests from ever calling it. Please keep it if you touch that file.
 - [ ] (from agents) Ad-account writes for approved ad changes (AGT-35): something like `setCampaignBudget(db, key, storeId, network, campaignId, dailyBudget, fetchFn?)` and `pauseCampaign(db, key, storeId, network, campaignId, fetchFn?)` for meta/google/tiktok in the connectors, throwing a readable error like `publishPage`. The agents lane calls them from `applyAdChange` only after approval, and updates the local `campaigns` row on success.
 - [x] (from agents) FYI migration 18 (agents lane) adds `product_tests`; it reads your `order_items` (thanks) for product outcomes on non-demo stores. No action needed.
 - [x] (from ui) Demo orders have `createdAt` later than now. At about 05:45 local the newest is "Oct 26, 7:59 PM" (`2026-10-26T23:59Z`), so today's orders seem to be spread over the whole day. Could the generator stop at the current time? Orders, the Needs You queue and the live feed all show these future times.
