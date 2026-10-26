@@ -31,6 +31,13 @@ export interface Store {
   color: string;
   /** True when real platform credentials are connected; false = demo data. */
   connected: boolean;
+  /**
+   * The owner's estimate of platform + payment fees as a % of revenue (e.g. 9.5 on Etsy: 6.5% transaction + 3%
+   * processing), subtracted from profit. Omitted = 0.
+   */
+  feePercent?: number;
+  /** Fixed fee per order in the store's currency (e.g. 0.25 on Etsy, 0.30 with Shopify Payments). Omitted = 0. */
+  feePerOrder?: number;
 }
 
 export type AgentRole =
@@ -303,6 +310,13 @@ export interface StoreInput {
   timezone?: string;
   /** Default red accent. */
   color?: string;
+  /**
+   * The owner's estimate of platform + payment fees as a % of revenue (e.g. 9.5 on Etsy: 6.5% transaction + 3%
+   * processing), subtracted from profit. Default 0.
+   */
+  feePercent?: number;
+  /** Fixed fee per order in the store's currency (e.g. 0.25 on Etsy, 0.30 with Shopify Payments). Default 0. */
+  feePerOrder?: number;
 }
 
 /** PATCH /api/stores/:id body. Response: the updated Store. */

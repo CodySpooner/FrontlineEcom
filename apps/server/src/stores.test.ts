@@ -58,6 +58,7 @@ test('invalid store bodies are rejected with a message', async () => {
   expect((await app.request('/api/stores', { method: 'POST', body: 'not json' })).status).toBe(400);
   expect((await app.request('/api/stores/nope', send('PATCH', { name: 'Y' }))).status).toBe(404);
   expect((await app.request('/api/stores/pawsome', send('PATCH', { niche: 'cars' }))).status).toBe(400);
+  for (const fee of [{ feePercent: 80 }, { feePercent: '5' }, { feePerOrder: -1 }]) expect((await app.request('/api/stores/pawsome', send('PATCH', fee))).status).toBe(400);
 });
 
 test('deleting a store removes its metrics', async () => {
@@ -88,4 +89,19 @@ test("a demo store the owner creates gets its niche's products and orders that m
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("the owner's fee estimate is saved on the store and comes off its profit", async () => {
+  const { app } = setup();
+  const summary = async () => ((await (await app.request('/api/analytics/summary?stores=pawsome&range=30')).json()) as AnalyticsSummary).totals;
+  const before = await summary();
+  const res = await app.request('/api/stores/pawsome', send('PATCH', { feePercent: 9.5, feePerOrder: 0.25 }));
+  expect(await res.json()).toMatchObject({ id: 'pawsome', feePercent: 9.5, feePerOrder: 0.25 });
+  const after = await summary();
+  expect(after.revenue).toBe(before.revenue);
+  expect(after.profit).toBeCloseTo(before.profit - before.revenue * 0.095 - before.orders * 0.25, 1);
+
+  const reset = await app.request('/api/stores/pawsome', send('PATCH', { feePercent: 0, feePerOrder: 0 }));
+  expect(await reset.json()).not.toHaveProperty('feePercent');
+  expect((await summary()).profit).toBe(before.profit);
 });

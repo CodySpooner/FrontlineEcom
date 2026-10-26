@@ -454,6 +454,10 @@ export const MIGRATIONS = [
   /* 29 (core: 0 when the platform doesn't track a product's stock, so its inventory 0 isn't "sold out") */ `
   ALTER TABLE products ADD COLUMN inventory_tracked INTEGER NOT NULL DEFAULT 1;
   `,
+  /* 30 (core: the owner's fee estimate per store, subtracted from profit) */ `
+  ALTER TABLE stores ADD COLUMN fee_percent REAL NOT NULL DEFAULT 0;
+  ALTER TABLE stores ADD COLUMN fee_per_order REAL NOT NULL DEFAULT 0;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

@@ -71,14 +71,16 @@ export function summarize(rows: MetricRow[], { range, to, storeIds, todayFractio
   return { range, storeIds, from, to, totals, previous, deltas: deltasOf(totals, previous), series, byStore, funnel };
 }
 
-/** Loads both periods for the given stores from daily_metrics. */
+/** Loads both periods for the given stores from daily_metrics. `cogs` also carries the store's fee estimate, so profit nets it. */
 export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: string): MetricRow[] {
   if (!storeIds.length) return [];
   const { rate } = fxFor(db, storeIds);
   return (db
     .prepare(
-      `SELECT store_id AS storeId, date, revenue, ad_spend AS adSpend, cogs, orders, sessions, add_to_carts AS addToCarts, checkouts FROM daily_metrics
-       WHERE store_id IN (${storeIds.map(() => '?').join(',')}) AND date BETWEEN ? AND ?`,
+      `SELECT d.store_id AS storeId, d.date, d.revenue, d.ad_spend AS adSpend, d.cogs + d.revenue * s.fee_percent / 100 + d.orders * s.fee_per_order AS cogs,
+         d.orders, d.sessions, d.add_to_carts AS addToCarts, d.checkouts
+       FROM daily_metrics d JOIN stores s ON s.id = d.store_id
+       WHERE d.store_id IN (${storeIds.map(() => '?').join(',')}) AND d.date BETWEEN ? AND ?`,
     )
     .all(...storeIds, addDays(to, 1 - 2 * range), to) as unknown as MetricRow[])
     // A store with no exchange rate is left out (the summary lists its currency in `unconverted`).

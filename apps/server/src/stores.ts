@@ -14,6 +14,8 @@ const toStore = (r: Row): Store => ({
   timezone: String(r.timezone),
   color: String(r.color),
   connected: r.connected === 1,
+  ...(Number(r.fee_percent) ? { feePercent: Number(r.fee_percent) } : {}),
+  ...(Number(r.fee_per_order) ? { feePerOrder: Number(r.fee_per_order) } : {}),
 });
 
 export const listStores = (db: Db) => db.prepare('SELECT * FROM stores ORDER BY created_at, rowid').all().map(toStore);
@@ -34,8 +36,8 @@ export const getStore = (db: Db, id: string) => {
 
 export function insertStore(db: Db, s: Store, demo = false) {
   db.prepare(
-    'INSERT INTO stores (id, name, platform, niche, niche_detail, currency, timezone, color, connected, demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-  ).run(s.id, s.name, s.platform, s.niche, s.nicheDetail ?? null, s.currency, s.timezone, s.color, s.connected ? 1 : 0, demo ? 1 : 0);
+    'INSERT INTO stores (id, name, platform, niche, niche_detail, currency, timezone, color, connected, demo, fee_percent, fee_per_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(s.id, s.name, s.platform, s.niche, s.nicheDetail ?? null, s.currency, s.timezone, s.color, s.connected ? 1 : 0, demo ? 1 : 0, s.feePercent ?? 0, s.feePerOrder ?? 0);
 }
 
 /** Validates a create/update body at the API boundary; returns an error message or the clean fields. */
@@ -67,6 +69,12 @@ export function parseStoreInput(body: unknown, partial: boolean): string | Store
     }
   }
   if (!str('color', 7) || (out.color && !/^#[0-9a-fA-F]{6}$/.test(out.color))) return 'color must be #rrggbb';
+  for (const [k, max, msg] of [['feePercent', 50, '% of revenue'], ['feePerOrder', 100, 'per order, in the store currency']] as const) {
+    const v = b[k];
+    if (v === undefined) continue;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max) return `${k} must be a number from 0 to ${max} (${msg})`;
+    out[k] = Math.round(v * 100) / 100;
+  }
   return out;
 }
 
@@ -88,6 +96,8 @@ export function createStore(db: Db, input: StoreInput): Store {
       timezone: input.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       color: input.color ?? '#ff2a3a',
       connected: false,
+      ...(input.feePercent ? { feePercent: input.feePercent } : {}),
+      ...(input.feePerOrder ? { feePerOrder: input.feePerOrder } : {}),
     };
     insertStore(db, store, true);
     seedDemoStore(db, id);
@@ -96,7 +106,10 @@ export function createStore(db: Db, input: StoreInput): Store {
 }
 
 export function updateStore(db: Db, id: string, u: StoreUpdate): Store | undefined {
-  const cols: Record<keyof StoreInput, string> = { name: 'name', platform: 'platform', niche: 'niche', nicheDetail: 'niche_detail', currency: 'currency', timezone: 'timezone', color: 'color' };
+  const cols: Record<keyof StoreInput, string> = {
+    name: 'name', platform: 'platform', niche: 'niche', nicheDetail: 'niche_detail', currency: 'currency', timezone: 'timezone', color: 'color',
+    feePercent: 'fee_percent', feePerOrder: 'fee_per_order',
+  };
   const keys = Object.keys(u) as (keyof StoreInput)[];
   if (keys.length) db.prepare(`UPDATE stores SET ${keys.map((k) => `${cols[k]} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => u[k]!), id);
   return getStore(db, id);
