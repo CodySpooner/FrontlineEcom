@@ -1,7 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { LiveMessage, StoreEvent } from '@frontline/shared';
-import type { Db } from './db';
-import { demoEvent } from './demo';
+import { tx, type Db } from './db';
+import { advanceDemoDay, demoEvent } from './demo';
 
 // ponytail: one in-process bus per server; every /api/live socket subscribes to it.
 const bus = new EventEmitter().setMaxListeners(0);
@@ -43,7 +43,12 @@ export function startDemoEmitter(db: Db, { minMs = 8000, maxMs = 25000 } = {}) {
   }
   let timer: ReturnType<typeof setTimeout>;
   const tick = () => {
-    const e = demoEvent(demoStoreIds(db), Math.random, new Date());
+    const now = new Date();
+    for (const o of tx(db, () => demoStoreIds(db).flatMap((id) => advanceDemoDay(db, id, now)))) {
+      insertEvent(db, o);
+      publish({ type: 'event', event: o });
+    }
+    const e = demoEvent(demoStoreIds(db), Math.random, now);
     if (e) {
       insertEvent(db, e);
       publish({ type: 'event', event: e });

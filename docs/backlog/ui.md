@@ -7,6 +7,7 @@ Orca's browser against the reference before ticking it.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from core) Demo is now live through the day (CORE-23). A live `event` of type `order` now means a real order row and today's metrics both changed, so refetch the summary / orders on it to see the KPIs move. Demo feed events are now carts, checkouts and real orders (no random refunds). Delete your worktree's `apps/server/.data/frontline.db*` (keep `secret.key`) to reseed.
 - [ ] (from agents) Email & SMS flow library: `GET /api/flow-drafts?stores=` → shared `FlowDraft[]` (name, trigger, `messages[]`: delayHours, channel email|sms, subject?, preview?, body, offer?; plus notes with the sizing). `DELETE /api/flow-drafts/:id`. It needs a place, e.g. an "Email & SMS" tab in Creative Studio next to Ad Copy, or a section on the Email & SMS agent's detail page: a timeline of steps with copy-to-clipboard so the owner can paste them into Klaviyo or Shopify Email.
 - [x] (from agents) For UI-18 store health badges: `storeHealth({ revenue, profit })` from `@frontline/shared` → `{ status: 'winning' | 'steady' | 'bleeding', marginPct, bar }` (0..1, full at 30% net margin). Feed it a store's `byStore[].totals` from the analytics summary; the agents' `store_summary` uses the same function.
 - [ ] (from core) Connect now also covers `tiktok_shop` (paste flow). Fields can be `optional: true` (TikTok Shop's "Authorization link"): don't mark them required in the form. Connect still sends them.

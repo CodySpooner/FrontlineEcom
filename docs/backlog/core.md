@@ -60,9 +60,14 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-22 OAuth connect flows: "Connect" buttons that run Etsy (PKCE), TikTok Shop (auth code) and Google Ads OAuth through a
       127.0.0.1 redirect and store the tokens, so owners don't have to mint refresh tokens by hand.
 
+- [x] CORE-23 Live demo day: today's demo numbers accrue through the day (no full-day totals at 6 AM), and demo live-feed orders/refunds land in `orders` + today's `daily_metrics`, so the KPIs, orders table and live feed move together.
+- [ ] CORE-24 Local backups: a daily `VACUUM INTO` snapshot in `<data dir>/backups` (keep the last 7), `GET /api/backups` (list) and `POST /api/backups` (back up now). Restore is documented: quit, then copy a snapshot over `frontline.db`.
+- [ ] CORE-25 WooCommerce connector: REST v3 (consumer key/secret, https only) orders + line items + products into revenue / top products, like the other platforms.
+- [ ] CORE-26 Multi-currency totals: a base currency in Settings. "All stores" totals convert each store's numbers with daily ECB reference rates (cached, last known rates when offline); single-store views stay in the store's currency.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-23: demo "today" is so far: traffic and spend accrue with the clock, sales step with whole orders. Each live tick finalises yesterday, updates today and inserts the orders that came due, publishing them as the feed's `order` events. Random feed events are carts/checkouts only, so the orders table, KPIs and feed agree
 - 2026-10-26 — Inbox (agents AGT-35): `setCampaignBudget` / `pauseCampaign` in `connectors/ads.ts` for meta (Graph), google (budget via campaignBudgets:mutate, shared budgets refused) and tiktok (campaign/update, status/update). Only campaigns synced for that store are accepted
 - 2026-10-26 — CORE-22: TikTok Shop Connect via the Partner Center authorization link (validated https `*.tiktokshop.com`, so the US host works) using the paste flow and `token/get`. New `IntegrationField.optional` (TikTok Shop `authLink`)
 - 2026-10-26 — CORE-22 (1/2): OAuth Connect for Google Ads (PKCE, loopback callback `/api/oauth/callback`) and Etsy (PKCE, paste flow, since Etsy only redirects to https://). Covers `POST /api/integrations/oauth/start` and `/finish`, `GET /api/integrations/oauth`, and `IntegrationField.oauth` marks token fields. States are single-use with a 15 min expiry, and provider text is HTML-escaped

@@ -18,7 +18,7 @@ test('demoEvent picks a known store, a known type and a positive amount', () => 
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const events = Array.from({ length: 500 }, () => demoEvent(ids, rand, new Date('2026-10-26T12:00:00Z'))!);
   expect(new Set(events.map((e) => e.storeId))).toEqual(new Set(ids));
-  expect(new Set(events.map((e) => e.type))).toEqual(new Set(['add_to_cart', 'checkout_started', 'order', 'refund']));
+  expect(new Set(events.map((e) => e.type))).toEqual(new Set(['add_to_cart', 'checkout_started']));
   expect(events.every((e) => e.amount > 0 && e.at === '2026-10-26T12:00:00.000Z')).toBe(true);
   // bigger stores get more events
   const n = (id: string) => events.filter((e) => e.storeId === id).length;

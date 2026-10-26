@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { openDb } from './db';
 import { addDays, localDate } from './dates';
-import { DEMO_DAYS, demoDay, seedDemo } from './demo';
+import { advanceDemoDay, DEMO_DAYS, demoDay, demoSoFar, seedDemo } from './demo';
 
 const TODAY = '2026-10-26';
 const count = (db: ReturnType<typeof openDb>, sql: string) => Number(db.prepare(sql).get()?.n);
@@ -55,4 +55,42 @@ test('demo orders are never in the future and fall within their local day', () =
   const times = db.prepare('SELECT created_at FROM orders').all().map((r) => Date.parse(String(r.created_at)));
   expect(times.length).toBeGreaterThan(0);
   expect(times.every((t) => t <= now && t >= midnight)).toBe(true);
+});
+
+test('demoSoFar: nothing at midnight, the full day at the end, sales step with whole orders', () => {
+  const full = demoDay('glow', '2026-10-21');
+  expect(demoSoFar('glow', '2026-10-21', 0)).toMatchObject({ revenue: 0, adSpend: 0, orders: 0, sessions: 0 });
+  expect(demoSoFar('glow', '2026-10-21', 1)).toEqual(full);
+  const half = demoSoFar('glow', '2026-10-21', 0.5);
+  expect(half.orders).toBe(Math.floor(full.orders / 2));
+  expect(half.revenue).toBeCloseTo((full.revenue * half.orders) / full.orders, 2);
+  expect(half.adSpend).toBeCloseTo(full.adSpend / 2, 1);
+  expect(half.checkouts).toBeGreaterThanOrEqual(half.orders);
+});
+
+test('advanceDemoDay adds the orders that came due, keeps orders and metrics in step, finalises yesterday', () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-20');
+  const at = (h: number) => new Date(`2026-10-21T${String(h).padStart(2, '0')}:00:00`);
+  const day = () => ({
+    metrics: db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-21'").get()!,
+    orders: db.prepare("SELECT count(*) AS n, coalesce(sum(total), 0) AS total FROM orders WHERE store_id = 'glow' AND local_date = '2026-10-21'").get()!,
+  });
+
+  const morning = advanceDemoDay(db, 'glow', at(10));
+  expect(morning.length).toBe(demoSoFar('glow', '2026-10-21', 10 / 24).orders);
+  expect(morning.every((e) => e.type === 'order' && e.storeId === 'glow' && e.at === at(10).toISOString())).toBe(true);
+  expect(day().orders.n).toBe(day().metrics.orders);
+
+  const evening = advanceDemoDay(db, 'glow', at(18));
+  expect(evening.length).toBe(demoSoFar('glow', '2026-10-21', 18 / 24).orders - morning.length);
+  expect(advanceDemoDay(db, 'glow', at(18))).toEqual([]);
+  const { metrics, orders } = day();
+  expect(orders.n).toBe(metrics.orders);
+  expect(Math.abs(Number(orders.total) - Number(metrics.revenue))).toBeLessThan(0.5);
+  expect(new Set(db.prepare("SELECT id FROM orders WHERE store_id = 'glow'").all().map((r) => r.id)).size).toBe(Number(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow'").get()!.n));
+
+  // The next morning, the 21st is final.
+  advanceDemoDay(db, 'glow', new Date('2026-10-22T01:00:00'));
+  expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-21'").get()).toEqual({ revenue: demoDay('glow', '2026-10-21').revenue, orders: demoDay('glow', '2026-10-21').orders });
 });

@@ -72,6 +72,45 @@ export function demoDay(storeId: string, date: string) {
   return { date, revenue: cents(revenue), adSpend: cents(adSpend), cogs: cents(cogs), orders, sessions, addToCarts, checkouts, campaigns };
 }
 
+/** Share of server-local `date` that has passed at `now`: 0 before it starts, 1 once it's over. */
+export const dayFraction = (date: string, now = Date.now()) => Math.min(1, Math.max(0, (now - new Date(`${date}T00:00:00`).getTime()) / 86400000));
+
+/** A demo day `frac` of the way through: traffic and ad spend accrue with the clock, sales step with whole orders. */
+export function demoSoFar(storeId: string, date: string, frac: number) {
+  const m = demoDay(storeId, date);
+  if (frac >= 1) return m;
+  const orders = Math.floor(m.orders * frac);
+  const sold = orders / m.orders;
+  const t = (n: number) => Math.floor(n * frac);
+  return {
+    ...m,
+    revenue: cents(m.revenue * sold),
+    adSpend: cents(m.adSpend * frac),
+    cogs: cents(m.cogs * sold),
+    orders,
+    sessions: t(m.sessions),
+    addToCarts: t(m.addToCarts),
+    checkouts: t(m.checkouts),
+    campaigns: m.campaigns.map((c) => ({ ...c, spend: cents(c.spend * frac), revenue: cents(c.revenue * sold), purchases: Math.floor(c.purchases * sold), clicks: t(c.clicks), impressions: t(c.impressions) })),
+  };
+}
+
+/** Upserts a demo day's daily_metrics row and, if the store has campaigns, its campaign_daily rows. */
+function writeDay(db: Db, storeId: string, m: ReturnType<typeof demoDay>) {
+  db.prepare(
+    `INSERT INTO daily_metrics (store_id, date, revenue, ad_spend, cogs, orders, sessions, add_to_carts, checkouts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (store_id, date) DO UPDATE SET revenue = excluded.revenue, ad_spend = excluded.ad_spend, cogs = excluded.cogs, orders = excluded.orders,
+       sessions = excluded.sessions, add_to_carts = excluded.add_to_carts, checkouts = excluded.checkouts`,
+  ).run(storeId, m.date, m.revenue, m.adSpend, m.cogs, m.orders, m.sessions, m.addToCarts, m.checkouts);
+  if (!db.prepare('SELECT count(*) AS n FROM campaigns WHERE store_id = ?').get(storeId)?.n) return;
+  const camp = db.prepare(
+    `INSERT INTO campaign_daily (network, campaign_id, date, spend, revenue, purchases, clicks, impressions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (network, campaign_id, date) DO UPDATE SET spend = excluded.spend, revenue = excluded.revenue, purchases = excluded.purchases,
+       clicks = excluded.clicks, impressions = excluded.impressions`,
+  );
+  for (const c of m.campaigns) camp.run(c.network, c.id, m.date, c.spend, c.revenue, c.purchases, c.clicks, c.impressions);
+}
+
 const PRODUCTS: Record<string, [title: string, price: number, compareAt: number, cost: number][]> = {
   pawsome: [
     ['Collapsible Travel Water Bowl', 18.99, 29.99, 4.2],
@@ -107,18 +146,35 @@ const APPROVALS = [
 
 const SUPPLIERS = ['CJ Dropshipping', 'DSers', 'Zendrop'];
 
-/** Inserts missing daily_metrics / campaign_daily rows for a demo store, up to `today`. */
+/** Writes missing daily_metrics / campaign_daily rows for a demo store, up to `today` (today: so far). */
 function topUp(db: Db, storeId: string, today: string) {
   const last = db.prepare('SELECT MAX(date) AS d FROM daily_metrics WHERE store_id = ?').get(storeId)?.d as string | null;
   const start = last ? addDays(last, 1) : addDays(today, 1 - DEMO_DAYS);
-  const metric = db.prepare('INSERT OR IGNORE INTO daily_metrics (store_id, date, revenue, ad_spend, cogs, orders, sessions, add_to_carts, checkouts) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-  const camp = db.prepare('INSERT OR IGNORE INTO campaign_daily (network, campaign_id, date, spend, revenue, purchases, clicks, impressions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-  const hasCampaigns = db.prepare('SELECT count(*) AS n FROM campaigns WHERE store_id = ?').get(storeId)?.n;
-  for (let date = start; date <= today; date = addDays(date, 1)) {
-    const m = demoDay(storeId, date);
-    metric.run(storeId, date, m.revenue, m.adSpend, m.cogs, m.orders, m.sessions, m.addToCarts, m.checkouts);
-    if (hasCampaigns) for (const c of m.campaigns) camp.run(c.network, c.id, date, c.spend, c.revenue, c.purchases, c.clicks, c.impressions);
-  }
+  for (let date = start; date <= today; date = addDays(date, 1)) writeDay(db, storeId, date < today ? demoDay(storeId, date) : demoSoFar(storeId, date, dayFraction(date)));
+}
+
+/**
+ * Moves a demo store's numbers to `now`: yesterday becomes final, today is updated so far, and the orders that have
+ * come due since the last call are added. Returns those orders as live-feed events, so the feed, the orders table and
+ * the KPIs agree.
+ */
+export function advanceDemoDay(db: Db, storeId: string, now = new Date()): StoreEvent[] {
+  const today = localDate(now);
+  writeDay(db, storeId, demoDay(storeId, addDays(today, -1)));
+  const m = demoSoFar(storeId, today, dayFraction(today, now.getTime()));
+  writeDay(db, storeId, m);
+  if (!PRODUCTS[storeId]) return [];
+  const have = Number(db.prepare('SELECT count(*) AS n FROM orders WHERE store_id = ? AND created_at >= ?').get(storeId, new Date(`${today}T00:00:00`).toISOString())!.n);
+  if (m.orders <= have) return [];
+  const last = Number(db.prepare("SELECT coalesce(max(CAST(substr(id, 2) AS INTEGER)), 1000) AS n FROM orders WHERE store_id = ? AND id LIKE '#%'").get(storeId)!.n);
+  const full = demoDay(storeId, today);
+  const total = cents(full.revenue / full.orders);
+  const at = now.toISOString();
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, 'paid', 'unfulfilled', ?, NULL, ?, ?)");
+  return Array.from({ length: m.orders - have }, (_, i): StoreEvent => {
+    order.run(storeId, `#${last + 1 + i}`, at, total, SUPPLIERS[(last + i) % SUPPLIERS.length]!, cents(full.cogs / full.orders), today);
+    return { id: randomUUID(), storeId, type: 'order', amount: total, at };
+  });
 }
 
 /** First-run catalog for a demo store: campaigns, products, last week's orders. */
@@ -138,7 +194,8 @@ function seedCatalog(db: Db, storeId: string, today: string) {
   let n = 1001;
   for (let ago = 6; ago >= 0; ago--) {
     const date = addDays(today, -ago);
-    for (let k = 0; k < demoDay(storeId, date).orders; k++) {
+    const count = (ago ? demoDay(storeId, date) : demoSoFar(storeId, date, dayFraction(date))).orders;
+    for (let k = 0; k < count; k++) {
       const [, price] = products[Math.floor(r() * products.length)]!;
       const qty = r() < 0.8 ? 1 : 2;
       // Within the local day; today's orders (all of them, so the count matches daily_metrics) only up to now.
@@ -151,11 +208,10 @@ function seedCatalog(db: Db, storeId: string, today: string) {
   }
 }
 
+// Browsing only: demo orders come from advanceDemoDay so they match the store's numbers.
 const EVENT_MIX: [StoreEventType, weight: number, amount: [min: number, max: number]][] = [
-  ['add_to_cart', 0.45, [0.4, 1]],
-  ['checkout_started', 0.25, [0.7, 1.5]],
-  ['order', 0.27, [0.6, 1.4]],
-  ['refund', 0.03, [0.5, 1]],
+  ['add_to_cart', 0.62, [0.4, 1]],
+  ['checkout_started', 0.38, [0.7, 1.5]],
 ];
 
 /** One live-feed event for a demo store, picked in proportion to store size; amounts scale with the store's AOV. */
