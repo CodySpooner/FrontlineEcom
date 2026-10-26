@@ -16,12 +16,14 @@ describe('Unit costs', () => {
   it('lists only products without a cost and saves the one the owner enters', async () => {
     const fetch = stubApi((url, init) => {
       if (init?.method === 'PATCH') return product('m1', 7.5);
-      if (url.startsWith('/api/products')) return { items: [product('m1', 0), product('m2', 6)], total: 2 };
+      if (url.startsWith('/api/products')) return { items: [product('m1', 0), product('m2', 6), { ...product('m3', 0), status: 'archived' }], total: 3 };
     });
     renderApp(<UnitCosts ids={[]} multi={false} />);
 
     fireEvent.change(await screen.findByLabelText('Unit cost of Mug m1'), { target: { value: '7.50' } });
     expect(screen.queryByLabelText('Unit cost of Mug m2')).toBeNull();
+    // Deleted on the platform (archived): it won't sell again, so it needs no cost.
+    expect(screen.queryByLabelText('Unit cost of Mug m3')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Save cost' }));
 
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/products/etsy-shop/m1', expect.objectContaining({ method: 'PATCH', body: '{"cost":7.5}' })));

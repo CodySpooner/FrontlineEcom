@@ -82,7 +82,7 @@ function RevenueChart({ s, who }: { s: AnalyticsSummary; who: string }) {
 function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
   // Products the platform has no cost for count their whole price as profit until the owner sets one.
   const { ids, stores, has } = useStoreSelection();
-  const atFullPrice = (useProducts(ids).data?.items ?? []).filter((p) => p.cost === 0).length;
+  const atFullPrice = (useProducts(ids).data?.items ?? []).filter((p) => p.cost === 0 && p.status !== 'archived').length;
   const fees = stores.some((x) => has(x.id) && (x.feePercent || x.feePerOrder));
   const grid = 'mb-3.5 grid grid-cols-2 gap-3 min-[620px]:grid-cols-3 min-[1280px]:grid-cols-5';
   if (q.isError)

@@ -1,8 +1,9 @@
 import type { Product } from '@frontline/shared';
 
 /** A product's stock against its sales pace over `days`: low when it runs out within two weeks. Undefined when unknown. */
-export function stockLeft(p: Pick<Product, 'inventory' | 'inventoryTracked'> | undefined, unitsSold: number, days: number) {
+export function stockLeft(p: Pick<Product, 'inventory' | 'inventoryTracked'> & Partial<Pick<Product, 'status'>> | undefined, unitsSold: number, days: number) {
   if (!p) return undefined;
+  if (p.status === 'archived') return { label: 'Archived', low: false };
   // Dropshipped products often aren't counted: their 0 means nothing (core: inventoryTracked).
   if (p.inventoryTracked === false) return { label: 'Not tracked', low: false };
   if (p.inventory <= 0) return { label: 'Sold out', low: true };

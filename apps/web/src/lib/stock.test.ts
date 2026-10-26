@@ -13,4 +13,8 @@ describe('stockLeft', () => {
     expect(stockLeft({ inventory: 0, inventoryTracked: false }, 10, 7)).toEqual({ label: 'Not tracked', low: false });
     expect(stockLeft(undefined, 10, 7)).toBeUndefined();
   });
+
+  it("doesn't flag a product the store deleted (archived) as sold out", () => {
+    expect(stockLeft({ inventory: 0, status: 'archived' }, 10, 7)).toEqual({ label: 'Archived', low: false });
+  });
 });

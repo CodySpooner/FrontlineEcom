@@ -216,7 +216,7 @@ function TopProducts({ ids, range, name, cur }: { ids: string[]; range: Analytic
 /** Products the platform reports no cost for (Etsy, TikTok Shop, Woo without COGS): their profit is the whole price until set. */
 export function UnitCosts({ ids, multi }: { ids: string[]; multi: boolean }) {
   // ponytail: first 200 products per call; page through when a store's catalog outgrows that.
-  const missing = (useProducts(ids).data?.items ?? []).filter((p) => p.cost === 0);
+  const missing = (useProducts(ids).data?.items ?? []).filter((p) => p.cost === 0 && p.status !== 'archived');
   if (!missing.length) return null;
   return (
     <Panel
