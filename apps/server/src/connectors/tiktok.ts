@@ -3,7 +3,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { adRate, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal, type CampaignChange } from './common';
+import { adRate, archiveMissing, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal, type CampaignChange } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -213,8 +213,11 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     };
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const since = cursor ? Number(cursor) : Math.floor(now.getTime() / 1000) - BACKFILL_DAYS * 86400;
-    // The first sync reads every product, however long unchanged (the backfill window is for orders).
-    const products = await search<ShopProduct>('/product/202309/products/search', 'products', {}, cursor ? { update_time_ge: since } : {});
+    // The first sync and once a day after read every product, however long unchanged (the backfill window is for orders),
+    // archiving those the search no longer returns.
+    const today = localDate(now);
+    const full = !cursor || catalogPassDue(db, id, today);
+    const products = await search<ShopProduct>('/product/202309/products/search', 'products', {}, full ? {} : { update_time_ge: since });
     const orders = await search<ShopOrder>('/order/202309/orders/search', 'orders', { sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: since });
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 
@@ -248,6 +251,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         setOrderItems(db, storeId, `tt-${o.id}`, (o.line_items ?? []).map((li) => ({ productId: `tt-${li.product_id}`, quantity: li.quantity ?? 1, revenue: Number(li.sale_price ?? 0) * (li.quantity ?? 1), cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);
+      if (full) archiveMissing(db, id, storeId, 'tt-*', products.map((p) => `tt-${p.id}`), today);
       const next = Math.max(since, Math.floor(cursorAt(now).getTime() / 1000));
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(String(next), now.toISOString(), id);
     });

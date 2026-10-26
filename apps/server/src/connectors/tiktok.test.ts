@@ -197,3 +197,17 @@ test("a TikTok Shop store takes its shop's currency from the orders", async () =
   await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
   expect(db.prepare("SELECT currency FROM stores WHERE id = 'glow'").get()?.currency).toBe('GBP');
 });
+
+test('TikTok Shop: once a day every product is searched again; products it no longer returns are archived', async () => {
+  const db = shopSetup();
+  await syncTikTokShop(db, key, 'glow', fakeShop().fetchFn, NOW);
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', 'tt-999', 'Gone', 5, 0, 1, 'active')").run();
+  const status = () => db.prepare("SELECT status FROM products WHERE store_id = 'glow' AND id = 'tt-999'").get()?.status;
+  await syncTikTokShop(db, key, 'glow', fakeShop().fetchFn, NOW); // same day: changes only
+  expect(status()).toBe('active');
+  const nextDay = fakeShop();
+  await syncTikTokShop(db, key, 'glow', nextDay.fetchFn, new Date('2026-10-27T18:00:00Z'));
+  expect(JSON.parse(nextDay.calls.find((c) => c.url.pathname.includes('products/search'))!.body)).toEqual({});
+  expect(status()).toBe('archived');
+  expect(db.prepare("SELECT status FROM products WHERE store_id = 'glow' AND id = 'tt-17301'").get()?.status).toBe('active');
+});
