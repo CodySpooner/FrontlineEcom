@@ -31,6 +31,9 @@ const ACCOUNT: Partial<Record<SDKAssistantMessageError, string>> = {
   model_not_found: "The agent model isn't available on your Claude login. Set FRONTLINE_AGENT_MODEL to one that is.",
 };
 
+/** The model agents run on: `FRONTLINE_AGENT_MODEL` or claude-opus-5-5. */
+export const agentModel = () => process.env.FRONTLINE_AGENT_MODEL ?? 'claude-opus-5-5';
+
 /** True for an account problem (signed out, usage limit…): every run fails the same way until the owner fixes it. */
 export const isAccountError = (message: string) => Object.values(ACCOUNT).includes(message);
 
@@ -57,7 +60,7 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     });
     const abortController = new AbortController();
     input.signal?.addEventListener('abort', () => abortController.abort(), { once: true });
-    const model = opts.model ?? process.env.FRONTLINE_AGENT_MODEL ?? 'claude-opus-5-5';
+    const model = opts.model ?? agentModel();
     const messages = run({
       prompt: input.task,
       options: {

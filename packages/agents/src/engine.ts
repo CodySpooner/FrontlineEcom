@@ -1,5 +1,5 @@
 import type { Agent, AgentEvent, Store } from '@frontline/shared';
-import { claudeEngine } from './claude-engine';
+import { agentModel, claudeEngine } from './claude-engine';
 import { fakeEngine } from './fake-engine';
 import type { ToolEnv } from './tools';
 
@@ -30,10 +30,16 @@ export type Engine = (input: RunInput) => AsyncIterable<AgentEvent>;
  * never spends Claude usage. `FRONTLINE_AGENT_ENGINE=claude|fake` forces one for every store (tests default to fake).
  */
 export function defaultEngine(claude: Engine = claudeEngine(), fake: Engine = fakeEngine()): Engine {
-  const forced = process.env.FRONTLINE_AGENT_ENGINE ?? (process.env.VITEST ? 'fake' : undefined); // a test run outside the root config never reaches Claude
+  const forced = forcedEngine();
   if (forced) return forced === 'claude' ? claude : fake;
   return (input) => (input.store.connected ? claude : fake)(input);
 }
+
+const forcedEngine = () => process.env.FRONTLINE_AGENT_ENGINE ?? (process.env.VITEST ? 'fake' : undefined); // a test run outside the root config never reaches Claude
+
+/** What `defaultEngine` runs a store's agents on, for the API: Claude with its model, or the demo engine. */
+export const engineInfo = (connected: boolean): NonNullable<Agent['engine']> =>
+  (forcedEngine() ? forcedEngine() === 'claude' : connected) ? { provider: 'claude', model: agentModel() } : { provider: 'demo' };
 
 /** Runs an agent and guarantees the stream ends with exactly one `done` or `error` event. */
 export async function* runAgent(input: RunInput, engine: Engine = defaultEngine()): AsyncGenerator<AgentEvent> {

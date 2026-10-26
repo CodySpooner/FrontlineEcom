@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, type Agent, type AgentRole, type AgentUpdate, type Autonomy, type Store } from '@frontline/shared';
+import { engineInfo } from './engine';
 import { demoXp, levelForXp, levelProgress, rankForLevel, xpForLevel } from './gamification';
 import { createDefaultJobs } from './jobs';
 
@@ -39,14 +40,14 @@ export function ensureSquads(db: DatabaseSync) {
 export function listAgents(db: DatabaseSync, storeIds?: string[]): Agent[] {
   const filter = storeIds?.length ? `WHERE a.store_id IN (${storeIds.map(() => '?').join(',')})` : '';
   const rows = db
-    .prepare(`SELECT a.* FROM agents a JOIN stores s ON s.id = a.store_id ${filter} ORDER BY s.created_at, s.rowid, a.rowid`)
+    .prepare(`SELECT a.*, s.connected FROM agents a JOIN stores s ON s.id = a.store_id ${filter} ORDER BY s.created_at, s.rowid, a.rowid`)
     .all(...(storeIds?.length ? storeIds : []));
   const busy = busyAgents(db);
   return rows.map((r) => toAgent(r, busy));
 }
 
 export function getAgent(db: DatabaseSync, id: string): Agent | undefined {
-  const row = db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
+  const row = db.prepare('SELECT a.*, s.connected FROM agents a JOIN stores s ON s.id = a.store_id WHERE a.id = ?').get(id);
   return row && toAgent(row, busyAgents(db));
 }
 
@@ -98,5 +99,6 @@ function toAgent(r: Record<string, unknown>, busy: ReturnType<typeof busyAgents>
     enabled,
     autonomy: r.autonomy as Autonomy,
     ...(typeof own === 'number' ? { dailyBudgetUsd: own } : {}),
+    engine: engineInfo(r.connected === 1),
   };
 }

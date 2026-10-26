@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunDetail, StoreMemory, StoreUsage } from '@frontline/shared';
+import type { Agent, AgentRun, AgentRunDetail, StoreMemory, StoreUsage } from '@frontline/shared';
 import { OUTLIVE_RUN } from '@frontline/agents';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,22 @@ beforeEach(() => {
 
 const send = (method: string, path: string, body?: unknown) =>
   app.request(path, { method, headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+
+test('each agent says what its runs run on: the demo engine in tests and on demo stores, Claude and its model when on', async () => {
+  const engine = async () => ((await (await send('GET', '/api/agents/glow%3Amarket_analyst')).json()) as Agent).engine;
+  expect(await engine()).toEqual({ provider: 'demo' });
+  const saved = { engine: process.env.FRONTLINE_AGENT_ENGINE, model: process.env.FRONTLINE_AGENT_MODEL };
+  try {
+    Object.assign(process.env, { FRONTLINE_AGENT_ENGINE: 'claude', FRONTLINE_AGENT_MODEL: 'claude-sonnet-5-5' });
+    expect(await engine()).toEqual({ provider: 'claude', model: 'claude-sonnet-5-5' });
+    expect(((await (await send('GET', '/api/agents?stores=glow')).json()) as Agent[]).every((a) => a.engine?.provider === 'claude')).toBe(true);
+  } finally {
+    for (const [k, v] of [['FRONTLINE_AGENT_ENGINE', saved.engine], ['FRONTLINE_AGENT_MODEL', saved.model]] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+});
 
 describe('runs', () => {
   test('start, read, list, and continue the conversation', async () => {

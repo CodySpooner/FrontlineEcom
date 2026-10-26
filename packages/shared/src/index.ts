@@ -92,6 +92,11 @@ export interface Agent {
   levelProgress?: { xp: number; needed: number };
   /** The agent's own daily AI budget, USD, inside the store's. Absent: only the store's cap applies. */
   dailyBudgetUsd?: number;
+  /**
+   * What its runs run on. Always set by the API. `claude`: the owner's Claude Code login with this model (live stores);
+   * `demo`: the free scripted engine (demo stores, so exploring never spends Claude usage).
+   */
+  engine?: { provider: 'claude' | 'demo'; model?: string };
 }
 
 /** GET /api/agents?stores=a,b → Agent[] (squads in store order, roles in AGENT_ROLES order). GET /api/agents/:id → Agent. */
