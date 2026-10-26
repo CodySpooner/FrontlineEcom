@@ -7,6 +7,7 @@ import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type Appr
 import { campaignStats, loadRows, summarize, topProducts } from './analytics';
 import { decide, listApprovals } from './approvals';
 import { automationRoutes } from './automations';
+import { backupRoutes } from './backups';
 import { oauthKinds, oauthRoutes } from './oauth';
 import { demoSupplierProducts, searchCj } from './connectors/cj';
 import { listOrders, listProducts } from './catalog';
@@ -91,6 +92,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const saved = saveIntegration(db, key(), await json(c.req.raw));
       return typeof saved === 'string' ? c.json({ error: saved }, 400) : c.json(saved);
     })
+    .route('/', backupRoutes(db))
     .get('/api/integrations/oauth', (c) => c.json(oauthKinds()))
     .route('/', oauthRoutes(db, key))
     .delete('/api/integrations/:id', (c) => (deleteIntegration(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'integration not found' }, 404)))

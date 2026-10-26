@@ -677,6 +677,17 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
 
 export type IntegrationStatus = 'connected' | 'error';
 
+/**
+ * GET /api/backups → Backup[] (newest first); POST /api/backups → Backup (201). The API keeps a daily snapshot of its
+ * database in <data dir>/backups (the newest 7). To restore: quit the app, copy a snapshot over <data dir>/frontline.db.
+ */
+export interface Backup {
+  name: string;
+  /** Bytes. */
+  size: number;
+  createdAt: string;
+}
+
 /** GET /api/health → Health. `ok` means the API is up; connector problems are listed here, not fatal. */
 export interface Health {
   ok: true;
