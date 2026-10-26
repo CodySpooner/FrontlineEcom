@@ -298,9 +298,10 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const looked = (orderId: string) => `amazon-order:${storeId}:${orderId}`;
     const known = db.prepare('SELECT 1 FROM orders WHERE store_id = ? AND id = ?');
     const asked = db.prepare('SELECT 1 FROM done_once WHERE ref = ?');
+    // Amazon's own refund lines only: a TikTok Shop line's order (tt-) isn't Amazon's, and a malformed id stops the lookups.
     const missing = !own ? [] : [...new Set([
       ...(refunds?.refunds ?? []).flatMap((e) => (e.AmazonOrderId ? [e.AmazonOrderId] : [])),
-      ...db.prepare('SELECT DISTINCT substr(order_id, 5) AS id FROM amazon_refunds r WHERE store_id = ? AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.store_id = r.store_id AND o.id = r.order_id)').all(storeId).map((r) => String(r.id)),
+      ...db.prepare(`SELECT DISTINCT substr(order_id, 5) AS id FROM amazon_refunds r WHERE store_id = ? AND order_id GLOB 'amz-*' AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.store_id = r.store_id AND o.id = r.order_id)`).all(storeId).map((r) => String(r.id)),
     ])].filter((o) => !known.get(storeId, `amz-${o}`) && !orders?.orders.some((x) => x.orderId === o) && !asked.get(looked(o)));
     const older = missing.length ? await refundedOrders(missing, fetchFn, host, token, marketplace) : undefined;
 

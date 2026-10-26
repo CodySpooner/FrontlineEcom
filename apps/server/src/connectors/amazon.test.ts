@@ -594,3 +594,12 @@ test("Amazon asks up to the end of the store's today, not the computer's (a stor
   await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-26T11:00:00Z'));
   expect(calls[1]!.url.searchParams.get('interval')).toMatch(/--2026-10-28T00:00:00\+14:00$/);
 });
+
+test("an Amazon store doesn't look up a TikTok Shop refund line's order on Amazon (its id isn't Amazon's)", async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  db.prepare("INSERT INTO amazon_refunds (store_id, id, order_id, amount) VALUES ('peak', 'tt-R1', 'tt-576460752303423', 9)").run();
+  const { fetchFn, calls } = fakeAmazon();
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect(calls.filter((c) => c.url.pathname.startsWith('/orders/2026-01-01/orders/')).map((c) => c.url.pathname)).toEqual([]);
+});
