@@ -28,12 +28,14 @@ export function listEvents(db: Db, storeIds: string[], limit: number): StoreEven
 const demoStoreIds = (db: Db) => db.prepare('SELECT id FROM stores WHERE demo = 1').all().map((r) => String(r.id));
 
 /**
- * Demo live feed: prunes events older than 7 days, backfills the last 15 minutes if the feed went quiet,
- * then emits an event for a random demo store every `minMs`–`maxMs`. Returns stop().
+ * Demo live feed: backfills the last 15 minutes if the feed went quiet, then emits an event for a random demo store
+ * every `minMs`–`maxMs`. Events older than 7 days are pruned at start and on every tick (the tray app runs for weeks).
+ * Returns stop().
  */
 export function startDemoEmitter(db: Db, { minMs = 8000, maxMs = 25000 } = {}) {
+  const prune = (now: number) => db.prepare('DELETE FROM events WHERE at < ?').run(new Date(now - 7 * 86400000).toISOString());
   const now = Date.now();
-  db.prepare('DELETE FROM events WHERE at < ?').run(new Date(now - 7 * 86400000).toISOString());
+  prune(now);
   const newest = db.prepare('SELECT MAX(at) AS at FROM events').get()?.at as string | null;
   if (!newest || Date.parse(newest) < now - 10 * 60000) {
     for (let i = 8; i >= 1; i--) {
@@ -44,6 +46,7 @@ export function startDemoEmitter(db: Db, { minMs = 8000, maxMs = 25000 } = {}) {
   let timer: ReturnType<typeof setTimeout>;
   const tick = () => {
     const now = new Date();
+    prune(now.getTime());
     for (const o of tx(db, () => demoStoreIds(db).flatMap((id) => advanceDemoDay(db, id, now)))) {
       insertEvent(db, o);
       publish({ type: 'event', event: o });

@@ -1,5 +1,5 @@
 import type { AddressInfo } from 'node:net';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { LiveMessage, StoreEvent } from '@frontline/shared';
 import { createApp, startServer } from './app';
 import { openDb } from './db';
@@ -44,6 +44,20 @@ test('demo emitter backfills a quiet feed so the dashboard is never empty', () =
   const stop = startDemoEmitter(db, { minMs: 60000, maxMs: 60000 });
   stop();
   expect(db.prepare('SELECT count(*) AS n FROM events').get()?.n).toBe(8);
+});
+
+test('demo emitter keeps pruning week-old events while it runs', () => {
+  vi.useFakeTimers({ now: new Date('2026-10-26T12:00:00Z') });
+  try {
+    const db = seeded();
+    const stop = startDemoEmitter(db, { minMs: 60000, maxMs: 60000 });
+    insertEvent(db, { id: 'old', storeId: 'glow', type: 'order', amount: 1, at: '2026-10-19T12:00:30.000Z' });
+    vi.advanceTimersByTime(60000);
+    stop();
+    expect(db.prepare("SELECT count(*) AS n FROM events WHERE id = 'old'").get()?.n).toBe(0);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('/api/live pushes published messages to connected sockets', async () => {
