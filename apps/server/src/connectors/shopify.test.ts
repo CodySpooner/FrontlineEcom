@@ -572,3 +572,14 @@ test('in a store whose prices include VAT, product revenue leaves the VAT out li
   await syncShopify(db, key, 'glow', fetchFn, NOW);
   expect(db.prepare("SELECT revenue FROM order_items WHERE store_id = 'glow' AND order_id = '#1001' AND product_id = '111'").get()?.revenue).toBe(66.67);
 });
+
+test("a Shopify refund of an amount (no item returned) comes off the order: received less refunded, when that's lower", async () => {
+  const { db } = await setup();
+  const net = (amount: string) => ({ displayFinancialStatus: 'PARTIALLY_REFUNDED', netPaymentSet: { shopMoney: money(amount) } });
+  await syncShopify(db, key, 'glow', fakeShopify([
+    order('#21', '2026-10-25T09:00:00Z', '100.00', net('80.00')), // a $20 goodwill refund: the current total stays 100
+    order('#22', '2026-10-25T10:00:00Z', '60.00', net('65.00')), // an item returned less a $5 fee: the current total is lower
+    order('#23', '2026-10-25T11:00:00Z', '50.00'),
+  ]).fetchFn, NOW);
+  expect(db.prepare("SELECT id, total FROM orders WHERE store_id = 'glow' AND id IN ('#21', '#22', '#23') ORDER BY id").all().map((r) => [r.id, r.total])).toEqual([['#21', 80], ['#22', 60], ['#23', 50]]);
+});

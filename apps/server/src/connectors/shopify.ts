@@ -50,7 +50,10 @@ interface ShopifyOrder {
   test: boolean;
   displayFinancialStatus: string | null;
   displayFulfillmentStatus: string;
+  /** After returns: Shopify's docs don't say a refund of an amount (no item returned) lowers it. */
   currentTotalPriceSet: { shopMoney: { amount: string } };
+  /** Received less refunded. */
+  netPaymentSet?: { shopMoney: { amount: string } };
   /** Tax in that total, after returns. */
   currentTotalTaxSet?: { shopMoney: { amount: string } };
   /** Prices include tax (VAT stores): line totals then hold it too. */
@@ -72,13 +75,13 @@ const DELETED_Q = `query ($after: String, $q: String) {
   events(first: 250, after: $after, query: $q) { nodes { ... on BasicEvent { subjectId } } pageInfo { hasNextPage endCursor } } }`;
 
 // Shopify prices a query before running it (max 1000): objects 1, connections 2 + first × child. Per order:
-// 1 + total 2 + tax 2 + fulfillment 2 + lineItems (2 + 10 × 7 + pageInfo 1) = 80, so 12 orders = 961. Products: 2 + 50 × 9 = 452.
+// 1 + total 2 + tax 2 + net payment 2 + fulfillment 2 + lineItems (2 + 10 × 7 + pageInfo 1) = 82, so 12 orders = 985. Products: 2 + 50 × 9 = 452.
 // An order with more line items gets the rest from ORDER_ITEMS_Q (2 + 1 + 100 × 7 + 1 = 704).
 const LINE_ITEM = 'quantity product { id } discountedTotalSet { shopMoney { amount } } variant { inventoryItem { unitCost { amount } } }';
 const ORDERS_Q = `query ($after: String, $q: String) {
   orders(first: 12, after: $after, query: $q, sortKey: UPDATED_AT) {
     nodes { id name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus taxesIncluded
-      currentTotalPriceSet { shopMoney { amount } } currentTotalTaxSet { shopMoney { amount } }
+      currentTotalPriceSet { shopMoney { amount } } currentTotalTaxSet { shopMoney { amount } } netPaymentSet { shopMoney { amount } }
       fulfillments(first: 1) { displayStatus trackingInfo(first: 1) { number url } }
       lineItems(first: 10) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } }
     pageInfo { hasNextPage endCursor } } }`;
@@ -285,10 +288,13 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
             continue;
           }
           const cogs = o.lineItems.nodes.reduce((a, li) => a + li.quantity * num(li.variant?.inventoryItem?.unitCost), 0);
-          ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day, num(o.currentTotalTaxSet?.shopMoney.amount), o.fulfillments[0]?.trackingInfo[0]?.url ?? null);
+          // Partly refunded: what the customer paid less what went back, when that's lower (an amount refunded with no
+          // item returned); the current total otherwise (a return less a restocking fee keeps the fee out of revenue).
+          const current = num(o.currentTotalPriceSet.shopMoney.amount);
+          const total = o.displayFinancialStatus === 'PARTIALLY_REFUNDED' && o.netPaymentSet ? Math.min(current, num(o.netPaymentSet.shopMoney.amount)) : current;
+          ord.run(storeId, o.name, o.createdAt, total, refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day, num(o.currentTotalTaxSet?.shopMoney.amount), o.fulfillments[0]?.trackingInfo[0]?.url ?? null);
           // Custom line items (no product) only count toward the order total. Where prices include VAT, each line gives up
           // the order's share of it. ponytail: one rate for all lines; reduced-rate lines come out a little low.
-          const total = num(o.currentTotalPriceSet.shopMoney.amount);
           const net = o.taxesIncluded && total > 0 ? 1 - num(o.currentTotalTaxSet?.shopMoney.amount) / total : 1;
           setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product ? [{ productId: tail(li.product.id), quantity: li.quantity, revenue: Math.round(num(li.discountedTotalSet.shopMoney.amount) * net * 100) / 100, cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));
         }
