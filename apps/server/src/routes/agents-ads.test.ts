@@ -119,6 +119,8 @@ test('a store in another currency is held to the USD caps; with no exchange rate
   expect(over.outputs).toEqual(["Not sent: +$30 (20 EUR)/day would pass the owner's $25/day cap on added ad spend ($0 already approved today). Propose a smaller step."]);
   const within = await run([propose({ campaignId: 'pawsome-c1', change: 'budget', newDailyBudget: from + 10 })]);
   expect(within.requests.map((r) => r.action)).toEqual([expect.objectContaining({ amountUsd: 15, auto: true })]); // €10 = $15, inside the $20 autopilot cap
+  const asked = await run([{ call: 'request_approval', input: { title: 'Refund 2 orders', reason: 'r', kind: 'refund', payload: {}, amount: 10 } }], 'deny');
+  expect(asked.requests[0]!.action.amountUsd).toBe(15); // the generic request converts the same way
 
   db.prepare(`UPDATE stores SET currency = 'ISK' WHERE id = 'pawsome'`).run(); // the ECB publishes no ISK rate
   const unknown = await run([propose({ campaignId: 'pawsome-c2', change: 'budget', newDailyBudget: budget('pawsome-c2').daily_budget + 1 })], 'deny');

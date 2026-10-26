@@ -95,6 +95,10 @@ const since = (days: number) => new Date(Date.now() - days * 86_400_000).toISOSt
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
 export const cash = (n: number, currency: string) => (currency === 'USD' ? `$${n}` : `${n} ${currency}`);
 
+/** `amount` of the store's currency in USD (the owner's caps are USD), to the cent; undefined when core has no rate. */
+const inUsd = async (ctx: ToolContext, amount: number) =>
+  ctx.store.currency === 'USD' || !amount ? amount : ctx.toUsd?.(amount, ctx.store.currency).then((n) => n && Math.round(n * 100) / 100);
+
 export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'store_summary',
@@ -646,8 +650,8 @@ export const APP_TOOLS: AppTool[] = [
       if (change === 'budget' && newDailyBudget === undefined) return 'newDailyBudget is required for a budget change.';
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
       const added = Math.max(0, to - from);
-      // Caps are USD. ponytail: no rate → no amount, so the cap can't be checked and autopilot can't take it: the owner decides.
-      const usd = !added ? 0 : ctx.store.currency === 'USD' ? added : await ctx.toUsd?.(added, ctx.store.currency).then((n) => n && Math.round(n * 100) / 100);
+      // ponytail: no rate → no amount, so the cap can't be checked and autopilot can't take it: the owner decides.
+      const usd = await inUsd(ctx, added);
       const cap = ctx.caps?.(ctx.store.id).adSpendChangePerDay;
       const addedToday = usd ? budgetAddedToday(ctx.db, ctx.store.id) : 0;
       if (cap !== undefined && usd && addedToday + usd > cap) {
@@ -735,9 +739,10 @@ export const APP_TOOLS: AppTool[] = [
         .max(40)
         .describe('action type. Carried out by the app: store.add_products with payload {products: [{researchProductId?, title, price, compareAt?, cost}]}, save_niche_pack. Anything else (e.g. price_test, customer_message) the owner applies by hand.'),
       payload: z.record(z.string(), z.unknown()).describe('everything needed to carry the action out'),
-      amountUsd: z.number().min(0).optional().describe("money at stake per day in USD (budget added, spend, refund total); lets autopilot decide within the owner's cap"),
+      amount: z.number().min(0).optional().describe("money at stake per day in the store's currency (budget added, spend, refund total); lets autopilot decide within the owner's cap"),
     },
-    run: async ({ title, reason, kind, payload, amountUsd }, ctx) => {
+    run: async ({ title, reason, kind, payload, amount }, ctx) => {
+      const amountUsd = amount === undefined ? undefined : await inUsd(ctx, amount);
       // Nothing in the app carries some kinds out (price tests, customer messages...): the owner does, so say so up front.
       const manual = !ACTIONS[kind] && !OUTLIVE_RUN.includes(kind);
       const why = manual ? `${reason} (You apply this one yourself; the agent lists the steps.)` : reason;

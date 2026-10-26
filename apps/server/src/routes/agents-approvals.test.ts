@@ -20,9 +20,9 @@ const input = (agentId: string): RunInput => {
   const agent = getAgent(db, agentId)!;
   return { agent, store: listStores(db).find((s) => s.id === agent.storeId)!, task: 't', env: toolEnv(db) };
 };
-const ask = (title: string, amountUsd?: number): FakeStep => ({
+const ask = (title: string, amount?: number): FakeStep => ({
   call: 'request_approval',
-  input: { title, reason: 'ROAS 3.4 for 5 days', kind: 'change_budget', payload: { campaignId: 'c1' }, ...(amountUsd === undefined ? {} : { amountUsd }) },
+  input: { title, reason: 'ROAS 3.4 for 5 days', kind: 'change_budget', payload: { campaignId: 'c1' }, ...(amount === undefined ? {} : { amount }) },
 });
 
 /** Runs steps; any pending request is approved by "the owner" so the run can finish. */
@@ -57,7 +57,7 @@ describe('autopilot', () => {
   test('asks when the amount is unknown, the kind has no rule, or the agent is not on autopilot', async () => {
     autopilot('pawsome:ad_strategist', 'pawsome');
     const status = async (agentId: string, step: FakeStep) => requests(await run(input(agentId), [step]))[0]?.status;
-    const publish: FakeStep = { call: 'request_approval', input: { title: 'Publish page', reason: 'r', kind: 'publish_page', payload: {}, amountUsd: 5 } };
+    const publish: FakeStep = { call: 'request_approval', input: { title: 'Publish page', reason: 'r', kind: 'publish_page', payload: {}, amount: 5 } };
     expect(await status('pawsome:ad_strategist', ask('Pause ad set'))).toBe('pending');
     expect(await status('pawsome:ad_strategist', publish)).toBe('pending');
     updateCaps(db, 'glow', { autopilot: { change_budget: { enabled: true, maxUsdPerDay: 100 } } });
