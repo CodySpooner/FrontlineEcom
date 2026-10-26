@@ -335,7 +335,7 @@ export interface NewProduct {
 /**
  * Creates each product in Shopify as a draft and adds it to the local catalog right away (the next sync refreshes it).
  * Call only for an approved request. Throws on the first failure; products created before it stay as drafts, and a
- * product whose price update failed stays a $0 draft in Shopify until the next sync shows it.
+ * product whose price update failed stays a $0 draft in Shopify (the error names it) until the next sync shows it.
  */
 function admin(db: Db, key: Buffer, storeId: string, fetchFn: Fetch) {
   const creds = getCredentials(db, key, 'shopify', storeId);
@@ -353,11 +353,13 @@ export async function createProducts(db: Db, key: Buffer, storeId: string, produ
   const insert = db.prepare(`INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 'draft')`);
   const created: { id: string; title: string }[] = [];
   for (const p of products) {
+    let unpriced = false; // Shopify made the draft but the price didn't take: it's there, at $0
     try {
       const id = await logAction(db, storeId, 'product_create', p.title, { ...p }, async () => {
         type Created = { productCreate: { product: { id: string; variants: { nodes: { id: string }[] } } | null; userErrors: { message: string }[] } };
         const { productCreate: c } = await q<Created>(CREATE_M, { product: { title: p.title, status: 'DRAFT' } });
         check(c.userErrors);
+        unpriced = true;
         const product = c.product!;
         const variant = { id: product.variants.nodes[0]!.id, price: p.price.toFixed(2), ...(p.compareAt ? { compareAtPrice: p.compareAt.toFixed(2) } : {}), ...(p.cost ? { inventoryItem: { cost: p.cost.toFixed(2) } } : {}) };
         const { productVariantsBulkUpdate: u } = await q<{ productVariantsBulkUpdate: { userErrors: { message: string }[] } }>(VARIANT_M, { productId: product.id, variants: [variant] });
@@ -367,8 +369,9 @@ export async function createProducts(db: Db, key: Buffer, storeId: string, produ
       insert.run(storeId, id, p.title, p.price, p.compareAt ?? null, p.cost ?? 0);
       created.push({ id, title: p.title });
     } catch (e) {
-      if (!created.length) throw e;
-      throw new Error(`${(e as Error).message} (already created as drafts: ${created.map((c) => c.title).join(', ')})`);
+      const made = [...created.map((c) => c.title), ...(unpriced ? [`${p.title}, without its price: set it in Shopify rather than adding it again`] : [])];
+      if (!made.length) throw e;
+      throw new Error(`${(e as Error).message} (already created as drafts: ${made.join(', ')})`);
     }
   }
   return created;

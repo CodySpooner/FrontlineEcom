@@ -302,6 +302,18 @@ test('createProducts logs each product; a failure part-way names the drafts alre
   expect(db.prepare("SELECT title FROM products WHERE store_id = 'glow' AND id IN ('901', '902') ORDER BY id").all()).toEqual([{ title: 'Roller' }, { title: 'Mask' }]);
 });
 
+test("createProducts names a product Shopify made but couldn't price, even when it's the first", async () => {
+  const { db } = await setup();
+  const fetchFn = (async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (body.query.includes('productCreate')) return Response.json({ data: { productCreate: { product: { id: 'gid://shopify/Product/911', variants: { nodes: [{ id: 'gid://shopify/ProductVariant/811' }] } }, userErrors: [] } } });
+    return Response.json({ data: { productVariantsBulkUpdate: { userErrors: [{ message: 'Price must be greater than 0' }] } } });
+  }) as typeof fetch;
+  await expect(createProducts(db, key, 'glow', [{ title: 'Roller', price: 20 }], fetchFn)).rejects.toThrow(
+    'Shopify: Price must be greater than 0 (already created as drafts: Roller, without its price: set it in Shopify rather than adding it again)',
+  );
+});
+
 test('themes: list, read, copy, edit the copy (never the live theme), publish', async () => {
   const { db } = await setup();
   const calls: { query: string; variables: Record<string, unknown> }[] = [];
