@@ -4,6 +4,7 @@ import type { AdSnapshotData, Competitor, CompetitorSnapshot, PriceChange, Price
 import { once, tx, type Db } from './db';
 import { addDays, localDate } from './dates';
 import { hash, mulberry32 } from './demo';
+import { getCredentials } from './integrations';
 import { log } from './log';
 
 type Row = Record<string, unknown>;
@@ -144,13 +145,45 @@ async function wooCatalog(origin: string, fetchFn: Fetch): Promise<Priced[] | un
 }
 
 /**
- * Reads a competitor's public catalog (a Shopify storefront, else a WooCommerce store) and records a price snapshot for
+ * An Etsy shop's active listings (Etsy Open API, 1,000 at most), read with a connected Etsy store's app key. Undefined
+ * when no Etsy store is connected. ponytail: an Etsy listing carries no sale price, so there's no compare-at.
+ */
+async function etsyCatalog(db: Db, key: Buffer | undefined, url: URL, fetchFn: Fetch): Promise<Priced[] | undefined> {
+  const name = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?shop\/([a-z0-9]+)/i.exec(url.pathname)?.[1];
+  const r = name && key ? db.prepare("SELECT store_id FROM integrations WHERE kind = 'etsy' ORDER BY updated_at DESC").get() : undefined;
+  const creds = r ? getCredentials(db, key!, 'etsy', String(r.store_id)) : undefined;
+  if (!name || !creds?.apiKey || !creds.sharedSecret) return;
+  const api = async <T>(path: string) => {
+    const res = await fetchFn(`https://openapi.etsy.com/v3/application${path}`, {
+      headers: { accept: 'application/json', 'x-api-key': `${creds.apiKey}:${creds.sharedSecret}` }, signal: AbortSignal.timeout(20_000),
+    });
+    if (!res.ok) throw new Error(`Etsy: HTTP ${res.status}`);
+    return (await res.json()) as T;
+  };
+  const shop = (await api<{ results?: { shop_id: number; shop_name: string }[] }>(`/shops?shop_name=${encodeURIComponent(name)}`))
+    .results?.find((s) => s.shop_name.toLowerCase() === name.toLowerCase());
+  if (!shop) throw new Error(`no Etsy shop named ${name}`);
+  const out: Priced[] = [];
+  for (let offset = 0; offset < 1000; offset += 100) {
+    const page = (await api<{ results?: { title?: string; price?: { amount: number; divisor: number } }[] }>(`/shops/${shop.shop_id}/listings/active?limit=100&offset=${offset}`)).results ?? [];
+    for (const l of page) {
+      const price = l.price?.divisor ? l.price.amount / l.price.divisor : 0;
+      if (price > 0) out.push({ product: l.title && decodeHtml(l.title), price });
+    }
+    if (page.length < 100) break;
+  }
+  return out;
+}
+
+/**
+ * Reads a competitor's public catalog (an Etsy shop, a Shopify storefront, else a WooCommerce store) and records a price snapshot for
  * each product whose lowest price or its compare-at changed since the last one. Returns how many it recorded, or
  * undefined when the site is neither.
  */
-export async function watchCompetitorPrices(db: Db, competitorId: string, url: string, fetchFn: Fetch = fetch, now = new Date()) {
-  const origin = new URL(url).origin;
-  const products = (await shopifyCatalog(origin, fetchFn)) ?? (await wooCatalog(origin, fetchFn));
+export async function watchCompetitorPrices(db: Db, competitorId: string, url: string, fetchFn: Fetch = fetch, now = new Date(), key?: Buffer) {
+  const u = new URL(url);
+  const products = /(^|\.)etsy\.com$/.test(u.hostname) ? await etsyCatalog(db, key, u, fetchFn)
+    : ((await shopifyCatalog(u.origin, fetchFn)) ?? (await wooCatalog(u.origin, fetchFn)));
   if (!products) return;
   const latest = new Map(
     db.prepare("SELECT data_json FROM competitor_snapshots WHERE competitor_id = ? AND kind = 'price' ORDER BY captured_at, rowid").all(competitorId)
@@ -178,7 +211,7 @@ export async function watchCompetitorPrices(db: Db, competitorId: string, url: s
  * Checks every competitor's prices once a day (hourly ticks, one site at a time). The demo competitors live on the
  * reserved `.example` domain and are never fetched. Returns stop().
  */
-export function startCompetitorWatch(db: Db, fetchFn: Fetch = fetch, everyMs = 3_600_000) {
+export function startCompetitorWatch(db: Db, key?: Buffer, fetchFn: Fetch = fetch, everyMs = 3_600_000) {
   let running = false;
   const check = async () => {
     if (running) return;
@@ -190,8 +223,8 @@ export function startCompetitorWatch(db: Db, fetchFn: Fetch = fetch, everyMs = 3
         const [id, url] = [String(c.id), String(c.url)];
         if (done[id] === today || new URL(url).hostname.endsWith('.example')) continue;
         try {
-          const changes = await watchCompetitorPrices(db, id, url, fetchFn);
-          log('info', 'competitor prices', { id, ...(changes === undefined ? { skipped: 'not a Shopify storefront' } : { changes }) });
+          const changes = await watchCompetitorPrices(db, id, url, fetchFn, new Date(), key);
+          log('info', 'competitor prices', { id, ...(changes === undefined ? { skipped: 'not a Shopify or WooCommerce store, or an Etsy shop with no Etsy store connected' } : { changes }) });
         } catch (e) {
           log('warn', 'competitor prices failed', { id, error: e instanceof Error ? e.message : String(e) });
         }

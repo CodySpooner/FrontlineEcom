@@ -22,11 +22,12 @@ seedCreatives(db);
 seedResearch(db);
 seedCompetitors(db);
 startDemoEmitter(db);
-startSyncLoop(db, loadKey(dataDir()));
+const key = loadKey(dataDir());
+startSyncLoop(db, key);
 startBackupLoop(db);
 startFxLoop(db);
 startDigestLoop(db);
-startCompetitorWatch(db);
+startCompetitorWatch(db, key);
 startScheduler(db, (agentId, task) => runManager(db).start(agentId, task));
 startOutcomeLoop(db);
 
