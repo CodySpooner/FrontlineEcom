@@ -32,6 +32,21 @@ pnpm check    # typecheck + tests
   `logs\api.log`, and `backups\` (daily, newest 7 kept, restorable from Settings). Connector credentials are encrypted
   with your Windows login and never leave the machine except to their own service.
 
+### How the numbers are counted
+
+- **Revenue** is what customers paid for paid orders, including shipping and tax, minus refunds. Pending and on-hold
+  payments (cash on delivery, bank transfer), test and sample orders don't count until paid, and a cancelled order
+  counts as refunded. TikTok Shop subtracts cancellations only, and Amazon counts sales before refunds.
+- **Profit** is revenue minus product costs minus ad spend. Costs come from the platform (Shopify "Cost per item",
+  WooCommerce Cost of Goods Sold) or from Store Analytics → Unit costs. Platform fees and shipping labels aren't
+  subtracted.
+- **ROAS** on the dashboard is store revenue ÷ total ad spend. In the campaigns table, it's the purchase value each
+  network attributes to that campaign.
+- **Days** follow each store's own timezone (the shop's, where the platform reports it). Today's change compares
+  against the same hours of earlier days.
+- **Currencies:** a store reports in its shop's currency. Ad spend in another currency, and "All stores" totals (in
+  the base currency from Settings), are converted at the European Central Bank's daily rates.
+
 ## The three Orca workers
 
 Three Claude Code agents build this in parallel, each in its own Orca worktree
