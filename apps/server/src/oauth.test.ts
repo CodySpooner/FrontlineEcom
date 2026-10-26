@@ -94,3 +94,18 @@ test('TikTok Shop: Connect uses the Partner Center link (any market host) and ex
   expect(Object.fromEntries(urls[0]!.searchParams)).toEqual({ app_key: 'ak', app_secret: 'as', auth_code: 'tt-code', grant_type: 'authorized_code' });
   expect(getCredentials(db, key, 'tiktok_shop', 'glow')).toMatchObject({ accessToken: 'ROW_access', refreshToken: 'ROW_refresh', accessTokenExpiresAt: '1793000000' });
 });
+
+test('Reconnect keeps the saved secrets the form leaves blank (it never gets them back to show)', async () => {
+  const { db, calls, app } = setup();
+  const values = { customerId: '123-456-7890', clientId: 'cid.apps.googleusercontent.com', clientSecret: 'g-secret', developerToken: 'dev-token' };
+  const connect = async (v: Record<string, string>) => {
+    const res = await app.request('http://127.0.0.1:8787/api/integrations/oauth/start', post({ kind: 'google_ads', storeId: 'glow', values: v }));
+    expect(res.status).toBe(200);
+    const state = new URL(((await res.json()) as OAuthStart).url).searchParams.get('state');
+    expect((await app.request(`http://127.0.0.1:8787/api/oauth/callback?code=4/abc&state=${state}`)).status).toBe(200);
+  };
+  await connect(values);
+  await connect({ customerId: values.customerId, clientId: values.clientId });
+  expect(calls[1]!.form.client_secret).toBe('g-secret');
+  expect(getCredentials(db, key, 'google_ads', 'glow')).toEqual({ ...values, refreshToken: '1//google-refresh' });
+});

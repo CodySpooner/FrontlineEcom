@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { Hono } from 'hono';
 import { INTEGRATION_KINDS, type IntegrationKind, type OAuthStart } from '@frontline/shared';
 import type { Db } from './db';
-import { saveIntegration, updateSecrets } from './integrations';
+import { getCredentials, saveIntegration, updateSecrets } from './integrations';
 import { getStore } from './stores';
 
 // "Connect" buttons: the owner enters the app credentials, consents in the browser, and the tokens are saved for them.
@@ -84,8 +84,11 @@ interface Pending { kind: IntegrationKind; storeId?: string; values: Values; ver
 const TTL_MS = 15 * 60_000;
 const base64url = (b: Buffer) => b.toString('base64url');
 
-/** Validates the non-token fields and returns where to send the owner. Error string on bad input. */
-export function startOAuth(db: Db, body: unknown, callbackUrl: string, pending: Map<string, Pending>, now = Date.now()): string | OAuthStart {
+/**
+ * Validates the non-token fields and returns where to send the owner. Error string on bad input. A secret left blank is
+ * the saved one (the form can't show it back), so reconnecting needs only the consent.
+ */
+export function startOAuth(db: Db, key: Buffer, body: unknown, callbackUrl: string, pending: Map<string, Pending>, now = Date.now()): string | OAuthStart {
   const { kind, storeId, values } = (body ?? {}) as { kind?: unknown; storeId?: unknown; values?: unknown };
   const provider = PROVIDERS[kind as IntegrationKind];
   if (!provider) return `Connect works for ${oauthKinds().join(', ')}`;
@@ -93,14 +96,16 @@ export function startOAuth(db: Db, body: unknown, callbackUrl: string, pending: 
   if (spec.perStore && (typeof storeId !== 'string' || !getStore(db, storeId))) return `${spec.name} needs an existing storeId`;
   if (!spec.perStore && storeId !== undefined) return `${spec.name} is global; omit storeId`;
   if (!values || typeof values !== 'object') return 'values must be an object';
+  const saved = getCredentials(db, key, kind as IntegrationKind, typeof storeId === 'string' ? storeId : undefined) ?? {};
   const given: Values = {};
   for (const f of spec.fields.filter((f) => !f.oauth)) {
-    const v = (values as Record<string, unknown>)[f.key];
-    if (typeof v !== 'string' || !v.trim()) {
+    const raw = (values as Record<string, unknown>)[f.key];
+    const v = (typeof raw === 'string' && raw.trim()) || (f.secret ? saved[f.key] : undefined);
+    if (!v) {
       if (f.optional) continue;
       return `${f.label} is required`;
     }
-    given[f.key] = v.trim();
+    given[f.key] = v;
   }
   const invalid = provider.validate?.(given);
   if (invalid) return invalid;
@@ -141,7 +146,7 @@ export function oauthRoutes(db: Db, key: () => Buffer, fetchFn: Fetch = fetch) {
   const pending = new Map<string, Pending>();
   return new Hono()
     .post('/api/integrations/oauth/start', async (c) => {
-      const r = startOAuth(db, await c.req.json().catch(() => undefined), new URL('/api/oauth/callback', c.req.url).href, pending);
+      const r = startOAuth(db, key(), await c.req.json().catch(() => undefined), new URL('/api/oauth/callback', c.req.url).href, pending);
       return typeof r === 'string' ? c.json({ error: r }, 400) : c.json(r);
     })
     .post('/api/integrations/oauth/finish', async (c) => {
