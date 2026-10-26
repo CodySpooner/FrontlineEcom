@@ -41,7 +41,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-16 Competitors: competitors per store, price snapshots, ad snapshots; API.
 - [x] CORE-17 Automation scheduler: rules (schedule cron | metric threshold) → action (agent task) with approval policy
       and caps; run log; survives restarts.
-- [ ] CORE-18 Electron shell `apps/desktop`: starts the server in a utilityProcess, loads the web build (dev: Vite URL),
+- [x] CORE-18 Electron shell `apps/desktop`: starts the server in a utilityProcess, loads the web build (dev: Vite URL),
       single instance, frameless window with themed title bar, tray, safeStorage for secrets. Check `node:sqlite` under
       Electron's Node; fall back to better-sqlite3 if needed.
 - [ ] CORE-19 Packaging: electron-builder Windows installer + icon from brand; `pnpm package`.
@@ -51,6 +51,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-18 Electron shell `apps/desktop` (`pnpm desktop`): API in a utilityProcess on a free localhost port serving the web build (`FRONTLINE_DEV_URL` = load Vite instead), single instance, frameless window with themed native controls, close-to-tray, data in `%APPDATA%/Frontline Ecom/data`, credentials key in safeStorage (unreadable key → owner can reset; connectors then ask for tokens again instead of crashing). `node:sqlite` + FTS5 verified under Electron 44 (Node 24.21): no better-sqlite3 fallback needed
 - 2026-10-26 — CORE-17 automation scheduler: rules (5-field local cron | metric threshold over N days) → agent task via the run manager; approval `ask` (approvals hook) or `auto`; daily cap + cooldown; run log; survives restarts (persisted `checked_at`, 24h catch-up, pending approvals re-attached); `GET/POST /api/automations`, `PATCH/DELETE /api/automations/:id`, `GET /api/automations/runs`
 - 2026-10-26 — CORE-16 competitors: `competitors` + `competitor_snapshots` (price | ad), `GET/POST /api/competitors`, `DELETE /api/competitors/:id`, `GET/POST /api/competitors/:id/snapshots`, `GET /api/competitors/price-changes`; demo rivals for the 3 demo stores
 - 2026-10-26 — Fix: `pnpm dev` API never started (tsx watch restarts on stdin data under `pnpm --parallel`); server dev now `node --watch --import tsx`. Verified Command Center on the real API in the browser.

@@ -17,4 +17,4 @@ startDemoEmitter(db);
 startSyncLoop(db, loadKey(dataDir()));
 startScheduler(db, (agentId, task) => runManager(db).start(agentId, task));
 
-startServer(db, Number(process.env.API_PORT ?? 8787), (port) => console.log(`Frontline API on http://127.0.0.1:${port}`));
+startServer(db, Number(process.env.API_PORT ?? 8787), (port) => console.log(`Frontline API on http://127.0.0.1:${port}`), process.env.FRONTLINE_WEB_DIR);

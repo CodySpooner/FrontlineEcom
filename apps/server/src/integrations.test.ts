@@ -85,3 +85,17 @@ test('invalid integration bodies are rejected', async () => {
   ];
   for (const body of bad) expect((await app.request('/api/integrations', put(body))).status, JSON.stringify(body)).toBe(400);
 });
+
+test('credentials saved under another key read as an error to re-enter, never a crash', async () => {
+  const { db, app } = setup();
+  await app.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', accessToken: TOKEN } }));
+  const reset = createApp(db, randomBytes(32)); // desktop key was reset
+  const [listed] = (await (await reset.request('/api/integrations?stores=glow')).json()) as Integration[];
+  expect(listed).toMatchObject({ status: 'error', error: expect.stringContaining('Enter them again'), secretsSet: [] });
+  expect(getCredentials(db, randomBytes(32), 'shopify', 'glow')).toBeUndefined();
+  expect(db.prepare('SELECT status FROM integrations').get()).toEqual({ status: 'error' });
+  // keeping the old token is impossible, so it must be entered again
+  expect((await reset.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com' } }))).status).toBe(400);
+  const res = await reset.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', accessToken: TOKEN } }));
+  expect(await res.json()).toMatchObject({ status: 'connected', secretsSet: ['accessToken'] });
+});

@@ -1,0 +1,16 @@
+{
+  "name": "@frontline/desktop",
+  "productName": "Frontline Ecom",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --external:electron --outfile=dist/main.js",
+    "start": "pnpm --filter @frontline/web build && pnpm build && electron .",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "esbuild": "0.28.2"
+  }
+}

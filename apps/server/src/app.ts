@@ -1,5 +1,6 @@
 import { createSquad } from '@frontline/agents';
 import { serve, upgradeWebSocket } from '@hono/node-server';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { WebSocketServer } from 'ws';
 import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type ApprovalStatus, type StoreInput } from '@frontline/shared';
@@ -103,6 +104,15 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .route('/', agentRoutes(db));
 };
 
-/** HTTP + WebSocket server on 127.0.0.1 (port 0 = any free port). */
-export const startServer = (db: Db, port: number, onListen?: (port: number) => void) =>
-  serve({ fetch: createApp(db).fetch, port, hostname: '127.0.0.1', websocket: { server: new WebSocketServer({ noServer: true }) } }, (info) => onListen?.(info.port));
+/**
+ * HTTP + WebSocket server on 127.0.0.1 (port 0 = any free port). With `webDir` (the desktop app) it also serves the
+ * built web UI, falling back to index.html for client-side routes.
+ */
+export const startServer = (db: Db, port: number, onListen?: (port: number) => void, webDir?: string) => {
+  const app = createApp(db);
+  if (webDir) {
+    const index = serveStatic({ root: webDir, path: 'index.html' });
+    app.use('*', serveStatic({ root: webDir })).get('*', (c, next) => (c.req.path.startsWith('/api/') ? next() : index(c, next)));
+  }
+  return serve({ fetch: app.fetch, port, hostname: '127.0.0.1', websocket: { server: new WebSocketServer({ noServer: true }) } }, (info) => onListen?.(info.port));
+};

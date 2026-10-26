@@ -7,17 +7,32 @@ type Row = Record<string, unknown>;
 
 const idOf = (kind: string, storeId?: string | null) => `${kind}:${storeId ?? 'global'}`;
 
-const toIntegration = (r: Row, key: Buffer): Integration => ({
-  id: String(r.id),
-  kind: r.kind as IntegrationKind,
-  ...(r.store_id ? { storeId: String(r.store_id) } : {}),
-  status: r.status as IntegrationStatus,
-  ...(r.error ? { error: String(r.error) } : {}),
-  settings: JSON.parse(String(r.settings_json)),
-  secretsSet: Object.keys(decrypt<Record<string, string>>(key, String(r.encrypted_credentials), String(r.id))),
-  updatedAt: String(r.updated_at),
-  ...(r.synced_at ? { syncedAt: String(r.synced_at) } : {}),
-});
+const LOCKED = "Saved credentials can't be unlocked (the app's key was reset). Enter them again.";
+
+/** The row's secrets, or undefined when they were saved under another key (e.g. the desktop app's key was reset). */
+function secretsOf(key: Buffer, r: Row) {
+  try {
+    return decrypt<Record<string, string>>(key, String(r.encrypted_credentials), String(r.id));
+  } catch {
+    return undefined;
+  }
+}
+
+const toIntegration = (r: Row, key: Buffer): Integration => {
+  const secrets = secretsOf(key, r);
+  const error = secrets ? r.error : LOCKED;
+  return {
+    id: String(r.id),
+    kind: r.kind as IntegrationKind,
+    ...(r.store_id ? { storeId: String(r.store_id) } : {}),
+    status: secrets ? (r.status as IntegrationStatus) : 'error',
+    ...(error ? { error: String(error) } : {}),
+    settings: JSON.parse(String(r.settings_json)),
+    secretsSet: Object.keys(secrets ?? {}),
+    updatedAt: String(r.updated_at),
+    ...(r.synced_at ? { syncedAt: String(r.synced_at) } : {}),
+  };
+};
 
 /** Integrations for the given stores plus all global ones. */
 export function listIntegrations(db: Db, key: Buffer, storeIds: string[]): Integration[] {
@@ -43,8 +58,8 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
   }
 
   const id = idOf(kind, storeId);
-  const existing = db.prepare('SELECT encrypted_credentials FROM integrations WHERE id = ?').get(id);
-  const oldSecrets = existing ? decrypt<Record<string, string>>(key, String(existing.encrypted_credentials), id) : {};
+  const existing = db.prepare('SELECT id, encrypted_credentials FROM integrations WHERE id = ?').get(id);
+  const oldSecrets = (existing && secretsOf(key, existing)) ?? {};
   const settings: Record<string, string> = {};
   const secrets: Record<string, string> = {};
   for (const f of spec.fields) {
@@ -63,11 +78,13 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
 
 export const deleteIntegration = (db: Db, id: string) => db.prepare('DELETE FROM integrations WHERE id = ?').run(id).changes > 0;
 
-/** For connectors only: settings + decrypted secrets. Never send this to the client or a log. */
+/** For connectors only: settings + decrypted secrets. Never send this to the client or a log. Undefined = don't sync. */
 export function getCredentials(db: Db, key: Buffer, kind: IntegrationKind, storeId?: string): Record<string, string> | undefined {
-  const id = idOf(kind, storeId);
-  const r = db.prepare('SELECT settings_json, encrypted_credentials FROM integrations WHERE id = ?').get(id);
-  return r && { ...JSON.parse(String(r.settings_json)), ...decrypt<Record<string, string>>(key, String(r.encrypted_credentials), id) };
+  const r = db.prepare('SELECT id, settings_json, encrypted_credentials FROM integrations WHERE id = ?').get(idOf(kind, storeId));
+  if (!r) return undefined;
+  const secrets = secretsOf(key, r);
+  if (!secrets) setIntegrationStatus(db, String(r.id), 'error', LOCKED);
+  return secrets && { ...JSON.parse(String(r.settings_json)), ...secrets };
 }
 
 

@@ -4,8 +4,17 @@ import { join } from 'node:path';
 
 // ponytail: AES-256-GCM with a key file in the data dir; the desktop app switches to Electron safeStorage (CORE-18).
 
-/** Reads `<dir>/secret.key`, creating a random 32-byte key on first use. */
+/**
+ * The desktop app passes its key (kept in Electron safeStorage) as base64 in FRONTLINE_SECRET_KEY. Otherwise reads
+ * `<dir>/secret.key`, creating a random 32-byte key on first use.
+ */
 export function loadKey(dir: string): Buffer {
+  const fromEnv = process.env.FRONTLINE_SECRET_KEY;
+  if (fromEnv) {
+    const key = Buffer.from(fromEnv, 'base64');
+    if (key.length !== 32) throw new Error('FRONTLINE_SECRET_KEY must be 32 bytes, base64');
+    return key;
+  }
   const file = join(dir, 'secret.key');
   try {
     return readFileSync(file);
