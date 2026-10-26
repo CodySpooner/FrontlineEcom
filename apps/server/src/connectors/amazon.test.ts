@@ -585,3 +585,12 @@ test("a listings answer with no items list (an error page sent as 200) archives 
   await syncAmazon(db, key, 'peak', broken, new Date(NOW.getTime() + 86_400_000));
   expect(active()).toBe(before);
 });
+
+test("Amazon asks up to the end of the store's today, not the computer's (a store ahead of the machine)", async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET timezone = 'Pacific/Kiritimati' WHERE id = 'peak'").run();
+  const { fetchFn, calls } = fakeAmazon();
+  // 11:00 UTC: still the 26th on any machine up to UTC+12, already 01:00 on the 27th in Kiritimati (UTC+14).
+  await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-26T11:00:00Z'));
+  expect(calls[1]!.url.searchParams.get('interval')).toMatch(/--2026-10-28T00:00:00\+14:00$/);
+});

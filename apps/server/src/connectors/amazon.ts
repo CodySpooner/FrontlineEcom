@@ -256,7 +256,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const account = `${creds.sellerId?.trim()}/${marketplace}`; // whose orders and traffic the saved read state is
 
     const timeZone = String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC');
-    const today = localDate(now);
+    const today = localDate(now, timeZone); // the store's day: the interval below ends at its midnight
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const start = cursor ? addDays(cursor, -SETTLE_DAYS) : addDays(today, -BACKFILL_DAYS);
     const end = addDays(today, 1);
