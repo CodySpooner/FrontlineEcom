@@ -110,9 +110,10 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
   props.push({depth:hub.y,draw:()=> {
     diamond(hub.x,hub.y-45,100,50,'#472735','#7e2a40');
     box(hub.x,hub.y-18,70,35,22,'#38343f','#31232f','#241c27');
-    diamond(hub.x,hub.y-41,59,30,'#b72241','#ff6074'); diamond(hub.x,hub.y-35,48,24,'#341724','#ff385d');
+    diamond(hub.x,hub.y-41,59,30,'#7a2038','#ff6074'); diamond(hub.x,hub.y-35,48,24,'#1e1726','#ff385d');
+    diamond(hub.x,hub.y-35,29,14,'#f66986','#ffe2ec'); diamond(hub.x,hub.y-31,18,8,'#fff1f6','#ff9db2');
+    for (const x of [-46,46]) { rect(hub.x+x-4,hub.y-14,8,4,'#ffe1e9'); rect(hub.x+x-5,hub.y-17,10,2,'#ff385d'); }
     rect(hub.x-3,hub.y+7,6,18,'#ff405e');
-    c.font='bold 16px monospace';c.textAlign='center';c.fillStyle='#e9d9df';c.fillText('FRONTLINE',hub.x,hub.y+60);
   }});
   props.sort((a,b)=>a.depth-b.depth).forEach((p)=>p.draw());
   return canvas;

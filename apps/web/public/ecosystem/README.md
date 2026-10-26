@@ -1,0 +1,1 @@
+`frontline-logo.png` is the owner's `docs/reference/frontline-logo.png`, with alpha values ≤ 8 cleared and the visible bounds cropped (x=21, y=467, 1222×285). The lettering and colors are unchanged. The office projects this local asset with crisp layered light and scanline sprites; it needs no external image service.

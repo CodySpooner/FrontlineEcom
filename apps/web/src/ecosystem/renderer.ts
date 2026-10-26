@@ -1,12 +1,14 @@
-import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
+import { Application, Assets, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { DESKS, MEETING, ROOMS, iso, uniso, type Tile } from './world';
 import { paintOffice } from './worldArt';
 import { fitCamera, zoomAt } from './camera';
 import { workerSprites } from './workerSprites';
 import type { DisplayOptions } from './display';
 import { OFFICE_THEMES, type OfficeThemeId } from './themes';
+import { createHologram, LOGO_URL } from './hologram';
 
 export async function createOffice(host: HTMLElement, onDesk: (id: string) => void) {
+  const logoTexture = await Assets.load<Texture>(LOGO_URL); logoTexture.source.scaleMode = 'nearest';
   const app = new Application();
   await app.init({ width: host.clientWidth, height: host.clientHeight, backgroundAlpha: 0, antialias: false, resolution: 1, preference: 'webgl' });
   host.appendChild(app.canvas);
@@ -21,7 +23,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   for (const room of ROOMS) {
     const p = iso({x:room.x+4,y:room.y+7});
     const label = new Text({ text: room.name.toUpperCase(), style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 22, fontWeight: '600', fill: '#e6e6ec', stroke: {color:'#08080c',width:5} } });
-    label.anchor.set(.5); label.position.set(p.x,p.y+20); labels.addChild(label);
+    label.anchor.set(.5); label.position.set(p.x,p.y+(room.id === 'executive' ? -32 : 20)); labels.addChild(label);
   }
   const selection = new Graphics(); world.addChild(selection);
   let dragged = false;
@@ -38,19 +40,13 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     hit.on('pointertap',()=>{ if(dragged) return; selection.clear().poly([p.x,p.y-12,p.x+31,p.y+4,p.x,p.y+20,p.x-31,p.y+4]).stroke({color:0xffffff,width:2});selectDesk(d.id); });
     world.addChild(hit); light.alpha=.45+(i%4)*.12;
   }
-  const globe = new Container(); const hub=iso(MEETING); globe.position.set(hub.x,hub.y-60); world.addChild(globe);
-  globe.addChild(new Graphics().circle(0,0,53).fill({color:0xff264f,alpha:.06}).circle(0,0,44).fill({color:0xa2193c,alpha:.3}).stroke({color:0xff627d,width:2}));
-  const meridians = new Graphics(); globe.addChild(meridians);
-  for (const w of [12,28,40]) meridians.ellipse(0,0,w,44).stroke({color:0xff496d,width:1,alpha:.8});
-  for (const yy of [-22,0,22]) meridians.ellipse(0,yy,Math.sqrt(44*44-yy*yy),9).stroke({color:0xff496d,width:1,alpha:.8});
-  const continents = new Graphics(); globe.addChild(continents);
-  for(let i=0;i<60;i++) { const x=Math.sin(i*1.9)*35, y=Math.cos(i*2.7)*32; if(Math.sin(x*.14)+Math.cos(y*.18)>.1) continents.rect(Math.round(x/3)*3,Math.round(y/3)*3,3,3).fill('#ff6686'); }
+  const hub=iso(MEETING), hologram = createHologram(logoTexture); hologram.root.position.set(hub.x,hub.y-98); world.addChild(hologram.root);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let lowPower = false, autoLow = false;
   app.ticker.maxFPS = 60;
   const workers = workerSprites(world, (desk, id) => { if (!dragged) { clickedWorker = id; selectDesk(desk); } });
   const objective = new Text({ text: '', style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 19, fontWeight: '600', fill: '#ffd9e3', stroke: { color: '#100810', width: 6 }, wordWrap: true, wordWrapWidth: 300, align: 'center' } });
-  objective.anchor.set(.5, 1); objective.position.set(hub.x, hub.y - 135); world.addChild(objective);
+  objective.anchor.set(.5, 1); objective.position.set(hub.x, hub.y - 176); world.addChild(objective);
   let camera = fitCamera(host.clientWidth,host.clientHeight);
   world.scale.set(camera.scale); world.position.set(camera.x,camera.y);
   const fit = () => { camera = fitCamera(host.clientWidth,host.clientHeight); };
@@ -90,12 +86,12 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     world.x+=(camera.x-world.x)*smooth;world.y+=(camera.y-world.y)*smooth;world.scale.set(world.scale.x+(camera.scale-world.scale.x)*smooth);
     workers.tick(Math.min(ticker.elapsedMS, 1000),reduced.matches || lowPower || autoLow,{x:-world.x/world.scale.x,y:-world.y/world.scale.x,width:host.clientWidth/world.scale.x,height:host.clientHeight/world.scale.x,scale:world.scale.x});
     objective.text = workers.meetingTitle() ? `TEAM KICKOFF\n${workers.meetingTitle()}` : '';
-    if(reduced.matches || lowPower || autoLow) return;
-    elapsed+=ticker.deltaMS;
-    globe.y=hub.y-60+Math.sin(elapsed/1600)*3;
-    meridians.scale.x=.75+Math.sin(elapsed/2400)*.2;
+    const still = reduced.matches || lowPower || autoLow;
+    if (!still) elapsed+=ticker.deltaMS;
+    hologram.tick(elapsed, still);
+    if(still) return;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;
