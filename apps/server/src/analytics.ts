@@ -15,6 +15,8 @@ export interface MetricRow {
   sessions?: number;
   addToCarts?: number;
   checkouts?: number;
+  /** Of `orders`, those from a sales channel with its own shoppers (Amazon next to the store's site): not in `sessions`. */
+  channelOrders?: number;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -89,8 +91,10 @@ export function summarize(rows: MetricRow[], { range, to, storeIds, todayFractio
   const sum = (k: 'sessions' | 'addToCarts' | 'checkouts') => cur.reduce((a, r) => a + (r[k] ?? 0), 0);
   // Orders from the store-days that report sessions: a store without a traffic source, or days from before its source
   // began (TikTok's last 30 days, GA4 connected mid-range), would inflate the conversion rate. With none, every order.
+  // A channel's own orders (Amazon next to the site) are left out too: its shoppers never visited the site.
   const tracked = cur.filter((r) => (r.sessions ?? 0) > 0);
-  const funnel = { sessions: sum('sessions'), addToCarts: sum('addToCarts'), checkouts: sum('checkouts'), orders: tracked.length ? totalsOf(tracked).orders : totals.orders };
+  const siteOrders = tracked.reduce((a, r) => a + r.orders - (r.channelOrders ?? 0), 0);
+  const funnel = { sessions: sum('sessions'), addToCarts: sum('addToCarts'), checkouts: sum('checkouts'), orders: tracked.length ? siteOrders : totals.orders };
   return { range, storeIds, from, to, totals, previous, deltas: deltasOf(totals, previous), series, byStore, funnel };
 }
 
@@ -104,7 +108,8 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
   return (db
     .prepare(
       `SELECT d.store_id AS storeId, d.date, d.revenue, d.ad_spend AS adSpend, d.cogs + d.revenue * s.fee_percent / 100 + d.orders * s.fee_per_order AS cogs,
-         d.orders, d.sessions, d.add_to_carts AS addToCarts, d.checkouts
+         d.orders, d.sessions, d.add_to_carts AS addToCarts, d.checkouts,
+         iif(s.platform = 'amazon', 0, (SELECT coalesce(sum(c.orders), 0) FROM channel_daily c WHERE c.store_id = d.store_id AND c.date = d.date)) AS channelOrders
        FROM daily_metrics d JOIN stores s ON s.id = d.store_id
        WHERE d.store_id IN (${storeIds.map(() => '?').join(',')}) AND d.date BETWEEN ? AND ?`,
     )

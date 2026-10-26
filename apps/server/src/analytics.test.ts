@@ -3,7 +3,7 @@ import type { AnalyticsSummary, CampaignStats, TopProduct } from '@frontline/sha
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { campaignStats, currentWindow, dayShifts, salesShares, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
+import { campaignStats, currentWindow, dayShifts, loadRows, salesShares, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
 
 const row = (storeId: string, date: string, revenue: number, adSpend: number, cogs: number, orders: number): MetricRow => ({ storeId, date, revenue, adSpend, cogs, orders });
 
@@ -209,4 +209,23 @@ test("campaigns and top products cover each store's own days when stores are in 
   order.run('peak', '#1', 30, '2026-10-19'); item.run('peak', '#1', 'rope', 30);
   order.run('glow', '#2', 50, '2026-10-19'); item.run('glow', '#2', 'mask', 50); // the day before Berlin's week
   expect(topProducts(db, ['glow', 'peak'], '2026-10-20', to, 8, shift).map((p) => [p.storeId, p.productId])).toEqual([['peak', 'rope']]);
+});
+
+test("funnel orders leave out a sales channel's own orders (Amazon next to the site): its shoppers aren't in the site's sessions", () => {
+  const s = summarize(
+    [{ ...row('a', '2026-10-26', 100, 0, 30, 9), sessions: 500, channelOrders: 6 }],
+    { range: 7, to: '2026-10-26', storeIds: ['a'] },
+  );
+  expect(s.totals.orders).toBe(9);
+  expect(s.funnel.orders).toBe(3);
+
+  // Loaded per store-day: Amazon next to a Shopify store is a channel; an Amazon store's own sales aren't.
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const sales = db.prepare("INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES (?, 'amazon', '2026-10-26', 50, 4)");
+  sales.run('glow');
+  sales.run('peak');
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  const day = (id: string) => loadRows(db, [id], 7, '2026-10-26').find((r) => r.date === '2026-10-26')?.channelOrders;
+  expect([day('glow'), day('peak')]).toEqual([4, 0]);
 });
