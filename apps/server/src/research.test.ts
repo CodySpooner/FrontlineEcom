@@ -119,3 +119,10 @@ test('add to store twice gives back the pending request instead of a second card
   // Another store gets its own.
   expect((await app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'glow' }))).status).toBe(201);
 });
+
+test('a double click on add to store still makes one request', async () => {
+  const app = setup();
+  const add = () => app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'pawsome' }));
+  const ids = await Promise.all([add(), add()].map(async (r) => ((await (await r).json()) as ApprovalRequest).id));
+  expect(ids[1]).toBe(ids[0]);
+});

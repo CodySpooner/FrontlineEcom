@@ -115,7 +115,12 @@ export function researchRoutes(db: Db) {
       if (!store) return c.json({ error: 'storeId must be an existing store' }, 400);
       // Approving would do nothing on a platform the app doesn't write products to.
       if (store.connected && !PRODUCT_WRITE_PLATFORMS.includes(store.platform)) return c.json({ error: `Products are only added automatically to Shopify and WooCommerce stores for now. Add "${p.title}" to ${store.name} by hand.` }, 400);
-      // Already asked (here, or by an agent): that request again rather than a second card for one product.
+      // Research prices are USD: converted to the store's currency, rounded to its minor unit. No rate: kept in USD, and the request says so.
+      const rate = await convertRate(db, 'USD', store.currency);
+      const digits = new Intl.NumberFormat('en', { style: 'currency', currency: store.currency }).resolvedOptions().maximumFractionDigits ?? 2;
+      const money = (usd: number) => (rate ? Math.round(usd * rate * 10 ** digits) / 10 ** digits : usd);
+      // Already asked (here, or by an agent): that request again rather than a second card for one product. After the
+      // await, so a double click's second request sees the first's.
       const asked = db
         .prepare(
           `SELECT a.id FROM approvals a, json_each(a.action_json, '$.payload.products') p
@@ -123,10 +128,6 @@ export function researchRoutes(db: Db) {
         )
         .get(store.id, p.title);
       if (asked) return c.json(getApproval(db, String(asked.id)));
-      // Research prices are USD: converted to the store's currency, rounded to its minor unit. No rate: kept in USD, and the request says so.
-      const rate = await convertRate(db, 'USD', store.currency);
-      const digits = new Intl.NumberFormat('en', { style: 'currency', currency: store.currency }).resolvedOptions().maximumFractionDigits ?? 2;
-      const money = (usd: number) => (rate ? Math.round(usd * rate * 10 ** digits) / 10 ** digits : usd);
       const approval = approvalsHook(db).create({
         storeId: store.id,
         agentId: `${store.id}:product_hunter`,
