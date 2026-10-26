@@ -657,22 +657,24 @@ export const APP_TOOLS: AppTool[] = [
       const from = Number(c.daily_budget);
       if (change === 'budget' && newDailyBudget === undefined) return 'newDailyBudget is required for a budget change.';
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
-      const added = Math.max(0, to - from);
-      // ponytail: no rate → no amount, so the cap can't be checked and autopilot can't take it: the owner decides.
-      const usd = await inUsd(ctx, added);
+      // Autopilot caps bound the budget a change touches (a pause stops all of it); the added-spend cap counts raises only.
+      // ponytail: no rate → no amount, so the caps can't be checked and autopilot can't take it: the owner decides.
+      const usd = await inUsd(ctx, change === 'pause' ? from : Math.abs(to - from));
+      const addedUsd = to > from ? usd : 0;
       const cap = ctx.caps?.(ctx.store.id).adSpendChangePerDay;
-      const addedToday = usd ? budgetAddedToday(ctx.db, ctx.store.id) : 0;
-      if (cap !== undefined && usd && addedToday + usd > cap) {
-        const more = ctx.store.currency === 'USD' ? '' : ` (${cash(added, ctx.store.currency)})`;
-        return `Not sent: +$${usd}${more}/day would pass the owner's $${cap}/day cap on added ad spend ($${addedToday} already approved today). Propose a smaller step.`;
+      const addedToday = addedUsd ? budgetAddedToday(ctx.db, ctx.store.id) : 0;
+      if (cap !== undefined && addedUsd && addedToday + addedUsd > cap) {
+        const more = ctx.store.currency === 'USD' ? '' : ` (${cash(to - from, ctx.store.currency)})`;
+        return `Not sent: +$${addedUsd}${more}/day would pass the owner's $${cap}/day cap on added ad spend ($${addedToday} already approved today). Propose a smaller step.`;
       }
+      const amount = usd !== undefined ? { amountUsd: usd } : {};
       const { approved, message } = await requestApproval(ctx, {
         title: (change === 'pause' ? `Pause ${c.name}` : `${to > from ? 'Raise' : 'Lower'} ${c.name} budget ${cash(from, ctx.store.currency)} → ${cash(to, ctx.store.currency)}/day`).slice(0, 80),
         reason: evidence,
         autopilot: true,
         action: change === 'pause'
-          ? { kind: 'ads.pause_campaign', payload: { network: c.network, campaignId, from }, amountUsd: 0 }
-          : { kind: 'ads.set_budget', payload: { network: c.network, campaignId, from, to }, ...(usd !== undefined ? { amountUsd: usd } : {}) },
+          ? { kind: 'ads.pause_campaign', payload: { network: c.network, campaignId, from }, ...amount }
+          : { kind: 'ads.set_budget', payload: { network: c.network, campaignId, from, to, ...(addedUsd !== undefined ? { addedUsd } : {}) }, ...amount },
       });
       return approved ? `${message}. It will be applied to the ad account.` : message;
     },
@@ -818,7 +820,7 @@ export function budgetAddedToday(db: DatabaseSync, storeId: string): number {
   midnight.setHours(0, 0, 0, 0);
   const row = db
     .prepare(
-      `SELECT coalesce(sum(json_extract(action_json, '$.amountUsd')), 0) AS added FROM approvals
+      `SELECT coalesce(sum(coalesce(json_extract(action_json, '$.payload.addedUsd'), json_extract(action_json, '$.amountUsd'))), 0) AS added FROM approvals
        WHERE store_id = ? AND json_extract(action_json, '$.kind') = 'ads.set_budget' AND status != 'denied' AND created_at >= ?`,
     )
     .get(storeId, midnight.toISOString());

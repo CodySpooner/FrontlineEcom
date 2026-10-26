@@ -1,4 +1,4 @@
-import { claudeEngine, fakeEngine, getAgent, listMemory, runAgent, updateAgent, type ClaudeEngineOptions, type FakeStep, type RunInput } from '@frontline/agents';
+import { budgetAddedToday, claudeEngine, fakeEngine, getAgent, listMemory, runAgent, updateAgent, type ClaudeEngineOptions, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -54,6 +54,20 @@ describe('autopilot', () => {
     expect(asked).toMatchObject({ status: 'pending', action: { amountUsd: 60 } });
     expect(asked?.action.auto).toBeUndefined();
     expect(outputs(events)).toEqual([expect.stringMatching(/^Auto-approved \(autopilot\): Raise .+\. It will be applied to the ad account\.$/), expect.stringMatching(/^Approved by the owner: Raise /)]);
+  });
+
+  test('pauses and cuts count the budget they touch against their autopilot cap; only raises count as added spend', async () => {
+    autopilot('pawsome:ad_strategist', 'pawsome');
+    updateCaps(db, 'pawsome', { autopilot: { 'ads.pause_campaign': { enabled: true, maxUsdPerDay: 100 }, 'ads.set_budget': { enabled: true, maxUsdPerDay: 1 } } });
+    db.prepare(`UPDATE campaigns SET daily_budget = 60 WHERE id IN ('pawsome-c2', 'pawsome-c3')`).run();
+    const pause = (campaignId: string): FakeStep => ({ call: 'propose_ad_change', input: { campaignId, change: 'pause', evidence: 'CPA 3x target' } });
+    const cut: FakeStep = { call: 'propose_ad_change', input: { campaignId: 'pawsome-c1', change: 'budget', newDailyBudget: 10, evidence: '7d ROAS 0.8 vs break-even 2.1' } };
+    const [first, second, cutting] = requests(await run(input('pawsome:ad_strategist'), [pause('pawsome-c2'), pause('pawsome-c3'), cut]));
+    expect(first).toMatchObject({ status: 'approved', action: { amountUsd: 60, auto: true } });
+    expect(second).toMatchObject({ status: 'pending', action: { amountUsd: 60 } }); // $60 + $60 > the $100 pause cap
+    expect(cutting).toMatchObject({ status: 'pending', action: { amountUsd: expect.any(Number), payload: { addedUsd: 0 } } }); // a cut of $1+ is past the $1 budget cap
+    expect(cutting!.action.amountUsd).toBeGreaterThan(1);
+    expect(budgetAddedToday(db, 'pawsome')).toBe(0);
   });
 
   test('asks for a kind with no rule, a hand-made request, or an agent not on autopilot', async () => {
