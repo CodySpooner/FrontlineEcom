@@ -38,8 +38,6 @@ export function getAgent(db: DatabaseSync, id: string): Agent | undefined {
 export function updateAgent(db: DatabaseSync, id: string, patch: AgentUpdate): Agent | undefined {
   if (patch.enabled !== undefined) db.prepare('UPDATE agents SET enabled = ? WHERE id = ?').run(patch.enabled ? 1 : 0, id);
   if (patch.autonomy !== undefined) db.prepare('UPDATE agents SET autonomy = ? WHERE id = ?').run(patch.autonomy, id);
-  if (patch.autopilotCapUsd !== undefined)
-    db.prepare(`UPDATE agents SET settings_json = json_set(settings_json, '$.autopilotCapUsd', ?) WHERE id = ?`).run(patch.autopilotCapUsd, id);
   return getAgent(db, id);
 }
 
@@ -64,6 +62,5 @@ function toAgent(r: Record<string, unknown>, waiting: Map<string, string>): Agen
     ...(request ? { currentTask: request } : {}),
     enabled,
     autonomy: r.autonomy as Autonomy,
-    autopilotCapUsd: Number(JSON.parse(String(r.settings_json ?? '{}')).autopilotCapUsd ?? 0),
   };
 }

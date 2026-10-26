@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type ApprovalDecision, type ApprovalsHook, type ResearchProduct, type ResearchTab, type Store } from '@frontline/shared';
+import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type ApprovalDecision, type ApprovalsHook, type ResearchProduct, type ResearchTab, type Store, type StoreCaps } from '@frontline/shared';
 import { z } from 'zod';
 import { searchMemory, writeMemory } from './memory';
 import { saveNichePack } from './niche';
@@ -13,6 +13,8 @@ export interface ToolEnv {
   approvals: ApprovalsHook;
   /** Core's decide(): lets autopilot approve within its cap. Without it every request waits for the owner. */
   decide?: (id: string, decision: ApprovalDecision) => unknown;
+  /** Core's per-store caps; `autopilot[kind]` is the owner's autopilot rule for that action kind. */
+  caps?: (storeId: string) => StoreCaps;
   /** Core's research feed (scored trending products). */
   research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number }) => Promise<ResearchProduct[]>;
   runId?: string;
@@ -197,16 +199,18 @@ export const APP_TOOLS: AppTool[] = [
 ];
 
 /**
- * Asks the owner and waits. `suggest` agents may not ask; `autopilot` agents approve themselves when the
- * amount at stake fits what is left of today's cap (logged on the request as `auto` + a note in the reason).
+ * Asks the owner and waits. `suggest` agents may not ask. `autopilot` agents approve themselves when the owner
+ * enabled autopilot for this action kind on the store and the amount at stake fits what is left of today's
+ * cap for that kind (logged on the request as `auto` + a note in the reason).
  */
 export async function requestApproval(ctx: ToolContext, req: { title: string; reason: string; action: ApprovalAction }) {
   const { agent } = ctx;
   if (agent.autonomy === 'suggest') return { approved: false, message: 'Not sent: your autonomy is "suggest". Put the recommendation in your answer instead.' };
-  const cap = agent.autopilotCapUsd ?? 0;
-  const amount = req.action.amountUsd;
-  const used = agent.autonomy === 'autopilot' ? autopilotUsedToday(ctx.db, agent.id) : 0;
-  const auto = agent.autonomy === 'autopilot' && ctx.decide !== undefined && amount !== undefined && used + amount <= cap;
+  const { kind, amountUsd: amount } = req.action;
+  const rule = agent.autonomy === 'autopilot' ? ctx.caps?.(ctx.store.id).autopilot[kind] : undefined;
+  const cap = rule?.enabled ? rule.maxUsdPerDay : 0;
+  const used = rule?.enabled ? autopilotUsedToday(ctx.db, ctx.store.id, kind) : 0;
+  const auto = !!rule?.enabled && ctx.decide !== undefined && amount !== undefined && used + amount <= cap;
   const request = ctx.approvals.create({
     storeId: ctx.store.id,
     agentId: agent.id,
@@ -224,16 +228,16 @@ export async function requestApproval(ctx: ToolContext, req: { title: string; re
     : { approved: false, message: `Denied by the owner: ${req.title}. Do not do it; suggest an alternative if useful.` };
 }
 
-/** USD autopilot already approved for this agent since local midnight. */
-function autopilotUsedToday(db: DatabaseSync, agentId: string): number {
+/** USD autopilot already approved for this store and action kind since local midnight. */
+function autopilotUsedToday(db: DatabaseSync, storeId: string, kind: string): number {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
   const row = db
     .prepare(
       `SELECT coalesce(sum(json_extract(action_json, '$.amountUsd')), 0) AS used FROM approvals
-       WHERE agent_id = ? AND json_extract(action_json, '$.auto') = 1 AND created_at >= ?`,
+       WHERE store_id = ? AND json_extract(action_json, '$.kind') = ? AND json_extract(action_json, '$.auto') = 1 AND created_at >= ?`,
     )
-    .get(agentId, midnight.toISOString());
+    .get(storeId, kind, midnight.toISOString());
   return Number(row?.used ?? 0);
 }
 

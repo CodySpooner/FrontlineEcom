@@ -5,6 +5,7 @@ import { createApp } from '../app';
 import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
+import { updateCaps } from '../settings';
 import { listStores } from '../stores';
 import { toolEnv } from './agents';
 
@@ -37,8 +38,13 @@ const requests = (events: AgentEvent[]) => events.flatMap((e) => (e.type === 'ap
 const outputs = (events: AgentEvent[]) => events.flatMap((e) => (e.type === 'tool_result' ? [e.output] : []));
 
 describe('autopilot', () => {
-  test('approves on its own within the daily cap, then asks', async () => {
-    updateAgent(db, 'pawsome:ad_strategist', { autonomy: 'autopilot', autopilotCapUsd: 100 });
+  const autopilot = (agentId: string, storeId: string) => {
+    updateAgent(db, agentId, { autonomy: 'autopilot' });
+    updateCaps(db, storeId, { autopilot: { change_budget: { enabled: true, maxUsdPerDay: 100 } } });
+  };
+
+  test('approves on its own within the store cap for that kind, then asks', async () => {
+    autopilot('pawsome:ad_strategist', 'pawsome');
     const events = await run(input('pawsome:ad_strategist'), [ask('Raise budget $60 → $120', 60), ask('Raise budget $120 → $180', 60)]);
     const [auto, asked] = requests(events);
     expect(auto).toMatchObject({ status: 'approved', action: { amountUsd: 60, auto: true }, reason: expect.stringContaining('[autopilot: $60 of $100/day cap, $0 used before]') });
@@ -47,21 +53,14 @@ describe('autopilot', () => {
     expect(outputs(events)).toEqual(['Auto-approved (autopilot): Raise budget $60 → $120', 'Approved by the owner: Raise budget $120 → $180']);
   });
 
-  test('asks when the amount is unknown or the agent is not on autopilot', async () => {
-    updateAgent(db, 'pawsome:ad_strategist', { autonomy: 'autopilot', autopilotCapUsd: 100 });
-    const unknown = await run(input('pawsome:ad_strategist'), [ask('Pause ad set')]);
-    expect(requests(unknown)[0]?.status).toBe('pending');
-    const asking = await run(input('glow:ad_strategist'), [ask('Raise budget', 10)]);
-    expect(requests(asking)[0]?.status).toBe('pending');
-  });
-
-  test('cap is set and validated through the API', async () => {
-    const app = createApp(db);
-    const patch = (body: unknown) =>
-      app.request('/api/agents/peak%3Aad_strategist', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    expect(await (await patch({ autonomy: 'autopilot', autopilotCapUsd: 200 })).json()).toMatchObject({ autonomy: 'autopilot', autopilotCapUsd: 200 });
-    expect((await patch({ autopilotCapUsd: -5 })).status).toBe(400);
-    expect(getAgent(db, 'glow:copywriter')?.autopilotCapUsd).toBe(0);
+  test('asks when the amount is unknown, the kind has no rule, or the agent is not on autopilot', async () => {
+    autopilot('pawsome:ad_strategist', 'pawsome');
+    const status = async (agentId: string, step: FakeStep) => requests(await run(input(agentId), [step]))[0]?.status;
+    const publish: FakeStep = { call: 'request_approval', input: { title: 'Publish page', reason: 'r', kind: 'publish_page', payload: {}, amountUsd: 5 } };
+    expect(await status('pawsome:ad_strategist', ask('Pause ad set'))).toBe('pending');
+    expect(await status('pawsome:ad_strategist', publish)).toBe('pending');
+    updateCaps(db, 'glow', { autopilot: { change_budget: { enabled: true, maxUsdPerDay: 100 } } });
+    expect(await status('glow:ad_strategist', ask('Raise budget', 10))).toBe('pending');
   });
 });
 

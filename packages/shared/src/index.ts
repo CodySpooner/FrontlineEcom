@@ -62,8 +62,6 @@ export interface Agent {
   enabled?: boolean;
   /** Always set by the API. */
   autonomy?: Autonomy;
-  /** Autopilot may approve up to this many USD at stake per day on its own (0 = never). Always set by the API. */
-  autopilotCapUsd?: number;
 }
 
 /** GET /api/agents?stores=a,b → Agent[] (squads in store order, roles in AGENT_ROLES order). GET /api/agents/:id → Agent. */
@@ -73,8 +71,6 @@ export type AgentsResponse = Agent[];
 export interface AgentUpdate {
   enabled?: boolean;
   autonomy?: Autonomy;
-  /** >= 0 */
-  autopilotCapUsd?: number;
 }
 
 export interface DailyMetrics {
@@ -107,7 +103,7 @@ export interface ApprovalAction {
   payload: unknown;
   /** Money at stake per day in USD (budget change, spend, refunds), when the agent can say. */
   amountUsd?: number;
-  /** True when the agent's autopilot approved it within its daily cap (no owner click). */
+  /** True when autopilot approved it within the store's cap for this kind (StoreCaps.autopilot), no owner click. */
   auto?: boolean;
 }
 
