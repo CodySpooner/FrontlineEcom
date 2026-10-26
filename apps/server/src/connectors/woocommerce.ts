@@ -19,7 +19,9 @@ interface WooOrder {
   date_modified_gmt: string;
   date_paid_gmt: string | null;
   total: string;
-  line_items?: { product_id: number; quantity: number; total: string }[];
+  line_items?: { product_id: number; quantity: number; total: string; cost_of_goods_sold?: { value: number } }[];
+  /** Only when the store has WooCommerce's Cost of Goods Sold feature on (Settings → Advanced → Features, Woo 9.5+). */
+  cost_of_goods_sold?: { total_value: number };
 }
 
 interface WooProduct {
@@ -32,6 +34,7 @@ interface WooProduct {
   stock_quantity: number | null;
   images?: { src: string }[];
   date_modified_gmt: string;
+  cost_of_goods_sold?: { total_value: number };
 }
 
 /** Woo's *_gmt dates have no zone suffix. */
@@ -77,20 +80,20 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       // ponytail: newest order's currency (orders come newest first); a multi-currency plugin's mixed orders aren't split.
       if (orders[0]?.currency) db.prepare('UPDATE stores SET currency = ? WHERE id = ?').run(orders[0].currency, storeId);
       const prod = db.prepare(
-        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
-           inventory = excluded.inventory, status = excluded.status`,
+           cost = excluded.cost, inventory = excluded.inventory, status = excluded.status`,
       );
       for (const p of products) {
         const price = Number(p.price || p.regular_price || 0);
         const regular = Number(p.regular_price || 0);
         const status: ProductStatus = p.status === 'publish' ? 'active' : 'draft';
-        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, p.stock_quantity ?? 0, status);
+        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), p.stock_quantity ?? 0, status);
       }
-      // ponytail: WooCommerce has no unit costs (only via plugins), so its orders add revenue with cogs 0; tracking needs a plugin too.
+      // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking needs a plugin.
       const ord = db.prepare(
-        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status`,
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, cogs = excluded.cogs`,
       );
       const days = new Set<string>();
       for (const o of orders) {
@@ -100,8 +103,8 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         const day = o.date_created.slice(0, 10);
         days.add(day);
         const refunded = o.status === 'refunded' || o.status === 'cancelled' || o.status === 'trash';
-        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Number(o.total), refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', day);
-        setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total), cost: 0 })));
+        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Number(o.total), refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', Number(o.cost_of_goods_sold?.total_value ?? 0), day);
+        setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total), cost: Number(li.cost_of_goods_sold?.value ?? 0) })));
       }
       rebuildRevenue(db, storeId, days);
       const newest = [...orders, ...products].reduce((m, x) => (x.date_modified_gmt > m ? x.date_modified_gmt : m), since);

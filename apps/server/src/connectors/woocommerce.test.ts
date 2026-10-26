@@ -94,3 +94,16 @@ test("orders land on the shop's own day and the store takes the shop's currency"
   expect(db.prepare("SELECT local_date AS day FROM orders WHERE store_id = 'pawsome'").all()).toEqual([{ day: '2026-10-26' }]);
   expect(db.prepare("SELECT currency FROM stores WHERE id = 'pawsome'").get()).toEqual({ currency: 'EUR' });
 });
+
+test("with Woo's Cost of Goods Sold on, orders, best sellers and products carry its costs", async () => {
+  const db = setup();
+  const fetchFn = (async (url: string) =>
+    new URL(url).pathname.endsWith('/orders')
+      ? Response.json([order('1001', 'processing', '30.00', true, { cost_of_goods_sold: { total_value: 9.5 }, line_items: [{ product_id: 7, quantity: 2, total: '25.00', cost_of_goods_sold: { value: 8 } }] })])
+      : Response.json([{ id: 7, name: 'Travel Bowl', status: 'publish', price: '19.00', regular_price: '19.00', sale_price: '', stock_quantity: 5, date_modified_gmt: '2026-10-20T00:00:00', cost_of_goods_sold: { values: [{ defined_value: 4, effective_value: 4 }], total_value: 4 } }])) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT cogs FROM orders WHERE store_id = 'pawsome' AND id = 'woo-1001'").get()?.cogs).toBe(9.5);
+  expect(db.prepare("SELECT cost FROM order_items WHERE store_id = 'pawsome' AND order_id = 'woo-1001'").get()?.cost).toBe(8);
+  expect(db.prepare("SELECT cost FROM products WHERE store_id = 'pawsome' AND id = 'woo-7'").get()?.cost).toBe(4);
+  expect(db.prepare("SELECT cogs FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()?.cogs).toBe(9.5);
+});
