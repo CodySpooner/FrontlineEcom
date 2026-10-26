@@ -8,7 +8,7 @@ import { seedDemo } from '../demo';
 import { subscribe } from '../live';
 import { updateCaps } from '../settings';
 import { getStore } from '../stores';
-import { runManager, toolEnv } from './agents';
+import { runHooks, runManager, toolEnv } from './agents';
 
 let db: Db;
 beforeEach(() => {
@@ -210,6 +210,14 @@ test('a follow-up whose session is gone goes on from a recap of the last exchang
   await m.idle();
   expect(getRun(db, reply.id)).toMatchObject({ status: 'done', sessionId: 's2' });
   expect(tasks[1]).toContain('asked: Draft 3 headlines\nYou answered: Glow your way to morning\n\nNow: Shorter please');
+});
+
+test('an account problem (usage limit) is told once a day, not once per failed run', async () => {
+  const limit = "You've hit your Claude usage limit for now. Agents can run again once it resets.";
+  const m = manager({ engine: async function* () { yield { type: 'error', message: limit }; }, ...runHooks(db) });
+  for (const a of ['glow:copywriter', 'glow:operations', 'peak:operations']) ok(m.start(a, 'Daily check'));
+  await m.idle();
+  expect(db.prepare(`SELECT body FROM notifications WHERE kind = 'error'`).all()).toEqual([{ body: limit }]);
 });
 
 test('a restart marks runs that were in flight as interrupted', () => {

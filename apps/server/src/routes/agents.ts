@@ -2,6 +2,7 @@ import {
   budgetAddedToday,
   claudeEngine,
   defaultEngine,
+  isAccountError,
   costToday,
   creditsToday,
   XP,
@@ -195,7 +196,9 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent'> =
     const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
     const link = `/agents/${run.agentId}`;
     if (run.status === 'done') notify(db, { kind: 'agent_done', title: `${name} finished`, body: runGist(getRun(db, run.id)?.transcript ?? []) ?? run.task, storeId: run.storeId, link });
-    if (run.status === 'error') notify(db, { kind: 'error', title: `${name} hit an error`, body: run.error ?? run.task, storeId: run.storeId, link });
+    // An account problem fails every queued and scheduled run alike: the owner hears it once a day, not once per run.
+    const told = run.status === 'error' && isAccountError(run.error ?? '') && !once(db, `account-error:${localDate()}:${run.error}`);
+    if (run.status === 'error' && !told) notify(db, { kind: 'error', title: `${name} hit an error`, body: run.error ?? run.task, storeId: run.storeId, link });
   },
 });
 

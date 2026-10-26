@@ -31,6 +31,9 @@ const ACCOUNT: Partial<Record<SDKAssistantMessageError, string>> = {
   model_not_found: "The agent model isn't available on your Claude login. Set FRONTLINE_AGENT_MODEL to one that is.",
 };
 
+/** True for an account problem (signed out, usage limit…): every run fails the same way until the owner fixes it. */
+export const isAccountError = (message: string) => Object.values(ACCOUNT).includes(message);
+
 /** Runs on the owner's local Claude Code login (no API key needed). */
 export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
   const run = opts.query ?? query;
