@@ -3,6 +3,7 @@ import type { ApprovalRequest, PageDraft } from '@frontline/shared';
 import type { Db } from '../db';
 import { subscribe } from '../live';
 import { notify } from '../settings';
+import { localDate } from '../dates';
 import { getStore } from '../stores';
 
 /**
@@ -100,6 +101,9 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
       insert.run(store.id, id, titles[i]!, img == null ? null : String(img), p.price, p.compareAt ?? null, p.cost ?? 0);
     }
   }
+  // Remembered so the product can be judged on its first 14 days of sales (checkProductOutcomes).
+  const test = db.prepare('INSERT OR IGNORE INTO product_tests (store_id, product_id, approval_id, agent_id, title, added_on) VALUES (?, ?, ?, ?, ?, ?)');
+  for (const p of added) test.run(store.id, p.id, a.id, a.agentId, p.title, localDate());
   startRun(
     `${store.id}:store_developer`,
     `New draft product(s) just added to ${store.name}: ${added.map((p) => `${p.title} (productId ${p.id})`).join(', ')}. For each, write the product page ` +

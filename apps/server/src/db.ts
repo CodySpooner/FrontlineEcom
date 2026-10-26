@@ -371,6 +371,18 @@ export const MIGRATIONS = [
   CREATE UNIQUE INDEX order_issues_open ON order_issues (store_id, order_id, kind) WHERE status = 'open';
   CREATE INDEX order_issues_by_store ON order_issues (store_id, status, created_at);
   `,
+  /* 18 (agents lane: product tests, AGT-29) */ `
+  CREATE TABLE product_tests (
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL,
+    approval_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    added_on TEXT NOT NULL,
+    judged_at TEXT,
+    PRIMARY KEY (store_id, product_id)
+  );
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

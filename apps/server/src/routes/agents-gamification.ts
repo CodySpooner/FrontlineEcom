@@ -69,6 +69,43 @@ export function checkAdOutcomes(db: Db, today = localDate()) {
   }
 }
 
+/**
+ * Products added through an approved request, judged on their first 14 days of real sales (core's order_items; demo
+ * stores have none, so they're skipped). Each becomes a store learning for the agent that proposed it; a product that
+ * sold 10+ units at a gross profit pays it once.
+ */
+export function checkProductOutcomes(db: Db, today = localDate()) {
+  const tests = db
+    .prepare(
+      `SELECT t.*, s.currency FROM product_tests t JOIN stores s ON s.id = t.store_id
+       WHERE t.judged_at IS NULL AND s.demo = 0 AND t.added_on <= ?`,
+    )
+    .all(addDays(today, -15));
+  for (const t of tests) {
+    const end = addDays(String(t.added_on), 14);
+    const s = db
+      .prepare(
+        `SELECT coalesce(sum(i.quantity), 0) AS units, coalesce(sum(i.revenue), 0) AS revenue, coalesce(sum(i.revenue - i.cost), 0) AS profit
+         FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+         WHERE i.store_id = ? AND i.product_id = ? AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?`,
+      )
+      .get(String(t.store_id), String(t.product_id), String(t.added_on), end)!;
+    const [units, revenue, profit] = [Number(s.units), Number(s.revenue), Number(s.profit)];
+    // ponytail: no per-product ad spend yet, so the bar is units + gross profit, not ROAS vs break-even.
+    const won = units >= 10 && profit > 0;
+    const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
+    const storeId = String(t.store_id);
+    const agentId = String(t.agent_id);
+    writeMemory(db, {
+      storeId, agentId, kind: 'learning', confidence: won ? 0.7 : 0.6, tags: ['outcome', 'product'],
+      text: `"${t.title}" ${won ? 'sold' : 'did not take off'}: ${units} units, ${money(revenue)} revenue, ${money(profit)} gross profit in its first 14 days.`,
+      evidence: `paid orders ${t.added_on} to ${end} (request ${t.approval_id})`,
+    });
+    if (won) award(db, { ref: `product-win:${t.approval_id}:${t.product_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" sold ${units} units in 14 days` });
+    db.prepare('UPDATE product_tests SET judged_at = ? WHERE store_id = ? AND product_id = ?').run(new Date().toISOString(), storeId, String(t.product_id));
+  }
+}
+
 function facts(db: Db): Facts {
   const ids = listStores(db).map((s) => s.id);
   const best = (totals: MetricTotals[], k: keyof MetricTotals) => Math.max(0, ...totals.map((t) => t[k]));
@@ -127,6 +164,7 @@ export function gamificationRoutes(db: Db) {
   watchApprovals(db);
   const achievements = () => {
     checkAdOutcomes(db);
+    checkProductOutcomes(db);
     return checkAchievements(db, facts(db), (a) => award(db, a));
   };
   return new Hono()
