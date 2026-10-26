@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { AD_ZONES, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, type CampaignChange } from './common';
+import { AD_ZONES, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
 export const GOOGLE_ADS_API_VERSION = 'v26';
@@ -86,6 +86,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
   const id = `google_ads:${storeId}`;
   const creds = getCredentials(db, key, 'google_ads', storeId);
   if (!creds) return;
+  const view = syncView(db, id);
   try {
     const customer = googleId(creds.customerId!, 'Customer ID', '123-456-7890');
     const token = await accessToken({ grant_type: 'refresh_token', client_id: creds.clientId!, client_secret: creds.clientSecret!, refresh_token: creds.refreshToken! }, fetchFn, 'Google');
@@ -118,6 +119,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
     const rate = await adRate(db, storeId, currency, fetchFn, 'Google Ads');
     const rateOn = cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
 
+    if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
       const camp = db.prepare(
@@ -151,6 +153,7 @@ export async function syncGa4(db: Db, key: Buffer, storeId: string, fetchFn: Fet
   const id = `ga4:${storeId}`;
   const creds = getCredentials(db, key, 'ga4', storeId);
   if (!creds) return;
+  const view = syncView(db, id);
   try {
     const property = googleId(creds.propertyId!, 'Property ID', '123456789');
     const token = await accessToken({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: serviceAccountJwt(creds.serviceAccountJson!, now) }, fetchFn, 'Google Analytics');
@@ -169,6 +172,7 @@ export async function syncGa4(db: Db, key: Buffer, storeId: string, fetchFn: Fet
     );
     if (report.metadata?.timeZone) stateOf<string>(db, AD_ZONES).set(id, report.metadata.timeZone);
 
+    if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
       const up = db.prepare(

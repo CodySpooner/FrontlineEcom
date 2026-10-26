@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { AD_ZONES, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, type CampaignChange } from './common';
+import { AD_ZONES, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -83,6 +83,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
   const id = `meta_ads:${storeId}`;
   const creds = getCredentials(db, key, 'meta_ads', storeId);
   if (!creds) return;
+  const view = syncView(db, id);
   try {
     const act = adAccount(creds.adAccountId!);
     const token = creds.accessToken!;
@@ -107,6 +108,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       rows.push(...(await edge<InsightRow>(`${GRAPH}/${act}/insights?${params}`, token, fetchFn)));
     }
 
+    if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
       const camp = db.prepare(

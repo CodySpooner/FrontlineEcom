@@ -4,7 +4,7 @@ import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import type { ProductPage } from './shopify';
 import { localDate } from '../dates';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, switchToReal } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, switchToReal, syncView } from './common';
 
 // Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r, and
 // listings_w for approved listing changes: setEtsyListingPrice, publishEtsyProductPage).
@@ -76,6 +76,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
   const id = `etsy:${storeId}`;
   const creds = getCredentials(db, key, 'etsy', storeId);
   if (!creds) return;
+  const view = syncView(db, id);
   try {
     const { shopId, headers } = await etsyAuth(db, key, id, creds, fetchFn, now);
     const get = async <T>(path: string, params: Record<string, string>) => {
@@ -125,6 +126,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
     }
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 
+    if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
       // Receipts and listings are in the shop's currency.

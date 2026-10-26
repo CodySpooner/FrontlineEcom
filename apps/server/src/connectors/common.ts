@@ -38,6 +38,14 @@ export function setStoreCurrency(db: Db, storeId: string, currency: string) {
 }
 
 /**
+ * What other writes can change while a sync awaits its reads: the integration's settings (another shop or account) and
+ * cursor (reset by that and by a currency switch), and the store's currency. A sync that finds it changed when it comes to
+ * write writes nothing (its reads are of the old account, or priced into the old currency); the next one reads afresh.
+ */
+export const syncView = (db: Db, id: string) =>
+  JSON.stringify(db.prepare('SELECT i.settings_json, i.cursor, s.currency FROM integrations i LEFT JOIN stores s ON s.id = i.store_id WHERE i.id = ?').get(id) ?? null);
+
+/**
  * Where the next incremental sync of a platform starts: this sync's start (`now`) minus 5 minutes of clock skew. Not
  * the newest change seen: a refund made while the sync was reading would fall below that and never be fetched again.
  * Callers keep the previous cursor if it's later; re-reading the overlap is safe because upserts are idempotent.

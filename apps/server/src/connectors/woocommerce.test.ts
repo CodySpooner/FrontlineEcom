@@ -472,3 +472,15 @@ test("a partly refunded Woo order's products lose what was refunded on their lin
   await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
   expect(items()).toEqual([{ product_id: 'woo-7', quantity: 2, revenue: 50 }, { product_id: 'woo-8', quantity: 1, revenue: 30 }]);
 });
+
+test("a Woo sync whose shop was swapped while it read writes nothing (the new shop's backfill starts clean)", async () => {
+  const db = setup();
+  const woo = fakeWoo().fetchFn;
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    if (new URL(url).pathname.endsWith('/orders')) saveIntegration(db, key, { kind: 'woocommerce', storeId: 'pawsome', values: { siteUrl: 'https://other.test/', consumerKey: 'ck_1', consumerSecret: 'cs_2' } });
+    return woo(url, init);
+  }) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT cursor FROM integrations WHERE id = 'woocommerce:pawsome'").get()?.cursor).toBeNull();
+  expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'pawsome' AND id LIKE 'woo-%'").get()?.n).toBe(0);
+});

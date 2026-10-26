@@ -4,7 +4,7 @@ import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { logAction } from '../actions';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { AD_ZONES, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, type CampaignChange } from './common';
+import { AD_ZONES, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -60,6 +60,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
   const id = `tiktok_ads:${storeId}`;
   const creds = getCredentials(db, key, 'tiktok_ads', storeId);
   if (!creds) return;
+  const view = syncView(db, id);
   try {
     const advertiser = creds.advertiserId!.trim();
     if (!/^\d+$/.test(advertiser)) throw new Error('Advertiser ID must be the number shown in TikTok Ads Manager');
@@ -95,6 +96,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
     const rate = await adRate(db, storeId, currency, fetchFn, 'TikTok Ads');
     const rateOn = cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
 
+    if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
       const camp = db.prepare(
@@ -230,6 +232,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
   const id = `tiktok_shop:${storeId}`;
   const creds = getCredentials(db, key, 'tiktok_shop', storeId);
   if (!creds) return;
+  const view = syncView(db, id);
   try {
     const { api, shop } = await shopClient(db, key, id, creds, fetchFn, now);
     const search = async <T>(path: string, list: string, query: Record<string, string>, body: object) => {
@@ -275,6 +278,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     // Read after the awaits: another sync (or the owner) may have changed the store's timezone meanwhile.
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 
+    if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
       // Orders are in the shop's currency.

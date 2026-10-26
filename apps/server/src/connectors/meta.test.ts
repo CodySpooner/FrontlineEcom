@@ -177,3 +177,21 @@ test("pointing the store at another ad account drops the old account's campaigns
   await syncMeta(db, key, 'pawsome', accountB, NOW); // an incremental sync keeps campaigns that only age out of the window
   expect(db.prepare("SELECT count(*) AS n FROM campaigns WHERE store_id = 'pawsome' AND network = 'meta'").get()?.n).toBe(1);
 });
+
+test('a sync whose store switched currency or ad account while it read writes nothing: the next one reads afresh', async () => {
+  for (const change of [
+    (db: ReturnType<typeof openDb>) => db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'pawsome'").run(),
+    (db: ReturnType<typeof openDb>) => saveIntegration(db, key, { kind: 'meta_ads', storeId: 'pawsome', values: { adAccountId: '999', accessToken: TOKEN } }),
+  ]) {
+    const { db } = setup();
+    db.prepare("UPDATE integrations SET cursor = '2026-10-20' WHERE id = 'meta_ads:pawsome'").run();
+    const { fetchFn: graph } = fakeGraph([insight('201', '2026-10-25', '60.00', '210.50')]);
+    const fetchFn = (async (url: string, init: RequestInit) => {
+      if (new URL(url).pathname.endsWith('/insights')) change(db);
+      return graph(url, init);
+    }) as typeof fetch;
+    await syncMeta(db, key, 'pawsome', fetchFn, NOW);
+    expect(db.prepare("SELECT count(*) AS n FROM campaigns WHERE network = 'meta' AND id = '201'").get()?.n).toBe(0);
+    expect(db.prepare("SELECT status FROM integrations WHERE id = 'meta_ads:pawsome'").get()?.status).toBe('connected');
+  }
+});

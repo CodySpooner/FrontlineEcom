@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate, midnight } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, archiveMissing, backfillRate, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal } from './common';
+import { adRate, archiveMissing, backfillRate, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal, syncView } from './common';
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
@@ -229,6 +229,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
   const id = `amazon:${storeId}`;
   const creds = getCredentials(db, key, 'amazon', storeId);
   if (!creds) return;
+  const view = syncView(db, id);
   try {
     const { host, marketplace, token } = await amazonAuth(creds, fetchFn);
     const account = `${creds.sellerId?.trim()}/${marketplace}`; // whose orders and traffic the saved read state is
@@ -274,6 +275,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const refundRead = refundReads.get(id);
     const refunds = !own ? undefined : await refundsOf(refundRead?.account === account ? refundRead : undefined, fetchFn, host, token, now).catch(() => undefined);
 
+    if (syncView(db, id) !== view) return;
     tx(db, () => {
       // Re-zoned while Amazon was read (another sync, or the owner): these days are the old zone's. setStoreTimezone
       // cleared the cursor, so the next sync reads them again in the new one.

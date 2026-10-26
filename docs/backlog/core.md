@@ -146,10 +146,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-63 Shopify product numbers counted refunded units and left out order-level discount codes.
 - [x] CORE-64 Amazon next to a store's site added its sales with no costs and the store's fees, so profit read high.
 - [x] CORE-65 WooCommerce product numbers counted refunded units.
+- [x] CORE-66 A sync running while its account, shop or the store currency changed wrote stale data and a fresh cursor.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-66 (from a review of the ad connectors): `syncView` (common.ts) = the integration's settings + cursor and the store's currency. Every sync takes it before its first await and checks it right before writing; changed (another account or shop, a currency switch, the integration deleted) = it writes nothing, status untouched, and the next sync reads afresh. Before, e.g. Meta saved two years of spend converted into the old currency with today's cursor, or an old shop's orders landed after the new shop's reset. Shopify (a write per page) re-takes it after its own writes. Tests: Meta (currency, account), Woo and Shopify (shop swapped).
 - 2026-10-26 — CORE-65: a partly refunded Woo order the sync reads gets its refunds list (`GET orders/<id>/refunds`, one request each): each product's refunded units and amount come off its line(s), as amounts whatever their sign; cost stays on what was ordered; a line refunded in full drops out; a failed read leaves the lines as ordered. `WooOrder.id` (REST id) added: `number` can differ with a sequential-numbers plugin. Etsy lines are the one platform left counting what was ordered. Follow-up: after one failed refunds read a sync stops asking (each failure costs ~30 s of 5xx retries).
 - 2026-10-26 — CORE-64 (agents Inbox, AGT-137): `loadRows` estimates a channel's costs (Amazon next to the site): the store's own cost ratio (site cogs / site revenue, the year to `to`) plus Amazon's 15% referral, instead of the store's fee % and per-order fee, which now apply to the site's revenue and orders only. Read-time only: daily_metrics stays raw. FBA fees aren't estimated. README notes it. Summary 1Y warm 24 ms. Agents told.
 - 2026-10-26 — (agents Inbox, AGT-135): `loadRows` carries `channelOrders` (a store-day's `channel_daily` orders, 0 for an Amazon store whose own traffic is its sessions), and the funnel's orders leave them out, so Amazon next to a site no longer counts its orders against the site's sessions. Summary 1Y: 39 ms.

@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest';
 import type { AnalyticsSummary, Integration, Order, Page, Product, Store } from '@frontline/shared';
 import { createApp } from '../app';
 import { openDb } from '../db';
+import { saveIntegration } from '../integrations';
 import { rebuildRevenue } from './common';
 import { seedDemo } from '../demo';
 import { listActions } from '../actions';
@@ -595,4 +596,16 @@ test("a Shopify product's numbers count the units kept, at their price after eve
   expect(db.prepare("SELECT product_id, quantity, revenue, cost FROM order_items WHERE store_id = 'glow' AND order_id = '#31'").all()).toEqual([
     { product_id: '111', quantity: 2, revenue: 60, cost: 15 },
   ]);
+});
+
+test("a Shopify sync whose shop was swapped while it paged orders stops writing (the new shop's backfill starts clean)", async () => {
+  const { db } = await setup();
+  const shopify = fakeShopify([order('#41', '2026-10-25T09:00:00Z', '30.00')]).fetchFn;
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    if (String(init.body).includes('orders(first')) saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'other-shop.myshopify.com', accessToken: TOKEN } });
+    return shopify(url, init);
+  }) as typeof fetch;
+  await syncShopify(db, key, 'glow', fetchFn, NOW);
+  expect(db.prepare("SELECT cursor FROM integrations WHERE id = 'shopify:glow'").get()?.cursor).toBeNull();
+  expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow' AND id = '#41'").get()?.n).toBe(0);
 });

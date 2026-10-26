@@ -4,7 +4,7 @@ import { addDays, localDate } from '../dates';
 import { tx, type Db } from '../db';
 import { convertRate, historicRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, setStoreTimezone, switchToReal } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, setStoreTimezone, switchToReal, syncView } from './common';
 import type { NewProduct, ProductPage } from './shopify';
 
 // WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
@@ -128,6 +128,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
   const id = `woocommerce:${storeId}`;
   const creds = getCredentials(db, key, 'woocommerce', storeId);
   if (!creds) return;
+  const view = syncView(db, id);
   try {
     const site = wooSite(creds.siteUrl!);
     const auth = basic(creds);
@@ -214,6 +215,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       if (on) historic.set(c, on);
     }
 
+    if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
       if (base) takeCurrency(db, storeId, 'woocommerce', base);

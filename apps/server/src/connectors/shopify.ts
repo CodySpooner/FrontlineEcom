@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { once, tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, setStoreTimezone, switchToReal } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, setStoreTimezone, switchToReal, syncView } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -215,6 +215,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
   const id = `shopify:${storeId}`;
   const creds = getCredentials(db, key, 'shopify', storeId);
   if (!creds) return;
+  let view = syncView(db, id);
   try {
     const q = client(db, key, storeId, creds, fetchFn, now);
     const { shop } = await q<{ shop: { currencyCode: string; ianaTimezone: string } }>(SHOP_Q);
@@ -236,6 +237,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     // A page's resume point never passes the sync start, so a product edited while orders page in is fetched again.
     const start = cursorAt(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
+    if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
       takeCurrency(db, storeId, 'shopify', shop.currencyCode);
@@ -257,6 +259,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       for (const e of deleted) if (e.subjectId) archive.run(storeId, tail(e.subjectId));
       if (catalog) archiveMissing(db, id, storeId, '[0-9]*', catalog.map((n) => tail(n.id)), today);
     });
+    view = syncView(db, id); // its own currency switch
 
     const ord = db.prepare(
       `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
@@ -275,6 +278,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         const rest = await all((after) => q<{ order: { lineItems: { nodes: LineItem[]; pageInfo: PageInfo } } }>(ORDER_ITEMS_Q, { id: o.id, after: after ?? o.lineItems.pageInfo.endCursor }).then((d) => d.order.lineItems));
         o.lineItems.nodes.push(...rest);
       }
+      if (syncView(db, id) !== view) return;
       tx(db, () => {
         const days = new Set<string>();
         for (const o of page.nodes) {
@@ -306,6 +310,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         const last = page.nodes.at(-1)?.updatedAt;
         if (last) db.prepare('UPDATE integrations SET cursor = ? WHERE id = ?').run(last < start ? last : start, id);
       });
+      view = syncView(db, id);
       after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
     } while (after);
 
@@ -326,6 +331,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         `INSERT INTO daily_metrics (store_id, date, sessions, add_to_carts, checkouts) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (store_id, date) DO UPDATE SET sessions = excluded.sessions, add_to_carts = excluded.add_to_carts, checkouts = excluded.checkouts`,
       );
+      if (syncView(db, id) !== view) return;
       tx(db, () => {
         for (const d of funnelDays(table)) {
           const b = bots.get(d.date);
