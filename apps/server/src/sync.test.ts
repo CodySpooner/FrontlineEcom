@@ -17,7 +17,7 @@ test('sync loop runs new integrations once, retries when stale or when credentia
   const save = () => saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow.myshopify.com', accessToken: 't' } });
   save();
   const shopify = vi.fn(async () => {});
-  const stop = startSyncLoop(db, key, { everyMs: 1000, staleMs: 60_000, syncers: { shopify } });
+  const stop = startSyncLoop(db, key, { everyMs: 1000, staleMs: 60_000, fastMs: 60_000, syncers: { shopify } });
 
   expect(shopify).toHaveBeenCalledTimes(1);
   expect(shopify).toHaveBeenCalledWith(db, key, 'glow', expect.any(Function));
@@ -43,7 +43,7 @@ test('a connection that breaks raises one error notification, and one when it re
   let fail = true;
   const shopify = vi.fn(async () => setIntegrationStatus(db, 'shopify:glow', fail ? 'error' : 'connected', fail ? 'Shopify refused the token' : undefined));
   const notes = () => db.prepare('SELECT kind, title, body, store_id AS storeId, link FROM notifications ORDER BY rowid DESC').all().map((n) => Object.values(n));
-  const stop = startSyncLoop(db, key, { everyMs: 1000, staleMs: 60_000, syncers: { shopify } });
+  const stop = startSyncLoop(db, key, { everyMs: 1000, staleMs: 60_000, fastMs: 60_000, syncers: { shopify } });
   await vi.advanceTimersByTimeAsync(0);
   await vi.advanceTimersByTimeAsync(61_000 * 2); // two failed retries
   expect(shopify).toHaveBeenCalledTimes(3);
@@ -71,7 +71,7 @@ test("a connected store's new paid orders reach the live feed once; history and 
   });
   const seen: string[] = [];
   const off = subscribe((m) => m.type === 'event' && seen.push(`${m.event.id} ${m.event.amount}`));
-  const stop = startSyncLoop(db, key, { everyMs: 1000, staleMs: 60_000, syncers: { shopify, meta_ads: shopify } });
+  const stop = startSyncLoop(db, key, { everyMs: 1000, staleMs: 60_000, fastMs: 60_000, syncers: { shopify, meta_ads: shopify } });
 
   batch = [['1001', '2026-10-26T11:50:00Z', 40, 'paid']]; // first real sync: history, not news
   await vi.advanceTimersByTimeAsync(0);
@@ -86,4 +86,21 @@ test("a connected store's new paid orders reach the live feed once; history and 
   expect(seen).toHaveLength(1);
   stop();
   off();
+});
+
+test('Shopify is polled every couple of minutes for new orders; ad networks wait the longer interval', async () => {
+  vi.useFakeTimers({ now: new Date('2026-10-26T12:00:00Z') });
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const key = randomBytes(32);
+  saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow.myshopify.com', accessToken: 't' } });
+  saveIntegration(db, key, { kind: 'meta_ads', storeId: 'glow', values: { adAccountId: 'act_1', accessToken: 't' } });
+  const shopify = vi.fn(async () => {});
+  const meta_ads = vi.fn(async () => {});
+  const stop = startSyncLoop(db, key, { everyMs: 30_000, staleMs: 600_000, fastMs: 120_000, syncers: { shopify, meta_ads } });
+  await vi.advanceTimersByTimeAsync(5 * 60_000);
+  expect([shopify.mock.calls.length, meta_ads.mock.calls.length]).toEqual([3, 1]);
+  await vi.advanceTimersByTimeAsync(6 * 60_000);
+  expect([shopify.mock.calls.length, meta_ads.mock.calls.length]).toEqual([5, 2]);
+  stop();
 });

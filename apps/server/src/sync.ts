@@ -44,10 +44,16 @@ function announceOrders(db: Db, storeId: string, newestBefore: string | null, no
 }
 
 /**
- * Every `everyMs`, syncs each data integration that was never tried, was last tried over `staleMs` ago, or whose
- * credentials changed since the last try. Returns stop().
+ * Store platforms whose sync is a few cheap incremental requests, polled every `fastMs` so new orders reach the live
+ * feed within minutes. Etsy stays at `staleMs` (new apps get 5k calls a day), ad networks re-pull weeks of insights.
  */
-export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs = 10 * 60_000, syncers = SYNCERS } = {}) {
+const FAST = new Set<IntegrationKind>(['shopify', 'woocommerce']);
+
+/**
+ * Every `everyMs`, syncs each data integration that was never tried, was last tried over `staleMs` ago (`fastMs` for
+ * FAST kinds), or whose credentials changed since the last try. Returns stop().
+ */
+export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs = 10 * 60_000, fastMs = 2 * 60_000, syncers = SYNCERS } = {}) {
   const lastTry = new Map<string, string>();
   const running = new Set<string>();
   const tick = () => {
@@ -57,7 +63,7 @@ export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs =
     for (const r of rows) {
       const id = String(r.id);
       const tried = lastTry.get(id);
-      const due = !tried || now.getTime() - Date.parse(tried) > staleMs || String(r.updated_at) > tried;
+      const due = !tried || now.getTime() - Date.parse(tried) > (FAST.has(r.kind as IntegrationKind) ? fastMs : staleMs) || String(r.updated_at) > tried;
       if (!due || running.has(id)) continue;
       lastTry.set(id, now.toISOString());
       running.add(id);
