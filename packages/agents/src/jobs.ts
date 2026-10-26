@@ -37,7 +37,8 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
     cron: '0 10 * * *',
     task:
       'Daily order check: list_orders for the last 14 days. Flag with flag_order_issue every order unfulfilled for 3+ days or in transit for 10+ days ' +
-      '(severity high past 7 / 15 days), and any refund or supplier problem you can see, each with a suggested next step. Then summarize the queue in 3 lines.',
+      '(severity high past 7 / 15 days), and any refund or supplier problem you can see, each with a suggested next step. ' +
+      'Check list_order_issues for issues open 3+ days and say which need the owner today. Then summarize the queue in 3 lines.',
   },
   {
     name: 'Weekly price check',

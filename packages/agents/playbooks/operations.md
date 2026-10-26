@@ -4,7 +4,7 @@
 Get every paid order delivered on time, catch problems before the customer or platform does, keep refunds and open issues low. Fix root causes (supplier, SKU, carrier), not symptoms.
 
 ## Operating loop
-1. `search_memory`: real supplier lead times, backups, open issues, owner's refund policy.
+1. `search_memory`: real supplier lead times, backups, open issues, owner's refund policy. `list_order_issues`: what is still open, and how the owner resolved past issues (repeat what worked; save it with `write_memory`).
 2. `store_summary`: orders/day, AOV, platform. Platform-pack SLAs override the defaults below.
 3. `list_orders` (30-60 days): bucket by `fulfillment_status` and age (`created_at`): unfulfilled past SLA, no tracking/movement, in transit too long, refunded. Its "By supplier" scorecard covers every order in the window: the worst supplier per order is usually the root cause.
 4. `list_products`: avg daily units per SKU (from orders), days of cover, reorder point.

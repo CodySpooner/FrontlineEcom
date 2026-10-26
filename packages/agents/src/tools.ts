@@ -7,7 +7,7 @@ import { searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
 import { getPageDraft, listPageDrafts, savePageDraft } from './pages';
 import { listFlowDrafts, saveFlowDraft } from './flows';
-import { flagOrderIssue } from './issues';
+import { flagOrderIssue, listOrderIssues } from './issues';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 import { runGist } from './runs';
 
@@ -398,6 +398,19 @@ export const APP_TOOLS: AppTool[] = [
       const flow = saveFlowDraft(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), ...f });
       return `Saved "${flow.name}" (${flow.messages.length} steps) to the flow library. The owner sets it up in their email/SMS tool.`;
     },
+  }),
+  defineTool({
+    name: 'list_order_issues',
+    description:
+      "The store's order issue queue (CSV): open issues first, then resolved ones with the owner's resolution, which says what actually fixed it.",
+    input: { status: z.enum(['open', 'resolved']).optional(), limit: z.number().int().min(1).max(200).default(50) },
+    run: async ({ status, limit }, ctx) =>
+      csv(
+        listOrderIssues(ctx.db, { storeIds: [ctx.store.id], ...(status ? { status } : {}), limit }).map((i) => ({
+          order_id: i.orderId, kind: i.kind, severity: i.severity, status: i.status, opened: i.createdAt.slice(0, 10), resolved: i.resolvedAt?.slice(0, 10) ?? '',
+          note: i.note, suggested_action: i.suggestedAction ?? '', resolution: i.resolution ?? '',
+        })),
+      ),
   }),
   defineTool({
     name: 'flag_order_issue',

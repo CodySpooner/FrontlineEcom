@@ -69,6 +69,18 @@ test('issues the order has since answered close themselves: delivered, or suppli
   ]);
 });
 
+test('list_order_issues shows the open queue first, then resolutions the owner wrote', async () => {
+  await run([flag(), flag({ kind: 'refund', severity: 'medium', note: 'Customer asked for a refund: wrong size' })]);
+  const refund = String(db.prepare(`SELECT id FROM order_issues WHERE kind = 'refund'`).get()?.id);
+  expect((await patch(refund, { status: 'resolved', resolution: 'Sent the right size; supplier swaps for free' })).status).toBe(200);
+  const [list] = await run([{ call: 'list_order_issues' }]);
+  const [header, ...rows] = list!.split('\n');
+  expect(header).toBe('order_id,kind,severity,status,opened,resolved,note,suggested_action,resolution');
+  expect(rows.map((r) => r.split(',').slice(1, 4).join(','))).toEqual(['late,high,open', 'refund,medium,resolved']);
+  expect(rows[1]).toMatch(/,Sent the right size; supplier swaps for free$/);
+  expect((await run([{ call: 'list_order_issues', input: { status: 'open' } }]))[0]!.split('\n')).toHaveLength(2);
+});
+
 test('list_orders scores each supplier over every order in the window, not just the rows shown', async () => {
   const [late, slow, refunded] = db.prepare(`SELECT id FROM orders WHERE store_id = 'peak' ORDER BY created_at DESC LIMIT 3`).all().map((r) => String(r.id));
   const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
