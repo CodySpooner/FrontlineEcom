@@ -80,32 +80,50 @@ async function start() {
   tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Frontline Ecom', click: show }, ...startWithWindows, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));
 }
 
-/** Runs the API in a utility process on a free localhost port and resolves its URL once it answers. */
+/** Exit code the API uses to ask for a restart (e.g. after staging a backup restore); not counted as a crash. */
+const RESTART = 75;
+
+/**
+ * Runs the API in a utility process on a free localhost port and resolves its URL once it answers. If it dies it is
+ * started again on the same port and the window reloads; after 3 crashes in 10 minutes the app gives up.
+ */
 async function startApi() {
   const port = await freePort();
   const userData = app.getPath('userData');
-  const api = utilityProcess.fork(API_ENTRY, [], {
-    serviceName: 'Frontline API',
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      API_PORT: String(port),
-      FRONTLINE_DATA_DIR: join(userData, 'data'),
-      FRONTLINE_WEB_DIR: WEB_DIR,
-      FRONTLINE_SECRET_KEY: loadKey(join(userData, 'secret.key.enc'), safeStorage, confirmKeyReset).toString('base64'),
-    },
-  });
-  api.on('exit', (code) => {
-    if (quitting) return;
-    dialog.showErrorBox('Frontline Ecom', `The local server stopped (exit code ${code}).`);
-    app.exit(1);
-  });
-  app.on('will-quit', () => api.kill());
-
+  const env = {
+    ...process.env,
+    API_PORT: String(port),
+    FRONTLINE_DATA_DIR: join(userData, 'data'),
+    FRONTLINE_WEB_DIR: WEB_DIR,
+    FRONTLINE_SECRET_KEY: loadKey(join(userData, 'secret.key.enc'), safeStorage, confirmKeyReset).toString('base64'),
+  };
   const url = `http://127.0.0.1:${port}`;
-  // First run seeds two years of demo data, so give it time.
+  const crashes: number[] = [];
+  let api: Electron.UtilityProcess;
+  const spawn = () => {
+    api = utilityProcess.fork(API_ENTRY, [], { serviceName: 'Frontline API', stdio: 'inherit', env });
+    api.on('exit', (code) => {
+      if (quitting) return;
+      if (code !== RESTART) crashes.push(Date.now());
+      if (crashes.filter((t) => Date.now() - t < 10 * 60_000).length > 3) {
+        dialog.showErrorBox('Frontline Ecom', `The local server keeps stopping (exit code ${code}). Details are in the log folder next to your data.`);
+        app.exit(1);
+        return;
+      }
+      spawn();
+      waitForApi(url).then(() => win?.reload(), () => {});
+    });
+  };
+  spawn();
+  app.on('will-quit', () => api.kill());
+  await waitForApi(url);
+  return url;
+}
+
+// First run seeds two years of demo data, so give it time.
+async function waitForApi(url: string) {
   for (const deadline = Date.now() + 60_000; Date.now() < deadline; await new Promise((r) => setTimeout(r, 250))) {
-    if (await fetch(`${url}/api/health`).then((r) => r.ok, () => false)) return url;
+    if (await fetch(`${url}/api/health`).then((r) => r.ok, () => false)) return;
   }
   throw new Error('the local server did not answer within 60s');
 }
