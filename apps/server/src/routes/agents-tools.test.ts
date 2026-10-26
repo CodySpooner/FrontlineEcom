@@ -99,13 +99,23 @@ describe('agent tools on demo data', () => {
     const [summary, series, products, orders, campaigns] = results(events);
     expect(summary?.isError).toBe(false);
     expect(JSON.parse(summary!.output)).toMatchObject({ currency: 'USD', totals: { revenue: expect.any(Number), roas: expect.any(Number) }, health: { status: expect.stringMatching(/^(winning|steady|bleeding)$/) } });
-    expect(series!.output.split('\n')[0]).toBe('date,revenue,ad_spend,cogs,orders,sessions,add_to_carts,checkouts');
+    expect(series!.output.split('\n')[0]).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts');
     expect(series!.output.split('\n').length).toBeGreaterThanOrEqual(3);
     expect(products!.output).toMatch(/^id,title,price,compare_at,cost,margin_pct,inventory,status,units_30d,revenue_30d\n/);
     expect(orders!.output).toMatch(/^counts: .+\n# By supplier\nsupplier,orders,unfulfilled_3d_plus,in_transit_10d_plus,refunded,open_issues\n/);
     expect(orders!.output).toContain('\n# Orders\nid,created_at,total,status,fulfillment_status,supplier,tracking\n');
     expect(campaigns!.output).toMatch(/^network,id,name,status,daily_budget,spend,revenue,purchases,clicks,impressions,roas,cpa,ctr_pct\n/);
     expect(events.at(-1)).toEqual(done);
+  });
+
+  test("metrics_timeseries profit nets the store's fee estimate, like the dashboard's", async () => {
+    db.prepare(`UPDATE stores SET fee_percent = 10, fee_per_order = 0.3 WHERE id = 'pawsome'`).run();
+    const [series] = results(await run(input('pawsome', 'market_analyst'), [{ call: 'metrics_timeseries', input: { days: 3 } }, done]));
+    for (const row of series!.output.split('\n').slice(1)) {
+      const [, revenue, adSpend, cogs, fees, profit, orders] = row.split(',').map(Number);
+      expect(fees).toBeCloseTo(revenue! * 0.1 + orders! * 0.3, 1);
+      expect(profit).toBeCloseTo(revenue! - adSpend! - cogs! - fees!, 1);
+    }
   });
 
   test("list_products says 'not tracked' for stock the platform doesn't count, instead of a sold-out 0", async () => {

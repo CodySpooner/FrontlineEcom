@@ -163,14 +163,18 @@ export const APP_TOOLS: AppTool[] = [
   }),
   defineTool({
     name: 'metrics_timeseries',
-    description: 'Daily revenue, ad spend, COGS, orders, sessions, add-to-carts and checkouts for the last N days (CSV, oldest first).',
+    description:
+      'Daily revenue, ad spend, COGS, fees (the estimate set for the store), profit (revenue - ad spend - COGS - fees), orders, sessions, add-to-carts and checkouts for the last N days (CSV, oldest first).',
     input: { days: z.number().int().min(1).max(365).default(30) },
     run: async ({ days }, ctx) =>
       csv(
         ctx.db
           .prepare(
-            `SELECT date, round(revenue, 2) AS revenue, round(ad_spend, 2) AS ad_spend, round(cogs, 2) AS cogs, orders, sessions, add_to_carts, checkouts
-             FROM daily_metrics WHERE store_id = ? AND date >= ? ORDER BY date`,
+            `SELECT date, round(revenue, 2) AS revenue, round(ad_spend, 2) AS ad_spend, round(cogs, 2) AS cogs, round(fees, 2) AS fees,
+               round(revenue - ad_spend - cogs - fees, 2) AS profit, orders, sessions, add_to_carts, checkouts
+             FROM (SELECT d.*, d.revenue * s.fee_percent / 100 + d.orders * s.fee_per_order AS fees FROM daily_metrics d JOIN stores s ON s.id = d.store_id
+                   WHERE d.store_id = ? AND d.date >= ?)
+             ORDER BY date`,
           )
           .all(ctx.store.id, since(days, ctx.store)),
       ),
