@@ -72,6 +72,32 @@ test('schedule rules fire once per matching minute, catch up after downtime, and
   expect((await runs()).map((r) => [r.status, r.runId])).toEqual([['started', 'run-2'], ['started', 'run-1']]);
 });
 
+test("a rule switched back on doesn't replay what it was off for; a weekly slot missed while the app was closed fires once", async () => {
+  const { app, db, calls, scheduler, create, setClock } = setup();
+  const daily = await create({ trigger: { type: 'schedule', cron: '0 9 * * *' }, approval: 'auto' });
+  await create({ name: 'Weekly review', trigger: { type: 'schedule', cron: '0 9 * * 2' }, approval: 'auto' }); // Tuesdays
+  setClock(at(26, 8, 30));
+  const s = scheduler();
+  await app.request(`/api/automations/${daily.id}`, send('PATCH', { enabled: false }));
+  // The owner touched it: agents switching default jobs on leave it alone.
+  expect(db.prepare('SELECT 1 FROM done_once WHERE ref = ?').get(`rule-edited:${daily.id}`)).toBeTruthy();
+  setClock(at(26, 9, 30));
+  s.tick();
+  setClock(at(26, 15, 0));
+  s.tick();
+  await app.request(`/api/automations/${daily.id}`, send('PATCH', { enabled: true }));
+  setClock(at(26, 15, 1));
+  s.tick();
+  expect(calls).toHaveLength(0); // this morning's 09:00 passed while it was off
+
+  // Closed from Monday 15:01 to Thursday 10:00: Tuesday's weekly slot is over a day old, and still runs once.
+  setClock(at(29, 10, 0));
+  s.tick();
+  s.tick();
+  s.stop();
+  expect(calls.map(([, task]) => /Automation "([^"]+)"/.exec(task)![1]).sort()).toEqual(['Daily brief', 'Weekly review']);
+});
+
 test('every-minute rule hits its daily cap and logs a skip', async () => {
   const { calls, scheduler, create, runs, setClock } = setup();
   await create({ trigger: { type: 'schedule', cron: '* * * * *' }, approval: 'auto', maxRunsPerDay: 2 });

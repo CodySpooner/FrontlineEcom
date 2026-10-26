@@ -5,7 +5,7 @@ import { loadRows, salesShares, totalsOf } from './analytics';
 import { approvalsHook } from './approvals';
 import { cronDueBetween, nextCronTime, parseCron } from './cron';
 import { addDays, dayFraction, localDate } from './dates';
-import type { Db } from './db';
+import { once, type Db } from './db';
 import { storeZone } from './stores';
 
 type Row = Record<string, unknown>;
@@ -165,11 +165,15 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
   const tick = () => {
     const t = now();
     const check = db.prepare('UPDATE automation_rules SET checked_at = ? WHERE id = ?');
+    // A rule that's off moves on too: switched back on, it doesn't replay the slots it was off for.
+    db.prepare('UPDATE automation_rules SET checked_at = ? WHERE enabled = 0').run(t.toISOString());
     for (const r of db.prepare('SELECT * FROM automation_rules WHERE enabled = 1').all()) {
       const rule = toRule(r);
       const checked = r.checked_at ? new Date(String(r.checked_at)) : new Date(rule.createdAt);
       if (rule.trigger.type === 'schedule') {
-        const after = new Date(Math.max(checked.getTime(), t.getTime() - 86400000));
+        // Back after downtime, a missed slot runs once (cronDueBetween asks whether any was due), as far back as a month:
+        // a weekly or monthly slot the app was closed through isn't dropped.
+        const after = new Date(Math.max(checked.getTime(), t.getTime() - 31 * 86400000));
         check.run(t.toISOString(), rule.id);
         if (cronDueBetween(parseCron(rule.trigger.cron), after, t)) fire(rule, `scheduled (${rule.trigger.cron})`, t);
         continue;
@@ -230,6 +234,7 @@ export function automationRoutes(db: Db, pickStores: (q?: string) => string[]) {
       const f = parseRule(db, await c.req.json().catch(() => undefined), cur);
       if (typeof f === 'string') return c.json({ error: f }, 400);
       write(cur.id, f);
+      once(db, `rule-edited:${cur.id}`); // the owner's call now: agents switching default jobs on leave this one alone
       return c.json(getRule(db, cur.id));
     })
     .delete('/api/automations/:id', (c) => (db.prepare('DELETE FROM automation_rules WHERE id = ?').run(c.req.param('id')).changes ? c.body(null, 204) : c.json({ error: 'automation not found' }, 404)));
