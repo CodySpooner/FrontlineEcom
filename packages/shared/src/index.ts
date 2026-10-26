@@ -92,6 +92,8 @@ export interface Agent {
   levelProgress?: { xp: number; needed: number };
   /** The agent's own daily AI budget, USD, inside the store's. Absent: only the store's cap applies. */
   dailyBudgetUsd?: number;
+  /** What its runs spent today (since local midnight), USD: the sum `dailyBudgetUsd` is checked against. Always set by the API. */
+  costTodayUsd?: number;
   /**
    * What its runs run on. Always set by the API. `claude`: the owner's Claude Code login with this model (live stores);
    * `demo`: the free scripted engine (demo stores, so exploring never spends Claude usage).

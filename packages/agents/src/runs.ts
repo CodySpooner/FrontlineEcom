@@ -5,7 +5,7 @@ import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { once, parseLearnings, REFLECTION_PROMPT, searchMemory, writeMemory } from './memory';
 import { listNicheLearnings, nicheKey } from './niche';
 import { assemblePrompt } from './prompt';
-import { getAgent } from './squads';
+import { costToday, getAgent } from './squads';
 import { OUTLIVE_RUN, type ToolEnv } from './tools';
 
 // Runs live in `agent_runs` (agents-lane migration in apps/server/src/db.ts). The queue is the table itself.
@@ -356,16 +356,6 @@ const addUsage = (a: RunUsage, b: RunUsage): RunUsage => ({
 });
 
 /** USD the store's agents spent since local midnight. */
-/** What the store's runs (or one agent's) cost since local midnight. */
-export function costToday(db: DatabaseSync, storeId: string, agentId?: string): number {
-  const midnight = new Date();
-  midnight.setHours(0, 0, 0, 0);
-  const row = db
-    .prepare(`SELECT coalesce(sum(cost_usd), 0) AS cost FROM agent_runs WHERE store_id = ? AND created_at >= ? ${agentId ? 'AND agent_id = ?' : ''}`)
-    .get(storeId, midnight.toISOString(), ...(agentId ? [agentId] : []));
-  return Number(row?.cost ?? 0);
-}
-
 const ownUsedUp = (usd: number, stopped = false) => `${stopped ? "Stopped: today's" : "Today's"} budget for this agent ($${usd}) is used up. Raise it in its settings.`;
 
 /** The error of a run that was in flight when the app stopped (one from the last 6 hours runs again, as a new run). */

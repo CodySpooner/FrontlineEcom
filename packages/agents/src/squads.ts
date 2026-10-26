@@ -43,12 +43,22 @@ export function listAgents(db: DatabaseSync, storeIds?: string[]): Agent[] {
     .prepare(`SELECT a.*, s.connected FROM agents a JOIN stores s ON s.id = a.store_id ${filter} ORDER BY s.created_at, s.rowid, a.rowid`)
     .all(...(storeIds?.length ? storeIds : []));
   const busy = busyAgents(db);
-  return rows.map((r) => toAgent(r, busy));
+  return rows.map((r) => toAgent(r, busy, costToday(db, String(r.store_id), String(r.id))));
+}
+
+/** What the store's runs (or one agent's) cost since local midnight. */
+export function costToday(db: DatabaseSync, storeId: string, agentId?: string): number {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const row = db
+    .prepare(`SELECT coalesce(sum(cost_usd), 0) AS cost FROM agent_runs WHERE store_id = ? AND created_at >= ? ${agentId ? 'AND agent_id = ?' : ''}`)
+    .get(storeId, midnight.toISOString(), ...(agentId ? [agentId] : []));
+  return Number(row?.cost ?? 0);
 }
 
 export function getAgent(db: DatabaseSync, id: string): Agent | undefined {
   const row = db.prepare('SELECT a.*, s.connected FROM agents a JOIN stores s ON s.id = a.store_id WHERE a.id = ?').get(id);
-  return row && toAgent(row, busyAgents(db));
+  return row && toAgent(row, busyAgents(db), costToday(db, String(row.store_id), id));
 }
 
 export function updateAgent(db: DatabaseSync, id: string, patch: AgentUpdate): Agent | undefined {
@@ -77,7 +87,7 @@ function busyAgents(db: DatabaseSync) {
 }
 
 // Status is derived from the DB: offline > waiting for the owner > working on a run > last run failed > idle.
-function toAgent(r: Record<string, unknown>, busy: ReturnType<typeof busyAgents>): Agent {
+function toAgent(r: Record<string, unknown>, busy: ReturnType<typeof busyAgents>, costTodayUsd: number): Agent {
   const id = String(r.id);
   const enabled = r.enabled === 1;
   const request = enabled ? busy.waiting.get(id) : undefined;
@@ -99,6 +109,7 @@ function toAgent(r: Record<string, unknown>, busy: ReturnType<typeof busyAgents>
     enabled,
     autonomy: r.autonomy as Autonomy,
     ...(typeof own === 'number' ? { dailyBudgetUsd: own } : {}),
+    costTodayUsd,
     engine: engineInfo(r.connected === 1),
   };
 }

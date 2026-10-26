@@ -179,9 +179,13 @@ test("an agent's own daily budget caps its runs inside the store's; the rest of 
   const m = manager({ engine: fakeEngine((input) => (budgets.push(input.budgetUsd), [{ type: 'done', sessionId: 's', usage }])) });
   const patch = (body: unknown) => createApp(db).request('/api/agents/glow%3Acopywriter', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   updateCaps(db, 'glow', { agentCostPerDay: 1 });
-  expect(await (await patch({ dailyBudgetUsd: 0.3 })).json()).toMatchObject({ dailyBudgetUsd: 0.3 });
+  expect(await (await patch({ dailyBudgetUsd: 0.3 })).json()).toMatchObject({ dailyBudgetUsd: 0.3, costTodayUsd: 0 });
   expect((await patch({ dailyBudgetUsd: -1 })).status).toBe(400);
   db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at) VALUES ('r0', 'glow', 'glow:copywriter', 't', 'done', 0.2, ?)`).run(new Date().toISOString());
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at) VALUES ('old', 'glow', 'glow:copywriter', 't', 'done', 5, '2020-01-01T00:00:00.000Z')`).run();
+  // What the agent's usage meter shows is what its budget is checked against: today's runs only, however many.
+  const listed = (await (await createApp(db).request('/api/agents?stores=glow')).json()) as { id: string; costTodayUsd: number }[];
+  expect(listed.filter((a) => a.costTodayUsd).map((a) => [a.id, a.costTodayUsd])).toEqual([['glow:copywriter', 0.2]]);
   ok(m.start('glow:copywriter', 'one'));
   ok(m.start('glow:ad_strategist', 'two'));
   await m.idle();

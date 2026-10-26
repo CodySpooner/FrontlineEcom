@@ -2,7 +2,7 @@ export { runAgent, defaultEngine, engineInfo, type Engine, type RunInput } from 
 export { fakeEngine, echoScript, type FakeScript, type FakeStep } from './fake-engine';
 export { agentModel, claudeEngine, estimate, isAccountError, isReadOnly, toAgentEvents, type ClaudeEngineOptions } from './claude-engine';
 export { ROLES, SQUAD_RULES, type RoleSpec, type ToolName } from './roles';
-export { createSquad, ensureSquads, seedDemoXp, listAgents, getAgent, updateAgent, agentId, DEFAULT_AUTONOMY } from './squads';
+export { createSquad, ensureSquads, seedDemoXp, listAgents, getAgent, updateAgent, agentId, costToday, DEFAULT_AUTONOMY } from './squads';
 export { assemblePrompt, playbook, platformPack, nichePack, estimateTokens, type PromptInput } from './prompt';
 export {
   writeMemory,
@@ -22,7 +22,7 @@ export {
 } from './memory';
 export { APP_TOOLS, OUTLIVE_RUN, budgetAddedToday, cash, toolsFor, callTool, requestApproval, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
-export { createRunManager, getRun, listRuns, costToday, runGist, type RunManager, type RunManagerOptions } from './runs';
+export { createRunManager, getRun, listRuns, runGist, type RunManager, type RunManagerOptions } from './runs';
 export { XP, xpForLevel, levelForXp, levelProgress, rankForLevel, demoXp, awardXp, commander, profitStreak, dailyMissions, ACHIEVEMENTS, checkAchievements, type Award, type Facts, type StoreDay } from './gamification';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats, type Economics, type Verdict } from './ads';
