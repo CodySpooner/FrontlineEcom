@@ -90,4 +90,98 @@ export interface ApprovalRequest {
   action: { kind: string; payload: unknown };
   status: ApprovalStatus;
   createdAt: string;
+  runId?: string;
+  /** ISO timestamp, set when approved or denied. */
+  decidedAt?: string;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// API contracts (core lane). Every endpoint's request/response shape lives here.
+
+/** Dashboard ranges in days: 7D / 30D / 90D / 1Y. */
+export type AnalyticsRange = 7 | 30 | 90 | 365;
+export const ANALYTICS_RANGES: AnalyticsRange[] = [7, 30, 90, 365];
+
+/** Profit = revenue - cogs - adSpend. ROAS = revenue / adSpend (0 when no spend). AOV = revenue / orders (0 when no orders). */
+export interface MetricTotals {
+  revenue: number;
+  profit: number;
+  adSpend: number;
+  roas: number;
+  orders: number;
+  aov: number;
+}
+
+/** Percent change vs the previous period of the same length, e.g. 18.4 = +18.4%. 0 when the previous value is 0. */
+export type MetricDeltas = MetricTotals;
+
+export interface MetricPoint extends MetricTotals {
+  /** YYYY-MM-DD. */
+  date: string;
+}
+
+/** GET /api/analytics/summary?stores=a,b&range=7|30|90|365 (stores omitted = all stores). */
+export interface AnalyticsSummary {
+  range: AnalyticsRange;
+  storeIds: string[];
+  /** First and last day of the selected period, YYYY-MM-DD, inclusive. */
+  from: string;
+  to: string;
+  totals: MetricTotals;
+  previous: MetricTotals;
+  deltas: MetricDeltas;
+  /** One point per day, oldest first (UI buckets 1Y into weeks). */
+  series: MetricPoint[];
+  byStore: { storeId: string; totals: MetricTotals; deltas: MetricDeltas }[];
+}
+
+/** POST /api/stores body. Response: the created Store. */
+export interface StoreInput {
+  name: string;
+  platform: Platform;
+  niche: Niche;
+  nicheDetail?: string;
+  /** Default 'USD'. */
+  currency?: string;
+  /** Default 'America/Chicago'. */
+  timezone?: string;
+  /** Default red accent. */
+  color?: string;
+}
+
+/** PATCH /api/stores/:id body. Response: the updated Store. */
+export type StoreUpdate = Partial<StoreInput>;
+
+/** GET /api/events?stores=a,b&limit=20 → StoreEvent[] newest first (default limit 20, max 200). */
+export type EventsResponse = StoreEvent[];
+
+export type ApprovalDecision = 'approve' | 'deny';
+
+/** What an agent passes to create an approval request (core fills id, status, createdAt). */
+export interface NewApprovalRequest {
+  storeId: string;
+  agentId: string;
+  runId?: string;
+  title: string;
+  reason: string;
+  action: { kind: string; payload: unknown };
+}
+
+/**
+ * In-process approvals hook the server hands to the agents engine.
+ * `create` stores + broadcasts a pending request; `decision` resolves when the owner approves or denies it.
+ */
+export interface ApprovalsHook {
+  create(input: NewApprovalRequest): ApprovalRequest;
+  decision(id: string): Promise<ApprovalRequest>;
+}
+
+/** Messages on the `/api/live` WebSocket (JSON, one per frame). New `type`s may be added; ignore unknown ones. */
+export type LiveMessage =
+  | { type: 'event'; event: StoreEvent }
+  | { type: 'approval'; approval: ApprovalRequest };
+
+/** Error body for any non-2xx API response. */
+export interface ApiError {
+  error: string;
 }
