@@ -231,8 +231,11 @@ test('a Dev Dashboard app connects with client credentials; the 24 h token is ca
   const shop = fakeShopify([]);
   const grants: string[] = [];
   let refuse = false;
+  const revoked = new Set<string>();
   const fetchFn = (async (url: string, init: RequestInit) => {
-    if (!url.endsWith('/admin/oauth/access_token')) return shop.fetchFn(url, init);
+    if (!url.endsWith('/admin/oauth/access_token')) {
+      return revoked.has(new Headers(init.headers).get('x-shopify-access-token')!) ? new Response('', { status: 401 }) : shop.fetchFn(url, init);
+    }
     grants.push(`${url} ${init.body}`);
     if (refuse) return Response.json({ error: 'invalid_client', error_description: 'Client authentication failed' }, { status: 401 });
     return Response.json({ access_token: `tok-${grants.length}`, scope: 'read_products,read_orders', expires_in: 86399 });
@@ -249,10 +252,35 @@ test('a Dev Dashboard app connects with client credentials; the 24 h token is ca
   expect(grants).toHaveLength(2);
   expect(shop.calls.at(-1)!.token).toBe('tok-2');
 
+  // Shopify drops the cached token early (app reinstalled): it is renewed once and the call goes through.
+  revoked.add('tok-2');
+  await syncShopify(db, key, 'glow', fetchFn, new Date('2026-10-27T12:00:00Z'));
+  expect(grants).toHaveLength(3);
+  expect(db.prepare("SELECT status FROM integrations WHERE id = 'shopify:glow'").get()).toEqual({ status: 'connected' });
+
   refuse = true;
   await syncShopify(db, key, 'glow', fetchFn, new Date('2026-10-29T00:00:00Z'));
   expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'shopify:glow'").get()).toMatchObject({ status: 'error', error: expect.stringContaining('Client authentication failed') });
 
   const bare = await app.request('/api/integrations', { method: 'PUT', body: JSON.stringify({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', clientId: '' } }), headers: { 'content-type': 'application/json' } });
   expect([bare.status, await bare.json()]).toEqual([400, { error: 'Enter the client ID and secret (or an Admin API access token)' }]);
+});
+
+test('createProducts logs each product; a failure part-way names the drafts already made', async () => {
+  const { db } = await setup();
+  let n = 0;
+  const fetchFn = (async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (body.query.includes('productCreate')) {
+      if (body.variables.product.title === 'Bad') return Response.json({ data: { productCreate: { product: null, userErrors: [{ message: 'Title is invalid' }] } } });
+      n++;
+      return Response.json({ data: { productCreate: { product: { id: `gid://shopify/Product/90${n}`, variants: { nodes: [{ id: `gid://shopify/ProductVariant/80${n}` }] } }, userErrors: [] } } });
+    }
+    return Response.json({ data: { productVariantsBulkUpdate: { userErrors: [] } } });
+  }) as typeof fetch;
+  await expect(createProducts(db, key, 'glow', [{ title: 'Roller', price: 20 }, { title: 'Mask', price: 50 }, { title: 'Bad', price: 5 }], fetchFn)).rejects.toThrow(
+    'Shopify: Title is invalid (already created as drafts: Roller, Mask)',
+  );
+  expect(listActions(db, ['glow'], 10).map((a) => [a.target, a.ok])).toEqual([['Bad', false], ['Mask', true], ['Roller', true]]);
+  expect(db.prepare("SELECT title FROM products WHERE store_id = 'glow' AND id IN ('901', '902') ORDER BY id").all()).toEqual([{ title: 'Roller' }, { title: 'Mask' }]);
 });

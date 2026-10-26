@@ -87,7 +87,9 @@ async function gql<T>(host: string, token: string, query: string, variables: Rec
     headers: { 'content-type': 'application/json', 'X-Shopify-Access-Token': token },
     body: JSON.stringify({ query, variables }),
   });
-  if (res.status === 401 || res.status === 403) throw new Error(`Shopify rejected the access token (HTTP ${res.status}); check the token and its scopes`);
+  if (res.status === 401 || res.status === 403) {
+    throw Object.assign(new Error(`Shopify rejected the access token (HTTP ${res.status}); check that the app is installed on this store with the scopes it needs`), { auth: true });
+  }
   if (!res.ok) throw new Error(`Shopify returned HTTP ${res.status}`);
   const body = (await res.json()) as { data?: T; errors?: { message: string }[] };
   if (body.errors?.length || !body.data) throw new Error(`Shopify: ${body.errors?.map((e) => e.message).join('; ') ?? 'empty response'}`);
@@ -119,12 +121,12 @@ export function fulfillmentOf(o: Pick<ShopifyOrder, 'displayFulfillmentStatus' |
  * The Admin API token: a pasted one (legacy custom app), or for a Dev Dashboard app a client-credentials token. Those
  * last 24 h, so one is minted when the cached one has under 5 minutes left and saved (encrypted) with its expiry.
  */
-async function adminToken(db: Db, key: Buffer, storeId: string, creds: Record<string, string>, fetchFn: Fetch, now = new Date()) {
+async function adminToken(db: Db, key: Buffer, storeId: string, creds: Record<string, string>, fetchFn: Fetch, now = new Date(), force = false) {
   if (!creds.clientId || !creds.clientSecret) {
     if (!creds.accessToken) throw new Error("Enter your Dev Dashboard app's client ID and secret (or an older custom app's Admin API access token)");
     return creds.accessToken;
   }
-  if (creds.grantToken && Number(creds.grantTokenExpiresAt) - now.getTime() > 5 * 60_000) return creds.grantToken;
+  if (!force && creds.grantToken && Number(creds.grantTokenExpiresAt) - now.getTime() > 5 * 60_000) return creds.grantToken;
   const res = await fetchFn(`https://${shopHost(creds.shopDomain!)}/admin/oauth/access_token`, {
     method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
@@ -138,15 +140,32 @@ async function adminToken(db: Db, key: Buffer, storeId: string, creds: Record<st
   return body.access_token;
 }
 
+/** Admin API calls. A client-credentials token Shopify rejects before it expires (app reinstalled, secret rotated) is renewed once. */
+function client(db: Db, key: Buffer, storeId: string, creds: Record<string, string>, fetchFn: Fetch, now?: Date) {
+  const host = shopHost(creds.shopDomain!);
+  let token: Promise<string> | undefined;
+  let renewed = false;
+  const call = async <T>(query: string, vars: Record<string, unknown> = {}): Promise<T> => {
+    token ??= adminToken(db, key, storeId, creds, fetchFn, now);
+    try {
+      return await gql<T>(host, await token, query, vars, fetchFn);
+    } catch (e) {
+      if (!(e as { auth?: boolean }).auth || renewed || !creds.clientId || !creds.clientSecret) throw e;
+      renewed = true;
+      token = adminToken(db, key, storeId, creds, fetchFn, now, true);
+      return call<T>(query, vars);
+    }
+  };
+  return call;
+}
+
 /** Pulls shop, products and orders updated since the last sync and rebuilds revenue/orders/cogs for the touched days. */
 export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `shopify:${storeId}`;
   const creds = getCredentials(db, key, 'shopify', storeId);
   if (!creds) return;
   try {
-    const host = shopHost(creds.shopDomain!);
-    const token = await adminToken(db, key, storeId, creds, fetchFn, now);
-    const q = <T>(query: string, vars: Record<string, unknown> = {}) => gql<T>(host, token, query, vars, fetchFn);
+    const q = client(db, key, storeId, creds, fetchFn, now);
     const { shop } = await q<{ shop: { currencyCode: string; ianaTimezone: string } }>(SHOP_Q);
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const since = cursor ?? `${addDays(localDate(now), -BACKFILL_DAYS)}T00:00:00Z`;
@@ -212,32 +231,36 @@ export interface NewProduct {
 function admin(db: Db, key: Buffer, storeId: string, fetchFn: Fetch) {
   const creds = getCredentials(db, key, 'shopify', storeId);
   if (!creds) throw new Error('Shopify is not connected for this store');
-  let token: Promise<string> | undefined;
-  return async <T>(query: string, vars: Record<string, unknown>) => gql<T>(shopHost(creds.shopDomain!), await (token ??= adminToken(db, key, storeId, creds, fetchFn)), query, vars, fetchFn);
+  return client(db, key, storeId, creds, fetchFn);
 }
 
 const check = (errors: { message: string }[]) => {
   if (errors.length) throw new Error(`Shopify: ${errors.map((e) => e.message).join('; ')}`);
 };
 
+/** Creates priced drafts one by one, each logged. A failure part-way names the drafts already created, so nobody adds them twice. */
 export async function createProducts(db: Db, key: Buffer, storeId: string, products: NewProduct[], fetchFn: Fetch = fetch) {
-  return logAction(db, storeId, 'product_create', products.map((p) => p.title).join(', '), { products }, () => createProductsNow(db, key, storeId, products, fetchFn));
-}
-
-async function createProductsNow(db: Db, key: Buffer, storeId: string, products: NewProduct[], fetchFn: Fetch) {
   const q = admin(db, key, storeId, fetchFn);
   const insert = db.prepare(`INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 'draft')`);
   const created: { id: string; title: string }[] = [];
   for (const p of products) {
-    type Created = { productCreate: { product: { id: string; variants: { nodes: { id: string }[] } } | null; userErrors: { message: string }[] } };
-    const { productCreate: c } = await q<Created>(CREATE_M, { product: { title: p.title, status: 'DRAFT' } });
-    check(c.userErrors);
-    const product = c.product!;
-    const variant = { id: product.variants.nodes[0]!.id, price: p.price.toFixed(2), ...(p.compareAt ? { compareAtPrice: p.compareAt.toFixed(2) } : {}), ...(p.cost ? { inventoryItem: { cost: p.cost.toFixed(2) } } : {}) };
-    const { productVariantsBulkUpdate: u } = await q<{ productVariantsBulkUpdate: { userErrors: { message: string }[] } }>(VARIANT_M, { productId: product.id, variants: [variant] });
-    check(u.userErrors);
-    insert.run(storeId, tail(product.id), p.title, p.price, p.compareAt ?? null, p.cost ?? 0);
-    created.push({ id: tail(product.id), title: p.title });
+    try {
+      const id = await logAction(db, storeId, 'product_create', p.title, { ...p }, async () => {
+        type Created = { productCreate: { product: { id: string; variants: { nodes: { id: string }[] } } | null; userErrors: { message: string }[] } };
+        const { productCreate: c } = await q<Created>(CREATE_M, { product: { title: p.title, status: 'DRAFT' } });
+        check(c.userErrors);
+        const product = c.product!;
+        const variant = { id: product.variants.nodes[0]!.id, price: p.price.toFixed(2), ...(p.compareAt ? { compareAtPrice: p.compareAt.toFixed(2) } : {}), ...(p.cost ? { inventoryItem: { cost: p.cost.toFixed(2) } } : {}) };
+        const { productVariantsBulkUpdate: u } = await q<{ productVariantsBulkUpdate: { userErrors: { message: string }[] } }>(VARIANT_M, { productId: product.id, variants: [variant] });
+        check(u.userErrors);
+        return tail(product.id);
+      });
+      insert.run(storeId, id, p.title, p.price, p.compareAt ?? null, p.cost ?? 0);
+      created.push({ id, title: p.title });
+    } catch (e) {
+      if (!created.length) throw e;
+      throw new Error(`${(e as Error).message} (already created as drafts: ${created.map((c) => c.title).join(', ')})`);
+    }
   }
   return created;
 }
