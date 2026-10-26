@@ -70,6 +70,21 @@ test('funnel: period totals of sessions, add to carts, checkouts and orders', ()
   expect(s.funnel).toEqual({ sessions: 900, addToCarts: 70, checkouts: 21, orders: 5 });
 });
 
+test("funnel orders come from the store-days that report sessions, so a short traffic history doesn't inflate conversion", () => {
+  const s = summarize(
+    [
+      { ...row('a', '2026-10-26', 100, 0, 30, 2), sessions: 500 },
+      row('a', '2026-10-24', 100, 0, 30, 4), // before the store's traffic source began
+      row('b', '2026-10-26', 100, 0, 30, 7), // a store with no traffic source
+    ],
+    { range: 7, to: '2026-10-26', storeIds: ['a', 'b'] },
+  );
+  expect(s.totals.orders).toBe(13);
+  expect(s.funnel).toEqual({ sessions: 500, addToCarts: 0, checkouts: 0, orders: 2 });
+  // No sessions anywhere: the funnel is just the orders.
+  expect(summarize([row('b', '2026-10-26', 100, 0, 30, 7)], { range: 7, to: '2026-10-26', storeIds: ['b'] }).funnel.orders).toBe(7);
+});
+
 test('campaign stats over the period, folded statuses, biggest spend first; GET /api/analytics/campaigns', async () => {
   const db = openDb();
   seedDemo(db, '2026-10-26');

@@ -87,7 +87,10 @@ export function summarize(rows: MetricRow[], { range, to, storeIds, todayFractio
     return { storeId, totals: t, previous: p, deltas: deltasOf(t, p) };
   });
   const sum = (k: 'sessions' | 'addToCarts' | 'checkouts') => cur.reduce((a, r) => a + (r[k] ?? 0), 0);
-  const funnel = { sessions: sum('sessions'), addToCarts: sum('addToCarts'), checkouts: sum('checkouts'), orders: totals.orders };
+  // Orders from the store-days that report sessions: a store without a traffic source, or days from before its source
+  // began (TikTok's last 30 days, GA4 connected mid-range), would inflate the conversion rate. With none, every order.
+  const tracked = cur.filter((r) => (r.sessions ?? 0) > 0);
+  const funnel = { sessions: sum('sessions'), addToCarts: sum('addToCarts'), checkouts: sum('checkouts'), orders: tracked.length ? totalsOf(tracked).orders : totals.orders };
   return { range, storeIds, from, to, totals, previous, deltas: deltasOf(totals, previous), series, byStore, funnel };
 }
 
