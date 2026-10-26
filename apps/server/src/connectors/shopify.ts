@@ -316,3 +316,86 @@ export async function publishPage(db: Db, key: Buffer, storeId: string, page: { 
     return { id: tail(c.page!.id), handle: c.page!.handle };
   });
 }
+
+const THEMES_Q = `{ themes(first: 50) { nodes { id name role processing } } }`;
+const THEME_Q = `query ($id: ID!) { theme(id: $id) { id name role processing } }`;
+const THEME_FILES_Q = `query ($id: ID!, $filenames: [String!]) {
+  theme(id: $id) { files(filenames: $filenames, first: 250) { nodes { filename body { ... on OnlineStoreThemeFileBodyText { content } } } } } }`;
+const THEME_DUPLICATE_M = `mutation ($id: ID!, $name: String) {
+  themeDuplicate(id: $id, name: $name) { newTheme { id name role processing } userErrors { message } } }`;
+const THEME_FILES_M = `mutation ($themeId: ID!, $files: [OnlineStoreThemeFilesUpsertFileInput!]!) {
+  themeFilesUpsert(themeId: $themeId, files: $files) { upsertedThemeFiles { filename } userErrors { message } } }`;
+const THEME_PUBLISH_M = `mutation ($id: ID!) { themePublish(id: $id) { theme { id name role processing } userErrors { message } } }`;
+
+/** role MAIN is the live theme; a fresh copy is `processing` for a while before its files can be read or written. */
+export interface ShopifyTheme {
+  id: string;
+  name: string;
+  role: string;
+  processing: boolean;
+  /** Opens the storefront with this theme for whoever follows the link (the store's admin login isn't needed). */
+  previewUrl: string;
+}
+type ThemeNode = Omit<ShopifyTheme, 'previewUrl'>;
+
+const themeGid = (id: string) => `gid://shopify/OnlineStoreTheme/${id}`;
+
+function themeApi(db: Db, key: Buffer, storeId: string, fetchFn: Fetch) {
+  const q = admin(db, key, storeId, fetchFn);
+  const host = shopHost(getCredentials(db, key, 'shopify', storeId)!.shopDomain!);
+  const view = (t: ThemeNode): ShopifyTheme => ({ ...t, id: tail(t.id), previewUrl: `https://${host}/?preview_theme_id=${tail(t.id)}` });
+  return { q, view };
+}
+
+export async function listThemes(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch): Promise<ShopifyTheme[]> {
+  const { q, view } = themeApi(db, key, storeId, fetchFn);
+  return (await q<{ themes: { nodes: ThemeNode[] } }>(THEMES_Q)).themes.nodes.map(view);
+}
+
+/** Theme files by name (`*` wildcards, 50 names at most). Binary files (images, fonts) come back with content null. */
+export async function readThemeFiles(db: Db, key: Buffer, storeId: string, themeId: string, filenames: string[], fetchFn: Fetch = fetch) {
+  if (!filenames.length || filenames.length > 50) throw new Error('Read 1 to 50 theme file names at a time');
+  type Files = { theme: { files: { nodes: { filename: string; body: { content?: string } }[] } | null } | null };
+  // ponytail: first 250 matches, no paging; a wildcard over a whole folder of a big theme can be cut short.
+  const { theme } = await admin(db, key, storeId, fetchFn)<Files>(THEME_FILES_Q, { id: themeGid(themeId), filenames });
+  if (!theme) throw new Error(`Shopify: theme ${themeId} not found`);
+  return (theme.files?.nodes ?? []).map((f) => ({ filename: f.filename, content: f.body.content ?? null }));
+}
+
+/** Copies a theme as an unpublished draft to edit and preview; the live store doesn't change. */
+export async function duplicateTheme(db: Db, key: Buffer, storeId: string, themeId: string, name: string, fetchFn: Fetch = fetch): Promise<ShopifyTheme> {
+  const { q, view } = themeApi(db, key, storeId, fetchFn);
+  return logAction(db, storeId, 'theme_duplicate', themeId, { name }, async () => {
+    const { themeDuplicate: d } = await q<{ themeDuplicate: { newTheme: ThemeNode | null; userErrors: { message: string }[] } }>(THEME_DUPLICATE_M, { id: themeGid(themeId), name });
+    check(d.userErrors);
+    return view(d.newTheme!);
+  });
+}
+
+/**
+ * Writes text files (Liquid, JSON, CSS, JS) to an unpublished theme, 50 at most. The live theme is refused: edit a
+ * copy (duplicateTheme), then publishTheme once the owner approves. Returns the filenames written.
+ */
+export async function upsertThemeFiles(db: Db, key: Buffer, storeId: string, themeId: string, files: { filename: string; body: string }[], fetchFn: Fetch = fetch) {
+  if (!files.length || files.length > 50) throw new Error('Write 1 to 50 theme files at a time');
+  const { q } = themeApi(db, key, storeId, fetchFn);
+  const { theme } = await q<{ theme: ThemeNode | null }>(THEME_Q, { id: themeGid(themeId) });
+  if (!theme) throw new Error(`Shopify: theme ${themeId} not found`);
+  if (theme.role === 'MAIN') throw new Error(`"${theme.name}" is the live theme; edit a copy and publish it once approved`);
+  return logAction(db, storeId, 'theme_files', themeId, { files: files.map((f) => f.filename) }, async () => {
+    type Upserted = { themeFilesUpsert: { upsertedThemeFiles: { filename: string }[] | null; userErrors: { message: string }[] } };
+    const { themeFilesUpsert: u } = await q<Upserted>(THEME_FILES_M, { themeId: themeGid(themeId), files: files.map((f) => ({ filename: f.filename, body: { type: 'TEXT', value: f.body } })) });
+    check(u.userErrors);
+    return (u.upsertedThemeFiles ?? []).map((f) => f.filename);
+  });
+}
+
+/** Makes a theme the live one. Call only for an approved request. */
+export async function publishTheme(db: Db, key: Buffer, storeId: string, themeId: string, fetchFn: Fetch = fetch): Promise<ShopifyTheme> {
+  const { q, view } = themeApi(db, key, storeId, fetchFn);
+  return logAction(db, storeId, 'theme_publish', themeId, {}, async () => {
+    const { themePublish: p } = await q<{ themePublish: { theme: ThemeNode | null; userErrors: { message: string }[] } }>(THEME_PUBLISH_M, { id: themeGid(themeId) });
+    check(p.userErrors);
+    return view(p.theme!);
+  });
+}

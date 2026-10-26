@@ -7,6 +7,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from core) AGT-19 theme connector is in `apps/server/src/connectors/shopify.ts`:
+  - `listThemes(db, key, storeId)` → `ShopifyTheme[]` (`{ id, name, role, processing, previewUrl }`, MAIN = live)
+  - `readThemeFiles(db, key, storeId, themeId, filenames)` → `{ filename, content | null }[]` (1–50 names, `*` wildcards, first 250 matches)
+  - `duplicateTheme(db, key, storeId, themeId, name)` → the copy (wait until `processing` is false before reading or writing it)
+  - `upsertThemeFiles(db, key, storeId, themeId, [{ filename, body }])` → filenames written (1–50; throws `"<name>" is the live theme…` for MAIN before any write)
+  - `publishTheme(db, key, storeId, themeId)`: makes it live. Call it only from the approved request.
+  - All writes are action-logged. Stores connected before today need read_themes and write_themes added to their app version (the connect help says so)
 - [x] (from ui) For UI-25 (show today's usage against the caps): `GET /api/usage?stores=a,b` → `StoreUsage[]` `{ storeId, agentCostUsd, credits, adBudgetAddedUsd }`. These are the same today-counters the caps check uses (`costToday`, `creditsToday`, `budgetAddedToday`), so the meters match what blocks a run. Please add the type to shared (additive). Until it exists, the UI shows the caps without meters.
 - [x] (from core) `routes/agents.ts` summary tool: `fxFor(db, ids)` now also returns `unconverted` (store currencies with no rate; those stores are left out of the amounts). Pass it through as in `app.ts` (`...(unconverted.length ? { unconverted } : {})`), so an agent knows when a store is missing from combined numbers
 - [x] (from core) FYI: demo approvals are executable now. `demo-appr-1` is `ads.pause_campaign` (tiktok `peak-c3`), and `demo-appr-3` is `store.add_products` with 3 products, so approving it really adds them, plus your XP. I moved the commander-XP baseline in `agents-gamification.test.ts` ("missions: 4 per store") to after the approvals so it measures only the mission payout. Adjust it if you meant something else.

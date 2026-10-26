@@ -645,7 +645,7 @@ export interface OAuthStart {
 
 /** Catalog for the Integrations screen: every field listed is required. `perStore` = connected per store (else global). */
 export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category: IntegrationCategory; perStore: boolean; fields: IntegrationField[]; /** Setup steps shown next to the form. */ help?: string }> = {
-  shopify: { name: 'Shopify', category: 'platform', perStore: true, help: 'Shopify admin → Settings → Apps and sales channels → Develop apps → Build apps in Dev Dashboard → Create app → new version with Admin API scopes read_products, read_inventory, read_orders, read_all_orders (plus write_products and write_online_store_pages if agents may add products, change prices and publish pages you approve) → Release → Install on your store → Settings: copy the client ID and secret. The app must be in the same organization as the store. Already have a custom app made before 2026? Paste its Admin API access token instead.', fields: [
+  shopify: { name: 'Shopify', category: 'platform', perStore: true, help: 'Shopify admin → Settings → Apps and sales channels → Develop apps → Build apps in Dev Dashboard → Create app → new version with Admin API scopes read_products, read_inventory, read_orders, read_all_orders (plus write_products and write_online_store_pages if agents may add products, change prices and publish pages you approve, and read_themes and write_themes if the Store Developer may edit a copy of your theme) → Release → Install on your store → Settings: copy the client ID and secret. The app must be in the same organization as the store. Already have a custom app made before 2026? Paste its Admin API access token instead.', fields: [
     { key: 'shopDomain', label: 'Shop domain', secret: false, placeholder: 'your-store.myshopify.com' },
     { key: 'clientId', label: 'Client ID', secret: false, optional: true },
     { key: 'clientSecret', label: 'Client secret', secret: true, optional: true },
@@ -723,7 +723,7 @@ export interface Backup {
   createdAt: string;
 }
 
-export type ActionKind = 'ad_budget' | 'ad_pause' | 'product_create' | 'price_change' | 'product_page_publish' | 'page_publish';
+export type ActionKind = 'ad_budget' | 'ad_pause' | 'product_create' | 'price_change' | 'product_page_publish' | 'page_publish' | 'theme_duplicate' | 'theme_files' | 'theme_publish';
 
 /**
  * GET /api/actions?stores=&limit= → ActionLogEntry[], newest first (limit default 50, max 200). Every write to a live

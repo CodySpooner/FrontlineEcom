@@ -5,7 +5,7 @@ import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { listActions } from '../actions';
-import { createProducts, fulfillmentOf, publishPage, publishProductPage, setProductPrice, shopHost, syncShopify } from './shopify';
+import { createProducts, duplicateTheme, fulfillmentOf, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, shopHost, syncShopify, upsertThemeFiles } from './shopify';
 
 const key = randomBytes(32);
 const TOKEN = 'shpat_fixture_token';
@@ -286,4 +286,49 @@ test('createProducts logs each product; a failure part-way names the drafts alre
   );
   expect(listActions(db, ['glow'], 10).map((a) => [a.target, a.ok])).toEqual([['Bad', false], ['Mask', true], ['Roller', true]]);
   expect(db.prepare("SELECT title FROM products WHERE store_id = 'glow' AND id IN ('901', '902') ORDER BY id").all()).toEqual([{ title: 'Roller' }, { title: 'Mask' }]);
+});
+
+test('themes: list, read, copy, edit the copy (never the live theme), publish', async () => {
+  const { db } = await setup();
+  const calls: { query: string; variables: Record<string, unknown> }[] = [];
+  const node = (id: number, role: string) => ({ id: `gid://shopify/OnlineStoreTheme/${id}`, name: role === 'MAIN' ? 'Dawn' : 'Copy of Dawn', role, processing: false });
+  const fetchFn = (async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    calls.push(body);
+    const q: string = body.query;
+    if (q.includes('themes(')) return Response.json({ data: { themes: { nodes: [node(1, 'MAIN'), node(2, 'UNPUBLISHED')] } } });
+    if (q.includes('files(')) {
+      return Response.json({ data: { theme: body.variables.id.endsWith('/404') ? null : { files: { nodes: [{ filename: 'sections/hero.liquid', body: { content: '<h1>{{ section.settings.title }}</h1>' } }, { filename: 'assets/logo.png', body: {} }] } } } });
+    }
+    if (q.includes('themeDuplicate')) return Response.json({ data: { themeDuplicate: { newTheme: { ...node(3, 'UNPUBLISHED'), processing: true }, userErrors: [] } } });
+    if (q.includes('themeFilesUpsert')) return Response.json({ data: { themeFilesUpsert: { upsertedThemeFiles: body.variables.files.map((f: { filename: string }) => ({ filename: f.filename })), userErrors: [] } } });
+    if (q.includes('themePublish')) return Response.json({ data: { themePublish: { theme: node(3, 'MAIN'), userErrors: [] } } });
+    return Response.json({ data: { theme: body.variables.id.endsWith('/1') ? node(1, 'MAIN') : node(3, 'UNPUBLISHED') } });
+  }) as typeof fetch;
+
+  expect(await listThemes(db, key, 'glow', fetchFn)).toEqual([
+    { id: '1', name: 'Dawn', role: 'MAIN', processing: false, previewUrl: 'https://glow-haus.myshopify.com/?preview_theme_id=1' },
+    { id: '2', name: 'Copy of Dawn', role: 'UNPUBLISHED', processing: false, previewUrl: 'https://glow-haus.myshopify.com/?preview_theme_id=2' },
+  ]);
+  expect(await readThemeFiles(db, key, 'glow', '1', ['sections/*', 'assets/logo.png'], fetchFn)).toEqual([
+    { filename: 'sections/hero.liquid', content: '<h1>{{ section.settings.title }}</h1>' },
+    { filename: 'assets/logo.png', content: null },
+  ]);
+  expect(calls.at(-1)!.variables).toEqual({ id: 'gid://shopify/OnlineStoreTheme/1', filenames: ['sections/*', 'assets/logo.png'] });
+  await expect(readThemeFiles(db, key, 'glow', '404', ['layout/theme.liquid'], fetchFn)).rejects.toThrow('theme 404 not found');
+  await expect(readThemeFiles(db, key, 'glow', '1', [], fetchFn)).rejects.toThrow('1 to 50');
+
+  expect(await duplicateTheme(db, key, 'glow', '1', 'Frontline draft', fetchFn)).toMatchObject({ id: '3', role: 'UNPUBLISHED', processing: true });
+  const files = [{ filename: 'sections/hero.liquid', body: '<h1>New</h1>' }];
+  await expect(upsertThemeFiles(db, key, 'glow', '1', files, fetchFn)).rejects.toThrow('"Dawn" is the live theme');
+  expect(calls.some((c) => c.query.includes('themeFilesUpsert'))).toBe(false);
+  expect(await upsertThemeFiles(db, key, 'glow', '3', files, fetchFn)).toEqual(['sections/hero.liquid']);
+  expect(calls.at(-1)!.variables).toEqual({ themeId: 'gid://shopify/OnlineStoreTheme/3', files: [{ filename: 'sections/hero.liquid', body: { type: 'TEXT', value: '<h1>New</h1>' } }] });
+  expect(await publishTheme(db, key, 'glow', '3', fetchFn)).toMatchObject({ id: '3', role: 'MAIN' });
+
+  expect(listActions(db, ['glow'], 10).map((a) => [a.action, a.target, a.ok])).toEqual([
+    ['theme_publish', '3', true],
+    ['theme_files', '3', true],
+    ['theme_duplicate', '1', true],
+  ]);
 });

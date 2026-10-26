@@ -190,6 +190,9 @@ const ACTION: Record<ActionKind, string> = {
   price_change: 'Price changed',
   product_page_publish: 'Product page published',
   page_publish: 'Page published',
+  theme_duplicate: 'Theme copied',
+  theme_files: 'Theme files edited',
+  theme_publish: 'Theme published',
 };
 
 /** What actually ran against a live store or ad account, whoever triggered it. */
