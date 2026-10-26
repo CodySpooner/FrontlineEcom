@@ -109,6 +109,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Reconnecting a store to another shop (a new Shopify domain, Woo site, Etsy shop, TikTok Shop shop, or Amazon seller or marketplace) drops the old shop's orders, products and Amazon daily totals, and rebuilds revenue (`forgetPlatform`). Before, a dev store connected first stayed mixed into the live store's revenue forever. The same shop with a new token, or a differently written URL, keeps everything. Other platforms' rows and local drafts stay. Test
 - 2026-10-26 — Demo: Glow Haus' "Add 3 trending products" now says "about 80% margin", matching its payload (76–84%). New data dirs only; existing ones keep the old text.
 - 2026-10-26 — The demo feed prunes week-old events on every tick, not only at startup. A tray app left running for weeks kept about 5k demo events a day. Also measured the 1-year top products query on a 150k-order store: 214 ms warm. A covering index didn't help, so none was added. Test
 - 2026-10-26 — Store currency from every platform:

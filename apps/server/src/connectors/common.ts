@@ -1,4 +1,4 @@
-import type { AdNetwork } from '@frontline/shared';
+import type { AdNetwork, IntegrationKind } from '@frontline/shared';
 import type { Db } from '../db';
 import { convertRate } from '../fx';
 
@@ -58,6 +58,28 @@ export function rebuildRevenue(db: Db, storeId: string, dates: Iterable<string>)
     const a = agg.get(storeId, date)!;
     up.run(storeId, date, Math.round(Number(a.revenue) * 100) / 100, Math.round(Number(a.cogs) * 100) / 100, Number(a.n));
   }
+}
+
+/** Each store platform's id prefix. Shopify's ids have none (order names, product numbers); local drafts are research-/approval-. */
+const ID_PREFIX: Partial<Record<IntegrationKind, string>> = { woocommerce: 'woo-', etsy: 'etsy-', tiktok_shop: 'tt-' };
+
+/**
+ * Drops a platform's synced orders, products and daily channel totals (Amazon) from a real store, with the revenue they
+ * made. For a reconnect to another shop: the new shop's backfill then fills the store instead of mixing with the old one.
+ * ponytail: Shopify's rows are the ones without another source's prefix; give rows a source column if that gets crowded.
+ */
+export function forgetPlatform(db: Db, storeId: string, kind: IntegrationKind) {
+  if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo !== 0) return;
+  const others = [...Object.values(ID_PREFIX), 'research-', 'approval-'].map((p) => `${p}*`);
+  const [where, args] =
+    kind === 'shopify' ? [`NOT (${others.map(() => 'id GLOB ?').join(' OR ')})`, others] : ID_PREFIX[kind] ? ['id GLOB ?', [`${ID_PREFIX[kind]}*`]] : ['0', []];
+  const dates = db
+    .prepare(`SELECT DISTINCT local_date AS d FROM orders WHERE store_id = ? AND ${where} UNION SELECT date FROM channel_daily WHERE store_id = ? AND channel = ?`)
+    .all(storeId, ...args, storeId, kind)
+    .map((r) => String(r.d));
+  for (const t of ['orders', 'products']) db.prepare(`DELETE FROM ${t} WHERE store_id = ? AND ${where}`).run(storeId, ...args);
+  db.prepare('DELETE FROM channel_daily WHERE store_id = ? AND channel = ?').run(storeId, kind);
+  rebuildRevenue(db, storeId, dates);
 }
 
 export interface OrderItem {

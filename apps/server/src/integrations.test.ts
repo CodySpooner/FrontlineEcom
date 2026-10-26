@@ -9,6 +9,7 @@ import { openDb } from './db';
 import { seedDemo } from './demo';
 import { getCredentials, saveIntegration } from './integrations';
 import { decrypt, encrypt, loadKey } from './secrets';
+import { rebuildRevenue, switchToReal } from './connectors/common';
 
 const key = randomBytes(32);
 const setup = () => {
@@ -132,4 +133,37 @@ test('pointing an integration at another ad account restarts its backfill; a new
   expect(cursor()).toBe('2026-10-26');
   save('act_2', 'token-b');
   expect(cursor()).toBeNull();
+});
+
+test("reconnecting a store to another shop drops the old shop's orders, products and revenue; other sources stay", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow');
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES ('glow', ?, '2026-10-25T12:00:00Z', ?, 'paid', 'unfulfilled', 0, '2026-10-25')");
+  order.run('#1001', 100);
+  order.run('tt-5', 20);
+  const product = db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', ?, 'p', 10, 0, 1, 'active')");
+  for (const id of ['8001', 'tt-9', 'research-r1']) product.run(id);
+  db.prepare("INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('glow', 'amazon', '2026-10-24', 50, 2)").run();
+  rebuildRevenue(db, 'glow', ['2026-10-24', '2026-10-25']);
+  const shopify = (shopDomain: string, accessToken: string) => saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain, accessToken } });
+  const amazon = (marketplaceId: string) =>
+    saveIntegration(db, key, { kind: 'amazon', storeId: 'glow', values: { sellerId: 'A1', region: 'na', marketplaceId, clientId: 'c', clientSecret: 's', refreshToken: 'r' } });
+  const ids = (t: string) => db.prepare(`SELECT id FROM ${t} WHERE store_id = 'glow' ORDER BY id`).all().map((r) => r.id);
+  const revenue = (date: string) => db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'glow' AND date = ?").get(date)?.revenue;
+
+  shopify('dev-shop.myshopify.com', 'token-a');
+  shopify('https://Dev-Shop.myshopify.com/', 'token-b'); // the same shop, a new token
+  amazon('ATVPDKIKX0DER');
+  expect(ids('orders')).toEqual(['#1001', 'tt-5']);
+
+  shopify('real-shop.myshopify.com', 'token-c');
+  expect(ids('orders')).toEqual(['tt-5']);
+  expect(ids('products')).toEqual(['research-r1', 'tt-9']);
+  expect(revenue('2026-10-25')).toBe(20);
+  expect(revenue('2026-10-24')).toBe(50);
+
+  amazon('A1F83G8C2ARO7P');
+  expect(revenue('2026-10-24')).toBe(0);
+  expect(ids('orders')).toEqual(['tt-5']);
 });

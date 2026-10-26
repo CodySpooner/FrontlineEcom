@@ -1,5 +1,6 @@
 import { INTEGRATION_KINDS, type Health, type Integration, type IntegrationInput, type IntegrationKind, type IntegrationStatus } from '@frontline/shared';
-import type { Db } from './db';
+import { forgetPlatform } from './connectors/common';
+import { tx, type Db } from './db';
 import { decrypt, encrypt } from './secrets';
 import { getStore } from './stores';
 
@@ -47,6 +48,10 @@ export function listIntegrations(db: Db, key: Buffer, storeIds: string[]): Integ
 }
 
 /** Validates and saves (create or update) an integration. Returns an error message or the saved Integration. */
+/** The settings naming the shop a platform integration reads: a new value is another shop. */
+const SHOP_KEYS: Partial<Record<IntegrationKind, string[]>> = { shopify: ['shopDomain'], tiktok_shop: ['shop'], etsy: ['shopId'], amazon: ['sellerId', 'marketplaceId'], woocommerce: ['siteUrl'] };
+const bare = (v = '') => v.toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
+
 export function saveIntegration(db: Db, key: Buffer, body: unknown): string | Integration {
   if (!body || typeof body !== 'object') return 'body must be a JSON object';
   const { kind, storeId, values } = body as Partial<IntegrationInput>;
@@ -62,7 +67,7 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
   }
 
   const id = idOf(kind, storeId);
-  const existing = db.prepare('SELECT id, encrypted_credentials FROM integrations WHERE id = ?').get(id);
+  const existing = db.prepare('SELECT id, encrypted_credentials, settings_json FROM integrations WHERE id = ?').get(id);
   const oldSecrets = (existing && secretsOf(key, existing)) ?? {};
   const settings: Record<string, string> = {};
   const secrets: Record<string, string> = {};
@@ -77,13 +82,20 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
   // ponytail: the only kind with alternative credentials (Dev Dashboard app, or a pre-2026 custom app's token).
   if (kind === 'shopify' && !(secrets.accessToken || (settings.clientId && secrets.clientSecret))) return 'Enter the client ID and secret (or an Admin API access token)';
 
-  db.prepare(
-    `INSERT INTO integrations (id, kind, store_id, status, error, settings_json, encrypted_credentials, updated_at) VALUES (?, ?, ?, 'connected', NULL, ?, ?, ?)
-     ON CONFLICT (id) DO UPDATE SET status = 'connected', error = NULL, settings_json = excluded.settings_json,
-       encrypted_credentials = excluded.encrypted_credentials, updated_at = excluded.updated_at,
-       -- Another shop or ad account (non-secret settings changed) backfills from scratch; a new token picks up where it was.
-       cursor = CASE WHEN settings_json = excluded.settings_json THEN cursor END`,
-  ).run(id, kind, storeId ?? null, JSON.stringify(settings), encrypt(key, secrets, id), new Date().toISOString());
+  const old = existing ? (JSON.parse(String(existing.settings_json)) as Record<string, string>) : {};
+  const otherShop = (SHOP_KEYS[kind] ?? []).some((k) => old[k] !== undefined && bare(old[k]) !== bare(settings[k]));
+
+  tx(db, () => {
+    db.prepare(
+      `INSERT INTO integrations (id, kind, store_id, status, error, settings_json, encrypted_credentials, updated_at) VALUES (?, ?, ?, 'connected', NULL, ?, ?, ?)
+       ON CONFLICT (id) DO UPDATE SET status = 'connected', error = NULL, settings_json = excluded.settings_json,
+         encrypted_credentials = excluded.encrypted_credentials, updated_at = excluded.updated_at,
+         -- Another shop or ad account (non-secret settings changed) backfills from scratch; a new token picks up where it was.
+         cursor = CASE WHEN settings_json = excluded.settings_json THEN cursor END`,
+    ).run(id, kind, storeId ?? null, JSON.stringify(settings), encrypt(key, secrets, id), new Date().toISOString());
+    // The previous shop's orders, products and revenue leave now instead of mixing with the new shop's backfill.
+    if (otherShop) forgetPlatform(db, storeId!, kind);
+  });
   return toIntegration(db.prepare('SELECT * FROM integrations WHERE id = ?').get(id)!, key);
 }
 
