@@ -28,16 +28,24 @@ export function onApproved(db: Db, fn: (db: Db, a: ApprovalRequest) => unknown) 
   });
 }
 
+/** Pushes a draft to the store's platform (core's Shopify productUpdate / pageCreate); throws a readable error. */
+export type PushPage = (d: PageDraft) => Promise<unknown>;
+
 /**
- * Publishes a Store Builder draft: demo stores go live locally (a draft product the page is for becomes active);
- * connected stores get a notification to apply it by hand.
+ * Publishes a Store Builder draft: connected stores get it on the platform (an error tells the owner and leaves it
+ * approved); demo stores go live locally, and a draft product the page is for becomes active.
  */
-export function publishDraft(db: Db, d: PageDraft) {
+export async function publishDraft(db: Db, d: PageDraft, push: PushPage) {
   const store = getStore(db, d.storeId);
   if (!store || d.publishedAt) return;
   if (store.connected) {
-    // ponytail: needs core's Shopify productUpdate (descriptionHtml, seo) / pageCreate to push it.
-    notify(db, { kind: 'info', title: `Publish on ${store.name} by hand: ${d.title}`, body: 'Approved. The page is in Store Builder; publishing to a connected store is not automated yet.', storeId: store.id });
+    try {
+      await push(d);
+    } catch (e) {
+      notify(db, { kind: 'error', title: `Couldn't publish "${d.title}" to ${store.name}`, body: `${(e as Error).message}. It's approved and waiting in Store Builder.`, storeId: store.id });
+      return;
+    }
+    markPublished(db, d.id);
     return;
   }
   markPublished(db, d.id);

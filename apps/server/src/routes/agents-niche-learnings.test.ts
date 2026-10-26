@@ -54,6 +54,9 @@ test("an approved learning reaches every same-niche store's prompt, once", async
   expect(prompts[dew.id]).toContain('# Learned across beauty stores (owner-approved)\n- Bundles of 2+ devices lift AOV ~25% in at-home skincare Evidence: Glow Haus');
   expect(prompts.pawsome).not.toContain('Learned across');
 
+  expect(await (await app.request(`/api/niche-learnings?store=${dew.id}`)).json()).toHaveLength(1);
+  expect(await (await app.request('/api/niche-learnings?store=pawsome')).json()).toEqual([]);
+  expect(await (await app.request('/api/niche-learnings?store=nope')).json()).toEqual([]);
   const [learning] = (await (await app.request('/api/niche-learnings?niche=beauty')).json()) as NicheLearning[];
   expect(learning).toMatchObject({ niche: 'beauty', storeId: 'glow', text: 'Bundles of 2+ devices lift AOV ~25% in at-home skincare' });
   expect((await app.request(`/api/niche-learnings/${learning!.id}`, { method: 'DELETE' })).status).toBe(204);

@@ -12,6 +12,7 @@ import {
   listAgents,
   listMemory,
   listNicheLearnings,
+  nicheKey,
   listRuns,
   updateAgent,
   updateMemory,
@@ -31,12 +32,12 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
-import { addProducts, applyAdChange, onApproved, publishDraft } from './agents-actions';
+import { addProducts, applyAdChange, onApproved, publishDraft, type PushPage } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { issueRoutes } from './agents-issues';
 import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
-import { createProducts } from '../connectors/shopify';
+import { createProducts, publishPage, publishProductPage } from '../connectors/shopify';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
@@ -44,6 +45,16 @@ import { getStore } from '../stores';
 import { publish } from '../live';
 
 /** App data + approvals for agent tools. `key` decrypts integration credentials (default: the data dir's key file). */
+/** Store Builder drafts → Shopify: product pages update the product, other pages are created. */
+const pushPage =
+  (db: Db): PushPage =>
+  (d) => {
+    const seo = { ...(d.seoTitle ? { seoTitle: d.seoTitle } : {}), ...(d.seoDescription ? { seoDescription: d.seoDescription } : {}) };
+    return d.kind === 'product' && d.productId
+      ? publishProductPage(db, loadKey(dataDir()), d.storeId, d.productId, { title: d.title, descriptionHtml: d.html, ...seo })
+      : publishPage(db, loadKey(dataDir()), d.storeId, { title: d.title, bodyHtml: d.html });
+  };
+
 export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): ToolEnv => ({
   db,
   approvals: approvalsHook(db),
@@ -125,7 +136,7 @@ export function runManager(db: Db): RunManager {
       if (a.action.kind === 'ads.set_budget' || a.action.kind === 'ads.pause_campaign') applyAdChange(db, a);
       if (a.action.kind === 'store.publish_page') {
         const d = getPageDraft(db, String((a.action.payload as { draftId?: unknown })?.draftId));
-        if (d) publishDraft(db, d);
+        if (d) return publishDraft(db, d, pushPage(db));
       }
     });
   }
@@ -219,9 +230,14 @@ export function agentRoutes(db: Db) {
       const d = knowledgeDoc(c.req.param('kind'), c.req.param('key'));
       return d ? c.json(d) : c.json({ error: 'Not found' }, 404);
     })
-    .get('/api/niche-learnings', (c) => c.json(listNicheLearnings(db, c.req.query('niche') || undefined)))
+    .get('/api/niche-learnings', (c) => {
+      const storeId = c.req.query('store');
+      const store = storeId ? getStore(db, storeId) : undefined;
+      if (storeId && !store) return c.json([]);
+      return c.json(listNicheLearnings(db, store ? nicheKey(store) : c.req.query('niche') || undefined));
+    })
     .delete('/api/niche-learnings/:id', (c) => (deleteNicheLearning(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Learning not found' }, 404)))
-    .route('/', pageRoutes(db))
+    .route('/', pageRoutes(db, pushPage(db)))
     .route('/', issueRoutes(db))
     .route('/', gamificationRoutes(db))
     .route('/', creativeRoutes(db));

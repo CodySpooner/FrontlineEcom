@@ -7,6 +7,7 @@ import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
+import { publishDraft } from './agents-actions';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -65,14 +66,22 @@ test('denied requests leave the draft rejected; the owner can still publish it f
   expect((await app.request(`/api/page-drafts/${d!.id}/publish`, { method: 'POST' })).status).toBe(409);
 });
 
-test('connected stores are told to apply it; bad input is refused', async () => {
+test('connected stores get it on the platform; a platform error tells the owner; bad input is refused', async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
   const out = await run(() => [draft({ productId: 'nope' }), draft({ productId: undefined }), draft({ kind: 'page', productId: undefined, title: 'About us' })]);
   expect(out.slice(0, 2)).toEqual(['No product nope in this store. Use list_products for ids.', 'productId is required for a product page.']);
   const [about] = listPageDrafts(db);
   await run(() => [{ call: 'publish_page', input: { draftId: about!.id } }], 'approve');
   expect(listPageDrafts(db)[0]?.status).toBe('approved');
-  expect(db.prepare(`SELECT title FROM notifications WHERE kind = 'info' AND store_id = 'glow'`).get()?.title).toBe('Publish on Glow Haus by hand: About us');
+  expect(db.prepare(`SELECT title, body FROM notifications WHERE kind = 'error' AND store_id = 'glow'`).get()).toEqual({
+    title: 'Couldn\'t publish "About us" to Glow Haus',
+    body: "Shopify is not connected for this store. It's approved and waiting in Store Builder.",
+  });
+
+  const pushed: string[] = [];
+  await publishDraft(db, listPageDrafts(db)[0]!, async (d) => pushed.push(d.title));
+  expect(pushed).toEqual(['About us']);
+  expect(listPageDrafts(db)[0]?.status).toBe('published');
 });
 
 test('Store Builder routes', async () => {

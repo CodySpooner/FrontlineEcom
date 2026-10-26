@@ -3,12 +3,12 @@ import type { PageDraftStatus } from '@frontline/shared';
 import { Hono } from 'hono';
 import { decide } from '../approvals';
 import type { Db } from '../db';
-import { publishDraft } from './agents-actions';
+import { publishDraft, type PushPage } from './agents-actions';
 
 const STATUSES: PageDraftStatus[] = ['draft', 'pending', 'approved', 'published', 'rejected'];
 
 /** Store Builder: the Store Developer's drafts. */
-export function pageRoutes(db: Db) {
+export function pageRoutes(db: Db, push: PushPage) {
   return new Hono()
     .get('/api/page-drafts', (c) => {
       const status = c.req.query('status') as PageDraftStatus | undefined;
@@ -21,7 +21,7 @@ export function pageRoutes(db: Db) {
       return d ? c.json(d) : c.json({ error: 'Draft not found' }, 404);
     })
     // The owner publishes: a pending request is approved (the approvals watcher publishes it); a plain draft publishes now.
-    .post('/api/page-drafts/:id/publish', (c) => {
+    .post('/api/page-drafts/:id/publish', async (c) => {
       const d = getPageDraft(db, c.req.param('id'));
       if (!d) return c.json({ error: 'Draft not found' }, 404);
       if (d.status === 'published' || d.status === 'approved') return c.json({ error: `Already ${d.status}` }, 409);
@@ -29,7 +29,7 @@ export function pageRoutes(db: Db) {
         decide(db, d.approvalId!, 'approve');
         return c.json(getPageDraft(db, d.id), 202);
       }
-      publishDraft(db, d);
+      await publishDraft(db, d, push);
       return c.json(getPageDraft(db, d.id));
     })
     .delete('/api/page-drafts/:id', (c) => (deletePageDraft(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Draft not found' }, 404)));
