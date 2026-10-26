@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { AnalyticsSummary, Product, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { FunnelPanel, TopProducts, TopTable, UnitCosts } from './Analytics';
+import { FunnelPanel, PlatformSplit, TopProducts, TopTable, UnitCosts } from './Analytics';
 
 const product = (id: string, cost: number): Product => ({ id, storeId: 'etsy-shop', title: `Mug ${id}`, price: 24, cost, inventory: 10, status: 'active', margin: 0 });
 
@@ -101,6 +101,27 @@ describe('Conversion funnel with steps the platform does not report', () => {
     expect(await screen.findByText(/count GA4's add-to-cart and checkout events, not sessions/)).toBeTruthy();
     const widths = [...document.querySelectorAll<HTMLElement>('.bg-red.rounded-full')].map((b) => b.style.width);
     expect(widths).toEqual(['100%', '100%', '40%', '20%']);
+  });
+});
+
+describe('sales by platform', () => {
+  const s = (byPlatform: AnalyticsSummary['byPlatform']) => ({ currency: 'USD', byPlatform }) as AnalyticsSummary;
+
+  it("gives each platform's revenue, orders and share of sales when there are two or more", () => {
+    stubApi(() => []);
+    renderApp(<PlatformSplit s={s([{ platform: 'shopify', revenue: 7500, orders: 150 }, { platform: 'amazon', revenue: 2500, orders: 1 }])} />);
+    expect(screen.getByText('Shopify')).toBeTruthy();
+    expect(screen.getByText('Amazon')).toBeTruthy();
+    expect(screen.getByText('75.0% of sales')).toBeTruthy();
+    expect(screen.getByText('1 order')).toBeTruthy();
+    const widths = [...document.querySelectorAll<HTMLElement>('.bg-red.rounded-full')].map((b) => b.style.width);
+    expect(widths).toEqual(['75%', '25%']);
+  });
+
+  it('shows nothing for one platform', () => {
+    stubApi(() => []);
+    renderApp(<PlatformSplit s={s([{ platform: 'shopify', revenue: 7500, orders: 150 }])} />);
+    expect(screen.queryByText('Sales by platform')).toBeNull();
   });
 });
 

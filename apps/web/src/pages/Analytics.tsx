@@ -7,6 +7,7 @@ import { useCampaigns, useMissingCosts, useSetCost, useSummary, useTopProducts }
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
 import { DemoMixNote, StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
+import { PLATFORM_NAME } from '../components/StoreForm';
 import { Badge, Button, ErrorState, inputClass, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
 import { breakEvenRoas, byNetwork, rate, roasTone, times } from '../lib/analytics';
 import { PERIOD, RANGES, weekly } from '../lib/chart';
@@ -104,7 +105,37 @@ function Trend({ s, be }: { s: AnalyticsSummary; be: number }) {
         <Stat label="Orders" value={num(s.totals.orders)} />
         <Stat label="Avg. order" value={money(s.totals.aov, s.currency)} />
       </dl>
+      <PlatformSplit s={s} />
     </Panel>
+  );
+}
+
+/** Sales by platform: a store with a second channel (a TikTok Shop or Amazon next to its site), or stores on different ones. */
+export function PlatformSplit({ s }: { s: AnalyticsSummary }) {
+  const ps = s.byPlatform ?? [];
+  if (ps.length < 2) return null;
+  const total = ps.reduce((n, p) => n + p.revenue, 0);
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <h3 className="mb-2 text-xs text-muted">Sales by platform</h3>
+      <ul className="grid gap-x-6 gap-y-3 min-[620px]:grid-cols-2">
+        {ps.map((p) => (
+          <li key={p.platform}>
+            <div className="mb-1.5 flex items-baseline justify-between gap-2 text-[13px]">
+              <span className="font-semibold">{PLATFORM_NAME[p.platform]}</span>
+              <b className="tabular-nums">{money(p.revenue, s.currency)}</b>
+            </div>
+            <div className="h-2 rounded-full bg-white/5">
+              <div className="h-full min-w-1 rounded-full bg-red" style={{ width: `${rate(p.revenue, total)}%` }} />
+            </div>
+            <div className="mt-1 flex justify-between text-xs text-muted tabular-nums">
+              <span>{`${num(p.orders)} order${p.orders === 1 ? '' : 's'}`}</span>
+              <span>{`${pct(rate(p.revenue, total))} of sales`}</span>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
