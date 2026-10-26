@@ -67,9 +67,14 @@ export function serviceAccountJwt(json: string, now: Date) {
   return `${unsigned}.${sign('RSA-SHA256', Buffer.from(unsigned), sa.private_key).toString('base64url')}`;
 }
 
+/** Google Ads API headers; login-customer-id when the ad account is reached through a manager account. */
+const adsHeaders = (token: string, creds: Record<string, string>) => ({
+  authorization: `Bearer ${token}`, 'developer-token': creds.developerToken!, 'content-type': 'application/json',
+  ...(creds.managerId ? { 'login-customer-id': googleId(creds.managerId, 'Manager account ID', '123-456-7890') } : {}),
+});
+
 const cursorOf = (db: Db, id: string) => db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
 
-// ponytail: no login-customer-id header, so the OAuth user needs direct access to the ad account (not only via a manager).
 export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `google_ads:${storeId}`;
   const creds = getCredentials(db, key, 'google_ads', storeId);
@@ -83,7 +88,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       do {
         const page = await call<{ results?: AdsRow[]; nextPageToken?: string }>(
           `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${customer}/googleAds:search`,
-          { method: 'POST', headers: { authorization: `Bearer ${token}`, 'developer-token': creds.developerToken!, 'content-type': 'application/json' }, body: JSON.stringify({ query, ...(pageToken ? { pageToken } : {}) }) },
+          { method: 'POST', headers: adsHeaders(token, creds), body: JSON.stringify({ query, ...(pageToken ? { pageToken } : {}) }) },
           fetchFn,
           'Google Ads',
         );
@@ -175,7 +180,7 @@ export async function updateGoogleCampaign(db: Db, key: Buffer, storeId: string,
   const token = await accessToken({ grant_type: 'refresh_token', client_id: creds.clientId!, client_secret: creds.clientSecret!, refresh_token: creds.refreshToken! }, fetchFn, 'Google');
   const base = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${customer}`;
   const post = <T>(path: string, body: object) =>
-    call<T>(`${base}/${path}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'developer-token': creds.developerToken!, 'content-type': 'application/json' }, body: JSON.stringify(body) }, fetchFn, 'Google Ads');
+    call<T>(`${base}/${path}`, { method: 'POST', headers: adsHeaders(token, creds), body: JSON.stringify(body) }, fetchFn, 'Google Ads');
   if ('status' in change) {
     await post('campaigns:mutate', { operations: [{ update: { resourceName: `customers/${customer}/campaigns/${campaignId}`, status: change.status }, updateMask: 'status' }] });
     return;

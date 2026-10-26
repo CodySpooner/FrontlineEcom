@@ -683,8 +683,9 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'adAccountId', label: 'Ad account ID', secret: false, placeholder: 'act_…' },
     { key: 'accessToken', label: 'System user access token', secret: true },
   ] },
-  google_ads: { name: 'Google Ads', category: 'ads', perStore: true, help: 'Google Ads → Tools → API Center: apply for a developer token. Google Cloud console → enable the Google Ads API → Credentials → OAuth client ID (Desktop app) → client ID + secret. Enter them and press Connect, then sign in with a Google account that has direct access to the ad account. Customer ID is top right in Google Ads.', fields: [
+  google_ads: { name: 'Google Ads', category: 'ads', perStore: true, help: 'Google Ads → Tools → API Center: apply for a developer token. Google Cloud console → enable the Google Ads API → Credentials → OAuth client ID (Desktop app) → client ID + secret. Enter them and press Connect, then sign in with a Google account that has access to the ad account. Customer ID is top right in Google Ads. If you get to the ad account through a manager account, also enter the manager account ID.', fields: [
     { key: 'customerId', label: 'Customer ID', secret: false, placeholder: '123-456-7890' },
+    { key: 'managerId', label: 'Manager account ID', secret: false, placeholder: '123-456-7890', optional: true },
     { key: 'clientId', label: 'OAuth client ID', secret: false },
     { key: 'clientSecret', label: 'OAuth client secret', secret: true },
     { key: 'developerToken', label: 'Developer token', secret: true },

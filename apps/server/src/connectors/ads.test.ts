@@ -83,3 +83,10 @@ test('Meta budgets in a currency without cents (yen) are whole units, not hundre
   await setCampaignBudget(db, key, 'glow', 'meta', IDS.meta, 7200, fetchFn);
   expect(calls.map((c) => c.body)).toEqual(['daily_budget=7200']);
 });
+
+test('Google Ads through a manager account sends its id as login-customer-id', async () => {
+  const { db, calls, fetchFn } = setup();
+  saveIntegration(db, key, { kind: 'google_ads', storeId: 'glow', values: { customerId: '123-456-7890', managerId: '999-888-7777', clientId: 'cid', clientSecret: 'cs', developerToken: 'dev', refreshToken: 'rt' } });
+  await pauseCampaign(db, key, 'glow', 'google', IDS.google, fetchFn);
+  expect(calls.filter((c) => c.url.startsWith('https://googleads')).map((c) => c.headers.get('login-customer-id'))).toEqual(['9998887777']);
+});

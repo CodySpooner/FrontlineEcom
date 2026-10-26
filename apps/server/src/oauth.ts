@@ -96,7 +96,10 @@ export function startOAuth(db: Db, body: unknown, callbackUrl: string, pending: 
   const given: Values = {};
   for (const f of spec.fields.filter((f) => !f.oauth)) {
     const v = (values as Record<string, unknown>)[f.key];
-    if (typeof v !== 'string' || !v.trim()) return `${f.label} is required`;
+    if (typeof v !== 'string' || !v.trim()) {
+      if (f.optional) continue;
+      return `${f.label} is required`;
+    }
     given[f.key] = v.trim();
   }
   const invalid = provider.validate?.(given);
