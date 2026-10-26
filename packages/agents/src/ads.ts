@@ -49,9 +49,14 @@ export function reviewCampaigns(campaigns: CampaignStats[], econ: Economics) {
 export function economics(db: DatabaseSync, storeId: string, since: string): Economics {
   const r = db
     .prepare(
-      `SELECT coalesce(sum(d.revenue), 0) AS revenue, coalesce(sum(d.cogs + d.revenue * s.fee_percent / 100 + d.orders * s.fee_per_order), 0) AS cogs,
-         coalesce(sum(d.orders), 0) AS orders
-       FROM daily_metrics d JOIN stores s ON s.id = d.store_id WHERE d.store_id = ? AND d.date >= ?`,
+      // Amazon as an extra channel (core's channel_daily) is in revenue and orders without its product costs (core reads
+      // only an Amazon store's own orders), and the store's ads don't sell there: the economics are the store's own site's.
+      `SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(cogs + revenue * fee_percent / 100 + orders * fee_per_order), 0) AS cogs,
+         coalesce(sum(orders), 0) AS orders
+       FROM (SELECT d.revenue - coalesce(c.revenue, 0) AS revenue, d.orders - coalesce(c.orders, 0) AS orders, d.cogs, s.fee_percent, s.fee_per_order
+             FROM daily_metrics d JOIN stores s ON s.id = d.store_id
+             LEFT JOIN channel_daily c ON c.store_id = d.store_id AND c.date = d.date AND c.channel = 'amazon' AND s.platform != 'amazon'
+             WHERE d.store_id = ? AND d.date >= ?)`,
     )
     .get(storeId, since);
   const revenue = Number(r?.revenue ?? 0);

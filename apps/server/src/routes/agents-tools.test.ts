@@ -191,7 +191,7 @@ describe('agent tools on demo data', () => {
     try {
       const [series] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
       const [note, header, ...rows] = series!.output.split('\n');
-      expect(note).toMatch(/^\(revenue and orders include Amazon's sales as a channel \(amazon_revenue, amazon_orders\).+take them out for conversion and MER\.\)$/);
+      expect(note).toMatch(/^\(revenue and orders include Amazon's sales as a channel \(amazon_revenue, amazon_orders\).+take them out for conversion, margin and MER\.\)$/);
       expect(header).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts,amazon_revenue,amazon_orders');
       expect([rows.find((r) => r.startsWith(days[1]!)), rows.find((r) => r.startsWith(days[0]!))]).toEqual([expect.stringMatching(/,120\.5,3$/), expect.stringMatching(/,0,0$/)]);
     } finally {

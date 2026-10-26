@@ -203,7 +203,7 @@ export const APP_TOOLS: AppTool[] = [
       const amazon = ctx.store.platform !== 'amazon' && rows.some((r) => Number(r.amazon_orders) || Number(r.amazon_revenue));
       if (!amazon) for (const r of rows) delete r.amazon_revenue, delete r.amazon_orders;
       const split = amazon
-        ? "(revenue and orders include Amazon's sales as a channel (amazon_revenue, amazon_orders): its shoppers aren't in sessions and the store's ads mostly drive its own site, so take them out for conversion and MER.)\n"
+        ? "(revenue and orders include Amazon's sales as a channel (amazon_revenue, amazon_orders): its shoppers aren't in sessions, its product costs aren't in cogs, and the store's ads mostly drive its own site, so take them out for conversion, margin and MER.)\n"
         : '';
       return note + (late ? `(sessions start on ${rows[first]!.date}: work out conversion from that day on; earlier orders have no traffic data.)\n` : '') + split + csv(rows);
     },

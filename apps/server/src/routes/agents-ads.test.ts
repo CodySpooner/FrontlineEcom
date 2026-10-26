@@ -1,4 +1,4 @@
-import { deleteMemory, fakeEngine, getAgent, listMemory, once, runAgent, updateAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
+import { deleteMemory, economics, fakeEngine, getAgent, listMemory, once, runAgent, updateAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
@@ -311,6 +311,18 @@ test('a late approval does not undo a budget the owner moved, nor pause a paused
   db.prepare(`INSERT INTO done_once (ref, at) VALUES ('not-applied:a-skip', '')`).run();
   await app.request('/api/commander');
   expect(outcomes()).toEqual([]);
+});
+
+test("break-even ROAS is the store's own site's: Amazon channel sales come without their product costs", () => {
+  const since = addDays(localDate(), -30);
+  const site = economics(db, 'glow', since);
+  for (const d of [1, 2, 3].map((n) => addDays(localDate(), -n))) {
+    db.prepare(`UPDATE daily_metrics SET revenue = revenue + 900, orders = orders + 30 WHERE store_id = 'glow' AND date = ?`).run(d); // as core's rebuild adds it
+    db.prepare(`INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('glow', 'amazon', ?, 900, 30)`).run(d);
+  }
+  const after = economics(db, 'glow', since);
+  expect(after.margin).toBeCloseTo(site.margin, 6);
+  expect(after.aov).toBeCloseTo(site.aov, 6);
 });
 
 test("Amazon sales as an extra channel don't count toward an ad change's outcome: the store's ads didn't make them", async () => {
