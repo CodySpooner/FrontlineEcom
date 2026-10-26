@@ -9,19 +9,25 @@ import { cx, Dialog, ErrorState, LoadingState, XPBar } from './ui';
 type XpMessage = Extract<LiveMessage, { type: 'xp' }>;
 type Toast = XpMessage & { key: number };
 
-/** A short synth blip; louder and higher on a level-up. */
-function blip(levelUp: boolean) {
+/** A short synth sting, one blip per note. */
+function sting(notes: number[], gain = 0.05) {
   const ctx = new AudioContext();
-  const o = ctx.createOscillator();
-  const g = ctx.createGain();
-  o.frequency.value = levelUp ? 880 : 660;
-  g.gain.setValueAtTime(levelUp ? 0.08 : 0.05, ctx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-  o.connect(g).connect(ctx.destination);
-  o.start();
-  o.stop(ctx.currentTime + 0.22);
-  o.onended = () => void ctx.close();
+  notes.forEach((hz, i) => {
+    const o = ctx.createOscillator();
+    const g = ctx.createGain();
+    const t = ctx.currentTime + i * 0.12;
+    o.frequency.value = hz;
+    g.gain.setValueAtTime(gain, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+    o.connect(g).connect(ctx.destination);
+    o.start(t);
+    o.stop(t + 0.22);
+    if (i === notes.length - 1) o.onended = () => void ctx.close();
+  });
 }
+
+// The server's reason for mission XP (agents-gamification.ts).
+const MISSION = 'Mission complete: ';
 
 /** Mount once (Shell): "+25 XP" toasts as agents and the owner earn XP. */
 export function XpToasts() {
@@ -34,8 +40,9 @@ export function XpToasts() {
       const m = (e as CustomEvent<XpMessage>).detail;
       const t = { ...m, key: ++key };
       setToasts((list) => [...list, t].slice(-3));
-      setTimeout(() => setToasts((list) => list.filter((x) => x.key !== t.key)), m.levelUp ? 6000 : 4000);
-      if (sound) blip(!!m.levelUp);
+      const mission = m.xp.reason.startsWith(MISSION);
+      setTimeout(() => setToasts((list) => list.filter((x) => x.key !== t.key)), m.levelUp ? 6000 : mission ? 5000 : 4000);
+      if (sound) sting(m.levelUp ? [880] : mission ? [660, 990] : [660], m.levelUp ? 0.08 : 0.05);
     };
     window.addEventListener('frontline:xp', on);
     return () => window.removeEventListener('frontline:xp', on);
@@ -45,14 +52,25 @@ export function XpToasts() {
       {toasts.map(({ key, xp, levelUp }) => {
         const role = xp.agentId?.split(':')[1] as AgentRole | undefined;
         const who = role && AGENT_ROLES[role] ? `${AGENT_ROLES[role].name}${xp.storeId ? ` · ${name(xp.storeId)}` : ''}` : 'Commander';
+        const mission = !levelUp && xp.reason.startsWith(MISSION) ? xp.reason.slice(MISSION.length) : undefined;
         return (
-          <div key={key} className={cx('card relative animate-rise overflow-hidden px-3.5 py-2.5', levelUp && 'border-red/60 shadow-glow-lg')}>
+          <div key={key} className={cx('card relative animate-rise overflow-hidden px-3.5 py-2.5', levelUp && 'border-red/60 shadow-glow-lg', mission && 'border-red/60')}>
             {levelUp && <span aria-hidden className="absolute top-1/2 left-8 size-24 -translate-y-1/2 animate-burst rounded-full border-2 border-red" />}
             {levelUp ? (
               <p className="relative">
                 <b className="block font-display text-sm tracking-[.12em] text-red uppercase">Level up!</b>
                 <span className="text-[13px]">
                   {who} reached LV {levelUp.level} · {levelUp.rank}
+                </span>
+              </p>
+            ) : mission ? (
+              <p>
+                <b className="flex items-baseline justify-between gap-2 font-display text-sm tracking-[.12em] text-red uppercase">
+                  Mission complete<span className="tracking-normal tabular-nums">+{xp.amount} XP</span>
+                </b>
+                <span className="block truncate text-[13px]">
+                  {mission}
+                  {xp.storeId && <span className="text-text-2"> · {name(xp.storeId)}</span>}
                 </span>
               </p>
             ) : (
