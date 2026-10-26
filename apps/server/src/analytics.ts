@@ -1,8 +1,9 @@
 import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, MetricTotals, ProductStatus, TopProduct } from '@frontline/shared';
 import type { Db } from './db';
-import { addDays } from './dates';
+import { addDays, dayFraction, dayNumber, localDate } from './dates';
 import { demoTopProducts } from './demo';
 import { fxFor } from './fx';
+import { storeZone } from './stores';
 
 export interface MetricRow {
   storeId: string;
@@ -89,8 +90,11 @@ export function summarize(rows: MetricRow[], { range, to, storeIds, todayFractio
   return { range, storeIds, from, to, totals, previous, deltas: deltasOf(totals, previous), series, byStore, funnel };
 }
 
-/** Loads both periods for the given stores from daily_metrics. `cogs` also carries the store's fee estimate, so profit nets it. */
-export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: string): MetricRow[] {
+/**
+ * Loads both periods for the given stores from daily_metrics, plus `pad` days either side. `cogs` also carries the store's
+ * fee estimate, so profit nets it.
+ */
+export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: string, pad = 0): MetricRow[] {
   if (!storeIds.length) return [];
   const { rate } = fxFor(db, storeIds);
   return (db
@@ -100,12 +104,33 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
        FROM daily_metrics d JOIN stores s ON s.id = d.store_id
        WHERE d.store_id IN (${storeIds.map(() => '?').join(',')}) AND d.date BETWEEN ? AND ?`,
     )
-    .all(...storeIds, addDays(to, 1 - 2 * range), to) as unknown as MetricRow[])
+    .all(...storeIds, addDays(to, 1 - 2 * range - pad), addDays(to, pad)) as unknown as MetricRow[])
     // A store with no exchange rate is left out (the summary lists its currency in `unconverted`).
     .flatMap((r) => {
       const x = rate(r.storeId);
       return !x ? [] : x === 1 ? [r] : [{ ...r, revenue: r.revenue * x, adSpend: r.adSpend * x, cogs: r.cogs * x }];
     });
+}
+
+/**
+ * The window ending today, for the dashboard: `to` is today in the first store's day zone (a connected shop's own
+ * timezone), and each store's rows are lined up on its own today (a store whose day is behind or ahead is shifted), with
+ * its share of its comparison day (`range` days back) made by now. ponytail: shifts of more than a day (zones 24 h+
+ * apart) fall outside the loaded rows.
+ */
+export function currentWindow(db: Db, storeIds: string[], range: AnalyticsRange, now = Date.now()) {
+  const to = localDate(new Date(now), storeZone(db, storeIds[0]));
+  const cutoff = new Date(now - range * 86_400_000);
+  const shift: Record<string, number> = {};
+  const todayFraction: Record<string, number> = {};
+  for (const id of storeIds) {
+    const tz = storeZone(db, id);
+    const today = localDate(new Date(now), tz);
+    shift[id] = dayNumber(to) - dayNumber(today);
+    Object.assign(todayFraction, salesShares(db, [id], addDays(today, -range), cutoff, dayFraction(today, now, tz)));
+  }
+  const rows = loadRows(db, storeIds, range, to, 1).map((r) => (shift[r.storeId] ? { ...r, date: addDays(r.date, shift[r.storeId]!) } : r));
+  return { to, todayFraction, rows };
 }
 
 const STATUS = (s: string): CampaignStats['status'] => (s === 'paused' ? 'paused' : s === 'archived' || s === 'deleted' || s === 'removed' ? 'archived' : 'active');

@@ -3,7 +3,7 @@ import type { AnalyticsSummary, CampaignStats, TopProduct } from '@frontline/sha
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { campaignStats, salesShares, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
+import { campaignStats, currentWindow, salesShares, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
 
 const row = (storeId: string, date: string, revenue: number, adSpend: number, cogs: number, orders: number): MetricRow => ({ storeId, date, revenue, adSpend, cogs, orders });
 
@@ -147,4 +147,27 @@ test("each store's share of a day's sales by a time of day comes from its paid o
   ord.run('#2', '2026-10-19T20:00:00Z', 90, 'paid');
   ord.run('#3', '2026-10-19T09:00:00Z', 500, 'refunded');
   expect(salesShares(db, ['glow', 'peak'], '2026-10-19', new Date('2026-10-19T12:00:00Z'), 0.5)).toEqual({ glow: 0.25, peak: 0.5 });
+});
+
+test("stores in different day zones each count their own today, and their own comparison day's share", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  // 03:00 UTC: Berlin is at 04:00 on the 26th, Honolulu still at 17:00 on the 25th.
+  const now = Date.parse('2026-10-26T03:00:00Z');
+  db.prepare("UPDATE stores SET demo = 0, currency = 'USD', timezone = ? WHERE id = ?").run('Europe/Berlin', 'glow');
+  db.prepare("UPDATE stores SET demo = 0, currency = 'USD', timezone = ? WHERE id = ?").run('Pacific/Honolulu', 'peak');
+  db.prepare("DELETE FROM daily_metrics WHERE store_id = 'peak'").run();
+  db.prepare("DELETE FROM orders WHERE store_id = 'peak'").run();
+  const day = db.prepare("INSERT INTO daily_metrics (store_id, date, revenue, ad_spend, cogs, orders) VALUES ('peak', ?, ?, 0, 0, 1)");
+  day.run('2026-10-25', 100); // Honolulu's today so far
+  day.run('2026-10-18', 240); // a week before: its comparison day
+  day.run('2026-10-11', 999); // outside both weeks
+
+  const w = currentWindow(db, ['glow', 'peak'], 7, now);
+  expect(w.to).toBe('2026-10-26'); // the first store's today
+  expect(w.rows.filter((r) => r.storeId === 'peak').map((r) => [r.date, r.revenue])).toEqual([['2026-10-19', 240], ['2026-10-26', 100]]);
+  expect(w.todayFraction.peak).toBeCloseTo(17 / 24, 3); // Honolulu's clock (no orders that day)
+  const peak = summarize(w.rows, { range: 7, to: w.to, storeIds: ['glow', 'peak'], todayFraction: w.todayFraction }).byStore[1]!;
+  expect(peak.totals.revenue).toBe(100);
+  expect(peak.previous.revenue).toBeCloseTo(170, 1); // 240 × 17/24, not a full day against a partial one
 });

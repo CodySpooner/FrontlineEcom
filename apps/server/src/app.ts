@@ -4,7 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { WebSocketServer } from 'ws';
 import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type ApprovalStatus, type StoreInput } from '@frontline/shared';
-import { campaignStats, loadRows, salesShares, summarize, topProducts } from './analytics';
+import { campaignStats, currentWindow, summarize, topProducts } from './analytics';
 import { decide, listApprovals } from './approvals';
 import { automationRoutes } from './automations';
 import { actionRoutes } from './actions';
@@ -16,7 +16,7 @@ import { demoSupplierProducts, searchCj } from './connectors/cj';
 import { listOrders, listProducts, setProductCost } from './catalog';
 import { competitorRoutes } from './competitors';
 import { dataDir, type Db } from './db';
-import { addDays, dayFraction, localDate } from './dates';
+import { addDays, localDate } from './dates';
 import { deleteIntegration, health, listIntegrations, saveIntegration } from './integrations';
 import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
@@ -35,17 +35,8 @@ const pickStores = (db: Db, q?: string) => {
 
 const json = (req: Request): Promise<unknown> => req.json().catch(() => undefined);
 
-/**
- * Today for an analytics window over `storeIds`, in the first store's day zone (a connected shop's own timezone), and
- * each store's share of the comparison day (`range` days back) made by the same time.
- * ponytail: one reference zone for a mix of stores; a store in another zone is off by its offset at the window edges.
- */
-const windowEnd = (db: Db, storeIds: string[], range = 1) => {
-  const tz = storeZone(db, storeIds[0]);
-  const now = Date.now();
-  const to = localDate(new Date(now), tz);
-  return { to, todayFraction: salesShares(db, storeIds, addDays(to, -range), new Date(now - range * 86_400_000), dayFraction(to, now, tz)) };
-};
+/** Today for an analytics window over `storeIds`, in the first store's day zone (a connected shop's own timezone). */
+const todayOf = (db: Db, storeIds: string[]) => localDate(new Date(), storeZone(db, storeIds[0]));
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const isLocal = (url: string) => URL.canParse(url) && LOCAL_HOSTS.has(new URL(url).hostname);
@@ -158,15 +149,15 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
       const storeIds = pickStores(db, c.req.query('stores'));
-      const { to, todayFraction } = windowEnd(db, storeIds, range);
+      const { to, todayFraction, rows } = currentWindow(db, storeIds, range);
       const { currency, unconverted } = fxFor(db, storeIds);
-      return c.json({ ...summarize(loadRows(db, storeIds, range, to), { range, to, storeIds, todayFraction }), currency, ...(unconverted.length ? { unconverted } : {}) });
+      return c.json({ ...summarize(rows, { range, to, storeIds, todayFraction }), currency, ...(unconverted.length ? { unconverted } : {}) });
     })
     .get('/api/analytics/campaigns', (c) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
       const storeIds = pickStores(db, c.req.query('stores'));
-      const { to } = windowEnd(db, storeIds);
+      const to = todayOf(db, storeIds);
       return c.json(campaignStats(db, storeIds, addDays(to, 1 - range), to));
     })
     .get('/api/analytics/top-products', (c) => {
@@ -174,7 +165,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
       const limit = Math.min(50, Math.max(1, Math.floor(Number(c.req.query('limit'))) || 8));
       const storeIds = pickStores(db, c.req.query('stores'));
-      const { to } = windowEnd(db, storeIds);
+      const to = todayOf(db, storeIds);
       return c.json(topProducts(db, storeIds, addDays(to, 1 - range), to, limit));
     })
     .route('/', researchRoutes(db))
