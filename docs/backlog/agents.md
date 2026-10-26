@@ -276,11 +276,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-150 The theme outcome check counts only days with traffic reported. It divided every order in the 14-day window by the sessions of the days that had any, so a store that connected GA4 mid-window read a high conversion before the change and a good theme "did not help".
 - [x] AGT-151 Higgsfield videos aren't labelled with an aspect they weren't made in. Its video endpoints (Kling 2.5, Hailuo 2.3; text- and image-to-video) take no aspect ratio, yet a video asked as 9:16 was saved and shown as 9:16, so the owner could run a landscape clip as a Reels/TikTok ad.
 - [x] AGT-152 One theme change at a time on the storefront. Only a waiting request blocked a second draft, so a new change could go live inside the last one's 14-day conversion window and both outcomes measured the mix (price tests and product pages already wait out theirs).
+- [x] AGT-153 A product page and a price test on one product don't overlap. Both are judged on the product's profit 14 days before vs after; each tool only checked its own kind, so a price change during a new page's window (or the reverse) was credited to whichever was judged.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-153: `propose_price_change` refuses while the product's new page went live in the last 29 days, and `publish_page` while a price test on it started in the last 29 (the draft waits in Store Builder) — the same span each already used for its own kind.
 - 2026-10-26 — AGT-152: `draft_theme_change` refuses (before copying the theme) while a theme change went live in the last 15 days, naming it and the day.
 - 2026-10-26 — AGT-151: a Higgsfield video/ugc render is saved without an aspect and the tool tells the agent to check its frame; images keep theirs (Soul takes `aspect_ratio`), demo renders keep theirs. A real 9:16 video would need image-to-video from a 9:16 Soul still; Higgsfield's docs don't say Kling keeps the input frame, so not built.
 - 2026-10-26 — AGT-150: `checkThemeOutcomes` sums orders (less Amazon channel orders, per day) and sessions over the days with sessions > 0 on each side.

@@ -701,6 +701,8 @@ export const APP_TOOLS: AppTool[] = [
       if (d.status !== 'draft' && d.status !== 'rejected') return `That draft is already ${d.status}.`;
       const gone = d.productId && productGone(ctx, d.productId);
       if (gone) return `Not sent: ${gone}`;
+      const test = d.productId && ctx.db.prepare('SELECT changed_on FROM price_tests WHERE store_id = ? AND product_id = ? AND changed_on >= ?').get(ctx.store.id, d.productId, since(29, ctx.store));
+      if (test) return `Not sent: a price test on this product has been running since ${String(test.changed_on)} and is judged on the same 14 days of sales; the page couldn't be told apart. The draft waits in Store Builder.`;
       const no = noStoreWrites(ctx.store, d.kind === 'product' && d.productId ? PRODUCT_PAGE_PLATFORMS : PRODUCT_WRITE_PLATFORMS);
       if (no) return no;
       const { approved, message } = await requestApproval(ctx, {
@@ -895,6 +897,11 @@ export const APP_TOOLS: AppTool[] = [
       // Overlapping tests on one product can't be judged apart.
       const running = ctx.db.prepare('SELECT changed_on FROM price_tests WHERE store_id = ? AND product_id = ? AND changed_on >= ?').get(ctx.store.id, productId, since(29, ctx.store));
       if (running) return `Not sent: a price test on this product has been running since ${running.changed_on}; it is judged after 14 days of sales.`;
+      // A new product page is judged on the same 14-days-before-vs-after profit: a price change in it can't be told apart.
+      const page = ctx.db
+        .prepare('SELECT published_at FROM page_drafts WHERE store_id = ? AND product_id = ? AND published_at >= ? ORDER BY published_at DESC LIMIT 1')
+        .get(ctx.store.id, productId, since(29, ctx.store));
+      if (page) return `Not sent: this product's new page went live on ${String(page.published_at).slice(0, 10)} and is judged on 14 days of sales after it; a price test now couldn't be told apart.`;
       const pending = ctx.db
         .prepare(`SELECT 1 FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') = 'store.set_price' AND json_extract(action_json, '$.payload.productId') = ?`)
         .get(ctx.store.id, productId);

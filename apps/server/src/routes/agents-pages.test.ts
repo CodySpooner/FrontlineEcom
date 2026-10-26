@@ -208,6 +208,25 @@ test('discarding a draft whose publish request waits denies the request (approvi
   expect(db.prepare('SELECT status, decision_note FROM approvals WHERE id = ?').get(approvalId!)).toEqual({ status: 'denied', decision_note: 'The owner discarded the draft in the Store Builder.' });
 }, 3000);
 
+test("a page and a price test on one product don't overlap: neither could be judged", async () => {
+  await run(() => [draft()]);
+  const id = listPageDrafts(db)[0]!.id;
+  const started = new Date(Date.now() - 5 * 86_400_000).toISOString().slice(0, 10);
+  db.prepare(`INSERT INTO price_tests (approval_id, store_id, product_id, agent_id, title, from_price, to_price, changed_on) VALUES ('a-p', 'glow', 'p-new', 'glow:market_analyst', 'Ice roller', 17.9, 19.9, ?)`).run(started);
+  expect(await run(() => [{ call: 'publish_page', input: { draftId: id } }], 'approve')).toEqual([
+    `Not sent: a price test on this product has been running since ${started} and is judged on the same 14 days of sales; the page couldn't be told apart. The draft waits in Store Builder.`,
+  ]);
+  db.prepare(`DELETE FROM price_tests`).run();
+  expect((await run(() => [{ call: 'publish_page', input: { draftId: id } }], 'approve'))[0]).toMatch(/^Approved by the owner/);
+  const agent = getAgent(db, 'glow:market_analyst')!;
+  const out: string[] = [];
+  const steps: FakeStep[] = [{ call: 'propose_price_change', input: { productId: 'p-new', newPrice: 21.9, evidence: 'Converts 3.1% at $19.90; rivals at $22-24' } }];
+  for await (const e of runAgent({ agent, store: getStore(db, 'glow')!, task: 't', env: toolEnv(db) }, fakeEngine(() => steps)) as AsyncIterable<AgentEvent>) {
+    if (e.type === 'tool_result') out.push(e.output);
+  }
+  expect(out[0]).toMatch(/^Not sent: this product's new page went live on \d{4}-\d{2}-\d{2} and is judged on 14 days of sales after it/);
+});
+
 test('best sellers come first, and a product gets one page test at a time', async () => {
   db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', 'o-roller', ?, 39.8, 'paid', 'delivered', date('now'))`).run(new Date().toISOString());
   db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('glow', 'o-roller', 'p-new', 2, 39.8, 5.2)`).run();
