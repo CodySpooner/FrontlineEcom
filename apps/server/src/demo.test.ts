@@ -198,3 +198,15 @@ test("each demo store's Creative Studio starts with two images, a video and a co
   seedCreatives(db); // later startups don't add more, even to a library the owner emptied
   expect(count(db, 'SELECT count(*) AS n FROM creatives')).toBe(8);
 });
+
+test("a store that goes real drops its demo competitors (and their made-up prices), but keeps the ones the owner added", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  seedCompetitors(db, '2026-10-26');
+  db.prepare("INSERT INTO competitors (id, store_id, name, url, created_at) VALUES ('c-mine', 'glow', 'Mine', 'https://mine.com', '2026-10-26T00:00:00Z')").run();
+  switchToReal(db, 'glow');
+  seedCompetitors(db, '2026-10-26'); // a later start doesn't bring them back
+  expect(db.prepare("SELECT id FROM competitors WHERE store_id = 'glow'").all()).toEqual([{ id: 'c-mine' }]);
+  expect(count(db, "SELECT count(*) AS n FROM competitor_snapshots s LEFT JOIN competitors c ON c.id = s.competitor_id WHERE c.id IS NULL")).toBe(0);
+  expect(count(db, "SELECT count(*) AS n FROM competitors WHERE store_id = 'peak'")).toBeGreaterThan(0);
+});
