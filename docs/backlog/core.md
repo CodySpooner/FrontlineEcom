@@ -169,6 +169,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-82 follow-up (perf): the per-day `tt-` count made SQLite walk the store's tt- orders by id for every day: a 1Y summary over a 100k-order store took 5.4 s. `+o.id` keeps it on `orders_by_day`: 34 ms (measured with a throwaway test, deleted).
 - 2026-10-26 — CORE-82: `loadRows` counts a day's paid `tt-` orders of a store on another platform as channel orders, as Amazon's are: the funnel (site conversion) leaves them out, since their shoppers never saw the site's sessions, and they don't pay the site's per-order fee. They keep their own line costs and the store's fee % (`ponytail:` noted). README updated.
 - 2026-10-26 — CORE-81: `setProductCost` refused every product of a connected Shopify store ("Shopify keeps unit costs"), including the `tt-`/`amz-` products of a TikTok Shop or Amazon connected next to it (UI-121), which have no Shopify cost: their profit stayed at 100% margin with no way to fix it. Only Shopify's own products (numeric ids) are refused now.
 - 2026-10-26 — CORE-80: an Etsy receipt's total was net of partial refunds but its lines weren't, so per-product revenue and profit overstated them. Etsy's refunds name no lines, so each line keeps its share of what the buyer kept (total ÷ grand total); a shipping-only refund lowers them too (`ponytail:` noted).

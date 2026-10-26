@@ -113,7 +113,8 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
     `iif(s.platform = 'amazon', 0, (SELECT coalesce(sum(c.${col}), 0) FROM channel_daily c WHERE c.store_id = d.store_id AND c.date = d.date))`;
   // TikTok Shop next to the site keeps its orders (tt-) with their own costs: they leave only the funnel and the site's
   // per-order fee. ponytail: the store's fee % still applies to them, for TikTok's own commission.
-  const tiktokOrders = `iif(s.platform = 'tiktok_shop', 0, (SELECT count(*) FROM orders o WHERE o.store_id = d.store_id AND o.local_date = d.date AND o.status = 'paid' AND o.id GLOB 'tt-*'))`;
+  // `+o.id` keeps SQLite on the day index: on the id index a 1Y view of a 100k-order store took 5 s instead of 35 ms.
+  const tiktokOrders = `iif(s.platform = 'tiktok_shop', 0, (SELECT count(*) FROM orders o WHERE o.store_id = d.store_id AND o.local_date = d.date AND o.status = 'paid' AND +o.id GLOB 'tt-*'))`;
   const ratios = new Map<string, number>();
   const ratio = (storeId: string) => {
     if (!ratios.has(storeId)) {
