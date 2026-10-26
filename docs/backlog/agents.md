@@ -102,11 +102,11 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-51 A runaway real-engine run can't burn past the store's daily AI budget: the cap was only checked when a run started.
 - [x] AGT-52 Ask AI across stores: the palette asks one store's Market Analyst, which could only see that store.
 - [x] AGT-53 Achievements for measured wins: the strongest moment in the loop had XP but no badge.
-- [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
 
 ## Blocked
+- AGT-19 (later) Codex as an alternate engine for Store Developer code work. Blocked on a place for that code to go: whichever engine writes it, theme sections and snippets need core's Shopify theme-files connector (requested in core's Inbox: list, read and upsert files on an unpublished theme copy with a preview). After that: a `draft_theme_change` tool and Store Builder approvals, then optionally `codex exec --json` as the engine for that role when the owner has Codex installed.
 
 ## Done
 - 2026-10-26 — AGT-53 New achievements "First Measured Win" (+100) and "Proven Squad" (10 wins, +300), counted from XP awards whose reason starts "Measured win:". That covers ad, product, price and page wins. `Facts.wins` is added.
