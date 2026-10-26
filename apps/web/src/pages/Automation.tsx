@@ -3,7 +3,8 @@ import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { CalendarClock, History, Plus, TrendingDown, Zap } from 'lucide-react';
 import { AGENT_ROLES, type ActionKind, type AgentRole, type AutomationRule, type AutomationRunStatus, type AutomationTrigger, type MetricTotals } from '@frontline/shared';
-import { useActionLog, useAutomationActions, useAutomationRuns, useAutomations } from '../api/client';
+import { useActionLog, useApprovals, useAutomationActions, useAutomationRuns, useAutomations } from '../api/client';
+import { ApprovalCard } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, Segmented, Switch } from '../components/ui';
@@ -134,9 +135,10 @@ function RuleRow({ r, onEdit }: { r: AutomationRule; onEdit: () => void }) {
   );
 }
 
-function RunLog({ rules }: { rules: AutomationRule[] }) {
+export function RunLog({ rules }: { rules: AutomationRule[] }) {
   const { has, name } = useStoreSelection();
   const q = useAutomationRuns();
+  const pending = useApprovals().data;
   const rule = new Map(rules.map((r) => [r.id, r]));
   const runs = (q.data ?? []).filter((x) => has(x.storeId));
   return (
@@ -153,6 +155,7 @@ function RunLog({ rules }: { rules: AutomationRule[] }) {
         <ol className="grid gap-2">
           {runs.map((x) => {
             const r = rule.get(x.ruleId);
+            const ask = x.status === 'awaiting_approval' ? pending?.find((a) => a.id === x.approvalId) : undefined;
             return (
               <li key={x.id} className="rounded-lg border border-line bg-bg-2 px-3 py-2">
                 <div className="flex items-center justify-between gap-2">
@@ -168,10 +171,16 @@ function RunLog({ rules }: { rules: AutomationRule[] }) {
                     Open the run
                   </Link>
                 )}
-                {x.status === 'awaiting_approval' && (
-                  <Link to="/" className="mt-1 inline-block text-xs text-red hover:underline">
-                    Review it on the Dashboard
-                  </Link>
+                {ask ? (
+                  <div className="mt-2">
+                    <ApprovalCard a={ask} />
+                  </div>
+                ) : (
+                  x.status === 'awaiting_approval' && (
+                    <Link to="/" className="mt-1 inline-block text-xs text-red hover:underline">
+                      Review it on the Dashboard
+                    </Link>
+                  )
                 )}
               </li>
             );
