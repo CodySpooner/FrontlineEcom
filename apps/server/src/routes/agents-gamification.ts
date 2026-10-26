@@ -193,6 +193,37 @@ export function checkPageOutcomes(db: Db, today = localDate()) {
   }
 }
 
+/** Theme changes that went live 15+ days ago: store conversion rate in the 14 days after vs the 14 before, once each. */
+// ponytail: any lift counts as a win, no significance test; small stores need a few thousand sessions a side to mean much.
+export function checkThemeOutcomes(db: Db, today = localDate()) {
+  const live = db
+    .prepare(
+      `SELECT a.id, a.store_id, a.agent_id, a.run_id, a.title, substr(o.at, 1, 10) AS day FROM approvals a
+       JOIN done_once o ON o.ref = 'theme-live:' || a.id JOIN stores s ON s.id = a.store_id
+       WHERE s.demo = 0 AND substr(o.at, 1, 10) <= ?`,
+    )
+    .all(addDays(today, -15));
+  const funnel = db.prepare('SELECT coalesce(sum(orders), 0) AS orders, coalesce(sum(sessions), 0) AS sessions FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?');
+  for (const t of live) {
+    if (!once(db, `theme-outcome:${t.id}`)) continue;
+    const [storeId, agentId, day] = [String(t.store_id), String(t.agent_id), String(t.day)];
+    const before = funnel.get(storeId, addDays(day, -14), addDays(day, -1))!;
+    const after = funnel.get(storeId, addDays(day, 1), addDays(day, 14))!;
+    if (!Number(before.sessions) || !Number(after.sessions)) continue;
+    const [cr0, cr1] = [Number(before.orders) / Number(before.sessions), Number(after.orders) / Number(after.sessions)];
+    const worked = cr1 > cr0;
+    const pct = (x: number) => `${(x * 100).toFixed(2)}%`;
+    const name = String(t.title).replace(/^Publish theme change: /, '');
+    recordOutcome(db, `theme:${t.id}`, worked, {
+      storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'theme'],
+      text: `The theme change "${name}" ${worked ? 'worked' : 'did not help'}: conversion ${pct(cr0)} → ${pct(cr1)} (14 days before vs after, ${Number(before.sessions).toLocaleString('en-US')} → ${Number(after.sessions).toLocaleString('en-US')} sessions).`,
+      evidence: `daily metrics ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.id})`,
+    });
+    if (t.run_id) judgeRun(db, `theme:${t.id}`, String(t.run_id), worked);
+    if (worked) award(db, { ref: `theme-win:${t.id}`, amount: XP.win, storeId, agentId, reason: `Measured win: the theme change "${name}" lifted conversion` });
+  }
+}
+
 function facts(db: Db): Facts {
   const ids = listStores(db).map((s) => s.id);
   const best = (totals: MetricTotals[], k: keyof MetricTotals) => Math.max(0, ...totals.map((t) => t[k]));
@@ -255,6 +286,7 @@ export function gamificationRoutes(db: Db) {
     checkProductOutcomes(db);
     checkPriceOutcomes(db);
     checkPageOutcomes(db);
+    checkThemeOutcomes(db);
     return checkAchievements(db, facts(db), (a) => award(db, a));
   };
   return new Hono()

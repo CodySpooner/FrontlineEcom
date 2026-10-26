@@ -1,4 +1,4 @@
-import { getPageDraft, markPublished } from '@frontline/agents';
+import { getPageDraft, markPublished, once } from '@frontline/agents';
 import type { AdNetwork, ApprovalRequest, PageDraft } from '@frontline/shared';
 import type { Db } from '../db';
 import { subscribe } from '../live';
@@ -190,6 +190,7 @@ export async function publishThemeChange(db: Db, a: ApprovalRequest, publish: (s
   if (!store || typeof p.themeId !== 'string') return;
   try {
     await publish(store.id, p.themeId);
+    once(db, `theme-live:${a.id}`); // when it went live: the outcome check measures from here
   } catch (e) {
     notify(db, { kind: 'error', title: `Couldn't publish the theme on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Publish "${String(p.name ?? p.themeId)}" by hand in Online Store > Themes.`, storeId: store.id });
   }

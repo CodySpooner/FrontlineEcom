@@ -1,13 +1,15 @@
-import { fakeEngine, getAgent, runAgent, type FakeStep, type ToolEnv } from '@frontline/agents';
+import { fakeEngine, getAgent, listMemory, runAgent, type FakeStep, type ToolEnv } from '@frontline/agents';
 import type { AgentEvent, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
+import { addDays, localDate } from '../dates';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
 import { draftThemeCopy, publishThemeChange } from './agents-actions';
+import { checkThemeOutcomes } from './agents-gamification';
 
 let db: Db;
 beforeEach(() => {
@@ -114,4 +116,27 @@ test('publishThemeChange publishes the approved copy', async () => {
   await publishThemeChange(db, a, async (storeId, themeId) => published.push(`${storeId} ${themeId}`));
   expect(published).toEqual(['glow 9']);
   expect(db.prepare(`SELECT count(*) AS n FROM notifications WHERE title LIKE 'Couldn''t publish%'`).get()?.n).toBe(0);
+});
+
+test('a published theme change is judged on store conversion, 14 days before vs after, once', async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'glow'`).run();
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('a1', 'glow', 'glow:store_developer', 'run-t', 'Publish theme change: Sticky ATC', 'r', ?, 'approved', ?)`).run(
+    JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9', name: 'Frontline: Sticky ATC' } }),
+    new Date().toISOString(),
+  );
+  await publishThemeChange(db, { id: 'a1', storeId: 'glow', title: 'Publish theme change: Sticky ATC', action: { kind: 'store.publish_theme', payload: { themeId: '9' } } } as ApprovalRequest, async () => {});
+  const day = addDays(localDate(), -20);
+  db.prepare(`UPDATE done_once SET at = ? WHERE ref = 'theme-live:a1'`).run(`${day}T15:00:00Z`);
+  const window = (from: number, to: number, orders: number, sessions: number) =>
+    db.prepare(`UPDATE daily_metrics SET orders = ?, sessions = ? WHERE store_id = 'glow' AND date BETWEEN ? AND ?`).run(orders, sessions, addDays(day, from), addDays(day, to));
+  window(-14, -1, 20, 1000); // 2.00%
+  window(1, 14, 25, 1000); // 2.50%
+  const xp = getAgent(db, 'glow:store_developer')!.xp;
+  checkThemeOutcomes(db);
+  checkThemeOutcomes(db);
+  expect(listMemory(db, 'glow').filter((m) => m.tags.includes('theme')).map((m) => m.text)).toEqual([
+    'The theme change "Sticky ATC" worked: conversion 2.00% → 2.50% (14 days before vs after, 14,000 → 14,000 sessions).',
+  ]);
+  expect(db.prepare(`SELECT count(*) AS n FROM notifications WHERE title = 'Measured win: Store Developer'`).get()?.n).toBe(1);
+  expect(getAgent(db, 'glow:store_developer')!.xp).toBeGreaterThan(xp);
 });
