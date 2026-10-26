@@ -104,6 +104,18 @@ test('store_summary names the Amazon channel sales in its totals', async () => {
   }
 });
 
+test('list_products shows a unit cost nobody set as "not set", with no margin, not a 97% margin', async () => {
+  const p = db.prepare(`SELECT id, cost FROM products WHERE store_id = 'glow' ORDER BY price DESC LIMIT 1`).get()!;
+  db.prepare(`UPDATE products SET cost = 0 WHERE store_id = 'glow' AND id = ?`).run(String(p.id));
+  try {
+    const [out] = results(await run(input('glow', 'market_analyst'), [{ call: 'list_products', input: { limit: 500 } }]));
+    const row = out!.output.split('\n').find((r) => r.startsWith(`${String(p.id)},`))!.split(',');
+    expect([row[4], row[5]]).toEqual(['not set', '']);
+  } finally {
+    db.prepare(`UPDATE products SET cost = ? WHERE store_id = 'glow' AND id = ?`).run(Number(p.cost), String(p.id)); // the db is shared by these tests
+  }
+});
+
 test("list_products says the Amazon channel's sales aren't in its per-product numbers", async () => {
   const products = async () => results(await run(input('glow', 'market_analyst'), [{ call: 'list_products', input: { limit: 1 } }]))[0]!.output.split('\n')[0];
   expect(await products()).toMatch(/^id,title,/);

@@ -57,6 +57,17 @@ test('a price test is checked, approved and applied to a demo store', async () =
   expect(await run('glow', [price(id, cost)])).toEqual([`Not sent: ${cost} EUR is at or below the unit cost (${cost} EUR).`]);
 });
 
+test("a product with no unit cost set has no floor to check, and the owner is told so", async () => {
+  const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'glow' ORDER BY price DESC LIMIT 1`).get()!;
+  db.prepare(`UPDATE products SET cost = 0 WHERE store_id = 'glow' AND id = ?`).run(String(p.id)); // Shopify's empty "Cost per item"
+  const to = Math.round(Number(p.price) * 0.75 * 100) / 100;
+  const [out] = await run('glow', [price(String(p.id), to)]);
+  expect(out).toMatch(/^Approved by the owner: /);
+  expect(String(db.prepare(`SELECT reason FROM approvals WHERE json_extract(action_json, '$.kind') = 'store.set_price'`).get()?.reason)).toBe(
+    "Converts 3.1% at current price; competitors sell at $34-39 No unit cost is set for this product, so the app can't check the new price covers it, and its profit is judged before product cost.",
+  );
+});
+
 test('an archived product (deleted on the platform) gets no price test', async () => {
   const id = String(db.prepare(`SELECT id FROM products WHERE store_id = 'glow' AND cost IS NOT NULL LIMIT 1`).get()!.id);
   db.prepare(`UPDATE products SET status = 'archived' WHERE store_id = 'glow' AND id = ?`).run(id);

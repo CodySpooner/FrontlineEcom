@@ -224,7 +224,7 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'list_products',
     description:
-      'The store catalog, best sellers first: price, compare-at, unit cost, margin % (after unit cost and the fee estimate set for the store: its % plus its per-order fee, as if one unit per order), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last 30 days, revenue net of Amazon refunds (CSV).',
+      'The store catalog, best sellers first: price, compare-at, unit cost ("not set" when nobody entered one; margin then blank), margin % (after unit cost and the fee estimate set for the store: its % plus its per-order fee, as if one unit per order), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last 30 days, revenue net of Amazon refunds (CSV).',
     input: {
       status: z.enum(['active', 'draft', 'archived']).optional().describe('default: active and draft (archived = deleted or trashed on the platform)'),
       limit: z.number().int().min(1).max(500).default(100),
@@ -234,8 +234,8 @@ export const APP_TOOLS: AppTool[] = [
       csv(
         ctx.db
           .prepare(
-            `SELECT p.id, p.title, p.price, p.compare_at, p.cost,
-               round(100.0 * (p.price * (1 - (SELECT fee_percent FROM stores WHERE id = p.store_id) / 100.0) - (SELECT fee_per_order FROM stores WHERE id = p.store_id) - p.cost) / nullif(p.price, 0), 1) AS margin_pct,
+            `SELECT p.id, p.title, p.price, p.compare_at, iif(p.cost > 0, p.cost, 'not set') AS cost,
+               iif(p.cost > 0, round(100.0 * (p.price * (1 - (SELECT fee_percent FROM stores WHERE id = p.store_id) / 100.0) - (SELECT fee_per_order FROM stores WHERE id = p.store_id) - p.cost) / nullif(p.price, 0), 1), NULL) AS margin_pct,
                CASE WHEN p.inventory_tracked THEN p.inventory ELSE 'not tracked' END AS inventory, p.status,
                coalesce(s.units, 0) AS units_30d, round(coalesce(s.revenue, 0), 2) AS revenue_30d
              FROM products p LEFT JOIN (
@@ -842,7 +842,9 @@ export const APP_TOOLS: AppTool[] = [
       // The lowest price that still covers the unit and the store's fee estimate. ponytail: the per-order fee is counted
       // per unit, so a multi-unit order's floor is a little high.
       const fees = ctx.store.feePercent || ctx.store.feePerOrder;
-      const floor = p.cost == null ? undefined : r2((Number(p.cost) + (ctx.store.feePerOrder ?? 0)) / (1 - (ctx.store.feePercent ?? 0) / 100));
+      // A cost of 0 is one nobody set (Shopify's empty "Cost per item"; Etsy and TikTok Shop send none): no floor to check.
+      const costed = Number(p.cost) > 0;
+      const floor = !costed ? undefined : r2((Number(p.cost) + (ctx.store.feePerOrder ?? 0)) / (1 - (ctx.store.feePercent ?? 0) / 100));
       if (floor !== undefined && to <= floor) return `Not sent: ${$(to)} is at or below the unit cost${fees ? ' plus fees' : ''} (${$(floor)}).`;
       if (Math.abs(to - from) / from > 0.3) return 'Not sent: test within ±30% of the current price, one step at a time.';
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
@@ -859,7 +861,7 @@ export const APP_TOOLS: AppTool[] = [
       if (pending) return 'Not sent: a price change for this product is already waiting for the owner.';
       const { approved, message } = await requestApproval(ctx, {
         title: `Price ${String(p.title)} ${$(from)} → ${$(to)}`.slice(0, 80),
-        reason: evidence,
+        reason: costed ? evidence : `${evidence} No unit cost is set for this product, so the app can't check the new price covers it, and its profit is judged before product cost.`,
         action: { kind: 'store.set_price', payload: { productId, title: String(p.title), from, to, ...(compareAt ? { compareAt: r2(compareAt) } : {}) } },
       });
       return approved ? `${message}. It will be applied to the store and judged on 14 days of sales after vs before.` : message;
