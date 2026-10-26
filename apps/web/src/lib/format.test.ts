@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ago, cents, day, money, shortMoney, signedPct } from './format';
+import { ago, cents, day, money, noBaseline, shortMoney, signedPct } from './format';
 
 describe('format', () => {
   it('formats money with a real minus sign for losses', () => {
@@ -32,5 +32,13 @@ describe('format', () => {
   });
   it('parses YYYY-MM-DD as a local date', () => {
     expect(day('2026-10-26').getDate()).toBe(26);
+  });
+});
+
+describe('noBaseline', () => {
+  it('flags a change measured against an empty previous period', () => {
+    expect(noBaseline(0, 974)).toBe(true);
+    expect(noBaseline(0, 0)).toBe(false);
+    expect(noBaseline(500, 974)).toBe(false);
   });
 });

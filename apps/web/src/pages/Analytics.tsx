@@ -10,7 +10,7 @@ import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/S
 import { Badge, ErrorState, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
 import { breakEvenRoas, byNetwork, rate, roasTone } from '../lib/analytics';
 import { PERIOD, RANGES, weekly } from '../lib/chart';
-import { fmtDay, money, signedPct } from '../lib/format';
+import { fmtDay, money, noBaseline, signedPct } from '../lib/format';
 import { NAV } from '../nav';
 
 type Metric = 'revenue' | 'profit' | 'adSpend';
@@ -81,7 +81,8 @@ function Trend({ s, be }: { s: AnalyticsSummary; be: number }) {
   const [metric, setMetric] = useState<Metric>('revenue');
   const daily = s.series.map((d) => ({ date: d.date, value: d[metric] }));
   const d = s.deltas[metric];
-  const tone = metric === 'adSpend' || Math.abs(d) < 0.05 ? 'text-muted' : d > 0 ? 'text-good' : 'text-red';
+  const fresh = noBaseline(s.previous[metric], s.totals[metric]);
+  const tone = fresh || metric === 'adSpend' || Math.abs(d) < 0.05 ? 'text-muted' : d > 0 ? 'text-good' : 'text-red';
   const label = METRICS.find((m) => m.value === metric)!.label;
   return (
     <Panel
@@ -91,8 +92,8 @@ function Trend({ s, be }: { s: AnalyticsSummary; be: number }) {
     >
       <p className="mb-2 flex items-baseline gap-2">
         <b className="font-display text-2xl tabular-nums">{money(s.totals[metric], s.currency)}</b>
-        <span className={cx('text-xs font-semibold tabular-nums', tone)}>{signedPct(d)}</span>
-        <span className="text-xs text-muted">vs previous period</span>
+        <span className={cx('text-xs font-semibold tabular-nums', tone)}>{fresh ? 'New' : signedPct(d)}</span>
+        <span className="text-xs text-muted">{fresh ? 'nothing in the previous period' : 'vs previous period'}</span>
       </p>
       <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} partial currency={s.currency} label={`${label}, ${PERIOD[s.range]}: ${money(s.totals[metric], s.currency)} total`} />
       <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-line pt-3 text-[13px] min-[620px]:grid-cols-4">

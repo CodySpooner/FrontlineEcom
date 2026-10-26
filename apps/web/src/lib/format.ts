@@ -22,6 +22,9 @@ export const signedPct = (d: number) => {
   return (r < 0 ? '−' : '+') + Math.abs(r).toFixed(1) + '%';
 };
 
+/** Nothing in the previous period to compare with (the API sends a 0% change then): show "New", not "+0.0%". */
+export const noBaseline = (prev: number, now: number) => prev === 0 && now !== 0;
+
 /** "2 min ago", "3 h ago", "4 d ago" */
 export function ago(iso: string, now = Date.now()) {
   const m = Math.max(0, Math.floor((now - Date.parse(iso)) / 60_000));

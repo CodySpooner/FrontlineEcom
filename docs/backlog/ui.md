@@ -126,7 +126,7 @@ Orca's browser against the reference before ticking it.
       `dashboard-mockup-v3.html` + `ui-reference.webp` at 1440 and fix what drifted (spacing, order, hierarchy).
 - [x] UI-39 Narrow check (Orca 800px) of what landed since the last sweep: bell drawer request cards, agent Schedule
       panel, mission toast, skip link, Reconnecting status. No page-level horizontal scroll, nothing clipped.
-- [ ] UI-40 Zero-data store: a just-connected store mid-first-sync (no metrics, orders, products) renders KPIs,
+- [x] UI-40 Zero-data store: a just-connected store mid-first-sync (no metrics, orders, products) renders KPIs,
       sparklines and charts without NaN/Infinity/"$NaN" or broken SVG paths; chart helpers tested with empty series.
 
 ## Blocked
@@ -190,3 +190,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-37: console sweep found nothing to fix. Full loads of all 12 pages + agent chat/flows + 404, bell drawer, Commander profile, 1Y range, Ctrl+K with a question, Automation rule editor, Research tabs, Settings add store, onboarding → Explore the demo: browser console had only the React DevTools info line; `pnpm check` output has no act/key/nesting warnings
 - 2026-10-26 — UI-38: Dashboard re-compared with mockup v3 + reference at 1440. Layout, panel order and hierarchy still match. One drift fixed: the revenue axis drew quarters of a "nice" max ($750 / $1.5K / $2.3K, where $2.3K was really 2,250). `niceTicks` (3–5 steps of 1/2/5×10ⁿ, tested) now gives $0/$1K/$2K/$3K (1Y: $5K steps), and Analytics gets it too. Left as is: the AI Agents panel stretches to the Requests panel height (same in the mockup)
 - 2026-10-26 — UI-39: Orca 800px. Agent Schedule panel and bell drawer (440px, request cards) fit with no page or panel overflow, and the skip link sits over the collapsed logo. Found and fixed: XP/mission toasts rendered under any open modal (blurred behind the drawer, where approving earns XP). The toast stack is now a manual popover, re-shown per toast so it sits above the modal; checked over the open drawer. Schedule rows: trigger line brighter than the agent-prompt line. Note: System Status (and so "Reconnecting…") is hidden below 900px, as before
+- 2026-10-26 — UI-40: zero-data fixture store (ui-fx-empty; generated rows deleted, store deleted after, no rows left). All 11 pages had no NaN/Infinity/undefined text and no NaN SVG attributes (empty sparklines/charts handled; `niceTicks(0)` tested). Fixed: a period with nothing before it showed a green "+0.0%". KPI tiles and the Analytics headline now say a muted "New" (grey sparkline, sr text) via `noBaseline(prev, now)` (tested). The per-store table keeps the muted +0.0% (byStore has no `previous`)

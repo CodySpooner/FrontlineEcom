@@ -12,7 +12,7 @@ import { Hero } from '../components/Hero';
 import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
 import { PERIOD, RANGES, sparkPoints, weekly } from '../lib/chart';
-import { ago, cents, money, signedPct } from '../lib/format';
+import { ago, cents, money, noBaseline, signedPct } from '../lib/format';
 import { NAV } from '../nav';
 
 export function Dashboard() {
@@ -77,12 +77,13 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
         ))}
       </div>
     );
-  const { totals: t, deltas: d } = s;
+  const { totals: t, deltas: d, previous: p } = s;
+  const fresh = (k: keyof typeof t) => noBaseline(p[k], t[k]);
   // Sparklines leave out today: a day in progress reads like a crash at the right edge.
   const series = s.series.slice(0, -1);
   return (
     <div className={cx(grid, 'transition-opacity', q.isPlaceholderData && 'opacity-60')}>
-      <Kpi label="Total Revenue" value={money(t.revenue, s.currency)} d={d.revenue} series={series.map((p) => p.revenue)} />
+      <Kpi label="Total Revenue" value={money(t.revenue, s.currency)} d={d.revenue} fresh={fresh('revenue')} series={series.map((p) => p.revenue)} />
       <Kpi
         hero
         label={
@@ -94,17 +95,17 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
         }
         value={money(t.profit, s.currency)}
         negative={t.profit < 0}
-        d={d.profit}
+        d={d.profit} fresh={fresh('profit')}
         series={series.map((p) => p.profit)}
       />
-      <Kpi label="Ad Spend" value={money(t.adSpend, s.currency)} d={d.adSpend} series={series.map((p) => p.adSpend)} />
-      <Kpi label="ROAS" value={`${t.roas.toFixed(1)}x`} d={d.roas} series={series.map((p) => p.roas)} />
-      <Kpi label="Total Orders" extra={`AOV ${cents(t.aov, s.currency)}`} value={t.orders.toLocaleString('en-US')} d={d.orders} series={series.map((p) => p.orders)} />
+      <Kpi label="Ad Spend" value={money(t.adSpend, s.currency)} d={d.adSpend} fresh={fresh('adSpend')} series={series.map((p) => p.adSpend)} />
+      <Kpi label="ROAS" value={`${t.roas.toFixed(1)}x`} d={d.roas} fresh={fresh('roas')} series={series.map((p) => p.roas)} />
+      <Kpi label="Total Orders" extra={`AOV ${cents(t.aov, s.currency)}`} value={t.orders.toLocaleString('en-US')} d={d.orders} fresh={fresh('orders')} series={series.map((p) => p.orders)} />
     </div>
   );
 }
 
-function Kpi({ label, extra, value, d, series, hero, negative }: { label: ReactNode; extra?: string; value: string; d: number; series: number[]; hero?: boolean; negative?: boolean }) {
+function Kpi({ label, extra, value, d, fresh, series, hero, negative }: { label: ReactNode; extra?: string; value: string; d: number; fresh?: boolean; series: number[]; hero?: boolean; negative?: boolean }) {
   const up = Math.round(d * 10) >= 0; // same rounding as signedPct, so "+0.0%" is never red
   return (
     <div
@@ -118,12 +119,12 @@ function Kpi({ label, extra, value, d, series, hero, negative }: { label: ReactN
         {extra && <span className="truncate text-muted">{extra}</span>}
       </div>
       <div className={cx('col-start-1 row-start-2 mt-1 font-display text-[25px] leading-tight font-bold whitespace-nowrap', negative && 'text-red')}>{value}</div>
-      <div className={cx('col-start-1 row-start-3 mt-0.5 text-[13px] font-semibold', up ? 'text-good' : 'text-red')}>
-        {signedPct(d)}
-        <span className="sr-only"> vs previous period</span>
+      <div className={cx('col-start-1 row-start-3 mt-0.5 text-[13px] font-semibold', fresh ? 'text-muted' : up ? 'text-good' : 'text-red')}>
+        {fresh ? 'New' : signedPct(d)}
+        <span className="sr-only">{fresh ? ', nothing in the previous period to compare with' : ' vs previous period'}</span>
       </div>
       <svg className="col-start-2 row-span-2 row-start-2 h-[34px] w-full self-center overflow-visible" viewBox="0 0 100 30" preserveAspectRatio="none" aria-hidden="true">
-        <polyline points={sparkPoints(series)} fill="none" stroke={up ? 'var(--color-good)' : 'var(--color-red)'} strokeWidth="1.8" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+        <polyline points={sparkPoints(series)} fill="none" stroke={fresh ? 'var(--color-muted)' : up ? 'var(--color-good)' : 'var(--color-red)'} strokeWidth="1.8" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
       </svg>
     </div>
   );
