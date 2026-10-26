@@ -17,9 +17,11 @@ pnpm check    # typecheck + tests
 
 ## The three Orca workers
 
-Three Claude Code agents build this in parallel, each in its own Orca worktree (`C:\dev\FrontlineEcom-ui`,
-`-core`, `-agents`). A Stop hook (`scripts/agent/keep-going.mjs`, enabled only in those worktrees'
-`.claude/settings.local.json`) keeps each one working, and `scripts/agent/watchdog.mjs` nudges any that go idle.
+Three Claude Code agents build this in parallel, each in its own Orca worktree
+(`C:\Users\Xody2\orca\workspaces\FrontlineEcom\ui`, `\core`, `\agents`). A Stop hook (`scripts/agent/keep-going.mjs`,
+enabled only in those worktrees' `.claude/settings.local.json`) keeps each one working, and `scripts/agent/watchdog.mjs`
+(running in the "Watchdog" terminal of the main FrontlineEcom workspace in Orca) nudges any that go idle and relaunches
+any that exit.
 
 **To stop them:** create an empty file `C:\dev\FrontlineEcom\.agent\STOP` (stops all workers and the watchdog), or
 `<worktree>\.agent\STOP` for one worker. Then press Esc in the worker's Orca terminal (or close it).
