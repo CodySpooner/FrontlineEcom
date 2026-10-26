@@ -23,7 +23,7 @@ import { researchRoutes } from './research';
 import { settingsRoutes } from './settings';
 import { agentRoutes } from './routes/agents';
 import { loadKey } from './secrets';
-import { createStore, deleteStore, getStore, listStores, parseStoreInput, updateStore } from './stores';
+import { createStore, deleteStore, getStore, listStores, parseStoreInput, storeZone, updateStore } from './stores';
 
 /** `?stores=a,b` → known store ids in store order; missing/empty = all stores. */
 const pickStores = (db: Db, q?: string) => {
@@ -33,6 +33,16 @@ const pickStores = (db: Db, q?: string) => {
 };
 
 const json = (req: Request): Promise<unknown> => req.json().catch(() => undefined);
+
+/**
+ * Today for an analytics window over `storeIds`, in the first store's day zone (a connected shop's own timezone).
+ * ponytail: one reference zone for a mix of stores; a store in another zone is off by its offset at the window edges.
+ */
+const windowEnd = (db: Db, storeIds: string[]) => {
+  const tz = storeZone(db, storeIds[0]);
+  const to = localDate(new Date(), tz);
+  return { to, todayFraction: dayFraction(to, Date.now(), tz) };
+};
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const isLocal = (url: string) => URL.canParse(url) && LOCAL_HOSTS.has(new URL(url).hostname);
@@ -136,22 +146,24 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
       const storeIds = pickStores(db, c.req.query('stores'));
-      const to = localDate();
+      const { to, todayFraction } = windowEnd(db, storeIds);
       const { currency, unconverted } = fxFor(db, storeIds);
-      return c.json({ ...summarize(loadRows(db, storeIds, range, to), { range, to, storeIds, todayFraction: dayFraction(to) }), currency, ...(unconverted.length ? { unconverted } : {}) });
+      return c.json({ ...summarize(loadRows(db, storeIds, range, to), { range, to, storeIds, todayFraction }), currency, ...(unconverted.length ? { unconverted } : {}) });
     })
     .get('/api/analytics/campaigns', (c) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
-      const to = localDate();
-      return c.json(campaignStats(db, pickStores(db, c.req.query('stores')), addDays(to, 1 - range), to));
+      const storeIds = pickStores(db, c.req.query('stores'));
+      const { to } = windowEnd(db, storeIds);
+      return c.json(campaignStats(db, storeIds, addDays(to, 1 - range), to));
     })
     .get('/api/analytics/top-products', (c) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
       const limit = Math.min(50, Math.max(1, Math.floor(Number(c.req.query('limit'))) || 8));
-      const to = localDate();
-      return c.json(topProducts(db, pickStores(db, c.req.query('stores')), addDays(to, 1 - range), to, limit));
+      const storeIds = pickStores(db, c.req.query('stores'));
+      const { to } = windowEnd(db, storeIds);
+      return c.json(topProducts(db, storeIds, addDays(to, 1 - range), to, limit));
     })
     .route('/', researchRoutes(db))
     .route('/', competitorRoutes(db, (q) => pickStores(db, q)))

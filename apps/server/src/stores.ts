@@ -18,6 +18,15 @@ const toStore = (r: Row): Store => ({
 
 export const listStores = (db: Db) => db.prepare('SELECT * FROM stores ORDER BY created_at, rowid').all().map(toStore);
 
+/**
+ * The timezone a store's days are dated in: a real store's own (connectors date orders in the shop's zone), undefined
+ * (the machine's) for seeded demo data.
+ */
+export function storeZone(db: Db, storeId: string | undefined) {
+  const r = storeId ? db.prepare('SELECT timezone, demo FROM stores WHERE id = ?').get(storeId) : undefined;
+  return r && !r.demo ? String(r.timezone) : undefined;
+}
+
 export const getStore = (db: Db, id: string) => {
   const r = db.prepare('SELECT * FROM stores WHERE id = ?').get(id);
   return r ? toStore(r) : undefined;
