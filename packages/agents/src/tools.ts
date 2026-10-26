@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { Agent, AgentEvent, AnalyticsRange, AnalyticsSummary, ApprovalsHook, Store } from '@frontline/shared';
+import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type ApprovalDecision, type ApprovalsHook, type ResearchProduct, type ResearchTab, type Store } from '@frontline/shared';
 import { z } from 'zod';
 import { searchMemory, writeMemory } from './memory';
 import { saveNichePack } from './niche';
@@ -11,6 +11,10 @@ export interface ToolEnv {
   /** Core's analytics summary for this store (the math lives in apps/server). */
   summary: (storeId: string, range: AnalyticsRange) => AnalyticsSummary;
   approvals: ApprovalsHook;
+  /** Core's decide(): lets autopilot approve within its cap. Without it every request waits for the owner. */
+  decide?: (id: string, decision: ApprovalDecision) => unknown;
+  /** Core's research feed (scored trending products). */
+  research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number }) => Promise<ResearchProduct[]>;
   runId?: string;
 }
 
@@ -130,6 +134,24 @@ export const APP_TOOLS: AppTool[] = [
     },
   }),
   defineTool({
+    name: 'research_feed',
+    description:
+      'Trending product candidates with cost, price, margin %, 30-day demand trend %, competition (0-100, lower is better), shipping days and AI score (CSV, best first). Defaults to the store niche.',
+    input: {
+      tab: z.enum(RESEARCH_TABS as [ResearchTab, ...ResearchTab[]]).optional(),
+      q: z.string().optional().describe('search title/category'),
+      anyNiche: z.boolean().default(false).describe('search outside the store niche'),
+      limit: z.number().int().min(1).max(100).default(25),
+    },
+    run: async ({ tab, q, anyNiche, limit }, ctx) => {
+      if (!ctx.research) return 'The research feed is not available.';
+      const items = await ctx.research({ tab, q, limit, ...(anyNiche ? {} : { niche: ctx.store.niche }) });
+      return csv(
+        items.map((p) => ({ id: p.id, title: p.title, category: p.category, source: p.source, cost: p.cost, price: p.price, compare_at: p.compareAt, margin_pct: p.margin, trend_pct: p.trend, competition: p.competition, shipping_days: p.shippingDays, score: p.score })),
+      );
+    },
+  }),
+  defineTool({
     name: 'search_memory',
     description: 'What the squad has learned about this store, most relevant first.',
     input: { query: z.string().describe('what you need to know'), k: z.number().int().min(1).max(20).default(8) },
@@ -163,25 +185,57 @@ export const APP_TOOLS: AppTool[] = [
       reason: z.string().max(400).describe('the evidence with numbers and period'),
       kind: z.string().max(40).describe('action type, e.g. pause_ad_set, change_budget, publish_page, add_product'),
       payload: z.record(z.string(), z.unknown()).describe('everything needed to carry the action out'),
+      amountUsd: z.number().min(0).optional().describe("money at stake per day in USD (budget added, spend, refund total); lets autopilot decide within the owner's cap"),
     },
-    run: async ({ title, reason, kind, payload }, ctx) => {
-      if (ctx.agent.autonomy === 'suggest') return 'Not sent: your autonomy is "suggest". Put the recommendation in your answer instead.';
-      const request = ctx.approvals.create({
-        storeId: ctx.store.id,
-        agentId: ctx.agent.id,
-        ...(ctx.runId ? { runId: ctx.runId } : {}),
-        title,
-        reason,
-        action: { kind, payload },
-      });
-      ctx.emit({ type: 'approval_request', approval: request });
-      const decided = await abortable(ctx.approvals.decision(request.id), ctx.signal);
-      if (decided.status !== 'approved') return `Denied by the owner: ${title}. Do not do it; suggest an alternative if useful.`;
+    run: async ({ title, reason, kind, payload, amountUsd }, ctx) => {
+      const { approved, message } = await requestApproval(ctx, { title, reason, action: { kind, payload, ...(amountUsd !== undefined ? { amountUsd } : {}) } });
+      if (!approved) return message;
       const outcome = await ACTIONS[kind]?.(payload);
-      return `Approved by the owner: ${title}${outcome ? `. ${outcome}` : ''}`;
+      return `${message}${outcome ? `. ${outcome}` : ''}`;
     },
   }),
 ];
+
+/**
+ * Asks the owner and waits. `suggest` agents may not ask; `autopilot` agents approve themselves when the
+ * amount at stake fits what is left of today's cap (logged on the request as `auto` + a note in the reason).
+ */
+export async function requestApproval(ctx: ToolContext, req: { title: string; reason: string; action: ApprovalAction }) {
+  const { agent } = ctx;
+  if (agent.autonomy === 'suggest') return { approved: false, message: 'Not sent: your autonomy is "suggest". Put the recommendation in your answer instead.' };
+  const cap = agent.autopilotCapUsd ?? 0;
+  const amount = req.action.amountUsd;
+  const used = agent.autonomy === 'autopilot' ? autopilotUsedToday(ctx.db, agent.id) : 0;
+  const auto = agent.autonomy === 'autopilot' && ctx.decide !== undefined && amount !== undefined && used + amount <= cap;
+  const request = ctx.approvals.create({
+    storeId: ctx.store.id,
+    agentId: agent.id,
+    ...(ctx.runId ? { runId: ctx.runId } : {}),
+    title: req.title,
+    reason: auto ? `${req.reason} [autopilot: $${amount} of $${cap}/day cap, $${used} used before]` : req.reason,
+    action: auto ? { ...req.action, auto: true } : req.action,
+  });
+  if (auto) ctx.decide!(request.id, 'approve');
+  else ctx.emit({ type: 'approval_request', approval: request });
+  const decided = await abortable(ctx.approvals.decision(request.id), ctx.signal);
+  if (auto) ctx.emit({ type: 'approval_request', approval: decided });
+  return decided.status === 'approved'
+    ? { approved: true, message: `${auto ? 'Auto-approved (autopilot)' : 'Approved by the owner'}: ${req.title}` }
+    : { approved: false, message: `Denied by the owner: ${req.title}. Do not do it; suggest an alternative if useful.` };
+}
+
+/** USD autopilot already approved for this agent since local midnight. */
+function autopilotUsedToday(db: DatabaseSync, agentId: string): number {
+  const midnight = new Date();
+  midnight.setHours(0, 0, 0, 0);
+  const row = db
+    .prepare(
+      `SELECT coalesce(sum(json_extract(action_json, '$.amountUsd')), 0) AS used FROM approvals
+       WHERE agent_id = ? AND json_extract(action_json, '$.auto') = 1 AND created_at >= ?`,
+    )
+    .get(agentId, midnight.toISOString());
+  return Number(row?.used ?? 0);
+}
 
 /** Actions the agents lane carries out itself once approved. Store/ad actions arrive with the connectors. */
 const ACTIONS: Record<string, (payload: Record<string, unknown>) => Promise<string>> = {

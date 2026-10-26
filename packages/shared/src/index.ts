@@ -62,6 +62,8 @@ export interface Agent {
   enabled?: boolean;
   /** Always set by the API. */
   autonomy?: Autonomy;
+  /** Autopilot may approve up to this many USD at stake per day on its own (0 = never). Always set by the API. */
+  autopilotCapUsd?: number;
 }
 
 /** GET /api/agents?stores=a,b → Agent[] (squads in store order, roles in AGENT_ROLES order). GET /api/agents/:id → Agent. */
@@ -71,6 +73,8 @@ export type AgentsResponse = Agent[];
 export interface AgentUpdate {
   enabled?: boolean;
   autonomy?: Autonomy;
+  /** >= 0 */
+  autopilotCapUsd?: number;
 }
 
 export interface DailyMetrics {
@@ -98,6 +102,15 @@ export interface StoreEvent {
 
 export type ApprovalStatus = 'pending' | 'approved' | 'denied';
 
+export interface ApprovalAction {
+  kind: string;
+  payload: unknown;
+  /** Money at stake per day in USD (budget change, spend, refunds), when the agent can say. */
+  amountUsd?: number;
+  /** True when the agent's autopilot approved it within its daily cap (no owner click). */
+  auto?: boolean;
+}
+
 export interface ApprovalRequest {
   id: string;
   storeId: string;
@@ -106,7 +119,7 @@ export interface ApprovalRequest {
   title: string;
   /** Evidence, e.g. "Losing $45/day for 4 days straight". */
   reason: string;
-  action: { kind: string; payload: unknown };
+  action: ApprovalAction;
   status: ApprovalStatus;
   createdAt: string;
   runId?: string;
@@ -183,7 +196,7 @@ export interface NewApprovalRequest {
   runId?: string;
   title: string;
   reason: string;
-  action: { kind: string; payload: unknown };
+  action: ApprovalAction;
 }
 
 /**

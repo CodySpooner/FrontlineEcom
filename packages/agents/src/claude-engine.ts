@@ -6,7 +6,7 @@ import type { AgentEvent } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
 import { assemblePrompt } from './prompt';
 import { ROLES } from './roles';
-import { callTool, channel, toolsFor } from './tools';
+import { callTool, channel, requestApproval, toolsFor } from './tools';
 
 export interface ClaudeEngineOptions {
   /** Defaults to `FRONTLINE_AGENT_MODEL` or claude-opus-5-5. */
@@ -50,6 +50,16 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
         allowedTools: [...builtins, ...appTools.map((t) => `mcp__frontline__${t.name}`)],
         ...(appTools.length ? { mcpServers: { frontline } } : {}),
         permissionMode: 'default',
+        // Anything not pre-approved above (e.g. a write tool on a connected store's MCP) goes to the owner.
+        canUseTool: async (toolName, toolInput) => {
+          if (!ctx) return { behavior: 'deny', message: 'Tool not available in this run.' };
+          const { approved, message } = await requestApproval(ctx, {
+            title: `Allow ${toolName.replace(/^mcp__/, '').replace('__', ': ')}`,
+            reason: JSON.stringify(toolInput).slice(0, 400),
+            action: { kind: 'tool_use', payload: { tool: toolName, input: toolInput } },
+          });
+          return approved ? { behavior: 'allow', updatedInput: toolInput } : { behavior: 'deny', message };
+        },
         abortController,
         ...(input.resume ? { resume: input.resume } : {}),
         ...opts.queryOptions?.(input),

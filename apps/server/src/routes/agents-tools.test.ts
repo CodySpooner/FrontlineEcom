@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
+import { seedResearch } from '../research';
 import { listStores } from '../stores';
 import { agentRoutes, toolEnv } from './agents';
 
@@ -11,6 +12,7 @@ let db: Db;
 beforeAll(() => {
   db = openDb();
   seedDemo(db);
+  seedResearch(db);
   agentRoutes(db); // creates the squads
 });
 
@@ -53,6 +55,15 @@ describe('agent tools on demo data', () => {
     expect(orders!.output).toMatch(/^counts: /);
     expect(campaigns!.output).toMatch(/^network,id,name,status,daily_budget,spend,revenue,purchases,clicks,impressions,roas,cpa,ctr_pct\n/);
     expect(events.at(-1)).toEqual(done);
+  });
+
+  test('research_feed lists scored candidates in the store niche', async () => {
+    const events = await run(input('glow', 'product_hunter'), [{ call: 'research_feed', input: { tab: 'high_margin', limit: 5 } }, done]);
+    const [feed] = results(events);
+    const [header, ...rows] = feed!.output.split(/\n/);
+    expect(header).toBe('id,title,category,source,cost,price,compare_at,margin_pct,trend_pct,competition,shipping_days,score');
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => Number(r.split(',')[7]) >= 70)).toBe(true);
   });
 
   test('write_memory saves a learning and streams memory_written', async () => {

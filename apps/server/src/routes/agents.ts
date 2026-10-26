@@ -1,15 +1,22 @@
 import { ensureSquads, getAgent, listAgents, updateAgent, type ToolEnv } from '@frontline/agents';
-import { AUTONOMY_LEVELS, type AgentUpdate } from '@frontline/shared';
+import { AUTONOMY_LEVELS, type AgentUpdate, type Page, type ResearchProduct } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
-import { approvalsHook } from '../approvals';
+import { approvalsHook, decide } from '../approvals';
 import { localDate } from '../dates';
 import type { Db } from '../db';
+import { researchRoutes } from '../research';
 
 /** App data + approvals for agent tools. */
 export const toolEnv = (db: Db): ToolEnv => ({
   db,
   approvals: approvalsHook(db),
+  decide: (id, decision) => decide(db, id, decision),
+  research: async (q) => {
+    const params = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
+    const res = await researchRoutes(db).request(`/api/research?${params}`);
+    return ((await res.json()) as Page<ResearchProduct>).items;
+  },
   summary: (storeId, range) => {
     const to = localDate();
     return summarize(loadRows(db, [storeId], range, to), { range, to, storeIds: [storeId] });
@@ -29,11 +36,12 @@ export function agentRoutes(db: Db) {
       if (
         !body ||
         (body.enabled !== undefined && typeof body.enabled !== 'boolean') ||
-        (body.autonomy !== undefined && !AUTONOMY_LEVELS.includes(body.autonomy))
+        (body.autonomy !== undefined && !AUTONOMY_LEVELS.includes(body.autonomy)) ||
+        (body.autopilotCapUsd !== undefined && !(typeof body.autopilotCapUsd === 'number' && body.autopilotCapUsd >= 0))
       ) {
-        return c.json({ error: 'Expected { enabled?: boolean, autonomy?: suggest|ask|autopilot }' }, 400);
+        return c.json({ error: 'Expected { enabled?: boolean, autonomy?: suggest|ask|autopilot, autopilotCapUsd?: number >= 0 }' }, 400);
       }
-      const agent = updateAgent(db, c.req.param('id'), { enabled: body.enabled, autonomy: body.autonomy });
+      const agent = updateAgent(db, c.req.param('id'), { enabled: body.enabled, autonomy: body.autonomy, autopilotCapUsd: body.autopilotCapUsd });
       return agent ? c.json(agent) : c.json({ error: 'Agent not found' }, 404);
     });
 }
