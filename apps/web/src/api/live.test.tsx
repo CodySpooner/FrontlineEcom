@@ -57,4 +57,17 @@ describe('useLive', () => {
     act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'approval', approval: { ...approval, status: 'approved' } }) }));
     expect(refetch).toHaveBeenCalledWith({ queryKey: ['products'] });
   });
+
+  it("refreshes the store's memory when a request is denied (the squad remembers the no)", () => {
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const qc = new QueryClient();
+    const refetch = vi.spyOn(qc, 'invalidateQueries');
+    renderHook(() => useLive(), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+    const approval = { id: 'a2', storeId: 'glow', agentId: 'glow:ad_strategist', title: 'Raise budget', reason: 'x', action: { kind: 'ads.set_budget', payload: {} }, createdAt: '2026-10-26T08:00:00Z' };
+
+    act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'approval', approval: { ...approval, status: 'approved' } }) }));
+    expect(refetch).not.toHaveBeenCalledWith({ queryKey: ['memory', 'glow'] });
+    act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'approval', approval: { ...approval, status: 'denied' } }) }));
+    expect(refetch).toHaveBeenCalledWith({ queryKey: ['memory', 'glow'] });
+  });
 });

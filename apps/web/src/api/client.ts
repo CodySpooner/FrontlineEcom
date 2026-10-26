@@ -498,6 +498,8 @@ export function useLive() {
         // Approved changes to a live store or ad account are logged as they run.
         if (m.approval.status === 'approved') qc.invalidateQueries({ queryKey: ['actions'] });
         if (m.approval.status === 'approved') ['niche-learnings', 'campaigns', 'products'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+        // A denial is written to the store's memory (with the owner's reason).
+        if (m.approval.status === 'denied') qc.invalidateQueries({ queryKey: ['memory', m.approval.storeId] });
         // A decided request lingers ~1s so its "Approved"/"Denied" verdict shows before the row drops.
         setTimeout(() => qc.invalidateQueries({ queryKey: ['approvals'] }), m.approval.status === 'pending' ? 0 : 1000);
       }
