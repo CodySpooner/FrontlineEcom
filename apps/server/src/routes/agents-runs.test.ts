@@ -1,4 +1,4 @@
-import { createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, type Engine, type RunManagerOptions } from '@frontline/agents';
+import { createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, type Engine, type FakeStep, type RunManagerOptions } from '@frontline/agents';
 import type { AgentRun, LiveMessage } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -168,11 +168,11 @@ test('requests a run can no longer act on expire when it ends; ones the server c
   const waitFor = async (n: number) => {
     for (let i = 0; i < 100 && pending().length < n; i++) await new Promise((r) => setImmediate(r));
   };
-  const steps = {
+  const steps: Record<string, FakeStep[]> = {
     creative_studio: [{ call: 'create_creative' as const, input: { kind: 'image', headline: 'Glow', primaryText: 'Serum, soft light', prompt: 'serum on marble' } }],
     ad_strategist: [{ call: 'propose_ad_change' as const, input: { campaignId: 'glow-c1', change: 'pause', evidence: '7d ROAS 0.6 vs break-even 2.1' } }],
   };
-  const m = manager({ engine: fakeEngine((input) => (input.task === REFLECTION_PROMPT ? [] : (steps as Record<string, never[]>)[input.agent.role] ?? [])) });
+  const m = manager({ engine: fakeEngine((input) => (input.task === REFLECTION_PROMPT ? [] : steps[input.agent.role] ?? [])) });
   const creative = ok(m.start('glow:creative_studio', 'Make an ad'));
   const ad = ok(m.start('glow:ad_strategist', 'Review ads'));
   await waitFor(2);
@@ -187,7 +187,7 @@ test('requests a run can no longer act on expire when it ends; ones the server c
   expect(db.prepare(`SELECT status FROM campaigns WHERE id = 'glow-c1'`).get()?.status).toBe('paused');
 
   // An app restart closes in-run requests of the runs it interrupts.
-  const before = manager({ engine: fakeEngine((input) => (input.task === REFLECTION_PROMPT ? [] : steps.creative_studio)) });
+  const before = manager({ engine: fakeEngine((input) => (input.task === REFLECTION_PROMPT ? [] : steps.creative_studio!)) });
   const stuck = ok(before.start('glow:creative_studio', 'Make another ad'));
   await waitFor(3);
   manager();
