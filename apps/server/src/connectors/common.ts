@@ -52,3 +52,6 @@ export function setOrderItems(db: Db, storeId: string, orderId: string, items: O
   const ins = db.prepare('INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES (?, ?, ?, ?, ?, ?)');
   for (const i of byProduct.values()) ins.run(storeId, orderId, i.productId, i.quantity, Math.round(i.revenue * 100) / 100, Math.round(i.cost * 100) / 100);
 }
+
+/** An approved change to a live campaign: a new daily budget (account currency) or a pause. */
+export type CampaignChange = { dailyBudget: number } | { status: 'PAUSED' };

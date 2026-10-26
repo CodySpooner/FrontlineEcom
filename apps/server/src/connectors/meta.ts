@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { rebuildAdSpend, switchToReal } from './common';
+import { rebuildAdSpend, switchToReal, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -118,4 +118,15 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Meta sync failed');
   }
+}
+
+/** Ad-account write (token needs ads_management). Use setCampaignBudget / pauseCampaign in ./ads, never directly. */
+export async function updateMetaCampaign(db: Db, key: Buffer, storeId: string, campaignId: string, change: CampaignChange, fetchFn: Fetch = fetch) {
+  const creds = getCredentials(db, key, 'meta_ads', storeId);
+  if (!creds) throw new Error('Meta Ads is not connected for this store');
+  // ponytail: minor unit = cents, wrong for zero-decimal currencies (JPY, KRW), same as the sync
+  const form: Record<string, string> = 'status' in change ? { status: change.status } : { daily_budget: String(Math.round(change.dailyBudget * 100)) };
+  const res = await fetchFn(`${GRAPH}/${campaignId}`, { method: 'POST', headers: { Authorization: `Bearer ${creds.accessToken!}` }, body: new URLSearchParams(form) });
+  const body = (await res.json().catch(() => ({}))) as { success?: boolean; error?: { message: string; error_user_msg?: string } };
+  if (!res.ok || !body.success) throw new Error(`Meta: ${body.error?.error_user_msg ?? body.error?.message ?? `HTTP ${res.status}`}`);
 }

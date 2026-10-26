@@ -5,8 +5,8 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from agents) FYI, tiny root-config change: `vitest.config.ts` now sets `env: { FRONTLINE_AGENT_ENGINE: 'fake' }`. Connected (non-demo) stores now default to the real Claude engine (AGT-36), and this keeps tests from ever calling it. Please keep it if you touch that file.
-- [ ] (from agents) Ad-account writes for approved ad changes (AGT-35): something like `setCampaignBudget(db, key, storeId, network, campaignId, dailyBudget, fetchFn?)` and `pauseCampaign(db, key, storeId, network, campaignId, fetchFn?)` for meta/google/tiktok in the connectors, throwing a readable error like `publishPage`. The agents lane calls them from `applyAdChange` only after approval, and updates the local `campaigns` row on success.
+- [x] (from agents) FYI, tiny root-config change: `vitest.config.ts` now sets `env: { FRONTLINE_AGENT_ENGINE: 'fake' }`. Connected (non-demo) stores now default to the real Claude engine (AGT-36), and this keeps tests from ever calling it. Please keep it if you touch that file.
+- [x] (from agents) Ad-account writes for approved ad changes (AGT-35): something like `setCampaignBudget(db, key, storeId, network, campaignId, dailyBudget, fetchFn?)` and `pauseCampaign(db, key, storeId, network, campaignId, fetchFn?)` for meta/google/tiktok in the connectors, throwing a readable error like `publishPage`. The agents lane calls them from `applyAdChange` only after approval, and updates the local `campaigns` row on success.
 - [x] (from agents) FYI migration 18 (agents lane) adds `product_tests`; it reads your `order_items` (thanks) for product outcomes on non-demo stores. No action needed.
 - [x] (from ui) Demo orders have `createdAt` later than now. At about 05:45 local the newest is "Oct 26, 7:59 PM" (`2026-10-26T23:59Z`), so today's orders seem to be spread over the whole day. Could the generator stop at the current time? Orders, the Needs You queue and the live feed all show these future times.
 - [x] (from agents) FYI migration 17 (agents lane) adds `order_issues`; no action needed.
@@ -62,6 +62,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Inbox (agents AGT-35): `setCampaignBudget` / `pauseCampaign` in `connectors/ads.ts` for meta (Graph), google (budget via campaignBudgets:mutate, shared budgets refused) and tiktok (campaign/update, status/update). Only campaigns synced for that store are accepted
 - 2026-10-26 — CORE-22: TikTok Shop Connect via the Partner Center authorization link (validated https `*.tiktokshop.com`, so the US host works) using the paste flow and `token/get`. New `IntegrationField.optional` (TikTok Shop `authLink`)
 - 2026-10-26 — CORE-22 (1/2): OAuth Connect for Google Ads (PKCE, loopback callback `/api/oauth/callback`) and Etsy (PKCE, paste flow, since Etsy only redirects to https://). Covers `POST /api/integrations/oauth/start` and `/finish`, `GET /api/integrations/oauth`, and `IntegrationField.oauth` marks token fields. States are single-use with a 15 min expiry, and provider text is HTML-escaped
 - 2026-10-26 — CORE-21 `GET /api/health` → `Health` (`ok`, `uptimeSec`, per-connector status / error / syncedAt, no secrets) + JSON-lines log at `<data dir>/logs/api.log` (start, each sync with duration and outcome, crashes; one rotated copy at 5 MB)

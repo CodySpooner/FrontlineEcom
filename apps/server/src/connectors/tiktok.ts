@@ -3,7 +3,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { rebuildAdSpend, rebuildRevenue, setOrderItems, switchToReal } from './common';
+import { rebuildAdSpend, rebuildRevenue, setOrderItems, switchToReal, type CampaignChange } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -232,4 +232,19 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'TikTok Shop sync failed');
   }
+}
+
+/** Ad-account write (Ads Management scope). Use setCampaignBudget / pauseCampaign in ./ads, never directly. */
+export async function updateTikTokCampaign(db: Db, key: Buffer, storeId: string, campaignId: string, change: CampaignChange, fetchFn: Fetch = fetch) {
+  const creds = getCredentials(db, key, 'tiktok_ads', storeId);
+  if (!creds) throw new Error('TikTok Ads is not connected for this store');
+  const advertiser_id = creds.advertiserId!.trim();
+  const [path, body] =
+    'status' in change
+      ? ['/campaign/status/update/', { advertiser_id, campaign_ids: [campaignId], operation_status: 'DISABLE' }]
+      : ['/campaign/update/', { advertiser_id, campaign_id: campaignId, budget: Math.round(change.dailyBudget * 100) / 100 }];
+  const res = await fetchFn(`${ADS_API}${path}`, { method: 'POST', headers: { 'Access-Token': creds.accessToken!, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const json = (await res.json().catch(() => ({}))) as { code?: number; message?: string };
+  if (json.code !== undefined && json.code >= 40100 && json.code < 40200) throw new Error('TikTok rejected the access token; generate a new one for the advertiser account');
+  if (!res.ok || json.code !== 0) throw new Error(`TikTok Ads: ${json.message ?? `HTTP ${res.status}`}`);
 }

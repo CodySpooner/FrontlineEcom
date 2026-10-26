@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { rebuildAdSpend, switchToReal } from './common';
+import { rebuildAdSpend, switchToReal, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
 export const GOOGLE_ADS_API_VERSION = 'v26';
@@ -165,4 +165,26 @@ export async function syncGa4(db: Db, key: Buffer, storeId: string, fetchFn: Fet
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Google Analytics sync failed');
   }
+}
+
+/** Ad-account write. Use setCampaignBudget / pauseCampaign in ./ads, never directly. */
+export async function updateGoogleCampaign(db: Db, key: Buffer, storeId: string, campaignId: string, change: CampaignChange, fetchFn: Fetch = fetch) {
+  const creds = getCredentials(db, key, 'google_ads', storeId);
+  if (!creds) throw new Error('Google Ads is not connected for this store');
+  const customer = googleId(creds.customerId!, 'Customer ID', '123-456-7890');
+  const token = await accessToken({ grant_type: 'refresh_token', client_id: creds.clientId!, client_secret: creds.clientSecret!, refresh_token: creds.refreshToken! }, fetchFn, 'Google');
+  const base = `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${customer}`;
+  const post = <T>(path: string, body: object) =>
+    call<T>(`${base}/${path}`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'developer-token': creds.developerToken!, 'content-type': 'application/json' }, body: JSON.stringify(body) }, fetchFn, 'Google Ads');
+  if ('status' in change) {
+    await post('campaigns:mutate', { operations: [{ update: { resourceName: `customers/${customer}/campaigns/${campaignId}`, status: change.status }, updateMask: 'status' }] });
+    return;
+  }
+  type Row = { campaign: { campaignBudget?: string }; campaignBudget?: { explicitlyShared?: boolean } };
+  const { results } = await post<{ results?: Row[] }>('googleAds:search', { query: `SELECT campaign.campaign_budget, campaign_budget.explicitly_shared FROM campaign WHERE campaign.id = ${campaignId}` });
+  const row = results?.[0];
+  if (!row?.campaign.campaignBudget) throw new Error('Google Ads: campaign not found in this account');
+  if (row.campaignBudget?.explicitlyShared) throw new Error('Google Ads: this campaign uses a shared budget; change it in Google Ads so the other campaigns sharing it are not affected');
+  // Budgets are whole cents (micros in steps of 10,000).
+  await post('campaignBudgets:mutate', { operations: [{ update: { resourceName: row.campaign.campaignBudget, amountMicros: String(Math.round(change.dailyBudget * 100) * 10_000) }, updateMask: 'amount_micros' }] });
 }
