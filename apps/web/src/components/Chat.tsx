@@ -26,19 +26,21 @@ export function Chat({ agent, thread, onThread }: { agent: Agent; thread: string
     return () => ro.disconnect();
   }, []);
 
-  const send = (e?: FormEvent) => {
-    e?.preventDefault();
-    const t = task.trim();
+  const ask = (t: string, sent?: () => void) => {
     if (!t || busy || start.isPending) return;
     start.mutate(
       { agentId: agent.id, task: t, resumeRunId: last?.sessionId ? last.id : undefined },
       {
         onSuccess: (r) => {
-          setTask('');
+          sent?.();
           onThread([...thread, r.id]);
         },
       },
     );
+  };
+  const send = (e?: FormEvent) => {
+    e?.preventDefault();
+    ask(task.trim(), () => setTask(''));
   };
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter' || e.shiftKey) return;
@@ -61,7 +63,7 @@ export function Chat({ agent, thread, onThread }: { agent: Agent; thread: string
       <div ref={scroller} className="max-h-[min(60vh,560px)] min-h-[240px] overflow-y-auto pr-1" aria-live="polite">
         <div ref={content} className="grid gap-5">
           {thread.length ? (
-            thread.map((id) => <RunView key={id} id={id} role={agent.role} />)
+            thread.map((id, i) => <RunView key={id} id={id} role={agent.role} onRetry={i === thread.length - 1 && !off ? ask : undefined} />)
           ) : (
             <EmptyState icon={MessageSquare} title={`Brief your ${name}`}>
               Give it a task, e.g. "What should we change this week?" It works with this store's data and asks before it spends or
@@ -99,15 +101,16 @@ export function Chat({ agent, thread, onThread }: { agent: Agent; thread: string
   );
 }
 
-function RunView({ id, role }: { id: string; role: AgentRole }) {
+function RunView({ id, role, onRetry }: { id: string; role: AgentRole; onRetry?: (task: string) => void }) {
   const q = useRun(id);
   if (q.isPending) return <LoadingState rows={1} />;
   if (q.isError) return <p className="text-xs text-red">Couldn't load this message.</p>;
-  return <Transcript run={q.data} role={role} />;
+  return <Transcript run={q.data} role={role} onRetry={onRetry} />;
 }
 
 /** One exchange: the owner's task, then the agent's streamed reply, tool steps, approvals and learnings. */
-export function Transcript({ run, role }: { run: AgentRunDetail; role: AgentRole }) {
+/** `onRetry` (the newest message only) offers to send a failed or stopped task again. */
+export function Transcript({ run, role, onRetry }: { run: AgentRunDetail; role: AgentRole; onRetry?: (task: string) => void }) {
   const cancel = useCancelRun();
   const live = isLive(run);
   const blocks = toBlocks(run.transcript);
@@ -165,6 +168,11 @@ export function Transcript({ run, role }: { run: AgentRunDetail; role: AgentRole
               'Stopped'
             ) : (
               <span className="text-red">Failed{run.error ? `: ${run.error}` : ''}</span>
+            )}
+            {onRetry && (run.status === 'error' || run.status === 'cancelled') && (
+              <button type="button" onClick={() => onRetry(run.task)} className="cursor-pointer underline-offset-2 hover:text-white hover:underline">
+                Try again
+              </button>
             )}
           </div>
         </div>
