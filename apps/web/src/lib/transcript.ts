@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentRun, AgentRunDetail, ApprovalRequest, StoreMemory } from '@frontline/shared';
+import { INTEGRATION_KINDS, type AgentEvent, type AgentRun, type AgentRunDetail, type ApprovalRequest, type IntegrationKind, type StoreMemory } from '@frontline/shared';
 
 /** What the chat draws for one run. */
 export type Block =
@@ -37,3 +37,11 @@ export function applyRunEvent(run: AgentRunDetail, e: AgentEvent): AgentRunDetai
 }
 
 export const isLive = (r: Pick<AgentRun, 'status'>) => r.status === 'queued' || r.status === 'running';
+
+/** "mcp__meta_ads__get_insights" → ["get_insights", "Meta Ads"]: the tool, and the integration whose MCP server it's on.
+ * The app's own tools (`frontline`, prefixed in older transcripts) and the SDK's built-ins have none. */
+export function toolName(id: string): [string, string?] {
+  const [, server, tool] = /^mcp__(.+?)__(.+)$/.exec(id) ?? [];
+  if (!server || !tool) return [id];
+  return server === 'frontline' ? [tool] : [tool, INTEGRATION_KINDS[server as IntegrationKind]?.name ?? server];
+}

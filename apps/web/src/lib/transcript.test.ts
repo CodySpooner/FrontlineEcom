@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AgentRunDetail } from '@frontline/shared';
-import { applyRunEvent, toBlocks } from './transcript';
+import { applyRunEvent, toBlocks, toolName } from './transcript';
 
 const usage = { inputTokens: 10, outputTokens: 20, costUsd: 0.01 };
 
@@ -39,5 +39,14 @@ describe('applyRunEvent', () => {
   it('finishes on done and error', () => {
     expect(applyRunEvent(run, { type: 'done', sessionId: 's1', usage })).toMatchObject({ status: 'done', sessionId: 's1', usage });
     expect(applyRunEvent(run, { type: 'error', message: 'boom' })).toMatchObject({ status: 'error', error: 'boom' });
+  });
+});
+
+describe('toolName', () => {
+  it("drops the MCP prefix, naming an external tool's integration", () => {
+    expect(toolName('mcp__meta_ads__get_insights')).toEqual(['get_insights', 'Meta Ads']);
+    expect(toolName('mcp__frontline__store_summary')).toEqual(['store_summary']); // the app's own (older transcripts)
+    expect(toolName('mcp__some_server__do_it')).toEqual(['do_it', 'some_server']);
+    expect(toolName('WebSearch')).toEqual(['WebSearch']);
   });
 });

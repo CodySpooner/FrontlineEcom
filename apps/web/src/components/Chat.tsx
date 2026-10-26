@@ -6,7 +6,7 @@ import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type AgentRunD
 import { useApprovals, useCancelRun, useDecide, useRun, useStartRun } from '../api/client';
 import { expiredWhy } from '../lib/approvals';
 import { cents, money } from '../lib/format';
-import { isLive, toBlocks } from '../lib/transcript';
+import { isLive, toBlocks, toolName } from '../lib/transcript';
 import { budgetFix } from '../lib/usage';
 import { ApprovalExtras } from './ApprovalExtras';
 import { Portrait } from './Art';
@@ -133,7 +133,7 @@ export function Transcript({ run, role, onRetry }: { run: AgentRunDetail; role: 
                 <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-text-2 [&::-webkit-details-marker]:hidden">
                   <ChevronRight className="size-3.5 text-muted transition-transform group-open:rotate-90" />
                   <Wrench className="size-3.5 text-muted" />
-                  <span className="font-mono">{b.name}</span>
+                  <ToolName id={b.name} />
                   <span className={cx('ml-auto', b.isError ? 'text-red' : 'text-muted')}>{b.output === undefined ? 'running…' : b.isError ? 'failed' : 'done'}</span>
                 </summary>
                 <div className="grid gap-2 border-t border-line px-3 py-2">
@@ -281,5 +281,15 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
         )}
       </div>
     </div>
+  );
+}
+
+function ToolName({ id }: { id: string }) {
+  const [tool, server] = toolName(id);
+  return (
+    <>
+      <span className="font-mono">{tool}</span>
+      {server && <span className="text-muted">· {server}</span>}
+    </>
   );
 }
