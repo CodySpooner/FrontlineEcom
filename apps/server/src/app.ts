@@ -7,6 +7,7 @@ import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type Appr
 import { campaignStats, loadRows, summarize, topProducts } from './analytics';
 import { decide, listApprovals } from './approvals';
 import { automationRoutes } from './automations';
+import { demoSupplierProducts, searchCj } from './connectors/cj';
 import { listOrders, listProducts } from './catalog';
 import { competitorRoutes } from './competitors';
 import { dataDir, type Db } from './db';
@@ -90,6 +91,16 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       return typeof saved === 'string' ? c.json({ error: saved }, 400) : c.json(saved);
     })
     .delete('/api/integrations/:id', (c) => (deleteIntegration(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'integration not found' }, 404)))
+    .get('/api/suppliers/products', async (c) => {
+      const q = (c.req.query('q') ?? '').trim();
+      if (!q || q.length > 200) return c.json({ error: 'q must be 1 to 200 characters' }, 400);
+      const limit = Math.min(50, Math.max(1, Math.floor(Number(c.req.query('limit'))) || 20));
+      try {
+        return c.json((await searchCj(db, key(), q, limit)) ?? demoSupplierProducts(db, q, limit));
+      } catch (e) {
+        return c.json({ error: e instanceof Error ? e.message : 'CJ search failed' }, 502);
+      }
+    })
     .get('/api/analytics/summary', (c) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);

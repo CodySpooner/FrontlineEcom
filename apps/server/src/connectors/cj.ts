@@ -1,8 +1,8 @@
-import type { FulfillmentStatus } from '@frontline/shared';
+import type { FulfillmentStatus, SupplierProduct } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 
-// CJ Dropshipping API 2.0, read-only first: order status + tracking for orders the owner's stores sent to CJ.
+// CJ Dropshipping API 2.0, read-only first: order status + tracking for orders the owner's stores sent to CJ, catalog search.
 // One account serves every store (global integration). CJ allows one call per second.
 const API = 'https://developers.cjdropshipping.com/api2.0/v1';
 const ID = 'cj:global';
@@ -79,4 +79,45 @@ export async function syncCj(db: Db, key: Buffer, _storeId: string, fetchFn: Fet
   } catch (e) {
     setIntegrationStatus(db, ID, 'error', e instanceof Error ? e.message : 'CJ sync failed');
   }
+}
+
+interface CjProduct { id: string; sku: string; nameEn: string; bigImage?: string; sellPrice: string | number; listedNum?: number }
+
+/**
+ * CJ catalog search by product name or SKU. Undefined when CJ isn't connected. Throws "CJ: <message>".
+ * ponytail: no shared limiter with syncCj, so a search during a sync can hit CJ's 1 call/second limit and show its error.
+ */
+export async function searchCj(db: Db, key: Buffer, q: string, limit: number, fetchFn: Fetch = fetch, now = new Date()): Promise<SupplierProduct[] | undefined> {
+  const creds = getCredentials(db, key, 'cj');
+  if (!creds) return undefined;
+  const token = await accessToken(db, key, creds, fetchFn, now);
+  const params = new URLSearchParams({ keyWord: q, page: '1', size: String(limit) });
+  const data = await call<{ content?: { productList?: CjProduct[] }[] }>(fetchFn, `/product/listV2?${params}`, { headers: { 'CJ-Access-Token': token } });
+  return (data.content ?? []).flatMap((c) => c.productList ?? []).slice(0, limit).map((p) => ({
+    supplier: 'cj',
+    id: String(p.id),
+    sku: String(p.sku),
+    title: p.nameEn,
+    ...(p.bigImage ? { image: p.bigImage } : {}),
+    // A product with variants at different prices reports a range ("2.47 -- 3.10"): keep the lowest.
+    price: parseFloat(String(p.sellPrice)) || 0,
+    listed: Number(p.listedNum ?? 0),
+  }));
+}
+
+/** Zero-credential stand-in: research catalog products matching the query, at their supplier cost. */
+export function demoSupplierProducts(db: Db, q: string, limit: number): SupplierProduct[] {
+  return db
+    .prepare('SELECT id, title, image, cost, competition FROM research_products WHERE title LIKE ? ORDER BY cost LIMIT ?')
+    .all(`%${q}%`, limit)
+    .map((r) => ({
+      supplier: 'cj',
+      id: `demo-${r.id}`,
+      sku: `CJ${String(r.id).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)}`,
+      title: String(r.title),
+      ...(r.image ? { image: String(r.image) } : {}),
+      price: Number(r.cost),
+      listed: Math.round(Number(r.competition) * 40),
+      demo: true,
+    }));
 }

@@ -213,6 +213,23 @@ export interface TopProduct {
   profit: number;
 }
 
+/**
+ * GET /api/suppliers/products?q=&limit= → SupplierProduct[] from the CJ Dropshipping catalog (name or SKU search).
+ * Without a CJ connection the matches come from the demo research catalog and carry `demo: true`.
+ */
+export interface SupplierProduct {
+  supplier: 'cj';
+  id: string;
+  sku: string;
+  title: string;
+  image?: string;
+  /** Supplier price in USD, before shipping (lowest variant). */
+  price: number;
+  /** How many sellers list it on CJ, a demand signal. */
+  listed: number;
+  demo?: boolean;
+}
+
 /** POST /api/stores body. Response: the created Store. */
 export interface StoreInput {
   name: string;

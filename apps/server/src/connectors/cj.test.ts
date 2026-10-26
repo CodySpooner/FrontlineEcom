@@ -1,9 +1,12 @@
 import { randomBytes } from 'node:crypto';
 import { expect, test } from 'vitest';
+import type { SupplierProduct } from '@frontline/shared';
+import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { getCredentials, saveIntegration } from '../integrations';
-import { syncCj } from './cj';
+import { seedResearch } from '../research';
+import { searchCj, syncCj } from './cj';
 
 const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
@@ -77,4 +80,35 @@ test('CJ: a bad API key shows a clear error', async () => {
   const db = setup();
   await syncCj(db, key, 'null', fakeCj({}, false).fetchFn, NOW, 0);
   expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'cj:global'").get()).toEqual({ status: 'error', error: 'CJ: User not find' });
+});
+
+test('CJ catalog search maps products (lowest variant price); without CJ the route serves demo matches', async () => {
+  const db = setup();
+  const calls: URL[] = [];
+  const fetchFn = (async (url: string) => {
+    const u = new URL(url);
+    calls.push(u);
+    if (u.pathname.endsWith('/getAccessToken')) return Response.json({ code: 200, result: true, message: 'Success', data: { accessToken: 'cj-access', accessTokenExpiryDate: '2026-11-10T09:16:33+08:00' } });
+    return Response.json({ code: 200, result: true, message: 'Success', data: { content: [{ productList: [
+      { id: '1A2B', sku: 'CJYD1001', nameEn: 'Ice Roller', bigImage: 'https://cf.cjdropshipping.com/roller.jpg', sellPrice: '2.47 -- 3.10', listedNum: 812 },
+      { id: '3C4D', sku: 'CJYD1002', nameEn: 'Ice Roller Mini', sellPrice: 1.9 },
+    ] }] } });
+  }) as typeof fetch;
+  expect(await searchCj(db, key, 'ice roller', 10, fetchFn, NOW)).toEqual([
+    { supplier: 'cj', id: '1A2B', sku: 'CJYD1001', title: 'Ice Roller', image: 'https://cf.cjdropshipping.com/roller.jpg', price: 2.47, listed: 812 },
+    { supplier: 'cj', id: '3C4D', sku: 'CJYD1002', title: 'Ice Roller Mini', price: 1.9, listed: 0 },
+  ]);
+  expect(Object.fromEntries(calls[1]!.searchParams)).toEqual({ keyWord: 'ice roller', page: '1', size: '10' });
+
+  const demoDb = openDb();
+  seedDemo(demoDb, '2026-10-26');
+  seedResearch(demoDb);
+  expect(await searchCj(demoDb, key, 'x', 5)).toBeUndefined();
+  const title = String(demoDb.prepare('SELECT title FROM research_products LIMIT 1').get()!.title);
+  const app = createApp(demoDb);
+  const res = (await (await app.request(`/api/suppliers/products?q=${encodeURIComponent(title.split(' ')[0]!)}&limit=3`)).json()) as SupplierProduct[];
+  expect(res.length).toBeGreaterThan(0);
+  expect(res.length).toBeLessThanOrEqual(3);
+  expect(res.every((p) => p.demo && p.price > 0 && p.title.toLowerCase().includes(title.split(' ')[0]!.toLowerCase()))).toBe(true);
+  expect((await app.request('/api/suppliers/products?q=')).status).toBe(400);
 });
