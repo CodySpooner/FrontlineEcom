@@ -79,13 +79,13 @@ describe('Conversion funnel with steps the platform does not report', () => {
     expect(screen.queryByText('Reached checkout')).toBeNull();
     expect(screen.getByText('5.0% of previous')).toBeTruthy();
     expect(screen.getByText(/doesn't report are left out/)).toBeTruthy();
-    expect(screen.queryByText(/days with traffic data/)).toBeNull();
+    expect(screen.queryByText(/sessions cover/)).toBeNull();
   });
 
-  it('says when Ordered only counts the days with traffic data', async () => {
+  it('says when Ordered only counts the orders its sessions cover', async () => {
     stubApi(() => []);
     renderApp(<FunnelPanel s={{ funnel: { sessions: 1000, addToCarts: 0, checkouts: 0, orders: 50 }, totals: { orders: 140 } } as AnalyticsSummary} />);
-    expect(await screen.findByText('Ordered counts orders on days with traffic data: 50 of 140.')).toBeTruthy();
+    expect(await screen.findByText('Ordered only counts orders these sessions cover (not other channels, or days without traffic data): 50 of 140.')).toBeTruthy();
   });
 
   it('keeps a real zero: sessions but no carts and no orders', async () => {

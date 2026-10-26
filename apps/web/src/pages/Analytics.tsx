@@ -160,10 +160,12 @@ export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
             </li>
           ))}
           {steps.length < all.length && <li className="text-xs text-muted">Steps the platform doesn't report are left out.</li>}
-          {/* Core counts only orders from store-days with sessions, so a store or day without traffic data isn't a drop-off. */}
+          {/* Core counts only orders its sessions cover (not days before traffic data, nor Amazon sold next to the site),
+              so those aren't a drop-off. */}
           {f.orders < s.totals.orders && (
             <li className="text-xs text-muted">
-              Ordered counts orders on days with traffic data: {num(f.orders)} of {num(s.totals.orders)}.
+              Ordered only counts orders these sessions cover (not other channels, or days without traffic data): {num(f.orders)} of{' '}
+              {num(s.totals.orders)}.
             </li>
           )}
         </ol>
