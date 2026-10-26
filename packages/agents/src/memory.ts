@@ -39,12 +39,13 @@ export function writeMemory(db: DatabaseSync, m: NewMemory, now = new Date()): S
   ).run(id, m.storeId, m.agentId, m.kind, text, m.evidence ?? null, clamp(m.confidence), JSON.stringify(m.tags ?? []), now.toISOString(), m.runId ?? null);
   const written = getMemory(db, id)!;
   // The daily jobs would pile up thousands (an unpaged Knowledge Base, a pairwise promotion scan): past the cap the
-  // weakest agent facts and learnings go, oldest first, proven ones (0.8+) last. Pins, preferences and the owner's notes stay.
+  // weakest agent facts and learnings go, oldest first; the one just written, measured outcomes and proven ones (0.8+)
+  // go last. Pins, preferences and the owner's notes stay.
   db.prepare(
     `DELETE FROM store_memory WHERE id IN (
        SELECT id FROM store_memory WHERE store_id = ? AND agent_id != 'owner' AND kind IN ('fact', 'learning') AND pinned = 0
-       ORDER BY confidence >= 0.8 DESC, created_at DESC, rowid DESC LIMIT -1 OFFSET ?)`,
-  ).run(m.storeId, MEMORY_CAP);
+       ORDER BY id = ? DESC, (confidence >= 0.8 OR tags LIKE '%"outcome"%') DESC, created_at DESC, rowid DESC LIMIT -1 OFFSET ?)`,
+  ).run(m.storeId, id, MEMORY_CAP);
   return written;
 }
 

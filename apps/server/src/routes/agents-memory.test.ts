@@ -29,6 +29,13 @@ describe('store memory', () => {
     expect(texts).toHaveLength(MEMORY_CAP + 3); // the cap, plus the pin, the preference and the owner's note
     expect(texts).toEqual(expect.arrayContaining(['Bundles lift AOV 18%', 'Pinned by the owner', 'Owner wants no emojis', 'We ship from Austin', `Learning number ${MEMORY_CAP - 1}`]));
     expect(texts).not.toContain('Learning number 0'); // the oldest unproven one made room
+    // A full store of confident guesses: a measured outcome and a fresh low-confidence learning still stay.
+    for (let i = 0; i < MEMORY_CAP; i++) writeMemory(db, mem(`Sure guess ${i}`, { confidence: 0.9 }), daysAgo(200 - i / 10));
+    writeMemory(db, mem('Price test on the harness: profit +12% in 14 days', { confidence: 0.7, tags: ['outcome', 'pricing'] }), daysAgo(1));
+    writeMemory(db, mem('Fresh hunch', { confidence: 0.3 }), now);
+    const after = listMemory(db, 'glow').map((m) => m.text);
+    expect(after).toHaveLength(MEMORY_CAP + 3);
+    expect(after).toEqual(expect.arrayContaining(['Price test on the harness: profit +12% in 14 days', 'Fresh hunch']));
   });
 
   test('same text merges instead of duplicating', () => {

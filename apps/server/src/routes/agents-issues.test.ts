@@ -102,6 +102,9 @@ test('list_orders with stale lists only late orders, oldest first, however many 
   set.run(ago(5), ago(5).slice(0, 10), 'unfulfilled', late!);
   set.run(ago(20), ago(20).slice(0, 10), 'in_transit', slow!);
   set.run(ago(1), ago(1).slice(0, 10), 'unfulfilled', fresh!); // not late yet
+  const cancelled = String(db.prepare(`SELECT id FROM orders WHERE store_id = 'peak' AND id NOT IN (?, ?, ?) LIMIT 1`).get(late!, slow!, fresh!)?.id);
+  set.run(ago(6), ago(6).slice(0, 10), 'unfulfilled', cancelled);
+  db.prepare(`UPDATE orders SET status = 'refunded' WHERE store_id = 'peak' AND id = ?`).run(cancelled); // cancelled before shipping
   const [out] = await run([{ call: 'list_orders', input: { days: 30, stale: true, limit: 5 } }]);
   expect(out!.split('# Orders\n')[1]!.split('\n').slice(1).map((r) => r.split(',')[0])).toEqual([slow, late]);
   const [cut] = await run([{ call: 'list_orders', input: { days: 30, limit: 2 } }]);

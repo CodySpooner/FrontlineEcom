@@ -220,7 +220,7 @@ export const APP_TOOLS: AppTool[] = [
     input: {
       days: z.number().int().min(1).max(90).default(14),
       fulfillment: z.enum(['unfulfilled', 'fulfilled', 'in_transit', 'delivered']).optional(),
-      stale: z.boolean().optional().describe('only orders unfulfilled 3+ days or in transit 10+ days, oldest first'),
+      stale: z.boolean().optional().describe('only orders unfulfilled 3+ days or in transit 10+ days, oldest first (cancelled and refunded ones left out)'),
       limit: z.number().int().min(1).max(500).default(100),
     },
     run: async ({ days, fulfillment, stale, limit }, ctx) => {
@@ -234,7 +234,7 @@ export const APP_TOOLS: AppTool[] = [
         .prepare(
           `SELECT id, created_at, total, status, fulfillment_status, supplier, tracking FROM orders
            WHERE store_id = ? AND coalesce(local_date, substr(created_at, 1, 10)) >= ? ${fulfillment ? 'AND fulfillment_status = ?' : ''}
-           ${stale ? `AND ((fulfillment_status = 'unfulfilled' AND created_at < ?) OR (fulfillment_status = 'in_transit' AND created_at < ?))` : ''}
+           ${stale ? `AND status != 'refunded' AND ((fulfillment_status = 'unfulfilled' AND created_at < ?) OR (fulfillment_status = 'in_transit' AND created_at < ?))` : ''}
            ORDER BY created_at ${stale ? 'ASC' : 'DESC'} LIMIT ?`,
         )
         .all(...([ctx.store.id, from, ...(fulfillment ? [fulfillment] : []), ...(stale ? [ago(3), ago(10)] : []), limit] as string[]));
