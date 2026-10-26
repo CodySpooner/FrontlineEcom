@@ -52,6 +52,8 @@ test("a Product Hunter's own request goes through the same path; denied ones add
   expect(await sent([{ title: 'Lick Mat', price: 1.5, cost: 1.2 }])).toEqual(['Not sent: "Lick Mat" at $1.5 is at or below its unit cost plus fees ($1.67).']);
   expect(await sent([{ title: 'Lick Mat', cost: 1.2 }])).toEqual(["Not sent: payload.products needs each product's title and a price above 0, in the store's currency."]);
   expect(await sent([])).toHaveLength(1);
+  const owned = String(db.prepare(`SELECT title FROM products WHERE store_id = 'pawsome' AND status = 'active' LIMIT 1`).get()!.title);
+  expect(await sent([{ title: ` ${owned.toUpperCase()} `, price: 30, cost: 5 }])).toEqual([`Not sent: "${owned}" is already in the store's catalog (list_products).`]);
   expect(db.prepare(`SELECT count(*) AS n FROM approvals WHERE title = 'Add it'`).get()?.n).toBe(0);
 
   // A second request for a product already waiting isn't sent.

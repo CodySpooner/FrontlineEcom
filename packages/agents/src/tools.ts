@@ -977,6 +977,11 @@ export const APP_TOOLS: AppTool[] = [
         }
         // Two approvals for one product would add it twice: one request per product at a time.
         const titles = products.map((p) => String(p.title).trim().toLowerCase());
+        // Approving it would make a second, empty copy of a product the store already sells.
+        const listed = ctx.db
+          .prepare(`SELECT title FROM products WHERE store_id = ? AND status != 'archived' AND lower(trim(title)) IN (SELECT value FROM json_each(?)) LIMIT 1`)
+          .get(ctx.store.id, JSON.stringify(titles));
+        if (listed) return `Not sent: "${String(listed.title)}" is already in the store's catalog (list_products).`;
         const waiting = ctx.db
           .prepare(
             `SELECT a.title FROM approvals a, json_each(a.action_json, '$.payload.products') p WHERE a.store_id = ? AND a.status = 'pending'

@@ -24,7 +24,7 @@ const ask = (kind: string, payload: object = {}): FakeStep => ({ call: 'request_
 const FLOWS: { role: AgentRole; steps: FakeStep[]; approval?: string }[] = [
   { role: 'market_analyst', steps: [{ call: 'store_summary' }, { call: 'metrics_timeseries', input: { days: 14 } }, { call: 'research_feed' }] },
   { role: 'ad_strategist', steps: [{ call: 'review_campaigns' }, { call: 'propose_ad_change', input: { campaignId: 'glow-c3', change: 'pause', evidence: '7d ROAS 0.6 vs break-even 2.1' } }], approval: 'ads.pause_campaign' },
-  { role: 'product_hunter', steps: [{ call: 'research_feed' }, { call: 'list_competitors' }, ask('store.add_products', { products: [{ researchProductId: 'ice-facial-roller', title: 'Ice Facial Roller', price: 19.9, cost: 2.6 }] })], approval: 'store.add_products' },
+  { role: 'product_hunter', steps: [{ call: 'research_feed' }, { call: 'list_competitors' }, ask('store.add_products', { products: [{ researchProductId: 'heatless-curling-ribbon', title: 'Heatless Curling Ribbon', price: 14.9, cost: 1.4 }] })], approval: 'store.add_products' },
   { role: 'store_developer', steps: [{ call: 'list_products' }, ask('publish_page')], approval: 'publish_page' },
   { role: 'copywriter', steps: [{ call: 'list_products' }, { call: 'create_creative', input: { kind: 'copy', headline: 'Glow in 3 steps', primaryText: 'The routine customers swear by.' } }] },
   { role: 'creative_studio', steps: [{ call: 'list_campaigns' }, { call: 'create_creative', input: { kind: 'image', headline: 'Glow', primaryText: 'Serum, soft light', prompt: 'serum on marble' } }], approval: 'creative.generate' },
