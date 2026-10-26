@@ -213,6 +213,22 @@ export function costToday(db: DatabaseSync, storeId: string): number {
   return Number(row?.cost ?? 0);
 }
 
+/**
+ * One line for the activity feed: the first sentence of the agent's final answer (the text after its last tool step),
+ * skipping headings and list markers. Undefined when the run ended without a final answer.
+ */
+export function runGist(transcript: AgentEvent[], max = 160): string | undefined {
+  const lastTool = transcript.findLastIndex((e) => e.type === 'tool_call' || e.type === 'tool_result');
+  const text = transcript.slice(lastTool + 1).map((e) => (e.type === 'text_delta' ? e.text : '')).join('');
+  const line = text
+    .split('\n')
+    .map((l) => l.replace(/[*_`]/g, '').replace(/^\s*(?:[-•>]|\d+\.)\s+/, '').trim())
+    .find((l) => l && !l.startsWith('#') && !/^[-=|: ]+$/.test(l));
+  if (!line) return undefined;
+  const sentence = line.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? line;
+  return sentence.length <= max ? sentence : `${sentence.slice(0, max - 1).replace(/\s+\S*$/, '')}…`;
+}
+
 export function getRun(db: DatabaseSync, id: string): AgentRunDetail | undefined {
   const r = db.prepare('SELECT * FROM agent_runs WHERE id = ?').get(id);
   return r && { ...toRun(r), transcript: JSON.parse(String(r.transcript_json)) };

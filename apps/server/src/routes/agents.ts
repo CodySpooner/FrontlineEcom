@@ -21,6 +21,8 @@ import {
   listNicheLearnings,
   nicheKey,
   listRuns,
+  getRun,
+  runGist,
   updateAgent,
   updateMemory,
   writeMemory,
@@ -134,7 +136,7 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent'> =
     const agent = getAgent(db, run.agentId);
     const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
     const link = `/agents/${run.agentId}`;
-    if (run.status === 'done') notify(db, { kind: 'agent_done', title: `${name} finished`, body: run.task, storeId: run.storeId, link });
+    if (run.status === 'done') notify(db, { kind: 'agent_done', title: `${name} finished`, body: runGist(getRun(db, run.id)?.transcript ?? []) ?? run.task, storeId: run.storeId, link });
     if (run.status === 'error') notify(db, { kind: 'error', title: `${name} hit an error`, body: run.error ?? run.task, storeId: run.storeId, link });
   },
 });

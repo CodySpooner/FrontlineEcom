@@ -21,7 +21,7 @@ export {
 } from './memory';
 export { APP_TOOLS, toolsFor, callTool, requestApproval, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
-export { createRunManager, getRun, listRuns, costToday, type RunManager, type RunManagerOptions } from './runs';
+export { createRunManager, getRun, listRuns, costToday, runGist, type RunManager, type RunManagerOptions } from './runs';
 export { XP, xpForLevel, levelForXp, levelProgress, rankForLevel, demoXp, awardXp, commander, profitStreak, dailyMissions, ACHIEVEMENTS, checkAchievements, type Award, type Facts, type StoreDay } from './gamification';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats, type Economics, type Verdict } from './ads';

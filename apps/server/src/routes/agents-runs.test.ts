@@ -163,7 +163,8 @@ test('the app run manager publishes runs and their events on the live bus', asyn
   expect(steps.filter((t, i) => t !== steps[i - 1])).toEqual([
     'run:queued', 'run:running', 'event:tool_call', 'event:tool_result', 'event:tool_call', 'event:tool_result', 'event:text_delta', 'event:done', 'run:done',
   ]);
-  expect(seen.some((s) => s.type === 'notification' && s.notification.title === 'Operations finished')).toBe(true);
+  const done = seen.find((s) => s.type === 'notification' && s.notification.title === 'Operations finished');
+  expect(done?.type === 'notification' && done.notification.body).toMatch(/^Operations for .+: on it — "Check late orders"\.$/); // the answer's gist
 });
 
 test('requests a run can no longer act on expire when it ends; ones the server carries out stay open', async () => {

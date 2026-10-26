@@ -92,6 +92,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-43 Page outcomes: Store Builder product pages are judged like price tests, so the Store Developer and Copywriter can earn measured wins too.
 - [x] AGT-44 The new loops run on their own: a weekly price check job, one test per product at a time, and supplier-costed product scans.
 - [x] AGT-45 A living demo: demo-engine runs did nothing but quote totals, so none of the agent screens showed agent output without spending Claude usage.
+- [x] AGT-46 The activity feed says what an agent found, not just the task it was given.
 - [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
@@ -99,6 +100,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-46 Run gist: the "<Agent> finished" notification body is the first sentence of the agent's final answer (`runGist`: the text after its last tool step, without headings, list markers or emphasis, max 160 chars). It falls back to the task when the run ended on a tool step.
 - 2026-10-26 — Inbox (ui): `APPROVAL_KINDS` in shared lists every approval kind the agents produce, with owner-facing labels. `autopilot: true` marks only the kinds that carry a USD amount (`ads.set_budget`, `ads.pause_campaign`), because autopilot only fires within a $/day cap. An eval fails if a tool or engine adds a kind without a label.
 - 2026-10-26 — AGT-45 Demo work: on demo stores (fake engine) each role does one real, non-blocking action through its own tools before its summary reply. The Store Developer drafts the product page (the product named in its task, so "approve product → page drafted" works end to end; one open draft per product). Operations flags the oldest order unfulfilled 3+ days. The Copywriter saves an ad copy creative, and Email & SMS saves a checkout-abandonment flow. The Ad Strategist and Product Hunter run their reviews. Nothing waits on an approval, so demo runs always finish.
 - 2026-10-26 — AGT-44 Default jobs: "Weekly price check" (Market Analyst, Wed 09:00) proposes at most one `propose_price_change` with the numbers, or says why prices hold. The daily product scan costs finds with `search_suppliers`. `propose_price_change` refuses a product with a test running (last 29 days) or a price request still pending, since overlapping tests can't be judged apart. New squads get 6 jobs; existing squads keep theirs.
