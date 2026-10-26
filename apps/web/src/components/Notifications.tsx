@@ -79,7 +79,11 @@ function Drawer({ onClose }: { onClose: () => void }) {
       ) : q.isError ? (
         <ErrorState message="Couldn't load your notifications." onRetry={() => q.refetch()} />
       ) : !q.data.length ? (
-        <EmptyState title="You're all caught up">Approvals, finished tasks and errors show up here.</EmptyState>
+        approvals.length ? (
+          <p className="text-xs text-muted">Nothing else new.</p>
+        ) : (
+          <EmptyState title="You're all caught up">Approvals, finished tasks and errors show up here.</EmptyState>
+        )
       ) : (
         <ul className="grid gap-1.5">
           {q.data.map((n) => {

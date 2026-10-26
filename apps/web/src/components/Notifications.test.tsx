@@ -34,6 +34,9 @@ describe('bell drawer', () => {
 
     const waiting = await screen.findByRole('region', { name: 'Waiting on you' });
     expect(await within(waiting).findByText(/Ad Strategist · Peak Fit/)).toBeTruthy();
+    // Requests are waiting, so the empty list below doesn't claim you're caught up.
+    expect(await screen.findByText('Nothing else new.')).toBeTruthy();
+    expect(screen.queryByText("You're all caught up")).toBeNull();
     fireEvent.click(within(waiting).getByRole('button', { name: `Deny: ${approval.title}` }));
     expect(await within(waiting).findByText('Denied')).toBeTruthy();
     expect(fetch).toHaveBeenCalledWith('/api/approvals/a1/deny', { method: 'POST' });
