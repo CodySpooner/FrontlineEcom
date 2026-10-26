@@ -4,7 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { WebSocketServer } from 'ws';
 import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type ApprovalStatus, type StoreInput } from '@frontline/shared';
-import { campaignStats, currentWindow, summarize, topProducts } from './analytics';
+import { campaignStats, currentWindow, dayShifts, summarize, topProducts } from './analytics';
 import { decide, listApprovals } from './approvals';
 import { automationRoutes } from './automations';
 import { actionRoutes } from './actions';
@@ -16,7 +16,7 @@ import { demoSupplierProducts, searchCj } from './connectors/cj';
 import { listOrders, listProducts, setProductCost } from './catalog';
 import { competitorRoutes } from './competitors';
 import { dataDir, type Db } from './db';
-import { addDays, localDate } from './dates';
+import { addDays } from './dates';
 import { deleteIntegration, health, listIntegrations, saveIntegration } from './integrations';
 import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
@@ -24,7 +24,7 @@ import { settingsRoutes } from './settings';
 import { agentRoutes, runManager } from './routes/agents';
 import { ecosystemRoutes } from './routes/ecosystem';
 import { loadKey } from './secrets';
-import { createStore, deleteStore, getStore, listStores, parseStoreInput, storeZone, updateStore } from './stores';
+import { createStore, deleteStore, getStore, listStores, parseStoreInput, updateStore } from './stores';
 
 /** `?stores=a,b` → known store ids in store order; missing/empty = all stores. */
 const pickStores = (db: Db, q?: string) => {
@@ -35,8 +35,6 @@ const pickStores = (db: Db, q?: string) => {
 
 const json = (req: Request): Promise<unknown> => req.json().catch(() => undefined);
 
-/** Today for an analytics window over `storeIds`, in the first store's day zone (a connected shop's own timezone). */
-const todayOf = (db: Db, storeIds: string[]) => localDate(new Date(), storeZone(db, storeIds[0]));
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const isLocal = (url: string) => URL.canParse(url) && LOCAL_HOSTS.has(new URL(url).hostname);
@@ -161,16 +159,16 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
       const storeIds = pickStores(db, c.req.query('stores'));
-      const to = todayOf(db, storeIds);
-      return c.json(campaignStats(db, storeIds, addDays(to, 1 - range), to));
+      const { to, shift } = dayShifts(db, storeIds);
+      return c.json(campaignStats(db, storeIds, addDays(to, 1 - range), to, shift));
     })
     .get('/api/analytics/top-products', (c) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
       const limit = Math.min(50, Math.max(1, Math.floor(Number(c.req.query('limit'))) || 8));
       const storeIds = pickStores(db, c.req.query('stores'));
-      const to = todayOf(db, storeIds);
-      return c.json(topProducts(db, storeIds, addDays(to, 1 - range), to, limit));
+      const { to, shift } = dayShifts(db, storeIds);
+      return c.json(topProducts(db, storeIds, addDays(to, 1 - range), to, limit, shift));
     })
     .route('/', researchRoutes(db))
     .route('/', competitorRoutes(db, (q) => pickStores(db, q)))

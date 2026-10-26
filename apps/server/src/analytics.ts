@@ -113,20 +113,30 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
 }
 
 /**
- * The window ending today, for the dashboard: `to` is today in the first store's day zone (a connected shop's own
- * timezone), and each store's rows are lined up on its own today (a store whose day is behind or ahead is shifted), with
- * its share of its comparison day (`range` days back) made by now. ponytail: shifts of more than a day (zones 24 h+
- * apart) fall outside the loaded rows.
+ * Today in the first store's day zone (a connected shop's own timezone) as `to`, and how many days each store's own today
+ * is behind it (negative: ahead). A store's window ending `to` is its own days, `shift` earlier.
+ */
+export function dayShifts(db: Db, storeIds: string[], now = Date.now()) {
+  const to = localDate(new Date(now), storeZone(db, storeIds[0]));
+  return { to, shift: Object.fromEntries(storeIds.map((id) => [id, dayNumber(to) - dayNumber(localDate(new Date(now), storeZone(db, id)))])) };
+}
+
+/** Each store's [from, to] for a window [from, to] in `dayShifts`' days. */
+const ownDays = (storeIds: string[], from: string, to: string, shift: Record<string, number>) =>
+  storeIds.map((id) => [id, addDays(from, -(shift[id] ?? 0)), addDays(to, -(shift[id] ?? 0))] as const);
+
+/**
+ * The window ending today, for the dashboard: each store's rows are lined up on its own today (see dayShifts), with its
+ * share of its comparison day (`range` days back) made by now. ponytail: shifts of more than a day (zones 24 h+ apart)
+ * fall outside the loaded rows.
  */
 export function currentWindow(db: Db, storeIds: string[], range: AnalyticsRange, now = Date.now()) {
-  const to = localDate(new Date(now), storeZone(db, storeIds[0]));
+  const { to, shift } = dayShifts(db, storeIds, now);
   const cutoff = new Date(now - range * 86_400_000);
-  const shift: Record<string, number> = {};
   const todayFraction: Record<string, number> = {};
   for (const id of storeIds) {
     const tz = storeZone(db, id);
-    const today = localDate(new Date(now), tz);
-    shift[id] = dayNumber(to) - dayNumber(today);
+    const today = addDays(to, -shift[id]!);
     Object.assign(todayFraction, salesShares(db, [id], addDays(today, -range), cutoff, dayFraction(today, now, tz)));
   }
   const rows = loadRows(db, storeIds, range, to, 1).map((r) => (shift[r.storeId] ? { ...r, date: addDays(r.date, shift[r.storeId]!) } : r));
@@ -135,18 +145,20 @@ export function currentWindow(db: Db, storeIds: string[], range: AnalyticsRange,
 
 const STATUS = (s: string): CampaignStats['status'] => (s === 'paused' ? 'paused' : s === 'archived' || s === 'deleted' || s === 'removed' ? 'archived' : 'active');
 
-/** Every campaign of the stores with its totals over [from, to], biggest spend first. */
-export function campaignStats(db: Db, storeIds: string[], from: string, to: string): CampaignStats[] {
+/** Every campaign of the stores with its totals over [from, to] (each store's own days, see dayShifts), biggest spend first. */
+export function campaignStats(db: Db, storeIds: string[], from: string, to: string, shift: Record<string, number> = {}): CampaignStats[] {
   if (!storeIds.length) return [];
   const { rate } = fxFor(db, storeIds);
   return db
     .prepare(
-      `SELECT c.network, c.id, c.store_id, c.name, c.status, c.daily_budget, coalesce(sum(d.spend), 0) AS spend, coalesce(sum(d.revenue), 0) AS revenue,
+      `WITH w (store_id, d_from, d_to) AS (VALUES ${storeIds.map(() => '(?, ?, ?)').join(',')})
+       SELECT c.network, c.id, c.store_id, c.name, c.status, c.daily_budget, coalesce(sum(d.spend), 0) AS spend, coalesce(sum(d.revenue), 0) AS revenue,
          coalesce(sum(d.purchases), 0) AS purchases, coalesce(sum(d.clicks), 0) AS clicks, coalesce(sum(d.impressions), 0) AS impressions
-       FROM campaigns c LEFT JOIN campaign_daily d ON d.network = c.network AND d.campaign_id = c.id AND d.date BETWEEN ? AND ?
-       WHERE c.store_id IN (${storeIds.map(() => '?').join(',')}) GROUP BY c.network, c.id ORDER BY spend DESC, c.name`,
+       FROM campaigns c JOIN w ON w.store_id = c.store_id
+       LEFT JOIN campaign_daily d ON d.network = c.network AND d.campaign_id = c.id AND d.date BETWEEN w.d_from AND w.d_to
+       GROUP BY c.network, c.id ORDER BY spend DESC, c.name`,
     )
-    .all(from, to, ...storeIds)
+    .all(...ownDays(storeIds, from, to, shift).flat())
     .filter((r) => rate(String(r.store_id)))
     .map((r) => {
       const x = rate(String(r.store_id));
@@ -170,8 +182,11 @@ export function campaignStats(db: Db, storeIds: string[], from: string, to: stri
     .sort((a, b) => b.spend - a.spend || a.name.localeCompare(b.name));
 }
 
-/** Best sellers over [from, to]: paid orders' line items for real stores, a revenue-consistent split for demo stores. */
-export function topProducts(db: Db, storeIds: string[], from: string, to: string, limit: number): TopProduct[] {
+/**
+ * Best sellers over [from, to] (each store's own days, see dayShifts): paid orders' line items for real stores, a
+ * revenue-consistent split for demo stores.
+ */
+export function topProducts(db: Db, storeIds: string[], from: string, to: string, limit: number, shift: Record<string, number> = {}): TopProduct[] {
   if (!storeIds.length) return [];
   const marks = storeIds.map(() => '?').join(',');
   const demo = db.prepare(`SELECT id FROM stores WHERE demo = 1 AND id IN (${marks})`).all(...storeIds).map((r) => String(r.id));
@@ -179,14 +194,16 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
   const rows = real.length
     ? db
         .prepare(
-          `SELECT i.store_id, i.product_id, p.title, p.image, p.inventory, p.inventory_tracked, p.status, sum(i.quantity) AS units, sum(i.revenue) AS revenue, sum(i.revenue - i.cost) AS profit
+          `WITH w (store_id, d_from, d_to) AS (VALUES ${real.map(() => '(?, ?, ?)').join(',')})
+           SELECT i.store_id, i.product_id, p.title, p.image, p.inventory, p.inventory_tracked, p.status, sum(i.quantity) AS units, sum(i.revenue) AS revenue, sum(i.revenue - i.cost) AS profit
            FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+           JOIN w ON w.store_id = i.store_id AND o.local_date BETWEEN w.d_from AND w.d_to
            LEFT JOIN products p ON p.store_id = i.store_id AND p.id = i.product_id
-           WHERE i.store_id IN (${real.map(() => '?').join(',')}) AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?
+           WHERE o.status = 'paid'
            GROUP BY i.store_id, i.product_id`,
         )
         // No LIMIT here: stores in different currencies only rank correctly after conversion (below).
-        .all(...real, from, to)
+        .all(...ownDays(real, from, to, shift).flat())
         .map((r) => ({
           storeId: String(r.store_id),
           productId: String(r.product_id),
@@ -201,7 +218,7 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
   const { rate } = fxFor(db, storeIds);
   // The store's fee % comes off each product's revenue, as it does off the store's profit (the per-order fee can't be split).
   const fee = new Map(db.prepare(`SELECT id, fee_percent FROM stores WHERE id IN (${marks})`).all(...storeIds).map((r) => [String(r.id), Number(r.fee_percent)]));
-  return [...rows, ...demo.flatMap((id) => demoTopProducts(db, id, from, to))]
+  return [...rows, ...ownDays(demo, from, to, shift).flatMap(([id, f, t]) => demoTopProducts(db, id, f, t))]
     .map((p) => (fee.get(p.storeId) ? { ...p, profit: r2(p.profit - (p.revenue * fee.get(p.storeId)!) / 100) } : p))
     .filter((p) => rate(p.storeId))
     .map((p) => (rate(p.storeId) === 1 ? p : { ...p, revenue: r2(p.revenue * rate(p.storeId)), profit: r2(p.profit * rate(p.storeId)) }))

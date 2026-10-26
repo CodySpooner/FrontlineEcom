@@ -3,7 +3,7 @@ import type { AnalyticsSummary, CampaignStats, TopProduct } from '@frontline/sha
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { campaignStats, currentWindow, salesShares, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
+import { campaignStats, currentWindow, dayShifts, salesShares, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
 
 const row = (storeId: string, date: string, revenue: number, adSpend: number, cogs: number, orders: number): MetricRow => ({ storeId, date, revenue, adSpend, cogs, orders });
 
@@ -170,4 +170,28 @@ test("stores in different day zones each count their own today, and their own co
   const peak = summarize(w.rows, { range: 7, to: w.to, storeIds: ['glow', 'peak'], todayFraction: w.todayFraction }).byStore[1]!;
   expect(peak.totals.revenue).toBe(100);
   expect(peak.previous.revenue).toBeCloseTo(170, 1); // 240 × 17/24, not a full day against a partial one
+});
+
+test("campaigns and top products cover each store's own days when stores are in different day zones", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  // 03:00 UTC: Berlin is at 04:00 on the 26th, Honolulu still at 17:00 on the 25th (one day behind).
+  const now = Date.parse('2026-10-26T03:00:00Z');
+  db.prepare("UPDATE stores SET demo = 0, currency = 'USD', timezone = ? WHERE id = ?").run('Europe/Berlin', 'glow');
+  db.prepare("UPDATE stores SET demo = 0, currency = 'USD', timezone = ? WHERE id = ?").run('Pacific/Honolulu', 'peak');
+  const { to, shift } = dayShifts(db, ['glow', 'peak'], now);
+  expect([to, shift]).toEqual(['2026-10-26', { glow: 0, peak: 1 }]);
+
+  db.prepare("INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 'hnl', 'peak', 'Honolulu', 'active', 10)").run();
+  const spend = db.prepare("INSERT INTO campaign_daily (network, campaign_id, date, spend, revenue, purchases, clicks, impressions) VALUES ('meta', 'hnl', ?, ?, 0, 0, 0, 0)");
+  spend.run('2026-10-19', 7); // Honolulu's first day of its week (the 19th–25th)
+  spend.run('2026-10-26', 1000); // not yet Honolulu's day
+  expect(campaignStats(db, ['glow', 'peak'], '2026-10-20', to, shift).find((c) => c.id === 'hnl')!.spend).toBe(7);
+
+  for (const t of ['orders', 'products']) db.prepare(`DELETE FROM ${t} WHERE store_id IN ('glow', 'peak')`).run();
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES (?, ?, '', ?, 'paid', 'unfulfilled', 0, ?)");
+  const item = db.prepare('INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES (?, ?, ?, 1, ?, 0)');
+  order.run('peak', '#1', 30, '2026-10-19'); item.run('peak', '#1', 'rope', 30);
+  order.run('glow', '#2', 50, '2026-10-19'); item.run('glow', '#2', 'mask', 50); // the day before Berlin's week
+  expect(topProducts(db, ['glow', 'peak'], '2026-10-20', to, 8, shift).map((p) => [p.storeId, p.productId])).toEqual([['peak', 'rope']]);
 });
