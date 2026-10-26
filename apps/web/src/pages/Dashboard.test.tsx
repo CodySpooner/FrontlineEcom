@@ -4,7 +4,8 @@ import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { ApprovalRequest, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
 import { DemoMixNote } from '../components/StoreFilter';
-import { Missions, profitFormula, Requests } from './Dashboard';
+import { Outlet, Route, Routes } from 'react-router';
+import { LiveActivity, Missions, profitFormula, Requests } from './Dashboard';
 
 const store = { id: 'pawsome', name: 'Pawsome Gear', currency: 'USD' } as Store;
 const approval: ApprovalRequest = {
@@ -125,5 +126,20 @@ describe('Daily Missions', () => {
     expect(screen.getByText('Mission 12')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Show fewer' }));
     expect(screen.queryByText('Mission 12')).toBeNull();
+  });
+});
+
+describe('Live Store Activity', () => {
+  it("doesn't claim to be live while the app's live connection is down", async () => {
+    stubApi(() => []);
+    renderApp(
+      <Routes>
+        <Route element={<Outlet context={false} />}>
+          <Route path="/" element={<LiveActivity />} />
+        </Route>
+      </Routes>,
+    );
+    expect(await screen.findByText('Reconnecting…')).toBeTruthy();
+    expect(screen.queryByText('Live')).toBeNull();
   });
 });

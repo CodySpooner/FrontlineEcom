@@ -337,6 +337,9 @@ Orca's browser against the reference before ticking it.
       characters now read compact ($71.2M, MX$68M, ¥150M); smaller stores keep the exact figure.
 - [x] UI-133 App.tsx imported the AI Ecosystem page statically, so pixi.js rode in the main bundle (602 kB, over Vite's
       500 kB warning) and every launch parsed a 2D engine only that page uses. It now lazy-loads like every other page.
+- [x] UI-134 Live Store Activity's "Live" badge was hard-coded green and pulsing, so it claimed "Live" while the app's live
+      connection was down (API restart, laptop asleep) and nothing streamed in. It now follows the connection: grey
+      "Reconnecting…" like the sidebar's status, back to "Live" once the socket reconnects.
 
 ## Blocked
 
@@ -515,3 +518,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-131: found on the UI-130 zero-store instance. New Settings test (red on the old code, green now). The rest of the zero-store sweep is clean: Builder, Competitors, Creative and Research disable their submit with no store, Knowledge's Store memory shows its empty state, every other page shows zeros or its empty state. Orca at 800px: the line under the Caps heading, Stores' "Add store" above it
 - 2026-10-26 — UI-132: `fitMoney` in lib/format (Intl compact, 3 significant digits, the 10-character limit on the unsigned amount so losses match) for Revenue, Profit and Ad Spend. New format test. Chrome with a client-side ×100 summary patch, 1Y, body pinned to 1280px: "$71.2M / $15.5M / $26.7M" with 66–71px sparklines (were ~0); unpatched 30D still "$65,269 / $14,589 / $24,230". Orca at 800px fit even before. Analytics' stat row had no overflow at 1280 with the same patch. Reduced motion is already handled globally in index.css
 - 2026-10-26 — UI-133: one line in App.tsx (`page(() => import('./ecosystem/Ecosystem'), 'Ecosystem')`); src/ecosystem untouched. vite build: main chunk 602 → 423 kB (132 kB gzip), no size warning; Ecosystem is its own 334 kB chunk. Orca: /ecosystem renders the office canvas (685×500) with pixi fetched on visit. Same session's checks: long store names (48 chars) wrap cleanly on every page, dialogs return focus to their trigger on Close and Esc
+- 2026-10-26 — UI-134: Shell passes `useLive()`'s online flag as the Outlet context; `LiveActivity` (now exported) reads it, online outside Shell. New Dashboard test (Outlet context false: "Reconnecting…", no "Live"). Orca: stopped the dev API, so the badge read "Reconnecting…" (grey, no pulse) beside the sidebar's "System status: Reconnecting…"; restarted it, back to "Live" in ~5s

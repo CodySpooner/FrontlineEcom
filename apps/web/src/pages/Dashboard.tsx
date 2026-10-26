@@ -1,6 +1,6 @@
 // UI-04 Command Center — port of docs/reference/dashboard-mockup-v3.html. The store filter scopes every panel.
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link } from 'react-router';
+import { Link, useOutletContext } from 'react-router';
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight, Check, CreditCard, RotateCcw, ShoppingBag, ShoppingCart } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type Store, type StoreEventType } from '@frontline/shared';
@@ -184,8 +184,9 @@ const EVENT: Record<StoreEventType, { label: string; icon: typeof ShoppingBag; c
   refund: { label: 'Refund', icon: RotateCcw, cls: 'border-red/35 bg-red-soft text-red' },
 };
 
-function LiveActivity() {
+export function LiveActivity() {
   const { ids, name, currency } = useStoreSelection();
+  const online = useOutletContext<boolean | undefined>() ?? true;
   const q = useEvents(ids);
   useTick(30_000);
   const list = (q.data ?? []).slice(0, 5);
@@ -193,9 +194,9 @@ function LiveActivity() {
     <Panel
       title="Live Store Activity"
       action={
-        <span className="flex items-center gap-[7px] text-xs text-good">
-          <StatusDot tone="good" pulse />
-          Live
+        <span className={cx('flex items-center gap-[7px] text-xs', online ? 'text-good' : 'text-muted')}>
+          <StatusDot tone={online ? 'good' : 'idle'} pulse={online} />
+          {online ? 'Live' : 'Reconnecting…'}
         </span>
       }
     >

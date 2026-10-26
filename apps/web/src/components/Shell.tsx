@@ -79,7 +79,8 @@ export function Shell() {
         {/* Keyed by path: moving to another page clears a caught error. */}
         <PageBoundary key={pathname}>
           <Suspense fallback={<LoadingState rows={6} />}>
-            <Outlet />
+            {/* Pages read whether the live connection is up (Dashboard's "Live" badge). */}
+            <Outlet context={online} />
           </Suspense>
         </PageBoundary>
       </main>
