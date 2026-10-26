@@ -31,7 +31,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [ ] CORE-11 TikTok Shop + TikTok Ads connectors.
 - [ ] CORE-12 Etsy + Amazon SP-API connectors (read-only analytics first).
 - [ ] CORE-13 Suppliers: CJ Dropshipping / DSers — product sourcing + order status (read first).
-- [ ] CORE-14 Products & Orders API for the UI (filters, pagination, sort).
+- [x] CORE-14 Products & Orders API for the UI (filters, pagination, sort).
 - [ ] CORE-15 Research feed: trending products dataset (demo) with scoring (margin, competition, trend, shipping),
       tabs as filters, saved lists API.
 - [ ] CORE-16 Competitors: competitors per store, price snapshots, ad snapshots; API.
@@ -47,6 +47,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-14 `GET /api/products` + `GET /api/orders` (store filter, `q` search, status filters, whitelisted sort, `Page<T>` pagination)
 - 2026-10-26 — CORE-07 secrets: AES-256-GCM (row-bound AAD) with `secret.key` in the data dir, `integrations` table, `GET/PUT /api/integrations`, `DELETE /api/integrations/:id`, `INTEGRATION_KINDS` catalog in shared; secret values never returned
 - 2026-10-26 — CORE-06 approvals: `GET /api/approvals?status=&stores=`, `POST /api/approvals/:id/approve|deny` (404/409), broadcasts on `/api/live`, in-process `approvalsHook(db)` (`create` + awaitable `decision`)
 - 2026-10-26 — CORE-05 `/api/live` WebSocket (`LiveMessage`), `GET /api/events`, demo emitter (8–25s, weighted by store size, backfills a quiet feed, prunes >7d)

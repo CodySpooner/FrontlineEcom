@@ -5,6 +5,7 @@ import { WebSocketServer } from 'ws';
 import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type ApprovalStatus, type StoreInput } from '@frontline/shared';
 import { loadRows, summarize } from './analytics';
 import { decide, listApprovals } from './approvals';
+import { listOrders, listProducts } from './catalog';
 import { dataDir, type Db } from './db';
 import { localDate } from './dates';
 import { deleteIntegration, listIntegrations, saveIntegration } from './integrations';
@@ -69,6 +70,14 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const a = decide(db, c.req.param('id'), c.req.param('decision') as ApprovalDecision);
       if (!a) return c.json({ error: 'approval not found' }, 404);
       return a === 'decided' ? c.json({ error: 'approval already decided' }, 409) : c.json(a);
+    })
+    .get('/api/products', (c) => {
+      const page = listProducts(db, pickStores(db, c.req.query('stores')), (k) => c.req.query(k));
+      return typeof page === 'string' ? c.json({ error: page }, 400) : c.json(page);
+    })
+    .get('/api/orders', (c) => {
+      const page = listOrders(db, pickStores(db, c.req.query('stores')), (k) => c.req.query(k));
+      return typeof page === 'string' ? c.json({ error: page }, 400) : c.json(page);
     })
     .get('/api/integrations', (c) => c.json(listIntegrations(db, key(), pickStores(db, c.req.query('stores')))))
     .put('/api/integrations', async (c) => {

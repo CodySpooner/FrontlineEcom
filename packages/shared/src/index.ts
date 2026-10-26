@@ -334,3 +334,49 @@ export interface IntegrationInput {
   storeId?: string;
   values: Record<string, string>;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Products & orders (core lane).
+
+/** One page of a list endpoint. `?offset=&limit=` (default limit 50, max 200). */
+export interface Page<T> {
+  items: T[];
+  /** Total matching rows across all pages. */
+  total: number;
+  offset: number;
+  limit: number;
+}
+
+export type ProductStatus = 'active' | 'draft' | 'archived';
+
+/** GET /api/products?stores=&q=&status=&sort=title|price|inventory|margin&dir=asc|desc → Page<Product>. */
+export interface Product {
+  id: string;
+  storeId: string;
+  title: string;
+  image?: string;
+  price: number;
+  compareAt?: number;
+  /** Unit cost incl. shipping. */
+  cost: number;
+  inventory: number;
+  status: ProductStatus;
+  /** (price - cost) / price × 100. */
+  margin: number;
+}
+
+export type OrderStatus = 'paid' | 'refunded';
+export type FulfillmentStatus = 'unfulfilled' | 'fulfilled' | 'in_transit' | 'delivered';
+
+/** GET /api/orders?stores=&q=&status=&fulfillment=&sort=createdAt|total&dir=asc|desc → Page<Order>. Key = storeId + id. */
+export interface Order {
+  /** Platform order number, e.g. "#1042" (unique per store). */
+  id: string;
+  storeId: string;
+  createdAt: string;
+  total: number;
+  status: OrderStatus;
+  fulfillmentStatus: FulfillmentStatus;
+  supplier?: string;
+  tracking?: string;
+}
