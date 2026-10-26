@@ -71,6 +71,19 @@ describe('agent tools on demo data', () => {
     expect(revenue).toEqual([...revenue].sort((a, b) => b - a));
   });
 
+  test('compare_stores names stores it has no exchange rate for instead of showing them at zero', async () => {
+    db.prepare(`UPDATE stores SET currency = 'XYZ' WHERE id = 'peak'`).run();
+    try {
+      const [cmp] = results(await run(input('glow', 'market_analyst'), [{ call: 'compare_stores', input: { range: 7 } }, done]));
+      const [period, , ...rows] = cmp!.output.split('\n');
+      expect(period).toMatch(/, amounts in USD; left out, no exchange rate yet: Peak Fit$/);
+      expect(rows).toHaveLength(listStores(db).length - 1);
+      expect(rows.some((r) => r.startsWith('Peak Fit'))).toBe(false);
+    } finally {
+      db.prepare(`UPDATE stores SET currency = 'USD' WHERE id = 'peak'`).run();
+    }
+  });
+
   test('list_competitors shows competitors, price moves and recent ads', async () => {
     const events = await run(input('pawsome', 'ad_strategist'), [{ call: 'list_competitors' }, done]);
     const out = results(events)[0]!.output;

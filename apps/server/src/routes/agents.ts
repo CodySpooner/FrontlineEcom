@@ -139,7 +139,8 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
   },
   portfolio: (range) => {
     const [to, ids] = [localDate(), listStores(db).map((s) => s.id)];
-    return { ...summarize(loadRows(db, ids, range, to), { range, to, storeIds: ids }), currency: fxFor(db, ids).currency };
+    const { currency, unconverted } = fxFor(db, ids);
+    return { ...summarize(loadRows(db, ids, range, to), { range, to, storeIds: ids }), currency, ...(unconverted.length ? { unconverted } : {}) };
   },
 });
 
