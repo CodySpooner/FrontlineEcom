@@ -19,7 +19,7 @@ export {
   REFLECTION_PROMPT,
   type NewMemory,
 } from './memory';
-export { APP_TOOLS, cash, toolsFor, callTool, requestApproval, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
+export { APP_TOOLS, budgetAddedToday, cash, toolsFor, callTool, requestApproval, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
 export { createRunManager, getRun, listRuns, costToday, runGist, type RunManager, type RunManagerOptions } from './runs';
 export { XP, xpForLevel, levelForXp, levelProgress, rankForLevel, demoXp, awardXp, commander, profitStreak, dailyMissions, ACHIEVEMENTS, checkAchievements, type Award, type Facts, type StoreDay } from './gamification';

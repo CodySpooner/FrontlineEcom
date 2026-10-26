@@ -1,4 +1,4 @@
-import type { AgentRun, AgentRunDetail, StoreMemory } from '@frontline/shared';
+import type { AgentRun, AgentRunDetail, StoreMemory, StoreUsage } from '@frontline/shared';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
@@ -69,4 +69,24 @@ describe('memory', () => {
     expect((await send('GET', '/api/stores/nope/memory')).status).toBe(404);
     expect((await send('PATCH', '/api/memory/nope', { confidence: 0.4 })).status).toBe(404);
   });
+});
+
+test("usage: today's AI cost, credits and added ad budget per store, the counters the caps check", async () => {
+  const now = new Date().toISOString();
+  const usage = async () => (await (await send('GET', '/api/usage?stores=glow')).json()) as StoreUsage[];
+  const before = await usage();
+  expect(before.map((u) => u.storeId)).toEqual(['glow']);
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, cost_usd, created_at) VALUES ('u1', 'glow', 'glow:copywriter', 't', 0.25, ?)`).run(now);
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, cost_usd, created_at) VALUES ('u2', 'glow', 'glow:copywriter', 't', 9, '2020-01-01T00:00:00Z')`).run();
+  db.prepare(`INSERT INTO creatives (id, store_id, agent_id, kind, headline, primary_text, credits, source, created_at) VALUES ('u3', 'glow', 'glow:creative_studio', 'image', 'h', 'p', 2, 'demo', ?)`).run(now);
+  const budget = (id: string, status: string) =>
+    db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'glow', 'glow:ad_strategist', 't', 'r', ?, ?, ?)`)
+      .run(id, JSON.stringify({ kind: 'ads.set_budget', payload: {}, amountUsd: 12 }), status, now);
+  budget('u4', 'pending');
+  budget('u5', 'denied');
+  const [after] = await usage();
+  expect(after!.agentCostUsd - before[0]!.agentCostUsd).toBeCloseTo(0.25);
+  expect(after!.credits - before[0]!.credits).toBe(2);
+  expect(after!.adBudgetAddedUsd - before[0]!.adBudgetAddedUsd).toBe(12);
+  expect(((await (await send('GET', '/api/usage')).json()) as StoreUsage[]).length).toBeGreaterThan(1);
 });

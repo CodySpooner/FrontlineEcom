@@ -911,6 +911,15 @@ export interface StoreCaps {
 
 export type StoreCapsUpdate = Partial<Omit<StoreCaps, 'storeId'>>;
 
+/** Today's usage (since local midnight) against the store's caps: the same counters that block a run, a render or a budget change. */
+export interface StoreUsage {
+  storeId: string;
+  agentCostUsd: number;
+  credits: number;
+  /** Daily ad budget added by approved or pending budget changes. */
+  adBudgetAddedUsd: number;
+}
+
 export type NotificationKind = 'approval' | 'agent_done' | 'error' | 'info';
 
 /** GET /api/notifications?unread=true&limit= → AppNotification[] newest first. POST /api/notifications/read { ids? } (no ids = all) → { updated }. */

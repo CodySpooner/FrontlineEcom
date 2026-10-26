@@ -1,4 +1,7 @@
 import {
+  budgetAddedToday,
+  costToday,
+  creditsToday,
   XP,
   createDefaultJobs,
   DEFAULT_JOBS,
@@ -31,7 +34,7 @@ import {
   type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
-import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type ResearchProduct, type StartRunInput } from '@frontline/shared';
+import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type ResearchProduct, type StartRunInput, type StoreUsage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Hono } from 'hono';
@@ -235,6 +238,13 @@ export function agentRoutes(db: Db) {
   }
   const limit = (v: string | undefined) => Math.min(200, Math.max(1, Math.floor(Number(v)) || 50));
   return new Hono()
+    .get('/api/usage', (c) => {
+      const ids = c.req.query('stores')?.split(',').filter(Boolean);
+      const stores = listStores(db).filter((s) => !ids?.length || ids.includes(s.id));
+      return c.json(
+        stores.map((s): StoreUsage => ({ storeId: s.id, agentCostUsd: costToday(db, s.id), credits: creditsToday(db, s.id), adBudgetAddedUsd: budgetAddedToday(db, s.id) })),
+      );
+    })
     .get('/api/agents', (c) => {
       activateConnectedStores(db, runs);
       return c.json(listAgents(db, c.req.query('stores')?.split(',').filter(Boolean)));

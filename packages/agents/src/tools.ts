@@ -531,7 +531,7 @@ export const APP_TOOLS: AppTool[] = [
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
       const added = Math.max(0, to - from);
       const cap = ctx.caps?.(ctx.store.id).adSpendChangePerDay;
-      const addedToday = added ? budgetAddedToday(ctx) : 0;
+      const addedToday = added ? budgetAddedToday(ctx.db, ctx.store.id) : 0;
       if (cap !== undefined && added && addedToday + added > cap) {
         const $ = (n: number) => cash(n, ctx.store.currency);
         return `Not sent: +${$(added)}/day would pass the owner's ${$(cap)}/day cap on added ad spend (${$(addedToday)} already approved today). Propose a smaller step.`;
@@ -675,15 +675,15 @@ function campaignStats(ctx: ToolContext, days: number): CampaignStats[] {
 }
 
 /** Daily ad budget added by approved or pending budget changes for this store since local midnight. */
-function budgetAddedToday(ctx: ToolContext): number {
+export function budgetAddedToday(db: DatabaseSync, storeId: string): number {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
-  const row = ctx.db
+  const row = db
     .prepare(
       `SELECT coalesce(sum(json_extract(action_json, '$.amountUsd')), 0) AS added FROM approvals
        WHERE store_id = ? AND json_extract(action_json, '$.kind') = 'ads.set_budget' AND status != 'denied' AND created_at >= ?`,
     )
-    .get(ctx.store.id, midnight.toISOString());
+    .get(storeId, midnight.toISOString());
   return Number(row?.added ?? 0);
 }
 
