@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { once, tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, setStoreTimezone, switchToReal, syncView } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, setStoreTimezone, switchToReal, syncView, hasTag } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -354,6 +354,22 @@ export interface NewProduct {
 }
 
 /**
+ * Refuses products an agent sent malformed, before any is created: a string where a number belongs fails only after
+ * the draft exists (a $0 draft), and a title with HTML would run on the storefront.
+ */
+export function checkNewProducts(products: NewProduct[]) {
+  const num = (v: unknown, min: number) => typeof v === 'number' && Number.isFinite(v) && v >= min;
+  for (const [i, p] of products.entries()) {
+    const which = `Product ${i + 1}${typeof p.title === 'string' && p.title.trim() ? ` (${p.title.trim().slice(0, 60)})` : ''}`;
+    if (typeof p.title !== 'string' || !p.title.trim()) throw new Error(`${which}: a title is required`);
+    if (hasTag(p.title)) throw new Error(`${which}: the title can't contain HTML`);
+    if (!num(p.price, 0.01)) throw new Error(`${which}: the price must be a number above 0`);
+    if (p.compareAt != null && !num(p.compareAt, 0.01)) throw new Error(`${which}: the compare-at price must be a number above 0`);
+    if (p.cost != null && !num(p.cost, 0)) throw new Error(`${which}: the cost must be a number, 0 or more`);
+  }
+}
+
+/**
  * Creates each product in Shopify as a draft and adds it to the local catalog right away (the next sync refreshes it).
  * Call only for an approved request. Throws on the first failure; products created before it stay as drafts, and a
  * product whose price update failed stays a $0 draft in Shopify (the error names it) until the next sync shows it.
@@ -370,6 +386,7 @@ const check = (errors: { message: string }[]) => {
 
 /** Creates priced drafts one by one, each logged. A failure part-way names the drafts already created, so nobody adds them twice. */
 export async function createProducts(db: Db, key: Buffer, storeId: string, products: NewProduct[], fetchFn: Fetch = fetch) {
+  checkNewProducts(products);
   const q = admin(db, key, storeId, fetchFn);
   const insert = db.prepare(`INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 'draft')`);
   const created: { id: string; title: string }[] = [];

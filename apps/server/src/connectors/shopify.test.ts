@@ -7,7 +7,8 @@ import { saveIntegration } from '../integrations';
 import { rebuildRevenue } from './common';
 import { seedDemo } from '../demo';
 import { listActions } from '../actions';
-import { createProducts, deleteTheme, duplicateTheme, fulfillmentOf, funnelDays, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, shopHost, syncShopify, upsertThemeFiles } from './shopify';
+import { createProducts, deleteTheme, duplicateTheme, fulfillmentOf, funnelDays, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, shopHost, syncShopify, upsertThemeFiles , type NewProduct } from './shopify';
+import { createWooProducts } from './woocommerce';
 
 const key = randomBytes(32);
 const TOKEN = 'shpat_fixture_token';
@@ -608,4 +609,22 @@ test("a Shopify sync whose shop was swapped while it paged orders stops writing 
   await syncShopify(db, key, 'glow', fetchFn, NOW);
   expect(db.prepare("SELECT cursor FROM integrations WHERE id = 'shopify:glow'").get()?.cursor).toBeNull();
   expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow' AND id = '#41'").get()?.n).toBe(0);
+});
+
+test('products to create are checked before anything is created: a string where a number belongs, or a title with HTML, would leave a half-made draft', async () => {
+  const { db } = await setup();
+  const calls: string[] = [];
+  const fetchFn = (async (url: string) => (calls.push(url), Response.json({}))) as typeof fetch;
+  const bad = [
+    { title: 'Ice Roller', price: 24.9, compareAt: '39.99' },
+    { title: 'Ice Roller', price: 0 },
+    { title: 'Ice Roller', price: 10, cost: -1 },
+    { title: '  ', price: 10 },
+    { title: 'Roller <img src=x onerror=alert(1)>', price: 10 },
+  ] as unknown as NewProduct[];
+  for (const p of bad) {
+    await expect(createProducts(db, key, 'glow', [{ title: 'Fine', price: 5 }, p], fetchFn)).rejects.toThrow(/^Product 2/);
+    await expect(createWooProducts(db, key, 'glow', [{ title: 'Fine', price: 5 }, p], fetchFn)).rejects.toThrow(/^Product 2/);
+  }
+  expect(calls).toHaveLength(0);
 });

@@ -5,7 +5,7 @@ import { tx, type Db } from '../db';
 import { convertRate, historicRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, setStoreTimezone, switchToReal, syncView } from './common';
-import type { NewProduct, ProductPage } from './shopify';
+import { checkNewProducts, type NewProduct, type ProductPage } from './shopify';
 
 // WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
 // approved product writes below (createWooProducts, setWooProductPrice, publishWooProductPage). Store pages are
@@ -278,6 +278,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
  * for an approved request. Same contract as Shopify's createProducts: a failure part-way names the drafts already created.
  */
 export async function createWooProducts(db: Db, key: Buffer, storeId: string, products: NewProduct[], fetchFn: Fetch = fetch) {
+  checkNewProducts(products);
   const insert = db.prepare(`INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 'draft')`);
   const created: { id: string; title: string }[] = [];
   for (const p of products) {

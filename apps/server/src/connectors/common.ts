@@ -262,6 +262,9 @@ export const stateOf = <T>(db: Db, key: string) => {
 /** Settings row: the timezone each ad account or GA4 property reports its days in (integration id → IANA name). */
 export const AD_ZONES = 'ad_timezones';
 
+/** A tag in text a storefront shows as is (titles): `<b`, `</`, `<!--`, `<?`. A lone "<" ("under <5 cm") isn't one. */
+export const hasTag = (s: string) => /<[a-z!/?]/i.test(s);
+
 /** Money as cents (2 decimals). */
 export const cents = (n: number) => Math.round(n * 100) / 100;
 
