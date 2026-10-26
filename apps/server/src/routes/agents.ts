@@ -61,7 +61,7 @@ import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
 import { demoSupplierProducts, searchCj } from '../connectors/cj';
 import { createProducts, deleteTheme, duplicateTheme, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, upsertThemeFiles } from '../connectors/shopify';
 import { createWooProducts, publishWooPage, publishWooProductPage, setWooProductPrice } from '../connectors/woocommerce';
-import { setEtsyListingPrice } from '../connectors/etsy';
+import { publishEtsyProductPage, setEtsyListingPrice } from '../connectors/etsy';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
@@ -91,7 +91,7 @@ const onShopify = <T,>(db: Db, storeId: string, write: () => Promise<T>) =>
 const onLiveShopify = <T,>(db: Db, storeId: string, fn: () => Promise<T>) =>
   getStore(db, storeId)?.connected ? onShopify(db, storeId, fn) : Promise.reject(new Error('Theme editing needs a connected Shopify store; this one runs on demo data.'));
 
-/** Store Builder drafts → Shopify or WooCommerce: product pages update the product, other pages are created. */
+/** Store Builder drafts → Shopify or WooCommerce: product pages update the product (Etsy too), other pages are created. */
 const pushPage =
   (db: Db): PushPage =>
   (d) => {
@@ -109,6 +109,8 @@ const pushPage =
         product
           ? publishWooProductPage(db, loadKey(dataDir()), d.storeId, product, { title: d.title, descriptionHtml: d.html })
           : publishWooPage(db, loadKey(dataDir()), d.storeId, { title: d.title, bodyHtml: d.html }),
+      // Etsy has listings, not pages; core sends the description as plain text.
+      ...(product ? { etsy: () => publishEtsyProductPage(db, loadKey(dataDir()), d.storeId, product, { title: d.title, descriptionHtml: d.html }) } : {}),
     });
   };
 

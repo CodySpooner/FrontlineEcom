@@ -89,6 +89,15 @@ test('connected stores get it on the platform; a platform error tells the owner;
   expect(seen).toEqual(['published']);
 });
 
+test('Etsy takes product pages (to the listing) but not other pages', async () => {
+  db.prepare(`UPDATE stores SET connected = 1, platform = 'etsy' WHERE id = 'glow'`).run();
+  await run(() => [draft(), draft({ kind: 'page', productId: undefined, title: 'About us' })]);
+  const [about, page] = listPageDrafts(db);
+  expect((await run(() => [{ call: 'publish_page', input: { draftId: about!.id } }], 'approve'))[0]).toMatch(/^Not sent: the app doesn't change etsy stores yet/);
+  await run(() => [{ call: 'publish_page', input: { draftId: page!.id } }], 'approve');
+  expect(db.prepare(`SELECT body FROM notifications WHERE kind = 'error' AND store_id = 'glow'`).get()?.body).toBe("p-new is not an Etsy listing. It's approved and waiting in Store Builder.");
+});
+
 test('a decision said twice on the live bus runs its action once', async () => {
   const runs: string[] = [];
   onDecision(db, 'approved', (_, a) => runs.push(a.id));

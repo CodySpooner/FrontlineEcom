@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
+import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
@@ -101,8 +101,8 @@ const since = (days: number, store: Store) => {
 const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 /**
  * Why a store change can't be asked for: the store is connected on a platform the app doesn't write it to yet (shared
- * PRODUCT_WRITE_PLATFORMS for products and pages, PRICE_WRITE_PLATFORMS for prices; `onStore` in
- * apps/server/src/routes/agents.ts), so an approval would only fail. Undefined when it can.
+ * PRODUCT_WRITE_PLATFORMS for products and other pages, PRODUCT_PAGE_PLATFORMS for product pages, PRICE_WRITE_PLATFORMS
+ * for prices; `onStore` in apps/server/src/routes/agents.ts), so an approval would only fail. Undefined when it can.
  */
 const noStoreWrites = (store: Store, platforms = PRODUCT_WRITE_PLATFORMS) =>
   store.connected && !platforms.includes(store.platform)
@@ -597,7 +597,7 @@ export const APP_TOOLS: AppTool[] = [
       const d = getPageDraft(ctx.db, draftId);
       if (!d || d.storeId !== ctx.store.id) return `No draft ${draftId} in this store.`;
       if (d.status !== 'draft' && d.status !== 'rejected') return `That draft is already ${d.status}.`;
-      const no = noStoreWrites(ctx.store);
+      const no = noStoreWrites(ctx.store, d.kind === 'product' && d.productId ? PRODUCT_PAGE_PLATFORMS : PRODUCT_WRITE_PLATFORMS);
       if (no) return no;
       const { approved, message } = await requestApproval(ctx, {
         title: `Publish "${d.title}"`.slice(0, 80),
