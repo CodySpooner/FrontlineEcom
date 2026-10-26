@@ -46,6 +46,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
   - Each step is an ordinary run. A step starts when all its `dependsOn` are done, as the **child run** (`parentRunId`) of the first one, with their final answers in its brief. Handoffs are real parent/child runs, so `/api/live` `run` events show them.
   - Mission `status`: `running` | `done` | `blocked`. Step `status`: `waiting` | `blocked` or its run's status. A step also has `runId`, `deliverable` (the first line of its answer) and `note` (why it couldn't start yet). The mission panel's pending, completed and blocked tasks map straight onto these.
   - Missions end with a notification ("Mission done: …" or "Mission stuck: …", linking to `/ecosystem`).
+  - **Live:** `/api/live` sends `{ type: 'mission', mission }` whenever a mission is created, starts a step, gets a step's deliverable or ends. That's your "Team workflow advanced" feed event (AGT-100).
   - **Model and provider:** every `Agent` has `engine: { provider: 'claude', model } | { provider: 'demo' }`, the same choice the run engine makes. There's no second config to link.
 
 ## Items

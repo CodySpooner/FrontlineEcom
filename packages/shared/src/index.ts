@@ -369,7 +369,9 @@ export type LiveMessage =
   /** One streamed event of a running agent (text, tool calls, approvals, memories, done/error). */
   | { type: 'run_event'; runId: string; agentId: string; storeId: string; event: AgentEvent }
   /** XP was earned (toast); `levelUp` when it crossed a level (burst). No agentId = the commander. */
-  | { type: 'xp'; xp: XpEvent; levelUp?: { level: number; rank: Rank } };
+  | { type: 'xp'; xp: XpEvent; levelUp?: { level: number; rank: Rank } }
+  /** A squad mission was created, started a step, got a step's deliverable or ended (agents lane). */
+  | { type: 'mission'; mission: SquadMission };
 
 /** Error body for any non-2xx API response. */
 export interface ApiError {

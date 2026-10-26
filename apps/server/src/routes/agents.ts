@@ -356,9 +356,11 @@ function startFresh(db: Db, store: Store) {
   }
 }
 
-/** Starts the mission steps that finished runs unblocked; the owner hears when a mission ends. */
+/** Starts the mission steps that finished runs unblocked; the live feed sees every move, the owner hears when one ends. */
 function advanceSquadMissions(db: Db) {
   for (const m of advanceMissions(db, runManager(db).start)) {
+    publish({ type: 'mission', mission: m });
+    if (m.status === 'running') continue;
     const stuck = m.steps.find((s) => s.status === 'error' || s.status === 'cancelled');
     notify(db, m.status === 'done'
       ? { kind: 'agent_done', title: `Mission done: ${m.title}`, body: m.steps.at(-1)?.deliverable ?? `${m.steps.length} steps done.`, storeId: m.storeId, link: '/ecosystem' }
@@ -467,7 +469,9 @@ export function agentRoutes(db: Db) {
       const input = parseMission(await c.req.json().catch(() => null));
       if (typeof input === 'string') return c.json({ error: input }, 400);
       if (!getStore(db, input.storeId)) return c.json({ error: 'Store not found' }, 404);
-      return c.json(createMission(db, input, runs.start), 201);
+      const mission = createMission(db, input, runs.start);
+      publish({ type: 'mission', mission });
+      return c.json(mission, 201);
     })
     .get('/api/runs', (c) =>
       c.json(listRuns(db, { agentId: c.req.query('agent'), storeIds: c.req.query('stores')?.split(',').filter(Boolean), limit: limit(c.req.query('limit')) })),
