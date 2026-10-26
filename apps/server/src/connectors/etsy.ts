@@ -11,7 +11,8 @@ const API = 'https://openapi.etsy.com/v3/application';
 const TOKEN_URL = 'https://api.etsy.com/v3/public/oauth/token';
 /** First sync pulls this many days of receipts (1Y range + the previous year for deltas). */
 const BACKFILL_DAYS = 730;
-const LISTING_STATES = ['active', 'draft', 'inactive'];
+// A listing that sells out or expires leaves 'active' for its own state, so those are pulled too or it would stay in stock here.
+const LISTING_STATES = ['active', 'draft', 'inactive', 'sold_out', 'expired'];
 
 type Fetch = typeof fetch;
 type Money = { amount: number; divisor: number; currency_code?: string };
@@ -40,7 +41,8 @@ interface Listing {
 }
 
 const money = (m: Money | undefined) => (m ? m.amount / m.divisor : 0);
-const LISTING_STATUS: Record<string, ProductStatus> = { active: 'active', draft: 'draft' };
+/** Sold out is still a live listing, at 0 stock (like a Shopify product at 0); the rest are off the shop. */
+const LISTING_STATUS: Record<string, ProductStatus> = { active: 'active', sold_out: 'active', draft: 'draft' };
 
 /** Access tokens last an hour and refresh tokens rotate, so both are saved (encrypted) right away. */
 async function refreshEtsy(db: Db, key: Buffer, id: string, creds: Record<string, string>, fetchFn: Fetch, now: Date) {
@@ -102,7 +104,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, NULL, 0, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, price = excluded.price, inventory = excluded.inventory, status = excluded.status`,
       );
-      for (const l of listings) prod.run(storeId, `etsy-${l.listing_id}`, l.title, money(l.price), l.quantity, LISTING_STATUS[l.state] ?? 'archived');
+      for (const l of listings) prod.run(storeId, `etsy-${l.listing_id}`, l.title, money(l.price), l.state === 'sold_out' ? 0 : l.quantity, LISTING_STATUS[l.state] ?? 'archived');
       // ponytail: Etsy has no unit costs, so Etsy orders add revenue with cogs 0.
       const ord = db.prepare(
         `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?)

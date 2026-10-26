@@ -30,8 +30,9 @@ function fakeEtsy(refreshError = false) {
       return Response.json({ count: 104, results: offset === 0 ? all : [] });
     }
     const state = u.searchParams.get('state');
-    const results = state === 'active' ? [listing(11, 'active', '2026-10-24T00:00:00Z'), listing(12, 'active', '2020-01-01T00:00:00Z')] : state === 'draft' ? [listing(13, 'draft', '2026-10-01T00:00:00Z')] : [];
-    return Response.json({ count: state === 'draft' ? 1 : 500, results });
+    const one = { draft: listing(13, 'draft', '2026-10-01T00:00:00Z'), sold_out: listing(14, 'sold_out', '2026-10-25T00:00:00Z'), expired: listing(15, 'expired', '2026-10-20T00:00:00Z') }[state!];
+    const results = state === 'active' ? [listing(11, 'active', '2026-10-24T00:00:00Z'), listing(12, 'active', '2020-01-01T00:00:00Z')] : one ? [one] : [];
+    return Response.json({ count: one ? 1 : 500, results });
   }) as typeof fetch;
   return { fetchFn, calls };
 }
@@ -53,10 +54,15 @@ test('Etsy sync renews the token, pulls paid receipts + changed listings, rebuil
   const api = calls.slice(1);
   expect(api.every((c) => c.headers.get('x-api-key') === 'keystr:shh' && c.headers.get('authorization') === 'Bearer 123.at_new')).toBe(true);
   expect(api.filter((c) => c.url.pathname.endsWith('/receipts')).map((c) => c.url.searchParams.get('offset'))).toEqual(['0', '100']);
-  // active stops at a listing older than the window, draft at its count, inactive at an empty page
-  expect(api.filter((c) => c.url.pathname.endsWith('/listings')).map((c) => c.url.searchParams.get('state'))).toEqual(['active', 'draft', 'inactive']);
+  // active stops at a listing older than the window, inactive at an empty page, the others at their count
+  expect(api.filter((c) => c.url.pathname.endsWith('/listings')).map((c) => c.url.searchParams.get('state'))).toEqual(['active', 'draft', 'inactive', 'sold_out', 'expired']);
 
-  expect(db.prepare("SELECT id, status FROM products WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([{ id: 'etsy-11', status: 'active' }, { id: 'etsy-13', status: 'draft' }]);
+  expect(db.prepare("SELECT id, status, inventory FROM products WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
+    { id: 'etsy-11', status: 'active', inventory: 5 },
+    { id: 'etsy-13', status: 'draft', inventory: 5 },
+    { id: 'etsy-14', status: 'active', inventory: 0 }, // sold out: still listed, nothing left
+    { id: 'etsy-15', status: 'archived', inventory: 5 },
+  ]);
   expect(db.prepare("SELECT id, total, status, fulfillment_status, tracking FROM orders WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
     { id: 'etsy-1', total: 30, status: 'paid', fulfillment_status: 'unfulfilled', tracking: null },
     { id: 'etsy-2', total: 20, status: 'paid', fulfillment_status: 'fulfilled', tracking: '9400' },
