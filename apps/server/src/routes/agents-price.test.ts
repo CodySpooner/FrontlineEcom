@@ -202,5 +202,6 @@ test('a price approved after the price moved is not applied and starts no test',
   await applyPriceChange(db, approval, async () => {});
   expect(db.prepare('SELECT price FROM products WHERE id = ?').get(id)?.price).toBe(22);
   expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
+  expect(db.prepare(`SELECT 1 AS y FROM done_once WHERE ref = 'not-applied:a1'`).get()).toEqual({ y: 1 }); // squad_log says so
   expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Not applied: "Test $24"'`).get()?.body).toBe('The price moved since this was asked ($20 → now $22). Ask the Market Analyst again if it still makes sense.');
 });

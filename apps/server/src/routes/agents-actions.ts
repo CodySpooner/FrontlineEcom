@@ -130,6 +130,7 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
   if (!store || typeof p.productId !== 'string' || typeof p.to !== 'number' || typeof p.from !== 'number') return;
   const now = db.prepare('SELECT price FROM products WHERE store_id = ? AND id = ?').get(store.id, p.productId)?.price;
   if (now != null && moved(p.from, Number(now))) {
+    once(db, `not-applied:${a.id}`); // squad_log: approved, not shipped
     notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The price moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(now), store.currency)}). Ask the Market Analyst again if it still makes sense.`, storeId: store.id });
     return;
   }
@@ -138,6 +139,7 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
     try {
       await setPrice(store.id, p.productId, { price: p.to, ...(compareAt !== undefined ? { compareAt } : {}) });
     } catch (e) {
+      once(db, `not-applied:${a.id}`);
       notify(db, { kind: 'error', title: `Couldn't change the price on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Change it by hand if you still want the test.`, storeId: store.id });
       return;
     }
@@ -246,6 +248,7 @@ export async function publishThemeChange(db: Db, a: ApprovalRequest, publish: (s
     await publish(store.id, p.themeId);
     once(db, `theme-live:${a.id}`); // when it went live: the outcome check measures from here
   } catch (e) {
+    once(db, `not-applied:${a.id}`);
     notify(db, { kind: 'error', title: `Couldn't publish the theme on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Publish "${String(p.name ?? p.themeId)}" by hand in Online Store > Themes.`, storeId: store.id });
   }
 }

@@ -40,6 +40,14 @@ test("the squad log shows the week's requests with their decision and finished r
   expect((await run('peak:market_analyst', [{ call: 'squad_log' }]))[0]).toMatch(/\n\nruns:\n\(none\)\n\noutcomes:\n\(none\)$/);
 });
 
+test("a request the app didn't apply reads approved but not applied: approved isn't shipped", async () => {
+  await run('glow:ad_strategist', [{ call: 'propose_ad_change', input: { campaignId: 'glow-c1', change: 'pause', evidence: '7d ROAS 0.6 vs break-even 2.1' } }]);
+  const id = String(db.prepare(`SELECT id FROM approvals WHERE store_id = 'glow' AND title LIKE 'Pause %'`).get()!.id);
+  once(db, `not-applied:${id}`); // e.g. the budget moved since it was asked
+  const [log] = await run('glow:market_analyst', [{ call: 'squad_log', input: { days: 7 } }]);
+  expect(log).toMatch(/^\d{4}-\d{2}-\d{2},Ad Strategist,Pause .+,approved but not applied$/m);
+});
+
 test("a live store's log starts when it went live: demo-era work isn't its track record", async () => {
   const at = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
   const ask = (id: string, title: string, created: string) =>
