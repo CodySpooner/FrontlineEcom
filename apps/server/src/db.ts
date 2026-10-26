@@ -268,6 +268,18 @@ export const MIGRATIONS = [
   );
   CREATE INDEX automation_runs_by_time ON automation_runs (store_id, fired_at);
   `,
+  /* 10 (agents lane: XP ledger, AGT-13) */ `
+  CREATE TABLE xp_events (
+    id TEXT PRIMARY KEY,
+    ref TEXT NOT NULL UNIQUE,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    agent_id TEXT,
+    amount INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX xp_events_by_agent ON xp_events (agent_id, created_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

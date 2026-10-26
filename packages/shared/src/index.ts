@@ -45,6 +45,10 @@ export const AGENT_ROLES: Record<AgentRole, { name: string; blurb: string }> = {
 
 export type AgentStatus = 'idle' | 'running' | 'waiting_approval' | 'error' | 'offline';
 
+/** Agent ranks by level: Recruit 1, Operative 5, Specialist 10, Veteran 15, Elite 20, Legend 30. */
+export type Rank = 'Recruit' | 'Operative' | 'Specialist' | 'Veteran' | 'Elite' | 'Legend';
+export const RANKS: Rank[] = ['Recruit', 'Operative', 'Specialist', 'Veteran', 'Elite', 'Legend'];
+
 /** suggest = recommends only; ask = side effects need approval; autopilot = auto-approved within caps (logged). */
 export type Autonomy = 'suggest' | 'ask' | 'autopilot';
 export const AUTONOMY_LEVELS: Autonomy[] = ['suggest', 'ask', 'autopilot'];
@@ -62,6 +66,12 @@ export interface Agent {
   enabled?: boolean;
   /** Always set by the API. */
   autonomy?: Autonomy;
+  /** Always set by the API. */
+  rank?: Rank;
+  /** Total XP at which the next level starts (same units as `xp`). Always set by the API. */
+  nextLevelXp?: number;
+  /** XP into the current level / XP the level costs (XP bar). Always set by the API. */
+  levelProgress?: { xp: number; needed: number };
 }
 
 /** GET /api/agents?stores=a,b → Agent[] (squads in store order, roles in AGENT_ROLES order). GET /api/agents/:id → Agent. */
@@ -212,7 +222,9 @@ export type LiveMessage =
   /** An agent run was queued, started or finished (agents lane). */
   | { type: 'run'; run: AgentRun }
   /** One streamed event of a running agent (text, tool calls, approvals, memories, done/error). */
-  | { type: 'run_event'; runId: string; agentId: string; storeId: string; event: AgentEvent };
+  | { type: 'run_event'; runId: string; agentId: string; storeId: string; event: AgentEvent }
+  /** XP was earned (toast); `levelUp` when it crossed a level (burst). No agentId = the commander. */
+  | { type: 'xp'; xp: XpEvent; levelUp?: { level: number; rank: Rank } };
 
 /** Error body for any non-2xx API response. */
 export interface ApiError {
@@ -233,6 +245,44 @@ export interface StoreMemory {
   /** 0..1 */
   confidence: number;
   tags: string[];
+  createdAt: string;
+}
+
+/** GET /api/missions?stores= → Mission[]: 3 per store, regenerated daily. XP goes to the commander once complete. */
+export interface Mission {
+  id: string;
+  storeId: string;
+  title: string;
+  progress: number;
+  target: number;
+  xp: number;
+}
+
+/** GET /api/achievements → Achievement[] (whole catalog; unlocked ones carry unlockedAt). */
+export interface Achievement {
+  id: string;
+  title: string;
+  description: string;
+  xp: number;
+  unlockedAt?: string;
+}
+
+/** GET /api/commander → the owner's level (XP from missions + achievements) and profit streak in days. */
+export interface Commander {
+  level: number;
+  xp: number;
+  rank: Rank;
+  levelProgress: { xp: number; needed: number };
+  streakDays: number;
+}
+
+export interface XpEvent {
+  id: string;
+  storeId?: string;
+  /** Omitted = the commander. */
+  agentId?: string;
+  amount: number;
+  reason: string;
   createdAt: string;
 }
 

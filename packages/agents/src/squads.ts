@@ -1,5 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, type Agent, type AgentRole, type AgentUpdate, type Autonomy, type Store } from '@frontline/shared';
+import { demoXp, levelForXp, levelProgress, rankForLevel, xpForLevel } from './gamification';
 
 // Squads live in core's `agents` table (apps/server/src/db.ts). Agent id = `<storeId>:<role>`.
 
@@ -13,6 +14,12 @@ export function createSquad(db: DatabaseSync, store: Pick<Store, 'id'>): Agent[]
   const insert = db.prepare('INSERT OR IGNORE INTO agents (id, store_id, role, autonomy) VALUES (?, ?, ?, ?)');
   for (const role of Object.keys(AGENT_ROLES) as AgentRole[]) insert.run(agentId(store.id, role), store.id, role, DEFAULT_AUTONOMY);
   return listAgents(db, [store.id]);
+}
+
+/** The showcase stores' squads start with some history so levels and ranks vary. Only touches agents still at 0 XP. */
+export function seedDemoXp(db: DatabaseSync, storeIds: string[]) {
+  const set = db.prepare('UPDATE agents SET xp = ?, level = ? WHERE id = ? AND xp = 0');
+  for (const a of listAgents(db, storeIds)) set.run(demoXp(a.id), levelForXp(demoXp(a.id)), a.id);
 }
 
 /** Gives every store a full squad (new stores, and roles added since a squad was made). */
@@ -62,8 +69,11 @@ function toAgent(r: Record<string, unknown>, busy: ReturnType<typeof busyAgents>
     storeId: String(r.store_id),
     role: r.role as AgentRole,
     status: !enabled ? 'offline' : request ? 'waiting_approval' : task ? 'running' : 'idle',
-    level: Number(r.level),
+    level: levelForXp(Number(r.xp)),
     xp: Number(r.xp),
+    rank: rankForLevel(levelForXp(Number(r.xp))),
+    nextLevelXp: xpForLevel(levelForXp(Number(r.xp)) + 1),
+    levelProgress: levelProgress(Number(r.xp)),
     ...(currentTask ? { currentTask } : {}),
     enabled,
     autonomy: r.autonomy as Autonomy,

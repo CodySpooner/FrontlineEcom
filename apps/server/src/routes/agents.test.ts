@@ -1,4 +1,4 @@
-import { createSquad, listAgents } from '@frontline/agents';
+import { createSquad, demoXp, listAgents } from '@frontline/agents';
 import { AGENT_ROLES, type Agent } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -22,7 +22,7 @@ test('every demo store gets a full squad on startup', async () => {
   const agents = (await get('/api/agents')) as Agent[];
   expect(agents).toHaveLength(3 * 8);
   expect(agents.slice(0, 8).map((a) => a.id)).toEqual(Object.keys(AGENT_ROLES).map((r) => `pawsome:${r}`));
-  expect(agents[0]).toMatchObject({ storeId: 'pawsome', role: 'ad_strategist', level: 1, xp: 0, enabled: true, autonomy: 'ask' });
+  expect(agents[0]).toMatchObject({ storeId: 'pawsome', role: 'ad_strategist', xp: demoXp('pawsome:ad_strategist'), enabled: true, autonomy: 'ask' });
 });
 
 test('filters by store', async () => {

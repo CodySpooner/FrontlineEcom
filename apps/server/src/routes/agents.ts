@@ -1,7 +1,9 @@
 import {
+  XP,
   createRunManager,
   deleteMemory,
   ensureSquads,
+  seedDemoXp,
   getAgent,
   listAgents,
   listMemory,
@@ -10,6 +12,7 @@ import {
   updateMemory,
   writeMemory,
   type RunManager,
+  type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
 import { AGENT_ROLES, AUTONOMY_LEVELS, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type ResearchProduct, type StartRunInput } from '@frontline/shared';
@@ -17,8 +20,10 @@ import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
 import { approvalsHook, decide } from '../approvals';
 import { localDate } from '../dates';
+import { DEMO_STORES } from '../demo';
 import type { Db } from '../db';
 import { researchRoutes } from '../research';
+import { award, gamificationRoutes } from './agents-gamification';
 import { getCaps, notify } from '../settings';
 import { getStore } from '../stores';
 import { publish } from '../live';
@@ -40,26 +45,33 @@ export const toolEnv = (db: Db): ToolEnv => ({
   },
 });
 
+/** What the app does with runs: stream them over the live bus, pay XP, notify the owner when one finishes or fails. */
+export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent'> => ({
+  onEvent: (run, event) => {
+    publish({ type: 'run_event', runId: run.id, agentId: run.agentId, storeId: run.storeId, event });
+    if (event.type === 'memory_written') {
+      const m = event.memory;
+      award(db, { ref: `memory:${m.id}`, amount: XP.memory, reason: `Learned: ${m.text.slice(0, 80)}`, storeId: m.storeId, agentId: run.agentId });
+    }
+  },
+  onRun: (run) => {
+    publish({ type: 'run', run });
+    if (run.status === 'done') award(db, { ref: `run:${run.id}`, amount: XP.runDone, reason: `Completed: ${run.task.slice(0, 80)}`, storeId: run.storeId, agentId: run.agentId });
+    const agent = getAgent(db, run.agentId);
+    const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
+    const link = `/agents/${run.agentId}`;
+    if (run.status === 'done') notify(db, { kind: 'agent_done', title: `${name} finished`, body: run.task, storeId: run.storeId, link });
+    if (run.status === 'error') notify(db, { kind: 'error', title: `${name} hit an error`, body: run.error ?? run.task, storeId: run.storeId, link });
+  },
+});
+
 const managers = new WeakMap<Db, RunManager>();
 
-/** The app's run manager for this DB: runs stream over the live bus; finished/failed runs notify the owner. */
+/** The app's run manager for this DB. */
 export function runManager(db: Db): RunManager {
   let manager = managers.get(db);
   if (!manager) {
-    manager = createRunManager({
-      db,
-      env: toolEnv(db),
-      store: (id) => getStore(db, id),
-      onEvent: (run, event) => publish({ type: 'run_event', runId: run.id, agentId: run.agentId, storeId: run.storeId, event }),
-      onRun: (run) => {
-        publish({ type: 'run', run });
-        const agent = getAgent(db, run.agentId);
-        const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
-        const link = `/agents/${run.agentId}`;
-        if (run.status === 'done') notify(db, { kind: 'agent_done', title: `${name} finished`, body: run.task, storeId: run.storeId, link });
-        if (run.status === 'error') notify(db, { kind: 'error', title: `${name} hit an error`, body: run.error ?? run.task, storeId: run.storeId, link });
-      },
-    });
+    manager = createRunManager({ db, env: toolEnv(db), store: (id) => getStore(db, id), ...runHooks(db) });
     managers.set(db, manager);
   }
   return manager;
@@ -85,6 +97,7 @@ export function parseMemoryInput(body: unknown, partial: boolean): string | Part
 
 export function agentRoutes(db: Db) {
   ensureSquads(db);
+  seedDemoXp(db, DEMO_STORES.map((s) => s.id));
   const runs = runManager(db);
   const limit = (v: string | undefined) => Math.min(200, Math.max(1, Math.floor(Number(v)) || 50));
   return new Hono()
@@ -145,5 +158,6 @@ export function agentRoutes(db: Db) {
       const memory = updateMemory(db, c.req.param('id'), input);
       return memory ? c.json(memory) : c.json({ error: 'Memory not found' }, 404);
     })
-    .delete('/api/memory/:id', (c) => (deleteMemory(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Memory not found' }, 404)));
+    .delete('/api/memory/:id', (c) => (deleteMemory(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Memory not found' }, 404)))
+    .route('/', gamificationRoutes(db));
 }
