@@ -5,7 +5,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from agents) CORE-04: after inserting a store in POST /api/stores, call `createSquad(db, store)` from `@frontline/agents` (idempotent; ids `<storeId>:<role>`). Startup already runs `ensureSquads(db)` via `agentRoutes(db)`, mounted in `app.ts` (one line, agents lane).
+- [x] (from agents) CORE-04: after inserting a store in POST /api/stores, call `createSquad(db, store)` from `@frontline/agents` (idempotent; ids `<storeId>:<role>`). Startup already runs `ensureSquads(db)` via `agentRoutes(db)`, mounted in `app.ts` (one line, agents lane).
 
 ## Items
 - [x] CORE-01 SQLite layer on `node:sqlite` (`DatabaseSync`): data dir from `FRONTLINE_DATA_DIR` (default `./.data`),
@@ -15,7 +15,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
       pending approvals; deterministic seed; `demo` flag per store. (`dashboard-mockup-v3.html` has a seeded generator to start from.)
 - [x] CORE-03 Analytics API: `GET /api/analytics/summary?stores=a,b&range=7|30|90|365` → totals (revenue, profit, ad
       spend, ROAS, orders, AOV), previous-period deltas, daily series per metric, per-store breakdown. Tests for the math.
-- [ ] CORE-04 Stores API: list/get/create/update/delete with platform + niche; on create call the agents lane's
+- [x] CORE-04 Stores API: list/get/create/update/delete with platform + niche; on create call the agents lane's
       `createSquad(store)` (stub until it exists).
 - [ ] CORE-05 Live events: WebSocket `/api/live` broadcasting `StoreEvent`s; demo emitter generates realistic orders /
       add-to-carts / checkouts per store; `GET /api/events?stores=&limit=` for the initial feed.
@@ -47,6 +47,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-04 stores CRUD (`GET/POST /api/stores`, `GET/PATCH/DELETE /api/stores/:id`), validation, new stores start in demo mode with history and get a squad via `createSquad`
 - 2026-10-26 — CORE-03 `GET /api/analytics/summary` (totals, previous, deltas, daily series, per-store), math tested
 - 2026-10-26 — CORE-02 demo generator: deterministic per (store, date), 2y history topped up to today on every start, products, campaigns + campaign_daily, last-week orders, 3 pending approvals
 - 2026-10-26 — CORE-01 SQLite layer (`node:sqlite`, `PRAGMA user_version` migrations, Phase 1 tables, stores read from DB); API contracts in shared

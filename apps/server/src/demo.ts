@@ -148,6 +148,12 @@ function seedCatalog(db: Db, storeId: string, today: string) {
   }
 }
 
+/** Gives a just-created demo store (no credentials yet) campaigns and 2 years of history. Call inside a transaction. */
+export function seedDemoStore(db: Db, storeId: string, today = localDate()) {
+  seedCatalog(db, storeId, today);
+  topUp(db, storeId, today);
+}
+
 /**
  * Seeds the three demo stores on an empty DB, then tops up every demo store's history to `today`.
  * Safe to run on every startup.
