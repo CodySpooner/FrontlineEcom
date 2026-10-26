@@ -1,7 +1,7 @@
 // UI-17 Settings: stores, per-store caps and autopilot, profile, notifications, sound, where the data lives.
 import { useState, type FormEvent } from 'react';
 import { APPROVAL_KINDS, type Store, type StoreCaps } from '@frontline/shared';
-import { useBackupNow, useBackups, useCaps, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings } from '../api/client';
+import { useBackupNow, useBackups, useCaps, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings } from '../api/client';
 import { Hero } from '../components/Hero';
 import { nicheName, PLATFORM_NAME, StoreForm } from '../components/StoreForm';
 import { Badge, Button, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch } from '../components/ui';
@@ -293,6 +293,9 @@ function Preferences() {
 function Backups() {
   const q = useBackups();
   const now = useBackupNow();
+  const restore = useRestoreBackup();
+  const [confirm, setConfirm] = useState<string>();
+  const when = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
   return (
     <div className="mt-4 border-t border-line pt-3">
       <div className="mb-2 flex items-center justify-between gap-2">
@@ -309,22 +312,48 @@ function Backups() {
         <p className="text-xs text-muted">No backups yet. One is made every day; the newest 7 are kept.</p>
       ) : (
         <ul className="grid gap-1 text-xs">
-          {q.data.map((b) => (
-            <li key={b.name} className="flex justify-between gap-2">
-              <span className="truncate text-text-2" title={b.name}>
-                {new Date(b.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-              </span>
-              <span className="text-muted tabular-nums">{(b.size / 1e6).toFixed(1)} MB</span>
-            </li>
-          ))}
+          {q.data.map((b) =>
+            confirm === b.name ? (
+              <li key={b.name} className="flex flex-wrap items-center gap-2 rounded-lg border border-line-2 bg-bg-2 px-2.5 py-2">
+                <span className="mr-auto text-text-2">
+                  {restore.isPending ? 'Restoring. The app reloads when it is back…' : `Restore the backup from ${when(b.createdAt)}? Your current data is backed up first.`}
+                </span>
+                {!restore.isPending && (
+                  <>
+                    <Button size="sm" onClick={() => setConfirm(undefined)}>
+                      Keep current
+                    </Button>
+                    <Button size="sm" variant="primary" onClick={() => restore.mutate(b.name)}>
+                      Restore
+                    </Button>
+                  </>
+                )}
+              </li>
+            ) : (
+              <li key={b.name} className="flex items-center gap-2">
+                <span className="truncate text-text-2" title={b.name}>
+                  {when(b.createdAt)}
+                </span>
+                <span className="ml-auto text-muted tabular-nums">{(b.size / 1e6).toFixed(1)} MB</span>
+                <button
+                  type="button"
+                  disabled={restore.isPending}
+                  onClick={() => setConfirm(b.name)}
+                  aria-label={`Restore the backup from ${when(b.createdAt)}`}
+                  className="cursor-pointer text-muted hover:text-white disabled:cursor-default disabled:opacity-50"
+                >
+                  Restore
+                </button>
+              </li>
+            ),
+          )}
         </ul>
       )}
-      {now.isError && (
+      {(now.error ?? restore.error) && (
         <p role="alert" className="mt-2 text-xs text-red">
-          {now.error.message}
+          {(now.error ?? restore.error)!.message}
         </p>
       )}
-      <p className="mt-3 text-[11px] leading-relaxed text-muted">To restore: quit Frontline Ecom, then copy a backup from the backups folder over frontline.db in the data folder.</p>
     </div>
   );
 }

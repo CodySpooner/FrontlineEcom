@@ -59,6 +59,7 @@ import type {
   SupplierProduct,
   TopProduct,
 } from '@frontline/shared';
+import { apiUp, waitForApi } from '../lib/restart';
 import { applyRunEvent, isLive } from '../lib/transcript';
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
@@ -399,6 +400,16 @@ export function useBackupNow() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: () => api<Backup>('/api/backups', { method: 'POST' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['backups'] }) });
 }
+
+/** Restores a backup: the API backs up the current data, restarts on the snapshot, and the page reloads once it's back. */
+export const useRestoreBackup = () =>
+  useMutation({
+    mutationFn: async (name: string) => {
+      await api<{ restarting: true }>(`/api/backups/${encodeURIComponent(name)}/restore`, { method: 'POST' });
+      await waitForApi(apiUp);
+      location.reload();
+    },
+  });
 
 export const useActionLog = (storeIds: string[]) =>
   useQuery({ queryKey: ['actions', storeIds], queryFn: () => api<ActionLogEntry[]>(`/api/actions?stores=${storeIds.join(',')}&limit=50`) });
