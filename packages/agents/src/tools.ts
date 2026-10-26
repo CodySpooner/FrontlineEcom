@@ -463,6 +463,13 @@ export const APP_TOOLS: AppTool[] = [
       if (p.cost != null && to <= Number(p.cost)) return `Not sent: $${to} is at or below the unit cost ($${Number(p.cost)}).`;
       if (Math.abs(to - from) / from > 0.3) return 'Not sent: test within ±30% of the current price, one step at a time.';
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
+      // Overlapping tests on one product can't be judged apart.
+      const running = ctx.db.prepare('SELECT changed_on FROM price_tests WHERE store_id = ? AND product_id = ? AND changed_on > ?').get(ctx.store.id, productId, since(29));
+      if (running) return `Not sent: a price test on this product has been running since ${running.changed_on}; it is judged after 14 days of sales.`;
+      const pending = ctx.db
+        .prepare(`SELECT 1 FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') = 'store.set_price' AND json_extract(action_json, '$.payload.productId') = ?`)
+        .get(ctx.store.id, productId);
+      if (pending) return 'Not sent: a price change for this product is already waiting for the owner.';
       const { approved, message } = await requestApproval(ctx, {
         title: `Price ${String(p.title)} $${from} → $${to}`.slice(0, 80),
         reason: evidence,

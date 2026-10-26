@@ -49,6 +49,7 @@ test('a price test is checked, approved and applied to a demo store', async () =
   expect(applied).toBe(`Approved by the owner: Price ${String(p.title)} $${from} → $${to}. It will be applied to the store and judged on 14 days of sales after vs before.`);
   expect(Number(db.prepare(`SELECT price FROM products WHERE store_id = 'glow' AND id = ?`).get(id)?.price)).toBe(to);
   expect(db.prepare('SELECT product_id, from_price, to_price, changed_on FROM price_tests').get()).toEqual({ product_id: id, from_price: from, to_price: to, changed_on: localDate() });
+  expect(await run('glow', [price(id, from)])).toEqual([`Not sent: a price test on this product has been running since ${localDate()}; it is judged after 14 days of sales.`]);
 });
 
 test('on a real store a price test is judged on gross profit 14 days before vs after, once', async () => {

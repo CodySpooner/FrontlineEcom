@@ -1,4 +1,4 @@
-import { listRuns } from '@frontline/agents';
+import { DEFAULT_JOBS, listRuns } from '@frontline/agents';
 import type { Store } from '@frontline/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -36,7 +36,7 @@ test("a store's first real sync switches its squad's jobs on once, and a custom 
   switchToReal(db, store.id);
   await app.request('/api/agents');
   await app.request('/api/agents');
-  expect(jobsOn(store.id)).toBe(5);
+  expect(jobsOn(store.id)).toBe(DEFAULT_JOBS.length);
   expect(notes(store.id)).toEqual(["Ink & Nib is live: the squad's scheduled jobs are on"]);
   const runs = listRuns(db, { storeIds: [store.id] });
   expect(runs.map((r) => [r.agentId, r.task.split('\n')[0]])).toEqual([
