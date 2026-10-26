@@ -1,5 +1,4 @@
-import type { MetricTotals } from '@frontline/shared';
-import type { AdNetwork, CampaignStats } from '../api/stubs';
+import type { AdNetwork, CampaignStats, MetricTotals } from '@frontline/shared';
 
 /** ROAS at which ad spend eats the whole gross margin: revenue / (revenue − cogs). Below it, ads lose money. */
 export function breakEvenRoas(t: MetricTotals) {

@@ -11,6 +11,7 @@ import type {
   ApprovalDecision,
   ApprovalRequest,
   ApprovalStatus,
+  CampaignStats,
   Commander,
   Creative,
   CreativeKind,
@@ -167,6 +168,13 @@ export function useForgetNicheLearning() {
   });
 }
 
+export const useCampaigns = (storeIds: string[], range: AnalyticsRange) =>
+  useQuery({
+    queryKey: ['campaigns', storeIds, range],
+    queryFn: () => api<CampaignStats[]>(`/api/analytics/campaigns?stores=${storeIds.join(',')}&range=${range}`),
+    placeholderData: keepPreviousData,
+  });
+
 export const useProducts = (storeIds: string[]) =>
   useQuery({ queryKey: ['products', storeIds], queryFn: () => api<Page<Product>>(`/api/products?stores=${storeIds.join(',')}&limit=200`) });
 
@@ -207,7 +215,8 @@ export function useLive() {
       if (m.type === 'xp') qc.invalidateQueries({ queryKey: ['agents'] });
       else if (m.type === 'approval') {
         qc.invalidateQueries({ queryKey: ['agents'] });
-        if (m.approval.status === 'approved') qc.invalidateQueries({ queryKey: ['niche-learnings'] });
+        // Approved requests change shared learnings or (ad changes) campaign budgets and statuses.
+        if (m.approval.status === 'approved') ['niche-learnings', 'campaigns'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         // A decided request lingers ~1s so its "Approved"/"Denied" verdict shows before the row drops.
         setTimeout(() => qc.invalidateQueries({ queryKey: ['approvals'] }), m.approval.status === 'pending' ? 0 : 1000);
       }

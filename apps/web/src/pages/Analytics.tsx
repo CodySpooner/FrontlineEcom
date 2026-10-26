@@ -1,8 +1,10 @@
 // UI-11 Store Analytics: where the money comes from (trend, funnel, channels, products, campaigns). The store filter scopes it all.
 import { useState } from 'react';
-import type { AnalyticsRange, AnalyticsSummary } from '@frontline/shared';
-import { useProducts, useSummary } from '../api/client';
-import { stubCampaigns, stubFunnel, stubTopProducts, type AdNetwork, type CampaignStats } from '../api/stubs';
+import { Link } from 'react-router';
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats } from '@frontline/shared';
+import { useCampaigns, useProducts, useSummary } from '../api/client';
+import { stubTopProducts } from '../api/stubs';
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
@@ -24,7 +26,7 @@ const times = (n: number) => `${n.toFixed(2)}×`;
 const pct = (n: number) => `${n.toFixed(1)}%`;
 const num = (n: number) => n.toLocaleString('en-US');
 
-// Marks panels drawn from stand-in data (api/stubs.ts) until their endpoints land.
+// Marks a panel drawn from stand-in data (api/stubs.ts) until its endpoint lands.
 const SAMPLE = <Badge>Estimated</Badge>;
 
 export function Analytics() {
@@ -55,14 +57,14 @@ export function Analytics() {
         <Report s={s} ids={ids} name={name} dim={summary.isPlaceholderData} />
       )}
       <p className="mt-3.5 text-xs text-muted">
-        Panels marked Estimated are modelled from your real revenue, orders and ad spend until per-campaign and per-product reports are connected.
+        Top Products is estimated from your catalog until per-product sales reporting lands.
       </p>
     </>
   );
 }
 
 function Report({ s, ids, name, dim }: { s: AnalyticsSummary; ids: string[]; name: (id: string) => string; dim: boolean }) {
-  const campaigns = stubCampaigns(s);
+  const campaigns = useCampaigns(ids, s.range);
   const be = breakEvenRoas(s.totals);
   const multi = s.byStore.length > 1;
   return (
@@ -72,10 +74,10 @@ function Report({ s, ids, name, dim }: { s: AnalyticsSummary; ids: string[]; nam
         <FunnelPanel s={s} />
       </div>
       <div className="grid gap-3.5 min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <Channels cs={campaigns} be={be} />
+        <Channels q={campaigns} be={be} />
         <TopProducts ids={ids} days={s.series.length} name={multi ? name : undefined} />
       </div>
-      <Campaigns cs={campaigns} be={be} beOf={(id) => breakEvenRoas(s.byStore.find((b) => b.storeId === id)!.totals)} name={multi ? name : undefined} />
+      <Campaigns q={campaigns} be={be} beOf={(id) => breakEvenRoas(s.byStore.find((b) => b.storeId === id)?.totals ?? s.totals)} name={multi ? name : undefined} />
       {multi && <ByStore s={s} name={name} />}
     </div>
   );
@@ -117,7 +119,7 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
 );
 
 function FunnelPanel({ s }: { s: AnalyticsSummary }) {
-  const f = stubFunnel(s);
+  const f = s.funnel;
   const steps: [string, number][] = [
     ['Sessions', f.sessions],
     ['Added to cart', f.addToCarts],
@@ -125,33 +127,49 @@ function FunnelPanel({ s }: { s: AnalyticsSummary }) {
     ['Ordered', f.orders],
   ];
   return (
-    <Panel title="Conversion Funnel" sub={`${pct(rate(f.orders, f.sessions))} of sessions place an order`} action={SAMPLE}>
-      <ol className="grid gap-4">
-        {steps.map(([label, n], i) => (
-          <li key={label}>
-            <div className="mb-1.5 flex items-baseline justify-between gap-2 text-[13px]">
-              <span className="text-text-2">{label}</span>
-              <span className="tabular-nums">
-                {i > 0 && <span className="mr-2 text-xs text-muted">{pct(rate(n, steps[i - 1]![1]))} of previous</span>}
-                <b>{num(n)}</b>
-              </span>
-            </div>
-            <div className="h-2 rounded-full bg-white/5">
-              <div className="h-full min-w-1 rounded-full bg-red" style={{ width: `${rate(n, f.sessions)}%` }} />
-            </div>
-          </li>
-        ))}
-      </ol>
+    <Panel title="Conversion Funnel" sub={f.sessions ? `${pct(rate(f.orders, f.sessions))} of sessions place an order` : `${num(f.orders)} orders`}>
+      {!f.sessions ? (
+        <p className="text-[13px] text-muted">
+          Sessions, carts and checkouts come from Google Analytics.{' '}
+          <Link to="/integrations" className="text-red hover:underline">
+            Connect GA4
+          </Link>{' '}
+          to see where shoppers drop off.
+        </p>
+      ) : (
+        <ol className="grid gap-4">
+          {steps.map(([label, n], i) => (
+            <li key={label}>
+              <div className="mb-1.5 flex items-baseline justify-between gap-2 text-[13px]">
+                <span className="text-text-2">{label}</span>
+                <span className="tabular-nums">
+                  {i > 0 && <span className="mr-2 text-xs text-muted">{pct(rate(n, steps[i - 1]![1]))} of previous</span>}
+                  <b>{num(n)}</b>
+                </span>
+              </div>
+              <div className="h-2 rounded-full bg-white/5">
+                <div className="h-full min-w-1 rounded-full bg-red" style={{ width: `${rate(n, f.sessions)}%` }} />
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
     </Panel>
   );
 }
 
-function Channels({ cs, be }: { cs: CampaignStats[]; be: number }) {
-  const ch = byNetwork(cs);
+type Campaigns = UseQueryResult<CampaignStats[]>;
+
+function Channels({ q, be }: { q: Campaigns; be: number }) {
+  const ch = byNetwork(q.data ?? []);
   const top = Math.max(1, ...ch.map((c) => c.revenue));
   return (
-    <Panel title="Channels" sub="Ad-attributed revenue by network" action={SAMPLE}>
-      {!ch.length ? (
+    <Panel title="Channels" sub="Ad-attributed revenue by network">
+      {q.isPending ? (
+        <LoadingState rows={3} />
+      ) : q.isError ? (
+        <ErrorState message="Couldn't load campaigns." onRetry={() => q.refetch()} />
+      ) : !ch.length ? (
         <p className="text-[13px] text-muted">No ad campaigns in this period.</p>
       ) : (
         <ul className="grid gap-4">
@@ -227,10 +245,15 @@ function TopTable({ rows, name }: { rows: ReturnType<typeof stubTopProducts>; na
 }
 
 /** Each campaign is judged against its own store's break-even (margins differ per store); `be` is the blended one. */
-function Campaigns({ cs, be, beOf, name }: { cs: CampaignStats[]; be: number; beOf: (storeId: string) => number; name?: (id: string) => string }) {
+function Campaigns({ q, be, beOf, name }: { q: Campaigns; be: number; beOf: (storeId: string) => number; name?: (id: string) => string }) {
+  const cs = q.data ?? [];
   return (
-    <Panel title="Campaigns" sub={`${cs.length} campaigns, biggest spend first`} action={SAMPLE}>
-      {!cs.length ? (
+    <Panel title="Campaigns" sub={`${cs.length} campaigns, biggest spend first`}>
+      {q.isPending ? (
+        <LoadingState rows={4} />
+      ) : q.isError ? (
+        <ErrorState message="Couldn't load campaigns." onRetry={() => q.refetch()} />
+      ) : !cs.length ? (
         <p className="text-[13px] text-muted">No ad campaigns in this period.</p>
       ) : (
         <>
@@ -258,7 +281,7 @@ function Campaigns({ cs, be, beOf, name }: { cs: CampaignStats[]; be: number; be
                       {name && ` · ${name(c.storeId)}`}
                     </div>
                   </td>
-                  <td>{c.status === 'paused' ? <Badge>Paused</Badge> : <span className="text-text-2">Active</span>}</td>
+                  <td>{c.status === 'active' ? <span className="text-text-2">Active</span> : <Badge>{c.status === 'paused' ? 'Paused' : 'Archived'}</Badge>}</td>
                   <td className="text-right">{money(c.dailyBudget)}</td>
                   <td className="text-right">{money(c.spend)}</td>
                   <td className="text-right">{money(c.revenue)}</td>

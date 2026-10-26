@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { AnalyticsSummary, MetricTotals } from '@frontline/shared';
-import { stubCampaigns, stubFunnel } from '../api/stubs';
-import { breakEvenRoas, byNetwork, rate, roasTone } from './analytics';
+import type { MetricTotals } from '@frontline/shared';
+import { breakEvenRoas, byNetwork, roasTone } from './analytics';
 
 const totals: MetricTotals = { revenue: 10_000, profit: 2_000, adSpend: 3_000, roas: 3.33, orders: 200, aov: 50 };
 
@@ -29,22 +28,5 @@ describe('byNetwork', () => {
       { network: 'meta', spend: 200, revenue: 600, purchases: 12, roas: 3 },
       { network: 'tiktok', spend: 50, revenue: 300, purchases: 6, roas: 6 },
     ]);
-  });
-});
-
-describe('UI-11 stubs', () => {
-  const s = { range: 30, storeIds: [], from: '', to: '', totals, previous: totals, deltas: totals, series: Array(30).fill(null), byStore: [{ storeId: 'a', totals, deltas: totals }] } as unknown as AnalyticsSummary;
-
-  it('campaigns split the real ad spend', () => {
-    const cs = stubCampaigns(s);
-    expect(cs.reduce((n, c) => n + c.spend, 0)).toBe(totals.adSpend);
-    expect(cs.map((c) => c.spend)).toEqual([...cs.map((c) => c.spend)].sort((a, b) => b - a));
-  });
-
-  it('funnel narrows and ends at the real orders', () => {
-    const f = stubFunnel(s);
-    expect(f.orders).toBe(200);
-    expect(f.sessions > f.addToCarts && f.addToCarts > f.checkouts && f.checkouts > f.orders).toBe(true);
-    expect(rate(f.orders, f.sessions)).toBeGreaterThan(1.9);
   });
 });

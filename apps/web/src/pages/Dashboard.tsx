@@ -251,7 +251,7 @@ function Missions() {
   const isDone = (m: { progress: number; target: number }) => m.progress >= m.target;
   const done = all.filter(isDone).length;
   // Open missions first: that's what the owner can still act on.
-  const list = [...all].sort((a, b) => Number(isDone(a)) - Number(isDone(b))).slice(0, 6);
+  const list = [...all].sort((a, b) => Number(isDone(a)) - Number(isDone(b))).slice(0, 8);
   return (
     <Panel title="Daily Missions" action={all.length > 0 && <span className="text-xs text-muted">{`${done}/${all.length} complete`}</span>}>
       {q.isPending ? (
@@ -261,7 +261,7 @@ function Missions() {
       ) : !list.length ? (
         <EmptyState title="No missions today">New missions drop every morning.</EmptyState>
       ) : (
-        <ul className="grid gap-x-5 gap-y-3.5 min-[620px]:grid-cols-2 min-[1280px]:grid-cols-3">
+        <ul className="grid gap-x-5 gap-y-3.5 min-[620px]:grid-cols-2 min-[1280px]:grid-cols-4">
           {list.map((m) => {
             const complete = isDone(m);
             return (
