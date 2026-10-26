@@ -46,7 +46,8 @@ each step may wait only on steps listed before it. A step becomes an ordinary ru
 It starts as the child run of the first of those steps, and their final answers go into its brief. Only the plan, the
 run ids and the one-line deliverables are stored; every status is read off the runs. After an app restart a step follows
 the run that retried it. A failed or cancelled step blocks the steps after it. `MISSION_TEMPLATES` holds "Launch a new
-product".
+product", "Rescue a slipping product" and "Answer a competitor's price cut". Their briefs are checked by the evals test,
+like the scheduled jobs.
 
 ## Money guards
 

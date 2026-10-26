@@ -46,6 +46,53 @@ export const MISSION_TEMPLATES: Omit<NewSquadMission, 'storeId'>[] = [
       },
     ],
   },
+  {
+    title: 'Rescue a slipping product',
+    steps: [
+      {
+        id: 'diagnose', role: 'market_analyst',
+        task: 'Find the product whose revenue fell most in the last 14 days against the 14 before (list_products, metrics_timeseries), and why: a competitor price move ' +
+          '(list_competitors), refunds (list_orders), its ads or its page. If price is the cause and matching still clears margin after fees, request it with ' +
+          'propose_price_change. Hand on: the product, how far it fell and the likeliest cause.',
+      },
+      {
+        id: 'page', role: 'copywriter', dependsOn: ['diagnose'],
+        task: "Rewrite the product's page around the cause the Market Analyst found: draft_page with a benefit-first headline and the buyers' objections answered, " +
+          'then ask to publish it with publish_page. Hand on: what changed and why.',
+      },
+      {
+        id: 'ads', role: 'ad_strategist', dependsOn: ['diagnose'],
+        task: "Check the product's campaigns with review_campaigns: fatigue (CTR falling, frequency rising) and spend against the break-even ROAS. Propose cuts or " +
+          'pauses with propose_ad_change. Hand on: the moves, and whether it needs a fresh ad and with what hook.',
+      },
+      {
+        id: 'creative', role: 'creative_studio', dependsOn: ['ads'],
+        task: "If the Ad Strategist says the product needs a fresh ad, make one image ad with the new hook (create_creative); if not, say so and make nothing. " +
+          'Hand on: what you made.',
+      },
+    ],
+  },
+  {
+    title: "Answer a competitor's price cut",
+    steps: [
+      {
+        id: 'check', role: 'market_analyst',
+        task: "Find the biggest competitor price cut of the last 14 days (list_competitors) on a product this store also sells (list_products), and what it did to " +
+          'our sales (metrics_timeseries). If matching still clears margin after fees, request it with propose_price_change; if not, say we hold on value. ' +
+          'Hand on: the product, their price against ours, and match or hold.',
+      },
+      {
+        id: 'copy', role: 'copywriter', dependsOn: ['check'],
+        task: "Write 3 ad headlines with primary text that sell the product on value against the competitor's price (bundle, shipping, guarantee, quality), " +
+          'saved with create_creative. Hand on: the copy.',
+      },
+      {
+        id: 'ads', role: 'ad_strategist', dependsOn: ['check'],
+        task: "While the competitor undercuts, hold the product's campaigns to the break-even ROAS: review_campaigns, then propose_ad_change for what falls below it. " +
+          'Hand on: the moves.',
+      },
+    ],
+  },
 ];
 
 /** The mission to create, or what's wrong with it. A step may only wait on steps listed before it, so there are no cycles. */

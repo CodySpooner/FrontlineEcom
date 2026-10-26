@@ -125,7 +125,7 @@ test('a step its agent turned down starts when the owner brings the agent back',
   expect((await settle(created.id)).status).toBe('done');
 });
 
-test('plans are checked (a step only waits on steps before it); the template is a valid plan of the six roles', async () => {
+test('plans are checked (a step only waits on steps before it); every template is a valid plan; the launch has the six roles', async () => {
   const post = (steps: unknown, storeId = 'glow') => send('POST', '/api/squad-missions', { storeId, title: 'Checked mission', steps });
   const res = await post([{ id: 'a', role: 'copywriter', task: 'Write the copy first.', dependsOn: ['b'] }, { id: 'b', role: 'market_analyst', task: 'Pull the numbers.' }]);
   expect([res.status, await res.json()]).toEqual([400, { error: 'Step a can only wait on steps listed before it.' }]);
@@ -133,8 +133,8 @@ test('plans are checked (a step only waits on steps before it); the template is 
   expect((await post([{ id: 'a', role: 'constructor', task: 'Do some magic for us.' }])).status).toBe(400);
   expect((await post([])).status).toBe(400);
   expect((await post([{ id: 'a', role: 'copywriter', task: 'Write the copy first.' }], 'nope')).status).toBe(404);
-  const [launch, ...more] = await get<Omit<NewSquadMission, 'storeId'>[]>('/api/squad-missions/templates');
-  expect(more).toEqual([]);
-  expect(typeof parseMission({ storeId: 'glow', ...launch })).toBe('object');
+  const templates = await get<Omit<NewSquadMission, 'storeId'>[]>('/api/squad-missions/templates');
+  for (const t of templates) expect(typeof parseMission({ storeId: 'glow', ...t }), t.title).toBe('object');
+  const launch = templates[0];
   expect(launch!.steps.map((s) => s.role)).toEqual(['product_hunter', 'market_analyst', 'copywriter', 'creative_studio', 'store_developer', 'ad_strategist']);
 });
