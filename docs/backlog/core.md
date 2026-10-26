@@ -163,10 +163,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-78 Page and product-page titles (and Shopify SEO titles) went to the storefront unchecked; the body was checked, the title wasn't.
 - [x] CORE-79 The Woo sync downloaded whole orders (customer names, emails, addresses) and products (descriptions) to read a few fields.
 - [x] CORE-80 A partly refunded Etsy receipt's product lines kept their full revenue (Top Products overstated them).
+- [x] CORE-81 A TikTok Shop or Amazon product next to a connected Shopify store couldn't be given a unit cost.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-81: `setProductCost` refused every product of a connected Shopify store ("Shopify keeps unit costs"), including the `tt-`/`amz-` products of a TikTok Shop or Amazon connected next to it (UI-121), which have no Shopify cost: their profit stayed at 100% margin with no way to fix it. Only Shopify's own products (numeric ids) are refused now.
 - 2026-10-26 — CORE-80: an Etsy receipt's total was net of partial refunds but its lines weren't, so per-product revenue and profit overstated them. Etsy's refunds name no lines, so each line keeps its share of what the buyer kept (total ÷ grand total); a shipping-only refund lowers them too (`ponytail:` noted).
 - 2026-10-26 — (ui Inbox) `AnalyticsSummary.byPlatform`: revenue and orders per sales platform over the summary's period and stores, in its currency, biggest first, adding up to `totals`. TikTok Shop (`tt-` orders) and Amazon (its daily totals) next to a store's own platform are split out of that store's, net of their refunds; the rest is the store's own platform. Always set by /api/analytics/summary (one entry for a single-platform view).
 - 2026-10-26 — CORE-79: Woo order, refund, product and variation reads ask for only the fields the sync uses (`_fields`). Customers' billing and shipping details no longer reach the app, and a big shop's 2-year backfill is a fraction of the size. A WordPress that ignores `_fields` sends everything, which parses as before.

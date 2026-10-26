@@ -103,7 +103,10 @@ export function setProductCost(db: Db, storeId: string, productId: string, body:
   const cost = (body as { cost?: unknown } | undefined)?.cost;
   if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0 || cost > 1_000_000) return 'cost must be a number from 0 to 1000000';
   const store = db.prepare('SELECT platform, connected FROM stores WHERE id = ?').get(storeId);
-  if (store?.platform === 'shopify' && store.connected) return 'Shopify keeps unit costs: set "Cost per item" on the product in Shopify and the next sync brings it here';
+  // Shopify's own products (numeric ids); a TikTok Shop or Amazon product next to it (tt-, amz-) has no Shopify cost.
+  if (store?.platform === 'shopify' && store.connected && /^\d+$/.test(productId)) {
+    return 'Shopify keeps unit costs: set "Cost per item" on the product in Shopify and the next sync brings it here';
+  }
   const old = db.prepare('SELECT cost FROM products WHERE store_id = ? AND id = ?').get(storeId, productId);
   if (!old) return undefined;
   tx(db, () => {

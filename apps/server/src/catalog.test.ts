@@ -74,7 +74,7 @@ test("the owner's unit cost fills order lines the platform gave no cost for, now
   expect([cogs('tt-a'), day()]).toEqual([0, 0]);
 
   const app = createApp(db);
-  const patch = (cost: unknown, store = 'peak') => app.request(`/api/products/${store}/tt-1`, { method: 'PATCH', body: JSON.stringify({ cost }), headers: { 'content-type': 'application/json' } });
+  const patch = (cost: unknown, store = 'peak', id = 'tt-1') => app.request(`/api/products/${store}/${id}`, { method: 'PATCH', body: JSON.stringify({ cost }), headers: { 'content-type': 'application/json' } });
   expect(((await (await patch(7.5)).json()) as Product).cost).toBe(7.5);
   expect([cogs('tt-a'), day()]).toEqual([15, 15]);
   await patch(8); // changed again: lines priced at the old cost follow
@@ -87,6 +87,10 @@ test("the owner's unit cost fills order lines the platform gave no cost for, now
   expect((await patch(-1)).status).toBe(400);
   expect((await app.request('/api/products/peak/nope', { method: 'PATCH', body: JSON.stringify({ cost: 1 }) })).status).toBe(404);
   db.prepare("UPDATE stores SET connected = 1 WHERE id = 'glow'").run();
-  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', 'tt-1', 'X', 10, 0, 1, 'active')").run();
-  expect(((await (await patch(2, 'glow')).json()) as { error: string }).error).toContain('Shopify');
+  const add = db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', ?, 'X', 10, 0, 1, 'active')");
+  add.run('901');
+  add.run('tt-1');
+  expect(((await (await patch(2, 'glow', '901')).json()) as { error: string }).error).toContain('Shopify');
+  // A TikTok Shop or Amazon product next to the Shopify store has no Shopify cost: the owner's is taken.
+  expect(((await (await patch(2, 'glow')).json()) as Product).cost).toBe(2);
 });
