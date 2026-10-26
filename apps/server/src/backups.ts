@@ -1,6 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { backup, DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
 import type { Backup } from '@frontline/shared';
 import { dataDir, dbFile, MIGRATIONS, type Db } from './db';
@@ -29,13 +29,19 @@ export function listBackups(dir = backupDir()): Backup[] {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.name.localeCompare(a.name));
 }
 
-/** A consistent copy of the live database (VACUUM INTO), then prunes to the newest KEEP. */
-export function backupNow(db: Db, dir = backupDir(), now = new Date()): Backup {
+/**
+ * A consistent copy of the live database, then prunes to the newest KEEP. node:sqlite's backup copies a batch of pages
+ * per turn, so the server keeps answering (VACUUM INTO held it ~0.5 s on a 70 MB database, longer as it grows). It's
+ * written as .part and renamed once whole, so a failed one never lists.
+ */
+export async function backupNow(db: Db, dir = backupDir(), now = new Date()): Promise<Backup> {
   mkdirSync(dir, { recursive: true });
   const name = `frontline-${now.toISOString().slice(0, 19).replace(/:/g, '-')}.db`;
   const file = join(dir, name);
+  rmSync(`${file}.part`, { force: true });
+  await backup(db, `${file}.part`);
   rmSync(file, { force: true });
-  db.exec(`VACUUM INTO '${file.replace(/'/g, "''")}'`);
+  renameSync(`${file}.part`, file);
   for (const old of listBackups(dir).slice(KEEP)) rmSync(join(dir, old.name), { force: true });
   log('info', 'backup', { name });
   return { name, size: statSync(file).size, createdAt: statSync(file).mtime.toISOString() };
@@ -47,11 +53,13 @@ export function backupNow(db: Db, dir = backupDir(), now = new Date()): Backup {
  */
 export function startBackupLoop(db: Db, dir = backupDir()) {
   let failing = false;
-  const check = () => {
+  let running = false;
+  const check = async () => {
     const newest = listBackups(dir)[0];
-    if (newest && Date.now() - Date.parse(newest.createdAt) < DAY_MS) return;
+    if (running || (newest && Date.now() - Date.parse(newest.createdAt) < DAY_MS)) return;
+    running = true;
     try {
-      backupNow(db, dir);
+      await backupNow(db, dir);
       if (failing) notify(db, { kind: 'info', title: 'Backups are working again', link: '/settings' });
       failing = false;
     } catch (e) {
@@ -59,9 +67,11 @@ export function startBackupLoop(db: Db, dir = backupDir()) {
       log('error', 'backup failed', { error });
       if (!failing) notify(db, { kind: 'error', title: 'The daily backup failed', body: `${error}. Check free disk space and the data folder (Settings).`, link: '/settings' });
       failing = true;
+    } finally {
+      running = false;
     }
   };
-  check();
+  void check();
   const timer = setInterval(check, 3_600_000);
   return () => clearInterval(timer);
 }
@@ -73,7 +83,7 @@ export const RESTART_CODE = 75;
  * Checks a snapshot and stages it to replace `dbPath` on the next start (see openDb), after an undo backup of the
  * current data. Returns an error message, or undefined when staged.
  */
-export function stageRestore(db: Db, name: string, dbPath: string, dir = backupDir()): string | undefined {
+export async function stageRestore(db: Db, name: string, dbPath: string, dir = backupDir()): Promise<string | undefined> {
   const file = join(dir, name);
   if (!/^frontline-[\w-]+\.db$/.test(name) || !existsSync(file)) return 'backup not found';
   let version: number;
@@ -92,7 +102,7 @@ export function stageRestore(db: Db, name: string, dbPath: string, dir = backupD
   // Staged first: the undo backup may prune the snapshot being restored.
   copyFileSync(file, `${dbPath}.restore`);
   try {
-    backupNow(db, dir);
+    await backupNow(db, dir);
   } catch (e) {
     rmSync(`${dbPath}.restore`, { force: true });
     throw e;
@@ -103,9 +113,9 @@ export function stageRestore(db: Db, name: string, dbPath: string, dir = backupD
 export function backupRoutes(db: Db, dir = backupDir, dbPath = dbFile, restart: () => void = () => process.exit(RESTART_CODE)) {
   return new Hono()
     .get('/api/backups', (c) => c.json(listBackups(dir())))
-    .post('/api/backups', (c) => c.json(backupNow(db, dir()), 201))
-    .post('/api/backups/:name/restore', (c) => {
-      const error = stageRestore(db, c.req.param('name'), dbPath(), dir());
+    .post('/api/backups', async (c) => c.json(await backupNow(db, dir()), 201))
+    .post('/api/backups/:name/restore', async (c) => {
+      const error = await stageRestore(db, c.req.param('name'), dbPath(), dir());
       if (error) return c.json({ error }, error === 'backup not found' ? 404 : 400);
       // ponytail: exit after the response is out; the desktop app restarts the API, `pnpm dev` needs a manual restart.
       setTimeout(restart, 300);

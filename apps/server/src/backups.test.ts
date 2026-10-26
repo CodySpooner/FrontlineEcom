@@ -10,17 +10,17 @@ import { seedDemo } from './demo';
 
 const tmp = () => join(mkdtempSync(join(tmpdir(), 'frontline-backup-')), "O'Brien data", 'backups');
 
-test('backupNow writes a usable snapshot and keeps the newest 7', () => {
+test('backupNow writes a usable snapshot and keeps the newest 7', async () => {
   const db = openDb();
   seedDemo(db, '2026-10-26');
   const dir = tmp();
-  const first = backupNow(db, dir, new Date('2026-10-01T03:00:00Z'));
+  const first = await backupNow(db, dir, new Date('2026-10-01T03:00:00Z'));
   expect(first.name).toBe('frontline-2026-10-01T03-00-00.db');
   const copy = new DatabaseSync(join(dir, first.name), { readOnly: true });
   expect(copy.prepare('SELECT count(*) AS n FROM stores').get()).toEqual({ n: 3 });
   copy.close();
 
-  for (let d = 2; d <= 9; d++) backupNow(db, dir, new Date(`2026-10-0${d}T03:00:00Z`));
+  for (let d = 2; d <= 9; d++) await backupNow(db, dir, new Date(`2026-10-0${d}T03:00:00Z`));
   const names = listBackups(dir).map((b) => b.name);
   expect(names).toHaveLength(7);
   expect(names[0]).toBe('frontline-2026-10-09T03-00-00.db');
@@ -33,7 +33,9 @@ test('backup routes and the daily loop', async () => {
   const dir = tmp();
   expect(listBackups(dir)).toEqual([]);
   startBackupLoop(db, dir)();
+  await vi.waitFor(() => expect(listBackups(dir)).toHaveLength(1));
   startBackupLoop(db, dir)(); // the newest is under a day old: no second snapshot
+  await new Promise((r) => setTimeout(r, 50));
   expect(listBackups(dir)).toHaveLength(1);
 
   const app = backupRoutes(db, () => dir);
@@ -64,7 +66,7 @@ test('restore: checks the snapshot, keeps an undo backup, stages it and asks for
   seedDemo(db, '2026-10-26');
   const dir = tmp();
   const dbPath = join(dir, '..', 'frontline.db');
-  for (let d = 1; d <= 7; d++) backupNow(db, dir, new Date(`2026-10-0${d}T03:00:00Z`));
+  for (let d = 1; d <= 7; d++) await backupNow(db, dir, new Date(`2026-10-0${d}T03:00:00Z`));
   writeFileSync(join(dir, 'frontline-junk.db'), 'not a database');
   const newer = join(dir, 'frontline-newer.db');
   copyFileSync(join(dir, 'frontline-2026-10-07T03-00-00.db'), newer);
@@ -93,8 +95,8 @@ test('restore: checks the snapshot, keeps an undo backup, stages it and asks for
   expect(restarts).toBe(1);
 });
 
-test('a failing daily backup raises one error notification, and an info one when it works again', () => {
-  vi.useFakeTimers();
+test('a failing daily backup raises one error notification, and an info one when it works again', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval'] }); // the hourly check; the backup itself runs for real
   try {
     const db = openDb();
     seedDemo(db, '2026-10-26');
@@ -104,11 +106,11 @@ test('a failing daily backup raises one error notification, and an info one when
     const notes = () => db.prepare('SELECT kind, title FROM notifications ORDER BY rowid').all();
     const stop = startBackupLoop(db, dir);
     vi.advanceTimersByTime(2 * 3_600_000);
-    expect(notes()).toEqual([{ kind: 'error', title: 'The daily backup failed' }]);
+    await vi.waitFor(() => expect(notes()).toEqual([{ kind: 'error', title: 'The daily backup failed' }]));
 
     rmSync(join(root, 'blocked'));
     vi.advanceTimersByTime(3_600_000);
-    expect(notes()).toEqual([{ kind: 'error', title: 'The daily backup failed' }, { kind: 'info', title: 'Backups are working again' }]);
+    await vi.waitFor(() => expect(notes()).toEqual([{ kind: 'error', title: 'The daily backup failed' }, { kind: 'info', title: 'Backups are working again' }]));
     expect(listBackups(dir)).toHaveLength(1);
     stop();
   } finally {
