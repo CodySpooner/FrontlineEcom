@@ -14,6 +14,7 @@ const SELECT = `SELECT d.*, a.id AS approval_id, a.status AS approval_status FRO
 
 const TAGS = new Set('h1 h2 h3 h4 h5 h6 p br hr ul ol li strong b em i u s small sup sub span div blockquote a img figure figcaption table caption thead tbody tfoot tr th td'.split(' '));
 const ATTRS = new Set('href src alt title width height colspan rowspan target rel class id loading'.split(' '));
+const TAG = /<(\/?)([a-zA-Z][^\s/>]*)/y;
 
 /**
  * Why `html` can't go on a storefront, or undefined when it's clean: structural tags only, no scripts, handlers,
@@ -21,16 +22,44 @@ const ATTRS = new Set('href src alt title width height colspan rowspan target re
  */
 // ponytail: an allowlist that refuses, not a sanitizer; a parser (e.g. parse5) if legit pages start getting refused.
 export function unsafeHtml(html: string): string | undefined {
-  // Quoted values are taken whole, so `title="x>" onerror=…` can't hide an attribute.
-  for (const [, slash, name, attrs] of html.matchAll(/<(\/?)([a-zA-Z][^\s/>]*)((?:"[^"]*"|'[^']*'|[^'">])*)/g)) {
-    const tag = name!.toLowerCase();
+  // Tags are read the way a browser's tokenizer reads them: a quote opens a value only right after "=" (one inside a name
+  // or an unquoted value is just a character), so the scan ends each tag at the same ">" the browser does and no
+  // markup hides inside what only looks like a quoted value. End tags' attributes count too (browsers parse, then drop them).
+  let i = 0;
+  const at = (re: RegExp) => ((re.lastIndex = i), re.exec(html)?.[0] ?? ''); // sticky: matches at i, no copies
+  while ((i = html.indexOf('<', i)) !== -1) {
+    const open = ((TAG.lastIndex = i), TAG.exec(html));
+    if (!open) {
+      i++;
+      continue;
+    }
+    const tag = open[2]!.toLowerCase();
     if (!TAGS.has(tag)) return `<${tag}> is not allowed`;
-    if (slash) continue;
-    for (const [, attr, ...vals] of attrs!.matchAll(/([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*)))?/g)) {
-      const a = attr!.toLowerCase();
+    i += open[0].length;
+    for (;;) {
+      i += at(/[\s/]*/y).length;
+      if (i >= html.length || html[i] === '>') break;
+      const attr = at(/[^][^\s/>=]*/y); // a name may start with "=" and hold quotes
+      i += attr.length;
+      i += at(/\s*/y).length;
+      let value = '';
+      if (html[i] === '=') {
+        i += at(/=\s*/y).length;
+        const q = html[i];
+        if (q === '"' || q === "'") {
+          const end = html.indexOf(q, i + 1);
+          value = html.slice(i + 1, end === -1 ? undefined : end);
+          i = end === -1 ? html.length : end + 1;
+        } else {
+          value = at(/[^\s>]*/y);
+          i += value.length;
+        }
+      }
+      if (open[1]) continue;
+      const a = attr.toLowerCase();
       if (!ATTRS.has(a)) return `the ${a} attribute is not allowed`;
       if (a !== 'href' && a !== 'src') continue;
-      const url = (vals.find((v) => v !== undefined) ?? '')
+      const url = value
         .replace(/&#(x?)([0-9a-f]+);?/gi, (_, x: string, n: string) => String.fromCharCode(parseInt(n, x ? 16 : 10)))
         .replace(/&colon;/gi, ':')
         .replace(/[\s\u0000-\u001f]+/g, '')

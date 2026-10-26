@@ -8,6 +8,15 @@ test('storefront HTML: structure and http(s) links pass; scripts, handlers, styl
   expect(unsafeHtml('<svg><circle/></svg>')).toBe('<svg> is not allowed');
   expect(unsafeHtml('<img src=x onerror=alert(1)>')).toBe('the onerror attribute is not allowed');
   expect(unsafeHtml('<img title="a>b" onerror="alert(1)">')).toBe('the onerror attribute is not allowed'); // a ">" inside quotes doesn't end the tag
+  // A quote inside an unquoted value or a name is a plain character to a browser: the tag ends at the next ">", and
+  // what follows is markup, even when a later quote makes it look like the inside of a value.
+  expect(unsafeHtml(`<a title=x">"title="<img src=x onerror=alert(1)>">`)).toBe('the onerror attribute is not allowed');
+  expect(unsafeHtml(`</a x"><img src=x onerror=alert(1)>">`)).toBe('the onerror attribute is not allowed');
+  expect(unsafeHtml(`<p title=a'b>'<img src=x onerror=alert(1)>'`)).toBe('the onerror attribute is not allowed');
+  expect(unsafeHtml(`<p title = "a > b" class=intro>Hi</p></p>`)).toBeUndefined();
+  expect(unsafeHtml(`<a href = 'javascript:alert(1)'>x</a>`)).toBe('javascript: links are not allowed');
+  expect(unsafeHtml(`<a/href=javascript:alert(1)>x</a>`)).toBe('javascript: links are not allowed');
+  expect(unsafeHtml(`<img src=/a.png/onerror=alert(1)>`)).toBeUndefined(); // one unquoted value, as a browser reads it
   expect(unsafeHtml('<p style="display:none">hidden link</p>')).toBe('the style attribute is not allowed');
   expect(unsafeHtml('<a href="javascript:alert(1)">x</a>')).toBe('javascript: links are not allowed');
   expect(unsafeHtml('<a href=" jav&#x61;script&colon;alert(1)">x</a>')).toBe('javascript: links are not allowed');
