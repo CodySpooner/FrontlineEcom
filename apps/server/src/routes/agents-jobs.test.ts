@@ -57,6 +57,13 @@ test("a job switched on at go-live waits for its next slot instead of running fo
   expect(started.filter((s) => s.startsWith('glow:') && DEFAULT_JOBS.some((j) => s.includes(j.task)))).toEqual([]);
 });
 
+test('a job the owner edited in Automation keeps their on/off when the store goes live or gets campaigns', async () => {
+  const report = (await rules('glow')).find((r) => r.name === 'Weekly report')!;
+  expect((await app.request(`/api/automations/${report.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: false }) })).status).toBe(200);
+  expect(enableDefaultJobs(db, 'glow')).toBe(DEFAULT_JOBS.length - 1);
+  expect((await rules('glow')).filter((r) => !r.enabled).map((r) => r.name)).toEqual(['Weekly report']);
+});
+
 test('stores made before a job shipped get it on the next start; a job the owner deleted stays deleted', async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'peak'`).run();
   agentRoutes(db); // activation: the jobs are on

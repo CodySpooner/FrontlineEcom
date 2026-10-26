@@ -93,12 +93,16 @@ const taskHash = (task: string) => createHash('sha256').update(task).digest('hex
 /** Has nothing to review until the store has campaigns (an ad account synced); a run a day on none spends Claude usage. */
 export const ADS_JOB = 'Daily campaign review';
 
-/** Switches a store's default jobs on (it just got connected); returns how many were off. */
+/**
+ * Switches a store's default jobs on (it just got connected, or got campaigns); returns how many were off. A job the
+ * owner edited in Automation (core's `rule-edited:<id>` marker) is theirs: an "off" there stays off.
+ */
 export function enableDefaultJobs(db: DatabaseSync, storeId: string, names = DEFAULT_JOBS.map((j) => j.name), now = new Date()): number {
   // Checked as of now: the scheduler skips rules while they're off, so an old check would run today's earlier slots at once.
   return Number(
     db
-      .prepare(`UPDATE automation_rules SET enabled = 1, checked_at = ? WHERE store_id = ? AND enabled = 0 AND name IN (${names.map(() => '?').join(',')})`)
+      .prepare(`UPDATE automation_rules SET enabled = 1, checked_at = ? WHERE store_id = ? AND enabled = 0 AND name IN (${names.map(() => '?').join(',')})
+                 AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'rule-edited:' || automation_rules.id)`)
       .run(now.toISOString(), storeId, ...names).changes,
   );
 }
