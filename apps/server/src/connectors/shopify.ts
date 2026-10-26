@@ -300,17 +300,23 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     } while (after);
 
     // The funnel from Shopify's own analytics for a store without GA4 (GA4 owns it there). It needs read_reports and Level 2
-    // customer data access, so without them orders sync on and the funnel stays empty.
-    // ponytail: bot sessions count too; add WHERE human_or_bot_session = 'human' once checked against a live shop.
+    // customer data access, so without them orders sync on and the funnel stays empty. Bot visits (Shopify's human/bot
+    // verdict, since October 2025) are read separately and taken off, so days it never classified keep their totals.
     if (!db.prepare('SELECT 1 FROM integrations WHERE id = ?').get(`ga4:${storeId}`)) {
-      const query = `FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout TIMESERIES day SINCE -${cursor ? 3 : BACKFILL_DAYS}d ORDER BY day ASC`;
-      const table = await q<{ shopifyqlQuery?: { tableData: Table } }>(FUNNEL_Q, { q: query }).then((d) => d.shopifyqlQuery?.tableData ?? null, () => null);
+      const query = (where: string) =>
+        `FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout${where} TIMESERIES day SINCE -${cursor ? 3 : BACKFILL_DAYS}d ORDER BY day ASC`;
+      const read = (where: string) => q<{ shopifyqlQuery?: { tableData: Table } }>(FUNNEL_Q, { q: query(where) }).then((d) => d.shopifyqlQuery?.tableData ?? null, () => null);
+      const table = await read('');
+      const bots = new Map(funnelDays(table && (await read(" WHERE human_or_bot_session = 'bot'"))).map((d) => [d.date, d]));
       const up = db.prepare(
         `INSERT INTO daily_metrics (store_id, date, sessions, add_to_carts, checkouts) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (store_id, date) DO UPDATE SET sessions = excluded.sessions, add_to_carts = excluded.add_to_carts, checkouts = excluded.checkouts`,
       );
       tx(db, () => {
-        for (const d of funnelDays(table)) up.run(storeId, d.date, d.sessions, d.carts, d.checkouts);
+        for (const d of funnelDays(table)) {
+          const b = bots.get(d.date);
+          up.run(storeId, d.date, Math.max(0, d.sessions - (b?.sessions ?? 0)), Math.max(0, d.carts - (b?.carts ?? 0)), Math.max(0, d.checkouts - (b?.checkouts ?? 0)));
+        }
       });
     }
     db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(start > since ? start : since, now.toISOString(), id);

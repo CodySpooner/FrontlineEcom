@@ -43,6 +43,8 @@ function fakeShopify(orders: ReturnType<typeof order>[], status = 200, funnel = 
     if (body.query.includes('shopifyqlQuery')) {
       if (!funnel) return Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });
       const columns = ['day', 'sessions', 'sessions_with_cart_additions', 'sessions_that_reached_checkout'].map((name) => ({ name, dataType: 'INTEGER' }));
+      // Bot visits on the 25th; the 26th has no human/bot verdict.
+      if (body.variables.q.includes("WHERE human_or_bot_session = 'bot'")) return json({ shopifyqlQuery: { parseErrors: [], tableData: { columns, rows: [['2026-10-25', '20', '1', '0']] } } });
       return json({ shopifyqlQuery: { parseErrors: [], tableData: { columns, rows: [['2026-10-25', '120', '14', '6'], ['2026-10-26', 80, 9, 4]] } } });
     }
     const start = body.variables.after ? Number(body.variables.after) : 0;
@@ -457,9 +459,13 @@ test("without GA4, the funnel comes from Shopify's analytics; without its scope,
 
   const { fetchFn, calls } = fakeShopify([], 200, true);
   await syncShopify(db, key, 'glow', fetchFn, NOW);
-  expect(calls.find((c) => c.body.query.includes('shopifyqlQuery'))?.body.variables.q).toContain('FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout TIMESERIES day SINCE -3d');
+  expect(calls.filter((c) => c.body.query.includes('shopifyqlQuery')).map((c) => c.body.variables.q)).toEqual([
+    'FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout TIMESERIES day SINCE -3d ORDER BY day ASC',
+    "FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout WHERE human_or_bot_session = 'bot' TIMESERIES day SINCE -3d ORDER BY day ASC",
+  ]);
+  // Bot visits come off; a day Shopify didn't classify keeps its total.
   expect(funnel()).toEqual([
-    { date: '2026-10-25', sessions: 120, carts: 14, checkouts: 6 },
+    { date: '2026-10-25', sessions: 100, carts: 13, checkouts: 6 },
     { date: '2026-10-26', sessions: 80, carts: 9, checkouts: 4 },
   ]);
 });
