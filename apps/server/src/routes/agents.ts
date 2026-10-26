@@ -36,6 +36,7 @@ import {
   listAgents,
   listMemory,
   listNicheLearnings,
+  listXpEvents,
   addNicheLearning,
   nicheKey,
   listRuns,
@@ -461,6 +462,9 @@ export function agentRoutes(db: Db) {
       const agent = getAgent(db, c.req.param('id'));
       return agent ? c.json(agent) : c.json({ error: 'Agent not found' }, 404);
     })
+    .get('/api/agents/:id/xp', (c) =>
+      getAgent(db, c.req.param('id')) ? c.json(listXpEvents(db, c.req.param('id'), limit(c.req.query('limit')))) : c.json({ error: 'Agent not found' }, 404),
+    )
     .patch('/api/agents/:id', async (c) => {
       const body = (await c.req.json().catch(() => null)) as AgentUpdate | null;
       if (

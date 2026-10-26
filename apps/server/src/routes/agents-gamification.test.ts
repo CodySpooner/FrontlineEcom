@@ -1,5 +1,5 @@
-import { createRunManager, fakeEngine, getAgent, levelForXp, REFLECTION_PROMPT } from '@frontline/agents';
-import type { Achievement, Agent, Commander, LiveMessage, Mission } from '@frontline/shared';
+import { awardXp, createRunManager, fakeEngine, getAgent, levelForXp, REFLECTION_PROMPT } from '@frontline/agents';
+import type { Achievement, Agent, Commander, LiveMessage, Mission, XpEvent } from '@frontline/shared';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
@@ -70,6 +70,20 @@ test('finished runs and learnings pay the agent once, with live XP messages', as
     [10, 'Completed: Where do our buyers live?'],
   ]);
   expect(xpOf('glow:market_analyst')).toBe(before + 15);
+});
+
+test("an agent's XP history, newest first", async () => {
+  const at = (s: number) => new Date(Date.UTC(2026, 9, 26, 12, 0, s));
+  awardXp(db, { ref: 'x1', amount: 10, reason: 'Task done', storeId: 'glow', agentId: 'glow:copywriter' }, at(1));
+  awardXp(db, { ref: 'x2', amount: 40, reason: 'Measured win: ROAS 1.8 → 2.4', storeId: 'glow', agentId: 'glow:copywriter' }, at(2));
+  awardXp(db, { ref: 'x3', amount: 5, reason: 'Someone else', storeId: 'glow', agentId: 'glow:ad_strategist' }, at(3));
+  const xp = async (q = '') => (await (await app.request(`/api/agents/glow:copywriter/xp${q}`)).json()) as XpEvent[];
+  expect((await xp()).map((e) => [e.amount, e.reason, e.createdAt])).toEqual([
+    [40, 'Measured win: ROAS 1.8 → 2.4', at(2).toISOString()],
+    [10, 'Task done', at(1).toISOString()],
+  ]);
+  expect((await xp('?limit=1')).map((e) => e.amount)).toEqual([40]);
+  expect((await app.request('/api/agents/nope/xp')).status).toBe(404);
 });
 
 test('an approved request pays the agent that made it; a denied one does not', async () => {

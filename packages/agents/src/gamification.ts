@@ -172,6 +172,14 @@ export const ACHIEVEMENTS: (Omit<Achievement, 'unlockedAt'> & { check: (f: Facts
 ];
 
 /** Unlocks what the facts now satisfy (paying its XP once) and returns the whole catalog with unlock times. */
+/** An agent's XP events, newest first. Demo squads' starting XP has none (it's set on the agent). */
+export function listXpEvents(db: DatabaseSync, agentId: string, limit = 50): XpEvent[] {
+  return db
+    .prepare('SELECT id, store_id, agent_id, amount, reason, created_at FROM xp_events WHERE agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
+    .all(agentId, limit)
+    .map((r) => ({ id: String(r.id), ...(r.store_id ? { storeId: String(r.store_id) } : {}), agentId: String(r.agent_id), amount: Number(r.amount), reason: String(r.reason), createdAt: String(r.created_at) }));
+}
+
 export function checkAchievements(db: DatabaseSync, facts: Facts, award: (a: Award) => unknown = (a) => awardXp(db, a)): Achievement[] {
   for (const a of ACHIEVEMENTS) if (a.check(facts)) award({ ref: `achievement:${a.id}`, amount: a.xp, reason: `Achievement: ${a.title}` });
   const unlocked = new Map(
