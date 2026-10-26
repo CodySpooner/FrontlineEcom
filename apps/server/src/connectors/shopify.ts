@@ -424,6 +424,7 @@ export interface ProductPage {
 
 /** Replaces a live product's title, description and SEO. Call only for an approved request. */
 export async function publishProductPage(db: Db, key: Buffer, storeId: string, productId: string, page: ProductPage, fetchFn: Fetch = fetch) {
+  if ([page.title, page.seoTitle].some((t) => t && hasTag(t))) throw new Error("The title can't contain HTML: themes show it as it is");
   const seo = { ...(page.seoTitle ? { title: page.seoTitle } : {}), ...(page.seoDescription ? { description: page.seoDescription } : {}) };
   const product = { id: `gid://shopify/Product/${productId}`, title: page.title, descriptionHtml: page.descriptionHtml, ...(Object.keys(seo).length ? { seo } : {}) };
   await logAction(db, storeId, 'product_page_publish', productId, { title: page.title, ...(page.seoTitle ? { seoTitle: page.seoTitle } : {}) }, async () => {
@@ -459,6 +460,7 @@ async function repriceVariants(q: ReturnType<typeof admin>, productId: string, p
 
 /** Creates a published store page (about, FAQ, shipping, landing). Call only for an approved request. Returns its handle (/pages/<handle>). */
 export async function publishPage(db: Db, key: Buffer, storeId: string, page: { title: string; bodyHtml: string }, fetchFn: Fetch = fetch) {
+  if ([page.title].some((t) => t && hasTag(t))) throw new Error("The title can't contain HTML: themes show it as it is");
   type Created = { pageCreate: { page: { id: string; handle: string } | null; userErrors: { message: string }[] } };
   return logAction(db, storeId, 'page_publish', page.title, { title: page.title }, async () => {
     const { pageCreate: c } = await admin(db, key, storeId, fetchFn)<Created>(PAGE_CREATE_M, { page: { title: page.title, body: page.bodyHtml, isPublished: true } });

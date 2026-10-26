@@ -159,10 +159,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-75 A WooCommerce order moved to the trash after it was counted kept counting as paid.
 - [x] CORE-76 A product to create with a string compare-at or cost left a $0 draft in Shopify; titles could carry HTML.
 - [x] CORE-77 A Woo price change on a product with a scheduled sale only took effect inside the owner's sale dates.
+- [x] CORE-78 Page and product-page titles (and Shopify SEO titles) went to the storefront unchecked; the body was checked, the title wasn't.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-78 (live-write review): the agents route checks a Store Builder draft's body with `unsafeHtml`, but its title went to Shopify/WordPress as is, and themes (and WordPress for admin users) print titles unescaped: a prompt-injected agent could put a script on the owner's storefront. `publishPage`, `publishProductPage` (title and SEO title), `publishWooPage` and `publishWooProductPage` now refuse a title with a tag (`hasTag`) before any call. Etsy shows titles as text itself. Agents told.
 - 2026-10-26 — CORE-77 (live-write review): `setWooProductPrice` wrote `sale_price` but left `date_on_sale_from/to`, so with a sale scheduled for next week the new price showed only during that week (the local catalog and a price test said it was live now), and it replaced the owner's planned sale price. A product with sale dates set is now refused before any write ("has a scheduled sale (2026-11-02 to 2026-11-09); change its price in WooCommerce"), as variable products are.
 - 2026-10-26 — CORE-76 (live-write review): `createProducts` (Shopify) and `createWooProducts` take the agent's free-form products. A string compare-at or cost threw at `.toFixed` after `productCreate` had made the draft, leaving a $0 draft outside the local catalog. `checkNewProducts` now refuses the whole batch before any call: title required and without tags (`hasTag`: `<b`, `</`, `<!--`, `<?`; a lone `<` passes), price a number above 0, compare-at above 0, cost 0 or more, naming the product ("Product 2 (Ice Roller): ..."). Agents told about a double-approval race in their route.
 - 2026-10-26 — CORE-75: the order read used Woo's default status (any), which leaves out the trash, so the existing `trash` → refunded handling never saw an order trashed after it was counted (a fraud or test order kept its revenue). Each sync now also reads trashed orders modified since the cursor (one more request). An order deleted permanently still can't be seen through the REST API.

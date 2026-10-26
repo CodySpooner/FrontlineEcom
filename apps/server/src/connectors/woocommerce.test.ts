@@ -3,6 +3,7 @@ import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
+import { publishPage, publishProductPage } from './shopify';
 import { createWooProducts, publishWooPage, publishWooProductPage, setWooProductPrice, syncWooCommerce, wooSite, wpZone } from './woocommerce';
 
 const key = randomBytes(32);
@@ -507,4 +508,16 @@ test("a Woo price change leaves a product with a scheduled sale alone: its new p
   const { fetchFn, writes } = fakeWooWrites();
   await expect(setWooProductPrice(db, key, 'pawsome', 'woo-44', { price: 27 }, fetchFn)).rejects.toThrow(/scheduled sale/);
   expect(writes).toHaveLength(0);
+});
+
+test("a page or product title with HTML isn't published: themes print titles as they are", async () => {
+  const db = setup();
+  const calls: string[] = [];
+  const fetchFn = (async (url: string) => (calls.push(url), Response.json({}))) as typeof fetch;
+  const title = 'FAQ <script>alert(1)</script>';
+  await expect(publishWooPage(db, key, 'pawsome', { title, bodyHtml: '<p>Hi</p>' }, fetchFn)).rejects.toThrow("title can't contain HTML");
+  await expect(publishWooProductPage(db, key, 'pawsome', 'woo-41', { title, descriptionHtml: '<p>Hi</p>' }, fetchFn)).rejects.toThrow("title can't contain HTML");
+  await expect(publishPage(db, key, 'pawsome', { title, bodyHtml: '<p>Hi</p>' }, fetchFn)).rejects.toThrow("title can't contain HTML");
+  await expect(publishProductPage(db, key, 'pawsome', '41', { title: 'Fine', seoTitle: title, descriptionHtml: '<p>Hi</p>' }, fetchFn)).rejects.toThrow("title can't contain HTML");
+  expect(calls).toHaveLength(0);
 });

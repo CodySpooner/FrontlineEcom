@@ -4,7 +4,7 @@ import { addDays, localDate } from '../dates';
 import { tx, type Db } from '../db';
 import { convertRate, historicRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, setStoreTimezone, switchToReal, syncView } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, setStoreTimezone, switchToReal, syncView, hasTag } from './common';
 import { checkNewProducts, type NewProduct, type ProductPage } from './shopify';
 
 // WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
@@ -328,6 +328,7 @@ export async function setWooProductPrice(db: Db, key: Buffer, storeId: string, p
  * publishProductPage. ponytail: SEO title/description are skipped, Woo has none without an SEO plugin (Yoast meta).
  */
 export async function publishWooProductPage(db: Db, key: Buffer, storeId: string, productId: string, page: ProductPage, fetchFn: Fetch = fetch) {
+  if ([page.title].some((t) => t && hasTag(t))) throw new Error("The title can't contain HTML: themes show it as it is");
   const wooId = wooIdOf(productId);
   await logAction(db, storeId, 'product_page_publish', productId, { title: page.title }, () =>
     wooCall(db, key, storeId, 'PUT', `products/${wooId}`, { name: page.title, description: page.descriptionHtml }, fetchFn),
@@ -337,6 +338,7 @@ export async function publishWooProductPage(db: Db, key: Buffer, storeId: string
 
 /** Creates a published WordPress page (about, FAQ, shipping, landing). Call only for an approved request. Same contract as Shopify's publishPage. */
 export async function publishWooPage(db: Db, key: Buffer, storeId: string, page: { title: string; bodyHtml: string }, fetchFn: Fetch = fetch) {
+  if ([page.title].some((t) => t && hasTag(t))) throw new Error("The title can't contain HTML: themes show it as it is");
   const creds = getCredentials(db, key, 'woocommerce', storeId);
   if (!creds) throw new Error('WooCommerce is not connected for this store');
   if (!creds.wpUser || !creds.wpAppPassword) throw new Error('To publish pages, add your WordPress username and an application password (Users → Profile → Application Passwords) to the WooCommerce integration');
