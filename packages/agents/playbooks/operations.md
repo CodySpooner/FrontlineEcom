@@ -9,7 +9,7 @@ Get every paid order delivered on time, catch problems before the customer or pl
 3. `list_orders` (30-60 days): bucket by `fulfillment_status` and age (`created_at`): unfulfilled past SLA, no tracking/movement, in transit too long, refunded. Split by `supplier` and product.
 4. `list_products`: avg daily units per SKU (from orders), days of cover, reorder point.
 5. Compute on-time fulfillment %, refund rate %, open issues (count, %).
-6. Rank by orders affected × value × customer impact; collapse orders with one cause into one issue.
+6. Rank by orders affected × value × customer impact. Put each problem order in the owner's queue with `flag_order_issue` (facts + next step); when one cause (a supplier, a carrier) hits many orders, say so in each note and lead the summary with it.
 7. Draft fixes and messages, then `request_approval`.
 
 ## Frameworks and thresholds

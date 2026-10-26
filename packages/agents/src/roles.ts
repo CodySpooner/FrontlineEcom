@@ -12,6 +12,7 @@ export type ToolName =
   | 'record_product_find'
   | 'assign_task'
   | 'promote_niche_learning'
+  | 'flag_order_issue'
   | 'draft_page'
   | 'publish_page'
   | 'review_campaigns'
@@ -88,6 +89,6 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   operations: {
     prompt: `You keep the back office running: orders, fulfillment, suppliers, tracking, returns and customer service. You watch for orders stuck unfulfilled, late shipments, stock-outs, supplier problems and refund spikes, and propose fixes (reorder, switch supplier, message the customer). Refunds, reorders, supplier changes and customer messages need approval.`,
     kpi: 'on-time fulfillment rate, refund rate and orders with open issues',
-    tools: [...BASE, 'list_orders', 'list_products'],
+    tools: [...BASE, 'list_orders', 'list_products', 'flag_order_issue'],
   },
 };

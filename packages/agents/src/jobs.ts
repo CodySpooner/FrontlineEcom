@@ -31,6 +31,14 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
       'with record_product_find. Request a store.add_products approval only for a product that clearly beats the weakest current product; otherwise report the top 3 to watch.',
   },
   {
+    name: 'Daily order check',
+    role: 'operations',
+    cron: '0 10 * * *',
+    task:
+      'Daily order check: list_orders for the last 14 days. Flag with flag_order_issue every order unfulfilled for 3+ days or in transit for 10+ days ' +
+      '(severity high past 7 / 15 days), and any refund or supplier problem you can see, each with a suggested next step. Then summarize the queue in 3 lines.',
+  },
+  {
     name: 'Weekly report',
     role: 'market_analyst',
     cron: '0 9 * * 1',

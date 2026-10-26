@@ -353,6 +353,24 @@ export const MIGRATIONS = [
     FOREIGN KEY (store_id, order_id) REFERENCES orders (store_id, id) ON DELETE CASCADE
   );
   `,
+  /* 17 (agents lane: order issue queue, AGT-27) */ `
+  CREATE TABLE order_issues (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    order_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    severity TEXT NOT NULL,
+    note TEXT NOT NULL,
+    suggested_action TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    resolution TEXT,
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+  );
+  CREATE UNIQUE INDEX order_issues_open ON order_issues (store_id, order_id, kind) WHERE status = 'open';
+  CREATE INDEX order_issues_by_store ON order_issues (store_id, status, created_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

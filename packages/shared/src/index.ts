@@ -378,6 +378,29 @@ export interface AgentRun {
   parentRunId?: string;
 }
 
+export type OrderIssueKind = 'late' | 'stuck' | 'refund' | 'supplier' | 'address' | 'other';
+export type OrderIssueStatus = 'open' | 'resolved';
+
+/**
+ * Orders & Fulfillment issue queue, flagged by the Operations agent. GET /api/order-issues?stores=&status=&limit= →
+ * OrderIssue[] (open first, newest first); PATCH /api/order-issues/:id { status, resolution? } → OrderIssue.
+ */
+export interface OrderIssue {
+  id: string;
+  storeId: string;
+  orderId: string;
+  agentId: string;
+  kind: OrderIssueKind;
+  severity: 'low' | 'medium' | 'high';
+  /** What is wrong, with the facts (days since order, status, carrier). */
+  note: string;
+  suggestedAction?: string;
+  status: OrderIssueStatus;
+  resolution?: string;
+  createdAt: string;
+  resolvedAt?: string;
+}
+
 export type PageDraftKind = 'product' | 'page';
 /** draft → pending (publish requested) → published, or rejected. approved = approved, but a connected store needs it applied by hand. */
 export type PageDraftStatus = 'draft' | 'pending' | 'approved' | 'published' | 'rejected';

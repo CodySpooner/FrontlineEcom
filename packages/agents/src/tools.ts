@@ -6,6 +6,7 @@ import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
 import { searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
 import { getPageDraft, savePageDraft } from './pages';
+import { flagOrderIssue } from './issues';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 
 /** What the server hands a run so its tools can read and act on app data. */
@@ -251,6 +252,23 @@ export const APP_TOOLS: AppTool[] = [
       }
       const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'demo', mediaUrl: demoMedia(ctx.store, { kind, aspect, headline, cta }) });
       return `${message}. Higgsfield isn't connected, so this is a demo render, saved to the library (${saved.id}).`;
+    },
+  }),
+  defineTool({
+    name: 'flag_order_issue',
+    description:
+      "Put an order problem in the owner's issue queue (Orders & Fulfillment): late or stuck shipments, refund requests, supplier problems, bad addresses. One open issue per order and kind; flagging it again returns the open one.",
+    input: {
+      orderId: z.string(),
+      kind: z.enum(['late', 'stuck', 'refund', 'supplier', 'address', 'other']),
+      severity: z.enum(['low', 'medium', 'high']).describe('high = customer already waiting past the promise or money at risk'),
+      note: z.string().min(10).max(500).describe('the facts: days since order, fulfillment status, supplier, tracking'),
+      suggestedAction: z.string().max(300).optional().describe('the next step, e.g. "Email CJ for tracking; offer the customer 10% if not shipped by Friday"'),
+    },
+    run: async ({ orderId, ...i }, ctx) => {
+      if (!ctx.db.prepare('SELECT 1 FROM orders WHERE store_id = ? AND id = ?').get(ctx.store.id, orderId)) return `No order ${orderId} in this store. Use list_orders for ids.`;
+      const { issue, created } = flagOrderIssue(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, orderId, ...i });
+      return created ? `Flagged order ${orderId} (${i.kind}, ${i.severity}) in the issue queue (${issue.id}).` : `Order ${orderId} already has an open ${i.kind} issue (${issue.id}): ${issue.note}`;
     },
   }),
   defineTool({

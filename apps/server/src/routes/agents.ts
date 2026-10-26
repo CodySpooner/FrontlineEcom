@@ -31,6 +31,7 @@ import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
 import { addProducts, applyAdChange, onApproved, publishDraft } from './agents-actions';
 import { pageRoutes } from './agents-pages';
+import { issueRoutes } from './agents-issues';
 import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { createProducts } from '../connectors/shopify';
@@ -214,6 +215,7 @@ export function agentRoutes(db: Db) {
     .get('/api/niche-learnings', (c) => c.json(listNicheLearnings(db, c.req.query('niche') || undefined)))
     .delete('/api/niche-learnings/:id', (c) => (deleteNicheLearning(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Learning not found' }, 404)))
     .route('/', pageRoutes(db))
+    .route('/', issueRoutes(db))
     .route('/', gamificationRoutes(db))
     .route('/', creativeRoutes(db));
 }
