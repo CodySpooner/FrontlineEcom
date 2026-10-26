@@ -307,7 +307,7 @@ function Requests() {
     setVerdicts((v) => ({ ...v, [id]: verdict }));
     decide.mutateAsync({ id, verdict }).then(
       // Leave the verdict on screen for a beat, then drop the row.
-      () => setTimeout(() => qc.setQueryData<ApprovalRequest[]>(['approvals'], (old = []) => old.filter((a) => a.id !== id)), 900),
+      () => setTimeout(() => qc.setQueryData<ApprovalRequest[]>(['approvals', 'pending'], (old = []) => old.filter((a) => a.id !== id)), 900),
       () => {
         setVerdicts(({ [id]: _, ...rest }) => rest);
         setFailed(id);
@@ -337,7 +337,10 @@ function Requests() {
                     {role ? AGENT_ROLES[role].name : 'Agent'} · {name(a.storeId)}
                   </div>
                   <div className="mt-0.5 text-[13px] font-semibold">{a.title}</div>
-                  <div className="mt-0.5 text-xs text-muted">{a.reason}</div>
+                  <div className="mt-0.5 text-xs text-muted">
+                    {a.reason}
+                    {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold whitespace-nowrap text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
+                  </div>
                   {failed === a.id && (
                     <div role="alert" className="mt-1 text-xs text-red">
                       Couldn't send that. Try again.
@@ -361,6 +364,31 @@ function Requests() {
           })}
         </ul>
       )}
+      <Autopiloted />
     </Panel>
+  );
+}
+
+const DAY_MS = 86_400_000;
+
+/** What autopilot approved on its own (within the agent's cap) in the last 24h, so the owner can see it acted. */
+function Autopiloted() {
+  const { has, name } = useStoreSelection();
+  const list = (useApprovals('approved').data ?? []).filter((a) => a.action.auto && has(a.storeId) && Date.now() - Date.parse(a.decidedAt ?? a.createdAt) < DAY_MS).slice(0, 3);
+  if (!list.length) return null;
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <div className="mb-1.5 font-display text-[11px] font-semibold tracking-[.15em] text-muted uppercase">Autopilot · last 24h</div>
+      <ul className="grid gap-1.5">
+        {list.map((a) => (
+          <li key={a.id} className="flex items-center justify-between gap-2 text-xs">
+            <span className="min-w-0 truncate text-text-2">
+              {a.title} <span className="text-muted">· {name(a.storeId)}</span>
+            </span>
+            <Badge tone="good">Auto-approved</Badge>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

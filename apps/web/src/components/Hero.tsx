@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import { Bell, ChevronDown, Search } from 'lucide-react';
-import { useApprovals } from '../api/client';
+import { useApprovals, useSettings } from '../api/client';
 
 // Page hero: title, subtitle, red-lit character art over a skyline, and the top bar (Ask AI, bell, profile).
 // ponytail: one look for every page; UI-05 adds per-page art variants.
 export function Hero({ title, subtitle, children }: { title: string; subtitle: string; children?: ReactNode }) {
   const pending = useApprovals().data?.length ?? 0;
+  const profile = useSettings().data?.profile ?? { name: 'Owner', plan: '' };
   return (
     <header className="hero-bg relative -mx-[22px] mb-4 min-h-[158px] overflow-hidden border-b border-line px-[22px] pt-5 pb-[26px]">
       <svg className="absolute bottom-0 left-0 h-16 w-full" viewBox="0 0 850 80" preserveAspectRatio="none" aria-hidden="true">
@@ -43,10 +44,10 @@ export function Hero({ title, subtitle, children }: { title: string; subtitle: s
             )}
           </button>
           <button type="button" className="glass flex cursor-pointer items-center gap-2.5 rounded-[13px] py-[5px] pr-2.5 pl-[5px] text-left">
-            <span className="grid size-8 place-items-center rounded-full border border-red bg-[radial-gradient(circle_at_50%_35%,#45121a,#120507)] font-display text-sm font-bold">X</span>
+            <span className="grid size-8 place-items-center rounded-full border border-red bg-[radial-gradient(circle_at_50%_35%,#45121a,#120507)] font-display text-sm font-bold">{profile.name.charAt(0).toUpperCase()}</span>
             <span>
-              <span className="block text-[13px] leading-tight font-semibold">Xody</span>
-              <span className="block text-[11px] text-muted">Owner</span>
+              <span className="block text-[13px] leading-tight font-semibold">{profile.name}</span>
+              <span className="block text-[11px] text-muted">{profile.plan || 'Owner'}</span>
             </span>
             <ChevronDown className="size-[15px] text-muted" strokeWidth={1.8} />
           </button>

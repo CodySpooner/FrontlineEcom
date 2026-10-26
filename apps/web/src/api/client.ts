@@ -1,7 +1,7 @@
 // UI-03 data layer: typed fetchers + react-query hooks over the local API, and the /api/live socket.
 import { useEffect } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Agent, AnalyticsRange, AnalyticsSummary, ApprovalDecision, ApprovalRequest, LiveMessage, Store, StoreEvent } from '@frontline/shared';
+import type { Agent, AnalyticsRange, AnalyticsSummary, ApprovalDecision, ApprovalRequest, ApprovalStatus, LiveMessage, Settings, Store, StoreEvent } from '@frontline/shared';
 import * as stub from './stubs';
 import type { Mission } from './stubs';
 
@@ -14,6 +14,7 @@ async function api<T>(path: string, init?: RequestInit & { fallback?: () => T })
   return (await r.json()) as T;
 }
 
+export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/api/settings') });
 export const useStores = () => useQuery({ queryKey: ['stores'], queryFn: () => api<Store[]>('/api/stores') });
 
 /** Empty `storeIds` = all stores. Keeps the previous range on screen while the next one loads. */
@@ -26,7 +27,8 @@ export const useSummary = (storeIds: string[], range: AnalyticsRange) =>
 
 // ponytail: the lists below fetch every store once and filter client-side; pass `stores=` when there are dozens of stores.
 export const useEvents = () => useQuery({ queryKey: ['events'], queryFn: () => api<StoreEvent[]>('/api/events?limit=30') });
-export const useApprovals = () => useQuery({ queryKey: ['approvals'], queryFn: () => api<ApprovalRequest[]>('/api/approvals?status=pending') });
+export const useApprovals = (status: ApprovalStatus = 'pending') =>
+  useQuery({ queryKey: ['approvals', status], queryFn: () => api<ApprovalRequest[]>(`/api/approvals?status=${status}`) });
 export const useAgents = () => useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/api/agents') });
 export const useMissions = () => useQuery({ queryKey: ['missions'], queryFn: () => api<Mission[]>('/api/missions', { fallback: stub.missions }) });
 
