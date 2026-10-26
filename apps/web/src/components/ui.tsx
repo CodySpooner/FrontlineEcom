@@ -3,6 +3,7 @@ import { cloneElement, useEffect, useId, useRef } from 'react';
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactElement, ReactNode, TableHTMLAttributes } from 'react';
 import { Inbox, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 import { AGENT_ROLES, type AgentRole, type AgentStatus, type MemoryKind, type RunStatus, type StoreHealthStatus } from '@frontline/shared';
+import { usedShare } from '../lib/usage';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -177,7 +178,7 @@ export const MEMORY_KINDS: { value: MemoryKind; label: string }[] = [
 /** Who saved a memory: the owner or one of the squad's roles. */
 export const memoryAuthor = (agentId: string) => (agentId === 'owner' ? 'You' : AGENT_ROLES[agentId.split(':')[1] as AgentRole]?.name ?? 'Agent');
 
-export function ProgressBar({ value = 0, tone = 'red', scan, label }: { value?: number; tone?: 'red' | 'good'; scan?: boolean; label: string }) {
+export function ProgressBar({ value = 0, tone = 'red', scan, label }: { value?: number; tone?: 'red' | 'good' | 'muted'; scan?: boolean; label: string }) {
   const v = Math.min(1, Math.max(0, value));
   return (
     <div
@@ -192,10 +193,23 @@ export function ProgressBar({ value = 0, tone = 'red', scan, label }: { value?: 
         <i className="block h-full w-2/5 animate-scan bg-linear-to-r from-transparent via-red to-transparent" />
       ) : (
         <i
-          className={cx('block h-full origin-left rounded transition-transform duration-500 ease-out', tone === 'good' ? 'bg-good shadow-glow-good' : 'bg-linear-to-r from-red-2 to-red shadow-glow')}
+          className={cx('block h-full origin-left rounded transition-transform duration-500 ease-out', tone === 'good' ? 'bg-good shadow-glow-good' : tone === 'muted' ? 'bg-muted' : 'bg-linear-to-r from-red-2 to-red shadow-glow')}
           style={{ transform: `scaleX(${v})` }}
         />
       )}
+    </div>
+  );
+}
+
+/** Today's use of a daily cap: a neutral bar that turns red from 80%. */
+export function UsageMeter({ label, used, cap, fmt }: { label: string; used: number; cap: number; fmt: (n: number) => string }) {
+  const share = usedShare(used, cap);
+  return (
+    <div className="grid gap-1">
+      <ProgressBar value={share} tone={share >= 0.8 ? 'red' : 'muted'} label={`${label} used today`} />
+      <span className={cx('text-[11px] tabular-nums', share >= 1 ? 'text-red' : 'text-muted')}>
+        {fmt(used)} of {fmt(cap)} used today
+      </span>
     </div>
   );
 }

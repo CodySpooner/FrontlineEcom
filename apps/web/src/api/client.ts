@@ -55,6 +55,7 @@ import type {
   StoreCapsUpdate,
   StoreEvent,
   StoreInput,
+  StoreUsage,
   StoreMemory,
   SupplierProduct,
   TopProduct,
@@ -213,6 +214,9 @@ export function useSaveKnowledge() {
 }
 
 export const useCaps = (storeId: string) => useQuery({ queryKey: ['caps', storeId], queryFn: () => api<StoreCaps[]>(`/api/caps?stores=${storeId}`).then((c) => c[0]) });
+
+/** Today's use of each store's caps (AI $, generation credits, ad budget added). */
+export const useUsage = (storeIds: string[]) => useQuery({ queryKey: ['usage', storeIds], queryFn: () => api<StoreUsage[]>(`/api/usage?stores=${storeIds.join(',')}`) });
 
 export function useSaveCaps(storeId: string) {
   const qc = useQueryClient();
@@ -454,6 +458,7 @@ export function useLive() {
         qc.invalidateQueries({ queryKey: ['commander'] });
         // Automation fires start runs or ask for approval; the log and "last fired" follow.
         ['automation-runs', 'automations'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+        qc.invalidateQueries({ queryKey: ['usage'] });
       }
       if (m.type === 'notification') qc.setQueryData<AppNotification[]>(['notifications'], (old) => old && [m.notification, ...old]);
       if (m.type === 'xp') {

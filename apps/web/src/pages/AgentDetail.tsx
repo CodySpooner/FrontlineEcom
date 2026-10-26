@@ -1,15 +1,15 @@
 // UI-07 agent detail: chat, run history, what the squad has learned about the store, and the agent's settings.
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
-import { AGENT_ROLES, type Agent, type AgentRole, type Autonomy, type MemoryKind } from '@frontline/shared';
-import { useAddMemory, useAgents, useCaps, useForgetMemory, useForgetNicheLearning, useMemory, useNicheLearnings, useRun, useRuns, useStores, useUpdateAgent } from '../api/client';
+import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type Autonomy, type MemoryKind } from '@frontline/shared';
+import { useAddMemory, useAgents, useCaps, useForgetMemory, useForgetNicheLearning, useMemory, useNicheLearnings, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
 import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
 import { FlowLibrary } from '../components/FlowLibrary';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, XPBar } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
 import { ago, cents, money } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -300,6 +300,7 @@ const AUTONOMY: Record<Autonomy, { label: string; help: string }> = {
 function AgentSettings({ agent }: { agent: Agent }) {
   const update = useUpdateAgent();
   const caps = useCaps(agent.storeId).data;
+  const usage = useUsage([agent.storeId]).data?.[0];
   const autonomy = agent.autonomy ?? 'ask';
   const autopilotKinds = Object.entries(caps?.autopilot ?? {}).filter(([, v]) => v.enabled);
   return (
@@ -333,10 +334,19 @@ function AgentSettings({ agent }: { agent: Agent }) {
           <LoadingState rows={3} />
         ) : (
           <dl className="grid gap-2.5 text-[13px]">
-            <Cap label="Ad budget changes" value={`${money(caps.adSpendChangePerDay)}/day`} />
-            <Cap label="AI usage" value={`${money(caps.agentCostPerDay)}/day`} />
-            <Cap label="Higgsfield credits" value={`${caps.higgsfieldCreditsPerDay.toLocaleString('en-US')}/day`} />
-            <Cap label="Autopilot actions" value={autopilotKinds.length ? autopilotKinds.map(([k, v]) => `${k} ≤ ${money(v.maxUsdPerDay)}/day`).join(', ') : 'None — everything asks first'} />
+            <Cap label="Ad budget changes" value={`${money(caps.adSpendChangePerDay)}/day`}>
+              {usage && <UsageMeter label="Ad budget changes" used={usage.adBudgetAddedUsd} cap={caps.adSpendChangePerDay} fmt={(n) => money(n)} />}
+            </Cap>
+            <Cap label="AI usage" value={`${money(caps.agentCostPerDay)}/day`}>
+              {usage && <UsageMeter label="AI usage" used={usage.agentCostUsd} cap={caps.agentCostPerDay} fmt={(n) => cents(n)} />}
+            </Cap>
+            <Cap label="Higgsfield credits" value={`${caps.higgsfieldCreditsPerDay.toLocaleString('en-US')}/day`}>
+              {usage && <UsageMeter label="Higgsfield credits" used={usage.credits} cap={caps.higgsfieldCreditsPerDay} fmt={(n) => n.toLocaleString('en-US')} />}
+            </Cap>
+            <Cap
+              label="Autopilot actions"
+              value={autopilotKinds.length ? autopilotKinds.map(([k, v]) => `${APPROVAL_KINDS[k]?.label ?? k} ≤ ${money(v.maxUsdPerDay)}/day`).join(', ') : 'None — everything asks first'}
+            />
           </dl>
         )}
       </Panel>
@@ -344,11 +354,12 @@ function AgentSettings({ agent }: { agent: Agent }) {
   );
 }
 
-function Cap({ label, value }: { label: string; value: string }) {
+function Cap({ label, value, children }: { label: string; value: string; children?: ReactNode }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-line pb-2.5 last:border-b-0 last:pb-0">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-4 gap-y-1.5 border-b border-line pb-2.5 last:border-b-0 last:pb-0">
       <dt className="text-muted">{label}</dt>
       <dd className="text-right font-semibold text-text-2 tabular-nums">{value}</dd>
+      {children && <dd className="col-span-2">{children}</dd>}
     </div>
   );
 }

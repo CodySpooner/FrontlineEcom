@@ -8,7 +8,7 @@ Orca's browser against the reference before ticking it.
 ## Inbox
 - [x] (from agents) `APPROVAL_KINDS` is in `@frontline/shared` (label + `autopilot?`), so Settings can list `Object.entries(APPROVAL_KINDS).filter(([, k]) => k.autopilot)` and approval cards can show `APPROVAL_KINDS[kind]?.label ?? kind`. Only `ads.set_budget` and `ads.pause_campaign` can autopilot: autopilot needs a USD amount to check against the cap, and the other kinds carry none. `ads.pause_adsets` and `store.update_products` are never produced, so drop them from the list.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from agents) UI-25 is unblocked: `GET /api/usage?stores=a,b` → `StoreUsage[]` `{ storeId, agentCostUsd, credits, adBudgetAddedUsd }` is on main (33abd88), with the type in shared. No `stores` = every store.
+- [x] (from agents) UI-25 is unblocked: `GET /api/usage?stores=a,b` → `StoreUsage[]` `{ storeId, agentCostUsd, credits, adBudgetAddedUsd }` is on main (33abd88), with the type in shared. No `stores` = every store.
 - [x] (from core) `AnalyticsSummary.unconverted?: string[]`: on a multi-store view, stores in those currencies are left out of every amount (no exchange rate yet, or not an ECB currency). Show a small warning near the totals, e.g. "VND stores aren't included: no exchange rate. Open the store on its own to see it."
 - [x] (from core) Restore for the backups list (CORE-36): `POST /api/backups/:name/restore` returns 202 `{ restarting: true }`. The current data is backed up first, then the API restarts on the snapshot. Poll `GET /api/health` until it answers, then reload (the desktop app reloads by itself). 404 means unknown, and 400 `{ error }` means damaged or from a newer version. Confirm first ("Restore the backup from <date>? Your current data is backed up first."). In `pnpm dev`, the API has to be restarted by hand.
 - [x] (from core) Today is a so-far day (CORE-23/32): the last point of `series` is today in progress, so the Revenue Overview line dives at the right edge and reads like a crash. Consider drawing the last segment dashed or labelling it "today so far" (`summary.to` is today). KPI deltas already compare like with like.
@@ -92,7 +92,7 @@ Orca's browser against the reference before ticking it.
 - [x] UI-24 Store Builder: the Store Developer agent's workspace — pages/sections it's building, change list, previews,
       approve to publish (DESIGN.md §4.6).
 - [x] UI-23 Tests (vitest + @testing-library/react + jsdom): KPI formatting, store filter, approvals flow, chart range bucketing.
-- [ ] UI-25 Today's usage vs caps (DESIGN §7 "cost and credit accounting per store with daily caps"): next to each cap in
+- [x] UI-25 Today's usage vs caps (DESIGN §7 "cost and credit accounting per store with daily caps"): next to each cap in
       Settings › Caps a meter "used today / cap" (AI $, generation credits, ad budget added); a one-line "AI budget today" on
       the agent page. Needs `GET /api/usage` (requested from agents).
 - [x] UI-26 Narrow window: every page at 800px in Orca. No horizontal page scroll, tables scroll inside their panel, no
@@ -101,7 +101,6 @@ Orca's browser against the reference before ticking it.
       selected) and Ask palette (Ctrl+K opens; arrows + Enter open a page; a question starts a Market Analyst run). Stub all fetches.
 
 ## Blocked
-- UI-25 waits for `GET /api/usage` (requested in the agents Inbox, 2026-10-26).
 
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
@@ -146,3 +145,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Inbox (core): Restore on the Settings backups list: inline confirm ("Restore the backup from <date>? Your current data is backed up first."), POST restore, wait for /api/health, reload; server errors shown inline; removed the copy-the-file instructions
 - 2026-10-26 — UI-26: Narrow window — measured all 13 pages at 800px in Orca: no page-level horizontal scroll, wide tables scroll in their panel. Fixed: the Ask AI search is an icon button (bell-sized) below 900px instead of disappearing; the Dashboard agents strip keeps one row of ≥125px cards (extras clipped, least urgent last) and "Needs you" no longer wraps
 - 2026-10-26 — Inbox (core): Dashboard + Analytics show "<codes> stores aren't included: no exchange rate. Open the store on its own to see it." under the filter row when `AnalyticsSummary.unconverted` is set (checked with a temp VND store: shown on All, gone on the store alone, which reads ₫)
+- 2026-10-26 — UI-25: Today's usage vs caps — `useUsage` (/api/usage, refreshed on run/approval events); UsageMeter (neutral bar, red from 80%, "x of cap used today") under each cap in Settings › Caps (follows the cap being typed) and in the agent's Store caps panel; autopilot list there shows kind labels instead of raw kinds
