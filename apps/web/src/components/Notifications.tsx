@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router';
 import { Bell, CircleAlert, CircleCheck, CircleX, Info, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { AGENT_ROLES, type AppNotification, type ApprovalRequest, type NotificationKind } from '@frontline/shared';
 import { useAgents, useApprovals, useMarkRead, useNotifications } from '../api/client';
+import { expiredWhy } from '../lib/approvals';
 import { ago } from '../lib/format';
 import { ApprovalCard } from './Chat';
 import { useStoreSelection } from './StoreFilter';
@@ -83,14 +84,16 @@ function Drawer({ onClose }: { onClose: () => void }) {
           <ul className="grid gap-1">
             {decided.map((a) => {
               const ok = a.status === 'approved';
+              const expired = expiredWhy(a);
               const Icon = ok ? CircleCheck : CircleX;
               return (
                 <li key={a.id} className="flex items-start gap-2.5 px-1 py-1 text-[13px]">
                   <Icon aria-hidden className={cx('mt-0.5 size-4 shrink-0', ok ? 'text-good' : 'text-muted')} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate" title={a.title}>
-                      <b className="font-semibold">{ok ? (a.action.auto ? 'Autopilot approved' : 'Approved') : 'Denied'}</b> · {a.title}
+                      <b className="font-semibold">{ok ? (a.action.auto ? 'Autopilot approved' : 'Approved') : expired ? 'Expired' : 'Denied'}</b> · {a.title}
                     </span>
+                    {expired && <span className="block text-xs text-text-2">{expired}.</span>}
                     {a.decisionNote && <span className="block text-xs text-text-2">“{a.decisionNote}”</span>}
                     <span className="block text-xs text-muted">
                       {who(a)} · {ago(a.decidedAt ?? a.createdAt)}

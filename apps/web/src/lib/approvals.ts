@@ -1,4 +1,13 @@
-import type { ApprovalAction } from '@frontline/shared';
+import type { ApprovalAction, ApprovalRequest } from '@frontline/shared';
+
+/**
+ * Why the app closed a request nobody decided, from the marker the server appends to its reason (agents: the run ended
+ * first, or the store went live, AGT-71). Undefined for the owner's own denials.
+ */
+export function expiredWhy(a: Pick<ApprovalRequest, 'status' | 'reason'>) {
+  const why = a.status === 'denied' ? /\[Expired: (.+?)\.?\]$/.exec(a.reason)?.[1] : undefined;
+  return why && why[0]!.toUpperCase() + why.slice(1);
+}
 
 /** The theme edit behind a `store.publish_theme` request. The preview link is agent-written, so only http(s) passes. */
 export function themeChange(action: ApprovalAction) {

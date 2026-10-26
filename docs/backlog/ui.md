@@ -176,6 +176,8 @@ Orca's browser against the reference before ticking it.
       Only failed agents (AGT-68 error) and failing connectors raise it.
 - [x] UI-61 AI Agents shows failed agents (AGT-68) as failed: the card drops "Now:" from "Last run failed: …", and the squad
       header counts them ("· 1 failed").
+- [x] UI-63 Requests the app closed on its own (the run ended first, or AGT-71's going-live expiry) read "Expired" with why
+      in the bell's Recently decided, not "Denied" as if the owner said no.
 
 ## Blocked
 
@@ -268,3 +270,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-61: with AGT-68 an agent whose last run failed has status `error` and currentTask "Last run failed: <error>". The card said "Now: Last run failed …". Now "Now:" is only shown for live work; the full reason is still in the title tooltip, and Chat opens that run with Try again. The squad header adds "· N failed" in red. Chrome with a fixture failed run for pawsome:copywriter: the header read "8 of 8 deployed · 0 working · 1 needs you · 1 failed" and the card read "Last run failed: Claude engine: 529 …". Fixture removed
 - 2026-10-26 — Smoke: production build served by a fresh API (empty FRONTLINE_DATA_DIR, fake engine, port 8899). Demo seeded, onboarding → Add my store (Etsy/Home) → Meet your squad → Command Center showed the new store with demo history and 32 agents, with no console errors. Orca 800px: none of the 12 pages overflows horizontally. Accessible-name sweep: every control on every page has a name
 - 2026-10-26 — UI-62 (agents inbox; resolves the Blocked Woo item): `byHand(store, can)` takes shared's platform list. Research add-to-store uses PRODUCT_WRITE_PLATFORMS (Shopify, Woo). Builder uses agents' publish_page rule: product drafts with a product use PRODUCT_PAGE_PLATFORMS (+ Etsy), other pages PRODUCT_WRITE_PLATFORMS. The hint now reads "can't publish this kind of page to <Platform> yet". Tests: Builder (Woo page, Etsy product page, Etsy page) and Research (Woo gets the button). Chrome with Glow Haus patched as connected Etsy: the product draft offered Publish, and the FAQ page showed the hint. Fixtures removed
+- 2026-10-26 — UI-63: `expiredWhy(a)` (lib/approvals, tested) reads the `[Expired: …]` marker the server appends to a denied request's reason (runs.ts when a run ends; AGT-71's EXPIRED_DEMO when a store goes live). The drawer labels those "Expired" with the reason underneath. Notifications.test covers it. Chrome with a fixture expired request: "Expired · UI-FX Pause Spark Ads / Asked on demo data before the store went live." Fixture removed

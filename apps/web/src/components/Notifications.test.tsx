@@ -36,7 +36,11 @@ describe('bell drawer', () => {
       if (init?.method === 'POST') return { ...approval, status: 'denied' };
       if (url.startsWith('/api/approvals?status=pending')) return [approval];
       if (url.startsWith('/api/approvals?status=approved')) return [decided];
-      if (url.startsWith('/api/approvals?status=denied')) return [{ ...approval, id: 'a9', title: 'Add 3 products', status: 'denied', decisionNote: 'Wrong niche', decidedAt: decided.decidedAt }];
+      if (url.startsWith('/api/approvals?status=denied'))
+        return [
+          { ...approval, id: 'a9', title: 'Add 3 products', status: 'denied', decisionNote: 'Wrong niche', decidedAt: decided.decidedAt },
+          { ...approval, id: 'a8', title: 'Pause UGC', status: 'denied', reason: 'ROAS 0.8. [Expired: asked on demo data before the store went live.]', decidedAt: decided.decidedAt },
+        ];
       if (url.startsWith('/api/stores')) return [{ id: 'peak', name: 'Peak Fit', currency: 'USD' }];
       if (url.startsWith('/api/agents')) return [{ id: 'peak:ad_strategist', storeId: 'peak', role: 'ad_strategist' }];
     });
@@ -47,9 +51,12 @@ describe('bell drawer', () => {
     expect(await within(waiting).findByText(/Ad Strategist · Peak Fit/)).toBeTruthy();
     const recent = screen.getByRole('region', { name: 'Recently decided' });
     expect(within(recent).getByText('Autopilot approved')).toBeTruthy();
-    expect(within(recent).getAllByText(/Ad Strategist · Peak Fit · 2 h ago/)).toHaveLength(2);
+    expect(within(recent).getAllByText(/Ad Strategist · Peak Fit · 2 h ago/)).toHaveLength(3);
     // A denial shows the owner's reason.
     expect(within(recent).getByText(/Wrong niche/)).toBeTruthy();
+    // One the app closed on its own isn't the owner's denial.
+    expect(within(recent).getByText('Expired')).toBeTruthy();
+    expect(within(recent).getByText('Asked on demo data before the store went live.')).toBeTruthy();
     // Requests are waiting, so the empty list below doesn't claim you're caught up.
     expect(await screen.findByText('Nothing else new.')).toBeTruthy();
     expect(screen.queryByText("You're all caught up")).toBeNull();

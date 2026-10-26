@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addedProducts, draftLink, fileList, themeChange } from './approvals';
+import { addedProducts, draftLink, expiredWhy, fileList, themeChange } from './approvals';
 
 const theme = (payload: unknown) => themeChange({ kind: 'store.publish_theme', payload });
 
@@ -23,6 +23,14 @@ describe('fileList', () => {
   it('names the first few and counts the rest', () => {
     expect(fileList(['a', 'b'])).toBe('a, b');
     expect(fileList(['a', 'b', 'c', 'd', 'e'])).toBe('a, b, c +2 more');
+  });
+});
+
+describe('expiredWhy', () => {
+  it("tells a request the app closed apart from the owner's denial", () => {
+    expect(expiredWhy({ status: 'denied', reason: 'ROAS under 1. [Expired: asked on demo data before the store went live.]' })).toBe('Asked on demo data before the store went live');
+    expect(expiredWhy({ status: 'denied', reason: 'x [Expired: the agent run ended before a decision.]' })).toBe('The agent run ended before a decision');
+    expect(expiredWhy({ status: 'denied', reason: 'ROAS under 1 for 4 days' })).toBeUndefined();
   });
 });
 
