@@ -12,6 +12,8 @@ import type {
   ApprovalRequest,
   ApprovalStatus,
   Commander,
+  Creative,
+  CreativeKind,
   LiveMessage,
   MemoryInput,
   Mission,
@@ -152,6 +154,17 @@ export function useAddToStore() {
   });
 }
 
+export const useCreatives = (kind?: CreativeKind) =>
+  useQuery({ queryKey: ['creatives', kind], queryFn: () => api<Creative[]>(`/api/creatives?limit=60${kind ? `&kind=${kind}` : ''}`), placeholderData: keepPreviousData });
+
+export function useDeleteCreative() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/api/creatives/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['creatives'] }),
+  });
+}
+
 /** Mount once: streams /api/live into the react-query cache, reconnecting if the server restarts. */
 export function useLive() {
   const qc = useQueryClient();
@@ -169,6 +182,7 @@ export function useLive() {
         qc.invalidateQueries({ queryKey: ['runs', m.run.agentId] });
         qc.invalidateQueries({ queryKey: ['agents'] });
         qc.invalidateQueries({ queryKey: ['memory', m.run.storeId] });
+        qc.invalidateQueries({ queryKey: ['creatives'] });
       }
       if (m.type === 'approval' || m.type === 'run' || m.type === 'xp') {
         qc.invalidateQueries({ queryKey: ['missions'] });

@@ -84,7 +84,7 @@ export function Segmented<T extends string | number>({ label, options, value, on
 /** Underlined tab bar (store tabs, page sections). `color` adds an identity dot. */
 export function Tabs<T extends string>({ label, tabs, value, onChange }: { label: string; tabs: { value: T; label: string; color?: string }[]; value: T; onChange: (v: T) => void }) {
   return (
-    <div role="tablist" aria-label={label} className="flex gap-1 overflow-x-auto shadow-[inset_0_-1px_0_var(--color-line)]">
+    <div role="tablist" aria-label={label} className="flex gap-1 overflow-x-auto [scrollbar-width:none] shadow-[inset_0_-1px_0_var(--color-line)]">
       {tabs.map((t) => (
         <button
           key={t.value}
