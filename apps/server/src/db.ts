@@ -391,6 +391,9 @@ export const MIGRATIONS = [
   CREATE INDEX store_memory_by_run ON store_memory (run_id) WHERE run_id IS NOT NULL;
   CREATE TABLE memory_feedback (ref TEXT PRIMARY KEY, at TEXT NOT NULL);
   `,
+  /* 21 (agents lane: one generic "done once" ledger, AGT-37) */ `
+  ALTER TABLE memory_feedback RENAME TO done_once;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

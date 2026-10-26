@@ -73,13 +73,17 @@ export function adjustConfidence(db: DatabaseSync, id: string, delta: number) {
   return getMemory(db, id);
 }
 
+/** True the first time it's called for `ref`, false ever after (the `done_once` ledger). */
+export const once = (db: DatabaseSync, ref: string, now = new Date()) =>
+  db.prepare('INSERT OR IGNORE INTO done_once (ref, at) VALUES (?, ?)').run(ref, now.toISOString()).changes > 0;
+
 /**
  * Outcome of a request a run made (an ad change, a product): the learnings that run wrote gain confidence when it
  * worked and lose it when it didn't. Once per outcome `ref`.
  */
 // ponytail: moves every learning of the run, not only the ones behind the request; match on tags if that misfires.
 export function judgeRun(db: DatabaseSync, ref: string, runId: string, worked: boolean, now = new Date()) {
-  if (!db.prepare('INSERT OR IGNORE INTO memory_feedback (ref, at) VALUES (?, ?)').run(ref, now.toISOString()).changes) return [];
+  if (!once(db, ref, now)) return [];
   return db
     .prepare('SELECT id FROM store_memory WHERE run_id = ?')
     .all(runId)

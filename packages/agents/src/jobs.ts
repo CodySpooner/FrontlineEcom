@@ -48,6 +48,14 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
   },
 ];
 
+/** Switches a store's default jobs on (it just got connected); returns how many were off. */
+export function enableDefaultJobs(db: DatabaseSync, storeId: string): number {
+  const names = DEFAULT_JOBS.map((j) => j.name);
+  return Number(
+    db.prepare(`UPDATE automation_rules SET enabled = 1 WHERE store_id = ? AND enabled = 0 AND name IN (${names.map(() => '?').join(',')})`).run(storeId, ...names).changes,
+  );
+}
+
 /**
  * Adds the default jobs for a store. They start enabled only when the store is connected: on demo data they would
  * spend the owner's Claude usage on simulated numbers. The owner can switch them on in Automation.

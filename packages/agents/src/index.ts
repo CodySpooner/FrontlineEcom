@@ -12,6 +12,7 @@ export {
   deleteMemory,
   adjustConfidence,
   judgeRun,
+  once,
   searchMemory,
   parseLearnings,
   promotionCandidates,
@@ -24,7 +25,7 @@ export { createRunManager, getRun, listRuns, costToday, type RunManager, type Ru
 export { XP, xpForLevel, levelForXp, levelProgress, rankForLevel, demoXp, awardXp, commander, profitStreak, dailyMissions, ACHIEVEMENTS, checkAchievements, type Award, type Facts, type StoreDay } from './gamification';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats, type Economics, type Verdict } from './ads';
-export { DEFAULT_JOBS, createDefaultJobs } from './jobs';
+export { DEFAULT_JOBS, createDefaultJobs, enableDefaultJobs } from './jobs';
 export { nicheKey, addNicheLearning, listNicheLearnings, deleteNicheLearning } from './niche';
 export { savePageDraft, getPageDraft, listPageDrafts, markPublished, deletePageDraft, type NewPageDraft } from './pages';
 export { closeAnsweredIssues, flagOrderIssue, listOrderIssues, setIssueStatus, type NewOrderIssue } from './issues';

@@ -1,6 +1,11 @@
 import {
   XP,
+  DEFAULT_JOBS,
   createRunManager,
+  customNichePack,
+  draftNichePackTask,
+  enableDefaultJobs,
+  once,
   deleteMemory,
   deleteNicheLearning,
   ensureSquads,
@@ -44,7 +49,7 @@ import { createProducts, publishPage, publishProductPage } from '../connectors/s
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
-import { getStore } from '../stores';
+import { getStore, listStores } from '../stores';
 import { publish } from '../live';
 
 /** App data + approvals for agent tools. `key` decrypts integration credentials (default: the data dir's key file). */
@@ -166,13 +171,33 @@ export function parseMemoryInput(body: unknown, partial: boolean): string | Part
   return out;
 }
 
+/**
+ * A store's first real sync connects it (core's switchToReal). Once per store: its default jobs switch on (they run on
+ * the owner's Claude login, so the owner is told), and a custom niche without a pack gets the Market Analyst drafting one.
+ */
+// ponytail: checked at startup and on squad reads (the dashboard polls them); core has no connect event to hook.
+function activateConnectedStores(db: Db, runs: RunManager) {
+  for (const store of listStores(db).filter((s) => s.connected)) {
+    if (!once(db, `activate:${store.id}`)) continue;
+    if (enableDefaultJobs(db, store.id)) {
+      const jobs = DEFAULT_JOBS.map((j) => j.name).join(', ');
+      notify(db, { kind: 'info', title: `${store.name} is live: the squad's scheduled jobs are on`, body: `${jobs}. They run on your Claude login; pause or change them in Automation.`, storeId: store.id, link: '/automation' });
+    }
+    if (store.niche === 'other' && store.nicheDetail && !customNichePack(store.nicheDetail)) runs.start(`${store.id}:market_analyst`, draftNichePackTask(store));
+  }
+}
+
 export function agentRoutes(db: Db) {
   ensureSquads(db);
   seedDemoXp(db, DEMO_STORES.map((s) => s.id));
   const runs = runManager(db);
+  activateConnectedStores(db, runs);
   const limit = (v: string | undefined) => Math.min(200, Math.max(1, Math.floor(Number(v)) || 50));
   return new Hono()
-    .get('/api/agents', (c) => c.json(listAgents(db, c.req.query('stores')?.split(',').filter(Boolean))))
+    .get('/api/agents', (c) => {
+      activateConnectedStores(db, runs);
+      return c.json(listAgents(db, c.req.query('stores')?.split(',').filter(Boolean)));
+    })
     .get('/api/agents/:id', (c) => {
       const agent = getAgent(db, c.req.param('id'));
       return agent ? c.json(agent) : c.json({ error: 'Agent not found' }, 404);
