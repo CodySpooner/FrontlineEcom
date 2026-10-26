@@ -50,7 +50,7 @@ test("a Product Hunter's own request goes through the same path; denied ones add
 });
 
 test('connected stores get platform drafts; a platform error tells the owner instead', async () => {
-  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'peak'`).run();
+  db.prepare(`UPDATE stores SET connected = 1, platform = 'shopify' WHERE id = 'peak'`).run();
   const approval = (await (await post('/api/research/smart-jump-rope/add-to-store', { storeId: 'peak' })).json()) as ApprovalRequest;
   await post(`/api/approvals/${approval.id}/approve`);
   await tick();

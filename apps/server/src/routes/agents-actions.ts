@@ -52,7 +52,6 @@ export async function publishDraft(db: Db, d: PageDraft, push: PushPage) {
   if (d.productId) db.prepare(`UPDATE products SET title = ?, status = 'active' WHERE store_id = ? AND id = ? AND status = 'draft'`).run(d.title, store.id, d.productId);
 }
 
-/** Approved `ads.set_budget` / `ads.pause_campaign` on a demo store's campaigns. Connected stores: the owner is told. */
 /** Writes an approved change to the store's ad account (core's connectors/ads.ts); throws a readable error. */
 export type WriteAd = (storeId: string, network: AdNetwork, campaignId: string, change: 'pause' | { dailyBudget: number }) => Promise<unknown>;
 
@@ -82,17 +81,27 @@ export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) 
  * Applies an approved price test: demo stores change the product locally; connected stores are told to change it by hand
  * (until core has a price setter). Either way it's recorded so checkPriceOutcomes can judge it.
  */
-export function applyPriceChange(db: Db, a: ApprovalRequest) {
+/** Writes an approved price to the store's platform (core's Shopify `setProductPrice`, which also updates the local row); throws a readable error. */
+export type SetPrice = (storeId: string, productId: string, change: { price: number; compareAt?: number }) => Promise<unknown>;
+
+/**
+ * Applies an approved `store.set_price` and starts its 14-day test: connected stores on the platform (an error tells
+ * the owner and starts no test), demo stores locally.
+ */
+export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: SetPrice) {
   const p = (a.action.payload ?? {}) as { productId?: unknown; title?: unknown; from?: unknown; to?: unknown; compareAt?: unknown };
   const store = getStore(db, a.storeId);
   if (!store || typeof p.productId !== 'string' || typeof p.to !== 'number' || typeof p.from !== 'number') return;
+  const compareAt = typeof p.compareAt === 'number' ? p.compareAt : undefined;
   if (store.connected) {
-    // ponytail: needs core's Shopify productVariantsBulkUpdate to push it; the 14-day clock starts at approval either way.
-    notify(db, { kind: 'info', title: `Change the price on ${store.name}: ${a.title}`, body: 'Approved. Price changes are not automated for connected stores yet.', storeId: store.id });
+    try {
+      await setPrice(store.id, p.productId, { price: p.to, ...(compareAt !== undefined ? { compareAt } : {}) });
+    } catch (e) {
+      notify(db, { kind: 'error', title: `Couldn't change the price on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Change it by hand if you still want the test.`, storeId: store.id });
+      return;
+    }
   } else {
-    db.prepare('UPDATE products SET price = ?, compare_at = coalesce(?, compare_at) WHERE store_id = ? AND id = ?').run(
-      p.to, typeof p.compareAt === 'number' ? p.compareAt : null, store.id, p.productId,
-    );
+    db.prepare('UPDATE products SET price = ?, compare_at = coalesce(?, compare_at) WHERE store_id = ? AND id = ?').run(p.to, compareAt ?? null, store.id, p.productId);
   }
   db.prepare('INSERT OR IGNORE INTO price_tests (approval_id, store_id, product_id, agent_id, title, from_price, to_price, changed_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
     a.id, store.id, p.productId, a.agentId, String(p.title ?? a.title), p.from, p.to, localDate(),

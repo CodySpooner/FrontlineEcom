@@ -1,5 +1,5 @@
 import { fakeEngine, getAgent, listMemory, runAgent, writeMemory, type FakeStep } from '@frontline/agents';
-import type { AgentEvent } from '@frontline/shared';
+import type { AgentEvent, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
@@ -8,6 +8,7 @@ import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
+import { applyPriceChange } from './agents-actions';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -78,4 +79,21 @@ test('on a real store a price test is judged on gross profit 14 days before vs a
   expect(texts).toEqual(['Pricing "Grip Socks" $20 → $25 worked: gross profit 140 USD → 171 USD, 10 → 9 units (14 days before vs after).']);
   expect(xp()).toBe(before + 50);
   expect(listMemory(db, 'peak').find((m) => m.text === 'Grip Socks are underpriced vs rivals')?.confidence).toBe(0.7);
+});
+
+test('connected stores get the price on Shopify; other platforms and write errors tell the owner and start no test', async () => {
+  const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'peak' ORDER BY price DESC LIMIT 1`).get()!;
+  const [id, from] = [String(p.id), Number(p.price)];
+  const to = Math.round(from * 1.1 * 100) / 100;
+  db.prepare(`UPDATE stores SET connected = 1, platform = 'woocommerce' WHERE id = 'peak'`).run();
+  await run('peak', [price(id, to)]);
+  expect(db.prepare(`SELECT body FROM notifications WHERE kind = 'error'`).get()?.body).toBe('Only Shopify stores are updated automatically so far. Change it by hand if you still want the test.');
+  expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
+
+  db.prepare(`UPDATE stores SET platform = 'shopify' WHERE id = 'peak'`).run();
+  const approval = { id: 'a1', storeId: 'peak', agentId: 'peak:market_analyst', title: 't', reason: 'r', status: 'approved', createdAt: '', action: { kind: 'store.set_price', payload: { productId: id, title: 'T', from, to, compareAt: 99 } } } as ApprovalRequest;
+  const writes: unknown[] = [];
+  await applyPriceChange(db, approval, async (...args) => void writes.push(args));
+  expect(writes).toEqual([['peak', id, { price: to, compareAt: 99 }]]);
+  expect(db.prepare('SELECT approval_id, to_price FROM price_tests').all()).toEqual([{ approval_id: 'a1', to_price: to }]);
 });

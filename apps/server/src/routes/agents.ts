@@ -41,7 +41,7 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
-import { addProducts, applyAdChange, applyPriceChange, onApproved, publishDraft, type PushPage, type WriteAd } from './agents-actions';
+import { addProducts, applyAdChange, applyPriceChange, onApproved, publishDraft, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { issueRoutes } from './agents-issues';
@@ -49,14 +49,13 @@ import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
 import { demoSupplierProducts, searchCj } from '../connectors/cj';
-import { createProducts, publishPage, publishProductPage } from '../connectors/shopify';
+import { createProducts, publishPage, publishProductPage, setProductPrice } from '../connectors/shopify';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
 import { getStore, listStores } from '../stores';
 import { publish } from '../live';
 
-/** App data + approvals for agent tools. `key` decrypts integration credentials (default: the data dir's key file). */
 /** Approved ad changes → the store's ad account (core's Meta / Google / TikTok writers). */
 const writeAd =
   (db: Db): WriteAd =>
@@ -65,15 +64,29 @@ const writeAd =
       ? pauseCampaign(db, loadKey(dataDir()), storeId, network, campaignId)
       : setCampaignBudget(db, loadKey(dataDir()), storeId, network, campaignId, change.dailyBudget);
 
+/** Core's store writers are Shopify-only so far: other platforms get a readable error, and the owner applies it by hand. */
+const onShopify = <T,>(db: Db, storeId: string, write: () => Promise<T>) =>
+  getStore(db, storeId)?.platform === 'shopify' ? write() : Promise.reject(new Error('Only Shopify stores are updated automatically so far'));
+
 /** Store Builder drafts → Shopify: product pages update the product, other pages are created. */
 const pushPage =
   (db: Db): PushPage =>
   (d) => {
     const seo = { ...(d.seoTitle ? { seoTitle: d.seoTitle } : {}), ...(d.seoDescription ? { seoDescription: d.seoDescription } : {}) };
-    return d.kind === 'product' && d.productId
-      ? publishProductPage(db, loadKey(dataDir()), d.storeId, d.productId, { title: d.title, descriptionHtml: d.html, ...seo })
-      : publishPage(db, loadKey(dataDir()), d.storeId, { title: d.title, bodyHtml: d.html });
+    return onShopify<unknown>(db, d.storeId, () =>
+      d.kind === 'product' && d.productId
+        ? publishProductPage(db, loadKey(dataDir()), d.storeId, d.productId, { title: d.title, descriptionHtml: d.html, ...seo })
+        : publishPage(db, loadKey(dataDir()), d.storeId, { title: d.title, bodyHtml: d.html }),
+    );
   };
+
+/** Approved price tests → Shopify (every variant). */
+const setPrice =
+  (db: Db): SetPrice =>
+  (storeId, productId, change) =>
+    onShopify(db, storeId, () => setProductPrice(db, loadKey(dataDir()), storeId, productId, change));
+
+/** App data + approvals for agent tools. `key` decrypts integration credentials (default: the data dir's key file). */
 
 export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): ToolEnv => ({
   db,
@@ -152,10 +165,12 @@ export function runManager(db: Db): RunManager {
     // Approved actions that can come from outside a run (research screen, automations) are carried out here.
     onApproved(db, (db, a) => {
       if (a.action.kind === 'store.add_products') {
-        return addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task), (storeId, products) => createProducts(db, loadKey(dataDir()), storeId, products));
+        return addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task), (storeId, products) =>
+          onShopify(db, storeId, () => createProducts(db, loadKey(dataDir()), storeId, products)),
+        );
       }
       if (a.action.kind === 'ads.set_budget' || a.action.kind === 'ads.pause_campaign') return applyAdChange(db, a, writeAd(db));
-      if (a.action.kind === 'store.set_price') applyPriceChange(db, a);
+      if (a.action.kind === 'store.set_price') return applyPriceChange(db, a, setPrice(db));
       if (a.action.kind === 'store.publish_page') {
         const d = getPageDraft(db, String((a.action.payload as { draftId?: unknown })?.draftId));
         if (d) return publishDraft(db, d, pushPage(db));
