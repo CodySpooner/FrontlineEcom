@@ -199,7 +199,13 @@ test("WordPress' timezone setting as an IANA zone: a city, a whole-hour offset, 
   expect(wpZone({ timezone_string: 'Europe/Berlin', gmt_offset: 2 })).toBe('Europe/Berlin');
   expect(wpZone({ timezone_string: '', gmt_offset: 0 })).toBe('UTC'); // a fresh WordPress install
   expect(wpZone({ timezone_string: '', gmt_offset: -5 })).toBe('Etc/GMT+5');
-  expect(wpZone({ timezone_string: '', gmt_offset: '5.5' })).toBeUndefined();
+  // A fractional offset: a zone that keeps it all year (India, Nepal); none for one only DST zones have (Newfoundland).
+  const offsets = (zone: string) => ['2026-01-15', '2026-07-15'].map((d) =>
+    new Intl.DateTimeFormat('en', { timeZone: zone, timeZoneName: 'longOffset' }).formatToParts(new Date(`${d}T12:00:00Z`)).find((p) => p.type === 'timeZoneName')!.value);
+  for (const [h, offset] of [['5.5', 'GMT+05:30'], [5.75, 'GMT+05:45'], [3.5, 'GMT+03:30'], [9.5, 'GMT+09:30'], [-9.5, 'GMT-09:30']] as const) {
+    expect(offsets(wpZone({ timezone_string: '', gmt_offset: h })!)).toEqual([offset, offset]);
+  }
+  expect(wpZone({ timezone_string: '', gmt_offset: -3.5 })).toBeUndefined();
   expect(wpZone({ timezone_string: 'Mars/Olympus' })).toBeUndefined();
   expect(wpZone(undefined)).toBeUndefined();
 });

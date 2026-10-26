@@ -87,11 +87,20 @@ export function wooSite(url: string) {
   return `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
 }
 
-/** WordPress' timezone as an IANA name: its city setting, else a whole-hour UTC offset (Etc/GMT names flip the sign). */
+/** Fractional UTC offsets have no Etc/GMT name: a zone that keeps the offset all year stands in. */
+const FRACTIONAL_ZONES: Record<string, string> = {
+  '3.5': 'Asia/Tehran', '4.5': 'Asia/Kabul', '5.5': 'Asia/Kolkata', '5.75': 'Asia/Kathmandu', '6.5': 'Asia/Yangon',
+  '8.75': 'Australia/Eucla', '9.5': 'Australia/Darwin', '-9.5': 'Pacific/Marquesas',
+};
+
+/**
+ * WordPress' timezone as an IANA name: its city setting, else its UTC offset (Etc/GMT names flip the sign).
+ * ponytail: an offset only DST zones use (UTC-3:30 Newfoundland) has none; the store keeps its own zone.
+ */
 export function wpZone(wp?: { timezone_string?: unknown; gmt_offset?: unknown }) {
   const h = Number(wp?.gmt_offset);
-  // ponytail: a half-hour offset with no city (UTC+5:30) has no IANA name; the store keeps its own zone.
-  const zone = typeof wp?.timezone_string === 'string' && wp.timezone_string ? wp.timezone_string : !Number.isInteger(h) ? undefined : h ? `Etc/GMT${h > 0 ? '-' : '+'}${Math.abs(h)}` : 'UTC';
+  const zone = typeof wp?.timezone_string === 'string' && wp.timezone_string ? wp.timezone_string
+    : !Number.isInteger(h) ? FRACTIONAL_ZONES[String(h)] : h ? `Etc/GMT${h > 0 ? '-' : '+'}${Math.abs(h)}` : 'UTC';
   try {
     return zone && new Intl.DateTimeFormat('en', { timeZone: zone }).resolvedOptions().timeZone;
   } catch {
