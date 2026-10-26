@@ -72,6 +72,7 @@ export function AgentDetail() {
               <StatusDot tone={st.tone} pulse={st.pulse} />
               {st.label}
               <Badge>{AUTONOMY[agent.autonomy ?? 'ask'].label}</Badge>
+              {agent.dailyBudgetUsd !== undefined && <Badge>AI ≤ {cents(agent.dailyBudgetUsd)}/day</Badge>}
             </div>
             <p className="mt-1 max-w-xl truncate text-xs text-muted">{role.blurb}</p>
           </div>
