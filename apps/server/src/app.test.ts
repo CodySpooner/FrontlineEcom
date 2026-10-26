@@ -13,7 +13,7 @@ const app = createApp(db);
 
 test('health responds ok', async () => {
   const res = await app.request('/api/health');
-  expect(await res.json()).toEqual({ ok: true });
+  expect(await res.json()).toMatchObject({ ok: true, connectors: [] });
 });
 
 test('stores lists the demo stores', async () => {
