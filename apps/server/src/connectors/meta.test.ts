@@ -5,6 +5,7 @@ import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
+import { setCampaignBudget } from './ads';
 import { adAccount, purchaseValue, syncMeta } from './meta';
 import { syncShopify } from './shopify';
 
@@ -125,4 +126,21 @@ test('a USD ad account on a euro store: spend, purchase value and budgets are co
   expect({ ...db.prepare("SELECT spend, revenue FROM campaign_daily WHERE campaign_id = '201' AND date = '2026-10-26'").get() }).toEqual({ spend: 48, revenue: 168.4 });
   expect(db.prepare("SELECT daily_budget AS b FROM campaigns WHERE id = '201'").get()?.b).toBe(48);
   expect(db.prepare("SELECT ad_spend AS s FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-26'").get()?.s).toBe(48);
+});
+
+test("pointing the store at another ad account drops the old account's campaigns and spend", async () => {
+  const { db } = setup();
+  await syncMeta(db, key, 'pawsome', fakeGraph([insight('201', '2026-10-25', '60.00', '210.50')]).fetchFn, NOW);
+  saveIntegration(db, key, { kind: 'meta_ads', storeId: 'pawsome', values: { adAccountId: '999', accessToken: TOKEN } });
+  const b = fakeGraph([insight('301', '2026-10-25', '20.00', '50')]).fetchFn;
+  const accountB = (async (url: string, init: RequestInit) =>
+    new URL(url).pathname.endsWith('/campaigns') ? Response.json({ data: [{ id: '301', name: 'Retargeting', effective_status: 'ACTIVE', daily_budget: '2000' }] }) : b(url, init)) as typeof fetch;
+  await syncMeta(db, key, 'pawsome', accountB, NOW);
+
+  expect(db.prepare("SELECT id FROM campaigns WHERE store_id = 'pawsome' AND network = 'meta'").all().map((r) => r.id)).toEqual(['301']);
+  expect(db.prepare("SELECT ad_spend FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()?.ad_spend).toBe(20);
+  await expect(setCampaignBudget(db, key, 'pawsome', 'meta', '201', 80, accountB)).rejects.toThrow('No meta campaign 201');
+
+  await syncMeta(db, key, 'pawsome', accountB, NOW); // an incremental sync keeps campaigns that only age out of the window
+  expect(db.prepare("SELECT count(*) AS n FROM campaigns WHERE store_id = 'pawsome' AND network = 'meta'").get()?.n).toBe(1);
 });

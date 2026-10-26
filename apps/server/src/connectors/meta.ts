@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, cents, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
+import { adRate, cents, pruneCampaigns, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -126,6 +126,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         dates.add(r.date_start);
         day.run(r.campaign_id, r.date_start, cents(Number(r.spend ?? 0) * money.rate), cents(purchaseValue(r.action_values) * money.rate), Math.round(purchaseValue(r.actions)), Number(r.clicks ?? 0), Number(r.impressions ?? 0));
       }
+      if (!cursor) for (const d of pruneCampaigns(db, storeId, 'meta', [...campaigns.map((c) => c.id), ...rows.map((r) => r.campaign_id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });

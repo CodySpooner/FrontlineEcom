@@ -1,3 +1,4 @@
+import type { AdNetwork } from '@frontline/shared';
 import type { Db } from '../db';
 import { convertRate } from '../fx';
 
@@ -16,6 +17,21 @@ export function switchToReal(db: Db, storeId: string) {
  * Callers keep the previous cursor if it's later; re-reading the overlap is safe because upserts are idempotent.
  */
 export const cursorAt = (now: Date) => new Date(now.getTime() - 5 * 60_000);
+
+/**
+ * On a full sync (the first, or after the account changed) the connected account is the source of truth for the store's
+ * `network` campaigns: the ones it didn't return go, with their daily rows. An account entered by mistake then leaves
+ * no spend in the store's profit and no campaign an approved change could reach. Returns the dates whose spend changed.
+ * ponytail: a replaced account's history goes too; keeping it would need campaigns tagged with their account.
+ */
+export function pruneCampaigns(db: Db, storeId: string, network: AdNetwork, keep: Iterable<string>): string[] {
+  const gone = 'SELECT id FROM campaigns WHERE store_id = ? AND network = ? AND id NOT IN (SELECT value FROM json_each(?))';
+  const args = [storeId, network, JSON.stringify([...keep])];
+  const dates = db.prepare(`SELECT DISTINCT date FROM campaign_daily WHERE network = ? AND campaign_id IN (${gone})`).all(network, ...args).map((r) => String(r.date));
+  db.prepare(`DELETE FROM campaign_daily WHERE network = ? AND campaign_id IN (${gone})`).run(network, ...args);
+  db.prepare(`DELETE FROM campaigns WHERE id IN (${gone}) AND network = ?`).run(...args, network);
+  return dates;
+}
 
 /** daily_metrics.ad_spend = spend across every ad network's campaigns for that store and day. */
 export function rebuildAdSpend(db: Db, storeId: string, dates: Iterable<string>) {

@@ -3,7 +3,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { adRate, cents, cursorAt, rebuildAdSpend, rebuildRevenue, setOrderItems, switchToReal, type CampaignChange } from './common';
+import { adRate, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, switchToReal, type CampaignChange } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -111,6 +111,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
         seen.run(d.campaign_id, storeId, `Campaign ${d.campaign_id}`);
         day.run(d.campaign_id, date, cents(n(m.spend) * rate), cents(n(m.complete_payment_roas) * n(m.spend) * rate), n(m.complete_payment), n(m.clicks), n(m.impressions));
       }
+      if (!cursor) for (const d of pruneCampaigns(db, storeId, 'tiktok', [...campaigns.map((c) => c.campaign_id), ...rows.map((r) => r.dimensions.campaign_id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });

@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, cents, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
+import { adRate, cents, pruneCampaigns, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
 export const GOOGLE_ADS_API_VERSION = 'v26';
@@ -126,6 +126,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
         dates.add(r.segments!.date);
         day.run(r.campaign.id, r.segments!.date, cents(micros(m.costMicros) * rate), cents(Number(m.conversionsValue ?? 0) * rate), Math.round(Number(m.conversions ?? 0)), Number(m.clicks ?? 0), Number(m.impressions ?? 0));
       }
+      if (!cursor) for (const d of pruneCampaigns(db, storeId, 'google', [...campaigns.map((c) => c.campaign.id), ...rows.map((r) => r.campaign.id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
