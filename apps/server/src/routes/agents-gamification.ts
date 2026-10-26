@@ -3,6 +3,7 @@ import { AGENT_ROLES, type MetricTotals, type Mission } from '@frontline/shared'
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
 import { addDays, localDate } from '../dates';
+import { cachedRate, fxFor } from '../fx';
 import type { Db } from '../db';
 import { publish } from '../live';
 import { onApproved } from './agents-actions';
@@ -230,9 +231,11 @@ function facts(db: Db): Facts {
   const best = (totals: MetricTotals[], k: keyof MetricTotals) => Math.max(0, ...totals.map((t) => t[k]));
   const month = summary(db, ids, 30);
   const week = summary(db, ids, 7);
+  // "$10K Month" is USD; the summary is in the one store's currency or the base currency. No rate yet: not counted.
+  const usd = cachedRate(db, fxFor(db, ids).currency, 'USD') ?? 0;
   return {
     orders: month.totals.orders,
-    best30Revenue: best(month.byStore.map((s) => s.totals), 'revenue'),
+    best30Revenue: best(month.byStore.map((s) => s.totals), 'revenue') * usd,
     best7Roas: best(week.byStore.map((s) => s.totals), 'roas'),
     profitStreak: profitStreak(month.series),
     fullSquad: count(db, 'SELECT count(*) AS n FROM (SELECT store_id FROM agents GROUP BY store_id HAVING min(enabled) = 1 AND count(*) >= 8)') > 0,

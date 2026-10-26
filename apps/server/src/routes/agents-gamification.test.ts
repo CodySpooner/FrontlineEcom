@@ -6,6 +6,7 @@ import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { subscribe } from '../live';
+import { updateSettings } from '../settings';
 import { getStore } from '../stores';
 import { runHooks, toolEnv } from './agents';
 
@@ -116,4 +117,15 @@ test('achievements unlock from store results and level the commander', async () 
   expect(commander.xp).toBe(list.filter((a) => a.unlockedAt).reduce((n, a) => n + a.xp, 0));
   expect(commander).toMatchObject({ level: levelForXp(commander.xp), rank: expect.any(String), streakDays: expect.any(Number) });
   expect((await get<Commander>('/api/commander')).xp).toBe(commander.xp);
+});
+
+test('"$10K Month" counts dollars: ~35,000 yen a month is not it', async () => {
+  db.prepare(`UPDATE stores SET currency = 'JPY'`).run();
+  expect(updateSettings(db, { baseCurrency: 'JPY' })).toMatchObject({ baseCurrency: 'JPY' });
+  db.prepare(`INSERT INTO settings (key, value_json) VALUES ('fx', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json`).run(
+    JSON.stringify({ date: '2026-10-26', fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1, JPY: 150 } }),
+  );
+  const unlocked = (await get<Achievement[]>('/api/achievements')).filter((a) => a.unlockedAt).map((a) => a.id);
+  expect(unlocked).toContain('first_sale');
+  expect(unlocked).not.toContain('ten_k_month');
 });
