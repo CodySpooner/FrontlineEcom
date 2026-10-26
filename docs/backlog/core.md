@@ -78,6 +78,8 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 - [x] CORE-33 Route errors: an exception in any route is logged to `api.log` with its stack and answered as JSON `{ error }` (500); unknown paths are JSON 404s.
 
+- [x] CORE-34 DSers (DESIGN §9 suppliers): no public DSers API exists (checked 2026-10-26). DSers writes AliExpress tracking back into Shopify fulfillments, which the Shopify connector already reads into `orders.tracking` / fulfillment status. So DSers stores are covered through Shopify, and there's no separate connector. Revisit if DSers publishes an API.
+
 ## Blocked
 
 ## Done
