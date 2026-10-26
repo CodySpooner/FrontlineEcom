@@ -4,7 +4,7 @@ import { createOffice, type OfficeRenderer } from './renderer';
 import { Button } from '../components/ui';
 import { AGENT_ROLES } from '@frontline/shared';
 import { useAgents } from '../api/client';
-import { useSeats } from './api';
+import { officeApi, useSeats } from './api';
 import type { OfficeWorker } from './workerSprites';
 
 export function OfficeScene() {
@@ -26,7 +26,11 @@ export function OfficeScene() {
     createOffice(host.current!,setDesk).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setWorkers(latestWorkers.current); } }).catch((e:unknown)=>{if(!disposed)setError(e instanceof Error ? e.message : 'Renderer unavailable');});
     const changed=()=>setFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange',changed);
-    return ()=>{disposed=true;renderer?.destroy();scene.current=undefined;document.removeEventListener('fullscreenchange',changed);};
+    // Persist settled tiles outside the rendering loop; motion never waits for a network request.
+    const save = window.setInterval(() => {
+      for (const [id, position] of renderer?.drainPositions() ?? []) officeApi(`/api/ecosystem/seats/${encodeURIComponent(id)}`, 'PATCH', { position }).catch(() => { if (!disposed) setError('Worker positions could not be saved.'); });
+    }, 1000);
+    return ()=>{disposed=true;renderer?.destroy();scene.current=undefined;clearInterval(save);document.removeEventListener('fullscreenchange',changed);};
   },[]);
   const selected = DESKS.find((d)=>d.id===desk);
   return <>

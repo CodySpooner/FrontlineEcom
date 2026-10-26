@@ -1,9 +1,10 @@
 import { Container, Rectangle, Sprite, Text, Texture } from 'pixi.js';
 import type { OfficeSeat } from '@frontline/shared';
 import { CELL, frameAt, paintCharacters, type Animation, type Direction } from './characters';
-import { deskTile, iso } from './world';
+import { ENTRANCE, deskTile, iso, tileKey, walkable, type Tile } from './world';
+import { advanceMotion, nearestFree, startMotion, type Motion } from './pathfinding';
 
-export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation }
+export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation; target?: Tile }
 
 export function workerSprites(world: Container, select: (deskId: string) => void) {
   const layer = new Container(); layer.sortableChildren = true; world.addChild(layer);
@@ -11,6 +12,8 @@ export function workerSprites(world: Container, select: (deskId: string) => void
   let atlas: Texture | undefined;
   let signature = '';
   const frames = new Map<string, Texture>();
+  const motions = new Map<string, Motion>();
+  const positions = new Map<string, Tile>();
   function update(data: OfficeWorker[]) {
     const active = data.filter((w) => !w.seat.archived).slice(0, 30);
     const next = JSON.stringify(active.map((w) => [w.seat.agentId, w.seat.appearance]));
@@ -22,7 +25,7 @@ export function workerSprites(world: Container, select: (deskId: string) => void
       frames.clear(); signature = next;
       old?.destroy(true);
     }
-    for (const [id, worker] of workers) if (!active.some((w) => w.seat.agentId === id)) { worker.root.destroy({ children: true }); workers.delete(id); }
+    for (const [id, worker] of workers) if (!active.some((w) => w.seat.agentId === id)) { worker.root.destroy({ children: true }); workers.delete(id); motions.delete(id); positions.delete(id); }
     active.forEach((data, index) => {
       let worker = workers.get(data.seat.agentId);
       if (!worker) {
@@ -32,24 +35,34 @@ export function workerSprites(world: Container, select: (deskId: string) => void
         sprite.on('pointertap', () => select(workers.get(data.seat.agentId)!.data.seat.deskId));
         worker = { data, root, sprite, name, elapsed: 0, direction: 2, index };
         workers.set(data.seat.agentId, worker);
+        const occupied = new Set([...motions.values()].flatMap((m) => [tileKey(m.cell), ...(m.next ? [tileKey(m.next)] : [])]));
+        const saved = data.seat.position;
+        const start = saved && walkable(saved) && !occupied.has(tileKey(saved)) ? saved : nearestFree(ENTRANCE, occupied)!;
+        motions.set(data.seat.agentId, startMotion(start, data.target ?? deskTile(data.seat.deskId)));
       }
       if (worker.data.animation !== data.animation) worker.elapsed = 0;
       worker.data = data; worker.index = index; worker.name.text = data.name;
-      const tile = data.seat.position ?? deskTile(data.seat.deskId), p = iso(tile);
-      worker.root.position.set(p.x, p.y + 12); worker.root.zIndex = p.y;
+      motions.get(data.seat.agentId)!.target = data.target ?? deskTile(data.seat.deskId);
     });
     tick(0, true);
   }
   function tick(delta: number, reduced: boolean) {
     if (!atlas) return;
+    for (const id of advanceMotion(motions, delta / 1000)) positions.set(id, { ...motions.get(id)!.cell });
     for (const worker of workers.values()) {
       worker.elapsed += delta;
-      const p = frameAt(worker.data.animation, reduced ? 0 : worker.elapsed, worker.direction, worker.index);
+      const motion = motions.get(worker.data.seat.agentId)!;
+      if (motion.next) {
+        const dx = motion.next.x - motion.cell.x, dy = motion.next.y - motion.cell.y;
+        worker.direction = dx > 0 ? 0 : dy > 0 ? 1 : dx < 0 ? 3 : 2;
+      } else if (motion.arrived) worker.direction = 2;
+      const pos = iso(motion.position); worker.root.position.set(pos.x, pos.y + 12); worker.root.zIndex = pos.y;
+      const p = frameAt(motion.next ? 'walk' : motion.arrived ? worker.data.animation : 'idle', reduced ? 0 : worker.elapsed, worker.direction, worker.index);
       const key = `${p.x},${p.y}`;
       let frame = frames.get(key);
       if (!frame) { frame = new Texture({ source: atlas.source, frame: new Rectangle(p.x, p.y, CELL.width, CELL.height) }); frames.set(key, frame); }
       worker.sprite.texture = frame;
     }
   }
-  return { update, tick, destroy: () => { for (const frame of frames.values()) frame.destroy(); atlas?.destroy(true); } };
+  return { update, tick, drainPositions: () => { const entries = [...positions]; positions.clear(); return entries; }, destroy: () => { for (const frame of frames.values()) frame.destroy(); atlas?.destroy(true); } };
 }

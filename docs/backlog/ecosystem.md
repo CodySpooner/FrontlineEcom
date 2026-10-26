@@ -41,7 +41,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Inbox
 - [x] (from core, FYI) Migration 37 is core's (`orders.tracking_url`; 36 is agents' squad missions). The next free one is 38.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from agents) Your ECO-14 request is built (AGT-98, AGT-99):
+- [x] (from agents) Your ECO-14 request is built (AGT-98, AGT-99):
   - **Squad missions** (`SquadMission`, `SquadMissionStep` and `NewSquadMission` in `packages/shared`): `GET /api/squad-missions?stores=a,b` (newest first), `GET /api/squad-missions/:id`, `POST /api/squad-missions` (`{ storeId, title, steps: [{ id, role, task, dependsOn? }] }` → 201; the first steps start at once), and `GET /api/squad-missions/templates` ("Launch a new product": the six roles of spec §7).
   - Each step is an ordinary run. A step starts when all its `dependsOn` are done, as the **child run** (`parentRunId`) of the first one, with their final answers in its brief. Handoffs are real parent/child runs, so `/api/live` `run` events show them.
   - Mission `status`: `running` | `done` | `blocked`. Step `status`: `waiting` | `blocked` or its run's status. A step also has `runId`, `deliverable` (the first line of its answer) and `note` (why it couldn't start yet). The mission panel's pending, completed and blocked tasks map straight onto these.
@@ -56,7 +56,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-04 World: isometric tile map with the 10 departments (desk counts per spec §3) + central globe area, props, ambient animation, cached static layers, collision grid.
 - [x] ECO-05 Camera: drag pan, wheel zoom, double-click focus, jump to department, reset, fit, fullscreen; sharp pixels at every zoom step.
 - [x] ECO-06 Characters: sprite sheets with the 10 animations (spec §4), per-agent appearance variation, isometric walk directions, animation state machine.
-- [ ] ECO-07 Movement: A* on the grid with occupancy, walk to desk / meeting table / another desk; tests for the pathfinder.
+- [x] ECO-07 Movement: A* on the grid with occupancy, walk to desk / meeting table / another desk; tests for the pathfinder.
 - [ ] ECO-08 Real state → behavior: `AgentOfficeEvent` adapter over existing live messages + REST snapshot; state table from spec §5; idempotent on reconnect, ignores stale/out-of-order events; tests.
 - [ ] ECO-09 Agent panel: click a character → profile, live activity, performance (runs, cost/tokens where present), actions (chat, assign task, output, history, configure, pause/cancel, focus) using existing endpoints.
 - [ ] ECO-10 Assign Task: compact command panel → real run on that agent; loading / success / failure / awaiting-approval states shown in the panel and on the character.
@@ -75,6 +75,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-07: Cached A* routes, current/next-tile reservations, separate motion simulation, entry walk, arbitrary walkable destinations and saved arrival positions outside rendering. All 30 workers reach desks without overlap in simulation; browser entry movement and Copywriter arrival persistence verified (.agent/eco-07*.png). pnpm check 113 files / 608 tests pass. Orca browser rAF itself measured ~1 FPS (30 callbacks / 29.5 s); ECO-20 needs an unthrottled browser for meaningful renderer FPS. Acknowledged agents Inbox: mission dependencies and engine identity now available for ECO-09/14.
 
 - 2026-10-26 ECO-06: Original pixel workers share one packed atlas (ten poses, four directions, four frames); deterministic hair/skin/outfit/accessory variations, completion-to-sitting transition, selectable sprites and persistent seat loading. Browser checked four fake-store workers and atlas (.agent/eco-06*.png); 111 files / 600 tests pass. Movement and execution-driven poses follow in ECO-07/08.
 
