@@ -26,15 +26,38 @@ export interface RunManagerOptions {
 
 export type RunManager = ReturnType<typeof createRunManager>;
 
+/** Approval kinds the server carries out when approved (apps/server/src/routes/agents.ts), whether or not the run that asked is still alive. */
+export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'ads.set_budget', 'ads.pause_campaign'];
+
 export function createRunManager(opts: RunManagerOptions) {
   const { db, env, concurrency = 3, perStore = 2 } = opts;
   const engine = opts.engine ?? defaultEngine();
   const active = new Map<string, { storeId: string; agentId: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[] }>();
 
+  /**
+   * A run that ended without finishing can't act on its pending requests any more, so they're closed as denied with a
+   * note. Kinds the server carries out on approval (OUTLIVE_RUN) stay open: approving them later still works.
+   */
+  function expireApprovals(runIds: string[]) {
+    if (!env.decide || !runIds.length) return;
+    const rows = db
+      .prepare(
+        `SELECT id FROM approvals WHERE status = 'pending' AND run_id IN (${runIds.map(() => '?').join(',')})
+         AND json_extract(action_json, '$.kind') NOT IN (${OUTLIVE_RUN.map(() => '?').join(',')})`,
+      )
+      .all(...runIds, ...OUTLIVE_RUN);
+    for (const r of rows) {
+      db.prepare('UPDATE approvals SET reason = reason || ? WHERE id = ?').run(' [Expired: the agent run ended before a decision.]', String(r.id));
+      env.decide(String(r.id), 'deny');
+    }
+  }
+
   // In-flight runs die with the process; say so instead of leaving them "running" forever.
+  const interrupted = db.prepare(`SELECT id FROM agent_runs WHERE status IN ('queued', 'running')`).all().map((r) => String(r.id));
   db.prepare(`UPDATE agent_runs SET status = 'error', error = 'Interrupted by an app restart', ended_at = ? WHERE status IN ('queued', 'running')`).run(
     new Date().toISOString(),
   );
+  expireApprovals(interrupted);
 
   /** Queues a task. Returns an error message when the agent can't take it. */
   function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string): AgentRun | string {
@@ -156,6 +179,7 @@ export function createRunManager(opts: RunManagerOptions) {
       new Date().toISOString(),
       run.id,
     );
+    if (status !== 'done') expireApprovals([run.id]);
     opts.onRun?.(getRun(db, run.id)!);
   }
 

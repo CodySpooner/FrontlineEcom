@@ -161,3 +161,37 @@ test('the app run manager publishes runs and their events on the live bus', asyn
   expect(steps.filter((t, i) => t !== steps[i - 1])).toEqual(['run:queued', 'run:running', 'event:tool_call', 'event:tool_result', 'event:text_delta', 'event:done', 'run:done']);
   expect(seen.some((s) => s.type === 'notification' && s.notification.title === 'Operations finished')).toBe(true);
 });
+
+test('requests a run can no longer act on expire when it ends; ones the server carries out stay open', async () => {
+  runManager(db); // registers the approvals watcher that applies ad changes
+  const pending = () => db.prepare(`SELECT id, status, reason, json_extract(action_json, '$.kind') AS kind FROM approvals WHERE run_id IS NOT NULL ORDER BY created_at`).all();
+  const waitFor = async (n: number) => {
+    for (let i = 0; i < 100 && pending().length < n; i++) await new Promise((r) => setImmediate(r));
+  };
+  const steps = {
+    creative_studio: [{ call: 'create_creative' as const, input: { kind: 'image', headline: 'Glow', primaryText: 'Serum, soft light', prompt: 'serum on marble' } }],
+    ad_strategist: [{ call: 'propose_ad_change' as const, input: { campaignId: 'glow-c1', change: 'pause', evidence: '7d ROAS 0.6 vs break-even 2.1' } }],
+  };
+  const m = manager({ engine: fakeEngine((input) => (input.task === REFLECTION_PROMPT ? [] : (steps as Record<string, never[]>)[input.agent.role] ?? [])) });
+  const creative = ok(m.start('glow:creative_studio', 'Make an ad'));
+  const ad = ok(m.start('glow:ad_strategist', 'Review ads'));
+  await waitFor(2);
+  m.cancel(creative.id);
+  m.cancel(ad.id);
+  await m.idle();
+  const [c, a] = pending() as { id: string; status: string; reason: string; kind: string }[];
+  expect(c).toMatchObject({ kind: 'creative.generate', status: 'denied', reason: expect.stringMatching(/\[Expired: the agent run ended before a decision\.\]$/) });
+  expect(a).toMatchObject({ kind: 'ads.pause_campaign', status: 'pending' });
+  decide(db, a!.id, 'approve');
+  await new Promise((r) => setImmediate(r));
+  expect(db.prepare(`SELECT status FROM campaigns WHERE id = 'glow-c1'`).get()?.status).toBe('paused');
+
+  // An app restart closes in-run requests of the runs it interrupts.
+  const before = manager({ engine: fakeEngine((input) => (input.task === REFLECTION_PROMPT ? [] : steps.creative_studio)) });
+  const stuck = ok(before.start('glow:creative_studio', 'Make another ad'));
+  await waitFor(3);
+  manager();
+  expect(pending().at(-1)).toMatchObject({ kind: 'creative.generate', status: 'denied' });
+  before.cancel(stuck.id);
+  await before.idle();
+});
