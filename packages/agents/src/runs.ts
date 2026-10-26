@@ -28,7 +28,7 @@ export type RunManager = ReturnType<typeof createRunManager>;
 export function createRunManager(opts: RunManagerOptions) {
   const { db, env, concurrency = 3, perStore = 2 } = opts;
   const engine = opts.engine ?? defaultEngine();
-  const active = new Map<string, { storeId: string; agentId: string; abort: AbortController; done: Promise<void> }>();
+  const active = new Map<string, { storeId: string; agentId: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[] }>();
 
   // In-flight runs die with the process; say so instead of leaving them "running" forever.
   db.prepare(`UPDATE agent_runs SET status = 'error', error = 'Interrupted by an app restart', ended_at = ? WHERE status IN ('queued', 'running')`).run(
@@ -69,6 +69,13 @@ export function createRunManager(opts: RunManagerOptions) {
     return run && getRun(db, id);
   }
 
+  /** The run with its transcript so far while it is still running. */
+  function get(id: string): AgentRunDetail | undefined {
+    const run = getRun(db, id);
+    const live = active.get(id)?.transcript;
+    return run && (live ? { ...run, transcript: [...live] } : run);
+  }
+
   /** Resolves once nothing is running or queued (tests, shutdown). */
   async function idle() {
     while (active.size) await Promise.all([...active.values()].map((a) => a.done));
@@ -81,19 +88,19 @@ export function createRunManager(opts: RunManagerOptions) {
       const busy = [...active.values()];
       if (busy.some((a) => a.agentId === run.agentId) || busy.filter((a) => a.storeId === run.storeId).length >= perStore) continue;
       const abort = new AbortController();
-      const done = execute(run, abort.signal).finally(() => {
+      const transcript: AgentEvent[] = [];
+      const done = execute(run, abort.signal, transcript).finally(() => {
         active.delete(run.id);
         pump();
       });
-      active.set(run.id, { storeId: run.storeId, agentId: run.agentId, abort, done });
+      active.set(run.id, { storeId: run.storeId, agentId: run.agentId, abort, done, transcript });
     }
   }
 
-  async function execute(queued: AgentRun, signal: AbortSignal) {
+  async function execute(queued: AgentRun, signal: AbortSignal, transcript: AgentEvent[]) {
     db.prepare(`UPDATE agent_runs SET status = 'running', started_at = ? WHERE id = ?`).run(new Date().toISOString(), queued.id);
     const run = getRun(db, queued.id)!;
     opts.onRun?.(run);
-    const transcript: AgentEvent[] = [];
     const emit = (event: AgentEvent) => {
       const last = transcript.at(-1);
       if (event.type === 'text_delta' && last?.type === 'text_delta') transcript[transcript.length - 1] = { type: 'text_delta', text: last.text + event.text };
@@ -165,7 +172,7 @@ export function createRunManager(opts: RunManagerOptions) {
     return { ...done, usage };
   }
 
-  return { start, cancel, idle };
+  return { start, cancel, get, idle };
 }
 
 const addUsage = (a: RunUsage, b: RunUsage): RunUsage => ({

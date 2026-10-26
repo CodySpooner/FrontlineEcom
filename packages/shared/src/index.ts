@@ -254,6 +254,32 @@ export interface AgentRun {
   endedAt?: string;
 }
 
+/**
+ * POST /api/agents/:id/runs → 201 AgentRun (409 when the agent is offline, the store's AI budget is spent, or
+ * resumeRunId isn't this agent's). GET /api/runs?stores=&agent=&limit= → AgentRun[] newest first.
+ * GET /api/runs/:id → AgentRunDetail (live transcript while running). POST /api/runs/:id/cancel → AgentRun.
+ * Live updates arrive on /api/live as `run` / `run_event`.
+ */
+export interface StartRunInput {
+  task: string;
+  /** Continue that run's conversation (chat follow-up). */
+  resumeRunId?: string;
+}
+
+/**
+ * GET /api/stores/:id/memory?q= → StoreMemory[] newest first. POST /api/stores/:id/memory → 201 StoreMemory
+ * (owner-written, agentId 'owner'). PATCH /api/memory/:id with any subset → StoreMemory. DELETE /api/memory/:id → 204.
+ */
+export interface MemoryInput {
+  kind: MemoryKind;
+  /** 5–300 chars, one sentence. */
+  text: string;
+  evidence?: string;
+  /** 0–1, default 0.8 for owner-written. */
+  confidence?: number;
+  tags?: string[];
+}
+
 /** A run with its transcript (consecutive text deltas merged into one). */
 export interface AgentRunDetail extends AgentRun {
   transcript: AgentEvent[];

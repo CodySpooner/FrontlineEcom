@@ -2,6 +2,7 @@ import { createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, R
 import type { AgentRun, LiveMessage } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
+import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { subscribe } from '../live';
@@ -49,6 +50,29 @@ test('a run streams, persists its transcript and usage, and shows the agent as r
     { type: 'done', sessionId: 'fake-glow:copywriter', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } },
   ]);
   expect(getAgent(db, 'glow:copywriter')?.status).toBe('idle');
+});
+
+test('get() returns the transcript so far while a run waits for approval', async () => {
+  const m = manager({
+    engine: fakeEngine((input) =>
+      input.task === REFLECTION_PROMPT
+        ? [{ type: 'done', sessionId: 's', usage }]
+        : [
+            { type: 'text_delta', text: 'Proposing a change.' },
+            { call: 'request_approval', input: { title: 'Rewrite hero', reason: 'CTR 0.8%', kind: 'publish_page', payload: {} } },
+            { type: 'done', sessionId: 's', usage },
+          ],
+    ),
+  });
+  const run = ok(m.start('glow:copywriter', 'Fix the hero'));
+  await new Promise((r) => setTimeout(r, 20));
+  const live = m.get(run.id)!;
+  expect(live.transcript.map((e) => e.type)).toEqual(['text_delta', 'tool_call', 'approval_request']);
+  expect(getAgent(db, 'glow:copywriter')).toMatchObject({ status: 'waiting_approval', currentTask: 'Rewrite hero' });
+  const request = live.transcript[2];
+  if (request?.type === 'approval_request') decide(db, request.approval.id, 'approve');
+  await m.idle();
+  expect(m.get(run.id)?.transcript.at(-1)?.type).toBe('done');
 });
 
 test('global, per-store and per-agent limits queue runs in order', async () => {
