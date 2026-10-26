@@ -1,4 +1,4 @@
-import { ADS_JOB, DEFAULT_JOBS, listMemory, listRuns, updateMemory, writeMemory } from '@frontline/agents';
+import { ADS_JOB, DEFAULT_JOBS, listMemory, listRuns, once, updateMemory, writeMemory } from '@frontline/agents';
 import type { Store } from '@frontline/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -101,6 +101,27 @@ test("a live TikTok Shop store doesn't get the weekly page refresh: its drafts c
   expect(on).not.toContain('Weekly page refresh');
   expect(on).toContain('Weekly price check'); // its findings still go to the owner, to apply by hand
   expect(db.prepare('SELECT enabled FROM automation_rules WHERE store_id = ? AND name = ?').get(store.id, 'Weekly page refresh')?.enabled).toBe(0); // still there to switch on
+  await runManager(db).idle();
+});
+
+test('a store that went live before the job rules gets them once: jobs with nothing to do there switch off', async () => {
+  const res = await app.request('/api/stores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Tok', platform: 'tiktok_shop', niche: 'home' }) });
+  const store = (await res.json()) as Store;
+  switchToReal(db, store.id);
+  once(db, `activate:${store.id}`); // went live on an older build: every job on, no gates
+  db.prepare(`DELETE FROM done_once WHERE ref IN (?, ?)`).run(`job-gates:${store.id}`, `ads-job-wait:${store.id}`);
+  db.prepare('UPDATE automation_rules SET enabled = 1 WHERE store_id = ?').run(store.id);
+  await app.request('/api/agents');
+  const on = () => db.prepare('SELECT name FROM automation_rules WHERE store_id = ? AND enabled = 1').all(store.id).map((r) => String(r.name));
+  expect(on()).not.toContain('Weekly page refresh');
+  expect(on()).not.toContain(ADS_JOB);
+  expect(on()).toHaveLength(DEFAULT_JOBS.length - 2);
+  expect(notes(store.id)).toEqual([`Tok: ${ADS_JOB.toLowerCase()} and weekly page refresh switched off`]);
+  // Once: the owner switches the page refresh back on and it stays on; campaigns bring the review back.
+  db.prepare('UPDATE automation_rules SET enabled = 1 WHERE store_id = ? AND name = ?').run(store.id, 'Weekly page refresh');
+  db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('tiktok', 't1', ?, 'Spark', 'active', 30)`).run(store.id);
+  await app.request('/api/agents');
+  expect(on()).toHaveLength(DEFAULT_JOBS.length);
   await runManager(db).idle();
 });
 
