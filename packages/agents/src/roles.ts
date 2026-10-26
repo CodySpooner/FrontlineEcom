@@ -45,7 +45,7 @@ export interface RoleSpec {
   mcp?: ExternalMcpKind[];
 }
 
-/** Integrations whose official MCP server agents can use. Google Ads / GA4 / Higgsfield: see Blocked in the backlog. */
+/** Integrations whose official MCP server agents can use. Google Ads / GA4 reach agents through core's syncs (list_campaigns, metrics_timeseries), Higgsfield through create_creative. */
 export type ExternalMcpKind = 'meta_ads';
 
 /** Rules every agent in every squad follows. */
