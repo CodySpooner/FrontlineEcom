@@ -135,6 +135,29 @@ describe('agent tools on demo data', () => {
     expect(events.at(-1)).toEqual(done);
   });
 
+  test("list_products revenue is net of Amazon refunds on the product's paid orders", async () => {
+    const id = String(db.prepare(`SELECT id FROM products WHERE store_id = 'glow' AND status = 'active' LIMIT 1`).get()?.id);
+    const day = addDays(localDate(), -2);
+    const order = db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, ?, 60, ?, 'delivered', ?)`);
+    order.run('o-refunds-paid', `${day}T12:00:00Z`, 'paid', day);
+    order.run('o-refunds-cancelled', `${day}T12:00:00Z`, 'refunded', day);
+    const item = db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('glow', ?, ?, 2, 60, 10)`);
+    item.run('o-refunds-paid', id);
+    item.run('o-refunds-cancelled', id);
+    const refund = db.prepare(`INSERT INTO amazon_refunds (store_id, id, order_id, amount, product_id) VALUES ('glow', ?, ?, ?, ?)`);
+    refund.run('r-paid', 'o-refunds-paid', 30, id);
+    refund.run('r-cancelled', 'o-refunds-cancelled', 60, id); // its line never counted
+    refund.run('r-elsewhere', 'o-not-ours', 60, id); // another marketplace's order
+    try {
+      const [out] = results(await run(input('glow', 'market_analyst'), [{ call: 'list_products', input: { limit: 500 } }, done]));
+      expect(out!.output.split('\n').find((l) => l.startsWith(`${id},`))).toMatch(/,2,30$/);
+    } finally {
+      db.prepare(`DELETE FROM amazon_refunds WHERE store_id = 'glow'`).run();
+      db.prepare(`DELETE FROM order_items WHERE store_id = 'glow' AND order_id LIKE 'o-refunds-%'`).run();
+      db.prepare(`DELETE FROM orders WHERE store_id = 'glow' AND id LIKE 'o-refunds-%'`).run();
+    }
+  });
+
   test("metrics_timeseries says when the platform doesn't report a funnel step, so a 0 isn't read as no traffic", async () => {
     const saved = db.prepare(`SELECT date, sessions, add_to_carts, checkouts FROM daily_metrics WHERE store_id = 'glow'`).all();
     const glow = input('glow', 'market_analyst');

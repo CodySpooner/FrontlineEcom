@@ -110,13 +110,22 @@ test("on a real store a price test is judged on profit after the store's fee %, 
   };
   sell(10, addDays(day, -5), 20); // 140 gross profit before, 100 after the 20% fee
   sell(9, addDays(day, 5), 25); // 171 gross, 126 net
+  // One sock refunded: 25 off the after window (146 gross, 106 net). Another product's refund, one on a cancelled order
+  // (its line never counted) and one whose order isn't the store's don't count.
+  db.prepare(`UPDATE orders SET status = 'refunded' WHERE store_id = 'peak' AND id = ?`).run(`o-${addDays(day, 5)}-8`);
+  sell(1, addDays(day, 6), 25);
+  const refund = db.prepare(`INSERT INTO amazon_refunds (store_id, id, order_id, amount, product_id) VALUES ('peak', ?, ?, ?, ?)`);
+  refund.run('r1', `o-${addDays(day, 5)}-0`, 25, '77');
+  refund.run('r2', `o-${addDays(day, 5)}-1`, 25, '78');
+  refund.run('r3', `o-${addDays(day, 5)}-8`, 25, '77');
+  refund.run('r4', 'o-elsewhere', 25, '77');
   const xp = () => getAgent(db, 'peak:market_analyst')!.xp;
   const before = xp();
   await app.request('/api/achievements');
   await app.request('/api/achievements');
 
   const texts = listMemory(db, 'peak').filter((m) => m.tags.includes('pricing')).map((m) => m.text);
-  expect(texts).toEqual(['Pricing "Grip Socks" $20 → $25 worked: profit 100 USD → 126 USD, 10 → 9 units (14 days before vs after).']);
+  expect(texts).toEqual(['Pricing "Grip Socks" $20 → $25 worked: profit 100 USD → 106 USD, 10 → 9 units (14 days before vs after).']);
   expect(xp()).toBe(before + 50);
   expect(listMemory(db, 'peak').find((m) => m.text === 'Grip Socks are underpriced vs rivals')?.confidence).toBe(0.7);
   expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Measured win: Market Analyst'`).all()).toEqual([{ body: texts[0] }]);

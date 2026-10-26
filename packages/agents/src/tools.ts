@@ -195,7 +195,7 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'list_products',
     description:
-      'The store catalog, best sellers first: price, compare-at, unit cost, margin % (after unit cost and the fee % set for the store), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last 30 days (CSV).',
+      'The store catalog, best sellers first: price, compare-at, unit cost, margin % (after unit cost and the fee % set for the store), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last 30 days, revenue net of Amazon refunds (CSV).',
     input: {
       status: z.enum(['active', 'draft', 'archived']).optional().describe('default: active and draft (archived = deleted or trashed on the platform)'),
       limit: z.number().int().min(1).max(500).default(100),
@@ -209,13 +209,19 @@ export const APP_TOOLS: AppTool[] = [
                CASE WHEN p.inventory_tracked THEN p.inventory ELSE 'not tracked' END AS inventory, p.status,
                coalesce(s.units, 0) AS units_30d, round(coalesce(s.revenue, 0), 2) AS revenue_30d
              FROM products p LEFT JOIN (
-               SELECT i.product_id, sum(i.quantity) AS units, sum(i.revenue) AS revenue
-               FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
-               WHERE i.store_id = ? AND o.status = 'paid' AND o.local_date >= ? GROUP BY i.product_id
+               SELECT product_id, sum(units) AS units, sum(revenue) AS revenue FROM (
+                 SELECT i.product_id, i.quantity AS units, i.revenue
+                 FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+                 WHERE i.store_id = ? AND o.status = 'paid' AND o.local_date >= ?
+                 -- core's Amazon refund lines, off their order's day as on the dashboard. ponytail: units stay gross (a refund line has no quantity).
+                 UNION ALL SELECT r.product_id, 0, -r.amount
+                 FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
+                 WHERE r.store_id = ? AND o.status = 'paid' AND o.local_date >= ?
+               ) GROUP BY product_id
              ) s ON s.product_id = p.id
              WHERE p.store_id = ? ${status ? 'AND p.status = ?' : "AND p.status != 'archived'"} ORDER BY revenue_30d DESC, p.title LIMIT ?`,
           )
-          .all(...([ctx.store.id, since(30, ctx.store), ctx.store.id, ...(status ? [status] : []), limit] as string[])),
+          .all(...([ctx.store.id, since(30, ctx.store), ctx.store.id, since(30, ctx.store), ctx.store.id, ...(status ? [status] : []), limit] as string[])),
       ),
   }),
   defineTool({
