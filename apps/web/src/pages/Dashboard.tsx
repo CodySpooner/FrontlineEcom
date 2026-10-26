@@ -33,6 +33,7 @@ export function Dashboard() {
         </div>
         <UnconvertedNote codes={summary.data?.unconverted} />
         <ImportNote />
+        <DemoMixNote />
       </div>
       <Kpis q={summary} />
       <div className="mb-3.5 grid gap-3.5 min-[1100px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -55,6 +56,25 @@ export function Dashboard() {
       </div>
       <Missions />
     </>
+  );
+}
+
+/** Stores without credentials run on generated numbers, so a total that mixes them with a connected store isn't all real. */
+export function DemoMixNote() {
+  const { stores, has } = useStoreSelection();
+  const picked = stores.filter((s) => has(s.id));
+  const demo = picked.filter((s) => !s.connected);
+  if (!demo.length || demo.length === picked.length) return null;
+  return (
+    <p className="flex basis-full items-center gap-2 text-xs text-text-2">
+      <StatusDot tone="idle" />
+      <span>
+        {new Intl.ListFormat('en').format(demo.map((s) => s.name))} {demo.length > 1 ? 'show' : 'shows'} demo numbers until connected, and these totals include them.{' '}
+        <Link to="/settings" className="text-red hover:underline">
+          Manage stores
+        </Link>
+      </span>
+    </p>
   );
 }
 

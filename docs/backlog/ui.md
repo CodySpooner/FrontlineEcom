@@ -255,6 +255,8 @@ Orca's browser against the reference before ticking it.
       answers from Claude's at a glance (DESIGN: demo mode first; agents never burn Claude usage on demo stores).
 - [x] UI-96 Creative Studio's Claude integration chip (DESIGN §4.5) shows what the tab's agent really runs on, like the
       Higgsfield chip beside it: demo copy, signed in, or a signed-out login that needs attention → Integrations.
+- [x] UI-97 The Dashboard says when its totals mix a connected store with demo-data stores (seeded, or added without
+      credentials), naming them, with a link to Settings' store list. Real and generated revenue were summed silently.
 
 ## Blocked
 
@@ -392,3 +394,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Core inbox (competitor currency): Price Moves formats with `p.currency ?? currency(p.storeId)`. The ponytail note became a plain fallback comment. Competitors.test adds a GBP rival on a EUR store → £32.00. Orca: demo rivals (no currency) unchanged
 - 2026-10-26 — UI-95: AgentDetail header shows a `Demo engine` Badge when `agent.engine.provider === 'demo'` (next to the autonomy badge). First full-page AgentDetail test (Route + ResizeObserver stub, like Chat.test). Orca at 800px on peak:ad_strategist: "Needs you | Ask first | Demo engine" on one 21px row, no overflow
 - 2026-10-26 — UI-96: the static "Claude · copy" span became a Link to /integrations with a StatusDot. It reads the `${store}:${tab.role}` agent's `engine.provider`: demo → idle "· demo copy" (no account check); claude → `useClaudeAccount(true)`, signed out → red "· needs attention", signed in → green. New Creative.test (2). Orca at 800px, copy tab: "Higgsfield AI · demo renders | Claude · demo copy" on one row
+- 2026-10-26 — UI-97: `DemoMixNote` beside ImportNote. It shows only when the selection has both `connected` and not-connected stores, and names the demo ones with Intl.ListFormat. Three Dashboard tests (mixed → named with a /settings link; all-demo and all-connected → hidden). Orca at 800px: hidden on the demo seed; with a client-side fetch patch (first store connected) → "Glow Haus and Peak Fit show demo numbers until connected, and these totals include them. Manage stores" on one line. Patch dropped by reload

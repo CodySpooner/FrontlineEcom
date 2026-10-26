@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { ApprovalRequest, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { profitFormula, Requests } from './Dashboard';
+import { DemoMixNote, profitFormula, Requests } from './Dashboard';
 
 const store = { id: 'pawsome', name: 'Pawsome Gear', currency: 'USD' } as Store;
 const approval: ApprovalRequest = {
@@ -79,5 +79,24 @@ describe('profitFormula', () => {
     expect(profitFormula([store({ connected: true, platform: 'etsy' })])).toBe('Revenue − cost of goods − sales tax − ad spend');
     expect(profitFormula([store({ connected: true, platform: 'tiktok_shop' })])).toBe('Revenue − cost of goods − sales tax − ad spend');
     expect(profitFormula([store({ connected: true, platform: 'amazon' })])).toBe('Revenue − cost of goods − ad spend');
+  });
+});
+
+describe('demo numbers in real totals', () => {
+  const stores = (...connected: boolean[]) =>
+    stubApi((url) => (url === '/api/stores' ? connected.map((c, i) => ({ ...store, id: `s${i}`, name: ['Real Co', 'Pawsome Gear', 'Glow Haus'][i], connected: c })) : undefined));
+
+  it('names the demo stores when they share totals with a connected one', async () => {
+    stores(true, false, false);
+    renderApp(<DemoMixNote />);
+    const note = await screen.findByText(/Pawsome Gear and Glow Haus show demo numbers/);
+    expect(note.querySelector('a')?.getAttribute('href')).toBe('/settings');
+  });
+
+  it.each([[[false, false]], [[true]]])('stays out of the way when every store is the same kind (%j)', async (connected) => {
+    stores(...connected);
+    renderApp(<DemoMixNote />);
+    await new Promise((r) => setTimeout(r, 50));
+    expect(screen.queryByText(/demo numbers/)).toBeNull();
   });
 });
