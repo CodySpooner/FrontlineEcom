@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { LayoutTemplate } from 'lucide-react';
-import type { PageDraft, PageDraftStatus } from '@frontline/shared';
+import { PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, type PageDraft, type PageDraftStatus } from '@frontline/shared';
 import { useApprovals, usePageDraftActions, usePageDrafts, useStartRun } from '../api/client';
 import { ApprovalCard } from '../components/Chat';
 import { Hero } from '../components/Hero';
@@ -164,7 +164,8 @@ function DraftView({ d }: { d: PageDraft }) {
   const st = STATUS[d.status];
   const store = name(d.storeId);
   const canPublish = d.status === 'draft' || d.status === 'pending' || d.status === 'rejected';
-  const manual = byHand(stores.find((s) => s.id === d.storeId));
+  // The same gate as agents' publish_page: product pages reach more platforms than other pages.
+  const manual = byHand(stores.find((s) => s.id === d.storeId), d.kind === 'product' && d.productId ? PRODUCT_PAGE_PLATFORMS : PRODUCT_WRITE_PLATFORMS);
   const error = publish.error ?? remove.error;
   return (
     <div className="grid gap-3.5">
@@ -193,7 +194,7 @@ function DraftView({ d }: { d: PageDraft }) {
           {canPublish &&
             (manual ? (
               <span className="ml-auto text-xs text-text-2">
-                The app can't publish to {manual} stores yet. Copy the page into {manual} by hand.
+                The app can't publish this kind of page to {manual} yet. Copy it into {manual} by hand.
               </span>
             ) : (
               <Button variant="primary" className="ml-auto" disabled={publish.isPending} onClick={() => publish.mutate(d.id)}>

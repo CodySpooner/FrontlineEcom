@@ -2,7 +2,7 @@
 import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Baby, Bookmark, Cpu, Dumbbell, Lamp, Package, PawPrint, Search, Shirt, Sparkles, Tent, type LucideIcon } from 'lucide-react';
-import { NICHES, type Niche, type ProductList, type ResearchProduct, type ResearchSource, type ResearchTab } from '@frontline/shared';
+import { NICHES, PRODUCT_WRITE_PLATFORMS, type Niche, type ProductList, type ResearchProduct, type ResearchSource, type ResearchTab } from '@frontline/shared';
 import { useAddToStore, useListActions, useLists, useResearch, useStartRun, useSupplierSearch } from '../api/client';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
@@ -248,7 +248,7 @@ export function ProductDetails({ p }: { p: ResearchProduct }) {
   const [storeId, setStoreId] = useState(ids[0] ?? stores[0]?.id ?? '');
   const add = useAddToStore();
   // An approved request would do nothing on a store the app can't write to.
-  const manual = byHand(stores.find((s) => s.id === storeId));
+  const manual = byHand(stores.find((s) => s.id === storeId), PRODUCT_WRITE_PLATFORMS);
 
   const newList = (e: FormEvent) => {
     e.preventDefault();

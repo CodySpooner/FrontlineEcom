@@ -18,7 +18,7 @@ const product: ResearchProduct = {
 
 describe('ProductDetails › Add to a store', () => {
   it("doesn't offer a request the app can't carry out on a connected non-Shopify store", async () => {
-    const fetch = stubApi((url) => (url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify'), store('etsy1', 'Clay Co', 'etsy')] : url.includes('add-to-store') ? { id: 'a1' } : []));
+    const fetch = stubApi((url) => (url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify'), store('etsy1', 'Clay Co', 'etsy'), store('woo1', 'Mug Lab', 'woocommerce')] : url.includes('add-to-store') ? { id: 'a1' } : []));
     renderApp(<ProductDetails p={product} />);
     await screen.findByRole('option', { name: 'Clay Co' });
     const pick = screen.getByRole('combobox', { name: 'Store' });
@@ -26,6 +26,9 @@ describe('ProductDetails › Add to a store', () => {
     fireEvent.change(pick, { target: { value: 'etsy1' } });
     expect(screen.getByText(/can't add products to Etsy stores yet/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Request to add' })).toBeNull();
+
+    fireEvent.change(pick, { target: { value: 'woo1' } });
+    expect(screen.getByRole('button', { name: 'Request to add' })).toBeTruthy();
 
     fireEvent.change(pick, { target: { value: 'shop1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Request to add' }));
