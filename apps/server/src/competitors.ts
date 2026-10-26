@@ -47,6 +47,7 @@ function snapshotError(kind: unknown, d: unknown): string | undefined {
     if (!str(d.product, 200)) return 'data.product must be 1-200 characters';
     if (typeof d.price !== 'number' || !(d.price > 0)) return 'data.price must be a positive number';
     if (d.compareAt !== undefined && (typeof d.compareAt !== 'number' || !(d.compareAt > 0))) return 'data.compareAt must be a positive number';
+    if (d.currency !== undefined && !iso(d.currency).currency) return 'data.currency must be a 3-letter ISO code';
     return;
   }
   if (kind === 'ad') {
@@ -73,7 +74,8 @@ export function priceChanges(db: Db, storeIds: string[], limit: number): PriceCh
   if (!storeIds.length) return [];
   const rows = db
     .prepare(
-      `SELECT s.competitor_id, c.store_id, s.captured_at, json_extract(s.data_json, '$.product') AS product, json_extract(s.data_json, '$.price') AS price
+      `SELECT s.competitor_id, c.store_id, s.captured_at, json_extract(s.data_json, '$.product') AS product, json_extract(s.data_json, '$.price') AS price,
+         json_extract(s.data_json, '$.currency') AS currency
        FROM competitor_snapshots s JOIN competitors c ON c.id = s.competitor_id
        WHERE s.kind = 'price' AND c.store_id IN (${storeIds.map(() => '?').join(',')}) ORDER BY s.competitor_id, product, s.captured_at`,
     )
@@ -83,7 +85,7 @@ export function priceChanges(db: Db, storeIds: string[], limit: number): PriceCh
     const prev = rows[i - 1];
     if (!prev || prev.competitor_id !== r.competitor_id || prev.product !== r.product || prev.price === r.price) return;
     const from = Number(prev.price), to = Number(r.price);
-    out.push({ competitorId: String(r.competitor_id), storeId: String(r.store_id), product: String(r.product), from, to, changePct: Math.round(((to - from) / from) * 10000) / 100, at: String(r.captured_at) });
+    out.push({ competitorId: String(r.competitor_id), storeId: String(r.store_id), product: String(r.product), from, to, changePct: Math.round(((to - from) / from) * 10000) / 100, at: String(r.captured_at), ...iso(r.currency) });
   });
   return out.sort((a, b) => b.at.localeCompare(a.at)).slice(0, limit);
 }
@@ -96,9 +98,11 @@ interface StorefrontProduct {
 interface WooStoreProduct {
   name?: string;
   /** Strings in minor units; a variable product's `price` is its lowest variation's. */
-  prices?: { price?: string; regular_price?: string; currency_minor_unit?: number };
+  prices?: { price?: string; regular_price?: string; currency_minor_unit?: number; currency_code?: string };
 }
 type Priced = Omit<PriceSnapshotData, 'product'> & { product?: string };
+/** `{ currency }` when `c` is an ISO currency code, else nothing. */
+const iso = (c: unknown): { currency?: string } => (typeof c === 'string' && /^[A-Z]{3}$/.test(c) ? { currency: c } : {});
 
 const get = (url: string, fetchFn: Fetch) => fetchFn(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
 const decodeHtml = (s: string) =>
@@ -120,7 +124,10 @@ async function shopifyCatalog(origin: string, fetchFn: Fetch): Promise<Priced[] 
     }
     if (body.products.length < 250) break;
   }
-  return out;
+  // /products.json has no currency; the shop's public /meta.json does.
+  if (!out.length) return out;
+  const meta = (await get(`${origin}/meta.json`, fetchFn).then((r) => r.json()).catch(() => undefined)) as { currency?: unknown } | undefined;
+  return out.map((p) => ({ ...p, ...iso(meta?.currency) }));
 }
 
 /** A WooCommerce store's public Store API (`/wp-json/wc/store/v1/products`, 1,000 products at most). */
@@ -137,7 +144,7 @@ async function wooCatalog(origin: string, fetchFn: Fetch): Promise<Priced[] | un
       const unit = 10 ** (p.prices?.currency_minor_unit ?? 2);
       const price = Number(p.prices?.price) / unit;
       const regular = Number(p.prices?.regular_price) / unit;
-      if (price > 0) out.push({ product: p.name && decodeHtml(p.name), price, ...(regular > price ? { compareAt: regular } : {}) });
+      if (price > 0) out.push({ product: p.name && decodeHtml(p.name), price, ...(regular > price ? { compareAt: regular } : {}), ...iso(p.prices?.currency_code) });
     }
     if (body.length < 100) break;
   }
@@ -165,10 +172,10 @@ async function etsyCatalog(db: Db, key: Buffer | undefined, url: URL, fetchFn: F
   if (!shop) throw new Error(`no Etsy shop named ${name}`);
   const out: Priced[] = [];
   for (let offset = 0; offset < 1000; offset += 100) {
-    const page = (await api<{ results?: { title?: string; price?: { amount: number; divisor: number } }[] }>(`/shops/${shop.shop_id}/listings/active?limit=100&offset=${offset}`)).results ?? [];
+    const page = (await api<{ results?: { title?: string; price?: { amount: number; divisor: number; currency_code?: string } }[] }>(`/shops/${shop.shop_id}/listings/active?limit=100&offset=${offset}`)).results ?? [];
     for (const l of page) {
       const price = l.price?.divisor ? l.price.amount / l.price.divisor : 0;
-      if (price > 0) out.push({ product: l.title && decodeHtml(l.title), price });
+      if (price > 0) out.push({ product: l.title && decodeHtml(l.title), price, ...iso(l.price?.currency_code) });
     }
     if (page.length < 100) break;
   }

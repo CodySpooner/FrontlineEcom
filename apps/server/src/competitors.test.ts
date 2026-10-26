@@ -38,9 +38,9 @@ test('price changes come from consecutive snapshots of the same product, newest 
   addSnapshot(db, 'c1', { kind: 'price', data: { product: 'Rope', price: 40 } }, '2026-10-08T00:00:00Z');
   addSnapshot(db, 'c1', { kind: 'price', data: { product: 'Rope', price: 30 } }, '2026-10-15T00:00:00Z');
   addSnapshot(db, 'c1', { kind: 'price', data: { product: 'Bands', price: 20 } }, '2026-10-02T00:00:00Z');
-  addSnapshot(db, 'c1', { kind: 'price', data: { product: 'Bands', price: 25 } }, '2026-10-20T00:00:00Z');
+  addSnapshot(db, 'c1', { kind: 'price', data: { product: 'Bands', price: 25, currency: 'GBP' } }, '2026-10-20T00:00:00Z');
   expect(await get<PriceChange[]>(app, '/api/competitors/price-changes?stores=peak')).toEqual([
-    { competitorId: 'c1', storeId: 'peak', product: 'Bands', from: 20, to: 25, changePct: 25, at: '2026-10-20T00:00:00Z' },
+    { competitorId: 'c1', storeId: 'peak', product: 'Bands', from: 20, to: 25, changePct: 25, at: '2026-10-20T00:00:00Z', currency: 'GBP' }, // the competitor's own
     { competitorId: 'c1', storeId: 'peak', product: 'Rope', from: 40, to: 30, changePct: -25, at: '2026-10-15T00:00:00Z' },
   ]);
   expect(await get<PriceChange[]>(app, '/api/competitors/price-changes?stores=glow')).toEqual([]);
@@ -63,7 +63,7 @@ test('validation and 404s', async () => {
   }
   const c = (await (await app.request('/api/competitors', send('POST', { storeId: 'glow', name: 'X', url: 'https://x.example', notes: 'Main rival' }))).json()) as Competitor;
   expect(c).toMatchObject({ storeId: 'glow', name: 'X', notes: 'Main rival', productsTracked: 0, activeAds: 0 });
-  for (const body of [{ kind: 'price', data: { product: 'A', price: -1 } }, { kind: 'ad', data: { network: 'myspace' } }, { kind: 'tweet', data: {} }, { kind: 'ad', data: { network: 'meta', format: 'image', headline: 'H', body: 'B', firstSeen: 'yesterday', lastSeen: '2026-10-01' } }]) {
+  for (const body of [{ kind: 'price', data: { product: 'A', price: -1 } }, { kind: 'price', data: { product: 'A', price: 5, currency: 'usd' } }, { kind: 'ad', data: { network: 'myspace' } }, { kind: 'tweet', data: {} }, { kind: 'ad', data: { network: 'meta', format: 'image', headline: 'H', body: 'B', firstSeen: 'yesterday', lastSeen: '2026-10-01' } }]) {
     expect((await app.request(`/api/competitors/${c.id}/snapshots`, send('POST', body))).status, JSON.stringify(body)).toBe(400);
   }
   expect((await app.request('/api/competitors/nope/snapshots')).status).toBe(404);
@@ -83,19 +83,19 @@ test("a Shopify competitor's catalog becomes price snapshots, recorded again onl
   const urls: string[] = [];
   const fetchFn = (async (url: string) => {
     urls.push(url);
-    return Response.json({ products: catalog });
+    return url.endsWith('/meta.json') ? Response.json({ name: 'Rival', currency: 'EUR' }) : Response.json({ products: catalog });
   }) as typeof fetch;
   const latest = () => db.prepare("SELECT data_json FROM competitor_snapshots WHERE competitor_id = 'rival' ORDER BY captured_at, rowid").all().map((r) => JSON.parse(String(r.data_json)));
 
   expect(await watchCompetitorPrices(db, 'rival', 'https://rival.com/collections/all', fetchFn, new Date('2026-10-25T09:00:00Z'))).toBe(2);
-  expect(urls).toEqual(['https://rival.com/products.json?limit=250&page=1']);
-  expect(latest()).toEqual([{ product: 'LED Mask', price: 79 }, { product: 'Ice Roller', price: 24 }]);
+  expect(urls).toEqual(['https://rival.com/products.json?limit=250&page=1', 'https://rival.com/meta.json']); // the shop's currency
+  expect(latest()).toEqual([{ product: 'LED Mask', price: 79, currency: 'EUR' }, { product: 'Ice Roller', price: 24, currency: 'EUR' }]);
 
   expect(await watchCompetitorPrices(db, 'rival', 'https://rival.com', fetchFn, new Date('2026-10-26T09:00:00Z'))).toBe(0);
   catalog = [{ ...catalog[0]!, variants: [{ price: '69.00', compare_at_price: '99.00' }] }, catalog[1]!];
   expect(await watchCompetitorPrices(db, 'rival', 'https://rival.com', fetchFn, new Date('2026-10-26T10:00:00Z'))).toBe(1);
-  expect(latest().at(-1)).toEqual({ product: 'LED Mask', price: 69, compareAt: 99 });
-  expect(priceChanges(db, ['glow'], 50).find((c) => c.competitorId === 'rival')).toMatchObject({ product: 'LED Mask', from: 79, to: 69 });
+  expect(latest().at(-1)).toEqual({ product: 'LED Mask', price: 69, compareAt: 99, currency: 'EUR' });
+  expect(priceChanges(db, ['glow'], 50).find((c) => c.competitorId === 'rival')).toMatchObject({ product: 'LED Mask', from: 79, to: 69, currency: 'EUR' });
 
   const html = (async () => new Response('<html>Wix site</html>', { headers: { 'content-type': 'text/html' } })) as unknown as typeof fetch;
   expect(await watchCompetitorPrices(db, 'rival', 'https://rival.com', html)).toBeUndefined();
@@ -135,16 +135,16 @@ test("a WooCommerce competitor's prices come from its public Store API (minor un
     urls.push(url);
     if (url.includes('/products.json')) return new Response('<html>Not found</html>', { status: 404 });
     return Response.json([
-      { name: 'Jade Roller &amp; Gua Sha', prices: { price: '1999', regular_price: '2999', currency_minor_unit: 2 } },
+      { name: 'Jade Roller &amp; Gua Sha', prices: { price: '1999', regular_price: '2999', currency_minor_unit: 2, currency_code: 'GBP' } },
       { name: 'Free Sample', prices: { price: '0', regular_price: '0', currency_minor_unit: 2 } },
-      { name: 'Face Mist', prices: { price: '1450', regular_price: '1450', currency_minor_unit: 2 } },
+      { name: 'Face Mist', prices: { price: '1450', regular_price: '1450', currency_minor_unit: 2, currency_code: 'GBP' } },
     ]);
   }) as typeof fetch;
   expect(await watchCompetitorPrices(db, 'woo', 'https://woo-rival.com/shop', fetchFn, new Date('2026-10-25T09:00:00Z'))).toBe(2);
   expect(urls).toEqual(['https://woo-rival.com/products.json?limit=250&page=1', 'https://woo-rival.com/wp-json/wc/store/v1/products?per_page=100&page=1']);
   expect(db.prepare("SELECT data_json FROM competitor_snapshots WHERE competitor_id = 'woo' ORDER BY rowid").all().map((r) => JSON.parse(String(r.data_json)))).toEqual([
-    { product: 'Jade Roller & Gua Sha', price: 19.99, compareAt: 29.99 },
-    { product: 'Face Mist', price: 14.5 },
+    { product: 'Jade Roller & Gua Sha', price: 19.99, compareAt: 29.99, currency: 'GBP' },
+    { product: 'Face Mist', price: 14.5, currency: 'GBP' },
   ]);
 });
 
@@ -174,7 +174,7 @@ test("an Etsy competitor's prices come from the Etsy Open API, with a connected 
     { url: 'https://openapi.etsy.com/v3/application/shops/7/listings/active?limit=100&offset=0', apiKey: 'keystr:shh' },
   ]);
   expect(db.prepare("SELECT data_json FROM competitor_snapshots WHERE competitor_id = 'etsy' ORDER BY rowid").all().map((r) => JSON.parse(String(r.data_json)))).toEqual([
-    { product: "Mom's Mug", price: 19.99 },
-    { product: 'Name Sign', price: 45 },
+    { product: "Mom's Mug", price: 19.99, currency: 'USD' },
+    { product: 'Name Sign', price: 45, currency: 'USD' },
   ]);
 });

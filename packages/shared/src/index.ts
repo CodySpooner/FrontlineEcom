@@ -1096,6 +1096,8 @@ export interface PriceSnapshotData {
   product: string;
   price: number;
   compareAt?: number;
+  /** The competitor shop's own currency (ISO code), when its source gives it. */
+  currency?: string;
 }
 
 export interface AdSnapshotData {
@@ -1129,6 +1131,8 @@ export interface PriceChange {
   /** (to - from) / from × 100. */
   changePct: number;
   at: string;
+  /** The competitor shop's currency (ISO code), from the newer snapshot; absent when its source didn't give one. */
+  currency?: string;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
