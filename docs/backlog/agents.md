@@ -106,12 +106,14 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
 - [x] AGT-54 Email & SMS works on its own: `list_flows` so it sees the flows it already drafted, plus a monthly "Flow check" job that drafts the missing core flow (welcome, checkout abandonment, post-purchase, win-back) or improves the weakest.
 - [x] AGT-55 Supplier scorecard for Operations: per supplier over 30 days, orders, unfulfilled 3+ days, in transit 10+ days and open issues, so the daily order check can name the supplier behind the problems.
-- [ ] AGT-56 Competitor brief: a weekly Market Analyst job over `list_competitors` (price moves, new ads and angles) that says what changed and hands one action to its owner. DESIGN §4.8 "Market Analyst briefs".
+- [x] AGT-56 Competitor brief: a weekly Market Analyst job over `list_competitors` (price moves, new ads and angles) that says what changed and hands one action to its owner. DESIGN §4.8 "Market Analyst briefs".
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work. Blocked on a place for that code to go: whichever engine writes it, theme sections and snippets need core's Shopify theme-files connector (requested in core's Inbox: list, read and upsert files on an unpublished theme copy with a preview). After that: a `draft_theme_change` tool and Store Builder approvals, then optionally `codex exec --json` as the engine for that role when the owner has Codex installed.
 
 ## Done
+- 2026-10-26 — AGT-56 Folded into the Weekly price check instead of a new weekly job, which would spend more Claude usage: it already reads `list_competitors` (prices and recent ads). It now hands a new competitor angle or offer to the Ad Strategist with `assign_task`.
+- 2026-10-26 — Default jobs reach existing stores: `createDefaultJobs` adds each job a store hasn't been given yet, once (`done_once` `default-job:<store>:<name>`), and runs for every store at startup. A store made before a job shipped (price check, page refresh, flow check) gets it. A job the owner deleted stays deleted. A live store's owner gets "New scheduled work for <store>".
 - 2026-10-26 — AGT-55 `list_orders` now carries a "By supplier" scorecard over every order in the window, not just the rows shown: orders, unfulfilled 3+ days, in transit 10+ days, refunded, open issues. The Operations playbook reads it for root causes. Sections: `counts:`, `# By supplier`, `# Orders`.
 - 2026-10-26 — AGT-54 `list_flows` (Email & SMS) is the store's flow library as CSV: name, drafted date, trigger, steps, channels, last step. New default job "Monthly flow check" (1st of the month, 09:00) drafts the first missing core flow (welcome, checkout abandonment, post-purchase, win-back) or redrafts the oldest, one flow per run. The playbook reads the library first.
 - 2026-10-26 — AGT-53 New achievements "First Measured Win" (+100) and "Proven Squad" (10 wins, +300), counted from XP awards whose reason starts "Measured win:". That covers ad, product, price and page wins. `Facts.wins` is added.

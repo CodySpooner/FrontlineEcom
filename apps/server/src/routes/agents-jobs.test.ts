@@ -4,6 +4,7 @@ import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
+import { agentRoutes } from './agents';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -25,7 +26,25 @@ test('every new squad gets the default jobs, off on demo stores', async () => {
 test('connected stores start with the jobs on', async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'peak'`).run();
   db.prepare(`DELETE FROM automation_rules WHERE store_id = 'peak'`).run();
-  createDefaultJobs(db, 'peak');
+  db.prepare(`DELETE FROM done_once WHERE ref LIKE 'default-job:peak:%'`).run();
+  expect(createDefaultJobs(db, 'peak')).toEqual(DEFAULT_JOBS.map((j) => j.name));
   const peak = await rules('peak');
   expect(peak.every((r) => r.enabled && r.nextRunAt)).toBe(true);
+});
+
+test('stores made before a job shipped get it on the next start; a job the owner deleted stays deleted', async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'peak'`).run();
+  agentRoutes(db); // activation: the jobs are on
+  // A store from before 'Monthly flow check' shipped: no rule and no ledger entry. 'Daily briefing' the owner deleted.
+  db.prepare(`DELETE FROM automation_rules WHERE store_id = 'peak' AND name IN ('Monthly flow check', 'Daily briefing')`).run();
+  db.prepare(`DELETE FROM done_once WHERE ref = 'default-job:peak:Monthly flow check'`).run();
+  agentRoutes(db);
+  const peak = await rules('peak');
+  expect(peak.map((r) => r.name).sort()).toEqual(DEFAULT_JOBS.map((j) => j.name).filter((n) => n !== 'Daily briefing').sort());
+  expect(peak.find((r) => r.name === 'Monthly flow check')?.enabled).toBe(true);
+  expect(db.prepare(`SELECT body FROM notifications WHERE title = 'New scheduled work for Peak Fit'`).all()).toEqual([
+    { body: 'Monthly flow check. It runs on your Claude login; pause or change it in Automation.' },
+  ]);
+  agentRoutes(db);
+  expect(await rules('peak')).toHaveLength(DEFAULT_JOBS.length - 1);
 });

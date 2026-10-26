@@ -1,5 +1,6 @@
 import {
   XP,
+  createDefaultJobs,
   DEFAULT_JOBS,
   createRunManager,
   customNichePack,
@@ -225,6 +226,13 @@ export function agentRoutes(db: Db) {
   seedDemoXp(db, DEMO_STORES.map((s) => s.id));
   const runs = runManager(db);
   activateConnectedStores(db, runs);
+  // Default jobs that shipped after a store was made; a live store's owner hears about them (they use Claude usage).
+  for (const store of listStores(db)) {
+    const added = createDefaultJobs(db, store.id);
+    if (added.length && store.connected) {
+      notify(db, { kind: 'info', title: `New scheduled work for ${store.name}`, body: `${added.join(', ')}. It runs on your Claude login; pause or change it in Automation.`, storeId: store.id, link: '/automation' });
+    }
+  }
   const limit = (v: string | undefined) => Math.min(200, Math.max(1, Math.floor(Number(v)) || 50));
   return new Hono()
     .get('/api/agents', (c) => {

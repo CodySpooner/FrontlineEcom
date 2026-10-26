@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { AgentRole } from '@frontline/shared';
+import { once } from './memory';
 
 // Default scheduled work for a squad, as rows in core's `automation_rules` (apps/server/src/automations.ts runs them).
 
@@ -44,7 +45,8 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
     cron: '0 9 * * 3',
     task:
       "Weekly price check: list_products (price, cost, margin) against list_competitors' prices and recent price changes. If one product is clearly mispriced " +
-      'with the numbers to show it, propose one price test with propose_price_change; otherwise say prices hold and why, in 3 lines.',
+      'with the numbers to show it, propose one price test with propose_price_change; otherwise say prices hold and why, in 3 lines. ' +
+      "If a competitor's recent ads show a new angle or offer worth testing, hand it to the Ad Strategist with assign_task.",
   },
   {
     name: 'Weekly page refresh',
@@ -81,19 +83,23 @@ export function enableDefaultJobs(db: DatabaseSync, storeId: string): number {
 }
 
 /**
- * Adds the default jobs for a store. They start enabled only when the store is connected: on demo data they would
- * spend the owner's Claude usage on simulated numbers. The owner can switch them on in Automation.
+ * Adds the default jobs a store hasn't been given yet, each once: a job the owner deleted stays deleted, and stores made
+ * before a job shipped get it. They start enabled only when the store is connected: on demo data they would spend the
+ * owner's Claude usage on simulated numbers. The owner can switch them on in Automation. Returns the names added.
  */
-export function createDefaultJobs(db: DatabaseSync, storeId: string, now = new Date()) {
+export function createDefaultJobs(db: DatabaseSync, storeId: string, now = new Date()): string[] {
   const connected = db.prepare('SELECT connected FROM stores WHERE id = ?').get(storeId)?.connected === 1;
+  const has = db.prepare('SELECT 1 FROM automation_rules WHERE store_id = ? AND name = ?');
   const insert = db.prepare(
     `INSERT INTO automation_rules (id, store_id, name, enabled, trigger_json, action_json, approval, max_runs_per_day, cooldown_hours, created_at)
      VALUES (?, ?, ?, ?, ?, ?, 'auto', 1, 24, ?)`,
   );
-  for (const j of DEFAULT_JOBS) {
+  const added = DEFAULT_JOBS.filter((j) => once(db, `default-job:${storeId}:${j.name}`, now) && !has.get(storeId, j.name));
+  for (const j of added) {
     insert.run(
       randomUUID(), storeId, j.name, connected ? 1 : 0, JSON.stringify({ type: 'schedule', cron: j.cron }),
       JSON.stringify({ type: 'agent_task', agentId: `${storeId}:${j.role}`, task: j.task }), now.toISOString(),
     );
   }
+  return added.map((j) => j.name);
 }
