@@ -19,7 +19,7 @@ const listing = (id: number, state: string, updated: string) => ({
 });
 
 /** Fake Etsy: token refresh, receipts (two pages), listings sorted newest-changed first. */
-function fakeEtsy(refreshError = false) {
+function fakeEtsy(refreshError = false, gone: number[] = []) {
   const calls: { url: URL; headers: Headers; body: string }[] = [];
   const fetchFn = (async (url: string, init: RequestInit = {}) => {
     const u = new URL(url);
@@ -34,8 +34,8 @@ function fakeEtsy(refreshError = false) {
     }
     const state = u.searchParams.get('state');
     const one = { draft: listing(13, 'draft', '2026-10-01T00:00:00Z'), sold_out: listing(14, 'sold_out', '2026-10-25T00:00:00Z'), expired: listing(15, 'expired', '2026-10-20T00:00:00Z') }[state!];
-    const results = state === 'active' ? [listing(11, 'active', '2026-10-24T00:00:00Z'), listing(12, 'active', '2020-01-01T00:00:00Z')] : one ? [one] : [];
-    return Response.json({ count: one ? 1 : 500, results });
+    const results = (state === 'active' ? [listing(11, 'active', '2026-10-24T00:00:00Z'), listing(12, 'active', '2020-01-01T00:00:00Z')] : one ? [one] : []).filter((l) => !gone.includes(l.listing_id));
+    return Response.json({ count: state === 'inactive' ? 500 : results.length, results });
   }) as typeof fetch;
   return { fetchFn, calls };
 }
@@ -57,13 +57,14 @@ test('Etsy sync renews the token, pulls paid receipts + changed listings, rebuil
   const api = calls.slice(1);
   expect(api.every((c) => c.headers.get('x-api-key') === 'keystr:shh' && c.headers.get('authorization') === 'Bearer 123.at_new')).toBe(true);
   expect(api.filter((c) => c.url.pathname.endsWith('/receipts')).map((c) => c.url.searchParams.get('offset'))).toEqual(['0', '100']);
-  // active stops at a listing older than the window, inactive at an empty page, the others at their count
+  // The first sync reads every listing, however old: each state to its count (inactive to an empty page).
   expect(api.filter((c) => c.url.pathname.endsWith('/listings')).map((c) => c.url.searchParams.get('state'))).toEqual(['active', 'draft', 'inactive', 'sold_out', 'expired']);
 
   expect(api.find((c) => c.url.pathname.endsWith('/listings'))!.url.searchParams.get('includes')).toBe('Images');
   expect(db.prepare("SELECT image FROM products WHERE store_id = 'pawsome' AND id = 'etsy-11'").get()?.image).toBe('https://i.etsystatic.com/11-main.jpg');
   expect(db.prepare("SELECT id, status, inventory FROM products WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
     { id: 'etsy-11', status: 'active', inventory: 5 },
+    { id: 'etsy-12', status: 'active', inventory: 5 }, // unchanged since 2020, still listed
     { id: 'etsy-13', status: 'draft', inventory: 5 },
     { id: 'etsy-14', status: 'active', inventory: 0 }, // sold out: still listed, nothing left
     { id: 'etsy-15', status: 'archived', inventory: 5 },
@@ -182,4 +183,17 @@ test('a sync and an approved change renewing the token together share one refres
   await Promise.all([syncEtsy(db, key, 'pawsome', write, NOW), setEtsyListingPrice(db, key, 'pawsome', 'etsy-11', { price: 22 }, write, NOW)]);
   expect(calls.filter((c) => c.url.pathname === '/v3/public/oauth/token')).toHaveLength(1);
   expect(db.prepare("SELECT status FROM integrations WHERE id = 'etsy:pawsome'").get()?.status).toBe('connected');
+});
+
+test('Etsy: later syncs read changed listings only; once a day all of them, archiving listings deleted on Etsy', async () => {
+  const db = setup();
+  await syncEtsy(db, key, 'pawsome', fakeEtsy().fetchFn, NOW);
+  const sameDay = fakeEtsy(false, [13]);
+  await syncEtsy(db, key, 'pawsome', sameDay.fetchFn, NOW);
+  const status = () => db.prepare("SELECT status FROM products WHERE store_id = 'pawsome' AND id = 'etsy-13'").get()?.status;
+  expect(status()).toBe('draft'); // a changes-only read can't tell deleted from unchanged
+  const nextDay = fakeEtsy(false, [13]);
+  await syncEtsy(db, key, 'pawsome', nextDay.fetchFn, new Date('2026-10-27T18:00:00Z'));
+  expect(status()).toBe('archived');
+  expect(db.prepare("SELECT status FROM products WHERE store_id = 'pawsome' AND id = 'etsy-12'").get()?.status).toBe('active');
 });

@@ -3,7 +3,8 @@ import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import type { ProductPage } from './shopify';
-import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
+import { localDate } from '../dates';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
 
 // Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r, and
 // listings_w for approved listing changes: setEtsyListingPrice, publishEtsyProductPage).
@@ -92,12 +93,16 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       if (!page.results.length || offset + 100 >= page.count) break;
     }
     // Listings can't be filtered by change time: page newest-changed first and stop at the first one older than the cursor.
+    // The first sync and once a day after read them all, so a listing deleted on Etsy (in no state any more) is archived.
+    const today = localDate(now);
+    const full = !cursor || catalogPassDue(db, id, today);
+    const listedSince = full ? 0 : since;
     const listings: Listing[] = [];
     for (const state of LISTING_STATES) {
       for (let offset = 0; ; offset += 100) {
         const page = await get<Listing>(`/shops/${shopId}/listings`, { state, sort_on: 'updated', sort_order: 'desc', includes: 'Images', limit: '100', offset: String(offset) });
-        listings.push(...page.results.filter((l) => l.updated_timestamp >= since));
-        if (!page.results.length || offset + 100 >= page.count || page.results.some((l) => l.updated_timestamp < since)) break;
+        listings.push(...page.results.filter((l) => l.updated_timestamp >= listedSince));
+        if (!page.results.length || offset + 100 >= page.count || page.results.some((l) => l.updated_timestamp < listedSince)) break;
       }
     }
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
@@ -130,6 +135,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         setOrderItems(db, storeId, `etsy-${r.receipt_id}`, (r.transactions ?? []).map((t) => ({ productId: `etsy-${t.listing_id}`, quantity: t.quantity, revenue: money(t.price) * t.quantity, cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);
+      if (full) archiveMissing(db, id, storeId, 'etsy-*', listings.map((l) => `etsy-${l.listing_id}`), today);
       const next = Math.max(since, Math.floor(cursorAt(now).getTime() / 1000));
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(String(next), now.toISOString(), id);
     });
