@@ -33,9 +33,8 @@ describe("an agent's daily AI budget", () => {
   });
 
   it("shows how much of its budget the agent used today", async () => {
-    const today = new Date().toISOString();
-    stubApi((url) => (url.startsWith('/api/runs') ? [{ id: 'r1', agentId: agent.id, storeId: 'peak', status: 'done', createdAt: today, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0.42 } }] : []));
-    renderApp(<AgentBudget agent={{ ...agent, dailyBudgetUsd: 1 }} />);
+    stubApi(() => undefined);
+    renderApp(<AgentBudget agent={{ ...agent, dailyBudgetUsd: 1, costTodayUsd: 0.42 }} />);
     expect(await screen.findByText('$0.42 of $1.00 used today')).toBeTruthy();
   });
 });
