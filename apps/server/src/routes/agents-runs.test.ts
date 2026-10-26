@@ -253,9 +253,24 @@ test('a follow-up and a reflection are told what their session already cost; a r
 });
 
 test('a restart marks runs that were in flight as interrupted', () => {
-  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at) VALUES ('r1', 'glow', 'glow:copywriter', 't', 'running', '2026-10-26T00:00:00Z')`).run();
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at) VALUES ('r1', 'glow', 'glow:copywriter', 't', 'running', '2026-01-01T00:00:00Z')`).run();
   manager();
   expect(getRun(db, 'r1')).toMatchObject({ status: 'error', error: 'Interrupted by an app restart' });
+});
+
+test('runs cut off by a restart in the last 6 hours run again, once; chat follow-ups and older runs do not', async () => {
+  const add = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, resume, created_at) VALUES (?, 'glow', ?, ?, 'running', ?, ?)`);
+  const ago = (hours: number) => new Date(Date.now() - hours * 3_600_000).toISOString();
+  add.run('r1', 'glow:market_analyst', 'Daily briefing', null, ago(1));
+  add.run('r2', 'glow:copywriter', 'Old task', null, ago(8));
+  add.run('r3', 'glow:operations', 'Shorter please', 's-1', ago(1));
+  await manager({ engine: fakeEngine() }).idle();
+  const retries = () => db.prepare(`SELECT id, agent_id, task, status FROM agent_runs WHERE id NOT IN ('r1', 'r2', 'r3')`).all();
+  expect(retries()).toEqual([expect.objectContaining({ agent_id: 'glow:market_analyst', task: 'Daily briefing', status: 'done' })]);
+
+  db.prepare(`UPDATE agent_runs SET status = 'running' WHERE id = ?`).run(String(retries()[0]!.id)); // the retry is cut off too
+  await manager({ engine: fakeEngine() }).idle();
+  expect(retries()).toHaveLength(1);
 });
 
 test('the app run manager publishes runs and their events on the live bus', async () => {
