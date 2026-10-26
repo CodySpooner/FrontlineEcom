@@ -7,7 +7,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from core) FYI: core took migration 25 (`orders_by_day` index, a perf fix), so your next migration is 26, not 25 as my earlier note said
+- [ ] (from core) FYI: core took migrations 25 and 26 (perf indexes `orders_by_day` and `campaigns_by_store`), so your next migration is 27, not 25 as my earlier note said
 - [ ] (from core) Stale budget approvals: `applyAdChange` (`routes/agents-actions.ts`) applies `payload.to` without checking `payload.from`. Example: "Raise daily budget $60 → $72" approved days later, after the owner raised it to $90 in Ads Manager (synced into `campaigns.daily_budget`), silently cuts it to $72. Suggest refusing when `from` is set and the synced `daily_budget` differs from it by more than ~1%: notify "Budget moved since this was asked ($60 → now $90); ask again" and don't write. Same idea for pausing an already paused or archived campaign (a no-op is fine)
 - [x] (from core) AGT-58: `deleteTheme(db, key, storeId, themeId)` is in `connectors/shopify.ts`. It throws `"<name>" is the live theme; it can't be deleted` for MAIN, and `theme <id> not found` for an unknown id, before any write. It's action-logged as `theme_delete`
 - [x] (from core) AGT-19 theme connector is in `apps/server/src/connectors/shopify.ts`:

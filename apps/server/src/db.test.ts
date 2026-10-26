@@ -38,3 +38,12 @@ test("a day's orders are found through the (store_id, local_date) index, not a s
   const plan = openDb().prepare("EXPLAIN QUERY PLAN SELECT total FROM orders WHERE store_id = ? AND local_date = ? AND status = 'paid'").all('s', '2026-10-26');
   expect(plan.map((r) => String(r.detail)).join(' ')).toContain('orders_by_day');
 });
+
+test("a store's ad spend for a day starts from its campaigns, not a scan of every campaign's history", () => {
+  const plan = openDb()
+    .prepare('EXPLAIN QUERY PLAN SELECT coalesce(sum(d.spend), 0) FROM campaign_daily d JOIN campaigns c ON c.network = d.network AND c.id = d.campaign_id WHERE c.store_id = ? AND d.date = ?')
+    .all('s', '2026-10-26')
+    .map((r) => String(r.detail));
+  expect(plan).toEqual([expect.stringContaining('campaigns_by_store'), expect.stringContaining('campaign_daily')]);
+  expect(plan.join(' ')).not.toContain('SCAN');
+});
