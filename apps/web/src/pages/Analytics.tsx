@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Product, type TopProduct } from '@frontline/shared';
-import { useCampaigns, useProducts, useSetCost, useSummary, useTopProducts } from '../api/client';
+import { useCampaigns, useMissingCosts, useProducts, useSetCost, useSummary, useTopProducts } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
 import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
@@ -198,7 +198,7 @@ function Channels({ q, be, cur }: { q: Campaigns; be: number; cur?: string }) {
 
 function TopProducts({ ids, range, name, cur }: { ids: string[]; range: AnalyticsRange; name?: (id: string) => string; cur?: string }) {
   const q = useTopProducts(ids, range, 5);
-  // The same products Unit costs loads (first 200 per call): a top product past that shows no stock.
+  // The first 200 products by title: a top product past that shows no stock.
   const products = useProducts(ids).data?.items;
   return (
     <Panel title="Top Products" sub={`Best 5 by revenue, ${PERIOD[range]}`}>
@@ -216,7 +216,7 @@ function TopProducts({ ids, range, name, cur }: { ids: string[]; range: Analytic
 /** Products the platform reports no cost for (Etsy, TikTok Shop, Woo without COGS): their profit is the whole price until set. */
 export function UnitCosts({ ids, multi }: { ids: string[]; multi: boolean }) {
   // ponytail: first 200 products per call; page through when a store's catalog outgrows that.
-  const missing = (useProducts(ids).data?.items ?? []).filter((p) => p.cost === 0 && p.status !== 'archived');
+  const missing = useMissingCosts(ids).data ?? [];
   if (!missing.length) return null;
   return (
     <Panel

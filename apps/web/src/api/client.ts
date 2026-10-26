@@ -367,6 +367,17 @@ export const useTopProducts = (storeIds: string[], range: AnalyticsRange, limit:
 export const useProducts = (storeIds: string[]) =>
   useQuery({ queryKey: ['products', storeIds], queryFn: () => api<Page<Product>>(`/api/products?stores=${storeIds.join(',')}&limit=200`) });
 
+/**
+ * Active products with no unit cost (their whole price counts as profit). Margin-first puts them on top (a cost of 0 is
+ * a 100% margin), so one 200-product page finds them in any catalog. ponytail: past 200 missing costs, it shows 200.
+ */
+export const useMissingCosts = (storeIds: string[]) =>
+  useQuery({
+    queryKey: ['products', storeIds, 'missing-cost'],
+    queryFn: () => api<Page<Product>>(`/api/products?stores=${storeIds.join(',')}&status=active&sort=margin&dir=desc&limit=200`),
+    select: (page) => page.items.filter((p) => p.cost === 0),
+  });
+
 /** The owner's unit cost for a product the platform has none for; past orders are re-priced, so profit moves. */
 export function useSetCost() {
   const qc = useQueryClient();
