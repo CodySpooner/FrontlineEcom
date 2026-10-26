@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { MemoryKind, StoreMemory } from '@frontline/shared';
 
-// Rows live in `store_memory` + FTS5 index `store_memory_fts` (migration 2 in apps/server/src/db.ts).
+// Rows live in `store_memory` + FTS5 index `store_memory_fts` (agents-lane migration in apps/server/src/db.ts).
 
 export interface NewMemory {
   storeId: string;
