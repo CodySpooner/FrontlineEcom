@@ -251,7 +251,12 @@ describe('agent tools on demo data', () => {
     const events = await run(input('pawsome', 'ad_strategist'), [{ call: 'list_competitors' }, done]);
     const out = results(events)[0]!.output;
     expect(out).toContain('# Competitors\nname,url,products_tracked,active_ads,notes\nWag & Wander,');
-    expect(out).toContain('# Price changes (newest first)\ncompetitor,product,from,to,change_pct,at');
+    expect(out).toContain("# Price changes (newest first, in the competitor's currency; blank when its site didn't say. This store sells in USD)\ncompetitor,product,from,to,currency,change_pct,at");
+    // A shop pricing in euros says so, next to this store's dollars.
+    const eur = { competitorId: 'c1', storeId: 'pawsome', product: 'Dog bed', from: 39, to: 35, changePct: -10.256, at: '2026-10-25T08:00:00Z', currency: 'EUR' };
+    const env = { ...toolEnv(db), competitors: () => ({ competitors: [], priceChanges: [eur], ads: [] }) };
+    const [res] = results(await run(input('pawsome', 'ad_strategist', { env }), [{ call: 'list_competitors' }, done]));
+    expect(res!.output).toContain('\nc1,Dog bed,39,35,EUR,-10.26,2026-10-25\n');
     expect(out).toMatch(/# Recent ads\ncompetitor,network,format,headline,body,cta,first_seen,last_seen\n.+/);
   });
 

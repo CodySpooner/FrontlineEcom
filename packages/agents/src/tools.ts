@@ -310,8 +310,9 @@ export const APP_TOOLS: AppTool[] = [
       return [
         '# Competitors',
         csv(competitors.map((c) => ({ name: c.name, url: c.url, products_tracked: c.productsTracked, active_ads: c.activeAds, notes: c.notes ?? '' }))),
-        '# Price changes (newest first)',
-        csv(priceChanges.map((p) => ({ competitor: name.get(p.competitorId) ?? p.competitorId, product: p.product, from: p.from, to: p.to, change_pct: r2(p.changePct), at: p.at.slice(0, 10) }))),
+        // A competitor shop prices in its own currency: 39 EUR next to this store's 39 USD isn't the same price.
+        `# Price changes (newest first, in the competitor's currency; blank when its site didn't say. This store sells in ${ctx.store.currency})`,
+        csv(priceChanges.map((p) => ({ competitor: name.get(p.competitorId) ?? p.competitorId, product: p.product, from: p.from, to: p.to, currency: p.currency ?? '', change_pct: r2(p.changePct), at: p.at.slice(0, 10) }))),
         '# Recent ads',
         csv(ads.map((a) => ({ competitor: a.competitor, network: a.network, format: a.format, headline: a.headline, body: a.body, cta: a.cta ?? '', first_seen: a.firstSeen, last_seen: a.lastSeen }))),
       ].join('\n');
