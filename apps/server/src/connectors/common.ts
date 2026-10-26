@@ -175,6 +175,20 @@ export async function backfillRate(db: Db, storeId: string, accountCurrency: str
   return (day: string) => on?.(day) ?? rate;
 }
 
+/** An integration's entry in a settings row that maps integration ids to read state. Each write re-reads the row: syncs of
+ * several stores interleave. */
+export const stateOf = <T>(db: Db, key: string) => {
+  const all = () => JSON.parse(String(db.prepare('SELECT value_json FROM settings WHERE key = ?').get(key)?.value_json ?? '{}')) as Record<string, T>;
+  return {
+    get: (id: string) => all()[id] as T | undefined,
+    set: (id: string, v: T) =>
+      db.prepare('INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json').run(key, JSON.stringify({ ...all(), [id]: v })),
+  };
+};
+
+/** Settings row: the timezone each ad integration's account reports its days in (integration id → IANA name). */
+export const AD_ZONES = 'ad_timezones';
+
 /** Money as cents (2 decimals). */
 export const cents = (n: number) => Math.round(n * 100) / 100;
 

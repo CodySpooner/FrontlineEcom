@@ -1,8 +1,9 @@
 import { INTEGRATION_KINDS, type Health, type Integration, type IntegrationInput, type IntegrationKind, type IntegrationStatus } from '@frontline/shared';
-import { forgetPlatform } from './connectors/common';
+import { AD_ZONES, forgetPlatform, stateOf } from './connectors/common';
+import { utcOffset } from './dates';
 import { tx, type Db } from './db';
 import { decrypt, encrypt } from './secrets';
-import { getStore } from './stores';
+import { getStore, storeZone } from './stores';
 
 type Row = Record<string, unknown>;
 
@@ -44,7 +45,22 @@ export function listIntegrations(db: Db, key: Buffer, storeIds: string[]): Integ
   return db
     .prepare(`SELECT * FROM integrations WHERE store_id IS NULL ${storeIds.length ? `OR store_id IN (${storeIds.map(() => '?').join(',')})` : ''} ORDER BY kind, store_id`)
     .all(...storeIds)
-    .map((r) => toIntegration(r, key));
+    .map((r) => ({ ...toIntegration(r, key), ...zoneNotice(db, r) }));
+}
+
+/** An ad account whose days run in another timezone than its store's (by today's clocks, so two names for one match). */
+function zoneNotice(db: Db, r: Row): { notice?: string } {
+  const account = stateOf<string>(db, AD_ZONES).get(String(r.id));
+  const store = storeZone(db, r.store_id ? String(r.store_id) : undefined);
+  if (!account || !store) return {};
+  try {
+    const behind = utcOffset(store) - utcOffset(account);
+    if (!behind) return {};
+    const name = INTEGRATION_KINDS[r.kind as IntegrationKind].name;
+    return { notice: `${name} reports its days in ${account}, ${Math.abs(behind)} h ${behind > 0 ? 'behind' : 'ahead of'} the store's ${store}, so a day's ad spend covers other hours than its sales.` };
+  } catch {
+    return {}; // a zone name this machine doesn't know
+  }
 }
 
 /** Validates and saves (create or update) an integration. Returns an error message or the saved Integration. */

@@ -6,6 +6,9 @@ export const dayNumber = (date: string) => Date.parse(`${date}T00:00:00Z`) / DAY
 export const addDays = (date: string, n: number) => new Date(Date.parse(`${date}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
 
 /** Today on the owner's machine (local timezone), or in IANA `timeZone`, YYYY-MM-DD. */
+/** Hours `timeZone` is ahead of UTC at `t`. */
+export const utcOffset = (timeZone: string, t = Date.now()) =>
+  (Date.parse(`${new Date(t).toLocaleString('sv-SE', { timeZone }).replace(' ', 'T')}Z`) - Math.floor(t / 1000) * 1000) / 3_600_000;
 export const localDate = (now = new Date(), timeZone?: string) => now.toLocaleDateString('en-CA', { timeZone });
 
 /** Epoch ms when `date` starts on the machine, or in IANA `timeZone`. */

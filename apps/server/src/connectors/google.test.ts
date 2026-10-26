@@ -24,7 +24,7 @@ function fakeGoogle(opts: { tokenError?: unknown; adsError?: unknown; currency?:
     if (url.includes('googleads')) {
       if (opts.adsError) return Response.json(opts.adsError, { status: 403 });
       const { query, pageToken } = JSON.parse(body);
-      if (!query.includes('segments.date')) return Response.json({ results: [{ campaign: { id: '301', name: 'Search - Brand', status: 'ENABLED' }, campaignBudget: { amountMicros: '25000000' }, customer: { currencyCode: opts.currency ?? 'USD' } }, { campaign: { id: '302', name: 'PMax', status: 'REMOVED' } }] });
+      if (!query.includes('segments.date')) return Response.json({ results: [{ campaign: { id: '301', name: 'Search - Brand', status: 'ENABLED' }, campaignBudget: { amountMicros: '25000000' }, customer: { currencyCode: opts.currency ?? 'USD', timeZone: 'America/Phoenix' } }, { campaign: { id: '302', name: 'PMax', status: 'REMOVED' } }] });
       const row = (id: string, date: string, cost: string) => ({ campaign: { id }, segments: { date }, metrics: { costMicros: cost, conversions: 2.6, conversionsValue: 130.5, clicks: '40', impressions: '900' } });
       return pageToken
         ? Response.json({ results: [row('302', '2026-10-25', '5000000')] })
@@ -67,6 +67,8 @@ test('Google Ads sync stores campaigns + daily metrics and feeds ad_spend; later
   expect(search[0]!.headers.get('developer-token')).toBe('devtoken');
   expect(search[0]!.headers.get('authorization')).toBe('Bearer ya29.fixture');
   expect(JSON.parse(search[0]!.body).query).toContain("BETWEEN '2024-10-27' AND '2026-10-26'");
+  expect(search.map((c) => String(JSON.parse(c.body).query)).find((q) => !q.includes('segments.date'))).toContain('customer.time_zone');
+  expect(db.prepare("SELECT value_json FROM settings WHERE key = 'ad_timezones'").get()?.value_json).toBe('{"google_ads:glow":"America/Phoenix"}');
 
   expect(db.prepare("SELECT id, name, status, daily_budget FROM campaigns WHERE store_id = 'glow' ORDER BY id").all()).toEqual([
     { id: '301', name: 'Search - Brand', status: 'active', daily_budget: 25 },

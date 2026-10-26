@@ -21,7 +21,7 @@ function setup({ sharedBudget = false, metaError = '', metaCurrency = 'USD', adC
   const calls: { url: string; headers: Headers; body: string }[] = [];
   const fetchFn = (async (url: string, init: RequestInit = {}) => {
     calls.push({ url, headers: new Headers(init.headers), body: String(init.body ?? '') });
-    if (url.endsWith('?fields=currency')) return Response.json({ id: 'act_1', currency: metaCurrency });
+    if (url.endsWith('?fields=currency,timezone_name')) return Response.json({ id: 'act_1', currency: metaCurrency });
     if (url.startsWith('https://graph.facebook.com/')) return metaError ? Response.json({ error: { message: 'x', error_user_msg: metaError } }, { status: 400 }) : Response.json({ success: true });
     if (url === 'https://oauth2.googleapis.com/token') return Response.json({ access_token: 'g-access' });
     if (url.endsWith('googleAds:search')) return Response.json({ results: [{ campaign: { campaignBudget: 'customers/1234567890/campaignBudgets/555' }, campaignBudget: { explicitlyShared: sharedBudget }, customer: { currencyCode: adCurrency } }] });
@@ -37,7 +37,7 @@ test('budget and pause writes per network', async () => {
   await setCampaignBudget(db, key, 'glow', 'meta', IDS.meta, 45.5, fetchFn);
   await pauseCampaign(db, key, 'glow', 'meta', IDS.meta, fetchFn);
   expect(calls.map((c) => [c.url, c.headers.get('authorization'), c.body])).toEqual([
-    ['https://graph.facebook.com/v24.0/act_1?fields=currency', 'Bearer meta-token', ''],
+    ['https://graph.facebook.com/v24.0/act_1?fields=currency,timezone_name', 'Bearer meta-token', ''],
     ['https://graph.facebook.com/v24.0/120210000000001', 'Bearer meta-token', 'daily_budget=4550'],
     ['https://graph.facebook.com/v24.0/120210000000001', 'Bearer meta-token', 'status=PAUSED'],
   ]);

@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
+import { AD_ZONES, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -75,8 +75,8 @@ async function edge<T>(url: string, token: string, fetchFn: Fetch): Promise<T[]>
 
 /** The factor from the ad account's currency into the store's, and its budget units (minor units, or 1 where it has none). */
 async function accountMoney(db: Db, storeId: string, act: string, token: string, fetchFn: Fetch) {
-  const { currency } = await graph<{ currency: string }>(`${GRAPH}/${act}?fields=currency`, token, fetchFn);
-  return { currency, rate: await adRate(db, storeId, currency, fetchFn, 'Meta'), units: ZERO_DECIMAL.has(currency) ? 1 : 100 };
+  const { currency, timezone_name: zone } = await graph<{ currency: string; timezone_name?: string }>(`${GRAPH}/${act}?fields=currency,timezone_name`, token, fetchFn);
+  return { currency, zone, rate: await adRate(db, storeId, currency, fetchFn, 'Meta'), units: ZERO_DECIMAL.has(currency) ? 1 : 100 };
 }
 
 export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
@@ -91,6 +91,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
     const start = cursor ? addDays(cursor, -ATTRIBUTION_DAYS) : addDays(today, 1 - BACKFILL_DAYS);
 
     const money = await accountMoney(db, storeId, act, token, fetchFn);
+    if (money.zone) stateOf<string>(db, AD_ZONES).set(id, money.zone);
     const rateOn = cursor ? () => money.rate : await backfillRate(db, storeId, money.currency, money.rate, fetchFn);
     const campaigns = await edge<CampaignRow>(`${GRAPH}/${act}/campaigns?fields=id,name,effective_status,daily_budget&limit=200`, token, fetchFn);
     const rows: InsightRow[] = [];

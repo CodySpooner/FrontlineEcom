@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate, midnight } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, archiveMissing, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
+import { adRate, archiveMissing, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal } from './common';
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
@@ -50,17 +50,6 @@ async function fbaStock(fetchFn: Fetch, host: string, token: string, marketplace
   } while (nextToken);
   return out;
 }
-
-/** An integration's entry in a settings row that maps integration ids to read state. Each write re-reads the row: syncs of
- * several stores interleave. */
-const stateOf = <T>(db: Db, key: string) => {
-  const all = () => JSON.parse(String(db.prepare('SELECT value_json FROM settings WHERE key = ?').get(key)?.value_json ?? '{}')) as Record<string, T>;
-  return {
-    get: (id: string) => all()[id] as T | undefined,
-    set: (id: string, v: T) =>
-      db.prepare('INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json').run(key, JSON.stringify({ ...all(), [id]: v })),
-  };
-};
 
 interface AmazonOrder {
   orderId: string;

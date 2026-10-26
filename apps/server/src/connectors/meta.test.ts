@@ -20,13 +20,13 @@ const insight = (campaign_id: string, date_start: string, spend: string, value: 
 });
 
 /** Fake Graph API: campaigns edge + insights edge (paged once), records requests. */
-function fakeGraph(rows: ReturnType<typeof insight>[], error?: { status: number; body: unknown }, currency = 'USD') {
+function fakeGraph(rows: ReturnType<typeof insight>[], error?: { status: number; body: unknown }, currency = 'USD', zone = 'America/Chicago') {
   const calls: { url: URL; auth: string | null }[] = [];
   const fetchFn = (async (url: string, init: RequestInit) => {
     const u = new URL(url);
     calls.push({ url: u, auth: new Headers(init.headers).get('authorization') });
     if (error) return Response.json(error.body, { status: error.status });
-    if (u.searchParams.get('fields') === 'currency') return Response.json({ id: 'act_1234567890', currency });
+    if (u.searchParams.get('fields') === 'currency,timezone_name') return Response.json({ id: 'act_1234567890', currency, timezone_name: zone });
     if (u.pathname.endsWith('/campaigns')) return Response.json({ data: [{ id: '201', name: 'Prospecting', effective_status: 'ACTIVE', daily_budget: '6000' }] });
     const page = u.searchParams.get('after');
     if (page) return Response.json({ data: rows.slice(1) });
@@ -148,6 +148,17 @@ test("a first sync prices each backfilled day at that day's rate; later syncs us
 
   await syncMeta(db, key, 'pawsome', fetchFn, NOW);
   expect(urls.filter((u) => u.includes('eurofxref-hist'))).toHaveLength(1); // only the first sync reads the history
+});
+
+test("the integration says when the ad account's days run in another timezone than the store's", async () => {
+  const { db, app } = setup();
+  const meta = async () => (await (await app.request('/api/integrations?stores=pawsome')).json() as Integration[]).find((i) => i.kind === 'meta_ads')!;
+  db.prepare("UPDATE stores SET timezone = 'Asia/Tokyo' WHERE id = 'pawsome'").run();
+  await syncMeta(db, key, 'pawsome', fakeGraph([], undefined, 'USD', 'America/Phoenix').fetchFn, NOW); // neither has DST
+  expect((await meta()).notice).toBe("Meta Ads reports its days in America/Phoenix, 16 h behind the store's Asia/Tokyo, so a day's ad spend covers other hours than its sales.");
+
+  await syncMeta(db, key, 'pawsome', fakeGraph([], undefined, 'USD', 'Asia/Seoul').fetchFn, NOW); // another name, same clock
+  expect((await meta()).notice).toBeUndefined();
 });
 
 test("pointing the store at another ad account drops the old account's campaigns and spend", async () => {

@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
+import { AD_ZONES, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
 export const GOOGLE_ADS_API_VERSION = 'v26';
@@ -22,7 +22,7 @@ interface AdsRow {
   campaignBudget?: { amountMicros?: string };
   segments?: { date: string };
   metrics?: { costMicros?: string; conversions?: number; conversionsValue?: number; clicks?: string; impressions?: string };
-  customer?: { currencyCode?: string };
+  customer?: { currencyCode?: string; timeZone?: string };
 }
 
 const STATUS: Record<string, string> = { ENABLED: 'active', PAUSED: 'paused', REMOVED: 'archived' };
@@ -111,8 +111,10 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
     const rows = await search(
       `SELECT campaign.id, segments.date, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.clicks, metrics.impressions FROM campaign WHERE segments.date BETWEEN '${start}' AND '${today}'`,
     );
-    const campaigns = await search('SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, customer.currency_code FROM campaign');
+    const campaigns = await search('SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, customer.currency_code, customer.time_zone FROM campaign');
     const currency = campaigns[0]?.customer?.currencyCode;
+    const zone = campaigns[0]?.customer?.timeZone;
+    if (zone) stateOf<string>(db, AD_ZONES).set(id, zone);
     const rate = await adRate(db, storeId, currency, fetchFn, 'Google Ads');
     const rateOn = cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
 
