@@ -739,8 +739,20 @@ export const APP_TOOLS: AppTool[] = [
       const econ = economics(ctx.db, ctx.store.id, since(30, ctx.store));
       const t = thresholds(econ);
       const rows = campaignStats(ctx, days);
+      // Products with no unit cost (Shopify's "Cost per item" left empty) sell at cost 0: margin reads high and break-even
+      // ROAS low, so losing campaigns come out as "scale". ponytail: 10% of product sales, no per-product list.
+      const lines = ctx.db
+        .prepare(
+          `SELECT sum(i.revenue) AS revenue, sum(iif(i.cost = 0, i.revenue, 0)) AS uncosted FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+           WHERE i.store_id = ? AND o.status = 'paid' AND o.local_date >= ?`,
+        )
+        .get(ctx.store.id, since(30, ctx.store));
+      const uncosted = Number(lines?.revenue) > 0 ? Number(lines!.uncosted) / Number(lines!.revenue) : 0;
       return [
         `margin after cost, tax and fees ${r2(econ.margin * 100)}%, AOV ${r2(econ.aov)}, break-even ROAS ${r2(t.breakEven)}, target ROAS ${r2(t.target)}, max CPA ${r2(t.maxCpa)} (30 days); campaigns over ${days} days:`,
+        uncosted >= 0.1
+          ? `(${Math.round(uncosted * 100)}% of the last 30 days' product sales have no unit cost set, so margin reads high and break-even ROAS low: don't scale on these verdicts until the owner fills in costs (Shopify "Cost per item", else Products here). Products that truly cost nothing, like digital ones, are fine.)`
+          : '',
         idleNote(ctx, rows.length).trimEnd(),
         csv(
           reviewCampaigns(rows, econ).map((c) => ({
@@ -811,7 +823,7 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'propose_price_change',
     description:
-      "Ask the owner to test a new price for a product, with the evidence. Applied to the store once approved, then judged on the product's profit (after unit cost and the store's fee %) in the 14 days after vs the 14 before.",
+      "Ask the owner to test a new price for a product, with the evidence. Applied to the store once approved, then judged on the product's profit (after unit cost and the store's fee estimate) in the 14 days after vs the 14 before.",
     input: {
       productId: z.string(),
       newPrice: z.number().positive(),

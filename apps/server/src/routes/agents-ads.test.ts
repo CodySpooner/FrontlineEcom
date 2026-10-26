@@ -49,6 +49,20 @@ test('review_campaigns gives thresholds and a verdict per campaign', async () =>
   for (const r of rows) expect(['scale', 'hold', 'cut', 'pause', 'learning', 'paused']).toContain(r.split(',')[9]);
 });
 
+test('review_campaigns warns when sales have no unit cost: margin reads high and break-even ROAS low', async () => {
+  const order = db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('pawsome', ?, ?, ?, 'paid', 'fulfilled', ?)`);
+  const line = db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('pawsome', ?, ?, 1, ?, ?)`);
+  order.run('o1', new Date().toISOString(), 80, localDate());
+  line.run('o1', 'p-nocost', 80, 0); // "Cost per item" left empty
+  order.run('o2', new Date().toISOString(), 20, localDate());
+  line.run('o2', 'p-cost', 20, 8);
+  const [out] = (await run([{ call: 'review_campaigns' }])).outputs;
+  expect(out!.split('\n')[1]).toMatch(/^\(80% of the last 30 days' product sales have no unit cost set, so margin reads high and break-even ROAS low: don't scale on these verdicts/);
+  line.run('o1', 'p-more', 800, 300); // mostly costed now: no warning
+  const [costed] = (await run([{ call: 'review_campaigns' }])).outputs;
+  expect(costed!.split('\n')[1]).toBe('network,id,name,status,daily_budget,spend,roas,cpa,purchases,verdict,suggested_budget');
+});
+
 test("an old account's paused campaigns with no spend are left out; one that is on but spends nothing stays", async () => {
   const add = db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, 'pawsome', ?, ?, 0)`);
   for (let i = 0; i < 3; i++) add.run(`old-${i}`, `Black Friday ${2020 + i}`, i ? 'paused' : 'archived');
