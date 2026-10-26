@@ -268,6 +268,8 @@ Orca's browser against the reference before ticking it.
       only follows the link, so recovery steps ("set it in Shopify rather than adding it again…") were never readable.
 - [x] UI-102 Editing a squad memory in the Knowledge Base says that saving makes it the owner's note (AGT-121: always
       recalled, no longer moved by outcomes), before the owner saves.
+- [x] UI-103 An agent's Memory tab can show just that agent's own memories ("Everyone (N) / Copywriter (M)"), and
+      the squad card's "N learned" link opens on them, rather than among up to 300 shared squad memories.
 
 ## Blocked
 
@@ -414,3 +416,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-101: Notifications body is `line-clamp-2` only when `kind !== 'error'`. Notifications.test checks an error body unclamped and an info body still clamped. Orca at 800px with a client-side patch (fake error notification carrying core's products-failure text): 5 lines, not clipped. Nothing in the drawer clicked; patch dropped by reload
 - 2026-10-26 — UI-102: Knowledge MemoryRow's edit form has a muted line "Saved, it becomes your note: always recalled, and results no longer change it." when the memory isn't already the owner's (agentId 'owner' or the `denied` tag). Knowledge.test covers squad memory → hint, owner memory → none. Orca at 800px with a client-side memory patch: hint under the edit row. Only Edit/Cancel clicked; patch dropped by reload
 - 2026-10-26 — UI-102 follow-up: the Store Memory panel says "Your notes, your no's and pinned items go into every run" (AGT-121's `always`: pinned, agentId 'owner', `denied` tag). It said pinned only
+- 2026-10-26 — UI-103: AgentDetail Memory has a "Whose" Segmented, shown only when the list mixes this agent's memories with others'. It starts on the agent when the URL has `by=agent`, which the UI-99 card link now adds. AgentDetail.test: by=agent shows only its own; "Everyone (2)" widens. Orca at 800px with a client-side memory patch: clicking "2 things learned" on Copywriter → "Everyone (4) | Copywriter (2)*" with its 2 items. Patch dropped by reload

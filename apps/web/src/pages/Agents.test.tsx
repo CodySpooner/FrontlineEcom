@@ -43,7 +43,7 @@ describe('AI agents', () => {
     );
     renderApp(<Agents />, '/agents');
     const learned = await screen.findByRole('link', { name: '2 things learned about Peak Fit' });
-    expect(learned.getAttribute('href')).toBe('/agents/peak%3Acopywriter?tab=memory');
+    expect(learned.getAttribute('href')).toBe('/agents/peak%3Acopywriter?tab=memory&by=agent');
     // Nothing learned yet: no line, rather than a "0".
     expect(screen.getAllByRole('link', { name: /learned about/ })).toHaveLength(1);
   });

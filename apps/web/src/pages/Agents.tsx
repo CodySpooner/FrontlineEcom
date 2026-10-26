@@ -137,7 +137,7 @@ function AgentCard({ a, learned, store, onDeploy, deploying, failed }: { a: Agen
       <p className="line-clamp-3 min-h-[3lh] text-xs text-muted">{role.blurb}</p>
       {/* DESIGN §1: each agent becomes an expert in its store by learning from every run. */}
       {learned > 0 && !off && (
-        <Link to={`${to}?tab=memory`} className="flex items-center gap-1.5 text-xs text-text-2 hover:text-white">
+        <Link to={`${to}?tab=memory&by=agent`} className="flex items-center gap-1.5 text-xs text-text-2 hover:text-white">
           <Brain aria-hidden className="size-3.5 text-red" strokeWidth={2} />
           {learned} thing{learned > 1 ? 's' : ''} learned about {store}
         </Link>

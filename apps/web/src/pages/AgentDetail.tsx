@@ -185,6 +185,11 @@ function Memory({ agent }: { agent: Agent }) {
   const forget = useForgetMemory(agent.storeId);
   const [kind, setKind] = useState<MemoryKind>('fact');
   const [text, setText] = useState('');
+  // The squad card's "N learned" link opens on this agent's own (`by=agent`); the store's memory is shared by all.
+  const [params] = useSearchParams();
+  const [by, setBy] = useState<'all' | 'agent'>(params.get('by') === 'agent' ? 'agent' : 'all');
+  const mine = mem.data?.filter((m) => m.agentId === agent.id) ?? [];
+  const mixed = mine.length > 0 && mine.length < (mem.data?.length ?? 0);
 
   const teach = (e: FormEvent) => {
     e.preventDefault();
@@ -225,33 +230,48 @@ function Memory({ agent }: { agent: Agent }) {
           As agents work on this store they save what worked and why. Add the first fact above.
         </EmptyState>
       ) : (
-        <ul className="grid gap-2">
-          {mem.data.map((m) => (
-            <li key={m.id} className="grid grid-cols-[minmax(0,1fr)_120px_auto] items-center gap-4 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 text-[11px] text-muted">
-                  <Badge tone={m.agentId === agent.id ? 'red' : 'muted'}>{MEMORY_KINDS.find((k) => k.value === m.kind)?.label}</Badge>
-                  {memoryAuthor(m.agentId)} · {ago(m.createdAt, Date.now())}
+        <>
+          {mixed && (
+            <div className="mb-3">
+              <Segmented
+                label="Whose"
+                options={[
+                  { value: 'all' as const, label: `Everyone (${mem.data.length})` },
+                  { value: 'agent' as const, label: `${AGENT_ROLES[agent.role].name} (${mine.length})` },
+                ]}
+                value={by}
+                onChange={setBy}
+              />
+            </div>
+          )}
+          <ul className="grid gap-2">
+            {(by === 'agent' && mixed ? mine : mem.data).map((m) => (
+              <li key={m.id} className="grid grid-cols-[minmax(0,1fr)_120px_auto] items-center gap-4 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-[11px] text-muted">
+                    <Badge tone={m.agentId === agent.id ? 'red' : 'muted'}>{MEMORY_KINDS.find((k) => k.value === m.kind)?.label}</Badge>
+                    {memoryAuthor(m.agentId)} · {ago(m.createdAt, Date.now())}
+                  </div>
+                  <p className="mt-1 text-[13px]">{m.text}</p>
+                  {m.evidence && <p className="mt-0.5 text-xs text-muted">{m.evidence}</p>}
                 </div>
-                <p className="mt-1 text-[13px]">{m.text}</p>
-                {m.evidence && <p className="mt-0.5 text-xs text-muted">{m.evidence}</p>}
-              </div>
-              <div>
-                <div className="mb-1 text-right text-[11px] text-muted tabular-nums">{Math.round(m.confidence * 100)}% sure</div>
-                <ProgressBar value={m.confidence} label="Confidence" />
-              </div>
-              <button
-                type="button"
-                onClick={() => forget.mutate(m.id)}
-                disabled={forget.isPending}
-                aria-label={`Forget: ${m.text}`}
-                className="cursor-pointer rounded-md p-1.5 text-muted transition hover:bg-panel-2 hover:text-red"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            </li>
-          ))}
-        </ul>
+                <div>
+                  <div className="mb-1 text-right text-[11px] text-muted tabular-nums">{Math.round(m.confidence * 100)}% sure</div>
+                  <ProgressBar value={m.confidence} label="Confidence" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => forget.mutate(m.id)}
+                  disabled={forget.isPending}
+                  aria-label={`Forget: ${m.text}`}
+                  className="cursor-pointer rounded-md p-1.5 text-muted transition hover:bg-panel-2 hover:text-red"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       {forget.isError && (
         <p role="alert" className="mt-2 text-xs text-red">

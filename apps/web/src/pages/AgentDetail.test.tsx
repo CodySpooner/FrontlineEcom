@@ -67,4 +67,25 @@ describe('agent header', () => {
     );
     expect(await screen.findByText('Demo engine')).toBeTruthy();
   });
+
+  it("opens on this agent's own memories from its card, and can widen to the squad's", async () => {
+    const mem = (id: string, agentId: string, text: string) => ({ id, storeId: 'peak', agentId, kind: 'learning', text, confidence: 0.6, tags: [], createdAt: '2026-10-26T08:00:00Z' });
+    stubApi((url) =>
+      url === '/api/agents'
+        ? [{ ...agent, status: 'idle', level: 3, rank: 'recruit' }]
+        : url === '/api/stores/peak/memory'
+          ? [mem('m1', agent.id, 'Broad audiences beat interests here'), mem('m2', 'peak:copywriter', 'Short hooks win')]
+          : undefined,
+    );
+    renderApp(
+      <Routes>
+        <Route path="/agents/:id" element={<AgentDetail />} />
+      </Routes>,
+      '/agents/peak%3Aad_strategist?tab=memory&by=agent',
+    );
+    expect(await screen.findByText('Broad audiences beat interests here')).toBeTruthy();
+    expect(screen.queryByText('Short hooks win')).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: 'Everyone (2)' }));
+    expect(screen.getByText('Short hooks win')).toBeTruthy();
+  });
 });
