@@ -114,7 +114,7 @@ Orca's browser against the reference before ticking it.
       Alt-Tab and history show where you are. Every page is "Frontline Ecom" today.
 - [x] UI-33 Mission complete sting (DESIGN §8): XP for `Mission complete: …` gets its own toast (header + mission
       title) and a two-note sound when sound is on. Today it's an ordinary "+50 XP" line.
-- [ ] UI-34 Agent schedule (DESIGN §4.2 "settings … schedule"): the agent page lists the automation rules that task
+- [x] UI-34 Agent schedule (DESIGN §4.2 "settings … schedule"): the agent page lists the automation rules that task
       this agent (trigger, next run, on/off) with a link to Automation to add one.
 
 ## Blocked
@@ -171,3 +171,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-30: Bell drawer "Waiting on you · N" lists every pending request as the chat ApprovalCard (new optional `who` heading: role · store · kind) with Approve/Deny and kind extras, replacing the go-to-Dashboard callout; checked in Chrome from Analytics (3 demo requests, not decided) + component test (deny from the drawer, stays on the page)
 - 2026-10-26 — UI-31/32: "Skip to content" is the first tab stop (shows on focus, focuses `<main id=main>` without a hash) and `document.title` follows the sidebar label (`pageTitle`, tested; agent pages count as AI Agents). Checked in Chrome on /orders: Tab → link, Enter + Tab → Ask AI in main
 - 2026-10-26 — UI-33: XP whose reason starts `Mission complete: ` gets a "Mission complete · +N XP" toast (title · store, red border, 5s) and a two-note sting (660→990 Hz) when sound is on; `blip` became `sting(notes)`. Component test + Chrome (main-world event on the Dashboard); the sound itself is unheard (sound off in demo settings)
+- 2026-10-26 — UI-34: agent Settings tab gets a "Schedule" panel listing the automation rules whose action targets this agent (name, trigger, next run when on, task, on/off switch) with Manage rules / New rule → /automation; `when` moved to lib/automation. Chrome: Pawsome Market Analyst shows its 3 seeded rules; switch round-tripped off → on → off

@@ -7,7 +7,7 @@ import { useActionLog, useAutomationActions, useAutomationRuns, useAutomations }
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, Segmented, Switch } from '../components/ui';
-import { describeChange, describeTrigger, METRICS, parseCron, toCron, WEEKDAYS, type Schedule } from '../lib/automation';
+import { describeChange, describeTrigger, METRICS, parseCron, toCron, WEEKDAYS, when, type Schedule } from '../lib/automation';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -26,7 +26,6 @@ const APPROVAL = {
   auto: { label: 'Run on its own', help: 'The agent starts right away. Anything that spends money or changes the store still asks you.' },
 };
 const roleOf = (agentId: string) => agentId.split(':')[1] as AgentRole;
-const when = (iso: string) => new Date(iso).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 
 export function Automation() {
   const nav = NAV.find((n) => n.path === '/automation')!;

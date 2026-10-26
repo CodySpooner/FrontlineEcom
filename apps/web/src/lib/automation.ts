@@ -45,6 +45,9 @@ export function describeTrigger(t: AutomationTrigger) {
   return `When ${m.label} ${t.op === '<' ? 'drops below' : 'goes above'} ${m.fmt(t.value)} over ${t.windowDays} day${t.windowDays === 1 ? '' : 's'}`;
 }
 
+/** "Mon 9:00 AM": when a rule fires next or last. */
+export const when = (iso: string) => new Date(iso).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+
 /** An action log entry's change, readable: { dailyBudget: 40, from: 32 } → "daily budget 40 · from 32". */
 export const describeChange = (d: Record<string, unknown>) =>
   Object.entries(d)

@@ -3,13 +3,14 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type Autonomy, type MemoryKind } from '@frontline/shared';
-import { useAddMemory, useAgents, useCaps, useForgetMemory, useForgetNicheLearning, useMemory, useNicheLearnings, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
+import { useAddMemory, useAgents, useAutomationActions, useAutomations, useCaps, useForgetMemory, useForgetNicheLearning, useMemory, useNicheLearnings, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
 import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
 import { FlowLibrary } from '../components/FlowLibrary';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
+import { describeTrigger, when } from '../lib/automation';
 import { ago, cents, money } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -350,7 +351,57 @@ function AgentSettings({ agent }: { agent: Agent }) {
           </dl>
         )}
       </Panel>
+      <Schedule agent={agent} />
     </div>
+  );
+}
+
+function Schedule({ agent }: { agent: Agent }) {
+  const q = useAutomations();
+  const { toggle } = useAutomationActions();
+  const rules = (q.data ?? []).filter((r) => r.action.agentId === agent.id);
+  return (
+    <Panel
+      title="Schedule"
+      sub="Automation rules that hand this agent a task."
+      action={
+        <Link to="/automation" className={buttonClass('ghost', 'sm')}>
+          {rules.length ? 'Manage rules' : 'New rule'}
+        </Link>
+      }
+      className="min-[1100px]:col-span-2"
+    >
+      {q.isPending ? (
+        <LoadingState rows={2} />
+      ) : q.isError ? (
+        <ErrorState message="Couldn't load the rules." onRetry={() => q.refetch()} />
+      ) : !rules.length ? (
+        <p className="text-xs text-muted">No rules yet: this agent works when you or another agent asks.</p>
+      ) : (
+        <ul className="divide-y divide-line">
+          {rules.map((r) => (
+            <li key={r.id} className="flex items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
+              <span className="min-w-0">
+                <span className="block text-[13px] font-semibold">{r.name}</span>
+                <span className="block text-xs text-muted">{[describeTrigger(r.trigger), r.enabled && r.nextRunAt && `next ${when(r.nextRunAt)}`].filter(Boolean).join(' · ')}</span>
+                <span className="block truncate text-xs text-text-2" title={r.action.task}>
+                  {r.action.task}
+                </span>
+              </span>
+              <label className="flex shrink-0 cursor-pointer">
+                <span className="sr-only">{r.name} on</span>
+                <Switch checked={r.enabled} disabled={toggle.isPending} onChange={(e) => toggle.mutate({ id: r.id, enabled: e.target.checked })} />
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      {toggle.isError && (
+        <p role="alert" className="mt-2 text-xs text-red">
+          {toggle.error.message}
+        </p>
+      )}
+    </Panel>
   );
 }
 
