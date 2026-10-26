@@ -1,4 +1,4 @@
-import { awardXp, blendedRoas, checkAchievements, commander, dailyMissions, levelForXp, profitStreak, XP, type Award, type Facts } from '@frontline/agents';
+import { awardXp, blendedRoas, checkAchievements, commander, dailyMissions, levelForXp, profitStreak, writeMemory, XP, type Award, type Facts } from '@frontline/agents';
 import type { MetricTotals, Mission } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
@@ -36,10 +36,11 @@ function watchApprovals(db: Db) {
 }
 
 /**
- * Measured wins: an approved ad change whose store's blended ROAS over the 3 days after beats the 7 days before pays
- * the agent once. Checked lazily (commander/achievements reads); changes older than 30 days are left alone.
+ * Outcomes of approved ad changes: the store's blended ROAS over the 3 days after vs the 7 days before. Each outcome
+ * becomes a store learning for the agent (so its next review knows what worked), and a win pays it once.
+ * Checked lazily (commander/achievements reads); changes older than 30 days are left alone.
  */
-export function checkMeasuredWins(db: Db, today = localDate()) {
+export function checkAdOutcomes(db: Db, today = localDate()) {
   const rows = db
     .prepare(
       `SELECT id, store_id, agent_id, title, decided_at FROM approvals
@@ -51,7 +52,16 @@ export function checkMeasuredWins(db: Db, today = localDate()) {
     if (addDays(day, 3) >= today) continue; // the 3 days after aren't complete yet
     const before = blendedRoas(db, String(r.store_id), addDays(day, -7), addDays(day, -1));
     const after = blendedRoas(db, String(r.store_id), addDays(day, 1), addDays(day, 3));
-    if (before === undefined || after === undefined || after <= before) continue;
+    if (before === undefined || after === undefined) continue;
+    const worked = after > before;
+    const roas = `blended ROAS ${before.toFixed(2)} → ${after.toFixed(2)}`;
+    // ponytail: writeMemory dedupes by text, so rechecks are no-ops; an owner-deleted outcome comes back within 30 days.
+    writeMemory(db, {
+      storeId: String(r.store_id), agentId: String(r.agent_id), kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'ads'],
+      text: `"${r.title}" ${worked ? 'worked' : 'did not help'}: ${roas} in the 3 days after.`,
+      evidence: `7 days before vs 3 days after ${day} (request ${r.id})`,
+    });
+    if (!worked) continue;
     award(db, {
       ref: `win:${r.id}`, amount: XP.win, storeId: String(r.store_id), agentId: String(r.agent_id),
       reason: `Measured win: ROAS ${before.toFixed(2)} → ${after.toFixed(2)} after "${r.title}"`,
@@ -108,7 +118,7 @@ function missions(db: Db, storeIds?: string[]): Mission[] {
 export function gamificationRoutes(db: Db) {
   watchApprovals(db);
   const achievements = () => {
-    checkMeasuredWins(db);
+    checkAdOutcomes(db);
     return checkAchievements(db, facts(db), (a) => award(db, a));
   };
   return new Hono()

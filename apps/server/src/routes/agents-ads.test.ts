@@ -1,5 +1,5 @@
-import { fakeEngine, getAgent, runAgent, type FakeStep, type RunInput } from '@frontline/agents';
-import type { AgentEvent, ApprovalDecision, ApprovalRequest } from '@frontline/shared';
+import { fakeEngine, getAgent, listMemory, runAgent, type FakeStep, type RunInput } from '@frontline/agents';
+import type { AgentEvent, ApprovalDecision } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
@@ -86,17 +86,39 @@ test('connected stores are told to apply it on the ad account', async () => {
   expect(db.prepare(`SELECT title FROM notifications WHERE kind = 'info'`).get()?.title).toBe('Apply on the ad account: Pause Spark Ads · UGC');
 });
 
-test('an approved ad change followed by better blended ROAS is a measured win, paid once', async () => {
-  const decided = addDays(localDate(), -10);
-  const approval: Partial<ApprovalRequest> = { id: 'a-win', storeId: 'peak', agentId: 'peak:ad_strategist', title: 'Pause Spark Ads · UGC' };
+const decided = () => addDays(localDate(), -10);
+function approvedChange(id: string, title: string, revenueFactorAfter: number) {
+  const day = decided();
   db.prepare(
-    `INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at, decided_at) VALUES (?, ?, ?, ?, 'r', ?, 'approved', ?, ?)`,
-  ).run(approval.id!, approval.storeId!, approval.agentId!, approval.title!, JSON.stringify({ kind: 'ads.pause_campaign', payload: {} }), `${decided}T09:00:00Z`, `${decided}T12:00:00Z`);
-  db.prepare(`UPDATE daily_metrics SET revenue = revenue * 3 WHERE store_id = 'peak' AND date BETWEEN ? AND ?`).run(addDays(decided, 1), addDays(decided, 3));
+    `INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at, decided_at) VALUES (?, 'peak', 'peak:ad_strategist', ?, 'r', ?, 'approved', ?, ?)`,
+  ).run(id, title, JSON.stringify({ kind: 'ads.pause_campaign', payload: {} }), `${day}T09:00:00Z`, `${day}T12:00:00Z`);
+  db.prepare(`UPDATE daily_metrics SET revenue = revenue * ? WHERE store_id = 'peak' AND date BETWEEN ? AND ?`).run(revenueFactorAfter, addDays(day, 1), addDays(day, 3));
+}
+const outcomes = () => listMemory(db, 'peak').filter((m) => m.tags.includes('outcome'));
+
+test('an approved ad change followed by better blended ROAS is a measured win, paid once and remembered', async () => {
+  approvedChange('a-win', 'Pause Spark Ads · UGC', 3);
   const xp = () => getAgent(db, 'peak:ad_strategist')!.xp;
   const before = xp();
   await app.request('/api/commander');
   await app.request('/api/commander');
   expect(xp()).toBe(before + 50);
   expect(String(db.prepare(`SELECT reason FROM xp_events WHERE ref = 'win:a-win'`).get()?.reason)).toMatch(/^Measured win: ROAS [\d.]+ → [\d.]+ after "Pause Spark Ads · UGC"$/);
+  expect(outcomes()).toEqual([
+    expect.objectContaining({
+      agentId: 'peak:ad_strategist', kind: 'learning', confidence: 0.7,
+      text: expect.stringMatching(/^"Pause Spark Ads · UGC" worked: blended ROAS [\d.]+ → [\d.]+ in the 3 days after\.$/),
+      evidence: `7 days before vs 3 days after ${decided()} (request a-win)`,
+    }),
+  ]);
+});
+
+test('a change that did not help is remembered too, without XP', async () => {
+  approvedChange('a-flop', 'Raise Prospecting · Broad budget $50 → $80/day', 0.3);
+  const before = getAgent(db, 'peak:ad_strategist')!.xp;
+  await app.request('/api/achievements');
+  expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(before);
+  expect(outcomes().map((m) => [m.text.replace(/[\d.]+ → [\d.]+/, 'x → y'), m.confidence])).toEqual([
+    ['"Raise Prospecting · Broad budget $50 → $80/day" did not help: blended ROAS x → y in the 3 days after.', 0.6],
+  ]);
 });
