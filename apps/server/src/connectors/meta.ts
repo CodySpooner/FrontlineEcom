@@ -11,6 +11,10 @@ const BACKFILL_DAYS = 730;
 const ATTRIBUTION_DAYS = 28;
 /** Insights requests span at most this many days to stay under Meta's per-query limits. */
 const CHUNK_DAYS = 90;
+/** Budgets are in the currency's minor unit (cents), except these, which have none (Marketing API currency offset 1). */
+const ZERO_DECIMAL = new Set(['CLP', 'COP', 'CRC', 'HUF', 'ISK', 'IDR', 'JPY', 'KRW', 'PYG', 'TWD', 'VND']);
+// ponytail: the store's currency stands in for the ad account's, as it does for ad spend everywhere.
+const budgetUnits = (db: Db, storeId: string) => (ZERO_DECIMAL.has(String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency)) ? 1 : 100);
 
 type Fetch = typeof fetch;
 type Action = { action_type: string; value: string };
@@ -92,12 +96,12 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
 
     tx(db, () => {
       switchToReal(db, storeId);
-      // ponytail: daily_budget is in the account currency's minor unit; /100 is wrong for zero-decimal currencies (JPY, KRW)
+      const units = budgetUnits(db, storeId);
       const camp = db.prepare(
         `INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, ?, ?, ?, ?)
          ON CONFLICT (network, id) DO UPDATE SET name = excluded.name, status = excluded.status, daily_budget = excluded.daily_budget`,
       );
-      for (const c of campaigns) camp.run(c.id, storeId, c.name, c.effective_status.toLowerCase(), Number(c.daily_budget ?? 0) / 100);
+      for (const c of campaigns) camp.run(c.id, storeId, c.name, c.effective_status.toLowerCase(), Number(c.daily_budget ?? 0) / units);
       // Campaigns that only show up in insights (deleted/archived since) still need a row for the join.
       const seen = db.prepare("INSERT OR IGNORE INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, ?, ?, 'archived', 0)");
       for (const r of rows) seen.run(r.campaign_id, storeId, r.campaign_name);
@@ -124,8 +128,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
 export async function updateMetaCampaign(db: Db, key: Buffer, storeId: string, campaignId: string, change: CampaignChange, fetchFn: Fetch = fetch) {
   const creds = getCredentials(db, key, 'meta_ads', storeId);
   if (!creds) throw new Error('Meta Ads is not connected for this store');
-  // ponytail: minor unit = cents, wrong for zero-decimal currencies (JPY, KRW), same as the sync
-  const form: Record<string, string> = 'status' in change ? { status: change.status } : { daily_budget: String(Math.round(change.dailyBudget * 100)) };
+  const form: Record<string, string> = 'status' in change ? { status: change.status } : { daily_budget: String(Math.round(change.dailyBudget * budgetUnits(db, storeId))) };
   const res = await fetchFn(`${GRAPH}/${campaignId}`, { method: 'POST', headers: { Authorization: `Bearer ${creds.accessToken!}` }, body: new URLSearchParams(form) });
   const body = (await res.json().catch(() => ({}))) as { success?: boolean; error?: { message: string; error_user_msg?: string } };
   if (!res.ok || !body.success) throw new Error(`Meta: ${body.error?.error_user_msg ?? body.error?.message ?? `HTTP ${res.status}`}`);

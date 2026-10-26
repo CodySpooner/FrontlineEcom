@@ -108,3 +108,10 @@ test('an expired token marks the integration as error and keeps demo data', asyn
   expect((JSON.parse(list) as Integration[])[0]).toMatchObject({ status: 'error', error: expect.stringContaining('rejected the access token') });
   expect(db.prepare("SELECT demo FROM stores WHERE id = 'pawsome'").get()?.demo).toBe(1);
 });
+
+test("a yen ad account's daily budget is synced in yen, not hundredths of one", async () => {
+  const { db } = setup();
+  db.prepare("UPDATE stores SET currency = 'JPY' WHERE id = 'pawsome'").run();
+  await syncMeta(db, key, 'pawsome', fakeGraph([insight('201', '2026-10-26', '5800', '15000')]).fetchFn, NOW);
+  expect(db.prepare("SELECT daily_budget AS b FROM campaigns WHERE id = '201'").get()?.b).toBe(6000);
+});

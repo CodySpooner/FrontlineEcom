@@ -76,3 +76,10 @@ test('ad writes refuse unknown campaigns, bad budgets, shared Google budgets and
   // Demo campaigns exist locally but the store has no Meta connection.
   await expect(pauseCampaign(db, key, 'peak', 'meta', 'peak-c1', fetchFn)).rejects.toThrow('Meta Ads is not connected for this store');
 });
+
+test('Meta budgets in a currency without cents (yen) are whole units, not hundredths', async () => {
+  const { db, calls, fetchFn } = setup();
+  db.prepare("UPDATE stores SET currency = 'JPY' WHERE id = 'glow'").run();
+  await setCampaignBudget(db, key, 'glow', 'meta', IDS.meta, 7200, fetchFn);
+  expect(calls.map((c) => c.body)).toEqual(['daily_budget=7200']);
+});
