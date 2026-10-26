@@ -708,9 +708,13 @@ export const APP_TOOLS: AppTool[] = [
       const c = ctx.db.prepare('SELECT * FROM campaigns WHERE id = ? AND store_id = ?').get(campaignId, ctx.store.id);
       if (!c) return `No campaign ${campaignId} in this store. Use review_campaigns for ids.`;
       const waiting = ctx.db
-        .prepare(`SELECT title FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign') AND json_extract(action_json, '$.payload.campaignId') = ?`)
+        .prepare(`SELECT id, title, created_at FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign') AND json_extract(action_json, '$.payload.campaignId') = ?`)
         .get(ctx.store.id, campaignId);
-      if (waiting) return `Not sent: "${waiting.title}" is already waiting for the owner. One change per campaign at a time.`;
+      // A live store's request over 4 days old is never applied (its numbers moved), so it gives way instead of blocking.
+      if (waiting && ctx.store.connected && ctx.decide && String(waiting.created_at) < ago(4)) {
+        ctx.db.prepare('UPDATE approvals SET reason = reason || ? WHERE id = ?').run(' [Expired: asked over 4 days ago; a fresh request replaced it.]', String(waiting.id));
+        ctx.decide(String(waiting.id), 'deny');
+      } else if (waiting) return `Not sent: "${waiting.title}" is already waiting for the owner. One change per campaign at a time.`;
       const from = Number(c.daily_budget);
       if (change === 'budget' && newDailyBudget === undefined) return 'newDailyBudget is required for a budget change.';
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);

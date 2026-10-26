@@ -251,7 +251,7 @@ export async function discardThemeCopy(db: Db, a: ApprovalRequest, del: (storeId
 export const EXPIRED_DEMO = '[Expired: asked on demo data before the store went live.]';
 
 export function rememberDenial(db: Db, a: ApprovalRequest) {
-  if (a.reason.endsWith('[Expired: the agent run ended before a decision.]') || a.reason.endsWith(EXPIRED_DEMO)) return;
+  if (/\[Expired: [^\]]*\]$/.test(a.reason)) return; // closed by the app (run ended, demo data, replaced), not by the owner
   writeMemory(db, {
     storeId: a.storeId, agentId: a.agentId, kind: 'preference', confidence: 0.6, tags: ['denied'],
     // The owner's reason, when given, is what the squad learns from: why, not just that.

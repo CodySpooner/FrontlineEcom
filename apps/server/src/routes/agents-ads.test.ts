@@ -206,6 +206,19 @@ test("an ad change from a store's demo phase isn't judged on its real numbers", 
   expect(basis('Pause Spark Ads')).toBe(0.6);
 });
 
+test("on a live store, a request too old to be applied gives way to a fresh one, and isn't learned as the owner's no", async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
+  const add = db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'pawsome', 'pawsome:ad_strategist', ?, 'r', ?, 'pending', ?)`);
+  const pause = (id: string) => JSON.stringify({ kind: 'ads.pause_campaign', payload: { campaignId: id } });
+  add.run('old', 'Pause Prospecting · Broad', pause('pawsome-c1'), new Date(Date.now() - 5 * 86_400_000).toISOString());
+  add.run('recent', 'Pause Retargeting', pause('pawsome-c2'), new Date(Date.now() - 3 * 86_400_000).toISOString());
+  const { outputs, requests } = await run([propose({ campaignId: 'pawsome-c1', change: 'pause' }), propose({ campaignId: 'pawsome-c2', change: 'pause' })], 'deny');
+  expect(requests.map((r) => (r.action.payload as { campaignId: string }).campaignId)).toEqual(['pawsome-c1']);
+  expect(outputs[1]).toBe('Not sent: "Pause Retargeting" is already waiting for the owner. One change per campaign at a time.'); // still applicable
+  expect(db.prepare(`SELECT status, reason FROM approvals WHERE id = 'old'`).get()).toEqual({ status: 'denied', reason: 'r [Expired: asked over 4 days ago; a fresh request replaced it.]' });
+  expect(listMemory(db, 'pawsome').filter((m) => m.tags.includes('denied'))).toHaveLength(1); // the fresh one the owner denied, not the expired one
+});
+
 test("a real store's ad change approved days after it was asked is not applied: its numbers are stale", async () => {
   const writes: unknown[] = [];
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
