@@ -297,12 +297,16 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       if (returns) {
         // Into the refund lines Amazon's go to too (rebuildRevenue takes them off their order's day). One per return,
         // re-written as its status moves, so a refund only counts once TikTok has granted it. Net of its tax: the order's
-        // tax already counts against profit. Returns name SKUs, not products, so these don't come off per-product revenue.
-        const refund = db.prepare('INSERT INTO amazon_refunds (store_id, id, order_id, amount) VALUES (?, ?, ?, ?) ON CONFLICT (store_id, id) DO UPDATE SET amount = excluded.amount');
+        // tax already counts against profit. Returns name SKUs, not products: a refund on an order of one product comes off
+        // that product (price tests measure it), one on a mixed order off the store only.
+        // ponytail: a mixed order's refund isn't split; return lines carry order_line_item_id, which order_items doesn't keep.
+        const refund = db.prepare('INSERT INTO amazon_refunds (store_id, id, order_id, amount, product_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT (store_id, id) DO UPDATE SET amount = excluded.amount, product_id = excluded.product_id');
+        const onlyProduct = db.prepare('SELECT min(product_id) AS product FROM order_items WHERE store_id = ? AND order_id = ? HAVING count(DISTINCT product_id) = 1');
         const orderDay = db.prepare('SELECT local_date FROM orders WHERE store_id = ? AND id = ?');
         for (const r of returns) {
           const a = r.refund_amount;
-          refund.run(storeId, `tt-${r.return_id}`, `tt-${r.order_id}`, REFUNDED.has(r.return_status) ? cents(Number(a?.refund_total ?? 0) - Number(a?.refund_tax ?? 0)) : 0);
+          const amount = REFUNDED.has(r.return_status) ? cents(Number(a?.refund_total ?? 0) - Number(a?.refund_tax ?? 0)) : 0;
+          refund.run(storeId, `tt-${r.return_id}`, `tt-${r.order_id}`, amount, onlyProduct.get(storeId, `tt-${r.order_id}`)?.product ?? null);
           const day = orderDay.get(storeId, `tt-${r.order_id}`)?.local_date;
           if (day) days.add(String(day));
         }

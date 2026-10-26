@@ -134,8 +134,8 @@ function fakeShop(refreshError?: { code: number; message: string }, shops = [{ c
     return ok({
       orders: [
         shopOrder('5761', 'AWAITING_SHIPMENT', '30.00', { line_items: [{ product_id: '17301', sale_price: '12.45' }, { product_id: '17301', sale_price: '12.45' }] }),
-        shopOrder('5762', 'COMPLETED', '20.00', { tracking_number: 'TT123', payment: { total_amount: '20.00', currency: 'USD', tax: '1.60' } }),
-        shopOrder('5763', 'CANCELLED', '15.00'),
+        shopOrder('5762', 'COMPLETED', '20.00', { tracking_number: 'TT123', payment: { total_amount: '20.00', currency: 'USD', tax: '1.60' }, line_items: [{ product_id: '17302', sale_price: '18.40' }] }),
+        shopOrder('5763', 'CANCELLED', '15.00', { line_items: [{ product_id: '17301', sale_price: '7.50' }, { product_id: '17302', sale_price: '7.50' }] }),
         shopOrder('5764', 'UNPAID', '99.00'),
         shopOrder('5765', 'AWAITING_SHIPMENT', '0.00', { is_sample_order: true }),
       ],
@@ -176,6 +176,12 @@ test('TikTok Shop sync renews the token, pulls products + paid orders, and rebui
   ]);
   // 30 + 20 paid, less #5762's completed refund net of its tax (the order's tax already counts against profit).
   expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ revenue: 42.6, orders: 2 });
+  // Returns name SKUs, not products: a refund on a one-product order comes off that product; on a mixed order, off none.
+  expect(db.prepare("SELECT id, product_id FROM amazon_refunds WHERE store_id = 'glow' ORDER BY id").all()).toEqual([
+    { id: 'tt-R1', product_id: 'tt-17302' },
+    { id: 'tt-R2', product_id: 'tt-17301' },
+    { id: 'tt-R3', product_id: null },
+  ]);
   const returns = api.find((c) => c.url.pathname === '/return_refund/202309/returns/search')!;
   expect([returns.url.searchParams.get('page_size'), returns.url.searchParams.get('sort_field'), returns.url.searchParams.get('shop_cipher')]).toEqual(['50', 'update_time', 'CIPHER']);
   expect(JSON.parse(returns.body)).toEqual({ update_time_ge: T('2024-10-26T18:00:00Z') });
