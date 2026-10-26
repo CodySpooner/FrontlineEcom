@@ -87,7 +87,10 @@ test("orders land on the shop's own day and the store takes the shop's currency"
   const db = setup();
   const fetchFn = (async (url: string) => {
     const path = new URL(url).pathname;
-    if (path.endsWith('/wp-json/')) return Response.json({ name: 'Shop', gmt_offset: 2, timezone_string: 'Europe/Berlin' });
+    if (path.endsWith('/wp-json/')) {
+      expect(new URL(url).searchParams.get('_fields')).toBe('timezone_string,gmt_offset'); // not the multi-megabyte route index
+      return Response.json({ gmt_offset: 2, timezone_string: 'Europe/Berlin' });
+    }
     return path.endsWith('/orders')
       ? Response.json([order('2001', 'processing', '40.00', true, { currency: 'EUR', date_created: '2026-10-26T00:30:00', date_created_gmt: '2026-10-25T22:30:00' })], { headers: { 'x-wp-totalpages': '1' } })
       : Response.json([], { headers: { 'x-wp-totalpages': '1' } });

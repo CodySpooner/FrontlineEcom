@@ -127,7 +127,8 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       .catch(() => undefined);
     const base = typeof setting?.value === 'string' && /^[A-Z]{3}$/.test(setting.value) ? setting.value : orders[0]?.currency;
     // Orders are dated on the site's day (date_created); the store takes its timezone so "today" is that same day.
-    const zone = wpZone(await fetchFn(`${site}/wp-json/`, { headers: { authorization: auth } }).then((r) => (r.ok ? (r.json() as Promise<Parameters<typeof wpZone>[0]>) : undefined)).catch(() => undefined));
+    // _fields: the full index lists every route's schema (often megabytes), and this runs every 2 minutes.
+    const zone = wpZone(await fetchFn(`${site}/wp-json/?_fields=timezone_string,gmt_offset`, { headers: { authorization: auth } }).then((r) => (r.ok ? (r.json() as Promise<Parameters<typeof wpZone>[0]>) : undefined)).catch(() => undefined));
     const rates = new Map<string, number | undefined>();
     for (const c of new Set(orders.map((o) => o.currency))) rates.set(c, !base || c === base ? 1 : await convertRate(db, c, base, fetchFn));
 
