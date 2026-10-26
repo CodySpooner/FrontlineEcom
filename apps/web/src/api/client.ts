@@ -368,8 +368,11 @@ export function useLive() {
     let retry = 0;
     let closed = false;
     const onMessage = (m: LiveMessage) => {
-      if (m.type === 'event') qc.setQueryData<StoreEvent[]>(['events'], (old = []) => [m.event, ...old].slice(0, 30));
-      else if (m.type === 'run_event') qc.setQueryData<AgentRunDetail>(['run', m.runId], (d) => d && applyRunEvent(d, m.event));
+      if (m.type === 'event') {
+        qc.setQueryData<StoreEvent[]>(['events'], (old = []) => [m.event, ...old].slice(0, 30));
+        // An order event means a real order row and today's metrics moved.
+        if (m.event.type === 'order') ['summary', 'orders', 'top-products', 'missions'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      } else if (m.type === 'run_event') qc.setQueryData<AgentRunDetail>(['run', m.runId], (d) => d && applyRunEvent(d, m.event));
       else if (m.type === 'run') {
         // Finished: refetch the stored transcript, which also covers events that raced ahead of the POST response.
         if (isLive(m.run)) qc.setQueryData<AgentRunDetail>(['run', m.run.id], (d) => d && { ...d, ...m.run });
