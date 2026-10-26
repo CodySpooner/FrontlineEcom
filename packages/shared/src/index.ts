@@ -715,7 +715,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'wpUser', label: 'WordPress username (to publish pages)', secret: true, optional: true },
     { key: 'wpAppPassword', label: 'WordPress application password', secret: true, placeholder: 'abcd efgh ijkl mnop qrst uvwx', optional: true },
   ] },
-  meta_ads: { name: 'Meta Ads', category: 'ads', perStore: true, help: 'Meta Business Settings → Users → System users → Add (Admin) → Assign assets: the ad account (view performance) → Generate new token with ads_read and ads_mcp_management (agents read through the Meta ads MCP), plus ads_management if agents may make changes you approve → copy it. Ad account ID is in Ads Manager (act_…).', fields: [
+  meta_ads: { name: 'Meta Ads', category: 'ads', perStore: true, help: 'Meta Business Settings → Users → System users → Add (Admin) → Assign assets: the ad account (view performance) → Generate new token (expiration: Never; a 60-day one stops syncing when it lapses) with ads_read and ads_mcp_management (agents read through the Meta ads MCP), plus ads_management if agents may make changes you approve → copy it. Ad account ID is in Ads Manager (act_…).', fields: [
     { key: 'adAccountId', label: 'Ad account ID', secret: false, placeholder: 'act_…' },
     { key: 'accessToken', label: 'System user access token', secret: true },
   ] },
