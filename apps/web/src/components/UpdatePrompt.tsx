@@ -5,7 +5,7 @@ import { Button } from './ui';
 declare global {
   interface Window {
     /** The desktop app's preload (apps/desktop/src/preload.ts); absent in a browser. */
-    desktop?: { updateReady(): Promise<string | null>; onUpdate(cb: (version: string) => void): () => void; installUpdate(): Promise<void> };
+    desktop?: { updateReady(): Promise<string | null>; onUpdate(cb: (version: string) => void): () => void; installUpdate(): Promise<void>; openDataFolder(): Promise<string> };
   }
 }
 

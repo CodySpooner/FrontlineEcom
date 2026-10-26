@@ -14,6 +14,7 @@ function desktop(ready: string | null) {
     updateReady: async () => ready,
     onUpdate: (cb) => ((notify = cb), () => {}),
     installUpdate: vi.fn(async () => {}),
+    openDataFolder: async () => '',
   };
   return (v: string) => act(() => notify(v));
 }

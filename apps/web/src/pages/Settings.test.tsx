@@ -63,4 +63,15 @@ describe('your data', () => {
     renderApp(<Settings />, '/settings');
     expect(await screen.findByText(text)).toBeTruthy();
   });
+
+  it("opens the data folder through the desktop app when it's there, and shows Windows' error", async () => {
+    const fetch = stubApi((url) => (url === '/api/settings' ? settings : undefined));
+    const openDataFolder = vi.fn(async () => 'The system cannot find the path specified.');
+    vi.stubGlobal('desktop', { openDataFolder });
+    renderApp(<Settings />, '/settings');
+    fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }));
+    expect((await screen.findByRole('alert')).textContent).toContain('cannot find the path');
+    expect(openDataFolder).toHaveBeenCalledOnce();
+    expect(fetch.mock.calls.some(([url]) => String(url).includes('open-data-folder'))).toBe(false);
+  });
 });

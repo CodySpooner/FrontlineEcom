@@ -78,7 +78,15 @@ export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: () 
 export const useStores = () => useQuery({ queryKey: ['stores'], queryFn: () => api<Store[]>('/api/stores') });
 
 /** Opens the data folder (logs, backups) in Explorer on this computer. */
-export const useOpenDataFolder = () => useMutation({ mutationFn: () => api<void>('/api/settings/open-data-folder', { method: 'POST' }) });
+/** In the desktop app its main process opens Explorer (in front of the window; '' or Windows' error back); else the API does. */
+export const useOpenDataFolder = () =>
+  useMutation({
+    mutationFn: async () => {
+      if (!window.desktop) return api<void>('/api/settings/open-data-folder', { method: 'POST' });
+      const error = await window.desktop.openDataFolder();
+      if (error) throw new Error(error);
+    },
+  });
 
 export function useUpdateSettings() {
   const qc = useQueryClient();
