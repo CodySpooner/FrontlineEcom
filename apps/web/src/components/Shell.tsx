@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router';
 import { useAgents, useLive } from '../api/client';
 import { NAV } from '../nav';
@@ -7,6 +8,16 @@ import { ProgressBar, StatusDot, cx } from './ui';
 
 export function Shell() {
   useLive();
+  // Desktop app (frameless Electron): Windows' caption buttons overlay the page, so the hero strip becomes the title bar.
+  useEffect(() => {
+    // Not in TS's DOM lib yet (Chromium-only API).
+    const wco = (navigator as Navigator & { windowControlsOverlay?: EventTarget & { visible: boolean } }).windowControlsOverlay;
+    if (!wco) return;
+    const sync = () => document.documentElement.toggleAttribute('data-wco', wco.visible);
+    sync();
+    wco.addEventListener('geometrychange', sync);
+    return () => wco.removeEventListener('geometrychange', sync);
+  }, []);
   return (
     <div className="grid min-h-dvh grid-cols-[68px_minmax(0,1fr)] min-[900px]:grid-cols-[232px_minmax(0,1fr)]">
       <SvgDefs />

@@ -51,7 +51,7 @@ export function Hero({ title, subtitle, icon: Icon, art = 'lone', children }: { 
   const profile = useSettings().data?.profile ?? { name: 'Owner', plan: '' };
   const commander = useCommander().data;
   return (
-    <header className="hero-bg relative -mx-[22px] mb-4 min-h-[158px] overflow-hidden border-b border-line px-[22px] pt-5 pb-[26px]">
+    <header className="titlebar hero-bg relative -mx-[22px] mb-4 min-h-[158px] overflow-hidden border-b border-line px-[22px] pt-5 pb-[26px]">
       <svg className="absolute bottom-0 left-0 h-16 w-full" viewBox="0 0 850 80" preserveAspectRatio="none" aria-hidden="true">
         <path
           d="M0 80V54h30V40h22v18h26V30h14v-8h12v22h30v-10h26v26h20V28h24v20h26V36h14V20h18v24h28v14h30V32h22v16h30V30h18V14h12v24h30v14h28V36h26v12h30V26h22v16h28v16h26V36h22V22h14v22h30v10h28V32h20v14h28V28h22v24h26V40h30v16h38v24z"

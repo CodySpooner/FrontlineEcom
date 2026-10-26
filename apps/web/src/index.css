@@ -84,3 +84,15 @@ body {
     transition: none !important;
   }
 }
+
+/* Desktop app (frameless Electron, data-wco set by Shell): the hero is the title bar; keep its controls clickable and
+   clear of the caption buttons, whose width is 100vw minus the end of the title-bar area. */
+:root[data-wco] .titlebar {
+  -webkit-app-region: drag;
+  app-region: drag;
+  padding-right: calc(22px + 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw));
+}
+:root[data-wco] .titlebar :is(a, button, input, select, textarea, label) {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
