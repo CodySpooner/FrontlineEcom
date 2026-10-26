@@ -1,5 +1,7 @@
-import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, safeStorage, shell, Tray, utilityProcess } from 'electron';
+import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, safeStorage, screen, shell, Tray, utilityProcess } from 'electron';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { initialBounds, type WindowState } from './bounds';
 import { loadKey } from './key';
 import { stablePort } from './port';
 
@@ -19,6 +21,8 @@ const HIDDEN = process.argv.includes('--hidden');
 let win: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let quitting = false;
+/** Last launch ended maximized: maximize on first show (maximize() also shows, so not before a --hidden start is opened). */
+let maximize = false;
 
 // Windows only shows toasts for an app id it knows: the installer's shortcut carries this one (electron-builder appId).
 if (app.isPackaged) app.setAppUserModelId('com.frontline-ecom.app');
@@ -35,6 +39,8 @@ else {
 
 function show() {
   if (!win) return;
+  if (maximize) win.maximize();
+  maximize = false;
   win.show();
   if (win.isMinimized()) win.restore();
   win.focus();
@@ -45,9 +51,16 @@ async function start() {
   const url = DEV_URL ?? (await startApi());
   // Before the window loads (the first start takes a while): nothing raised meanwhile is missed.
   toastNotifications(url);
+  const stateFile = join(app.getPath('userData'), 'window.json');
+  let saved: WindowState = {};
+  try {
+    saved = JSON.parse(readFileSync(stateFile, 'utf8')) ?? {};
+  } catch {} // first launch
+  const areas = [screen.getPrimaryDisplay(), ...screen.getAllDisplays()].map((d) => d.workArea);
+  const { maximized, ...bounds } = initialBounds(saved, areas);
+  maximize = maximized;
   win = new BrowserWindow({
-    width: 1440,
-    height: 900,
+    ...bounds,
     minWidth: 1024,
     minHeight: 680,
     show: false,
@@ -61,6 +74,9 @@ async function start() {
   if (!HIDDEN) win.once('ready-to-show', show);
   // Closing hides to the tray so automations and agents keep running; Quit is in the tray menu.
   win.on('close', (e) => {
+    try {
+      writeFileSync(stateFile, JSON.stringify({ bounds: win!.getNormalBounds(), maximized: win!.isMaximized() } satisfies WindowState));
+    } catch {} // a read-only profile just reopens at the default
     if (quitting) return;
     e.preventDefault();
     win?.hide();
