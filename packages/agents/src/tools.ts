@@ -477,7 +477,7 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'flag_order_issue',
     description:
-      "Put an order problem in the owner's issue queue (Orders & Fulfillment): late or stuck shipments, refund requests, supplier problems, bad addresses. One open issue per order and kind; flagging it again returns the open one.",
+      "Put an order problem in the owner's issue queue (Orders & Fulfillment): late or stuck shipments, refund requests, supplier problems, bad addresses. One open issue per order and kind; flagging it again at a higher severity raises the open one, otherwise returns it.",
     input: {
       orderId: z.string(),
       kind: z.enum(['late', 'stuck', 'refund', 'supplier', 'address', 'other']),
@@ -487,8 +487,9 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ orderId, ...i }, ctx) => {
       if (!ctx.db.prepare('SELECT 1 FROM orders WHERE store_id = ? AND id = ?').get(ctx.store.id, orderId)) return `No order ${orderId} in this store. Use list_orders for ids.`;
-      const { issue, created } = flagOrderIssue(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, orderId, ...i });
-      return created ? `Flagged order ${orderId} (${i.kind}, ${i.severity}) in the issue queue (${issue.id}).` : `Order ${orderId} already has an open ${i.kind} issue (${issue.id}): ${issue.note}`;
+      const { issue, created, raised } = flagOrderIssue(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, orderId, ...i });
+      if (created) return `Flagged order ${orderId} (${i.kind}, ${i.severity}) in the issue queue (${issue.id}).`;
+      return raised ? `Raised order ${orderId}'s open ${i.kind} issue (${issue.id}) to ${i.severity}.` : `Order ${orderId} already has an open ${i.kind} issue (${issue.id}): ${issue.note}`;
     },
   }),
   defineTool({

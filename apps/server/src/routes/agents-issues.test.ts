@@ -37,9 +37,14 @@ test('Operations flags order problems once per order and kind; the owner resolve
   expect(out[0]).toContain(orderId);
   expect(out[1]).toMatch(/^Order \S+ already has an open late issue \([\w-]+\): Unfulfilled 9 days/);
   expect(out[3]).toBe('No order nope in this store. Use list_orders for ids.');
+  // A day-8 re-flag at high raises a day-3 medium refund issue; a lower one leaves it as it is.
+  const raised = await run([flag({ kind: 'refund', severity: 'high', note: 'Refund asked 8 days ago, no reply' }), flag({ kind: 'refund', severity: 'low', note: 'customer is calmer now' })]);
+  expect(raised[0]).toMatch(/^Raised order \S+'s open refund issue \([\w-]+\) to high\.$/);
+  expect(raised[1]).toMatch(/already has an open refund issue \([\w-]+\): Refund asked 8 days ago, no reply$/);
 
   const open = (await (await app.request('/api/order-issues?stores=peak&status=open')).json()) as OrderIssue[];
-  expect(open.map((i) => [i.kind, i.severity])).toEqual([['refund', 'medium'], ['late', 'high']]);
+  expect(open.map((i) => [i.kind, i.severity])).toEqual([['refund', 'high'], ['late', 'high']]);
+  expect(open[0]!.suggestedAction).toBe('Ask CJ for tracking today'); // kept: the re-flag named no new step
   expect(open[1]).toMatchObject({ orderId, agentId: 'peak:operations', suggestedAction: 'Ask CJ for tracking today', status: 'open' });
 
   expect((await patch(open[1]!.id, { status: 'done' })).status).toBe(400);

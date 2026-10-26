@@ -6,8 +6,10 @@ import type { OrderIssue, OrderIssueStatus } from '@frontline/shared';
 
 export type NewOrderIssue = Omit<OrderIssue, 'id' | 'status' | 'resolution' | 'createdAt' | 'resolvedAt'>;
 
-/** Returns the new issue, or the one already open for this order and kind. */
-export function flagOrderIssue(db: DatabaseSync, i: NewOrderIssue, now = new Date()): { issue: OrderIssue; created: boolean } {
+const RANK = { low: 0, medium: 1, high: 2 };
+
+/** Returns the new issue, or the one already open for this order and kind: raised (severity, note, next step) if this flag is more severe. */
+export function flagOrderIssue(db: DatabaseSync, i: NewOrderIssue, now = new Date()): { issue: OrderIssue; created: boolean; raised?: boolean } {
   const id = randomUUID();
   const created =
     db
@@ -16,10 +18,11 @@ export function flagOrderIssue(db: DatabaseSync, i: NewOrderIssue, now = new Dat
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?)`,
       )
       .run(id, i.storeId, i.orderId, i.agentId, i.kind, i.severity, i.note, i.suggestedAction ?? null, now.toISOString()).changes > 0;
-  const row = created
-    ? db.prepare('SELECT * FROM order_issues WHERE id = ?').get(id)
-    : db.prepare(`SELECT * FROM order_issues WHERE store_id = ? AND order_id = ? AND kind = ? AND status = 'open'`).get(i.storeId, i.orderId, i.kind);
-  return { issue: toIssue(row!), created };
+  if (created) return { issue: toIssue(db.prepare('SELECT * FROM order_issues WHERE id = ?').get(id)!), created };
+  const open = toIssue(db.prepare(`SELECT * FROM order_issues WHERE store_id = ? AND order_id = ? AND kind = ? AND status = 'open'`).get(i.storeId, i.orderId, i.kind)!);
+  if (RANK[i.severity] <= RANK[open.severity]) return { issue: open, created };
+  db.prepare('UPDATE order_issues SET severity = ?, note = ?, suggested_action = coalesce(?, suggested_action) WHERE id = ?').run(i.severity, i.note, i.suggestedAction ?? null, open.id);
+  return { issue: toIssue(db.prepare('SELECT * FROM order_issues WHERE id = ?').get(open.id)!), created, raised: true };
 }
 
 /** Open first, then newest first. */
