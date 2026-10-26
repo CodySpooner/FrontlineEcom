@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { AGENT_ROLES, type Agent, type AgentRole, type Niche, type NicheLearning, type Platform, type Store, type StoreMemory } from '@frontline/shared';
+import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, type Agent, type AgentRole, type Niche, type NicheLearning, type Platform, type Store, type StoreMemory } from '@frontline/shared';
 import { customNichePack } from './niche';
 import { ROLES, SQUAD_RULES } from './roles';
 
@@ -75,13 +75,28 @@ export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [
   return [...fixed, memory, open, date].filter(Boolean).join('\n\n');
 }
 
+/** What an approved request can change on a connected store: the same lists the request tools gate on (tools.ts noStoreWrites). */
+function storeWrites(store: Store): string {
+  const on = (list: readonly Platform[]) => list.includes(store.platform);
+  const can = [
+    on(PRODUCT_WRITE_PLATFORMS) && 'add products',
+    on(PRICE_WRITE_PLATFORMS) && 'change prices',
+    on(PRODUCT_PAGE_PLATFORMS) && 'publish product pages',
+    on(PRODUCT_WRITE_PLATFORMS) && 'publish other pages',
+    store.platform === 'shopify' && 'publish theme changes',
+  ].filter(Boolean);
+  return can.length
+    ? `- On ${store.platform} the app can ${can.join(', ')} once the owner approves; any other store change goes in your answer for the owner to make by hand.`
+    : `- The app can't change ${store.platform} stores yet: put store changes in your answer for the owner to make by hand.`;
+}
+
 function storeProfile(store: Store): string {
   return [
     '# Store profile',
     `- ${store.name} (id ${store.id}) on ${store.platform}, niche ${store.niche}${store.nicheDetail ? `: ${store.nicheDetail}` : ''}`,
     `- Currency ${store.currency}, timezone ${store.timezone}`,
     store.connected
-      ? '- Live data from the connected store and ad accounts.'
+      ? `- Live data from the connected store and ad accounts.\n${storeWrites(store)}`
       : '- Demo data: no live store is connected, numbers are simulated. Say so if the owner treats them as real.',
   ].join('\n');
 }

@@ -50,6 +50,14 @@ describe('assemblePrompt', () => {
     for (const part of [playbook('ad_strategist'), platformPack('tiktok_shop'), nichePack('fitness'), 'Live data']) expect(prompt).toContain(part);
     expect(prompt).not.toContain(nichePack('beauty'));
     expect(prompt).not.toContain('What the squad has learned');
+    expect(prompt).toContain("- The app can't change tiktok_shop stores yet: put store changes in your answer for the owner to make by hand.");
+  });
+
+  test('a connected store is told what the app can change there on approval', () => {
+    const writes = (platform: Store['platform']) => assemblePrompt({ agent: agentOf(peak, 'market_analyst'), store: { ...peak, platform } }).split('\n').find((l) => l.startsWith(`- On ${platform} the app can`));
+    expect(writes('shopify')).toContain('add products, change prices, publish product pages, publish other pages, publish theme changes once');
+    expect(writes('etsy')).toContain('can change prices, publish product pages once');
+    expect(assemblePrompt({ agent: agentOf(glow, 'market_analyst'), store: glow })).not.toContain('the app can'); // demo: anything goes locally
   });
 
   test('custom niche: no niche pack, the sub-niche still reaches the profile', () => {
