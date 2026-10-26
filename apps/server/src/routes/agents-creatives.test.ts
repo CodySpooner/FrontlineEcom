@@ -170,6 +170,13 @@ test('higgsfieldGenerate submits, polls, downloads the output and serves it loca
   const failing = (async (u: string) =>
     u.includes('/status') ? Response.json({ request_id: 'r-9', status: 'failed', error: 'bad prompt' }) : Response.json({ request_id: 'r-9' })) as typeof fetch;
   await expect(higgsfieldGenerate({ keyId: 'k', keySecret: 's' }, { kind: 'video', aspect: '9:16', prompt: 'x' }, dir, { fetch: failing })).rejects.toThrow('Higgsfield render failed: bad prompt');
+
+  // A download that stalls fails on its own instead of holding the run.
+  const stalled = (async (u: string, init?: RequestInit) =>
+    u.includes('/status') ? Response.json({ request_id: 'r-7', status: 'completed', images: [{ url: 'https://cdn.example.com/slow.png' }] })
+    : u.includes('slow') ? new Promise((_, no) => init!.signal!.addEventListener('abort', () => no(init!.signal!.reason)))
+    : Response.json({ request_id: 'r-7' })) as typeof fetch;
+  await expect(higgsfieldGenerate({ keyId: 'k', keySecret: 's' }, { kind: 'image', aspect: '1:1', prompt: 'x' }, dir, { fetch: stalled, callMs: 20 })).rejects.toThrow(/timeout/i);
 });
 
 test('the squad reads the library back without the media payloads', async () => {

@@ -23,11 +23,13 @@ export async function higgsfieldGenerate(
   creds: { keyId: string; keySecret: string },
   req: { kind: Exclude<CreativeKind, 'copy'>; aspect: AspectRatio; prompt: string },
   dir: string,
-  { fetch: f = fetch, signal, pollMs = 3000, timeoutMs = 10 * 60_000 }: { fetch?: typeof fetch; signal?: AbortSignal; pollMs?: number; timeoutMs?: number } = {},
+  { fetch: f = fetch, signal, pollMs = 3000, timeoutMs = 10 * 60_000, callMs = 5 * 60_000 }: { fetch?: typeof fetch; signal?: AbortSignal; pollMs?: number; timeoutMs?: number; callMs?: number } = {},
 ): Promise<string> {
+  // Each request, the download included, gives up on its own: a stalled connection would hold the run's slot until cancelled.
+  const within = () => AbortSignal.any([AbortSignal.timeout(callMs), ...(signal ? [signal] : [])]);
   const headers = { Authorization: `Key ${creds.keyId}:${creds.keySecret}`, 'Content-Type': 'application/json' };
   const call = async (url: string, init: RequestInit = {}) => {
-    const res = await f(url, { ...init, headers, signal });
+    const res = await f(url, { ...init, headers, signal: within() });
     if (!res.ok) throw new Error(`Higgsfield ${res.status}: ${(await res.text()).slice(0, 200)}`);
     return (await res.json()) as { request_id: string; status_url?: string; status?: string; error?: string | null; images?: { url: string }[]; video?: { url: string } };
   };
@@ -43,7 +45,7 @@ export async function higgsfieldGenerate(
     else await sleep(pollMs, undefined, { signal });
   }
   if (!url) throw new Error('Higgsfield returned no media');
-  const res = await f(url, { signal });
+  const res = await f(url, { signal: within() });
   if (!res.ok) throw new Error(`Downloading the render failed (${res.status})`);
   const ext = TYPES[res.headers.get('content-type')?.split(';')[0] ?? ''] ?? (req.kind === 'image' ? 'jpg' : 'mp4');
   const name = `${sub.request_id.replace(/[^\w-]/g, '')}.${ext}`;
