@@ -1,7 +1,9 @@
+import { createHmac } from 'node:crypto';
+import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
-import { getCredentials, setIntegrationStatus } from '../integrations';
-import { rebuildAdSpend, switchToReal } from './common';
+import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
+import { rebuildAdSpend, rebuildRevenue, switchToReal } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -103,5 +105,128 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
     });
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'TikTok Ads sync failed');
+  }
+}
+
+// TikTok Shop Partner API (202309): app key + secret from Partner Center, and the shop's access + refresh token.
+const SHOP_API = 'https://open-api.tiktokglobalshop.com';
+const SHOP_TOKEN_REFRESH = 'https://auth.tiktok-shops.com/api/v2/token/refresh';
+
+interface ShopProduct {
+  id: string;
+  title: string;
+  status: string;
+  update_time: number;
+  skus?: { price?: { sale_price?: string; tax_exclusive_price?: string }; inventory?: { quantity: number }[] }[];
+}
+
+interface ShopOrder {
+  id: string;
+  status: string;
+  create_time: number;
+  update_time: number;
+  is_sample_order?: boolean;
+  tracking_number?: string;
+  payment?: { total_amount?: string };
+}
+
+/** Request signature: HMAC-SHA256 keyed by the secret over secret + path + sorted key+value params (minus sign/access_token) + body + secret, hex. */
+export function signTikTokShop(secret: string, path: string, params: Record<string, string>, body = '') {
+  const pairs = Object.keys(params).filter((k) => k !== 'sign' && k !== 'access_token').sort().map((k) => k + params[k]).join('');
+  return createHmac('sha256', secret).update(secret + path + pairs + body + secret).digest('hex');
+}
+
+const PRODUCT_STATUS: Record<string, ProductStatus> = { ACTIVATE: 'active', DRAFT: 'draft', PENDING: 'draft', FAILED: 'draft' };
+
+export function shopFulfillment(status: string): FulfillmentStatus {
+  if (status === 'DELIVERED' || status === 'COMPLETED') return 'delivered';
+  if (status === 'IN_TRANSIT') return 'in_transit';
+  return status === 'AWAITING_COLLECTION' ? 'fulfilled' : 'unfulfilled';
+}
+
+/** Access tokens last about a week; this trades the refresh token for new ones and saves both (encrypted). */
+async function refreshShopToken(db: Db, key: Buffer, id: string, creds: Record<string, string>, fetchFn: Fetch) {
+  const params = new URLSearchParams({ app_key: creds.appKey!, app_secret: creds.appSecret!, refresh_token: creds.refreshToken!, grant_type: 'refresh_token' });
+  const res = await fetchFn(`${SHOP_TOKEN_REFRESH}?${params}`);
+  const body = (await res.json().catch(() => ({}))) as { code?: number; message?: string; data?: { access_token?: string; access_token_expire_in?: number; refresh_token?: string } };
+  const data = body.data;
+  if (body.code !== 0 || !data?.access_token || !data.refresh_token) {
+    throw new Error(`TikTok Shop sign-in failed: ${body.message ?? `HTTP ${res.status}`}; authorize the shop again and paste new tokens`);
+  }
+  updateSecrets(db, key, id, { accessToken: data.access_token, refreshToken: data.refresh_token, accessTokenExpiresAt: String(data.access_token_expire_in ?? 0) });
+  return data.access_token;
+}
+
+export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
+  const id = `tiktok_shop:${storeId}`;
+  const creds = getCredentials(db, key, 'tiktok_shop', storeId);
+  if (!creds) return;
+  try {
+    // accessTokenExpiresAt (unix seconds) is only known after our first refresh, so a freshly pasted token is refreshed once.
+    const fresh = Number(creds.accessTokenExpiresAt) * 1000 - now.getTime() > 86400000;
+    const token = fresh ? creds.accessToken! : await refreshShopToken(db, key, id, creds, fetchFn);
+    const api = async <T>(method: 'GET' | 'POST', path: string, query: Record<string, string> = {}, body?: object) => {
+      const json = body ? JSON.stringify(body) : '';
+      const params = { ...query, app_key: creds.appKey!, timestamp: String(Math.floor(now.getTime() / 1000)) };
+      const res = await fetchFn(`${SHOP_API}${path}?${new URLSearchParams({ ...params, sign: signTikTokShop(creds.appSecret!, path, params, json) })}`, {
+        method,
+        headers: { 'x-tts-access-token': token, 'content-type': 'application/json' },
+        ...(body ? { body: json } : {}),
+      });
+      const b = (await res.json().catch(() => ({}))) as { code?: number; message?: string; data?: T };
+      if (!res.ok || b.code !== 0) throw new Error(`TikTok Shop: ${b.message ?? `HTTP ${res.status}`}`);
+      return b.data as T;
+    };
+
+    // ponytail: first authorized shop only; an app authorized by several shops needs a shop picker on the Integrations screen.
+    const shop = (await api<{ shops?: { cipher: string }[] }>('GET', '/authorization/202309/shops')).shops?.[0];
+    if (!shop) throw new Error('TikTok Shop: no shop has authorized this app');
+    const search = async <T>(path: string, list: string, query: Record<string, string>, body: object) => {
+      const out: T[] = [];
+      let pageToken = '';
+      do {
+        const data = await api<Record<string, unknown>>('POST', path, { ...query, shop_cipher: shop.cipher, page_size: '100', ...(pageToken ? { page_token: pageToken } : {}) }, body);
+        out.push(...((data[list] as T[] | undefined) ?? []));
+        pageToken = String(data.next_page_token ?? '');
+      } while (pageToken);
+      return out;
+    };
+    const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
+    const since = cursor ? Number(cursor) : Math.floor(now.getTime() / 1000) - BACKFILL_DAYS * 86400;
+    const products = await search<ShopProduct>('/product/202309/products/search', 'products', {}, { update_time_ge: since });
+    const orders = await search<ShopOrder>('/order/202309/orders/search', 'orders', { sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: since });
+    const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
+
+    tx(db, () => {
+      switchToReal(db, storeId);
+      // Ids get a tt- prefix so they can't collide with another platform's ids in the same store.
+      const prod = db.prepare(
+        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, NULL, 0, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, price = excluded.price, inventory = excluded.inventory, status = excluded.status`,
+      );
+      for (const p of products) {
+        const price = p.skus?.[0]?.price;
+        const inventory = (p.skus ?? []).flatMap((k) => k.inventory ?? []).reduce((a, i) => a + i.quantity, 0);
+        prod.run(storeId, `tt-${p.id}`, p.title, Number(price?.sale_price ?? price?.tax_exclusive_price ?? 0), inventory, PRODUCT_STATUS[p.status] ?? 'archived');
+      }
+      // ponytail: TikTok has no unit costs, so TikTok orders add revenue with cogs 0.
+      const ord = db.prepare(
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = excluded.tracking`,
+      );
+      const days = new Set<string>();
+      for (const o of orders) {
+        if (o.status === 'UNPAID' || o.is_sample_order) continue;
+        const created = new Date(o.create_time * 1000);
+        const day = dayOf.format(created);
+        days.add(day);
+        ord.run(storeId, `tt-${o.id}`, created.toISOString(), Number(o.payment?.total_amount ?? 0), o.status === 'CANCELLED' ? 'refunded' : 'paid', shopFulfillment(o.status), o.tracking_number || null, day);
+      }
+      rebuildRevenue(db, storeId, days);
+      const newest = [...products, ...orders].reduce((m, x) => Math.max(m, x.update_time), since);
+      db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(String(newest), now.toISOString(), id);
+    });
+  } catch (e) {
+    setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'TikTok Shop sync failed');
   }
 }

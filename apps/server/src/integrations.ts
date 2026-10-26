@@ -88,6 +88,12 @@ export function getCredentials(db: Db, key: Buffer, kind: IntegrationKind, store
 }
 
 
+/** Connectors that rotate tokens save the new ones here, merged into the stored secrets. */
+export function updateSecrets(db: Db, key: Buffer, id: string, secrets: Record<string, string>) {
+  const r = db.prepare('SELECT id, encrypted_credentials FROM integrations WHERE id = ?').get(id);
+  if (r) db.prepare('UPDATE integrations SET encrypted_credentials = ? WHERE id = ?').run(encrypt(key, { ...secretsOf(key, r), ...secrets }, id), id);
+}
+
 /** Connectors report health here; shows on the Integrations screen. Never put credentials in `error`. */
 export function setIntegrationStatus(db: Db, id: string, status: IntegrationStatus, error?: string) {
   db.prepare('UPDATE integrations SET status = ?, error = ? WHERE id = ?').run(status, error ?? null, id);

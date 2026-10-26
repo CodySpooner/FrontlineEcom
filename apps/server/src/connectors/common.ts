@@ -13,3 +13,16 @@ export function rebuildAdSpend(db: Db, storeId: string, dates: Iterable<string>)
   const up = db.prepare('INSERT INTO daily_metrics (store_id, date, ad_spend) VALUES (?, ?, ?) ON CONFLICT (store_id, date) DO UPDATE SET ad_spend = excluded.ad_spend');
   for (const date of dates) up.run(storeId, date, Math.round(Number(sum.get(storeId, date)!.spend) * 100) / 100);
 }
+
+/** daily_metrics revenue/cogs/orders = paid orders from every store platform that day. ad_spend is left to the ad connectors. */
+export function rebuildRevenue(db: Db, storeId: string, dates: Iterable<string>) {
+  const agg = db.prepare("SELECT coalesce(sum(total), 0) AS revenue, coalesce(sum(cogs), 0) AS cogs, count(*) AS n FROM orders WHERE store_id = ? AND local_date = ? AND status = 'paid'");
+  const up = db.prepare(
+    `INSERT INTO daily_metrics (store_id, date, revenue, cogs, orders) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (store_id, date) DO UPDATE SET revenue = excluded.revenue, cogs = excluded.cogs, orders = excluded.orders`,
+  );
+  for (const date of dates) {
+    const a = agg.get(storeId, date)!;
+    up.run(storeId, date, Math.round(Number(a.revenue) * 100) / 100, Math.round(Number(a.cogs) * 100) / 100, Number(a.n));
+  }
+}

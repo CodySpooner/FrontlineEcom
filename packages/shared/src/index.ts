@@ -402,10 +402,11 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'shopDomain', label: 'Shop domain', secret: false, placeholder: 'your-store.myshopify.com' },
     { key: 'accessToken', label: 'Admin API access token', secret: true, placeholder: 'shpat_…' },
   ] },
-  tiktok_shop: { name: 'TikTok Shop', category: 'platform', perStore: true, fields: [
+  tiktok_shop: { name: 'TikTok Shop', category: 'platform', perStore: true, help: 'TikTok Shop Partner Center → App & Service → create a custom app with Order and Product read scopes → copy the App key and App secret → authorize the app for your shop → get the shop access token and refresh token (Partner Center API testing tool, or the auth code exchange) → paste both. The app renews the access token itself.', fields: [
     { key: 'appKey', label: 'App key', secret: false },
     { key: 'appSecret', label: 'App secret', secret: true },
     { key: 'accessToken', label: 'Access token', secret: true },
+    { key: 'refreshToken', label: 'Refresh token', secret: true },
   ] },
   etsy: { name: 'Etsy', category: 'platform', perStore: true, fields: [
     { key: 'shopId', label: 'Shop ID', secret: false },

@@ -1,9 +1,9 @@
-import { randomBytes } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
-import { saveIntegration } from '../integrations';
-import { syncTikTokAds } from './tiktok';
+import { getCredentials, saveIntegration } from '../integrations';
+import { signTikTokShop, syncTikTokAds, syncTikTokShop } from './tiktok';
 
 const key = randomBytes(32);
 const TOKEN = 'tt_fixture_token';
@@ -72,4 +72,92 @@ test('a bad token shows on the integration without leaking it, and keeps demo da
 
   await syncTikTokAds(db, key, 'glow', fakeTikTok({ code: 40002, message: 'advertiser_id: Advertiser does not exist' }).fetchFn, NOW);
   expect(db.prepare("SELECT error FROM integrations WHERE id = 'tiktok_ads:glow'").get()).toEqual({ error: 'TikTok Ads: advertiser_id: Advertiser does not exist' });
+});
+
+test('TikTok Shop signature: secret + path + sorted params (no sign/access_token) + body + secret', () => {
+  const expected = createHmac('sha256', 'S').update('S/order/202309/orders/searchapp_keyKpage_size100shop_cipherCtimestamp1{"a":1}S').digest('hex');
+  expect(signTikTokShop('S', '/order/202309/orders/search', { timestamp: '1', shop_cipher: 'C', app_key: 'K', page_size: '100', access_token: 'x', sign: 'y' }, '{"a":1}')).toBe(expected);
+});
+
+const T = (iso: string) => Date.parse(iso) / 1000;
+const shopOrder = (id: string, status: string, total: string, extra: Record<string, unknown> = {}) => ({
+  id, status, create_time: T('2026-10-25T12:00:00Z'), update_time: T('2026-10-25T13:00:00Z'), payment: { total_amount: total }, ...extra,
+});
+
+/** Fake TikTok Shop: token refresh, shops, products (two pages), orders. Checks every signature. */
+function fakeShop(refreshError?: { code: number; message: string }) {
+  const calls: { url: URL; token: string | null; body: string }[] = [];
+  const fetchFn = (async (url: string, init: RequestInit = {}) => {
+    const u = new URL(url);
+    const body = String(init.body ?? '');
+    calls.push({ url: u, token: new Headers(init.headers).get('x-tts-access-token'), body });
+    if (u.host === 'auth.tiktok-shops.com') {
+      if (refreshError) return Response.json(refreshError);
+      return Response.json({ code: 0, message: 'success', data: { access_token: 'at_new', access_token_expire_in: T('2026-11-02T00:00:00Z'), refresh_token: 'rt_new' } });
+    }
+    const params = Object.fromEntries(u.searchParams);
+    expect(params.sign).toBe(signTikTokShop('app_secret_fixture', u.pathname, params, body));
+    const ok = (data: unknown) => Response.json({ code: 0, message: 'Success', data });
+    if (u.pathname === '/authorization/202309/shops') return ok({ shops: [{ cipher: 'CIPHER', name: 'Glow Haus TT' }] });
+    if (u.pathname === '/product/202309/products/search') {
+      return params.page_token
+        ? ok({ products: [{ id: '17302', title: 'Gua Sha', status: 'DRAFT', update_time: T('2026-10-20T00:00:00Z'), skus: [{ price: { sale_price: '19.00' }, inventory: [] }] }], next_page_token: '' })
+        : ok({ products: [{ id: '17301', title: 'Ice Roller', status: 'ACTIVATE', update_time: T('2026-10-21T00:00:00Z'), skus: [{ price: { sale_price: '24.90' }, inventory: [{ quantity: 7 }, { quantity: 3 }] }] }], next_page_token: 'p2' });
+    }
+    return ok({
+      orders: [
+        shopOrder('5761', 'AWAITING_SHIPMENT', '30.00'),
+        shopOrder('5762', 'COMPLETED', '20.00', { tracking_number: 'TT123' }),
+        shopOrder('5763', 'CANCELLED', '15.00'),
+        shopOrder('5764', 'UNPAID', '99.00'),
+        shopOrder('5765', 'AWAITING_SHIPMENT', '0.00', { is_sample_order: true }),
+      ],
+      next_page_token: '',
+    });
+  }) as typeof fetch;
+  return { fetchFn, calls };
+}
+
+const shopSetup = () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  saveIntegration(db, key, { kind: 'tiktok_shop', storeId: 'glow', values: { appKey: 'app_key_fixture', appSecret: 'app_secret_fixture', accessToken: 'at_old', refreshToken: 'rt_old' } });
+  return db;
+};
+
+test('TikTok Shop sync renews the token, pulls products + paid orders, and rebuilds revenue', async () => {
+  const db = shopSetup();
+  const { fetchFn, calls } = fakeShop();
+  await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
+
+  expect(calls[0]!.url.searchParams.get('refresh_token')).toBe('rt_old');
+  expect(getCredentials(db, key, 'tiktok_shop', 'glow')).toMatchObject({ accessToken: 'at_new', refreshToken: 'rt_new' });
+  const api = calls.slice(1);
+  expect(api.every((c) => c.token === 'at_new')).toBe(true);
+  expect(api.filter((c) => c.url.pathname.includes('/search')).every((c) => c.url.searchParams.get('shop_cipher') === 'CIPHER')).toBe(true);
+
+  expect(db.prepare("SELECT id, title, price, inventory, status FROM products WHERE store_id = 'glow' ORDER BY id").all()).toEqual([
+    { id: 'tt-17301', title: 'Ice Roller', price: 24.9, inventory: 10, status: 'active' },
+    { id: 'tt-17302', title: 'Gua Sha', price: 19, inventory: 0, status: 'draft' },
+  ]);
+  expect(db.prepare("SELECT id, total, status, fulfillment_status, tracking FROM orders WHERE store_id = 'glow' ORDER BY id").all()).toEqual([
+    { id: 'tt-5761', total: 30, status: 'paid', fulfillment_status: 'unfulfilled', tracking: null },
+    { id: 'tt-5762', total: 20, status: 'paid', fulfillment_status: 'delivered', tracking: 'TT123' },
+    { id: 'tt-5763', total: 15, status: 'refunded', fulfillment_status: 'unfulfilled', tracking: null },
+  ]);
+  expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ revenue: 50, orders: 2 });
+
+  // Token still good for a week: no renewal; incremental from the newest update_time.
+  const again = fakeShop();
+  await syncTikTokShop(db, key, 'glow', again.fetchFn, NOW);
+  expect(again.calls.some((c) => c.url.host === 'auth.tiktok-shops.com')).toBe(false);
+  expect(JSON.parse(again.calls.find((c) => c.url.pathname.includes('orders'))!.body)).toEqual({ update_time_ge: T('2026-10-25T13:00:00Z') });
+});
+
+test('TikTok Shop: a rejected refresh token shows on the integration and keeps demo data', async () => {
+  const db = shopSetup();
+  await syncTikTokShop(db, key, 'glow', fakeShop({ code: 36004004, message: 'refresh token is expired' }).fetchFn, NOW);
+  const row = db.prepare("SELECT status, error FROM integrations WHERE id = 'tiktok_shop:glow'").get();
+  expect(row).toEqual({ status: 'error', error: 'TikTok Shop sign-in failed: refresh token is expired; authorize the shop again and paste new tokens' });
+  expect(db.prepare("SELECT demo FROM stores WHERE id = 'glow'").get()).toEqual({ demo: 1 });
 });

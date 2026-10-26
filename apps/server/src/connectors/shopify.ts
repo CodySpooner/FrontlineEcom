@@ -2,7 +2,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { switchToReal } from './common';
+import { rebuildRevenue, switchToReal } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts).
@@ -149,16 +149,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day);
       }
 
-      // ad_spend is left alone: the ad connectors own it.
-      const agg = db.prepare("SELECT coalesce(sum(total), 0) AS revenue, coalesce(sum(cogs), 0) AS cogs, count(*) AS n FROM orders WHERE store_id = ? AND local_date = ? AND status = 'paid'");
-      const up = db.prepare(
-        `INSERT INTO daily_metrics (store_id, date, revenue, cogs, orders) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT (store_id, date) DO UPDATE SET revenue = excluded.revenue, cogs = excluded.cogs, orders = excluded.orders`,
-      );
-      for (const day of days) {
-        const a = agg.get(storeId, day)!;
-        up.run(storeId, day, Math.round(Number(a.revenue) * 100) / 100, Math.round(Number(a.cogs) * 100) / 100, Number(a.n));
-      }
+      rebuildRevenue(db, storeId, days);
 
       const newest = [...products, ...orders].reduce((m, x) => (x.updatedAt > m ? x.updatedAt : m), since);
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(newest, now.toISOString(), id);
