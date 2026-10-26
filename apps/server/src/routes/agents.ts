@@ -7,6 +7,8 @@ import {
   seedDemoXp,
   getAgent,
   getPageDraft,
+  knowledgeDoc,
+  knowledgeIndex,
   listAgents,
   listMemory,
   listNicheLearnings,
@@ -212,6 +214,11 @@ export function agentRoutes(db: Db) {
       return memory ? c.json(memory) : c.json({ error: 'Memory not found' }, 404);
     })
     .delete('/api/memory/:id', (c) => (deleteMemory(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Memory not found' }, 404)))
+    .get('/api/knowledge', (c) => c.json(knowledgeIndex()))
+    .get('/api/knowledge/:kind/:key', (c) => {
+      const d = knowledgeDoc(c.req.param('kind'), c.req.param('key'));
+      return d ? c.json(d) : c.json({ error: 'Not found' }, 404);
+    })
     .get('/api/niche-learnings', (c) => c.json(listNicheLearnings(db, c.req.query('niche') || undefined)))
     .delete('/api/niche-learnings/:id', (c) => (deleteNicheLearning(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Learning not found' }, 404)))
     .route('/', pageRoutes(db))

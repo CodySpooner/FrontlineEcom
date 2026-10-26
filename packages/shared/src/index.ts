@@ -378,6 +378,23 @@ export interface AgentRun {
   parentRunId?: string;
 }
 
+export type KnowledgeKind = 'playbook' | 'platform' | 'niche';
+
+/**
+ * Knowledge Base: an expertise layer the agents read. GET /api/knowledge → KnowledgeDoc[] (no markdown);
+ * GET /api/knowledge/:kind/:key → KnowledgeDoc with markdown. Store memory: /api/stores/:id/memory; niche learnings: /api/niche-learnings.
+ */
+export interface KnowledgeDoc {
+  kind: KnowledgeKind;
+  /** Role, platform or niche id; custom niche packs are `other:<slug>` (same key as niche learnings). */
+  key: string;
+  title: string;
+  /** A pack the Market Analyst drafted for this owner's custom niche (in the data dir). */
+  custom?: boolean;
+  chars: number;
+  markdown?: string;
+}
+
 export type OrderIssueKind = 'late' | 'stuck' | 'refund' | 'supplier' | 'address' | 'other';
 export type OrderIssueStatus = 'open' | 'resolved';
 

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { NicheLearning, Store } from '@frontline/shared';
@@ -21,6 +21,15 @@ export function customNichePack(nicheDetail?: string): string {
   if (!slug) return '';
   const path = customPackPath(slug);
   return existsSync(path) ? readFileSync(path, 'utf8').trim() : '';
+}
+
+/** The owner's custom niche packs, by slug. */
+export function customNichePacks(): { slug: string; markdown: string }[] {
+  const dir = dirname(customPackPath('x'));
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.md'))
+    .map((f) => ({ slug: f.slice(0, -3), markdown: readFileSync(join(dir, f), 'utf8').trim() }));
 }
 
 export function saveNichePack(slug: string, markdown: string): string {
