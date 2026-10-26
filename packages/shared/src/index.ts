@@ -380,3 +380,55 @@ export interface Order {
   supplier?: string;
   tracking?: string;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Product research (core lane).
+
+export type ResearchSource = 'tiktok' | 'shopify' | 'amazon' | 'aliexpress';
+
+/** Product Research tabs (My Lists uses the lists endpoints). */
+export type ResearchTab = 'trending' | 'high_margin' | 'low_competition' | 'tiktok_viral' | 'shopify_winners';
+export const RESEARCH_TABS: ResearchTab[] = ['trending', 'high_margin', 'low_competition', 'tiktok_viral', 'shopify_winners'];
+
+/** GET /api/research?tab=&niche=&q=&offset=&limit= → Page<ResearchProduct> (no tab = best AI score first). GET /api/research/:id. */
+export interface ResearchProduct {
+  id: string;
+  title: string;
+  /** Display category, e.g. "Health & Beauty". */
+  category: string;
+  niche: Niche;
+  image?: string;
+  source: ResearchSource;
+  /** Supplier cost incl. shipping. */
+  cost: number;
+  /** Suggested sell price. */
+  price: number;
+  compareAt: number;
+  /** (price - cost) / price × 100. */
+  margin: number;
+  /** Demand growth over the last 30 days, %. */
+  trend: number;
+  /** 0–100, lower = fewer competing sellers/ads. */
+  competition: number;
+  shippingDays: number;
+  /** AI Score 0–100 = 35% margin + 25% trend + 25% low competition + 15% fast shipping. */
+  score: number;
+  /** Each factor scored 0–100, for the details view. */
+  scoreParts: { margin: number; trend: number; competition: number; shipping: number };
+}
+
+/**
+ * Saved research lists. GET /api/research/lists → ProductList[]; POST /api/research/lists { name } → ProductList;
+ * DELETE /api/research/lists/:id; PUT|DELETE /api/research/lists/:id/items/:productId → ProductList.
+ */
+export interface ProductList {
+  id: string;
+  name: string;
+  productIds: string[];
+  createdAt: string;
+}
+
+/** POST /api/research/:id/add-to-store body → 201 ApprovalRequest for that store's Product Hunter. */
+export interface AddToStoreInput {
+  storeId: string;
+}

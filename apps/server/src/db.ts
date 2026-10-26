@@ -122,6 +122,33 @@ export const MIGRATIONS = [
     updated_at TEXT NOT NULL
   );
   `,
+  /* 3 */ `
+  CREATE TABLE research_products (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    category TEXT NOT NULL,
+    niche TEXT NOT NULL,
+    image TEXT,
+    source TEXT NOT NULL,
+    cost REAL NOT NULL,
+    price REAL NOT NULL,
+    compare_at REAL NOT NULL,
+    trend REAL NOT NULL,
+    competition REAL NOT NULL,
+    shipping_days INTEGER NOT NULL
+  );
+  CREATE TABLE product_lists (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE product_list_items (
+    list_id TEXT NOT NULL REFERENCES product_lists(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL REFERENCES research_products(id) ON DELETE CASCADE,
+    added_at TEXT NOT NULL,
+    PRIMARY KEY (list_id, product_id)
+  );
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

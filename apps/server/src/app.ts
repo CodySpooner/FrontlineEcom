@@ -10,6 +10,7 @@ import { dataDir, type Db } from './db';
 import { localDate } from './dates';
 import { deleteIntegration, listIntegrations, saveIntegration } from './integrations';
 import { listEvents, subscribe } from './live';
+import { researchRoutes } from './research';
 import { agentRoutes } from './routes/agents';
 import { loadKey } from './secrets';
 import { createStore, deleteStore, getStore, listStores, parseStoreInput, updateStore } from './stores';
@@ -92,6 +93,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const to = localDate();
       return c.json(summarize(loadRows(db, storeIds, range, to), { range, to, storeIds }));
     })
+    .route('/', researchRoutes(db))
     .route('/', agentRoutes(db));
 };
 
