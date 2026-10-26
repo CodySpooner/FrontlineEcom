@@ -804,7 +804,7 @@ function autopilotUsedToday(db: DatabaseSync, storeId: string, kind: string): nu
 }
 
 /** Approval kinds the server carries out when approved (apps/server/src/routes/agents.ts), whether or not the run that asked is still alive. */
-export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'store.set_price', 'ads.set_budget', 'ads.pause_campaign'];
+export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'store.publish_theme', 'store.set_price', 'ads.set_budget', 'ads.pause_campaign'];
 
 /** Actions the agents lane carries out itself once approved. Store/ad actions arrive with the connectors. */
 const ACTIONS: Record<string, (payload: Record<string, unknown>) => Promise<string>> = {

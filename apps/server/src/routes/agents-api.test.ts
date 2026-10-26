@@ -1,4 +1,7 @@
 import type { AgentRun, AgentRunDetail, StoreMemory, StoreUsage } from '@frontline/shared';
+import { OUTLIVE_RUN } from '@frontline/agents';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
@@ -89,4 +92,11 @@ test("usage: today's AI cost, credits and added ad budget per store, the counter
   expect(after!.credits - before[0]!.credits).toBe(2);
   expect(after!.adBudgetAddedUsd - before[0]!.adBudgetAddedUsd).toBe(12);
   expect(((await (await send('GET', '/api/usage')).json()) as StoreUsage[]).length).toBeGreaterThan(1);
+});
+
+test('every kind the server carries out on approval outlives its run (a restart must not expire it)', () => {
+  const src = readFileSync(fileURLToPath(new URL('./agents.ts', import.meta.url)), 'utf8');
+  const executed = [...src.matchAll(/a\.action\.kind === '([\w.]+)'/g)].map((m) => m[1]);
+  expect(executed.length).toBeGreaterThan(4);
+  expect(executed.filter((k) => !OUTLIVE_RUN.includes(k!))).toEqual([]);
 });

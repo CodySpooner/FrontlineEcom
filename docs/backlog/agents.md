@@ -122,6 +122,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed.
 
 ## Done
+- 2026-10-26 — `store.publish_theme` is in `OUTLIVE_RUN`, so an app restart no longer expires a pending theme request whose copy is already built. A test checks that every kind `agents.ts` executes on approval is in `OUTLIVE_RUN` (now exported).
 - 2026-10-26 — A run paused on the owner's decision no longer holds a concurrency slot. Before, two unanswered requests on a store (perStore 2) stalled every later job and chat for that store until the owner answered. The paused run still blocks a second run of the same agent. Limits gate starting runs only, so a resumed run can briefly go over. The test fails without the fix.
 - 2026-10-26 — Theme changes are judged like the rest. On a successful publish the executor records `theme-live:<approval>`. Fifteen days later, `checkThemeOutcomes` compares store conversion (orders/sessions) for the 14 days before and after, once each. It writes a learning (tag `theme`), notifies "Measured win" or "no lift", moves the run's learnings, and pays win XP, which counts toward First Measured Win.
 - 2026-10-26 — AGT-57 Theme edits (core's theme connector). Tools for the Store Developer:
