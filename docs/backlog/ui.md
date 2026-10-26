@@ -89,7 +89,7 @@ Orca's browser against the reference before ticking it.
 - [x] UI-22 Polish: 1280–1920 first, usable to 900px; focus rings, keyboard nav, AA contrast; run styleseed-design-review.
 - [x] UI-24 Store Builder: the Store Developer agent's workspace — pages/sections it's building, change list, previews,
       approve to publish (DESIGN.md §4.6).
-- [ ] UI-23 Tests (vitest + @testing-library/react + jsdom): KPI formatting, store filter, approvals flow, chart range bucketing.
+- [x] UI-23 Tests (vitest + @testing-library/react + jsdom): KPI formatting, store filter, approvals flow, chart range bucketing.
 
 ## Blocked
 
@@ -132,3 +132,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Inbox: today is in progress — the area chart dashes its last segment and labels it "Today so far" / "This week so far" (Dashboard + Analytics); KPI sparklines leave out today
 - 2026-10-26 — UI-21: Onboarding — first-run welcome (per-device flag): Explore the demo, or Add my store (shared StoreForm, moved out of Settings) → Meet your squad (8 portraits, niche pack line) → Open the Command Center with the new store selected
 - 2026-10-26 — UI-22: Polish — measured token contrast (text/text-2/muted/red/good all ≥4.5 on every surface); white on #ff2a3a was 3.7:1, so primary buttons, the active segment, the bell count and the AI-score badge now use red-fill #e01e2d (4.8:1); every click target is a button/link with the global focus ring; checked 1440/1920 in Chrome and 800 in Orca
+- 2026-10-26 — UI-23: Tests — @testing-library/react + jsdom (per-file `@vitest-environment jsdom`, no root config change); approvals flow component test (shows kind/reason/$ at stake, Approve posts the verdict and shows it, a failed verdict alerts and restores the buttons). KPI formatting (format.test), store filter (StoreFilter.test) and chart range bucketing (chart.test) were already covered

@@ -288,7 +288,7 @@ function Missions() {
   );
 }
 
-function Requests() {
+export function Requests() {
   const { has, name } = useStoreSelection();
   const qc = useQueryClient();
   const q = useApprovals();
