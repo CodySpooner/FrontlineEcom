@@ -109,7 +109,7 @@ describe('Claude engine', () => {
   test('maps SDK frames to agent events', () => {
     expect(frames.flatMap(toAgentEvents)).toEqual([
       { type: 'text_delta', text: 'Revenue ' },
-      { type: 'tool_call', id: 'tu1', name: 'mcp__frontline__analytics_summary', input: { range: 7 } },
+      { type: 'tool_call', id: 'tu1', name: 'analytics_summary', input: { range: 7 } },
       { type: 'tool_result', id: 'tu1', output: '{"revenue":1200}', isError: false },
       { type: 'text_delta', text: 'is up.' },
       { type: 'done', sessionId: 'abc', usage: { inputTokens: 115, outputTokens: 7, costUsd: 0.012 } },

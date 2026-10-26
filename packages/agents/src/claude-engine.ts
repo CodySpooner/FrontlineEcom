@@ -110,7 +110,8 @@ export function toAgentEvents(message: SDKMessage): AgentEvent[] {
       if (message.parent_tool_use_id !== null) return [];
       if (message.error && ACCOUNT[message.error]) return [{ type: 'error', message: ACCOUNT[message.error]! }];
       return message.message.content.flatMap((block): AgentEvent[] =>
-        block.type === 'tool_use' ? [{ type: 'tool_call', id: block.id, name: block.name, input: block.input }] : [],
+        // Our own tools read as in demo runs (store_summary); external ones keep their server (mcp__meta_ads__…).
+        block.type === 'tool_use' ? [{ type: 'tool_call', id: block.id, name: block.name.replace(/^mcp__frontline__/, ''), input: block.input }] : [],
       );
     case 'user': {
       const { content } = message.message;
