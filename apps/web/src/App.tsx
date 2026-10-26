@@ -9,6 +9,7 @@ import { Competitors } from './pages/Competitors';
 import { Integrations } from './pages/Integrations';
 import { Knowledge } from './pages/Knowledge';
 import { Settings } from './pages/Settings';
+import { Builder } from './pages/Builder';
 import { Agents } from './pages/Agents';
 import { Creative } from './pages/Creative';
 import { Orders } from './pages/Orders';
@@ -17,7 +18,7 @@ import { DevGallery } from './pages/DevGallery';
 import { Placeholder } from './pages/Placeholder';
 import { Research } from './pages/Research';
 
-const PAGES: Record<string, ReactNode> = { '/agents': <Agents />, '/research': <Research />, '/creative': <Creative />, '/analytics': <Analytics />, '/orders': <Orders />, '/competitors': <Competitors />, '/automation': <Automation />, '/integrations': <Integrations />, '/knowledge': <Knowledge />, '/settings': <Settings /> };
+const PAGES: Record<string, ReactNode> = { '/agents': <Agents />, '/research': <Research />, '/creative': <Creative />, '/analytics': <Analytics />, '/orders': <Orders />, '/competitors': <Competitors />, '/automation': <Automation />, '/integrations': <Integrations />, '/knowledge': <Knowledge />, '/settings': <Settings />, '/builder': <Builder /> };
 
 export function App() {
   return (

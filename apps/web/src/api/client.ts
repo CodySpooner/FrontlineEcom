@@ -40,6 +40,7 @@ import type {
   OrderIssueStatus,
   OrderStatus,
   Page,
+  PageDraft,
   PriceChange,
   ProductList,
   ResearchProduct,
@@ -369,6 +370,18 @@ export function useDeleteFlowDraft() {
   return useMutation({ mutationFn: (id: string) => api<void>(`/api/flow-drafts/${id}`, { method: 'DELETE' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['flow-drafts'] }) });
 }
 
+export const usePageDrafts = (storeIds: string[]) =>
+  useQuery({ queryKey: ['page-drafts', storeIds], queryFn: () => api<PageDraft[]>(`/api/page-drafts?stores=${storeIds.join(',')}`), placeholderData: keepPreviousData });
+
+export function usePageDraftActions() {
+  const qc = useQueryClient();
+  const done = () => ['page-drafts', 'approvals', 'products'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  return {
+    publish: useMutation({ mutationFn: (id: string) => api<PageDraft>(`/api/page-drafts/${id}/publish`, { method: 'POST' }), onSuccess: done }),
+    remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/page-drafts/${id}`, { method: 'DELETE' }), onSuccess: done }),
+  };
+}
+
 export const useNotifications = () => useQuery({ queryKey: ['notifications'], queryFn: () => api<AppNotification[]>('/api/notifications?limit=40') });
 
 export function useMarkRead() {
@@ -402,6 +415,7 @@ export function useLive() {
         qc.invalidateQueries({ queryKey: ['creatives'] });
         qc.invalidateQueries({ queryKey: ['order-issues'] });
         qc.invalidateQueries({ queryKey: ['flow-drafts'] });
+        qc.invalidateQueries({ queryKey: ['page-drafts'] });
       }
       if (m.type === 'approval' || m.type === 'run' || m.type === 'xp') {
         qc.invalidateQueries({ queryKey: ['missions'] });
@@ -414,6 +428,8 @@ export function useLive() {
       else if (m.type === 'approval') {
         qc.invalidateQueries({ queryKey: ['agents'] });
         // Approved requests change shared learnings or (ad changes) campaign budgets and statuses.
+        // Publish requests move Store Builder drafts between pending, approved, published and rejected.
+        qc.invalidateQueries({ queryKey: ['page-drafts'] });
         if (m.approval.status === 'approved') ['niche-learnings', 'campaigns'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         // A decided request lingers ~1s so its "Approved"/"Denied" verdict shows before the row drops.
         setTimeout(() => qc.invalidateQueries({ queryKey: ['approvals'] }), m.approval.status === 'pending' ? 0 : 1000);
