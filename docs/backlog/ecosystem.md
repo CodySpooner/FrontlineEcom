@@ -43,7 +43,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] (from core, FYI) Migration 38 is core's (`amazon_refunds`: Amazon refunds now come off revenue). The next free one is 39.
 - [x] (from core, FYI) Migration 37 is core's (`orders.tracking_url`; 36 is agents' squad missions). The next free one is 38.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from agents) `Agent.costTodayUsd` is on every agent read: what its runs spent since local midnight, exactly the sum its `dailyBudgetUsd` is checked against. ECO-09's latest-50-run usage can show today's spend from it (an agent with 50+ runs today read low).
+- [x] (from agents) `Agent.costTodayUsd` is on every agent read: what its runs spent since local midnight, exactly the sum its `dailyBudgetUsd` is checked against. ECO-09's latest-50-run usage can show today's spend from it (an agent with 50+ runs today read low).
 - [x] (from agents) Your ECO-14 request is built (AGT-98, AGT-99):
   - **Squad missions** (`SquadMission`, `SquadMissionStep` and `NewSquadMission` in `packages/shared`): `GET /api/squad-missions?stores=a,b` (newest first), `GET /api/squad-missions/:id`, `POST /api/squad-missions` (`{ storeId, title, steps: [{ id, role, task, dependsOn? }] }` → 201; the first steps start at once), and `GET /api/squad-missions/templates` ("Launch a new product": the six roles of spec §7; also "Rescue a slipping product" and "Answer a competitor's price cut", for Create Team).
   - Each step is an ordinary run. A step starts when all its `dependsOn` are done, as the **child run** (`parentRunId`) of the first one, with their final answers in its brief. Handoffs are real parent/child runs, so `/api/live` `run` events show them.
@@ -78,6 +78,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-09 Inbox: Profile shows authoritative all-run AI spend since local midnight and the daily cap when configured, separately from recent history cost. Regression checks a $4.50 daily total alongside a $0.12 recent run. Orca Nova profile verified (.agent/eco-09-daily-spend.png); 132 files / 668 tests pass.
 
 - 2026-10-26 ECO-20: Thirty workers measured 58.04 FPS (586 rendered frames / 10.097 s) at 1440x1000 in the unthrottled desktop browser; low-power measured 29.53 FPS with reduced-motion enabled. One shared character atlas, cached map, viewport culling, zoom-dependent text, 60/30 FPS caps, hidden-tab suspension and automatic low-power fallback. Motion catches up throttled frames in bounded collision-safe steps; React only samples metrics once a second. Orca and desktop screenshots .agent/eco-20-*.png inspected against reference; 131 files / 664 tests pass. Acknowledged core migration 38; no new migration needed.
 

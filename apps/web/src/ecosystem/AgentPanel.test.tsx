@@ -10,13 +10,15 @@ import { emptyOffice, mergeOfficeSnapshot } from './events';
 vi.mock('./WorkerPortrait', () => ({ WorkerPortrait: () => <span>Portrait</span> }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 test('inspects real usage and cancels through the existing run endpoint', async () => {
-  const agent: Agent = { id: 'glow:copywriter', storeId: 'glow', role: 'copywriter', status: 'running', level: 1, xp: 20, engine: { provider: 'demo' } };
+  const agent: Agent = { id: 'glow:copywriter', storeId: 'glow', role: 'copywriter', status: 'running', level: 1, xp: 20, costTodayUsd: 4.5, dailyBudgetUsd: 8, engine: { provider: 'demo' } };
   const run: AgentRun = { id: 'r1', agentId: agent.id, storeId: 'glow', task: 'Write a real headline', status: 'running', createdAt: new Date().toISOString(), usage: { inputTokens: 123, outputTokens: 45, costUsd: .12 } };
   const seat: OfficeSeat = { agentId: agent.id, deskId: 'copywriting-1', displayName: 'Nova', appearance: appearanceFor(agent.id), position: null, archived: false, updatedAt: run.createdAt };
   const fetch = stubApi((url, init) => url.startsWith('/api/runs?') ? [run] : url === '/api/runs/r1/cancel' && init?.method === 'POST' ? { ...run, status: 'cancelled' } : []);
   renderApp(<AgentPanel agent={agent} seat={seat} office={mergeOfficeSnapshot(emptyOffice(), [agent], [run], [])} onClose={() => {}} onFocus={() => {}} />);
   expect(screen.getByRole('dialog', { name: 'Nova' })).toBeTruthy();
   expect(await screen.findByText('$0.12')).toBeTruthy();
+  expect(screen.getByText('$4.50')).toBeTruthy();
+  expect(screen.getByText(/of \$8.00 daily limit/)).toBeTruthy();
   expect(screen.getByText('168')).toBeTruthy();
   expect(screen.getByRole('link', { name: 'Configure Agent' }).getAttribute('href')).toBe('/agents/glow%3Acopywriter?tab=settings');
   fireEvent.click(screen.getByRole('button', { name: 'Cancel task' }));

@@ -26,6 +26,7 @@ export function AgentPanel({ agent, seat, office, onClose, onFocus, assignInitia
   return <Dialog open onClose={onClose} title={name} side="right">
     <div className="eco-profile"><WorkerPortrait appearance={seat.appearance} name={name} /><div><Badge>{department?.name}</Badge><h3>{role.name}</h3><p>{agent.storeId} · {seat.deskId}</p><p>Level {agent.level} · {agent.rank ?? 'Recruit'} · {agent.xp} XP</p></div></div>
     <p className="eco-profile-copy">{role.blurb}</p>
+    {agent.costTodayUsd !== undefined && <p className="eco-profile-copy">AI spend today: <strong>{cents(agent.costTodayUsd)}</strong>{agent.dailyBudgetUsd !== undefined && <> of {cents(agent.dailyBudgetUsd)} daily limit</>} · since local midnight, across all runs.</p>}
     {agent.levelProgress && <XPBar level={agent.level} rank={agent.rank} xp={agent.levelProgress.xp} next={agent.levelProgress.needed} />}
     <dl className="eco-details"><dt>Model</dt><dd>{agent.engine?.provider === 'demo' ? 'Demo engine · no API cost' : agent.engine?.model ?? 'Managed by the agent engine'}</dd><dt>Permissions</dt><dd>{agent.autonomy ?? 'ask'} · existing approval policy</dd><dt>Status</dt><dd>{activity.status.replaceAll('_', ' ')}</dd><dt>Current task</dt><dd>{activity.run && activeRun(activity.run) ? activity.run.task : 'No active task'}</dd>{activity.tool && <><dt>Current tool</dt><dd>{activity.tool}</dd></>}{recent && <><dt>Latest activity</dt><dd>{recent.summary}<small>{ago(recent.at)}</small></dd></>}</dl>
     <div className="eco-panel-actions">
