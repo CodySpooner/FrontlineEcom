@@ -7,7 +7,7 @@ import type { Integration } from '@frontline/shared';
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { getCredentials } from './integrations';
+import { getCredentials, saveIntegration } from './integrations';
 import { decrypt, encrypt, loadKey } from './secrets';
 
 const key = randomBytes(32);
@@ -119,4 +119,17 @@ test('GET /api/health lists each connector state without secrets', async () => {
       { id: 'shopify:glow', kind: 'shopify', storeId: 'glow', status: 'error', error: 'Shopify rejected the access token' },
     ],
   });
+});
+
+test('pointing an integration at another ad account restarts its backfill; a new token keeps the sync cursor', () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const save = (adAccountId: string, accessToken: string) => saveIntegration(db, key, { kind: 'meta_ads', storeId: 'glow', values: { adAccountId, accessToken } });
+  const cursor = () => db.prepare("SELECT cursor FROM integrations WHERE id = 'meta_ads:glow'").get()?.cursor;
+  save('act_1', 'token-a');
+  db.prepare("UPDATE integrations SET cursor = '2026-10-26' WHERE id = 'meta_ads:glow'").run();
+  save('act_1', 'token-b');
+  expect(cursor()).toBe('2026-10-26');
+  save('act_2', 'token-b');
+  expect(cursor()).toBeNull();
 });

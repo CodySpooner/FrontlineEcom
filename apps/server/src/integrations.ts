@@ -76,7 +76,9 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
   db.prepare(
     `INSERT INTO integrations (id, kind, store_id, status, error, settings_json, encrypted_credentials, updated_at) VALUES (?, ?, ?, 'connected', NULL, ?, ?, ?)
      ON CONFLICT (id) DO UPDATE SET status = 'connected', error = NULL, settings_json = excluded.settings_json,
-       encrypted_credentials = excluded.encrypted_credentials, updated_at = excluded.updated_at`,
+       encrypted_credentials = excluded.encrypted_credentials, updated_at = excluded.updated_at,
+       -- Another shop or ad account (non-secret settings changed) backfills from scratch; a new token picks up where it was.
+       cursor = CASE WHEN settings_json = excluded.settings_json THEN cursor END`,
   ).run(id, kind, storeId ?? null, JSON.stringify(settings), encrypt(key, secrets, id), new Date().toISOString());
   return toIntegration(db.prepare('SELECT * FROM integrations WHERE id = ?').get(id)!, key);
 }
