@@ -22,6 +22,7 @@ import type {
   Creative,
   CreativeKind,
   FulfillmentStatus,
+  Health,
   Integration,
   IntegrationInput,
   KnowledgeDoc,
@@ -240,11 +241,14 @@ export const useOrders = (storeIds: string[], o: OrderQuery) =>
   });
 
 // ponytail: polls so a sync result (connected → error) shows up; push it over the live socket if this ever gets chatty.
+/** Connector status for the sidebar (sync failures surface here). */
+export const useHealth = () => useQuery({ queryKey: ['health'], queryFn: () => api<Health>('/api/health'), refetchInterval: 60_000 });
+
 export const useIntegrations = () => useQuery({ queryKey: ['integrations'], queryFn: () => api<Integration[]>('/api/integrations'), refetchInterval: 10_000 });
 
 export function useIntegrationActions() {
   const qc = useQueryClient();
-  const refresh = () => qc.invalidateQueries({ queryKey: ['integrations'] });
+  const refresh = () => ['integrations', 'health'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   return {
     save: useMutation({ mutationFn: (i: IntegrationInput) => api<Integration>('/api/integrations', json('PUT', i)), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/integrations/${id}`, { method: 'DELETE' }), onSuccess: refresh }),

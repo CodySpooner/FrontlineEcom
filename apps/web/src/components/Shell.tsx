@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
-import { NavLink, Outlet } from 'react-router';
-import { useAgents, useLive } from '../api/client';
+import { Link, NavLink, Outlet } from 'react-router';
+import { useAgents, useHealth, useLive } from '../api/client';
 import { NAV } from '../nav';
 import { SvgDefs } from './Art';
 import { BrandLogo } from './BrandLogo';
@@ -59,13 +59,24 @@ export function Shell() {
 function SystemStatus() {
   const { data: agents = [], isError } = useAgents();
   const down = agents.filter((a) => a.status === 'error' || a.status === 'offline').length;
-  const ok = !isError && down === 0;
+  const failing = useHealth().data?.connectors.filter((c) => c.status === 'error').length ?? 0;
+  const ok = !isError && down === 0 && failing === 0;
   return (
     <div className="mt-auto hidden rounded-[11px] border border-line bg-panel p-3 min-[900px]:block">
       <div className="text-xs text-muted">System Status</div>
       <div className="mt-1.5 mb-[9px] flex items-center gap-2 text-[13px]">
         <StatusDot tone={ok ? 'good' : 'red'} />
-        {isError ? 'Agents unreachable' : down ? `${down} agent${down > 1 ? 's' : ''} need attention` : 'All agents online'}
+        {isError ? (
+          'Agents unreachable'
+        ) : down ? (
+          `${down} agent${down > 1 ? 's need' : ' needs'} attention`
+        ) : failing ? (
+          <Link to="/integrations" className="hover:underline">
+            {failing} connector{failing > 1 ? 's need' : ' needs'} attention
+          </Link>
+        ) : (
+          'All agents online'
+        )}
       </div>
       <ProgressBar value={agents.length ? (agents.length - down) / agents.length : 0} tone={ok ? 'good' : 'red'} label="Agents online" />
     </div>

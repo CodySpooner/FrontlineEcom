@@ -2,7 +2,7 @@
 import { cloneElement, useEffect, useId, useRef } from 'react';
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactElement, ReactNode, TableHTMLAttributes } from 'react';
 import { Inbox, TriangleAlert, X, type LucideIcon } from 'lucide-react';
-import { AGENT_ROLES, type AgentRole, type AgentStatus, type MemoryKind, type RunStatus } from '@frontline/shared';
+import { AGENT_ROLES, type AgentRole, type AgentStatus, type MemoryKind, type RunStatus, type StoreHealthStatus } from '@frontline/shared';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -161,6 +161,13 @@ export const RUN_STATUS: Record<RunStatus, { label: string; tone: 'red' | 'good'
 };
 
 /** `value` 0..1. `scan` = indeterminate "working" sweep instead of a fill. */
+/** Store health from shared `storeHealth()`: only losing money gets the alarm color. */
+export const STORE_HEALTH: Record<StoreHealthStatus, { label: string; tone: keyof typeof BADGE }> = {
+  winning: { label: 'Winning', tone: 'good' },
+  steady: { label: 'Steady', tone: 'muted' },
+  bleeding: { label: 'Bleeding', tone: 'red' },
+};
+
 export const MEMORY_KINDS: { value: MemoryKind; label: string }[] = [
   { value: 'fact', label: 'Fact' },
   { value: 'learning', label: 'Learning' },

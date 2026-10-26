@@ -2,12 +2,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, TopProduct } from '@frontline/shared';
+import { storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type TopProduct } from '@frontline/shared';
 import { useCampaigns, useSummary, useTopProducts } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, ErrorState, LoadingState, Panel, Segmented, Table, cx } from '../components/ui';
+import { Badge, ErrorState, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
 import { breakEvenRoas, byNetwork, rate, roasTone } from '../lib/analytics';
 import { PERIOD, RANGES, weekly } from '../lib/chart';
 import { fmtDay, money, signedPct } from '../lib/format';
@@ -309,6 +309,7 @@ function ByStore({ s, name }: { s: AnalyticsSummary; name: (id: string) => strin
         <thead>
           <tr>
             <th>Store</th>
+            <th>Health</th>
             <th className="text-right!">Revenue</th>
             <th className="text-right!">Change</th>
             <th className="text-right!">Profit</th>
@@ -320,17 +321,26 @@ function ByStore({ s, name }: { s: AnalyticsSummary; name: (id: string) => strin
         <tbody>
           {[...s.byStore]
             .sort((a, b) => b.totals.revenue - a.totals.revenue)
-            .map(({ storeId, totals: t, deltas: d }) => (
-              <tr key={storeId}>
-                <td>{name(storeId)}</td>
-                <td className="text-right">{money(t.revenue)}</td>
-                <td className={cx('text-right', Math.abs(d.revenue) < 0.05 ? 'text-muted' : d.revenue > 0 ? 'text-good' : 'text-red')}>{signedPct(d.revenue)}</td>
-                <td className="text-right">{money(t.profit)}</td>
-                <td className="text-right">{money(t.adSpend)}</td>
-                <td className="text-right">{times(t.roas)}</td>
-                <td className="text-right">{num(t.orders)}</td>
-              </tr>
-            ))}
+            .map(({ storeId, totals: t, deltas: d }) => {
+              const h = storeHealth(t);
+              return (
+                <tr key={storeId}>
+                  <td>{name(storeId)}</td>
+                  <td>
+                    <span className="flex items-center gap-2 whitespace-nowrap">
+                      <Badge tone={STORE_HEALTH[h.status].tone}>{STORE_HEALTH[h.status].label}</Badge>
+                      <span className="text-xs text-muted">{h.marginPct < 0 ? '−' : ''}{Math.abs(h.marginPct)}% net margin</span>
+                    </span>
+                  </td>
+                  <td className="text-right">{money(t.revenue)}</td>
+                  <td className={cx('text-right', Math.abs(d.revenue) < 0.05 ? 'text-muted' : d.revenue > 0 ? 'text-good' : 'text-red')}>{signedPct(d.revenue)}</td>
+                  <td className="text-right">{money(t.profit)}</td>
+                  <td className="text-right">{money(t.adSpend)}</td>
+                  <td className="text-right">{times(t.roas)}</td>
+                  <td className="text-right">{num(t.orders)}</td>
+                </tr>
+              );
+            })}
         </tbody>
       </Table>
     </Panel>
