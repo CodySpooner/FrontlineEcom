@@ -1,6 +1,6 @@
 // UI-15 Integrations: connect store platforms, ad accounts, analytics, suppliers and creative tools.
 // Secrets go in and never come back out: the API only says which secret fields are set.
-import { useEffect, useState, type FormEvent } from 'react';
+import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { INTEGRATION_KINDS, type Integration, type IntegrationCategory, type IntegrationKind, type OAuthStart, type Store } from '@frontline/shared';
 import { useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds } from '../api/client';
 import { Hero } from '../components/Hero';
@@ -17,6 +17,10 @@ const CATEGORIES: Record<IntegrationCategory, { title: string; sub: string }> = 
   creative: { title: 'Creative', sub: 'Image and video generation for Ad Creation.' },
 };
 const KINDS = Object.keys(INTEGRATION_KINDS) as IntegrationKind[];
+// ponytail: one-of groups aren't in the shared field list; Shopify needs client ID + secret or an older app's token.
+const ONE_OF: Partial<Record<IntegrationKind, { from: string; keys: string[]; note: string }>> = {
+  shopify: { from: 'clientId', keys: ['clientId', 'clientSecret', 'accessToken'], note: 'Then either the client ID and secret of your Dev Dashboard app, or the access token of a custom app made before 2026.' },
+};
 const keyOf = (kind: IntegrationKind, store?: Store) => `${kind}:${store?.id ?? ''}`;
 
 export function Integrations() {
@@ -112,6 +116,7 @@ function ConnectForm({ kind, store, current, onDone }: { kind: IntegrationKind; 
   const [confirm, setConfirm] = useState(false);
   const viaConnect = canConnect && !manual;
   const fields = k.fields.filter((f) => !(viaConnect && f.oauth));
+  const oneOf = ONE_OF[kind];
   const isSet = (key: string) => !!current?.secretsSet.includes(key);
   // A blank secret that's already saved is left out, so the server keeps it.
   const filled = () => Object.fromEntries(fields.flatMap((f) => (values[f.key]?.trim() ? [[f.key, values[f.key]!.trim()]] : [])));
@@ -196,18 +201,21 @@ function ConnectForm({ kind, store, current, onDone }: { kind: IntegrationKind; 
         </details>
       )}
       {fields.map((f) => (
-        <Field key={f.key} label={f.optional ? `${f.label} (optional)` : f.label}>
-          <input
-            type={f.secret ? 'password' : 'text'}
-            autoComplete="off"
-            spellCheck={false}
-            value={values[f.key] ?? ''}
-            onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
-            required={!f.optional && (!f.secret || !isSet(f.key))}
-            placeholder={f.secret && isSet(f.key) ? 'Saved. Leave blank to keep it.' : f.placeholder}
-            className={inputClass}
-          />
-        </Field>
+        <Fragment key={f.key}>
+          {oneOf?.from === f.key && <p className="-mb-2 text-xs text-text-2">{oneOf.note}</p>}
+          <Field label={f.optional && !oneOf?.keys.includes(f.key) ? `${f.label} (optional)` : f.label}>
+            <input
+              type={f.secret ? 'password' : 'text'}
+              autoComplete="off"
+              spellCheck={false}
+              value={values[f.key] ?? ''}
+              onChange={(e) => setValues((v) => ({ ...v, [f.key]: e.target.value }))}
+              required={!f.optional && (!f.secret || !isSet(f.key))}
+              placeholder={f.secret && isSet(f.key) ? 'Saved. Leave blank to keep it.' : f.placeholder}
+              className={inputClass}
+            />
+          </Field>
+        </Fragment>
       ))}
       {canConnect && (
         <button type="button" onClick={() => setManual((m) => !m)} className="w-fit cursor-pointer text-xs text-muted hover:text-white">
