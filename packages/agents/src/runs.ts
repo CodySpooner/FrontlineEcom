@@ -74,6 +74,7 @@ export function createRunManager(opts: RunManagerOptions) {
     }
     const cap = env.caps?.(agent.storeId).agentCostPerDay;
     if (cap !== undefined && costToday(db, agent.storeId) >= cap) return `Today's AI budget for this store ($${cap}) is used up. Raise it in Settings.`;
+    if (agent.dailyBudgetUsd !== undefined && costToday(db, agent.storeId, agentId) >= agent.dailyBudgetUsd) return ownUsedUp(agent.dailyBudgetUsd);
     const id = randomUUID();
     db.prepare('INSERT INTO agent_runs (id, store_id, agent_id, task, resume, parent_run_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
       id, agent.storeId, agentId, task, resume ?? null, parentRunId ?? null, new Date().toISOString(),
@@ -137,8 +138,11 @@ export function createRunManager(opts: RunManagerOptions) {
     for (const run of queued) {
       if (working().length >= concurrency) return;
       if ([...active.values()].some((a) => a.agentId === run.agentId) || working().filter((a) => a.storeId === run.storeId).length >= perStore) continue;
-      const budget = budgetFor(run.storeId);
-      if (budget !== undefined && budget < 0.01 && working().some((a) => a.storeId === run.storeId)) continue; // waits for a share to free up
+      const share = budgetFor(run.storeId);
+      if (share !== undefined && share < 0.01 && working().some((a) => a.storeId === run.storeId)) continue; // waits for a share to free up
+      // One run per agent at a time, so its own cap needs no shares: what is left of it today.
+      const own = getAgent(db, run.agentId)?.dailyBudgetUsd;
+      const budget = own === undefined ? share : Math.min(share ?? Infinity, Math.max(0, own - costToday(db, run.storeId, run.agentId)));
       const abort = new AbortController();
       const transcript: AgentEvent[] = [];
       const done = execute(run, abort, transcript, budget)
@@ -175,7 +179,9 @@ export function createRunManager(opts: RunManagerOptions) {
     let ended = false;
     let spent = 0;
     const cap = env.caps?.(run.storeId).agentCostPerDay;
+    const own = getAgent(db, run.agentId)?.dailyBudgetUsd;
     let overCap = false;
+    let overOwn = false;
     const spend = (usd: number) => {
       if (ended) return;
       spent = Math.max(spent, usd); // the reflection reports from the engine's figure, which can be under the estimate
@@ -187,12 +193,19 @@ export function createRunManager(opts: RunManagerOptions) {
         overCap = true;
         abort.abort();
       }
+      if (own !== undefined && !overCap && costToday(db, run.storeId, run.agentId) > own) {
+        overCap = overOwn = true;
+        abort.abort();
+      }
     };
     let end: AgentEvent = { type: 'error', message: 'Agent or store not found' };
     try {
       const agent = getAgent(db, run.agentId);
       const store = opts.store(run.storeId);
-      if (budget !== undefined && budget < 0.01) end = { type: 'error', message: `Today's AI budget for this store ($${env.caps?.(run.storeId).agentCostPerDay}) is used up. Raise it in Settings.` };
+      if (budget !== undefined && budget < 0.01) {
+        const ownGone = own !== undefined && costToday(db, run.storeId, run.agentId) >= own - 0.01;
+        end = { type: 'error', message: ownGone ? ownUsedUp(own) : `Today's AI budget for this store ($${env.caps?.(run.storeId).agentCostPerDay}) is used up. Raise it in Settings.` };
+      }
       else if (agent && store) {
         const resume = db.prepare('SELECT resume FROM agent_runs WHERE id = ?').get(run.id)?.resume;
         const input: RunInput = {
@@ -225,7 +238,7 @@ export function createRunManager(opts: RunManagerOptions) {
     } catch (err) {
       end = { type: 'error', message: err instanceof Error ? err.message : String(err) };
     }
-    if (overCap && end.type === 'error') end = { type: 'error', message: `Stopped: today's AI budget for this store ($${cap}) is used up. Raise it in Settings.` };
+    if (overCap && end.type === 'error') end = { type: 'error', message: overOwn ? ownUsedUp(own!, true) : `Stopped: today's AI budget for this store ($${cap}) is used up. Raise it in Settings.` };
     emit(end);
 
     const status: RunStatus = end.type === 'done' ? 'done' : signal.aborted && !overCap ? 'cancelled' : 'error';
@@ -337,12 +350,17 @@ const addUsage = (a: RunUsage, b: RunUsage): RunUsage => ({
 });
 
 /** USD the store's agents spent since local midnight. */
-export function costToday(db: DatabaseSync, storeId: string): number {
+/** What the store's runs (or one agent's) cost since local midnight. */
+export function costToday(db: DatabaseSync, storeId: string, agentId?: string): number {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
-  const row = db.prepare('SELECT coalesce(sum(cost_usd), 0) AS cost FROM agent_runs WHERE store_id = ? AND created_at >= ?').get(storeId, midnight.toISOString());
+  const row = db
+    .prepare(`SELECT coalesce(sum(cost_usd), 0) AS cost FROM agent_runs WHERE store_id = ? AND created_at >= ? ${agentId ? 'AND agent_id = ?' : ''}`)
+    .get(storeId, midnight.toISOString(), ...(agentId ? [agentId] : []));
   return Number(row?.cost ?? 0);
 }
+
+const ownUsedUp = (usd: number, stopped = false) => `${stopped ? "Stopped: today's" : "Today's"} budget for this agent ($${usd}) is used up. Raise it in its settings.`;
 
 /**
  * One line for the activity feed: the first sentence of the agent's final answer (the text after its last tool step),

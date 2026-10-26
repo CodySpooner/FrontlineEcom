@@ -90,6 +90,8 @@ export interface Agent {
   nextLevelXp?: number;
   /** XP into the current level / XP the level costs (XP bar). Always set by the API. */
   levelProgress?: { xp: number; needed: number };
+  /** The agent's own daily AI budget, USD, inside the store's. Absent: only the store's cap applies. */
+  dailyBudgetUsd?: number;
 }
 
 /** GET /api/agents?stores=a,b → Agent[] (squads in store order, roles in AGENT_ROLES order). GET /api/agents/:id → Agent. */
@@ -99,6 +101,8 @@ export type AgentsResponse = Agent[];
 export interface AgentUpdate {
   enabled?: boolean;
   autonomy?: Autonomy;
+  /** USD per day; null removes the agent's own cap. */
+  dailyBudgetUsd?: number | null;
 }
 
 export interface DailyMetrics {

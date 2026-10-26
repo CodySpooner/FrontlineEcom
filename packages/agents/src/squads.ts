@@ -53,6 +53,11 @@ export function getAgent(db: DatabaseSync, id: string): Agent | undefined {
 export function updateAgent(db: DatabaseSync, id: string, patch: AgentUpdate): Agent | undefined {
   if (patch.enabled !== undefined) db.prepare('UPDATE agents SET enabled = ? WHERE id = ?').run(patch.enabled ? 1 : 0, id);
   if (patch.autonomy !== undefined) db.prepare('UPDATE agents SET autonomy = ? WHERE id = ?').run(patch.autonomy, id);
+  if (patch.dailyBudgetUsd !== undefined) {
+    db.prepare(`UPDATE agents SET settings_json = CASE WHEN ? IS NULL THEN json_remove(settings_json, '$.dailyBudgetUsd') ELSE json_set(settings_json, '$.dailyBudgetUsd', ?) END WHERE id = ?`).run(
+      patch.dailyBudgetUsd, patch.dailyBudgetUsd, id,
+    );
+  }
   return getAgent(db, id);
 }
 
@@ -78,6 +83,7 @@ function toAgent(r: Record<string, unknown>, busy: ReturnType<typeof busyAgents>
   const task = enabled ? busy.running.get(id) : undefined;
   const failed = enabled ? busy.failed.get(id) : undefined;
   const currentTask = request ?? task ?? (failed && `Last run failed: ${failed}`);
+  const own = (JSON.parse(String(r.settings_json ?? '{}')) as { dailyBudgetUsd?: unknown }).dailyBudgetUsd;
   return {
     id,
     storeId: String(r.store_id),
@@ -91,5 +97,6 @@ function toAgent(r: Record<string, unknown>, busy: ReturnType<typeof busyAgents>
     ...(currentTask ? { currentTask } : {}),
     enabled,
     autonomy: r.autonomy as Autonomy,
+    ...(typeof own === 'number' ? { dailyBudgetUsd: own } : {}),
   };
 }

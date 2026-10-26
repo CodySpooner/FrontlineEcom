@@ -1,4 +1,4 @@
-import { createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, type Engine, type FakeStep, type RunManagerOptions } from '@frontline/agents';
+import { createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, updateAgent, type Engine, type FakeStep, type RunManagerOptions } from '@frontline/agents';
 import type { AgentEvent, AgentRun, LiveMessage } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -166,6 +166,42 @@ test("the store's daily AI budget blocks new runs once spent", async () => {
   expect(m.start('glow:copywriter', 'three')).toBe("Today's AI budget for this store ($0.03) is used up. Raise it in Settings.");
   expect(typeof m.start('peak:copywriter', 'other store')).toBe('object');
   expect(m.start('glow:nobody', 'x')).toBe('Agent not found');
+});
+
+test("an agent's own daily budget caps its runs inside the store's; the rest of the squad keeps the store's", async () => {
+  const budgets: (number | undefined)[] = [];
+  const m = manager({ engine: fakeEngine((input) => (budgets.push(input.budgetUsd), [{ type: 'done', sessionId: 's', usage }])) });
+  const patch = (body: unknown) => createApp(db).request('/api/agents/glow%3Acopywriter', { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  updateCaps(db, 'glow', { agentCostPerDay: 1 });
+  expect(await (await patch({ dailyBudgetUsd: 0.3 })).json()).toMatchObject({ dailyBudgetUsd: 0.3 });
+  expect((await patch({ dailyBudgetUsd: -1 })).status).toBe(400);
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at) VALUES ('r0', 'glow', 'glow:copywriter', 't', 'done', 0.2, ?)`).run(new Date().toISOString());
+  ok(m.start('glow:copywriter', 'one'));
+  ok(m.start('glow:ad_strategist', 'two'));
+  await m.idle();
+  expect(budgets.map((b) => b?.toFixed(2))).toEqual(['0.10', '0.50']); // the copywriter's $0.30 less $0.20 spent; half the store's $1
+  db.prepare(`UPDATE agent_runs SET cost_usd = 0.3 WHERE id = 'r0'`).run();
+  expect(m.start('glow:copywriter', 'three')).toBe("Today's budget for this agent ($0.3) is used up. Raise it in its settings.");
+  expect(typeof m.start('glow:market_analyst', 'four')).toBe('object');
+  const cleared = (await (await patch({ dailyBudgetUsd: null })).json()) as object;
+  expect(cleared).not.toHaveProperty('dailyBudgetUsd');
+  expect(typeof m.start('glow:copywriter', 'five')).toBe('object');
+  await m.idle();
+});
+
+test("a run stops once its agent's spend today passes the agent's own budget", async () => {
+  const m = manager({
+    engine: async function* (input) {
+      input.onSpend?.(0.6);
+      yield { type: 'text_delta', text: 'Looking' };
+      await new Promise((r) => (input.signal?.aborted ? r(0) : input.signal?.addEventListener('abort', r)));
+      yield { type: 'error', message: 'aborted' };
+    },
+  });
+  updateAgent(db, 'glow:copywriter', { dailyBudgetUsd: 0.5 });
+  const run = ok(m.start('glow:copywriter', 'x'));
+  await m.idle();
+  expect(getRun(db, run.id)).toMatchObject({ status: 'error', error: "Stopped: today's budget for this agent ($0.5) is used up. Raise it in its settings." });
 });
 
 test("each run is told what is left of the store's daily AI budget", async () => {

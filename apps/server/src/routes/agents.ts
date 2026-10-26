@@ -400,11 +400,12 @@ export function agentRoutes(db: Db) {
       if (
         !body ||
         (body.enabled !== undefined && typeof body.enabled !== 'boolean') ||
-        (body.autonomy !== undefined && !AUTONOMY_LEVELS.includes(body.autonomy))
+        (body.autonomy !== undefined && !AUTONOMY_LEVELS.includes(body.autonomy)) ||
+        (body.dailyBudgetUsd != null && !(typeof body.dailyBudgetUsd === 'number' && body.dailyBudgetUsd >= 0 && body.dailyBudgetUsd <= 1000))
       ) {
-        return c.json({ error: 'Expected { enabled?: boolean, autonomy?: suggest|ask|autopilot }' }, 400);
+        return c.json({ error: 'Expected { enabled?: boolean, autonomy?: suggest|ask|autopilot, dailyBudgetUsd?: 0-1000 | null }' }, 400);
       }
-      const agent = updateAgent(db, c.req.param('id'), { enabled: body.enabled, autonomy: body.autonomy });
+      const agent = updateAgent(db, c.req.param('id'), { enabled: body.enabled, autonomy: body.autonomy, dailyBudgetUsd: body.dailyBudgetUsd });
       if (agent && body.enabled === false) runManager(db).cancelAgent(agent.id); // offline means it stops working now
       return agent ? c.json(agent) : c.json({ error: 'Agent not found' }, 404);
     })
