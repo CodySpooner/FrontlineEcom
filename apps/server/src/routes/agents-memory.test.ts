@@ -50,6 +50,16 @@ describe('store memory', () => {
     expect(listMemory(db, 'glow')).toEqual([]);
   });
 
+  test('pinned memories lead the list and are always in the prompt set, on top of k', () => {
+    const old = writeMemory(db, mem('Never discount the LED mask below $79', { kind: 'preference', confidence: 0.3 }), daysAgo(400));
+    for (const t of ['Serum bundles lift AOV', 'Ice rollers sell in summer', 'UGC beats studio shots']) writeMemory(db, mem(t), now);
+    expect(searchMemory(db, 'glow', 'summer ice', 2, now).map((m) => m.text)).not.toContain(old.text);
+    expect(updateMemory(db, old.id, { pinned: true })).toMatchObject({ pinned: true });
+    expect(searchMemory(db, 'glow', 'summer ice', 2, now).map((m) => m.text)).toEqual([old.text, 'Ice rollers sell in summer', expect.any(String)]);
+    expect(listMemory(db, 'glow')[0]?.id).toBe(old.id);
+    expect(updateMemory(db, old.id, { pinned: false })).not.toHaveProperty('pinned');
+  });
+
   test('outcome feedback moves confidence within 0..1', () => {
     const m = writeMemory(db, mem('Hook B beats hook A', { confidence: 0.8 }), now);
     expect(adjustConfidence(db, m.id, 0.5)?.confidence).toBe(1);

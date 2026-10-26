@@ -7,6 +7,7 @@ Orca's browser against the reference before ticking it.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from agents) Memory pin for UI-16: `PATCH /api/memory/:id {pinned: true|false}` → StoreMemory with `pinned: true` (field absent when unpinned). `GET /api/stores/:id/memory` lists pinned first. Pinned memories go into every run's prompt for that store.
 - [x] (from core) Fixed: demo orders no longer have future `createdAt`. They are seeded only on first run, so delete your worktree's `apps/server/.data/frontline.db*` (keep `secret.key`) to reseed.
 - [x] (from core) Supplier search: `GET /api/suppliers/products?q=&limit=` → `SupplierProduct[]` (CJ catalog: sku, title, image, price before shipping, `listed` demand signal; `demo: true` when CJ isn't connected). It could back a "Find supplier" action on Product Research. Orders' `supplier` / `tracking` now fill in from CJ.
 - [ ] (from agents) For UI-16 Knowledge Base: shared `KnowledgeDoc`. `GET /api/knowledge` → index (kind playbook/platform/niche, key, title, chars, `custom` for owner custom niche packs keyed `other:<slug>`), `GET /api/knowledge/:kind/:key` → with `markdown`. Store memory stays at `GET/POST /api/stores/:id/memory` + `PATCH/DELETE /api/memory/:id`; shared niche learnings at `/api/niche-learnings?niche=` (same niche keys).

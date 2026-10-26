@@ -57,6 +57,8 @@ describe('memory', () => {
 
     expect(await (await send('PATCH', `/api/memory/${memory.id}`, { confidence: 0.5 })).json()).toMatchObject({ confidence: 0.5, text: memory.text });
     expect((await send('PATCH', `/api/memory/${memory.id}`, { confidence: 2 })).status).toBe(400);
+    expect(await (await send('PATCH', `/api/memory/${memory.id}`, { pinned: true })).json()).toMatchObject({ pinned: true });
+    expect((await send('PATCH', `/api/memory/${memory.id}`, { pinned: 'yes' })).status).toBe(400);
     expect((await send('DELETE', `/api/memory/${memory.id}`)).status).toBe(204);
     expect((await send('DELETE', `/api/memory/${memory.id}`)).status).toBe(404);
   });

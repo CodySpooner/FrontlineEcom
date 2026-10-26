@@ -158,8 +158,9 @@ export function parseMemoryInput(body: unknown, partial: boolean): string | Part
   if (has('evidence') && !isText(b.evidence, 0, 300)) return 'evidence must be up to 300 characters';
   if (has('confidence') && !(typeof b.confidence === 'number' && b.confidence >= 0 && b.confidence <= 1)) return 'confidence must be 0–1';
   if (has('tags') && !(Array.isArray(b.tags) && b.tags.length <= 10 && b.tags.every((t) => isText(t, 1, 40)))) return 'tags must be up to 10 short strings';
+  if (has('pinned') && (!partial || typeof b.pinned !== 'boolean')) return 'pinned must be true or false (PATCH only)';
   const out: Partial<MemoryInput> = {};
-  for (const k of ['kind', 'text', 'evidence', 'confidence', 'tags'] as const) if (has(k)) Object.assign(out, { [k]: typeof b[k] === 'string' ? b[k].trim() : b[k] });
+  for (const k of ['kind', 'text', 'evidence', 'confidence', 'tags', 'pinned'] as const) if (has(k)) Object.assign(out, { [k]: typeof b[k] === 'string' ? b[k].trim() : b[k] });
   return out;
 }
 

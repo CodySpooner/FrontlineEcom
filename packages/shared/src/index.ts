@@ -303,6 +303,8 @@ export interface StoreMemory {
   confidence: number;
   tags: string[];
   createdAt: string;
+  /** Owner-pinned: always in the agents' prompt, whatever the task. */
+  pinned?: boolean;
 }
 
 /** GET /api/missions?stores= → Mission[]: 3 per store, regenerated daily. XP goes to the commander once complete. */
@@ -505,6 +507,8 @@ export interface MemoryInput {
   /** 0–1, default 0.8 for owner-written. */
   confidence?: number;
   tags?: string[];
+  /** PATCH only: pin/unpin. */
+  pinned?: boolean;
 }
 
 /** A run with its transcript (consecutive text deltas merged into one). */

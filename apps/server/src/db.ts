@@ -383,6 +383,9 @@ export const MIGRATIONS = [
     PRIMARY KEY (store_id, product_id)
   );
   `,
+  /* 19 (agents lane: pinned memories, AGT-31) */ `
+  ALTER TABLE store_memory ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

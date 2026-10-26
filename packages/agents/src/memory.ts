@@ -43,20 +43,21 @@ export function getMemory(db: DatabaseSync, id: string): StoreMemory | undefined
   return row && toMemory(row);
 }
 
-/** Every memory of a store, newest first (Knowledge Base / agent detail). */
+/** Every memory of a store, pinned first, then newest first (Knowledge Base / agent detail). */
 export const listMemory = (db: DatabaseSync, storeId: string) =>
-  db.prepare('SELECT * FROM store_memory WHERE store_id = ? ORDER BY created_at DESC, rowid DESC').all(storeId).map(toMemory);
+  db.prepare('SELECT * FROM store_memory WHERE store_id = ? ORDER BY pinned DESC, created_at DESC, rowid DESC').all(storeId).map(toMemory);
 
-export function updateMemory(db: DatabaseSync, id: string, patch: Partial<Pick<StoreMemory, 'text' | 'evidence' | 'confidence' | 'tags' | 'kind'>>) {
+export function updateMemory(db: DatabaseSync, id: string, patch: Partial<Pick<StoreMemory, 'text' | 'evidence' | 'confidence' | 'tags' | 'kind' | 'pinned'>>) {
   const cur = getMemory(db, id);
   if (!cur) return undefined;
   const next = { ...cur, ...patch };
-  db.prepare('UPDATE store_memory SET text = ?, evidence = ?, confidence = ?, tags = ?, kind = ? WHERE id = ?').run(
+  db.prepare('UPDATE store_memory SET text = ?, evidence = ?, confidence = ?, tags = ?, kind = ?, pinned = ? WHERE id = ?').run(
     next.text.trim(),
     next.evidence ?? null,
     clamp(next.confidence),
     JSON.stringify(next.tags),
     next.kind,
+    next.pinned ? 1 : 0,
     id,
   );
   return getMemory(db, id);
@@ -71,7 +72,7 @@ export function adjustConfidence(db: DatabaseSync, id: string, delta: number) {
 }
 
 /**
- * Top-k memories for a task: relevance × recency × confidence.
+ * Pinned memories, then the top-k others for a task: relevance × recency × confidence.
  * relevance = 0.3 + bm25 share of the best match (unmatched memories can still rank on confidence + recency),
  * recency = 0.2 + 0.8 × 0.5^(age / 90 days). Marks the returned memories as used.
  */
@@ -90,7 +91,7 @@ export function searchMemory(db: DatabaseSync, storeId: string, query = '', k = 
   }
   const best = Math.max(0, ...bm25.values()) || 1;
   const day = 86_400_000;
-  const ranked = db
+  const scored = db
     .prepare('SELECT * FROM store_memory WHERE store_id = ?')
     .all(storeId)
     .map(toMemory)
@@ -99,9 +100,8 @@ export function searchMemory(db: DatabaseSync, storeId: string, query = '', k = 
       const age = Math.max(0, now.getTime() - Date.parse(m.createdAt)) / day;
       return { m, score: relevance * (0.2 + 0.8 * 0.5 ** (age / 90)) * m.confidence };
     })
-    .sort((a, b) => b.score - a.score)
-    .slice(0, k)
-    .map((s) => s.m);
+    .sort((a, b) => Number(!!b.m.pinned) - Number(!!a.m.pinned) || b.score - a.score);
+  const ranked = scored.slice(0, k + scored.filter((s) => s.m.pinned).length).map((s) => s.m);
   const used = db.prepare('UPDATE store_memory SET last_used_at = ? WHERE id = ?');
   for (const m of ranked) used.run(now.toISOString(), m.id);
   return ranked;
@@ -196,5 +196,6 @@ function toMemory(r: Record<string, unknown>): StoreMemory {
     confidence: Number(r.confidence),
     tags: parseTags(r.tags),
     createdAt: String(r.created_at),
+    ...(r.pinned ? { pinned: true } : {}),
   };
 }
