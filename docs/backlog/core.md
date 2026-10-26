@@ -47,10 +47,13 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [ ] CORE-19 Packaging: electron-builder Windows installer + icon from brand; `pnpm package`.
 - [x] CORE-20 Settings + budget caps + notifications API.
 - [ ] CORE-21 Health: `/api/health` with connector statuses, structured logs to the data dir.
+- [ ] CORE-22 OAuth connect flows: "Connect" buttons that run Etsy (PKCE), TikTok Shop (auth code) and Google Ads OAuth through a
+      127.0.0.1 redirect and store the tokens, so owners don't have to mint refresh tokens by hand.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-12 (1/2) Etsy connector: Open API v3 (`x-api-key` keystring:secret), hourly token renewal with rotating refresh tokens saved encrypted, paid receipts → orders/revenue, listings newest-changed first with early stop
 - 2026-10-26 — CORE-11 (2/2) TikTok Shop connector: signed Partner API 202309 requests, access token renewed with the refresh token and saved encrypted, first authorized shop, products + paid orders (tt- ids) → shared revenue rebuild with Shopify
 - 2026-10-26 — CORE-11 (1/2) TikTok Ads connector: Marketing API v1.3 daily AUCTION_CAMPAIGN report in 30-day chunks + campaign list → campaigns/campaign_daily (network `tiktok`) → ad_spend; 28-day re-pull
 - 2026-10-26 — CORE-10 Google Ads (API v26, GAQL search, OAuth refresh token; campaigns + campaign_daily → ad_spend, 30-day re-pull) and GA4 (Data API, service-account JWT, read-only; owns sessions / add_to_carts / checkouts); both in the sync loop, help text in the catalog

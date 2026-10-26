@@ -408,10 +408,12 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'accessToken', label: 'Access token', secret: true },
     { key: 'refreshToken', label: 'Refresh token', secret: true },
   ] },
-  etsy: { name: 'Etsy', category: 'platform', perStore: true, fields: [
+  etsy: { name: 'Etsy', category: 'platform', perStore: true, help: 'etsy.com/developers → Create a new app → copy the keystring and shared secret. Authorize your shop with OAuth for the scopes transactions_r listings_r → paste the access token and refresh token. The shop ID is in the getShop API response or your shop URL tools. The app renews the access token itself (it lasts an hour).', fields: [
     { key: 'shopId', label: 'Shop ID', secret: false },
     { key: 'apiKey', label: 'API keystring', secret: true },
+    { key: 'sharedSecret', label: 'Shared secret', secret: true },
     { key: 'accessToken', label: 'OAuth access token', secret: true },
+    { key: 'refreshToken', label: 'OAuth refresh token', secret: true },
   ] },
   amazon: { name: 'Amazon SP-API', category: 'platform', perStore: true, fields: [
     { key: 'sellerId', label: 'Seller ID', secret: false },
