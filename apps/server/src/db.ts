@@ -530,6 +530,7 @@ export function openDb(file = ':memory:'): Db {
       for (const f of [file, `${file}-wal`, `${file}-shm`]) rmSync(f, { force: true });
       renameSync(`${file}.restore`, file);
     }
+    rmSync(`${file}.restore.part`, { force: true }); // a restore the app quit during: never staged
   }
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');

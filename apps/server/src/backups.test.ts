@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { expect, test, vi } from 'vitest';
 import type { Backup } from '@frontline/shared';
-import { backupNow, backupRoutes, listBackups, startBackupLoop } from './backups';
+import { backupNow, backupRoutes, listBackups, stageRestore, startBackupLoop } from './backups';
 import { openDb } from './db';
 import { seedDemo } from './demo';
 
@@ -126,4 +126,18 @@ test('a backup sweeps .part files an interrupted one left, but not one still bei
   writeFileSync(join(dir, 'frontline-2026-10-02T03-00-00.db.part'), 'in progress');
   await backupNow(db, dir, new Date('2026-10-03T03:00:00Z'));
   expect(readdirSync(dir).sort()).toEqual(['frontline-2026-10-02T03-00-00.db.part', 'frontline-2026-10-03T03-00-00.db']);
+});
+
+test("a restore is staged only once the undo backup is whole: quitting mid-way leaves the live data as it was", async () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const dir = tmp();
+  const dbPath = join(dir, '..', 'frontline.db');
+  const snap = await backupNow(db, dir, new Date('2026-10-01T03:00:00Z'));
+  const staging = stageRestore(db, snap.name, dbPath, dir);
+  // The undo backup is still being written (the app could be quit now): nothing that openDb would swap in yet.
+  expect(existsSync(`${dbPath}.restore`)).toBe(false);
+  expect(await staging).toBeUndefined();
+  expect(existsSync(`${dbPath}.restore`)).toBe(true);
+  expect(existsSync(`${dbPath}.restore.part`)).toBe(false);
 });

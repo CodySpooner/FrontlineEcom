@@ -108,14 +108,17 @@ export async function stageRestore(db: Db, name: string, dbPath: string, dir = b
     return 'that backup is damaged';
   }
   if (version > MIGRATIONS.length) return 'that backup was made by a newer version of the app';
-  // Staged first: the undo backup may prune the snapshot being restored.
-  copyFileSync(file, `${dbPath}.restore`);
+  // Copied first (the undo backup may prune the snapshot being restored), but named .restore, which openDb swaps in,
+  // only once the undo backup is whole: quitting or a crash before that leaves the live data as it was.
+  const part = `${dbPath}.restore.part`;
+  copyFileSync(file, part);
   try {
     await backupNow(db, dir);
   } catch (e) {
-    rmSync(`${dbPath}.restore`, { force: true });
+    rmSync(part, { force: true });
     throw e;
   }
+  renameSync(part, `${dbPath}.restore`);
   log('info', 'restore staged', { name });
 }
 
