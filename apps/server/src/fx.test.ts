@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
 import type { AnalyticsSummary, CampaignStats, TopProduct } from '@frontline/shared';
+import { topProducts } from './analytics';
 import { createApp } from './app';
+import { switchToReal } from './connectors/common';
 import { openDb } from './db';
 import { seedDemo } from './demo';
 import { fxFor, parseEcb, refreshFx, startFxLoop } from './fx';
@@ -79,4 +81,21 @@ test('baseCurrency must be a 3-letter code', () => {
   expect(getSettings(db).baseCurrency).toBe('USD');
   expect(updateSettings(db, { baseCurrency: 'dollars' })).toBe('baseCurrency must be a 3-letter ISO code');
   expect(updateSettings(db, { baseCurrency: 7 })).toBe('baseCurrency must be a 3-letter ISO code');
+});
+
+test('best sellers across currencies rank after conversion', async () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'pawsome');
+  switchToReal(db, 'glow');
+  db.prepare("UPDATE stores SET currency = 'JPY' WHERE id = 'glow'").run();
+  await refreshFx(db, (async () => new Response("<Cube time='2026-10-23'><Cube currency='USD' rate='1.25'/><Cube currency='JPY' rate='175'/></Cube>")) as unknown as typeof fetch);
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES (?, ?, '2026-10-25T12:00:00Z', ?, 'paid', 'unfulfilled', '2026-10-25')");
+  const item = db.prepare('INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue) VALUES (?, ?, ?, 1, ?)');
+  order.run('pawsome', 'o1', 5000);
+  item.run('pawsome', 'o1', 'p1', 5000);
+  order.run('glow', 'o2', 50000); // ¥50,000 ≈ $357
+  item.run('glow', 'o2', 'g1', 50000);
+  expect(topProducts(db, ['pawsome', 'glow'], '2026-10-20', '2026-10-26', 1).map((p) => [p.productId, p.revenue])).toEqual([['p1', 5000]]);
+  expect(topProducts(db, ['pawsome', 'glow'], '2026-10-20', '2026-10-26', 2)[1]).toMatchObject({ productId: 'g1', revenue: 357.14 });
 });

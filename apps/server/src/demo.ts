@@ -251,7 +251,7 @@ export function seedDemo(db: Db, today = localDate()) {
       APPROVALS.forEach((a, i) => appr.run(`demo-appr-${i + 1}`, a.storeId, `${a.storeId}:${a.role}`, a.title, a.reason, JSON.stringify(a.action), 'pending', new Date(Date.now() - (i + 1) * 3600000).toISOString()));
     }
     // Seeded requests still waiting get the current wording and payload (earlier seeds had kinds nothing executes).
-    const fix = db.prepare("UPDATE approvals SET title = ?, action_json = ? WHERE id = ? AND status = 'pending'");
+    const fix = db.prepare("UPDATE approvals SET title = ?, action_json = ? WHERE id = ? AND status = 'pending' AND store_id IN (SELECT id FROM stores WHERE demo = 1)");
     APPROVALS.forEach((a, i) => fix.run(a.title, JSON.stringify(a.action), `demo-appr-${i + 1}`));
     for (const { id } of db.prepare('SELECT id FROM stores WHERE demo = 1').all()) topUp(db, String(id), today);
   });

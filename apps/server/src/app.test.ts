@@ -48,6 +48,7 @@ test('only the local UI gets in: DNS-rebound hosts and foreign origins are refus
   expect(await status('http://[::1]:8797/api/health')).toBe(200);
   expect(await status('http://localhost:5183/api/health', { headers: { origin: 'http://localhost:5183' } })).toBe(200);
   expect(await status('http://attacker.example:8797/api/health')).toBe(403);
+  expect(await status('http://127.0.0.1:8797/api/health', { headers: { origin: 'http://127.0.0.1:3000' } })).toBe(403); // another local port
   const post = { method: 'POST', body: '{}', headers: { 'content-type': 'text/plain' } };
   expect(await status('http://127.0.0.1:8797/api/approvals/demo-appr-1/approve', { ...post, headers: { ...post.headers, origin: 'https://attacker.example' } })).toBe(403);
   expect(await status('http://127.0.0.1:8797/api/approvals/demo-appr-1/approve', { ...post, headers: { ...post.headers, origin: 'null' } })).toBe(403);

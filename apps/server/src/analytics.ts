@@ -135,9 +135,10 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
            FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
            LEFT JOIN products p ON p.store_id = i.store_id AND p.id = i.product_id
            WHERE i.store_id IN (${real.map(() => '?').join(',')}) AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?
-           GROUP BY i.store_id, i.product_id ORDER BY revenue DESC LIMIT ?`,
+           GROUP BY i.store_id, i.product_id`,
         )
-        .all(...real, from, to, limit)
+        // No LIMIT here: stores in different currencies only rank correctly after conversion (below).
+        .all(...real, from, to)
         .map((r) => ({
           storeId: String(r.store_id),
           productId: String(r.product_id),

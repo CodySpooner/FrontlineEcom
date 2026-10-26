@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { switchToReal } from './connectors/common';
 import { openDb } from './db';
 import { addDays, localDate } from './dates';
 import { advanceDemoDay, DEMO_DAYS, demoDay, demoSoFar, seedDemo } from './demo';
@@ -101,4 +102,12 @@ test('a day left "so far" by an earlier session is finalised on the next start',
   db.prepare("UPDATE daily_metrics SET revenue = 1, orders = 0 WHERE date = '2026-10-20'").run(); // as if the app quit mid-morning
   seedDemo(db, '2026-10-23');
   expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-20'").get()).toEqual({ revenue: demoDay('glow', '2026-10-20').revenue, orders: demoDay('glow', '2026-10-20').orders });
+});
+
+test('a store that goes real drops its pending sample requests, so approving one never touches the live shop', () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow');
+  seedDemo(db, '2026-10-26'); // a later start doesn't bring them back
+  expect(db.prepare("SELECT id, store_id AS s FROM approvals WHERE id LIKE 'demo-appr-%' ORDER BY id").all()).toEqual([{ id: 'demo-appr-1', s: 'peak' }, { id: 'demo-appr-2', s: 'pawsome' }]);
 });

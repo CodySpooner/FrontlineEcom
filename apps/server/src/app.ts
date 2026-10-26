@@ -36,6 +36,8 @@ const json = (req: Request): Promise<unknown> => req.json().catch(() => undefine
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 const isLocal = (url: string) => URL.canParse(url) && LOCAL_HOSTS.has(new URL(url).hostname);
+/** Same host and port: a page from another local port (another dev server, a local tool) is a different site. */
+const sameHost = (origin: string, url: string) => URL.canParse(origin) && new URL(origin).host === new URL(url).host;
 
 /** `secretKey` defaults to the key file in the data dir, loaded on first use. */
 export const createApp = (db: Db, secretKey?: Buffer) => {
@@ -47,10 +49,10 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       return c.json({ error: e.message || 'Something went wrong' }, 500);
     })
     .notFound((c) => c.json({ error: `${c.req.method} ${c.req.path} not found` }, 404))
-    // Only the local UI: a non-local Host is DNS rebinding, a foreign Origin is another website posting (or opening a socket) here.
+    // Only the local UI: a non-local Host is DNS rebinding, a foreign Origin is another site posting (or opening a socket) here.
     .use('*', async (c, next) => {
       const origin = c.req.header('origin');
-      if (!isLocal(c.req.url) || (origin !== undefined && !isLocal(origin))) return c.json({ error: 'forbidden' }, 403);
+      if (!isLocal(c.req.url) || (origin !== undefined && !sameHost(origin, c.req.url))) return c.json({ error: 'forbidden' }, 403);
       await next();
     })
     .get('/api/health', (c) => c.json(health(db)))

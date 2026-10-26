@@ -87,6 +87,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Review fixes (1/2): a store that goes real drops its pending seeded sample requests, and the seed rewrite only touches demo stores. Before, approving "Add 3 trending products" on a newly connected Shopify store made real drafts. The guard now requires Origin == the request's host:port, so another localhost port is refused, including for WebSocket. Best sellers across currencies are ranked after conversion (SQL LIMIT removed)
 - 2026-10-26 — Fix: a store created without a timezone got `America/Chicago`, so on this machine (America/New_York) its days were cut an hour off. It now defaults to the machine's timezone. Connecting Shopify still sets the shop's own
 - 2026-10-26 — CORE-36: `POST /api/backups/:name/restore` checks the name, `integrity_check` and schema version, stages `frontline.db.restore`, takes an undo backup, answers 202 `{ restarting: true }`, then exits with 75. The desktop app starts the API again (CORE-35), and `openDb` swaps the staged file in. Verified end to end in the desktop app (marker value back after restore). `pnpm dev` needs a manual restart after a restore
 - 2026-10-26 — CORE-35: the desktop app restarts a dead API process on the same port and reloads the window. Exit code 75 is a requested restart and doesn't count as a crash. More than 3 crashes in 10 min shows the error dialog. Verified by killing the API utility process: it was back on the same port in ~5 s
