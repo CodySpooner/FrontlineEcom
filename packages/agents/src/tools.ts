@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
+import { AGENT_ROLES, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
@@ -100,11 +100,12 @@ const since = (days: number, store: Store) => {
 /** `days` × 24 hours ago, to compare with timestamps (an order's age). */
 const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 /**
- * Why a store change can't be asked for: the store is connected on a platform the app doesn't write to yet (store writes
- * reach Shopify only, `onShopify` in apps/server/src/routes/agents.ts), so an approval would only fail. Undefined when it can.
+ * Why a store change can't be asked for: the store is connected on a platform the app doesn't write to yet (products,
+ * prices and pages reach Shopify and WooCommerce, `onStore` in apps/server/src/routes/agents.ts), so an approval would
+ * only fail. Undefined when it can.
  */
 const noStoreWrites = (store: Store) =>
-  store.connected && store.platform !== 'shopify'
+  store.connected && !PRODUCT_WRITE_PLATFORMS.includes(store.platform)
     ? `Not sent: the app doesn't change ${store.platform} stores yet, so approving it would do nothing. Put the change in your answer so the owner can make it by hand.`
     : undefined;
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */

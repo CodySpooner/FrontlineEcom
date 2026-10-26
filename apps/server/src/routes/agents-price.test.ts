@@ -1,6 +1,6 @@
 import { fakeEngine, getAgent, listMemory, runAgent, writeMemory, type FakeStep } from '@frontline/agents';
 import type { AgentEvent, ApprovalRequest } from '@frontline/shared';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
 import { addDays, localDate } from '../dates';
@@ -87,14 +87,23 @@ test('on a real store a price test is judged on gross profit 14 days before vs a
   expect(achievements.find((a) => a.id === 'first_win')?.unlockedAt).toEqual(expect.any(String));
 });
 
-test("connected stores get the price on Shopify; other platforms aren't asked and write errors tell the owner; neither starts a test", async () => {
+test("connected stores get the price on Shopify or WooCommerce; other platforms aren't asked and write errors tell the owner; neither starts a test", async () => {
   const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'peak' ORDER BY price DESC LIMIT 1`).get()!;
   const [id, from] = [String(p.id), Number(p.price)];
   const to = Math.round(from * 1.1 * 100) / 100;
-  db.prepare(`UPDATE stores SET connected = 1, platform = 'woocommerce' WHERE id = 'peak'`).run();
-  expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Not sent: the app doesn't change woocommerce stores yet/);
+  db.prepare(`UPDATE stores SET connected = 1, platform = 'etsy' WHERE id = 'peak'`).run();
+  expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Not sent: the app doesn't change etsy stores yet/);
   expect(db.prepare(`SELECT count(*) AS n FROM approvals WHERE json_extract(action_json, '$.kind') = 'store.set_price'`).get()?.n).toBe(0);
   expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
+
+  // WooCommerce is asked, and the approved change goes to core's Woo writer (its refusal of a non-Woo id reaches the owner).
+  vi.stubEnv('FRONTLINE_SECRET_KEY', Buffer.alloc(32).toString('base64'));
+  db.prepare(`UPDATE stores SET platform = 'woocommerce' WHERE id = 'peak'`).run();
+  expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Approved by the owner/);
+  for (let i = 0; i < 20 && !db.prepare(`SELECT 1 FROM notifications WHERE title LIKE 'Couldn''t change the price%'`).get(); i++) await tick();
+  expect(db.prepare(`SELECT body FROM notifications WHERE title LIKE 'Couldn''t change the price%'`).get()?.body).toBe(`${id} is not a WooCommerce product. Change it by hand if you still want the test.`);
+  expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
+  vi.unstubAllEnvs();
 
   db.prepare(`UPDATE stores SET platform = 'shopify' WHERE id = 'peak'`).run();
   const approval = { id: 'a1', storeId: 'peak', agentId: 'peak:market_analyst', title: 't', reason: 'r', status: 'approved', createdAt: '', action: { kind: 'store.set_price', payload: { productId: id, title: 'T', from, to, compareAt: 99 } } } as ApprovalRequest;

@@ -60,6 +60,7 @@ import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
 import { demoSupplierProducts, searchCj } from '../connectors/cj';
 import { createProducts, deleteTheme, duplicateTheme, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, upsertThemeFiles } from '../connectors/shopify';
+import { createWooProducts, publishWooPage, publishWooProductPage, setWooProductPrice } from '../connectors/woocommerce';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
@@ -74,7 +75,13 @@ const writeAd =
       ? pauseCampaign(db, loadKey(dataDir()), storeId, network, campaignId)
       : setCampaignBudget(db, loadKey(dataDir()), storeId, network, campaignId, change.dailyBudget);
 
-/** Core's store writers are Shopify-only so far: other platforms get a readable error, and the owner applies it by hand. */
+/** Core's product, price and page writers: Shopify and WooCommerce. Other platforms get a readable error, and the owner applies it by hand. */
+const onStore = <T,>(db: Db, storeId: string, writers: { shopify: () => Promise<T>; woocommerce: () => Promise<T> }) => {
+  const platform = getStore(db, storeId)?.platform;
+  return platform === 'shopify' || platform === 'woocommerce' ? writers[platform]() : Promise.reject(new Error(`The app doesn't change ${platform} stores automatically yet`));
+};
+
+/** Theme writers are Shopify-only. */
 const onShopify = <T,>(db: Db, storeId: string, write: () => Promise<T>) =>
   getStore(db, storeId)?.platform === 'shopify' ? write() : Promise.reject(new Error('Only Shopify stores are updated automatically so far'));
 
@@ -82,25 +89,35 @@ const onShopify = <T,>(db: Db, storeId: string, write: () => Promise<T>) =>
 const onLiveShopify = <T,>(db: Db, storeId: string, fn: () => Promise<T>) =>
   getStore(db, storeId)?.connected ? onShopify(db, storeId, fn) : Promise.reject(new Error('Theme editing needs a connected Shopify store; this one runs on demo data.'));
 
-/** Store Builder drafts → Shopify: product pages update the product, other pages are created. */
+/** Store Builder drafts → Shopify or WooCommerce: product pages update the product, other pages are created. */
 const pushPage =
   (db: Db): PushPage =>
   (d) => {
     const bad = unsafeHtml(d.html);
     if (bad) return Promise.reject(new Error(`The draft has HTML a storefront must not run (${bad}); ask the Store Developer for a clean draft`));
     const seo = { ...(d.seoTitle ? { seoTitle: d.seoTitle } : {}), ...(d.seoDescription ? { seoDescription: d.seoDescription } : {}) };
-    return onShopify<unknown>(db, d.storeId, () =>
-      d.kind === 'product' && d.productId
-        ? publishProductPage(db, loadKey(dataDir()), d.storeId, d.productId, { title: d.title, descriptionHtml: d.html, ...seo })
-        : publishPage(db, loadKey(dataDir()), d.storeId, { title: d.title, bodyHtml: d.html }),
-    );
+    const product = d.kind === 'product' && d.productId;
+    return onStore<unknown>(db, d.storeId, {
+      shopify: () =>
+        product
+          ? publishProductPage(db, loadKey(dataDir()), d.storeId, product, { title: d.title, descriptionHtml: d.html, ...seo })
+          : publishPage(db, loadKey(dataDir()), d.storeId, { title: d.title, bodyHtml: d.html }),
+      // No SEO fields on Woo; other pages need the WordPress login fields, and core's error says so.
+      woocommerce: () =>
+        product
+          ? publishWooProductPage(db, loadKey(dataDir()), d.storeId, product, { title: d.title, descriptionHtml: d.html })
+          : publishWooPage(db, loadKey(dataDir()), d.storeId, { title: d.title, bodyHtml: d.html }),
+    });
   };
 
-/** Approved price tests → Shopify (every variant). */
+/** Approved price tests → Shopify (every variant) or WooCommerce. */
 const setPrice =
   (db: Db): SetPrice =>
   (storeId, productId, change) =>
-    onShopify(db, storeId, () => setProductPrice(db, loadKey(dataDir()), storeId, productId, change));
+    onStore(db, storeId, {
+      shopify: () => setProductPrice(db, loadKey(dataDir()), storeId, productId, change),
+      woocommerce: () => setWooProductPrice(db, loadKey(dataDir()), storeId, productId, change),
+    });
 
 /** The dashboard's window (app.ts windowEnd): today in the store's zone, with today's comparison scaled to the hours gone. */
 const windowEnd = (db: Db, storeIds: string[]) => {
@@ -238,7 +255,10 @@ export function runManager(db: Db): RunManager {
     onApproved(db, (db, a) => {
       if (a.action.kind === 'store.add_products') {
         return addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task), (storeId, products) =>
-          onShopify(db, storeId, () => createProducts(db, loadKey(dataDir()), storeId, products)),
+          onStore(db, storeId, {
+            shopify: () => createProducts(db, loadKey(dataDir()), storeId, products),
+            woocommerce: () => createWooProducts(db, loadKey(dataDir()), storeId, products),
+          }),
         );
       }
       if (a.action.kind === 'ads.set_budget' || a.action.kind === 'ads.pause_campaign') return applyAdChange(db, a, writeAd(db));

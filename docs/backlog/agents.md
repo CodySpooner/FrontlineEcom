@@ -157,6 +157,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — (core inbox) WooCommerce writes routed: approved product adds, price changes and Store Builder pages on a woocommerce store go to createWooProducts / setWooProductPrice / publishWooProductPage / publishWooPage through a new `onStore` in routes/agents.ts. Themes stay on `onShopify`. `noStoreWrites` gates on shared PRODUCT_WRITE_PLATFORMS, so Woo agents are asked again and Etsy and the rest still get the up-front refusal. Test: Etsy refused; a Woo price approval reaches core's Woo writer, whose error reaches the owner.
 - 2026-10-26 — Review fixes (fresh review of the lane since 54ef164):
   (1) storefront HTML: any colon before the first / ? # must start http/https/mailto/tel, so `java&Tab;script:` / `&NewLine;` links are refused like plain `javascript:`;
   (2) a run's saved cost is the larger of the engine's figure and the live estimate, so zeroed crash results and cut-off reflections keep what was spent;
