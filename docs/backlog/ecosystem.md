@@ -46,7 +46,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-02 Route + shell: `/ecosystem` "AI ECOSYSTEM" / "A LIVING WORKFORCE OF ECOMMERCE AGENTS" in nav, page skeleton matching the reference (header, 4 stat cards, tabs, office area, right activity panel, bottom bar). No other page changes.
 - [x] ECO-03 Seats backend: migration + `routes/ecosystem.ts` — list/deploy/update/archive seats, 30-desk capacity enforced server-side, desk uniqueness, persistence across restarts, tests.
 - [x] ECO-04 World: isometric tile map with the 10 departments (desk counts per spec §3) + central globe area, props, ambient animation, cached static layers, collision grid.
-- [ ] ECO-05 Camera: drag pan, wheel zoom, double-click focus, jump to department, reset, fit, fullscreen; sharp pixels at every zoom step.
+- [x] ECO-05 Camera: drag pan, wheel zoom, double-click focus, jump to department, reset, fit, fullscreen; sharp pixels at every zoom step.
 - [ ] ECO-06 Characters: sprite sheets with the 10 animations (spec §4), per-agent appearance variation, isometric walk directions, animation state machine.
 - [ ] ECO-07 Movement: A* on the grid with occupancy, walk to desk / meeting table / another desk; tests for the pathfinder.
 - [ ] ECO-08 Real state → behavior: `AgentOfficeEvent` adapter over existing live messages + REST snapshot; state table from spec §5; idempotent on reconnect, ignores stale/out-of-order events; tests.
@@ -67,6 +67,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-05: Smooth camera with pointer drag/capture, anchored wheel zoom, +/- and arrow keys, double-click focus, department jumps, fit/reset and fullscreen. Nearest-neighbor map sampling retained. Orca department focus and fullscreen entry/exit verified; .agent/eco-05.png inspected. Camera anchor/limits tests; pnpm check 110 files / 599 tests pass. Worker focus will use the same focus method as workers arrive.
 
 - 2026-10-26 ECO-04: PixiJS office with original cached pixel map art, ten distinct departments, thirty selectable desks, plants/studio/crates/rack props, holographic globe, blinking monitors and collision tiles. Accessible desk directory; narrow screens give the scene full width. Browser selection and .agent/eco-04.png compared against reference; 109 files / 597 tests pass. Detailed zoom and workers follow in ECO-05/06.
 
