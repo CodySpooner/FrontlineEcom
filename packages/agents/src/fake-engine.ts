@@ -9,8 +9,8 @@ export type FakeStep = AgentEvent | { call: ToolName; input?: Record<string, unk
 export type FakeScript = (input: RunInput) => FakeStep[];
 
 /**
- * What each role does on a demo run: one real action on the store's data that never waits for an approval, so its
- * screens (Store Builder, issue queue, creatives, flows) fill up without spending Claude usage.
+ * What each role does on a demo run: one real action on the store's data, so its screens (Store Builder, issue queue,
+ * creatives, flows) fill up without spending Claude usage. Only the Creative Studio's waits for an approval.
  */
 // ponytail: templated content from the store's own rows; the Claude engine does the real thinking.
 function demoWork(input: RunInput): FakeStep[] {
@@ -55,6 +55,21 @@ function demoWork(input: RunInput): FakeStep[] {
     case 'copywriter': {
       const p = product();
       return p ? [{ call: 'create_creative', input: { kind: 'copy', headline: `${p.title}, done right`.slice(0, 80), primaryText: `Meet ${p.title}: the upgrade your routine was missing. Now ${cash(Number(p.price), input.store.currency)}.`, cta: 'Shop now' } }] : [];
+    }
+    case 'creative_studio': {
+      // Only the owner starts it (no scheduled jobs), so its demo asks first like a real run: approve → a demo render.
+      const p = product();
+      const kind = input.task.match(/\b(UGC|video|image)\b[^.]* ad and save it/i)?.[1]?.toLowerCase() ?? 'image';
+      const brief = input.task.match(/Brief: ([\s\S]+)/)?.[1]?.trim() ?? input.task;
+      return p
+        ? [{
+            call: 'create_creative',
+            input: {
+              kind, aspect: input.task.match(/\b(1:1|4:5|9:16|16:9)\b/)?.[1] ?? '1:1', prompt: brief.slice(0, 1000), cta: 'Shop now',
+              headline: `${p.title}: see the difference`.slice(0, 80), primaryText: `${p.title}, now ${cash(Number(p.price), input.store.currency)}. Tap to see it in action.`,
+            },
+          }]
+        : [];
     }
     case 'email_sms':
       return [{

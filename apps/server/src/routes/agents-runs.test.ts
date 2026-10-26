@@ -374,10 +374,11 @@ test('requests a run can no longer act on expire when it ends; ones the server c
   const before = manager({ engine: fakeEngine((input) => (input.task === REFLECTION_PROMPT ? [] : steps.creative_studio!)) });
   const stuck = ok(before.start('glow:creative_studio', 'Make another ad'));
   await waitFor(3);
-  manager();
+  const after = manager({ engine: fakeEngine(() => []) }); // its retry of the cut-off run asks nothing
   expect(pending().at(-1)).toMatchObject({ kind: 'creative.generate', status: 'denied' });
   before.cancel(stuck.id);
   await before.idle();
+  await after.idle();
 });
 
 test('long tool outputs are cut in the stored transcript (the agent still saw all of it)', async () => {
