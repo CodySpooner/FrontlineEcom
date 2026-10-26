@@ -1,4 +1,4 @@
-import { claudeEngine, fakeEngine, getAgent, runAgent, updateAgent, type ClaudeEngineOptions, type FakeStep, type RunInput } from '@frontline/agents';
+import { claudeEngine, fakeEngine, getAgent, listMemory, runAgent, updateAgent, type ClaudeEngineOptions, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -90,4 +90,19 @@ describe('canUseTool', () => {
     expect(request).toMatchObject({ title: 'Allow shopify: update_product', action: { kind: 'tool_use', payload: { tool: 'mcp__shopify__update_product' } } });
     expect(events.find((e) => e.type === 'text_delta')).toEqual({ type: 'text_delta', text: behavior });
   });
+});
+
+test("the owner's no is remembered for the squad; a request that expired with its run isn't", async () => {
+  const add = db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'glow', 'glow:ad_strategist', ?, ?, '{"kind":"ads.set_budget"}', 'pending', ?)`);
+  add.run('n1', 'Raise Prospecting budget', 'ROAS 3.4 for 5 days', new Date().toISOString());
+  add.run('n2', 'Pause Retargeting', 'CPA up 40% [Expired: the agent run ended before a decision.]', new Date().toISOString());
+  decide(db, 'n1', 'deny');
+  decide(db, 'n2', 'deny');
+  await new Promise((r) => setImmediate(r));
+  expect(listMemory(db, 'glow').filter((m) => m.tags.includes('denied'))).toEqual([
+    expect.objectContaining({
+      agentId: 'glow:ad_strategist', kind: 'preference', evidence: 'ROAS 3.4 for 5 days',
+      text: expect.stringMatching(/^The owner turned down "Raise Prospecting budget" on \d{4}-\d\d-\d\d\.$/),
+    }),
+  ]);
 });

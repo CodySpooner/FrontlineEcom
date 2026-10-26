@@ -50,7 +50,7 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
-import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, onApproved, onDecision, publishDraft, publishThemeChange, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
+import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { issueRoutes } from './agents-issues';
@@ -212,6 +212,7 @@ export function runManager(db: Db): RunManager {
     managers.set(db, manager);
     // Approved actions that can come from outside a run (research screen, automations) are carried out here.
     onDecision(db, 'denied', (db, a) => {
+      rememberDenial(db, a);
       if (a.action.kind === 'store.publish_theme' && getStore(db, a.storeId)?.connected) {
         return discardThemeCopy(a, (storeId, themeId) => onLiveShopify(db, storeId, () => deleteTheme(db, loadKey(dataDir()), storeId, themeId)));
       }

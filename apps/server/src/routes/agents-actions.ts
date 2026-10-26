@@ -1,4 +1,4 @@
-import { getPageDraft, markPublished, once } from '@frontline/agents';
+import { getPageDraft, markPublished, once, writeMemory } from '@frontline/agents';
 import type { AdNetwork, ApprovalRequest, PageDraft } from '@frontline/shared';
 import type { Db } from '../db';
 import { subscribe } from '../live';
@@ -219,4 +219,14 @@ export async function publishThemeChange(db: Db, a: ApprovalRequest, publish: (s
 export async function discardThemeCopy(a: ApprovalRequest, del: (storeId: string, themeId: string) => Promise<unknown>) {
   const themeId = (a.action.payload as { themeId?: unknown } | undefined)?.themeId;
   if (typeof themeId === 'string') await del(a.storeId, themeId);
+}
+
+/** The owner's no becomes a store memory, so the squad doesn't pitch it again without new evidence. An expired request isn't a no. */
+export function rememberDenial(db: Db, a: ApprovalRequest) {
+  if (a.reason.endsWith('[Expired: the agent run ended before a decision.]')) return;
+  writeMemory(db, {
+    storeId: a.storeId, agentId: a.agentId, kind: 'preference', confidence: 0.6, tags: ['denied'],
+    text: `The owner turned down "${a.title}"${a.decidedAt ? ` on ${a.decidedAt.slice(0, 10)}` : ''}.`,
+    evidence: a.reason.slice(0, 300),
+  });
 }
