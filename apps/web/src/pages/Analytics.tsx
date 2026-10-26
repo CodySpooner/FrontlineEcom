@@ -2,15 +2,15 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type TopProduct } from '@frontline/shared';
-import { useCampaigns, useSummary, useTopProducts } from '../api/client';
+import { storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Product, type TopProduct } from '@frontline/shared';
+import { useCampaigns, useProducts, useSetCost, useSummary, useTopProducts } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
 import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
-import { Badge, ErrorState, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
+import { Badge, Button, ErrorState, inputClass, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
 import { breakEvenRoas, byNetwork, rate, roasTone } from '../lib/analytics';
 import { PERIOD, RANGES, weekly } from '../lib/chart';
-import { fmtDay, money, noBaseline, signedPct } from '../lib/format';
+import { cents, fmtDay, money, noBaseline, signedPct } from '../lib/format';
 import { NAV } from '../nav';
 
 type Metric = 'revenue' | 'profit' | 'adSpend';
@@ -71,6 +71,7 @@ function Report({ s, ids, name, dim }: { s: AnalyticsSummary; ids: string[]; nam
         <Channels q={campaigns} be={be} cur={s.currency} />
         <TopProducts ids={ids} range={s.range} name={multi ? name : undefined} cur={s.currency} />
       </div>
+      <UnitCosts ids={ids} multi={multi} />
       <Campaigns q={campaigns} be={be} beOf={(id) => breakEvenRoas(s.byStore.find((b) => b.storeId === id)?.totals ?? s.totals)} name={multi ? name : undefined} cur={s.currency} />
       {multi && <ByStore s={s} name={name} />}
     </div>
@@ -203,6 +204,70 @@ function TopProducts({ ids, range, name, cur }: { ids: string[]; range: Analytic
         <TopTable rows={q.data} name={name} cur={cur} />
       )}
     </Panel>
+  );
+}
+
+/** Products the platform reports no cost for (Etsy, TikTok Shop, Woo without COGS): their profit is the whole price until set. */
+export function UnitCosts({ ids, multi }: { ids: string[]; multi: boolean }) {
+  // ponytail: first 200 products per call; page through when a store's catalog outgrows that.
+  const missing = (useProducts(ids).data?.items ?? []).filter((p) => p.cost === 0);
+  if (!missing.length) return null;
+  return (
+    <Panel
+      title="Unit costs"
+      sub={`${missing.length} product${missing.length === 1 ? ' has' : 's have'} no unit cost, so ${missing.length === 1 ? 'its' : 'their'} whole price counts as profit. Enter what each costs you, shipping included.`}
+    >
+      <ul className="divide-y divide-line">
+        {missing.slice(0, 8).map((p) => (
+          <CostRow key={p.storeId + p.id} p={p} multi={multi} />
+        ))}
+      </ul>
+      {missing.length > 8 && <p className="mt-2 text-xs text-muted">{missing.length - 8} more show up here as you fill these in.</p>}
+    </Panel>
+  );
+}
+
+function CostRow({ p, multi }: { p: Product; multi: boolean }) {
+  const save = useSetCost();
+  const { name, currency } = useStoreSelection();
+  const [value, setValue] = useState('');
+  const cost = Number(value);
+  const valid = value.trim() !== '' && Number.isFinite(cost) && cost > 0;
+  return (
+    <li className="py-2.5 first:pt-0 last:pb-0">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (valid) save.mutate({ storeId: p.storeId, id: p.id, cost });
+        }}
+        className="flex flex-wrap items-center gap-x-3 gap-y-1.5"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold" title={p.title}>
+            {p.title}
+          </span>
+          <span className="block text-xs text-muted">
+            {multi && `${name(p.storeId)} · `}sells for {cents(p.price, currency(p.storeId))}
+          </span>
+        </span>
+        <input
+          inputMode="decimal"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Unit cost"
+          aria-label={`Unit cost of ${p.title}`}
+          className={cx(inputClass, 'w-28 text-right tabular-nums')}
+        />
+        <Button type="submit" size="sm" disabled={!valid || save.isPending}>
+          Save cost
+        </Button>
+      </form>
+      {save.isError && (
+        <p role="alert" className="mt-1 text-xs text-red">
+          {save.error.message}
+        </p>
+      )}
+    </li>
   );
 }
 

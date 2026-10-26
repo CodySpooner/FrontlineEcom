@@ -45,6 +45,7 @@ import type {
   Page,
   PageDraft,
   PriceChange,
+  Product,
   ProductList,
   ResearchProduct,
   ResearchTab,
@@ -358,6 +359,20 @@ export const useTopProducts = (storeIds: string[], range: AnalyticsRange, limit:
     queryFn: () => api<TopProduct[]>(`/api/analytics/top-products?stores=${storeIds.join(',')}&range=${range}&limit=${limit}`),
     placeholderData: keepPreviousData,
   });
+
+/** The selected stores' products (first 200). */
+export const useProducts = (storeIds: string[]) =>
+  useQuery({ queryKey: ['products', storeIds], queryFn: () => api<Page<Product>>(`/api/products?stores=${storeIds.join(',')}&limit=200`) });
+
+/** The owner's unit cost for a product the platform has none for; past orders are re-priced, so profit moves. */
+export function useSetCost() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ storeId, id, cost }: { storeId: string; id: string; cost: number }) =>
+      api<Product>(`/api/products/${encodeURIComponent(storeId)}/${encodeURIComponent(id)}`, json('PATCH', { cost })),
+    onSuccess: () => ['products', 'summary', 'top-products', 'orders'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+  });
+}
 
 /** Issues the Operations agent flagged, open first. */
 export const useOrderIssues = (storeIds: string[]) =>
