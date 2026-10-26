@@ -112,6 +112,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - Amazon refunds: `orderMetrics` totalSales is gross. Netting needs the Finances API (refund events) and the Finance and Accounting role. Same: a verified response or a live seller account.
 
 ## Done
+- 2026-10-26 — `publishWooPage`: approved Store Builder pages on a Woo store become published WordPress pages (`/wp-json/wp/v2/pages`). It uses two new optional, secret Woo fields: WordPress username and application password (help text says where). They're secret so adding them doesn't restart the backfill. Without them the error says what to add. Added to the agents' Woo routing request. Test
 - 2026-10-26 — `publishWooProductPage`: Store Builder product drafts can replace a Woo product's title and description (SEO fields skipped; Woo has none without a plugin). Logged through `logAction`. Added to the agents' Woo routing request. Test
 - 2026-10-26 — Untracked stock isn't sold out: `products.inventory_tracked` (migration 29) comes from Shopify's `tracksInventory` and Woo's `manage_stock`. The API returns it as `Product.inventoryTracked: false`. Dropshipping stores usually don't track stock, so their whole catalog read as inventory 0. Agents (catalog tool) and ui told; agents' next migration is 30. Tests
 - 2026-10-26 — Packaged smoke after the connector batch: rebuilt installer, two launches on one port, deny note stored, data kept across the restart, 0 log errors.

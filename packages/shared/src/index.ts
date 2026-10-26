@@ -689,10 +689,13 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'clientSecret', label: 'LWA client secret', secret: true },
     { key: 'refreshToken', label: 'Refresh token', secret: true },
   ] },
-  woocommerce: { name: 'WooCommerce', category: 'platform', perStore: true, help: 'WordPress admin → WooCommerce → Settings → Advanced → REST API → Add key → Permissions: Read (Read/Write if agents may add products and change prices you approve) → copy the consumer key and secret (shown once). The site must use https and pretty permalinks (not Plain). For real profit, turn on Cost of Goods Sold (Settings → Advanced → Features) and enter product costs.', fields: [
+  woocommerce: { name: 'WooCommerce', category: 'platform', perStore: true, help: 'WordPress admin → WooCommerce → Settings → Advanced → REST API → Add key → Permissions: Read (Read/Write if agents may add products and change prices you approve) → copy the consumer key and secret (shown once). The site must use https and pretty permalinks (not Plain). For real profit, turn on Cost of Goods Sold (Settings → Advanced → Features) and enter product costs. To let the Store Developer publish pages you approve, also add your WordPress username and an application password (Users → Profile → Application Passwords).', fields: [
     { key: 'siteUrl', label: 'Site URL', secret: false, placeholder: 'https://yourstore.com' },
     { key: 'consumerKey', label: 'Consumer key', secret: true, placeholder: 'ck_…' },
     { key: 'consumerSecret', label: 'Consumer secret', secret: true, placeholder: 'cs_…' },
+    // Secret so that adding them doesn't count as another shop (a changed setting restarts the backfill).
+    { key: 'wpUser', label: 'WordPress username (to publish pages)', secret: true, optional: true },
+    { key: 'wpAppPassword', label: 'WordPress application password', secret: true, placeholder: 'abcd efgh ijkl mnop qrst uvwx', optional: true },
   ] },
   meta_ads: { name: 'Meta Ads', category: 'ads', perStore: true, help: 'Meta Business Settings → Users → System users → Add (Admin) → Assign assets: the ad account (view performance) → Generate new token with ads_read and ads_mcp_management (agents read through the Meta ads MCP), plus ads_management if agents may make changes you approve → copy it. Ad account ID is in Ads Manager (act_…).', fields: [
     { key: 'adAccountId', label: 'Ad account ID', secret: false, placeholder: 'act_…' },

@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
-import { createWooProducts, publishWooProductPage, setWooProductPrice, syncWooCommerce, wooSite, wpZone } from './woocommerce';
+import { createWooProducts, publishWooPage, publishWooProductPage, setWooProductPrice, syncWooCommerce, wooSite, wpZone } from './woocommerce';
 
 const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
@@ -236,4 +236,22 @@ test("an approved product page replaces the Woo product's title and description"
   expect(writes).toEqual([{ method: 'PUT', path: 'products/42', body: { name: 'Travel Bowl Pro', description: '<p>Folds flat</p>' } }]);
   expect(db.prepare("SELECT title FROM products WHERE store_id = 'pawsome' AND id = 'woo-42'").get()?.title).toBe('Travel Bowl Pro');
   expect(db.prepare("SELECT action, target FROM action_log WHERE store_id = 'pawsome'").all()).toEqual([{ action: 'product_page_publish', target: 'woo-42' }]);
+});
+
+test('approved store pages go to WordPress with the application password; without one the error says how to add it', async () => {
+  const db = setup();
+  const page = { title: 'Shipping', bodyHtml: '<p>Free over 50</p>' };
+  await expect(publishWooPage(db, key, 'pawsome', page, fakeWooWrites().fetchFn)).rejects.toThrow('add your WordPress username and an application password');
+
+  db.prepare("UPDATE integrations SET cursor = '2026-10-26T17:55:00' WHERE id = 'woocommerce:pawsome'").run();
+  saveIntegration(db, key, { kind: 'woocommerce', storeId: 'pawsome', values: { siteUrl: 'https://shop.test/store/', wpUser: 'owner', wpAppPassword: 'abcd efgh' } });
+  const sent: { url: string; auth: string | null; body: unknown }[] = [];
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    sent.push({ url, auth: new Headers(init.headers).get('authorization'), body: JSON.parse(String(init.body)) });
+    return Response.json({ id: 77, slug: 'shipping', link: 'https://shop.test/store/shipping/' }, { status: 201 });
+  }) as typeof fetch;
+  expect(await publishWooPage(db, key, 'pawsome', page, fetchFn)).toEqual({ id: '77', handle: 'shipping' });
+  expect(sent).toEqual([{ url: 'https://shop.test/store/wp-json/wp/v2/pages', auth: `Basic ${Buffer.from('owner:abcd efgh').toString('base64')}`, body: { title: 'Shipping', content: '<p>Free over 50</p>', status: 'publish' } }]);
+  // The keys were kept (secrets left blank keep their value) and no backfill restarted.
+  expect(db.prepare("SELECT cursor FROM integrations WHERE id = 'woocommerce:pawsome'").get()?.cursor).toBe('2026-10-26T17:55:00');
 });

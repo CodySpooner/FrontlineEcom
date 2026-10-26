@@ -7,7 +7,8 @@ import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal
 import type { NewProduct, ProductPage } from './shopify';
 
 // WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
-// approved product writes below (createWooProducts, setWooProductPrice, publishWooProductPage).
+// approved product writes below (createWooProducts, setWooProductPrice, publishWooProductPage). Store pages are
+// WordPress pages, written with a WordPress application password (publishWooPage).
 /** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
 const BACKFILL_DAYS = 730;
 
@@ -226,4 +227,22 @@ export async function publishWooProductPage(db: Db, key: Buffer, storeId: string
     wooCall(db, key, storeId, 'PUT', `products/${wooId}`, { name: page.title, description: page.descriptionHtml }, fetchFn),
   );
   db.prepare('UPDATE products SET title = ? WHERE store_id = ? AND id = ?').run(page.title, storeId, productId);
+}
+
+/** Creates a published WordPress page (about, FAQ, shipping, landing). Call only for an approved request. Same contract as Shopify's publishPage. */
+export async function publishWooPage(db: Db, key: Buffer, storeId: string, page: { title: string; bodyHtml: string }, fetchFn: Fetch = fetch) {
+  const creds = getCredentials(db, key, 'woocommerce', storeId);
+  if (!creds) throw new Error('WooCommerce is not connected for this store');
+  if (!creds.wpUser || !creds.wpAppPassword) throw new Error('To publish pages, add your WordPress username and an application password (Users → Profile → Application Passwords) to the WooCommerce integration');
+  return logAction(db, storeId, 'page_publish', page.title, { title: page.title }, async () => {
+    const res = await fetchFn(`${wooSite(creds.siteUrl!)}/wp-json/wp/v2/pages`, {
+      method: 'POST',
+      headers: { authorization: `Basic ${Buffer.from(`${creds.wpUser!.trim()}:${creds.wpAppPassword!.trim()}`).toString('base64')}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ title: page.title, content: page.bodyHtml, status: 'publish' }),
+    });
+    const json = (await res.json().catch(() => undefined)) as { id?: number; slug?: string; message?: string } | undefined;
+    if (res.status === 401 || res.status === 403) throw new Error('WordPress refused the username and application password, or that user may not publish pages');
+    if (!res.ok || !json?.id) throw new Error(`WordPress: ${json?.message ?? `HTTP ${res.status}`}`);
+    return { id: String(json.id), handle: String(json.slug) };
+  });
 }
