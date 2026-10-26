@@ -63,3 +63,12 @@ describe('AI Research', () => {
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/agents/glow%3Aproduct_hunter/runs', expect.objectContaining({ method: 'POST' })));
   });
 });
+
+describe('research results', () => {
+  it('heads the grid with its count (an h2 over the h3 product cards), singular for one', async () => {
+    stubApi((url) => (url.startsWith('/api/research?') ? { items: [product], total: 1, offset: 0, limit: 30 } : []));
+    renderApp(<Research />);
+    expect(await screen.findByRole('heading', { level: 2, name: '1 product, best first' })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 3, name: product.title })).toBeTruthy();
+  });
+});

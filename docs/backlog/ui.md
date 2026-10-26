@@ -325,6 +325,8 @@ Orca's browser against the reference before ticking it.
       with "+N more in the last 24h" (same sweep as UI-126; the other capped lists already say so or link on).
 - [x] UI-128 Since AGT-163 the Store Developer doesn't save a draft the app can't publish on the store's platform (it
       answers in chat), but Builder's brief still promised "It drafts the page here". A note under the store picker says so up front.
+- [x] UI-129 Heading audit of all 14 pages: Research jumped h1 → h3 (its product cards) with no h2, so a screen reader's
+      heading list had no level for the results. The "N products, best first" line is now that h2 (same look), singular for 1.
 
 ## Blocked
 
@@ -498,3 +500,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-126: `Missions` (now exported) keeps open-first order and shows 8 until "Show all N". New Dashboard test: 12 missions show 8, then 12, then 8 again. Chrome at 1440 with All stores: "Show all 12" brings in Peak Fit's row (Hit $500 revenue, Get 12 orders, Clear requests, Launch 2 creatives) with "Show fewer" under it. The AI Agents strip's empty space beside a tall Agent Requests board is the approved mockup v3 layout (one row of 5), left as is
 - 2026-10-26 — UI-127: `Autopiloted` keeps the whole 24h list and shows the first 3 plus a muted "+N more in the last 24h". New Dashboard test (5 auto approvals: 3 listed, "+2 more"). Orca at 800px with a client-side patch of 5 auto-approved requests: 3 rows then "+2 more in the last 24h". Patch dropped by reload. Sweep of other `.slice(0, N)` lists: Unit costs says how many more come, Competitor briefs are the latest 5 (all in the analyst's History), the bell's "recently decided" is meant to be short, the agents strip links to all agents
 - 2026-10-26 — UI-128: Brief uses `byHand` against PRODUCT_PAGE_PLATFORMS (no page at all: Amazon, TikTok Shop, Walmart) and PRODUCT_WRITE_PLATFORMS (store pages: Etsy gets "only product pages publish from here"). Demo stores show nothing. New Builder test (Amazon, Etsy, Shopify). Orca at 800px with a client-side patch marking Peak Fit (TikTok Shop) connected: "The app can't publish pages to TikTok Shop stores yet: the Store Developer writes the page in chat for you to add by hand." under Store. Patch dropped by reload
+- 2026-10-26 — UI-129: every page has one h1 first and, after this, no skipped levels (Orca audit of all 14 routes). Research's count line is an `h2` styled 12px/400/muted like the old `p`, and reads "1 product" for one result. New Research test (h2 "1 product, best first" over the h3 card). My Lists already had list titles as h2

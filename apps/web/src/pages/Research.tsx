@@ -140,7 +140,8 @@ function Results({ tab, niche, q, onOpen, saved, onClear }: { tab: ResearchTab; 
   }
   return (
     <>
-      <p className="mb-3 text-xs text-muted">{r.data.total} products, best first</p>
+      {/* The grid's heading: product cards are h3s, as they are under each list's title in My Lists. */}
+      <h2 className="mb-3 text-xs font-normal text-muted">{`${r.data.total} product${r.data.total === 1 ? '' : 's'}, best first`}</h2>
       <Grid className={cx(r.isPlaceholderData && 'opacity-60')}>
         {r.data.items.map((p) => (
           <ProductCard key={p.id} p={p} onOpen={() => onOpen(p)} saved={saved} />
