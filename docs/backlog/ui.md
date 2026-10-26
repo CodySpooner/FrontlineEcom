@@ -135,8 +135,11 @@ Orca's browser against the reference before ticking it.
       the waiting ones, so a mis-tapped Deny is visible right where it happened.
 - [ ] UI-43 First-sync progress: while a newly connected store imports its history, Integrations and the Dashboard say
       so ("Importing order history: through Mar 2025") instead of showing a half-empty dashboard. Needs core: see Inbox.
+- [x] UI-44 Profit caveat: when products in the selection have no unit cost, the Dashboard Profit tile says so ("2
+      products at full price") and links to Store Analytics › Unit costs, since that profit is overstated until set.
 
 ## Blocked
+- UI-43 First-sync progress: waiting on core for `Integration.backfill` (core Inbox, 2026-10-26).
 
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
@@ -202,3 +205,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-40 follow-up: core added `byStore[].previous`, so the Analytics per-store table also says a muted "New" instead of +0.0% for a store with nothing in the previous period. Chrome: the 3 demo stores unchanged
 - 2026-10-26 — UI-42: the bell drawer shows "Recently decided" (last 3 approved/denied by `decidedAt`): Approved / Autopilot approved (green ✓) or Denied (muted ✕), the title, then role · store · when. Test (autopilot row) + Chrome with 2 ui-fx decided fixtures (deleted after)
 - 2026-10-26 — Inbox (core) unit costs: Store Analytics gets a "Unit costs" panel, shown only when products in the selection have cost 0 (first 200 per call, ponytail note). It lists up to 8, each with a cost field and "Save cost" (PATCH; refetches products/summary/top products/orders). Shopify's 400 reason shows inline. Tests: save posts `{cost}`, the 400 message shows. Chrome: zeroed glow-p1, the panel showed it, entering 28 saved, the cost went back to 28 and the panel went away
+- 2026-10-26 — UI-44: the Dashboard Profit tile shows "N cost(s) missing" (red link, title explains) when products in the selection have no unit cost, linking to Store Analytics' Unit costs panel. Chrome: zeroed glow-p1 → "1 cost missing" → link → panel; fixture restored (cost 28)

@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight, Check, CreditCard, RotateCcw, ShoppingBag, ShoppingCart } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type StoreEventType } from '@frontline/shared';
-import { useAgents, useApprovals, useDecide, useEvents, useMissions, useSummary } from '../api/client';
+import { useAgents, useApprovals, useDecide, useEvents, useMissions, useProducts, useSummary } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Portrait } from '../components/Art';
 import { ApprovalExtras } from '../components/ApprovalExtras';
@@ -61,6 +61,8 @@ function RevenueChart({ s, who }: { s: AnalyticsSummary; who: string }) {
 }
 
 function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
+  // Products the platform has no cost for count their whole price as profit until the owner sets one.
+  const atFullPrice = (useProducts(useStoreSelection().ids).data?.items ?? []).filter((p) => p.cost === 0).length;
   const grid = 'mb-3.5 grid grid-cols-2 gap-3 min-[620px]:grid-cols-3 min-[1280px]:grid-cols-5';
   if (q.isError)
     return (
@@ -93,9 +95,17 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
             </span>
           </Tooltip>
         }
+        extra={
+          atFullPrice > 0 && (
+            <Link to="/analytics" title="These products count their whole price as profit. Set their unit costs in Store Analytics." className="text-red hover:underline">
+              {atFullPrice} cost{atFullPrice > 1 ? 's' : ''} missing
+            </Link>
+          )
+        }
         value={money(t.profit, s.currency)}
         negative={t.profit < 0}
-        d={d.profit} fresh={fresh('profit')}
+        d={d.profit}
+        fresh={fresh('profit')}
         series={series.map((p) => p.profit)}
       />
       <Kpi label="Ad Spend" value={money(t.adSpend, s.currency)} d={d.adSpend} fresh={fresh('adSpend')} series={series.map((p) => p.adSpend)} />
@@ -105,7 +115,7 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
   );
 }
 
-function Kpi({ label, extra, value, d, fresh, series, hero, negative }: { label: ReactNode; extra?: string; value: string; d: number; fresh?: boolean; series: number[]; hero?: boolean; negative?: boolean }) {
+function Kpi({ label, extra, value, d, fresh, series, hero, negative }: { label: ReactNode; extra?: ReactNode; value: string; d: number; fresh?: boolean; series: number[]; hero?: boolean; negative?: boolean }) {
   const up = Math.round(d * 10) >= 0; // same rounding as signedPct, so "+0.0%" is never red
   return (
     <div
