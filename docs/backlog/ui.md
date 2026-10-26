@@ -253,6 +253,8 @@ Orca's browser against the reference before ticking it.
       and the login is signed out, so it's noticed before their runs fail.
 - [x] UI-95 An agent's header says "Demo engine" when it runs on the free scripted engine, so the owner can tell demo
       answers from Claude's at a glance (DESIGN: demo mode first; agents never burn Claude usage on demo stores).
+- [x] UI-96 Creative Studio's Claude integration chip (DESIGN §4.5) shows what the tab's agent really runs on, like the
+      Higgsfield chip beside it: demo copy, signed in, or a signed-out login that needs attention → Integrations.
 
 ## Blocked
 
@@ -389,3 +391,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-94: `useClaudeAccount(enabled)`. SystemStatus enables it only when some agent's `engine.provider` is `claude`, so demo-only setups never start the CLI-backed check (verified: 0 `/api/claude-account` requests on demo). Signed out ranks above failed agents (it's their cause). The text was shortened from "Claude login needs attention" (2 lines in the 188px box at 1024) to "Check Claude login" (1 line). Two Shell tests. Orca with a fetch patch (agents on claude, account signed out), after `visibilitychange` on window: "Check Claude login" → /integrations. Patch dropped by reload
 - 2026-10-26 — Core inbox (competitor currency): Price Moves formats with `p.currency ?? currency(p.storeId)`. The ponytail note became a plain fallback comment. Competitors.test adds a GBP rival on a EUR store → £32.00. Orca: demo rivals (no currency) unchanged
 - 2026-10-26 — UI-95: AgentDetail header shows a `Demo engine` Badge when `agent.engine.provider === 'demo'` (next to the autonomy badge). First full-page AgentDetail test (Route + ResizeObserver stub, like Chat.test). Orca at 800px on peak:ad_strategist: "Needs you | Ask first | Demo engine" on one 21px row, no overflow
+- 2026-10-26 — UI-96: the static "Claude · copy" span became a Link to /integrations with a StatusDot. It reads the `${store}:${tab.role}` agent's `engine.provider`: demo → idle "· demo copy" (no account check); claude → `useClaudeAccount(true)`, signed out → red "· needs attention", signed in → green. New Creative.test (2). Orca at 800px, copy tab: "Higgsfield AI · demo renders | Claude · demo copy" on one row

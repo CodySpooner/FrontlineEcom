@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Captions, Copy, Download, PenLine, Sparkles, Trash2, Wand2, Zap } from 'lucide-react';
 import { CREDITS, type AgentRole, type AspectRatio, type Creative as CreativeT, type CreativeKind } from '@frontline/shared';
-import { useCaps, useCreatives, useDeleteCreative, useIntegrations, useStartRun } from '../api/client';
+import { useAgents, useCaps, useClaudeAccount, useCreatives, useDeleteCreative, useIntegrations, useStartRun } from '../api/client';
 import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
@@ -41,6 +41,10 @@ export function Creative() {
   const start = useStartRun();
   const cap = useCaps(store?.id ?? '').data;
   const hf = useIntegrations().data?.find((i) => i.kind === 'higgsfield')?.status;
+  // The agent briefed on this tab thinks with Claude only on a live store; demo stores get the scripted engine.
+  const engine = useAgents().data?.find((a) => a.id === `${store?.id}:${tab.role}`)?.engine?.provider;
+  const signedIn = useClaudeAccount(engine === 'claude').q.data?.signedIn;
+  const claude = engine === 'demo' ? 'demo' : engine === 'claude' && signedIn === false ? 'error' : signedIn ? 'connected' : undefined;
   const lib = useCreatives(tab.show);
   const list = (lib.data ?? []).filter((c) => has(c.storeId) && (tab.show || c.kind !== 'copy'));
   const [picked, setPicked] = useState<string>();
@@ -138,7 +142,14 @@ export function Creative() {
                 <StatusDot tone={hf === 'connected' ? 'good' : hf === 'error' ? 'red' : 'idle'} />
                 Higgsfield AI{hf !== 'connected' && <span className="text-muted">{hf === 'error' ? ' · needs attention' : ' · demo renders'}</span>}
               </Link>
-              <span className="inline-flex items-center rounded-md border border-line bg-bg-2 px-2 py-1 text-text-2">Claude · copy</span>
+              <Link
+                to="/integrations"
+                title={claude === 'demo' ? 'Demo stores get scripted answers' : 'Writes the copy and the briefs'}
+                className="inline-flex items-center gap-1.5 rounded-md border border-line bg-bg-2 px-2 py-1 text-text-2 hover:text-white"
+              >
+                <StatusDot tone={claude === 'connected' ? 'good' : claude === 'error' ? 'red' : 'idle'} />
+                Claude{claude && claude !== 'connected' && <span className="text-muted">{claude === 'error' ? ' · needs attention' : ' · demo copy'}</span>}
+              </Link>
               {cap && <span className="ml-auto">Daily cap {cap.higgsfieldCreditsPerDay} credits</span>}
             </div>
           </div>
