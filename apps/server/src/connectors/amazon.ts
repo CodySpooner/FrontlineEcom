@@ -1,3 +1,4 @@
+import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
@@ -67,22 +68,27 @@ export function midnightOffset(timeZone: string, date: string) {
   return `${off < 0 ? '-' : '+'}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
 }
 
+/** The seller's API host, marketplace and a fresh LWA access token. */
+async function amazonAuth(creds: Record<string, string>, fetchFn: Fetch) {
+  const host = HOSTS[creds.region!.trim().toLowerCase()];
+  if (!host) throw new Error('Region must be na, eu or fe');
+  const marketplace = creds.marketplaceId!.trim().toUpperCase();
+  if (!/^[A-Z0-9]{8,16}$/.test(marketplace)) throw new Error('Marketplace ID must look like ATVPDKIKX0DER');
+  const lwa = await fetchFn(LWA_TOKEN_URL, {
+    method: 'POST',
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: creds.refreshToken!, client_id: creds.clientId!, client_secret: creds.clientSecret! }),
+  });
+  const auth = (await lwa.json().catch(() => ({}))) as { access_token?: string; error?: string; error_description?: string };
+  if (!lwa.ok || !auth.access_token) throw new Error(`Amazon sign-in failed: ${auth.error_description ?? auth.error ?? `HTTP ${lwa.status}`}; check the LWA client and refresh token`);
+  return { host, marketplace, token: auth.access_token };
+}
+
 export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `amazon:${storeId}`;
   const creds = getCredentials(db, key, 'amazon', storeId);
   if (!creds) return;
   try {
-    const host = HOSTS[creds.region!.trim().toLowerCase()];
-    if (!host) throw new Error('Region must be na, eu or fe');
-    const marketplace = creds.marketplaceId!.trim().toUpperCase();
-    if (!/^[A-Z0-9]{8,16}$/.test(marketplace)) throw new Error('Marketplace ID must look like ATVPDKIKX0DER');
-
-    const lwa = await fetchFn(LWA_TOKEN_URL, {
-      method: 'POST',
-      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: creds.refreshToken!, client_id: creds.clientId!, client_secret: creds.clientSecret! }),
-    });
-    const auth = (await lwa.json().catch(() => ({}))) as { access_token?: string; error?: string; error_description?: string };
-    if (!lwa.ok || !auth.access_token) throw new Error(`Amazon sign-in failed: ${auth.error_description ?? auth.error ?? `HTTP ${lwa.status}`}; check the LWA client and refresh token`);
+    const { host, marketplace, token } = await amazonAuth(creds, fetchFn);
 
     const timeZone = String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC');
     const today = localDate(now);
@@ -95,7 +101,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
       granularity: 'Day',
       granularityTimeZone: timeZone,
     });
-    const res = await fetchFn(`https://${host}/sales/v1/orderMetrics?${params}`, { headers: { 'x-amz-access-token': auth.access_token } });
+    const res = await fetchFn(`https://${host}/sales/v1/orderMetrics?${params}`, { headers: { 'x-amz-access-token': token } });
     const body = (await res.json().catch(() => ({}))) as { payload?: { interval: string; orderCount: number; totalSales: { amount: number; currencyCode?: string } }[]; errors?: { message: string }[] };
     if (res.status === 403) throw new Error('Amazon refused access; the SP-API app needs the Selling Partner Insights (sales) role for this seller');
     if (!res.ok) throw new Error(`Amazon: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
@@ -109,7 +115,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const have = db.prepare("SELECT 1 FROM products WHERE store_id = ? AND id GLOB 'amz-*'").get(storeId);
     const full = !have || catalogPassDue(db, id, today);
     const listings = !own ? undefined
-      : await listingsOf(fetchFn, host, auth.access_token, creds.sellerId!.trim(), marketplace, full ? undefined : `${addDays(cursor ?? today, -2)}T00:00:00Z`).catch(() => undefined);
+      : await listingsOf(fetchFn, host, token, creds.sellerId!.trim(), marketplace, full ? undefined : `${addDays(cursor ?? today, -2)}T00:00:00Z`).catch(() => undefined);
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -149,4 +155,63 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Amazon sync failed');
   }
+}
+
+/** One price in a purchasable_offer schedule. */
+type Scheduled = { schedule?: { value_with_tax?: number; start_at?: string; end_at?: string }[] }[];
+interface Offer {
+  marketplace_id?: string;
+  audience?: string;
+  currency?: string;
+  discounted_price?: Scheduled;
+  minimum_seller_allowed_price?: Scheduled;
+  maximum_seller_allowed_price?: Scheduled;
+}
+const first = (p?: Scheduled) => p?.[0]?.schedule?.[0];
+
+/**
+ * Sets a live listing's price (its consumer offer's our_price in the store's marketplace), merging so the sale price,
+ * min/max and B2B prices stay as they are. Call only for an approved request. Same contract as Shopify's
+ * setProductPrice, except Amazon has no compare-at price. Amazon applies an accepted change within minutes.
+ */
+export async function setAmazonListingPrice(db: Db, key: Buffer, storeId: string, productId: string, { price, compareAt }: { price: number; compareAt?: number | null }, fetchFn: Fetch = fetch, now = new Date()) {
+  if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be more than 0');
+  if (compareAt != null) throw new Error('Amazon has no compare-at price; set a sale price in Seller Central');
+  if (!productId.startsWith('amz-')) throw new Error(`${productId} is not an Amazon listing`);
+  const creds = getCredentials(db, key, 'amazon', storeId);
+  if (!creds) throw new Error('Amazon is not connected for this store');
+  const sku = productId.slice(4);
+  await logAction(db, storeId, 'price_change', productId, { price }, async () => {
+    const { host, marketplace, token } = await amazonAuth(creds, fetchFn);
+    const url = `https://${host}/listings/2021-08-01/items/${encodeURIComponent(creds.sellerId!.trim())}/${encodeURIComponent(sku)}`;
+    const call = async <T,>(init: RequestInit, query: Record<string, string>) => {
+      const res = await fetchFn(`${url}?${new URLSearchParams({ marketplaceIds: marketplace, ...query })}`, { ...init, headers: { 'x-amz-access-token': token, 'content-type': 'application/json' } });
+      const body = (await res.json().catch(() => ({}))) as T & { errors?: { message: string }[] };
+      if (res.status === 403) throw new Error('Amazon refused the change; the SP-API app needs the Product Listing role for this seller');
+      if (!res.ok) throw new Error(`Amazon: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
+      return body;
+    };
+    const item = await call<{ summaries?: { productType?: string }[]; attributes?: { purchasable_offer?: Offer[] } }>({}, { includedData: 'summaries,attributes' });
+    const productType = item.summaries?.[0]?.productType;
+    if (!productType) throw new Error(`Amazon: listing ${sku} not found in this marketplace`);
+    const offer = item.attributes?.purchasable_offer?.find((o) => o.marketplace_id === marketplace && (o.audience ?? 'ALL') === 'ALL');
+    if (!offer?.currency) throw new Error(`Amazon: listing ${sku} has no offer to reprice in this marketplace`);
+    // A running sale is what buyers pay, so a new regular price wouldn't show; min/max outside the price deactivates the offer.
+    const sale = first(offer.discounted_price);
+    if (sale?.value_with_tax != null && (!sale.end_at || Date.parse(sale.end_at) > now.getTime())) throw new Error(`Amazon: listing ${sku} has a sale price running or scheduled; change it in Seller Central`);
+    const [min, max] = [first(offer.minimum_seller_allowed_price)?.value_with_tax, first(offer.maximum_seller_allowed_price)?.value_with_tax];
+    if ((min != null && price < min) || (max != null && price > max)) throw new Error(`Amazon: ${price} is outside the ${min ?? 0}–${max ?? '∞'} price range set for listing ${sku} in Seller Central`);
+    const res = await call<{ status?: string; issues?: { message: string; severity: string }[] }>(
+      {
+        method: 'PATCH',
+        body: JSON.stringify({
+          productType,
+          patches: [{ op: 'merge', path: '/attributes/purchasable_offer', value: [{ marketplace_id: marketplace, currency: offer.currency, audience: 'ALL', our_price: [{ schedule: [{ value_with_tax: price }] }] }] }],
+        }),
+      },
+      {},
+    );
+    if (res.status !== 'ACCEPTED') throw new Error(`Amazon: ${res.issues?.find((i) => i.severity === 'ERROR')?.message ?? `the change was ${res.status ?? 'not accepted'}`}`);
+  });
+  db.prepare('UPDATE products SET price = ?, compare_at = NULL WHERE store_id = ? AND id = ?').run(price, storeId, productId);
 }

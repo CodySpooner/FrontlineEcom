@@ -35,7 +35,9 @@ pnpm check    # typecheck + tests
   - Etsy: prices and listing titles and descriptions. Etsy has no compare-at price. An Etsy shop connected before
     this feature must be connected again once.
   - Meta, Google and TikTok ads: daily budgets and pausing campaigns.
-  - TikTok Shop and Amazon: agents put the change in their answer and you make it.
+  - Amazon: prices (the consumer offer in the store's marketplace). A listing with a sale price running, or a new
+    price outside its min/max in Seller Central, is left for you to change. Needs the Product Listing role.
+  - TikTok Shop: agents put the change in their answer and you make it.
 - **Your data:** everything stays on this PC in `%APPDATA%\Frontline Ecom\data`. That folder holds the database,
   `logs\api.log`, and `backups\` (daily, newest 7 kept, restorable from Settings). Connector credentials are encrypted
   with your Windows login and never leave the machine except to their own service.

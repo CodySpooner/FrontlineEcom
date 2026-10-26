@@ -10,7 +10,7 @@ export type Platform = 'shopify' | 'tiktok_shop' | 'etsy' | 'amazon' | 'woocomme
  */
 export const PRODUCT_WRITE_PLATFORMS: readonly Platform[] = ['shopify', 'woocommerce'];
 /** Platforms whose live prices an approved `store.set_price` can change. */
-export const PRICE_WRITE_PLATFORMS: readonly Platform[] = ['shopify', 'woocommerce', 'etsy'];
+export const PRICE_WRITE_PLATFORMS: readonly Platform[] = ['shopify', 'woocommerce', 'etsy', 'amazon'];
 /** Platforms whose live product title and description an approved Store Builder product draft can replace. */
 export const PRODUCT_PAGE_PLATFORMS: readonly Platform[] = ['shopify', 'woocommerce', 'etsy'];
 export const PLATFORMS: Platform[] = ['shopify', 'tiktok_shop', 'etsy', 'amazon', 'woocommerce', 'walmart'];

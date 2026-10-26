@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
-import { midnightOffset, syncAmazon } from './amazon';
+import { midnightOffset, setAmazonListingPrice, syncAmazon } from './amazon';
 
 const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
@@ -201,4 +201,52 @@ test('a catalog read cut short by the search cap archives nothing', async () => 
   }) as typeof fetch, new Date('2026-10-27T18:10:00Z'));
   expect(queries[0]).not.toBeNull(); // the day's pass is done: back to changes only
   expect(db.prepare("SELECT count(*) AS n FROM products WHERE store_id = 'peak' AND id GLOB 'amz-*'").get()?.n).toBe(1001);
+});
+
+test('an approved Amazon price change merges our_price into the consumer offer and leaves the rest alone', async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('peak', 'amz-MAT/1', 'Mat', 30, 10, 5, 'active')").run();
+  let offer: Record<string, unknown> = { marketplace_id: 'ATVPDKIKX0DER', audience: 'ALL', currency: 'USD', our_price: [{ schedule: [{ value_with_tax: 30 }] }], minimum_seller_allowed_price: [{ schedule: [{ value_with_tax: 20 }] }] };
+  const patches: unknown[] = [];
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (!u.pathname.startsWith('/listings/')) return base(url, init);
+    expect(u.pathname).toBe('/listings/2021-08-01/items/A1SELLER/MAT%2F1');
+    if (init?.method === 'PATCH') {
+      patches.push(JSON.parse(String(init.body)));
+      return Response.json({ sku: 'MAT/1', status: 'ACCEPTED', submissionId: 's1', issues: [] });
+    }
+    expect(u.searchParams.get('includedData')).toBe('summaries,attributes');
+    return Response.json({ sku: 'MAT/1', summaries: [{ marketplaceId: 'ATVPDKIKX0DER', productType: 'YOGA_MAT' }], attributes: { purchasable_offer: [{ ...offer, audience: 'B2B' }, offer] } });
+  }) as typeof fetch;
+
+  await setAmazonListingPrice(db, key, 'peak', 'amz-MAT/1', { price: 27.5 }, fetchFn, NOW);
+  expect(patches).toEqual([{
+    productType: 'YOGA_MAT',
+    patches: [{ op: 'merge', path: '/attributes/purchasable_offer', value: [{ marketplace_id: 'ATVPDKIKX0DER', currency: 'USD', audience: 'ALL', our_price: [{ schedule: [{ value_with_tax: 27.5 }] }] }] }],
+  }]);
+  expect(db.prepare("SELECT price, compare_at FROM products WHERE id = 'amz-MAT/1'").get()).toEqual({ price: 27.5, compare_at: null });
+  expect(db.prepare("SELECT action, error FROM action_log WHERE store_id = 'peak'").all()).toEqual([{ action: 'price_change', error: null }]);
+
+  // Refused before anything is sent: below the seller's minimum, a sale running, a compare-at price.
+  await expect(setAmazonListingPrice(db, key, 'peak', 'amz-MAT/1', { price: 15 }, fetchFn, NOW)).rejects.toThrow('outside the 20–∞ price range');
+  offer = { ...offer, discounted_price: [{ schedule: [{ value_with_tax: 25, start_at: '2026-10-01T00:00:00Z', end_at: '2026-11-30T00:00:00Z' }] }] };
+  await expect(setAmazonListingPrice(db, key, 'peak', 'amz-MAT/1', { price: 26 }, fetchFn, NOW)).rejects.toThrow('sale price running');
+  await expect(setAmazonListingPrice(db, key, 'peak', 'amz-MAT/1', { price: 26, compareAt: 35 }, fetchFn, NOW)).rejects.toThrow('no compare-at');
+  expect(patches).toHaveLength(1);
+  expect(db.prepare("SELECT price FROM products WHERE id = 'amz-MAT/1'").get()?.price).toBe(27.5);
+});
+
+test('an Amazon price change the API rejects says why', async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    if (!new URL(url).pathname.startsWith('/listings/')) return base(url, init);
+    if (init?.method === 'PATCH') return Response.json({ sku: 'X', status: 'INVALID', issues: [{ code: '90220', message: "'our_price' is invalid", severity: 'ERROR' }] });
+    return Response.json({ summaries: [{ productType: 'PRODUCT' }], attributes: { purchasable_offer: [{ marketplace_id: 'ATVPDKIKX0DER', currency: 'USD', our_price: [{ schedule: [{ value_with_tax: 9 }] }] }] } });
+  }) as typeof fetch;
+  await expect(setAmazonListingPrice(db, key, 'peak', 'amz-X', { price: 8 }, fetchFn, NOW)).rejects.toThrow("Amazon: 'our_price' is invalid");
 });

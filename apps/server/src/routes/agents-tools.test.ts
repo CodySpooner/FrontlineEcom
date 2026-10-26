@@ -60,14 +60,14 @@ test('a 7-day window is the 7 dates ending today in the zone the data is dated i
 });
 
 test("store changes aren't asked for on a connected store the app can't write them to", async () => {
-  const on = (platform: 'amazon' | 'etsy') => ({ ...input('glow', 'market_analyst').store, connected: true, platform });
+  const on = (platform: 'tiktok_shop' | 'etsy') => ({ ...input('glow', 'market_analyst').store, connected: true, platform });
   const productId = String(db.prepare(`SELECT id FROM products WHERE store_id = 'glow' LIMIT 1`).get()?.id);
   const before = db.prepare('SELECT count(*) AS n FROM approvals').get()?.n;
-  const price = results(await run({ ...input('glow', 'market_analyst'), store: on('amazon') }, [{ call: 'propose_price_change', input: { productId, newPrice: 19, evidence: 'converts 3.1% at $29.99 vs competitors at $34-39' } }]));
+  const price = results(await run({ ...input('glow', 'market_analyst'), store: on('tiktok_shop') }, [{ call: 'propose_price_change', input: { productId, newPrice: 19, evidence: 'converts 3.1% at $29.99 vs competitors at $34-39' } }]));
   // Etsy takes prices (PRICE_WRITE_PLATFORMS) but not new products (PRODUCT_WRITE_PLATFORMS).
   const add = results(await run({ ...input('glow', 'product_hunter'), store: on('etsy') }, [{ call: 'request_approval', input: { title: 'Add 2 products', reason: 'AI score 88', kind: 'store.add_products', payload: {} } }]));
   const [p, a] = [price[0]!.output, add[0]!.output];
-  expect(p).toBe("Not sent: the app doesn't change amazon stores yet, so approving it would do nothing. Put the change in your answer so the owner can make it by hand.");
+  expect(p).toBe("Not sent: the app doesn't change tiktok_shop stores yet, so approving it would do nothing. Put the change in your answer so the owner can make it by hand.");
   expect(a).toBe("Not sent: the app doesn't change etsy stores yet, so approving it would do nothing. Put the change in your answer so the owner can make it by hand.");
   expect(db.prepare('SELECT count(*) AS n FROM approvals').get()?.n).toBe(before);
 });

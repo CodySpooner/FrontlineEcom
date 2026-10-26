@@ -63,6 +63,7 @@ import { demoSupplierProducts, searchCj } from '../connectors/cj';
 import { createProducts, deleteTheme, duplicateTheme, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, upsertThemeFiles } from '../connectors/shopify';
 import { createWooProducts, publishWooPage, publishWooProductPage, setWooProductPrice } from '../connectors/woocommerce';
 import { publishEtsyProductPage, setEtsyListingPrice } from '../connectors/etsy';
+import { setAmazonListingPrice } from '../connectors/amazon';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
@@ -123,6 +124,7 @@ const setPrice =
       shopify: () => setProductPrice(db, loadKey(dataDir()), storeId, productId, change),
       woocommerce: () => setWooProductPrice(db, loadKey(dataDir()), storeId, productId, change),
       etsy: () => setEtsyListingPrice(db, loadKey(dataDir()), storeId, productId, change),
+      amazon: () => setAmazonListingPrice(db, loadKey(dataDir()), storeId, productId, change),
     });
 
 /** The dashboard's window (app.ts windowEnd): today in the store's zone, with today's comparison scaled to the hours gone. */

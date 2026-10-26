@@ -109,8 +109,8 @@ test("connected stores get the price on Shopify or WooCommerce; other platforms 
   const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'peak' ORDER BY price DESC LIMIT 1`).get()!;
   const [id, from] = [String(p.id), Number(p.price)];
   const to = Math.round(from * 1.1 * 100) / 100;
-  db.prepare(`UPDATE stores SET connected = 1, platform = 'amazon' WHERE id = 'peak'`).run();
-  expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Not sent: the app doesn't change amazon stores yet/);
+  db.prepare(`UPDATE stores SET connected = 1, platform = 'tiktok_shop' WHERE id = 'peak'`).run();
+  expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Not sent: the app doesn't change tiktok_shop stores yet/);
   expect(db.prepare(`SELECT count(*) AS n FROM approvals WHERE json_extract(action_json, '$.kind') = 'store.set_price'`).get()?.n).toBe(0);
   expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
 
