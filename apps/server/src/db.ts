@@ -280,6 +280,25 @@ export const MIGRATIONS = [
   );
   CREATE INDEX xp_events_by_agent ON xp_events (agent_id, created_at);
   `,
+  /* 11 (agents lane: creatives library, AGT-15) */ `
+  CREATE TABLE creatives (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL,
+    run_id TEXT,
+    kind TEXT NOT NULL,
+    aspect TEXT,
+    prompt TEXT,
+    headline TEXT NOT NULL,
+    primary_text TEXT NOT NULL,
+    cta TEXT,
+    media_url TEXT,
+    credits INTEGER NOT NULL DEFAULT 0,
+    source TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX creatives_by_store ON creatives (store_id, created_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

@@ -25,6 +25,7 @@ import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
 import { award, gamificationRoutes } from './agents-gamification';
+import { creativeRoutes } from './agents-creatives';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
@@ -178,5 +179,6 @@ export function agentRoutes(db: Db) {
       return memory ? c.json(memory) : c.json({ error: 'Memory not found' }, 404);
     })
     .delete('/api/memory/:id', (c) => (deleteMemory(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Memory not found' }, 404)))
-    .route('/', gamificationRoutes(db));
+    .route('/', gamificationRoutes(db))
+    .route('/', creativeRoutes(db));
 }

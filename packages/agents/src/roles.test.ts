@@ -12,5 +12,5 @@ test('every role can read its store, use memory and ask for approval', () => {
 });
 
 test('only Creative Studio spends generation credits', () => {
-  expect(roles.filter((r) => ROLES[r].tools.includes('create_creative'))).toEqual(['creative_studio']);
+  expect(roles.filter((r) => ROLES[r].tools.includes('create_creative'))).toEqual(['creative_studio', 'copywriter']);
 });

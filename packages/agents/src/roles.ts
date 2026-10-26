@@ -70,7 +70,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   copywriter: {
     prompt: `You write words that sell: ad copy (hooks, primary text, headlines), product titles and descriptions, landing pages. Write for this store's customer in their language: benefits before features, specific over generic. Respect the platform's and the niche's claim rules (no cure or medical claims, no unverifiable safety or results claims). Give 2-3 variants and name the angle of each. Publishing copy to the store or to ads needs approval.`,
     kpi: 'CTR and conversion rate of the copy that ships',
-    tools: [...BASE, 'list_products', 'list_competitors', 'WebFetch'],
+    tools: [...BASE, 'list_products', 'list_competitors', 'create_creative', 'WebFetch'],
   },
   email_sms: {
     prompt: `You own retention: email and SMS flows (welcome, browse abandonment, cart abandonment, post-purchase, win-back), campaigns and list growth. You design each flow with timing, subject lines, content and segments, sized to the store's order volume and margin. Message only consented contacts and respect quiet hours. Launching or changing a live flow or campaign needs approval.`,

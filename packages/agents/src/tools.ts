@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps } from '@frontline/shared';
 import { z } from 'zod';
+import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
 import { searchMemory, writeMemory } from './memory';
 import { saveNichePack } from './niche';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
@@ -180,6 +181,37 @@ export const APP_TOOLS: AppTool[] = [
       return csv(
         items.map((p) => ({ id: p.id, title: p.title, category: p.category, source: p.source, cost: p.cost, price: p.price, compare_at: p.compareAt, margin_pct: p.margin, trend_pct: p.trend, competition: p.competition, shipping_days: p.shippingDays, score: p.score })),
       );
+    },
+  }),
+  defineTool({
+    name: 'create_creative',
+    description:
+      'Save an ad to the creatives library. kind "copy" saves ad copy right away. image/video/ugc generate media: costs generation credits (image 2, video 20, ugc 40), checks the daily credit cap and asks the owner first.',
+    input: {
+      kind: z.enum(['image', 'video', 'ugc', 'copy']),
+      headline: z.string().min(2).max(80),
+      primaryText: z.string().min(2).max(500).describe('the ad body copy'),
+      cta: z.string().max(30).optional(),
+      prompt: z.string().max(1000).optional().describe('visual brief for media kinds: subject, setting, style, motion, hook in the first second'),
+      aspect: z.enum(['1:1', '4:5', '9:16', '16:9']).default('1:1'),
+    },
+    run: async ({ kind, headline, primaryText, cta, prompt, aspect }, ctx) => {
+      const base = { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), kind, headline, primaryText, ...(cta ? { cta } : {}) };
+      if (kind === 'copy') return `Saved ad copy to the library (${saveCreative(ctx.db, { ...base, credits: 0, source: 'agent' }).id}).`;
+      if (!prompt) return 'Not generated: media needs a prompt (the visual brief).';
+      const credits = CREDITS[kind];
+      const used = creditsToday(ctx.db, ctx.store.id);
+      const cap = ctx.caps?.(ctx.store.id).higgsfieldCreditsPerDay ?? Infinity;
+      if (used + credits > cap) return `Not generated: it needs ${credits} credits and ${used} of today's ${cap}-credit cap are used. Suggest it for tomorrow instead.`;
+      const { approved, message } = await requestApproval(ctx, {
+        title: `Generate ${aspect} ${kind} ad: ${headline}`.slice(0, 80),
+        reason: `${credits} generation credits (${used}/${cap} used today). Brief: ${prompt}`.slice(0, 400),
+        action: { kind: 'creative.generate', payload: { kind, aspect, prompt, headline, primaryText, cta, credits } },
+      });
+      if (!approved) return message;
+      // ponytail: demo render only; the Higgsfield MCP call goes here once core adds the integration (see Blocked).
+      const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'demo', mediaUrl: demoMedia(ctx.store, { kind, aspect, headline, cta }) });
+      return `${message}. Generated a demo render and saved it to the library (${saved.id}).`;
     },
   }),
   defineTool({

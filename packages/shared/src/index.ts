@@ -286,6 +286,35 @@ export interface XpEvent {
   createdAt: string;
 }
 
+export type CreativeKind = 'image' | 'video' | 'ugc' | 'copy';
+export type AspectRatio = '1:1' | '4:5' | '9:16' | '16:9';
+
+/**
+ * The creatives library. GET /api/creatives?stores=&kind=&limit= → Creative[] newest first; DELETE /api/creatives/:id → 204.
+ * Agents add to it with the create_creative tool (media kinds spend generation credits and need approval; copy doesn't).
+ */
+export interface Creative {
+  id: string;
+  storeId: string;
+  agentId: string;
+  runId?: string;
+  kind: CreativeKind;
+  /** Media kinds only. */
+  aspect?: AspectRatio;
+  /** The visual brief given to the generator. */
+  prompt?: string;
+  headline: string;
+  primaryText: string;
+  cta?: string;
+  /** Image/video URL; a data: URL for demo renders. */
+  mediaUrl?: string;
+  /** Generation credits spent (0 for copy). */
+  credits: number;
+  /** demo = simulated render (no Higgsfield connected); agent = written copy. */
+  source: 'demo' | 'higgsfield' | 'agent';
+  createdAt: string;
+}
+
 export type RunStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';
 
 /** One task given to an agent. A follow-up chat message is a new run that resumes the previous run's session. */
