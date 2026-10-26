@@ -187,7 +187,7 @@ const isVideo = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url);
 
 function Media({ c, className, controls }: { c: CreativeT; className?: string; controls?: boolean }) {
   if (!c.mediaUrl) return null;
-  return isVideo(c.mediaUrl) ? <video src={c.mediaUrl} controls={controls} muted={!controls} className={className} /> : <img src={c.mediaUrl} alt={c.headline} className={className} />;
+  return isVideo(c.mediaUrl) ? <video src={c.mediaUrl} controls={controls} muted playsInline className={className} /> : <img src={c.mediaUrl} alt={c.headline} className={className} />;
 }
 
 function Preview({ c, onAsk, busy }: { c: CreativeT; onAsk: (task: string) => void; busy: boolean }) {
@@ -228,7 +228,7 @@ function Preview({ c, onAsk, busy }: { c: CreativeT; onAsk: (task: string) => vo
           </Button>
         )}
         {c.mediaUrl ? (
-          <a href={c.mediaUrl} download={`${c.headline.replace(/[^\w-]+/g, '-').slice(0, 40)}.${isVideo(c.mediaUrl) ? 'mp4' : c.mediaUrl.startsWith('data:image/svg') ? 'svg' : 'png'}`} className={buttonClass('ghost', 'sm')}>
+          <a href={c.mediaUrl} download={`${c.headline.replace(/[^\w-]+/g, '-').slice(0, 40)}.${c.mediaUrl.startsWith('data:') ? 'svg' : c.mediaUrl.split('?')[0]!.split('.').pop()}`} className={buttonClass('ghost', 'sm')}>
             <Download className="size-3.5" />
             Export
           </a>

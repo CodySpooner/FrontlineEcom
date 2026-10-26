@@ -2,8 +2,8 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
-import { AGENT_ROLES, type Agent, type Autonomy, type MemoryKind, type RunStatus } from '@frontline/shared';
-import { useAddMemory, useAgents, useCaps, useForgetMemory, useMemory, useRuns, useUpdateAgent } from '../api/client';
+import { AGENT_ROLES, type Agent, type AgentRole, type Autonomy, type MemoryKind, type RunStatus } from '@frontline/shared';
+import { useAddMemory, useAgents, useCaps, useForgetMemory, useMemory, useRun, useRuns, useUpdateAgent } from '../api/client';
 import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
 import { Hero } from '../components/Hero';
@@ -27,9 +27,10 @@ export function AgentDetail() {
   const [params, setParams] = useSearchParams();
   const tab: Tab = TABS.find((t) => t.value === params.get('tab'))?.value ?? 'chat';
   const runs = useRuns(id);
-  // The open conversation; until the owner picks one it's the latest run.
+  // The open conversation; until the owner picks one it's ?run= (a deep link) or the latest run.
   const [picked, setThread] = useState<string[]>();
-  const thread = picked ?? (runs.data?.[0] ? [runs.data[0].id] : []);
+  const linked = params.get('run');
+  const thread = picked ?? (linked ? [linked] : runs.data?.[0] ? [runs.data[0].id] : []);
 
   const agent = agents.data?.find((a) => a.id === id);
   const role = agent && AGENT_ROLES[agent.role];
@@ -98,6 +99,18 @@ const RUN_STATUS: Record<RunStatus, { label: string; tone: 'red' | 'good' | 'mut
   cancelled: { label: 'Stopped', tone: 'muted' },
 };
 
+/** Links a run a squadmate assigned (`assign_task`) back to the run that assigned it. */
+function AssignedBy({ runId }: { runId: string }) {
+  const parent = useRun(runId).data;
+  if (!parent) return null;
+  const role = AGENT_ROLES[parent.agentId.split(':')[1] as AgentRole];
+  return (
+    <Link to={`/agents/${encodeURIComponent(parent.agentId)}?run=${runId}`} className="mt-1 inline-block rounded-md border border-line-2 px-1.5 py-0.5 text-[11px] text-text-2 hover:border-red/60 hover:text-white">
+      Assigned by {role?.name ?? 'a squadmate'}
+    </Link>
+  );
+}
+
 function History({ agentId, onOpen }: { agentId: string; onOpen: (runId: string) => void }) {
   const runs = useRuns(agentId);
   const now = Date.now();
@@ -126,6 +139,7 @@ function History({ agentId, onOpen }: { agentId: string; onOpen: (runId: string)
                   <button type="button" onClick={() => onOpen(r.id)} className="block max-w-full cursor-pointer truncate text-left hover:text-red" title="Open in chat">
                     {r.task}
                   </button>
+                  {r.parentRunId && <AssignedBy runId={r.parentRunId} />}
                 </td>
                 <td>
                   <Badge tone={RUN_STATUS[r.status].tone}>{RUN_STATUS[r.status].label}</Badge>
