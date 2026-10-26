@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Agent, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
-import { AgentBudget, NicheLearnings } from './AgentDetail';
+import { Route, Routes } from 'react-router';
+import { AgentBudget, AgentDetail, NicheLearnings } from './AgentDetail';
 
 afterEach(() => {
   cleanup();
@@ -49,5 +50,21 @@ describe('niche learnings', () => {
     expect(await screen.findByText('Glass-skin hooks win')).toBeTruthy();
     expect(screen.getByText('Shared with all K-beauty skincare stores')).toBeTruthy();
     expect(fetch.mock.calls.map(([url]) => url)).toContain('/api/niche-learnings?store=dew');
+  });
+});
+
+describe('agent header', () => {
+  // jsdom has no ResizeObserver; the page's chat uses it to keep the newest message in view.
+  beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }));
+
+  it('says when the agent runs on the free demo engine', async () => {
+    stubApi((url) => (url === '/api/agents' ? [{ ...agent, status: 'idle', level: 3, rank: 'recruit', engine: { provider: 'demo' } }] : undefined));
+    renderApp(
+      <Routes>
+        <Route path="/agents/:id" element={<AgentDetail />} />
+      </Routes>,
+      '/agents/peak%3Aad_strategist',
+    );
+    expect(await screen.findByText('Demo engine')).toBeTruthy();
   });
 });

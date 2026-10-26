@@ -72,6 +72,8 @@ export function AgentDetail() {
               {st.label}
               <Badge>{AUTONOMY[agent.autonomy ?? 'ask'].label}</Badge>
               {agent.dailyBudgetUsd !== undefined && <Badge>AI ≤ {cents(agent.dailyBudgetUsd)}/day</Badge>}
+              {/* Scripted answers on demo stores: never touches the owner's Claude plan. */}
+              {agent.engine?.provider === 'demo' && <Badge>Demo engine</Badge>}
             </div>
             <p className="mt-1 max-w-xl truncate text-xs text-muted">{role.blurb}</p>
           </div>

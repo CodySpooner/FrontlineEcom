@@ -251,6 +251,8 @@ Orca's browser against the reference before ticking it.
       and core's inbox asks for the rival's own currency (in its Woo/Etsy/Shopify sources).
 - [x] UI-94 System Status (sidebar) says "Check Claude login" → Integrations when a live store's agents run on Claude
       and the login is signed out, so it's noticed before their runs fail.
+- [x] UI-95 An agent's header says "Demo engine" when it runs on the free scripted engine, so the owner can tell demo
+      answers from Claude's at a glance (DESIGN: demo mode first; agents never burn Claude usage on demo stores).
 
 ## Blocked
 
@@ -386,3 +388,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Core inbox (openDataFolder): Settings already had Open folder through CORE-42's API route, so `useOpenDataFolder` now calls `window.desktop.openDataFolder()` when the bridge exists and throws its error text into the same alert, else POSTs as before. The type is in UpdatePrompt.tsx (its test fixture got the method). Settings.test covers the bridge and its error, with no API call. Not run in Electron here; the browser path is unchanged
 - 2026-10-26 — UI-94: `useClaudeAccount(enabled)`. SystemStatus enables it only when some agent's `engine.provider` is `claude`, so demo-only setups never start the CLI-backed check (verified: 0 `/api/claude-account` requests on demo). Signed out ranks above failed agents (it's their cause). The text was shortened from "Claude login needs attention" (2 lines in the 188px box at 1024) to "Check Claude login" (1 line). Two Shell tests. Orca with a fetch patch (agents on claude, account signed out), after `visibilitychange` on window: "Check Claude login" → /integrations. Patch dropped by reload
 - 2026-10-26 — Core inbox (competitor currency): Price Moves formats with `p.currency ?? currency(p.storeId)`. The ponytail note became a plain fallback comment. Competitors.test adds a GBP rival on a EUR store → £32.00. Orca: demo rivals (no currency) unchanged
+- 2026-10-26 — UI-95: AgentDetail header shows a `Demo engine` Badge when `agent.engine.provider === 'demo'` (next to the autonomy badge). First full-page AgentDetail test (Route + ResizeObserver stub, like Chat.test). Orca at 800px on peak:ad_strategist: "Needs you | Ask first | Demo engine" on one 21px row, no overflow
