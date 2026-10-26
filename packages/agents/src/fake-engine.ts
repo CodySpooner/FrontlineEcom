@@ -68,8 +68,9 @@ function demoWork(input: RunInput): FakeStep[] {
     case 'creative_studio': {
       // Only the owner starts it (no scheduled jobs), so its demo asks first like a real run: approve → a demo render.
       const p = product();
-      const kind = input.task.match(/\b(UGC|video|image)\b[^.]* ad and save it/i)?.[1]?.toLowerCase() ?? 'image';
-      const brief = input.task.match(/Brief: ([\s\S]+)/)?.[1]?.trim() ?? input.task;
+      // The first "<kind> ad" in the task: the tab's own or a card's ("Add on-screen captions to this video ad ...").
+      const kind = input.task.match(/\b(UGC|video|image)\b[^.]*? ad\b/i)?.[1]?.toLowerCase() ?? 'image';
+      const brief = input.task.match(/brief: ([\s\S]+)/i)?.[1]?.trim() ?? input.task;
       // Ad Variations asks for N with different hooks (each its own request, like a real run); at most 3.
       const hooks = ['see the difference', 'what everyone is switching to', `now ${cash(Number(p?.price), input.store.currency)}`];
       const n = Math.min(3, Number(input.task.match(/\bMake (\d+) variations\b/i)?.[1] ?? 1));

@@ -70,6 +70,24 @@ test('demo Ad Variations makes the variations asked for, each with its own hook'
   expect(asked.map((t) => t.split(': ').at(-1))).toEqual(['see the difference', 'what everyone is switching to', expect.stringMatching(/^now \$/)]);
 });
 
+test("demo actions on a creative card keep the creative's kind: captions on a video make a video", async () => {
+  const made = async (task: string) => {
+    const m = runManager(db);
+    const run = m.start('glow:creative_studio', task);
+    if (typeof run === 'string') throw new Error(run);
+    const kinds: string[] = [];
+    for (let i = 0; i < 200 && !(kinds.length && m.get(run.id)?.status !== 'running' && m.get(run.id)?.status !== 'queued'); i++) {
+      const p = db.prepare(`SELECT id, title FROM approvals WHERE run_id = ? AND status = 'pending'`).get(run.id);
+      if (p) kinds.push(String(p.title).split(' ')[2]!), decide(db, String(p.id), 'approve');
+      await new Promise((r) => setImmediate(r));
+    }
+    await m.idle();
+    return kinds;
+  };
+  expect(await made('Add on-screen captions to this video ad and save the new version: "Glow: see it". Brief: A creator unboxes it.')).toEqual(['video']);
+  expect(await made('Make 3 variations of this 9:16 UGC avatar video ad with different hooks and save them: "Glow". Original brief: In a car.')).toEqual(['ugc', 'ugc', 'ugc']);
+});
+
 test("a demo Ask AI question reads the data it's about", async () => {
   const asked = async (q: string) => {
     const m = runManager(db);
