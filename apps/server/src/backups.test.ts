@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -116,4 +116,14 @@ test('a failing daily backup raises one error notification, and an info one when
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('a backup sweeps .part files an interrupted one left, but not one still being written', async () => {
+  const db = openDb();
+  const dir = mkdtempSync(join(tmpdir(), 'frontline-backup-'));
+  writeFileSync(join(dir, 'frontline-2026-10-01T03-00-00.db.part'), 'half');
+  utimesSync(join(dir, 'frontline-2026-10-01T03-00-00.db.part'), new Date(Date.now() - 2 * 3_600_000), new Date(Date.now() - 2 * 3_600_000));
+  writeFileSync(join(dir, 'frontline-2026-10-02T03-00-00.db.part'), 'in progress');
+  await backupNow(db, dir, new Date('2026-10-03T03:00:00Z'));
+  expect(readdirSync(dir).sort()).toEqual(['frontline-2026-10-02T03-00-00.db.part', 'frontline-2026-10-03T03-00-00.db']);
 });

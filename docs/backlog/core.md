@@ -128,10 +128,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-49 A background job's failed promise took the whole API down (and every agent run in it).
 - [x] CORE-50 The funnel compared every order with sessions from fewer days or stores, inflating conversion.
 - [x] CORE-51 A TikTok Shop store's funnel had only 30 days of visitors, so 90D/1Y showed sessions for a third or less of the range.
+- [x] CORE-52 A failed or interrupted backup left its .part file (up to the database's size) forever.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-52 (from a review of CORE-48): a failed backup deletes its `.part` (a full disk gets the space back), and each backup sweeps `.part` files untouched for an hour (the app quit mid-copy, e.g. the restart after a restore). A copy in progress keeps writing, so it is never swept.
 - 2026-10-26 — AGT-128 (agents Inbox): `deleteStore` removes the store's creatives' rendered files (`/api/creatives/media/<name>.<jpg|png|webp|mp4>` only, never outside the folder) after the cascade; demo data: URLs have none, a file held open elsewhere is left. Tested with a temp media folder.
 - 2026-10-26 — CORE-51: TikTok Shop visitors backfill one older 30-day window per sync (TikTok documents no longest range) after the last 30 days, back to BACKFILL_DAYS. A window with no visitors ends it (the shop had none before); a failed window is retried next sync. Progress per integration and shop in settings `tiktok_visitor_reads`. Two years fills in ~24 syncs (~4 h).
 - 2026-10-26 — CORE-50: `summarize`'s funnel takes its orders from the store-days that report sessions (every order when none do). Before, sessions covered only the days and stores with a traffic source while orders covered all: a TikTok Shop store on 90D (30 days of visitors) showed ~3x the real conversion, as did GA4 connected mid-range or All stores with one store lacking a source. ui told.

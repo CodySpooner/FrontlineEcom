@@ -38,8 +38,17 @@ export async function backupNow(db: Db, dir = backupDir(), now = new Date()): Pr
   mkdirSync(dir, { recursive: true });
   const name = `frontline-${now.toISOString().slice(0, 19).replace(/:/g, '-')}.db`;
   const file = join(dir, name);
+  // A .part untouched for an hour is from a run the app quit during; one still being copied keeps being written.
+  for (const n of readdirSync(dir)) {
+    if (n.endsWith('.part') && Date.now() - statSync(join(dir, n)).mtimeMs > 3_600_000) rmSync(join(dir, n), { force: true });
+  }
   rmSync(`${file}.part`, { force: true });
-  await backup(db, `${file}.part`);
+  try {
+    await backup(db, `${file}.part`);
+  } catch (e) {
+    rmSync(`${file}.part`, { force: true }); // e.g. the disk filled: give the space back
+    throw e;
+  }
   rmSync(file, { force: true });
   renameSync(`${file}.part`, file);
   for (const old of listBackups(dir).slice(KEEP)) rmSync(join(dir, old.name), { force: true });
