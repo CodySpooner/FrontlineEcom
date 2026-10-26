@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
+import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
@@ -100,12 +100,12 @@ const since = (days: number, store: Store) => {
 /** `days` × 24 hours ago, to compare with timestamps (an order's age). */
 const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 /**
- * Why a store change can't be asked for: the store is connected on a platform the app doesn't write to yet (products,
- * prices and pages reach Shopify and WooCommerce, `onStore` in apps/server/src/routes/agents.ts), so an approval would
- * only fail. Undefined when it can.
+ * Why a store change can't be asked for: the store is connected on a platform the app doesn't write it to yet (shared
+ * PRODUCT_WRITE_PLATFORMS for products and pages, PRICE_WRITE_PLATFORMS for prices; `onStore` in
+ * apps/server/src/routes/agents.ts), so an approval would only fail. Undefined when it can.
  */
-const noStoreWrites = (store: Store) =>
-  store.connected && !PRODUCT_WRITE_PLATFORMS.includes(store.platform)
+const noStoreWrites = (store: Store, platforms = PRODUCT_WRITE_PLATFORMS) =>
+  store.connected && !platforms.includes(store.platform)
     ? `Not sent: the app doesn't change ${store.platform} stores yet, so approving it would do nothing. Put the change in your answer so the owner can make it by hand.`
     : undefined;
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
@@ -722,7 +722,7 @@ export const APP_TOOLS: AppTool[] = [
       evidence: z.string().min(10).max(400).describe('the numbers and window, e.g. "converts 3.1% at $29.99 vs competitors at $34-39, margin 62%"'),
     },
     run: async ({ productId, newPrice, compareAt, evidence }, ctx) => {
-      const no = noStoreWrites(ctx.store);
+      const no = noStoreWrites(ctx.store, PRICE_WRITE_PLATFORMS);
       if (no) return no;
       const p = ctx.db.prepare('SELECT * FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId);
       if (!p) return `No product ${productId} in this store. Use list_products for ids.`;
@@ -732,6 +732,7 @@ export const APP_TOOLS: AppTool[] = [
       if (p.cost != null && to <= Number(p.cost)) return `Not sent: ${$(to)} is at or below the unit cost (${$(Number(p.cost))}).`;
       if (Math.abs(to - from) / from > 0.3) return 'Not sent: test within ±30% of the current price, one step at a time.';
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
+      if (compareAt !== undefined && ctx.store.connected && ctx.store.platform === 'etsy') return 'Not sent: Etsy has no compare-at price. Propose the price alone; a sale is set in Etsy Shop Manager (Marketing → Sales and discounts).';
       // Overlapping tests on one product can't be judged apart.
       const running = ctx.db.prepare('SELECT changed_on FROM price_tests WHERE store_id = ? AND product_id = ? AND changed_on >= ?').get(ctx.store.id, productId, since(29, ctx.store));
       if (running) return `Not sent: a price test on this product has been running since ${running.changed_on}; it is judged after 14 days of sales.`;

@@ -91,8 +91,8 @@ test("connected stores get the price on Shopify or WooCommerce; other platforms 
   const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'peak' ORDER BY price DESC LIMIT 1`).get()!;
   const [id, from] = [String(p.id), Number(p.price)];
   const to = Math.round(from * 1.1 * 100) / 100;
-  db.prepare(`UPDATE stores SET connected = 1, platform = 'etsy' WHERE id = 'peak'`).run();
-  expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Not sent: the app doesn't change etsy stores yet/);
+  db.prepare(`UPDATE stores SET connected = 1, platform = 'amazon' WHERE id = 'peak'`).run();
+  expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Not sent: the app doesn't change amazon stores yet/);
   expect(db.prepare(`SELECT count(*) AS n FROM approvals WHERE json_extract(action_json, '$.kind') = 'store.set_price'`).get()?.n).toBe(0);
   expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
 
@@ -103,6 +103,13 @@ test("connected stores get the price on Shopify or WooCommerce; other platforms 
   for (let i = 0; i < 20 && !db.prepare(`SELECT 1 FROM notifications WHERE title LIKE 'Couldn''t change the price%'`).get(); i++) await tick();
   expect(db.prepare(`SELECT body FROM notifications WHERE title LIKE 'Couldn''t change the price%'`).get()?.body).toBe(`${id} is not a WooCommerce product. Change it by hand if you still want the test.`);
   expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
+
+  // Etsy prices too (core's Etsy writer refuses a non-Etsy id), but Etsy has no compare-at price: refused up front.
+  db.prepare(`UPDATE stores SET platform = 'etsy' WHERE id = 'peak'`).run();
+  expect((await run('peak', [{ call: 'propose_price_change', input: { productId: id, newPrice: to, compareAt: to + 10, evidence: 'rivals at $99' } }]))[0]).toMatch(/^Not sent: Etsy has no compare-at price/);
+  expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Approved by the owner/);
+  for (let i = 0; i < 20 && !db.prepare(`SELECT 1 FROM notifications WHERE body LIKE '%not an Etsy listing%'`).get(); i++) await tick();
+  expect(db.prepare(`SELECT body FROM notifications WHERE body LIKE '%not an Etsy listing%'`).get()?.body).toBe(`${id} is not an Etsy listing. Change it by hand if you still want the test.`);
   vi.unstubAllEnvs();
 
   db.prepare(`UPDATE stores SET platform = 'shopify' WHERE id = 'peak'`).run();

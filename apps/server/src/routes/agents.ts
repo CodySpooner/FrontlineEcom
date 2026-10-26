@@ -38,7 +38,7 @@ import {
   type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
-import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type ResearchProduct, type StartRunInput, type StoreUsage } from '@frontline/shared';
+import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type StartRunInput, type StoreUsage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -61,6 +61,7 @@ import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
 import { demoSupplierProducts, searchCj } from '../connectors/cj';
 import { createProducts, deleteTheme, duplicateTheme, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, upsertThemeFiles } from '../connectors/shopify';
 import { createWooProducts, publishWooPage, publishWooProductPage, setWooProductPrice } from '../connectors/woocommerce';
+import { setEtsyListingPrice } from '../connectors/etsy';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
@@ -75,10 +76,11 @@ const writeAd =
       ? pauseCampaign(db, loadKey(dataDir()), storeId, network, campaignId)
       : setCampaignBudget(db, loadKey(dataDir()), storeId, network, campaignId, change.dailyBudget);
 
-/** Core's product, price and page writers: Shopify and WooCommerce. Other platforms get a readable error, and the owner applies it by hand. */
-const onStore = <T,>(db: Db, storeId: string, writers: { shopify: () => Promise<T>; woocommerce: () => Promise<T> }) => {
+/** Core's store writers by platform (shared PRODUCT_WRITE_PLATFORMS / PRICE_WRITE_PLATFORMS). Others get a readable error, and the owner applies it by hand. */
+const onStore = <T,>(db: Db, storeId: string, writers: Partial<Record<Platform, () => Promise<T>>>) => {
   const platform = getStore(db, storeId)?.platform;
-  return platform === 'shopify' || platform === 'woocommerce' ? writers[platform]() : Promise.reject(new Error(`The app doesn't change ${platform} stores automatically yet`));
+  const write = platform && writers[platform];
+  return write ? write() : Promise.reject(new Error(`The app doesn't change ${platform} stores automatically yet`));
 };
 
 /** Theme writers are Shopify-only. */
@@ -110,13 +112,14 @@ const pushPage =
     });
   };
 
-/** Approved price tests → Shopify (every variant) or WooCommerce. */
+/** Approved price tests → Shopify (every variant), WooCommerce or Etsy. */
 const setPrice =
   (db: Db): SetPrice =>
   (storeId, productId, change) =>
     onStore(db, storeId, {
       shopify: () => setProductPrice(db, loadKey(dataDir()), storeId, productId, change),
       woocommerce: () => setWooProductPrice(db, loadKey(dataDir()), storeId, productId, change),
+      etsy: () => setEtsyListingPrice(db, loadKey(dataDir()), storeId, productId, change),
     });
 
 /** The dashboard's window (app.ts windowEnd): today in the store's zone, with today's comparison scaled to the hours gone. */
