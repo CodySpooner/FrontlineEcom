@@ -154,10 +154,13 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const changed = { modified_after: since, dates_are_gmt: 'true' };
     const orders = await all<WooOrder>('orders', changed);
     // The order list has only each refund's total: a partly refunded order's refunds list says which lines lost what, one
-    // request each. Read as amounts (signs vary between versions); a failed read leaves the lines as ordered.
+    // request each. Read as amounts (signs vary between versions); a failed read leaves the lines as ordered, and the
+    // rest of this sync's too (each failure costs ~30 s of retries).
     const lineRefunds = new Map<number, Map<number, { quantity: number; total: number }>>();
+    let refundsDown = false;
     for (const o of orders.filter((o) => o.refunds?.length && o.status !== 'refunded' && o.date_paid_gmt)) {
-      const refunds = await all<{ line_items?: { product_id: number; quantity: number; total: string }[] }>(`orders/${o.id}/refunds`, {}).catch(() => undefined);
+      if (refundsDown) break;
+      const refunds = await all<{ line_items?: { product_id: number; quantity: number; total: string }[] }>(`orders/${o.id}/refunds`, {}).catch(() => void (refundsDown = true));
       const back = new Map<number, { quantity: number; total: number }>();
       for (const li of (refunds ?? []).flatMap((r) => r.line_items ?? [])) {
         const b = back.get(li.product_id) ?? { quantity: 0, total: 0 };
