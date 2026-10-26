@@ -85,6 +85,8 @@ pnpm check    # typecheck + tests
   stops and says so: add it as a store of its own. Amazon as a second channel is converted (each day at that day's rate),
   and as its sales come without costs, profit estimates them: the store's own cost ratio over the last year plus Amazon's
   15% referral fee (instead of the store's fees; FBA fees aren't estimated). The funnel leaves its orders out.
+  If the store's Shopify already imports its Amazon orders (Marketplace Connect), don't also connect Amazon to it: those
+  sales would count twice.
 
 ## The Orca workers
 
