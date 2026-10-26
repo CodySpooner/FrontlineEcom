@@ -16,6 +16,7 @@ const toProduct = (r: Row): Product => ({
   ...(r.compare_at != null ? { compareAt: Number(r.compare_at) } : {}),
   cost: Number(r.cost),
   inventory: Number(r.inventory),
+  ...(r.inventory_tracked === 0 ? { inventoryTracked: false } : {}),
   status: r.status as ProductStatus,
   margin: Number(r.price) ? r2(((Number(r.price) - Number(r.cost)) / Number(r.price)) * 100) : 0,
 });

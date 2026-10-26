@@ -830,6 +830,11 @@ export interface Product {
    */
   cost: number;
   inventory: number;
+  /**
+   * false when the platform doesn't track this product's stock (Shopify "Track quantity" off, Woo "Manage stock" off,
+   * common when dropshipping): `inventory` is then 0 and means nothing, not sold out. Omitted = tracked.
+   */
+  inventoryTracked?: boolean;
   status: ProductStatus;
   /** (price - cost) / price × 100. */
   margin: number;

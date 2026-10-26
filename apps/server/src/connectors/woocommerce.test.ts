@@ -27,7 +27,7 @@ function fakeWoo(status = 200) {
     }
     return Response.json([
       { id: 7, name: 'Travel Bowl', status: 'publish', price: '19.00', regular_price: '24.00', sale_price: '19.00', stock_quantity: 5, images: [{ src: 'https://shop.test/bowl.jpg' }], date_modified_gmt: '2026-10-20T00:00:00' },
-      { id: 8, name: 'Leash', status: 'draft', price: '', regular_price: '', sale_price: '', stock_quantity: null, date_modified_gmt: '2026-10-21T00:00:00' },
+      { id: 8, name: 'Leash', status: 'draft', price: '', regular_price: '', sale_price: '', stock_quantity: null, manage_stock: false, date_modified_gmt: '2026-10-21T00:00:00' },
     ], { headers: { 'x-wp-totalpages': '1' } });
   }) as typeof fetch;
   return { fetchFn, calls };
@@ -49,9 +49,9 @@ test('WooCommerce sync pulls paid orders + products since the cursor and rebuild
   expect(calls.every((c) => c.headers.get('authorization') === `Basic ${Buffer.from('ck_1:cs_2').toString('base64')}`)).toBe(true);
   expect(calls[0]!.url.searchParams.get('modified_after')).toBe('2024-10-26T18:00:00');
 
-  expect(db.prepare("SELECT id, price, compare_at AS compareAt, inventory, status FROM products WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
-    { id: 'woo-7', price: 19, compareAt: 24, inventory: 5, status: 'active' },
-    { id: 'woo-8', price: 0, compareAt: null, inventory: 0, status: 'draft' },
+  expect(db.prepare("SELECT id, price, compare_at AS compareAt, inventory, inventory_tracked AS tracked, status FROM products WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
+    { id: 'woo-7', price: 19, compareAt: 24, inventory: 5, tracked: 1, status: 'active' },
+    { id: 'woo-8', price: 0, compareAt: null, inventory: 0, tracked: 0, status: 'draft' }, // Manage stock off: 0 isn't sold out
   ]);
   expect(db.prepare("SELECT id, total, status, fulfillment_status AS f, local_date AS day FROM orders WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
     { id: 'woo-1001', total: 30, status: 'paid', f: 'unfulfilled', day: '2026-10-25' },

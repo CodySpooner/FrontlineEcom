@@ -34,6 +34,7 @@ interface ShopifyProduct {
   status: string;
   updatedAt: string;
   totalInventory: number | null;
+  tracksInventory: boolean;
   featuredMedia: { preview: { image: { url: string } | null } | null } | null;
   variants: { nodes: { price: string; compareAtPrice: string | null; inventoryItem: { unitCost: Money } | null }[] };
 }
@@ -57,7 +58,7 @@ const SHOP_Q = `{ shop { name currencyCode ianaTimezone } }`;
 
 const PRODUCTS_Q = `query ($after: String, $q: String) {
   products(first: 50, after: $after, query: $q) {
-    nodes { id title status updatedAt totalInventory
+    nodes { id title status updatedAt totalInventory tracksInventory
       featuredMedia { preview { image { url } } }
       variants(first: 1) { nodes { price compareAtPrice inventoryItem { unitCost { amount } } } } }
     pageInfo { hasNextPage endCursor } } }`;
@@ -220,14 +221,14 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       db.prepare('UPDATE stores SET connected = 1, timezone = ? WHERE id = ?').run(shop.ianaTimezone, storeId);
 
       const prod = db.prepare(
-        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
-           cost = CASE WHEN excluded.cost > 0 THEN excluded.cost ELSE cost END, inventory = excluded.inventory, status = excluded.status`,
+           cost = CASE WHEN excluded.cost > 0 THEN excluded.cost ELSE cost END, inventory = excluded.inventory, inventory_tracked = excluded.inventory_tracked, status = excluded.status`,
       );
       for (const p of products) {
         const v = p.variants.nodes[0];
         const compareAt = v?.compareAtPrice ? num(v.compareAtPrice) : null;
-        prod.run(storeId, tail(p.id), p.title, p.featuredMedia?.preview?.image?.url ?? null, num(v?.price), compareAt, num(v?.inventoryItem?.unitCost), p.totalInventory ?? 0, p.status.toLowerCase() as ProductStatus);
+        prod.run(storeId, tail(p.id), p.title, p.featuredMedia?.preview?.image?.url ?? null, num(v?.price), compareAt, num(v?.inventoryItem?.unitCost), p.totalInventory ?? 0, p.tracksInventory === false ? 0 : 1, p.status.toLowerCase() as ProductStatus);
       }
     });
 

@@ -451,6 +451,9 @@ export const MIGRATIONS = [
   CREATE INDEX creative_credits_by_store ON creative_credits (store_id, created_at);
   INSERT INTO creative_credits SELECT store_id, credits, created_at FROM creatives WHERE credits > 0;
   `,
+  /* 29 (core: 0 when the platform doesn't track a product's stock, so its inventory 0 isn't "sold out") */ `
+  ALTER TABLE products ADD COLUMN inventory_tracked INTEGER NOT NULL DEFAULT 1;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

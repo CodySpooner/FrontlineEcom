@@ -39,6 +39,8 @@ interface WooProduct {
   regular_price: string;
   sale_price: string;
   stock_quantity: number | null;
+  /** Off: Woo doesn't count its stock. ponytail: a variable product counting stock per variation reads as untracked here. */
+  manage_stock?: boolean;
   images?: { src: string }[];
   date_modified_gmt: string;
   cost_of_goods_sold?: { total_value: number };
@@ -126,15 +128,15 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       if (base) setStoreCurrency(db, storeId, base);
       if (zone) db.prepare('UPDATE stores SET timezone = ? WHERE id = ?').run(zone, storeId);
       const prod = db.prepare(
-        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
-           cost = CASE WHEN excluded.cost > 0 THEN excluded.cost ELSE cost END, inventory = excluded.inventory, status = excluded.status`,
+           cost = CASE WHEN excluded.cost > 0 THEN excluded.cost ELSE cost END, inventory = excluded.inventory, inventory_tracked = excluded.inventory_tracked, status = excluded.status`,
       );
       for (const p of products) {
         const price = Number(p.price || p.regular_price || 0);
         const regular = Number(p.regular_price || 0);
         const status: ProductStatus = p.status === 'publish' ? 'active' : 'draft';
-        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), p.stock_quantity ?? 0, status);
+        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), p.stock_quantity ?? 0, p.manage_stock === false ? 0 : 1, status);
       }
       // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking needs a plugin.
       const ord = db.prepare(

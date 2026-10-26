@@ -465,3 +465,15 @@ test('ShopifyQL rows read the same as arrays or as objects, and rows without a d
   expect(funnelDays({ columns, rows: [{ day: '2026-10-25', sessions: '5', sessions_with_cart_additions: '2', sessions_that_reached_checkout: '1' }, { day: null }] })).toEqual([day]);
   expect(funnelDays(null)).toEqual([]);
 });
+
+test("a product whose stock Shopify doesn't track reads as untracked, not sold out", async () => {
+  const { db, app } = await setup();
+  const shop = fakeShopify([]).fetchFn;
+  const fetchFn = (async (url: string, init: RequestInit) =>
+    String(init.body).includes('products(')
+      ? Response.json({ data: { products: { nodes: [{ ...PRODUCT, totalInventory: 0, tracksInventory: false }], pageInfo: { hasNextPage: false, endCursor: null } } } })
+      : shop(url, init)) as typeof fetch;
+  await syncShopify(db, key, 'glow', fetchFn, NOW);
+  const [p] = ((await (await app.request('/api/products?stores=glow')).json()) as Page<Product>).items;
+  expect(p).toMatchObject({ id: '111', inventory: 0, inventoryTracked: false });
+});
