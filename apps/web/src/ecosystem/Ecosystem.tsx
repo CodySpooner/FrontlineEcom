@@ -6,12 +6,14 @@ import { OfficeScene } from './OfficeScene';
 import { useOffice } from './useOffice';
 import { useSeats } from './api';
 import { AgentPanel } from './AgentPanel';
+import { DeployWizard } from './DeployWizard';
 
 const TABS = ['Office View', 'Department View', 'Agent List', 'Task Board', 'Performance'].map((label) => ({ value: label, label }));
 
 export function Ecosystem() {
   const [tab, setTab] = useState('Office View');
   const [feed, setFeed] = useState(true);
+  const [deploy, setDeploy] = useState(false);
   const office = useOffice();
   const seats = useSeats();
   const [selected, setSelected] = useState('');
@@ -21,10 +23,10 @@ export function Ecosystem() {
     <div className="ecosystem">
       <header className="eco-header">
         <div><p className="eco-eyebrow">FRONTLINE / HEADQUARTERS</p><h1><span>AI</span> ECOSYSTEM</h1><p>A LIVING WORKFORCE OF ECOMMERCE AGENTS</p></div>
-        <Button variant="primary" disabled title="Office deployment is being connected">+ Deploy Agent</Button>
+        <Button variant="primary" onClick={() => setDeploy(true)}>+ Deploy Agent</Button>
       </header>
       <div className="eco-stats">
-        {[[Users, '— / 30', 'Deployed Agents'], [Activity, '—', 'Active Tasks'], [Target, '—', 'Task Success Rate'], [Network, '—', 'Active Teams']].map(([Icon, value, label]) => {
+        {[[Users, `${seats.data?.filter((s) => !s.archived).length ?? '—'} / 30`, 'Deployed Agents'], [Activity, '—', 'Active Tasks'], [Target, '—', 'Task Success Rate'], [Network, '—', 'Active Teams']].map(([Icon, value, label]) => {
           const StatIcon = Icon as typeof Users;
           return <div className="eco-stat" key={String(label)}><StatIcon size={22} /><div><strong>{String(value)}</strong><small>{String(label)}</small></div></div>;
         })}
@@ -39,6 +41,7 @@ export function Ecosystem() {
       </div>
       <footer className="eco-bottom"><div><small>AGENT STATUS KEY</small><p><i className="eco-dot" />Working <i className="eco-dot waiting" />Waiting <i className="eco-dot collab" />Collaborating <i className="eco-dot idle" />Idle <i className="eco-dot blocked" />Blocked</p></div><div><small>OFFICE CAPACITY</small><p>30 desks · 10 departments</p></div></footer>
       {agent && seat && <AgentPanel key={agent.id} agent={agent} seat={seat} office={office.state} onClose={() => setSelected('')} onFocus={() => { setFocus({ id: agent.id, at: Date.now() }); setTab('Office View'); setSelected(''); }} />}
+      {deploy && <DeployWizard agents={office.state.agents} seats={seats.data ?? []} onClose={() => setDeploy(false)} />}
     </div>
   );
 }
