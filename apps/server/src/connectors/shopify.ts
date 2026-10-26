@@ -222,6 +222,11 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
        ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
          tracking = coalesce(excluded.tracking, tracking), cogs = excluded.cogs`,
     );
+    // Not paid yet (cash on delivery, bank transfer, an uncaptured authorization): left out of revenue until it is, and
+    // removed if an earlier sync stored it. Its updated_at moves when it's paid, so the next sync brings it back.
+    const UNPAID = new Set(['PENDING', 'AUTHORIZED', 'PARTIALLY_PAID']);
+    const dropItems = db.prepare('DELETE FROM order_items WHERE store_id = ? AND order_id = ?');
+    const drop = db.prepare('DELETE FROM orders WHERE store_id = ? AND id = ?');
     let after: string | null = null;
     do {
       const page: { nodes: ShopifyOrder[]; pageInfo: PageInfo } = await q<{ orders: { nodes: ShopifyOrder[]; pageInfo: PageInfo } }>(ORDERS_Q, { after, q: filter }).then((d) => d.orders);
@@ -233,10 +238,15 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         const days = new Set<string>();
         for (const o of page.nodes) {
           if (o.test) continue;
-          const refunded = !!o.cancelledAt || o.displayFinancialStatus === 'REFUNDED' || o.displayFinancialStatus === 'VOIDED';
-          const cogs = o.lineItems.nodes.reduce((a, li) => a + li.quantity * num(li.variant?.inventoryItem?.unitCost), 0);
+          const refunded = !!o.cancelledAt || ['REFUNDED', 'VOIDED', 'EXPIRED'].includes(o.displayFinancialStatus ?? '');
           const day = dayOf.format(new Date(o.createdAt));
           days.add(day);
+          if (!refunded && UNPAID.has(o.displayFinancialStatus ?? '')) {
+            dropItems.run(storeId, o.name);
+            drop.run(storeId, o.name);
+            continue;
+          }
+          const cogs = o.lineItems.nodes.reduce((a, li) => a + li.quantity * num(li.variant?.inventoryItem?.unitCost), 0);
           ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day);
           // Custom line items (no product) only count toward the order total.
           setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product ? [{ productId: tail(li.product.id), quantity: li.quantity, revenue: num(li.discountedTotalSet.shopMoney.amount), cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));

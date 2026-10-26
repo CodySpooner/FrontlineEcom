@@ -3,6 +3,7 @@ import { expect, test, vi } from 'vitest';
 import type { AnalyticsSummary, Integration, Order, Page, Product, Store } from '@frontline/shared';
 import { createApp } from '../app';
 import { openDb } from '../db';
+import { rebuildRevenue } from './common';
 import { seedDemo } from '../demo';
 import { listActions } from '../actions';
 import { createProducts, deleteTheme, duplicateTheme, fulfillmentOf, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, shopHost, syncShopify, upsertThemeFiles } from './shopify';
@@ -411,4 +412,23 @@ test('a first sync that stops partway keeps the order pages it saved, and the ne
   expect(calls.find((c) => c.body.query.includes('orders('))!.body.variables.q).toBe("updated_at:>='2026-10-21T09:00:00Z'");
   expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow'").get()?.n).toBe(3);
   expect(db.prepare("SELECT status, cursor FROM integrations WHERE id = 'shopify:glow'").get()).toMatchObject({ status: 'connected', cursor: '2026-10-22T09:00:00Z' });
+});
+
+test('only paid orders count as revenue: unpaid ones stay out, and one that expires unpaid drops out', async () => {
+  const { db } = await setup();
+  const day = '2026-10-25T09:00:00Z';
+  const statuses = ['PAID', 'PARTIALLY_REFUNDED', 'PENDING', 'AUTHORIZED', 'PARTIALLY_PAID', 'EXPIRED', 'VOIDED'];
+  await syncShopify(db, key, 'glow', fakeShopify(statuses.map((s, i) => order(`#20${i}`, day, '100.00', { displayFinancialStatus: s }))).fetchFn, NOW);
+  const revenue = () => db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get();
+  expect(revenue()).toEqual({ revenue: 200, orders: 2 });
+  expect(db.prepare("SELECT id, status FROM orders WHERE store_id = 'glow' ORDER BY id").all().map((r) => `${r.id} ${r.status}`)).toEqual(['#200 paid', '#201 paid', '#205 refunded', '#206 refunded']);
+
+  // Stored by an older build as paid, then it expires: the next sync takes it out.
+  db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES ('glow', '#300', ?, 50, 'paid', 'unfulfilled', 0, '2026-10-25')").run(day);
+  rebuildRevenue(db, 'glow', ['2026-10-25']);
+  expect(revenue()).toEqual({ revenue: 250, orders: 3 });
+  await syncShopify(db, key, 'glow', fakeShopify([order('#300', day, '50.00', { displayFinancialStatus: 'PENDING', updatedAt: '2026-10-26T10:00:00Z' })]).fetchFn, NOW);
+  expect(revenue()).toEqual({ revenue: 200, orders: 2 });
+  await syncShopify(db, key, 'glow', fakeShopify([order('#300', day, '50.00', { updatedAt: '2026-10-26T11:00:00Z' })]).fetchFn, NOW); // paid at last
+  expect(revenue()).toEqual({ revenue: 250, orders: 3 });
 });
