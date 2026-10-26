@@ -47,8 +47,8 @@ each step may wait only on steps listed before it. A step becomes an ordinary ru
 It starts as the child run of the first of those steps, and their final answers go into its brief. Only the plan, the
 run ids and the one-line deliverables are stored; every status is read off the runs. After an app restart a step follows
 the run that retried it. A failed or cancelled step blocks the steps after it. A step its agent turns down (offline, or
-today's budget is spent) waits with a note, and the owner is told once. It starts when that agent is changed or another
-run ends. The owner also hears when a mission is done or stuck. `MISSION_TEMPLATES` holds "Launch a new
+today's budget is spent) waits with a note, and the owner is told once. It starts when that agent is changed, another
+run ends, or within a minute of the cap being raised or the day turning over. The owner also hears when a mission is done or stuck. `MISSION_TEMPLATES` holds "Launch a new
 product", "Rescue a slipping product" and "Answer a competitor's price cut". Their briefs are checked by the evals test,
 like the scheduled jobs.
 

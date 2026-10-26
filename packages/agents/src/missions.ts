@@ -202,7 +202,7 @@ function stepRun(db: DatabaseSync, id: string): { id: string; status: AgentRun['
   if (!r) return undefined;
   const link = `retry:${id}:`;
   const retry = r.status === 'error' && r.error === INTERRUPTED
-    ? db.prepare('SELECT substr(ref, ?) AS id FROM done_once WHERE substr(ref, 1, ?) = ?').get(link.length + 1, link.length, link)
+    ? db.prepare("SELECT substr(ref, ?) AS id FROM done_once WHERE ref > ? AND ref < ? || '~'").get(link.length + 1, link, link) // ids sort below '~'
     : undefined;
   return retry ? stepRun(db, String(retry.id)) : { id: String(r.id), status: r.status as AgentRun['status'] };
 }

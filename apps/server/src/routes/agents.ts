@@ -47,7 +47,7 @@ import {
   type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
-import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
+import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -59,6 +59,7 @@ import { listCompetitors, priceChanges } from '../competitors';
 import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
+import { log } from '../log';
 import { researchRoutes } from '../research';
 import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, EXPIRED_DEMO, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
@@ -350,14 +351,23 @@ function startFresh(db: Db, store: Store) {
 function advanceSquadMissions(db: Db) {
   const runs = managers.get(db);
   if (!runs) return; // a restart retry ended while the manager was being built: agentRoutes advances once it's ready
-  for (const m of advanceMissions(db, runs.start)) {
+  let moved: SquadMission[];
+  try {
+    moved = advanceMissions(db, runs.start);
+  } catch (e) {
+    // A damaged mission row mustn't cost every run end its XP and notification, or the app its start.
+    return log('error', 'squad missions: advance failed', { error: e instanceof Error ? e.message : String(e) });
+  }
+  for (const m of moved) {
     publish({ type: 'mission', mission: m });
-    for (const s of m.steps) {
-      if (s.note && once(db, `mission-wait:${m.id}:${s.id}:${s.note}`)) {
-        notify(db, { kind: 'info', title: `Mission waiting: ${m.title}`, body: `The ${AGENT_ROLES[s.role].name} can't take its step yet: ${s.note}`, storeId: m.storeId, link: '/ecosystem' });
+    if (m.status === 'running') {
+      for (const s of m.steps) {
+        if (s.note && once(db, `mission-wait:${m.id}:${s.id}:${s.note}`)) {
+          notify(db, { kind: 'info', title: `Mission waiting: ${m.title}`, body: `The ${AGENT_ROLES[s.role].name} can't take its step yet: ${s.note}`, storeId: m.storeId, link: '/ecosystem' });
+        }
       }
+      continue;
     }
-    if (m.status === 'running') continue;
     const stuck = m.steps.find((s) => s.status === 'error' || s.status === 'cancelled');
     notify(db, m.status === 'done'
       ? { kind: 'agent_done', title: `Mission done: ${m.title}`, body: m.steps.at(-1)?.deliverable ?? `${m.steps.length} steps done.`, storeId: m.storeId, link: '/ecosystem' }
@@ -409,6 +419,9 @@ export function agentRoutes(db: Db) {
   const runs = runManager(db);
   activateConnectedStores(db, runs);
   advanceSquadMissions(db); // runs that ended while the app was closed
+  // A step turned down for budget can start once the owner raises the store's cap (core's caps route) or the day turns
+  // over, neither of which ends a run. ponytail: a minute's poll over open missions; an event from the caps route if that lags.
+  setInterval(() => advanceSquadMissions(db), 60_000).unref();
   // Default jobs that shipped after a store was made; a live store's owner hears about them (they use Claude usage).
   for (const store of listStores(db)) {
     const added = createDefaultJobs(db, store.id);

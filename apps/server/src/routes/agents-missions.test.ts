@@ -1,6 +1,6 @@
 import { parseMission } from '@frontline/agents';
 import type { AgentRun, NewSquadMission, SquadMission } from '@frontline/shared';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
@@ -98,16 +98,45 @@ test('after an app restart each step follows the retry of its own run, even when
 
 test('a step whose run fails before it starts (budget under a cent) fails once and blocks the mission once', async () => {
   await send('PATCH', '/api/agents/glow:market_analyst', { dailyBudgetUsd: 0.005 });
+  await send('PATCH', '/api/agents/glow:email_sms', { enabled: false }); // a parallel step turned down in the same pass
   const m = await create({
     title: 'Broke launch',
     steps: [
       { id: 'numbers', role: 'market_analyst', task: 'Pull the numbers for the launch.' },
       { id: 'copy', role: 'copywriter', task: 'Write the launch copy from the numbers.', dependsOn: ['numbers'] },
+      { id: 'flow', role: 'email_sms', task: 'Draft the launch email flow now.' },
     ],
   });
-  expect([m.status, ...m.steps.map((s) => s.status)]).toEqual(['blocked', 'error', 'blocked']);
+  expect([m.status, ...m.steps.map((s) => s.status)]).toEqual(['blocked', 'error', 'blocked', 'waiting']);
+  // Stuck, not "waiting": the turned-down step won't be tried again.
   expect(db.prepare(`SELECT count(*) AS n FROM agent_runs WHERE agent_id = 'glow:market_analyst'`).get()?.n).toBe(1);
   expect(notes()).toEqual([{ title: 'Mission stuck: Broke launch', body: "The Market Analyst's step failed, so the steps that need it didn't start." }]);
+});
+
+test("a step turned down for the store's AI budget starts once the owner raises the cap, though no run ends", async () => {
+  vi.useFakeTimers({ toFake: ['setInterval'] });
+  try {
+    db = openDb();
+    seedDemo(db);
+    app = createApp(db); // its minute tick runs on the fake clock
+    await send('PUT', '/api/caps/glow', { agentCostPerDay: 0.5 });
+    db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at) VALUES ('spent', 'glow', 'glow:ad_strategist', 't', 'done', 1, ?)`).run(new Date().toISOString());
+    const created = await create({ title: 'Budget wait', steps: [{ id: 'numbers', role: 'market_analyst', task: 'Pull the numbers for the plan.' }] });
+    expect(created.steps[0]).toMatchObject({ status: 'waiting', note: "Today's AI budget for this store ($0.5) is used up. Raise it in Settings." });
+    await send('PUT', '/api/caps/glow', { agentCostPerDay: 50 });
+    vi.advanceTimersByTime(60_000);
+    expect((await settle(created.id)).status).toBe('done');
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('a damaged mission row is skipped by run ends and app start alike', async () => {
+  db.prepare(`INSERT INTO squad_missions (id, store_id, title, steps_json, created_at) VALUES ('bad', 'glow', 'Damaged', 'not json', ?)`).run(new Date().toISOString());
+  expect(() => createApp(db)).not.toThrow();
+  runManager(db).start('glow:market_analyst', 'Pull the numbers please.');
+  await runManager(db).idle();
+  expect(db.prepare(`SELECT title FROM notifications WHERE title = 'Market Analyst finished'`).all()).toHaveLength(1);
 });
 
 test('a step its agent turned down starts when the owner brings the agent back', async () => {
