@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Route, Routes } from 'react-router';
 import { Shell } from './components/Shell';
 import { NAV } from './nav';
+import { AgentDetail } from './pages/AgentDetail';
 import { Agents } from './pages/Agents';
 import { Dashboard } from './pages/Dashboard';
 import { DevGallery } from './pages/DevGallery';
@@ -17,7 +18,7 @@ export function App() {
         {NAV.slice(1).map((n) => (
           <Route key={n.path} path={n.path} element={PAGES[n.path] ?? <Placeholder nav={n} />} />
         ))}
-        <Route path="/agents/:id" element={<Placeholder nav={{ ...NAV[1]!, item: 'UI-07' }} />} />
+        <Route path="/agents/:id" element={<AgentDetail />} />
         {import.meta.env.DEV && <Route path="/dev/ui" element={<DevGallery />} />}
         <Route path="*" element={<Placeholder />} />
       </Route>

@@ -1,7 +1,25 @@
 // UI-03 data layer: typed fetchers + react-query hooks over the local API, and the /api/live socket.
 import { useEffect } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Agent, AgentUpdate, AnalyticsRange, AnalyticsSummary, ApprovalDecision, ApprovalRequest, ApprovalStatus, LiveMessage, Settings, Store, StoreEvent } from '@frontline/shared';
+import type {
+  Agent,
+  AgentRun,
+  AgentRunDetail,
+  AgentUpdate,
+  AnalyticsRange,
+  AnalyticsSummary,
+  ApprovalDecision,
+  ApprovalRequest,
+  ApprovalStatus,
+  LiveMessage,
+  MemoryInput,
+  Settings,
+  Store,
+  StoreCaps,
+  StoreEvent,
+  StoreMemory,
+} from '@frontline/shared';
+import { applyRunEvent, isLive } from '../lib/transcript';
 import * as stub from './stubs';
 import type { Mission } from './stubs';
 
@@ -13,6 +31,8 @@ async function api<T>(path: string, init?: RequestInit & { fallback?: () => T })
   if (!r.ok) throw new Error(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? `${init?.method ?? 'GET'} ${path} failed (${r.status})`);
   return (await r.json()) as T;
 }
+
+const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/api/settings') });
 export const useStores = () => useQuery({ queryKey: ['stores'], queryFn: () => api<Store[]>('/api/stores') });
@@ -43,11 +63,59 @@ export function useDecide() {
 export function useUpdateAgent() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...body }: AgentUpdate & { id: string }) =>
-      api<Agent>(`/api/agents/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+    mutationFn: ({ id, ...body }: AgentUpdate & { id: string }) => api<Agent>(`/api/agents/${encodeURIComponent(id)}`, json('PATCH', body)),
     onSuccess: (a) => qc.setQueryData<Agent[]>(['agents'], (old = []) => old.map((o) => (o.id === a.id ? a : o))),
   });
 }
+
+export const useRuns = (agentId: string) => useQuery({ queryKey: ['runs', agentId], queryFn: () => api<AgentRun[]>(`/api/runs?agent=${encodeURIComponent(agentId)}&limit=50`) });
+// Live events stream into this cache; the poll only covers a run that finished before its POST response landed.
+export const useRun = (id: string) =>
+  useQuery({
+    queryKey: ['run', id],
+    queryFn: () => api<AgentRunDetail>(`/api/runs/${id}`),
+    staleTime: Infinity,
+    enabled: !!id,
+    refetchInterval: (q) => (q.state.data && isLive(q.state.data) ? 2000 : false),
+  });
+
+/** Starts a run (or a chat follow-up with `resumeRunId`); the live socket streams the rest into ['run', id]. */
+export function useStartRun() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ agentId, task, resumeRunId }: { agentId: string; task: string; resumeRunId?: string }) =>
+      api<AgentRunDetail>(`/api/agents/${encodeURIComponent(agentId)}/runs`, json('POST', { task, resumeRunId })),
+    onSuccess: (r) => {
+      qc.setQueryData<AgentRunDetail>(['run', r.id], (old) => old ?? r);
+      qc.invalidateQueries({ queryKey: ['runs', r.agentId] });
+    },
+  });
+}
+
+export const useCancelRun = () => useMutation({ mutationFn: (id: string) => api<AgentRun>(`/api/runs/${id}/cancel`, { method: 'POST' }) });
+
+export const useMemory = (storeId: string) => useQuery({ queryKey: ['memory', storeId], queryFn: () => api<StoreMemory[]>(`/api/stores/${storeId}/memory`) });
+
+export function useAddMemory(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (m: MemoryInput) => api<StoreMemory>(`/api/stores/${storeId}/memory`, json('POST', m)),
+    onSuccess: (m) => qc.setQueryData<StoreMemory[]>(['memory', storeId], (old = []) => [m, ...old]),
+  });
+}
+
+export function useForgetMemory(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/memory/${id}`, { method: 'DELETE' });
+      if (!r.ok) throw new Error(`Couldn't forget that (${r.status})`);
+    },
+    onSuccess: (_, id) => qc.setQueryData<StoreMemory[]>(['memory', storeId], (old = []) => old.filter((m) => m.id !== id)),
+  });
+}
+
+export const useCaps = (storeId: string) => useQuery({ queryKey: ['caps', storeId], queryFn: () => api<StoreCaps[]>(`/api/caps?stores=${storeId}`).then((c) => c[0]) });
 
 /** Mount once: streams /api/live into the react-query cache, reconnecting if the server restarts. */
 export function useLive() {
@@ -58,6 +126,15 @@ export function useLive() {
     let closed = false;
     const onMessage = (m: LiveMessage) => {
       if (m.type === 'event') qc.setQueryData<StoreEvent[]>(['events'], (old = []) => [m.event, ...old].slice(0, 30));
+      else if (m.type === 'run_event') qc.setQueryData<AgentRunDetail>(['run', m.runId], (d) => d && applyRunEvent(d, m.event));
+      else if (m.type === 'run') {
+        // Finished: refetch the stored transcript, which also covers events that raced ahead of the POST response.
+        if (isLive(m.run)) qc.setQueryData<AgentRunDetail>(['run', m.run.id], (d) => d && { ...d, ...m.run });
+        else qc.invalidateQueries({ queryKey: ['run', m.run.id] });
+        qc.invalidateQueries({ queryKey: ['runs', m.run.agentId] });
+        qc.invalidateQueries({ queryKey: ['agents'] });
+        qc.invalidateQueries({ queryKey: ['memory', m.run.storeId] });
+      }
       else if (m.type === 'approval') {
         qc.invalidateQueries({ queryKey: ['agents'] });
         // A decided request lingers ~1s so its "Approved"/"Denied" verdict shows before the row drops.

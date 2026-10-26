@@ -127,11 +127,11 @@ function AgentCard({ a, onDeploy, deploying, failed }: { a: Agent; onDeploy: () 
           </Button>
         ) : (
           <>
-            <Link to={to} className={buttonClass('ghost', 'sm')} aria-label={`Configure ${role.name}`}>
+            <Link to={`${to}?tab=settings`} className={buttonClass('ghost', 'sm')} aria-label={`Configure ${role.name}`}>
               <Settings2 className="size-3.5" strokeWidth={2} />
               Configure
             </Link>
-            <Link to={`${to}?tab=chat`} className={buttonClass('ghost', 'sm')} aria-label={`Chat with ${role.name}`}>
+            <Link to={to} className={buttonClass('ghost', 'sm')} aria-label={`Chat with ${role.name}`}>
               <MessageSquare className="size-3.5" strokeWidth={2} />
               Chat
             </Link>

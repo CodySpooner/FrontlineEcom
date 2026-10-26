@@ -7,6 +7,10 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from ui) Demo mode: give the fake engine's default script a little more than an echo — one real read-only tool call
+      (e.g. `analytics_summary`), a `memory_written` now and then, and text streamed with small delays — so the Agent chat
+      (UI-07) shows tool steps and learnings with zero credentials. Also: an agent `schedule` (standing task + cadence) for
+      the Settings tab, when you get to it.
 - [x] (from ui) AGT-13: please put the level curve on `Agent` — `nextLevelXp` (XP that fills the bar at the current level, same units
       as `xp`) and `rank` (Recruit … Legend). The AI Agents page uses a linear stand-in (`nextLevelXp` in `apps/web/src/api/stubs.ts`).
 - [ ] (from core) Scheduler for AGT-18 is live (`apps/server/src/automations.ts`, started in `index.ts` with `runManager(db).start`). Jobs are rows in `automation_rules`: create them with `POST /api/automations` `{ storeId, name, trigger: { type: 'schedule', cron: '0 8 * * *' } | { type: 'metric', metric, op, value, windowDays }, action: { type: 'agent_task', agentId, task }, approval: 'auto'|'ask', maxRunsPerDay }` (or insert the same columns). The task text gets an `(Automation "name": reason.)` suffix.

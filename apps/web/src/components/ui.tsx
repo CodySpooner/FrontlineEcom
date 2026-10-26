@@ -61,7 +61,7 @@ export function Chip({ on, color, className, children, ...p }: ButtonHTMLAttribu
 
 export function Segmented<T extends string | number>({ label, options, value, onChange }: { label: string; options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
   return (
-    <div role="radiogroup" aria-label={label} className="flex gap-0.5 rounded-[10px] border border-line-2 bg-panel p-[3px]">
+    <div role="radiogroup" aria-label={label} className="inline-flex gap-0.5 rounded-[10px] border border-line-2 bg-panel p-[3px]">
       {options.map((o) => (
         <button
           key={o.value}

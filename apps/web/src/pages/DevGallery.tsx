@@ -1,7 +1,9 @@
 // Dev-only gallery of the design-system primitives (/dev/ui) for visual checks against docs/reference.
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
+import type { AgentRunDetail } from '@frontline/shared';
 import { Portrait } from '../components/Art';
+import { Transcript } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { AGENT_STATUS, Badge, Button, Card, Chip, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Table, Tooltip, XPBar } from '../components/ui';
 
@@ -108,7 +110,32 @@ export function DevGallery() {
             </div>
           </Dialog>
         </Panel>
+        <Panel title="Chat transcript (fixture)" className="min-[1100px]:col-span-2">
+          <Transcript run={SAMPLE_RUN} role="ad_strategist" />
+        </Panel>
       </div>
     </>
   );
 }
+
+const SAMPLE_RUN: AgentRunDetail = {
+  id: 'sample',
+  storeId: 'pawsome',
+  agentId: 'pawsome:ad_strategist',
+  task: 'Find our worst ad set this week and fix it.',
+  status: 'running',
+  usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
+  createdAt: '2026-10-26T08:00:00Z',
+  transcript: [
+    { type: 'text_delta', text: 'Pulling the last 7 days of ad performance first.' },
+    { type: 'tool_call', id: 't1', name: 'analytics_summary', input: { range: 7 } },
+    { type: 'tool_result', id: 't1', output: '{"roas": 2.61, "adSpend": 6001.42}', isError: false },
+    { type: 'text_delta', text: 'Ad set "Puppy travel – broad" is losing $45/day at 0.7 ROAS. Pausing it frees budget for the 3.4 ROAS set.' },
+    { type: 'memory_written', memory: { id: 'm1', storeId: 'pawsome', agentId: 'pawsome:ad_strategist', kind: 'learning', text: 'Broad targeting underperforms; lookalikes of repeat buyers convert 3x.', confidence: 0.7, tags: [], createdAt: '2026-10-26T08:00:00Z' } },
+    {
+      type: 'approval_request',
+      approval: { id: 'sample-appr', storeId: 'pawsome', agentId: 'pawsome:ad_strategist', title: 'Pause 1 losing ad set', reason: 'Losing $45/day for 4 days straight', action: { kind: 'ads.pause_adsets', payload: {}, amountUsd: 45 }, status: 'pending', createdAt: '2026-10-26T08:00:00Z' },
+    },
+    { type: 'tool_call', id: 't2', name: 'list_campaigns', input: { status: 'active' } },
+  ],
+};

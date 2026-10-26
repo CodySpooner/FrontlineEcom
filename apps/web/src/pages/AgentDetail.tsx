@@ -1,0 +1,302 @@
+// UI-07 agent detail: chat, run history, what the squad has learned about the store, and the agent's settings.
+import { useState, type FormEvent } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
+import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
+import { AGENT_ROLES, type Agent, type Autonomy, type MemoryKind, type RunStatus } from '@frontline/shared';
+import { useAddMemory, useAgents, useCaps, useForgetMemory, useMemory, useRuns, useUpdateAgent } from '../api/client';
+import { nextLevelXp } from '../api/stubs';
+import { Portrait } from '../components/Art';
+import { Chat } from '../components/Chat';
+import { Hero } from '../components/Hero';
+import { useStoreSelection } from '../components/StoreFilter';
+import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Table, Tabs, XPBar } from '../components/ui';
+import { ago, cents, money } from '../lib/format';
+import { NAV } from '../nav';
+
+const TABS = [
+  { value: 'chat', label: 'Chat' },
+  { value: 'history', label: 'History' },
+  { value: 'memory', label: 'Memory' },
+  { value: 'settings', label: 'Settings' },
+] as const;
+type Tab = (typeof TABS)[number]['value'];
+
+export function AgentDetail() {
+  const { id = '' } = useParams();
+  const agents = useAgents();
+  const { name } = useStoreSelection();
+  const [params, setParams] = useSearchParams();
+  const tab: Tab = TABS.find((t) => t.value === params.get('tab'))?.value ?? 'chat';
+  const runs = useRuns(id);
+  // The open conversation; until the owner picks one it's the latest run.
+  const [picked, setThread] = useState<string[]>();
+  const thread = picked ?? (runs.data?.[0] ? [runs.data[0].id] : []);
+
+  const agent = agents.data?.find((a) => a.id === id);
+  const role = agent && AGENT_ROLES[agent.role];
+  const nav = NAV[1]!;
+  const go = (t: Tab) => setParams(t === 'chat' ? {} : { tab: t }, { replace: true });
+
+  if (agents.isPending) return <LoadingState rows={4} className="mt-6" />;
+  if (agents.isError) return <ErrorState message="Couldn't load this agent." onRetry={() => agents.refetch()} />;
+  if (!agent || !role) {
+    return (
+      <>
+        <Hero title="Agent not found" subtitle="It may belong to a store that was removed." icon={nav.icon} />
+        <EmptyState title="No agent here" action={<Link to="/agents" className={buttonClass('primary')}>Back to AI Agents</Link>} />
+      </>
+    );
+  }
+
+  const st = AGENT_STATUS[agent.status];
+  return (
+    <>
+      <Hero title={role.name} subtitle={`${name(agent.storeId)} · Level ${agent.level}`} icon={nav.icon} art="lone" />
+      <div className="mb-4 flex flex-wrap items-center gap-4">
+        <Link to={`/agents?store=${agent.storeId}`} className="flex items-center gap-1.5 text-[13px] text-muted transition hover:text-white">
+          <ArrowLeft className="size-4" />
+          All agents
+        </Link>
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <Portrait role={agent.role} className="size-12" />
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 text-xs text-text-2">
+              <StatusDot tone={st.tone} pulse={st.pulse} />
+              {st.label}
+              <Badge>{AUTONOMY[agent.autonomy ?? 'ask'].label}</Badge>
+            </div>
+            <p className="mt-1 max-w-xl truncate text-xs text-muted">{role.blurb}</p>
+          </div>
+        </div>
+        <div className="w-full max-w-60">
+          <XPBar level={agent.level} xp={agent.xp} next={nextLevelXp(agent.level)} />
+        </div>
+      </div>
+      <Tabs label="Agent" tabs={[...TABS]} value={tab} onChange={go} />
+      <div className="mt-4">
+        {tab === 'chat' && <Chat agent={agent} thread={thread} onThread={setThread} />}
+        {tab === 'history' && (
+          <History
+            agentId={agent.id}
+            onOpen={(runId) => {
+              setThread([runId]);
+              go('chat');
+            }}
+          />
+        )}
+        {tab === 'memory' && <Memory agent={agent} />}
+        {tab === 'settings' && <AgentSettings agent={agent} />}
+      </div>
+    </>
+  );
+}
+
+const RUN_STATUS: Record<RunStatus, { label: string; tone: 'red' | 'good' | 'muted' }> = {
+  queued: { label: 'Queued', tone: 'muted' },
+  running: { label: 'Running', tone: 'good' },
+  done: { label: 'Done', tone: 'muted' },
+  error: { label: 'Failed', tone: 'red' },
+  cancelled: { label: 'Stopped', tone: 'muted' },
+};
+
+function History({ agentId, onOpen }: { agentId: string; onOpen: (runId: string) => void }) {
+  const runs = useRuns(agentId);
+  const now = Date.now();
+  return (
+    <Panel title="Run history" sub="Every task this agent worked on, newest first.">
+      {runs.isPending ? (
+        <LoadingState rows={4} />
+      ) : runs.isError ? (
+        <ErrorState message="Couldn't load the history." onRetry={() => runs.refetch()} />
+      ) : !runs.data.length ? (
+        <EmptyState title="No runs yet">Tasks you give this agent in Chat show up here.</EmptyState>
+      ) : (
+        <Table>
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Status</th>
+              <th>Started</th>
+              <th className="text-right!">Cost</th>
+            </tr>
+          </thead>
+          <tbody>
+            {runs.data.map((r) => (
+              <tr key={r.id}>
+                <td className="max-w-[420px]">
+                  <button type="button" onClick={() => onOpen(r.id)} className="block max-w-full cursor-pointer truncate text-left hover:text-red" title="Open in chat">
+                    {r.task}
+                  </button>
+                </td>
+                <td>
+                  <Badge tone={RUN_STATUS[r.status].tone}>{RUN_STATUS[r.status].label}</Badge>
+                </td>
+                <td className="text-muted">{ago(r.startedAt ?? r.createdAt, now)}</td>
+                <td className="text-right text-muted">{cents(r.usage.costUsd)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      )}
+    </Panel>
+  );
+}
+
+const KINDS: { value: MemoryKind; label: string }[] = [
+  { value: 'fact', label: 'Fact' },
+  { value: 'learning', label: 'Learning' },
+  { value: 'preference', label: 'Preference' },
+];
+
+function Memory({ agent }: { agent: Agent }) {
+  const { name } = useStoreSelection();
+  const mem = useMemory(agent.storeId);
+  const add = useAddMemory(agent.storeId);
+  const forget = useForgetMemory(agent.storeId);
+  const [kind, setKind] = useState<MemoryKind>('fact');
+  const [text, setText] = useState('');
+  const author = (agentId: string) => (agentId === 'owner' ? 'You' : AGENT_ROLES[agentId.split(':')[1] as Agent['role']]?.name ?? 'Agent');
+
+  const teach = (e: FormEvent) => {
+    e.preventDefault();
+    add.mutate({ kind, text: text.trim() }, { onSuccess: () => setText('') });
+  };
+
+  return (
+    <Panel title={`What the squad knows about ${name(agent.storeId)}`} sub="Shared by every agent on this store. Agents add learnings as they work; you can teach them too.">
+      <form onSubmit={teach} className="mb-4 flex flex-wrap items-center gap-2">
+        <Segmented label="Kind" options={KINDS} value={kind} onChange={setKind} />
+        <label htmlFor="mem-text" className="sr-only">
+          What should the squad know?
+        </label>
+        <input
+          id="mem-text"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          minLength={5}
+          maxLength={300}
+          placeholder="e.g. Our best customers are first-time dog owners"
+          className="min-w-60 flex-1 rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] placeholder:text-muted focus:border-red/60 focus:outline-none"
+        />
+        <Button type="submit" variant="primary" disabled={text.trim().length < 5 || add.isPending}>
+          Teach the squad
+        </Button>
+        {add.isError && (
+          <p role="alert" className="w-full text-xs text-red">
+            {add.error.message}
+          </p>
+        )}
+      </form>
+      {mem.isPending ? (
+        <LoadingState rows={3} />
+      ) : mem.isError ? (
+        <ErrorState message="Couldn't load what the squad knows." onRetry={() => mem.refetch()} />
+      ) : !mem.data.length ? (
+        <EmptyState icon={Brain} title="Nothing learned yet">
+          As agents work on this store they save what worked and why. Add the first fact above.
+        </EmptyState>
+      ) : (
+        <ul className="grid gap-2">
+          {mem.data.map((m) => (
+            <li key={m.id} className="grid grid-cols-[minmax(0,1fr)_120px_auto] items-center gap-4 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 text-[11px] text-muted">
+                  <Badge tone={m.agentId === agent.id ? 'red' : 'muted'}>{KINDS.find((k) => k.value === m.kind)?.label}</Badge>
+                  {author(m.agentId)} · {ago(m.createdAt, Date.now())}
+                </div>
+                <p className="mt-1 text-[13px]">{m.text}</p>
+                {m.evidence && <p className="mt-0.5 text-xs text-muted">{m.evidence}</p>}
+              </div>
+              <div>
+                <div className="mb-1 text-right text-[11px] text-muted tabular-nums">{Math.round(m.confidence * 100)}% sure</div>
+                <ProgressBar value={m.confidence} label="Confidence" />
+              </div>
+              <button
+                type="button"
+                onClick={() => forget.mutate(m.id)}
+                disabled={forget.isPending}
+                aria-label={`Forget: ${m.text}`}
+                className="cursor-pointer rounded-md p-1.5 text-muted transition hover:bg-panel-2 hover:text-red"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+const AUTONOMY: Record<Autonomy, { label: string; help: string }> = {
+  suggest: { label: 'Suggest', help: 'Recommends only. Never acts on the store.' },
+  ask: { label: 'Ask first', help: 'Acts, but anything that spends, publishes or changes the store waits for your approval.' },
+  autopilot: { label: 'Autopilot', help: "Approves its own actions within the store's autopilot caps. Everything is logged." },
+};
+
+function AgentSettings({ agent }: { agent: Agent }) {
+  const update = useUpdateAgent();
+  const caps = useCaps(agent.storeId).data;
+  const autonomy = agent.autonomy ?? 'ask';
+  const autopilotKinds = Object.entries(caps?.autopilot ?? {}).filter(([, v]) => v.enabled);
+  return (
+    <div className="grid gap-4 min-[1100px]:grid-cols-2">
+      <Panel title="Deployment">
+        <label className="flex cursor-pointer items-center justify-between gap-4">
+          <span>
+            <span className="block text-[13px] font-semibold">Deployed</span>
+            <span className="block text-xs text-muted">Off = the agent stops taking tasks for this store. Its memory stays.</span>
+          </span>
+          <input
+            type="checkbox"
+            role="switch"
+            checked={agent.enabled !== false}
+            disabled={update.isPending}
+            onChange={(e) => update.mutate({ id: agent.id, enabled: e.target.checked })}
+            className="peer sr-only"
+          />
+          <span
+            aria-hidden
+            className="relative h-6 w-11 shrink-0 rounded-full border border-line-2 bg-panel-2 transition peer-checked:border-red peer-checked:bg-red peer-focus-visible:outline-2 peer-focus-visible:outline-red after:absolute after:top-0.5 after:left-0.5 after:size-[18px] after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5"
+          />
+        </label>
+        <div className="mt-5">
+          <div className="mb-2 text-[13px] font-semibold">Autonomy</div>
+          <Segmented
+            label="Autonomy"
+            options={Object.entries(AUTONOMY).map(([value, a]) => ({ value: value as Autonomy, label: a.label }))}
+            value={autonomy}
+            onChange={(v) => update.mutate({ id: agent.id, autonomy: v })}
+          />
+          <p className="mt-2 text-xs text-muted">{AUTONOMY[autonomy].help}</p>
+        </div>
+        {update.isError && (
+          <p role="alert" className="mt-3 text-xs text-red">
+            {update.error.message}
+          </p>
+        )}
+      </Panel>
+      <Panel title="Store caps" sub="Hard limits every agent on this store respects." action={<Link to="/settings" className={buttonClass('ghost', 'sm')}>Edit caps</Link>}>
+        {!caps ? (
+          <LoadingState rows={3} />
+        ) : (
+          <dl className="grid gap-2.5 text-[13px]">
+            <Cap label="Ad budget changes" value={`${money(caps.adSpendChangePerDay)}/day`} />
+            <Cap label="AI usage" value={`${money(caps.agentCostPerDay)}/day`} />
+            <Cap label="Higgsfield credits" value={`${caps.higgsfieldCreditsPerDay.toLocaleString('en-US')}/day`} />
+            <Cap label="Autopilot actions" value={autopilotKinds.length ? autopilotKinds.map(([k, v]) => `${k} ≤ ${money(v.maxUsdPerDay)}/day`).join(', ') : 'None — everything asks first'} />
+          </dl>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function Cap({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-line pb-2.5 last:border-b-0 last:pb-0">
+      <dt className="text-muted">{label}</dt>
+      <dd className="text-right font-semibold text-text-2 tabular-nums">{value}</dd>
+    </div>
+  );
+}
