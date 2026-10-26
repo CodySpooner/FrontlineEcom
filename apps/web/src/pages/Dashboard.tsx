@@ -81,7 +81,9 @@ function RevenueChart({ s, who }: { s: AnalyticsSummary; who: string }) {
 
 function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
   // Products the platform has no cost for count their whole price as profit until the owner sets one.
-  const atFullPrice = (useProducts(useStoreSelection().ids).data?.items ?? []).filter((p) => p.cost === 0).length;
+  const { ids, stores, has } = useStoreSelection();
+  const atFullPrice = (useProducts(ids).data?.items ?? []).filter((p) => p.cost === 0).length;
+  const fees = stores.some((x) => has(x.id) && (x.feePercent || x.feePerOrder));
   const grid = 'mb-3.5 grid grid-cols-2 gap-3 min-[620px]:grid-cols-3 min-[1280px]:grid-cols-5';
   if (q.isError)
     return (
@@ -108,7 +110,7 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
       <Kpi
         hero
         label={
-          <Tooltip tip="Revenue − cost of goods − ad spend">
+          <Tooltip tip={fees ? 'Revenue − cost of goods − your fee estimate − ad spend' : 'Revenue − cost of goods − ad spend'}>
             <span tabIndex={0} className="cursor-help underline decoration-muted/50 decoration-dotted underline-offset-3">
               Profit
             </span>

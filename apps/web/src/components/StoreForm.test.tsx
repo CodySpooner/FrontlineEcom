@@ -31,3 +31,27 @@ describe('store form time zone', () => {
     expect((screen.getByLabelText(/Time zone/) as HTMLSelectElement).value).toBe('UTC');
   });
 });
+
+describe('store form fees', () => {
+  const etsy = { id: 'clay', name: 'Clay Co', platform: 'etsy', niche: 'home', currency: 'USD', timezone: 'UTC', color: '#ff2a3a', connected: true } as Store;
+
+  it("hints the platform's usual fees and sends the owner's estimate", async () => {
+    const fetch = stubApi((_url, init) => (init?.method === 'PATCH' ? etsy : undefined));
+    renderApp(<StoreForm store={etsy} onDone={() => {}} />);
+    expect(screen.getByText(/Typical on Etsy: 9.5% \+ 0.25 per order/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Fees, % of revenue'), { target: { value: '9.5' } });
+    fireEvent.change(screen.getByLabelText('Fees per order'), { target: { value: '0.25' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save store' }));
+    await vi.waitFor(() => expect(sent(fetch)[0]).toEqual(['/api/stores/clay', expect.objectContaining({ feePercent: 9.5, feePerOrder: 0.25 })]));
+  });
+
+  it('clears a saved estimate back to no fees', async () => {
+    const fetch = stubApi((_url, init) => (init?.method === 'PATCH' ? etsy : undefined));
+    renderApp(<StoreForm store={{ ...etsy, feePercent: 9.5 }} onDone={() => {}} />);
+    const pct = screen.getByLabelText('Fees, % of revenue') as HTMLInputElement;
+    expect(pct.value).toBe('9.5');
+    fireEvent.change(pct, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save store' }));
+    await vi.waitFor(() => expect(sent(fetch)[0]?.[1]).toMatchObject({ feePercent: 0, feePerOrder: 0 }));
+  });
+});
