@@ -1,5 +1,5 @@
-import { expect, test } from 'vitest';
-import type { Agent, AnalyticsSummary, Store } from '@frontline/shared';
+import { expect, test, vi } from 'vitest';
+import type { Agent, AnalyticsSummary, Order, Page, Product, Store } from '@frontline/shared';
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
@@ -71,4 +71,21 @@ test("a new store without a timezone gets the owner's machine timezone", async (
   const res = await app.request('/api/stores', { method: 'POST', body: JSON.stringify({ name: 'Tide Co', platform: 'shopify', niche: 'outdoor' }), headers: { 'content-type': 'application/json' } });
   expect(res.status).toBe(201);
   expect(((await res.json()) as Store).timezone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+});
+
+test("a demo store the owner creates gets its niche's products and orders that match its KPIs", async () => {
+  vi.useFakeTimers({ now: new Date('2026-10-26T15:00:00'), toFake: ['Date'] });
+  try {
+    const { app } = setup();
+    const store = (await (await app.request('/api/stores', send('POST', { name: 'Volt Lab', platform: 'shopify', niche: 'tech' }))).json()) as Store;
+    const products = (await (await app.request(`/api/products?stores=${store.id}`)).json()) as Page<Product>;
+    const orders = (await (await app.request(`/api/orders?stores=${store.id}`)).json()) as Page<Order>;
+    const summary = (await (await app.request(`/api/analytics/summary?range=7&stores=${store.id}`)).json()) as AnalyticsSummary;
+    expect(products.total).toBeGreaterThan(0);
+    expect(orders.total).toBe(summary.totals.orders); // seeded orders cover exactly the last 7 days
+    const beauty = (await (await app.request('/api/stores', send('POST', { name: 'Dewy', platform: 'etsy', niche: 'beauty' }))).json()) as Store;
+    expect(((await (await app.request(`/api/products?stores=${beauty.id}`)).json()) as Page<Product>).items.map((p) => p.title)).toContain('Heated Eyelash Curler');
+  } finally {
+    vi.useRealTimers();
+  }
 });

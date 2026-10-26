@@ -148,6 +148,14 @@ const APPROVALS = [
   },
 ];
 
+/** A demo store's products: its own, else the built-in demo store's for its niche, else the pet store's. */
+function productsFor(db: Db, storeId: string) {
+  if (PRODUCTS[storeId]) return PRODUCTS[storeId];
+  const niche = db.prepare('SELECT niche FROM stores WHERE id = ?').get(storeId)?.niche;
+  // ponytail: niches without a built-in demo store (tech, home, …) borrow the pet catalog; give them their own lists if demos need it.
+  return PRODUCTS[DEMO_STORES.find((s) => s.niche === niche)?.id ?? 'pawsome']!;
+}
+
 const SUPPLIERS = ['CJ Dropshipping', 'DSers', 'Zendrop'];
 
 /** Writes missing daily_metrics / campaign_daily rows for a demo store, up to `today` (today: so far). */
@@ -172,7 +180,6 @@ export function advanceDemoDay(db: Db, storeId: string, now = new Date()): Store
   writeDay(db, storeId, demoDay(storeId, addDays(today, -1)));
   const m = demoSoFar(storeId, today, dayFraction(today, now.getTime()));
   writeDay(db, storeId, m);
-  if (!PRODUCTS[storeId]) return [];
   const first = addDays(today, -6);
   const byDay = new Map<string, number[]>();
   for (const r of db.prepare('SELECT created_at FROM orders WHERE store_id = ? AND created_at >= ?').all(storeId, new Date(`${first}T00:00:00`).toISOString())) {
@@ -218,10 +225,9 @@ function seedCatalog(db: Db, storeId: string, today: string) {
   const spend = demoDay(storeId, today).adSpend;
   CAMPAIGNS.forEach((c, i) => camp.run(c.network, `${storeId}-c${i + 1}`, storeId, c.name, 'active', Math.round(spend * c.budget)));
 
-  const products = PRODUCTS[storeId] ?? [];
+  const products = productsFor(db, storeId);
   const prod = db.prepare('INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?)');
   products.forEach(([title, price, compareAt, cost], i) => prod.run(storeId, `${storeId}-p${i + 1}`, title, price, compareAt, cost, Math.round(20 + 400 * r()), 'active'));
-  if (!products.length) return;
 
   // ponytail: orders only for the last 7 days (count matches daily_metrics); older history lives in daily_metrics
   const order = db.prepare('INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
