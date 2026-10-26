@@ -60,7 +60,7 @@ test('WooCommerce sync pulls paid orders + products since the cursor and rebuild
   ]);
   expect(db.prepare("SELECT product_id AS p, quantity AS q, revenue FROM order_items WHERE store_id = 'pawsome'").all()).toEqual([{ p: 'woo-7', q: 2, revenue: 25 }]);
   expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()).toEqual({ revenue: 50, orders: 2 });
-  expect(db.prepare("SELECT status, cursor FROM integrations WHERE id = 'woocommerce:pawsome'").get()).toEqual({ status: 'connected', cursor: '2026-10-26T09:30:00' });
+  expect(db.prepare("SELECT status, cursor FROM integrations WHERE id = 'woocommerce:pawsome'").get()).toEqual({ status: 'connected', cursor: '2026-10-26T17:55:00' });
 
   await syncWooCommerce(db, key, 'pawsome', fakeWoo().fetchFn, NOW);
   expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'pawsome'").get()).toEqual({ n: 3 });
@@ -106,4 +106,25 @@ test("with Woo's Cost of Goods Sold on, orders, best sellers and products carry 
   expect(db.prepare("SELECT cost FROM order_items WHERE store_id = 'pawsome' AND order_id = 'woo-1001'").get()?.cost).toBe(8);
   expect(db.prepare("SELECT cost FROM products WHERE store_id = 'pawsome' AND id = 'woo-7'").get()?.cost).toBe(4);
   expect(db.prepare("SELECT cogs FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()?.cogs).toBe(9.5);
+});
+
+test('a refund made while the sync was still reading is fetched by the next sync', async () => {
+  const db = setup();
+  // Order 1001 is read paid at 18:00; it's refunded at 18:01 (modified 18:01) while products are read, and a product
+  // changed at 18:02 comes back last. The next sync must still ask for changes from before the refund.
+  let refunded = false;
+  const fetchFn = (async (url: string) => {
+    const u = new URL(url);
+    if (u.pathname.endsWith('/orders')) {
+      const o = refunded ? order('1001', 'refunded', '30.00', true, { date_modified_gmt: '2026-10-26T18:01:00' }) : order('1001', 'processing', '30.00', true);
+      return Response.json(u.searchParams.get('modified_after')! <= o.date_modified_gmt ? [o] : [], { headers: { 'x-wp-totalpages': '1' } });
+    }
+    refunded = true;
+    return Response.json([{ id: 7, name: 'Bowl', status: 'publish', price: '19.00', regular_price: '19.00', sale_price: '', stock_quantity: 5, date_modified_gmt: '2026-10-26T18:02:00' }], { headers: { 'x-wp-totalpages': '1' } });
+  }) as typeof fetch;
+  const day = () => db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get();
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(day()).toEqual({ revenue: 30, orders: 1 });
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, new Date('2026-10-26T18:10:00Z'));
+  expect(day()).toEqual({ revenue: 0, orders: 0 });
 });

@@ -153,7 +153,7 @@ test('TikTok Shop sync renews the token, pulls products + paid orders, and rebui
   const again = fakeShop();
   await syncTikTokShop(db, key, 'glow', again.fetchFn, NOW);
   expect(again.calls.some((c) => c.url.host === 'auth.tiktok-shops.com')).toBe(false);
-  expect(JSON.parse(again.calls.find((c) => c.url.pathname.includes('orders'))!.body)).toEqual({ update_time_ge: T('2026-10-25T13:00:00Z') });
+  expect(JSON.parse(again.calls.find((c) => c.url.pathname.includes('orders'))!.body)).toEqual({ update_time_ge: T('2026-10-26T17:55:00Z') });
 });
 
 test('TikTok Shop: a rejected refresh token shows on the integration and keeps demo data', async () => {

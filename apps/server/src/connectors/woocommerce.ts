@@ -1,7 +1,7 @@
 import type { ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { rebuildRevenue, setOrderItems, switchToReal } from './common';
+import { cursorAt, rebuildRevenue, setOrderItems, switchToReal } from './common';
 
 // WooCommerce REST API v3 with a read-only consumer key/secret (Basic auth, so https only).
 /** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
@@ -107,8 +107,8 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total), cost: Number(li.cost_of_goods_sold?.value ?? 0) })));
       }
       rebuildRevenue(db, storeId, days);
-      const newest = [...orders, ...products].reduce((m, x) => (x.date_modified_gmt > m ? x.date_modified_gmt : m), since);
-      db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(newest, now.toISOString(), id);
+      const next = cursorAt(now).toISOString().slice(0, 19);
+      db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(next > since ? next : since, now.toISOString(), id);
     });
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'WooCommerce sync failed');

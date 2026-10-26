@@ -68,7 +68,7 @@ test('Etsy sync renews the token, pulls paid receipts + changed listings, rebuil
   const again = fakeEtsy();
   await syncEtsy(db, key, 'pawsome', again.fetchFn, NOW);
   expect(again.calls[0]!.url.pathname.endsWith('/receipts')).toBe(true); // token still fresh
-  expect(again.calls[0]!.url.searchParams.get('min_last_modified')).toBe(String(T('2026-10-25T14:00:00Z')));
+  expect(again.calls[0]!.url.searchParams.get('min_last_modified')).toBe(String(T('2026-10-26T17:55:00Z'))); // the last sync's start, less 5 min;
 });
 
 test('Etsy: an expired refresh token shows on the integration and keeps demo data', async () => {

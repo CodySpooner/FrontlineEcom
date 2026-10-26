@@ -1,7 +1,7 @@
 import type { ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { rebuildRevenue, setOrderItems, switchToReal } from './common';
+import { cursorAt, rebuildRevenue, setOrderItems, switchToReal } from './common';
 
 // Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r).
 const API = 'https://openapi.etsy.com/v3/application';
@@ -106,8 +106,8 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         setOrderItems(db, storeId, `etsy-${r.receipt_id}`, (r.transactions ?? []).map((t) => ({ productId: `etsy-${t.listing_id}`, quantity: t.quantity, revenue: money(t.price) * t.quantity, cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);
-      const newest = [...receipts, ...listings].reduce((m, x) => Math.max(m, x.updated_timestamp), since);
-      db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(String(newest), now.toISOString(), id);
+      const next = Math.max(since, Math.floor(cursorAt(now).getTime() / 1000));
+      db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(String(next), now.toISOString(), id);
     });
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Etsy sync failed');

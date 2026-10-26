@@ -117,7 +117,7 @@ test('later syncs are incremental and update changed orders in place', async () 
   const refunded = order('#1001', '2026-10-25T09:00:00Z', '0.00', { updatedAt: '2026-10-26T12:00:00Z', displayFinancialStatus: 'REFUNDED' });
   const second = fakeShopify([refunded]);
   await syncShopify(db, key, 'glow', second.fetchFn, NOW);
-  expect(second.calls.find((c) => c.body.query.includes('orders('))!.body.variables.q).toBe("updated_at:>='2026-10-25T09:00:00Z'");
+  expect(second.calls.find((c) => c.body.query.includes('orders('))!.body.variables.q).toBe("updated_at:>='2026-10-26T17:55:00Z'");
   expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ revenue: 0, orders: 0 });
 });
 
@@ -411,7 +411,7 @@ test('a first sync that stops partway keeps the order pages it saved, and the ne
   await syncShopify(db, key, 'glow', fetchFn, NOW);
   expect(calls.find((c) => c.body.query.includes('orders('))!.body.variables.q).toBe("updated_at:>='2026-10-21T09:00:00Z'");
   expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow'").get()?.n).toBe(3);
-  expect(db.prepare("SELECT status, cursor FROM integrations WHERE id = 'shopify:glow'").get()).toMatchObject({ status: 'connected', cursor: '2026-10-22T09:00:00Z' });
+  expect(db.prepare("SELECT status, cursor FROM integrations WHERE id = 'shopify:glow'").get()).toMatchObject({ status: 'connected', cursor: '2026-10-26T17:55:00Z' });
 });
 
 test('only paid orders count as revenue: unpaid ones stay out, and one that expires unpaid drops out', async () => {

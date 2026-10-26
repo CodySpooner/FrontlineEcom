@@ -10,6 +10,13 @@ export function switchToReal(db: Db, storeId: string) {
   db.prepare('UPDATE stores SET demo = 0, connected = 1 WHERE id = ?').run(storeId);
 }
 
+/**
+ * Where the next incremental sync of a platform starts: this sync's start (`now`) minus 5 minutes of clock skew. Not
+ * the newest change seen: a refund made while the sync was reading would fall below that and never be fetched again.
+ * Callers keep the previous cursor if it's later; re-reading the overlap is safe because upserts are idempotent.
+ */
+export const cursorAt = (now: Date) => new Date(now.getTime() - 5 * 60_000);
+
 /** daily_metrics.ad_spend = spend across every ad network's campaigns for that store and day. */
 export function rebuildAdSpend(db: Db, storeId: string, dates: Iterable<string>) {
   const sum = db.prepare('SELECT coalesce(sum(d.spend), 0) AS spend FROM campaign_daily d JOIN campaigns c ON c.network = d.network AND c.id = d.campaign_id WHERE c.store_id = ? AND d.date = ?');

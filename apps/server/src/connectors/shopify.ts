@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { rebuildRevenue, setOrderItems, switchToReal } from './common';
+import { cursorAt, rebuildRevenue, setOrderItems, switchToReal } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -199,7 +199,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const filter = `updated_at:>='${since}'`;
     const products = await all((after) => q<{ products: { nodes: ShopifyProduct[]; pageInfo: PageInfo } }>(PRODUCTS_Q, { after, q: filter }).then((d) => d.products));
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: shop.ianaTimezone });
-    let newest = products.reduce((m, x) => (x.updatedAt > m ? x.updatedAt : m), since);
+    // A page's resume point never passes the sync start, so a product edited while orders page in is fetched again.
+    const start = cursorAt(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -254,12 +255,11 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
 
         rebuildRevenue(db, storeId, days);
         const last = page.nodes.at(-1)?.updatedAt;
-        if (last) db.prepare('UPDATE integrations SET cursor = ? WHERE id = ?').run(last, id);
+        if (last) db.prepare('UPDATE integrations SET cursor = ? WHERE id = ?').run(last < start ? last : start, id);
       });
-      newest = page.nodes.reduce((m, x) => (x.updatedAt > m ? x.updatedAt : m), newest);
       after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
     } while (after);
-    db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(newest, now.toISOString(), id);
+    db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(start > since ? start : since, now.toISOString(), id);
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Shopify sync failed');
   }

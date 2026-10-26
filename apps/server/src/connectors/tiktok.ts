@@ -3,7 +3,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { adRate, cents, rebuildAdSpend, rebuildRevenue, setOrderItems, switchToReal, type CampaignChange } from './common';
+import { adRate, cents, cursorAt, rebuildAdSpend, rebuildRevenue, setOrderItems, switchToReal, type CampaignChange } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -237,8 +237,8 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         setOrderItems(db, storeId, `tt-${o.id}`, (o.line_items ?? []).map((li) => ({ productId: `tt-${li.product_id}`, quantity: li.quantity ?? 1, revenue: Number(li.sale_price ?? 0) * (li.quantity ?? 1), cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);
-      const newest = [...products, ...orders].reduce((m, x) => Math.max(m, x.update_time), since);
-      db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(String(newest), now.toISOString(), id);
+      const next = Math.max(since, Math.floor(cursorAt(now).getTime() / 1000));
+      db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(String(next), now.toISOString(), id);
     });
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'TikTok Shop sync failed');
