@@ -16,7 +16,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
       `error`). `FakeEngine` (scripted, deterministic) and `ClaudeEngine` (Agent SDK `query()` on the owner's local Claude
       Code login, partial-message streaming, resume). Put shared event types in `packages/shared`.
 - [x] AGT-02 Role catalog: the 8 roles in `AGENT_ROLES` → system prompt, allowed tools, default autonomy, XP rules.
-- [ ] AGT-03 Playbooks `packages/agents/playbooks/<role>.md`: concise expert playbooks distilled from the installed skills
+- [x] AGT-03 Playbooks `packages/agents/playbooks/<role>.md`: concise expert playbooks distilled from the installed skills
       (ecommerce-ppc-strategy-planner, dropshipping-product-research, shopify-*, tiktok-shop-*, etsy-*,
       ecommerce-email-marketing-builder, ecommerce-landing-page, product-description-generator, competitor/pricing skills…).
 - [ ] AGT-04 Platform packs `packs/platform/<platform>.md`: shopify, tiktok_shop, etsy, amazon, woocommerce.
@@ -54,6 +54,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-03 Playbooks for all 8 roles (`packages/agents/playbooks/<role>.md`, ~950 words each: mission, operating loop with tools, frameworks + thresholds, approval wording, red lines, what to learn), distilled from the installed ecommerce skills + expert rules of thumb.
 - 2026-10-26 — AGT-06 Squads on core's `agents` table: `createSquad`/`ensureSquads`/`listAgents`/`updateAgent`, default autonomy `ask`, status derived (offline / waiting_approval + request title / idle); `GET/PATCH /api/agents` mounted in app.ts; `Autonomy`/`AgentUpdate` in shared.
 - 2026-10-26 — AGT-02 Role catalog `ROLES`: per-role prompt, KPI (feeds "measured win" XP in AGT-13), tool allowlist; `SQUAD_RULES`; Claude engine enables the role's WebSearch/WebFetch. Default autonomy lands with squads (AGT-06).
 - 2026-10-26 — AGT-01 `@frontline/agents`: `runAgent` + `Engine`, `fakeEngine` (scripted), `claudeEngine` (Agent SDK `query()`, partial streaming, resume, isolated settings/tools); `AgentEvent`/`StoreMemory` in shared. `FRONTLINE_AGENT_ENGINE=claude` switches engines.
