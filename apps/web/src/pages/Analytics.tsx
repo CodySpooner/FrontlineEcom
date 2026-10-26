@@ -382,7 +382,16 @@ function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number; beOf:
                     </div>
                   </td>
                   <td>{c.status === 'active' ? <span className="text-text-2">Active</span> : <Badge>{c.status === 'paused' ? 'Paused' : 'Archived'}</Badge>}</td>
-                  <td className="text-right">{money(c.dailyBudget, cur)}</td>
+                  <td className="text-right">
+                    {/* Synced as 0: a lifetime budget, budgets on its ad sets, or archived (core's setCampaignBudget refuses these). */}
+                    {c.dailyBudget ? (
+                      money(c.dailyBudget, cur)
+                    ) : (
+                      <span className="text-muted" title={c.status === 'archived' ? undefined : 'No daily budget of its own: a lifetime budget, or budgets on its ad sets'}>
+                        –
+                      </span>
+                    )}
+                  </td>
                   <td className="text-right">{money(c.spend, cur)}</td>
                   <td className="text-right">{money(c.revenue, cur)}</td>
                   <td className={cx('text-right font-semibold', c.spend ? TONE[roasTone(c.roas, beOf(c.storeId))] : 'text-muted')}>{times(c.roas, c.spend)}</td>

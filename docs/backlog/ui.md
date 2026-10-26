@@ -299,6 +299,8 @@ Orca's browser against the reference before ticking it.
       instead of the hand-built approximation DESIGN §3 said to replace once the art was in the repo.
 - [x] UI-116 Ask AI with several stores in view offers each store's Market Analyst instead of silently asking the first
       store's: the question goes to the store the owner picks (Enter still takes the first).
+- [x] UI-117 Analytics' campaigns table shows a dash, not "$0", for a campaign with no daily budget of its own (lifetime
+      budget, budgets on its ad sets, or archived: CORE-68/69 sync those as 0), with the reason on hover.
 
 ## Blocked
 
@@ -459,3 +461,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-114: `DemoJobsNote` (exported, Automation.test) is above the rules list when a store in view isn't connected and has a rule switched off. It names those stores (Intl.ListFormat, singular/plural), says connecting switches their squads' jobs on (agents' enableDefaultJobs at go-live) and that a demo run is scripted and free, and links to Integrations. Orca at 800px with the 3 demo stores: two muted lines under "0 of 24 on". Also asked agents to link the measured-win notification to `?tab=history` (UI-111's XP list)
 - 2026-10-26 — UI-115: the 1254×1254 transparent PNG was cropped to the art's alpha bbox and scaled to 400×93 (2× the ~196px logo slot, 35 KB) as apps/web/src/assets/frontline-logo.png. It is imported as a module, so Vite fingerprints it and it resolves under any base the desktop build uses (apps/web has no public/). BrandLogo is now an `<img alt="Frontline Ecom">` with width/height set. The <900px rail keeps its red "F" mark. Checked in Chrome at 1440: the real logo sits crisp above Dashboard. In Orca, at 800px (rail), it loads with naturalWidth 400
 - 2026-10-26 — UI-116: AskPalette builds one ask row per store the filter shows (`has`, so All stores = every store), keyed `ask:<agentId>` so only the row being asked says "Asking…". New AskPalette test: with two stores, ArrowDown + Enter starts glow:market_analyst. Orca at 800px with All stores: three rows (Pawsome Gear selected, Glow Haus, Peak Fit) under the question; no run started
+- 2026-10-26 — UI-117: the Budget/day cell is a muted dash when `dailyBudget` is 0, titled "No daily budget of its own: a lifetime budget, or budgets on its ad sets" unless the campaign is archived. Orca at 800px with a client-side patch (first campaign active with 0, second archived with 0): "– [title]", "Archived · –", and the third still reads $124. Patch dropped by reload
