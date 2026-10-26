@@ -52,7 +52,12 @@ test('Operations flags order problems once per order and kind; the owner resolve
   expect(await (await patch(open[1]!.id, { status: 'resolved', resolution: 'CJ shipped it, tracking sent' })).json()).toMatchObject({
     status: 'resolved', resolution: 'CJ shipped it, tracking sent', resolvedAt: expect.any(String),
   });
-  // Resolved issues sort last, and the same problem can be flagged again later.
+  // Within 3 days of the owner's resolution the same problem isn't flagged again (the order may not have caught up)…
+  expect((await run([flag()]))[0]).toBe(
+    `The owner resolved order ${orderId}'s late issue on ${new Date().toISOString().slice(0, 10)}: "CJ shipped it, tracking sent". Not flagged again within 3 days of that unless it got worse (a higher severity).`,
+  );
+  // …after that it can be, and resolved issues sort last.
+  db.prepare(`UPDATE order_issues SET resolved_at = ? WHERE id = ?`).run(new Date(Date.now() - 4 * 86_400_000).toISOString(), open[1]!.id);
   expect((await run([flag()]))[0]).toMatch(/^Flagged order/);
   expect(listOrderIssues(db, { storeIds: ['peak'] }).map((i) => [i.kind, i.status])).toEqual([['late', 'open'], ['refund', 'open'], ['late', 'resolved']]);
   expect((await app.request('/api/order-issues?status=closed')).status).toBe(400);
@@ -60,6 +65,15 @@ test('Operations flags order problems once per order and kind; the owner resolve
   const res = await patch(open[1]!.id, { status: 'open' });
   expect([res.status, await res.json()]).toEqual([409, { error: `Order ${orderId} already has a newer open late issue: work that one.` }]);
   expect(listOrderIssues(db, { storeIds: ['peak'], status: 'open' }).map((i) => i.kind)).toEqual(['late', 'refund']);
+});
+
+test('a problem the owner just resolved is flagged again only once it got worse', async () => {
+  await run([flag({ severity: 'medium', note: 'Unfulfilled 4 days, supplier CJ, no tracking' })]);
+  const id = String(db.prepare(`SELECT id FROM order_issues WHERE kind = 'late'`).get()?.id);
+  expect((await patch(id, { status: 'resolved', resolution: 'Emailed CJ, ships Friday' })).status).toBe(200);
+  const [same, worse] = await run([flag({ severity: 'medium', note: 'Unfulfilled 5 days, still no tracking' }), flag({ note: 'Unfulfilled 8 days, still no tracking' })]);
+  expect(same).toMatch(/^The owner resolved order \S+'s late issue on [\d-]+: "Emailed CJ, ships Friday"\. Not flagged again/);
+  expect(worse).toMatch(/^Flagged order \S+ \(late, high\)/);
 });
 
 test('issues the order has since answered close themselves: delivered, or supplier tracking arrived', async () => {

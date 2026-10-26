@@ -561,6 +561,18 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ orderId, ...i }, ctx) => {
       if (!ctx.db.prepare('SELECT 1 FROM orders WHERE store_id = ? AND id = ?').get(ctx.store.id, orderId)) return `No order ${orderId} in this store. Use list_orders for ids.`;
+      // The owner resolved it lately while the order still reads late ("emailed CJ, ships Friday"): the daily check would
+      // reopen it every morning until the order catches up. Again only once it's worse.
+      const done = ctx.db
+        .prepare(
+          `SELECT resolved_at, severity, resolution FROM order_issues r WHERE store_id = ? AND order_id = ? AND kind = ? AND status = 'resolved' AND resolved_at >= ?
+             AND NOT EXISTS (SELECT 1 FROM order_issues o WHERE o.store_id = r.store_id AND o.order_id = r.order_id AND o.kind = r.kind AND o.status = 'open')
+           ORDER BY resolved_at DESC LIMIT 1`,
+        )
+        .get(ctx.store.id, orderId, i.kind, ago(3));
+      const rank = ['low', 'medium', 'high'];
+      if (done && rank.indexOf(i.severity) <= rank.indexOf(String(done.severity)))
+        return `The owner resolved order ${orderId}'s ${i.kind} issue on ${String(done.resolved_at).slice(0, 10)}: "${String(done.resolution ?? '')}". Not flagged again within 3 days of that unless it got worse (a higher severity).`;
       const { issue, created, raised } = flagOrderIssue(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, orderId, ...i });
       if (created) return `Flagged order ${orderId} (${i.kind}, ${i.severity}) in the issue queue (${issue.id}).`;
       return raised ? `Raised order ${orderId}'s open ${i.kind} issue (${issue.id}) to ${i.severity}.` : `Order ${orderId} already has an open ${i.kind} issue (${issue.id}): ${issue.note}`;
