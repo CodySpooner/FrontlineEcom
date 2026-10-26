@@ -82,7 +82,8 @@ pnpm check    # typecheck + tests
   totals (in the base currency from Settings) at the latest rate. Currencies the ECB doesn't publish (AED, SAR, TWD,
   VND, most of Latin America and Africa) take the daily rate from the open currency-api feed (fawazahmed0, CC0).
   A second platform on a store (say a TikTok Shop next to its Shopify) must sell in the store's currency, else its sync
-  stops and says so: add it as a store of its own. Amazon as a second channel is converted (each day at that day's rate),
+  stops and says so: add it as a store of its own. A TikTok Shop's orders there keep their own costs and the store's fee %,
+  but leave the funnel (its shoppers never visit the site) and the site's per-order fee. Amazon as a second channel is converted (each day at that day's rate),
   and as its sales come without costs, profit estimates them: the store's own cost ratio over the last year plus Amazon's
   15% referral fee (instead of the store's fees; FBA fees aren't estimated). The funnel leaves its orders out.
   If the store's Shopify already imports its Amazon orders (Marketplace Connect), don't also connect Amazon to it: those

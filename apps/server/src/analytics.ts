@@ -15,7 +15,7 @@ export interface MetricRow {
   sessions?: number;
   addToCarts?: number;
   checkouts?: number;
-  /** Of `orders`, those from a sales channel with its own shoppers (Amazon next to the store's site): not in `sessions`. */
+  /** Of `orders`, those from a sales channel with its own shoppers (Amazon or TikTok Shop next to the store's site): not in `sessions`. */
   channelOrders?: number;
 }
 
@@ -111,6 +111,9 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
   const { rate } = fxFor(db, storeIds);
   const channel = (col: string) =>
     `iif(s.platform = 'amazon', 0, (SELECT coalesce(sum(c.${col}), 0) FROM channel_daily c WHERE c.store_id = d.store_id AND c.date = d.date))`;
+  // TikTok Shop next to the site keeps its orders (tt-) with their own costs: they leave only the funnel and the site's
+  // per-order fee. ponytail: the store's fee % still applies to them, for TikTok's own commission.
+  const tiktokOrders = `iif(s.platform = 'tiktok_shop', 0, (SELECT count(*) FROM orders o WHERE o.store_id = d.store_id AND o.local_date = d.date AND o.status = 'paid' AND o.id GLOB 'tt-*'))`;
   const ratios = new Map<string, number>();
   const ratio = (storeId: string) => {
     if (!ratios.has(storeId)) {
@@ -124,7 +127,7 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
   return (db
     .prepare(
       `SELECT d.store_id AS storeId, d.date, d.revenue, d.ad_spend AS adSpend, d.cogs, s.fee_percent AS feePercent, s.fee_per_order AS feePerOrder,
-         d.orders, d.sessions, d.add_to_carts AS addToCarts, d.checkouts, ${channel('orders')} AS channelOrders, ${channel('revenue')} AS channelRevenue
+         d.orders, d.sessions, d.add_to_carts AS addToCarts, d.checkouts, ${channel('orders')} + ${tiktokOrders} AS channelOrders, ${channel('revenue')} AS channelRevenue
        FROM daily_metrics d JOIN stores s ON s.id = d.store_id
        WHERE d.store_id IN (${storeIds.map(() => '?').join(',')}) AND d.date BETWEEN ? AND ?`,
     )

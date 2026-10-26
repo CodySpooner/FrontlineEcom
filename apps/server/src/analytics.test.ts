@@ -279,3 +279,16 @@ test("sales by platform split a channel next to the store's own platform (Amazon
   expect(s.byPlatform!.reduce((a, p) => a + p.revenue, 0)).toBeCloseTo(s.totals.revenue, 1);
   expect(s.byPlatform!.reduce((a, p) => a + p.orders, 0)).toBe(s.totals.orders);
 });
+
+test("a TikTok Shop's orders next to the site are a channel's too: out of the funnel and of the site's per-order fee", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES (?, ?, '2026-10-26T12:00:00Z', 20, ?, 'fulfilled', '2026-10-26')");
+  order.run('glow', 'tt-1', 'paid');
+  order.run('glow', 'tt-2', 'paid');
+  order.run('glow', 'tt-3', 'refunded'); // not in the day's orders
+  order.run('glow', '1001', 'paid'); // the Shopify site's own
+  order.run('peak', 'tt-9', 'paid'); // a TikTok Shop store's own orders aren't a channel
+  const day = (id: string) => loadRows(db, [id], 7, '2026-10-26').find((r) => r.date === '2026-10-26')?.channelOrders;
+  expect([day('glow'), day('peak')]).toEqual([2, 0]);
+});
