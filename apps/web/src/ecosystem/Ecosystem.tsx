@@ -16,6 +16,7 @@ import { loadDisplay } from './display';
 import { useDemoOffice } from './useDemoOffice';
 import { demoStats } from './demo';
 import { DemoAgentPanel } from './DemoAgentPanel';
+import { loadTheme } from './themes';
 
 const TABS = ['Office View', 'Department View', 'Agent List', 'Task Board', 'Performance'].map((label) => ({ value: label, label }));
 
@@ -27,6 +28,8 @@ export function Ecosystem() {
   const [createTeam, setCreateTeam] = useState(false);
   const [settings, setSettings] = useState(false), [quick, setQuick] = useState(false), [assignInitially, setAssignInitially] = useState(false);
   const [display, setDisplay] = useState(loadDisplay);
+  const [theme, setTheme] = useState(loadTheme);
+  useEffect(() => { try { localStorage.setItem('frontline.ecosystem.theme', theme); } catch { /* Use the selected theme for this session. */ } }, [theme]);
   useEffect(() => { try { localStorage.setItem('frontline.ecosystem.display', JSON.stringify(display)); } catch { /* Rendering still works when device storage is unavailable. */ } }, [display]);
   const live = useOffice(!demo), simulated = useDemoOffice(demo);
   const liveSeats = useSeats(!demo), liveStats = useOfficeStats(!demo);
@@ -53,7 +56,7 @@ export function Ecosystem() {
       <p className={`eco-connection ${demo ? 'eco-demo-banner' : ''}`} role="status"><StatusDot tone={office.connected && !office.error ? 'good' : 'idle'} />{demo ? 'DEMO MODE · All activity is simulated locally. No backend actions or model calls.' : office.error || (office.connected ? 'Connected to agent execution' : 'Reconnecting to agent execution…')}</p>
       <div className={`eco-workspace ${feed ? '' : 'eco-no-feed'}`}>
         <section className="eco-stage" aria-label={tab}>
-          {tab === 'Office View' ? <OfficeScene key={String(demo)} office={office.state} seats={seats.data ?? []} persist={!demo} onSelect={(id) => { setAssignInitially(false); setSelected(id); }} focus={focus} display={display} /> : <OfficeViews tab={tab} office={office.state} seats={seats.data ?? []} stats={stats.data} preview={demo} onSelect={(id) => { setAssignInitially(false); setSelected(id); }} />}
+          {tab === 'Office View' ? <OfficeScene key={String(demo)} office={office.state} seats={seats.data ?? []} persist={!demo} onSelect={(id) => { setAssignInitially(false); setSelected(id); }} focus={focus} display={display} theme={theme} /> : <OfficeViews tab={tab} office={office.state} seats={seats.data ?? []} stats={stats.data} preview={demo} onSelect={(id) => { setAssignInitially(false); setSelected(id); }} />}
         </section>
         {feed && <ActivityFeed office={office.state} seats={seats.data ?? []} onPreview={demo ? setSelected : undefined} onFocus={(id) => { setFocus({ id, at: Date.now() }); setTab('Office View'); }} />}
       </div>
@@ -61,7 +64,7 @@ export function Ecosystem() {
       <MissionPanel office={office.state} create={createTeam} onPreview={demo ? setSelected : undefined} onCreate={() => setCreateTeam(true)} onCloseCreate={() => setCreateTeam(false)} />
       {agent && seat && (demo ? <DemoAgentPanel key={agent.id} agent={agent} seat={seat} office={office.state} onClose={() => setSelected('')} onSimulate={simulated.simulate} /> : <AgentPanel key={agent.id} agent={agent} seat={seat} office={office.state} assignInitially={assignInitially} onClose={() => setSelected('')} onFocus={() => { setFocus({ id: agent.id, at: Date.now() }); setTab('Office View'); setSelected(''); }} />)}
       {deploy && <DeployWizard agents={office.state.agents} seats={seats.data ?? []} onClose={() => setDeploy(false)} />}
-      {settings && <OfficeSettings value={display} onChange={setDisplay} onClose={() => setSettings(false)} />}
+      {settings && <OfficeSettings value={display} onChange={setDisplay} theme={theme} onTheme={setTheme} onClose={() => setSettings(false)} />}
       {quick && <Dialog open onClose={() => setQuick(false)} title="Quick Assign"><p className="eco-profile-copy">Choose a deployed worker for your task.</p><div className="eco-quick-workers">{(seats.data ?? []).filter((s) => !s.archived).map((s) => { const a = office.state.agents.find((a) => a.id === s.agentId); return a && <Button key={s.agentId} onClick={() => { setQuick(false); setAssignInitially(true); setSelected(a.id); }}>{s.displayName || AGENT_ROLES[a.role].name} · {a.storeId}</Button>; })}</div>{!seats.data?.some((s) => !s.archived) && <Button onClick={() => { setQuick(false); setDeploy(true); }}>Deploy your first agent</Button>}</Dialog>}
     </div>
   );

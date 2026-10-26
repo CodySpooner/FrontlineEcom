@@ -9,8 +9,9 @@ import { workerActivity, type OfficeState } from './events';
 import { recentHandoff } from './communications';
 import { kickoff } from './meetings';
 import type { DisplayOptions } from './display';
+import type { OfficeThemeId } from './themes';
 
-export function OfficeScene({ office, onSelect, focus, display, seats, persist = true }: { office: OfficeState; onSelect: (agentId: string) => void; focus?: { id: string; at: number }; display: DisplayOptions; seats: OfficeSeat[]; persist?: boolean }) {
+export function OfficeScene({ office, onSelect, focus, display, seats, persist = true, theme }: { office: OfficeState; onSelect: (agentId: string) => void; focus?: { id: string; at: number }; display: DisplayOptions; seats: OfficeSeat[]; persist?: boolean; theme: OfficeThemeId }) {
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeRenderer>(undefined);
   const [desk, setDesk] = useState('');
@@ -25,13 +26,15 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
   const select = useRef(onSelect); select.current = onSelect;
   const latestFocus = useRef(focus); latestFocus.current = focus;
   const latestDisplay = useRef(display); latestDisplay.current = display;
+  const latestTheme = useRef(theme); latestTheme.current = theme;
   const choose = (deskId: string) => { setDesk(deskId); const worker = latestWorkers.current.find((w) => w.seat.deskId === deskId); if (worker) select.current(worker.seat.agentId); };
   useEffect(() => { scene.current?.setWorkers(workers); }, [seats, office]);
   useEffect(() => { if (focus) scene.current?.focusWorker(focus.id); }, [focus]);
   useEffect(() => { scene.current?.setDisplay(display); }, [display]);
+  useEffect(() => { scene.current?.setTheme(theme); }, [theme]);
   useEffect(()=>{
     let disposed=false; let renderer:OfficeRenderer|undefined;
-    createOffice(host.current!,choose).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setDisplay(latestDisplay.current);r.setWorkers(latestWorkers.current);if(latestFocus.current)r.focusWorker(latestFocus.current.id); } }).catch((e:unknown)=>{if(!disposed)setError(e instanceof Error ? e.message : 'Renderer unavailable');});
+    createOffice(host.current!,choose).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setTheme(latestTheme.current);r.setDisplay(latestDisplay.current);r.setWorkers(latestWorkers.current);if(latestFocus.current)r.focusWorker(latestFocus.current.id); } }).catch((e:unknown)=>{if(!disposed)setError(e instanceof Error ? e.message : 'Renderer unavailable');});
     const changed=()=>setFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange',changed);
     // Persist settled tiles outside the rendering loop; motion never waits for a network request.

@@ -9,9 +9,11 @@ import { activeRun, workerActivity, type OfficeState } from './events';
 import { WorkerPortrait } from './WorkerPortrait';
 import { TaskComposer } from './TaskComposer';
 import { officeApi } from './api';
+import { SeatEditor } from './SeatEditor';
 
 export function AgentPanel({ agent, seat, office, onClose, onFocus, assignInitially = false }: { agent: Agent; seat: OfficeSeat; office: OfficeState; onClose: () => void; onFocus: () => void; assignInitially?: boolean }) {
   const [assign, setAssign] = useState(assignInitially);
+  const [customize, setCustomize] = useState(false);
   const qc = useQueryClient();
   const archive = useMutation({ mutationFn: () => officeApi(`/api/ecosystem/seats/${encodeURIComponent(agent.id)}`, 'DELETE'), onSuccess: () => { qc.invalidateQueries({ queryKey: ['ecosystem', 'seats'] }); onClose(); } });
   const history = useRuns(agent.id), cancel = useCancelRun(), update = useUpdateAgent();
@@ -31,10 +33,12 @@ export function AgentPanel({ agent, seat, office, onClose, onFocus, assignInitia
       <Link className={buttonClass('ghost', 'sm')} to={`${base}?tab=history`}>View Activity History</Link>
       <Link className={buttonClass('ghost', 'sm')} to={`${base}?tab=settings`}>Configure Agent</Link>
       <Button size="sm" onClick={onFocus}>Focus Camera</Button>
+      <Button size="sm" onClick={() => setCustomize(!customize)} aria-expanded={customize}>Customize Worker</Button>
       <Button size="sm" disabled={update.isPending} onClick={() => update.mutate({ id: agent.id, enabled: current.status === 'offline' })}>{current.status === 'offline' ? 'Resume agent' : 'Pause agent'}</Button>
       {activity.run && activeRun(activity.run) && <Button size="sm" disabled={cancel.isPending} onClick={() => cancel.mutate(activity.run!.id)}>Cancel task</Button>}
     </div>
     {assign && <TaskComposer agent={current} office={office} />}
+    {customize && <SeatEditor seat={seat} onSaved={() => setCustomize(false)} />}
     {(cancel.error || update.error) && <ErrorState message={(cancel.error ?? update.error)!.message} />}
     {cancel.isSuccess && <p role="status" className="eco-profile-copy">Task cancelled.</p>}
     <Button size="sm" disabled={archive.isPending} onClick={() => archive.mutate()}>Archive office worker</Button>

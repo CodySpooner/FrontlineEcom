@@ -1,8 +1,9 @@
 import { OFFICE_GRID } from '@frontline/shared';
 import { DESKS, MAP_SIZE, MEETING, ROOMS, iso } from './world';
+import { DEPARTMENT_DECOR, OFFICE_THEMES, type OfficeTheme } from './themes';
 
 /** Original pixel art, cached once as a map texture. No external assets or requests. */
-export function paintOffice() {
+export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
   const canvas = document.createElement('canvas');
   canvas.width = MAP_SIZE.width; canvas.height = MAP_SIZE.height;
   const c = canvas.getContext('2d')!;
@@ -35,7 +36,7 @@ export function paintOffice() {
     rect(x-2,y-35,4,27,'#5d6040');
     for (let i = 0; i < 6; i++) {
       const side = i % 2 ? 1 : -1, yy = y-20-i*4;
-      poly([x,yy+5,x+side*19,yy-7,x+side*11,yy-9,x+side*3,yy-3],i%3 ? '#3e8056' : '#71a56d');
+      poly([x,yy+5,x+side*19,yy-7,x+side*11,yy-9,x+side*3,yy-3],i%3 ? theme.plants[0] : theme.plants[1]);
     }
   };
 
@@ -43,13 +44,13 @@ export function paintOffice() {
   poly(corners.flatMap((p) => [p.x,p.y+24]),'#030309');
   for (let y = 0; y < OFFICE_GRID.height; y++) for (let x = 0; x < OFFICE_GRID.width; x++) {
     const p = iso({x,y}); const room = ROOMS.find((r) => x >= r.x && x < r.x+8 && y >= r.y && y < r.y+8);
-    diamond(p.x,p.y,24,12,room ? (x+y)%2 ? '#30303b' : '#2b2b34' : (x+y)%2 ? '#1d202a' : '#22252e','#3c3b45');
+    diamond(p.x,p.y,24,12,room ? theme.floor[(x+y)%2]! : (x+y)%2 ? '#1d202a' : '#22252e','#3c3b45');
     if (!room && (x%9===8 || y%9===8)) { rect(p.x-3,p.y+10,6,2,'#57303b'); }
   }
   // The front edges expose the headquarters' foundation and red power rails.
   for (const [a,b] of [[corners[1]!,corners[2]!],[corners[2]!,corners[3]!]] as const) {
     poly([a.x,a.y,b.x,b.y,b.x,b.y+22,a.x,a.y+22],'#191a23','#3d3645');
-    poly([a.x,a.y+4,b.x,b.y+4,b.x,b.y+7,a.x,a.y+7],'#fc294a');
+    poly([a.x,a.y+4,b.x,b.y+4,b.x,b.y+7,a.x,a.y+7],theme.rail);
   }
   const props: { depth: number; draw: () => void }[] = [];
   for (const room of ROOMS) {
@@ -57,8 +58,8 @@ export function paintOffice() {
       for (const side of [0,1]) {
         const p = iso({x:room.x+(side ? 0:i),y:room.y+(side ? i:0)});
         const dx = side ? -24:24;
-        poly([p.x,p.y,p.x+dx,p.y+12,p.x+dx,p.y-38,p.x,p.y-50],side ? '#232330':'#181a24','#55515e');
-        poly([p.x,p.y-48,p.x+dx,p.y-36,p.x+dx,p.y-33,p.x,p.y-45],'#df2545');
+        poly([p.x,p.y,p.x+dx,p.y+12,p.x+dx,p.y-38,p.x,p.y-50],theme.wall[side ? 0 : 1],'#55515e');
+        poly([p.x,p.y-48,p.x+dx,p.y-36,p.x+dx,p.y-33,p.x,p.y-45],theme.rail);
         poly([p.x,p.y-8,p.x+dx,p.y+4,p.x+dx,p.y+6,p.x,p.y-6],'#912139');
         if (i%2===1) poly([p.x+dx*.2,p.y-36,p.x+dx*.8,p.y-29,p.x+dx*.8,p.y-13,p.x+dx*.2,p.y-20],'#263448','#384c69');
       }
@@ -68,23 +69,35 @@ export function paintOffice() {
     const pp = iso({x:room.x+7,y:room.y+1}); props.push({depth:pp.y,draw:()=>plant(pp.x,pp.y+8)});
     const decor = iso({x:room.x+6.5,y:room.y+6.5});
     props.push({depth:decor.y,draw:()=> {
-      if (room.id==='operations') {
+      const kind = DEPARTMENT_DECOR[room.id];
+      if (kind==='crates') {
         box(decor.x,decor.y,18,9,19,'#b2875f','#87603e','#62452f'); box(decor.x-14,decor.y-4,11,6,34,'#ca9f6b','#906940','#64452e');
         rect(decor.x-13,decor.y-25,3,12,'#e4be86');
-      } else if (room.id==='integrations') {
+      } else if (kind==='rack') {
         box(decor.x,decor.y,17,8,56,'#353947','#202333','#141724');
         for(let j=0;j<6;j++){ rect(decor.x-11,decor.y-43+j*7,9,3,'#0c111b');rect(decor.x-10,decor.y-43+j*7,2,2,j%2?'#ff3558':'#55dcb1'); }
-      } else if (room.id==='creative') {
+      } else if (kind==='camera') {
         rect(decor.x-2,decor.y-29,4,34,'#646878'); poly([decor.x,decor.y-5,decor.x-13,decor.y+8,decor.x-9,decor.y+9,decor.x,decor.y], '#73727f');
         rect(decor.x-10,decor.y-37,20,15,'#292d3d');rect(decor.x+10,decor.y-34,9,10,'#667184');rect(decor.x-7,decor.y-34,8,8,'#bb6ddd');
-      } else { box(decor.x,decor.y,17,8,19,'#444452'); rect(decor.x-12,decor.y-6,10,2,room.color); }
+      } else if (kind==='conference') {
+        box(decor.x,decor.y,38,19,22,theme.desk); screen(decor.x,decor.y-23,room.color,0,30,21);
+        for (const side of [-1,1]) { rect(decor.x+side*26-5,decor.y+4,10,14,'#1b202e'); rect(decor.x+side*26-3,decor.y+6,6,4,room.color); }
+      } else if (kind==='products' || kind==='library') {
+        box(decor.x,decor.y,22,11,34,theme.desk);
+        for (let j=0;j<6;j++) { rect(decor.x-18+j*6,decor.y-24,4,kind==='products'?10+(j%3)*3:18,j%2?room.color:'#a6a8c0'); rect(decor.x-17+j*6,decor.y-20,2,2,'#f4eee8'); }
+      } else if (kind==='charts' || kind==='campaigns') {
+        box(decor.x,decor.y,23,11,18,theme.desk); screen(decor.x,decor.y-12,room.color,kind==='charts'?0:2,45,32);
+      } else {
+        box(decor.x,decor.y,22,11,24,theme.desk); rect(decor.x-15,decor.y-22,30,18,room.color);
+        poly([decor.x-14,decor.y-21,decor.x,decor.y-12,decor.x+14,decor.y-21],'#dae5eb');
+      }
     }});
   }
   for (const [i,d] of DESKS.entries()) {
     const p = iso(d);
     props.push({depth:p.y+16,draw:()=> {
       diamond(p.x,p.y+14,28,14,'#13141b');
-      box(p.x,p.y+8,27,13,18,'#55515d','#383641','#242330');
+      box(p.x,p.y+8,27,13,18,theme.desk,'#383641','#242330');
       poly([p.x-26,p.y-1,p.x,p.y+12,p.x+26,p.y-1,p.x+26,p.y+1,p.x,p.y+14,p.x-26,p.y+1],d.color);
       screen(p.x,p.y-16,d.color,i);
       rect(p.x-9,p.y+2,15,4,'#a1a5b3'); rect(p.x+11,p.y+1,4,3,'#d4d5da');

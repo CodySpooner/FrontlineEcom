@@ -4,6 +4,7 @@ import { paintOffice } from './worldArt';
 import { fitCamera, zoomAt } from './camera';
 import { workerSprites } from './workerSprites';
 import type { DisplayOptions } from './display';
+import { OFFICE_THEMES, type OfficeThemeId } from './themes';
 
 export async function createOffice(host: HTMLElement, onDesk: (id: string) => void) {
   const app = new Application();
@@ -12,8 +13,10 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   app.canvas.setAttribute('aria-label', 'Interactive isometric office with ten departments and thirty workstations');
   app.canvas.tabIndex = 0;
   const world = new Container(); app.stage.addChild(world);
-  const mapTexture = Texture.from(paintOffice()); mapTexture.source.scaleMode = 'nearest';
-  world.addChild(new Sprite(mapTexture));
+  let mapTexture = Texture.from(paintOffice()); mapTexture.source.scaleMode = 'nearest';
+  const map = new Sprite(mapTexture); world.addChild(map);
+  let theme: OfficeThemeId = 'frontline';
+  const setTheme = (value: OfficeThemeId) => { if (theme === value) return; theme = value; const old = mapTexture; mapTexture = Texture.from(paintOffice(OFFICE_THEMES[value])); mapTexture.source.scaleMode = 'nearest'; map.texture = mapTexture; old.destroy(true); };
   const labels = new Container(); world.addChild(labels);
   for (const room of ROOMS) {
     const p = iso({x:room.x+4,y:room.y+7});
@@ -75,6 +78,6 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     meridians.scale.x=.75+Math.sin(elapsed/2400)*.2;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ resize.disconnect();app.destroy(true,{children:true});workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ resize.disconnect();app.destroy(true,{children:true});workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;
