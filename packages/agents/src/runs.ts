@@ -317,7 +317,7 @@ export function createRunManager(opts: RunManagerOptions) {
   for (const r of interrupted) {
     if (r.resume || Date.now() - Date.parse(String(r.created_at)) > 6 * 3_600_000 || !once(db, `retried:${r.id}`)) continue;
     const again = start(String(r.agent_id), String(r.task), undefined, r.parent_run_id ? String(r.parent_run_id) : undefined);
-    if (typeof again !== 'string') once(db, `retried:${again.id}`);
+    if (typeof again !== 'string') once(db, `retried:${again.id}`) && once(db, `retry:${r.id}:${again.id}`); // missions follow this link
   }
 
   return { start, cancel, cancelStore, cancelAgent, get, idle };

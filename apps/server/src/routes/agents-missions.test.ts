@@ -1,4 +1,4 @@
-import { advanceMissions, parseMission } from '@frontline/agents';
+import { parseMission } from '@frontline/agents';
 import type { AgentRun, NewSquadMission, SquadMission } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -74,21 +74,54 @@ test('a cancelled step blocks the steps that need it, and the owner hears the mi
   expect(notes()).toEqual([{ title: 'Mission stuck: Bundle test', body: "The Market Analyst's step was cancelled, so the steps that need it didn't start." }]);
 });
 
-test("a step whose run an app restart interrupted follows the run that retried it", async () => {
-  const run = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, error, transcript_json, created_at) VALUES (?, 'glow', 'glow:market_analyst', 'Pull the numbers.', ?, ?, ?, ?)`);
-  run.run('cut', 'error', 'Interrupted by an app restart', '[]', '2026-10-26T08:00:00.000Z');
-  run.run('retry', 'done', null, JSON.stringify([{ type: 'text_delta', text: 'Revenue is up 12% on last week.' }]), '2026-10-26T08:05:00.000Z');
-  const steps = [
-    { id: 'numbers', role: 'market_analyst', task: 'Pull the numbers.', dependsOn: [], runId: 'cut' },
-    { id: 'copy', role: 'copywriter', task: 'Write the ad copy from the numbers.', dependsOn: ['numbers'] },
-  ];
-  db.prepare(`INSERT INTO squad_missions (id, store_id, title, steps_json, created_at) VALUES ('m1', 'glow', 'Restarted', ?, '2026-10-26T08:00:00.000Z')`).run(JSON.stringify(steps));
-  advanceMissions(db, runManager(db).start);
-  const m = await settle('m1');
-  expect(m.steps[0]).toMatchObject({ status: 'done', runId: 'retry', deliverable: 'Revenue is up 12% on last week.' });
-  const copy = await get<AgentRun>(`/api/runs/${m.steps[1]!.runId}`);
-  expect(copy.parentRunId).toBe('retry');
-  expect(copy.task).toContain('- Market Analyst: Revenue is up 12% on last week.');
+test('after an app restart each step follows the retry of its own run, even when two missions gave the same brief', async () => {
+  db = openDb();
+  seedDemo(db);
+  const now = new Date().toISOString();
+  for (const id of ['m1', 'm2']) {
+    db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at) VALUES (?, 'glow', 'glow:market_analyst', 'Pull the numbers.', 'running', ?)`).run(`cut-${id}`, now);
+    const steps = [
+      { id: 'numbers', role: 'market_analyst', task: 'Pull the numbers.', dependsOn: [], runId: `cut-${id}` },
+      { id: 'copy', role: 'copywriter', task: 'Write the ad copy from the numbers.', dependsOn: ['numbers'] },
+    ];
+    db.prepare(`INSERT INTO squad_missions (id, store_id, title, steps_json, created_at) VALUES (?, 'glow', 'Restarted', ?, ?)`).run(id, JSON.stringify(steps), now);
+  }
+  app = createApp(db); // the app starts again: both cut-off runs are retried
+  const [a, b] = [await settle('m1'), await settle('m2')];
+  expect([a.status, b.status]).toEqual(['done', 'done']);
+  expect(new Set([a.steps[0]!.runId, b.steps[0]!.runId, 'cut-m1', 'cut-m2']).size).toBe(4);
+  const copy = await get<AgentRun>(`/api/runs/${a.steps[1]!.runId}`);
+  expect(copy.parentRunId).toBe(a.steps[0]!.runId);
+  expect(copy.task).toMatch(/\n- Market Analyst: .+/);
+});
+
+test('a step whose run fails before it starts (budget under a cent) fails once and blocks the mission once', async () => {
+  await send('PATCH', '/api/agents/glow:market_analyst', { dailyBudgetUsd: 0.005 });
+  const m = await create({
+    title: 'Broke launch',
+    steps: [
+      { id: 'numbers', role: 'market_analyst', task: 'Pull the numbers for the launch.' },
+      { id: 'copy', role: 'copywriter', task: 'Write the launch copy from the numbers.', dependsOn: ['numbers'] },
+    ],
+  });
+  expect([m.status, ...m.steps.map((s) => s.status)]).toEqual(['blocked', 'error', 'blocked']);
+  expect(db.prepare(`SELECT count(*) AS n FROM agent_runs WHERE agent_id = 'glow:market_analyst'`).get()?.n).toBe(1);
+  expect(notes()).toEqual([{ title: 'Mission stuck: Broke launch', body: "The Market Analyst's step failed, so the steps that need it didn't start." }]);
+});
+
+test('a step its agent turned down starts when the owner brings the agent back', async () => {
+  await send('PATCH', '/api/agents/glow:copywriter', { enabled: false });
+  const created = await create({
+    title: 'Paused copy',
+    steps: [
+      { id: 'numbers', role: 'market_analyst', task: 'Pull the numbers for the copy.' },
+      { id: 'copy', role: 'copywriter', task: 'Write the ad copy from the numbers.', dependsOn: ['numbers'] },
+    ],
+  });
+  const waiting = await settle(created.id);
+  expect([waiting.status, waiting.steps[1]!.status, waiting.steps[1]!.note]).toEqual(['running', 'waiting', 'This agent is offline. Redeploy it first.']);
+  await send('PATCH', '/api/agents/glow:copywriter', { enabled: true });
+  expect((await settle(created.id)).status).toBe('done');
 });
 
 test('plans are checked (a step only waits on steps before it); the template is a valid plan of the six roles', async () => {
@@ -96,6 +129,7 @@ test('plans are checked (a step only waits on steps before it); the template is 
   const res = await post([{ id: 'a', role: 'copywriter', task: 'Write the copy first.', dependsOn: ['b'] }, { id: 'b', role: 'market_analyst', task: 'Pull the numbers.' }]);
   expect([res.status, await res.json()]).toEqual([400, { error: 'Step a can only wait on steps listed before it.' }]);
   expect((await post([{ id: 'a', role: 'wizard', task: 'Do some magic for us.' }])).status).toBe(400);
+  expect((await post([{ id: 'a', role: 'constructor', task: 'Do some magic for us.' }])).status).toBe(400);
   expect((await post([])).status).toBe(400);
   expect((await post([{ id: 'a', role: 'copywriter', task: 'Write the copy first.' }], 'nope')).status).toBe(404);
   const [launch, ...more] = await get<Omit<NewSquadMission, 'storeId'>[]>('/api/squad-missions/templates');

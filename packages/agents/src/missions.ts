@@ -56,19 +56,19 @@ export function parseMission(body: unknown): NewSquadMission | string {
   const seen = new Set<string>();
   for (const s of b.steps) {
     if (typeof s?.id !== 'string' || !/^[a-z0-9-]{1,30}$/.test(s.id) || seen.has(s.id)) return 'Each step needs its own id (a-z, 0-9, -).';
-    if (typeof s.role !== 'string' || !(s.role in AGENT_ROLES)) return `Unknown role: ${String(s.role)}.`;
+    if (typeof s.role !== 'string' || !Object.hasOwn(AGENT_ROLES, s.role)) return `Unknown role: ${String(s.role)}.`;
     if (typeof s.task !== 'string' || s.task.trim().length < 10 || s.task.length > 1500) return `Step ${s.id} needs a task (10–1500 chars).`;
     if (s.dependsOn !== undefined && (!Array.isArray(s.dependsOn) || s.dependsOn.some((d) => !seen.has(d)))) return `Step ${s.id} can only wait on steps listed before it.`;
     seen.add(s.id);
   }
-  return { storeId: b.storeId, title, steps: b.steps.map((s) => ({ id: s.id, role: s.role, task: s.task.trim(), dependsOn: s.dependsOn ?? [] })) };
+  return { storeId: b.storeId, title, steps: b.steps.map((s) => ({ id: s.id, role: s.role, task: s.task.trim(), dependsOn: [...new Set(s.dependsOn ?? [])] })) };
 }
 
-export function createMission(db: DatabaseSync, m: NewSquadMission, start: Start, now = new Date()): SquadMission {
+/** Saves the plan; the next `advanceMissions` starts its first steps. */
+export function createMission(db: DatabaseSync, m: NewSquadMission, now = new Date()): SquadMission {
   const id = randomUUID();
   const steps: Stored[] = m.steps.map((s) => ({ ...s, dependsOn: s.dependsOn ?? [] }));
   db.prepare('INSERT INTO squad_missions (id, store_id, title, steps_json, created_at) VALUES (?, ?, ?, ?, ?)').run(id, m.storeId, m.title, JSON.stringify(steps), now.toISOString());
-  advanceMissions(db, start, id);
   return getMission(db, id)!;
 }
 
@@ -89,8 +89,27 @@ export function getMission(db: DatabaseSync, id: string): SquadMission | undefin
  * ended (status no longer `running`; each ends once). A step its agent can't take yet (budget used up, agent off) keeps
  * a note and is tried again next time.
  */
-export function advanceMissions(db: DatabaseSync, start: Start, missionId?: string): SquadMission[] {
-  const rows = db.prepare(`SELECT * FROM squad_missions WHERE ended_at IS NULL ${missionId ? 'AND id = ?' : ''} ORDER BY created_at`).all(...(missionId ? [missionId] : []));
+export function advanceMissions(db: DatabaseSync, start: Start): SquadMission[] {
+  // A run that can't even start (its budget is under a cent) ends inside start(), and that run's end calls back here
+  // before the step's run id is saved. The nested call only asks for another pass, so a step never starts twice.
+  if (advancing) return void (again = true), [];
+  advancing = true;
+  const moved: SquadMission[] = [];
+  try {
+    do {
+      again = false;
+      moved.push(...advanceOnce(db, start));
+    } while (again);
+  } finally {
+    advancing = false;
+  }
+  return moved;
+}
+let advancing = false;
+let again = false;
+
+function advanceOnce(db: DatabaseSync, start: Start): SquadMission[] {
+  const rows = db.prepare('SELECT * FROM squad_missions WHERE ended_at IS NULL ORDER BY created_at').all();
   const moved: SquadMission[] = [];
   for (const r of rows) {
     const stored = JSON.parse(String(r.steps_json)) as Stored[];
@@ -127,12 +146,13 @@ export function advanceMissions(db: DatabaseSync, start: Start, missionId?: stri
   return moved;
 }
 
-/** A step's run, or the one that retried it after an app restart (same agent and task, queued later). */
+/** A step's run, or the one that retried it after an app restart (`retry:<run>:<retry>` in done_once, from runs.ts). */
 function stepRun(db: DatabaseSync, id: string): { id: string; status: AgentRun['status'] } | undefined {
-  const r = db.prepare('SELECT id, agent_id, task, status, error, created_at FROM agent_runs WHERE id = ?').get(id);
+  const r = db.prepare('SELECT id, status, error FROM agent_runs WHERE id = ?').get(id);
   if (!r) return undefined;
+  const link = `retry:${id}:`;
   const retry = r.status === 'error' && r.error === INTERRUPTED
-    ? db.prepare('SELECT id FROM agent_runs WHERE agent_id = ? AND task = ? AND created_at > ? ORDER BY created_at LIMIT 1').get(String(r.agent_id), String(r.task), String(r.created_at))
+    ? db.prepare('SELECT substr(ref, ?) AS id FROM done_once WHERE substr(ref, 1, ?) = ?').get(link.length + 1, link.length, link)
     : undefined;
   return retry ? stepRun(db, String(retry.id)) : { id: String(r.id), status: r.status as AgentRun['status'] };
 }

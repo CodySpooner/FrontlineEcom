@@ -358,7 +358,9 @@ function startFresh(db: Db, store: Store) {
 
 /** Starts the mission steps that finished runs unblocked; the live feed sees every move, the owner hears when one ends. */
 function advanceSquadMissions(db: Db) {
-  for (const m of advanceMissions(db, runManager(db).start)) {
+  const runs = managers.get(db);
+  if (!runs) return; // a restart retry ended while the manager was being built: agentRoutes advances once it's ready
+  for (const m of advanceMissions(db, runs.start)) {
     publish({ type: 'mission', mission: m });
     if (m.status === 'running') continue;
     const stuck = m.steps.find((s) => s.status === 'error' || s.status === 'cancelled');
@@ -448,6 +450,7 @@ export function agentRoutes(db: Db) {
       }
       const agent = updateAgent(db, c.req.param('id'), { enabled: body.enabled, autonomy: body.autonomy, dailyBudgetUsd: body.dailyBudgetUsd });
       if (agent && body.enabled === false) runManager(db).cancelAgent(agent.id); // offline means it stops working now
+      if (agent) advanceSquadMissions(db); // a mission step this agent turned down (offline, budget spent) may start now
       return agent ? c.json(agent) : c.json({ error: 'Agent not found' }, 404);
     })
     .post('/api/agents/:id/runs', async (c) => {
@@ -469,9 +472,9 @@ export function agentRoutes(db: Db) {
       const input = parseMission(await c.req.json().catch(() => null));
       if (typeof input === 'string') return c.json({ error: input }, 400);
       if (!getStore(db, input.storeId)) return c.json({ error: 'Store not found' }, 404);
-      const mission = createMission(db, input, runs.start);
-      publish({ type: 'mission', mission });
-      return c.json(mission, 201);
+      const { id } = createMission(db, input);
+      advanceSquadMissions(db); // starts its first steps and puts it on the live feed
+      return c.json(getMission(db, id), 201);
     })
     .get('/api/runs', (c) =>
       c.json(listRuns(db, { agentId: c.req.query('agent'), storeIds: c.req.query('stores')?.split(',').filter(Boolean), limit: limit(c.req.query('limit')) })),
