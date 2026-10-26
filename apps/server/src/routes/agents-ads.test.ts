@@ -248,6 +248,8 @@ function approvedChange(id: string, title: string, revenueFactorAfter: number) {
   // What the run that asked for it learned; the outcome moves its confidence.
   writeMemory(db, { storeId: 'peak', agentId: 'peak:ad_strategist', kind: 'learning', text: `Basis for ${title}`, confidence: 0.6, runId: `run-${id}` });
   db.prepare(`UPDATE daily_metrics SET revenue = revenue * ? WHERE store_id = 'peak' AND date BETWEEN ? AND ?`).run(revenueFactorAfter, addDays(day, 1), addDays(day, 3));
+  // Spend as it was: judged on blended ROAS (a cut or raise in spend has its own test).
+  db.prepare(`UPDATE daily_metrics SET ad_spend = 100 WHERE store_id = 'peak' AND date BETWEEN ? AND ?`).run(addDays(day, -7), addDays(day, 3));
 }
 const outcomes = () => listMemory(db, 'peak').filter((m) => m.tags.includes('outcome'));
 const basis = (title: string) => listMemory(db, 'peak').find((m) => m.text === `Basis for ${title}`)?.confidence;
@@ -425,6 +427,35 @@ test('a budget raise is judged on what its extra spend brought vs break-even, no
   raise('scale-2', 'Raise UGC budget $250 → $500/day');
   checkAdOutcomes(db);
   expect(outcomes().map((m) => m.text)).toContain('"Raise UGC budget $250 → $500/day" did not help: blended ROAS 4.00 → 3.20 in the 3 days after.');
+});
+
+test('a pause or cut is judged on what the spend it took away was bringing vs break-even, not on blended ROAS (which rises when any spend goes)', () => {
+  const day = decided();
+  db.prepare(`UPDATE stores SET fee_percent = 0, fee_per_order = 0 WHERE id = 'peak'`).run();
+  db.prepare(`UPDATE daily_metrics SET revenue = 2000, cogs = 800, ad_spend = 500 WHERE store_id = 'peak' AND date >= ?`).run(addDays(day, -30)); // margin 60%: break-even 1.67
+  const after = (revenue: number, spend: number) =>
+    db.prepare(`UPDATE daily_metrics SET revenue = ?, cogs = ?, ad_spend = ? WHERE store_id = 'peak' AND date BETWEEN ? AND ?`).run(revenue, revenue * 0.4, spend, addDays(day, 1), addDays(day, 3));
+  const change = (id: string, title: string, kind: string, payload: object) =>
+    db.prepare(
+      `INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at, decided_at) VALUES (?, 'peak', 'peak:ad_strategist', NULL, ?, 'r', ?, 'approved', ?, ?)`,
+    ).run(id, title, JSON.stringify({ kind, payload }), `${day}T09:00:00Z`, `${day}T12:00:00Z`);
+  after(1500, 250);
+  change('cut', 'Lower Broad budget $500 → $250/day', 'ads.set_budget', { from: 500, to: 250 });
+  const xp = getAgent(db, 'peak:ad_strategist')!.xp;
+  checkAdOutcomes(db);
+  // Blended ROAS rose 4.00 → 6.00, but the 250/day it cut was bringing 500/day: 2.00, over the 1.67 break-even.
+  expect(outcomes().map((m) => m.text)).toEqual([
+    '"Lower Broad budget $500 → $250/day" did not help: -250 USD/day ad spend went with -500 USD/day revenue (ROAS of the spend cut 2.00 vs break-even 1.67) in the 3 days after.',
+  ]);
+  expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(xp);
+
+  after(1900, 0); // every campaign off: judged too, with no spend left after
+  change('pause', 'Pause Broad', 'ads.pause_campaign', {});
+  checkAdOutcomes(db);
+  expect(outcomes().map((m) => m.text)).toContain(
+    '"Pause Broad" worked: -500 USD/day ad spend went with -100 USD/day revenue (ROAS of the spend cut 0.20 vs break-even 1.67) in the 3 days after.',
+  );
+  expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(xp + 50);
 });
 
 test('a change that did not help is remembered too, without XP', async () => {

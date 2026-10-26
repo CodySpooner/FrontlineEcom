@@ -36,7 +36,7 @@ outcome checks.
    ends after the store went live learns nothing). Each run recalls the pins and the owner's notes and no's, plus the
    12 others that score best on relevance × recency × confidence; rewording a squad memory makes it the owner's. Outcome checks
    (`routes/agents-gamification.ts`, on dashboard reads and hourly) judge approved changes on real data later:
-   - ads: 3 days after vs 7 before (blended ROAS; a budget raise on its extra spend's ROAS vs break-even)
+   - ads: 3 days after vs 7 before (blended ROAS; a raise on its extra spend's ROAS, a pause or cut on the ROAS of the spend it took away, vs break-even)
    - products: their first 14 days on sale (from when first seen active; else from the day added)
    - prices and pages: 14 days before vs after
    - themes: 14 days before vs after

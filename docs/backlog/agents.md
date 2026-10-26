@@ -291,11 +291,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-163 A page the app can't publish on the store's platform isn't drafted. `draft_page` saved product pages on connected Amazon/TikTok Shop/Walmart stores and store pages on anything but Shopify/WooCommerce; `publish_page` then refused them, so they sat in the Store Builder after the owner had read them.
 - [x] AGT-164 A demo store's learning isn't shared with a niche that has a live store. `promote_niche_learning` took evidence from a demo store's seeded numbers, and once approved every store of the niche saw it, live ones included.
 - [x] AGT-165 Going live clears the niche learnings a store shared in its demo phase. They came from its seeded numbers like the memories go-live already clears, and every store of the niche kept reading them.
+- [x] AGT-166 A pause or budget cut is judged on what the spend it took away was bringing. Judged on blended ROAS, which rises whenever spend goes (even spend that paid back above break-even), every cut read as a win and taught the Ad Strategist to cut; a pause of all spend was never judged.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-166: an approved pause or budget cut whose spend did fall is judged on revenue lost per spend saved (per day, 3 after vs 7 before) against 30-day break-even ROAS: under it worked, at or over it didn't. Same uncosted-sales fallback to blended ROAS as raises (AGT-155); a pause that left no spend is judged now.
 - 2026-10-26 — AGT-165: `startFresh` deletes the store's own `niche_learnings` rows and counts them in its "starts fresh on real numbers" notice; other stores' learnings stay.
 - 2026-10-26 — AGT-164: a store that isn't connected can't propose a niche learning while a connected store shares its niche (`nicheKey`); with only demo stores in the niche it still can, so demo mode shows the feature. The automatic promotion offers already used live stores only.
 - 2026-10-26 — AGT-163: `draft_page` refuses on a connected store the platforms `publish_page` refuses (`PRODUCT_PAGE_PLATFORMS` for product pages, `PRODUCT_WRITE_PLATFORMS` for store pages) and says to put the page in the answer instead; demo stores draft anything.

@@ -92,20 +92,28 @@ export function checkAdOutcomes(db: Db, today?: string) {
     if (!synced(db, String(r.store_id), addDays(day, 3))) continue;
     const b = adWindow(db, String(r.store_id), addDays(day, -7), addDays(day, -1));
     const a = adWindow(db, String(r.store_id), addDays(day, 1), addDays(day, 3));
-    if (!b.spend || !a.spend) continue;
+    // A raise is judged on what its extra spend brought: blended ROAS dips as a winner scales even when it pays back.
+    // A pause or cut on what the spend it took away was bringing: blended ROAS rises when any spend goes, even spend
+    // that paid back. ponytail: per-day averages, store-wide; whatever else moved revenue in those days counts too.
+    const [extra, more] = [a.spend / 3 - b.spend / 7, a.revenue / 3 - b.revenue / 7];
+    // Not when many sales have no unit cost: break-even reads low there, so a losing raise would pass and a fair cut fail.
+    const costed = uncostedShare(db, String(r.store_id), addDays(day, -30)) < 0.1;
+    const budget = r.kind === 'ads.set_budget';
+    const raise = budget && Number(r.bto) > Number(r.bfrom) && extra > 0 && costed;
+    const cut = (!budget || Number(r.bto) < Number(r.bfrom)) && extra < 0 && costed;
+    if (!b.spend || (!a.spend && !cut)) continue;
     if (!once(db, `ads-outcome:${r.id}`)) continue; // judged once: an outcome the owner deleted stays deleted
     const [before, after] = [b.revenue / b.spend, a.revenue / a.spend];
-    // A raise is judged on what its extra spend brought: blended ROAS dips as a winner scales even when it pays back.
-    // ponytail: per-day averages, store-wide; whatever else moved revenue in those days counts too.
-    const [extra, more] = [a.spend / 3 - b.spend / 7, a.revenue / 3 - b.revenue / 7];
-    // Not when many sales have no unit cost: break-even reads low there, and a losing raise would pass.
-    const raise = r.kind === 'ads.set_budget' && Number(r.bto) > Number(r.bfrom) && extra > 0 && uncostedShare(db, String(r.store_id), addDays(day, -30)) < 0.1;
-    const breakEven = raise ? thresholds(economics(db, String(r.store_id), addDays(day, -30))).breakEven : 0;
-    const worked = raise ? more / extra >= breakEven : after > before;
+    const breakEven = raise || cut ? thresholds(economics(db, String(r.store_id), addDays(day, -30))).breakEven : 0;
+    const marginal = more / extra; // a cut's: the revenue that went per unit of spend that went
+    const worked = raise ? marginal >= breakEven : cut ? marginal < breakEven : after > before;
     const money = (n: number) => `${n < 0 ? '-' : '+'}${Math.round(Math.abs(n)).toLocaleString('en-US')} ${String(r.currency)}/day`;
+    const vs = `${marginal.toFixed(2)} vs break-even ${breakEven.toFixed(2)}`;
     const roas = raise
-      ? `${money(extra)} ad spend brought ${money(more)} revenue (incremental ROAS ${(more / extra).toFixed(2)} vs break-even ${breakEven.toFixed(2)})`
-      : `blended ROAS ${before.toFixed(2)} → ${after.toFixed(2)}`;
+      ? `${money(extra)} ad spend brought ${money(more)} revenue (incremental ROAS ${vs})`
+      : cut
+        ? `${money(extra)} ad spend went with ${money(more)} revenue (ROAS of the spend cut ${vs})`
+        : `blended ROAS ${before.toFixed(2)} → ${after.toFixed(2)}`;
     recordOutcome(db, `ads:${r.id}`, worked, {
       storeId: String(r.store_id), agentId: String(r.agent_id), kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'ads'],
       text: `"${r.title}" ${worked ? 'worked' : 'did not help'}: ${roas} in the 3 days after.`,
@@ -117,8 +125,10 @@ export function checkAdOutcomes(db: Db, today?: string) {
     award(db, {
       ref: `win:${r.id}`, amount: XP.win, storeId: String(r.store_id), agentId: String(r.agent_id),
       reason: raise
-        ? `Measured win: incremental ROAS ${(more / extra).toFixed(2)} vs break-even ${breakEven.toFixed(2)} after "${r.title}"`
-        : `Measured win: ROAS ${before.toFixed(2)} → ${after.toFixed(2)} after "${r.title}"`,
+        ? `Measured win: incremental ROAS ${vs} after "${r.title}"`
+        : cut
+          ? `Measured win: the spend "${r.title}" cut was returning ${marginal.toFixed(2)}, under break-even ${breakEven.toFixed(2)}`
+          : `Measured win: ROAS ${before.toFixed(2)} → ${after.toFixed(2)} after "${r.title}"`,
     });
   }
 }
