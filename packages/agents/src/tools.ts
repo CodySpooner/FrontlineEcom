@@ -20,6 +20,8 @@ export interface ToolEnv {
   competitors?: (storeId: string) => { competitors: Competitor[]; priceChanges: PriceChange[]; ads: (AdSnapshotData & { competitor: string })[] };
   /** Official MCP servers the store has connected (never in demo mode: no credentials, no servers). */
   externalMcp?: (storeId: string) => Partial<Record<ExternalMcpKind, ExternalMcp>>;
+  /** Adds a product found on the web to core's research feed; returns it with its AI score. */
+  recordFind?: (find: Omit<ResearchProduct, 'id' | 'margin' | 'score' | 'scoreParts'>) => Promise<ResearchProduct>;
   /** Core's research feed (scored trending products). */
   research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number }) => Promise<ResearchProduct[]>;
   runId?: string;
@@ -166,6 +168,28 @@ export const APP_TOOLS: AppTool[] = [
     },
   }),
   defineTool({
+    name: 'record_product_find',
+    description:
+      'Add a product you found (web, marketplaces, supplier sites) to the research feed so it gets the same AI score as the feed and the owner sees it there. Returns the scored row. Use real numbers; estimate trend/competition only with a stated basis.',
+    input: {
+      title: z.string().min(3).max(120),
+      category: z.string().min(2).max(60),
+      source: z.enum(['tiktok', 'shopify', 'amazon', 'aliexpress']).describe('where you saw it selling'),
+      cost: z.number().positive().describe('supplier cost incl. shipping'),
+      price: z.number().positive().describe('suggested sell price'),
+      compareAt: z.number().positive(),
+      trend: z.number().describe('demand growth over the last 30 days, %'),
+      competition: z.number().min(0).max(100).describe('0-100, lower = fewer competing sellers/ads'),
+      shippingDays: z.number().int().min(1).max(60),
+      image: z.string().url().optional(),
+    },
+    run: async (find, ctx) => {
+      if (!ctx.recordFind) return 'The research feed is not available.';
+      const p = await ctx.recordFind({ ...find, niche: ctx.store.niche });
+      return `Added to the research feed as ${p.id}: AI score ${p.score} (margin ${p.scoreParts.margin}, trend ${p.scoreParts.trend}, competition ${p.scoreParts.competition}, shipping ${p.scoreParts.shipping}), margin ${p.margin}%.`;
+    },
+  }),
+  defineTool({
     name: 'research_feed',
     description:
       'Trending product candidates with cost, price, margin %, 30-day demand trend %, competition (0-100, lower is better), shipping days and AI score (CSV, best first). Defaults to the store niche.',
@@ -246,7 +270,10 @@ export const APP_TOOLS: AppTool[] = [
     input: {
       title: z.string().max(80).describe('short imperative, e.g. "Pause 2 losing ad sets"'),
       reason: z.string().max(400).describe('the evidence with numbers and period'),
-      kind: z.string().max(40).describe('action type, e.g. pause_ad_set, change_budget, publish_page, add_product'),
+      kind: z
+        .string()
+        .max(40)
+        .describe('action type, e.g. pause_ad_set, change_budget, publish_page; store.add_products with payload {products: [{researchProductId?, title, price, compareAt?, cost}]}'),
       payload: z.record(z.string(), z.unknown()).describe('everything needed to carry the action out'),
       amountUsd: z.number().min(0).optional().describe("money at stake per day in USD (budget added, spend, refund total); lets autopilot decide within the owner's cap"),
     },

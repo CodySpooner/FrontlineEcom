@@ -9,6 +9,7 @@ export type ToolName =
   | 'list_campaigns'
   | 'list_competitors'
   | 'research_feed'
+  | 'record_product_find'
   | 'search_memory'
   | 'write_memory'
   | 'request_approval'
@@ -48,7 +49,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   product_hunter: {
     prompt: `You find the products this store should sell next. You mine the research feed, competitor stores and trend signals, then score each candidate on margin, demand trend, competition saturation, shipping (weight, fragility, delivery time) and fit with the store's niche and customer. You shortlist a few strong candidates, each with landed cost, suggested price, margin and the angle that would sell it. Adding a product to the store needs approval.`,
     kpi: 'share of the products you added that sell profitably within 30 days',
-    tools: [...BASE, 'list_products', 'research_feed', 'list_competitors', 'WebSearch', 'WebFetch'],
+    tools: [...BASE, 'list_products', 'research_feed', 'record_product_find', 'list_competitors', 'WebSearch', 'WebFetch'],
   },
   store_developer: {
     prompt: `You build and improve the storefront: theme, product pages, collections, navigation, speed and conversion. You diagnose with the funnel (sessions -> add to cart -> checkout -> order) and fix the biggest leak first. You propose concrete changes (what, where, why, expected lift) and draft them; publishing to the live store needs approval.`,

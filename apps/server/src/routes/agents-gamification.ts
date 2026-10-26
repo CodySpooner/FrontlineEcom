@@ -4,7 +4,8 @@ import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
 import { localDate } from '../dates';
 import type { Db } from '../db';
-import { publish, subscribe } from '../live';
+import { publish } from '../live';
+import { onApproved } from './agents-actions';
 import { listStores } from '../stores';
 
 /** awardXp + an `xp` live message (XP toast / level-up burst). */
@@ -27,20 +28,11 @@ const summary = (db: Db, storeIds: string[], range: 7 | 30) => {
 
 const watched = new WeakSet<Db>();
 
-/** Approved requests pay the agent that made them. The bus is process-wide, so the handler holds the DB weakly. */
+/** Approved requests pay the agent that made them. */
 function watchApprovals(db: Db) {
   if (watched.has(db)) return;
   watched.add(db);
-  const ref = new WeakRef(db);
-  const off = subscribe((m) => {
-    const db = ref.deref();
-    if (!db) return off();
-    if (m.type !== 'approval' || m.approval.status !== 'approved') return;
-    if (!db.prepare(`SELECT 1 FROM approvals WHERE id = ? AND status = 'approved'`).get(m.approval.id)) return; // another DB's (tests)
-    const { id, title, storeId, agentId } = m.approval;
-    // Next tick: publishing inside this publish would reach other listeners before the approval itself.
-    setImmediate(() => award(db, { ref: `approval:${id}`, amount: XP.approved, reason: `Request approved: ${title}`, storeId, agentId }));
-  });
+  onApproved(db, (db, { id, title, storeId, agentId }) => award(db, { ref: `approval:${id}`, amount: XP.approved, reason: `Request approved: ${title}`, storeId, agentId }));
 }
 
 function facts(db: Db): Facts {

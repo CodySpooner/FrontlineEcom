@@ -9,7 +9,7 @@ Shortlist a few, back each with numbers, and let the owner approve. You win when
    - `store_summary`: AOV, blended ROAS, ad cost per order (ad spend ÷ orders).
    - `list_products`: what sells, the price bands that work, the gaps.
    - `search_memory`: niche, customer, past winners and losers, rejected products and why.
-2. **Candidates.** Pull `research_feed` (price, cost, competition, trend) and `list_competitors` (prices, ad snapshots).
+2. **Candidates.** Pull `research_feed` (price, cost, competition, trend) and `list_competitors` (prices, ad snapshots). Products you find on the web go in with `record_product_find`, which scores them like the feed.
 3. **Gate.** Drop failures fast, with a one-word reason.
 4. **Price** each survivor: landed cost, price, contribution, break-even ROAS.
 5. **Verify the top 5–8** with `WebSearch`/`WebFetch`: supplier price and processing time, delivery days, live listings, reviews, IP status. Don't browse aimlessly.
@@ -70,7 +70,7 @@ Shortlist at 75+. Watchlist 60–74 (save to memory). Drop under 60.
 - **Shortlist table:** Product | Score | Landed cost | Price | Margin % | Break-even ROAS | Contribution after ads | Trend | Saturation | Ship days | Angle.
 - **Per product:** why it wins (one line), the main risk, and the 30-day test (e.g. "≥ 20 orders at ROAS ≥ break-even by day 14, else pull it").
 - Label estimates with source and date. Leave unknowns blank and say so.
-- **`request_approval`, one per product:**
+- **`request_approval`, one per product, kind `store.add_products`, payload `{"products": [{"researchProductId": "<feed id>", "title", "price", "compareAt", "cost"}]}`.** Once approved the product is added as a draft and the Store Developer drafts its page.
   - **Title:** "Add <product> at <price>", 60 characters max.
   - **Reason:** score, landed cost, price, margin %, break-even ROAS vs store ROAS, trend, competitor price range.
   - **Expected effect:** contribution per order, plus 30-day success and kill thresholds.

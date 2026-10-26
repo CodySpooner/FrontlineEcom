@@ -16,6 +16,7 @@ import {
   type ToolEnv,
 } from '@frontline/agents';
 import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type ResearchProduct, type StartRunInput } from '@frontline/shared';
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
 import { approvalsHook, decide } from '../approvals';
@@ -24,6 +25,7 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
+import { addProducts, onApproved } from './agents-actions';
 import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes } from './agents-creatives';
 import { getCredentials } from '../integrations';
@@ -54,6 +56,13 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
       .all(storeId)
       .map((r) => ({ competitor: String(r.name), ...(JSON.parse(String(r.data_json)) as AdSnapshotData) })),
   }),
+  recordFind: async (find) => {
+    const id = `find-${randomUUID().slice(0, 8)}`;
+    db.prepare(
+      'INSERT INTO research_products (id, title, category, niche, image, source, cost, price, compare_at, trend, competition, shipping_days) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(id, find.title, find.category, find.niche, find.image ?? null, find.source, find.cost, find.price, find.compareAt, find.trend, find.competition, find.shippingDays);
+    return (await (await researchRoutes(db).request(`/api/research/${id}`)).json()) as ResearchProduct;
+  },
   research: async (q) => {
     const params = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
     const res = await researchRoutes(db).request(`/api/research?${params}`);
@@ -93,6 +102,10 @@ export function runManager(db: Db): RunManager {
   if (!manager) {
     manager = createRunManager({ db, env: toolEnv(db), store: (id) => getStore(db, id), ...runHooks(db) });
     managers.set(db, manager);
+    // Approved actions that can come from outside a run (research screen, automations) are carried out here.
+    onApproved(db, (db, a) => {
+      if (a.action.kind === 'store.add_products') addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task));
+    });
   }
   return manager;
 }
