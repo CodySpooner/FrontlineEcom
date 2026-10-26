@@ -131,7 +131,7 @@ Orca's browser against the reference before ticking it.
       sparklines and charts without NaN/Infinity/"$NaN" or broken SVG paths; chart helpers tested with empty series.
 - [x] UI-41 Narrow status dot: below 900px the System Status card is hidden, so "Reconnecting…" and "needs attention"
       never show in Orca or small windows. Add a compact status dot to the collapsed sidebar (label as title + sr text).
-- [ ] UI-42 Recent decisions: the bell drawer lists the last few approved/denied requests (outcome, who, when) under
+- [x] UI-42 Recent decisions: the bell drawer lists the last few approved/denied requests (outcome, who, when) under
       the waiting ones, so a mis-tapped Deny is visible right where it happened.
 - [ ] UI-43 First-sync progress: while a newly connected store imports its history, Integrations and the Dashboard say
       so ("Importing order history: through Mar 2025") instead of showing a half-empty dashboard. Needs core: see Inbox.
@@ -200,3 +200,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-40: zero-data fixture store (ui-fx-empty; generated rows deleted, store deleted after, no rows left). All 11 pages had no NaN/Infinity/undefined text and no NaN SVG attributes (empty sparklines/charts handled; `niceTicks(0)` tested). Fixed: a period with nothing before it showed a green "+0.0%". KPI tiles and the Analytics headline now say a muted "New" (grey sparkline, sr text) via `noBaseline(prev, now)` (tested). The per-store table keeps the muted +0.0% (byStore has no `previous`)
 - 2026-10-26 — UI-41: below 900px the collapsed sidebar ends in the System Status dot (role=status, "System status: …" as title + sr text; same tone/pulse as the card, whose text is now computed once). Orca 800: dot at the bottom of the rail, and across an API restart it read Reconnecting… → All agents online
 - 2026-10-26 — UI-40 follow-up: core added `byStore[].previous`, so the Analytics per-store table also says a muted "New" instead of +0.0% for a store with nothing in the previous period. Chrome: the 3 demo stores unchanged
+- 2026-10-26 — UI-42: the bell drawer shows "Recently decided" (last 3 approved/denied by `decidedAt`): Approved / Autopilot approved (green ✓) or Denied (muted ✕), the title, then role · store · when. Test (autopilot row) + Chrome with 2 ui-fx decided fixtures (deleted after)

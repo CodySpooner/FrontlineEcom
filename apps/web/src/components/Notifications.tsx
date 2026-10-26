@@ -1,8 +1,8 @@
 // UI-20 Notification center: the bell in the top bar and its drawer.
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
-import { Bell, CircleAlert, CircleCheck, Info, ShieldCheck, type LucideIcon } from 'lucide-react';
-import { AGENT_ROLES, type AppNotification, type NotificationKind } from '@frontline/shared';
+import { Bell, CircleAlert, CircleCheck, CircleX, Info, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { AGENT_ROLES, type AppNotification, type ApprovalRequest, type NotificationKind } from '@frontline/shared';
 import { useAgents, useApprovals, useMarkRead, useNotifications } from '../api/client';
 import { ago } from '../lib/format';
 import { ApprovalCard } from './Chat';
@@ -44,12 +44,19 @@ export function NotificationBell() {
 
 function Drawer({ onClose }: { onClose: () => void }) {
   const approvals = useApprovals().data ?? [];
+  const decided = [...(useApprovals('approved').data ?? []), ...(useApprovals('denied').data ?? [])]
+    .sort((a, b) => Date.parse(b.decidedAt ?? b.createdAt) - Date.parse(a.decidedAt ?? a.createdAt))
+    .slice(0, 3);
   const agents = useAgents().data ?? [];
   const q = useNotifications();
   const read = useMarkRead();
   const navigate = useNavigate();
   const { name } = useStoreSelection();
   const unread = q.data?.filter((n) => !n.readAt).length ?? 0;
+  const who = (a: ApprovalRequest) => {
+    const role = agents.find((g) => g.id === a.agentId)?.role;
+    return `${role ? AGENT_ROLES[role].name : 'Agent'} · ${name(a.storeId)}`;
+  };
   const open = (n: AppNotification) => {
     if (!n.readAt) read.mutate([n.id]);
     if (n.link) {
@@ -62,10 +69,33 @@ function Drawer({ onClose }: { onClose: () => void }) {
       {approvals.length > 0 && (
         <section aria-label="Waiting on you" className="grid gap-2">
           <h3 className="font-display text-[11px] font-semibold tracking-[.15em] text-muted uppercase">Waiting on you · {approvals.length}</h3>
-          {approvals.map((a) => {
-            const role = agents.find((g) => g.id === a.agentId)?.role;
-            return <ApprovalCard key={a.id} a={a} who={`${role ? AGENT_ROLES[role].name : 'Agent'} · ${name(a.storeId)}`} />;
-          })}
+          {approvals.map((a) => (
+            <ApprovalCard key={a.id} a={a} who={who(a)} />
+          ))}
+        </section>
+      )}
+      {decided.length > 0 && (
+        <section aria-label="Recently decided" className="grid gap-1.5">
+          <h3 className="font-display text-[11px] font-semibold tracking-[.15em] text-muted uppercase">Recently decided</h3>
+          <ul className="grid gap-1">
+            {decided.map((a) => {
+              const ok = a.status === 'approved';
+              const Icon = ok ? CircleCheck : CircleX;
+              return (
+                <li key={a.id} className="flex items-start gap-2.5 px-1 py-1 text-[13px]">
+                  <Icon aria-hidden className={cx('mt-0.5 size-4 shrink-0', ok ? 'text-good' : 'text-muted')} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate" title={a.title}>
+                      <b className="font-semibold">{ok ? (a.action.auto ? 'Autopilot approved' : 'Approved') : 'Denied'}</b> · {a.title}
+                    </span>
+                    <span className="block text-xs text-muted">
+                      {who(a)} · {ago(a.decidedAt ?? a.createdAt)}
+                    </span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
         </section>
       )}
       <div className="flex items-center justify-between gap-2">
