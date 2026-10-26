@@ -1,0 +1,361 @@
+// UI-09 Product Research: browse scored products by tab, save them to lists, send winners to a store (as an approval).
+import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Baby, Bookmark, Cpu, Dumbbell, Lamp, Package, PawPrint, Search, Shirt, Sparkles, Tent, type LucideIcon } from 'lucide-react';
+import { NICHES, type Niche, type ProductList, type ResearchProduct, type ResearchSource, type ResearchTab } from '@frontline/shared';
+import { useAddToStore, useListActions, useLists, useResearch, useStartRun } from '../api/client';
+import { Hero } from '../components/Hero';
+import { useStoreSelection } from '../components/StoreFilter';
+import { Badge, Button, cx, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Tabs } from '../components/ui';
+import { cents } from '../lib/format';
+import { NAV } from '../nav';
+
+type Tab = ResearchTab | 'lists';
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'trending', label: 'Trending' },
+  { value: 'high_margin', label: 'High Margin' },
+  { value: 'low_competition', label: 'Low Competition' },
+  { value: 'tiktok_viral', label: 'TikTok Viral' },
+  { value: 'shopify_winners', label: 'Shopify Winners' },
+  { value: 'lists', label: 'My Lists' },
+];
+
+// ponytail: demo data has no images, so each product shows its niche's icon; real connectors fill `image`.
+const NICHE_ICON: Record<Niche, LucideIcon> = { beauty: Sparkles, pet: PawPrint, tech: Cpu, fitness: Dumbbell, home: Lamp, fashion: Shirt, kids: Baby, outdoor: Tent, other: Package };
+const SOURCE: Record<ResearchSource, string> = { tiktok: 'TikTok', shopify: 'Shopify', amazon: 'Amazon', aliexpress: 'AliExpress' };
+const SAVED = 'Saved';
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+export function Research() {
+  const nav = NAV[3]!;
+  const [params, setParams] = useSearchParams();
+  const tab = TABS.find((t) => t.value === params.get('tab'))?.value ?? 'trending';
+  const [niche, setNiche] = useState('');
+  const [q, setQ] = useState('');
+  const query = useDeferredValue(q.trim());
+  const [open, setOpen] = useState<ResearchProduct>();
+  const saved = useSaved();
+
+  const { ids, stores } = useStoreSelection();
+  const store = stores.find((s) => s.id === ids[0]) ?? stores[0];
+  const start = useStartRun();
+  const navigate = useNavigate();
+  const research = () =>
+    store &&
+    start.mutate(
+      { agentId: `${store.id}:product_hunter`, task: `Find 5 new winning ${niche ? `${niche} ` : ''}products for this store, with margin, trend and competition for each.` },
+      { onSuccess: (r) => navigate(`/agents/${encodeURIComponent(r.agentId)}`) },
+    );
+
+  return (
+    <>
+      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
+      <Tabs label="Research" tabs={TABS} value={tab} onChange={(t) => setParams(t === 'trending' ? {} : { tab: t }, { replace: true })} />
+      {tab !== 'lists' && (
+        <div className="my-4 flex flex-wrap items-center gap-2">
+          <label className="relative min-w-56 flex-1 min-[900px]:max-w-80">
+            <span className="sr-only">Search products</span>
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
+            <input
+              type="search"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search products or categories"
+              className="w-full rounded-lg border border-line-2 bg-bg-2 py-2 pr-3 pl-9 text-[13px] placeholder:text-muted focus:border-red/60 focus:outline-none"
+            />
+          </label>
+          <label>
+            <span className="sr-only">Niche</span>
+            <select value={niche} onChange={(e) => setNiche(e.target.value)} className="cursor-pointer rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] focus:border-red/60 focus:outline-none">
+              <option value="">All niches</option>
+              {NICHES.map((n) => (
+                <option key={n} value={n}>
+                  {cap(n)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button variant="primary" className="ml-auto" disabled={!store || start.isPending} onClick={research} title={store && `Ask ${store.name}'s Product Hunter to find new winners`}>
+            <Sparkles className="size-4" />
+            AI Research
+          </Button>
+          {start.isError && (
+            <p role="alert" className="w-full text-right text-xs text-red">
+              {start.error.message}
+            </p>
+          )}
+        </div>
+      )}
+      {tab === 'lists' ? (
+        <Lists onOpen={setOpen} saved={saved} />
+      ) : (
+        <Results tab={tab} niche={niche} q={query} onOpen={setOpen} saved={saved} onClear={() => (setQ(''), setNiche(''))} />
+      )}
+      <ProductDialog product={open} onClose={() => setOpen(undefined)} />
+    </>
+  );
+}
+
+/** The bookmark on a card = membership in the "Saved" list (created on first save). */
+function useSaved() {
+  const lists = useLists().data ?? [];
+  const { create, toggle } = useListActions();
+  const list = lists.find((l) => l.name === SAVED);
+  return {
+    has: (id: string) => !!list?.productIds.includes(id),
+    toggle: async (id: string) => {
+      const l = list ?? (await create.mutateAsync(SAVED));
+      toggle.mutate({ listId: l.id, productId: id, on: !l.productIds.includes(id) });
+    },
+  };
+}
+type Saved = ReturnType<typeof useSaved>;
+
+function Results({ tab, niche, q, onOpen, saved, onClear }: { tab: ResearchTab; niche: string; q: string; onOpen: (p: ResearchProduct) => void; saved: Saved; onClear: () => void }) {
+  const r = useResearch(tab, niche, q);
+  if (r.isPending) return <LoadingState rows={4} />;
+  if (r.isError) return <ErrorState message="Couldn't load research." onRetry={() => r.refetch()} />;
+  if (!r.data.items.length) {
+    return (
+      <EmptyState icon={Search} title="No products match" action={<Button onClick={onClear}>Clear filters</Button>}>
+        Try another niche or a broader search.
+      </EmptyState>
+    );
+  }
+  return (
+    <>
+      <p className="mb-3 text-xs text-muted">{r.data.total} products, best first</p>
+      <Grid className={cx(r.isPlaceholderData && 'opacity-60')}>
+        {r.data.items.map((p) => (
+          <ProductCard key={p.id} p={p} onOpen={() => onOpen(p)} saved={saved} />
+        ))}
+      </Grid>
+    </>
+  );
+}
+
+const Grid = ({ className, children }: { className?: string; children: ReactNode }) => (
+  <div className={cx('grid grid-cols-1 gap-3.5 transition-opacity min-[560px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1280px]:grid-cols-4', className)}>{children}</div>
+);
+
+function ProductCard({ p, onOpen, saved }: { p: ResearchProduct; onOpen: () => void; saved: Saved }) {
+  const Icon = NICHE_ICON[p.niche];
+  const on = saved.has(p.id);
+  return (
+    <article className="card flex flex-col overflow-hidden">
+      <div className="relative grid h-[150px] place-items-center border-b border-line bg-[radial-gradient(circle_at_50%_45%,rgb(255_42_58/.16),transparent_70%)]">
+        {p.image ? <img src={p.image} alt="" className="size-full object-cover" /> : <Icon aria-hidden className="size-14 text-text-2/60" strokeWidth={1.2} />}
+        <span className="absolute top-2.5 left-2.5 rounded-md bg-red px-2 py-0.5 text-[11px] font-bold text-white shadow-glow">AI Score {p.score}</span>
+        <button
+          type="button"
+          aria-pressed={on}
+          aria-label={on ? `Remove ${p.title} from ${SAVED}` : `Save ${p.title}`}
+          onClick={() => saved.toggle(p.id)}
+          className={cx('absolute top-2 right-2 grid size-8 cursor-pointer place-items-center rounded-lg bg-bg/70 transition hover:text-white', on ? 'text-red' : 'text-text-2')}
+        >
+          <Bookmark className="size-4" fill={on ? 'currentColor' : 'none'} />
+        </button>
+      </div>
+      <div className="flex flex-1 flex-col p-3.5">
+        <h3 className="text-[14px] leading-snug font-semibold">{p.title}</h3>
+        <p className="mt-0.5 text-xs text-muted">
+          {p.category} · {SOURCE[p.source]}
+        </p>
+        <div className="mt-2.5 flex items-baseline gap-2">
+          <b className="font-display text-lg tabular-nums">{cents(p.price)}</b>
+          <s className="text-xs text-muted tabular-nums">{cents(p.compareAt)}</s>
+          <span className="ml-auto text-xs font-semibold text-good tabular-nums" title="Demand growth, last 30 days">
+            +{p.trend}%
+          </span>
+        </div>
+        <p className="mt-0.5 text-xs text-muted">
+          {Math.round(p.margin)}% margin · ships in {p.shippingDays}d
+        </p>
+        <Button size="sm" className="mt-3" onClick={onOpen}>
+          View Details
+        </Button>
+      </div>
+    </article>
+  );
+}
+
+function Lists({ onOpen, saved }: { onOpen: (p: ResearchProduct) => void; saved: Saved }) {
+  const lists = useLists();
+  const all = useResearch(undefined, '', '');
+  const { remove } = useListActions();
+  if (lists.isPending || all.isPending) return <LoadingState rows={3} className="mt-4" />;
+  if (lists.isError || all.isError) return <ErrorState message="Couldn't load your lists." onRetry={() => (lists.refetch(), all.refetch())} />;
+  if (!lists.data.length) {
+    return (
+      <EmptyState icon={Bookmark} title="No lists yet">
+        Bookmark a product to save it, or make a list from a product's details.
+      </EmptyState>
+    );
+  }
+  const byId = new Map(all.data.items.map((p) => [p.id, p]));
+  return (
+    <div className="mt-4 grid gap-4">
+      {lists.data.map((l) => {
+        const items = l.productIds.map((id) => byId.get(id)).filter((p) => !!p);
+        return (
+          <Panel
+            key={l.id}
+            title={l.name}
+            sub={`${items.length} product${items.length === 1 ? '' : 's'}`}
+            action={
+              <Button size="sm" disabled={remove.isPending} onClick={() => remove.mutate(l.id)} aria-label={`Delete list ${l.name}`}>
+                Delete list
+              </Button>
+            }
+          >
+            {items.length ? (
+              <Grid>
+                {items.map((p) => (
+                  <ProductCard key={p.id} p={p} onOpen={() => onOpen(p)} saved={saved} />
+                ))}
+              </Grid>
+            ) : (
+              <p className="text-[13px] text-muted">Empty. Add products from their details.</p>
+            )}
+          </Panel>
+        );
+      })}
+    </div>
+  );
+}
+
+const PARTS: { key: keyof ResearchProduct['scoreParts']; label: string; weight: number }[] = [
+  { key: 'margin', label: 'Margin', weight: 35 },
+  { key: 'trend', label: 'Trend', weight: 25 },
+  { key: 'competition', label: 'Low competition', weight: 25 },
+  { key: 'shipping', label: 'Fast shipping', weight: 15 },
+];
+
+function ProductDialog({ product: p, onClose }: { product?: ResearchProduct; onClose: () => void }) {
+  return (
+    <Dialog open={!!p} onClose={onClose} title={p?.title ?? 'Product'}>
+      {p && <ProductDetails key={p.id} p={p} />}
+    </Dialog>
+  );
+}
+
+function ProductDetails({ p }: { p: ResearchProduct }) {
+  const lists = useLists().data ?? [];
+  const { create, toggle } = useListActions();
+  const [name, setName] = useState('');
+  const { ids, stores } = useStoreSelection();
+  const [storeId, setStoreId] = useState(ids[0] ?? stores[0]?.id ?? '');
+  const add = useAddToStore();
+
+  const newList = (e: FormEvent) => {
+    e.preventDefault();
+    create.mutate(name.trim(), {
+      onSuccess: (l: ProductList) => {
+        setName('');
+        toggle.mutate({ listId: l.id, productId: p.id, on: true });
+      },
+    });
+  };
+
+  return (
+    <div className="grid gap-5">
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-xs text-muted">
+          {p.category} · {SOURCE[p.source]} · {cap(p.niche)}
+        </p>
+        <Badge tone="red">AI Score {p.score}</Badge>
+      </div>
+      <dl className="grid grid-cols-3 gap-3 text-[13px]">
+        <Fact label="Cost" value={cents(p.cost)} />
+        <Fact label="Sell at" value={cents(p.price)} />
+        <Fact label="Compare at" value={cents(p.compareAt)} />
+        <Fact label="Margin" value={`${Math.round(p.margin)}%`} />
+        <Fact label="Demand, 30 days" value={`+${p.trend}%`} />
+        <Fact label="Ships in" value={`${p.shippingDays} days`} />
+      </dl>
+      <section>
+        <h3 className="mb-2 text-[13px] font-semibold">Why it scores {p.score}</h3>
+        <div className="grid gap-2.5">
+          {PARTS.map((part) => (
+            <div key={part.key} className="grid grid-cols-[156px_minmax(0,1fr)_32px] items-center gap-3 text-xs">
+              <span className="text-text-2">
+                {part.label} <span className="text-muted">· {part.weight}%</span>
+              </span>
+              <ProgressBar value={p.scoreParts[part.key] / 100} label={part.label} />
+              <span className="text-right text-text-2 tabular-nums">{p.scoreParts[part.key]}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section>
+        <h3 className="mb-2 text-[13px] font-semibold">Lists</h3>
+        <div className="flex flex-wrap gap-2">
+          {lists.map((l) => (
+            <label key={l.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line-2 px-2.5 py-1.5 text-xs text-text-2">
+              <input type="checkbox" className="accent-red" checked={l.productIds.includes(p.id)} onChange={(e) => toggle.mutate({ listId: l.id, productId: p.id, on: e.target.checked })} />
+              {l.name}
+            </label>
+          ))}
+        </div>
+        <form onSubmit={newList} className="mt-2 flex gap-2">
+          <label htmlFor="new-list" className="sr-only">
+            New list name
+          </label>
+          <input
+            id="new-list"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={80}
+            placeholder="New list, e.g. Q4 gifts"
+            className="flex-1 rounded-lg border border-line-2 bg-bg-2 px-3 py-1.5 text-[13px] placeholder:text-muted focus:border-red/60 focus:outline-none"
+          />
+          <Button size="sm" type="submit" disabled={!name.trim() || create.isPending}>
+            Create and add
+          </Button>
+        </form>
+      </section>
+      <section className="border-t border-line pt-4">
+        <h3 className="mb-2 text-[13px] font-semibold">Add to a store</h3>
+        {add.isSuccess ? (
+          <p className="text-[13px] text-text-2">
+            Sent to {stores.find((s) => s.id === storeId)?.name}'s Product Hunter.{' '}
+            <Link to="/" className="text-red hover:underline">
+              Approve it on the Dashboard
+            </Link>
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <label>
+              <span className="sr-only">Store</span>
+              <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="cursor-pointer rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] focus:border-red/60 focus:outline-none">
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button variant="primary" disabled={!storeId || add.isPending} onClick={() => add.mutate({ productId: p.id, storeId })}>
+              Request to add
+            </Button>
+            <span className="text-xs text-muted">Nothing changes until you approve it.</span>
+          </div>
+        )}
+        {add.isError && (
+          <p role="alert" className="mt-2 text-xs text-red">
+            {add.error.message}
+          </p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-line bg-bg-2 px-3 py-2">
+      <dt className="text-[11px] text-muted">{label}</dt>
+      <dd className="mt-0.5 font-semibold tabular-nums">{value}</dd>
+    </div>
+  );
+}

@@ -15,6 +15,10 @@ import type {
   LiveMessage,
   MemoryInput,
   Mission,
+  Page,
+  ProductList,
+  ResearchProduct,
+  ResearchTab,
   Settings,
   Store,
   StoreCaps,
@@ -24,6 +28,7 @@ import type {
 import { applyRunEvent, isLive } from '../lib/transcript';
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
+  if (r.status === 204) return undefined as T;
   if (!r.ok) throw new Error(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? `${init?.method ?? 'GET'} ${path} failed (${r.status})`);
   return (await r.json()) as T;
 }
@@ -104,15 +109,48 @@ export function useAddMemory(storeId: string) {
 export function useForgetMemory(storeId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const r = await fetch(`/api/memory/${id}`, { method: 'DELETE' });
-      if (!r.ok) throw new Error(`Couldn't forget that (${r.status})`);
-    },
+    mutationFn: (id: string) => api<void>(`/api/memory/${id}`, { method: 'DELETE' }),
     onSuccess: (_, id) => qc.setQueryData<StoreMemory[]>(['memory', storeId], (old = []) => old.filter((m) => m.id !== id)),
   });
 }
 
 export const useCaps = (storeId: string) => useQuery({ queryKey: ['caps', storeId], queryFn: () => api<StoreCaps[]>(`/api/caps?stores=${storeId}`).then((c) => c[0]) });
+
+/** Up to 200 products for a research tab (none = best AI score first), filtered by niche and search. */
+export const useResearch = (tab: ResearchTab | undefined, niche: string, q: string) =>
+  useQuery({
+    queryKey: ['research', tab, niche, q],
+    queryFn: () => api<Page<ResearchProduct>>(`/api/research?${new URLSearchParams({ ...(tab && { tab }), ...(niche && { niche }), ...(q && { q }), limit: '200' })}`),
+    placeholderData: keepPreviousData,
+  });
+
+export const useLists = () => useQuery({ queryKey: ['lists'], queryFn: () => api<ProductList[]>('/api/research/lists') });
+
+export function useListActions() {
+  const qc = useQueryClient();
+  const put = (l: ProductList) => qc.setQueryData<ProductList[]>(['lists'], (old = []) => (old.some((o) => o.id === l.id) ? old.map((o) => (o.id === l.id ? l : o)) : [...old, l]));
+  return {
+    create: useMutation({ mutationFn: (name: string) => api<ProductList>('/api/research/lists', json('POST', { name })), onSuccess: put }),
+    toggle: useMutation({
+      mutationFn: ({ listId, productId, on }: { listId: string; productId: string; on: boolean }) =>
+        api<ProductList>(`/api/research/lists/${listId}/items/${productId}`, { method: on ? 'PUT' : 'DELETE' }),
+      onSuccess: put,
+    }),
+    remove: useMutation({
+      mutationFn: (id: string) => api<void>(`/api/research/lists/${id}`, { method: 'DELETE' }),
+      onSuccess: (_, id) => qc.setQueryData<ProductList[]>(['lists'], (old = []) => old.filter((l) => l.id !== id)),
+    }),
+  };
+}
+
+/** Sends a product to the store's Product Hunter as an approval request. */
+export function useAddToStore() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ productId, storeId }: { productId: string; storeId: string }) => api<ApprovalRequest>(`/api/research/${productId}/add-to-store`, json('POST', { storeId })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
+  });
+}
 
 /** Mount once: streams /api/live into the react-query cache, reconnecting if the server restarts. */
 export function useLive() {

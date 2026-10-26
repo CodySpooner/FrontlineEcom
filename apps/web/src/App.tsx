@@ -7,8 +7,9 @@ import { Agents } from './pages/Agents';
 import { Dashboard } from './pages/Dashboard';
 import { DevGallery } from './pages/DevGallery';
 import { Placeholder } from './pages/Placeholder';
+import { Research } from './pages/Research';
 
-const PAGES: Record<string, ReactNode> = { '/agents': <Agents /> };
+const PAGES: Record<string, ReactNode> = { '/agents': <Agents />, '/research': <Research /> };
 
 export function App() {
   return (
