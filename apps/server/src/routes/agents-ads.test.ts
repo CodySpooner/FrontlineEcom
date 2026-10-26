@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, listMemory, once, runAgent, updateAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
+import { deleteMemory, fakeEngine, getAgent, listMemory, once, runAgent, updateAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
@@ -169,6 +169,16 @@ function approvedChange(id: string, title: string, revenueFactorAfter: number) {
 }
 const outcomes = () => listMemory(db, 'peak').filter((m) => m.tags.includes('outcome'));
 const basis = (title: string) => listMemory(db, 'peak').find((m) => m.text === `Basis for ${title}`)?.confidence;
+
+test("an ad change is judged once: an outcome the owner deleted doesn't come back", () => {
+  approvedChange('judged', 'Raise Broad', 1.5);
+  checkAdOutcomes(db);
+  const [o] = outcomes();
+  expect(o?.text).toMatch(/^"Raise Broad" worked/);
+  deleteMemory(db, o!.id);
+  checkAdOutcomes(db);
+  expect(outcomes()).toEqual([]);
+});
 
 test("an ad change from a store's demo phase isn't judged on its real numbers", () => {
   approvedChange('demo-era', 'Pause Spark Ads', 1.5);

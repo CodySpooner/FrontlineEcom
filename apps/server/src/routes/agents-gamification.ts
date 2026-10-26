@@ -72,9 +72,9 @@ export function checkAdOutcomes(db: Db, today = localDate()) {
     const before = blendedRoas(db, String(r.store_id), addDays(day, -7), addDays(day, -1));
     const after = blendedRoas(db, String(r.store_id), addDays(day, 1), addDays(day, 3));
     if (before === undefined || after === undefined) continue;
+    if (!once(db, `ads-outcome:${r.id}`)) continue; // judged once: an outcome the owner deleted stays deleted
     const worked = after > before;
     const roas = `blended ROAS ${before.toFixed(2)} → ${after.toFixed(2)}`;
-    // ponytail: writeMemory dedupes by text, so rechecks are no-ops; an owner-deleted outcome comes back within 30 days.
     recordOutcome(db, `ads:${r.id}`, worked, {
       storeId: String(r.store_id), agentId: String(r.agent_id), kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'ads'],
       text: `"${r.title}" ${worked ? 'worked' : 'did not help'}: ${roas} in the 3 days after.`,
