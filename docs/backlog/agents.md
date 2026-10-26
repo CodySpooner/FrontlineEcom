@@ -90,6 +90,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-42 Price tests as a real loop: the Market Analyst's main lever was a manual approval nobody measured.
 - [x] AGT-43 Page outcomes: Store Builder product pages are judged like price tests, so the Store Developer and Copywriter can earn measured wins too.
 - [x] AGT-44 The new loops run on their own: a weekly price check job, one test per product at a time, and supplier-costed product scans.
+- [x] AGT-45 A living demo: demo-engine runs did nothing but quote totals, so none of the agent screens showed agent output without spending Claude usage.
 - [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
@@ -97,6 +98,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-45 Demo work: on demo stores (fake engine) each role does one real, non-blocking action through its own tools before its summary reply. The Store Developer drafts the product page (the product named in its task, so "approve product → page drafted" works end to end; one open draft per product). Operations flags the oldest order unfulfilled 3+ days. The Copywriter saves an ad copy creative, and Email & SMS saves a checkout-abandonment flow. The Ad Strategist and Product Hunter run their reviews. Nothing waits on an approval, so demo runs always finish.
 - 2026-10-26 — AGT-44 Default jobs: "Weekly price check" (Market Analyst, Wed 09:00) proposes at most one `propose_price_change` with the numbers, or says why prices hold. The daily product scan costs finds with `search_suppliers`. `propose_price_change` refuses a product with a test running (last 29 days) or a price request still pending, since overlapping tests can't be judged apart. New squads get 6 jobs; existing squads keep theirs.
 - 2026-10-26 — AGT-43 Page outcomes: product pages published from the Store Builder on real stores are judged 15+ days later on the product's gross profit, 14 days after vs before. That becomes a learning for the drafting agent, moves its run's learnings, and pays +50 XP on a rise; each page is judged once (`done_once`). Price and page checks share one `productSales` query.
 - 2026-10-26 — AGT-35 Approved ad changes reach the ad account: on connected stores `applyAdChange` calls core's `setCampaignBudget` / `pauseCampaign` (Meta, Google, TikTok), then updates the local campaign. An ad-account error notifies the owner ("Apply it by hand in the ad manager") and leaves the campaign as it was. The network falls back to the campaign row when the payload lacks it. Demo stores still change locally.

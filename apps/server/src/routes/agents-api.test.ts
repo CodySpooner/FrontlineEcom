@@ -24,7 +24,7 @@ describe('runs', () => {
     expect(run).toMatchObject({ agentId: 'glow:copywriter', storeId: 'glow', task: 'Draft 3 headlines', status: 'queued' });
     await runManager(db).idle();
     const detail = (await (await send('GET', `/api/runs/${run.id}`)).json()) as AgentRunDetail;
-    expect(detail).toMatchObject({ status: 'done', transcript: [{ type: 'tool_call' }, { type: 'tool_result' }, { type: 'text_delta' }, { type: 'done' }] });
+    expect(detail).toMatchObject({ status: 'done', transcript: [{ type: 'tool_call' }, { type: 'tool_result' }, { type: 'tool_call' }, { type: 'tool_result' }, { type: 'text_delta' }, { type: 'done' }] });
 
     const follow = (await (await send('POST', '/api/agents/glow%3Acopywriter/runs', { task: 'Shorter', resumeRunId: run.id })).json()) as AgentRun;
     await runManager(db).idle();

@@ -45,10 +45,11 @@ test('a run streams, persists its transcript and usage, and shows the agent as r
   await m.idle();
   const saved = getRun(db, run.id)!;
   expect(saved).toMatchObject({ status: 'done', sessionId: 'fake-glow:copywriter' });
-  // Demo engine: one real read-only call, then a reply quoting it.
-  expect(saved.transcript.map((e) => e.type)).toEqual(['tool_call', 'tool_result', 'text_delta', 'done']);
-  expect(saved.transcript[0]).toMatchObject({ name: 'store_summary', input: { range: 30 } });
-  expect(saved.transcript[2]).toMatchObject({
+  // Demo engine: the Copywriter saves one ad copy for real, reads the summary, then replies quoting it.
+  expect(saved.transcript.map((e) => e.type)).toEqual(['tool_call', 'tool_result', 'tool_call', 'tool_result', 'text_delta', 'done']);
+  expect(saved.transcript[0]).toMatchObject({ name: 'create_creative', input: { kind: 'copy', cta: 'Shop now' } });
+  expect(saved.transcript[2]).toMatchObject({ name: 'store_summary', input: { range: 30 } });
+  expect(saved.transcript[4]).toMatchObject({
     text: expect.stringMatching(/^Copywriter for Glow Haus: on it — "Rewrite the hero headline"\. Last 30 days: [\d,]+ USD revenue, -?[\d,]+ USD profit, ROAS [\d.]+, \d+ orders\./),
   });
   expect(listMemory(db, 'glow')).toEqual([]); // reflection learns nothing in demo mode
@@ -159,7 +160,9 @@ test('the app run manager publishes runs and their events on the live bus', asyn
   stop();
   const mine = seen.filter((s) => (s.type === 'run' ? s.run.agentId : s.type === 'run_event' ? s.agentId : '') === 'peak:operations');
   const steps = mine.map((s) => (s.type === 'run' ? `run:${s.run.status}` : s.type === 'run_event' ? `event:${s.event.type}` : ''));
-  expect(steps.filter((t, i) => t !== steps[i - 1])).toEqual(['run:queued', 'run:running', 'event:tool_call', 'event:tool_result', 'event:text_delta', 'event:done', 'run:done']);
+  expect(steps.filter((t, i) => t !== steps[i - 1])).toEqual([
+    'run:queued', 'run:running', 'event:tool_call', 'event:tool_result', 'event:tool_call', 'event:tool_result', 'event:text_delta', 'event:done', 'run:done',
+  ]);
   expect(seen.some((s) => s.type === 'notification' && s.notification.title === 'Operations finished')).toBe(true);
 });
 
