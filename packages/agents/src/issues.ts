@@ -25,8 +25,9 @@ export function flagOrderIssue(db: DatabaseSync, i: NewOrderIssue, now = new Dat
   return { issue: toIssue(db.prepare('SELECT * FROM order_issues WHERE id = ?').get(open.id)!), created, raised: true };
 }
 
-/** Open first, then newest first. */
+/** Open first, then newest first; issues the order has since answered are closed first (the owner's page and the agent alike). */
 export function listOrderIssues(db: DatabaseSync, q: { storeIds?: string[]; status?: OrderIssueStatus; limit?: number } = {}): OrderIssue[] {
+  closeAnsweredIssues(db);
   const where: string[] = [];
   const args: (string | number)[] = [];
   if (q.storeIds?.length) where.push(`store_id IN (${q.storeIds.map(() => '?').join(',')})`), args.push(...q.storeIds);
@@ -45,16 +46,20 @@ export function setIssueStatus(db: DatabaseSync, id: string, status: OrderIssueS
   return r ? toIssue(r) : undefined;
 }
 
-/** Issues the order itself has since answered: late/stuck once delivered, supplier once it has tracking. Checked on read. */
+/**
+ * Issues the order itself has since answered: late/stuck once delivered, supplier once it has tracking, and all but
+ * 'other' once it's refunded or cancelled (core syncs both as status 'refunded'). Checked on read.
+ */
 export function closeAnsweredIssues(db: DatabaseSync, now = new Date()) {
   const rows = db
     .prepare(
-      `SELECT i.id, i.kind, o.fulfillment_status, o.tracking FROM order_issues i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
-       WHERE i.status = 'open' AND ((i.kind IN ('late', 'stuck', 'supplier') AND o.fulfillment_status = 'delivered') OR (i.kind = 'supplier' AND o.tracking IS NOT NULL))`,
+      `SELECT i.id, i.kind, o.status, o.fulfillment_status, o.tracking FROM order_issues i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+       WHERE i.status = 'open' AND ((i.kind IN ('late', 'stuck', 'supplier') AND o.fulfillment_status = 'delivered') OR (i.kind = 'supplier' AND o.tracking IS NOT NULL)
+         OR (i.kind != 'other' AND o.status = 'refunded'))`,
     )
     .all();
   for (const r of rows) {
-    const why = r.fulfillment_status === 'delivered' ? 'Delivered' : `Supplier shipped (tracking ${r.tracking})`;
+    const why = r.status === 'refunded' ? 'Order refunded or cancelled' : r.fulfillment_status === 'delivered' ? 'Delivered' : `Supplier shipped (tracking ${r.tracking})`;
     setIssueStatus(db, String(r.id), 'resolved', `${why}; closed automatically.`, now);
   }
 }

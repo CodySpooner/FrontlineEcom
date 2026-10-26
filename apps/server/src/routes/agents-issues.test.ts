@@ -74,6 +74,14 @@ test('issues the order has since answered close themselves: delivered, or suppli
   ]);
 });
 
+test("a refunded or cancelled order closes its issues, and the agent's list sees it without the owner's page open", async () => {
+  await run([flag({ kind: 'refund', severity: 'medium', note: 'Customer asked for a refund: wrong size' }), flag({ kind: 'address' }), flag({ kind: 'other', note: 'Chargeback opened by the bank' })]);
+  db.prepare(`UPDATE orders SET status = 'refunded' WHERE store_id = 'peak' AND id = ?`).run(orderId);
+  const [list] = await run([{ call: 'list_order_issues' }]);
+  expect(list!.split('\n').slice(1).map((r) => r.split(',').slice(1, 4).join(','))).toEqual(['other,high,open', 'address,high,resolved', 'refund,medium,resolved']);
+  expect(list).toContain('Order refunded or cancelled; closed automatically.');
+});
+
 test('list_order_issues shows the open queue first, then resolutions the owner wrote', async () => {
   await run([flag(), flag({ kind: 'refund', severity: 'medium', note: 'Customer asked for a refund: wrong size' })]);
   const refund = String(db.prepare(`SELECT id FROM order_issues WHERE kind = 'refund'`).get()?.id);

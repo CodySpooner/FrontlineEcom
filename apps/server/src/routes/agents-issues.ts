@@ -1,4 +1,4 @@
-import { closeAnsweredIssues, listOrderIssues, setIssueStatus } from '@frontline/agents';
+import { listOrderIssues, setIssueStatus } from '@frontline/agents';
 import type { OrderIssueStatus } from '@frontline/shared';
 import { Hono } from 'hono';
 import type { Db } from '../db';
@@ -12,7 +12,6 @@ export function issueRoutes(db: Db) {
       const status = c.req.query('status') as OrderIssueStatus | undefined;
       if (status && !STATUSES.includes(status)) return c.json({ error: 'status must be open or resolved' }, 400);
       const limit = Math.min(200, Math.max(1, Math.floor(Number(c.req.query('limit'))) || 100));
-      closeAnsweredIssues(db);
       return c.json(listOrderIssues(db, { storeIds: c.req.query('stores')?.split(',').filter(Boolean), status, limit }));
     })
     .patch('/api/order-issues/:id', async (c) => {
