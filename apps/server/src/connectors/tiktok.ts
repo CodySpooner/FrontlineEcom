@@ -252,6 +252,14 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     const returnsSince = lastReturns?.shop === shop.cipher ? lastReturns.since : Math.floor(now.getTime() / 1000) - BACKFILL_DAYS * 86400;
     const returns = await search<ShopReturn>('/return_refund/202309/returns/search', 'return_orders', { page_size: '50', sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: returnsSince }).catch(() => undefined);
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
+    // Product-page visitors a day are the funnel's sessions (TikTok Shop Analytics scope), unless GA4 is connected (it owns
+    // the funnel there). TikTok has no cart or checkout counts. Without the scope (or on any error) sessions stay empty.
+    // ponytail: the last 30 days each sync, no older history; TikTok documents no longest range to backfill with.
+    const storeDay = dayOf.format(now);
+    const traffic = db.prepare('SELECT 1 FROM integrations WHERE id = ?').get(`ga4:${storeId}`) ? undefined
+      : await api<{ latest_available_date?: string; performance?: { intervals?: { start_date: string; traffic?: { avg_visitors?: number } }[] } }>('GET', '/analytics/202609/shop/performance', {
+          shop_cipher: shop.cipher, start_date_ge: addDays(storeDay, -30), end_date_lt: addDays(storeDay, 1), granularity: '1D',
+        }).catch(() => undefined);
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -282,6 +290,10 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         ord.run(storeId, `tt-${o.id}`, created.toISOString(), Number(o.payment?.total_amount ?? 0), o.status === 'CANCELLED' ? 'refunded' : 'paid', shopFulfillment(o.status), o.tracking_number || null, day, Number(o.payment?.tax ?? 0));
         setOrderItems(db, storeId, `tt-${o.id}`, (o.line_items ?? []).map((li) => ({ productId: `tt-${li.product_id}`, quantity: li.quantity ?? 1, revenue: Number(li.sale_price ?? 0) * (li.quantity ?? 1), cost: 0 })));
       }
+      // At 1D an interval is one day, so its daily average is that day's count. Days after latest_available_date aren't in yet.
+      const visits = db.prepare('INSERT INTO daily_metrics (store_id, date, sessions) VALUES (?, ?, ?) ON CONFLICT (store_id, date) DO UPDATE SET sessions = excluded.sessions');
+      const ready = traffic?.latest_available_date?.slice(0, 10) ?? '';
+      for (const d of traffic?.performance?.intervals ?? []) if (d.start_date <= ready) visits.run(storeId, d.start_date, d.traffic?.avg_visitors ?? 0);
       if (returns) {
         // Into the refund lines Amazon's go to too (rebuildRevenue takes them off their order's day). One per return,
         // re-written as its status moves, so a refund only counts once TikTok has granted it. Net of its tax: the order's

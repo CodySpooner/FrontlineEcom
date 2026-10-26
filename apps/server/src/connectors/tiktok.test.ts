@@ -110,6 +110,11 @@ function fakeShop(refreshError?: { code: number; message: string }, shops = [{ c
     if (u.pathname === '/product/202309/products/17301/prices/update') return ok({});
     if (u.pathname === '/product/202309/products/17301') return ok({ id: '17301', status: 'ACTIVATE', skus: [{ id: 'S1', price: { currency: 'USD', sale_price: '24.90' } }, { id: 'S2', price: { currency: 'USD', sale_price: '24.90' } }], main_images: [{ uri: 'tos-1', urls: ['https://p16-oec.example/ice-roller.jpeg'], thumb_urls: ['https://p16-oec.example/ice-roller-thumb.jpeg'], width: 800, height: 800 }] });
     if (u.pathname === '/product/202309/products/17302') return ok({ id: '17302', status: 'DRAFT', skus: [{ id: 'S3' }], main_images: [] });
+    // Get Shop Performance (TikTok Shop Analytics scope; partner docs, checked 2026-10-26): one interval a day at 1D.
+    if (u.pathname === '/analytics/202609/shop/performance') {
+      const day = (d: string, visitors: number) => ({ start_date: d, end_date: d, traffic: { avg_visitors: visitors, avg_page_views: visitors * 2 }, sales: {} });
+      return ok({ latest_available_date: '2026-10-25', performance: { intervals: [day('2026-10-24', 120), day('2026-10-25', 95), day('2026-10-26', 40)] } });
+    }
     // Search Returns (Return & Refund Basic scope; TikTok's partner docs, checked 2026-10-26).
     if (u.pathname === '/return_refund/202309/returns/search') {
       return ok({
@@ -279,4 +284,22 @@ test('TikTok Shop price change sets every SKU of a live product, logged; drafts 
   await expect(setTikTokProductPrice(db, key, 'glow', 'tt-17301', { price: 22, compareAt: 30 }, fetchFn, NOW)).rejects.toThrow('compare-at');
   await expect(setTikTokProductPrice(db, key, 'glow', '17301', { price: 22 }, fetchFn, NOW)).rejects.toThrow('not a TikTok Shop product');
   expect(calls.filter((c) => c.url.pathname.endsWith('/prices/update'))).toHaveLength(1);
+});
+
+test("TikTok Shop visitors fill the funnel's sessions up to the last day TikTok has ready; GA4 owns them when connected", async () => {
+  const db = shopSetup();
+  const { fetchFn, calls } = fakeShop();
+  await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
+  const perf = calls.find((c) => c.url.pathname === '/analytics/202609/shop/performance')!;
+  // The store's day (America/Chicago) at NOW is 2026-10-26: the last 30 days through today.
+  expect(['start_date_ge', 'end_date_lt', 'granularity', 'shop_cipher'].map((k) => perf.url.searchParams.get(k))).toEqual(['2026-09-26', '2026-10-27', '1D', 'CIPHER']);
+  expect(db.prepare("SELECT date, sessions FROM daily_metrics WHERE store_id = 'glow' AND sessions > 0 ORDER BY date").all()).toEqual([
+    { date: '2026-10-24', sessions: 120 },
+    { date: '2026-10-25', sessions: 95 }, // 10-26 isn't ready yet
+  ]);
+
+  saveIntegration(db, key, { kind: 'ga4', storeId: 'glow', values: { propertyId: 'properties/987654', serviceAccountJson: '{}' } });
+  const again = fakeShop();
+  await syncTikTokShop(db, key, 'glow', again.fetchFn, NOW);
+  expect(again.calls.some((c) => c.url.pathname.startsWith('/analytics/'))).toBe(false);
 });

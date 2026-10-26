@@ -752,7 +752,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'clientSecret', label: 'Client secret', secret: true, optional: true },
     { key: 'accessToken', label: 'Admin API access token (older custom apps)', secret: true, placeholder: 'shpat_…', optional: true },
   ] },
-  tiktok_shop: { name: 'TikTok Shop', category: 'platform', perStore: true, help: 'TikTok Shop Partner Center → App & Service → create a custom app with Order and Product read scopes (and Return & Refund Basic, to take refunds off sales; Product Modify, to apply approved price changes), and set its redirect URL to https://localhost/frontline-oauth → copy the App key, App secret and the authorization link. Press Connect, approve your shop, then paste the address the browser lands on (the page itself will not load).', fields: [
+  tiktok_shop: { name: 'TikTok Shop', category: 'platform', perStore: true, help: 'TikTok Shop Partner Center → App & Service → create a custom app with Order and Product read scopes (and Return & Refund Basic, to take refunds off sales; Product Modify, to apply approved price changes; TikTok Shop Analytics, for visitors on the funnel), and set its redirect URL to https://localhost/frontline-oauth → copy the App key, App secret and the authorization link. Press Connect, approve your shop, then paste the address the browser lands on (the page itself will not load).', fields: [
     { key: 'appKey', label: 'App key', secret: false },
     { key: 'appSecret', label: 'App secret', secret: true },
     { key: 'authLink', label: 'Authorization link', secret: false, optional: true, placeholder: 'https://services.tiktokshop.com/open/authorize?service_id=…' },

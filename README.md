@@ -66,6 +66,8 @@ pnpm check    # typecheck + tests
   Etsy and TikTok Shop orders come off too (revenue still shows the order totals). Shipping labels aren't subtracted.
 - **ROAS** on the dashboard is store revenue ÷ total ad spend. In the campaigns table, it's the purchase value each
   network attributes to that campaign.
+- **Funnel:** without GA4, a TikTok Shop store's sessions are its product-page visitors from TikTok Shop Analytics
+  (the last 30 days; TikTok has no cart or checkout counts).
 - **Days** follow each store's own timezone (the shop's, where the platform reports it), also in "All stores" and the
   morning digest. Today's change compares against the same point of the earlier day: the share of that day's sales
   the store's orders had made by this time of day. Ad spend and GA4 sessions come by day as each network reports
