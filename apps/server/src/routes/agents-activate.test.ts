@@ -24,6 +24,26 @@ afterEach(() => {
 const jobsOn = (storeId: string) => Number(db.prepare('SELECT count(*) AS n FROM automation_rules WHERE store_id = ? AND enabled = 1').get(storeId)?.n);
 const notes = (storeId: string) => db.prepare(`SELECT title FROM notifications WHERE store_id = ? AND kind = 'info'`).all(storeId).map((r) => r.title);
 
+test('a store deleted and created again under the same name gets its jobs, and they switch on when it goes live', async () => {
+  const create = async () =>
+    (await (await app.request('/api/stores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Acme', platform: 'shopify', niche: 'home' }) })).json()) as Store;
+  const first = await create();
+  switchToReal(db, first.id);
+  await app.request('/api/agents');
+  expect(jobsOn(first.id)).toBe(DEFAULT_JOBS.length);
+  await runManager(db).idle();
+  expect((await app.request(`/api/stores/${first.id}`, { method: 'DELETE' })).status).toBe(204);
+
+  const again = await create();
+  expect(again.id).toBe(first.id);
+  const jobs = db.prepare('SELECT name FROM automation_rules WHERE store_id = ?').all(again.id).map((r) => r.name);
+  expect(jobs.sort()).toEqual(DEFAULT_JOBS.map((j) => j.name).sort());
+  switchToReal(db, again.id);
+  await app.request('/api/agents');
+  expect(jobsOn(again.id)).toBe(DEFAULT_JOBS.length);
+  await runManager(db).idle();
+});
+
 test("a store's first real sync switches its squad's jobs on once, and a custom niche gets its pack drafted", async () => {
   const res = await app.request('/api/stores', {
     method: 'POST', headers: { 'content-type': 'application/json' },

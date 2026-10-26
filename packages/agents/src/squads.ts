@@ -16,7 +16,11 @@ export function createSquad(db: DatabaseSync, store: Pick<Store, 'id'>): Agent[]
   const roles = Object.keys(AGENT_ROLES) as AgentRole[];
   let added = 0;
   for (const role of roles) added += Number(insert.run(agentId(store.id, role), store.id, role, DEFAULT_AUTONOMY).changes);
-  if (added === roles.length) createDefaultJobs(db, store.id);
+  if (added === roles.length) {
+    // A deleted store's id can come back: its once-per-store steps (default jobs, going live, theme copies) start fresh.
+    db.prepare(`DELETE FROM done_once WHERE ref = ? OR ref LIKE ? OR ref LIKE ?`).run(`activate:${store.id}`, `default-job:${store.id}:%`, `theme-copy:${store.id}:%`);
+    createDefaultJobs(db, store.id);
+  }
   return listAgents(db, [store.id]);
 }
 
