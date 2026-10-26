@@ -1,9 +1,9 @@
 // UI-06 AI Agents: one store's squad at a time — portrait, status, level + XP, what it does, and Deploy for idle roles.
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
-import { MessageSquare, Plus, Settings2, Users } from 'lucide-react';
+import { Brain, MessageSquare, Plus, Settings2, Users } from 'lucide-react';
 import { AGENT_ROLES, storeHealth, type Agent } from '@frontline/shared';
-import { useAgents, useStores, useSummary, useUpdateAgent } from '../api/client';
+import { useAgents, useMemory, useStores, useSummary, useUpdateAgent } from '../api/client';
 import { Portrait } from '../components/Art';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
@@ -25,6 +25,7 @@ export function Agents() {
   const storeId = list.find((s) => s.id === params.get('store'))?.id ?? ids[0] ?? list[0]?.id;
   const store = list.find((s) => s.id === storeId);
   const squad = (agents.data ?? []).filter((a) => a.storeId === storeId);
+  const memory = useMemory(storeId ?? '').data ?? [];
   const idle = squad.filter((a) => a.enabled === false);
   const working = squad.filter((a) => a.status === 'running').length;
   const needsYou = squad.filter((a) => a.status === 'waiting_approval').length;
@@ -62,7 +63,7 @@ export function Agents() {
           </div>
           <div className="grid grid-cols-1 gap-3.5 min-[620px]:grid-cols-2 min-[1100px]:grid-cols-3 min-[1280px]:grid-cols-4">
             {squad.map((a) => (
-              <AgentCard key={a.id} a={a} onDeploy={() => enable(a)} deploying={deploy.isPending && deploy.variables?.id === a.id} failed={deploy.isError && deploy.variables?.id === a.id} />
+              <AgentCard key={a.id} a={a} learned={memory.filter((m) => m.agentId === a.id).length} store={store.name} onDeploy={() => enable(a)} deploying={deploy.isPending && deploy.variables?.id === a.id} failed={deploy.isError && deploy.variables?.id === a.id} />
             ))}
           </div>
           <Dialog open={picking} onClose={() => setPicking(false)} title={`Deploy to ${store.name}`}>
@@ -113,7 +114,7 @@ function StoreHealthLine({ storeId }: { storeId: string }) {
   );
 }
 
-function AgentCard({ a, onDeploy, deploying, failed }: { a: Agent; onDeploy: () => void; deploying: boolean; failed: boolean }) {
+function AgentCard({ a, learned, store, onDeploy, deploying, failed }: { a: Agent; learned: number; store: string; onDeploy: () => void; deploying: boolean; failed: boolean }) {
   const role = AGENT_ROLES[a.role];
   const off = a.enabled === false;
   const st = AGENT_STATUS[a.status];
@@ -134,6 +135,13 @@ function AgentCard({ a, onDeploy, deploying, failed }: { a: Agent; onDeploy: () 
       </div>
       <XPBar level={a.level} rank={a.rank} xp={a.levelProgress?.xp ?? 0} next={a.levelProgress?.needed ?? 100} />
       <p className="line-clamp-3 min-h-[3lh] text-xs text-muted">{role.blurb}</p>
+      {/* DESIGN §1: each agent becomes an expert in its store by learning from every run. */}
+      {learned > 0 && !off && (
+        <Link to={`${to}?tab=memory`} className="flex items-center gap-1.5 text-xs text-text-2 hover:text-white">
+          <Brain aria-hidden className="size-3.5 text-red" strokeWidth={2} />
+          {learned} thing{learned > 1 ? 's' : ''} learned about {store}
+        </Link>
+      )}
       {a.currentTask && !off && (
         <p className="truncate text-xs text-text-2" title={a.currentTask}>
           {/* An error's task is "Last run failed: …" (AGT-68), which isn't happening now. */}
