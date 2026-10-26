@@ -1,6 +1,7 @@
 import { fakeEngine, getAgent, listMemory, runAgent, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, AgentRole } from '@frontline/shared';
-import { beforeAll, describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
+import { createApp } from '../app';
 import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
@@ -37,6 +38,20 @@ async function run(i: RunInput, steps: FakeStep[], onEvent?: (e: AgentEvent) => 
   return events;
 }
 const results = (events: AgentEvent[]) => events.flatMap((e) => (e.type === 'tool_result' ? [e] : []));
+
+test("store_summary's change vs the previous period matches the dashboard's in the middle of the day", async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const nine = new Date();
+    nine.setHours(9, 0, 0, 0);
+    vi.setSystemTime(nine);
+    const [r] = results(await run(input('glow', 'market_analyst'), [{ call: 'store_summary', input: { range: 7 } }]));
+    const api = (await (await createApp(db).request('/api/analytics/summary?range=7&stores=glow')).json()) as { deltas: unknown };
+    expect((JSON.parse(r!.output) as { deltasPct: unknown }).deltasPct).toEqual(api.deltas);
+  } finally {
+    vi.useRealTimers();
+  }
+});
 
 describe('agent tools on demo data', () => {
   test('read tools answer from the store data', async () => {

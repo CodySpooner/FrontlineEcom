@@ -47,7 +47,7 @@ import { loadRows, summarize } from '../analytics';
 import { convertRate, fxFor } from '../fx';
 import { approvalsHook, decide } from '../approvals';
 import { listCompetitors, priceChanges } from '../competitors';
-import { localDate } from '../dates';
+import { dayFraction, localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
@@ -63,7 +63,7 @@ import { createProducts, deleteTheme, duplicateTheme, listThemes, publishPage, p
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
-import { getStore, listStores } from '../stores';
+import { getStore, listStores, storeZone } from '../stores';
 import { publish } from '../live';
 
 /** Approved ad changes → the store's ad account (core's Meta / Google / TikTok writers). */
@@ -101,6 +101,13 @@ const setPrice =
   (db: Db): SetPrice =>
   (storeId, productId, change) =>
     onShopify(db, storeId, () => setProductPrice(db, loadKey(dataDir()), storeId, productId, change));
+
+/** The dashboard's window (app.ts windowEnd): today in the store's zone, with today's comparison scaled to the hours gone. */
+const windowEnd = (db: Db, storeIds: string[]) => {
+  const tz = storeZone(db, storeIds[0]);
+  const to = localDate(new Date(), tz);
+  return { to, todayFraction: dayFraction(to, Date.now(), tz) };
+};
 
 /** App data + approvals for agent tools. `key` decrypts integration credentials (default: the data dir's key file). */
 
@@ -149,8 +156,8 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
     return ((await res.json()) as Page<ResearchProduct>).items;
   },
   summary: (storeId, range) => {
-    const to = localDate();
-    return summarize(loadRows(db, [storeId], range, to), { range, to, storeIds: [storeId] });
+    const { to, todayFraction } = windowEnd(db, [storeId]);
+    return summarize(loadRows(db, [storeId], range, to), { range, to, storeIds: [storeId], todayFraction });
   },
   themes: {
     list: (storeId) => onLiveShopify(db, storeId, () => listThemes(db, loadKey(dataDir()), storeId)),
@@ -177,9 +184,10 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
       }),
   },
   portfolio: (range) => {
-    const [to, ids] = [localDate(), listStores(db).map((s) => s.id)];
+    const ids = listStores(db).map((s) => s.id);
+    const { to, todayFraction } = windowEnd(db, ids);
     const { currency, unconverted } = fxFor(db, ids);
-    return { ...summarize(loadRows(db, ids, range, to), { range, to, storeIds: ids }), currency, ...(unconverted.length ? { unconverted } : {}) };
+    return { ...summarize(loadRows(db, ids, range, to), { range, to, storeIds: ids, todayFraction }), currency, ...(unconverted.length ? { unconverted } : {}) };
   },
 });
 
