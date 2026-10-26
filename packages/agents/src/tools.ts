@@ -804,7 +804,8 @@ export const APP_TOOLS: AppTool[] = [
       if (floor !== undefined && to <= floor) return `Not sent: ${$(to)} is at or below the unit cost${fees ? ' plus fees' : ''} (${$(floor)}).`;
       if (Math.abs(to - from) / from > 0.3) return 'Not sent: test within ±30% of the current price, one step at a time.';
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
-      if (compareAt !== undefined && ctx.store.connected && ctx.store.platform === 'etsy') return 'Not sent: Etsy has no compare-at price. Propose the price alone; a sale is set in Etsy Shop Manager (Marketing → Sales and discounts).';
+      const sale = NO_COMPARE_AT[ctx.store.platform];
+      if (compareAt !== undefined && ctx.store.connected && sale) return `Not sent: ${sale} Propose the price alone.`;
       // Overlapping tests on one product can't be judged apart.
       const running = ctx.db.prepare('SELECT changed_on FROM price_tests WHERE store_id = ? AND product_id = ? AND changed_on >= ?').get(ctx.store.id, productId, since(29, ctx.store));
       if (running) return `Not sent: a price test on this product has been running since ${running.changed_on}; it is judged after 14 days of sales.`;
@@ -994,6 +995,13 @@ const PATIENCE_MS = 10 * 60_000;
 
 /** Approval kinds the server carries out when approved (apps/server/src/routes/agents.ts), whether or not the run that asked is still alive. */
 export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'store.publish_theme', 'store.set_price', 'ads.set_budget', 'ads.pause_campaign', 'niche.promote_learning'];
+
+/** Platforms whose price writer (core's connectors) refuses a compare-at price, and where the owner sets a sale instead. */
+const NO_COMPARE_AT: Partial<Record<Store['platform'], string>> = {
+  etsy: 'Etsy has no compare-at price; a sale is set in Etsy Shop Manager (Marketing → Sales and discounts).',
+  amazon: 'Amazon has no compare-at price here; a sale price is set in Seller Central.',
+  tiktok_shop: 'TikTok Shop has no compare-at price here; a discount is run from Seller Center → Promotions.',
+};
 
 /** Request kinds only their own tool may create (request_approval refuses them). */
 const OWN_TOOL: Record<string, string> = {

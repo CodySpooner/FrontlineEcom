@@ -161,7 +161,13 @@ test("connected stores get the price on Shopify or WooCommerce; other platforms 
 
   // Etsy prices too (core's Etsy writer refuses a non-Etsy id), but Etsy has no compare-at price: refused up front.
   db.prepare(`UPDATE stores SET platform = 'etsy' WHERE id = 'peak'`).run();
-  expect((await run('peak', [{ call: 'propose_price_change', input: { productId: id, newPrice: to, compareAt: to + 10, evidence: 'rivals at $99' } }]))[0]).toMatch(/^Not sent: Etsy has no compare-at price/);
+  const withCompareAt = { call: 'propose_price_change', input: { productId: id, newPrice: to, compareAt: to + 10, evidence: 'rivals at $99' } } as const;
+  expect((await run('peak', [withCompareAt]))[0]).toMatch(/^Not sent: Etsy has no compare-at price/);
+  for (const [platform, name] of [['amazon', 'Amazon'], ['tiktok_shop', 'TikTok Shop']] as const) {
+    db.prepare(`UPDATE stores SET platform = ? WHERE id = 'peak'`).run(platform); // their writers refuse one too
+    expect((await run('peak', [withCompareAt]))[0]).toMatch(new RegExp(`^Not sent: ${name} has no compare-at price`));
+  }
+  db.prepare(`UPDATE stores SET platform = 'etsy' WHERE id = 'peak'`).run();
   expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Approved by the owner/);
   for (let i = 0; i < 20 && !db.prepare(`SELECT 1 FROM notifications WHERE body LIKE '%not an Etsy listing%'`).get(); i++) await tick();
   expect(db.prepare(`SELECT body FROM notifications WHERE body LIKE '%not an Etsy listing%'`).get()?.body).toBe(`${id} is not an Etsy listing. Change it by hand if you still want the test.`);
