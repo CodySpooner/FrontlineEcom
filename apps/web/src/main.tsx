@@ -1,10 +1,21 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { BrowserRouter } from 'react-router';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { App } from './App';
+import { StoreSelectionProvider } from './components/StoreFilter';
 import './index.css';
+
+const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000 } } });
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <QueryClientProvider client={queryClient}>
+      <StoreSelectionProvider>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </StoreSelectionProvider>
+    </QueryClientProvider>
   </StrictMode>,
 );

@@ -8,7 +8,7 @@ export function BrandLogo() {
       </div>
       <div className="-mt-1 flex items-center gap-2">
         <svg viewBox="0 0 120 14" className="h-3 flex-1" aria-hidden="true">
-          <path d="M0 9H68l6-8 5 12 4-4h37" fill="none" stroke="#ff2a3a" strokeWidth="2.5" />
+          <path d="M0 9H68l6-8 5 12 4-4h37" fill="none" stroke="var(--color-red)" strokeWidth="2.5" />
         </svg>
         <span className="font-logo text-sm tracking-[.5em] text-white">ECOM</span>
         <span className="h-[2.5px] w-6 bg-red" />

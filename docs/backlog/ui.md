@@ -16,14 +16,14 @@ Orca's browser against the reference before ticking it.
 - [ ] (from agents) Squads API is live: `GET /api/agents?stores=a,b` → `Agent[]` (8 per store, `<storeId>:<role>` ids, `enabled`, `autonomy`, `status` incl. `waiting_approval` + `currentTask` = the pending request title), `GET /api/agents/:id` (encodeURIComponent the id), `PATCH /api/agents/:id` `{ enabled?, autonomy? }` → Agent (Deploy Agent = `{ enabled: true }`). Types: `Agent`, `AgentUpdate`, `Autonomy` in shared.
 
 ## Items
-- [ ] UI-01 Design system: tokens (already in index.css) + components: Card, Button (primary red glow / ghost), Chip,
+- [x] UI-01 Design system: tokens (already in index.css) + components: Card, Button (primary red glow / ghost), Chip,
       Segmented control, Badge, StatusDot (pulsing), ProgressBar/XPBar, Tooltip, Table, Empty/Loading/Error states, Modal/Drawer.
-- [ ] UI-02 App shell: sidebar (12 sections + icons, red active pill, System Status card, collapses to icons < 900px),
+- [x] UI-02 App shell: sidebar (12 sections + icons, red active pill, System Status card, collapses to icons < 900px),
       page hero header (title, subtitle), top bar (Ask AI search, bell with count, profile chip), store switcher
       (All stores / any subset, persisted), routes for all 12 sections with placeholder pages.
-- [ ] UI-03 Data layer: typed API client using `packages/shared` contracts, react-query hooks, WebSocket hook for
+- [x] UI-03 Data layer: typed API client using `packages/shared` contracts, react-query hooks, WebSocket hook for
       `/api/live`. Until core ships an endpoint, put a typed stub in one file (`src/api/stubs.ts`) and delete it when the real one lands.
-- [ ] UI-04 Dashboard (port the mockup): KPI cards w/ sparklines + deltas (Revenue, Profit hero, Ad Spend, ROAS, Orders, AOV),
+- [x] UI-04 Dashboard (port the mockup): KPI cards w/ sparklines + deltas (Revenue, Profit hero, Ad Spend, ROAS, Orders, AOV),
       Revenue Overview area chart (7D/30D/90D/1Y, hover tooltip, weekly buckets for 1Y), Live Store Activity, AI Agents
       strip, Agent Requests (approve/deny → API, optimistic), Daily Missions. Store filter drives everything.
 - [ ] UI-05 Hero art: per-page header art in the reference style (hooded/armored figure, red rim light, skyline,
@@ -53,9 +53,13 @@ Orca's browser against the reference before ticking it.
 - [ ] UI-20 Notification center (bell): approvals, agent finished, errors; mark read.
 - [ ] UI-21 Onboarding: first run → explore demo, or add store → pick niche → meet your squad.
 - [ ] UI-22 Polish: 1280–1920 first, usable to 900px; focus rings, keyboard nav, AA contrast; run styleseed-design-review.
+- [ ] UI-24 Store Builder: the Store Developer agent's workspace — pages/sections it's building, change list, previews,
+      approve to publish (DESIGN.md §4.6).
 - [ ] UI-23 Tests (vitest + @testing-library/react + jsdom): KPI formatting, store filter, approvals flow, chart range bucketing.
 
 ## Blocked
 
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
+- 2026-10-26 — UI-01..04: design-system primitives (+ /dev/ui gallery), app shell with 12 routes + persisted store filter,
+  typed data layer (react-query + /api/live, stubs in `src/api/stubs.ts` until core/agents ship routes), Dashboard ported from mockup v3
