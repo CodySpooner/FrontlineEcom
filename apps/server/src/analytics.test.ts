@@ -292,3 +292,21 @@ test("a TikTok Shop's orders next to the site are a channel's too: out of the fu
   const day = (id: string) => loadRows(db, [id], 7, '2026-10-26').find((r) => r.date === '2026-10-26')?.channelOrders;
   expect([day('glow'), day('peak')]).toEqual([2, 0]);
 });
+
+test("top products take off the refund lines (TikTok Shop, Amazon) of the product's paid orders, as store revenue does", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("UPDATE stores SET demo = 0 WHERE id = 'glow'").run();
+  for (const t of ['orders', 'products']) db.prepare(`DELETE FROM ${t} WHERE store_id = 'glow'`).run();
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES ('glow', ?, '', ?, 'paid', 'unfulfilled', 0, '2026-10-25')");
+  const item = db.prepare("INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('glow', ?, ?, 1, ?, ?)");
+  const refund = db.prepare("INSERT INTO amazon_refunds (store_id, id, order_id, amount, product_id) VALUES ('glow', ?, ?, ?, ?)");
+  order.run('tt-1', 50); item.run('tt-1', 'tt-p', 50, 10); refund.run('r1', 'tt-1', 50, 'tt-p'); // refunded in full
+  order.run('amz-2', 40); item.run('amz-2', 'amz-p', 40, 10); refund.run('r2', 'amz-2', 15, 'amz-p'); // partly
+  order.run('tt-3', 30); item.run('tt-3', 'tt-q', 30, 0); refund.run('r3', 'tt-3', 5, null); // names no product: lands on none
+  expect(topProducts(db, ['glow'], '2026-10-20', '2026-10-26', 8).map((p) => [p.productId, p.units, p.revenue, p.profit])).toEqual([
+    ['tt-q', 1, 30, 30],
+    ['amz-p', 1, 25, 15],
+    ['tt-p', 1, 0, -10],
+  ]);
+});

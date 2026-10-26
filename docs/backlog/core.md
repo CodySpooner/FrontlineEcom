@@ -178,12 +178,13 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-92 A double click on "add to store" made two requests for one product.
 - [x] CORE-93 A WooCommerce site next to a Shopify shop switched the store's timezone back and forth.
 - [x] CORE-94 Amazon's "today" was the computer's date, not the store's: a store ahead of the machine missed today's Amazon sales until the machine's midnight.
-- [ ] CORE-95 Top products ignored Amazon and TikTok Shop refund lines.
+- [x] CORE-95 Top products ignored Amazon and TikTok Shop refund lines.
 - [ ] CORE-96 Amazon looked up TikTok Shop refund lines' orders on Amazon, with mangled ids, and could stall on them.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-95: Top products summed paid orders' line items but never took off refund lines (`amazon_refunds`: Amazon's and TikTok Shop's), so a TikTok order refunded in full still showed its product at full revenue and profit while store revenue and the platform split had dropped it (as CORE-63/80 for Shopify and Etsy). Each product's refund lines on paid orders in the window now come off its revenue and profit (a refund naming no product lands on none; units stay gross), as the agents' `list_products` does. 1Y on a 100k-order store with 20k refund lines: 170 → 265 ms.
 - 2026-10-26 — CORE-94: Amazon's sales request ended at midnight after the machine's today, in the store's zone, so a store ahead of the machine (a UK store run from the US) wasn't asked for its own today until the machine's midnight: from 00:00 to 06:00 London time it had no Amazon sales, and an Amazon-only store showed today's order costs with no sales (negative profit). `today` is now the store's day. Left as is: the ad connectors and GA4 also end at the machine's today, but each sync re-reads the last days, so an account ahead of the machine catches up within hours (and only spend lags, not sales).
 - 2026-10-26 — CORE-93 (from a review of the Amazon/TikTok/Woo connectors and analytics): the Woo and Shopify syncs each set the store's timezone to their own, so a Shopify store in Chicago with a Woo site left at WordPress's default UTC was re-dated every couple of minutes (a 22:00 order jumping between two days), and every switch had Amazon re-read two years of sales. `takeTimezone` (common.ts) applies takeCurrency's rule: a second platform's zone is taken only until the store's own platform has synced.
 - 2026-10-26 — Inbox (agents, AGT-182): `research_products.niche_detail` (migration 43) and `ResearchProduct.nicheDetail?` (the custom niche's slug, with niche 'other'). `GET /api/research?niche=other:<slug>` gives that custom niche's finds only; `niche=other` still gives every custom niche's. `recordFind` (routes/agents.ts, agents lane) writes it once the agents pass it.

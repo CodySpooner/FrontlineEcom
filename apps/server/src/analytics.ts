@@ -261,7 +261,7 @@ export function campaignStats(db: Db, storeIds: string[], from: string, to: stri
 }
 
 /**
- * Best sellers over [from, to] (each store's own days, see dayShifts): paid orders' line items for real stores, a
+ * Best sellers over [from, to] (each store's own days, see dayShifts): paid orders' line items less their refund lines for real stores, a
  * revenue-consistent split for demo stores.
  */
 export function topProducts(db: Db, storeIds: string[], from: string, to: string, limit: number, shift: Record<string, number> = {}): TopProduct[] {
@@ -272,13 +272,22 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
   const rows = real.length
     ? db
         .prepare(
-          `WITH w (store_id, d_from, d_to) AS (VALUES ${real.map(() => '(?, ?, ?)').join(',')})
-           SELECT i.store_id, i.product_id, p.title, p.image, p.inventory, p.inventory_tracked, p.status, sum(i.quantity) AS units, sum(i.revenue) AS revenue, sum(i.revenue - i.cost) AS profit
-           FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
-           JOIN w ON w.store_id = i.store_id AND o.local_date BETWEEN w.d_from AND w.d_to
-           LEFT JOIN products p ON p.store_id = i.store_id AND p.id = i.product_id
-           WHERE o.status = 'paid'
-           GROUP BY i.store_id, i.product_id`,
+          `WITH w (store_id, d_from, d_to) AS (VALUES ${real.map(() => '(?, ?, ?)').join(',')}),
+           lines AS (
+             SELECT i.store_id, i.product_id, i.quantity, i.revenue, i.cost
+             FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+             JOIN w ON w.store_id = i.store_id AND o.local_date BETWEEN w.d_from AND w.d_to
+             WHERE o.status = 'paid'
+             -- Refund lines (TikTok Shop, Amazon) off their order's day, as rebuildRevenue takes them off the store's. One
+             -- that names no product (a TikTok refund of a mixed order) lands on none. ponytail: units stay gross.
+             UNION ALL SELECT r.store_id, r.product_id, 0, -r.amount, 0
+             FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
+             JOIN w ON w.store_id = r.store_id AND o.local_date BETWEEN w.d_from AND w.d_to
+             WHERE o.status = 'paid' AND r.product_id IS NOT NULL
+           )
+           SELECT l.store_id, l.product_id, p.title, p.image, p.inventory, p.inventory_tracked, p.status, sum(l.quantity) AS units, sum(l.revenue) AS revenue, sum(l.revenue - l.cost) AS profit
+           FROM lines l LEFT JOIN products p ON p.store_id = l.store_id AND p.id = l.product_id
+           GROUP BY l.store_id, l.product_id`,
         )
         // No LIMIT here: stores in different currencies only rank correctly after conversion (below).
         .all(...ownDays(real, from, to, shift).flat())
