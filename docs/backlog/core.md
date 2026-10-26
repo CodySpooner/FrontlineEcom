@@ -49,6 +49,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Fix: `pnpm dev` API never started (tsx watch restarts on stdin data under `pnpm --parallel`); server dev now `node --watch --import tsx`. Verified Command Center on the real API in the browser.
 - 2026-10-26 — CORE-09 Meta Ads connector: campaigns + daily campaign insights (spend, de-duplicated purchases/value, clicks, impressions), 730-day backfill in 90-day chunks then 28-day attribution re-pull, `daily_metrics.ad_spend` rebuilt across networks; shared `switchToReal`/`rebuildAdSpend`
 - 2026-10-26 — CORE-08 Shopify connector: Admin GraphQL (custom-app token, myshopify.com-only host), incremental products/orders sync by `updated_at` (2y backfill), daily revenue/orders/cogs rebuilt per store-local day, first sync wipes demo rows and flips the store to connected, errors surface on the integration; sync loop every 30s (stale 10 min / on credential change)
 - 2026-10-26 — CORE-20 `GET/PATCH /api/settings`, `GET /api/caps` + `PUT /api/caps/:storeId` (budget caps + per-action autopilot), notifications table + `notify()` (live broadcast, honors prefs), `GET /api/notifications`, `POST /api/notifications/read`; approvals raise a notification
