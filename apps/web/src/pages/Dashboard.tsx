@@ -10,17 +10,9 @@ import { Portrait } from '../components/Art';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
-import { sparkPoints, weekly } from '../lib/chart';
+import { PERIOD, RANGES, sparkPoints, weekly } from '../lib/chart';
 import { ago, cents, money, signedPct } from '../lib/format';
 import { NAV } from '../nav';
-
-const RANGES: { value: AnalyticsRange; label: string }[] = [
-  { value: 7, label: '7D' },
-  { value: 30, label: '30D' },
-  { value: 90, label: '90D' },
-  { value: 365, label: '1Y' },
-];
-const PERIOD: Record<AnalyticsRange, string> = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months' };
 
 export function Dashboard() {
   const [range, setRange] = useState<AnalyticsRange>(30);

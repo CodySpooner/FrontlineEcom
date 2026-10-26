@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router';
 import { Shell } from './components/Shell';
 import { NAV } from './nav';
 import { AgentDetail } from './pages/AgentDetail';
+import { Analytics } from './pages/Analytics';
 import { Agents } from './pages/Agents';
 import { Creative } from './pages/Creative';
 import { Dashboard } from './pages/Dashboard';
@@ -10,7 +11,7 @@ import { DevGallery } from './pages/DevGallery';
 import { Placeholder } from './pages/Placeholder';
 import { Research } from './pages/Research';
 
-const PAGES: Record<string, ReactNode> = { '/agents': <Agents />, '/research': <Research />, '/creative': <Creative /> };
+const PAGES: Record<string, ReactNode> = { '/agents': <Agents />, '/research': <Research />, '/creative': <Creative />, '/analytics': <Analytics /> };
 
 export function App() {
   return (

@@ -50,7 +50,7 @@ Orca's browser against the reference before ticking it.
 - [x] UI-10 Creative Studio (Ad Creation): tabs (Generate Ads, UGC Avatars, Video to Video, Image Studio, Ad Variations,
       Ad Copy), prompt + Enhance with AI + aspect ratio, Generate with Higgsfield (credit cost), preview player, gallery,
       action row (Edit, Variations, Captions, Export, Save to Library), integration badges.
-- [ ] UI-11 Store Analytics: revenue/profit chart, funnel, top products, channels, campaigns table (ROAS-colored).
+- [x] UI-11 Store Analytics: revenue/profit chart, funnel, top products, channels, campaigns table (ROAS-colored).
 - [ ] UI-12 Orders & Fulfillment: orders table (filters, status chips, supplier, tracking), issues queue.
 - [ ] UI-13 Competitor Intel: competitors list, ad snapshots grid, price-change timeline, analyst briefs.
 - [ ] UI-14 Automation: rules list + editor (trigger → action → approval policy/cap), run log.
@@ -82,3 +82,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-09: Product Research — 5 research tabs + My Lists (?tab=), search + niche filter, scored product cards (niche icon until images), bookmark → Saved list, details dialog (score breakdown, lists, Request to add → approval), AI Research → store's Product Hunter chat
 - 2026-10-26 — Inbox: desktop title bar — with the window-controls overlay visible, the hero strip is the drag region (controls no-drag) and pads right past Windows' caption buttons (CSS verified in Chrome; not yet seen in Electron)
 - 2026-10-26 — UI-10: Creative Studio — 6 tool tabs (?tab=), brief + Enhance + aspect, Generate with Higgsfield (credit price; asks approval via Creative Studio agent) / Write with Claude (Copywriter), preview (img/video), library gallery, actions (Edit in Studio, Variations, Captions, Export/Copy text, Delete), library refreshes on run end
+- 2026-10-26 — UI-11: Store Analytics — range + store filter, revenue/profit/ad-spend trend with ROAS/break-even/orders/AOV, conversion funnel, channels, top products, campaigns table (ROAS colored vs each store's break-even), by-store table. Funnel/campaigns/top-products are stubbed in api/stubs.ts (marked Estimated) until core's endpoints land (requested). Tooltip no longer widens the page when hidden.

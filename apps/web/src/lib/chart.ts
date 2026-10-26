@@ -1,4 +1,13 @@
 // Pure helpers behind the hand-rolled SVG charts.
+import type { AnalyticsRange } from '@frontline/shared';
+
+export const RANGES: { value: AnalyticsRange; label: string }[] = [
+  { value: 7, label: '7D' },
+  { value: 30, label: '30D' },
+  { value: 90, label: '90D' },
+  { value: 365, label: '1Y' },
+];
+export const PERIOD: Record<AnalyticsRange, string> = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months' };
 
 /** Rounds an axis maximum up to a "nice" number: 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8 × 10^n. */
 export function niceMax(v: number) {

@@ -18,6 +18,7 @@ import type {
   MemoryInput,
   Mission,
   Page,
+  Product,
   ProductList,
   ResearchProduct,
   ResearchTab,
@@ -153,6 +154,9 @@ export function useAddToStore() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
   });
 }
+
+export const useProducts = (storeIds: string[]) =>
+  useQuery({ queryKey: ['products', storeIds], queryFn: () => api<Page<Product>>(`/api/products?stores=${storeIds.join(',')}&limit=200`) });
 
 export const useCreatives = (kind?: CreativeKind) =>
   useQuery({ queryKey: ['creatives', kind], queryFn: () => api<Creative[]>(`/api/creatives?limit=60${kind ? `&kind=${kind}` : ''}`), placeholderData: keepPreviousData });
