@@ -60,7 +60,7 @@ export function Integrations() {
                   {kinds.map((kind) => (
                     <section key={kind} className="rounded-lg border border-line bg-bg-2 p-3.5">
                       <h3 className="mb-2.5 text-[14px] font-semibold">{INTEGRATION_KINDS[kind].name}</h3>
-                      <ul className="grid gap-2">
+                      <ul className="grid grid-cols-1 gap-2">
                         {targets(kind).map((store) => (
                           <Connection key={store?.id ?? 'all'} store={store} i={byKey.get(keyOf(kind, store))} onOpen={() => setOpen({ kind, store })} />
                         ))}
@@ -154,9 +154,12 @@ export function Connection({ store, i, onOpen }: { store?: Store; i?: Integratio
     <li>
       <div className="flex items-center gap-2 text-[13px]">
         <StatusDot tone={!i ? 'idle' : i.status === 'error' ? 'red' : 'good'} pulse={!!imp} />
-        <span className="min-w-0 flex-1 truncate">
-          {store ? store.name : 'All stores'}
-          <span className="text-xs text-muted"> · {status}</span>
+        {/* A long store name truncates; its status wraps below rather than being cut off with it. */}
+        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-1">
+          <span className="max-w-full truncate" title={store?.name}>
+            {store ? store.name : 'All stores'}
+          </span>
+          <span className="text-xs text-muted">· {status}</span>
         </span>
         {/* Creative tools (Higgsfield) have nothing to sync. */}
         {i && INTEGRATION_KINDS[i.kind].category !== 'creative' && (
