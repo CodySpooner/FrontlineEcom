@@ -42,6 +42,20 @@ export function setIssueStatus(db: DatabaseSync, id: string, status: OrderIssueS
   return r ? toIssue(r) : undefined;
 }
 
+/** Issues the order itself has since answered: late/stuck once delivered, supplier once it has tracking. Checked on read. */
+export function closeAnsweredIssues(db: DatabaseSync, now = new Date()) {
+  const rows = db
+    .prepare(
+      `SELECT i.id, i.kind, o.fulfillment_status, o.tracking FROM order_issues i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+       WHERE i.status = 'open' AND ((i.kind IN ('late', 'stuck', 'supplier') AND o.fulfillment_status = 'delivered') OR (i.kind = 'supplier' AND o.tracking IS NOT NULL))`,
+    )
+    .all();
+  for (const r of rows) {
+    const why = r.fulfillment_status === 'delivered' ? 'Delivered' : `Supplier shipped (tracking ${r.tracking})`;
+    setIssueStatus(db, String(r.id), 'resolved', `${why}; closed automatically.`, now);
+  }
+}
+
 function toIssue(r: Record<string, unknown>): OrderIssue {
   const opt = (k: string) => (r[k] == null ? undefined : String(r[k]));
   const [suggestedAction, resolution, resolvedAt] = ['suggested_action', 'resolution', 'resolved_at'].map(opt);

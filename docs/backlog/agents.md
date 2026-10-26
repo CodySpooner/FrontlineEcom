@@ -78,14 +78,17 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-31 Memory pins (UI-16): owner pins a store memory and every agent of that store gets it in its prompt, whatever the task.
 - [x] AGT-32 Outcomes move confidence: memories carry the run that wrote them; when an approved ad change or added product is measured, that run's learnings gain (worked) or lose (didn't) confidence via `adjustConfidence`. Today it's never called, so DESIGN's "outcomes confirm or contradict" loop is open.
 - [x] AGT-33 Knowledge Base edits: owner overrides for playbooks and platform/niche packs saved in the data dir (shipped files untouched); `PUT /api/knowledge/:kind/:key {markdown}`, `DELETE` resets to shipped; prompt assembly prefers the override; `KnowledgeDoc.edited`.
+- [x] AGT-34 Issue queue closes itself: late/stuck/supplier issues resolve once the order is delivered; supplier issues also resolve once supplier tracking arrives.
 - [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
 
 ## Blocked
-- AGT-14 Google Ads / GA4 MCPs: the official servers (`googleads/google-ads-mcp`, `googleanalytics/google-analytics-mcp`) are local pipx Python processes that read a credentials JSON file (ADC) + `GOOGLE_PROJECT_ID`; wiring them means writing decrypted credentials to disk and requiring Python/pipx on the owner's machine. Needs: an owner decision, or core's Google connectors syncing data our tools read instead.
+- AGT-35 Approved ad changes on connected stores still end as "apply on the ad account by hand": core's Meta/Google/TikTok connectors are read-only. Needs core's budget/pause writers (requested in core Inbox); then `applyAdChange` calls them like `publishDraft` does.
 
 ## Done
+- 2026-10-26 — AGT-34 Issue queue closes itself: on `GET /api/order-issues`, open late/stuck/supplier issues whose order is now delivered, and supplier issues whose order has tracking, are resolved with the reason ("Delivered; closed automatically."). The owner only sees what still needs them.
+- 2026-10-26 — AGT-14 Google unblocked without MCPs: core's Google Ads / TikTok Ads syncs fill `campaigns`/`campaign_daily`, so `list_campaigns` and `review_campaigns` read them like Meta. No Python MCP processes or credential files on disk.
 - 2026-10-26 — AGT-33 Knowledge Base edits: `PUT /api/knowledge/:kind/:key {markdown}` saves the owner's version to `<data dir>/knowledge/...`, which every run reads instead of the shipped file (`edited: true`); `DELETE` goes back to the shipped one. Custom niche packs are edited in place and can't be reset. Only known layers are writable.
 - 2026-10-26 — AGT-32 Outcomes move confidence: memories record the run that wrote them (`store_memory.run_id`, migration 20; write_memory and reflection). When an approved ad change or added product is measured, `judgeRun` moves that run's learnings +0.1 (worked) or -0.1 (didn't), once per outcome (`memory_feedback`).
 - 2026-10-26 — AGT-31 Memory pins: `store_memory.pinned` (migration 19), `PATCH /api/memory/:id {pinned}` (POST refuses it), pinned listed first, and the prompt's memory set always includes them on top of the top-k.

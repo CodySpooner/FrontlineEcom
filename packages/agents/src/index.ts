@@ -27,5 +27,5 @@ export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats
 export { DEFAULT_JOBS, createDefaultJobs } from './jobs';
 export { nicheKey, addNicheLearning, listNicheLearnings, deleteNicheLearning } from './niche';
 export { savePageDraft, getPageDraft, listPageDrafts, markPublished, deletePageDraft, type NewPageDraft } from './pages';
-export { flagOrderIssue, listOrderIssues, setIssueStatus, type NewOrderIssue } from './issues';
+export { closeAnsweredIssues, flagOrderIssue, listOrderIssues, setIssueStatus, type NewOrderIssue } from './issues';
 export { knowledgeIndex, knowledgeDoc, resetKnowledge, saveKnowledge } from './knowledge';

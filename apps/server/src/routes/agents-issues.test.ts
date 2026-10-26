@@ -15,6 +15,7 @@ beforeEach(() => {
   seedDemo(db);
   app = createApp(db);
   orderId = String(db.prepare(`SELECT id FROM orders WHERE store_id = 'peak' ORDER BY created_at LIMIT 1`).get()?.id);
+  db.prepare(`UPDATE orders SET fulfillment_status = 'unfulfilled', tracking = NULL WHERE store_id = 'peak' AND id = ?`).run(orderId); // still waiting
 });
 const flag = (extra: object = {}): FakeStep => ({
   call: 'flag_order_issue',
@@ -50,4 +51,20 @@ test('Operations flags order problems once per order and kind; the owner resolve
   expect((await run([flag()]))[0]).toMatch(/^Flagged order/);
   expect(listOrderIssues(db, { storeIds: ['peak'] }).map((i) => [i.kind, i.status])).toEqual([['late', 'open'], ['refund', 'open'], ['late', 'resolved']]);
   expect((await app.request('/api/order-issues?status=closed')).status).toBe(400);
+});
+
+test('issues the order has since answered close themselves: delivered, or supplier tracking arrived', async () => {
+  const other = String(db.prepare(`SELECT id FROM orders WHERE store_id = 'peak' AND id != ? ORDER BY created_at LIMIT 1`).get(orderId)?.id);
+  db.prepare(`UPDATE orders SET fulfillment_status = 'unfulfilled', tracking = NULL WHERE store_id = 'peak' AND id = ?`).run(other);
+  await run([flag(), flag({ kind: 'supplier' }), flag({ kind: 'address' }), flag({ orderId: other, kind: 'supplier' })]);
+  const open = async () => ((await (await app.request('/api/order-issues?stores=peak&status=open')).json()) as OrderIssue[]).map((i) => `${i.orderId === orderId ? 'a' : 'b'}:${i.kind}`).sort();
+  expect(await open()).toEqual(['a:address', 'a:late', 'a:supplier', 'b:supplier']);
+
+  db.prepare(`UPDATE orders SET tracking = 'CJ123' WHERE store_id = 'peak' AND id = ?`).run(other);
+  expect(await open()).toEqual(['a:address', 'a:late', 'a:supplier']);
+  db.prepare(`UPDATE orders SET fulfillment_status = 'delivered' WHERE store_id = 'peak' AND id = ?`).run(orderId);
+  expect(await open()).toEqual(['a:address']);
+  expect(listOrderIssues(db, { status: 'resolved' }).map((i) => i.resolution).sort()).toEqual([
+    'Delivered; closed automatically.', 'Delivered; closed automatically.', 'Supplier shipped (tracking CJ123); closed automatically.',
+  ]);
 });
