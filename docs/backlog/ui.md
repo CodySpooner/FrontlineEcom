@@ -344,6 +344,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-135 An agent marked "Needs you" showed nothing to act on from its own page unless the open chat run had raised
       the request (e.g. Pawsome's Ad Strategist: a pending budget raise, no runs, an empty "Brief your Ad Strategist" chat).
       Its waiting requests now sit under the header with Approve / Deny; one already in the open chat shows only there.
+- [x] UI-136 Deny opens a reason field; its "Back" unmounted the field and dropped keyboard focus to <body>, so a keyboard
+      user started over from the top of the page. Backing out now returns focus to that request's Deny button (Dashboard
+      requests board and every request card: chat transcripts and the agent page).
 
 ## Blocked
 
@@ -524,3 +527,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-133: one line in App.tsx (`page(() => import('./ecosystem/Ecosystem'), 'Ecosystem')`); src/ecosystem untouched. vite build: main chunk 602 → 423 kB (132 kB gzip), no size warning; Ecosystem is its own 334 kB chunk. Orca: /ecosystem renders the office canvas (685×500) with pixi fetched on visit. Same session's checks: long store names (48 chars) wrap cleanly on every page, dialogs return focus to their trigger on Close and Esc
 - 2026-10-26 — UI-134: Shell passes `useLive()`'s online flag as the Outlet context; `LiveActivity` (now exported) reads it, online outside Shell. New Dashboard test (Outlet context false: "Reconnecting…", no "Live"). Orca: stopped the dev API, so the badge read "Reconnecting…" (grey, no pulse) beside the sidebar's "System status: Reconnecting…"; restarted it, back to "Live" in ~5s
 - 2026-10-26 — UI-135: AgentDetail filters `useApprovals()` to the agent, skipping a request whose `runId` is in the open chat thread, and reuses Chat's `ApprovalCard`. Two new AgentDetail tests (a request no run raised shows with its Approve button and another agent's doesn't; one raised in the open run appears once). Chrome at 1440: Ad Strategist · Pawsome Gear shows "Needs your approval · Change ad budgets / Raise daily budget 20% ($216 → $259)" above the tabs (not clicked); the idle Copywriter shows none. Same pass: zero console warnings or errors across all 14 pages, the Orders table pages, the Automation form covers trigger/approval/cap, Creative matches the reference's action bar (captions for video only)
+- 2026-10-26 — UI-136: a `backed` state per call site gives the remounted Deny button `autoFocus`. New Dashboard and Chat tests (red on the old code: focus on body). Orca: Deny → Back on "Pause Spark Ads · UGC" left focus on BODY before, on "Deny: Pause …" after (no request was denied). Also found while verifying UI-135: after a ship's rebase the dev Vite can serve stale modules; restarted it clean

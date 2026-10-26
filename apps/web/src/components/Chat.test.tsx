@@ -84,3 +84,14 @@ describe('a request card in a past transcript', () => {
     expect(await screen.findByText('Expired')).toBeTruthy();
   });
 });
+
+describe('backing out of a deny on a request card', () => {
+  it('puts focus back on Deny', async () => {
+    const a = { id: 'a1', storeId: 'peak', agentId: 'peak:ad_strategist', title: 'Pause UGC', reason: 'ROAS 0.8', status: 'pending', createdAt: '2026-10-26T08:00:00Z', action: { kind: 'ads.pause_campaign', payload: {} } } as ApprovalRequest;
+    stubApi((url) => (url.startsWith('/api/approvals?status=pending') ? [a] : []));
+    renderApp(<ApprovalCard a={a} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Deny: Pause UGC' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Deny: Pause UGC' }));
+  });
+});

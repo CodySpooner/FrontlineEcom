@@ -356,6 +356,8 @@ export function Requests() {
   const [verdicts, setVerdicts] = useState<Record<string, 'approve' | 'deny'>>({});
   const [failed, setFailed] = useState<string>();
   const [denying, setDenying] = useState<string>();
+  // Backing out of a reason field unmounts it: focus returns to that request's Deny, not the top of the page.
+  const [backed, setBacked] = useState<string>();
   const list = (q.data ?? []).filter((a) => has(a.storeId));
   const waiting = list.filter((a) => !verdicts[a.id]).length;
 
@@ -410,13 +412,13 @@ export function Requests() {
                 {v ? (
                   <span className={cx('font-display text-xs font-bold tracking-widest uppercase', v === 'approve' ? 'text-good' : 'text-red')}>{v === 'approve' ? 'Approved' : 'Denied'}</span>
                 ) : denying === a.id ? (
-                  <DenyReason title={a.title} onDeny={(note) => act(a.id, 'deny', note)} onBack={() => setDenying(undefined)} className="col-span-2" />
+                  <DenyReason title={a.title} onDeny={(note) => act(a.id, 'deny', note)} onBack={() => (setDenying(undefined), setBacked(a.id))} className="col-span-2" />
                 ) : (
                   <div className="flex gap-1.5">
                     <Button size="sm" variant="primary" aria-label={`Approve: ${a.title}`} onClick={() => act(a.id, 'approve')}>
                       Approve
                     </Button>
-                    <Button size="sm" aria-label={`Deny: ${a.title}`} onClick={() => setDenying(a.id)}>
+                    <Button size="sm" aria-label={`Deny: ${a.title}`} onClick={() => setDenying(a.id)} autoFocus={backed === a.id}>
                       Deny
                     </Button>
                   </div>

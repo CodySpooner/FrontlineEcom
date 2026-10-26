@@ -143,3 +143,13 @@ describe('Live Store Activity', () => {
     expect(screen.queryByText('Live')).toBeNull();
   });
 });
+
+describe('backing out of a deny', () => {
+  it('puts focus back on Deny rather than dropping it to the page', async () => {
+    stubApi((url) => (url.startsWith('/api/stores') ? [store] : url.startsWith('/api/approvals?status=pending') ? [approval] : []));
+    renderApp(<Requests />);
+    fireEvent.click(await screen.findByRole('button', { name: `Deny: ${approval.title}` }));
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: `Deny: ${approval.title}` }));
+  });
+});

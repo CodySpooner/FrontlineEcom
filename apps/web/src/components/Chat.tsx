@@ -249,6 +249,8 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
   const [verdict, setVerdict] = useState<'approve' | 'deny'>();
   const open = !verdict && (pending?.some((p) => p.id === a.id) ?? a.status === 'pending');
   const [denying, setDenying] = useState(false);
+  // Backing out of the reason field unmounts it: focus returns to Deny, not the top of the page.
+  const [backed, setBacked] = useState(false);
   const act = (v: 'approve' | 'deny', note?: string) => decide.mutateAsync({ id: a.id, verdict: v, note }).then(() => setVerdict(v), () => {});
   return (
     <div className="rounded-lg border border-red/40 bg-red-soft/40 p-3">
@@ -261,13 +263,13 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
       <ApprovalExtras action={a.action} storeId={a.storeId} />
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         {open && denying ? (
-          <DenyReason title={a.title} disabled={decide.isPending} onDeny={(note) => act('deny', note)} onBack={() => setDenying(false)} />
+          <DenyReason title={a.title} disabled={decide.isPending} onDeny={(note) => act('deny', note)} onBack={() => (setDenying(false), setBacked(true))} />
         ) : open ? (
           <>
             <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => act('approve')} aria-label={`Approve: ${a.title}`}>
               Approve
             </Button>
-            <Button size="sm" disabled={decide.isPending} onClick={() => setDenying(true)} aria-label={`Deny: ${a.title}`}>
+            <Button size="sm" disabled={decide.isPending} onClick={() => setDenying(true)} aria-label={`Deny: ${a.title}`} autoFocus={backed}>
               Deny
             </Button>
           </>
