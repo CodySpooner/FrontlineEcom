@@ -578,7 +578,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'propertyId', label: 'Property ID', secret: false },
     { key: 'serviceAccountJson', label: 'Service account JSON', secret: true },
   ] },
-  cj: { name: 'CJ Dropshipping', category: 'supplier', perStore: false, fields: [
+  cj: { name: 'CJ Dropshipping', category: 'supplier', perStore: false, help: 'CJ Dropshipping → My CJ → Authorization → API → generate an API key. Read-only for now: order status and tracking for orders your stores send to CJ.', fields: [
     { key: 'email', label: 'Account email', secret: false },
     { key: 'apiKey', label: 'API key', secret: true },
   ] },

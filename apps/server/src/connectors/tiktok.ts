@@ -214,7 +214,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       // ponytail: TikTok has no unit costs, so TikTok orders add revenue with cogs 0.
       const ord = db.prepare(
         `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = excluded.tracking`,
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking)`,
       );
       const days = new Set<string>();
       for (const o of orders) {

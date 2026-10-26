@@ -146,7 +146,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       const ord = db.prepare(
         `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
-           tracking = excluded.tracking, cogs = excluded.cogs`,
+           tracking = coalesce(excluded.tracking, tracking), cogs = excluded.cogs`,
       );
       const days = new Set<string>();
       for (const o of orders) {
