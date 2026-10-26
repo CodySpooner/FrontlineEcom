@@ -31,3 +31,25 @@ test('next run and due-between windows', () => {
   expect(cronDueBetween(daily9, at(2026, 10, 26, 9, 0), at(2026, 10, 26, 10, 0))).toBe(false);
   expect(cronDueBetween(daily9, at(2026, 10, 25, 23, 0), at(2026, 10, 26, 8, 59))).toBe(false);
 });
+
+test('the night clocks fall back, a fixed time in the repeated hour runs once; hourly rules keep every real hour', () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'America/New_York'; // 2026-11-01: 02:00 EDT → 01:00 EST, so 01:00–01:59 comes round twice
+  try {
+    const daily = parseCron('30 1 * * *');
+    expect(nextCronTime(daily, new Date('2026-11-01T05:00:00Z'))?.toISOString()).toBe('2026-11-01T05:30:00.000Z'); // 01:30 EDT
+    expect(nextCronTime(daily, new Date('2026-11-01T05:30:00Z'))?.toISOString()).toBe('2026-11-02T06:30:00.000Z'); // next night
+    expect(cronDueBetween(daily, new Date('2026-11-01T05:30:00Z'), new Date('2026-11-01T06:45:00Z'))).toBe(false);
+    // The automation loop asks every minute: due once over the whole night, not on each tick of the second 01:xx.
+    let due = 0;
+    for (let t = Date.parse('2026-11-01T04:00:00Z'); t < Date.parse('2026-11-01T09:00:00Z'); t += 60_000) {
+      if (cronDueBetween(daily, new Date(t), new Date(t + 60_000))) due++;
+    }
+    expect(due).toBe(1);
+    const hourly = parseCron('0 * * * *');
+    expect(nextCronTime(hourly, new Date('2026-11-01T05:00:00Z'))?.toISOString()).toBe('2026-11-01T06:00:00.000Z'); // 01:00 EST
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});

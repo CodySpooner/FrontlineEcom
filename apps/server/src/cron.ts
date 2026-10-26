@@ -39,13 +39,29 @@ export function cronMatches(c: Cron, d: Date) {
   return c.domAny || c.dowAny ? domOk && dowOk : domOk || dowOk;
 }
 
-/** First matching minute strictly after `from`, looking ahead at most `days`. */
+/**
+ * True for a minute of the hour clocks fall back through, the second time round (its wall-clock time already happened
+ * before the clocks went back).
+ */
+function repeated(d: Date) {
+  const back = d.getTimezoneOffset() - new Date(d.getTime() - 3 * 3_600_000).getTimezoneOffset(); // minutes
+  if (back <= 0) return false;
+  const first = new Date(d.getTime() - back * 60_000);
+  return first.getHours() === d.getHours() && first.getMinutes() === d.getMinutes();
+}
+
+/**
+ * First matching minute strictly after `from`, looking ahead at most `days`. Steps in real minutes: a local time in the
+ * hour clocks fall back through is ambiguous. Like classic cron, a rule with fixed hours runs only the first time round.
+ * ponytail: a fixed time in the hour clocks skip in spring (02:30) doesn't run that night; classic cron runs it late.
+ */
 export function nextCronTime(c: Cron, from: Date, days = 8): Date | undefined {
-  const d = new Date(from);
-  d.setSeconds(0, 0);
+  let t = Math.floor(from.getTime() / 60_000) * 60_000;
+  const anyHour = c.sets[1]!.size === 24;
   for (let i = 0; i < days * 1440; i++) {
-    d.setMinutes(d.getMinutes() + 1);
-    if (cronMatches(c, d)) return new Date(d);
+    t += 60_000;
+    const d = new Date(t);
+    if (cronMatches(c, d) && (anyHour || !repeated(d))) return d;
   }
 }
 
