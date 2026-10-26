@@ -94,3 +94,11 @@ test('advanceDemoDay adds the orders that came due, keeps orders and metrics in 
   advanceDemoDay(db, 'glow', new Date('2026-10-22T01:00:00'));
   expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-21'").get()).toEqual({ revenue: demoDay('glow', '2026-10-21').revenue, orders: demoDay('glow', '2026-10-21').orders });
 });
+
+test('a day left "so far" by an earlier session is finalised on the next start', () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-20');
+  db.prepare("UPDATE daily_metrics SET revenue = 1, orders = 0 WHERE date = '2026-10-20'").run(); // as if the app quit mid-morning
+  seedDemo(db, '2026-10-23');
+  expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-20'").get()).toEqual({ revenue: demoDay('glow', '2026-10-20').revenue, orders: demoDay('glow', '2026-10-20').orders });
+});

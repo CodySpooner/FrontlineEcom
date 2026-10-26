@@ -120,3 +120,16 @@ test('top products: real stores from line items of paid orders, demo stores spli
   expect(both.map((p) => p.revenue)).toEqual([...both.map((p) => p.revenue)].sort((a, b) => b - a));
   expect((await app.request('/api/analytics/top-products?range=12')).status).toBe(400);
 });
+
+test('while today is in progress, the previous period\'s last day counts only the same share', () => {
+  const r = (date: string, revenue: number, orders: number): MetricRow => ({ storeId: 'a', date, revenue, adSpend: 10, cogs: 0, orders });
+  const rows = [r('2026-10-30', 100, 10), r('2026-10-31', 200, 20), r('2026-11-01', 100, 10), r('2026-11-02', 50, 5)];
+  const full = summarize(rows, { range: 2, to: '2026-11-02', storeIds: ['a'] } as never);
+  expect(full.previous).toMatchObject({ revenue: 300, orders: 30, adSpend: 20 });
+  const morning = summarize(rows, { range: 2, to: '2026-11-02', storeIds: ['a'], todayFraction: 0.5 } as never);
+  // 2026-10-31 (the day matching today) is halved; 2026-10-30 stays whole.
+  expect(morning.previous).toMatchObject({ revenue: 200, orders: 20, adSpend: 15 });
+  expect(morning.totals).toEqual(full.totals);
+  expect(morning.deltas.revenue).toBe(-25);
+  expect(morning.byStore[0]!.deltas.revenue).toBe(-25);
+});

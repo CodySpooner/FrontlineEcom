@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Store, StoreEvent, StoreEventType, TopProduct } from '@frontline/shared';
 import { tx, type Db } from './db';
-import { addDays, dayNumber, localDate } from './dates';
+import { addDays, dayFraction, dayNumber, localDate } from './dates';
 import { insertStore } from './stores';
 
 /** Days of history kept for demo stores (2 years). */
@@ -71,9 +71,6 @@ export function demoDay(storeId: string, date: string) {
   });
   return { date, revenue: cents(revenue), adSpend: cents(adSpend), cogs: cents(cogs), orders, sessions, addToCarts, checkouts, campaigns };
 }
-
-/** Share of server-local `date` that has passed at `now`: 0 before it starts, 1 once it's over. */
-export const dayFraction = (date: string, now = Date.now()) => Math.min(1, Math.max(0, (now - new Date(`${date}T00:00:00`).getTime()) / 86400000));
 
 /** A demo day `frac` of the way through: traffic and ad spend accrue with the clock, sales step with whole orders. */
 export function demoSoFar(storeId: string, date: string, frac: number) {
@@ -149,7 +146,8 @@ const SUPPLIERS = ['CJ Dropshipping', 'DSers', 'Zendrop'];
 /** Writes missing daily_metrics / campaign_daily rows for a demo store, up to `today` (today: so far). */
 function topUp(db: Db, storeId: string, today: string) {
   const last = db.prepare('SELECT MAX(date) AS d FROM daily_metrics WHERE store_id = ?').get(storeId)?.d as string | null;
-  const start = last ? addDays(last, 1) : addDays(today, 1 - DEMO_DAYS);
+  // From the last stored day: a session that ended mid-day left it "so far".
+  const start = last ?? addDays(today, 1 - DEMO_DAYS);
   for (let date = start; date <= today; date = addDays(date, 1)) writeDay(db, storeId, date < today ? demoDay(storeId, date) : demoSoFar(storeId, date, dayFraction(date)));
 }
 

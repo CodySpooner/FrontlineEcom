@@ -7,3 +7,6 @@ export const addDays = (date: string, n: number) => new Date(Date.parse(`${date}
 
 /** Today on the owner's machine (local timezone), YYYY-MM-DD. */
 export const localDate = (now = new Date()) => now.toLocaleDateString('en-CA');
+
+/** Share of local `date` that has passed at `now`: 0 before it starts, 1 once it's over. */
+export const dayFraction = (date: string, now = Date.now()) => Math.min(1, Math.max(0, (now - new Date(`${date}T00:00:00`).getTime()) / DAY));

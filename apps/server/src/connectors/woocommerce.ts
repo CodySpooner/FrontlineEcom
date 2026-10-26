@@ -64,7 +64,8 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
 
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const since = cursor ?? new Date(now.getTime() - BACKFILL_DAYS * 86_400_000).toISOString().slice(0, 19);
-    const changed = { modified_after: since, dates_are_gmt: 'true', orderby: 'modified', order: 'asc' };
+    // Default order (newest created first): edits don't move an order between pages, so paging can't skip it.
+    const changed = { modified_after: since, dates_are_gmt: 'true' };
     const orders = await all<WooOrder>('orders', changed);
     const products = await all<WooProduct>('products', changed);
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });

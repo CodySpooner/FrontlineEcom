@@ -196,6 +196,7 @@ export interface AnalyticsSummary {
   from: string;
   to: string;
   totals: MetricTotals;
+  /** The preceding period of the same length. While today is in progress, its last day counts up to the same time of day. */
   previous: MetricTotals;
   deltas: MetricDeltas;
   /** One point per day, oldest first (UI buckets 1Y into weeks). */
