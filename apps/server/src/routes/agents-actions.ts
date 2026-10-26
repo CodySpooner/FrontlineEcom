@@ -1,5 +1,5 @@
 import { getPageDraft, markPublished } from '@frontline/agents';
-import type { ApprovalRequest, PageDraft } from '@frontline/shared';
+import type { AdNetwork, ApprovalRequest, PageDraft } from '@frontline/shared';
 import type { Db } from '../db';
 import { subscribe } from '../live';
 import { notify } from '../settings';
@@ -53,19 +53,29 @@ export async function publishDraft(db: Db, d: PageDraft, push: PushPage) {
 }
 
 /** Approved `ads.set_budget` / `ads.pause_campaign` on a demo store's campaigns. Connected stores: the owner is told. */
-export function applyAdChange(db: Db, a: ApprovalRequest) {
-  const p = (a.action.payload ?? {}) as { campaignId?: unknown; to?: unknown };
+/** Writes an approved change to the store's ad account (core's connectors/ads.ts); throws a readable error. */
+export type WriteAd = (storeId: string, network: AdNetwork, campaignId: string, change: 'pause' | { dailyBudget: number }) => Promise<unknown>;
+
+/**
+ * Applies an approved ad change: connected stores on the ad account first (an error tells the owner and leaves the
+ * campaign as it was), then the local campaign row; demo stores locally only.
+ */
+export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) {
+  const p = (a.action.payload ?? {}) as { network?: unknown; campaignId?: unknown; to?: unknown };
   const store = getStore(db, a.storeId);
-  if (!store || typeof p.campaignId !== 'string') return;
+  const pause = a.action.kind === 'ads.pause_campaign';
+  if (!store || typeof p.campaignId !== 'string' || (!pause && !(typeof p.to === 'number' && p.to >= 1))) return;
+  const network = (typeof p.network === 'string' ? p.network : db.prepare('SELECT network FROM campaigns WHERE id = ? AND store_id = ?').get(p.campaignId, store.id)?.network) as AdNetwork;
   if (store.connected) {
-    // ponytail: real ad accounts change through the Meta MCP (the agent's own call, approved there) or by hand.
-    notify(db, { kind: 'info', title: `Apply on the ad account: ${a.title}`, body: 'Approved. Ad account changes are not automated for this store yet.', storeId: store.id });
-    return;
+    try {
+      await write(store.id, network, p.campaignId, pause ? 'pause' : { dailyBudget: p.to as number });
+    } catch (e) {
+      notify(db, { kind: 'error', title: `Couldn't apply "${a.title}" on the ad account`, body: `${(e as Error).message}. Apply it by hand in the ad manager.`, storeId: store.id });
+      return;
+    }
   }
-  if (a.action.kind === 'ads.pause_campaign') db.prepare(`UPDATE campaigns SET status = 'paused' WHERE id = ? AND store_id = ?`).run(p.campaignId, store.id);
-  if (a.action.kind === 'ads.set_budget' && typeof p.to === 'number' && p.to >= 0) {
-    db.prepare('UPDATE campaigns SET daily_budget = ? WHERE id = ? AND store_id = ?').run(p.to, p.campaignId, store.id);
-  }
+  if (pause) db.prepare(`UPDATE campaigns SET status = 'paused' WHERE id = ? AND store_id = ?`).run(p.campaignId, store.id);
+  else db.prepare('UPDATE campaigns SET daily_budget = ? WHERE id = ? AND store_id = ?').run(p.to as number, p.campaignId, store.id);
 }
 
 /**

@@ -39,12 +39,13 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
-import { addProducts, applyAdChange, applyPriceChange, onApproved, publishDraft, type PushPage } from './agents-actions';
+import { addProducts, applyAdChange, applyPriceChange, onApproved, publishDraft, type PushPage, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { issueRoutes } from './agents-issues';
 import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
+import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
 import { demoSupplierProducts, searchCj } from '../connectors/cj';
 import { createProducts, publishPage, publishProductPage } from '../connectors/shopify';
 import { getCredentials } from '../integrations';
@@ -54,6 +55,14 @@ import { getStore, listStores } from '../stores';
 import { publish } from '../live';
 
 /** App data + approvals for agent tools. `key` decrypts integration credentials (default: the data dir's key file). */
+/** Approved ad changes → the store's ad account (core's Meta / Google / TikTok writers). */
+const writeAd =
+  (db: Db): WriteAd =>
+  (storeId, network, campaignId, change) =>
+    change === 'pause'
+      ? pauseCampaign(db, loadKey(dataDir()), storeId, network, campaignId)
+      : setCampaignBudget(db, loadKey(dataDir()), storeId, network, campaignId, change.dailyBudget);
+
 /** Store Builder drafts → Shopify: product pages update the product, other pages are created. */
 const pushPage =
   (db: Db): PushPage =>
@@ -143,7 +152,7 @@ export function runManager(db: Db): RunManager {
       if (a.action.kind === 'store.add_products') {
         return addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task), (storeId, products) => createProducts(db, loadKey(dataDir()), storeId, products));
       }
-      if (a.action.kind === 'ads.set_budget' || a.action.kind === 'ads.pause_campaign') applyAdChange(db, a);
+      if (a.action.kind === 'ads.set_budget' || a.action.kind === 'ads.pause_campaign') return applyAdChange(db, a, writeAd(db));
       if (a.action.kind === 'store.set_price') applyPriceChange(db, a);
       if (a.action.kind === 'store.publish_page') {
         const d = getPageDraft(db, String((a.action.payload as { draftId?: unknown })?.draftId));

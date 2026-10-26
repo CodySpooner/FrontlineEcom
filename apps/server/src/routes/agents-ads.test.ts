@@ -1,5 +1,5 @@
 import { fakeEngine, getAgent, listMemory, runAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
-import type { AgentEvent, ApprovalDecision } from '@frontline/shared';
+import type { AgentEvent, ApprovalDecision, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
@@ -9,6 +9,7 @@ import { seedDemo } from '../demo';
 import { updateCaps } from '../settings';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
+import { applyAdChange } from './agents-actions';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -79,11 +80,22 @@ test("the owner's cap on added spend and bad input stop a proposal before asking
   ]);
 });
 
-test('connected stores are told to apply it on the ad account', async () => {
+test('connected stores get it on the ad account; an ad account error tells the owner and changes nothing', async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
-  await run([propose({ campaignId: 'pawsome-c3', change: 'pause' })]);
+  await run([propose({ campaignId: 'pawsome-c3', change: 'pause' })]); // no ad credentials in tests
   expect(budget('pawsome-c3').status).toBe('active');
-  expect(db.prepare(`SELECT title FROM notifications WHERE kind = 'info'`).get()?.title).toBe('Apply on the ad account: Pause Spark Ads · UGC');
+  expect(db.prepare(`SELECT title, body FROM notifications WHERE kind = 'error'`).get()).toEqual({
+    title: `Couldn't apply "Pause Spark Ads · UGC" on the ad account`, body: expect.stringMatching(/not connected.*\. Apply it by hand in the ad manager\.$/),
+  });
+
+  const writes: unknown[] = [];
+  const approval = (kind: string, payload: object) => ({ id: 'x', storeId: 'pawsome', agentId: 'pawsome:ad_strategist', title: 't', reason: 'r', status: 'approved', createdAt: '', action: { kind, payload } }) as ApprovalRequest;
+  const write = async (...args: unknown[]) => void writes.push(args);
+  await applyAdChange(db, approval('ads.set_budget', { campaignId: 'pawsome-c3', from: 40, to: 55 }), write);
+  await applyAdChange(db, approval('ads.pause_campaign', { network: 'meta', campaignId: 'pawsome-c3' }), write);
+  const network = String(db.prepare(`SELECT network FROM campaigns WHERE id = 'pawsome-c3'`).get()?.network);
+  expect(writes).toEqual([['pawsome', network, 'pawsome-c3', { dailyBudget: 55 }], ['pawsome', 'meta', 'pawsome-c3', 'pause']]);
+  expect(budget('pawsome-c3')).toEqual({ daily_budget: 55, status: 'paused' });
 });
 
 const decided = () => addDays(localDate(), -10);
