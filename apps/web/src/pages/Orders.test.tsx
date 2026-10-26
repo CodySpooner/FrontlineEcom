@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { OrderIssue } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { AgentIssue } from './Orders';
+import { AgentIssue, Orders } from './Orders';
 
 const issue: OrderIssue = {
   id: 'oi1',
@@ -40,5 +40,16 @@ describe('agent-flagged order issue', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Resolve' }));
     expect((await screen.findByRole('alert')).textContent).toContain('Issue not found');
     expect(patched(fetch)).toEqual([['/api/order-issues/oi1', { status: 'resolved' }]]);
+  });
+});
+
+describe('orders table', () => {
+  it("links a tracking number to the carrier's page", async () => {
+    const order = { id: '#1201', storeId: 'peak', createdAt: '2026-10-26T08:00:00Z', total: 30, status: 'paid', fulfillmentStatus: 'in_transit', tracking: 'LX123', trackingUrl: 'https://t.17track.net/en#nums=LX123' };
+    stubApi((url) => (url.startsWith('/api/orders?') ? { items: [order], total: 1 } : undefined));
+    renderApp(<Orders />, '/orders');
+    const link = await screen.findByRole('link', { name: 'LX123' });
+    expect(link.getAttribute('href')).toBe('https://t.17track.net/en#nums=LX123');
+    expect(link.getAttribute('target')).toBe('_blank');
   });
 });

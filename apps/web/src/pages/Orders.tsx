@@ -1,7 +1,7 @@
 // UI-12 Orders & Fulfillment: a queue of orders that need the owner, then every order across the selected stores.
 import { useDeferredValue, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { ChevronDown, ChevronUp, CircleCheck, CircleHelp, Clock, Factory, MapPin, PackageCheck, PackageSearch, RotateCcw, Search, Truck, type LucideIcon } from 'lucide-react';
+import { ChevronDown, ChevronUp, CircleCheck, CircleHelp, Clock, ExternalLink, Factory, MapPin, PackageCheck, PackageSearch, RotateCcw, Search, Truck, type LucideIcon } from 'lucide-react';
 import type { FulfillmentStatus, OrderIssue, OrderIssueKind, OrderStatus } from '@frontline/shared';
 import { useOrderIssues, useOrders, useSetIssueStatus, useStartRun, type OrderQuery } from '../api/client';
 import { FixLink } from '../components/Chat';
@@ -311,7 +311,16 @@ function OrderList({ ids }: { ids: string[] }) {
                       </span>
                     </td>
                     <td className="whitespace-nowrap text-text-2">{o.supplier ?? '–'}</td>
-                    <td className="font-mono text-xs text-text-2">{o.tracking ?? '–'}</td>
+                    <td className="font-mono text-xs text-text-2">
+                      {o.tracking && o.trackingUrl ? (
+                        <a href={o.trackingUrl} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 hover:text-white">
+                          {o.tracking}
+                          <ExternalLink aria-hidden className="size-3" />
+                        </a>
+                      ) : (
+                        (o.tracking ?? '–')
+                      )}
+                    </td>
                     <td className="text-right font-semibold">{cents(o.total, currency(o.storeId))}</td>
                   </tr>
                 );
