@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
+import { seedCompetitors } from '../competitors';
 import { seedResearch } from '../research';
 import { listStores } from '../stores';
 import { agentRoutes, toolEnv } from './agents';
@@ -13,6 +14,7 @@ beforeAll(() => {
   db = openDb();
   seedDemo(db);
   seedResearch(db);
+  seedCompetitors(db);
   agentRoutes(db); // creates the squads
 });
 
@@ -55,6 +57,14 @@ describe('agent tools on demo data', () => {
     expect(orders!.output).toMatch(/^counts: /);
     expect(campaigns!.output).toMatch(/^network,id,name,status,daily_budget,spend,revenue,purchases,clicks,impressions,roas,cpa,ctr_pct\n/);
     expect(events.at(-1)).toEqual(done);
+  });
+
+  test('list_competitors shows competitors, price moves and recent ads', async () => {
+    const events = await run(input('pawsome', 'ad_strategist'), [{ call: 'list_competitors' }, done]);
+    const out = results(events)[0]!.output;
+    expect(out).toContain('# Competitors\nname,url,products_tracked,active_ads,notes\nWag & Wander,');
+    expect(out).toContain('# Price changes (newest first)\ncompetitor,product,from,to,change_pct,at');
+    expect(out).toMatch(/# Recent ads\ncompetitor,network,format,headline,body,cta,first_seen,last_seen\n.+/);
   });
 
   test('research_feed lists scored candidates in the store niche', async () => {

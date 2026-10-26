@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type ApprovalDecision, type ApprovalsHook, type ResearchProduct, type ResearchTab, type Store, type StoreCaps } from '@frontline/shared';
+import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps } from '@frontline/shared';
 import { z } from 'zod';
 import { searchMemory, writeMemory } from './memory';
 import { saveNichePack } from './niche';
@@ -15,6 +15,8 @@ export interface ToolEnv {
   decide?: (id: string, decision: ApprovalDecision) => unknown;
   /** Core's per-store caps; `autopilot[kind]` is the owner's autopilot rule for that action kind. */
   caps?: (storeId: string) => StoreCaps;
+  /** Core's competitor tracking for a store: who, their recent price moves, and ads seen lately. */
+  competitors?: (storeId: string) => { competitors: Competitor[]; priceChanges: PriceChange[]; ads: (AdSnapshotData & { competitor: string })[] };
   /** Core's research feed (scored trending products). */
   research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number }) => Promise<ResearchProduct[]>;
   runId?: string;
@@ -133,6 +135,24 @@ export const APP_TOOLS: AppTool[] = [
           };
         }),
       );
+    },
+  }),
+  defineTool({
+    name: 'list_competitors',
+    description: "Tracked competitors of this store, their recent price changes, and the ads they are running (three CSV sections).",
+    input: {},
+    run: async (_, ctx) => {
+      if (!ctx.competitors) return 'Competitor tracking is not available.';
+      const { competitors, priceChanges, ads } = ctx.competitors(ctx.store.id);
+      const name = new Map(competitors.map((c) => [c.id, c.name]));
+      return [
+        '# Competitors',
+        csv(competitors.map((c) => ({ name: c.name, url: c.url, products_tracked: c.productsTracked, active_ads: c.activeAds, notes: c.notes ?? '' }))),
+        '# Price changes (newest first)',
+        csv(priceChanges.map((p) => ({ competitor: name.get(p.competitorId) ?? p.competitorId, product: p.product, from: p.from, to: p.to, change_pct: r2(p.changePct), at: p.at.slice(0, 10) }))),
+        '# Recent ads',
+        csv(ads.map((a) => ({ competitor: a.competitor, network: a.network, format: a.format, headline: a.headline, body: a.body, cta: a.cta ?? '', first_seen: a.firstSeen, last_seen: a.lastSeen }))),
+      ].join('\n');
     },
   }),
   defineTool({

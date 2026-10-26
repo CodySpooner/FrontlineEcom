@@ -15,10 +15,11 @@ import {
   type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
-import { AGENT_ROLES, AUTONOMY_LEVELS, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type ResearchProduct, type StartRunInput } from '@frontline/shared';
+import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type ResearchProduct, type StartRunInput } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
 import { approvalsHook, decide } from '../approvals';
+import { listCompetitors, priceChanges } from '../competitors';
 import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import type { Db } from '../db';
@@ -34,6 +35,17 @@ export const toolEnv = (db: Db): ToolEnv => ({
   approvals: approvalsHook(db),
   decide: (id, decision) => decide(db, id, decision),
   caps: (storeId) => getCaps(db, storeId),
+  competitors: (storeId) => ({
+    competitors: listCompetitors(db, [storeId]),
+    priceChanges: priceChanges(db, [storeId], 20),
+    ads: db
+      .prepare(
+        `SELECT c.name, s.data_json FROM competitor_snapshots s JOIN competitors c ON c.id = s.competitor_id
+         WHERE c.store_id = ? AND s.kind = 'ad' ORDER BY s.captured_at DESC, s.rowid DESC LIMIT 15`,
+      )
+      .all(storeId)
+      .map((r) => ({ competitor: String(r.name), ...(JSON.parse(String(r.data_json)) as AdSnapshotData) })),
+  }),
   research: async (q) => {
     const params = new URLSearchParams(Object.entries(q).flatMap(([k, v]) => (v === undefined ? [] : [[k, String(v)]])));
     const res = await researchRoutes(db).request(`/api/research?${params}`);
