@@ -147,8 +147,10 @@ test('a store page names no product: publishing it leaves the product as it was'
 
 test('Etsy takes product pages (to the listing) but not other pages', async () => {
   db.prepare(`UPDATE stores SET connected = 1, platform = 'etsy' WHERE id = 'glow'`).run();
-  await run(() => [draft(), draft({ kind: 'page', productId: undefined, title: 'About us' })]);
-  const [about, page] = listPageDrafts(db);
+  await run(() => [draft()]);
+  const [page] = listPageDrafts(db);
+  // draft_page refuses an Etsy store page now; one drafted before that is still refused at publish.
+  const about = savePageDraft(db, { storeId: 'glow', agentId: 'glow:store_developer', kind: 'page', title: 'About us', html: '<p>Hi</p>', notes: 'from before the check' });
   expect((await run(() => [{ call: 'publish_page', input: { draftId: about!.id } }], 'approve'))[0]).toMatch(/^Not sent: the app doesn't change etsy stores yet/);
   await run(() => [{ call: 'publish_page', input: { draftId: page!.id } }], 'approve');
   expect(db.prepare(`SELECT body FROM notifications WHERE kind = 'error' AND store_id = 'glow'`).get()?.body).toBe("p-new is not an Etsy listing. It's approved and waiting in Store Builder.");
@@ -162,6 +164,20 @@ test('a decision said twice on the live bus runs its action once', async () => {
   publish({ type: 'approval', approval: getApproval(db, String(a.id))! });
   await tick();
   expect(runs).toEqual([String(a.id)]);
+});
+
+test("a page the app can't publish on the store's platform isn't drafted", async () => {
+  db.prepare(`UPDATE stores SET connected = 1, platform = 'amazon' WHERE id = 'glow'`).run();
+  const store = { kind: 'page', productId: undefined, title: 'About Glow Haus' };
+  expect(await run(() => [draft(), draft(store)])).toEqual([
+    "Not saved: the app can't publish product pages to amazon stores yet. Put the page in your answer so the owner can add it by hand.",
+    "Not saved: the app can't publish store pages to amazon stores yet. Put the page in your answer so the owner can add it by hand.",
+  ]);
+  db.prepare(`UPDATE stores SET platform = 'etsy' WHERE id = 'glow'`).run(); // Etsy listings, but no store pages
+  const [product, page] = await run(() => [draft(), draft(store)]);
+  expect(product).toMatch(/^Saved draft/);
+  expect(page).toBe("Not saved: the app can't publish store pages to etsy stores yet. Put the page in your answer so the owner can add it by hand.");
+  expect(listPageDrafts(db)).toHaveLength(1);
 });
 
 test('a draft with active HTML is refused, and one saved before the check never reaches the storefront', async () => {
