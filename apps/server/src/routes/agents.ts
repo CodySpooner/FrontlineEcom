@@ -22,19 +22,26 @@ import { approvalsHook, decide } from '../approvals';
 import { listCompetitors, priceChanges } from '../competitors';
 import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
-import type { Db } from '../db';
+import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
 import { award, gamificationRoutes } from './agents-gamification';
+import { getCredentials } from '../integrations';
+import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
 import { getStore } from '../stores';
 import { publish } from '../live';
 
-/** App data + approvals for agent tools. */
-export const toolEnv = (db: Db): ToolEnv => ({
+/** App data + approvals for agent tools. `key` decrypts integration credentials (default: the data dir's key file). */
+export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): ToolEnv => ({
   db,
   approvals: approvalsHook(db),
   decide: (id, decision) => decide(db, id, decision),
   caps: (storeId) => getCaps(db, storeId),
+  externalMcp: (storeId) => {
+    if (!db.prepare(`SELECT 1 FROM integrations WHERE kind = 'meta_ads' AND store_id = ?`).get(storeId)) return {};
+    const meta = getCredentials(db, key(), 'meta_ads', storeId);
+    return meta?.accessToken ? { meta_ads: { type: 'http', url: 'https://mcp.facebook.com/ads', headers: { Authorization: `Bearer ${meta.accessToken}` } } } : {};
+  },
   competitors: (storeId) => ({
     competitors: listCompetitors(db, [storeId]),
     priceChanges: priceChanges(db, [storeId], 20),

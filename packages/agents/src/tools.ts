@@ -3,7 +3,7 @@ import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type A
 import { z } from 'zod';
 import { searchMemory, writeMemory } from './memory';
 import { saveNichePack } from './niche';
-import { ROLES, type ToolName } from './roles';
+import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 
 /** What the server hands a run so its tools can read and act on app data. */
 export interface ToolEnv {
@@ -17,9 +17,18 @@ export interface ToolEnv {
   caps?: (storeId: string) => StoreCaps;
   /** Core's competitor tracking for a store: who, their recent price moves, and ads seen lately. */
   competitors?: (storeId: string) => { competitors: Competitor[]; priceChanges: PriceChange[]; ads: (AdSnapshotData & { competitor: string })[] };
+  /** Official MCP servers the store has connected (never in demo mode: no credentials, no servers). */
+  externalMcp?: (storeId: string) => Partial<Record<ExternalMcpKind, ExternalMcp>>;
   /** Core's research feed (scored trending products). */
   research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number }) => Promise<ResearchProduct[]>;
   runId?: string;
+}
+
+/** A remote MCP server over HTTP (the Agent SDK's `{ type: 'http' }` config). */
+export interface ExternalMcp {
+  type: 'http';
+  url: string;
+  headers?: Record<string, string>;
 }
 
 export interface ToolContext extends ToolEnv {

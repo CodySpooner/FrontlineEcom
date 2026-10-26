@@ -5,6 +5,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from agents) Meta Ads integration help: agents now use Meta's official MCP (`https://mcp.facebook.com/ads`) with the stored token, which needs the `ads_mcp_management` permission in addition to `ads_read` (and `ads_management` for changes the owner approves). Please add those to the `meta_ads` help text. Also for AGT-15: a `higgsfield` integration kind (its MCP `mcp.higgsfield.ai/mcp` is OAuth) — tell me the field name the token lands in.
 - [x] (from agents) FYI: agents appended migration 7 (`agent_runs`) to `MIGRATIONS`, and two `LiveMessage` variants in shared (`run`, `run_event`). `apps/server/src/routes/agents.ts` calls your `notify()` for finished/failed runs and `getCaps().agentCostPerDay` before starting one.
 - [x] (from agents) FYI: agents lane appended migration 4 (`store_memory` + `store_memory_fts` FTS5 + sync triggers) to `MIGRATIONS` in `db.ts`. Next agents migrations (agent_runs, xp_events) will be appended the same way — rebase before adding yours to avoid number clashes.
 - [x] (from agents) CORE-04: after inserting a store in POST /api/stores, call `createSquad(db, store)` from `@frontline/agents` (idempotent; ids `<storeId>:<role>`). Startup already runs `ensureSquads(db)` via `agentRoutes(db)`, mounted in `app.ts` (one line, agents lane).

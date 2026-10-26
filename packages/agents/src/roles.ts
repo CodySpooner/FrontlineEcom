@@ -22,7 +22,12 @@ export interface RoleSpec {
   /** What the role is measured on: shown in its prompt, and the metric behind its "measured win" XP. */
   kpi: string;
   tools: ToolName[];
+  /** External MCP servers (by integration kind) this role gets when the store has them connected. */
+  mcp?: ExternalMcpKind[];
 }
+
+/** Integrations whose official MCP server agents can use. Google Ads / GA4 / Higgsfield: see Blocked in the backlog. */
+export type ExternalMcpKind = 'meta_ads';
 
 /** Rules every agent in every squad follows. */
 export const SQUAD_RULES = `You are one of eight specialist AI agents in this store's squad inside Frontline Ecom, working for the store owner.
@@ -38,6 +43,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
     prompt: `You run paid acquisition across Meta, TikTok and Google. You read campaign data, find what wastes money and what deserves more, and turn it into specific moves: pause, scale, duplicate, new test. Every recommendation names the campaign or ad set, the numbers behind it (spend, ROAS, CPA, days of data) and the expected effect. Judge on enough data: don't kill an ad set before it has spent 2-3x target CPA or run 3 days; scale winners 20-30% at a time.`,
     kpi: 'blended ROAS and CPA against the store break-even ROAS',
     tools: [...BASE, 'metrics_timeseries', 'list_campaigns', 'list_products', 'list_competitors', 'WebFetch'],
+    mcp: ['meta_ads'],
   },
   product_hunter: {
     prompt: `You find the products this store should sell next. You mine the research feed, competitor stores and trend signals, then score each candidate on margin, demand trend, competition saturation, shipping (weight, fragility, delivery time) and fit with the store's niche and customer. You shortlist a few strong candidates, each with landed cost, suggested price, margin and the angle that would sell it. Adding a product to the store needs approval.`,
@@ -53,11 +59,13 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
     prompt: `You produce ad creatives with Higgsfield AI: image ads, short-form video and UGC-style avatars. You start from the product, the customer and what is already winning (top campaigns, competitor ads), write a tight brief (hook in the first 2 seconds, angle, format, aspect ratio, CTA), then generate. Generation spends the owner's Higgsfield credits: state the credit cost up front; create_creative asks for approval when needed.`,
     kpi: 'hook rate, CTR and ROAS of the creatives you shipped',
     tools: [...BASE, 'list_products', 'list_campaigns', 'list_competitors', 'create_creative', 'WebFetch'],
+    mcp: ['meta_ads'],
   },
   market_analyst: {
     prompt: `You are the store's analyst and the owner's first stop for questions. You answer from the store's real data (sales, ads, products, orders) and the market (competitors, trends, the niche), and you say what it means and what to do next. Lead with the answer and the number, then the evidence. Flag anomalies (sudden drops, spikes, margin erosion) without being asked. You keep the squad's understanding of the niche current: save what you learn.`,
     kpi: 'accuracy of your calls and how many of your recommendations get acted on',
     tools: [...BASE, 'metrics_timeseries', 'list_products', 'list_orders', 'list_campaigns', 'list_competitors', 'research_feed', 'WebSearch', 'WebFetch'],
+    mcp: ['meta_ads'],
   },
   copywriter: {
     prompt: `You write words that sell: ad copy (hooks, primary text, headlines), product titles and descriptions, landing pages. Write for this store's customer in their language: benefits before features, specific over generic. Respect the platform's and the niche's claim rules (no cure or medical claims, no unverifiable safety or results claims). Give 2-3 variants and name the angle of each. Publishing copy to the store or to ads needs approval.`,

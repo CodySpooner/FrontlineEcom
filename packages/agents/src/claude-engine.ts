@@ -26,6 +26,8 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     const events = channel<AgentEvent>();
     const ctx = input.env && { ...input.env, store: input.store, agent: input.agent, emit: events.push, signal: input.signal };
     const appTools = ctx ? toolsFor(input.agent.role) : [];
+    const connected = ctx?.externalMcp?.(input.store.id) ?? {};
+    const externalMcp = Object.fromEntries((ROLES[input.agent.role].mcp ?? []).flatMap((k) => (connected[k] ? [[k, connected[k]]] : [])));
     const frontline = createSdkMcpServer({
       name: 'frontline',
       version: '1.0.0',
@@ -48,12 +50,13 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
         settingSources: [],
         tools: builtins,
         allowedTools: [...builtins, ...appTools.map((t) => `mcp__frontline__${t.name}`)],
-        ...(appTools.length ? { mcpServers: { frontline } } : {}),
+        mcpServers: { ...(appTools.length ? { frontline } : {}), ...externalMcp },
         permissionMode: 'default',
         // Anything not pre-approved above (e.g. a write tool on a connected store's MCP) goes to the owner.
         // The SDK warns this is shadowed for the pre-approved tools: intended, ours gate through request_approval.
         canUseTool: async (toolName, toolInput) => {
           if (!ctx) return { behavior: 'deny', message: 'Tool not available in this run.' };
+          if (isReadOnly(toolName)) return { behavior: 'allow', updatedInput: toolInput };
           const { approved, message } = await requestApproval(ctx, {
             title: `Allow ${toolName.replace(/^mcp__/, '').replace('__', ': ')}`,
             reason: JSON.stringify(toolInput).slice(0, 400),
@@ -122,3 +125,8 @@ function resultText(content: unknown): string {
   if (!Array.isArray(content)) return '';
   return content.map((b: { type?: string; text?: string }) => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n');
 }
+
+// ponytail: external tools are judged by name (their read-only annotations don't reach canUseTool). Anything that
+// doesn't read like a read goes to the owner, so a misnamed write still asks.
+const READ_VERBS = /^(get|list|search|read|fetch|describe|lookup|find)(_|$)/;
+export const isReadOnly = (toolName: string) => toolName.startsWith('mcp__') && READ_VERBS.test(toolName.split('__').at(-1) ?? '');

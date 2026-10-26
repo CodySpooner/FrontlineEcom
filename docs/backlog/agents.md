@@ -53,7 +53,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
       stream run events (over `/api/live` or SSE), chat (resume), cancel, memory CRUD.
 - [x] AGT-13 Gamification engine: XP events, level curve, ranks (Recruit → Operative → Specialist → Veteran → Elite →
       Legend), achievements catalog + unlock checks, daily missions per store, streaks, commander level; API.
-- [ ] AGT-14 External MCP wiring per store when connected: Shopify (official), Meta Ads (`mcp.facebook.com/ads`),
+- [x] AGT-14 External MCP wiring per store when connected: Shopify (official), Meta Ads (`mcp.facebook.com/ads`),
       Google Ads / GA4, Higgsfield (`mcp.higgsfield.ai/mcp`, OAuth). Off in demo mode.
 - [ ] AGT-15 Creative pipeline: Creative Studio + Copywriter → Higgsfield image/video/UGC with credit estimate +
       approval → saved to creatives library; ad copy variants.
@@ -65,8 +65,11 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [ ] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
 
 ## Blocked
+- AGT-14 Google Ads / GA4 MCPs: the official servers (`googleads/google-ads-mcp`, `googleanalytics/google-analytics-mcp`) are local pipx Python processes that read a credentials JSON file (ADC) + `GOOGLE_PROJECT_ID`; wiring them means writing decrypted credentials to disk and requiring Python/pipx on the owner's machine. Needs: an owner decision, or core's Google connectors syncing data our tools read instead.
+- AGT-14 Higgsfield MCP (`mcp.higgsfield.ai/mcp`) is OAuth-only and there is no `higgsfield` integration kind yet. Needs: core to add it (OAuth flow storing a token). Picked up with AGT-15.
 
 ## Done
+- 2026-10-26 — AGT-14 External MCP per store: roles declare `mcp` servers (Ad Strategist, Creative Studio, Market Analyst → `meta_ads`); when a store has Meta Ads connected the engine attaches Meta's official hosted MCP (`https://mcp.facebook.com/ads`, `Authorization: Bearer` from core's encrypted credentials); demo stores get none. External read-style tools (get/list/search/read/fetch/describe/lookup/find) run freely, anything else becomes an approval request. Shopify has no official Admin MCP (verified: only the docs-only Dev MCP + community servers) — store reads stay on core's connector + our tools; Google Ads/GA4/Higgsfield under Blocked. Not smoke-tested against a real Meta account (no token).
 - 2026-10-26 — Inbox: `list_competitors` tool (competitors, recent price changes, recent ads) over core's competitor tracking; Ad Strategist, Product Hunter, Creative Studio, Market Analyst and Copywriter have it.
 - 2026-10-26 — AGT-13 Gamification: `xp_events` ledger (migration 8, idempotent by ref); agents earn XP for finished runs (+10), learnings (+5), approved requests (+25); level curve (level L costs 100·L), ranks Recruit 1 / Operative 5 / Specialist 10 / Veteran 15 / Elite 20 / Legend 30 on `Agent.rank` + `levelProgress`; 3 daily missions per store (beat the 7-day average on revenue and orders, clear requests or brief the squad) paying the commander; 10 achievements; commander level + profit streak; `GET /api/missions`, `/api/achievements`, `/api/commander`; live `xp` messages with `levelUp`. Showcase demo squads start with varied XP. "Measured win" XP lands with outcome tracking in AGT-17.
 - 2026-10-26 — AGT-12 Agent API: `POST /api/agents/:id/runs {task, resumeRunId?}` (chat = resume), `GET /api/runs?stores=&agent=&limit=`, `GET /api/runs/:id` (live transcript while running), `POST /api/runs/:id/cancel`, store memory CRUD (`GET/POST /api/stores/:id/memory`, `PATCH/DELETE /api/memory/:id`, owner-written memories as agentId `owner`); events stream over `/api/live` (`run`, `run_event`). Contracts `StartRunInput`, `MemoryInput` in shared.
