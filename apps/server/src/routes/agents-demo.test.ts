@@ -5,6 +5,7 @@ import { decide } from '../approvals';
 import { addDays, localDate } from '../dates';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
+import { seedResearch } from '../research';
 import { runManager } from './agents';
 
 let db: Db;
@@ -110,6 +111,21 @@ test('demo Operations handed one order flags that order, as the Orders page saw 
   };
   expect(await hand('Not shipped after 4 days')).toEqual({ kind: 'late', severity: 'high', note: 'Not shipped after 4 days.' });
   expect((await hand('Shipped without a tracking number'))?.kind).toBe('supplier');
+});
+
+test('demo AI Research adds a new scored find to the feed each time, from the store niche', async () => {
+  seedResearch(db);
+  const hunt = async () => {
+    const m = runManager(db);
+    if (typeof m.start('glow:product_hunter', 'Find 5 new winning beauty products for this store, with margin, trend and competition for each.') === 'string') throw new Error('not started');
+    await m.idle();
+    return db.prepare(`SELECT title, niche FROM research_products WHERE id LIKE 'find-%' ORDER BY rowid`).all();
+  };
+  await hunt();
+  const finds = await hunt();
+  expect(finds).toHaveLength(2);
+  expect(new Set(finds.map((f) => f.title)).size).toBe(2);
+  for (const f of finds) expect(f).toMatchObject({ niche: 'beauty', title: expect.stringMatching(/ bundle$/) });
 });
 
 test("a demo Ask AI question reads the data it's about", async () => {

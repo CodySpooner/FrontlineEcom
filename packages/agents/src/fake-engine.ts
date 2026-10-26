@@ -32,8 +32,28 @@ function demoWork(input: RunInput): FakeStep[] {
   switch (input.agent.role) {
     case 'ad_strategist':
       return [{ call: 'review_campaigns', input: { days: 7 } }];
-    case 'product_hunter':
-      return [{ call: 'research_feed', input: { limit: 5 } }];
+    case 'product_hunter': {
+      // A bundle of the niche's most trending feed item not bundled yet, so AI Research shows a new scored card.
+      const top = db
+        .prepare(
+          `SELECT * FROM research_products r WHERE niche = ? AND title NOT LIKE '% bundle'
+             AND NOT EXISTS (SELECT 1 FROM research_products b WHERE b.title = r.title || ' bundle') ORDER BY trend DESC LIMIT 1`,
+        )
+        .get(input.store.niche);
+      const r2 = (n: number) => Math.round(n * 100) / 100;
+      const find: FakeStep[] = top
+        ? [{
+            call: 'record_product_find',
+            input: {
+              title: `${String(top.title).slice(0, 110)} bundle`, category: String(top.category), source: String(top.source),
+              cost: r2(Number(top.cost) * 1.8), price: r2(Number(top.price) * 1.7), compareAt: r2(Number(top.price) * 2.4),
+              trend: Number(top.trend), competition: Math.max(0, Number(top.competition) - 10), shippingDays: Number(top.shipping_days),
+              ...(top.image ? { image: String(top.image) } : {}),
+            },
+          }]
+        : [];
+      return [{ call: 'research_feed', input: { limit: 5 } }, ...find];
+    }
     case 'operations': {
       // "Hand to Operations" on one order (Orders page): flag that order with what the page saw. A refunded one is
       // 'other', since refunds close the other kinds on their own.
