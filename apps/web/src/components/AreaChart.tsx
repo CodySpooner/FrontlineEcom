@@ -59,7 +59,7 @@ export function AreaChart({ points, weekly, partial, label, currency }: { points
     <div ref={wrap} className="relative">
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="block h-[250px] w-full touch-none outline-none"
+        className="block h-[250px] w-full touch-none rounded-md"
         role="img"
         aria-label={`${label}. Use arrow keys to read values.`}
         tabIndex={0}

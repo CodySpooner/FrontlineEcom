@@ -301,6 +301,8 @@ Orca's browser against the reference before ticking it.
       store's: the question goes to the store the owner picks (Enter still takes the first).
 - [x] UI-117 Analytics' campaigns table shows a dash, not "$0", for a campaign with no daily budget of its own (lifetime
       budget, budgets on its ad sets, or archived: CORE-68/69 sync those as 0), with the reason on hover.
+- [x] UI-118 Tabbing to an area chart (Dashboard revenue, Analytics trend) showed no focus at all: `outline-none` hid
+      the global :focus-visible ring and the crosshair only appears after an arrow key.
 
 ## Blocked
 
@@ -462,3 +464,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-115: the 1254×1254 transparent PNG was cropped to the art's alpha bbox and scaled to 400×93 (2× the ~196px logo slot, 35 KB) as apps/web/src/assets/frontline-logo.png. It is imported as a module, so Vite fingerprints it and it resolves under any base the desktop build uses (apps/web has no public/). BrandLogo is now an `<img alt="Frontline Ecom">` with width/height set. The <900px rail keeps its red "F" mark. Checked in Chrome at 1440: the real logo sits crisp above Dashboard. In Orca, at 800px (rail), it loads with naturalWidth 400
 - 2026-10-26 — UI-116: AskPalette builds one ask row per store the filter shows (`has`, so All stores = every store), keyed `ask:<agentId>` so only the row being asked says "Asking…". New AskPalette test: with two stores, ArrowDown + Enter starts glow:market_analyst. Orca at 800px with All stores: three rows (Pawsome Gear selected, Glow Haus, Peak Fit) under the question; no run started
 - 2026-10-26 — UI-117: the Budget/day cell is a muted dash when `dailyBudget` is 0, titled "No daily budget of its own: a lifetime budget, or budgets on its ad sets" unless the campaign is archived. Orca at 800px with a client-side patch (first campaign active with 0, second archived with 0): "– [title]", "Archived · –", and the third still reads $124. Patch dropped by reload
+- 2026-10-26 — UI-118: AreaChart's focusable svg drops `outline-none` (now `rounded-md`), so the global red :focus-visible ring shows on keyboard focus. Chrome at 1440: focus({ focusVisible }) shows a 2px red ring around the chart, and a mouse click focuses it without the ring (:focus-visible false). a11y audit (unnamed controls, unlabeled inputs, duplicate ids, missing alt) on all 14 pages in Orca: clean. Other outline-less fields have a focus border or focus-within wrapper
