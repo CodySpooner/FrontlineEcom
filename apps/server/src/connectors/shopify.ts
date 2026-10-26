@@ -4,7 +4,8 @@ import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { switchToReal } from './common';
 
-// Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders.
+// Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
+// write_products to add products the owner approved (createProducts).
 export const SHOPIFY_API_VERSION = '2026-07';
 /** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
 const BACKFILL_DAYS = 730;
@@ -53,6 +54,13 @@ const ORDERS_Q = `query ($after: String, $q: String) {
       fulfillments(first: 1) { displayStatus trackingInfo(first: 1) { number } }
       lineItems(first: 20) { nodes { quantity variant { inventoryItem { unitCost { amount } } } } } }
     pageInfo { hasNextPage endCursor } } }`;
+
+// productCreate makes one default variant; its price and cost are set right after.
+const CREATE_M = `mutation ($product: ProductCreateInput!) {
+  productCreate(product: $product) { product { id variants(first: 1) { nodes { id } } } userErrors { message } } }`;
+
+const VARIANT_M = `mutation ($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+  productVariantsBulkUpdate(productId: $productId, variants: $variants) { userErrors { message } } }`;
 
 /** "https://Glow.myshopify.com/" → "glow.myshopify.com"; anything that isn't a myshopify.com host is rejected so the token only goes to Shopify. */
 export function shopHost(domain: string) {
@@ -158,4 +166,39 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Shopify sync failed');
   }
+}
+
+export interface NewProduct {
+  title: string;
+  price: number;
+  compareAt?: number;
+  cost?: number;
+}
+
+/**
+ * Creates each product in Shopify as a draft and adds it to the local catalog right away (the next sync refreshes it).
+ * Call only for an approved request. Throws on the first failure; products created before it stay as drafts, and a
+ * product whose price update failed stays a $0 draft in Shopify until the next sync shows it.
+ */
+export async function createProducts(db: Db, key: Buffer, storeId: string, products: NewProduct[], fetchFn: Fetch = fetch) {
+  const creds = getCredentials(db, key, 'shopify', storeId);
+  if (!creds) throw new Error('Shopify is not connected for this store');
+  const q = <T>(query: string, vars: Record<string, unknown>) => gql<T>(shopHost(creds.shopDomain!), creds.accessToken!, query, vars, fetchFn);
+  const check = (errors: { message: string }[]) => {
+    if (errors.length) throw new Error(`Shopify: ${errors.map((e) => e.message).join('; ')}`);
+  };
+  const insert = db.prepare(`INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 'draft')`);
+  const created: { id: string; title: string }[] = [];
+  for (const p of products) {
+    type Created = { productCreate: { product: { id: string; variants: { nodes: { id: string }[] } } | null; userErrors: { message: string }[] } };
+    const { productCreate: c } = await q<Created>(CREATE_M, { product: { title: p.title, status: 'DRAFT' } });
+    check(c.userErrors);
+    const product = c.product!;
+    const variant = { id: product.variants.nodes[0]!.id, price: p.price.toFixed(2), ...(p.compareAt ? { compareAtPrice: p.compareAt.toFixed(2) } : {}), ...(p.cost ? { inventoryItem: { cost: p.cost.toFixed(2) } } : {}) };
+    const { productVariantsBulkUpdate: u } = await q<{ productVariantsBulkUpdate: { userErrors: { message: string }[] } }>(VARIANT_M, { productId: product.id, variants: [variant] });
+    check(u.userErrors);
+    insert.run(storeId, tail(product.id), p.title, p.price, p.compareAt ?? null, p.cost ?? 0);
+    created.push({ id: tail(product.id), title: p.title });
+  }
+  return created;
 }

@@ -384,9 +384,9 @@ export type AgentEvent =
 // ---------------------------------------------------------------------------------------------------------------------
 // Integrations (core lane). Secret values never leave the server; the API only says which secret fields are set.
 
-export type IntegrationKind = 'shopify' | 'tiktok_shop' | 'etsy' | 'amazon' | 'woocommerce' | 'meta_ads' | 'google_ads' | 'tiktok_ads' | 'ga4' | 'cj';
+export type IntegrationKind = 'shopify' | 'tiktok_shop' | 'etsy' | 'amazon' | 'woocommerce' | 'meta_ads' | 'google_ads' | 'tiktok_ads' | 'ga4' | 'cj' | 'higgsfield';
 
-export type IntegrationCategory = 'platform' | 'ads' | 'analytics' | 'supplier';
+export type IntegrationCategory = 'platform' | 'ads' | 'analytics' | 'supplier' | 'creative';
 
 export interface IntegrationField {
   key: string;
@@ -398,7 +398,7 @@ export interface IntegrationField {
 
 /** Catalog for the Integrations screen: every field listed is required. `perStore` = connected per store (else global). */
 export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category: IntegrationCategory; perStore: boolean; fields: IntegrationField[]; /** Setup steps shown next to the form. */ help?: string }> = {
-  shopify: { name: 'Shopify', category: 'platform', perStore: true, help: 'Shopify admin → Settings → Apps and sales channels → Develop apps → Create an app → Configure Admin API scopes: read_products, read_inventory, read_orders, read_all_orders → Install app → copy the Admin API access token (shown once).', fields: [
+  shopify: { name: 'Shopify', category: 'platform', perStore: true, help: 'Shopify admin → Settings → Apps and sales channels → Develop apps → Create an app → Configure Admin API scopes: read_products, read_inventory, read_orders, read_all_orders (plus write_products if agents may add draft products you approve) → Install app → copy the Admin API access token (shown once).', fields: [
     { key: 'shopDomain', label: 'Shop domain', secret: false, placeholder: 'your-store.myshopify.com' },
     { key: 'accessToken', label: 'Admin API access token', secret: true, placeholder: 'shpat_…' },
   ] },
@@ -424,7 +424,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'consumerKey', label: 'Consumer key', secret: true, placeholder: 'ck_…' },
     { key: 'consumerSecret', label: 'Consumer secret', secret: true, placeholder: 'cs_…' },
   ] },
-  meta_ads: { name: 'Meta Ads', category: 'ads', perStore: true, help: 'Meta Business Settings → Users → System users → Add (Admin) → Assign assets: the ad account (view performance) → Generate new token with ads_read → copy it. Ad account ID is in Ads Manager (act_…).', fields: [
+  meta_ads: { name: 'Meta Ads', category: 'ads', perStore: true, help: 'Meta Business Settings → Users → System users → Add (Admin) → Assign assets: the ad account (view performance) → Generate new token with ads_read and ads_mcp_management (agents read through the Meta ads MCP), plus ads_management if agents may make changes you approve → copy it. Ad account ID is in Ads Manager (act_…).', fields: [
     { key: 'adAccountId', label: 'Ad account ID', secret: false, placeholder: 'act_…' },
     { key: 'accessToken', label: 'System user access token', secret: true },
   ] },
@@ -446,6 +446,10 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
   cj: { name: 'CJ Dropshipping', category: 'supplier', perStore: false, fields: [
     { key: 'email', label: 'Account email', secret: false },
     { key: 'apiKey', label: 'API key', secret: true },
+  ] },
+  higgsfield: { name: 'Higgsfield AI', category: 'creative', perStore: false, help: 'console.higgsfield.ai → API keys → Create key → copy the key ID and the secret (shown once). Generations spend your Higgsfield credits, capped per store per day in Settings.', fields: [
+    { key: 'keyId', label: 'Key ID', secret: false },
+    { key: 'keySecret', label: 'Key secret', secret: true },
   ] },
 };
 

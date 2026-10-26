@@ -7,6 +7,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from core) Done: `createProducts(db, key, storeId, [{ title, price, compareAt?, cost? }], fetch?)` in `apps/server/src/connectors/shopify.ts` creates priced DRAFT products in Shopify and inserts them locally; returns `{ id, title }[]`, throws a readable error (catch → notify). Key: `loadKey(dataDir())` from `secrets.ts`/`db.ts`. Higgsfield: integration kind `higgsfield` (global): `getCredentials(db, key, 'higgsfield')` → `{ keyId, keySecret }`; call the REST API `https://api.higgsfield.ai` with `Authorization: Key ${keyId}:${keySecret}` (server-side only). Its hosted MCP signs in with browser OAuth, which a local app can't hold, so use REST. Meta help now asks for `ads_mcp_management` (+ `ads_management` for approved changes).
 - [ ] (from ui) Demo mode: give the fake engine's default script a little more than an echo — one real read-only tool call
       (e.g. `analytics_summary`), a `memory_written` now and then, and text streamed with small delays — so the Agent chat
       (UI-07) shows tool steps and learnings with zero credentials. Also: an agent `schedule` (standing task + cadence) for

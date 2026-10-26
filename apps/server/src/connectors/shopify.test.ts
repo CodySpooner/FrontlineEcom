@@ -4,7 +4,7 @@ import type { AnalyticsSummary, Integration, Order, Page, Product, Store } from 
 import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
-import { fulfillmentOf, shopHost, syncShopify } from './shopify';
+import { createProducts, fulfillmentOf, shopHost, syncShopify } from './shopify';
 
 const key = randomBytes(32);
 const TOKEN = 'shpat_fixture_token';
@@ -120,4 +120,30 @@ test('a rejected token marks the integration as error without leaking it, and ke
   expect(JSON.parse(res)[0]).toMatchObject({ status: 'error', error: expect.stringContaining('rejected the access token') });
   const s = (await (await app.request('/api/analytics/summary?stores=glow&range=7')).json()) as AnalyticsSummary;
   expect(s.totals.revenue).toBeGreaterThan(0);
+});
+
+test('createProducts makes priced drafts in Shopify and shows them locally', async () => {
+  const { db } = await setup();
+  const calls: { query: string; variables: Record<string, unknown> }[] = [];
+  let n = 0;
+  const fetchFn = (async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    calls.push(body);
+    if (body.query.includes('productCreate')) {
+      if (body.variables.product.title === 'Bad') return Response.json({ data: { productCreate: { product: null, userErrors: [{ message: 'Title is invalid' }] } } });
+      n++;
+      return Response.json({ data: { productCreate: { product: { id: `gid://shopify/Product/90${n}`, variants: { nodes: [{ id: `gid://shopify/ProductVariant/80${n}` }] } }, userErrors: [] } } });
+    }
+    return Response.json({ data: { productVariantsBulkUpdate: { userErrors: [] } } });
+  }) as typeof fetch;
+
+  const created = await createProducts(db, key, 'glow', [{ title: 'Ice Roller', price: 24.9, compareAt: 39, cost: 6.5 }, { title: 'Gua Sha', price: 19 }], fetchFn);
+  expect(created).toEqual([{ id: '901', title: 'Ice Roller' }, { id: '902', title: 'Gua Sha' }]);
+  expect(calls[0]!.variables).toEqual({ product: { title: 'Ice Roller', status: 'DRAFT' } });
+  expect(calls[1]!.variables).toEqual({ productId: 'gid://shopify/Product/901', variants: [{ id: 'gid://shopify/ProductVariant/801', price: '24.90', compareAtPrice: '39.00', inventoryItem: { cost: '6.50' } }] });
+  expect(calls[3]!.variables.variants).toEqual([{ id: 'gid://shopify/ProductVariant/802', price: '19.00' }]);
+  expect(db.prepare("SELECT title, price, compare_at, cost, status FROM products WHERE store_id = 'glow' AND id = '901'").get()).toEqual({ title: 'Ice Roller', price: 24.9, compare_at: 39, cost: 6.5, status: 'draft' });
+
+  await expect(createProducts(db, key, 'glow', [{ title: 'Bad', price: 5 }], fetchFn)).rejects.toThrow('Shopify: Title is invalid');
+  await expect(createProducts(db, key, 'peak', [{ title: 'X', price: 5 }], fetchFn)).rejects.toThrow('not connected');
 });
