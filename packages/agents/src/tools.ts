@@ -436,7 +436,7 @@ export const APP_TOOLS: AppTool[] = [
       tags: z.array(z.string()).max(6).optional(),
     },
     run: async (args, ctx) => {
-      const memory = writeMemory(ctx.db, { ...args, storeId: ctx.store.id, agentId: ctx.agent.id });
+      const memory = writeMemory(ctx.db, { ...args, storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}) });
       ctx.emit({ type: 'memory_written', memory });
       return 'Saved.';
     },

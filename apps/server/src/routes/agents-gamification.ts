@@ -1,4 +1,4 @@
-import { awardXp, blendedRoas, checkAchievements, commander, dailyMissions, levelForXp, profitStreak, writeMemory, XP, type Award, type Facts } from '@frontline/agents';
+import { awardXp, blendedRoas, checkAchievements, commander, dailyMissions, judgeRun, levelForXp, profitStreak, writeMemory, XP, type Award, type Facts } from '@frontline/agents';
 import type { MetricTotals, Mission } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
@@ -43,7 +43,7 @@ function watchApprovals(db: Db) {
 export function checkAdOutcomes(db: Db, today = localDate()) {
   const rows = db
     .prepare(
-      `SELECT id, store_id, agent_id, title, decided_at FROM approvals
+      `SELECT id, store_id, agent_id, run_id, title, decided_at FROM approvals
        WHERE status = 'approved' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign', 'ads.pause_adsets') AND decided_at >= ?`,
     )
     .all(new Date(Date.now() - 30 * 86_400_000).toISOString());
@@ -61,6 +61,7 @@ export function checkAdOutcomes(db: Db, today = localDate()) {
       text: `"${r.title}" ${worked ? 'worked' : 'did not help'}: ${roas} in the 3 days after.`,
       evidence: `7 days before vs 3 days after ${day} (request ${r.id})`,
     });
+    if (r.run_id) judgeRun(db, `ads:${r.id}`, String(r.run_id), worked);
     if (!worked) continue;
     award(db, {
       ref: `win:${r.id}`, amount: XP.win, storeId: String(r.store_id), agentId: String(r.agent_id),
@@ -77,7 +78,7 @@ export function checkAdOutcomes(db: Db, today = localDate()) {
 export function checkProductOutcomes(db: Db, today = localDate()) {
   const tests = db
     .prepare(
-      `SELECT t.*, s.currency FROM product_tests t JOIN stores s ON s.id = t.store_id
+      `SELECT t.*, s.currency, a.run_id FROM product_tests t JOIN stores s ON s.id = t.store_id LEFT JOIN approvals a ON a.id = t.approval_id
        WHERE t.judged_at IS NULL AND s.demo = 0 AND t.added_on <= ?`,
     )
     .all(addDays(today, -15));
@@ -101,6 +102,7 @@ export function checkProductOutcomes(db: Db, today = localDate()) {
       text: `"${t.title}" ${won ? 'sold' : 'did not take off'}: ${units} units, ${money(revenue)} revenue, ${money(profit)} gross profit in its first 14 days.`,
       evidence: `paid orders ${t.added_on} to ${end} (request ${t.approval_id})`,
     });
+    if (t.run_id) judgeRun(db, `product:${t.approval_id}:${t.product_id}`, String(t.run_id), won);
     if (won) award(db, { ref: `product-win:${t.approval_id}:${t.product_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" sold ${units} units in 14 days` });
     db.prepare('UPDATE product_tests SET judged_at = ? WHERE store_id = ? AND product_id = ?').run(new Date().toISOString(), storeId, String(t.product_id));
   }

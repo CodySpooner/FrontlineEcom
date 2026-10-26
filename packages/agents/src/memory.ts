@@ -12,6 +12,8 @@ export interface NewMemory {
   evidence?: string;
   confidence: number;
   tags?: string[];
+  /** The run that learned it: outcomes of that run's requests move its confidence (judgeRun). */
+  runId?: string;
 }
 
 const KINDS: MemoryKind[] = ['fact', 'learning', 'preference'];
@@ -33,8 +35,8 @@ export function writeMemory(db: DatabaseSync, m: NewMemory, now = new Date()): S
   }
   const id = randomUUID();
   db.prepare(
-    'INSERT INTO store_memory (id, store_id, agent_id, kind, text, evidence, confidence, tags, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-  ).run(id, m.storeId, m.agentId, m.kind, text, m.evidence ?? null, clamp(m.confidence), JSON.stringify(m.tags ?? []), now.toISOString());
+    'INSERT INTO store_memory (id, store_id, agent_id, kind, text, evidence, confidence, tags, created_at, run_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+  ).run(id, m.storeId, m.agentId, m.kind, text, m.evidence ?? null, clamp(m.confidence), JSON.stringify(m.tags ?? []), now.toISOString(), m.runId ?? null);
   return getMemory(db, id)!;
 }
 
@@ -69,6 +71,19 @@ export const deleteMemory = (db: DatabaseSync, id: string) => db.prepare('DELETE
 export function adjustConfidence(db: DatabaseSync, id: string, delta: number) {
   db.prepare('UPDATE store_memory SET confidence = min(1, max(0, confidence + ?)) WHERE id = ?').run(delta, id);
   return getMemory(db, id);
+}
+
+/**
+ * Outcome of a request a run made (an ad change, a product): the learnings that run wrote gain confidence when it
+ * worked and lose it when it didn't. Once per outcome `ref`.
+ */
+// ponytail: moves every learning of the run, not only the ones behind the request; match on tags if that misfires.
+export function judgeRun(db: DatabaseSync, ref: string, runId: string, worked: boolean, now = new Date()) {
+  if (!db.prepare('INSERT OR IGNORE INTO memory_feedback (ref, at) VALUES (?, ?)').run(ref, now.toISOString()).changes) return [];
+  return db
+    .prepare('SELECT id FROM store_memory WHERE run_id = ?')
+    .all(runId)
+    .map((r) => adjustConfidence(db, String(r.id), worked ? 0.1 : -0.1)!);
 }
 
 /**

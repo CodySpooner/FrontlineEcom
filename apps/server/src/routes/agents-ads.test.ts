@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, listMemory, runAgent, type FakeStep, type RunInput } from '@frontline/agents';
+import { fakeEngine, getAgent, listMemory, runAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -90,11 +90,14 @@ const decided = () => addDays(localDate(), -10);
 function approvedChange(id: string, title: string, revenueFactorAfter: number) {
   const day = decided();
   db.prepare(
-    `INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at, decided_at) VALUES (?, 'peak', 'peak:ad_strategist', ?, 'r', ?, 'approved', ?, ?)`,
-  ).run(id, title, JSON.stringify({ kind: 'ads.pause_campaign', payload: {} }), `${day}T09:00:00Z`, `${day}T12:00:00Z`);
+    `INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at, decided_at) VALUES (?, 'peak', 'peak:ad_strategist', ?, ?, 'r', ?, 'approved', ?, ?)`,
+  ).run(id, `run-${id}`, title, JSON.stringify({ kind: 'ads.pause_campaign', payload: {} }), `${day}T09:00:00Z`, `${day}T12:00:00Z`);
+  // What the run that asked for it learned; the outcome moves its confidence.
+  writeMemory(db, { storeId: 'peak', agentId: 'peak:ad_strategist', kind: 'learning', text: `Basis for ${title}`, confidence: 0.6, runId: `run-${id}` });
   db.prepare(`UPDATE daily_metrics SET revenue = revenue * ? WHERE store_id = 'peak' AND date BETWEEN ? AND ?`).run(revenueFactorAfter, addDays(day, 1), addDays(day, 3));
 }
 const outcomes = () => listMemory(db, 'peak').filter((m) => m.tags.includes('outcome'));
+const basis = (title: string) => listMemory(db, 'peak').find((m) => m.text === `Basis for ${title}`)?.confidence;
 
 test('an approved ad change followed by better blended ROAS is a measured win, paid once and remembered', async () => {
   approvedChange('a-win', 'Pause Spark Ads · UGC', 3);
@@ -103,6 +106,7 @@ test('an approved ad change followed by better blended ROAS is a measured win, p
   await app.request('/api/commander');
   await app.request('/api/commander');
   expect(xp()).toBe(before + 50);
+  expect(basis('Pause Spark Ads · UGC')).toBe(0.7); // once, though checked twice
   expect(String(db.prepare(`SELECT reason FROM xp_events WHERE ref = 'win:a-win'`).get()?.reason)).toMatch(/^Measured win: ROAS [\d.]+ → [\d.]+ after "Pause Spark Ads · UGC"$/);
   expect(outcomes()).toEqual([
     expect.objectContaining({
@@ -118,6 +122,7 @@ test('a change that did not help is remembered too, without XP', async () => {
   const before = getAgent(db, 'peak:ad_strategist')!.xp;
   await app.request('/api/achievements');
   expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(before);
+  expect(basis('Raise Prospecting · Broad budget $50 → $80/day')).toBe(0.5);
   expect(outcomes().map((m) => [m.text.replace(/[\d.]+ → [\d.]+/, 'x → y'), m.confidence])).toEqual([
     ['"Raise Prospecting · Broad budget $50 → $80/day" did not help: blended ROAS x → y in the 3 days after.', 0.6],
   ]);

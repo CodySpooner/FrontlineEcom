@@ -386,6 +386,11 @@ export const MIGRATIONS = [
   /* 19 (agents lane: pinned memories, AGT-31) */ `
   ALTER TABLE store_memory ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
   `,
+  /* 20 (agents lane: outcomes move the confidence of the run's learnings, AGT-32) */ `
+  ALTER TABLE store_memory ADD COLUMN run_id TEXT;
+  CREATE INDEX store_memory_by_run ON store_memory (run_id) WHERE run_id IS NOT NULL;
+  CREATE TABLE memory_feedback (ref TEXT PRIMARY KEY, at TEXT NOT NULL);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

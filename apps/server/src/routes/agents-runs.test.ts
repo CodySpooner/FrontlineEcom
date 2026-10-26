@@ -131,6 +131,7 @@ test('runs that used tools reflect, and the learnings become store memory', asyn
   expect(saved.usage).toEqual({ inputTokens: 200, outputTokens: 40, costUsd: 0.04 });
   expect(saved.transcript.map((e) => e.type)).toEqual(['tool_call', 'tool_result', 'memory_written', 'done']);
   expect(listMemory(db, 'glow')[0]).toMatchObject({ agentId: 'glow:market_analyst', text: 'Glow buyers respond to routine-based bundles', confidence: 0.7 });
+  expect(db.prepare('SELECT run_id FROM store_memory WHERE text = ?').get('Glow buyers respond to routine-based bundles')).toEqual({ run_id: run.id });
 });
 
 test('a follow-up message resumes the previous run session', async () => {

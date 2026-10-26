@@ -192,7 +192,8 @@ export function createRunManager(opts: RunManagerOptions) {
       if (event.type === 'done') usage = addUsage(usage, event.usage);
     }
     for (const learning of parseLearnings(reply)) {
-      emit({ type: 'memory_written', memory: writeMemory(db, { ...learning, storeId: input.store.id, agentId: input.agent.id }) });
+      const runId = input.env?.runId;
+      emit({ type: 'memory_written', memory: writeMemory(db, { ...learning, storeId: input.store.id, agentId: input.agent.id, ...(runId ? { runId } : {}) }) });
     }
     return { ...done, usage };
   }

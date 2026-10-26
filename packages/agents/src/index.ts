@@ -11,6 +11,7 @@ export {
   updateMemory,
   deleteMemory,
   adjustConfidence,
+  judgeRun,
   searchMemory,
   parseLearnings,
   promotionCandidates,
