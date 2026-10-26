@@ -1,4 +1,4 @@
-import { ADS_JOB, DEFAULT_JOBS, listMemory, listRuns, once, updateMemory, writeMemory } from '@frontline/agents';
+import { addNicheLearning, ADS_JOB, DEFAULT_JOBS, listMemory, listNicheLearnings, listRuns, once, updateMemory, writeMemory } from '@frontline/agents';
 import type { Store } from '@frontline/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -172,13 +172,16 @@ test("going live clears what the agents learned from simulated numbers, not the 
   m('glow:copywriter', 'preference', 'Owner wants no exclamation marks');
   m('owner', 'fact', 'We ship from Austin');
   updateMemory(db, m('glow:market_analyst', 'learning', 'Customers ask about sensitive skin').id, { pinned: true });
+  addNicheLearning(db, { niche: 'beauty', text: 'Bundles lift AOV ~25%', evidence: 'demo numbers', storeId: 'glow' });
+  addNicheLearning(db, { niche: 'beauty', text: 'Ship in 3 days or lose the sale', storeId: 'pawsome' }); // another store's
   switchToReal(db, 'glow');
   await app.request('/api/agents');
   expect(listMemory(db, 'glow').map((x) => x.text).sort()).toEqual(['Customers ask about sensitive skin', 'Owner wants no exclamation marks', 'We ship from Austin']);
   expect(notes('glow')).toContain('Glow Haus: the squad starts fresh on real numbers');
   expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Glow Haus: the squad starts fresh on real numbers'`).get()?.body).toBe(
-    'Cleared what came from the demo data: 2 learnings, 1 request, 1 order issue. Your own notes, pins and preferences stay.',
+    'Cleared what came from the demo data: 2 learnings, 1 niche learning, 1 request, 1 order issue. Your own notes, pins and preferences stay.',
   );
+  expect(listNicheLearnings(db).map((l) => l.text)).toEqual(['Ship in 3 days or lose the sale']);
   expect(db.prepare(`SELECT status FROM approvals WHERE id = 'ask1'`).get()?.status).toBe('denied');
   expect(listMemory(db, 'glow').some((x) => x.tags.includes('denied'))).toBe(false); // expired, not the owner's no
   expect(db.prepare(`SELECT status FROM order_issues WHERE id = 'i1'`).get()?.status).toBe('resolved');
