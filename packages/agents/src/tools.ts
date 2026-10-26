@@ -681,6 +681,8 @@ export const APP_TOOLS: AppTool[] = [
       if (kind === 'page') productId = undefined; // a store page is no product's: publishing it must not rename or activate one
       const bad = unsafeHtml(d.html);
       if (bad) return `Not saved: ${bad} in a storefront page. Use headings, paragraphs, lists, tables, images and http(s) links only.`;
+      // Themes show titles as they are, and the platform refuses one with a tag at publish (core's hasTag).
+      if ([d.title, d.seoTitle].some((t) => t && /<[a-z!/?]/i.test(t))) return 'Not saved: the title and SEO title are plain text; no HTML tags.';
       const gone = productId && productGone(ctx, productId);
       if (gone) return gone;
       // One page per product at a time: overlapping page changes can't be judged apart (14 days of sales after publishing).

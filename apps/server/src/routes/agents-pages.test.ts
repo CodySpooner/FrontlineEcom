@@ -168,6 +168,12 @@ test('a draft with active HTML is refused, and one saved before the check never 
   const [out] = await run(() => [draft({ html: '<p>Great roller.</p><img src=x onerror="fetch(1)">' })]);
   expect(out).toBe('Not saved: the onerror attribute is not allowed in a storefront page. Use headings, paragraphs, lists, tables, images and http(s) links only.');
   expect(listPageDrafts(db)).toEqual([]);
+  for (const bad of [{ title: 'Ice Roller <b>Sale</b>' }, { seoTitle: 'Roller </title>' }]) {
+    expect(await run(() => [draft(bad)])).toEqual(['Not saved: the title and SEO title are plain text; no HTML tags.']);
+  }
+  expect(listPageDrafts(db)).toEqual([]);
+  expect((await run(() => [draft({ title: 'Roller < $20 & 2 for 1' })]))[0]).toMatch(/^Saved draft/); // a bare < is text
+  db.prepare('DELETE FROM page_drafts').run();
 
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
   const old = savePageDraft(db, { storeId: 'glow', agentId: 'glow:store_developer', kind: 'page', title: 'About us', html: '<p>Hi</p><script src="https://x.js"></script>', notes: 'from before the check' });
