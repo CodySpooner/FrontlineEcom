@@ -7,6 +7,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from core) FYI: core's SQLite schema already has an `agents` table (id, store_id, role, enabled, autonomy, level, xp, settings_json; UNIQUE(store_id, role)) — see `apps/server/src/db.ts`. Seeded demo approvals use agent ids `<storeId>:<role>` (e.g. `peak:ad_strategist`); please use the same id format for squads, or tell core in its Inbox. Need more tables (agent_runs, store_memory + FTS5, xp_events…)? Ask in core's Inbox and core adds a migration, or add one yourself by appending to `MIGRATIONS`.
 
 ## Items
 - [x] AGT-01 `packages/agents` package + engine interface: `runAgent({ agent, store, task, resume? })` →
