@@ -269,11 +269,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-143 `metrics_timeseries` says when the newest days' traffic isn't reported yet. GA4 and Amazon report a day or two late, so yesterday's row could show orders beside 0 sessions, add-to-carts and checkouts, and the 8:00 Daily briefing (yesterday vs the 7-day average) read that as traffic falling to nothing.
 - [x] AGT-144 `squad_log` says when an approved request wasn't applied. The Weekly report reads "what the squad shipped" from it, and listed a price whose numbers had moved, or a write the platform refused, as approved like the rest.
 - [x] AGT-145 `flag_order_issue` respects an issue the owner just resolved. The owner resolves a late order ("emailed CJ, ships Friday") while it still reads unfulfilled; the next morning's Daily order check flagged it again as a new open issue, and every morning after until the order caught up.
+- [x] AGT-146 `promote_niche_learning` doesn't stack the same proposal. It checked only learnings already shared, so an agent proposing it again before the owner answered put a second identical card in the queue.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-146: a pending `niche.promote_learning` request with the same niche and text (any case) answers "Already waiting for the owner" instead of asking again.
 - 2026-10-26 — AGT-145: within 3 days of the owner resolving an order's issue of a kind (and none of that kind open), a re-flag at the same or a lower severity is refused with the owner's resolution; a higher severity flags it as before.
 - 2026-10-26 — AGT-144: `squad_log`'s decision reads "approved but not applied" for requests marked `not-applied` (ad changes already were); a price that moved or failed and a theme that failed to publish now mark it too. Products whose platform write failed don't: some may have been created.
 - 2026-10-26 — Inbox (ui, outcome links): a measured win's notification opens `/agents/<id>?tab=history` (its XP line); a "no lift" one opens `?tab=memory`, where its learning is (it earns no XP).

@@ -709,6 +709,10 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ text, evidence }, ctx) => {
       const niche = nicheKey(ctx.store);
       if (listNicheLearnings(ctx.db, niche, 1000).some((l) => l.text.toLowerCase() === text.trim().toLowerCase())) return 'Already shared with this niche.';
+      const pending = ctx.db
+        .prepare(`SELECT 1 FROM approvals WHERE status = 'pending' AND json_extract(action_json, '$.kind') = 'niche.promote_learning' AND json_extract(action_json, '$.payload.niche') = ? AND lower(json_extract(action_json, '$.payload.text')) = ?`)
+        .get(niche, text.trim().toLowerCase());
+      if (pending) return 'Already waiting for the owner: the same learning was proposed for this niche.';
       const label = ctx.store.niche === 'other' ? ctx.store.nicheDetail : ctx.store.niche;
       const { approved, message } = await requestApproval(ctx, {
         title: `Share a learning with all ${label} stores`.slice(0, 80),

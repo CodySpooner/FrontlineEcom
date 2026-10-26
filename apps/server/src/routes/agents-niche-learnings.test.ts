@@ -31,6 +31,14 @@ async function run(steps: FakeStep[], answer: ApprovalDecision = 'approve') {
   return { out, kinds };
 }
 
+test('a learning already waiting for the owner is not proposed twice', async () => {
+  const text = 'Bundles of 2+ devices lift AOV ~25% in at-home skincare';
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('p1', 'glow', 'glow:market_analyst', 't', 'r', ?, 'pending', ?)`)
+    .run(JSON.stringify({ kind: 'niche.promote_learning', payload: { niche: 'beauty', text, evidence: 'e' } }), new Date().toISOString());
+  const { out, kinds } = await run([promote(` ${text.toUpperCase()} `)]);
+  expect([out[0], kinds]).toEqual(['Already waiting for the owner: the same learning was proposed for this niche.', []]);
+});
+
 test("an approved learning reaches every same-niche store's prompt, once", async () => {
   expect((await run([promote()], 'deny')).out[0]).toMatch(/^Denied by the owner/);
   expect(listNicheLearnings(db)).toEqual([]);
