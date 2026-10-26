@@ -55,6 +55,24 @@ test('products added on a real store are judged on their first 14 days of sales'
   expect(xp()).toBe(before + 50);
 });
 
+test('a product the owner put on sale days after it was added is judged on its first 14 days on sale', async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01'));
+  await addProducts(db, approval('peak', ['Speed Rope']), () => undefined, async () => [{ id: '904', title: 'Speed Rope' }]);
+  db.prepare(`INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('peak', '904', 'Speed Rope', 20, 6, 0, 'draft')`).run();
+  const added = addDays(localDate(), -30);
+  db.prepare(`UPDATE product_tests SET added_on = ?`).run(added);
+  db.prepare(`UPDATE products SET status = 'active' WHERE store_id = 'peak' AND id = '904'`).run(); // the owner put it on sale
+  await app.request('/api/achievements'); // seen on sale today: its 14 days start now, so not judged yet
+  expect(outcomes('peak')).toEqual([]);
+  expect(db.prepare(`SELECT judged_at FROM product_tests`).get()?.judged_at).toBeNull();
+  const onSale = addDays(added, 10); // as if seen on sale then
+  db.prepare(`UPDATE done_once SET at = ? WHERE ref = 'product-live:peak:904'`).run(`${onSale}T12:00:00Z`);
+  sell('peak', '904', 12, addDays(onSale, 3));
+  await app.request('/api/achievements');
+  expect(outcomes('peak')).toEqual(['"Speed Rope" sold: 12 units, 240 USD revenue, 168 USD profit in its first 14 days on sale.']);
+});
+
 test("products from a store's demo phase aren't judged once it's live; one never put on sale isn't called a flop", async () => {
   await addProducts(db, approval('peak', ['Demo Band']), () => undefined, async () => []); // demo phase: a local draft
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();

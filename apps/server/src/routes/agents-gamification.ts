@@ -129,17 +129,24 @@ export function checkAdOutcomes(db: Db, today?: string) {
  * sold 10+ units at a profit pays it once.
  */
 export function checkProductOutcomes(db: Db, today?: string) {
+  // Added as a draft, a product goes on sale when the owner activates it (on the platform, or its page on a demo store),
+  // maybe days later: its 14 days count from then. ponytail: seen here, so up to a sync plus an hour late.
+  const live = db.prepare(
+    `SELECT t.store_id, t.product_id FROM product_tests t JOIN products p ON p.store_id = t.store_id AND p.id = t.product_id WHERE t.judged_at IS NULL AND p.status = 'active'`,
+  );
+  for (const r of live.all()) once(db, `product-live:${r.store_id}:${r.product_id}`);
   const tests = db
     .prepare(
-      `SELECT t.*, s.currency, a.run_id, p.status FROM product_tests t JOIN stores s ON s.id = t.store_id LEFT JOIN approvals a ON a.id = t.approval_id
+      `SELECT t.*, s.currency, a.run_id, p.status, (SELECT at FROM done_once WHERE ref = 'product-live:' || t.store_id || ':' || t.product_id) AS live_at FROM product_tests t JOIN stores s ON s.id = t.store_id LEFT JOIN approvals a ON a.id = t.approval_id
        LEFT JOIN products p ON p.store_id = t.store_id AND p.id = t.product_id
        WHERE t.judged_at IS NULL AND s.demo = 0 AND t.added_on <= ? AND ${sinceLive('coalesce(a.decided_at, t.added_on)', 't.store_id')}`,
     )
     .all(roughly15DaysAgo(today));
   for (const t of tests) {
-    if (!settled(db, String(t.store_id), String(t.added_on), today)) continue;
-    const end = addDays(String(t.added_on), 13); // its first 14 days, the day it was added included
-    const { units, revenue, profit } = productSales(db, String(t.store_id), String(t.product_id), String(t.added_on), end);
+    const start = t.live_at ? [String(t.added_on), storeDay(db, String(t.store_id), String(t.live_at))].sort().at(-1)! : String(t.added_on);
+    if (!settled(db, String(t.store_id), start, today)) continue;
+    const end = addDays(start, 13); // its first 14 days, the first one included
+    const { units, revenue, profit } = productSales(db, String(t.store_id), String(t.product_id), start, end);
     // Still a draft with no sales: the owner never put it on sale, which says nothing about demand. Archived or removed
     // without a sale is judged: it flopped, or the owner turned the pick down after approving it.
     if (!units && t.status === 'draft') {
@@ -153,8 +160,8 @@ export function checkProductOutcomes(db: Db, today?: string) {
     const agentId = String(t.agent_id);
     recordOutcome(db, `product:${t.approval_id}:${t.product_id}`, won, {
       storeId, agentId, kind: 'learning', confidence: won ? 0.7 : 0.6, tags: ['outcome', 'product'],
-      text: `"${t.title}" ${won ? 'sold' : 'did not take off'}: ${units} units, ${money(revenue)} revenue, ${money(profit)} profit in its first 14 days.`,
-      evidence: `paid orders ${t.added_on} to ${end} (request ${t.approval_id})`,
+      text: `"${t.title}" ${won ? 'sold' : 'did not take off'}: ${units} units, ${money(revenue)} revenue, ${money(profit)} profit in its first 14 days${t.live_at ? ' on sale' : ''}.`,
+      evidence: `paid orders ${start} to ${end} (request ${t.approval_id})`,
     });
     if (t.run_id) judgeRun(db, `product:${t.approval_id}:${t.product_id}`, String(t.run_id), won);
     if (won) award(db, { ref: `product-win:${t.approval_id}:${t.product_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" sold ${units} units in 14 days` });
