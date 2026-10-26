@@ -1,4 +1,4 @@
-import { awardXp, blendedRoas, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, once, profitStreak, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
+import { awardXp, blendedRoas, cash, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, once, profitStreak, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
 import { AGENT_ROLES, type MetricTotals, type Mission } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
@@ -150,14 +150,15 @@ export function checkPriceOutcomes(db: Db, today = localDate()) {
     if (!before.units && !after.units) continue; // no sales either side: nothing to learn
     const worked = after.profit > before.profit;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
+    const price = (n: unknown) => cash(Number(n), String(t.currency));
     const agentId = String(t.agent_id);
     recordOutcome(db, `price:${t.approval_id}`, worked, {
       storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'pricing'],
-      text: `Pricing "${t.title}" $${t.from_price} → $${t.to_price} ${worked ? 'worked' : 'did not help'}: gross profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
+      text: `Pricing "${t.title}" ${price(t.from_price)} → ${price(t.to_price)} ${worked ? 'worked' : 'did not help'}: gross profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.approval_id})`,
     });
     if (t.run_id) judgeRun(db, `price:${t.approval_id}`, String(t.run_id), worked);
-    if (worked) award(db, { ref: `price-win:${t.approval_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" at $${t.to_price} made more gross profit` });
+    if (worked) award(db, { ref: `price-win:${t.approval_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" at ${price(t.to_price)} made more gross profit` });
   }
 }
 

@@ -2,7 +2,7 @@ import { AGENT_ROLES, type AgentEvent } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
 import { REFLECTION_PROMPT } from './memory';
 import type { ToolName } from './roles';
-import { callTool, channel, toolsFor } from './tools';
+import { callTool, cash, channel, toolsFor } from './tools';
 
 /** An event to emit, or a real call to one of the role's tools (needs `env`). */
 export type FakeStep = AgentEvent | { call: ToolName; input?: Record<string, unknown> };
@@ -45,7 +45,7 @@ function demoWork(input: RunInput): FakeStep[] {
     }
     case 'copywriter': {
       const p = product();
-      return p ? [{ call: 'create_creative', input: { kind: 'copy', headline: `${p.title}, done right`.slice(0, 80), primaryText: `Meet ${p.title}: the upgrade your routine was missing. Now $${p.price}.`, cta: 'Shop now' } }] : [];
+      return p ? [{ call: 'create_creative', input: { kind: 'copy', headline: `${p.title}, done right`.slice(0, 80), primaryText: `Meet ${p.title}: the upgrade your routine was missing. Now ${cash(Number(p.price), input.store.currency)}.`, cta: 'Shop now' } }] : [];
     }
     case 'email_sms':
       return [{

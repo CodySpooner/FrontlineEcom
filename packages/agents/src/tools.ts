@@ -72,7 +72,7 @@ function csv(rows: Record<string, unknown>[]): string {
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const since = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
-const cash = (n: number, currency: string) => (currency === 'USD' ? `$${n}` : `${n} ${currency}`);
+export const cash = (n: number, currency: string) => (currency === 'USD' ? `$${n}` : `${n} ${currency}`);
 
 export const APP_TOOLS: AppTool[] = [
   defineTool({
