@@ -230,6 +230,7 @@ export const APP_TOOLS: AppTool[] = [
       limit: z.number().int().min(1).max(500).default(100),
     },
     run: async ({ status, limit }, ctx) =>
+      amazonUnsplit(ctx) +
       csv(
         ctx.db
           .prepare(
@@ -982,6 +983,17 @@ const idleNote = (ctx: ToolContext, shown: number) => {
   const left = Number(ctx.db.prepare('SELECT count(*) AS n FROM campaigns WHERE store_id = ?').get(ctx.store.id)?.n) - shown;
   return left > 0 ? `(${left} paused or archived campaigns with no spend in the window left out)\n` : '';
 };
+
+/** Amazon as an extra channel (core's channel_daily) comes as daily totals: say its sales aren't in per-product numbers. */
+function amazonUnsplit(ctx: ToolContext): string {
+  if (ctx.store.platform === 'amazon') return '';
+  const r = ctx.db
+    .prepare(`SELECT sum(orders) AS orders, round(sum(revenue), 2) AS revenue FROM channel_daily WHERE store_id = ? AND channel = 'amazon' AND date >= ?`)
+    .get(ctx.store.id, since(30, ctx.store));
+  return Number(r?.orders)
+    ? `(units_30d and revenue_30d are this store's own orders: its ${Number(r!.orders)} Amazon channel orders (${Number(r!.revenue)} ${ctx.store.currency}) in 30 days aren't split by product, so a product can sell there and show 0 here.)\n`
+    : '';
+}
 
 function campaignStats(ctx: ToolContext, days: number): CampaignStats[] {
   return ctx.db

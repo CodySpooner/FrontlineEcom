@@ -104,6 +104,17 @@ test('store_summary names the Amazon channel sales in its totals', async () => {
   }
 });
 
+test("list_products says the Amazon channel's sales aren't in its per-product numbers", async () => {
+  const products = async () => results(await run(input('glow', 'market_analyst'), [{ call: 'list_products', input: { limit: 1 } }]))[0]!.output.split('\n')[0];
+  expect(await products()).toMatch(/^id,title,/);
+  db.prepare(`INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('glow', 'amazon', ?, 210.25, 7)`).run(localDate());
+  try {
+    expect(await products()).toBe("(units_30d and revenue_30d are this store's own orders: its 7 Amazon channel orders (210.25 USD) in 30 days aren't split by product, so a product can sell there and show 0 here.)");
+  } finally {
+    db.prepare(`DELETE FROM channel_daily WHERE store_id = 'glow'`).run(); // the db is shared by these tests
+  }
+});
+
 test("compare_stores matches the dashboard store by store when the stores' days are in different zones", async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   const saved = db.prepare('SELECT id, demo, timezone FROM stores').all();
