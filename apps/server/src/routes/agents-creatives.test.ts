@@ -7,7 +7,7 @@ import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { updateCaps } from '../settings';
 import { getStore } from '../stores';
-import { mkdtempSync } from 'node:fs';
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { toolEnv } from './agents';
@@ -177,6 +177,17 @@ test('higgsfieldGenerate submits, polls, downloads the output and serves it loca
     : u.includes('slow') ? new Promise((_, no) => init!.signal!.addEventListener('abort', () => no(init!.signal!.reason)))
     : Response.json({ request_id: 'r-7' })) as typeof fetch;
   await expect(higgsfieldGenerate({ keyId: 'k', keySecret: 's' }, { kind: 'image', aspect: '1:1', prompt: 'x' }, dir, { fetch: stalled, callMs: 20 })).rejects.toThrow(/timeout/i);
+});
+
+test('deleting a creative deletes its rendered file', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hf-'));
+  writeFileSync(join(dir, 'r-1.mp4'), 'video');
+  db.prepare(`INSERT INTO creatives (id, store_id, agent_id, kind, aspect, prompt, headline, primary_text, media_url, credits, source, created_at)
+    VALUES ('c-1', 'glow', 'glow:creative_studio', 'video', '9:16', 'p', 'h', 't', '/api/creatives/media/r-1.mp4', 40, 'higgsfield', '2026-10-26T00:00:00Z')`).run();
+  const routes = creativeRoutes(db, () => dir);
+  expect((await routes.request('/api/creatives/c-1', { method: 'DELETE' })).status).toBe(204);
+  expect(existsSync(join(dir, 'r-1.mp4'))).toBe(false);
+  expect((await routes.request('/api/creatives/c-1', { method: 'DELETE' })).status).toBe(404);
 });
 
 test('the squad reads the library back without the media payloads', async () => {

@@ -1,7 +1,7 @@
 import { deleteCreative, listCreatives } from '@frontline/agents';
 import type { AspectRatio, CreativeKind } from '@frontline/shared';
 import { Hono } from 'hono';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { dataDir, type Db } from '../db';
@@ -70,5 +70,12 @@ export function creativeRoutes(db: Db, mediaDir = () => join(dataDir(), 'creativ
       const type = Object.keys(TYPES).find((t) => TYPES[t] === file.split('.').pop())!;
       return c.body(bytes, 200, { 'content-type': type, 'cache-control': 'private, max-age=31536000, immutable' });
     })
-    .delete('/api/creatives/:id', (c) => (deleteCreative(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Creative not found' }, 404)));
+    .delete('/api/creatives/:id', async (c) => {
+      const url = db.prepare('SELECT media_url FROM creatives WHERE id = ?').get(c.req.param('id'))?.media_url;
+      if (!deleteCreative(db, c.req.param('id'))) return c.json({ error: 'Creative not found' }, 404);
+      // Its rendered file goes too (videos run to tens of MB); demo renders are data: URLs with no file.
+      const file = String(url ?? '').match(/^\/api\/creatives\/media\/([^/]+)$/)?.[1];
+      if (file && MEDIA.test(file)) await rm(join(mediaDir(), file), { force: true });
+      return c.body(null, 204);
+    });
 }
