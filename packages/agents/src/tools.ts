@@ -638,6 +638,14 @@ export const APP_TOOLS: AppTool[] = [
         .prepare(`SELECT 1 FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') = 'store.publish_theme'`)
         .get(ctx.store.id);
       if (pending) return 'Not sent: a theme change is already waiting for the owner. One at a time.';
+      // Each is judged on store conversion in the 14 days after it went live: a second one inside that window muddies both.
+      const recent = ctx.db
+        .prepare(`SELECT a.title, o.at FROM done_once o JOIN approvals a ON o.ref = 'theme-live:' || a.id WHERE a.store_id = ? AND o.at >= ? ORDER BY o.at DESC LIMIT 1`)
+        .get(ctx.store.id, ago(15));
+      if (recent) {
+        const [name, on] = [String(recent.title).replace(/^Publish theme change: /, ''), String(recent.at).slice(0, 10)];
+        return `Not sent: the theme change "${name}" went live on ${on} and is judged on the 14 days of conversion after it. Put this one in your answer, or draft it once that window is over.`;
+      }
       let copy: Theme;
       try {
         copy = await ctx.themes.draft(ctx.store.id, `Frontline: ${title}`.slice(0, 50), files);

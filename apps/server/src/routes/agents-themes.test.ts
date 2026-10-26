@@ -100,6 +100,14 @@ test('theme tools refuse what they should', async () => {
   expect(out[3]).toMatch(/^=== assets\/base\.css ===\nx{15000}\n… \(cut at 15,000 of 20000 characters\)\n\n=== assets\/logo\.png ===\n\(binary\)$/);
 
   db.prepare(`UPDATE approvals SET status = 'denied' WHERE id = 't1'`).run();
+  // One went live 10 days ago: a second change inside its 14-day window can't be judged apart; after it, it can.
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('t0', 'glow', 'glow:store_developer', 'Publish theme change: Bigger reviews', 'r', '{"kind":"store.publish_theme"}', 'approved', ?)`).run(new Date().toISOString());
+  const live = new Date(Date.now() - 10 * 86_400_000);
+  once(db, 'theme-live:t0', live);
+  expect(await run([change()], env)).toEqual([
+    `Not sent: the theme change "Bigger reviews" went live on ${live.toISOString().slice(0, 10)} and is judged on the 14 days of conversion after it. Put this one in your answer, or draft it once that window is over.`,
+  ]);
+  db.prepare(`UPDATE done_once SET at = ? WHERE ref = 'theme-live:t0'`).run(new Date(Date.now() - 16 * 86_400_000).toISOString());
   const failing = { themes: themes({ draft: async () => Promise.reject(new Error('Shopify: theme limit reached')) }) };
   expect(await run([change()], failing)).toEqual(['Not sent: Shopify: theme limit reached']);
   // Without an override, the demo store has no theme to edit.
