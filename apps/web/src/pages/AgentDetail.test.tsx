@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
-import type { Agent } from '@frontline/shared';
+import type { Agent, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
-import { AgentBudget } from './AgentDetail';
+import { AgentBudget, NicheLearnings } from './AgentDetail';
 
 afterEach(() => {
   cleanup();
@@ -37,5 +37,18 @@ describe("an agent's daily AI budget", () => {
     stubApi((url) => (url.startsWith('/api/runs') ? [{ id: 'r1', agentId: agent.id, storeId: 'peak', status: 'done', createdAt: today, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0.42 } }] : []));
     renderApp(<AgentBudget agent={{ ...agent, dailyBudgetUsd: 1 }} />);
     expect(await screen.findByText('$0.42 of $1.00 used today')).toBeTruthy();
+  });
+});
+
+describe('niche learnings', () => {
+  it("a custom-niche store shows what its niche shares, asked by store", async () => {
+    const store = { id: 'dew', name: 'Dew Lab', platform: 'shopify', niche: 'other', nicheDetail: 'K-beauty skincare', currency: 'USD' } as Store;
+    const fetch = stubApi((url) =>
+      url.startsWith('/api/stores') ? [store] : url.startsWith('/api/niche-learnings') ? [{ id: 'l1', niche: 'other:k-beauty-skincare', text: 'Glass-skin hooks win', createdAt: new Date().toISOString() }] : [],
+    );
+    renderApp(<NicheLearnings storeId="dew" />);
+    expect(await screen.findByText('Glass-skin hooks win')).toBeTruthy();
+    expect(screen.getByText('Shared with all K-beauty skincare stores')).toBeTruthy();
+    expect(fetch.mock.calls.map(([url]) => url)).toContain('/api/niche-learnings?store=dew');
   });
 });

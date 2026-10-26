@@ -169,14 +169,13 @@ function History({ agentId, onOpen }: { agentId: string; onOpen: (runId: string)
 }
 
 /** Owner-approved learnings every store in this niche sees (promoted from one store's memory). */
-function NicheLearnings({ storeId }: { storeId: string }) {
+export function NicheLearnings({ storeId }: { storeId: string }) {
   const store = useStores().data?.find((s) => s.id === storeId);
-  // ponytail: custom ("other") niches key on a slug of nicheDetail computed in packages/agents; asked agents for ?store= so we don't copy it.
-  const niche = store && store.niche !== 'other' ? store.niche : '';
-  const q = useNicheLearnings(niche);
+  const q = useNicheLearnings(storeId);
   const forget = useForgetNicheLearning();
   const { name } = useStoreSelection();
-  if (!niche) return null;
+  if (!store) return null;
+  const niche = store.niche === 'other' ? store.nicheDetail || 'your niche' : store.niche;
   return (
     <Panel title={`Shared with all ${niche} stores`} sub="Learnings you approved for the whole niche. Every squad in it sees them.">
       {q.isPending ? (

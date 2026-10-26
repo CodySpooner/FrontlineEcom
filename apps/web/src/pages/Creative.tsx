@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Captions, Copy, Download, PenLine, Sparkles, Trash2, Wand2, Zap } from 'lucide-react';
-import type { AgentRole, AspectRatio, Creative as CreativeT, CreativeKind } from '@frontline/shared';
+import { CREDITS, type AgentRole, type AspectRatio, type Creative as CreativeT, type CreativeKind } from '@frontline/shared';
 import { useCaps, useCreatives, useDeleteCreative, useIntegrations, useStartRun } from '../api/client';
 import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
@@ -11,8 +11,6 @@ import { Badge, Button, buttonClass, cx, EmptyState, ErrorState, LoadingState, P
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
 
-// ponytail: mirror of CREDITS in packages/agents (the web app can't import the agent engine); asked agents to move it to shared.
-const CREDITS: Record<CreativeKind, number> = { image: 2, video: 20, ugc: 40, copy: 0 };
 const KIND_LABEL: Record<CreativeKind, string> = { image: 'image', video: 'video', ugc: 'UGC avatar video', copy: 'ad copy' };
 const ASPECTS: AspectRatio[] = ['9:16', '1:1', '4:5', '16:9'];
 

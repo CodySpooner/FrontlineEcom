@@ -267,8 +267,9 @@ export function useAddToStore() {
   });
 }
 
-export const useNicheLearnings = (niche: string) =>
-  useQuery({ queryKey: ['niche-learnings', niche], queryFn: () => api<NicheLearning[]>(`/api/niche-learnings?niche=${encodeURIComponent(niche)}`), enabled: !!niche });
+/** The learnings shared with this store's niche (custom niches too, keyed server-side). */
+export const useNicheLearnings = (storeId: string) =>
+  useQuery({ queryKey: ['niche-learnings', storeId], queryFn: () => api<NicheLearning[]>(`/api/niche-learnings?store=${encodeURIComponent(storeId)}`) });
 
 export function useForgetNicheLearning() {
   const qc = useQueryClient();
