@@ -1,4 +1,4 @@
-import { getAgent, listMemory, savePageDraft, writeMemory } from '@frontline/agents';
+import { getAgent, listMemory, once, savePageDraft, writeMemory } from '@frontline/agents';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { addDays, localDate } from '../dates';
@@ -22,6 +22,7 @@ function sell(n: number, on: string) {
 
 test('a product page published on a real store is judged on the 14 days before vs after, once', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01')); // live long before
   const draft = savePageDraft(db, { storeId: 'peak', agentId: 'peak:store_developer', runId: 'run-page', kind: 'product', productId: 'peak-p1', title: 'Jump Rope', html: '<p>New copy for the rope</p>', notes: 'Benefit-first rewrite' });
   const day = addDays(localDate(), -20);
   db.prepare('UPDATE page_drafts SET published_at = ? WHERE id = ?').run(`${day}T15:00:00Z`, draft.id);

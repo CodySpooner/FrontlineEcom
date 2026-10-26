@@ -164,6 +164,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — Review of today's lane diff, fixes:
+  - (1) Outcome checks treat a connected store with no go-live record as not live yet (`sinceLive`). The startup or hourly check could run before activation and judge demo-era products and ads on real data.
+  - (2) A run started on demo data stops filing requests once the store is live (`requestApproval`), so an in-flight Ad Variations demo can't re-ask on the live store after go-live expired its first request. Calling `cancelStore` at activation was rejected because it would also kill a real run the owner started right after connecting.
+  - (4) Saved run spend only grows, so a resumed reflection's lower engine figure can't erase the main query's estimate.
+  - Also: `defaultEngine` falls back to fake under vitest. Running vitest from a package dir skipped the root config's fake engine and started real Claude runs that timed out.
+  - Not fixed: (3) `startFresh` on a store connected before AGT-37. The window was a few hours of this morning's dev builds.
+  - Tests added.
 - 2026-10-26 — AGT-74 follow-up: the store profile in every agent prompt states the owner's fee estimate when one is set, so the Product Hunter and Copywriter size margins after fees, and agents know the profit figures already subtract it. Test added.
 - 2026-10-26 — AGT-74 follow-up: the propose_price_change floor is now unit cost plus the store's fees, (cost + per-order fee) / (1 - fee %). On an Etsy-like store, a price just above cost was a loss on every sale and still went to the owner as a test. Test added.
 - 2026-10-26 — AGT-74 follow-up: metrics_timeseries adds `fees` and `profit` columns using the store's fee estimate, so the daily briefing's "yesterday vs 7-day average" profit matches the dashboard instead of being computed from revenue, ad spend and COGS only. Test added.

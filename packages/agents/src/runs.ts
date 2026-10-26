@@ -177,10 +177,10 @@ export function createRunManager(opts: RunManagerOptions) {
     let overCap = false;
     const spend = (usd: number) => {
       if (ended) return;
-      spent = usd;
+      spent = Math.max(spent, usd); // the reflection reports from the engine's figure, which can be under the estimate
       const slot = active.get(run.id);
-      if (slot) slot.spent = usd;
-      db.prepare('UPDATE agent_runs SET cost_usd = ? WHERE id = ?').run(usd, run.id);
+      if (slot) slot.spent = spent;
+      db.prepare('UPDATE agent_runs SET cost_usd = ? WHERE id = ?').run(spent, run.id);
       // Shares split the cap; this holds it however many runs paused on the owner come back at once.
       if (cap !== undefined && !overCap && costToday(db, run.storeId) > cap) {
         overCap = true;

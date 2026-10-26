@@ -52,7 +52,10 @@ function watchApprovals(db: Db) {
  * real sync replaced, so real numbers say nothing about them. Demo stores (never live) always pass.
  */
 // ponytail: "went live" = the first time the agents saw the store connected (activateConnectedStores), minutes after the sync.
-const sinceLive = (at: string, storeId: string) => `${at} >= coalesce((SELECT at FROM done_once WHERE ref = 'activate:' || ${storeId}), '')`;
+// A connected store the agents haven't seen yet (the check ran first at startup, or nobody opened the app since the sync)
+// has no go-live time: nothing of it passes until it does ('~' sorts after every timestamp).
+const sinceLive = (at: string, storeId: string) =>
+  `${at} >= coalesce((SELECT at FROM done_once WHERE ref = 'activate:' || ${storeId}), CASE WHEN (SELECT connected FROM stores WHERE id = ${storeId}) = 1 THEN '~' ELSE '' END)`;
 
 /**
  * Outcomes of approved ad changes: the store's blended ROAS over the 3 days after vs the 7 days before. Each outcome

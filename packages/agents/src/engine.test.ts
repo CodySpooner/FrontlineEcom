@@ -46,14 +46,17 @@ test('connected stores get Claude and demo stores the fake engine, unless the en
     yield { type: 'text_delta', text: name };
   };
   const pick = async (connected: boolean) => text(await collect(defaultEngine(named('claude'), named('fake'))({ ...input, store: { ...store, connected } })));
-  const forced = process.env.FRONTLINE_AGENT_ENGINE;
+  const [forced, vitest] = [process.env.FRONTLINE_AGENT_ENGINE, process.env.VITEST];
   try {
     delete process.env.FRONTLINE_AGENT_ENGINE;
+    expect(await pick(true)).toBe('fake'); // a test run without the root config still never reaches Claude
+    delete process.env.VITEST;
     expect([await pick(true), await pick(false)]).toEqual(['claude', 'fake']);
     process.env.FRONTLINE_AGENT_ENGINE = 'claude';
     expect(await pick(false)).toBe('claude');
   } finally {
     process.env.FRONTLINE_AGENT_ENGINE = forced;
+    process.env.VITEST = vitest;
   }
   expect([await pick(true), process.env.FRONTLINE_AGENT_ENGINE]).toEqual(['fake', 'fake']);
 });

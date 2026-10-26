@@ -43,7 +43,7 @@ test('approving save_niche_pack stores the drafted pack', async () => {
     create: (i: object) => ({ ...i, id: 'a1', status: 'pending' as const, createdAt: '' }) as never,
     decision: async () => ({ status: 'approved' }) as never,
   };
-  const env = { db: {} as never, summary: () => ({}) as never, approvals };
+  const env = { db: { prepare: () => ({ get: () => undefined }) } as never, summary: () => ({}) as never, approvals };
   const analyst = { ...agent, id: 'pens:market_analyst', role: 'market_analyst' as const, autonomy: 'ask' as const };
   const pack = '# Vintage fountain pens niche pack\n\n## Customer\n- Collectors.';
   const steps = [{ call: 'request_approval' as const, input: { title: 'Save the pack', reason: 'drafted', kind: 'save_niche_pack', payload: { slug: 'vintage-fountain-pens', markdown: pack } } }];

@@ -211,6 +211,19 @@ test('a crash result reporting $0 keeps what the run was seen spending', async (
   expect(getRun(db, run.id)).toMatchObject({ status: 'error', usage: { costUsd: 1.2 } });
 });
 
+test('a lower spend report later in the run (a resumed reflection) does not erase the earlier estimate', async () => {
+  const m = manager({
+    engine: async function* (input) {
+      input.onSpend?.(0.5);
+      input.onSpend?.(0.05);
+      yield { type: 'error', message: 'stopped', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
+    },
+  });
+  const run = ok(m.start('glow:copywriter', 'x'));
+  await m.idle();
+  expect(getRun(db, run.id)?.usage?.costUsd).toBe(0.5);
+});
+
 test("runs side by side share the store's daily AI budget instead of each getting all of it", async () => {
   const budgets: (number | undefined)[] = [];
   const m = manager({ engine: fakeEngine((input) => (budgets.push(input.budgetUsd), [{ type: 'done', sessionId: 's', usage: { ...usage, costUsd: 0.1 } }])) });

@@ -825,6 +825,10 @@ export const APP_TOOLS: AppTool[] = [
 export async function requestApproval(ctx: ToolContext, req: { title: string; reason: string; action: ApprovalAction; autopilot?: boolean }) {
   const { agent } = ctx;
   if (agent.autonomy === 'suggest') return { approved: false, message: 'Not sent: your autonomy is "suggest". Put the recommendation in your answer instead.' };
+  // Going live wiped the demo rows this run read and expired its requests; one more would act on the live store.
+  if (!ctx.store.connected && ctx.db.prepare('SELECT connected FROM stores WHERE id = ?').get(ctx.store.id)?.connected === 1) {
+    return { approved: false, message: 'Not sent: the store went live during this run, so the demo numbers behind it are gone. Stop here; the owner can ask again on real data.' };
+  }
   const { kind, amountUsd: amount } = req.action;
   const rule = req.autopilot && agent.autonomy === 'autopilot' ? ctx.caps?.(ctx.store.id).autopilot[kind] : undefined;
   const cap = rule?.enabled ? rule.maxUsdPerDay : 0;

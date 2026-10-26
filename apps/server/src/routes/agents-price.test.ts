@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, listMemory, runAgent, writeMemory, type FakeStep } from '@frontline/agents';
+import { fakeEngine, getAgent, listMemory, once, runAgent, writeMemory, type FakeStep } from '@frontline/agents';
 import type { AgentEvent, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
@@ -69,6 +69,7 @@ test("a price that covers the unit cost but not the store's fees is refused", as
 
 test('on a real store a price test is judged on gross profit 14 days before vs after, once', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01')); // live long before
   const day = addDays(localDate(), -20);
   db.prepare(
     `INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at, decided_at) VALUES ('a-price', 'peak', 'peak:market_analyst', 'run-price', 't', 'r', '{"kind":"store.set_price"}', 'approved', ?, ?)`,

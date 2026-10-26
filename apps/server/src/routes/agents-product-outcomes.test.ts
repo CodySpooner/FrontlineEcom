@@ -31,6 +31,7 @@ const outcomes = (storeId: string) => listMemory(db, storeId).filter((m) => m.ta
 
 test('products added on a real store are judged on their first 14 days of sales', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01')); // live long before
   await addProducts(db, approval('peak', ['Smart Jump Rope', 'Grip Socks']), () => undefined, async () => [{ id: '901', title: 'Smart Jump Rope' }, { id: '902', title: 'Grip Socks' }]);
   await app.request('/api/achievements');
   expect(outcomes('peak')).toEqual([]); // too early
@@ -57,12 +58,14 @@ test("products from a store's demo phase aren't judged once it's live; one never
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
   db.prepare(`UPDATE product_tests SET added_on = ?`).run(addDays(localDate(), -20));
   const judged = () => db.prepare('SELECT judged_at FROM product_tests').get()?.judged_at;
+  await app.request('/api/achievements'); // synced, but the squad hasn't seen it live yet (e.g. the hourly check ran first)
+  expect(judged()).toBeNull();
   once(db, 'activate:peak'); // went live after it was added
   await app.request('/api/achievements');
   expect(outcomes('peak')).toEqual([]);
   expect(judged()).toBeNull(); // left alone
 
-  db.prepare(`DELETE FROM done_once WHERE ref = 'activate:peak'`).run(); // as if added after going live
+  db.prepare(`UPDATE done_once SET at = '2020-01-01' WHERE ref = 'activate:peak'`).run(); // as if added after going live
   await app.request('/api/achievements'); // still a draft with no sales: closed quietly, not "did not take off"
   expect(outcomes('peak')).toEqual([]);
   expect(judged()).toEqual(expect.any(String));
@@ -70,6 +73,7 @@ test("products from a store's demo phase aren't judged once it's live; one never
 
 test('a product archived after selling nothing is a flop the squad learns from', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01')); // live long before
   await addProducts(db, approval('peak', ['Ab Roller']), () => undefined, async () => [{ id: '903', title: 'Ab Roller' }]);
   db.prepare(`UPDATE product_tests SET added_on = ?`).run(addDays(localDate(), -20));
   db.prepare(`UPDATE products SET status = 'archived' WHERE store_id = 'peak' AND id = '903'`).run();

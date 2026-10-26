@@ -67,6 +67,22 @@ test("a store's first real sync switches its squad's jobs on once, and a custom 
   expect(jobsOn('glow')).toBe(0); // demo stores stay off
 });
 
+test('a demo run still going when the store goes live asks nothing more: its numbers are gone', async () => {
+  const m = runManager(db);
+  const run = m.start('glow:creative_studio', 'Make 3 variations of our best ad with different hooks. Make a 1:1 image ad and save it to the creatives library. Brief: Keep the shot.');
+  if (typeof run === 'string') throw new Error(run);
+  const asked = () => db.prepare('SELECT id, status FROM approvals WHERE run_id = ?').all(run.id);
+  for (let i = 0; i < 50 && !asked().length; i++) await new Promise((r) => setImmediate(r));
+  expect(asked()).toHaveLength(1); // waiting on the first variation
+  switchToReal(db, 'glow');
+  await app.request('/api/agents'); // go-live expires it; the run moves on to the next two
+  await m.idle();
+  expect(asked().map((a) => a.status)).toEqual(['denied']);
+  expect(m.get(run.id)!.transcript!.filter((e) => e.type === 'tool_result').map((e) => e.type === 'tool_result' && e.output.slice(0, 40)).slice(0, 3)).toEqual([
+    expect.stringMatching(/^Denied/), 'Not sent: the store went live during thi', 'Not sent: the store went live during thi',
+  ]);
+});
+
 test("going live clears what the agents learned from simulated numbers, not the owner's notes, pins or preferences", async () => {
   await app.request('/api/agents');
   // Demo-phase leftovers: a request asked on simulated numbers, an issue on a demo order, a draft for a demo product.
