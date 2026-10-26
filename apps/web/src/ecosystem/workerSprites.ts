@@ -10,7 +10,7 @@ import { DEFAULT_DISPLAY, type DisplayOptions } from './display';
 
 export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation; target?: Tile; status?: OfficeStatus; tool?: string; handoff?: Handoff; meeting?: MeetingPlan }
 
-export function workerSprites(world: Container, select: (deskId: string) => void) {
+export function workerSprites(world: Container, select: (deskId: string, agentId: string) => void) {
   const connections = new Graphics(); world.addChild(connections);
   const layer = new Container(); layer.sortableChildren = true; world.addChild(layer);
   const workers = new Map<string, { data: OfficeWorker; root: Container; sprite: Sprite; name: Text; status: Graphics; bubble: Text; bubbleBack: Graphics; elapsed: number; direction: Direction; index: number }>();
@@ -47,7 +47,7 @@ export function workerSprites(world: Container, select: (deskId: string) => void
         bubble.anchor.set(.5, 1); bubble.y = -75;
         const bubbleBack = new Graphics();
         root.addChild(sprite, name, status, bubbleBack, bubble); layer.addChild(root); sprite.eventMode = 'static'; sprite.cursor = 'pointer';
-        sprite.on('pointertap', () => select(workers.get(data.seat.agentId)!.data.seat.deskId));
+        sprite.on('pointertap', () => select(workers.get(data.seat.agentId)!.data.seat.deskId, data.seat.agentId));
         worker = { data, root, sprite, name, status, bubble, bubbleBack, elapsed: 0, direction: 2, index };
         workers.set(data.seat.agentId, worker);
         const occupied = new Set([...motions.values()].flatMap((m) => [tileKey(m.cell), ...(m.next ? [tileKey(m.next)] : [])]));

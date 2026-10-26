@@ -25,6 +25,9 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   }
   const selection = new Graphics(); world.addChild(selection);
   let dragged = false;
+  let clickTimer: ReturnType<typeof setTimeout> | undefined, clickedWorker: string | undefined;
+  // Let a second click focus the camera before opening the profile on a single click.
+  const selectDesk = (id: string) => { clearTimeout(clickTimer); clickTimer = setTimeout(() => onDesk(id), 250); };
   const lights = new Container(); world.addChild(lights);
   for (const [i,d] of DESKS.entries()) {
     const p=iso(d);
@@ -32,7 +35,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     light.position.set(p.x,p.y); lights.addChild(light);
     const hit = new Graphics().rect(-30,-44,60,72).fill({color:0xffffff,alpha:0.001});
     hit.position.set(p.x,p.y); hit.eventMode='static'; hit.cursor='pointer';
-    hit.on('pointertap',()=>{ if(dragged) return; selection.clear().poly([p.x,p.y-12,p.x+31,p.y+4,p.x,p.y+20,p.x-31,p.y+4]).stroke({color:0xffffff,width:2});onDesk(d.id); });
+    hit.on('pointertap',()=>{ if(dragged) return; selection.clear().poly([p.x,p.y-12,p.x+31,p.y+4,p.x,p.y+20,p.x-31,p.y+4]).stroke({color:0xffffff,width:2});selectDesk(d.id); });
     world.addChild(hit); light.alpha=.45+(i%4)*.12;
   }
   const globe = new Container(); const hub=iso(MEETING); globe.position.set(hub.x,hub.y-60); world.addChild(globe);
@@ -45,7 +48,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let lowPower = false, autoLow = false;
   app.ticker.maxFPS = 60;
-  const workers = workerSprites(world, (desk) => { if (!dragged) onDesk(desk); });
+  const workers = workerSprites(world, (desk, id) => { if (!dragged) { clickedWorker = id; selectDesk(desk); } });
   const objective = new Text({ text: '', style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 19, fontWeight: '600', fill: '#ffd9e3', stroke: { color: '#100810', width: 6 }, wordWrap: true, wordWrapWidth: 300, align: 'center' } });
   objective.anchor.set(.5, 1); objective.position.set(hub.x, hub.y - 135); world.addChild(objective);
   let camera = fitCamera(host.clientWidth,host.clientHeight);
@@ -55,11 +58,11 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   const focus = (tile:Tile) => { const p=iso(tile);camera={scale:1.25,x:host.clientWidth/2-p.x*1.25,y:host.clientHeight/2-p.y*1.25}; };
   const point = (e:MouseEvent) => { const r=app.canvas.getBoundingClientRect();return {x:e.clientX-r.left,y:e.clientY-r.top}; };
   let drag: { pointer:number; x:number; y:number; startX:number; startY:number } | undefined;
-  const down = (e:PointerEvent) => { if(e.button!==0) return;dragged=false;drag={pointer:e.pointerId,x:e.clientX,y:e.clientY,startX:camera.x,startY:camera.y};app.canvas.setPointerCapture(e.pointerId); };
+  const down = (e:PointerEvent) => { if(e.button!==0) return;clearTimeout(clickTimer);clickedWorker=undefined;dragged=false;drag={pointer:e.pointerId,x:e.clientX,y:e.clientY,startX:camera.x,startY:camera.y};app.canvas.setPointerCapture(e.pointerId); };
   const move = (e:PointerEvent) => { if(!drag||e.pointerId!==drag.pointer) return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.hypot(dx,dy)>4)dragged=true;camera={...camera,x:drag.startX+dx,y:drag.startY+dy}; };
   const up = () => { drag=undefined; };
   const wheel = (e:WheelEvent) => {e.preventDefault();zoom(e.deltaY<0?1.15:1/1.15,point(e));};
-  const double = (e:MouseEvent) => {const p=point(e);focus(uniso({x:(p.x-world.x)/world.scale.x,y:(p.y-world.y)/world.scale.y}));};
+  const double = (e:MouseEvent) => {clearTimeout(clickTimer);const p=point(e),worker=clickedWorker && workers.position(clickedWorker);focus(worker || uniso({x:(p.x-world.x)/world.scale.x,y:(p.y-world.y)/world.scale.y}));};
   const key = (e:KeyboardEvent) => {
     if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-','0'].includes(e.key)) e.preventDefault();
     if(e.key==='+'||e.key==='=') zoom(1.25);else if(e.key==='-') zoom(.8);else if(e.key==='0')fit();
@@ -93,6 +96,6 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     meridians.scale.x=.75+Math.sin(elapsed/2400)*.2;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;

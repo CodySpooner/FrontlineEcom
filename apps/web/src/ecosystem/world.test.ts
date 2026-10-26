@@ -8,6 +8,7 @@ test('all thirty shared desks have unique, walkable seats in ten rooms', () => {
   expect(new Set(DESKS.map((d) => JSON.stringify(deskTile(d.id)))).size).toBe(30);
   for (const d of DESKS) { expect(walkable(d)).toBe(false); expect(walkable(deskTile(d.id))).toBe(true); }
   expect(walkable(ENTRANCE)).toBe(true);
+  for (const room of ROOMS) for (const x of [6, 7]) for (const y of [6, 7]) expect(walkable({ x: room.x + x, y: room.y + y })).toBe(false);
   expect(walkable({ x: -1, y: 0 })).toBe(false);
 });
 test('isometric tile centers round trip for pointer selection', () => {

@@ -73,11 +73,37 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-18 Customization: outfits/colors/accessories per seat, data-driven desk/decor themes so cosmetics can be added without rewriting the map.
 - [x] ECO-19 Gamification: levels from existing XP/ranks, office achievements from real data, trophy area.
 - [x] ECO-20 Performance: 30 characters at ~60 FPS (measure and note it), atlases/batching, no React rerender per frame, reduced-motion, low-power fallback.
-- [ ] ECO-21 Acceptance pass: walk every line of spec §17 in the browser, fix gaps, record the result here.
+- [x] ECO-21 Acceptance pass: walk every line of spec §17 in the browser, fix gaps, record the result here.
 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-21: Completed the section 17 pass below in Orca (799px) and desktop Chromium (1440px), compared against the reference. Fixed decoration collision footprints, single-click inspection versus double-click focus, overlapping scene notices, and actionable graphics-failure fallback. 133 files / 671 tests pass, including accessible inspection without WebGL; browser assertions cover click/focus, fullscreen and isolated simulation. Screenshots: .agent/eco-21-*.png. No real credentials or paid model calls used.
+
+### Section 17 acceptance — 2026-10-26
+
+| Criterion | Result and evidence |
+|---|---|
+| Existing dashboard unchanged | Pass: ecosystem only adds its route/nav integration; existing Command Center reopened with store cards, charts, requests and agent controls. `.agent/eco-21-dashboard.png`. |
+| Functional AI Ecosystem page | Pass: `/ecosystem`, cards, all five views, settings, deployments, quick assignment and missions exercised. |
+| Interactive isometric office | Pass: ten departments, thirty workstations, cached pixel map and animated globe; pan, zoom, department jump, reset and fullscreen entry/exit checked. |
+| Up to thirty distinct deployed workers | Pass: backend capacity/uniqueness tests fill all thirty slots and reject overflow; demo displays 30/30. |
+| Selectable character for every agent | Pass: thirty distinct demo profiles opened from the directory; clicking Nova's actual sprite opens her profile; double-click focuses at 125% without opening a modal. |
+| Collision-aware movement | Pass: thirty-worker path/occupancy, every-department visits and eight-participant gather/return tests; decoration footprints now blocked. Entry and meeting motion visible in browser. |
+| Visible work at assigned desks | Pass: varied work/tool/idle poses observed at desks in the thirty-worker demo and real-provider scene. |
+| Click workers to inspect current tasks | Pass: Nova profile shows actual execution state, task, tool, recent activity, permissions, engine and history. |
+| Assign real tasks from office | Pass: office-created run `fa764678-80a4-4b89-9eb2-aa52aa6b1a8c` completed through the existing fake-store engine; its output link opened the existing chat transcript. |
+| Activity drives character animations | Pass: live adapter and transition tests cover queued/running/tool/approval/error/completion/offline; demo exercises the same animation input. |
+| Visible handoff communications | Pass: completed real copywriter-to-analyst mission produced the handoff in ECO-13; recent handoffs show visits, bubble, connection and output history. |
+| Meetings represent multi-agent workflows | Pass: actual six-role mission and completed two-role mission shown in mission panel; demo kickoff visibly gathered workers around the globe (`eco-21-demo-fit.png`). Blocked runs remain visibly blocked. |
+| Real live activity and statistics | Pass: post-task cards matched backend totals: 6 seats, 0 active tasks, 10 completed/4 failed (71%), 0 active teams; current output and historical handoffs appear in feed. |
+| Clearly separated Demo Mode | Pass: explicit banner/data/profile labels; simulated instruction completed with zero API mutations observed; returning to live restored six real seats. |
+| Identities and positions survive restart | Pass: controlled worktree API process restart preserved all six seats' IDs, desks, names, appearances and saved positions exactly; reconnect restored Nova's profile. |
+| Responsive with thirty characters | Pass: 58.04 FPS standard and 29.53 FPS low-power measured in ECO-20; desktop controls and all thirty profiles remain responsive. Orca itself throttles animation callbacks. |
+| Existing features preserved | Pass: dashboard, agent chat/output and configuration/history navigation reuse existing pages/endpoints; full workspace typecheck and tests green. |
+
+Verification limits: live integrations and paid Claude execution were deliberately not used; model orchestration was checked with the existing free fake-store engine. Frame rate is measured on this workstation, with an explicit low-power mode for slower hardware.
 
 - 2026-10-26 ECO-09 Inbox: Profile shows authoritative all-run AI spend since local midnight and the daily cap when configured, separately from recent history cost. Regression checks a $4.50 daily total alongside a $0.12 recent run. Orca Nova profile verified (.agent/eco-09-daily-spend.png); 132 files / 668 tests pass.
 

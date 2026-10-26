@@ -24,7 +24,8 @@
 .eco-canvas { width:100%; height:clamp(500px,46vw,760px); touch-action:none; }
 .eco-canvas canvas { display:block; image-rendering:pixelated; }
 .eco-fps { position:absolute; right:14px; bottom:10px; color:#818697; font-size:9px; pointer-events:none; }
-.eco-scene-note { position:absolute; left:15px; bottom:16px; color:#a4a4b3; font-size:10px; letter-spacing:.06em; pointer-events:none; }
+.eco-scene-note { position:absolute; left:15px; bottom:32px; max-width:calc(100% - 30px); overflow:hidden; white-space:nowrap; text-overflow:ellipsis; color:#a4a4b3; font-size:10px; letter-spacing:.06em; pointer-events:none; }
+.eco-scene-error { position:absolute; top:110px; left:15px; right:15px; padding:12px; border:1px solid #7b434c; border-radius:6px; background:#281b22; color:#ffc9cc; font-size:12px; }
 .eco-desk-access { position:absolute; right:12px; top:64px; font-size:10px; color:#a4a4b3; background:#101016e8; border:1px solid #363640; border-radius:5px; padding:7px; max-width:220px; }
 .eco-camera { position:absolute; top:12px; left:12px; right:12px; display:flex; flex-wrap:wrap; gap:6px; z-index:1; }.eco-camera select { max-width:160px; background:#181820; border:1px solid #363640; border-radius:6px; padding:5px; color:#c8c8d3; font-size:11px; }
 .eco-connection { display:flex; align-items:center; gap:7px; font-size:10px; color:#9296a6; margin:8px 0; }

@@ -28,6 +28,7 @@ for (const room of ROOMS) {
     BLOCKED.add(tileKey({ x: room.x, y: room.y + i }));
   }
   BLOCKED.add(tileKey({ x: room.x + 7, y: room.y + 1 }));
+  for (const x of [6, 7]) for (const y of [6, 7]) BLOCKED.add(tileKey({ x: room.x + x, y: room.y + y }));
 }
 for (let x = 15; x <= 18; x++) for (let y = 11; y <= 14; y++) BLOCKED.add(tileKey({ x, y }));
 export const walkable = (p: Tile) => Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.y >= 0 && p.x < OFFICE_GRID.width && p.y < OFFICE_GRID.height && !BLOCKED.has(tileKey(p));

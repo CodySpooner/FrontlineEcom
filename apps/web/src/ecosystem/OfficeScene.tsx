@@ -35,7 +35,7 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
   useEffect(() => { scene.current?.setTheme(theme); }, [theme]);
   useEffect(()=>{
     let disposed=false; let renderer:OfficeRenderer|undefined;
-    createOffice(host.current!,choose).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setTheme(latestTheme.current);r.setDisplay(latestDisplay.current);r.setWorkers(latestWorkers.current);if(latestFocus.current)r.focusWorker(latestFocus.current.id); } }).catch((e:unknown)=>{if(!disposed)setError(e instanceof Error ? e.message : 'Renderer unavailable');});
+    createOffice(host.current!,choose).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setTheme(latestTheme.current);r.setDisplay(latestDisplay.current);r.setWorkers(latestWorkers.current);if(latestFocus.current)r.focusWorker(latestFocus.current.id); } }).catch(()=>{if(!disposed)setError('The office scene could not start. Use the workstation directory or Agent List to manage workers.');});
     const changed=()=>setFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange',changed);
     // Persist settled tiles outside the rendering loop; motion never waits for a network request.
@@ -58,9 +58,9 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
       </select>
       <Button size="sm" onClick={()=>{const action=fullscreen?document.exitFullscreen():host.current!.parentElement!.requestFullscreen();action.catch(()=>setError('Fullscreen could not be opened.'));}}>{fullscreen?'Exit fullscreen':'Fullscreen'}</Button>
     </div>
-    <div ref={host} className="eco-canvas" data-frames={performance?.frames} data-elapsed-ms={performance?.elapsedMs} />
-    {performance && <small className="eco-fps">{Math.round(performance.fps)} FPS · {performance.mode}{performance.scale < .65 ? ' · Zoom in for worker labels' : ''}</small>}
-    {error && <p role="alert" className="eco-scene-note">Office renderer unavailable: {error}</p>}
+    <div ref={host} className="eco-canvas" data-frames={performance?.frames} data-elapsed-ms={performance?.elapsedMs} data-scale={performance?.scale} />
+    {performance && <small className="eco-fps">{Math.round(performance.scale * 100)}% · {Math.round(performance.fps)} FPS · {performance.mode}{performance.scale < .65 ? ' · Zoom in for worker labels' : ''}</small>}
+    {error && <p role="alert" className="eco-scene-error">{error}</p>}
     <div className="eco-scene-note" role="status">{occupant ? `${occupant.name} · ${occupant.status?.replaceAll('_', ' ')}${occupant.tool ? ` · ${occupant.tool}` : ''}` : selected ? `${ROOMS.find((r)=>r.id===selected.department)!.name} · Workstation ${selected.id.split('-').at(-1)}` : 'HEADQUARTERS · Select a workstation to inspect it'}</div>
     <details className="eco-desk-access"><summary>Workstation directory</summary><div>{DESKS.map((d)=><button key={d.id} onClick={()=>{choose(d.id);scene.current?.focus(d);}}>{d.id}</button>)}</div></details>
   </>;
