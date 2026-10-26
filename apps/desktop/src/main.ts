@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, safeStorage, shell, Tray, utilityProcess } from 'electron';
-import { createServer, type AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { loadKey } from './key';
+import { stablePort } from './port';
 
 // Set FRONTLINE_DEV_URL (e.g. http://localhost:5173 with `pnpm dev` running) to load Vite with HMR; UI and API then
 // come from the dev servers. Otherwise the app starts its own API, which also serves the web build.
@@ -119,12 +119,13 @@ function toastNotifications(url: string) {
 const RESTART = 75;
 
 /**
- * Runs the API in a utility process on a free localhost port and resolves its URL once it answers. If it dies it is
- * started again on the same port and the window reloads; after 3 crashes in 10 minutes the app gives up.
+ * Runs the API in a utility process on the last launch's localhost port (a free one if it's taken) and resolves its URL
+ * once it answers. If it dies it is started again on the same port and the window reloads; after 3 crashes in 10
+ * minutes the app gives up.
  */
 async function startApi() {
-  const port = await freePort();
   const userData = app.getPath('userData');
+  const port = await stablePort(join(userData, 'api-port'));
   const env = {
     ...process.env,
     API_PORT: String(port),
@@ -177,17 +178,5 @@ function confirmKeyReset() {
     cancelId: 1,
   });
   return choice === 0;
-}
-
-// ponytail: the port is free when checked, not reserved; another process could grab it before the API binds.
-function freePort() {
-  return new Promise<number>((resolve, reject) => {
-    const s = createServer()
-      .once('error', reject)
-      .listen(0, '127.0.0.1', () => {
-        const { port } = s.address() as AddressInfo;
-        s.close(() => resolve(port));
-      });
-  });
 }
 
