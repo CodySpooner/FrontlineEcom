@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
+import { randomUUID } from 'node:crypto';
 import { AGENT_ROLES, type Agent, type AgentRole, type AgentUpdate, type Autonomy, type Store } from '@frontline/shared';
 import { engineInfo } from './engine';
 import { demoXp, levelForXp, levelProgress, rankForLevel, xpForLevel } from './gamification';
@@ -25,10 +26,21 @@ export function createSquad(db: DatabaseSync, store: Pick<Store, 'id'>): Agent[]
   return listAgents(db, [store.id]);
 }
 
-/** The showcase stores' squads start with some history so levels and ranks vary. Only touches agents still at 0 XP. */
+/**
+ * The showcase stores' squads start with some history so levels and ranks vary. Only touches agents still at 0 XP.
+ * The starting XP is one line in the agent's XP history too, dated when its store was made, so the history adds up.
+ * ponytail: the line is (back)filled for every demo agent: each got demoXp at its first start, before any work.
+ */
 export function seedDemoXp(db: DatabaseSync, storeIds: string[]) {
   const set = db.prepare('UPDATE agents SET xp = ?, level = ? WHERE id = ? AND xp = 0');
-  for (const a of listAgents(db, storeIds)) set.run(demoXp(a.id), levelForXp(demoXp(a.id)), a.id);
+  const line = db.prepare(
+    `INSERT OR IGNORE INTO xp_events (id, ref, store_id, agent_id, amount, reason, created_at)
+     SELECT ?, ?, id, ?, ?, 'Demo squad starting XP', created_at FROM stores WHERE id = ?`,
+  );
+  for (const a of listAgents(db, storeIds)) {
+    set.run(demoXp(a.id), levelForXp(demoXp(a.id)), a.id);
+    line.run(randomUUID(), `demo-xp:${a.id}`, a.id, demoXp(a.id), a.storeId);
+  }
 }
 
 /** Gives every store a full squad (new stores, and roles added since a squad was made). */

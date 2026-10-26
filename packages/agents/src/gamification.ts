@@ -172,7 +172,7 @@ export const ACHIEVEMENTS: (Omit<Achievement, 'unlockedAt'> & { check: (f: Facts
 ];
 
 /** Unlocks what the facts now satisfy (paying its XP once) and returns the whole catalog with unlock times. */
-/** An agent's XP events, newest first. Demo squads' starting XP has none (it's set on the agent). */
+/** An agent's XP events, newest first (a demo squad's starting XP is its oldest line). */
 export function listXpEvents(db: DatabaseSync, agentId: string, limit = 50): XpEvent[] {
   return db
     .prepare('SELECT id, store_id, agent_id, amount, reason, created_at FROM xp_events WHERE agent_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?')
