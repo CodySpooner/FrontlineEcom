@@ -84,10 +84,10 @@ export function StoreForm({ store, onDone }: { store?: Store; onDone: (saved?: S
       <p className="-mt-2 text-xs text-muted">Once connected, the store takes the currency its platform reports.</p>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Fees, % of revenue">
-          <input type="number" value={feePercent} onChange={(e) => setFeePercent(e.target.value)} min={0} max={50} step={0.01} placeholder={String(FEE_HINT[platform][0])} className={inputClass} />
+          <input type="number" value={feePercent} onChange={(e) => setFeePercent(e.target.value)} min={0} max={50} step={0.01} placeholder={`e.g. ${FEE_HINT[platform][0]}`} className={inputClass} />
         </Field>
         <Field label="Fees per order">
-          <input type="number" value={feePerOrder} onChange={(e) => setFeePerOrder(e.target.value)} min={0} max={100} step={0.01} placeholder={FEE_HINT[platform][1].toFixed(2)} className={inputClass} />
+          <input type="number" value={feePerOrder} onChange={(e) => setFeePerOrder(e.target.value)} min={0} max={100} step={0.01} placeholder={`e.g. ${FEE_HINT[platform][1].toFixed(2)}`} className={inputClass} />
         </Field>
       </div>
       <p className="-mt-2 text-xs text-muted">
