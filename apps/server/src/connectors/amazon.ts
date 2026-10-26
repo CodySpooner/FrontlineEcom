@@ -1,3 +1,4 @@
+import { gunzipSync } from 'node:zlib';
 import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
@@ -48,6 +49,52 @@ async function fbaStock(fetchFn: Fetch, host: string, token: string, marketplace
     nextToken = body.pagination?.nextToken;
   } while (nextToken);
   return out;
+}
+
+const TRAFFIC_KEY = 'amazon_traffic';
+
+/**
+ * Daily sessions from Amazon's Sales and Traffic report (Selling Partner Insights role), for the funnel. A report takes
+ * minutes to build, so a sync asks for one a day (two years the first time, then from three days before the last one it
+ * got) and a later sync collects it. Undefined until one is ready.
+ */
+async function trafficOf(db: Db, id: string, fetchFn: Fetch, host: string, token: string, marketplace: string, today: string) {
+  type State = { day: string; reportId?: string; got?: string };
+  const all = JSON.parse(String(db.prepare('SELECT value_json FROM settings WHERE key = ?').get(TRAFFIC_KEY)?.value_json ?? '{}')) as Record<string, State>;
+  const st: State = all[id] ?? { day: '' };
+  const save = (v: Partial<State>) =>
+    db.prepare('INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json').run(TRAFFIC_KEY, JSON.stringify({ ...all, [id]: { ...st, ...v } }));
+  const api = async <T>(path: string, init: RequestInit = {}) => {
+    const res = await fetchFn(`https://${host}/reports/2021-06-30${path}`, { ...init, headers: { 'x-amz-access-token': token, 'content-type': 'application/json' } });
+    const body = (await res.json().catch(() => ({}))) as T & { errors?: { message: string }[] };
+    if (!res.ok) throw new Error(`Amazon reports: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
+    return body;
+  };
+  if (!st.reportId) {
+    if (st.day === today) return;
+    save({ day: today }); // one ask a day, even if it fails
+    const { reportId } = await api<{ reportId?: string }>('/reports', {
+      method: 'POST',
+      body: JSON.stringify({
+        reportType: 'GET_SALES_AND_TRAFFIC_REPORT', marketplaceIds: [marketplace], dataStartTime: st.got ? addDays(st.got, -3) : addDays(today, -BACKFILL_DAYS), dataEndTime: today,
+        reportOptions: { dateGranularity: 'DAY', asinGranularity: 'PARENT' },
+      }),
+    });
+    if (reportId) save({ day: today, reportId });
+    return;
+  }
+  const report = await api<{ processingStatus?: string; reportDocumentId?: string }>(`/reports/${encodeURIComponent(st.reportId)}`);
+  if (report.processingStatus === 'IN_QUEUE' || report.processingStatus === 'IN_PROGRESS') return;
+  save({ reportId: undefined }); // DONE, or CANCELLED (no data) / FATAL
+  if (!report.reportDocumentId) return;
+  const doc = await api<{ url?: string; compressionAlgorithm?: string }>(`/documents/${encodeURIComponent(report.reportDocumentId)}`);
+  if (!doc.url?.startsWith('https://')) throw new Error('Amazon returned no report link');
+  const res = await fetchFn(doc.url); // presigned: no token
+  if (!res.ok) throw new Error(`Amazon report download: HTTP ${res.status}`);
+  const raw = Buffer.from(await res.arrayBuffer());
+  const data = JSON.parse((doc.compressionAlgorithm === 'GZIP' ? gunzipSync(raw) : raw).toString('utf8')) as { salesAndTrafficByDate?: { date: string; trafficByDate?: { sessions?: number } }[] };
+  save({ reportId: undefined, got: st.day });
+  return (data.salesAndTrafficByDate ?? []).map((d) => ({ date: d.date, sessions: d.trafficByDate?.sessions ?? 0 }));
 }
 
 /** A search pages through at most this many SKUs. */
@@ -144,6 +191,9 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const listings = !own ? undefined : await listingsOf(fetchFn, host, token, creds.sellerId!.trim(), marketplace, changedSince).catch(() => undefined);
     // FBA stock the same way (without the Amazon Fulfillment role, FBA listings stay "not tracked").
     const fba = !own ? undefined : await fbaStock(fetchFn, host, token, marketplace, changedSince).catch(() => undefined);
+    // Sessions for the funnel, unless GA4 is connected (it owns the funnel there).
+    const traffic = !own || db.prepare('SELECT 1 FROM integrations WHERE id = ?').get(`ga4:${storeId}`) ? undefined
+      : await trafficOf(db, id, fetchFn, host, token, marketplace, today).catch(() => undefined);
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -159,6 +209,8 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
         up.run(storeId, date, Math.round(Number(d.totalSales?.amount ?? 0) * rate * 100) / 100, d.orderCount ?? 0);
       }
       rebuildRevenue(db, storeId, days);
+      const visits = db.prepare('INSERT INTO daily_metrics (store_id, date, sessions) VALUES (?, ?, ?) ON CONFLICT (store_id, date) DO UPDATE SET sessions = excluded.sessions');
+      for (const d of traffic ?? []) visits.run(storeId, d.date, d.sessions);
       // ponytail: Amazon has no unit costs. An FBA listing keeps the stock fbaStock last gave it (its listing has no count).
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?1, ?2, ?3, ?4, ?5, NULL, 0, ?6, ?7, ?8)

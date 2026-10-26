@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
@@ -301,4 +302,53 @@ test('without the Amazon Fulfillment role, FBA listings stay "not tracked" and t
   await syncAmazon(db, key, 'peak', fetchFn, NOW);
   expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'amazon:peak'").get()).toEqual({ status: 'connected', error: null });
   expect(db.prepare("SELECT inventory, inventory_tracked AS tracked FROM products WHERE id = 'amz-FBA-1'").get()).toEqual({ inventory: 0, tracked: 0 });
+});
+
+test("an Amazon store's daily sessions come from the Sales and Traffic report: asked for once a day, collected when ready", async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  let status = 'IN_PROGRESS';
+  const reportCalls: { call: string; body?: unknown; token: string | null }[] = [];
+  const doc = gzipSync(JSON.stringify({ salesAndTrafficByDate: [
+    { date: '2026-10-24', salesByDate: { unitsOrdered: 3 }, trafficByDate: { browserSessions: 100, mobileAppSessions: 20, sessions: 120 } },
+    { date: '2026-10-25', trafficByDate: { sessions: 95 } },
+  ] }));
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init: RequestInit = {}) => {
+    const u = new URL(url);
+    if (u.host === 'reports.s3.example.com') {
+      reportCalls.push({ call: `GET ${u.pathname}`, token: new Headers(init.headers).get('x-amz-access-token') });
+      return new Response(doc);
+    }
+    if (!u.pathname.startsWith('/reports/')) return base(url, init);
+    reportCalls.push({ call: `${init.method ?? 'GET'} ${u.pathname}`, ...(init.body ? { body: JSON.parse(String(init.body)) } : {}), token: new Headers(init.headers).get('x-amz-access-token') });
+    if (u.pathname === '/reports/2021-06-30/reports') return Response.json({ reportId: 'R1' }, { status: 202 });
+    if (u.pathname === '/reports/2021-06-30/reports/R1') return Response.json({ reportId: 'R1', processingStatus: status, ...(status === 'DONE' ? { reportDocumentId: 'D1' } : {}) });
+    return Response.json({ reportDocumentId: 'D1', url: 'https://reports.s3.example.com/D1?sig=x', compressionAlgorithm: 'GZIP' });
+  }) as typeof fetch;
+  const sessions = () => db.prepare("SELECT date, sessions FROM daily_metrics WHERE store_id = 'peak' AND sessions > 0 ORDER BY date").all();
+
+  await syncAmazon(db, key, 'peak', fetchFn, NOW); // asks for two years
+  await syncAmazon(db, key, 'peak', fetchFn, NOW); // not ready yet
+  expect(sessions()).toEqual([]);
+  status = 'DONE';
+  await syncAmazon(db, key, 'peak', fetchFn, NOW); // collects it
+  await syncAmazon(db, key, 'peak', fetchFn, NOW); // nothing more today
+  expect(reportCalls).toEqual([
+    { call: 'POST /reports/2021-06-30/reports', token: 'Atza|access', body: {
+      reportType: 'GET_SALES_AND_TRAFFIC_REPORT', marketplaceIds: ['ATVPDKIKX0DER'], dataStartTime: '2024-10-27', dataEndTime: '2026-10-26',
+      reportOptions: { dateGranularity: 'DAY', asinGranularity: 'PARENT' },
+    } },
+    { call: 'GET /reports/2021-06-30/reports/R1', token: 'Atza|access' },
+    { call: 'GET /reports/2021-06-30/reports/R1', token: 'Atza|access' },
+    { call: 'GET /reports/2021-06-30/documents/D1', token: 'Atza|access' },
+    { call: 'GET /D1', token: null }, // the presigned link gets no token
+  ]);
+  expect(sessions()).toEqual([{ date: '2026-10-24', sessions: 120 }, { date: '2026-10-25', sessions: 95 }]);
+  // Sales sync on top without touching them.
+  expect(db.prepare("SELECT revenue, sessions FROM daily_metrics WHERE store_id = 'peak' AND date = '2026-10-25'").get()).toEqual({ revenue: 412.5, sessions: 95 });
+
+  // The next day: the days since three before the last report.
+  await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-27T18:00:00Z'));
+  expect(reportCalls.at(-1)).toMatchObject({ call: 'POST /reports/2021-06-30/reports', body: { dataStartTime: '2026-10-23', dataEndTime: '2026-10-27' } });
 });
