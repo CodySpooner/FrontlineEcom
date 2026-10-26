@@ -4,7 +4,7 @@ import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { logAction } from '../actions';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { AD_ZONES, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange } from './common';
+import { AD_ZONES, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -99,6 +99,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
     if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
+      claimCampaigns(db, storeId, 'tiktok', [...campaigns.map((c) => c.campaign_id), ...rows.map((r) => r.dimensions.campaign_id)]);
       const camp = db.prepare(
         `INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('tiktok', ?, ?, ?, ?, ?)
          ON CONFLICT (network, id) DO UPDATE SET name = excluded.name, status = excluded.status, daily_budget = excluded.daily_budget`,

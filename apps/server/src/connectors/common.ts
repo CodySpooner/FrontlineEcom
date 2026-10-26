@@ -67,6 +67,22 @@ export function pruneCampaigns(db: Db, storeId: string, network: AdNetwork, keep
   return dates;
 }
 
+/**
+ * Campaigns another store holds (an ad account disconnected there and connected here) move to this one, and that store's
+ * ad spend loses them on their days. Call in the sync's write, before its campaign upserts (which keep a row's store).
+ */
+export function claimCampaigns(db: Db, storeId: string, network: AdNetwork, ids: Iterable<string>) {
+  const list = JSON.stringify([...ids]);
+  const days = db
+    .prepare(
+      `SELECT DISTINCT c.store_id, d.date FROM campaigns c JOIN campaign_daily d ON d.network = c.network AND d.campaign_id = c.id
+       WHERE c.network = ? AND c.store_id != ? AND c.id IN (SELECT value FROM json_each(?))`,
+    )
+    .all(network, storeId, list);
+  db.prepare('UPDATE campaigns SET store_id = ? WHERE network = ? AND store_id != ? AND id IN (SELECT value FROM json_each(?))').run(storeId, network, storeId, list);
+  for (const d of days) rebuildAdSpend(db, String(d.store_id), [String(d.date)]);
+}
+
 /** daily_metrics.ad_spend = spend across every ad network's campaigns for that store and day. */
 export function rebuildAdSpend(db: Db, storeId: string, dates: Iterable<string>) {
   const sum = db.prepare('SELECT coalesce(sum(d.spend), 0) AS spend FROM campaign_daily d JOIN campaigns c ON c.network = d.network AND c.id = d.campaign_id WHERE c.store_id = ? AND d.date = ?');

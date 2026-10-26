@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { AD_ZONES, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
+import { AD_ZONES, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -111,6 +111,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
     if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
+      claimCampaigns(db, storeId, 'meta', [...campaigns.map((c) => c.id), ...rows.map((r) => r.campaign_id)]);
       const camp = db.prepare(
         `INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, ?, ?, ?, ?)
          ON CONFLICT (network, id) DO UPDATE SET name = excluded.name, status = excluded.status, daily_budget = excluded.daily_budget`,

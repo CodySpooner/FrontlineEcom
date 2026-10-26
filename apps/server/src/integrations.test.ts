@@ -177,3 +177,14 @@ test('"sync now" marks an integration changed, so the sync loop picks it up on i
   expect(String(db.prepare("SELECT updated_at FROM integrations WHERE id = 'shopify:glow'").get()?.updated_at) > '2026-01-01T00:00:00.000Z').toBe(true);
   expect((await app.request('/api/integrations/shopify:nope/sync', { method: 'POST' })).status).toBe(404);
 });
+
+test('an ad account feeds one store: connecting it to a second one says where it is', () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const key = randomBytes(32);
+  expect(saveIntegration(db, key, { kind: 'meta_ads', storeId: 'glow', values: { adAccountId: 'act_123', accessToken: 't' } })).toMatchObject({ status: 'connected' });
+  expect(saveIntegration(db, key, { kind: 'meta_ads', storeId: 'pawsome', values: { adAccountId: ' 123 ', accessToken: 't' } })).toMatch(/already connected to Glow Haus/);
+  expect(saveIntegration(db, key, { kind: 'meta_ads', storeId: 'glow', values: { adAccountId: '123', accessToken: 't2' } })).toMatchObject({ status: 'connected' }); // its own store again
+  saveIntegration(db, key, { kind: 'google_ads', storeId: 'glow', values: { customerId: '123-456-7890', clientId: 'c', clientSecret: 's', refreshToken: 'r', developerToken: 'd' } });
+  expect(saveIntegration(db, key, { kind: 'google_ads', storeId: 'peak', values: { customerId: '1234567890', clientId: 'c', clientSecret: 's', refreshToken: 'r', developerToken: 'd' } })).toMatch(/already connected/);
+});

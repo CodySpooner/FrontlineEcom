@@ -27,7 +27,8 @@ pnpm check    # typecheck + tests
 - **Demo first:** a fresh install opens on three demo stores with two years of data. Agents on demo stores run on a
   free stand-in engine, so exploring never uses your Claude plan.
 - **Going live:** in Integrations, pick a store and connect its platform (Shopify, WooCommerce, Etsy, TikTok Shop,
-  Amazon), its ad accounts (Meta, Google, TikTok) and GA4. Each card lists its setup steps. The first sync replaces
+  Amazon), its ad accounts (Meta, Google, TikTok) and GA4. An ad account feeds one store; moved to another, it takes
+  its campaigns and their spend along. Each card lists its setup steps. The first sync replaces
   that store's demo data with real data. After that, Shopify and WooCommerce refresh every 2 minutes and the rest
   every 10. New paid orders, and refunds on orders from the last 30 days, show in the dashboard's live activity
   as each sync brings them. Once a day each store's whole catalog is read again, and products deleted on the platform show as

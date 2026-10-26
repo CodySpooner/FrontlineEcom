@@ -67,6 +67,7 @@ function zoneNotice(db: Db, r: Row): { notice?: string } {
 /** Validates and saves (create or update) an integration. Returns an error message or the saved Integration. */
 /** The settings naming the shop a platform integration reads: a new value is another shop. */
 const SHOP_KEYS: Partial<Record<IntegrationKind, string[]>> = { shopify: ['shopDomain'], tiktok_shop: ['shop'], etsy: ['shopId'], amazon: ['sellerId', 'marketplaceId'], woocommerce: ['siteUrl'] };
+const AD_ACCOUNT_KEYS: Partial<Record<IntegrationKind, string>> = { meta_ads: 'adAccountId', google_ads: 'customerId', tiktok_ads: 'advertiserId' };
 const bare = (v = '') => v.toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '');
 
 export function saveIntegration(db: Db, key: Buffer, body: unknown): string | Integration {
@@ -98,6 +99,17 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
   }
   // ponytail: the only kind with alternative credentials (Dev Dashboard app, or a pre-2026 custom app's token).
   if (kind === 'shopify' && !(secrets.accessToken || (settings.clientId && secrets.clientSecret))) return 'Enter the client ID and secret (or an Admin API access token)';
+  // Campaigns belong to one store, so an ad account on two would hand them back and forth every sync. Compared as digits:
+  // act_123 is 123, and 123-456-7890 is 1234567890.
+  const account = AD_ACCOUNT_KEYS[kind];
+  const digits = (v = '') => v.replace(/\D/g, '');
+  if (account && digits(settings[account])) {
+    const taken = db
+      .prepare('SELECT s.name, i.settings_json FROM integrations i JOIN stores s ON s.id = i.store_id WHERE i.kind = ? AND i.id != ?')
+      .all(kind, id)
+      .find((r) => digits((JSON.parse(String(r.settings_json)) as Record<string, string>)[account]) === digits(settings[account]));
+    if (taken) return `This ${spec.name} account is already connected to ${taken.name}. An ad account feeds one store: disconnect it there first.`;
+  }
 
   const old = existing ? (JSON.parse(String(existing.settings_json)) as Record<string, string>) : {};
   const otherShop = (SHOP_KEYS[kind] ?? []).some((k) => old[k] !== undefined && bare(old[k]) !== bare(settings[k]));

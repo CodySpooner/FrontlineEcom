@@ -195,3 +195,15 @@ test('a sync whose store switched currency or ad account while it read writes no
     expect(db.prepare("SELECT status FROM integrations WHERE id = 'meta_ads:pawsome'").get()?.status).toBe('connected');
   }
 });
+
+test("an ad account moved to another store takes its campaigns and spend along (the old store's days lose them)", async () => {
+  const { db } = setup();
+  const { fetchFn } = fakeGraph([insight('201', '2026-10-25', '60.00', '210.50')]);
+  await syncMeta(db, key, 'pawsome', fetchFn, NOW);
+  db.prepare("DELETE FROM integrations WHERE id = 'meta_ads:pawsome'").run();
+  saveIntegration(db, key, { kind: 'meta_ads', storeId: 'glow', values: { adAccountId: '1234567890', accessToken: TOKEN } });
+  await syncMeta(db, key, 'glow', fetchFn, NOW);
+  const spend = (store: string) => db.prepare("SELECT ad_spend FROM daily_metrics WHERE store_id = ? AND date = '2026-10-25'").get(store)?.ad_spend;
+  expect(db.prepare("SELECT store_id FROM campaigns WHERE network = 'meta' AND id = '201'").get()?.store_id).toBe('glow');
+  expect([spend('glow'), spend('pawsome')]).toEqual([60, 0]);
+});

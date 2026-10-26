@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { AD_ZONES, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
+import { AD_ZONES, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
 export const GOOGLE_ADS_API_VERSION = 'v26';
@@ -122,6 +122,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
     if (syncView(db, id) !== view) return;
     tx(db, () => {
       switchToReal(db, storeId);
+      claimCampaigns(db, storeId, 'google', [...campaigns.map((c) => c.campaign.id), ...rows.map((r) => r.campaign.id)]);
       const camp = db.prepare(
         `INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('google', ?, ?, ?, ?, ?)
          ON CONFLICT (network, id) DO UPDATE SET name = excluded.name, status = excluded.status, daily_budget = excluded.daily_budget`,
