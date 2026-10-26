@@ -91,6 +91,27 @@ export function forgetPlatform(db: Db, storeId: string, kind: IntegrationKind) {
   rebuildRevenue(db, storeId, dates);
 }
 
+// Once a day per integration a connector reads the platform's whole catalog and archives the synced products it no
+// longer lists: a deleted product leaves no trace in "changed since" reads.
+const PASS_KEY = 'catalog_pass';
+const passes = (db: Db) => JSON.parse(String(db.prepare('SELECT value_json FROM settings WHERE key = ?').get(PASS_KEY)?.value_json ?? '{}')) as Record<string, string>;
+
+/** True while integration `id` hasn't had today's catalog pass. */
+export const catalogPassDue = (db: Db, id: string, today: string) => passes(db)[id] !== today;
+
+/**
+ * Applies a catalog pass: the store's products matching `glob` (the platform's ids) that `listed` doesn't hold are
+ * archived, and the day is recorded. `listed` must be the complete catalog; a partial read would archive live products.
+ */
+export function archiveMissing(db: Db, id: string, storeId: string, glob: string, listed: Iterable<string>, today: string) {
+  const keep = new Set(listed);
+  const archive = db.prepare("UPDATE products SET status = 'archived' WHERE store_id = ? AND id = ?");
+  for (const r of db.prepare("SELECT id FROM products WHERE store_id = ? AND id GLOB ? AND status != 'archived'").all(storeId, glob)) {
+    if (!keep.has(String(r.id))) archive.run(storeId, String(r.id));
+  }
+  db.prepare('INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json').run(PASS_KEY, JSON.stringify({ ...passes(db), [id]: today }));
+}
+
 export interface OrderItem {
   productId: string;
   quantity: number;

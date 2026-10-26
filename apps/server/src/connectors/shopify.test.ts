@@ -494,3 +494,22 @@ test("a product deleted in Shopify is archived from its delete event (later sync
   expect(second.calls.find((c) => c.body.query.includes('events('))!.body.variables.q).toBe("action:'destroy' AND subject_type:'PRODUCT' AND created_at:>='2026-10-26T17:55:00Z'");
   expect(status()).toBe('archived');
 });
+
+test('once a day every Shopify product id is read, and products it lacks are archived (deleted before the events reached them)', async () => {
+  const { db } = await setup();
+  await syncShopify(db, key, 'glow', fakeShopify([]).fetchFn, NOW);
+  const add = db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', ?, 'x', 1, 0, 1, 'active')");
+  for (const id of ['222', 'research-9', 'woo-5']) add.run(id);
+  const status = () => db.prepare("SELECT id, status FROM products WHERE store_id = 'glow' ORDER BY id").all();
+
+  const later = fakeShopify([]);
+  await syncShopify(db, key, 'glow', later.fetchFn, NOW);
+  expect(later.calls.some((c) => c.body.query.includes('products(first: 250'))).toBe(true);
+  // 222 is gone from Shopify; other platforms' and local drafts' rows are not Shopify's to judge.
+  expect(status()).toEqual([
+    { id: '111', status: 'active' }, { id: '222', status: 'archived' }, { id: 'research-9', status: 'active' }, { id: 'woo-5', status: 'active' },
+  ]);
+  const again = fakeShopify([]);
+  await syncShopify(db, key, 'glow', again.fetchFn, NOW);
+  expect(again.calls.some((c) => c.body.query.includes('products(first: 250'))).toBe(false); // once a day
+});

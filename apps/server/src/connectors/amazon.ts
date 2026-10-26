@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, rebuildRevenue, setStoreCurrency, switchToReal } from './common';
+import { adRate, archiveMissing, catalogPassDue, rebuildRevenue, setStoreCurrency, switchToReal } from './common';
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
@@ -103,11 +103,13 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const currency = body.payload?.find((d) => d.totalSales?.currencyCode)?.totalSales.currencyCode;
     const own = db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform === 'amazon';
     const rate = own ? 1 : await adRate(db, storeId, currency, fetchFn, 'Amazon');
-    // Everything until the store has Amazon products (so adding the Product Listing role later still pulls the whole
-    // catalog), then what changed since two days before the last sync. Without the role, sales sync on and the catalog stays empty.
+    // The whole catalog until the store has Amazon products (so adding the Product Listing role later still pulls it all)
+    // and once a day after (archiving listings that are gone); otherwise what changed since two days before the last sync.
+    // Without the role (or on any error) sales sync on and the catalog is left as it is.
     const have = db.prepare("SELECT 1 FROM products WHERE store_id = ? AND id GLOB 'amz-*'").get(storeId);
-    const changedSince = have ? `${addDays(cursor ?? today, -2)}T00:00:00Z` : undefined;
-    const listings = own ? await listingsOf(fetchFn, host, auth.access_token, creds.sellerId!.trim(), marketplace, changedSince).catch(() => []) : [];
+    const full = !have || catalogPassDue(db, id, today);
+    const listings = !own ? undefined
+      : await listingsOf(fetchFn, host, auth.access_token, creds.sellerId!.trim(), marketplace, full ? undefined : `${addDays(cursor ?? today, -2)}T00:00:00Z`).catch(() => undefined);
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -130,13 +132,14 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, inventory = excluded.inventory,
            inventory_tracked = excluded.inventory_tracked, status = excluded.status`,
       );
-      for (const l of listings) {
+      for (const l of listings ?? []) {
         const s = l.summaries?.[0];
         const counted = (l.fulfillmentAvailability ?? []).filter((f) => typeof f.quantity === 'number');
         const price = Number(l.offers?.find((o) => o.offerType === 'B2C')?.price.amount ?? 0);
         // BUYABLE and/or DISCOVERABLE: live (an out-of-stock listing keeps DISCOVERABLE); neither: not live yet.
         prod.run(storeId, `amz-${l.sku}`, s?.itemName ?? l.sku, s?.mainImage?.link ?? null, price, counted.reduce((a, f) => a + f.quantity!, 0), counted.length ? 1 : 0, s?.status?.length ? 'active' : 'draft');
       }
+      if (listings && full) archiveMissing(db, id, storeId, 'amz-*', listings.map((l) => `amz-${l.sku}`), today);
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
   } catch (e) {

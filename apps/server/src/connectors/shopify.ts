@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -62,6 +62,7 @@ const PRODUCTS_Q = `query ($after: String, $q: String) {
       featuredMedia { preview { image { url(transform: { maxWidth: 480 }) } } }
       variants(first: 1) { nodes { price compareAtPrice inventoryItem { unitCost { amount } } } } }
     pageInfo { hasNextPage endCursor } } }`;
+const PRODUCT_IDS_Q = `query ($after: String) { products(first: 250, after: $after) { nodes { id } pageInfo { hasNextPage endCursor } } }`;
 const DELETED_Q = `query ($after: String, $q: String) {
   events(first: 250, after: $after, query: $q) { nodes { ... on BasicEvent { subjectId } } pageInfo { hasNextPage endCursor } } }`;
 
@@ -217,6 +218,11 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const deleted = !cursor ? [] : await all((after) =>
       q<{ events: { nodes: { subjectId?: string }[]; pageInfo: PageInfo } }>(DELETED_Q, { after, q: `action:'destroy' AND subject_type:'PRODUCT' AND created_at:>='${since}'` }).then((d) => d.events),
     ).catch(() => []);
+    // And once a day every product id (250 a page), for deletions the events above don't cover: before they were read, or
+    // past their retention. A failed read archives nothing.
+    const today = localDate(now);
+    const catalog = !cursor || !catalogPassDue(db, id, today) ? undefined
+      : await all((after) => q<{ products: { nodes: { id: string }[]; pageInfo: PageInfo } }>(PRODUCT_IDS_Q, { after }).then((d) => d.products)).catch(() => undefined);
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: shop.ianaTimezone });
     // A page's resume point never passes the sync start, so a product edited while orders page in is fetched again.
     const start = cursorAt(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -238,6 +244,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       }
       const archive = db.prepare("UPDATE products SET status = 'archived' WHERE store_id = ? AND id = ?");
       for (const e of deleted) if (e.subjectId) archive.run(storeId, tail(e.subjectId));
+      if (catalog) archiveMissing(db, id, storeId, '[0-9]*', catalog.map((n) => tail(n.id)), today);
     });
 
     const ord = db.prepare(

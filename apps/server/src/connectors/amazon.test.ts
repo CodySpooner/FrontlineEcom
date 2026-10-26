@@ -153,3 +153,26 @@ test('a catalog past the 1000-SKU search cap is read in windows from the last ch
   expect(windows).toEqual([null, all[999]!.summaries[0]!.lastUpdatedDate, all[1998]!.summaries[0]!.lastUpdatedDate]);
   expect(db.prepare("SELECT count(*) AS n FROM products WHERE store_id = 'peak' AND id GLOB 'amz-*'").get()?.n).toBe(2500);
 });
+
+test('once a day the whole Amazon catalog is read again and listings that are gone are archived', async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  let skus = ['A', 'B'];
+  const queries: (string | null)[] = [];
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (!u.pathname.startsWith('/listings/')) return base(url, init);
+    queries.push(u.searchParams.get('lastUpdatedAfter'));
+    return Response.json({ numberOfResults: skus.length, items: skus.map((sku) => ({ sku, summaries: [{ status: ['BUYABLE'] }] })) });
+  }) as typeof fetch;
+  const status = () => db.prepare("SELECT id, status FROM products WHERE store_id = 'peak' AND id GLOB 'amz-*' ORDER BY id").all();
+
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  skus = ['A']; // B was deleted on Amazon
+  await syncAmazon(db, key, 'peak', fetchFn, NOW); // same day: changes only, nothing to archive from
+  expect(status()).toEqual([{ id: 'amz-A', status: 'active' }, { id: 'amz-B', status: 'active' }]);
+  await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-27T18:00:00Z')); // next day: the full pass
+  expect(queries).toEqual([null, '2026-10-24T00:00:00Z', null]);
+  expect(status()).toEqual([{ id: 'amz-A', status: 'active' }, { id: 'amz-B', status: 'archived' }]);
+});
