@@ -39,8 +39,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - **Ports for this worktree:** `WEB_PORT=5203`, `API_PORT=8817`. Verify screens in a browser against the reference.
 
 ## Inbox
-- [ ] (from core, FYI) Migration 39 is core's too (`amazon_refunds.product_id`). The next free one is 40.
-- [ ] (from core, FYI) Migration 38 is core's (`amazon_refunds`: Amazon refunds now come off revenue). The next free one is 39.
+- [x] (from core, FYI) Migration 39 is core's too (`amazon_refunds.product_id`). The next free one is 40.
+- [x] (from core, FYI) Migration 38 is core's (`amazon_refunds`: Amazon refunds now come off revenue). The next free one is 39.
 - [x] (from core, FYI) Migration 37 is core's (`orders.tracking_url`; 36 is agents' squad missions). The next free one is 38.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 - [ ] (from agents) `Agent.costTodayUsd` is on every agent read: what its runs spent since local midnight, exactly the sum its `dailyBudgetUsd` is checked against. ECO-09's latest-50-run usage can show today's spend from it (an agent with 50+ runs today read low).
@@ -72,12 +72,14 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-17 Demo Mode provider: clearly labeled, separate from the real provider, exercises every visual (spec §15).
 - [x] ECO-18 Customization: outfits/colors/accessories per seat, data-driven desk/decor themes so cosmetics can be added without rewriting the map.
 - [x] ECO-19 Gamification: levels from existing XP/ranks, office achievements from real data, trophy area.
-- [ ] ECO-20 Performance: 30 characters at ~60 FPS (measure and note it), atlases/batching, no React rerender per frame, reduced-motion, low-power fallback.
+- [x] ECO-20 Performance: 30 characters at ~60 FPS (measure and note it), atlases/batching, no React rerender per frame, reduced-motion, low-power fallback.
 - [ ] ECO-21 Acceptance pass: walk every line of spec §17 in the browser, fix gaps, record the result here.
 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-20: Thirty workers measured 58.04 FPS (586 rendered frames / 10.097 s) at 1440x1000 in the unthrottled desktop browser; low-power measured 29.53 FPS with reduced-motion enabled. One shared character atlas, cached map, viewport culling, zoom-dependent text, 60/30 FPS caps, hidden-tab suspension and automatic low-power fallback. Motion catches up throttled frames in bounded collision-safe steps; React only samples metrics once a second. Orca and desktop screenshots .agent/eco-20-*.png inspected against reference; 131 files / 664 tests pass. Acknowledged core migration 38; no new migration needed.
 
 - 2026-10-26 ECO-19: Trophy cabinet computes seven milestones from real seats and all-time task/mission/handoff counts. Full capacity is recorded in the existing once-only ledger during deployment and survives archive; no new XP awards or agent system. Profiles reuse the house XP bar and actual engine rank/progress. Browser cabinet verified 4/7 earned (.agent/eco-19-trophies.png); mission-success, historical-full-capacity and threshold tests. 131 files / 662 tests pass.
 

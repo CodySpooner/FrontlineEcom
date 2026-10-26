@@ -23,6 +23,7 @@
 .eco-dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:#3ddc84; margin-left:6px; }.eco-dot.waiting { background:#63b6ff; }.eco-dot.collab { background:#ce7aff; }.eco-dot.idle { background:#e3b45c; }.eco-dot.blocked { background:#ff2a3a; }
 .eco-canvas { width:100%; height:clamp(500px,46vw,760px); touch-action:none; }
 .eco-canvas canvas { display:block; image-rendering:pixelated; }
+.eco-fps { position:absolute; right:14px; bottom:10px; color:#818697; font-size:9px; pointer-events:none; }
 .eco-scene-note { position:absolute; left:15px; bottom:16px; color:#a4a4b3; font-size:10px; letter-spacing:.06em; pointer-events:none; }
 .eco-desk-access { position:absolute; right:12px; top:64px; font-size:10px; color:#a4a4b3; background:#101016e8; border:1px solid #363640; border-radius:5px; padding:7px; max-width:220px; }
 .eco-camera { position:absolute; top:12px; left:12px; right:12px; display:flex; flex-wrap:wrap; gap:6px; z-index:1; }.eco-camera select { max-width:160px; background:#181820; border:1px solid #363640; border-radius:6px; padding:5px; color:#c8c8d3; font-size:11px; }

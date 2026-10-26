@@ -2,7 +2,7 @@ import { Container, Graphics, Rectangle, Sprite, Text, Texture } from 'pixi.js';
 import type { OfficeSeat } from '@frontline/shared';
 import { CELL, frameAt, paintCharacters, type Animation, type Direction } from './characters';
 import { ENTRANCE, deskTile, iso, tileKey, walkable, type Tile } from './world';
-import { advanceMotion, nearestFree, startMotion, type Motion } from './pathfinding';
+import { advanceFrame, nearestFree, startMotion, type Motion } from './pathfinding';
 import type { OfficeStatus } from './events';
 import { startVisit, visitFinished, type Handoff, type Visit } from './communications';
 import { meetingFinished, type Meeting, type MeetingPlan } from './meetings';
@@ -71,9 +71,9 @@ export function workerSprites(world: Container, select: (deskId: string) => void
     }
     tick(0, true);
   }
-  function tick(delta: number, reduced: boolean) {
+  function tick(delta: number, reduced: boolean, view?: { x: number; y: number; width: number; height: number; scale: number }) {
     if (!atlas) return;
-    for (const id of advanceMotion(motions, delta / 1000)) positions.set(id, { ...motions.get(id)!.cell });
+    for (const id of advanceFrame(motions, delta)) positions.set(id, { ...motions.get(id)!.cell });
     if (meeting && meetingFinished(meeting, Object.keys(meeting.plan.targets).every((id) => !motions.has(id) || motions.get(id)!.arrived), delta)) {
       meeting = undefined;
       for (const [id, worker] of workers) motions.get(id)!.target = visits.get(id)?.target ?? worker.data.target ?? deskTile(worker.data.seat.deskId);
@@ -91,7 +91,8 @@ export function workerSprites(world: Container, select: (deskId: string) => void
       const motion = motions.get(worker.data.seat.agentId)!;
       const inMeeting = !!meeting?.plan.targets[worker.data.seat.agentId];
       const visit = inMeeting ? undefined : visits.get(worker.data.seat.agentId);
-      worker.name.visible = display.names || display.workload; worker.status.visible = display.status; worker.bubble.visible = worker.bubbleBack.visible = display.bubbles;
+      const details = !view || view.scale >= .65;
+      worker.name.visible = details && (display.names || display.workload); worker.status.visible = display.status; worker.bubble.visible = worker.bubbleBack.visible = display.bubbles && details;
       worker.name.text = [display.names ? worker.data.name : '', display.workload ? worker.data.tool ?? worker.data.status?.replaceAll('_', ' ') ?? 'idle' : ''].filter(Boolean).join('\n');
       const speech = visit ? `Handoff → ${workers.get(visit.event.toAgentId)?.data.name}\n${visit.event.summary.split('\n')[0]!.slice(0, 110)}` : worker.data.status === 'awaiting_approval' ? 'Awaiting owner approval' : worker.data.status === 'failed' ? 'Task blocked · inspect output' : '';
       if (worker.bubble.text !== speech) {
@@ -105,6 +106,7 @@ export function workerSprites(world: Container, select: (deskId: string) => void
         worker.direction = dx > 0 ? 0 : dy > 0 ? 1 : dx < 0 ? 3 : 2;
       } else if (motion.arrived) worker.direction = 2;
       const pos = iso(motion.position); worker.root.position.set(pos.x, pos.y + 12); worker.root.zIndex = pos.y;
+      worker.root.renderable = !view || (pos.x > view.x - 200 && pos.x < view.x + view.width + 200 && pos.y > view.y - 80 && pos.y < view.y + view.height + 200);
       const receiving = [...visits.values()].some((v) => v.event.toAgentId === worker.data.seat.agentId && v.atDesk > 0);
       const p = frameAt(motion.next ? 'walk' : motion.arrived ? visit || receiving || inMeeting ? 'collaborate' : worker.data.animation : 'idle', reduced ? 0 : worker.elapsed, worker.direction, worker.index);
       const key = `${p.x},${p.y}`;

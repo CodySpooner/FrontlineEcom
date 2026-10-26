@@ -64,3 +64,10 @@ export function advanceMotion(motions: Map<string, Motion>, seconds: number): st
   }
   return arrivals;
 }
+
+/** Catch up a throttled frame with small collision-safe steps; cap long background pauses. */
+export function advanceFrame(motions: Map<string, Motion>, milliseconds: number): string[] {
+  const arrivals = new Set<string>();
+  for (let remaining = Math.min(milliseconds / 1000, 1); remaining > .000001; remaining -= .05) for (const id of advanceMotion(motions, Math.min(remaining, .05))) arrivals.add(id);
+  return [...arrivals];
+}

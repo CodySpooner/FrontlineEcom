@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { advanceMotion, findPath, nearestFree, startMotion } from './pathfinding';
+import { advanceFrame, advanceMotion, findPath, nearestFree, startMotion } from './pathfinding';
 import { DESKS, ENTRANCE, deskTile, tileKey, walkable } from './world';
 
 test('A* reaches every workstation without crossing furniture or reserved tiles', () => {
@@ -25,4 +25,20 @@ test('thirty workers reach distinct desks without occupying or reserving the sam
     expect(new Set(reservations).size).toBe(reservations.length);
   }
   expect(arrived.size).toBe(30);
+});
+
+test('throttled frames catch up in collision-safe steps and cap long pauses', () => {
+  const create = () => new Map([['a', startMotion(ENTRANCE, { x: 17, y: 22 })], ['b', startMotion({ x: 18, y: 26 }, { x: 17, y: 25 })]]);
+  const smooth = create(), throttled = create(), paused = create();
+  const arrivals = new Set<string>();
+  for (let i = 0; i < 20; i++) advanceMotion(smooth, .05).forEach((id) => arrivals.add(id));
+  expect(advanceFrame(throttled, 1000)).toEqual([...arrivals]);
+  advanceFrame(paused, 60_000);
+  for (const id of ['a', 'b']) {
+    expect(throttled.get(id)!.position.x).toBeCloseTo(smooth.get(id)!.position.x);
+    expect(throttled.get(id)!.position.y).toBeCloseTo(smooth.get(id)!.position.y);
+    expect(paused.get(id)!.position).toEqual(throttled.get(id)!.position);
+  }
+  const reservations = [...throttled.values()].flatMap((m) => [tileKey(m.cell), ...(m.next ? [tileKey(m.next)] : [])]);
+  expect(new Set(reservations).size).toBe(reservations.length);
 });

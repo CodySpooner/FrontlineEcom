@@ -17,6 +17,7 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
   const [desk, setDesk] = useState('');
   const [error, setError] = useState('');
   const [fullscreen, setFullscreen] = useState(false);
+  const [performance, setPerformance] = useState<ReturnType<OfficeRenderer['performance']>>();
   const meeting = kickoff(Object.values(office.missions), seats);
   const workers: OfficeWorker[] = seats.filter((s) => !s.archived).map((seat) => {
     const agent = office.agents.find((a) => a.id === seat.agentId);
@@ -39,6 +40,7 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
     document.addEventListener('fullscreenchange',changed);
     // Persist settled tiles outside the rendering loop; motion never waits for a network request.
     const save = window.setInterval(() => {
+      if (renderer) setPerformance(renderer.performance());
       if (!persist) return;
       for (const [id, position] of renderer?.drainPositions() ?? []) officeApi(`/api/ecosystem/seats/${encodeURIComponent(id)}`, 'PATCH', { position }).catch(() => { if (!disposed) setError('Worker positions could not be saved.'); });
     }, 1000);
@@ -56,7 +58,8 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
       </select>
       <Button size="sm" onClick={()=>{const action=fullscreen?document.exitFullscreen():host.current!.parentElement!.requestFullscreen();action.catch(()=>setError('Fullscreen could not be opened.'));}}>{fullscreen?'Exit fullscreen':'Fullscreen'}</Button>
     </div>
-    <div ref={host} className="eco-canvas" />
+    <div ref={host} className="eco-canvas" data-frames={performance?.frames} data-elapsed-ms={performance?.elapsedMs} />
+    {performance && <small className="eco-fps">{Math.round(performance.fps)} FPS · {performance.mode}{performance.scale < .65 ? ' · Zoom in for worker labels' : ''}</small>}
     {error && <p role="alert" className="eco-scene-note">Office renderer unavailable: {error}</p>}
     <div className="eco-scene-note" role="status">{occupant ? `${occupant.name} · ${occupant.status?.replaceAll('_', ' ')}${occupant.tool ? ` · ${occupant.tool}` : ''}` : selected ? `${ROOMS.find((r)=>r.id===selected.department)!.name} · Workstation ${selected.id.split('-').at(-1)}` : 'HEADQUARTERS · Select a workstation to inspect it'}</div>
     <details className="eco-desk-access"><summary>Workstation directory</summary><div>{DESKS.map((d)=><button key={d.id} onClick={()=>{choose(d.id);scene.current?.focus(d);}}>{d.id}</button>)}</div></details>

@@ -43,6 +43,8 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   const continents = new Graphics(); globe.addChild(continents);
   for(let i=0;i<60;i++) { const x=Math.sin(i*1.9)*35, y=Math.cos(i*2.7)*32; if(Math.sin(x*.14)+Math.cos(y*.18)>.1) continents.rect(Math.round(x/3)*3,Math.round(y/3)*3,3,3).fill('#ff6686'); }
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  let lowPower = false, autoLow = false;
+  app.ticker.maxFPS = 60;
   const workers = workerSprites(world, (desk) => { if (!dragged) onDesk(desk); });
   const objective = new Text({ text: '', style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 19, fontWeight: '600', fill: '#ffd9e3', stroke: { color: '#100810', width: 6 }, wordWrap: true, wordWrapWidth: 300, align: 'center' } });
   objective.anchor.set(.5, 1); objective.position.set(hub.x, hub.y - 135); world.addChild(objective);
@@ -66,18 +68,31 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   app.canvas.addEventListener('pointerdown',down);app.canvas.addEventListener('pointermove',move);app.canvas.addEventListener('pointerup',up);app.canvas.addEventListener('pointercancel',up);
   app.canvas.addEventListener('wheel',wheel,{passive:false});app.canvas.addEventListener('dblclick',double);app.canvas.addEventListener('keydown',key);
   const resize = new ResizeObserver(()=>{app.renderer.resize(host.clientWidth,host.clientHeight);fit();}); resize.observe(host); fit();
-  let elapsed=0;
+  let elapsed=0, frames=0, sampleFrames=0, sampleStart=performance.now(), slowSamples=0;
+  const started = sampleStart;
+  let metrics = { fps: 0, frames: 0, elapsedMs: 0, mode: 'Standard', scale: camera.scale };
+  const visibility = () => { if (document.hidden) app.ticker.stop(); else { sampleStart = performance.now(); sampleFrames = 0; app.ticker.start(); } };
+  document.addEventListener('visibilitychange', visibility);
   app.ticker.add((ticker)=>{
+    frames++; sampleFrames++;
+    const now = performance.now(), period = now - sampleStart;
+    if (period >= 1000) {
+      const fps = sampleFrames * 1000 / period;
+      slowSamples = fps >= 10 && fps < 35 && !lowPower ? slowSamples + 1 : 0;
+      if (slowSamples >= 5) { autoLow = true; app.ticker.maxFPS = 30; }
+      metrics = { fps, frames, elapsedMs: now - started, mode: lowPower || autoLow ? 'Low power' : 'Standard', scale: world.scale.x };
+      sampleStart = now; sampleFrames = 0;
+    }
     const smooth=reduced.matches?1:1-Math.exp(-ticker.deltaMS/65);
     world.x+=(camera.x-world.x)*smooth;world.y+=(camera.y-world.y)*smooth;world.scale.set(world.scale.x+(camera.scale-world.scale.x)*smooth);
-    workers.tick(ticker.deltaMS,reduced.matches);
+    workers.tick(Math.min(ticker.elapsedMS, 1000),reduced.matches || lowPower || autoLow,{x:-world.x/world.scale.x,y:-world.y/world.scale.x,width:host.clientWidth/world.scale.x,height:host.clientHeight/world.scale.x,scale:world.scale.x});
     objective.text = workers.meetingTitle() ? `TEAM KICKOFF\n${workers.meetingTitle()}` : '';
-    if(reduced.matches) return;
+    if(reduced.matches || lowPower || autoLow) return;
     elapsed+=ticker.deltaMS;
     globe.y=hub.y-60+Math.sin(elapsed/1600)*3;
     meridians.scale.x=.75+Math.sin(elapsed/2400)*.2;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, setTheme, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ resize.disconnect();app.destroy(true,{children:true});workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;
