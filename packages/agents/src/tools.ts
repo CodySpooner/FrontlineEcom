@@ -32,6 +32,8 @@ export interface ToolEnv {
   decide?: (id: string, decision: ApprovalDecision) => unknown;
   /** Core's per-store caps; `autopilot[kind]` is the owner's autopilot rule for that action kind. */
   caps?: (storeId: string) => StoreCaps;
+  /** Core's exchange rate: `amount` of `currency` in USD (caps are USD); undefined when there's no rate. */
+  toUsd?: (amount: number, currency: string) => Promise<number | undefined>;
   /** Core's competitor tracking for a store: who, their recent price moves, and ads seen lately. */
   competitors?: (storeId: string) => { competitors: Competitor[]; priceChanges: PriceChange[]; ads: (AdSnapshotData & { competitor: string })[] };
   /** Official MCP servers the store has connected (never in demo mode: no credentials, no servers). */
@@ -644,18 +646,20 @@ export const APP_TOOLS: AppTool[] = [
       if (change === 'budget' && newDailyBudget === undefined) return 'newDailyBudget is required for a budget change.';
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
       const added = Math.max(0, to - from);
+      // Caps are USD. ponytail: no rate → no amount, so the cap can't be checked and autopilot can't take it: the owner decides.
+      const usd = !added ? 0 : ctx.store.currency === 'USD' ? added : await ctx.toUsd?.(added, ctx.store.currency).then((n) => n && Math.round(n * 100) / 100);
       const cap = ctx.caps?.(ctx.store.id).adSpendChangePerDay;
-      const addedToday = added ? budgetAddedToday(ctx.db, ctx.store.id) : 0;
-      if (cap !== undefined && added && addedToday + added > cap) {
-        const $ = (n: number) => cash(n, ctx.store.currency);
-        return `Not sent: +${$(added)}/day would pass the owner's ${$(cap)}/day cap on added ad spend (${$(addedToday)} already approved today). Propose a smaller step.`;
+      const addedToday = usd ? budgetAddedToday(ctx.db, ctx.store.id) : 0;
+      if (cap !== undefined && usd && addedToday + usd > cap) {
+        const more = ctx.store.currency === 'USD' ? '' : ` (${cash(added, ctx.store.currency)})`;
+        return `Not sent: +$${usd}${more}/day would pass the owner's $${cap}/day cap on added ad spend ($${addedToday} already approved today). Propose a smaller step.`;
       }
       const { approved, message } = await requestApproval(ctx, {
         title: (change === 'pause' ? `Pause ${c.name}` : `${to > from ? 'Raise' : 'Lower'} ${c.name} budget ${cash(from, ctx.store.currency)} → ${cash(to, ctx.store.currency)}/day`).slice(0, 80),
         reason: evidence,
         action: change === 'pause'
           ? { kind: 'ads.pause_campaign', payload: { network: c.network, campaignId, from }, amountUsd: 0 }
-          : { kind: 'ads.set_budget', payload: { network: c.network, campaignId, from, to }, amountUsd: added },
+          : { kind: 'ads.set_budget', payload: { network: c.network, campaignId, from, to }, ...(usd !== undefined ? { amountUsd: usd } : {}) },
       });
       return approved ? `${message}. It will be applied to the ad account.` : message;
     },

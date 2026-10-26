@@ -43,7 +43,7 @@ import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
-import { fxFor } from '../fx';
+import { convertRate, fxFor } from '../fx';
 import { approvalsHook, decide } from '../approvals';
 import { listCompetitors, priceChanges } from '../competitors';
 import { localDate } from '../dates';
@@ -106,6 +106,10 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
   approvals: approvalsHook(db),
   decide: (id, decision) => decide(db, id, decision),
   caps: (storeId) => getCaps(db, storeId),
+  toUsd: async (amount, currency) => {
+    const rate = await convertRate(db, currency, 'USD');
+    return rate && amount * rate;
+  },
   startRun: (agentId, task, parentRunId) => runManager(db).start(agentId, task, undefined, parentRunId),
   generateMedia: async (req, signal) => {
     const creds = db.prepare(`SELECT 1 FROM integrations WHERE kind = 'higgsfield'`).get() && getCredentials(db, key(), 'higgsfield');

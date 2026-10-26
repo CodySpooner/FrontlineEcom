@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, listMemory, runAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
+import { fakeEngine, getAgent, listMemory, runAgent, updateAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
@@ -105,6 +105,25 @@ test("the owner's cap on added spend and bad input stop a proposal before asking
     'No campaign glow-c1 in this store. Use review_campaigns for ids.',
     'newDailyBudget is required for a budget change.',
   ]);
+});
+
+test('a store in another currency is held to the USD caps; with no exchange rate the owner decides', async () => {
+  db.prepare(`UPDATE stores SET currency = 'EUR' WHERE id = 'pawsome'`).run();
+  db.prepare(`INSERT INTO settings (key, value_json) VALUES ('fx', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json`).run(
+    JSON.stringify({ date: localDate(), fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1.5 } }),
+  );
+  updateCaps(db, 'pawsome', { adSpendChangePerDay: 25, autopilot: { 'ads.set_budget': { enabled: true, maxUsdPerDay: 20 } } });
+  updateAgent(db, 'pawsome:ad_strategist', { autonomy: 'autopilot' });
+  const from = budget('pawsome-c1').daily_budget;
+  const over = await run([propose({ campaignId: 'pawsome-c1', change: 'budget', newDailyBudget: from + 20 })]);
+  expect(over.outputs).toEqual(["Not sent: +$30 (20 EUR)/day would pass the owner's $25/day cap on added ad spend ($0 already approved today). Propose a smaller step."]);
+  const within = await run([propose({ campaignId: 'pawsome-c1', change: 'budget', newDailyBudget: from + 10 })]);
+  expect(within.requests.map((r) => r.action)).toEqual([expect.objectContaining({ amountUsd: 15, auto: true })]); // €10 = $15, inside the $20 autopilot cap
+
+  db.prepare(`UPDATE stores SET currency = 'ISK' WHERE id = 'pawsome'`).run(); // the ECB publishes no ISK rate
+  const unknown = await run([propose({ campaignId: 'pawsome-c2', change: 'budget', newDailyBudget: budget('pawsome-c2').daily_budget + 1 })], 'deny');
+  expect(unknown.requests.map((r) => r.action)).toEqual([expect.not.objectContaining({ amountUsd: expect.anything() })]);
+  expect(unknown.requests[0]!.action.auto).toBeUndefined();
 });
 
 test('a campaign with a change already waiting for the owner gets no second request', async () => {

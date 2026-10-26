@@ -1,4 +1,4 @@
-import { getPageDraft, markPublished, once, writeMemory } from '@frontline/agents';
+import { cash, getPageDraft, markPublished, once, writeMemory } from '@frontline/agents';
 import type { AdNetwork, ApprovalRequest, PageDraft } from '@frontline/shared';
 import type { Db } from '../db';
 import { subscribe } from '../live';
@@ -76,7 +76,7 @@ export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) 
   const skip = () => void once(db, `not-applied:${a.id}`);
   if (pause && c && c.status !== 'active') return skip();
   if (!pause && typeof p.from === 'number' && c && moved(p.from, Number(c.daily_budget))) {
-    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The budget moved since this was asked ($${p.from} → now $${Number(c.daily_budget)}). Ask the Ad Strategist again if it still makes sense.`, storeId: store.id });
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The budget moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(c.daily_budget), store.currency)}). Ask the Ad Strategist again if it still makes sense.`, storeId: store.id });
     return skip();
   }
   if (store.connected) {
@@ -109,7 +109,7 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
   if (!store || typeof p.productId !== 'string' || typeof p.to !== 'number' || typeof p.from !== 'number') return;
   const now = db.prepare('SELECT price FROM products WHERE store_id = ? AND id = ?').get(store.id, p.productId)?.price;
   if (now != null && moved(p.from, Number(now))) {
-    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The price moved since this was asked (${p.from} → now ${Number(now)}). Ask the Market Analyst again if it still makes sense.`, storeId: store.id });
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The price moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(now), store.currency)}). Ask the Market Analyst again if it still makes sense.`, storeId: store.id });
     return;
   }
   const compareAt = typeof p.compareAt === 'number' ? p.compareAt : undefined;
