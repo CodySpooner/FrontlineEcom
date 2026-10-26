@@ -1,0 +1,16 @@
+node_modules/
+dist/
+out/
+release/
+.data/
+*.db
+*.db-*
+.env
+.env.*
+!.env.example
+.agent/
+.claude/settings.local.json
+*.log
+.DS_Store
+Thumbs.db
+coverage/

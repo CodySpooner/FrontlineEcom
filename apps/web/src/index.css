@@ -1,0 +1,31 @@
+@import "tailwindcss";
+@import "@fontsource/teko/700.css";
+@import "@fontsource/chakra-petch/600.css";
+@import "@fontsource/chakra-petch/700.css";
+@import "@fontsource-variable/inter";
+
+/* Design tokens from docs/reference (dark grey + red). */
+@theme {
+  --color-bg: #08080a;
+  --color-bg-2: #0e0e11;
+  --color-panel: #131316;
+  --color-panel-2: #1a1a1e;
+  --color-line: #24242a;
+  --color-line-2: #33333b;
+  --color-text: #f0f0f2;
+  --color-muted: #8b8b94;
+  --color-red: #ff2a3a;
+  --color-red-2: #c3121f;
+  --color-good: #3ddc84;
+  --font-sans: "Inter Variable", system-ui, sans-serif;
+  --font-display: "Chakra Petch", system-ui, sans-serif;
+  --font-logo: "Teko", "Chakra Petch", sans-serif;
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-bg text-text font-sans antialiased;
+}

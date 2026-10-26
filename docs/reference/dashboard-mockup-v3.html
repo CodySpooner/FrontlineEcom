@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frontline Ecom Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter:wght@400;500;600;700&family=Teko:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #08080a;
+  --bg-2: #0e0e11;
+  --panel: #131316;
+  --panel-2: #1a1a1e;
+  --line: #24242a;
+  --line-2: #33333b;
+  --text: #f0f0f2;
+  --muted: #8b8b94;
+  --red: #ff2a3a;
+  --red-2: #c3121f;
+  --red-soft: rgba(255, 42, 58, .12);
+  --red-glow: rgba(255, 42, 58, .45);
+  --good: #3ddc84;
+  --display: "Chakra Petch", system-ui, sans-serif;
+  --logo: "Teko", "Chakra Petch", sans-serif;
+}
+* { box-sizing: border-box; }
+html { color-scheme: dark; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 Inter, system-ui, sans-serif; }
+.shell { display: grid; grid-template-columns: 232px minmax(0, 1fr); min-height: 100vh; }
+
+/* sidebar */
+.side { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 18px; padding: 18px 14px; border-right: 1px solid var(--line); background: linear-gradient(180deg, #0d0d10, #09090b); overflow-y: auto; }
+.logo { position: relative; padding: 2px 8px 0; line-height: .78; user-select: none; }
+.logo .l1 { position: relative; display: inline-block; font: italic 700 46px var(--logo); letter-spacing: .01em; transform: skewX(-10deg); background: linear-gradient(180deg, #ffffff 0%, #d9d9df 55%, #8f8f98 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.logo .l1::after { content: ""; position: absolute; left: 50%; top: -4px; width: 5px; height: 112%; background: var(--red); transform: skewX(-28deg); box-shadow: 0 0 12px var(--red-glow); }
+.logo .l2 { display: block; margin: 4px 0 0 70px; font: italic 700 19px var(--logo); letter-spacing: .55em; color: var(--red); transform: skewX(-10deg); text-shadow: 0 0 10px var(--red-glow); }
+.logo-mini { display: none; place-items: center; width: 38px; height: 38px; margin: 0 auto; border-radius: 9px; background: linear-gradient(135deg, var(--red), var(--red-2)); font: italic 700 26px/1 var(--logo); color: #fff; box-shadow: 0 0 16px -4px var(--red-glow); }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 9px; color: #c4c4cc; font-size: 13.5px; font-weight: 500; cursor: pointer; white-space: nowrap; }
+.nav a:hover { background: var(--panel-2); color: #fff; }
+.nav a.on { background: linear-gradient(90deg, var(--red-2), var(--red)); color: #fff; box-shadow: 0 8px 22px -8px var(--red-glow); }
+.ic { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.ic.sm { width: 15px; height: 15px; }
+.sys { margin-top: auto; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel); }
+.sys .t { font-size: 12px; color: var(--muted); }
+.sys .s { display: flex; align-items: center; gap: 8px; margin: 6px 0 9px; font-size: 12.5px; }
+.sys .bar { height: 4px; border-radius: 4px; background: #222228; overflow: hidden; }
+.sys .bar i { display: block; height: 100%; width: 100%; background: var(--good); box-shadow: 0 0 8px rgba(61,220,132,.6); }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--good); box-shadow: 0 0 8px rgba(61,220,132,.7); flex: none; }
+.dot.idle { background: #6b6b75; box-shadow: none; }
+
+/* hero header */
+.main { min-width: 0; padding: 0 22px 32px; }
+.hero { position: relative; margin: 0 -22px 16px; padding: 20px 22px 26px; min-height: 158px; overflow: hidden; border-bottom: 1px solid var(--line);
+  background:
+    radial-gradient(380px 210px at 66% 42%, rgba(255,42,58,.42), transparent 70%),
+    radial-gradient(700px 260px at 25% -30%, rgba(255,42,58,.16), transparent 70%),
+    repeating-linear-gradient(115deg, rgba(255,255,255,.028) 0 2px, transparent 2px 24px),
+    linear-gradient(180deg, #14070a, #0a0a0c); }
+.skyline { position: absolute; left: 0; bottom: 0; width: 100%; height: 64px; }
+.figure { position: absolute; bottom: -6px; filter: drop-shadow(0 0 24px rgba(255,42,58,.4)); }
+.figure.f1 { right: 30%; height: 172px; }
+.figure.f2 { right: 41%; height: 118px; opacity: .55; }
+.hero-in { position: relative; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+.title { padding-top: 22px; }
+.title h1 { margin: 0; font: 700 34px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; text-shadow: 0 2px 18px rgba(0,0,0,.7); }
+.title p { margin: 9px 0 0; font: 600 12.5px var(--display); letter-spacing: .17em; text-transform: uppercase; color: #cfcfd6; }
+.tools { display: flex; align-items: center; gap: 12px; }
+.glass { background: rgba(10,10,12,.78); border: 1px solid var(--line-2); backdrop-filter: blur(6px); }
+.search { display: flex; align-items: center; gap: 9px; width: 280px; padding: 9px 12px; border-radius: 11px; color: var(--muted); font-size: 13px; }
+.bell { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 11px; color: #ddd; }
+.bell b { position: absolute; top: -6px; right: -6px; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: var(--red); color: #fff; font: 700 11px/19px Inter, sans-serif; text-align: center; box-shadow: 0 0 12px var(--red-glow); }
+.me { display: flex; align-items: center; gap: 10px; padding: 5px 10px 5px 5px; border-radius: 13px; }
+.avatar { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: radial-gradient(circle at 50% 35%, #45121a, #120507); border: 1px solid var(--red); font: 700 14px var(--display); }
+.me .n { font-size: 13px; font-weight: 600; line-height: 1.15; }
+.me .p { font-size: 11px; color: var(--muted); }
+
+/* store + range filter */
+.filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 14px; }
+.flbl { font: 600 11px var(--display); letter-spacing: .15em; text-transform: uppercase; color: var(--muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { display: flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--panel); color: #c4c4cc; font-size: 12.5px; font-weight: 500; cursor: pointer; user-select: none; }
+.chip:hover { color: #fff; border-color: #4a4a53; }
+.chip i { width: 7px; height: 7px; border-radius: 50%; }
+.chip.on { border-color: var(--red); background: var(--red-soft); color: #fff; }
+.vs { font-size: 12px; color: var(--muted); }
+.seg { display: flex; gap: 2px; margin-left: auto; padding: 3px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line-2); }
+.seg span { padding: 5px 12px; border-radius: 7px; font: 600 12px var(--display); color: var(--muted); cursor: pointer; }
+.seg span.on { background: var(--red); color: #fff; box-shadow: 0 0 14px -3px var(--red-glow); }
+
+/* cards */
+.card { background: linear-gradient(180deg, #161619, #111114); border: 1px solid var(--line); border-radius: 12px; }
+.kpis { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.kpi { display: grid; grid-template-columns: minmax(0, 1fr) 84px; column-gap: 8px; padding: 14px 16px; }
+.kpi .lbl { grid-column: 1 / -1; font-size: 12.5px; color: #b9b9c2; }
+.kpi .val { grid-column: 1; grid-row: 2; margin-top: 4px; font: 700 25px/1.1 var(--display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi .d { grid-column: 1; grid-row: 3; margin-top: 3px; font-size: 12.5px; font-weight: 600; }
+.kpi svg { grid-column: 2; grid-row: 2 / 4; align-self: center; width: 84px; height: 34px; overflow: visible; }
+.kpi.hero { border-color: rgba(255,42,58,.55); background: linear-gradient(180deg, rgba(255,42,58,.16), #121215 78%); box-shadow: 0 0 26px -12px var(--red-glow); }
+.up { color: var(--good); }
+.down { color: var(--red); }
+.row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; }
+.row3 { display: grid; grid-template-columns: minmax(0, 1.65fr) minmax(0, 1fr); gap: 14px; }
+.panel { padding: 16px; min-width: 0; }
+.ph { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
+.ph h3 { margin: 0; font: 600 16px var(--display); letter-spacing: .02em; }
+.sub { font-size: 12px; color: var(--muted); }
+.link { font-size: 12px; font-weight: 600; color: var(--red); cursor: pointer; white-space: nowrap; }
+
+/* revenue chart */
+.plot { position: relative; }
+#chart { display: block; width: 100%; height: 250px; }
+#chart .ax line { stroke: #1f1f25; }
+#chart .ax text { fill: #6f6f78; font: 11px Inter, sans-serif; }
+#chart .cur { stroke: rgba(255,255,255,.28); stroke-dasharray: 3 3; }
+#chart .pt { fill: var(--red); stroke: #fff; stroke-width: 2; }
+.tip { position: absolute; transform: translate(-50%, calc(-100% - 14px)); padding: 7px 11px; border-radius: 9px; background: rgba(12,12,14,.94); border: 1px solid var(--line-2); white-space: nowrap; pointer-events: none; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
+.tip b { display: block; font: 700 16px var(--display); }
+.tip span { font-size: 11px; color: var(--muted); }
+
+/* live activity */
+.live { display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--good); }
+.live .dot { animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .35; } }
+.ev { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px solid var(--line); }
+.ev:not(.off) ~ .ev:not(.off) { border-top: 1px solid var(--line); }
+.feed .ev:first-child { border-top: 0; }
+.ev.off { display: none; }
+.ico { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 10px; color: var(--good); background: rgba(61,220,132,.09); border: 1px solid rgba(61,220,132,.25); }
+.ico.cart { color: #d0d0d6; background: rgba(255,255,255,.04); border-color: var(--line-2); }
+.ico.co { color: var(--red); background: var(--red-soft); border-color: rgba(255,42,58,.35); }
+.ev .t { font-size: 13px; font-weight: 600; }
+.ev .m { font-size: 11.5px; color: var(--muted); }
+.ev .amt { font: 700 14px var(--display); font-variant-numeric: tabular-nums; }
+
+/* agents */
+.agents { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 10px; }
+.agent { padding: 10px; border-radius: 10px; background: var(--bg-2); border: 1px solid var(--line); }
+.agent .top { display: flex; align-items: center; gap: 9px; }
+.portrait { flex: none; width: 42px; height: 42px; border-radius: 9px; overflow: hidden; background: radial-gradient(circle at 50% 30%, rgba(255,42,58,.38), #0b0b0d 72%); border: 1px solid #3d1a1f; }
+.portrait svg { display: block; width: 100%; height: 100%; }
+.agent .nm { font-size: 12.5px; font-weight: 600; line-height: 1.2; }
+.agent .st { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 11px; color: var(--good); }
+.agent .st.idle { color: var(--muted); }
+.agent .task { min-height: 2.7em; margin-top: 9px; font-size: 11.5px; color: var(--muted); }
+.prog { height: 3px; margin-top: 6px; border-radius: 3px; background: #1f1f24; overflow: hidden; }
+.prog i { display: block; width: 40%; height: 100%; background: linear-gradient(90deg, transparent, var(--red), transparent); animation: scan 1.7s linear infinite; }
+@keyframes scan { from { transform: translateX(-100%); } to { transform: translateX(260%); } }
+
+/* agent requests */
+.req { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 10px; padding: 11px 0; border-top: 1px solid var(--line); transition: opacity .3s; }
+.reqs .req:first-child { border-top: 0; padding-top: 2px; }
+.req.done { opacity: .55; }
+.req.gone { display: none; }
+.who { font: 700 10.5px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--red); }
+.what { margin-top: 2px; font-size: 13px; font-weight: 600; }
+.why { margin-top: 2px; font-size: 11.5px; color: var(--muted); }
+.btns { display: flex; gap: 6px; }
+.btn { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line-2); background: var(--panel-2); color: #ddd; font: 600 12px Inter, sans-serif; cursor: pointer; }
+.btn:hover { filter: brightness(1.15); }
+.btn.ok { background: var(--red); border-color: var(--red); color: #fff; box-shadow: 0 0 14px -4px var(--red-glow); }
+.verdict { font: 700 12px var(--display); letter-spacing: .1em; text-transform: uppercase; }
+.empty { padding: 22px 0 8px; text-align: center; font-size: 13px; color: var(--muted); }
+
+.mock-tag { position: fixed; right: 12px; bottom: 12px; z-index: 5; padding: 6px 10px; border-radius: 8px; background: rgba(10,10,12,.88); border: 1px solid var(--line-2); font: 600 10.5px var(--display); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+
+@media (max-width: 1280px) {
+  .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .figure.f2 { display: none; }
+}
+@media (max-width: 1100px) {
+  .row, .row3 { grid-template-columns: minmax(0, 1fr); }
+  .search { width: 200px; }
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: 68px minmax(0, 1fr); }
+  .side { padding: 16px 10px; }
+  .logo, .nav .txt, .sys { display: none; }
+  .logo-mini { display: grid; }
+  .nav a { justify-content: center; padding: 10px; }
+  .figure.f1 { right: 8%; }
+  .search { display: none; }
+}
+@media (max-width: 620px) {
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .seg { margin-left: 0; }
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="eyeGlow" x="-100%" y="-200%" width="300%" height="500%"><feGaussianBlur stdDeviation="1.1" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <linearGradient id="hoodFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#26262c"/><stop offset="1" stop-color="#0b0b0d"/></linearGradient>
+  </defs>
+  <symbol id="hood" viewBox="0 0 64 64">
+    <path d="M4 64c2-9 10-15 18-16h20c8 1 16 7 18 16z" fill="#111114"/>
+    <path d="M32 3C17 3 9 16 9 30c0 12 6 22 12 26h22c6-4 12-14 12-26C55 16 47 3 32 3z" fill="url(#hoodFill)" stroke="rgba(255,42,58,.5)" stroke-width=".8"/>
+    <path d="M32 15c-8 0-13 8-13 17 0 9 5 16 13 18 8-2 13-9 13-18 0-9-5-17-13-17z" fill="#040405"/>
+    <path d="M23 31l7 2.6v1.4l-7-2z" fill="#ff2a3a" filter="url(#eyeGlow)"/>
+    <path d="M41 31l-7 2.6v1.4l7-2z" fill="#ff2a3a" filter="url(#eyeGlow)"/>
+  </symbol>
+  <symbol id="helm" viewBox="0 0 64 64">
+    <path d="M4 64c2-9 10-15 18-16h20c8 1 16 7 18 16z" fill="#111114"/>
+    <path d="M32 6c-12 0-20 9-20 22v14c0 6 4 10 9 12l11 3 11-3c5-2 9-6 9-12V28C52 15 44 6 32 6z" fill="url(#hoodFill)" stroke="rgba(255,42,58,.5)" stroke-width=".8"/>
+    <path d="M17 29h30l-3.5 7h-23z" fill="#040405"/>
+    <path d="M21 31.4h22l-1.5 2.4H22.5z" fill="#ff2a3a" filter="url(#eyeGlow)"/>
+    <path d="M32 7v9M24 44l8 3 8-3" stroke="rgba(255,42,58,.35)" stroke-width="1" fill="none"/>
+  </symbol>
+  <symbol id="i-dash" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></symbol>
+  <symbol id="i-bot" viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><circle cx="12" cy="3.5" r="1"/><path d="M9 13v1.5M15 13v1.5M2 13v3M22 13v3"/></symbol>
+  <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M8 17v-4M13 17V8M18 17v-7"/></symbol>
+  <symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1"/></symbol>
+  <symbol id="i-mega" viewBox="0 0 24 24"><path d="M3 11l15-6v14L3 13z"/><path d="M18 9a3 3 0 0 1 0 6"/><path d="M7 13.5l1.5 5.5h3l-1.2-4.6"/></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9l1.5-5h13L20 9"/><path d="M4 9h16v2a3 3 0 0 1-5.3 1.9A3 3 0 0 1 12 14a3 3 0 0 1-2.7-1.1A3 3 0 0 1 4 11z"/><path d="M5 13v7h14v-7M10 20v-4h4v4"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8M12 13v8"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 2v5M15 2v5"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v5"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a2 2 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18M16 10a4 4 0 0 1-8 0"/></symbol>
+  <symbol id="i-cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2 3h3l2.6 12.2a1.6 1.6 0 0 0 1.6 1.3h8.9a1.6 1.6 0 0 0 1.6-1.2L21 7H6"/></symbol>
+  <symbol id="i-card" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+</svg>
+
+<div class="shell">
+  <aside class="side">
+    <div class="logo"><span class="l1">FRONTLINE</span><span class="l2">ECOM</span></div>
+    <div class="logo-mini">F</div>
+    <nav class="nav">
+      <a class="on"><svg class="ic"><use href="#i-dash"/></svg><span class="txt">Dashboard</span></a>
+      <a><svg class="ic"><use href="#i-bot"/></svg><span class="txt">AI Agents</span></a>
+      <a><svg class="ic"><use href="#i-chart"/></svg><span class="txt">Store Analytics</span></a>
+      <a><svg class="ic"><use href="#i-target"/></svg><span class="txt">Product Research</span></a>
+      <a><svg class="ic"><use href="#i-mega"/></svg><span class="txt">Ad Creation</span></a>
+      <a><svg class="ic"><use href="#i-store"/></svg><span class="txt">Store Builder</span></a>
+      <a><svg class="ic"><use href="#i-box"/></svg><span class="txt">Orders &amp; Fulfillment</span></a>
+      <a><svg class="ic"><use href="#i-eye"/></svg><span class="txt">Competitor Intel</span></a>
+      <a><svg class="ic"><use href="#i-zap"/></svg><span class="txt">Automation</span></a>
+      <a><svg class="ic"><use href="#i-plug"/></svg><span class="txt">Integrations</span></a>
+      <a><svg class="ic"><use href="#i-book"/></svg><span class="txt">Knowledge Base</span></a>
+      <a><svg class="ic"><use href="#i-gear"/></svg><span class="txt">Settings</span></a>
+    </nav>
+    <div class="sys"><div class="t">System Status</div><div class="s"><i class="dot"></i>All agents online</div><div class="bar"><i></i></div></div>
+  </aside>
+
+  <main class="main">
+    <header class="hero">
+      <svg class="skyline" viewBox="0 0 850 80" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 80V54h30V40h22v18h26V30h14v-8h12v22h30v-10h26v26h20V28h24v20h26V36h14V20h18v24h28v14h30V32h22v16h30V30h18V14h12v24h30v14h28V36h26v12h30V26h22v16h28v16h26V36h22V22h14v22h30v10h28V32h20v14h28V28h22v24h26V40h30v16h38v24z" fill="#09090b" stroke="rgba(255,42,58,.3)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+      </svg>
+      <svg class="figure f2" viewBox="0 0 64 64" aria-hidden="true"><use href="#helm"/></svg>
+      <svg class="figure f1" viewBox="0 0 64 64" aria-hidden="true"><use href="#hood"/></svg>
+      <div class="hero-in">
+        <div class="title"><h1>Command Center</h1><p>Your ecom business. Powered by AI.</p></div>
+        <div class="tools">
+          <div class="search glass"><svg class="ic sm"><use href="#i-search"/></svg>Ask AI anything…</div>
+          <div class="bell glass"><svg class="ic"><use href="#i-bell"/></svg><b>3</b></div>
+          <div class="me glass"><div class="avatar">X</div><div><div class="n">Xody</div><div class="p">Owner</div></div><svg class="ic sm"><use href="#i-chev"/></svg></div>
+        </div>
+      </div>
+    </header>
+
+    <div class="filters">
+      <span class="flbl">Stores</span>
+      <div class="chips">
+        <span class="chip" data-all>All stores</span>
+        <span class="chip" data-store="pawsome"><i style="background:#ff2a3a"></i>Pawsome Gear</span>
+        <span class="chip" data-store="glow"><i style="background:#ff8f98"></i>Glow Haus</span>
+        <span class="chip" data-store="peak"><i style="background:#9a9aa3"></i>Peak Fit</span>
+      </div>
+      <span class="vs"></span>
+      <div class="seg"><span data-range="7">7D</span><span data-range="30" class="on">30D</span><span data-range="90">90D</span><span data-range="365">1Y</span></div>
+    </div>
+
+    <div class="kpis">
+      <div class="card kpi" data-kpi="rev"><div class="lbl">Total Revenue</div><div class="val"></div><svg viewBox="0 0 100 30" preserveAspectRatio="none"></svg><div class="d"></div></div>
+      <div class="card kpi hero" data-kpi="profit"><div class="lbl">Profit</div><div class="val"></div><svg viewBox="0 0 100 30" preserveAspectRatio="none"></svg><div class="d"></div></div>
+      <div class="card kpi" data-kpi="spend"><div class="lbl">Ad Spend</div><div class="val"></div><svg viewBox="0 0 100 30" preserveAspectRatio="none"></svg><div class="d"></div></div>
+      <div class="card kpi" data-kpi="roas"><div class="lbl">ROAS</div><div class="val"></div><svg viewBox="0 0 100 30" preserveAspectRatio="none"></svg><div class="d"></div></div>
+      <div class="card kpi" data-kpi="orders"><div class="lbl">Total Orders</div><div class="val"></div><svg viewBox="0 0 100 30" preserveAspectRatio="none"></svg><div class="d"></div></div>
+    </div>
+
+    <div class="row">
+      <section class="card panel">
+        <div class="ph"><div><h3>Revenue Overview</h3><div class="sub" id="chartSub"></div></div></div>
+        <div class="plot"><svg id="chart" role="img" aria-label="Revenue over time"></svg><div class="tip" id="tip"></div></div>
+      </section>
+      <section class="card panel">
+        <div class="ph"><h3>Live Store Activity</h3><span class="live"><i class="dot"></i>Live</span></div>
+        <div class="feed">
+          <div class="ev" data-store="pawsome"><div class="ico"><svg class="ic"><use href="#i-bag"/></svg></div><div><div class="t">New Order</div><div class="m">Pawsome Gear · 2 min ago</div></div><div class="amt">$67.00</div></div>
+          <div class="ev" data-store="glow"><div class="ico cart"><svg class="ic"><use href="#i-cart"/></svg></div><div><div class="t">Add to Cart</div><div class="m">Glow Haus · 3 min ago</div></div><div class="amt">$89.99</div></div>
+          <div class="ev" data-store="pawsome"><div class="ico co"><svg class="ic"><use href="#i-card"/></svg></div><div><div class="t">Checkout Started</div><div class="m">Pawsome Gear · 5 min ago</div></div><div class="amt">$120.00</div></div>
+          <div class="ev" data-store="peak"><div class="ico"><svg class="ic"><use href="#i-bag"/></svg></div><div><div class="t">New Order</div><div class="m">Peak Fit · 8 min ago</div></div><div class="amt">$49.99</div></div>
+          <div class="ev" data-store="pawsome"><div class="ico cart"><svg class="ic"><use href="#i-cart"/></svg></div><div><div class="t">Add to Cart</div><div class="m">Pawsome Gear · 12 min ago</div></div><div class="amt">$79.99</div></div>
+          <div class="ev" data-store="glow"><div class="ico"><svg class="ic"><use href="#i-bag"/></svg></div><div><div class="t">New Order</div><div class="m">Glow Haus · 15 min ago</div></div><div class="amt">$54.00</div></div>
+          <div class="ev" data-store="peak"><div class="ico co"><svg class="ic"><use href="#i-card"/></svg></div><div><div class="t">Checkout Started</div><div class="m">Peak Fit · 19 min ago</div></div><div class="amt">$64.98</div></div>
+          <div class="ev" data-store="glow"><div class="ico cart"><svg class="ic"><use href="#i-cart"/></svg></div><div><div class="t">Add to Cart</div><div class="m">Glow Haus · 24 min ago</div></div><div class="amt">$38.50</div></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="row3">
+      <section class="card panel">
+        <div class="ph"><h3>AI Agents</h3><span class="link">View all agents →</span></div>
+        <div class="agents">
+          <div class="agent"><div class="top"><div class="portrait"><svg viewBox="0 0 64 64"><use href="#hood"/></svg></div><div><div class="nm">Ad Strategist</div><div class="st"><i class="dot"></i>Running</div></div></div><div class="task">Optimizing campaigns…</div><div class="prog"><i></i></div></div>
+          <div class="agent"><div class="top"><div class="portrait"><svg viewBox="0 0 64 64"><use href="#helm"/></svg></div><div><div class="nm">Product Hunter</div><div class="st"><i class="dot"></i>Running</div></div></div><div class="task">Scanning trending products…</div><div class="prog"><i></i></div></div>
+          <div class="agent"><div class="top"><div class="portrait"><svg viewBox="0 0 64 64"><use href="#hood"/></svg></div><div><div class="nm">Store Developer</div><div class="st idle"><i class="dot idle"></i>Idle</div></div></div><div class="task">Ready for tasks.</div><div class="prog"></div></div>
+          <div class="agent"><div class="top"><div class="portrait"><svg viewBox="0 0 64 64"><use href="#helm"/></svg></div><div><div class="nm">Creative Studio</div><div class="st"><i class="dot"></i>Running</div></div></div><div class="task">Generating ad concepts…</div><div class="prog"><i></i></div></div>
+          <div class="agent"><div class="top"><div class="portrait"><svg viewBox="0 0 64 64"><use href="#hood"/></svg></div><div><div class="nm">Market Analyst</div><div class="st"><i class="dot"></i>Running</div></div></div><div class="task">Analyzing competitors…</div><div class="prog"><i></i></div></div>
+        </div>
+      </section>
+      <section class="card panel">
+        <div class="ph"><h3>Agent Requests</h3><span class="sub" id="reqCount"></span></div>
+        <div class="reqs">
+          <div class="req"><div><div class="who">Ad Strategist · Peak Fit</div><div class="what">Pause 2 losing ad sets</div><div class="why">Losing $45/day for 4 days straight</div></div><div class="btns"><button class="btn ok">Approve</button><button class="btn">Deny</button></div></div>
+          <div class="req"><div><div class="who">Ad Strategist · Pawsome Gear</div><div class="what">Raise daily budget 20% ($60 → $72)</div><div class="why">ROAS above 3.0 for 5 days</div></div><div class="btns"><button class="btn ok">Approve</button><button class="btn">Deny</button></div></div>
+          <div class="req"><div><div class="who">Product Hunter · Glow Haus</div><div class="what">Add 3 trending products to the store</div><div class="why">AI score 85+, about 60% margin</div></div><div class="btns"><button class="btn ok">Approve</button><button class="btn">Deny</button></div></div>
+          <div class="empty" hidden>All clear. Your agents will check in here.</div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+<div class="mock-tag">Mockup v3 · made-up numbers</div>
+
+<script>
+(() => {
+  const DAY = 86400000;
+  const TODAY = new Date(2026, 9, 26);
+  const N = 730;
+  // ponytail: seeded fake history per store so filters and date ranges behave like the real thing; the app will pull real data
+  const STORES = [
+    { id: 'pawsome', base: 1150, growth: 0.0011, roas: 3.3, margin: 0.62, aov: 45 },
+    { id: 'glow', base: 680, growth: 0.0008, roas: 2.9, margin: 0.58, aov: 46 },
+    { id: 'peak', base: 430, growth: 0.0002, roas: 1.75, margin: 0.55, aov: 40 },
+  ];
+  const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+  STORES.forEach((s, k) => {
+    const r = mulberry32(7 + k * 101);
+    s.days = Array.from({ length: N }, (_, i) => {
+      const rev = s.base * Math.exp(s.growth * (i - N + 1)) * (0.82 + 0.36 * r()) * (1 + 0.07 * Math.sin(i / 7 * 2 * Math.PI));
+      const spend = rev / (s.roas * (0.85 + 0.3 * r()));
+      return { rev, spend, profit: rev * s.margin - spend, orders: Math.max(1, Math.round(rev / (s.aov * (0.9 + 0.2 * r())))) };
+    });
+  });
+
+  const picked = new Set();
+  let range = 30;
+  let chartPts = [];
+
+  const $ = (q, el = document) => el.querySelector(q);
+  const $$ = (q, el = document) => [...el.querySelectorAll(q)];
+  const money = n => (n < 0 ? '−$' : '$') + Math.round(Math.abs(n)).toLocaleString('en-US');
+  const short = v => v >= 1000 ? '$' + +(v / 1000).toFixed(1) + 'K' : '$' + Math.round(v);
+  const fmtDate = (d, long) => d.toLocaleDateString('en-US', long ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
+  const pct = (c, p) => p ? (c - p) / Math.abs(p) * 100 : 0;
+  const niceMax = v => { const p = 10 ** Math.floor(Math.log10(v)); return [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(n => n * p >= v) * p; };
+  const sum = (arr, k) => arr.reduce((a, d) => a + d[k], 0);
+  const totals = (from, len) => Array.from({ length: len }, (_, j) => STORES
+    .filter(s => !picked.size || picked.has(s.id))
+    .reduce((a, s) => { const d = s.days[from + j]; a.rev += d.rev; a.spend += d.spend; a.profit += d.profit; a.orders += d.orders; return a; }, { rev: 0, spend: 0, profit: 0, orders: 0 }));
+
+  function spark(vals, color) {
+    const step = Math.max(1, Math.floor(vals.length / 24));
+    const v = vals.filter((_, i) => i % step === 0);
+    const lo = Math.min(...v), span = Math.max(...v) - lo || 1;
+    const pts = v.map((y, i) => `${(i / (v.length - 1) * 100).toFixed(1)},${(28 - (y - lo) / span * 24).toFixed(1)}`).join(' ');
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="1.8" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>`;
+  }
+
+  const svg = $('#chart'), tip = $('#tip');
+  function drawChart(cur) {
+    let pts = cur.map((d, j) => ({ v: d.rev, date: new Date(TODAY - (cur.length - 1 - j) * DAY) }));
+    if (range === 365) {
+      const wk = [];
+      for (let j = pts.length % 7; j < pts.length; j += 7) { const b = pts.slice(j, j + 7); wk.push({ v: sum(b, 'v'), date: b[b.length - 1].date, week: true }); }
+      pts = wk;
+    }
+    const W = svg.clientWidth || 640, H = 250, PL = 46, PR = 12, PT = 14, PB = 28;
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const max = niceMax(Math.max(...pts.map(p => p.v)) * 1.1);
+    const x = j => PL + j / (pts.length - 1) * (W - PL - PR);
+    const y = v => PT + (1 - v / max) * (H - PT - PB);
+    const line = pts.map((p, j) => `${x(j).toFixed(1)},${y(p.v).toFixed(1)}`).join(' ');
+    const grid = [0, .25, .5, .75, 1].map(f => `<line x1="${PL}" x2="${W - PR}" y1="${y(max * f)}" y2="${y(max * f)}"/><text x="${PL - 8}" y="${y(max * f) + 4}" text-anchor="end">${short(max * f)}</text>`).join('');
+    const ticks = [0, .25, .5, .75, 1].map(f => { const j = Math.round(f * (pts.length - 1)); return `<text x="${x(j)}" y="${H - 8}" text-anchor="${f === 0 ? 'start' : f === 1 ? 'end' : 'middle'}">${fmtDate(pts[j].date)}</text>`; }).join('');
+    svg.innerHTML = `<defs>
+        <linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff2a3a" stop-opacity=".42"/><stop offset="1" stop-color="#ff2a3a" stop-opacity="0"/></linearGradient>
+        <filter id="lineGlow" x="-5%" y="-30%" width="110%" height="160%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      </defs>
+      <g class="ax">${grid}${ticks}</g>
+      <polygon points="${PL},${y(0)} ${line} ${W - PR},${y(0)}" fill="url(#area)"/>
+      <polyline points="${line}" fill="none" stroke="#ff2a3a" stroke-width="2.2" stroke-linejoin="round" filter="url(#lineGlow)"/>
+      <line class="cur" y1="${PT}" y2="${H - PB}"/>
+      <circle class="pt" r="4.5"/>`;
+    chartPts = pts.map((p, j) => ({ ...p, x: x(j), y: y(p.v) }));
+    showTip(chartPts.length - 3);
+  }
+  function showTip(i) {
+    const p = chartPts[Math.max(0, Math.min(i, chartPts.length - 1))];
+    tip.innerHTML = `<b>${money(p.v)}</b><span>${p.week ? 'Week ending ' : ''}${fmtDate(p.date, true)}</span>`;
+    tip.style.left = p.x + 'px';
+    tip.style.top = p.y + 'px';
+    const pt = $('.pt', svg), cl = $('.cur', svg);
+    pt.setAttribute('cx', p.x); pt.setAttribute('cy', p.y);
+    cl.setAttribute('x1', p.x); cl.setAttribute('x2', p.x);
+  }
+  svg.addEventListener('mousemove', e => {
+    const mx = e.clientX - svg.getBoundingClientRect().left;
+    let best = 0;
+    chartPts.forEach((p, i) => { if (Math.abs(p.x - mx) < Math.abs(chartPts[best].x - mx)) best = i; });
+    showTip(best);
+  });
+  svg.addEventListener('mouseleave', () => showTip(chartPts.length - 3));
+
+  function render() {
+    const cur = totals(N - range, range), prev = totals(N - 2 * range, range);
+    const C = {}, P = {};
+    ['rev', 'spend', 'profit', 'orders'].forEach(k => { C[k] = sum(cur, k); P[k] = sum(prev, k); });
+    const kp = {
+      rev: [money(C.rev), pct(C.rev, P.rev), cur.map(d => d.rev)],
+      profit: [money(C.profit), pct(C.profit, P.profit), cur.map(d => d.profit)],
+      spend: [money(C.spend), pct(C.spend, P.spend), cur.map(d => d.spend)],
+      roas: [(C.rev / C.spend).toFixed(1) + 'x', pct(C.rev / C.spend, P.rev / P.spend), cur.map(d => d.rev / d.spend)],
+      orders: [Math.round(C.orders).toLocaleString('en-US'), pct(C.orders, P.orders), cur.map(d => d.orders)],
+    };
+    Object.entries(kp).forEach(([k, [val, d, series]]) => {
+      const el = $(`[data-kpi="${k}"]`);
+      $('.val', el).textContent = val;
+      $('.val', el).classList.toggle('down', k === 'profit' && C.profit < 0);
+      const de = $('.d', el);
+      de.textContent = (d >= 0 ? '+' : '−') + Math.abs(d).toFixed(1) + '%';
+      de.className = 'd ' + (d >= 0 ? 'up' : 'down');
+      $('svg', el).innerHTML = spark(series, d >= 0 ? '#3ddc84' : '#ff2a3a');
+    });
+    const label = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months' }[range];
+    const who = picked.size ? $$('.chip.on[data-store]').map(c => c.textContent.trim()).join(' + ') : 'All stores';
+    $('#chartSub').textContent = `${who} · ${label}`;
+    $('.vs').textContent = 'Changes vs the ' + label.replace('last', 'previous');
+    drawChart(cur);
+    let shown = 0;
+    $$('.ev').forEach(e => { const ok = (!picked.size || picked.has(e.dataset.store)) && shown < 5; e.classList.toggle('off', !ok); if (ok) shown++; });
+  }
+
+  const syncChips = () => {
+    $('.chip[data-all]').classList.toggle('on', !picked.size);
+    $$('.chip[data-store]').forEach(c => c.classList.toggle('on', picked.has(c.dataset.store)));
+  };
+  $$('.chip[data-store]').forEach(c => c.addEventListener('click', () => {
+    picked.has(c.dataset.store) ? picked.delete(c.dataset.store) : picked.add(c.dataset.store);
+    if (picked.size === STORES.length) picked.clear();
+    syncChips(); render();
+  }));
+  $('.chip[data-all]').addEventListener('click', () => { picked.clear(); syncChips(); render(); });
+  $$('.seg span').forEach(s => s.addEventListener('click', () => {
+    range = +s.dataset.range;
+    $$('.seg span').forEach(x => x.classList.toggle('on', x === s));
+    render();
+  }));
+
+  const syncReq = () => {
+    const n = $$('.req:not(.gone)').length;
+    $('.bell b').textContent = n;
+    $('.bell b').hidden = !n;
+    $('#reqCount').textContent = n ? `${n} waiting` : 'all clear';
+    $('.empty').hidden = n > 0;
+  };
+  $$('.req .btn').forEach(b => b.addEventListener('click', () => {
+    const r = b.closest('.req'), ok = b.classList.contains('ok');
+    $('.btns', r).innerHTML = `<span class="verdict ${ok ? 'up' : 'down'}">${ok ? 'Approved' : 'Denied'}</span>`;
+    r.classList.add('done');
+    setTimeout(() => { r.classList.add('gone'); syncReq(); }, 900);
+  }));
+
+  window.addEventListener('resize', () => drawChart(totals(N - range, range)));
+  syncChips(); syncReq(); render();
+})();
+</script>
+</body>
+</html>
