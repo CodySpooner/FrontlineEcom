@@ -6,6 +6,7 @@ import { advanceMotion, nearestFree, startMotion, type Motion } from './pathfind
 import type { OfficeStatus } from './events';
 import { startVisit, visitFinished, type Handoff, type Visit } from './communications';
 import { meetingFinished, type Meeting, type MeetingPlan } from './meetings';
+import { DEFAULT_DISPLAY, type DisplayOptions } from './display';
 
 export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation; target?: Tile; status?: OfficeStatus; tool?: string; handoff?: Handoff; meeting?: MeetingPlan }
 
@@ -21,6 +22,7 @@ export function workerSprites(world: Container, select: (deskId: string) => void
   const visits = new Map<string, Visit>(), seen = new Set<string>();
   let meeting: Meeting | undefined;
   const meetingsSeen = new Set<string>();
+  let display: DisplayOptions = DEFAULT_DISPLAY;
   function update(data: OfficeWorker[]) {
     const active = data.filter((w) => !w.seat.archived).slice(0, 30);
     const plan = active.find((w) => w.meeting)?.meeting;
@@ -89,7 +91,9 @@ export function workerSprites(world: Container, select: (deskId: string) => void
       const motion = motions.get(worker.data.seat.agentId)!;
       const inMeeting = !!meeting?.plan.targets[worker.data.seat.agentId];
       const visit = inMeeting ? undefined : visits.get(worker.data.seat.agentId);
-      const speech = visit ? `Handoff → ${workers.get(visit.event.toAgentId)?.data.name}\n${visit.event.summary.slice(0, 110)}${visit.event.summary.length > 110 ? '…' : ''}` : '';
+      worker.name.visible = display.names || display.workload; worker.status.visible = display.status; worker.bubble.visible = worker.bubbleBack.visible = display.bubbles;
+      worker.name.text = [display.names ? worker.data.name : '', display.workload ? worker.data.tool ?? worker.data.status?.replaceAll('_', ' ') ?? 'idle' : ''].filter(Boolean).join('\n');
+      const speech = visit ? `Handoff → ${workers.get(visit.event.toAgentId)?.data.name}\n${visit.event.summary.split('\n')[0]!.slice(0, 110)}` : worker.data.status === 'awaiting_approval' ? 'Awaiting owner approval' : worker.data.status === 'failed' ? 'Task blocked · inspect output' : '';
       if (worker.bubble.text !== speech) {
         worker.bubble.text = speech; worker.bubbleBack.clear();
         if (speech) { const w = worker.bubble.width + 16, h = worker.bubble.height + 14;
@@ -108,6 +112,7 @@ export function workerSprites(world: Container, select: (deskId: string) => void
       if (!frame) { frame = new Texture({ source: atlas.source, frame: new Rectangle(p.x, p.y, CELL.width, CELL.height) }); frames.set(key, frame); }
       worker.sprite.texture = frame;
     }
+    connections.visible = display.connections;
   }
-  return { update, tick, meetingTitle: () => meeting?.plan.title ?? '', position: (id: string) => motions.get(id)?.position, drainPositions: () => { const entries = [...positions]; positions.clear(); return entries; }, destroy: () => { for (const frame of frames.values()) frame.destroy(); atlas?.destroy(true); } };
+  return { update, tick, setDisplay: (value: DisplayOptions) => { display = value; }, meetingTitle: () => meeting?.plan.title ?? '', position: (id: string) => motions.get(id)?.position, drainPositions: () => { const entries = [...positions]; positions.clear(); return entries; }, destroy: () => { for (const frame of frames.values()) frame.destroy(); atlas?.destroy(true); } };
 }

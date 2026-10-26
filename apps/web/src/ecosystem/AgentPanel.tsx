@@ -10,8 +10,8 @@ import { WorkerPortrait } from './WorkerPortrait';
 import { TaskComposer } from './TaskComposer';
 import { officeApi } from './api';
 
-export function AgentPanel({ agent, seat, office, onClose, onFocus }: { agent: Agent; seat: OfficeSeat; office: OfficeState; onClose: () => void; onFocus: () => void }) {
-  const [assign, setAssign] = useState(false);
+export function AgentPanel({ agent, seat, office, onClose, onFocus, assignInitially = false }: { agent: Agent; seat: OfficeSeat; office: OfficeState; onClose: () => void; onFocus: () => void; assignInitially?: boolean }) {
+  const [assign, setAssign] = useState(assignInitially);
   const qc = useQueryClient();
   const archive = useMutation({ mutationFn: () => officeApi(`/api/ecosystem/seats/${encodeURIComponent(agent.id)}`, 'DELETE'), onSuccess: () => { qc.invalidateQueries({ queryKey: ['ecosystem', 'seats'] }); onClose(); } });
   const history = useRuns(agent.id), cancel = useCancelRun(), update = useUpdateAgent();

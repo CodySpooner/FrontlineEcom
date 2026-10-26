@@ -8,8 +8,9 @@ import type { OfficeWorker } from './workerSprites';
 import { workerActivity, type OfficeState } from './events';
 import { recentHandoff } from './communications';
 import { kickoff } from './meetings';
+import type { DisplayOptions } from './display';
 
-export function OfficeScene({ office, onSelect, focus }: { office: OfficeState; onSelect: (agentId: string) => void; focus?: { id: string; at: number } }) {
+export function OfficeScene({ office, onSelect, focus, display }: { office: OfficeState; onSelect: (agentId: string) => void; focus?: { id: string; at: number }; display: DisplayOptions }) {
   const host = useRef<HTMLDivElement>(null);
   const scene = useRef<OfficeRenderer>(undefined);
   const [desk, setDesk] = useState('');
@@ -24,12 +25,14 @@ export function OfficeScene({ office, onSelect, focus }: { office: OfficeState; 
   const latestWorkers = useRef(workers); latestWorkers.current = workers;
   const select = useRef(onSelect); select.current = onSelect;
   const latestFocus = useRef(focus); latestFocus.current = focus;
+  const latestDisplay = useRef(display); latestDisplay.current = display;
   const choose = (deskId: string) => { setDesk(deskId); const worker = latestWorkers.current.find((w) => w.seat.deskId === deskId); if (worker) select.current(worker.seat.agentId); };
   useEffect(() => { scene.current?.setWorkers(workers); }, [seats.data, office]);
   useEffect(() => { if (focus) scene.current?.focusWorker(focus.id); }, [focus]);
+  useEffect(() => { scene.current?.setDisplay(display); }, [display]);
   useEffect(()=>{
     let disposed=false; let renderer:OfficeRenderer|undefined;
-    createOffice(host.current!,choose).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setWorkers(latestWorkers.current);if(latestFocus.current)r.focusWorker(latestFocus.current.id); } }).catch((e:unknown)=>{if(!disposed)setError(e instanceof Error ? e.message : 'Renderer unavailable');});
+    createOffice(host.current!,choose).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setDisplay(latestDisplay.current);r.setWorkers(latestWorkers.current);if(latestFocus.current)r.focusWorker(latestFocus.current.id); } }).catch((e:unknown)=>{if(!disposed)setError(e instanceof Error ? e.message : 'Renderer unavailable');});
     const changed=()=>setFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange',changed);
     // Persist settled tiles outside the rendering loop; motion never waits for a network request.
