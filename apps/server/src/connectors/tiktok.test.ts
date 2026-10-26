@@ -107,6 +107,17 @@ function fakeShop(refreshError?: { code: number; message: string }, shops = [{ c
     // Get Product: main_images[].urls (TikTok's partner docs, checked 2026-10-26). The draft has none yet.
     if (u.pathname === '/product/202309/products/17301') return ok({ id: '17301', main_images: [{ uri: 'tos-1', urls: ['https://p16-oec.example/ice-roller.jpeg'], thumb_urls: ['https://p16-oec.example/ice-roller-thumb.jpeg'], width: 800, height: 800 }] });
     if (u.pathname === '/product/202309/products/17302') return ok({ id: '17302', main_images: [] });
+    // Search Returns (Return & Refund Basic scope; TikTok's partner docs, checked 2026-10-26).
+    if (u.pathname === '/return_refund/202309/returns/search') {
+      return ok({
+        return_orders: [
+          { return_id: 'R1', order_id: '5762', return_status: 'RETURN_OR_REFUND_REQUEST_COMPLETE', refund_amount: { currency: 'USD', refund_total: '8.00', refund_subtotal: '7.40', refund_tax: '0.60' } },
+          { return_id: 'R2', order_id: '5761', return_status: 'RETURN_OR_REFUND_REQUEST_PENDING', refund_amount: { currency: 'USD', refund_total: '30.00' } },
+          { return_id: 'R3', order_id: '5763', return_status: 'RETURN_OR_REFUND_REQUEST_SUCCESS', refund_amount: { currency: 'USD', refund_total: '15.00' } }, // a cancelled order: already out
+        ],
+        next_page_token: '',
+      });
+    }
     if (u.pathname === '/product/202309/products/search') {
       return params.page_token
         ? ok({ products: [{ id: '17302', title: 'Gua Sha', status: 'DRAFT', update_time: T('2026-10-20T00:00:00Z'), skus: [{ price: { sale_price: '19.00' }, inventory: [] }] }], next_page_token: '' })
@@ -155,7 +166,11 @@ test('TikTok Shop sync renews the token, pulls products + paid orders, and rebui
     { id: 'tt-5762', total: 20, status: 'paid', fulfillment_status: 'delivered', tracking: 'TT123' },
     { id: 'tt-5763', total: 15, status: 'refunded', fulfillment_status: 'unfulfilled', tracking: null },
   ]);
-  expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ revenue: 50, orders: 2 });
+  // 30 + 20 paid, less #5762's completed refund net of its tax (the order's tax already counts against profit).
+  expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ revenue: 42.6, orders: 2 });
+  const returns = api.find((c) => c.url.pathname === '/return_refund/202309/returns/search')!;
+  expect([returns.url.searchParams.get('page_size'), returns.url.searchParams.get('sort_field'), returns.url.searchParams.get('shop_cipher')]).toEqual(['50', 'update_time', 'CIPHER']);
+  expect(JSON.parse(returns.body)).toEqual({ update_time_ge: T('2024-10-26T18:00:00Z') });
   // The buyer's tax is in the order total; it counts against profit.
   expect(db.prepare("SELECT tax FROM orders WHERE store_id = 'glow' AND id = 'tt-5762'").get()?.tax).toBe(1.6);
   expect(db.prepare("SELECT cogs FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()?.cogs).toBe(1.6);
@@ -228,4 +243,20 @@ test('TikTok Shop: once a day every product is searched again; products it no lo
   expect(JSON.parse(nextDay.calls.find((c) => c.url.pathname.includes('products/search'))!.body)).toEqual({});
   expect(status()).toBe('archived');
   expect(db.prepare("SELECT status FROM products WHERE store_id = 'glow' AND id = 'tt-17301'").get()?.status).toBe('active');
+});
+
+test("TikTok Shop without the Return & Refund scope still syncs, nets cancellations only and asks again next time", async () => {
+  const db = shopSetup();
+  const shop = fakeShop().fetchFn;
+  const noScope = (async (url: string, init?: RequestInit) =>
+    new URL(url).pathname.includes('/return_refund/') ? Response.json({ code: 105005, message: 'Access denied: scope not authorized' }) : shop(url, init)) as typeof fetch;
+  await syncTikTokShop(db, key, 'glow', noScope, NOW);
+  expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'tiktok_shop:glow'").get()).toEqual({ status: 'connected', error: null });
+  expect(db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()?.revenue).toBe(50);
+
+  // Granted later: the next sync reads returns from the start, not from the orders cursor.
+  const { fetchFn, calls } = fakeShop();
+  await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
+  expect(JSON.parse(calls.find((c) => c.url.pathname.includes('/return_refund/'))!.body)).toEqual({ update_time_ge: T('2024-10-26T18:00:00Z') });
+  expect(db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()?.revenue).toBe(42.6);
 });

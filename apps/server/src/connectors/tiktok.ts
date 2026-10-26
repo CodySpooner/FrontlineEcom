@@ -151,6 +151,18 @@ interface ShopOrder {
   line_items?: { product_id: string; sale_price?: string; quantity?: number }[];
 }
 
+/** A return or refund (Search Returns, Return & Refund Basic scope). */
+interface ShopReturn {
+  return_id: string;
+  order_id: string;
+  return_status: string;
+  /** Strings in the shop's currency; refund_total includes refund_tax. */
+  refund_amount?: { refund_total?: string; refund_tax?: string };
+}
+const REFUNDED = new Set(['RETURN_OR_REFUND_REQUEST_SUCCESS', 'RETURN_OR_REFUND_REQUEST_COMPLETE']);
+/** Settings row: where each TikTok Shop integration's returns read got to, and for which shop. */
+const RETURNS_KEY = 'tiktok_return_reads';
+
 /** Request signature: HMAC-SHA256 keyed by the secret over secret + path + sorted key+value params (minus sign/access_token) + body + secret, hex. */
 export function signTikTokShop(secret: string, path: string, params: Record<string, string>, body = '') {
   const pairs = Object.keys(params).filter((k) => k !== 'sign' && k !== 'access_token').sort().map((k) => k + params[k]).join('');
@@ -212,7 +224,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       const out: T[] = [];
       let pageToken = '';
       do {
-        const data = await api<Record<string, unknown>>('POST', path, { ...query, shop_cipher: shop.cipher, page_size: '100', ...(pageToken ? { page_token: pageToken } : {}) }, body);
+        const data = await api<Record<string, unknown>>('POST', path, { page_size: '100', ...query, shop_cipher: shop.cipher, ...(pageToken ? { page_token: pageToken } : {}) }, body);
         out.push(...((data[list] as T[] | undefined) ?? []));
         pageToken = String(data.next_page_token ?? '');
       } while (pageToken);
@@ -226,6 +238,12 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     const full = !cursor || catalogPassDue(db, id, today);
     const products = await search<ShopProduct>('/product/202309/products/search', 'products', {}, full ? {} : { update_time_ge: since });
     const orders = await search<ShopOrder>('/order/202309/orders/search', 'orders', { sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: since });
+    // Refunds and returns need the Return & Refund Basic scope. Without it (or on any error) this read is skipped and
+    // tried again next sync from where it last got to; revenue then nets cancellations only.
+    const returnReads = stateOf<{ shop: string; since: number }>(db, RETURNS_KEY);
+    const lastReturns = returnReads.get(id);
+    const returnsSince = lastReturns?.shop === shop.cipher ? lastReturns.since : Math.floor(now.getTime() / 1000) - BACKFILL_DAYS * 86400;
+    const returns = await search<ShopReturn>('/return_refund/202309/returns/search', 'return_orders', { page_size: '50', sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: returnsSince }).catch(() => undefined);
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 
     tx(db, () => {
@@ -256,6 +274,20 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         days.add(day);
         ord.run(storeId, `tt-${o.id}`, created.toISOString(), Number(o.payment?.total_amount ?? 0), o.status === 'CANCELLED' ? 'refunded' : 'paid', shopFulfillment(o.status), o.tracking_number || null, day, Number(o.payment?.tax ?? 0));
         setOrderItems(db, storeId, `tt-${o.id}`, (o.line_items ?? []).map((li) => ({ productId: `tt-${li.product_id}`, quantity: li.quantity ?? 1, revenue: Number(li.sale_price ?? 0) * (li.quantity ?? 1), cost: 0 })));
+      }
+      if (returns) {
+        // Into the refund lines Amazon's go to too (rebuildRevenue takes them off their order's day). One per return,
+        // re-written as its status moves, so a refund only counts once TikTok has granted it. Net of its tax: the order's
+        // tax already counts against profit. Returns name SKUs, not products, so these don't come off per-product revenue.
+        const refund = db.prepare('INSERT INTO amazon_refunds (store_id, id, order_id, amount) VALUES (?, ?, ?, ?) ON CONFLICT (store_id, id) DO UPDATE SET amount = excluded.amount');
+        const orderDay = db.prepare('SELECT local_date FROM orders WHERE store_id = ? AND id = ?');
+        for (const r of returns) {
+          const a = r.refund_amount;
+          refund.run(storeId, `tt-${r.return_id}`, `tt-${r.order_id}`, REFUNDED.has(r.return_status) ? cents(Number(a?.refund_total ?? 0) - Number(a?.refund_tax ?? 0)) : 0);
+          const day = orderDay.get(storeId, `tt-${r.order_id}`)?.local_date;
+          if (day) days.add(String(day));
+        }
+        returnReads.set(id, { shop: shop.cipher, since: Math.floor(cursorAt(now).getTime() / 1000) });
       }
       rebuildRevenue(db, storeId, days);
       if (full) archiveMissing(db, id, storeId, 'tt-*', products.map((p) => `tt-${p.id}`), today);

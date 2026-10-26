@@ -57,13 +57,14 @@ export function rebuildRevenue(db: Db, storeId: string, dates: Iterable<string>)
   const agg = db.prepare(
     // An order's tax (sales tax, VAT) is in its total but owed to the tax office: it counts against profit with the costs.
     // Amazon's sales and order counts are in channel_daily already (its daily totals), so its orders add only their costs,
-    // and its refunds come off their order's day.
+    // and its refunds come off their order's day. Refund lines (amazon_refunds: Amazon's and TikTok Shop's) count only
+    // against a paid order: a cancelled one is out already.
     `SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(cogs), 0) AS cogs, coalesce(sum(n), 0) AS n FROM (
        SELECT iif(id GLOB 'amz-*', 0, total) AS revenue, cogs + tax AS cogs, iif(id GLOB 'amz-*', 0, 1) AS n
        FROM orders WHERE store_id = ?1 AND local_date = ?2 AND status = 'paid'
        UNION ALL SELECT revenue, 0, orders FROM channel_daily WHERE store_id = ?1 AND date = ?2
        UNION ALL SELECT -r.amount, 0, 0 FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
-         WHERE r.store_id = ?1 AND o.local_date = ?2)`,
+         WHERE r.store_id = ?1 AND o.local_date = ?2 AND o.status = 'paid')`,
   );
   const up = db.prepare(
     `INSERT INTO daily_metrics (store_id, date, revenue, cogs, orders) VALUES (?, ?, ?, ?, ?)
