@@ -206,14 +206,15 @@ export const APP_TOOLS: AppTool[] = [
       limit: z.number().int().min(1).max(500).default(100),
     },
     run: async ({ days, fulfillment, limit }, ctx) => {
+      // Real orders carry the shop's own date (local_date); demo ones only a timestamp.
       const from = since(days, ctx.store);
       const counts = ctx.db
-        .prepare('SELECT fulfillment_status AS status, count(*) AS n FROM orders WHERE store_id = ? AND created_at >= ? GROUP BY 1 ORDER BY 2 DESC')
+        .prepare('SELECT fulfillment_status AS status, count(*) AS n FROM orders WHERE store_id = ? AND coalesce(local_date, substr(created_at, 1, 10)) >= ? GROUP BY 1 ORDER BY 2 DESC')
         .all(ctx.store.id, from);
       const rows = ctx.db
         .prepare(
           `SELECT id, created_at, total, status, fulfillment_status, supplier, tracking FROM orders
-           WHERE store_id = ? AND created_at >= ? ${fulfillment ? 'AND fulfillment_status = ?' : ''} ORDER BY created_at DESC LIMIT ?`,
+           WHERE store_id = ? AND coalesce(local_date, substr(created_at, 1, 10)) >= ? ${fulfillment ? 'AND fulfillment_status = ?' : ''} ORDER BY created_at DESC LIMIT ?`,
         )
         .all(...([ctx.store.id, from, ...(fulfillment ? [fulfillment] : []), limit] as string[]));
       const suppliers = ctx.db
@@ -223,7 +224,7 @@ export const APP_TOOLS: AppTool[] = [
              sum(o.fulfillment_status = 'in_transit' AND o.created_at < ?) AS in_transit_10d_plus,
              sum(o.status = 'refunded') AS refunded,
              sum(EXISTS (SELECT 1 FROM order_issues i WHERE i.store_id = o.store_id AND i.order_id = o.id AND i.status = 'open')) AS open_issues
-           FROM orders o WHERE o.store_id = ? AND o.created_at >= ? GROUP BY 1 ORDER BY 2 DESC`,
+           FROM orders o WHERE o.store_id = ? AND coalesce(o.local_date, substr(o.created_at, 1, 10)) >= ? GROUP BY 1 ORDER BY 2 DESC`,
         )
         .all(ago(3), ago(10), ctx.store.id, from);
       return [

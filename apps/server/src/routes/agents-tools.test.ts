@@ -49,6 +49,11 @@ test('a 7-day window is the 7 dates ending today in the zone the data is dated i
     vi.setSystemTime(new Date('2026-10-26T23:00:00Z')); // 08:00 on the 27th in Tokyo
     expect(await first({ ...i.store, timezone: 'Asia/Tokyo', connected: true })).toBe('2026-10-21'); // a connected shop's own zone
     expect(await first({ ...i.store, timezone: 'Asia/Tokyo' })).toBe(addDays(localDate(), -6)); // demo data: this machine's
+    // A real order at 01:00 Tokyo on the window's first day is 16:00 UTC the day before: it's in by its own date.
+    db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', 'tokyo-early', '2026-10-20T16:00:00Z', 30, 'paid', 'delivered', '2026-10-21')`).run();
+    const [orders] = results(await run({ ...i, store: { ...i.store, timezone: 'Asia/Tokyo', connected: true } }, [{ call: 'list_orders', input: { days: 7, limit: 500 } }]));
+    expect(orders!.output).toContain('tokyo-early');
+    db.prepare(`DELETE FROM orders WHERE id = 'tokyo-early'`).run();
   } finally {
     vi.useRealTimers();
   }
