@@ -192,6 +192,11 @@ describe('agent tools on demo data', () => {
       expect(fees).toBeCloseTo(revenue! * 0.1 + orders! * 0.3, 1);
       expect(profit).toBeCloseTo(revenue! - adSpend! - cogs! - fees!, 1);
     }
+    // A product's margin pays both parts of the fee too (one unit per order).
+    const [products] = results(await run(input('pawsome', 'market_analyst'), [{ call: 'list_products' }, done]));
+    const rows = products!.output.split('\n').slice(1).map((r) => r.split(',')).filter((c) => c.length === 10 && Number(c[2]) > 0);
+    expect(rows.length).toBeGreaterThan(0);
+    for (const [, , price, , cost, margin] of rows) expect(Number(margin)).toBeCloseTo((100 * (Number(price) * 0.9 - 0.3 - Number(cost))) / Number(price), 1);
     db.prepare(`UPDATE stores SET fee_percent = 0, fee_per_order = 0 WHERE id = 'pawsome'`).run(); // the db is shared by these tests
   });
 

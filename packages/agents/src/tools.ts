@@ -201,7 +201,7 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'list_products',
     description:
-      'The store catalog, best sellers first: price, compare-at, unit cost, margin % (after unit cost and the fee % set for the store), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last 30 days, revenue net of Amazon refunds (CSV).',
+      'The store catalog, best sellers first: price, compare-at, unit cost, margin % (after unit cost and the fee estimate set for the store: its % plus its per-order fee, as if one unit per order), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last 30 days, revenue net of Amazon refunds (CSV).',
     input: {
       status: z.enum(['active', 'draft', 'archived']).optional().describe('default: active and draft (archived = deleted or trashed on the platform)'),
       limit: z.number().int().min(1).max(500).default(100),
@@ -211,7 +211,7 @@ export const APP_TOOLS: AppTool[] = [
         ctx.db
           .prepare(
             `SELECT p.id, p.title, p.price, p.compare_at, p.cost,
-               round(100.0 * (p.price * (1 - (SELECT fee_percent FROM stores WHERE id = p.store_id) / 100.0) - p.cost) / nullif(p.price, 0), 1) AS margin_pct,
+               round(100.0 * (p.price * (1 - (SELECT fee_percent FROM stores WHERE id = p.store_id) / 100.0) - (SELECT fee_per_order FROM stores WHERE id = p.store_id) - p.cost) / nullif(p.price, 0), 1) AS margin_pct,
                CASE WHEN p.inventory_tracked THEN p.inventory ELSE 'not tracked' END AS inventory, p.status,
                coalesce(s.units, 0) AS units_30d, round(coalesce(s.revenue, 0), 2) AS revenue_30d
              FROM products p LEFT JOIN (

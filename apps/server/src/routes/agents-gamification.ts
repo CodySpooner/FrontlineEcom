@@ -149,19 +149,21 @@ export function checkProductOutcomes(db: Db, today?: string) {
 }
 
 /**
- * A product's paid units and profit after unit cost and the store's fee % over [from, to] (core's order_items: real
- * stores only). Amazon refund lines come off their order's day, as on the dashboard. ponytail: units stay gross (a
- * refund line has no quantity), and a refund posted after the judgement isn't seen.
+ * A product's paid units and profit after unit cost and the store's fee estimate (% of revenue plus the per-order fee
+ * for each order it was in) over [from, to] (core's order_items: real stores only). Amazon refund lines come off their
+ * order's day, as on the dashboard. ponytail: units stay gross (a refund line has no quantity), a refund posted after
+ * the judgement isn't seen, and an order with several products charges each of them the whole per-order fee (errs low).
  */
 const productSales = (db: Db, storeId: string, productId: string, from: string, to: string) => {
   const r = db
     .prepare(
       `SELECT coalesce(sum(units), 0) AS units, coalesce(sum(revenue), 0) AS revenue,
-         coalesce(sum(revenue - cost), 0) - coalesce(sum(revenue), 0) * (SELECT fee_percent FROM stores WHERE id = ?1) / 100 AS profit
+         coalesce(sum(revenue - cost), 0) - coalesce(sum(revenue), 0) * (SELECT fee_percent FROM stores WHERE id = ?1) / 100
+           - count(DISTINCT order_id) * (SELECT fee_per_order FROM stores WHERE id = ?1) AS profit
        FROM (
-         SELECT i.quantity AS units, i.revenue, i.cost FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+         SELECT i.order_id, i.quantity AS units, i.revenue, i.cost FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
          WHERE i.store_id = ?1 AND i.product_id = ?2 AND o.status = 'paid' AND o.local_date BETWEEN ?3 AND ?4
-         UNION ALL SELECT 0, -r.amount, 0 FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
+         UNION ALL SELECT NULL, 0, -r.amount, 0 FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
          WHERE r.store_id = ?1 AND r.product_id = ?2 AND o.status = 'paid' AND o.local_date BETWEEN ?3 AND ?4
        )`,
     )
