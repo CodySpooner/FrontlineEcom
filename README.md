@@ -66,7 +66,8 @@ pnpm check    # typecheck + tests
   network attributes to that campaign.
 - **Days** follow each store's own timezone (the shop's, where the platform reports it), also in "All stores" and the
   morning digest. Today's change compares against the same point of the earlier day: the share of that day's sales
-  the store's orders had made by this time of day.
+  the store's orders had made by this time of day. Ad spend and GA4 sessions come by day as each network reports
+  them, in the ad account's or GA4 property's timezone; set those to the shop's to keep the days lined up.
 - **Currencies:** a store reports in its shop's currency. Ad spend in another currency, and "All stores" totals (in
   the base currency from Settings), are converted at the European Central Bank's daily rates.
 
