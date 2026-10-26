@@ -769,6 +769,13 @@ export interface Integration {
   updatedAt: string;
   /** Last successful sync (connectors that sync data). */
   syncedAt?: string;
+  /**
+   * A store platform's order-history import. While it runs, `through` is the YYYY-MM-DD it has reached (oldest first,
+   * by last-updated date) and `done` is false: only Shopify saves its import page by page, so only Shopify reports it
+   * mid-way. Once the first sync has finished, `done` is true and `through` is that day. Absent before either, and for
+   * other kinds.
+   */
+  backfill?: { through: string; done: boolean };
 }
 
 /**

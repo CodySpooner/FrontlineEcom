@@ -31,6 +31,10 @@ const toIntegration = (r: Row, key: Buffer): Integration => {
     secretsSet: Object.keys(secrets ?? {}),
     updatedAt: String(r.updated_at),
     ...(r.synced_at ? { syncedAt: String(r.synced_at) } : {}),
+    // Before the first sync finishes, a cursor is the last page Shopify's import saved.
+    ...(INTEGRATION_KINDS[r.kind as IntegrationKind]?.category === 'platform' && (r.synced_at || r.cursor)
+      ? { backfill: { through: String(r.synced_at ?? r.cursor).slice(0, 10), done: !!r.synced_at } }
+      : {}),
   };
 };
 
