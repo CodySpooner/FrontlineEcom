@@ -1,13 +1,13 @@
 // UI-14 Automation: rules (schedule or metric trigger → agent task, approval policy, daily cap) and the log of what they did.
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import { CalendarClock, Plus, TrendingDown, Zap } from 'lucide-react';
-import { AGENT_ROLES, type AgentRole, type AutomationRule, type AutomationRunStatus, type AutomationTrigger, type MetricTotals } from '@frontline/shared';
-import { useAutomationActions, useAutomationRuns, useAutomations } from '../api/client';
+import { CalendarClock, History, Plus, TrendingDown, Zap } from 'lucide-react';
+import { AGENT_ROLES, type ActionKind, type AgentRole, type AutomationRule, type AutomationRunStatus, type AutomationTrigger, type MetricTotals } from '@frontline/shared';
+import { useActionLog, useAutomationActions, useAutomationRuns, useAutomations } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, Segmented, Switch } from '../components/ui';
-import { describeTrigger, METRICS, parseCron, toCron, WEEKDAYS, type Schedule } from '../lib/automation';
+import { describeChange, describeTrigger, METRICS, parseCron, toCron, WEEKDAYS, type Schedule } from '../lib/automation';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -64,7 +64,10 @@ export function Automation() {
             </ul>
           )}
         </Panel>
-        <RunLog rules={q.data ?? []} />
+        <div className="grid gap-3.5">
+          <RunLog rules={q.data ?? []} />
+          <ActionLog />
+        </div>
       </div>
       <Dialog open={!!editing} onClose={() => setEditing(undefined)} title={editing === 'new' ? 'New rule' : 'Edit rule'} side="right">
         {editing && <RuleEditor key={editing === 'new' ? 'new' : editing.id} rule={editing === 'new' ? undefined : editing} onDone={() => setEditing(undefined)} />}
@@ -174,6 +177,52 @@ function RunLog({ rules }: { rules: AutomationRule[] }) {
               </li>
             );
           })}
+        </ol>
+      )}
+    </Panel>
+  );
+}
+
+const ACTION: Record<ActionKind, string> = {
+  ad_budget: 'Ad budget changed',
+  ad_pause: 'Ad paused',
+  product_create: 'Products added',
+  price_change: 'Price changed',
+  product_page_publish: 'Product page published',
+  page_publish: 'Page published',
+};
+
+/** What actually ran against a live store or ad account, whoever triggered it. */
+function ActionLog() {
+  const { ids, name } = useStoreSelection();
+  const q = useActionLog(ids);
+  return (
+    <Panel title="Executed Actions" sub="Every change made to a live store or ad account, with its outcome.">
+      {q.isPending ? (
+        <LoadingState rows={3} />
+      ) : q.isError ? (
+        <ErrorState message="Couldn't load the action log." onRetry={() => q.refetch()} />
+      ) : !q.data.length ? (
+        <EmptyState icon={History} title="Nothing changed on a live store yet">
+          Once a store is connected, approved and autopilot changes show up here.
+        </EmptyState>
+      ) : (
+        <ol className="grid gap-2">
+          {q.data.map((a) => (
+            <li key={a.id} className="rounded-lg border border-line bg-bg-2 px-3 py-2">
+              <div className="flex items-center justify-between gap-2">
+                <b className="truncate text-[13px]">{ACTION[a.action] ?? a.action}</b>
+                {!a.ok && <Badge tone="red">Failed</Badge>}
+              </div>
+              <p className="text-xs text-muted">
+                {name(a.storeId)} · {when(a.at)}
+              </p>
+              <p className="mt-1 truncate text-[13px] text-text-2" title={a.target}>
+                {[a.target, describeChange(a.detail)].filter(Boolean).join(' · ')}
+              </p>
+              {a.error && <p className="mt-1 text-xs text-red">{a.error}</p>}
+            </li>
+          ))}
         </ol>
       )}
     </Panel>

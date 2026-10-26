@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  ActionLogEntry,
   Agent,
   AgentRun,
   AgentRunDetail,
@@ -397,6 +398,9 @@ export function useBackupNow() {
   return useMutation({ mutationFn: () => api<Backup>('/api/backups', { method: 'POST' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['backups'] }) });
 }
 
+export const useActionLog = (storeIds: string[]) =>
+  useQuery({ queryKey: ['actions', storeIds], queryFn: () => api<ActionLogEntry[]>(`/api/actions?stores=${storeIds.join(',')}&limit=50`) });
+
 export const useNotifications = () => useQuery({ queryKey: ['notifications'], queryFn: () => api<AppNotification[]>('/api/notifications?limit=40') });
 
 export function useMarkRead() {
@@ -445,6 +449,8 @@ export function useLive() {
         // Approved requests change shared learnings or (ad changes) campaign budgets and statuses.
         // Publish requests move Store Builder drafts between pending, approved, published and rejected.
         qc.invalidateQueries({ queryKey: ['page-drafts'] });
+        // Approved changes to a live store or ad account are logged as they run.
+        if (m.approval.status === 'approved') qc.invalidateQueries({ queryKey: ['actions'] });
         if (m.approval.status === 'approved') ['niche-learnings', 'campaigns'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         // A decided request lingers ~1s so its "Approved"/"Denied" verdict shows before the row drops.
         setTimeout(() => qc.invalidateQueries({ queryKey: ['approvals'] }), m.approval.status === 'pending' ? 0 : 1000);

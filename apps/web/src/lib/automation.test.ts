@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { describeTrigger, parseCron, toCron } from './automation';
+import { describeChange, describeTrigger, parseCron, toCron } from './automation';
 
 describe('parseCron / toCron', () => {
   it('reads the crons the simple editor writes', () => {
@@ -28,5 +28,13 @@ describe('describeTrigger', () => {
   it('says metric thresholds in words', () => {
     expect(describeTrigger({ type: 'metric', metric: 'roas', op: '<', value: 2, windowDays: 3 })).toBe('When ROAS drops below 2x over 3 days');
     expect(describeTrigger({ type: 'metric', metric: 'adSpend', op: '>', value: 500, windowDays: 1 })).toBe('When ad spend goes above $500 over 1 day');
+  });
+});
+
+describe('describeChange', () => {
+  it('reads an action log change', () => {
+    expect(describeChange({ dailyBudget: 40, from: 32 })).toBe('daily budget 40 · from 32');
+    expect(describeChange({ titles: ['A', 'B'] })).toBe('titles ["A","B"]');
+    expect(describeChange({})).toBe('');
   });
 });

@@ -44,3 +44,9 @@ export function describeTrigger(t: AutomationTrigger) {
   const m = METRICS[t.metric];
   return `When ${m.label} ${t.op === '<' ? 'drops below' : 'goes above'} ${m.fmt(t.value)} over ${t.windowDays} day${t.windowDays === 1 ? '' : 's'}`;
 }
+
+/** An action log entry's change, readable: { dailyBudget: 40, from: 32 } → "daily budget 40 · from 32". */
+export const describeChange = (d: Record<string, unknown>) =>
+  Object.entries(d)
+    .map(([k, v]) => `${k.replace(/([A-Z])/g, ' $1').toLowerCase()} ${v !== null && typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+    .join(' · ');
