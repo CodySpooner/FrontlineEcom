@@ -507,6 +507,9 @@ export const MIGRATIONS = [
     PRIMARY KEY (store_id, id)
   );
   `,
+  /* 39 (core: the product of an Amazon refund line, for per-product numbers; NULL on lines read before) */ `
+  ALTER TABLE amazon_refunds ADD COLUMN product_id TEXT;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

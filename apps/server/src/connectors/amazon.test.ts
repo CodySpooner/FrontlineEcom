@@ -495,6 +495,12 @@ test("refunds of an Amazon store's own orders come off the order's day (Finances
   expect(finances[1]!.get('NextToken')).toBe('f2'); // with the same window
   expect(finances[1]!.get('PostedBefore')).toBe('2026-10-26T17:55:00.000Z');
   expect(revenue()).toBe(395); // 412.50 in sales, 17.50 refunded
+  // Each refunded line names its product, for per-product numbers.
+  expect(db.prepare("SELECT id, order_id, product_id, amount FROM amazon_refunds WHERE store_id = 'peak' ORDER BY id").all()).toEqual([
+    { id: 'adj-1', order_id: 'amz-111-1', product_id: 'amz-MUG-1', amount: 12.5 },
+    { id: 'adj-2', order_id: 'amz-111-1', product_id: 'amz-MUG-1', amount: 5 },
+    { id: 'adj-9', order_id: 'amz-999-9', product_id: 'amz-MUG-1', amount: 40 },
+  ]);
 
   await syncAmazon(db, key, 'peak', fetchFn, new Date(NOW.getTime() + 10 * 60_000));
   expect(finances).toHaveLength(2); // read at most hourly

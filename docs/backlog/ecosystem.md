@@ -39,6 +39,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - **Ports for this worktree:** `WEB_PORT=5203`, `API_PORT=8817`. Verify screens in a browser against the reference.
 
 ## Inbox
+- [ ] (from core, FYI) Migration 39 is core's too (`amazon_refunds.product_id`). The next free one is 40.
 - [ ] (from core, FYI) Migration 38 is core's (`amazon_refunds`: Amazon refunds now come off revenue). The next free one is 39.
 - [x] (from core, FYI) Migration 37 is core's (`orders.tracking_url`; 36 is agents' squad missions). The next free one is 38.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->

@@ -100,7 +100,7 @@ async function ordersOf(read: OrderRead | undefined, fetchFn: Fetch, host: strin
 interface RefundEvent {
   AmazonOrderId?: string;
   PostedDate?: string;
-  ShipmentItemAdjustmentList?: { OrderAdjustmentItemId?: string; ItemChargeAdjustmentList?: { ChargeType?: string; ChargeAmount?: { CurrencyAmount?: number } }[] }[];
+  ShipmentItemAdjustmentList?: { SellerSKU?: string; OrderAdjustmentItemId?: string; ItemChargeAdjustmentList?: { ChargeType?: string; ChargeAmount?: { CurrencyAmount?: number } }[] }[];
 }
 /** Where the last refunds read ended (its PostedBefore), for one seller account. */
 type RefundRead = { account?: string; to: string };
@@ -321,14 +321,16 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
       }
       // A refunded line's selling price (Principal: what Amazon's sales total counts) comes off its order's day. It counts
       // only once its order is one of the store's: another marketplace's never is, and an order read later brings it in.
-      const refund = db.prepare('INSERT INTO amazon_refunds (store_id, id, order_id, amount) VALUES (?, ?, ?, ?) ON CONFLICT (store_id, id) DO UPDATE SET amount = excluded.amount');
+      const refund = db.prepare(
+        'INSERT INTO amazon_refunds (store_id, id, order_id, amount, product_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT (store_id, id) DO UPDATE SET amount = excluded.amount, product_id = excluded.product_id',
+      );
       const dayOf = db.prepare('SELECT local_date FROM orders WHERE store_id = ? AND id = ?');
       for (const e of refunds?.refunds ?? []) {
         for (const [i, item] of (e.ShipmentItemAdjustmentList ?? []).entries()) {
           const amount = -(item.ItemChargeAdjustmentList ?? []).filter((c) => c.ChargeType === 'Principal').reduce((a, c) => a + Number(c.ChargeAmount?.CurrencyAmount ?? 0), 0);
           if (!e.AmazonOrderId || !amount) continue;
           const orderId = `amz-${e.AmazonOrderId}`;
-          refund.run(storeId, item.OrderAdjustmentItemId ?? `${e.AmazonOrderId}:${e.PostedDate}:${i}`, orderId, amount);
+          refund.run(storeId, item.OrderAdjustmentItemId ?? `${e.AmazonOrderId}:${e.PostedDate}:${i}`, orderId, amount, item.SellerSKU ? `amz-${item.SellerSKU}` : null);
           const day = dayOf.get(storeId, orderId)?.local_date;
           if (day) days.add(String(day));
         }
