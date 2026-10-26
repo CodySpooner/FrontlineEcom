@@ -21,7 +21,7 @@ function Inline({ text }: { text: string }) {
 /** Renders the knowledge packs' markdown (see lib/markdown for the subset). */
 export function Markdown({ text }: { text: string }) {
   return (
-    <div className="grid gap-3 text-[13px] leading-relaxed text-text-2">
+    <div className="grid max-w-[75ch] gap-3 text-[13px] leading-relaxed text-text-2">
       {parseMarkdown(text).map((b, i) =>
         b.t === 'h' ? (
           b.level === 1 ? (
