@@ -1,6 +1,7 @@
 import { AGENT_ROLES, type Agent, type AgentEvent, type Store } from '@frontline/shared';
 import { claudeEngine } from './claude-engine';
 import { fakeEngine } from './fake-engine';
+import { ROLES, SQUAD_RULES } from './roles';
 
 export interface RunInput {
   agent: Agent;
@@ -22,8 +23,13 @@ export function defaultEngine(): Engine {
 }
 
 export function basicSystemPrompt({ agent, store }: Pick<RunInput, 'agent' | 'store'>): string {
-  const role = AGENT_ROLES[agent.role];
-  return `You are the ${role.name} of ${store.name}, a ${store.niche} store on ${store.platform}. ${role.blurb}`;
+  const role = ROLES[agent.role];
+  return [
+    `You are the ${AGENT_ROLES[agent.role].name} of ${store.name}, a ${store.niche} store on ${store.platform}.`,
+    role.prompt,
+    `You are measured on ${role.kpi}.`,
+    SQUAD_RULES,
+  ].join('\n\n');
 }
 
 /** Runs an agent and guarantees the stream ends with exactly one `done` or `error` event. */

@@ -122,7 +122,8 @@ describe('Claude engine', () => {
       resume: 'abc',
       includePartialMessages: true,
       settingSources: [],
-      tools: [],
+      tools: ['WebSearch', 'WebFetch'],
+      allowedTools: ['WebSearch', 'WebFetch'],
       maxTurns: 3,
     });
   });

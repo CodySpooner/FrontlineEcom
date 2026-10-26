@@ -14,7 +14,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
       `AsyncIterable<AgentEvent>` (`text_delta`, `tool_call`, `tool_result`, `approval_request`, `memory_written`, `done`,
       `error`). `FakeEngine` (scripted, deterministic) and `ClaudeEngine` (Agent SDK `query()` on the owner's local Claude
       Code login, partial-message streaming, resume). Put shared event types in `packages/shared`.
-- [ ] AGT-02 Role catalog: the 8 roles in `AGENT_ROLES` → system prompt, allowed tools, default autonomy, XP rules.
+- [x] AGT-02 Role catalog: the 8 roles in `AGENT_ROLES` → system prompt, allowed tools, default autonomy, XP rules.
 - [ ] AGT-03 Playbooks `packages/agents/playbooks/<role>.md`: concise expert playbooks distilled from the installed skills
       (ecommerce-ppc-strategy-planner, dropshipping-product-research, shopify-*, tiktok-shop-*, etsy-*,
       ecommerce-email-marketing-builder, ecommerce-landing-page, product-description-generator, competitor/pricing skills…).
@@ -53,4 +53,5 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-02 Role catalog `ROLES`: per-role prompt, KPI (feeds "measured win" XP in AGT-13), tool allowlist; `SQUAD_RULES`; Claude engine enables the role's WebSearch/WebFetch. Default autonomy lands with squads (AGT-06).
 - 2026-10-26 — AGT-01 `@frontline/agents`: `runAgent` + `Engine`, `fakeEngine` (scripted), `claudeEngine` (Agent SDK `query()`, partial streaming, resume, isolated settings/tools); `AgentEvent`/`StoreMemory` in shared. `FRONTLINE_AGENT_ENGINE=claude` switches engines.

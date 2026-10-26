@@ -4,6 +4,7 @@
 import { query, type Options, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import type { AgentEvent } from '@frontline/shared';
 import { basicSystemPrompt, type Engine, type RunInput } from './engine';
+import { ROLES } from './roles';
 
 export interface ClaudeEngineOptions {
   /** Defaults to `FRONTLINE_AGENT_MODEL` or claude-opus-5-5. */
@@ -18,6 +19,8 @@ export interface ClaudeEngineOptions {
 export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
   const run = opts.query ?? query;
   return async function* (input) {
+    // Claude Code built-ins are capitalized (WebSearch); app tools come over MCP.
+    const builtins = ROLES[input.agent.role].tools.filter((t) => /^[A-Z]/.test(t));
     const abortController = new AbortController();
     input.signal?.addEventListener('abort', () => abortController.abort(), { once: true });
     const messages = run({
@@ -29,7 +32,8 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
         // Isolated from the owner's coding setup: no CLAUDE.md/settings, no file or shell tools.
         // Store tools arrive as MCP servers through queryOptions.
         settingSources: [],
-        tools: [],
+        tools: builtins,
+        allowedTools: builtins,
         permissionMode: 'default',
         abortController,
         ...(input.resume ? { resume: input.resume } : {}),
