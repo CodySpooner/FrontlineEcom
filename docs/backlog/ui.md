@@ -180,6 +180,8 @@ Orca's browser against the reference before ticking it.
       in the bell's Recently decided, not "Denied" as if the owner said no.
 - [x] UI-64 When a store's first sync lands (demo data swapped for real, demo learnings/requests/drafts cleared), every open
       view refetches at once instead of showing demo numbers until the next focus.
+- [x] UI-66 Settings → Stores rows show the owner's fee estimate ("Fees 9.5% + 0.25 per order"), so it's visible without
+      opening the form.
 
 ## Blocked
 
@@ -275,3 +277,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-63: `expiredWhy(a)` (lib/approvals, tested) reads the `[Expired: …]` marker the server appends to a denied request's reason (runs.ts when a run ends; AGT-71's EXPIRED_DEMO when a store goes live). The drawer labels those "Expired" with the reason underneath. Notifications.test covers it. Chrome with a fixture expired request: "Expired · UI-FX Pause Spark Ads / Asked on demo data before the store went live." Fixture removed
 - 2026-10-26 — UI-64: `useGoLiveRefresh()` (api/client, mounted in Shell) watches the integrations poll. When a platform integration leaves `importing()` (lib/sync), it runs one `invalidateQueries()`. There's no live message for going live (core switchToReal, agents startFresh). live.test covers it once per transition, with no repeat on later syncs. Chrome with a main-world `/api/integrations` patch (Pawsome Shopify importing, then synced): the importing note showed, and on the synced poll the app refetched stores, summary, products, approvals, events, missions and more in the same second. The note cleared
 - 2026-10-26 — UI-65 (core inbox, fees in profit): the store form has "Fees, % of revenue" and "Fees per order" fields. The platform's usual fees are the placeholders and a hint (Shopify/Woo 2.9% + 0.30, Etsy 9.5% + 0.25, TikTok Shop 8%, Amazon and Walmart 15%), and blank sends 0. When any selected store has an estimate, the Profit tooltip reads "Revenue − cost of goods − your fee estimate − ad spend". StoreForm.test covers it. Chrome: Glow Haus saved at 2.9% + 0.30, and its 30-day profit went from 4,228.21 to 3,534.17. The tooltip updated. Glow restored to no fees
+- 2026-10-26 — UI-66: `feeEstimate(s)` (StoreForm, tested) adds "Fees 8%" / "Fees 9.5% + 0.25 per order" to the store row's summary line, and nothing when unset. Chrome: Peak Fit at 8% read "TikTok Shop · Fitness · home workout accessories · USD · Fees 8%". Peak restored to 0

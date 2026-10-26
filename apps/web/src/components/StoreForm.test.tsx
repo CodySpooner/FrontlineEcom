@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
-import { StoreForm } from './StoreForm';
+import { feeEstimate, StoreForm } from './StoreForm';
 
 const sent = (fetch: ReturnType<typeof stubApi>) => fetch.mock.calls.filter(([, init]) => init?.method === 'POST' || init?.method === 'PATCH').map(([url, init]) => [url, JSON.parse(String(init!.body))]);
 
@@ -53,5 +53,14 @@ describe('store form fees', () => {
     fireEvent.change(pct, { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save store' }));
     await vi.waitFor(() => expect(sent(fetch)[0]?.[1]).toMatchObject({ feePercent: 0, feePerOrder: 0 }));
+  });
+});
+
+describe('feeEstimate', () => {
+  it('reads the estimate back the way the form takes it, nothing when unset', () => {
+    expect(feeEstimate({ feePercent: 9.5, feePerOrder: 0.25 })).toBe('Fees 9.5% + 0.25 per order');
+    expect(feeEstimate({ feePercent: 15 })).toBe('Fees 15%');
+    expect(feeEstimate({ feePerOrder: 0.3 })).toBe('Fees 0.30 per order');
+    expect(feeEstimate({})).toBeUndefined();
   });
 });

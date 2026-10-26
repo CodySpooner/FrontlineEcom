@@ -9,6 +9,11 @@ export const PLATFORM_NAME: Record<Platform, string> = { shopify: 'Shopify', tik
 export const byHand = (s: Store | undefined, can: readonly Platform[]) => (s?.connected && !can.includes(s.platform) ? PLATFORM_NAME[s.platform] : undefined);
 /** Usual platform + payment fees as [% of revenue, per order], shown as a starting point for the owner's estimate. */
 const FEE_HINT: Record<Platform, [number, number]> = { shopify: [2.9, 0.3], etsy: [9.5, 0.25], tiktok_shop: [8, 0], amazon: [15, 0], woocommerce: [2.9, 0.3], walmart: [15, 0] };
+/** The owner's fee estimate as one line (e.g. "Fees 9.5% + 0.25 per order"), undefined when none is set. */
+export function feeEstimate(s: Pick<Store, 'feePercent' | 'feePerOrder'>) {
+  const parts = [s.feePercent && `${s.feePercent}%`, s.feePerOrder && `${s.feePerOrder.toFixed(2)} per order`].filter(Boolean);
+  return parts.length ? `Fees ${parts.join(' + ')}` : undefined;
+}
 export const nicheName = (n: Niche) => n.charAt(0).toUpperCase() + n.slice(1);
 
 /** Add or edit a store. `onDone` gets the saved store, or nothing on Cancel. */

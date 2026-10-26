@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { APPROVAL_KINDS, type Store, type StoreCaps } from '@frontline/shared';
 import { useBackupNow, useBackups, useCaps, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings, useUsage } from '../api/client';
 import { Hero } from '../components/Hero';
-import { nicheName, PLATFORM_NAME, StoreForm } from '../components/StoreForm';
+import { feeEstimate, nicheName, PLATFORM_NAME, StoreForm } from '../components/StoreForm';
 import { Badge, Button, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../components/ui';
 import { cents, money } from '../lib/format';
 import { NAV } from '../nav';
@@ -71,7 +71,7 @@ function StoreRow({ s, onEdit }: { s: Store; onEdit: () => void }) {
           <b className="text-[14px]">{s.name}</b>
           <Badge tone={s.connected ? 'good' : 'muted'}>{s.connected ? 'Connected' : 'Demo data'}</Badge>
         </div>
-        <p className="text-xs text-muted">{[PLATFORM_NAME[s.platform], nicheName(s.niche), s.nicheDetail, s.currency].filter(Boolean).join(' · ')}</p>
+        <p className="text-xs text-muted">{[PLATFORM_NAME[s.platform], nicheName(s.niche), s.nicheDetail, s.currency, feeEstimate(s)].filter(Boolean).join(' · ')}</p>
         {remove.isError && (
           <p role="alert" className="mt-1 text-xs text-red">
             {remove.error.message}
