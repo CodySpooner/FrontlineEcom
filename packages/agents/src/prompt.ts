@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { AGENT_ROLES, type Agent, type AgentRole, type Niche, type Platform, type Store, type StoreMemory } from '@frontline/shared';
+import { customNichePack } from './niche';
 import { ROLES, SQUAD_RULES } from './roles';
 
 const root = new URL('../', import.meta.url);
@@ -41,7 +42,7 @@ export function assemblePrompt({ agent, store, memories = [], budget = 8000, tod
     SQUAD_RULES,
     playbook(agent.role),
     platformPack(store.platform),
-    nichePack(store.niche),
+    nichePack(store.niche) || customNichePack(store.nicheDetail),
     storeProfile(store),
   ].filter(Boolean);
   const date = `Today is ${today ?? new Date().toLocaleDateString('en-CA', { timeZone: store.timezone })} (${store.timezone}).`;

@@ -18,3 +18,4 @@ export {
   type NewMemory,
 } from './memory';
 export { APP_TOOLS, toolsFor, callTool, type AppTool, type ToolEnv, type ToolContext } from './tools';
+export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';

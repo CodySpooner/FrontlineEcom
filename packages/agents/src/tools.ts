@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Agent, AgentEvent, AnalyticsRange, AnalyticsSummary, ApprovalsHook, Store } from '@frontline/shared';
 import { z } from 'zod';
 import { searchMemory, writeMemory } from './memory';
+import { saveNichePack } from './niche';
 import { ROLES, type ToolName } from './roles';
 
 /** What the server hands a run so its tools can read and act on app data. */
@@ -175,10 +176,21 @@ export const APP_TOOLS: AppTool[] = [
       });
       ctx.emit({ type: 'approval_request', approval: request });
       const decided = await abortable(ctx.approvals.decision(request.id), ctx.signal);
-      return decided.status === 'approved' ? `Approved by the owner: ${title}` : `Denied by the owner: ${title}. Do not do it; suggest an alternative if useful.`;
+      if (decided.status !== 'approved') return `Denied by the owner: ${title}. Do not do it; suggest an alternative if useful.`;
+      const outcome = await ACTIONS[kind]?.(payload);
+      return `Approved by the owner: ${title}${outcome ? `. ${outcome}` : ''}`;
     },
   }),
 ];
+
+/** Actions the agents lane carries out itself once approved. Store/ad actions arrive with the connectors. */
+const ACTIONS: Record<string, (payload: Record<string, unknown>) => Promise<string>> = {
+  save_niche_pack: async ({ slug, markdown }) => {
+    if (typeof slug !== 'string' || typeof markdown !== 'string' || !markdown.trim()) return 'Not saved: the payload needs slug and markdown.';
+    saveNichePack(slug, markdown);
+    return 'Niche pack saved; stores in this niche use it from their next run.';
+  },
+};
 
 /** The app tools a role may use (its allowlist minus anything not built yet). */
 export const toolsFor = (role: Agent['role']) => APP_TOOLS.filter((t) => ROLES[role].tools.includes(t.name));

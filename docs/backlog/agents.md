@@ -22,7 +22,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
       (ecommerce-ppc-strategy-planner, dropshipping-product-research, shopify-*, tiktok-shop-*, etsy-*,
       ecommerce-email-marketing-builder, ecommerce-landing-page, product-description-generator, competitor/pricing skills…).
 - [x] AGT-04 Platform packs `packs/platform/<platform>.md`: shopify, tiktok_shop, etsy, amazon, woocommerce.
-- [ ] AGT-05 Niche packs `packs/niche/<niche>.md`: beauty, pet, tech, fitness, home, fashion, kids, outdoor + template
+- [x] AGT-05 Niche packs `packs/niche/<niche>.md`: beauty, pet, tech, fitness, home, fashion, kids, outdoor + template
       (audience, triggers, compliance, seasonality, creative angles, price norms, suppliers) + a Market Analyst task that
       drafts a pack for a custom niche (saving it needs approval).
 - [x] AGT-06 Squads: `createSquad(store)` makes one agent per role (persisted via core's DB once CORE-01 lands; in-memory
@@ -56,6 +56,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-05 Niche packs for beauty, pet, tech, fitness, home, fashion, kids, outdoor + `_template.md`; `draftNichePackTask(store)` has the Market Analyst research a custom niche and request `save_niche_pack`; on approval it is saved to `<data dir>/packs/niche/<slug>.md` and `assemblePrompt` uses it for stores without a built-in pack.
 - 2026-10-26 — AGT-09 Store tools: engine-agnostic `APP_TOOLS` (store_summary, metrics_timeseries, list_products/orders/campaigns, search/write_memory, request_approval) + per-role `toolsFor`; Claude engine serves them as in-process MCP server `frontline`, fake engine runs them for real (`{ call }` script steps); tool events stream through a channel so approval requests show while the run waits. `toolEnv(db)` wires core's analytics + approvals hook. Competitors/research/create_creative tools wait on CORE-15/16 and AGT-15. Real smoke: Claude called store_summary and cited the numbers.
 - 2026-10-26 — AGT-08 Store memory: `store_memory` + FTS5 (migration 4), write (merges duplicates), search (relevance × recency × confidence), CRUD, outcome confidence feedback, reflection prompt + `parseLearnings`, cross-store `promotionCandidates`. Reflection runs + promotion approvals hook into the run manager (AGT-11) / approvals (AGT-10).
 - 2026-10-26 — AGT-07 `assemblePrompt`: role + KPI + squad rules → playbook → platform pack → niche pack → store profile → ranked memories (token-budgeted) → date; stable layers first for prompt caching. Claude engine uses it by default.
