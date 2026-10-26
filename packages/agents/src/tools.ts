@@ -174,14 +174,17 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'metrics_timeseries',
     description:
-      'Daily revenue, ad spend, COGS (product cost plus the sales tax/VAT collected on orders), fees (the estimate set for the store), profit (revenue - ad spend - COGS - fees), orders, sessions, add-to-carts and checkouts for the last N days (CSV, oldest first).',
+      'Daily revenue, ad spend, COGS (product cost plus the sales tax/VAT collected on orders), fees (the estimate set for the store), profit (revenue - ad spend - COGS - fees), orders, sessions, add-to-carts and checkouts for the last N days (CSV, oldest first), plus amazon_revenue and amazon_orders when the store also sells on Amazon as a channel.',
     input: { days: z.number().int().min(1).max(365).default(30) },
     run: async ({ days }, ctx) => {
       const rows = ctx.db
         .prepare(
           `SELECT date, round(revenue, 2) AS revenue, round(ad_spend, 2) AS ad_spend, round(cogs, 2) AS cogs, round(fees, 2) AS fees,
-             round(revenue - ad_spend - cogs - fees, 2) AS profit, orders, sessions, add_to_carts, checkouts
-           FROM (SELECT d.*, d.revenue * s.fee_percent / 100 + d.orders * s.fee_per_order AS fees FROM daily_metrics d JOIN stores s ON s.id = d.store_id
+             round(revenue - ad_spend - cogs - fees, 2) AS profit, orders, sessions, add_to_carts, checkouts, amazon_revenue, amazon_orders
+           FROM (SELECT d.*, d.revenue * s.fee_percent / 100 + d.orders * s.fee_per_order AS fees,
+                   round(coalesce(c.revenue, 0), 2) AS amazon_revenue, coalesce(c.orders, 0) AS amazon_orders
+                 FROM daily_metrics d JOIN stores s ON s.id = d.store_id
+                 LEFT JOIN channel_daily c ON c.store_id = d.store_id AND c.date = d.date AND c.channel = 'amazon'
                  WHERE d.store_id = ? AND d.date >= ?)
            ORDER BY date`,
         )
@@ -195,7 +198,14 @@ export const APP_TOOLS: AppTool[] = [
       // sessions to convert from, and counting them inflates conversion (core's funnel leaves them out the same way).
       const first = missing.includes('sessions') ? -1 : rows.findIndex((r) => Number(r.sessions) > 0);
       const late = first > 0 && rows.slice(0, first).some((r) => Number(r.orders) > 0);
-      return note + (late ? `(sessions start on ${rows[first]!.date}: work out conversion from that day on; earlier orders have no traffic data.)\n` : '') + csv(rows);
+      // Amazon as an extra channel (core's channel_daily) is in revenue and orders but not in this store's sessions, and the
+      // store's ads mostly send shoppers to its own site. An Amazon store's own sales are the whole store: no split.
+      const amazon = ctx.store.platform !== 'amazon' && rows.some((r) => Number(r.amazon_orders) || Number(r.amazon_revenue));
+      if (!amazon) for (const r of rows) delete r.amazon_revenue, delete r.amazon_orders;
+      const split = amazon
+        ? "(revenue and orders include Amazon's sales as a channel (amazon_revenue, amazon_orders): its shoppers aren't in sessions and the store's ads mostly drive its own site, so take them out for conversion and MER.)\n"
+        : '';
+      return note + (late ? `(sessions start on ${rows[first]!.date}: work out conversion from that day on; earlier orders have no traffic data.)\n` : '') + split + csv(rows);
     },
   }),
   defineTool({

@@ -184,6 +184,23 @@ describe('agent tools on demo data', () => {
     expect(funnel(whole!.output)).toMatch(/^date,revenue,/);
   });
 
+  test('metrics_timeseries splits out Amazon as an extra channel: its orders have no sessions here, and ads mostly drive the site', async () => {
+    const glow = input('glow', 'market_analyst');
+    const days = db.prepare(`SELECT date FROM daily_metrics WHERE store_id = 'glow' ORDER BY date DESC LIMIT 2`).all().map((r) => String(r.date));
+    db.prepare(`INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('glow', 'amazon', ?, 120.5, 3)`).run(days[1]!);
+    try {
+      const [series] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
+      const [note, header, ...rows] = series!.output.split('\n');
+      expect(note).toMatch(/^\(revenue and orders include Amazon's sales as a channel \(amazon_revenue, amazon_orders\).+take them out for conversion and MER\.\)$/);
+      expect(header).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts,amazon_revenue,amazon_orders');
+      expect([rows.find((r) => r.startsWith(days[1]!)), rows.find((r) => r.startsWith(days[0]!))]).toEqual([expect.stringMatching(/,120\.5,3$/), expect.stringMatching(/,0,0$/)]);
+    } finally {
+      db.prepare(`DELETE FROM channel_daily WHERE store_id = 'glow'`).run();
+    }
+    const [plain] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
+    expect(plain!.output.split('\n')[0]).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts');
+  });
+
   test("metrics_timeseries profit nets the store's fee estimate, like the dashboard's", async () => {
     db.prepare(`UPDATE stores SET fee_percent = 10, fee_per_order = 0.3 WHERE id = 'pawsome'`).run();
     const [series] = results(await run(input('pawsome', 'market_analyst'), [{ call: 'metrics_timeseries', input: { days: 3 } }, done]));
