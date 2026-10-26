@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { Brain, ChevronRight, MessageSquare, SendHorizontal, Wrench } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type AgentRunDetail, type ApprovalRequest } from '@frontline/shared';
 import { useApprovals, useCancelRun, useDecide, useRun, useStartRun } from '../api/client';
+import { expiredWhy } from '../lib/approvals';
 import { cents, money } from '../lib/format';
 import { isLive, toBlocks } from '../lib/transcript';
 import { ApprovalExtras } from './ApprovalExtras';
@@ -211,6 +212,14 @@ export function DenyReason({ title, disabled, onDeny, onBack, className }: { tit
   );
 }
 
+/** How a request decided elsewhere (Dashboard, bell, autopilot) ended, or that the app closed it. Mounted only once it's out of the waiting list. */
+function Outcome({ id }: { id: string }) {
+  const done = [...(useApprovals('approved').data ?? []), ...(useApprovals('denied').data ?? [])].find((x) => x.id === id);
+  if (!done) return <Badge tone="muted">Decided</Badge>;
+  if (done.status === 'approved') return <Badge tone="good">Approved</Badge>;
+  return expiredWhy(done) ? <Badge tone="muted">Expired</Badge> : <Badge tone="red">Denied</Badge>;
+}
+
 /** A request raised mid-run. Decided ones (here or on the dashboard) drop their buttons. */
 /** `who` (e.g. "Ad Strategist · Pawsome Gear") replaces the generic heading where the store isn't obvious. */
 export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
@@ -222,7 +231,7 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
   const act = (v: 'approve' | 'deny', note?: string) => decide.mutateAsync({ id: a.id, verdict: v, note }).then(() => setVerdict(v), () => {});
   return (
     <div className="rounded-lg border border-red/40 bg-red-soft/40 p-3">
-      <div className="font-display text-[11px] font-bold tracking-[.12em] text-red uppercase">{who ?? 'Needs your approval'}{APPROVAL_KINDS[a.action.kind] && ` · ${APPROVAL_KINDS[a.action.kind]!.label}`}</div>
+      <div className="font-display text-[11px] font-bold tracking-[.12em] text-red uppercase">{who ?? (open ? 'Needs your approval' : 'Request')}{APPROVAL_KINDS[a.action.kind] && ` · ${APPROVAL_KINDS[a.action.kind]!.label}`}</div>
       <div className="mt-1 text-[13px] font-semibold">{a.title}</div>
       <div className="mt-0.5 text-xs text-muted">
         {a.reason}
@@ -242,7 +251,7 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
             </Button>
           </>
         ) : (
-          <Badge tone={verdict === 'deny' ? 'red' : verdict ? 'good' : 'muted'}>{verdict === 'approve' ? 'Approved' : verdict === 'deny' ? 'Denied' : 'Decided'}</Badge>
+          verdict ? <Badge tone={verdict === 'deny' ? 'red' : 'good'}>{verdict === 'approve' ? 'Approved' : 'Denied'}</Badge> : <Outcome id={a.id} />
         )}
         {decide.isError && (
           <span role="alert" className="text-xs text-red">

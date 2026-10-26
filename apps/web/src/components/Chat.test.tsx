@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
-import type { Agent, AgentRunDetail } from '@frontline/shared';
+import type { Agent, AgentRunDetail, ApprovalRequest } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
-import { Chat } from './Chat';
+import { ApprovalCard, Chat } from './Chat';
 
 const agent = { id: 'peak:copywriter', storeId: 'peak', role: 'copywriter', enabled: true } as Agent;
 const run = (id: string, status: AgentRunDetail['status'], extra: Partial<AgentRunDetail> = {}): AgentRunDetail => ({
@@ -52,5 +52,24 @@ describe('chat retry', () => {
     renderApp(<Chat agent={agent} thread={['r1']} onThread={() => {}} />);
     expect(await screen.findByText('Done')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+});
+
+describe('a request card in a past transcript', () => {
+  const asked = { id: 'a1', storeId: 'peak', agentId: 'peak:ad_strategist', title: 'Pause UGC', reason: 'ROAS 0.8', status: 'pending', createdAt: '2026-10-26T08:00:00Z', action: { kind: 'ads.pause_campaign', payload: {} } } as ApprovalRequest;
+  const render = (approved: ApprovalRequest[], denied: ApprovalRequest[]) => {
+    stubApi((url) => (url.startsWith('/api/approvals?status=approved') ? approved : url.startsWith('/api/approvals?status=denied') ? denied : []));
+    renderApp(<ApprovalCard a={asked} />);
+  };
+
+  it('says how it ended when it was decided elsewhere', async () => {
+    render([{ ...asked, status: 'approved' }], []);
+    expect(await screen.findByText('Approved')).toBeTruthy();
+    expect(screen.queryByText(/Needs your approval/)).toBeNull();
+  });
+
+  it("tells a request the app closed apart from the owner's no", async () => {
+    render([], [{ ...asked, status: 'denied', reason: 'ROAS 0.8 [Expired: the agent run ended before a decision.]' }]);
+    expect(await screen.findByText('Expired')).toBeTruthy();
   });
 });
