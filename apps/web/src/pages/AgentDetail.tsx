@@ -57,7 +57,7 @@ export function AgentDetail() {
           All agents
         </Link>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <Portrait role={agent.role} className="size-12" />
+          <Portrait role={agent.role} rank={agent.rank} className="size-12" />
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs text-text-2">
               <StatusDot tone={st.tone} pulse={st.pulse} />

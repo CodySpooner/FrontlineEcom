@@ -95,7 +95,7 @@ function AgentCard({ a, onDeploy, deploying, failed }: { a: Agent; onDeploy: () 
   const to = `/agents/${encodeURIComponent(a.id)}`;
   return (
     <article className="card flex flex-col gap-3 p-3.5">
-      <Portrait role={a.role} className={cx('h-[132px] w-full', off && 'opacity-40 grayscale')} />
+      <Portrait role={a.role} rank={a.rank} className={cx('h-[132px] w-full', off && 'opacity-40 grayscale')} />
       <div className="flex items-start justify-between gap-2">
         <h2 className="font-display text-[15px] leading-tight font-semibold">{role.name}</h2>
         {off ? (

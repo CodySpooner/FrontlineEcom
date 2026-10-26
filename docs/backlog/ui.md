@@ -39,7 +39,7 @@ Orca's browser against the reference before ticking it.
       Chat; Deploy Agent (enable a disabled role).
 - [x] UI-07 Agent detail: chat panel with streaming text + collapsible tool steps + inline approval cards; run history;
       memory list (learnings with confidence); settings (enabled, autonomy, caps, schedule).
-- [ ] UI-08 Agent portraits: 8 distinct SVG characters (hooded, visor helmet, horned helm, masked, cyber-ninja, …), red
+- [x] UI-08 Agent portraits: 8 distinct SVG characters (hooded, visor helmet, horned helm, masked, cyber-ninja, …), red
       glowing eyes; rank frames (Recruit → Legend).
 - [ ] UI-09 Product Research: tabs (Trending, High Margin, Low Competition, TikTok Viral, Shopify Winners, My Lists),
       AI Research button, Filters, product cards (image, AI Score badge, price vs compare-at, margin %), details modal,
@@ -75,3 +75,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-06: AI Agents page — store tabs (?store= deep link), squad grid with portrait/status/LV+XP/blurb, Configure/Chat links, Deploy Agent dialog + per-card Deploy; `Tabs` + `buttonClass` primitives
 - 2026-10-26 — UI-07: Agent detail — chat over runs (resume, live stream, Stop, tool steps, inline approvals, learnings), run history, squad memory (teach / forget, confidence), settings (deployed, autonomy, store caps). Schedule waits on agents (inbox).
 - 2026-10-26 — Inbox: real missions (open first, all-scope count), agent rank + level progress bars, commander level in the profile chip, live refetch on xp/approval/run; stubs.ts deleted
+- 2026-10-26 — UI-08: 8 role characters (horned, visor, hood, crest, ram, masked, ninja, heavy) as one SVG sprite; rank frames Recruit → Legend on every portrait

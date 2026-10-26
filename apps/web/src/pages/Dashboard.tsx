@@ -229,7 +229,7 @@ function AgentsStrip() {
             return (
               <li key={a.id} className="rounded-[10px] border border-line bg-bg-2 p-2.5">
                 <div className="flex items-center gap-[9px]">
-                  <Portrait role={a.role} />
+                  <Portrait role={a.role} rank={a.rank} />
                   <div className="min-w-0">
                     <div className="text-xs leading-tight font-semibold">{role}</div>
                     <div className={cx('mt-[3px] flex items-center gap-1.5 text-[11px]', TONE_TEXT[st.tone])}>

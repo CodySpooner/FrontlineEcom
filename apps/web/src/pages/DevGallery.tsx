@@ -1,7 +1,7 @@
 // Dev-only gallery of the design-system primitives (/dev/ui) for visual checks against docs/reference.
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
-import type { AgentRunDetail } from '@frontline/shared';
+import { AGENT_ROLES, RANKS, type AgentRole, type AgentRunDetail } from '@frontline/shared';
 import { Portrait } from '../components/Art';
 import { Transcript } from '../components/Chat';
 import { Hero } from '../components/Hero';
@@ -109,6 +109,17 @@ export function DevGallery() {
               </Button>
             </div>
           </Dialog>
+        </Panel>
+        <Panel title="Agent portraits + rank frames (UI-08)" className="min-[1100px]:col-span-2">
+          <div className="flex flex-wrap gap-3">
+            {(Object.keys(AGENT_ROLES) as AgentRole[]).map((r, i) => (
+              <div key={r} className="grid justify-items-center gap-1.5 text-[11px] text-muted">
+                <Portrait role={r} rank={RANKS[i % RANKS.length]} className="size-24" />
+                {AGENT_ROLES[r].name}
+                <span className="text-text-2">{RANKS[i % RANKS.length]}</span>
+              </div>
+            ))}
+          </div>
         </Panel>
         <Panel title="Chat transcript (fixture)" className="min-[1100px]:col-span-2">
           <Transcript run={SAMPLE_RUN} role="ad_strategist" />
