@@ -53,3 +53,24 @@ test('the night clocks fall back, a fixed time in the repeated hour runs once; h
     else process.env.TZ = tz;
   }
 });
+
+test('the night clocks spring forward, a fixed time in the skipped hour runs once, late; hourly rules skip it', () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'America/New_York'; // 2026-03-08: 02:00 EST → 03:00 EDT, so 02:00–02:59 never happens
+  try {
+    const daily = parseCron('30 2 * * *');
+    expect(nextCronTime(daily, new Date('2026-03-08T05:00:00Z'))?.toISOString()).toBe('2026-03-08T07:00:00.000Z'); // 03:00 EDT
+    expect(nextCronTime(daily, new Date('2026-03-08T07:00:00Z'))?.toISOString()).toBe('2026-03-09T06:30:00.000Z'); // 02:30 EDT
+    const twice = parseCron('0,30 2 * * *');
+    let due = 0;
+    for (let t = Date.parse('2026-03-08T04:00:00Z'); t < Date.parse('2026-03-08T10:00:00Z'); t += 60_000) {
+      if (cronDueBetween(twice, new Date(t), new Date(t + 60_000))) due++;
+    }
+    expect(due).toBe(1);
+    const hourly = parseCron('30 * * * *');
+    expect(nextCronTime(hourly, new Date('2026-03-08T06:30:00Z'))?.toISOString()).toBe('2026-03-08T07:30:00.000Z'); // 01:30 EST → 03:30 EDT
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});

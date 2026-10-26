@@ -32,11 +32,27 @@ export function parseCron(expr: string): Cron {
 }
 
 export function cronMatches(c: Cron, d: Date) {
+  return wallMatches(c, d, d.getHours(), d.getMinutes());
+}
+
+/** `d`'s local day at the wall-clock time h:m. */
+function wallMatches(c: Cron, d: Date, h: number, m: number) {
   const [min, hour, dom, month, dow] = c.sets as [Set<number>, Set<number>, Set<number>, Set<number>, Set<number>];
-  if (!min.has(d.getMinutes()) || !hour.has(d.getHours()) || !month.has(d.getMonth() + 1)) return false;
+  if (!min.has(m) || !hour.has(h) || !month.has(d.getMonth() + 1)) return false;
   const domOk = dom.has(d.getDate());
   const dowOk = dow.has(d.getDay());
   return c.domAny || c.dowAny ? domOk && dowOk : domOk || dowOk;
+}
+
+/** True when `d` is the first minute after clocks sprang forward and a wall-clock minute they skipped matches. */
+function skippedMatch(c: Cron, d: Date) {
+  const gap = new Date(d.getTime() - 60_000).getTimezoneOffset() - d.getTimezoneOffset(); // minutes skipped
+  const now = d.getHours() * 60 + d.getMinutes();
+  // ponytail: a jump across midnight (a few zones change at 00:00) isn't looked back over.
+  for (let back = 1; back <= gap && now - back >= 0; back++) {
+    if (wallMatches(c, d, Math.floor((now - back) / 60), (now - back) % 60)) return true;
+  }
+  return false;
 }
 
 /**
@@ -52,8 +68,8 @@ function repeated(d: Date) {
 
 /**
  * First matching minute strictly after `from`, looking ahead at most `days`. Steps in real minutes: a local time in the
- * hour clocks fall back through is ambiguous. Like classic cron, a rule with fixed hours runs only the first time round.
- * ponytail: a fixed time in the hour clocks skip in spring (02:30) doesn't run that night; classic cron runs it late.
+ * hour clocks fall back through is ambiguous. Like classic cron, a rule with fixed hours runs only the first time round,
+ * and one whose time clocks skip in spring (02:30) runs once, late, as they jump (03:00).
  */
 export function nextCronTime(c: Cron, from: Date, days = 8): Date | undefined {
   let t = Math.floor(from.getTime() / 60_000) * 60_000;
@@ -61,7 +77,7 @@ export function nextCronTime(c: Cron, from: Date, days = 8): Date | undefined {
   for (let i = 0; i < days * 1440; i++) {
     t += 60_000;
     const d = new Date(t);
-    if (cronMatches(c, d) && (anyHour || !repeated(d))) return d;
+    if (cronMatches(c, d) ? anyHour || !repeated(d) : !anyHour && skippedMatch(c, d)) return d;
   }
 }
 

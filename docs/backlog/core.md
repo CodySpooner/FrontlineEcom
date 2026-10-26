@@ -136,10 +136,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-55 A Woo store's first sync priced two years of orders in another currency at today's rate (and CORE-54 then locked it in).
 - [x] CORE-56 Amazon as an extra channel priced its first sync's two years of daily totals at today's rate.
 - [x] CORE-57 Two platforms on one store selling in different currencies switched the store's currency back and forth every sync.
+- [x] CORE-58 A job scheduled in the hour clocks skip in spring (e.g. 02:30) didn't run that night.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-58: `nextCronTime` runs a fixed-hour rule whose time clocks skip in spring once, late, at the first minute after the jump (03:00), as classic cron does; hourly and wildcard-hour rules don't get an extra run. Tested in America/New_York on 2026-03-08 (two skipped matches still run once). A week ahead costs 1.5 ms instead of 1.1 ms.
 - 2026-10-26 — CORE-57: Shopify, Woo, Etsy and TikTok Shop syncs set the store's currency through `takeCurrency`: when the store's own platform has synced and sells in another currency, the sync stops with an error naming both (nothing written), instead of adding unconverted orders and flipping the store's currency (each flip cleared the ad networks' cursors, a two-year re-pull). Without the own platform synced it takes the currency as before. README notes it.
 - 2026-10-26 — CORE-56: Amazon as an extra channel in a store with another currency converts a first sync's daily totals at each day's ECB rate (`backfillRate`, as ad spend does); later syncs re-read their settle window at today's, as ad spend does. An Amazon store (its own marketplace's currency) is unchanged.
 - 2026-10-26 — CORE-55: a paid Woo order in another currency, more than 3 days old and with no locked rate (a first sync's backfill, or after the store's currency changed), is converted at its own day's ECB rate (`historicRate`, as ad spend's backfill does), falling back to today's. One history download per such currency and sync; later syncs find the rates locked and download nothing.
