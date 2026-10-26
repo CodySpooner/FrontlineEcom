@@ -1,6 +1,8 @@
 import { Hono } from 'hono';
-import { DEMO_STORES } from './demo';
+import type { Db } from './db';
+import { listStores } from './stores';
 
-export const app = new Hono()
-  .get('/api/health', (c) => c.json({ ok: true }))
-  .get('/api/stores', (c) => c.json(DEMO_STORES));
+export const createApp = (db: Db) =>
+  new Hono()
+    .get('/api/health', (c) => c.json({ ok: true }))
+    .get('/api/stores', (c) => c.json(listStores(db)));

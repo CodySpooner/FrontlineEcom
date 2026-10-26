@@ -7,7 +7,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 
 ## Items
-- [ ] CORE-01 SQLite layer on `node:sqlite` (`DatabaseSync`): data dir from `FRONTLINE_DATA_DIR` (default `./.data`),
+- [x] CORE-01 SQLite layer on `node:sqlite` (`DatabaseSync`): data dir from `FRONTLINE_DATA_DIR` (default `./.data`),
       numbered SQL migrations run at startup, tables from DESIGN.md §6 that Phase 1 needs. Tests use an in-memory DB.
 - [ ] CORE-02 Demo generator: 3 seeded stores (Pawsome Gear pet/Shopify, Glow Haus beauty/Shopify, Peak Fit
       fitness/TikTok Shop), 2 years of daily metrics with trend + weekly seasonality + noise, products, orders, campaigns,
@@ -46,4 +46,5 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-01 SQLite layer (`node:sqlite`, `PRAGMA user_version` migrations, Phase 1 tables, stores read from DB); API contracts in shared
 - 2026-10-26 — Phase 0: Hono app with `/api/health` + `/api/stores` (static demo), shared domain types (coordinator)
