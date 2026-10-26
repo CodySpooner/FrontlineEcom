@@ -700,7 +700,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'accessToken', label: 'Access token', secret: true, oauth: true },
     { key: 'refreshToken', label: 'Refresh token', secret: true, oauth: true },
   ] },
-  etsy: { name: 'Etsy', category: 'platform', perStore: true, help: 'etsy.com/developers → Create a new app → copy the keystring and shared secret, and add https://localhost/frontline-oauth as a callback URL. Enter them with your shop ID, press Connect, approve in the browser, then paste the address the browser lands on (the page itself will not load). The app renews the access token itself (it lasts an hour).', fields: [
+  etsy: { name: 'Etsy', category: 'platform', perStore: true, help: 'etsy.com/developers → Create a new app → copy the keystring and shared secret, and add https://localhost/frontline-oauth as a callback URL. Enter them with your shop ID, press Connect, approve in the browser, then paste the address the browser lands on (the page itself will not load). The app renews the access token itself (it lasts an hour). The same app key reads the prices of Etsy shops you track as competitors.', fields: [
     { key: 'shopId', label: 'Shop ID', secret: false },
     { key: 'apiKey', label: 'API keystring', secret: true },
     { key: 'sharedSecret', label: 'Shared secret', secret: true },
