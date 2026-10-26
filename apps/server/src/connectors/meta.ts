@@ -1,5 +1,6 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
+import { convertRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { rebuildAdSpend, switchToReal, type CampaignChange } from './common';
 
@@ -13,8 +14,7 @@ const ATTRIBUTION_DAYS = 28;
 const CHUNK_DAYS = 90;
 /** Budgets are in the currency's minor unit (cents), except these, which have none (Marketing API currency offset 1). */
 const ZERO_DECIMAL = new Set(['CLP', 'COP', 'CRC', 'HUF', 'ISK', 'IDR', 'JPY', 'KRW', 'PYG', 'TWD', 'VND']);
-// ponytail: the store's currency stands in for the ad account's, as it does for ad spend everywhere.
-const budgetUnits = (db: Db, storeId: string) => (ZERO_DECIMAL.has(String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency)) ? 1 : 100);
+const cents = (n: number) => Math.round(n * 100) / 100;
 
 type Fetch = typeof fetch;
 type Action = { action_type: string; value: string };
@@ -53,20 +53,39 @@ export const adAccount = (id: string) => {
   return `act_${digits}`;
 };
 
+/** GETs a Graph object. */
+async function graph<T>(url: string, token: string, fetchFn: Fetch): Promise<T> {
+  const res = await fetchFn(url, { headers: { Authorization: `Bearer ${token}` } });
+  const body = (await res.json().catch(() => ({}))) as T & { error?: { message: string; code?: number } };
+  if (body.error?.code === 190 || res.status === 401) throw new Error('Meta rejected the access token; generate a new system user token with ads_read');
+  if (!res.ok || body.error) throw new Error(`Meta: ${body.error?.message ?? `HTTP ${res.status}`}`);
+  return body;
+}
+
 /** GETs a Graph edge and follows `paging.next` (only on graph.facebook.com). */
 async function edge<T>(url: string, token: string, fetchFn: Fetch): Promise<T[]> {
   const out: T[] = [];
   let next: string | undefined = url;
   while (next) {
     if (!next.startsWith('https://graph.facebook.com/')) throw new Error('Meta returned an unexpected paging URL');
-    const res = await fetchFn(next, { headers: { Authorization: `Bearer ${token}` } });
-    const body = (await res.json().catch(() => ({}))) as { data?: T[]; paging?: { next?: string }; error?: { message: string; code?: number } };
-    if (body.error?.code === 190 || res.status === 401) throw new Error('Meta rejected the access token; generate a new system user token with ads_read');
-    if (!res.ok || body.error) throw new Error(`Meta: ${body.error?.message ?? `HTTP ${res.status}`}`);
+    const body: { data?: T[]; paging?: { next?: string } } = await graph(next, token, fetchFn);
     out.push(...(body.data ?? []));
     next = body.paging?.next;
   }
   return out;
+}
+
+/**
+ * Ad numbers are kept in the store's currency: the factor from the ad account's currency into it, and the account
+ * currency's budget units (minor units, or 1 where it has none).
+ * ponytail: today's ECB rate for every day; past spend isn't re-priced at its own day's rate.
+ */
+async function accountMoney(db: Db, storeId: string, act: string, token: string, fetchFn: Fetch) {
+  const { currency } = await graph<{ currency: string }>(`${GRAPH}/${act}?fields=currency`, token, fetchFn);
+  const store = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency);
+  const rate = await convertRate(db, currency, store, fetchFn);
+  if (!rate) throw new Error(`Meta: no exchange rate from the ad account's ${currency} to the store's ${store}`);
+  return { rate, units: ZERO_DECIMAL.has(currency) ? 1 : 100 };
 }
 
 export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
@@ -80,6 +99,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const start = cursor ? addDays(cursor, -ATTRIBUTION_DAYS) : addDays(today, 1 - BACKFILL_DAYS);
 
+    const money = await accountMoney(db, storeId, act, token, fetchFn);
     const campaigns = await edge<CampaignRow>(`${GRAPH}/${act}/campaigns?fields=id,name,effective_status,daily_budget&limit=200`, token, fetchFn);
     const rows: InsightRow[] = [];
     for (let since = start; since <= today; since = addDays(since, CHUNK_DAYS)) {
@@ -96,12 +116,11 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
 
     tx(db, () => {
       switchToReal(db, storeId);
-      const units = budgetUnits(db, storeId);
       const camp = db.prepare(
         `INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, ?, ?, ?, ?)
          ON CONFLICT (network, id) DO UPDATE SET name = excluded.name, status = excluded.status, daily_budget = excluded.daily_budget`,
       );
-      for (const c of campaigns) camp.run(c.id, storeId, c.name, c.effective_status.toLowerCase(), Number(c.daily_budget ?? 0) / units);
+      for (const c of campaigns) camp.run(c.id, storeId, c.name, c.effective_status.toLowerCase(), cents((Number(c.daily_budget ?? 0) / money.units) * money.rate));
       // Campaigns that only show up in insights (deleted/archived since) still need a row for the join.
       const seen = db.prepare("INSERT OR IGNORE INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, ?, ?, 'archived', 0)");
       for (const r of rows) seen.run(r.campaign_id, storeId, r.campaign_name);
@@ -114,7 +133,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       const dates = new Set<string>();
       for (const r of rows) {
         dates.add(r.date_start);
-        day.run(r.campaign_id, r.date_start, Number(r.spend ?? 0), purchaseValue(r.action_values), Math.round(purchaseValue(r.actions)), Number(r.clicks ?? 0), Number(r.impressions ?? 0));
+        day.run(r.campaign_id, r.date_start, cents(Number(r.spend ?? 0) * money.rate), cents(purchaseValue(r.action_values) * money.rate), Math.round(purchaseValue(r.actions)), Number(r.clicks ?? 0), Number(r.impressions ?? 0));
       }
       rebuildAdSpend(db, storeId, dates);
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
@@ -128,7 +147,13 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
 export async function updateMetaCampaign(db: Db, key: Buffer, storeId: string, campaignId: string, change: CampaignChange, fetchFn: Fetch = fetch) {
   const creds = getCredentials(db, key, 'meta_ads', storeId);
   if (!creds) throw new Error('Meta Ads is not connected for this store');
-  const form: Record<string, string> = 'status' in change ? { status: change.status } : { daily_budget: String(Math.round(change.dailyBudget * budgetUnits(db, storeId))) };
+  let form: Record<string, string>;
+  if ('status' in change) form = { status: change.status };
+  else {
+    // The budget comes in the store's currency (as synced); Meta wants the account's, in its minor units.
+    const money = await accountMoney(db, storeId, adAccount(creds.adAccountId!), creds.accessToken!, fetchFn);
+    form = { daily_budget: String(Math.round((change.dailyBudget / money.rate) * money.units)) };
+  }
   const res = await fetchFn(`${GRAPH}/${campaignId}`, { method: 'POST', headers: { Authorization: `Bearer ${creds.accessToken!}` }, body: new URLSearchParams(form) });
   const body = (await res.json().catch(() => ({}))) as { success?: boolean; error?: { message: string; error_user_msg?: string } };
   if (!res.ok || !body.success) throw new Error(`Meta: ${body.error?.error_user_msg ?? body.error?.message ?? `HTTP ${res.status}`}`);

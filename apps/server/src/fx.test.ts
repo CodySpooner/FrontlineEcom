@@ -5,7 +5,7 @@ import { createApp } from './app';
 import { switchToReal } from './connectors/common';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { fxFor, parseEcb, refreshFx, startFxLoop } from './fx';
+import { convertRate, fxFor, parseEcb, refreshFx, startFxLoop } from './fx';
 import { getSettings, updateSettings } from './settings';
 
 const XML = `<?xml version="1.0" encoding="UTF-8"?><gesmes:Envelope><Cube><Cube time='2026-10-23'>
@@ -130,4 +130,15 @@ test('the rate loop notices a new currency within 10 minutes and waits an hour a
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('convertRate fetches rates when it has none (or day-old ones) and converts between any two published currencies', async () => {
+  const db = openDb();
+  const { fetchFn, calls } = fakeEcb();
+  expect(await convertRate(db, 'USD', 'USD', fetchFn)).toBe(1);
+  expect(calls).toHaveLength(0);
+  expect(await convertRate(db, 'USD', 'GBP', fetchFn)).toBeCloseTo(0.64);
+  expect(await convertRate(db, 'GBP', 'EUR', fetchFn)).toBe(1.25);
+  expect(calls).toHaveLength(1);
+  expect(await convertRate(db, 'USD', 'VND', fetchFn)).toBeUndefined();
 });

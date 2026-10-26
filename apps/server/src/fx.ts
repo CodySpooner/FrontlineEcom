@@ -55,6 +55,17 @@ export function fxFor(db: Db, storeIds: string[]) {
 }
 
 /**
+ * Units of `to` per unit of `from` (an ad account billing in another currency than its store), refreshing rates older
+ * than a day first. Undefined when the ECB doesn't publish one of them.
+ */
+export async function convertRate(db: Db, from: string, to: string, fetchFn: Fetch = fetch) {
+  if (from === to) return 1;
+  let fx = cached(db);
+  if (!fx?.fetchedAt || Date.now() - Date.parse(fx.fetchedAt) > 24 * 3_600_000) fx = await refreshFx(db, fetchFn).catch(() => fx);
+  return fx?.rates[from] && fx.rates[to] ? fx.rates[to] / fx.rates[from] : undefined;
+}
+
+/**
  * Refetches rates older than 12 h while any store's currency differs from the base currency. Checked every 10 min, so
  * a store that just changed currency gets rates soon; after a failure it waits an hour. Returns stop().
  */

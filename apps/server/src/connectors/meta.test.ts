@@ -19,12 +19,13 @@ const insight = (campaign_id: string, date_start: string, spend: string, value: 
 });
 
 /** Fake Graph API: campaigns edge + insights edge (paged once), records requests. */
-function fakeGraph(rows: ReturnType<typeof insight>[], error?: { status: number; body: unknown }) {
+function fakeGraph(rows: ReturnType<typeof insight>[], error?: { status: number; body: unknown }, currency = 'USD') {
   const calls: { url: URL; auth: string | null }[] = [];
   const fetchFn = (async (url: string, init: RequestInit) => {
     const u = new URL(url);
     calls.push({ url: u, auth: new Headers(init.headers).get('authorization') });
     if (error) return Response.json(error.body, { status: error.status });
+    if (u.searchParams.get('fields') === 'currency') return Response.json({ id: 'act_1234567890', currency });
     if (u.pathname.endsWith('/campaigns')) return Response.json({ data: [{ id: '201', name: 'Prospecting', effective_status: 'ACTIVE', daily_budget: '6000' }] });
     const page = u.searchParams.get('after');
     if (page) return Response.json({ data: rows.slice(1) });
@@ -112,6 +113,16 @@ test('an expired token marks the integration as error and keeps demo data', asyn
 test("a yen ad account's daily budget is synced in yen, not hundredths of one", async () => {
   const { db } = setup();
   db.prepare("UPDATE stores SET currency = 'JPY' WHERE id = 'pawsome'").run();
-  await syncMeta(db, key, 'pawsome', fakeGraph([insight('201', '2026-10-26', '5800', '15000')]).fetchFn, NOW);
+  await syncMeta(db, key, 'pawsome', fakeGraph([insight('201', '2026-10-26', '5800', '15000')], undefined, 'JPY').fetchFn, NOW);
   expect(db.prepare("SELECT daily_budget AS b FROM campaigns WHERE id = '201'").get()?.b).toBe(6000);
+});
+
+test('a USD ad account on a euro store: spend, purchase value and budgets are converted into euros', async () => {
+  const { db } = setup();
+  db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'pawsome'").run();
+  db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-26', fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1.25 } }));
+  await syncMeta(db, key, 'pawsome', fakeGraph([insight('201', '2026-10-26', '60.00', '210.50')]).fetchFn, NOW);
+  expect({ ...db.prepare("SELECT spend, revenue FROM campaign_daily WHERE campaign_id = '201' AND date = '2026-10-26'").get() }).toEqual({ spend: 48, revenue: 168.4 });
+  expect(db.prepare("SELECT daily_budget AS b FROM campaigns WHERE id = '201'").get()?.b).toBe(48);
+  expect(db.prepare("SELECT ad_spend AS s FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-26'").get()?.s).toBe(48);
 });
