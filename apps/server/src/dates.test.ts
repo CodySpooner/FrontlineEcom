@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import type { AnalyticsSummary } from '@frontline/shared';
 import { createApp } from './app';
 import { switchToReal } from './connectors/common';
-import { dayFraction, localDate } from './dates';
+import { addDays, dayFraction, localDate, midnight } from './dates';
 import { openDb } from './db';
 import { seedDemo } from './demo';
 
@@ -28,4 +28,13 @@ test("a connected store's analytics window ends on the shop's today, not the mac
   const to = async (stores: string) => ((await (await app.request(`/api/analytics/summary?range=7&stores=${stores}`)).json()) as AnalyticsSummary).to;
   expect(await to('glow')).toBe('2026-10-26');
   expect(await to('pawsome')).toBe(localDate()); // demo data is dated on the machine
+});
+
+test('a day starts at its first instant even where DST starts at midnight (the day begins at 01:00)', () => {
+  for (const tz of ['America/Santiago', 'America/Havana', 'Australia/Lord_Howe', 'Europe/Berlin', 'Asia/Kolkata']) {
+    for (let date = '2026-01-01'; date < '2027-01-01'; date = addDays(date, 1)) {
+      const start = midnight(date, tz);
+      expect([localDate(new Date(start), tz), localDate(new Date(start - 1), tz)], `${tz} ${date}`).toEqual([date, addDays(date, -1)]);
+    }
+  }
 });

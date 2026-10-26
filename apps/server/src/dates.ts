@@ -13,7 +13,9 @@ export const midnight = (date: string, timeZone?: string) => {
   if (!timeZone) return new Date(`${date}T00:00:00`).getTime();
   const utc = Date.parse(`${date}T00:00:00Z`);
   const offset = (t: number) => Date.parse(`${new Date(t).toLocaleString('sv-SE', { timeZone }).replace(' ', 'T')}Z`) - t;
-  return utc - offset(utc - offset(utc));
+  const t = utc - offset(utc - offset(utc));
+  // Where DST starts at midnight (Santiago, Havana) 00:00 doesn't exist: the day starts at the jump, 01:00.
+  return localDate(new Date(t), timeZone) === date ? t : utc - offset(utc);
 };
 
 /** Share of `date` (machine-local, or in `timeZone`) that has passed at `now`: 0 before it starts, 1 once it's over (DST days are 23 or 25 h). */

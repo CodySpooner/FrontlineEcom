@@ -50,6 +50,7 @@ test('UTC offset at local midnight, across DST and half-hour zones', () => {
   expect(midnightOffset('Europe/Berlin', '2026-03-29')).toBe('+01:00');
   expect(midnightOffset('Asia/Kolkata', '2026-10-26')).toBe('+05:30');
   expect(midnightOffset('UTC', '2026-10-26')).toBe('+00:00');
+  expect(midnightOffset('America/Santiago', '2026-09-06')).toBe('-04:00'); // DST starts at midnight: 00:00 at -04:00 is the jump to 01:00
 });
 
 test('Amazon sync stores daily sales per channel and adds them to revenue next to platform orders', async () => {

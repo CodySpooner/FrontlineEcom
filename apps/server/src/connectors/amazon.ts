@@ -1,7 +1,7 @@
 import { gunzipSync } from 'node:zlib';
 import { logAction } from '../actions';
 import { tx, type Db } from '../db';
-import { addDays, localDate } from '../dates';
+import { addDays, localDate, midnight } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { adRate, archiveMissing, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
 
@@ -184,13 +184,7 @@ async function listingsOf(fetchFn: Fetch, host: string, token: string, sellerId:
 
 /** "+02:00" / "-07:00": `timeZone`'s UTC offset at local midnight starting `date`. */
 export function midnightOffset(timeZone: string, date: string) {
-  const fmt = new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'longOffset' });
-  const minutes = (ms: number) => {
-    const m = /GMT([+-])(\d\d):(\d\d)/.exec(fmt.formatToParts(ms).find((p) => p.type === 'timeZoneName')!.value);
-    return m ? (m[1] === '-' ? -1 : 1) * (Number(m[2]) * 60 + Number(m[3])) : 0;
-  };
-  const utcMidnight = Date.parse(`${date}T00:00:00Z`);
-  const off = minutes(utcMidnight - minutes(utcMidnight) * 60_000);
+  const off = (Date.parse(`${date}T00:00:00Z`) - midnight(date, timeZone)) / 60_000;
   const abs = Math.abs(off);
   return `${off < 0 ? '-' : '+'}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`;
 }
