@@ -38,7 +38,8 @@ outcome checks.
    - themes: 14 days before vs after
 
    Windows are counted in the store's own days (a live store dates its data in its zone), and a change is judged only once
-   its last day there is over. Each judgement becomes a memory and moves the confidence of what that run learned. In the prompt every memory says
+   its last day there is over and every one of the store's integrations has synced since, none failing (each change is
+   judged once). Prices and pages need sales before the change to compare with. Each judgement becomes a memory and moves the confidence of what that run learned. In the prompt every memory says
    who it's from (owner, owner's no, measured, squad); only the app sets the `outcome` and `denied` tags, and an agent
    can't rewrite an owner note. Learnings that 2+ live stores of
    a niche (a custom niche by its name) found on their own become a request to share them with the whole niche (hourly, `proposeNichePromotions`;
@@ -60,13 +61,24 @@ like the scheduled jobs.
   runs already hold. Spend is saved as the run goes (`onSpend`, an estimate from token usage), so cancelled or crashed
   runs still count. A run stops as soon as the store's saved spend today passes the cap. An agent's own
   `dailyBudgetUsd` caps its runs inside that (one run per agent, so no shares). Both are read again at each spend, so a
-  cap the owner lowers mid-run holds.
+  cap the owner lowers mid-run holds. "Today" holds every run not over before midnight, so one queued or begun
+  yesterday that spends today counts today.
 - **Higgsfield credits** (`higgsfieldCreditsPerDay`): pending requests count as asked, credits are charged before the
   render, and they stay charged if it fails or the creative is deleted (`creative_credits`).
 - **Ad spend** (`adSpendChangePerDay`): only increases count toward it, on the day they're approved (a waiting one
   counts whenever it was asked). Pauses and cuts count toward the autopilot caps for those kinds. A pause of a
   campaign with no campaign budget (ad set or lifetime budgets) has no amount, so the owner decides it.
 - **Autopilot** is read from the agent at each request, so taking an agent off it mid-run takes effect at once.
+
+## Restarts and repeats
+
+- A run's transcript is saved as it spends and when it starts waiting on the owner, so a crash keeps what it did.
+- Runs cut off by a restart in the last 6 hours run again, once, linked `retry:<old>:<new>` before they start. Missions
+  follow the link, and `assign_task` reads the earlier attempt's assignments, so it doesn't hand out the same work twice.
+- A task started again while its last copy still waits in the queue (a scheduled job behind a run waiting on the
+  owner) returns that queued run instead of stacking another.
+- A chat reply keeps its Claude session even when it's cancelled or hits a limit (`onSession` from the SDK's `init`),
+  so the next message goes on from it.
 
 ## Demo, then live
 
