@@ -185,12 +185,13 @@ export function promotionCandidates(db: DatabaseSync, niche: string, minConfiden
     .map(toMemory);
   const out: { text: string; storeIds: string[]; memoryIds: string[]; confidence: number }[] = [];
   const taken = new Set<string>();
+  const sets = new Map(rows.map((m) => [m.id, words(m.text)])); // once each: the scan below is pairwise
   for (const a of rows) {
     if (taken.has(a.id)) continue;
-    const wa = words(a.text);
+    const wa = sets.get(a.id)!;
     const group = rows.filter((b) => {
       if (taken.has(b.id) || b.storeId === a.storeId) return false;
-      const wb = words(b.text);
+      const wb = sets.get(b.id)!;
       const shared = [...wa].filter((w) => wb.has(w)).length;
       return shared / (wa.size + wb.size - shared) >= 0.5;
     });
