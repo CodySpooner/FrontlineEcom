@@ -255,10 +255,13 @@ function AgentsStrip() {
 function Missions() {
   const { has, name } = useStoreSelection();
   const q = useMissions();
-  const list = (q.data ?? []).filter((m) => has(m.storeId)).slice(0, 4);
-  const done = list.filter((m) => m.progress >= m.target).length;
+  const all = (q.data ?? []).filter((m) => has(m.storeId));
+  const isDone = (m: { progress: number; target: number }) => m.progress >= m.target;
+  const done = all.filter(isDone).length;
+  // Open missions first: that's what the owner can still act on.
+  const list = [...all].sort((a, b) => Number(isDone(a)) - Number(isDone(b))).slice(0, 6);
   return (
-    <Panel title="Daily Missions" action={list.length > 0 && <span className="text-xs text-muted">{`${done}/${list.length} complete`}</span>}>
+    <Panel title="Daily Missions" action={all.length > 0 && <span className="text-xs text-muted">{`${done}/${all.length} complete`}</span>}>
       {q.isPending ? (
         <LoadingState rows={2} />
       ) : q.isError ? (
@@ -266,9 +269,9 @@ function Missions() {
       ) : !list.length ? (
         <EmptyState title="No missions today">New missions drop every morning.</EmptyState>
       ) : (
-        <ul className="grid gap-x-5 gap-y-3.5 min-[620px]:grid-cols-2 min-[1280px]:grid-cols-4">
+        <ul className="grid gap-x-5 gap-y-3.5 min-[620px]:grid-cols-2 min-[1280px]:grid-cols-3">
           {list.map((m) => {
-            const complete = m.progress >= m.target;
+            const complete = isDone(m);
             return (
               <li key={m.id} className="min-w-0">
                 <div className="mb-1.5 flex items-center justify-between gap-2">

@@ -4,7 +4,6 @@ import { Link, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
 import { AGENT_ROLES, type Agent, type Autonomy, type MemoryKind, type RunStatus } from '@frontline/shared';
 import { useAddMemory, useAgents, useCaps, useForgetMemory, useMemory, useRuns, useUpdateAgent } from '../api/client';
-import { nextLevelXp } from '../api/stubs';
 import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
 import { Hero } from '../components/Hero';
@@ -69,7 +68,7 @@ export function AgentDetail() {
           </div>
         </div>
         <div className="w-full max-w-60">
-          <XPBar level={agent.level} xp={agent.xp} next={nextLevelXp(agent.level)} />
+          <XPBar level={agent.level} rank={agent.rank} xp={agent.levelProgress?.xp ?? 0} next={agent.levelProgress?.needed ?? 100} />
         </div>
       </div>
       <Tabs label="Agent" tabs={[...TABS]} value={tab} onChange={go} />

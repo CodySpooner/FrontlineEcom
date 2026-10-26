@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Bell, ChevronDown, Search, type LucideIcon } from 'lucide-react';
-import { useApprovals, useSettings } from '../api/client';
+import { useApprovals, useCommander, useSettings } from '../api/client';
 import { cx } from './ui';
 
 /** UI-05 scene behind the title: who stands in the red light, plus one prop that hints at the page. */
@@ -49,6 +49,7 @@ function Scene({ art }: { art: HeroArt }) {
 export function Hero({ title, subtitle, icon: Icon, art = 'lone', children }: { title: string; subtitle: string; icon?: LucideIcon; art?: HeroArt; children?: ReactNode }) {
   const pending = useApprovals().data?.length ?? 0;
   const profile = useSettings().data?.profile ?? { name: 'Owner', plan: '' };
+  const commander = useCommander().data;
   return (
     <header className="hero-bg relative -mx-[22px] mb-4 min-h-[158px] overflow-hidden border-b border-line px-[22px] pt-5 pb-[26px]">
       <svg className="absolute bottom-0 left-0 h-16 w-full" viewBox="0 0 850 80" preserveAspectRatio="none" aria-hidden="true">
@@ -87,7 +88,10 @@ export function Hero({ title, subtitle, icon: Icon, art = 'lone', children }: { 
             <span className="grid size-8 place-items-center rounded-full border border-red bg-[radial-gradient(circle_at_50%_35%,#45121a,#120507)] font-display text-sm font-bold">{profile.name.charAt(0).toUpperCase()}</span>
             <span>
               <span className="block text-[13px] leading-tight font-semibold">{profile.name}</span>
-              <span className="block text-[11px] text-muted">{profile.plan || 'Owner'}</span>
+              <span className="block text-[11px] text-muted">
+                {profile.plan || 'Owner'}
+                {commander && ` · LV ${commander.level}`}
+              </span>
             </span>
             <ChevronDown className="size-[15px] text-muted" strokeWidth={1.8} />
           </button>

@@ -4,7 +4,6 @@ import { Link, useSearchParams } from 'react-router';
 import { MessageSquare, Plus, Settings2, Users } from 'lucide-react';
 import { AGENT_ROLES, type Agent } from '@frontline/shared';
 import { useAgents, useStores, useUpdateAgent } from '../api/client';
-import { nextLevelXp } from '../api/stubs';
 import { Portrait } from '../components/Art';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
@@ -108,7 +107,7 @@ function AgentCard({ a, onDeploy, deploying, failed }: { a: Agent; onDeploy: () 
           </span>
         )}
       </div>
-      <XPBar level={a.level} xp={a.xp} next={nextLevelXp(a.level)} />
+      <XPBar level={a.level} rank={a.rank} xp={a.levelProgress?.xp ?? 0} next={a.levelProgress?.needed ?? 100} />
       <p className="line-clamp-3 min-h-[3lh] text-xs text-muted">{role.blurb}</p>
       {a.currentTask && !off && (
         <p className="truncate text-xs text-text-2" title={a.currentTask}>

@@ -11,8 +11,10 @@ import type {
   ApprovalDecision,
   ApprovalRequest,
   ApprovalStatus,
+  Commander,
   LiveMessage,
   MemoryInput,
+  Mission,
   Settings,
   Store,
   StoreCaps,
@@ -20,14 +22,8 @@ import type {
   StoreMemory,
 } from '@frontline/shared';
 import { applyRunEvent, isLive } from '../lib/transcript';
-import * as stub from './stubs';
-import type { Mission } from './stubs';
-
-export type { Mission } from './stubs';
-
-async function api<T>(path: string, init?: RequestInit & { fallback?: () => T }): Promise<T> {
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, init);
-  if (r.status === 404 && init?.fallback) return init.fallback(); // ponytail: route not shipped yet → stub (see stubs.ts)
   if (!r.ok) throw new Error(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? `${init?.method ?? 'GET'} ${path} failed (${r.status})`);
   return (await r.json()) as T;
 }
@@ -50,7 +46,8 @@ export const useEvents = () => useQuery({ queryKey: ['events'], queryFn: () => a
 export const useApprovals = (status: ApprovalStatus = 'pending') =>
   useQuery({ queryKey: ['approvals', status], queryFn: () => api<ApprovalRequest[]>(`/api/approvals?status=${status}`) });
 export const useAgents = () => useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/api/agents') });
-export const useMissions = () => useQuery({ queryKey: ['missions'], queryFn: () => api<Mission[]>('/api/missions', { fallback: stub.missions }) });
+export const useMissions = () => useQuery({ queryKey: ['missions'], queryFn: () => api<Mission[]>('/api/missions') });
+export const useCommander = () => useQuery({ queryKey: ['commander'], queryFn: () => api<Commander>('/api/commander') });
 
 export function useDecide() {
   const qc = useQueryClient();
@@ -135,6 +132,11 @@ export function useLive() {
         qc.invalidateQueries({ queryKey: ['agents'] });
         qc.invalidateQueries({ queryKey: ['memory', m.run.storeId] });
       }
+      if (m.type === 'approval' || m.type === 'run' || m.type === 'xp') {
+        qc.invalidateQueries({ queryKey: ['missions'] });
+        qc.invalidateQueries({ queryKey: ['commander'] });
+      }
+      if (m.type === 'xp') qc.invalidateQueries({ queryKey: ['agents'] });
       else if (m.type === 'approval') {
         qc.invalidateQueries({ queryKey: ['agents'] });
         // A decided request lingers ~1s so its "Approved"/"Denied" verdict shows before the row drops.
