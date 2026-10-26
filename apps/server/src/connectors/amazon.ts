@@ -5,6 +5,7 @@ import { adRate, rebuildRevenue, setStoreCurrency, switchToReal } from './common
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
+// An Amazon store also gets its listings as products (Listings Items API, Product Listing role).
 const LWA_TOKEN_URL = 'https://api.amazon.com/auth/o2/token';
 const HOSTS: Record<string, string> = { na: 'sellingpartnerapi-na.amazon.com', eu: 'sellingpartnerapi-eu.amazon.com', fe: 'sellingpartnerapi-fe.amazon.com' };
 /** The Sales API serves up to two years back. */
@@ -13,6 +14,30 @@ const BACKFILL_DAYS = 729;
 const SETTLE_DAYS = 14;
 
 type Fetch = typeof fetch;
+
+interface Listing {
+  sku: string;
+  /** One per marketplace asked for. */
+  summaries?: { itemName?: string; status?: string[]; mainImage?: { link: string } }[];
+  offers?: { offerType: string; price: { amount: string } }[];
+  /** Merchant-fulfilled stock has a quantity; FBA stock isn't reported here. */
+  fulfillmentAvailability?: { quantity?: number }[];
+}
+
+/** The seller's listings in one marketplace, changed since `since` (all of them without it). 20 a page, 5 pages a second. */
+async function listingsOf(fetchFn: Fetch, host: string, token: string, sellerId: string, marketplace: string, since?: string) {
+  const out: Listing[] = [];
+  let pageToken: string | undefined;
+  do {
+    const q = new URLSearchParams({ marketplaceIds: marketplace, includedData: 'summaries,offers,fulfillmentAvailability', pageSize: '20', ...(since ? { lastUpdatedAfter: since } : {}), ...(pageToken ? { pageToken } : {}) });
+    const res = await fetchFn(`https://${host}/listings/2021-08-01/items/${encodeURIComponent(sellerId)}?${q}`, { headers: { 'x-amz-access-token': token } });
+    const body = (await res.json().catch(() => ({}))) as { items?: Listing[]; pagination?: { nextToken?: string }; errors?: { message: string }[] };
+    if (!res.ok) throw new Error(`Amazon listings: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
+    out.push(...(body.items ?? []));
+    pageToken = body.pagination?.nextToken;
+  } while (pageToken);
+  return out;
+}
 
 /** "+02:00" / "-07:00": `timeZone`'s UTC offset at local midnight starting `date`. */
 export function midnightOffset(timeZone: string, date: string) {
@@ -63,6 +88,10 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const currency = body.payload?.find((d) => d.totalSales?.currencyCode)?.totalSales.currencyCode;
     const own = db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform === 'amazon';
     const rate = own ? 1 : await adRate(db, storeId, currency, fetchFn, 'Amazon');
+    // Everything until the store has Amazon products (so adding the Product Listing role later still pulls the whole
+    // catalog), then what changed in the last two days. Without the role, sales sync on and the catalog stays empty.
+    const have = db.prepare("SELECT 1 FROM products WHERE store_id = ? AND id GLOB 'amz-*'").get(storeId);
+    const listings = own ? await listingsOf(fetchFn, host, auth.access_token, creds.sellerId!.trim(), marketplace, have ? `${addDays(today, -2)}T00:00:00Z` : undefined).catch(() => []) : [];
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -78,6 +107,20 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
         up.run(storeId, date, Math.round(Number(d.totalSales?.amount ?? 0) * rate * 100) / 100, d.orderCount ?? 0);
       }
       rebuildRevenue(db, storeId, days);
+      // ponytail: Amazon has no unit costs and FBA stock isn't in this call (that's the FBA Inventory API), so an FBA-only
+      // listing reads as stock not tracked.
+      const prod = db.prepare(
+        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, inventory = excluded.inventory,
+           inventory_tracked = excluded.inventory_tracked, status = excluded.status`,
+      );
+      for (const l of listings) {
+        const s = l.summaries?.[0];
+        const counted = (l.fulfillmentAvailability ?? []).filter((f) => typeof f.quantity === 'number');
+        const price = Number(l.offers?.find((o) => o.offerType === 'B2C')?.price.amount ?? 0);
+        // BUYABLE and/or DISCOVERABLE: live (an out-of-stock listing keeps DISCOVERABLE); neither: not live yet.
+        prod.run(storeId, `amz-${l.sku}`, s?.itemName ?? l.sku, s?.mainImage?.link ?? null, price, counted.reduce((a, f) => a + f.quantity!, 0), counted.length ? 1 : 0, s?.status?.length ? 'active' : 'draft');
+      }
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
   } catch (e) {

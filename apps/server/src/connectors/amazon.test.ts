@@ -10,13 +10,24 @@ const NOW = new Date('2026-10-26T18:00:00Z');
 const REFRESH = 'Atzr|fixture';
 
 /** Fake LWA + Sales API (two days of metrics). */
-function fakeAmazon(status = 200) {
+function fakeAmazon(status = 200, listings = true) {
   const calls: { url: URL; headers: Headers; body: string }[] = [];
   const fetchFn = (async (url: string, init: RequestInit = {}) => {
     const u = new URL(url);
     calls.push({ url: u, headers: new Headers(init.headers), body: String(init.body ?? '') });
     if (u.host === 'api.amazon.com') return Response.json({ access_token: 'Atza|access', expires_in: 3600 });
     if (status !== 200) return Response.json({ errors: [{ code: 'Unauthorized', message: 'Access to requested resource is denied.' }] }, { status });
+    if (u.pathname.startsWith('/listings/')) {
+      if (!listings) return Response.json({ errors: [{ code: 'Unauthorized', message: 'Access to requested resource is denied.' }] }, { status: 403 });
+      const item = (sku: string, status: string[], qty?: number) => ({
+        sku, summaries: [{ marketplaceId: 'ATVPDKIKX0DER', itemName: `Item ${sku}`, status, mainImage: { link: `https://m.media-amazon.com/${sku}.jpg` } }],
+        offers: [{ marketplaceId: 'ATVPDKIKX0DER', offerType: 'B2B', price: { currencyCode: 'USD', amount: '18.00' } }, { marketplaceId: 'ATVPDKIKX0DER', offerType: 'B2C', price: { currencyCode: 'USD', amount: '24.99' } }],
+        fulfillmentAvailability: qty === undefined ? [{ fulfillmentChannelCode: 'AMAZON_NA' }] : [{ fulfillmentChannelCode: 'DEFAULT', quantity: qty }],
+      });
+      return u.searchParams.get('pageToken')
+        ? Response.json({ numberOfResults: 3, items: [item('MUG-1', [])] })
+        : Response.json({ numberOfResults: 3, pagination: { nextToken: 'p2' }, items: [item('BOTTLE-1', ['BUYABLE', 'DISCOVERABLE'], 7), item('TENT-2', ['DISCOVERABLE'])] });
+    }
     const day = (date: string, amount: number, orderCount: number) => ({ interval: `${date}T00:00-05:00--x`, orderCount, unitCount: orderCount, orderItemCount: orderCount, totalSales: { amount, currencyCode: 'USD' } });
     return Response.json({ payload: [day('2026-10-25', 412.5, 9), day('2026-10-26', 80, 2)] });
   }) as typeof fetch;
@@ -85,4 +96,36 @@ test("Amazon as an extra channel is converted into the store's currency; an Amaz
   await syncAmazon(db, key, 'peak', fakeAmazon().fetchFn, NOW);
   expect(db.prepare("SELECT currency FROM stores WHERE id = 'peak'").get()?.currency).toBe('USD');
   expect(db.prepare("SELECT revenue FROM channel_daily WHERE store_id = 'peak' AND date = '2026-10-25'").get()?.revenue).toBe(412.5);
+});
+
+test("an Amazon store's listings become its products: all of them at first, then the last two days' changes", async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  const products = () => db.prepare("SELECT id, title, price, inventory, inventory_tracked AS tracked, status FROM products WHERE store_id = 'peak' AND id GLOB 'amz-*' ORDER BY id").all();
+  const listingCalls = (c: { url: URL }[]) => c.filter((x) => x.url.pathname.startsWith('/listings/')).map((x) => x.url.searchParams);
+
+  // No Product Listing role: sales still sync.
+  await syncAmazon(db, key, 'peak', fakeAmazon(200, false).fetchFn, NOW);
+  expect(db.prepare("SELECT status FROM integrations WHERE id = 'amazon:peak'").get()?.status).toBe('connected');
+  expect(products()).toEqual([]);
+
+  const { fetchFn, calls } = fakeAmazon();
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect(listingCalls(calls).map((q) => [q.get('lastUpdatedAfter'), q.get('pageToken')])).toEqual([[null, null], [null, 'p2']]); // the role came later: the whole catalog
+  expect(calls.find((x) => x.url.pathname.startsWith('/listings/'))!.url.pathname).toBe('/listings/2021-08-01/items/A1SELLER');
+  expect(products()).toEqual([
+    { id: 'amz-BOTTLE-1', title: 'Item BOTTLE-1', price: 24.99, inventory: 7, tracked: 1, status: 'active' },
+    { id: 'amz-MUG-1', title: 'Item MUG-1', price: 24.99, inventory: 0, tracked: 0, status: 'draft' },
+    { id: 'amz-TENT-2', title: 'Item TENT-2', price: 24.99, inventory: 0, tracked: 0, status: 'active' }, // FBA: stock not reported here
+  ]);
+
+  const later = fakeAmazon();
+  await syncAmazon(db, key, 'peak', later.fetchFn, NOW);
+  expect(listingCalls(later.calls)[0]!.get('lastUpdatedAfter')).toBe('2026-10-24T00:00:00Z');
+
+  // Amazon as an extra channel of another platform's store: no listings call.
+  db.prepare("UPDATE stores SET platform = 'shopify' WHERE id = 'peak'").run();
+  const extra = fakeAmazon();
+  await syncAmazon(db, key, 'peak', extra.fetchFn, NOW);
+  expect(listingCalls(extra.calls)).toEqual([]);
 });

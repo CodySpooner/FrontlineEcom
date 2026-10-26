@@ -70,7 +70,7 @@ export function rebuildRevenue(db: Db, storeId: string, dates: Iterable<string>)
 }
 
 /** Each store platform's id prefix. Shopify's ids have none (order names, product numbers); local drafts are research-/approval-. */
-const ID_PREFIX: Partial<Record<IntegrationKind, string>> = { woocommerce: 'woo-', etsy: 'etsy-', tiktok_shop: 'tt-' };
+const ID_PREFIX: Partial<Record<IntegrationKind, string>> = { woocommerce: 'woo-', etsy: 'etsy-', tiktok_shop: 'tt-', amazon: 'amz-' };
 
 /**
  * Drops a platform's synced orders, products and daily channel totals (Amazon) from a real store, with the revenue they
