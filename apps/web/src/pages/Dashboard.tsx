@@ -55,7 +55,7 @@ export function Dashboard() {
 
 function RevenueChart({ s, who }: { s: AnalyticsSummary; who: string }) {
   const daily = s.series.map((d) => ({ date: d.date, value: d.revenue }));
-  return <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} currency={s.currency} label={`Revenue for ${who}, ${PERIOD[s.range]}: ${money(s.totals.revenue, s.currency)} total`} />;
+  return <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} partial currency={s.currency} label={`Revenue for ${who}, ${PERIOD[s.range]}: ${money(s.totals.revenue, s.currency)} total`} />;
 }
 
 function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
@@ -75,7 +75,9 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
         ))}
       </div>
     );
-  const { totals: t, deltas: d, series } = s;
+  const { totals: t, deltas: d } = s;
+  // Sparklines leave out today: a day in progress reads like a crash at the right edge.
+  const series = s.series.slice(0, -1);
   return (
     <div className={cx(grid, 'transition-opacity', q.isPlaceholderData && 'opacity-60')}>
       <Kpi label="Total Revenue" value={money(t.revenue, s.currency)} d={d.revenue} series={series.map((p) => p.revenue)} />

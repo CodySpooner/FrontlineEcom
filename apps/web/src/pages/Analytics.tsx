@@ -93,7 +93,7 @@ function Trend({ s, be }: { s: AnalyticsSummary; be: number }) {
         <span className={cx('text-xs font-semibold tabular-nums', tone)}>{signedPct(d)}</span>
         <span className="text-xs text-muted">vs previous period</span>
       </p>
-      <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} currency={s.currency} label={`${label}, ${PERIOD[s.range]}: ${money(s.totals[metric], s.currency)} total`} />
+      <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} partial currency={s.currency} label={`${label}, ${PERIOD[s.range]}: ${money(s.totals[metric], s.currency)} total`} />
       <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-line pt-3 text-[13px] min-[620px]:grid-cols-4">
         <Stat label="ROAS" value={times(s.totals.roas)} />
         <Stat label="Break-even ROAS" value={Number.isFinite(be) ? times(be) : 'n/a'} />

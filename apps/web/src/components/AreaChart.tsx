@@ -9,8 +9,11 @@ const PR = 12;
 const PT = 14;
 const PB = 28;
 
-/** Single-series money area chart (ported from the mockup): crosshair + tooltip on hover, arrow keys when focused. */
-export function AreaChart({ points, weekly, label, currency }: { points: { date: string; value: number }[]; weekly?: boolean; label: string; currency?: string }) {
+/**
+ * Single-series money area chart (ported from the mockup): crosshair + tooltip on hover, arrow keys when focused.
+ * `partial`: the last point is still in progress (today so far), so its segment is dashed instead of reading as a crash.
+ */
+export function AreaChart({ points, weekly, partial, label, currency }: { points: { date: string; value: number }[]; weekly?: boolean; partial?: boolean; label: string; currency?: string }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
@@ -28,7 +31,8 @@ export function AreaChart({ points, weekly, label, currency }: { points: { date:
   const max = niceMax(Math.max(...points.map((p) => p.value)) * 1.1);
   const x = (j: number) => PL + (j / (n - 1)) * (W - PL - PR);
   const y = (v: number) => PT + (1 - Math.max(0, v) / max) * (H - PT - PB);
-  const line = points.map((p, j) => `${x(j).toFixed(1)},${y(p.value).toFixed(1)}`).join(' ');
+  const xy = points.map((p, j) => `${x(j).toFixed(1)},${y(p.value).toFixed(1)}`);
+  const line = xy.join(' ');
   const i = Math.min(n - 1, Math.max(0, hover ?? n - 3));
   const p = points[i]!;
   const px = x(i);
@@ -95,7 +99,8 @@ export function AreaChart({ points, weekly, label, currency }: { points: { date:
           })}
         </g>
         <polygon points={`${PL},${y(0)} ${line} ${W - PR},${y(0)}`} fill={`url(#area${uid})`} />
-        <polyline points={line} fill="none" stroke="var(--color-red)" strokeWidth="2.2" strokeLinejoin="round" filter={`url(#glow${uid})`} />
+        <polyline points={partial ? xy.slice(0, -1).join(' ') : line} fill="none" stroke="var(--color-red)" strokeWidth="2.2" strokeLinejoin="round" filter={`url(#glow${uid})`} />
+        {partial && <polyline points={xy.slice(-2).join(' ')} fill="none" stroke="var(--color-red)" strokeWidth="2.2" strokeDasharray="4 4" strokeLinecap="round" />}
         <line x1={px} x2={px} y1={PT} y2={H - PB} stroke="rgba(255,255,255,.28)" />
         <circle cx={px} cy={py} r="4.5" className="fill-red stroke-white" strokeWidth="2" />
       </svg>
@@ -106,8 +111,7 @@ export function AreaChart({ points, weekly, label, currency }: { points: { date:
       >
         <b className="block font-display text-base">{money(p.value, currency)}</b>
         <span className="text-[11px] text-muted">
-          {weekly ? 'Week ending ' : ''}
-          {fmtDay(p.date, true)}
+          {partial && i === n - 1 ? (weekly ? 'This week so far' : 'Today so far') : `${weekly ? 'Week ending ' : ''}${fmtDay(p.date, true)}`}
         </span>
       </div>
     </div>
