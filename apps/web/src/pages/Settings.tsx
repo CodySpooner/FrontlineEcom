@@ -148,7 +148,7 @@ export function CapsForm({ caps }: { caps: StoreCaps }) {
   const num = (key: 'adSpendChangePerDay' | 'higgsfieldCreditsPerDay' | 'agentCostPerDay', label: string, help: string, used: number | undefined, fmt: (n: number) => string) => (
     <div className="grid content-start gap-2">
       <Field label={label}>
-        <input type="number" min={0} max={1_000_000} step="any" value={draft[key]} onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.valueAsNumber }))} required className={inputClass} />
+        <input type="number" min={0} max={1_000_000} step="any" value={draft[key]} onChange={(e) => setDraft((d) => ({ ...d, [key]: e.target.valueAsNumber }))} required className={cx(inputClass, 'w-full min-w-0')} />
         <span className="text-[11px] text-muted">{help}</span>
       </Field>
       {used !== undefined && <UsageMeter label={label} used={used} cap={draft[key] || 0} fmt={fmt} />}
