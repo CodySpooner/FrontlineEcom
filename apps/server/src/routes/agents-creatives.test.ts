@@ -1,4 +1,4 @@
-import { demoMedia, fakeEngine, getAgent, listCreatives, runAgent, type FakeStep, type RunInput, type ToolEnv } from '@frontline/agents';
+import { demoMedia, wrap, fakeEngine, getAgent, listCreatives, runAgent, type FakeStep, type RunInput, type ToolEnv } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, Creative } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -79,6 +79,14 @@ test('demo renders escape the text they draw', () => {
   expect(svg).not.toContain('<script>');
   expect(svg).toContain('&#60;script&#62;');
   expect(svg).toContain('width="1080" height="1080"');
+});
+
+test('demo renders wrap long headlines instead of clipping them', () => {
+  expect(wrap('My dog finally drinks on the road', 20)).toEqual(['My dog finally', 'drinks on the road']);
+  expect(wrap('one two three four five six seven', 9, 2)).toEqual(['one two', 'three fo…']);
+  const svg = decodeURIComponent(demoMedia({ name: 'Pawsome', color: '#22c55e' }, { kind: 'video', aspect: '9:16', headline: 'My dog finally drinks on the road', cta: 'Shop now' }));
+  const lines = [...svg.matchAll(/<tspan[^>]*>([^<]*)<\/tspan>/g)].map((m) => m[1]!);
+  expect(lines).toEqual(['My dog finally', 'drinks on the road']);
 });
 
 test('library routes', async () => {

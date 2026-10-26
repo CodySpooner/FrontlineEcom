@@ -293,6 +293,9 @@ export type AspectRatio = '1:1' | '4:5' | '9:16' | '16:9';
  * The creatives library. GET /api/creatives?stores=&kind=&limit= → Creative[] newest first; DELETE /api/creatives/:id → 204.
  * Agents add to it with the create_creative tool (media kinds spend generation credits and need approval; copy doesn't).
  */
+/** Generation credits per creative kind, counted against the store's `higgsfieldCreditsPerDay` cap. */
+export const CREDITS: Record<CreativeKind, number> = { image: 2, video: 20, ugc: 40, copy: 0 };
+
 export interface Creative {
   id: string;
   storeId: string;
