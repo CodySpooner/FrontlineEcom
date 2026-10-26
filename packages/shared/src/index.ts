@@ -549,6 +549,21 @@ export interface IntegrationField {
   /** Secret fields are encrypted at rest and never returned by the API. */
   secret: boolean;
   placeholder?: string;
+  /** Filled by the Connect button (OAuth); the owner can still paste it. Leave it out of POST /api/integrations/oauth/start. */
+  oauth?: boolean;
+}
+
+/**
+ * POST /api/integrations/oauth/start { kind, storeId?, values } → OAuthStart, where `values` are the fields without
+ * `oauth`. Open `url` in the browser. finish 'loopback': the browser comes back to the API, which saves the integration
+ * (poll GET /api/integrations). finish 'paste': the browser lands on `redirectUri` (a page that won't load), and the owner
+ * pastes that full address into POST /api/integrations/oauth/finish { url } → Integration (400 { error } otherwise).
+ * GET /api/integrations/oauth → IntegrationKind[] that support Connect.
+ */
+export interface OAuthStart {
+  url: string;
+  finish: 'loopback' | 'paste';
+  redirectUri: string;
 }
 
 /** Catalog for the Integrations screen: every field listed is required. `perStore` = connected per store (else global). */
@@ -563,12 +578,12 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'accessToken', label: 'Access token', secret: true },
     { key: 'refreshToken', label: 'Refresh token', secret: true },
   ] },
-  etsy: { name: 'Etsy', category: 'platform', perStore: true, help: 'etsy.com/developers → Create a new app → copy the keystring and shared secret. Authorize your shop with OAuth for the scopes transactions_r listings_r → paste the access token and refresh token. The shop ID is in the getShop API response or your shop URL tools. The app renews the access token itself (it lasts an hour).', fields: [
+  etsy: { name: 'Etsy', category: 'platform', perStore: true, help: 'etsy.com/developers → Create a new app → copy the keystring and shared secret, and add https://localhost/frontline-oauth as a callback URL. Enter them with your shop ID, press Connect, approve in the browser, then paste the address the browser lands on (the page itself will not load). The app renews the access token itself (it lasts an hour).', fields: [
     { key: 'shopId', label: 'Shop ID', secret: false },
     { key: 'apiKey', label: 'API keystring', secret: true },
     { key: 'sharedSecret', label: 'Shared secret', secret: true },
-    { key: 'accessToken', label: 'OAuth access token', secret: true },
-    { key: 'refreshToken', label: 'OAuth refresh token', secret: true },
+    { key: 'accessToken', label: 'OAuth access token', secret: true, oauth: true },
+    { key: 'refreshToken', label: 'OAuth refresh token', secret: true, oauth: true },
   ] },
   amazon: { name: 'Amazon SP-API', category: 'platform', perStore: true, help: 'Seller Central → Apps and Services → Develop Apps → add a private app with the Selling Partner Insights role → copy the LWA client ID and secret → Authorize app → copy the refresh token. Region: na (US, CA, MX, BR), eu (Europe, UK, India, Middle East) or fe (Japan, Australia, Singapore). Marketplace ID, e.g. ATVPDKIKX0DER for amazon.com. Daily sales and order counts only for now.', fields: [
     { key: 'sellerId', label: 'Seller ID', secret: false },
@@ -587,12 +602,12 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'adAccountId', label: 'Ad account ID', secret: false, placeholder: 'act_…' },
     { key: 'accessToken', label: 'System user access token', secret: true },
   ] },
-  google_ads: { name: 'Google Ads', category: 'ads', perStore: true, help: 'Google Ads → Tools → API Center: apply for a developer token. Google Cloud console → enable the Google Ads API → Credentials → OAuth client ID (Desktop app) → client ID + secret. Get a refresh token for the https://www.googleapis.com/auth/adwords scope with that client (e.g. OAuth Playground → use your own credentials). Sign in with a Google account that has direct access to the ad account. Customer ID is top right in Google Ads.', fields: [
+  google_ads: { name: 'Google Ads', category: 'ads', perStore: true, help: 'Google Ads → Tools → API Center: apply for a developer token. Google Cloud console → enable the Google Ads API → Credentials → OAuth client ID (Desktop app) → client ID + secret. Enter them and press Connect, then sign in with a Google account that has direct access to the ad account. Customer ID is top right in Google Ads.', fields: [
     { key: 'customerId', label: 'Customer ID', secret: false, placeholder: '123-456-7890' },
     { key: 'clientId', label: 'OAuth client ID', secret: false },
     { key: 'clientSecret', label: 'OAuth client secret', secret: true },
     { key: 'developerToken', label: 'Developer token', secret: true },
-    { key: 'refreshToken', label: 'Refresh token', secret: true },
+    { key: 'refreshToken', label: 'Refresh token', secret: true, oauth: true },
   ] },
   tiktok_ads: { name: 'TikTok Ads', category: 'ads', perStore: true, help: 'TikTok API for Business (business-api.tiktok.com) → My apps → create a developer app with Ads Management and Reporting read scopes → authorize it for your ad account → copy the long-lived access token. Advertiser ID is in TikTok Ads Manager next to the account name.', fields: [
     { key: 'advertiserId', label: 'Advertiser ID', secret: false },

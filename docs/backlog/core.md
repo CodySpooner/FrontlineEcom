@@ -62,6 +62,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-22 (1/2): OAuth Connect for Google Ads (PKCE, loopback callback `/api/oauth/callback`) and Etsy (PKCE, paste flow, since Etsy only redirects to https://). Covers `POST /api/integrations/oauth/start` and `/finish`, `GET /api/integrations/oauth`, and `IntegrationField.oauth` marks token fields. States are single-use with a 15 min expiry, and provider text is HTML-escaped
 - 2026-10-26 — CORE-21 `GET /api/health` → `Health` (`ok`, `uptimeSec`, per-connector status / error / syncedAt, no secrets) + JSON-lines log at `<data dir>/logs/api.log` (start, each sync with duration and outcome, crashes; one rotated copy at 5 MB)
 - 2026-10-26 — CORE-19 `pnpm package` → `apps/desktop/release/Frontline Ecom Setup 0.1.0.exe` (NSIS, per-user, 224 MB). The API is bundled to one file by `scripts/stage.mjs`, with the Agent SDK's native `claude.exe` beside it, the web build, and the agent playbooks/packs under resources/. Brand bolt icon (`build/icon.svg`, render with `pnpm --filter @frontline/desktop icon`). Verified: the unpacked build runs the dashboard. Unsigned, so SmartScreen warns until a code-signing cert is set (`CSC_LINK`)
 - 2026-10-26 — Inbox (ui): demo orders were seeded across the UTC day, so some were in the future. They now fall within the local day and stop at the current time
