@@ -93,6 +93,8 @@ async function start() {
   });
   await win.loadURL(url);
   checkForUpdates();
+  // Settings' "Open folder": only the app's own data folder, so the page can't have any other path opened.
+  ipcMain.handle('data:open', () => shell.openPath(join(app.getPath('userData'), 'data')));
 
   tray = new Tray(nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 }));
   tray.setToolTip('Frontline Ecom');

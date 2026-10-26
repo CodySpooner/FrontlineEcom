@@ -1,5 +1,5 @@
-// The window has no Node access; this bridge exposes the one thing only the desktop shell knows: a downloaded update
-// (the web app's UpdatePrompt shows it bottom-left). Sandboxed preload, so it's bundled to CommonJS (dist/preload.cjs).
+// The window has no Node access; this bridge exposes what only the desktop shell can do: a downloaded update (the web
+// app's UpdatePrompt shows it bottom-left) and opening the data folder. Sandboxed preload, so it's bundled to CommonJS (dist/preload.cjs).
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('desktop', {
@@ -13,4 +13,6 @@ contextBridge.exposeInMainWorld('desktop', {
   },
   /** Quits, installs the update silently and starts the new version. */
   installUpdate: (): Promise<void> => ipcRenderer.invoke('update:install'),
+  /** Opens the data folder (database, logs, backups) in Explorer; resolves to '' or Windows' error text. */
+  openDataFolder: (): Promise<string> => ipcRenderer.invoke('data:open'),
 });
