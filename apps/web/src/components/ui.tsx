@@ -61,6 +61,14 @@ export function Chip({ on, color, className, children, ...p }: ButtonHTMLAttribu
 
 export const inputClass = 'rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] text-text placeholder:text-muted focus:border-red/60 focus:outline-none';
 
+/** A form control with its visible label above it. */
+export const Field = ({ label, children, className }: { label: string; children: ReactNode; className?: string }) => (
+  <label className={cx('grid gap-1 text-xs text-muted', className)}>
+    {label}
+    {children}
+  </label>
+);
+
 /** A checkbox drawn as a toggle. Put it inside the <label> that names it. */
 export function Switch(p: Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'role' | 'className'>) {
   return (

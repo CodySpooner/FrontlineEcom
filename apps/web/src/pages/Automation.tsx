@@ -1,12 +1,12 @@
 // UI-14 Automation: rules (schedule or metric trigger → agent task, approval policy, daily cap) and the log of what they did.
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { CalendarClock, Plus, TrendingDown, Zap } from 'lucide-react';
 import { AGENT_ROLES, type AgentRole, type AutomationRule, type AutomationRunStatus, type AutomationTrigger, type MetricTotals } from '@frontline/shared';
 import { useAutomationActions, useAutomationRuns, useAutomations } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, cx, Dialog, EmptyState, ErrorState, inputClass, LoadingState, Panel, Segmented, Switch } from '../components/ui';
+import { Badge, Button, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, Segmented, Switch } from '../components/ui';
 import { describeTrigger, METRICS, parseCron, toCron, WEEKDAYS, type Schedule } from '../lib/automation';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
@@ -179,13 +179,6 @@ function RunLog({ rules }: { rules: AutomationRule[] }) {
     </Panel>
   );
 }
-
-const Field = ({ label, children, className }: { label: string; children: ReactNode; className?: string }) => (
-  <label className={cx('grid gap-1 text-xs text-muted', className)}>
-    {label}
-    {children}
-  </label>
-);
 
 function RuleEditor({ rule, onDone }: { rule?: AutomationRule; onDone: () => void }) {
   const { ids, stores } = useStoreSelection();

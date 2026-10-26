@@ -22,6 +22,8 @@ import type {
   Creative,
   CreativeKind,
   FulfillmentStatus,
+  Integration,
+  IntegrationInput,
   LiveMessage,
   MemoryInput,
   Mission,
@@ -196,6 +198,18 @@ export const useOrders = (storeIds: string[], o: OrderQuery) =>
       api<Page<Order>>(`/api/orders?stores=${storeIds.join(',')}&${new URLSearchParams(Object.entries(o).flatMap(([k, v]) => (v === undefined || v === '' ? [] : [[k, String(v)]])))}`),
     placeholderData: keepPreviousData,
   });
+
+// ponytail: polls so a sync result (connected → error) shows up; push it over the live socket if this ever gets chatty.
+export const useIntegrations = () => useQuery({ queryKey: ['integrations'], queryFn: () => api<Integration[]>('/api/integrations'), refetchInterval: 10_000 });
+
+export function useIntegrationActions() {
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ['integrations'] });
+  return {
+    save: useMutation({ mutationFn: (i: IntegrationInput) => api<Integration>('/api/integrations', json('PUT', i)), onSuccess: refresh }),
+    remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/integrations/${id}`, { method: 'DELETE' }), onSuccess: refresh }),
+  };
+}
 
 export const useAutomations = () => useQuery({ queryKey: ['automations'], queryFn: () => api<AutomationRule[]>('/api/automations') });
 export const useAutomationRuns = () => useQuery({ queryKey: ['automation-runs'], queryFn: () => api<AutomationRun[]>('/api/automations/runs?limit=50') });
