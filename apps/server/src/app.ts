@@ -58,6 +58,10 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const origin = c.req.header('origin');
       if (!isLocal(c.req.url) || (origin !== undefined && !sameHost(origin, c.req.url))) return c.json({ error: 'forbidden' }, 403);
       await next();
+      // Never inside another site's frame: a hidden frame of the app (same origin, so the check above passes) could get
+      // the owner to click Approve. The app's own previews are srcdoc frames, which this doesn't touch.
+      c.res.headers.set('Content-Security-Policy', "frame-ancestors 'none'");
+      c.res.headers.set('X-Frame-Options', 'DENY');
     })
     .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))
