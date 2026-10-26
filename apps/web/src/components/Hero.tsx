@@ -70,10 +70,16 @@ export function Hero({ title, subtitle, icon: Icon, art = 'lone', children }: { 
           {children}
         </div>
         <div className="flex items-center gap-3">
-          <button type="button" onClick={() => window.dispatchEvent(new Event('frontline:ask'))} className="glass hidden w-[200px] cursor-pointer items-center gap-2.5 rounded-[11px] px-3 py-[9px] text-[13px] text-muted transition hover:text-text min-[900px]:flex min-[1100px]:w-[280px]">
-            <Search className="size-[15px]" strokeWidth={1.8} />
-            Ask AI anything…
-            <kbd className="ml-auto rounded border border-line-2 px-1.5 font-sans text-[11px] text-muted">Ctrl K</kbd>
+          {/* Below 900px it shrinks to an icon button the size of the bell. */}
+          <button
+            type="button"
+            aria-label="Ask AI anything"
+            onClick={() => window.dispatchEvent(new Event('frontline:ask'))}
+            className="glass grid size-10 cursor-pointer place-items-center rounded-[11px] text-muted transition hover:text-text min-[900px]:flex min-[900px]:h-auto min-[900px]:w-[200px] min-[900px]:gap-2.5 min-[900px]:px-3 min-[900px]:py-[9px] min-[900px]:text-[13px] min-[1100px]:w-[280px]"
+          >
+            <Search className="size-[18px] min-[900px]:size-[15px]" strokeWidth={1.8} />
+            <span className="hidden min-[900px]:inline">Ask AI anything…</span>
+            <kbd className="ml-auto hidden rounded border border-line-2 px-1.5 font-sans text-[11px] text-muted min-[900px]:inline">Ctrl K</kbd>
           </button>
           <NotificationBell />
           <CommanderChip />

@@ -94,7 +94,7 @@ Orca's browser against the reference before ticking it.
 - [ ] UI-25 Today's usage vs caps (DESIGN §7 "cost and credit accounting per store with daily caps"): next to each cap in
       Settings › Caps a meter "used today / cap" (AI $, generation credits, ad budget added); a one-line "AI budget today" on
       the agent page. Needs `GET /api/usage` (requested from agents).
-- [ ] UI-26 Narrow window: every page at 800px in Orca. No horizontal page scroll, tables scroll inside their panel, no
+- [x] UI-26 Narrow window: every page at 800px in Orca. No horizontal page scroll, tables scroll inside their panel, no
       clipped buttons or overlapping hero art.
 - [ ] UI-27 Component tests: onboarding (first run shows; Explore the demo remembers; add store → squad → that store
       selected) and Ask palette (Ctrl+K opens; arrows + Enter open a page; a question starts a Market Analyst run). Stub all fetches.
@@ -143,3 +143,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-22: Polish — measured token contrast (text/text-2/muted/red/good all ≥4.5 on every surface); white on #ff2a3a was 3.7:1, so primary buttons, the active segment, the bell count and the AI-score badge now use red-fill #e01e2d (4.8:1); every click target is a button/link with the global focus ring; checked 1440/1920 in Chrome and 800 in Orca
 - 2026-10-26 — UI-23: Tests — @testing-library/react + jsdom (per-file `@vitest-environment jsdom`, no root config change); approvals flow component test (shows kind/reason/$ at stake, Approve posts the verdict and shows it, a failed verdict alerts and restores the buttons). KPI formatting (format.test), store filter (StoreFilter.test) and chart range bucketing (chart.test) were already covered
 - 2026-10-26 — Inbox (core): Restore on the Settings backups list: inline confirm ("Restore the backup from <date>? Your current data is backed up first."), POST restore, wait for /api/health, reload; server errors shown inline; removed the copy-the-file instructions
+- 2026-10-26 — UI-26: Narrow window — measured all 13 pages at 800px in Orca: no page-level horizontal scroll, wide tables scroll in their panel. Fixed: the Ask AI search is an icon button (bell-sized) below 900px instead of disappearing; the Dashboard agents strip keeps one row of ≥125px cards (extras clipped, least urgent last) and "Needs you" no longer wraps
