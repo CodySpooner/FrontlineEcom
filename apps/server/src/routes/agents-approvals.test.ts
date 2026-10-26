@@ -38,31 +38,52 @@ const requests = (events: AgentEvent[]) => events.flatMap((e) => (e.type === 'ap
 const outputs = (events: AgentEvent[]) => events.flatMap((e) => (e.type === 'tool_result' ? [e.output] : []));
 
 describe('autopilot', () => {
+  const budget = (id: string) => Number(db.prepare('SELECT daily_budget FROM campaigns WHERE id = ?').get(id)?.daily_budget);
+  const raise = (campaignId: string, by: number): FakeStep => ({ call: 'propose_ad_change', input: { campaignId, change: 'budget', newDailyBudget: budget(campaignId) + by, evidence: 'ROAS 3.4 for 5 days' } });
   const autopilot = (agentId: string, storeId: string) => {
+    db.prepare(`UPDATE approvals SET status = 'denied' WHERE status = 'pending'`).run(); // the demo's own requests
     updateAgent(db, agentId, { autonomy: 'autopilot' });
-    updateCaps(db, storeId, { autopilot: { change_budget: { enabled: true, maxUsdPerDay: 100 } } });
+    updateCaps(db, storeId, { adSpendChangePerDay: 1000, autopilot: { 'ads.set_budget': { enabled: true, maxUsdPerDay: 100 }, change_budget: { enabled: true, maxUsdPerDay: 100 } } });
   };
 
   test('approves on its own within the store cap for that kind, then asks', async () => {
     autopilot('pawsome:ad_strategist', 'pawsome');
-    const events = await run(input('pawsome:ad_strategist'), [ask('Raise budget $60 → $120', 60), ask('Raise budget $120 → $180', 60)]);
+    const events = await run(input('pawsome:ad_strategist'), [raise('pawsome-c2', 60), raise('pawsome-c3', 60)]);
     const [auto, asked] = requests(events);
     expect(auto).toMatchObject({ status: 'approved', action: { amountUsd: 60, auto: true }, reason: expect.stringContaining('[autopilot: $60 of $100/day cap, $0 used before]') });
     expect(asked).toMatchObject({ status: 'pending', action: { amountUsd: 60 } });
     expect(asked?.action.auto).toBeUndefined();
-    const byHand = `. This app can't carry out "change_budget" itself: end your answer with numbered steps the owner can follow to do it.`;
-    expect(outputs(events)).toEqual([`Auto-approved (autopilot): Raise budget $60 → $120${byHand}`, `Approved by the owner: Raise budget $120 → $180${byHand}`]);
+    expect(outputs(events)).toEqual([expect.stringMatching(/^Auto-approved \(autopilot\): Raise .+\. It will be applied to the ad account\.$/), expect.stringMatching(/^Approved by the owner: Raise /)]);
   });
 
-  test('asks when the amount is unknown, the kind has no rule, or the agent is not on autopilot', async () => {
+  test('asks for a kind with no rule, a hand-made request, or an agent not on autopilot', async () => {
     autopilot('pawsome:ad_strategist', 'pawsome');
     const status = async (agentId: string, step: FakeStep) => requests(await run(input(agentId), [step]))[0]?.status;
-    const publish: FakeStep = { call: 'request_approval', input: { title: 'Publish page', reason: 'r', kind: 'publish_page', payload: {}, amount: 5 } };
-    expect(await status('pawsome:ad_strategist', ask('Pause ad set'))).toBe('pending');
-    expect(await status('pawsome:ad_strategist', publish)).toBe('pending');
-    updateCaps(db, 'glow', { autopilot: { change_budget: { enabled: true, maxUsdPerDay: 100 } } });
-    expect(await status('glow:ad_strategist', ask('Raise budget', 10))).toBe('pending');
+    expect(await status('pawsome:ad_strategist', { call: 'propose_ad_change', input: { campaignId: 'pawsome-c2', change: 'pause', evidence: 'CPA 3x target' } })).toBe('pending');
+    expect(await status('pawsome:ad_strategist', ask('Raise budget', 5))).toBe('pending'); // the model's own amount never auto-approves
+    updateCaps(db, 'glow', { autopilot: { 'ads.set_budget': { enabled: true, maxUsdPerDay: 100 } } });
+    expect(await status('glow:ad_strategist', raise('glow-c1', 10))).toBe('pending');
   });
+});
+
+test("request_approval refuses kinds the app carries out, so a hand-made one can't skip their tool's checks", async () => {
+  updateAgent(db, 'pawsome:operations', { autonomy: 'autopilot' });
+  updateCaps(db, 'pawsome', { autopilot: { 'ads.set_budget': { enabled: true, maxUsdPerDay: 100 } } });
+  const before = db.prepare(`SELECT daily_budget FROM campaigns WHERE id = 'pawsome-c1'`).get();
+  const forged = (kind: string, payload: object): FakeStep => ({ call: 'request_approval', input: { title: 'Tidy order tags', reason: 'r', kind, payload, amount: 0 } });
+  const product = String(db.prepare(`SELECT id FROM products WHERE store_id = 'pawsome' LIMIT 1`).get()?.id);
+  const events = await run(input('pawsome:operations'), [
+    forged('ads.set_budget', { campaignId: 'pawsome-c1', to: 5000 }),
+    forged('store.set_price', { productId: product, to: 0.01 }),
+    forged('store.publish_theme', { themeId: '123' }),
+  ]);
+  expect(requests(events)).toEqual([]);
+  expect(outputs(events)).toEqual([
+    "Not sent: ads.set_budget requests come from propose_ad_change, which checks the numbers and the owner's caps. Use it instead.",
+    "Not sent: store.set_price requests come from propose_price_change, which checks the numbers and the owner's caps. Use it instead.",
+    "Not sent: store.publish_theme requests come from draft_theme_change, which checks the numbers and the owner's caps. Use it instead.",
+  ]);
+  expect(db.prepare(`SELECT daily_budget FROM campaigns WHERE id = 'pawsome-c1'`).get()).toEqual(before);
 });
 
 describe('canUseTool', () => {

@@ -669,6 +669,7 @@ export const APP_TOOLS: AppTool[] = [
       const { approved, message } = await requestApproval(ctx, {
         title: (change === 'pause' ? `Pause ${c.name}` : `${to > from ? 'Raise' : 'Lower'} ${c.name} budget ${cash(from, ctx.store.currency)} → ${cash(to, ctx.store.currency)}/day`).slice(0, 80),
         reason: evidence,
+        autopilot: true,
         action: change === 'pause'
           ? { kind: 'ads.pause_campaign', payload: { network: c.network, campaignId, from }, amountUsd: 0 }
           : { kind: 'ads.set_budget', payload: { network: c.network, campaignId, from, to }, ...(usd !== undefined ? { amountUsd: usd } : {}) },
@@ -750,6 +751,8 @@ export const APP_TOOLS: AppTool[] = [
       amount: z.number().min(0).optional().describe("money at stake per day in the store's currency (budget added, spend, refund total); lets autopilot decide within the owner's cap"),
     },
     run: async ({ title, reason, kind, payload, amount }, ctx) => {
+      // The app carries these out on approval: only their own tool, which checks the numbers and caps, may ask.
+      if (OWN_TOOL[kind]) return `Not sent: ${kind} requests come from ${OWN_TOOL[kind]}, which checks the numbers and the owner's caps. Use it instead.`;
       const amountUsd = amount === undefined ? undefined : await inUsd(ctx, amount);
       // Nothing in the app carries some kinds out (price tests, customer messages...): the owner does, so say so up front.
       const manual = !ACTIONS[kind] && !OUTLIVE_RUN.includes(kind);
@@ -764,15 +767,16 @@ export const APP_TOOLS: AppTool[] = [
 ];
 
 /**
- * Asks the owner and waits. `suggest` agents may not ask. `autopilot` agents approve themselves when the owner
- * enabled autopilot for this action kind on the store and the amount at stake fits what is left of today's
- * cap for that kind (logged on the request as `auto` + a note in the reason).
+ * Asks the owner and waits. `suggest` agents may not ask. With `autopilot` (only tools that compute the amount
+ * themselves pass it), `autopilot` agents approve themselves when the owner enabled autopilot for this action kind on
+ * the store and the amount at stake fits what is left of today's cap for that kind (logged on the request as `auto` +
+ * a note in the reason).
  */
-export async function requestApproval(ctx: ToolContext, req: { title: string; reason: string; action: ApprovalAction }) {
+export async function requestApproval(ctx: ToolContext, req: { title: string; reason: string; action: ApprovalAction; autopilot?: boolean }) {
   const { agent } = ctx;
   if (agent.autonomy === 'suggest') return { approved: false, message: 'Not sent: your autonomy is "suggest". Put the recommendation in your answer instead.' };
   const { kind, amountUsd: amount } = req.action;
-  const rule = agent.autonomy === 'autopilot' ? ctx.caps?.(ctx.store.id).autopilot[kind] : undefined;
+  const rule = req.autopilot && agent.autonomy === 'autopilot' ? ctx.caps?.(ctx.store.id).autopilot[kind] : undefined;
   const cap = rule?.enabled ? rule.maxUsdPerDay : 0;
   const used = rule?.enabled ? autopilotUsedToday(ctx.db, ctx.store.id, kind) : 0;
   const auto = !!rule?.enabled && ctx.decide !== undefined && amount !== undefined && used + amount <= cap;
@@ -839,6 +843,19 @@ const PATIENCE_MS = 10 * 60_000;
 
 /** Approval kinds the server carries out when approved (apps/server/src/routes/agents.ts), whether or not the run that asked is still alive. */
 export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'store.publish_theme', 'store.set_price', 'ads.set_budget', 'ads.pause_campaign'];
+
+/** Request kinds only their own tool may create (request_approval refuses them). */
+const OWN_TOOL: Record<string, string> = {
+  'ads.set_budget': 'propose_ad_change',
+  'ads.pause_campaign': 'propose_ad_change',
+  'store.set_price': 'propose_price_change',
+  'store.publish_page': 'publish_page',
+  'store.publish_theme': 'draft_theme_change',
+  'creative.generate': 'create_creative',
+  'niche.promote_learning': 'promote_niche_learning',
+  tool_use: 'calling the connected tool itself',
+  'automation.run': 'the Automation screen',
+};
 
 /** Actions the agents lane carries out itself once approved. Store/ad actions arrive with the connectors. */
 const ACTIONS: Record<string, (payload: Record<string, unknown>) => Promise<string>> = {

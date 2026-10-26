@@ -69,7 +69,7 @@ export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) 
   const p = (a.action.payload ?? {}) as { network?: unknown; campaignId?: unknown; from?: unknown; to?: unknown };
   const store = getStore(db, a.storeId);
   const pause = a.action.kind === 'ads.pause_campaign';
-  if (!store || typeof p.campaignId !== 'string' || (!pause && !(typeof p.to === 'number' && p.to >= 1))) return;
+  if (!store || typeof p.campaignId !== 'string' || (!pause && !(typeof p.to === 'number' && p.to >= 1 && typeof p.from === 'number'))) return;
   const c = db.prepare('SELECT network, daily_budget, status FROM campaigns WHERE id = ? AND store_id = ?').get(p.campaignId, store.id);
   const network = (typeof p.network === 'string' ? p.network : c?.network) as AdNetwork;
   // Nothing changes (already off, refused, failed): `not-applied` keeps checkAdOutcomes from scoring it.
