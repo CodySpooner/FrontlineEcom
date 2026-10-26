@@ -78,9 +78,12 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
           if ((builtins as string[]).includes(toolName) || toolName.startsWith('mcp__frontline__')) return { behavior: 'allow', updatedInput: toolInput };
           if (!ctx) return { behavior: 'deny', message: 'Tool not available in this run.' };
           if (isReadOnly(toolName)) return { behavior: 'allow', updatedInput: toolInput };
+          if (movesSpend(toolName, toolInput)) {
+            return { behavior: 'deny', message: "Not allowed: budget, bid and status changes on an ad account go through propose_ad_change (the Ad Strategist's), where the owner's caps apply." };
+          }
           const { approved, message } = await requestApproval(ctx, {
             title: `Allow ${toolName.replace(/^mcp__/, '').replace('__', ': ')}`,
-            reason: JSON.stringify(toolInput).slice(0, 400),
+            reason: JSON.stringify(toolInput).slice(0, 2000),
             action: { kind: 'tool_use', payload: { tool: toolName, input: toolInput } },
           });
           return approved ? { behavior: 'allow', updatedInput: toolInput } : { behavior: 'deny', message };
@@ -152,3 +155,7 @@ function resultText(content: unknown): string {
 // doesn't read like a read goes to the owner, so a misnamed write still asks.
 const READ_VERBS = /^(get|list|search|read|fetch|describe|lookup|find)(_|$)/;
 export const isReadOnly = (toolName: string) => toolName.startsWith('mcp__') && READ_VERBS.test(toolName.split('__').at(-1) ?? '');
+
+/** A write on an ad server (mcp__meta_ads__…) whose name or input keys touch budget, bid, spend or status. */
+export const movesSpend = (toolName: string, input: unknown) =>
+  /^mcp__\w+_ads__/.test(toolName) && (/budget|bid|spend|status|pause|resume|activate/i.test(toolName.split('__').at(-1)!) || /"[^"]*(budget|bid|spend|status)[^"]*"\s*:/i.test(JSON.stringify(input)));

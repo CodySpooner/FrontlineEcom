@@ -102,9 +102,9 @@ test("request_approval refuses kinds the app carries out, so a hand-made one can
 
 describe('canUseTool', () => {
   /** A fake SDK that asks permission for one unlisted tool, the way the CLI does, and reports the answer. */
-  const askingQuery: NonNullable<ClaudeEngineOptions['query']> = (params) =>
+  const askingFor = (tool: string, toolInput: Record<string, unknown>): NonNullable<ClaudeEngineOptions['query']> => (params) =>
     (async function* () {
-      const decision = await params.options.canUseTool!('mcp__shopify__update_product', { id: 'p1', price: 29 }, { signal: new AbortController().signal } as never);
+      const decision = await params.options.canUseTool!(tool, toolInput, { signal: new AbortController().signal } as never);
       yield { type: 'stream_event', parent_tool_use_id: null, event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: decision?.behavior } } } as never;
       yield { type: 'result', subtype: 'success', is_error: false, result: '', session_id: 's', total_cost_usd: 0, usage: { input_tokens: 0, output_tokens: 0, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 } } as never;
     })();
@@ -115,7 +115,7 @@ describe('canUseTool', () => {
   ] as const)('owner %s → %s', async (decision, behavior) => {
     const events: AgentEvent[] = [];
     let request: ApprovalRequest | undefined;
-    for await (const e of runAgent(input('glow:store_developer'), claudeEngine({ query: askingQuery }))) {
+    for await (const e of runAgent(input('glow:store_developer'), claudeEngine({ query: askingFor('mcp__shopify__update_product', { id: 'p1', price: 29 }) }))) {
       events.push(e);
       if (e.type === 'approval_request') {
         request = e.approval;
@@ -124,6 +124,17 @@ describe('canUseTool', () => {
     }
     expect(request).toMatchObject({ title: 'Allow shopify: update_product', action: { kind: 'tool_use', payload: { tool: 'mcp__shopify__update_product' } } });
     expect(events.find((e) => e.type === 'text_delta')).toEqual({ type: 'text_delta', text: behavior });
+  });
+
+  test.each([
+    ['mcp__meta_ads__update_adset', { adset_id: '1', daily_budget: 90000 }],
+    ['mcp__meta_ads__update_campaign', { id: '2', status: 'ACTIVE' }],
+    ['mcp__meta_ads__set_bid', { id: '3', amount: 4 }],
+  ])('%s is refused without asking: spend changes go through propose_ad_change', async (tool, toolInput) => {
+    const events: AgentEvent[] = [];
+    for await (const e of runAgent(input('glow:ad_strategist'), claudeEngine({ query: askingFor(tool, toolInput) }))) events.push(e);
+    expect(requests(events)).toEqual([]);
+    expect(events.find((e) => e.type === 'text_delta')).toEqual({ type: 'text_delta', text: 'deny' });
   });
 });
 
