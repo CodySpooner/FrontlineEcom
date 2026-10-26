@@ -464,3 +464,42 @@ test("a failed (FATAL) traffic report isn't taken as collected, and sessions are
   await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-28T18:00:00Z')); // collected on the 27th: from 3 days before
   expect(posts.map((p) => p.dataStartTime)).toEqual(['2024-10-27', '2024-10-28', '2026-10-24']);
 });
+
+test("refunds of an Amazon store's own orders come off the order's day (Finances API); a re-read doesn't count them twice", async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  const finances: URLSearchParams[] = [];
+  const base = fakeAmazon().fetchFn;
+  const refund = (orderId: string, adjustment: string, principal: number) => ({
+    AmazonOrderId: orderId, PostedDate: '2026-10-26T10:00:00Z', MarketplaceName: 'Amazon.com',
+    ShipmentItemAdjustmentList: [{ SellerSKU: 'MUG-1', OrderAdjustmentItemId: adjustment, ItemChargeAdjustmentList: [
+      { ChargeType: 'Principal', ChargeAmount: { CurrencyCode: 'USD', CurrencyAmount: principal } },
+      { ChargeType: 'Tax', ChargeAmount: { CurrencyCode: 'USD', CurrencyAmount: -1 } }, // tax isn't in Amazon's sales total
+    ] }],
+  });
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (u.pathname === '/orders/2026-01-01/orders') {
+      return Response.json({ orders: [{ orderId: '111-1', createdTime: '2026-10-25T15:00:00Z', fulfillment: { fulfillmentStatus: 'SHIPPED' }, proceeds: { grandTotal: { amount: '30.00' } } }], lastUpdatedBefore: '2026-10-26T17:58:00Z' });
+    }
+    if (u.pathname !== '/finances/v0/financialEvents') return base(url, init);
+    finances.push(u.searchParams);
+    return u.searchParams.get('NextToken')
+      ? Response.json({ payload: { FinancialEvents: { RefundEventList: [refund('111-1', 'adj-2', -5)], ShipmentEventList: [{ AmazonOrderId: '111-1' }] } } })
+      : Response.json({ payload: { NextToken: 'f2', FinancialEvents: { RefundEventList: [refund('111-1', 'adj-1', -12.5), refund('999-9', 'adj-9', -40)] } } }); // 999-9: not this store's
+  }) as typeof fetch;
+  const revenue = () => db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'peak' AND date = '2026-10-25'").get()!.revenue;
+
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect([...finances[0]!.entries()]).toEqual([['PostedAfter', '2026-09-26T18:00:00.000Z'], ['PostedBefore', '2026-10-26T17:55:00.000Z'], ['MaxResultsPerPage', '100']]);
+  expect(finances[1]!.get('NextToken')).toBe('f2'); // with the same window
+  expect(finances[1]!.get('PostedBefore')).toBe('2026-10-26T17:55:00.000Z');
+  expect(revenue()).toBe(395); // 412.50 in sales, 17.50 refunded
+
+  await syncAmazon(db, key, 'peak', fetchFn, new Date(NOW.getTime() + 10 * 60_000));
+  expect(finances).toHaveLength(2); // read at most hourly
+  await syncAmazon(db, key, 'peak', fetchFn, new Date(NOW.getTime() + 2 * 3_600_000));
+  // Two days back from where the last read ended: late and released events are picked up, the ones seen already aren't added again.
+  expect(finances[2]!.get('PostedAfter')).toBe('2026-10-24T17:55:00.000Z');
+  expect(revenue()).toBe(395);
+});

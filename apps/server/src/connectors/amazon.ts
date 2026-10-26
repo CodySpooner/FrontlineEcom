@@ -97,8 +97,40 @@ async function ordersOf(read: OrderRead | undefined, fetchFn: Fetch, host: strin
   }
 }
 
+interface RefundEvent {
+  AmazonOrderId?: string;
+  PostedDate?: string;
+  ShipmentItemAdjustmentList?: { OrderAdjustmentItemId?: string; ItemChargeAdjustmentList?: { ChargeType?: string; ChargeAmount?: { CurrencyAmount?: number } }[] }[];
+}
+/** Where the last refunds read ended (its PostedBefore), for one seller account. */
+type RefundRead = { account?: string; to: string };
+
+/**
+ * Refund events (Finances API v0, Finance and Accounting role): the last 30 days at first, then from two days before the
+ * last read ended (events can post late), at most hourly. The API lists every financial event, 100 a page at 0.5 pages a
+ * second, so a busy seller's read takes a while. Undefined when the last read is under an hour old.
+ */
+async function refundsOf(read: RefundRead | undefined, fetchFn: Fetch, host: string, token: string, now: Date) {
+  if (read && now.getTime() - Date.parse(read.to) < 3_600_000) return;
+  const to = new Date(now.getTime() - 5 * 60_000).toISOString(); // Amazon wants it over two minutes ago
+  const back = read ? Date.parse(read.to) - 2 * 86_400_000 : now.getTime() - 30 * 86_400_000;
+  const from = new Date(Math.max(back, now.getTime() - 179 * 86_400_000)).toISOString(); // a window is 180 days at most
+  const refunds: RefundEvent[] = [];
+  let next: string | undefined;
+  do {
+    const q = new URLSearchParams({ PostedAfter: from, PostedBefore: to, MaxResultsPerPage: '100', ...(next ? { NextToken: next } : {}) });
+    const res = await fetchFn(`https://${host}/finances/v0/financialEvents?${q}`, { headers: { 'x-amz-access-token': token } });
+    const body = (await res.json().catch(() => ({}))) as { payload?: { NextToken?: string; FinancialEvents?: { RefundEventList?: RefundEvent[] } }; errors?: { message: string }[] };
+    if (!res.ok) throw new Error(`Amazon finances: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
+    refunds.push(...(body.payload?.FinancialEvents?.RefundEventList ?? []));
+    next = body.payload?.NextToken;
+  } while (next);
+  return { refunds, next: { to } };
+}
+
 const TRAFFIC_KEY = 'amazon_traffic';
 const ORDERS_KEY = 'amazon_orders';
+const REFUNDS_KEY = 'amazon_refund_reads';
 
 /**
  * Daily sessions from Amazon's Sales and Traffic report (Selling Partner Insights role), for the funnel. A report takes
@@ -246,6 +278,10 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const reads = stateOf<OrderRead>(db, ORDERS_KEY);
     const read = reads.get(id);
     const orders = !own ? undefined : await ordersOf(read?.account === account ? read : undefined, fetchFn, host, token, marketplace, now).catch(() => undefined);
+    // Without the Finance and Accounting role (or on any error) sales stay before refunds.
+    const refundReads = stateOf<RefundRead>(db, REFUNDS_KEY);
+    const refundRead = refundReads.get(id);
+    const refunds = !own ? undefined : await refundsOf(refundRead?.account === account ? refundRead : undefined, fetchFn, host, token, now).catch(() => undefined);
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -283,8 +319,23 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
         setOrderItems(db, storeId, `amz-${o.orderId}`, items);
         days.add(localDate(created, timeZone));
       }
+      // A refunded line's selling price (Principal: what Amazon's sales total counts) comes off its order's day. It counts
+      // only once its order is one of the store's: another marketplace's never is, and an order read later brings it in.
+      const refund = db.prepare('INSERT INTO amazon_refunds (store_id, id, order_id, amount) VALUES (?, ?, ?, ?) ON CONFLICT (store_id, id) DO UPDATE SET amount = excluded.amount');
+      const dayOf = db.prepare('SELECT local_date FROM orders WHERE store_id = ? AND id = ?');
+      for (const e of refunds?.refunds ?? []) {
+        for (const [i, item] of (e.ShipmentItemAdjustmentList ?? []).entries()) {
+          const amount = -(item.ItemChargeAdjustmentList ?? []).filter((c) => c.ChargeType === 'Principal').reduce((a, c) => a + Number(c.ChargeAmount?.CurrencyAmount ?? 0), 0);
+          if (!e.AmazonOrderId || !amount) continue;
+          const orderId = `amz-${e.AmazonOrderId}`;
+          refund.run(storeId, item.OrderAdjustmentItemId ?? `${e.AmazonOrderId}:${e.PostedDate}:${i}`, orderId, amount);
+          const day = dayOf.get(storeId, orderId)?.local_date;
+          if (day) days.add(String(day));
+        }
+      }
       rebuildRevenue(db, storeId, days);
       if (orders) reads.set(id, { ...orders.next, account });
+      if (refunds) refundReads.set(id, { ...refunds.next, account });
       // ponytail: Amazon has no unit costs. An FBA listing keeps the stock fbaStock last gave it (its listing has no count).
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status, merchant_stock) VALUES (?1, ?2, ?3, ?4, ?5, NULL, 0, ?6, ?7, ?8, ?10)

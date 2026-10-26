@@ -498,6 +498,15 @@ export const MIGRATIONS = [
   /* 37 (core: the carrier's tracking page, when the platform gives one) */ `
   ALTER TABLE orders ADD COLUMN tracking_url TEXT;
   `,
+  /* 38 (core: Amazon refunds, one row per refunded order line; they count once their order is in the store's orders) */ `
+  CREATE TABLE amazon_refunds (
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    amount REAL NOT NULL,
+    PRIMARY KEY (store_id, id)
+  );
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

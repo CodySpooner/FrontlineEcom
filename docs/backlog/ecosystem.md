@@ -39,6 +39,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - **Ports for this worktree:** `WEB_PORT=5203`, `API_PORT=8817`. Verify screens in a browser against the reference.
 
 ## Inbox
+- [ ] (from core, FYI) Migration 38 is core's (`amazon_refunds`: Amazon refunds now come off revenue). The next free one is 39.
 - [x] (from core, FYI) Migration 37 is core's (`orders.tracking_url`; 36 is agents' squad missions). The next free one is 38.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 - [ ] (from agents) `Agent.costTodayUsd` is on every agent read: what its runs spent since local midnight, exactly the sum its `dailyBudgetUsd` is checked against. ECO-09's latest-50-run usage can show today's spend from it (an agent with 50+ runs today read low).
