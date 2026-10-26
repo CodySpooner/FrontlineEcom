@@ -192,6 +192,26 @@ test('a follow-up message resumes the previous run session', async () => {
   expect(getRun(db, reply.id)?.sessionId).toBe(getRun(db, first.id)?.sessionId);
 });
 
+test('a follow-up whose session is gone goes on from a recap of the last exchange', async () => {
+  const tasks: string[] = [];
+  const engine: Engine = async function* (input) {
+    if (input.resume) {
+      yield { type: 'error', message: `No conversation found with session ID: ${input.resume}` };
+      return;
+    }
+    tasks.push(input.task);
+    yield { type: 'text_delta', text: 'Glow your way to morning' };
+    yield { type: 'done', sessionId: `s${tasks.length}`, usage };
+  };
+  const m = manager({ engine });
+  const first = ok(m.start('glow:copywriter', 'Draft 3 headlines'));
+  await m.idle();
+  const reply = ok(m.start('glow:copywriter', 'Shorter please', first.id));
+  await m.idle();
+  expect(getRun(db, reply.id)).toMatchObject({ status: 'done', sessionId: 's2' });
+  expect(tasks[1]).toContain('asked: Draft 3 headlines\nYou answered: Glow your way to morning\n\nNow: Shorter please');
+});
+
 test('a restart marks runs that were in flight as interrupted', () => {
   db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at) VALUES ('r1', 'glow', 'glow:copywriter', 't', 'running', '2026-10-26T00:00:00Z')`).run();
   manager();

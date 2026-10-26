@@ -158,12 +158,16 @@ export function createRunManager(opts: RunManagerOptions) {
           ...(cap !== undefined ? { budgetUsd: Math.max(0, cap - costToday(db, store.id)) } : {}),
         };
         let toolCalls = 0;
-        for await (const event of runAgent(input, engine)) {
-          if (event.type === 'done' || event.type === 'error') end = event;
-          else {
-            if (event.type === 'tool_call') toolCalls++;
-            emit(event);
+        for (let attempt = input; ; attempt = recapped(attempt)) {
+          for await (const event of runAgent(attempt, engine)) {
+            if (event.type === 'done' || event.type === 'error') end = event;
+            else {
+              if (event.type === 'tool_call') toolCalls++;
+              emit(event);
+            }
           }
+          // Claude Code keeps sessions 30 days, per folder: a follow-up whose session is gone goes on from a recap.
+          if (end.type !== 'error' || !attempt.resume || !end.message.startsWith('No conversation found')) break;
         }
         // ponytail: only runs that looked at data (tool calls) reflect; a chat reply rarely teaches anything durable.
         if (end.type === 'done' && toolCalls > 0 && !signal.aborted) end = await reflect(input, end, emit);
@@ -191,6 +195,15 @@ export function createRunManager(opts: RunManagerOptions) {
     );
     if (status !== 'done') expireApprovals([run.id]);
     opts.onRun?.(getRun(db, run.id)!);
+  }
+
+  /** A fresh session for a follow-up whose session is gone, with the last exchange as context. */
+  function recapped({ resume, ...input }: RunInput): RunInput {
+    const prev = db.prepare('SELECT task, transcript_json FROM agent_runs WHERE session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(resume!);
+    if (!prev) return input;
+    // ponytail: only the last exchange; walk the `resume` chain if longer chats need more.
+    const said = (JSON.parse(String(prev.transcript_json ?? '[]')) as AgentEvent[]).flatMap((e) => (e.type === 'text_delta' ? [e.text] : [])).join('\n').slice(-3000);
+    return { ...input, task: `Earlier in this chat (its full history has expired) you were asked: ${prev.task}\nYou answered: ${said}\n\nNow: ${input.task}` };
   }
 
   /** Asks the agent, in the same session, what it learned, and saves that as store memory. Never fails the run. */
