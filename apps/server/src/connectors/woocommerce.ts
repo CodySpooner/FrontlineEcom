@@ -308,9 +308,14 @@ export async function setWooProductPrice(db: Db, key: Buffer, storeId: string, p
   if (compareAt != null && !(Number.isFinite(compareAt) && compareAt > 0)) throw new Error('Compare-at price must be more than 0');
   const wooId = wooIdOf(productId);
   const shown = await logAction(db, storeId, 'price_change', productId, { price, ...(compareAt !== undefined ? { compareAt } : {}) }, async () => {
-    const cur = await wooCall<{ type: string; regular_price: string; sale_price: string }>(db, key, storeId, 'GET', `products/${wooId}`, undefined, fetchFn);
+    const cur = await wooCall<{ type: string; regular_price: string; sale_price: string; date_on_sale_from?: string | null; date_on_sale_to?: string | null }>(
+      db, key, storeId, 'GET', `products/${wooId}`, undefined, fetchFn);
     // One price for every variation would flatten e.g. S 20 / XL 25.
     if (cur.type !== 'simple') throw new Error(`WooCommerce: product ${productId} is a ${cur.type} product; change its prices in WooCommerce`);
+    // A sale price only shows between its dates: the new one would be the owner's planned sale, not today's price.
+    if (cur.date_on_sale_from || cur.date_on_sale_to) {
+      throw new Error(`WooCommerce: product ${productId} has a scheduled sale (${cur.date_on_sale_from?.slice(0, 10) ?? '…'} to ${cur.date_on_sale_to?.slice(0, 10) ?? '…'}); change its price in WooCommerce`);
+    }
     const was = compareAt === undefined ? (cur.sale_price ? Number(cur.regular_price) : 0) : (compareAt ?? 0);
     await wooCall(db, key, storeId, 'PUT', `products/${wooId}`, was > price ? { regular_price: String(was), sale_price: String(price) } : { regular_price: String(price), sale_price: '' }, fetchFn);
     return was > price ? was : null;

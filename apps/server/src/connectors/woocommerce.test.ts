@@ -218,6 +218,7 @@ function fakeWooWrites(status = 200) {
     '41': { type: 'simple', regular_price: '40', sale_price: '30' },
     '42': { type: 'simple', regular_price: '25', sale_price: '' },
     '43': { type: 'variable', regular_price: '', sale_price: '' },
+    '44': { type: 'simple', regular_price: '30', sale_price: '25', date_on_sale_from: '2026-11-02T00:00:00', date_on_sale_to: '2026-11-09T23:59:59' },
   };
   const fetchFn = (async (url: string, init: RequestInit) => {
     const path = new URL(url).pathname.replace('/store/wp-json/wc/v3/', '');
@@ -499,4 +500,11 @@ test("a Woo order moved to the trash after it was counted stops counting (the de
   }) as typeof fetch;
   await syncWooCommerce(db, key, 'pawsome', trashed, new Date(NOW.getTime() + 600_000));
   expect(status()).toBe('refunded');
+});
+
+test("a Woo price change leaves a product with a scheduled sale alone: its new price would only show inside the owner's sale dates", async () => {
+  const db = setup();
+  const { fetchFn, writes } = fakeWooWrites();
+  await expect(setWooProductPrice(db, key, 'pawsome', 'woo-44', { price: 27 }, fetchFn)).rejects.toThrow(/scheduled sale/);
+  expect(writes).toHaveLength(0);
 });
