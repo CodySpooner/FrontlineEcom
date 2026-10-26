@@ -758,7 +758,10 @@ export async function requestApproval(ctx: ToolContext, req: { title: string; re
   });
   if (auto) ctx.decide!(request.id, 'approve');
   else ctx.emit({ type: 'approval_request', approval: request });
-  const decided = await abortable(ctx.approvals.decision(request.id), ctx.signal);
+  // What the app carries out on approval (OUTLIVE_RUN) doesn't hold the run, and its Claude process, for days.
+  const later = !auto && OUTLIVE_RUN.includes(kind) ? new Promise<undefined>((r) => setTimeout(() => r(undefined), PATIENCE_MS).unref?.()) : undefined;
+  const decided = await abortable(later ? Promise.race([ctx.approvals.decision(request.id), later]) : ctx.approvals.decision(request.id), ctx.signal);
+  if (!decided) return { approved: false, message: `Waiting for the owner: ${req.title}. The app carries it out once approved; don't wait for it, finish your answer.` };
   if (auto) ctx.emit({ type: 'approval_request', approval: decided });
   return decided.status === 'approved'
     ? { approved: true, message: `${auto ? 'Auto-approved (autopilot)' : 'Approved by the owner'}: ${req.title}` }
@@ -802,6 +805,9 @@ function autopilotUsedToday(db: DatabaseSync, storeId: string, kind: string): nu
     .get(storeId, kind, midnight.toISOString());
   return Number(row?.used ?? 0);
 }
+
+/** How long a run waits on an OUTLIVE_RUN request before it finishes and leaves the request with the owner. */
+const PATIENCE_MS = 10 * 60_000;
 
 /** Approval kinds the server carries out when approved (apps/server/src/routes/agents.ts), whether or not the run that asked is still alive. */
 export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'store.publish_theme', 'store.set_price', 'ads.set_budget', 'ads.pause_campaign'];

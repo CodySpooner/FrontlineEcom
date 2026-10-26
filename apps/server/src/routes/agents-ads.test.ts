@@ -1,6 +1,6 @@
 import { fakeEngine, getAgent, listMemory, runAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, ApprovalRequest } from '@frontline/shared';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
 import { addDays, localDate } from '../dates';
@@ -61,6 +61,31 @@ test('an approved budget change and pause are applied to the demo ad account', a
   expect(budget('pawsome-c3').status).toBe('paused');
   await run([propose({ campaignId: 'pawsome-c2', change: 'pause' })], 'deny');
   expect(budget('pawsome-c2').status).toBe('active');
+});
+
+test('an unanswered budget request lets the run finish after 10 minutes and is still applied when approved later', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  try {
+    const agent = getAgent(db, 'pawsome:ad_strategist')!;
+    const from = budget('pawsome-c1').daily_budget;
+    const events: AgentEvent[] = [];
+    const steps = [propose({ campaignId: 'pawsome-c1', change: 'budget', newDailyBudget: from + 10 })];
+    const done = (async () => {
+      for await (const e of runAgent({ agent, store: getStore(db, 'pawsome')!, task: 't', env: toolEnv(db) }, fakeEngine(() => steps))) events.push(e);
+    })();
+    while (!events.some((e) => e.type === 'approval_request')) await tick();
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    await done;
+    expect(events.flatMap((e) => (e.type === 'tool_result' ? [e.output] : []))).toEqual([
+      `Waiting for the owner: Raise Prospecting · Broad budget $${from} → $${from + 10}/day. The app carries it out once approved; don't wait for it, finish your answer.`,
+    ]);
+    const request = events.find((e) => e.type === 'approval_request');
+    decide(db, request?.type === 'approval_request' ? request.approval.id : '', 'approve');
+    await tick();
+    expect(budget('pawsome-c1').daily_budget).toBe(from + 10);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("the owner's cap on added spend and bad input stop a proposal before asking", async () => {
