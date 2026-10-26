@@ -99,6 +99,14 @@ const since = (days: number, store: Store) => {
 };
 /** `days` × 24 hours ago, to compare with timestamps (an order's age). */
 const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+/**
+ * Why a store change can't be asked for: the store is connected on a platform the app doesn't write to yet (store writes
+ * reach Shopify only, `onShopify` in apps/server/src/routes/agents.ts), so an approval would only fail. Undefined when it can.
+ */
+const noStoreWrites = (store: Store) =>
+  store.connected && store.platform !== 'shopify'
+    ? `Not sent: the app doesn't change ${store.platform} stores yet, so approving it would do nothing. Put the change in your answer so the owner can make it by hand.`
+    : undefined;
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
 export const cash = (n: number, currency: string) => (currency === 'USD' ? `$${n}` : `${n} ${currency}`);
 
@@ -585,6 +593,8 @@ export const APP_TOOLS: AppTool[] = [
       const d = getPageDraft(ctx.db, draftId);
       if (!d || d.storeId !== ctx.store.id) return `No draft ${draftId} in this store.`;
       if (d.status !== 'draft' && d.status !== 'rejected') return `That draft is already ${d.status}.`;
+      const no = noStoreWrites(ctx.store);
+      if (no) return no;
       const { approved, message } = await requestApproval(ctx, {
         title: `Publish "${d.title}"`.slice(0, 80),
         reason: d.notes.slice(0, 400),
@@ -708,6 +718,8 @@ export const APP_TOOLS: AppTool[] = [
       evidence: z.string().min(10).max(400).describe('the numbers and window, e.g. "converts 3.1% at $29.99 vs competitors at $34-39, margin 62%"'),
     },
     run: async ({ productId, newPrice, compareAt, evidence }, ctx) => {
+      const no = noStoreWrites(ctx.store);
+      if (no) return no;
       const p = ctx.db.prepare('SELECT * FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId);
       if (!p) return `No product ${productId} in this store. Use list_products for ids.`;
       const [from, to] = [Number(p.price), r2(newPrice)];
@@ -773,6 +785,8 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ title, reason, kind, payload, amount }, ctx) => {
       // The app carries these out on approval: only their own tool, which checks the numbers and caps, may ask.
       if (OWN_TOOL[kind]) return `Not sent: ${kind} requests come from ${OWN_TOOL[kind]}, which checks the numbers and the owner's caps. Use it instead.`;
+      const no = kind === 'store.add_products' && noStoreWrites(ctx.store);
+      if (no) return no;
       const amountUsd = amount === undefined ? undefined : await inUsd(ctx, amount);
       // Nothing in the app carries some kinds out (price tests, customer messages...): the owner does, so say so up front.
       const manual = !ACTIONS[kind] && !OUTLIVE_RUN.includes(kind);

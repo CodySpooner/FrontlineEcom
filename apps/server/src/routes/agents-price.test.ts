@@ -87,13 +87,13 @@ test('on a real store a price test is judged on gross profit 14 days before vs a
   expect(achievements.find((a) => a.id === 'first_win')?.unlockedAt).toEqual(expect.any(String));
 });
 
-test('connected stores get the price on Shopify; other platforms and write errors tell the owner and start no test', async () => {
+test("connected stores get the price on Shopify; other platforms aren't asked and write errors tell the owner; neither starts a test", async () => {
   const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'peak' ORDER BY price DESC LIMIT 1`).get()!;
   const [id, from] = [String(p.id), Number(p.price)];
   const to = Math.round(from * 1.1 * 100) / 100;
   db.prepare(`UPDATE stores SET connected = 1, platform = 'woocommerce' WHERE id = 'peak'`).run();
-  await run('peak', [price(id, to)]);
-  expect(db.prepare(`SELECT body FROM notifications WHERE kind = 'error'`).get()?.body).toBe('Only Shopify stores are updated automatically so far. Change it by hand if you still want the test.');
+  expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Not sent: the app doesn't change woocommerce stores yet/);
+  expect(db.prepare(`SELECT count(*) AS n FROM approvals WHERE json_extract(action_json, '$.kind') = 'store.set_price'`).get()?.n).toBe(0);
   expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
 
   db.prepare(`UPDATE stores SET platform = 'shopify' WHERE id = 'peak'`).run();

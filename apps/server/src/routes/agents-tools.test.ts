@@ -54,6 +54,16 @@ test('a 7-day window is the 7 dates ending today in the zone the data is dated i
   }
 });
 
+test("store changes aren't asked for on a connected store the app can't write to", async () => {
+  const etsy = { ...input('glow', 'market_analyst').store, connected: true, platform: 'etsy' as const };
+  const productId = String(db.prepare(`SELECT id FROM products WHERE store_id = 'glow' LIMIT 1`).get()?.id);
+  const before = db.prepare('SELECT count(*) AS n FROM approvals').get()?.n;
+  const price = results(await run({ ...input('glow', 'market_analyst'), store: etsy }, [{ call: 'propose_price_change', input: { productId, newPrice: 19, evidence: 'converts 3.1% at $29.99 vs competitors at $34-39' } }]));
+  const add = results(await run({ ...input('glow', 'product_hunter'), store: etsy }, [{ call: 'request_approval', input: { title: 'Add 2 products', reason: 'AI score 88', kind: 'store.add_products', payload: {} } }]));
+  for (const r of [...price, ...add]) expect(r.output).toBe("Not sent: the app doesn't change etsy stores yet, so approving it would do nothing. Put the change in your answer so the owner can make it by hand.");
+  expect(db.prepare('SELECT count(*) AS n FROM approvals').get()?.n).toBe(before);
+});
+
 test("store_summary's change vs the previous period matches the dashboard's in the middle of the day", async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   try {
