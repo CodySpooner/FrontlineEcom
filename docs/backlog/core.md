@@ -138,10 +138,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-57 Two platforms on one store selling in different currencies switched the store's currency back and forth every sync.
 - [x] CORE-58 A job scheduled in the hour clocks skip in spring (e.g. 02:30) didn't run that night.
 - [x] CORE-59 A TikTok Shop product image was read once; a signed link that expires would stay broken.
+- [x] CORE-60 Shopify's funnel history was read only on a first sync that finished: one cut short, or read_reports added later, left 3 days.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-60 (from a review of the Shopify/Etsy connectors): the ShopifyQL funnel reads the whole backfill window until a read works (`done_once` `shopify-funnel:<store>:<shop host>`, so another shop backfills too), then 3 days. Before, the window followed the order cursor, which a first sync cut short (a 502 on page 40) or the read_reports scope added after the first sync both skipped for good.
 - 2026-10-26 — CORE-59: TikTok Shop product images whose link carries `x-expires` are read again (Get Product) within a day of expiring, in the same 50-a-sync budget; links without one stay as read. Whether the Shop API signs its image links isn't documented, so this costs nothing when it doesn't.
 - 2026-10-26 — CORE-58: `nextCronTime` runs a fixed-hour rule whose time clocks skip in spring once, late, at the first minute after the jump (03:00), as classic cron does; hourly and wildcard-hour rules don't get an extra run. Tested in America/New_York on 2026-03-08 (two skipped matches still run once). A week ahead costs 1.5 ms instead of 1.1 ms.
 - 2026-10-26 — CORE-57: Shopify, Woo, Etsy and TikTok Shop syncs set the store's currency through `takeCurrency`: when the store's own platform has synced and sells in another currency, the sync stops with an error naming both (nothing written), instead of adding unconverted orders and flipping the store's currency (each flip cleared the ad networks' cursors, a two-year re-pull). Without the own platform synced it takes the currency as before. README notes it.

@@ -469,12 +469,17 @@ test("without GA4, the funnel comes from Shopify's analytics; without its scope,
   expect(db.prepare("SELECT status FROM integrations WHERE id = 'shopify:glow'").get()?.status).toBe('connected');
   expect(funnel().every((d) => !d.sessions)).toBe(true);
 
+  // The scope added later: the first read that works covers the whole backfill window, later ones the last 3 days.
+  const ql = (c: { body: { query: string; variables: Record<string, unknown> } }[]) => c.filter((x) => x.body.query.includes('shopifyqlQuery')).map((x) => x.body.variables.q);
   const { fetchFn, calls } = fakeShopify([], 200, true);
   await syncShopify(db, key, 'glow', fetchFn, NOW);
-  expect(calls.filter((c) => c.body.query.includes('shopifyqlQuery')).map((c) => c.body.variables.q)).toEqual([
-    'FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout TIMESERIES day SINCE -3d ORDER BY day ASC',
-    "FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout WHERE human_or_bot_session = 'bot' TIMESERIES day SINCE -3d ORDER BY day ASC",
+  expect(ql(calls)).toEqual([
+    'FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout TIMESERIES day SINCE -730d ORDER BY day ASC',
+    "FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout WHERE human_or_bot_session = 'bot' TIMESERIES day SINCE -730d ORDER BY day ASC",
   ]);
+  const again = fakeShopify([], 200, true);
+  await syncShopify(db, key, 'glow', again.fetchFn, NOW);
+  expect(ql(again.calls)[0]).toBe('FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout TIMESERIES day SINCE -3d ORDER BY day ASC');
   // Bot visits come off; a day Shopify didn't classify keeps its total.
   expect(funnel()).toEqual([
     { date: '2026-10-25', sessions: 100, carts: 13, checkouts: 6 },
