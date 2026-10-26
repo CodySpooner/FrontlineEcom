@@ -143,7 +143,7 @@ export interface Facts {
   topLevel: number;
 }
 
-// ponytail: revenue milestones compare raw amounts across currencies; convert when a non-USD owner asks.
+// Revenue milestones read in the owner's base currency: core converts multi-store totals (CORE-26).
 export const ACHIEVEMENTS: (Omit<Achievement, 'unlockedAt'> & { check: (f: Facts) => boolean })[] = [
   { id: 'first_sale', title: 'First Sale', description: 'A store made its first sale.', xp: 50, check: (f) => f.orders > 0 },
   { id: 'squad_deployed', title: 'Squad Fully Deployed', description: 'All 8 agents online in a store.', xp: 50, check: (f) => f.fullSquad },

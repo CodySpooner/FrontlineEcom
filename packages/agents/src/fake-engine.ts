@@ -72,7 +72,9 @@ function demoWork(input: RunInput): FakeStep[] {
 export const echoScript: FakeScript = (input) => {
   const done: AgentEvent = { type: 'done', sessionId: input.resume ?? `fake-${input.agent.id}`, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
   if (input.task === REFLECTION_PROMPT) return [{ type: 'text_delta', text: '[]' }, done];
-  let reply = `${AGENT_ROLES[input.agent.role].name} for ${input.store.name}: on it — "${input.task}".`;
+  // Quotes the task's first clause: scheduled jobs carry a paragraph of instructions after "Daily briefing:".
+  const task = input.task.split(/[:\n]|\.(?=\s|$)/)[0]!.trim().slice(0, 80);
+  let reply = `${AGENT_ROLES[input.agent.role].name} for ${input.store.name}: on it — "${task}".`;
   const t = input.env?.summary(input.store.id, 30).totals;
   if (t) {
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${input.store.currency}`;

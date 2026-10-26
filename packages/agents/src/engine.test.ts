@@ -22,6 +22,8 @@ describe('fake engine', () => {
     expect(text(events)).toBe('Market Analyst for Glow Haus: on it — "Summarize last week".');
     expect(events.at(-1)).toEqual({ type: 'done', sessionId: 'fake-glow:market_analyst', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } });
     expect(await collect(runAgent(input, fakeEngine()))).toEqual(events);
+    const job = await collect(runAgent({ ...input, task: 'Daily briefing: compare yesterday with the 7-day average. Then act.' }, fakeEngine()));
+    expect(text(job)).toBe('Market Analyst for Glow Haus: on it — "Daily briefing".');
   });
 
   test('resume keeps the session id', async () => {
