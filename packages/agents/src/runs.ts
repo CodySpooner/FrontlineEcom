@@ -125,7 +125,9 @@ export function createRunManager(opts: RunManagerOptions) {
     db.prepare(`UPDATE agent_runs SET status = 'running', started_at = ? WHERE id = ?`).run(new Date().toISOString(), queued.id);
     const run = getRun(db, queued.id)!;
     opts.onRun?.(run);
-    const emit = (event: AgentEvent) => {
+    const emit = (full: AgentEvent) => {
+      // The agent saw the whole tool output; the stored transcript and the live feed keep the first 4,000 characters.
+      const event = full.type === 'tool_result' && full.output.length > SHOWN ? { ...full, output: `${full.output.slice(0, SHOWN)}\n… (${full.output.length - SHOWN} more characters)` } : full;
       const slot = active.get(run.id);
       const waiting = event.type === 'approval_request' && event.approval.status === 'pending';
       if (slot && !!slot.waiting !== waiting) {
@@ -211,6 +213,8 @@ export function createRunManager(opts: RunManagerOptions) {
 
   return { start, cancel, get, idle };
 }
+
+const SHOWN = 4000;
 
 const addUsage = (a: RunUsage, b: RunUsage): RunUsage => ({
   inputTokens: a.inputTokens + b.inputTokens,

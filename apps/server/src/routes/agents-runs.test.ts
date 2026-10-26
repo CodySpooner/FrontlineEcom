@@ -247,3 +247,12 @@ test('requests a run can no longer act on expire when it ends; ones the server c
   before.cancel(stuck.id);
   await before.idle();
 });
+
+test('long tool outputs are cut in the stored transcript (the agent still saw all of it)', async () => {
+  const m = manager({ engine: fakeEngine(() => [{ call: 'list_orders', input: { days: 90, limit: 500 } }, { type: 'done', sessionId: 's', usage }]) });
+  const run = ok(m.start('glow:operations', 'orders'));
+  await m.idle();
+  const result = getRun(db, run.id)!.transcript.find((e) => e.type === 'tool_result') as { output: string };
+  expect(result.output).toMatch(/\n… \(\d+ more characters\)$/);
+  expect(result.output.length).toBeLessThan(4100);
+});
