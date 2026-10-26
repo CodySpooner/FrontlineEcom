@@ -277,7 +277,7 @@ export interface TopProduct {
   image?: string;
   units: number;
   revenue: number;
-  /** Revenue minus product cost (ad spend is not allocated per product). */
+  /** Revenue minus product cost and the store's fee % (ad spend and the per-order fee are not allocated per product). */
   profit: number;
 }
 

@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import type { Agent, AnalyticsSummary, Order, Page, Product, Store } from '@frontline/shared';
+import type { Agent, AnalyticsSummary, Order, Page, Product, Store, TopProduct } from '@frontline/shared';
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
@@ -100,6 +100,12 @@ test("the owner's fee estimate is saved on the store and comes off its profit", 
   const after = await summary();
   expect(after.revenue).toBe(before.revenue);
   expect(after.profit).toBeCloseTo(before.profit - before.revenue * 0.095 - before.orders * 0.25, 1);
+
+  const top = async () => ((await (await app.request('/api/analytics/top-products?stores=pawsome&range=30&limit=1')).json()) as TopProduct[])[0]!;
+  const product = await top();
+  await app.request('/api/stores/pawsome', send('PATCH', { feePercent: 0 }));
+  const gross = await top();
+  expect(product.profit).toBeCloseTo(gross.profit - gross.revenue * 0.095, 1); // per product: the % only
 
   const reset = await app.request('/api/stores/pawsome', send('PATCH', { feePercent: 0, feePerOrder: 0 }));
   expect(await reset.json()).not.toHaveProperty('feePercent');

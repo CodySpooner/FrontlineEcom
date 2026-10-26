@@ -13,7 +13,10 @@ const usd = (cents: number) => ({ amount: cents, divisor: 100, currency_code: 'U
 const receipt = (id: number, status: string, cents: number, extra: Record<string, unknown> = {}) => ({
   receipt_id: id, status, is_paid: true, is_shipped: false, create_timestamp: T('2026-10-25T12:00:00Z'), updated_timestamp: T('2026-10-25T14:00:00Z'), grandtotal: usd(cents), ...extra,
 });
-const listing = (id: number, state: string, updated: string) => ({ listing_id: id, title: `Listing ${id}`, state, quantity: 5, price: usd(2400), updated_timestamp: T(updated) });
+const listing = (id: number, state: string, updated: string) => ({
+  listing_id: id, title: `Listing ${id}`, state, quantity: 5, price: usd(2400), updated_timestamp: T(updated),
+  images: [{ rank: 2, url_570xN: `https://i.etsystatic.com/${id}-back.jpg` }, { rank: 1, url_570xN: `https://i.etsystatic.com/${id}-main.jpg` }],
+});
 
 /** Fake Etsy: token refresh, receipts (two pages), listings sorted newest-changed first. */
 function fakeEtsy(refreshError = false) {
@@ -57,6 +60,8 @@ test('Etsy sync renews the token, pulls paid receipts + changed listings, rebuil
   // active stops at a listing older than the window, inactive at an empty page, the others at their count
   expect(api.filter((c) => c.url.pathname.endsWith('/listings')).map((c) => c.url.searchParams.get('state'))).toEqual(['active', 'draft', 'inactive', 'sold_out', 'expired']);
 
+  expect(api.find((c) => c.url.pathname.endsWith('/listings'))!.url.searchParams.get('includes')).toBe('Images');
+  expect(db.prepare("SELECT image FROM products WHERE store_id = 'pawsome' AND id = 'etsy-11'").get()?.image).toBe('https://i.etsystatic.com/11-main.jpg');
   expect(db.prepare("SELECT id, status, inventory FROM products WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
     { id: 'etsy-11', status: 'active', inventory: 5 },
     { id: 'etsy-13', status: 'draft', inventory: 5 },

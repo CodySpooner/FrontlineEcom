@@ -37,6 +37,8 @@ interface Listing {
   state: string;
   quantity: number;
   price: Money;
+  /** With includes=Images; rank 1 is the listing's main photo. */
+  images?: { rank?: number; url_570xN?: string }[];
   updated_timestamp: number;
 }
 
@@ -93,7 +95,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
     const listings: Listing[] = [];
     for (const state of LISTING_STATES) {
       for (let offset = 0; ; offset += 100) {
-        const page = await get<Listing>(`/shops/${shopId}/listings`, { state, sort_on: 'updated', sort_order: 'desc', limit: '100', offset: String(offset) });
+        const page = await get<Listing>(`/shops/${shopId}/listings`, { state, sort_on: 'updated', sort_order: 'desc', includes: 'Images', limit: '100', offset: String(offset) });
         listings.push(...page.results.filter((l) => l.updated_timestamp >= since));
         if (!page.results.length || offset + 100 >= page.count || page.results.some((l) => l.updated_timestamp < since)) break;
       }
@@ -106,10 +108,11 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       const currency = receipts[0]?.grandtotal.currency_code ?? listings[0]?.price.currency_code;
       if (currency) setStoreCurrency(db, storeId, currency);
       const prod = db.prepare(
-        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, NULL, 0, ?, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, price = excluded.price, inventory = excluded.inventory, status = excluded.status`,
+        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, inventory = excluded.inventory, status = excluded.status`,
       );
-      for (const l of listings) prod.run(storeId, `etsy-${l.listing_id}`, l.title, money(l.price), l.state === 'sold_out' ? 0 : l.quantity, LISTING_STATUS[l.state] ?? 'archived');
+      const photo = (l: Listing) => [...(l.images ?? [])].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))[0]?.url_570xN ?? null;
+      for (const l of listings) prod.run(storeId, `etsy-${l.listing_id}`, l.title, photo(l), money(l.price), l.state === 'sold_out' ? 0 : l.quantity, LISTING_STATUS[l.state] ?? 'archived');
       // ponytail: Etsy has no unit costs, so Etsy orders add revenue with cogs 0.
       const ord = db.prepare(
         `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?)

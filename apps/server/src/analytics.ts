@@ -155,7 +155,10 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
         }))
     : [];
   const { rate } = fxFor(db, storeIds);
+  // The store's fee % comes off each product's revenue, as it does off the store's profit (the per-order fee can't be split).
+  const fee = new Map(db.prepare(`SELECT id, fee_percent FROM stores WHERE id IN (${marks})`).all(...storeIds).map((r) => [String(r.id), Number(r.fee_percent)]));
   return [...rows, ...demo.flatMap((id) => demoTopProducts(db, id, from, to))]
+    .map((p) => (fee.get(p.storeId) ? { ...p, profit: r2(p.profit - (p.revenue * fee.get(p.storeId)!) / 100) } : p))
     .filter((p) => rate(p.storeId))
     .map((p) => (rate(p.storeId) === 1 ? p : { ...p, revenue: r2(p.revenue * rate(p.storeId)), profit: r2(p.profit * rate(p.storeId)) }))
     .sort((a, b) => b.revenue - a.revenue)
