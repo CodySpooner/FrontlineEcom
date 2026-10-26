@@ -185,6 +185,25 @@ test('the owner calls a mission off: its queued run stops, its waiting steps nev
   expect((await send('POST', '/api/squad-missions/nope/cancel')).status).toBe(404);
 });
 
+test('a long answer reaches the next step with both ends: its result up front and what it hands on at the end', async () => {
+  const answer = `Bundles beat singles.\n${'A filler line of analysis.\n'.repeat(200)}For the Copywriter: lead with the 2-pack at $39.`;
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, transcript_json, created_at) VALUES ('long', 'glow', 'glow:market_analyst', 't', 'done', ?, ?)`)
+    .run(JSON.stringify([{ type: 'text_delta', text: answer }]), now);
+  const steps = [
+    { id: 'numbers', role: 'market_analyst', task: 'Pull the numbers.', dependsOn: [], runId: 'long' },
+    { id: 'copy', role: 'copywriter', task: 'Write the copy.', dependsOn: ['numbers'] },
+  ];
+  db.prepare(`INSERT INTO squad_missions (id, store_id, title, steps_json, created_at) VALUES ('m-long', 'glow', 'Bundles', ?, ?)`).run(JSON.stringify(steps), now);
+  await create({ title: 'Anything', steps: [{ id: 'a', role: 'operations', task: 'Check the stuck orders.' }] }); // advances every open mission
+  const copy = (await get<SquadMission>('/api/squad-missions/m-long')).steps[1]!;
+  const { task } = await get<AgentRun>(`/api/runs/${copy.runId}`);
+  expect(task).toContain('- Market Analyst: Bundles beat singles.\n');
+  expect(task).toContain('For the Copywriter: lead with the 2-pack at $39.');
+  expect(task.length).toBeLessThan(answer.length);
+  await runManager(db).idle();
+});
+
 test('plans are checked (a step only waits on steps before it); every template is a valid plan; the launch has the six roles', async () => {
   const post = (steps: unknown, storeId = 'glow') => send('POST', '/api/squad-missions', { storeId, title: 'Checked mission', steps });
   const res = await post([{ id: 'a', role: 'copywriter', task: 'Write the copy first.', dependsOn: ['b'] }, { id: 'b', role: 'market_analyst', task: 'Pull the numbers.' }]);

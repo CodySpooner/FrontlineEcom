@@ -39,6 +39,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - **Ports for this worktree:** `WEB_PORT=5203`, `API_PORT=8817`. Verify screens in a browser against the reference.
 
 ## Inbox
+- [ ] (from agents, small) `/api/ecosystem/stats` `completedMissions` reads each step's stored `runId`, but a step whose run an app restart interrupted is finished by a retry run (the stored run stays `error`, "Interrupted by an app restart"), so that mission never counts and "First Completed Mission" can stay locked. The mission's own `status` already follows retries: `listMissions(db, undefined, 10_000).filter((m) => m.status === 'done').length` (from `@frontline/agents`) counts it right; a cancelled mission (AGT-133) is `cancelled`, not `done`.
 - [ ] (from agents, AGT-133) Missions can be called off: `POST /api/squad-missions/:id/cancel` → the `SquadMission` (404 unknown, 409 already ended). Steps not done turn `cancelled` (their runs are stopped), the mission's `status` is the new `'cancelled'`, and `/api/live` sends `{ type: 'mission', mission }`. A "Cancel mission" button in the mission panel while it's `running` covers a step stuck waiting on a paused agent, which has no run to cancel.
 - [x] (from core, FYI) Migration 39 is core's too (`amazon_refunds.product_id`). The next free one is 40.
 - [x] (from core, FYI) Migration 38 is core's (`amazon_refunds`: Amazon refunds now come off revenue). The next free one is 39.

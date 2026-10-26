@@ -9,6 +9,8 @@ import { finalText, getRun, INTERRUPTED, runGist } from './runs';
 type Stored = { id: string; role: AgentRole; task: string; dependsOn: string[]; runId?: string; note?: string; deliverable?: string; cancelled?: boolean };
 type Start = (agentId: string, task: string, resumeRunId?: string, parentRunId?: string) => AgentRun | string;
 const and = new Intl.ListFormat('en', { type: 'conjunction' });
+/** A long answer keeps both ends: it leads with its result (squad rules) and ends with what the next steps need (asked below). */
+const clip = (a: string) => (a.length <= 2000 ? a : `${a.slice(0, 500).trimEnd()}\n…\n${a.slice(-1500).trimStart()}`);
 
 /** The AI Ecosystem spec's example mission: research, then words and visuals, then the page and the ads. */
 export const MISSION_TEMPLATES: Omit<NewSquadMission, 'storeId'>[] = [
@@ -169,10 +171,7 @@ function advanceOnce(db: DatabaseSync, start: Start): SquadMission[] {
       if (step.status !== 'waiting') return;
       const deps = mission.steps.filter((d) => step.dependsOn.includes(d.id));
       if (deps.some((d) => d.status !== 'done')) return;
-      const handoff = deps.map((d) => {
-        const answer = finalText(getRun(db, d.runId!)?.transcript ?? []);
-        return `- ${AGENT_ROLES[d.role].name}: ${answer.length > 1200 ? `${answer.slice(0, 1199)}…` : answer || '(no final answer)'}`;
-      });
+      const handoff = deps.map((d) => `- ${AGENT_ROLES[d.role].name}: ${clip(finalText(getRun(db, d.runId!)?.transcript ?? [])) || '(no final answer)'}`);
       // The steps after it get its answer anyway: assigning their part as well would run it twice.
       const next = [...new Set(mission.steps.filter((n) => n.dependsOn.includes(step.id)).map((n) => `the ${AGENT_ROLES[n.role].name}`))];
       const task = `${step.task}\n\n${
