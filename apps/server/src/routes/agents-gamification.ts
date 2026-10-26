@@ -231,9 +231,10 @@ const MIN_ORDERS = 30;
 
 /**
  * Price tests on real stores, 15+ days after the change: the product's profit in the 14 days after vs the 14
- * before (core's order_items; demo stores have none). A learning either way; more profit is a measured win.
+ * before, scaled to the season (par); core's order_items, demo stores have none. A learning either way; more profit is a
+ * measured win.
  */
-// ponytail: raw before/after, no seasonality or traffic adjustment; the learning says the windows so the agent can weigh it.
+// ponytail: no traffic or ad-spend adjustment beyond the season; the learning says the windows so the agent can weigh it.
 export function checkPriceOutcomes(db: Db, today?: string) {
   const tests = db
     .prepare(
@@ -271,9 +272,9 @@ export function checkPriceOutcomes(db: Db, today?: string) {
 
 /**
  * Product pages published from the Store Builder on real stores, 15+ days later: the product's profit in the 14
- * days after publishing vs the 14 before. A learning for the agent that drafted it; more profit is a measured win.
+ * days after publishing vs the 14 before, scaled to the season (par). A learning for the agent that drafted it; more
+ * profit is a measured win. A price test on the product can't overlap it (propose_price_change and publish_page refuse).
  */
-// ponytail: raw before/after like price tests; a price test on the same product in the window muddies it.
 export function checkPageOutcomes(db: Db, today?: string) {
   const pages = db
     .prepare(
