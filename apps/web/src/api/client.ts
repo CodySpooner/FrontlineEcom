@@ -491,12 +491,13 @@ export function useLive() {
         window.dispatchEvent(new CustomEvent('frontline:xp', { detail: m }));
       } else if (m.type === 'approval') {
         qc.invalidateQueries({ queryKey: ['agents'] });
-        // Approved requests change shared learnings or (ad changes) campaign budgets and statuses.
+        // Approved requests change shared learnings, (ad changes) campaign budgets and statuses, or (price changes,
+        // added products) the store's products.
         // Publish requests move Store Builder drafts between pending, approved, published and rejected.
         qc.invalidateQueries({ queryKey: ['page-drafts'] });
         // Approved changes to a live store or ad account are logged as they run.
         if (m.approval.status === 'approved') qc.invalidateQueries({ queryKey: ['actions'] });
-        if (m.approval.status === 'approved') ['niche-learnings', 'campaigns'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+        if (m.approval.status === 'approved') ['niche-learnings', 'campaigns', 'products'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         // A decided request lingers ~1s so its "Approved"/"Denied" verdict shows before the row drops.
         setTimeout(() => qc.invalidateQueries({ queryKey: ['approvals'] }), m.approval.status === 'pending' ? 0 : 1000);
       }

@@ -44,4 +44,17 @@ describe('useLive', () => {
     expect(refetch).toHaveBeenCalledWith();
     expect(result.current).toBe(true);
   });
+
+  it('refreshes products when an approved request changes them (prices, added products)', () => {
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const qc = new QueryClient();
+    const refetch = vi.spyOn(qc, 'invalidateQueries');
+    renderHook(() => useLive(), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+    const approval = { id: 'a1', storeId: 'peak', agentId: 'peak:product_hunter', title: 'Price Ab Roller $27.99 → $24.99', reason: 'x', action: { kind: 'store.set_price', payload: {} }, createdAt: '2026-10-26T08:00:00Z' };
+
+    act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'approval', approval: { ...approval, status: 'pending' } }) }));
+    expect(refetch).not.toHaveBeenCalledWith({ queryKey: ['products'] });
+    act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'approval', approval: { ...approval, status: 'approved' } }) }));
+    expect(refetch).toHaveBeenCalledWith({ queryKey: ['products'] });
+  });
 });
