@@ -366,3 +366,19 @@ test("a TikTok Shop selling in another currency than the store's own connected p
   await syncTikTokShop(db, key, 'glow', fakeShop().fetchFn, NOW);
   expect(db.prepare("SELECT status FROM integrations WHERE id = 'tiktok_shop:glow'").get()).toEqual({ status: 'connected' });
 });
+
+test("a TikTok product image whose signed link expires (x-expires) is read again within a day of it; others aren't", async () => {
+  const db = shopSetup();
+  await syncTikTokShop(db, key, 'glow', fakeShop().fetchFn, NOW);
+  const at = (hours: number) => `https://p16-oec.example/old.jpeg?x-expires=${Math.floor(NOW.getTime() / 1000) + hours * 3600}&x-signature=s`;
+  const reads = async () => {
+    const { fetchFn, calls } = fakeShop();
+    await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
+    return calls.filter((c) => /^\/product\/202309\/products\/\d+$/.test(c.url.pathname)).map((c) => c.url.pathname.split('/').pop());
+  };
+  db.prepare("UPDATE products SET image = ? WHERE store_id = 'glow' AND id = 'tt-17301'").run(at(12));
+  expect(await reads()).toEqual(['17301']);
+  expect(db.prepare("SELECT image FROM products WHERE store_id = 'glow' AND id = 'tt-17301'").get()).toEqual({ image: 'https://p16-oec.example/ice-roller.jpeg' });
+  db.prepare("UPDATE products SET image = ? WHERE store_id = 'glow' AND id = 'tt-17301'").run(at(72));
+  expect(await reads()).toEqual([]);
+});
