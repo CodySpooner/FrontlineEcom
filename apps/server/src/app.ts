@@ -22,6 +22,7 @@ import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
 import { settingsRoutes } from './settings';
 import { agentRoutes, runManager } from './routes/agents';
+import { ecosystemRoutes } from './routes/ecosystem';
 import { loadKey } from './secrets';
 import { createStore, deleteStore, getStore, listStores, parseStoreInput, storeZone, updateStore } from './stores';
 
@@ -180,7 +181,8 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .route('/', competitorRoutes(db, (q) => pickStores(db, q)))
     .route('/', automationRoutes(db, (q) => pickStores(db, q)))
     .route('/', settingsRoutes(db))
-    .route('/', agentRoutes(db));
+    .route('/', agentRoutes(db))
+    .route('/', ecosystemRoutes(db));
 };
 
 /**

@@ -1139,3 +1139,36 @@ export interface AutomationRun {
   runId?: string;
   approvalId?: string;
 }
+
+// AI Ecosystem
+export const OFFICE_DEPARTMENTS = [
+  { id: 'executive', name: 'Executive Headquarters', desks: 2, role: null },
+  { id: 'research', name: 'Product Research', desks: 4, role: 'product_hunter' },
+  { id: 'advertising', name: 'Advertising', desks: 4, role: 'ad_strategist' },
+  { id: 'creative', name: 'Creative Studio', desks: 4, role: 'creative_studio' },
+  { id: 'development', name: 'Store Development', desks: 3, role: 'store_developer' },
+  { id: 'analytics', name: 'Analytics', desks: 3, role: 'market_analyst' },
+  { id: 'copywriting', name: 'Copywriting', desks: 3, role: 'copywriter' },
+  { id: 'operations', name: 'Operations', desks: 3, role: 'operations' },
+  { id: 'retention', name: 'Email & SMS', desks: 2, role: 'email_sms' },
+  { id: 'integrations', name: 'Integrations & Automation', desks: 2, role: null },
+] as const;
+export type OfficeDepartment = (typeof OFFICE_DEPARTMENTS)[number]['id'];
+export const OFFICE_DESKS = OFFICE_DEPARTMENTS.flatMap((d) => Array.from({ length: d.desks }, (_, i) => ({ id: `${d.id}-${i + 1}`, department: d.id })));
+export const OFFICE_GRID = { width: 36, height: 27 };
+export interface OfficeAppearance {
+  color: string;
+  hair: number;
+  skin: number;
+  outfit: 'jacket' | 'suit' | 'hoodie';
+  accessory: 'none' | 'headset' | 'glasses';
+}
+export interface OfficeSeat {
+  agentId: string;
+  deskId: string;
+  displayName: string;
+  appearance: OfficeAppearance;
+  position: { x: number; y: number } | null;
+  archived: boolean;
+  updatedAt: string;
+}

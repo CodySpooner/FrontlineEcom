@@ -44,7 +44,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Items
 - [x] ECO-01 Inspect: read the files named above, note in **Done** how the office will read agents/runs/flows/live events and what (if anything) is missing.
 - [x] ECO-02 Route + shell: `/ecosystem` "AI ECOSYSTEM" / "A LIVING WORKFORCE OF ECOMMERCE AGENTS" in nav, page skeleton matching the reference (header, 4 stat cards, tabs, office area, right activity panel, bottom bar). No other page changes.
-- [ ] ECO-03 Seats backend: migration + `routes/ecosystem.ts` — list/deploy/update/archive seats, 30-desk capacity enforced server-side, desk uniqueness, persistence across restarts, tests.
+- [x] ECO-03 Seats backend: migration + `routes/ecosystem.ts` — list/deploy/update/archive seats, 30-desk capacity enforced server-side, desk uniqueness, persistence across restarts, tests.
 - [ ] ECO-04 World: isometric tile map with the 10 departments (desk counts per spec §3) + central globe area, props, ambient animation, cached static layers, collision grid.
 - [ ] ECO-05 Camera: drag pan, wheel zoom, double-click focus, jump to department, reset, fit, fullscreen; sharp pixels at every zoom step.
 - [ ] ECO-06 Characters: sprite sheets with the 10 animations (spec §4), per-agent appearance variation, isometric walk directions, animation state machine.
@@ -67,6 +67,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-03: Added migration 35, shared ten-department/30-desk catalog and validated list/deploy/update/archive API with a unique active-desk index. Tests fill capacity, reject conflicts/invalid inputs, reopen a file database and preserve agent/run history on archive. Browser GET /api/ecosystem/seats verified; pnpm check 108 files / 593 tests pass.
 
 - 2026-10-26 ECO-02: Added /ecosystem with scoped charcoal/red styling, four truthful placeholder cards, accessible tabs, collapsible activity and status bar; existing nav indices preserved. Orca screenshot .agent/eco-02.png compared with reference; tab interaction verified. pnpm check: 107 files / 588 tests pass (six workers to avoid resource-contention timeouts).
 

@@ -471,6 +471,18 @@ export const MIGRATIONS = [
   /* 34 (core: Amazon listings that count their own, merchant-fulfilled, stock; FBA reads leave those alone) */ `
   ALTER TABLE products ADD COLUMN merchant_stock INTEGER NOT NULL DEFAULT 0;
   `,
+  /* 35 (ecosystem: persistent office seats; archiving never deletes an agent or its runs) */ `
+  CREATE TABLE ecosystem_seats (
+    agent_id TEXT PRIMARY KEY REFERENCES agents(id) ON DELETE CASCADE,
+    desk_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    appearance_json TEXT NOT NULL,
+    position_json TEXT,
+    archived INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX ecosystem_active_desk ON ecosystem_seats (desk_id) WHERE archived = 0;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
