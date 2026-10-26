@@ -1,11 +1,12 @@
-import { awardXp, blendedRoas, checkAchievements, commander, dailyMissions, judgeRun, levelForXp, once, profitStreak, writeMemory, XP, type Award, type Facts } from '@frontline/agents';
-import type { MetricTotals, Mission } from '@frontline/shared';
+import { awardXp, blendedRoas, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, once, profitStreak, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
+import { AGENT_ROLES, type MetricTotals, type Mission } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
 import { addDays, localDate } from '../dates';
 import type { Db } from '../db';
 import { publish } from '../live';
 import { onApproved } from './agents-actions';
+import { notify } from '../settings';
 import { listStores } from '../stores';
 
 /** awardXp + an `xp` live message (XP toast / level-up burst). */
@@ -13,6 +14,15 @@ export function award(db: Db, a: Award) {
   const out = awardXp(db, a);
   if (out) publish({ type: 'xp', ...out });
   return out;
+}
+
+/** A measured outcome becomes the agent's store learning and, once per change, a note in the owner's feed. */
+function recordOutcome(db: Db, ref: string, worked: boolean, m: NewMemory) {
+  writeMemory(db, m);
+  if (!once(db, `outcome-note:${ref}`)) return;
+  const agent = getAgent(db, m.agentId);
+  const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
+  notify(db, { kind: 'info', title: worked ? `Measured win: ${name}` : `${name}: no lift this time`, body: m.text, storeId: m.storeId, link: `/agents/${m.agentId}` });
 }
 
 const midnight = () => {
@@ -56,7 +66,7 @@ export function checkAdOutcomes(db: Db, today = localDate()) {
     const worked = after > before;
     const roas = `blended ROAS ${before.toFixed(2)} → ${after.toFixed(2)}`;
     // ponytail: writeMemory dedupes by text, so rechecks are no-ops; an owner-deleted outcome comes back within 30 days.
-    writeMemory(db, {
+    recordOutcome(db, `ads:${r.id}`, worked, {
       storeId: String(r.store_id), agentId: String(r.agent_id), kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'ads'],
       text: `"${r.title}" ${worked ? 'worked' : 'did not help'}: ${roas} in the 3 days after.`,
       evidence: `7 days before vs 3 days after ${day} (request ${r.id})`,
@@ -97,7 +107,7 @@ export function checkProductOutcomes(db: Db, today = localDate()) {
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
     const storeId = String(t.store_id);
     const agentId = String(t.agent_id);
-    writeMemory(db, {
+    recordOutcome(db, `product:${t.approval_id}:${t.product_id}`, won, {
       storeId, agentId, kind: 'learning', confidence: won ? 0.7 : 0.6, tags: ['outcome', 'product'],
       text: `"${t.title}" ${won ? 'sold' : 'did not take off'}: ${units} units, ${money(revenue)} revenue, ${money(profit)} gross profit in its first 14 days.`,
       evidence: `paid orders ${t.added_on} to ${end} (request ${t.approval_id})`,
@@ -141,7 +151,7 @@ export function checkPriceOutcomes(db: Db, today = localDate()) {
     const worked = after.profit > before.profit;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
     const agentId = String(t.agent_id);
-    writeMemory(db, {
+    recordOutcome(db, `price:${t.approval_id}`, worked, {
       storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'pricing'],
       text: `Pricing "${t.title}" $${t.from_price} → $${t.to_price} ${worked ? 'worked' : 'did not help'}: gross profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.approval_id})`,
@@ -172,7 +182,7 @@ export function checkPageOutcomes(db: Db, today = localDate()) {
     if (!before.units && !after.units) continue;
     const worked = after.profit > before.profit;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${d.currency}`;
-    writeMemory(db, {
+    recordOutcome(db, `page:${d.id}`, worked, {
       storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'page'],
       text: `The new "${d.title}" page ${worked ? 'worked' : 'did not help'}: gross profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (draft ${d.id})`,

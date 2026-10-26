@@ -97,6 +97,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-47 Agents see what sells, and the Store Developer improves one best-seller page a week, so the page-outcome loop (AGT-43) has something to judge.
 - [x] AGT-48 The squad can see its creatives library, so the Ad Strategist launches what the Creative Studio and Copywriter made instead of asking for more.
 - [x] AGT-49 The Weekly report can see what the squad shipped: its task asked for approved requests, but no tool could read them.
+- [x] AGT-50 The owner hears how each approved change turned out (measured wins and misses), not only a passing XP toast.
 - [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
@@ -104,6 +105,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-50 Outcome notes: every judged ad change, added product, price test and product page posts one notification to the owner's feed ("Measured win: <Agent>" or "<Agent>: no lift this time"). The body is the measured result and the link opens the agent. It goes through `recordOutcome` (learning + a `once` gate), so rechecks don't repeat it.
 - 2026-10-26 — AGT-49 `squad_log` (Market Analyst) lists the last N days of owner requests with their decision (approved, denied, pending or auto-approved) and finished runs with each answer's gist. The Weekly report job uses it for "what the squad shipped".
 - 2026-10-26 — AGT-48 `list_creatives` (Ad Strategist, Creative Studio, Copywriter) is the store's creatives library as CSV, newest first, filterable by kind. Media show as `demo` / `higgsfield` / `none`, never the payload. Playbooks: the Ad Strategist names library creatives to launch before asking the Creative Studio for new ones; the Creative Studio and Copywriter check it so they don't repeat an angle.
 - 2026-10-26 — AGT-47 `list_products` now sorts best sellers first and adds `units_30d` / `revenue_30d` from paid orders, so agents can tell what sells. New default job "Weekly page refresh" (Store Developer, Thu 09:00) drafts one improved page for the top seller and asks to publish it. `draft_page` allows one page test per product at a time: it refuses while a draft is open (draft, pending or approved) or within 29 days of going live. Rejected drafts don't block. Noted core's FYI: core's writers log to `action_log`, and my next migration is 25.

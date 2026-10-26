@@ -82,6 +82,7 @@ test('on a real store a price test is judged on gross profit 14 days before vs a
   expect(texts).toEqual(['Pricing "Grip Socks" $20 → $25 worked: gross profit 140 USD → 171 USD, 10 → 9 units (14 days before vs after).']);
   expect(xp()).toBe(before + 50);
   expect(listMemory(db, 'peak').find((m) => m.text === 'Grip Socks are underpriced vs rivals')?.confidence).toBe(0.7);
+  expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Measured win: Market Analyst'`).all()).toEqual([{ body: texts[0] }]);
 });
 
 test('connected stores get the price on Shopify; other platforms and write errors tell the owner and start no test', async () => {

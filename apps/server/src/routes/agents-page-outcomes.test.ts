@@ -38,4 +38,8 @@ test('a product page published on a real store is judged on the 14 days before v
   ]);
   expect(listMemory(db, 'peak').find((m) => m.text === 'Rope buyers care about cable length')?.confidence).toBe(0.5);
   expect(xp()).toBe(before);
+  // The owner hears how it went, once (the check above ran twice).
+  expect(db.prepare(`SELECT title, body, link FROM notifications WHERE kind = 'info' AND title LIKE '%no lift%'`).all()).toEqual([
+    { title: 'Store Developer: no lift this time', body: expect.stringMatching(/^The new "Jump Rope" page did not help/), link: '/agents/peak:store_developer' },
+  ]);
 });
