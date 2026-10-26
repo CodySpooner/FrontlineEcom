@@ -101,10 +101,16 @@ test('a partly refunded Etsy receipt counts what the buyer kept', async () => {
   const etsy = fakeEtsy().fetchFn;
   const fetchFn = (async (url: string, init: RequestInit) =>
     new URL(url).pathname.endsWith('/receipts')
-      ? Response.json({ count: 1, results: [receipt(9, 'partially refunded', 4000, { refunds: [{ amount: usd(1250), created_timestamp: T('2026-10-26T09:00:00Z'), reason: 'damaged' }] })] })
+      ? Response.json({ count: 1, results: [receipt(9, 'partially refunded', 4000, {
+          refunds: [{ amount: usd(1250), created_timestamp: T('2026-10-26T09:00:00Z'), reason: 'damaged' }],
+          transactions: [{ listing_id: 11, quantity: 2, price: usd(1500) }, { listing_id: 12, quantity: 1, price: usd(1000) }],
+        })] })
       : etsy(url, init)) as typeof fetch;
   await syncEtsy(db, key, 'pawsome', fetchFn, NOW);
   expect(db.prepare("SELECT total, status FROM orders WHERE store_id = 'pawsome' AND id = 'etsy-9'").get()).toEqual({ total: 27.5, status: 'paid' });
+  // Etsy doesn't say which lines a refund was for: each line keeps its share of what the buyer kept (27.50 of 40).
+  const lines = db.prepare("SELECT product_id, quantity, revenue FROM order_items WHERE order_id = 'etsy-9' ORDER BY product_id").all() as { revenue: number }[];
+  expect(lines.map((l) => l.revenue)).toEqual([expect.closeTo(20.63, 1), expect.closeTo(6.88, 1)]);
 });
 
 test("an Etsy store takes its shop's currency from the receipts", async () => {

@@ -155,7 +155,10 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         const gross = money(r.grandtotal);
         const tax = gross > 0 ? ((money(r.total_tax_cost) + money(r.total_vat_cost)) * total) / gross : 0;
         ord.run(storeId, `etsy-${r.receipt_id}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', r.is_shipped ? 'fulfilled' : 'unfulfilled', r.shipments?.[0]?.tracking_code || null, day, Math.round(tax * 100) / 100);
-        setOrderItems(db, storeId, `etsy-${r.receipt_id}`, (r.transactions ?? []).map((t) => ({ productId: `etsy-${t.listing_id}`, quantity: t.quantity, revenue: money(t.price) * t.quantity, cost: 0 })));
+        // ponytail: a partial refund names no lines, so each keeps its share of what the buyer kept (a shipping-only refund
+        // lowers them too); Woo's refunds list lines (CORE-65).
+        const kept = gross > 0 ? total / gross : 1;
+        setOrderItems(db, storeId, `etsy-${r.receipt_id}`, (r.transactions ?? []).map((t) => ({ productId: `etsy-${t.listing_id}`, quantity: t.quantity, revenue: money(t.price) * t.quantity * kept, cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);
       if (full) archiveMissing(db, id, storeId, 'etsy-*', [...listings.map((l) => `etsy-${l.listing_id}`), ...kept], today);
