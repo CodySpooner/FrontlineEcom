@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import type { ResearchProduct, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
-import { ProductDetails } from './Research';
+import { ProductDetails, Research } from './Research';
 
 afterEach(() => {
   cleanup();
@@ -35,5 +35,21 @@ describe('ProductDetails › Add to a store', () => {
     await screen.findByText(/Sent to Peak Fit's Product Hunter/);
     const [, init] = fetch.mock.calls.find(([u]) => String(u).includes('add-to-store'))!;
     expect(JSON.parse(String(init?.body))).toEqual({ storeId: 'shop1' });
+  });
+});
+
+describe('AI Research', () => {
+  it("asks the Product Hunter of the store the owner picks, not silently the first one", async () => {
+    const fetch = stubApi((url, init) => {
+      if (init?.method === 'POST') return { id: 'r1', agentId: 'glow:product_hunter', status: 'queued', transcript: [] };
+      if (url.startsWith('/api/stores')) return [store('paws', 'Pawsome Gear', 'shopify'), store('glow', 'Glow Haus', 'shopify')];
+      if (url.startsWith('/api/research?')) return { items: [], total: 0, offset: 0, limit: 30 };
+      return [];
+    });
+    renderApp(<Research />);
+    await screen.findByRole('option', { name: 'Glow Haus' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Store for AI Research' }), { target: { value: 'glow' } });
+    fireEvent.click(screen.getByRole('button', { name: 'AI Research' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/agents/glow%3Aproduct_hunter/runs', expect.objectContaining({ method: 'POST' })));
   });
 });

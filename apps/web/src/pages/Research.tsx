@@ -39,7 +39,9 @@ export function Research() {
   const saved = useSaved();
 
   const { ids, stores } = useStoreSelection();
-  const store = stores.find((s) => s.id === ids[0]) ?? stores[0];
+  // Research isn't per store, so the page has no store filter: with several stores, say whose Product Hunter runs.
+  const [storeId, setStoreId] = useState('');
+  const store = stores.find((s) => s.id === storeId) ?? stores.find((s) => s.id === ids[0]) ?? stores[0];
   const start = useStartRun();
   const navigate = useNavigate();
   const research = () =>
@@ -77,7 +79,19 @@ export function Research() {
               ))}
             </select>
           </label>
-          <Button variant="primary" className="ml-auto" disabled={!store || start.isPending} onClick={research} title={store && `Ask ${store.name}'s Product Hunter to find new winners`}>
+          {stores.length > 1 && (
+            <label className="ml-auto">
+              <span className="sr-only">Store for AI Research</span>
+              <select value={store?.id ?? ''} onChange={(e) => setStoreId(e.target.value)} className="cursor-pointer rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] focus:border-red/60 focus:outline-none">
+                {stores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <Button variant="primary" className={cx(stores.length < 2 && 'ml-auto')} disabled={!store || start.isPending} onClick={research} title={store && `Ask ${store.name}'s Product Hunter to find new winners`}>
             <Sparkles className="size-4" />
             AI Research
           </Button>
