@@ -541,3 +541,11 @@ test("a Shopify order's tax counts against profit, revenue stays the order total
   expect(db.prepare("SELECT total, tax FROM orders WHERE store_id = 'glow' AND id = '#1001'").get()).toEqual({ total: 120, tax: 20 });
   expect(day).toEqual({ revenue: 120, cogs: itemCost + 20 });
 });
+
+test('in a store whose prices include VAT, product revenue leaves the VAT out like the order does', async () => {
+  const { db } = await setup();
+  // 120 including 20 VAT: the 80 line holds 80 × 20/120 of it.
+  const { fetchFn } = fakeShopify([order('#1001', '2026-10-25T09:00:00Z', '120.00', { taxesIncluded: true, currentTotalTaxSet: { shopMoney: money('20.00') } })]);
+  await syncShopify(db, key, 'glow', fetchFn, NOW);
+  expect(db.prepare("SELECT revenue FROM order_items WHERE store_id = 'glow' AND order_id = '#1001' AND product_id = '111'").get()?.revenue).toBe(66.67);
+});

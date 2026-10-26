@@ -53,6 +53,8 @@ interface ShopifyOrder {
   currentTotalPriceSet: { shopMoney: { amount: string } };
   /** Tax in that total, after returns. */
   currentTotalTaxSet?: { shopMoney: { amount: string } };
+  /** Prices include tax (VAT stores): line totals then hold it too. */
+  taxesIncluded?: boolean;
   fulfillments: { displayStatus: string | null; trackingInfo: { number: string | null }[] }[];
   lineItems: { nodes: LineItem[]; pageInfo: PageInfo };
 }
@@ -75,7 +77,7 @@ const DELETED_Q = `query ($after: String, $q: String) {
 const LINE_ITEM = 'quantity product { id } discountedTotalSet { shopMoney { amount } } variant { inventoryItem { unitCost { amount } } }';
 const ORDERS_Q = `query ($after: String, $q: String) {
   orders(first: 12, after: $after, query: $q, sortKey: UPDATED_AT) {
-    nodes { id name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus
+    nodes { id name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus taxesIncluded
       currentTotalPriceSet { shopMoney { amount } } currentTotalTaxSet { shopMoney { amount } }
       fulfillments(first: 1) { displayStatus trackingInfo(first: 1) { number } }
       lineItems(first: 10) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } }
@@ -283,8 +285,11 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
           }
           const cogs = o.lineItems.nodes.reduce((a, li) => a + li.quantity * num(li.variant?.inventoryItem?.unitCost), 0);
           ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day, num(o.currentTotalTaxSet?.shopMoney.amount));
-          // Custom line items (no product) only count toward the order total.
-          setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product ? [{ productId: tail(li.product.id), quantity: li.quantity, revenue: num(li.discountedTotalSet.shopMoney.amount), cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));
+          // Custom line items (no product) only count toward the order total. Where prices include VAT, each line gives up
+          // the order's share of it. ponytail: one rate for all lines; reduced-rate lines come out a little low.
+          const total = num(o.currentTotalPriceSet.shopMoney.amount);
+          const net = o.taxesIncluded && total > 0 ? 1 - num(o.currentTotalTaxSet?.shopMoney.amount) / total : 1;
+          setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product ? [{ productId: tail(li.product.id), quantity: li.quantity, revenue: Math.round(num(li.discountedTotalSet.shopMoney.amount) * net * 100) / 100, cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));
         }
 
         rebuildRevenue(db, storeId, days);
