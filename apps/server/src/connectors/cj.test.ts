@@ -33,6 +33,7 @@ function fakeCj(byStatus: Record<string, ReturnType<typeof cjOrder>[]>, tokenRes
 const setup = () => {
   const db = openDb();
   seedDemo(db, '2026-10-26');
+  db.prepare('UPDATE stores SET demo = 0').run(); // connected stores: CJ only touches real orders
   saveIntegration(db, key, { kind: 'cj', values: { email: 'owner@example.com', apiKey: 'CJ-KEY' } });
   const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, tracking, cogs, local_date) VALUES (?, ?, '2026-10-20T10:00:00Z', 40, 'paid', ?, ?, 0, '2026-10-20')");
   order.run('glow', '#2001', 'unfulfilled', null);
@@ -130,4 +131,15 @@ test('CJ calls take turns (one per second for real), so two searches at once are
     vi.useRealTimers();
   }
   expect(at.slice(1).map((t, i) => t - at[i]!)).toEqual([1100, 1100, 1100]);
+});
+
+test("CJ leaves demo stores out: a real order whose number a demo store also has (they count from #1001 too) still gets its tracking", async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET demo = 1 WHERE id = 'peak'").run();
+  const { fetchFn } = fakeCj({ SHIPPED: [cjOrder('3001', 'SHIPPED', 'CJPKL1', 'Glow Haus Official')] });
+  await syncCj(db, key, 'null', fetchFn, NOW, 0);
+  expect(db.prepare("SELECT store_id, tracking FROM orders WHERE id = '#3001' ORDER BY store_id").all().map((r) => ({ ...r }))).toEqual([
+    { store_id: 'glow', tracking: 'CJPKL1' },
+    { store_id: 'peak', tracking: null },
+  ]);
 });
