@@ -27,6 +27,18 @@ const draft = (extra: object = {}): FakeStep => ({
   },
 });
 
+test("archived products (deleted on the platform) get no page drafts or publish requests", async () => {
+  const [saved] = await run(() => [draft()]);
+  expect(saved).toMatch(/^Saved draft/);
+  db.prepare(`UPDATE products SET status = 'archived' WHERE store_id = 'glow' AND id = 'p-new'`).run();
+  const id = listPageDrafts(db)[0]!.id;
+  expect(await run(() => [{ call: 'publish_page', input: { draftId: id } }, draft({ title: 'Again' })], 'approve')).toEqual([
+    'Not sent: Product p-new is archived (deleted or trashed on the platform). Pick an active product from list_products.',
+    'Product p-new is archived (deleted or trashed on the platform). Pick an active product from list_products.',
+  ]);
+  expect(db.prepare(`SELECT count(*) AS n FROM approvals WHERE store_id = 'glow' AND action_json LIKE '%store.publish_page%'`).get()?.n).toBe(0);
+});
+
 /** Runs the steps as the Glow Store Developer; `answer` decides publish requests. Returns tool outputs. */
 async function run(steps: (drafts: PageDraft[]) => FakeStep[], answer?: ApprovalDecision) {
   const agent = getAgent(db, 'glow:store_developer')!;

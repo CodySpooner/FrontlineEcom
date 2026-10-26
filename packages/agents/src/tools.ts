@@ -104,6 +104,13 @@ const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOStri
  * PRODUCT_WRITE_PLATFORMS for products and other pages, PRODUCT_PAGE_PLATFORMS for product pages, PRICE_WRITE_PLATFORMS
  * for prices; `onStore` in apps/server/src/routes/agents.ts), so an approval would only fail. Undefined when it can.
  */
+/** Why a product can't take a price or page change: not in the store, or archived (core's daily catalog pass archives deleted ones). */
+const productGone = (ctx: ToolContext, productId: string) => {
+  const status = ctx.db.prepare('SELECT status FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId)?.status;
+  if (status === undefined) return `No product ${productId} in this store. Use list_products for ids.`;
+  if (status === 'archived') return `Product ${productId} is archived (deleted or trashed on the platform). Pick an active product from list_products.`;
+};
+
 const noStoreWrites = (store: Store, platforms = PRODUCT_WRITE_PLATFORMS) =>
   store.connected && !platforms.includes(store.platform)
     ? `Not sent: the app doesn't change ${store.platform} stores yet, so approving it would do nothing. Put the change in your answer so the owner can make it by hand.`
@@ -588,7 +595,8 @@ export const APP_TOOLS: AppTool[] = [
       if (kind === 'product' && !productId) return 'productId is required for a product page.';
       const bad = unsafeHtml(d.html);
       if (bad) return `Not saved: ${bad} in a storefront page. Use headings, paragraphs, lists, tables, images and http(s) links only.`;
-      if (productId && !ctx.db.prepare('SELECT 1 FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId)) return `No product ${productId} in this store. Use list_products for ids.`;
+      const gone = productId && productGone(ctx, productId);
+      if (gone) return gone;
       // One page per product at a time: overlapping page changes can't be judged apart (14 days of sales after publishing).
       const prior = kind === 'product' ? listPageDrafts(ctx.db, { storeIds: [ctx.store.id], limit: 1000 }).find((d) => d.productId === productId && d.status !== 'rejected') : undefined;
       if (prior && prior.status !== 'published') return `Not saved: this product already has a page draft ${prior.status === 'draft' ? 'in' : `${prior.status} in`} Store Builder (${prior.id}). The owner publishes or rejects it first; work on another product.`;
@@ -605,6 +613,8 @@ export const APP_TOOLS: AppTool[] = [
       const d = getPageDraft(ctx.db, draftId);
       if (!d || d.storeId !== ctx.store.id) return `No draft ${draftId} in this store.`;
       if (d.status !== 'draft' && d.status !== 'rejected') return `That draft is already ${d.status}.`;
+      const gone = d.productId && productGone(ctx, d.productId);
+      if (gone) return `Not sent: ${gone}`;
       const no = noStoreWrites(ctx.store, d.kind === 'product' && d.productId ? PRODUCT_PAGE_PLATFORMS : PRODUCT_WRITE_PLATFORMS);
       if (no) return no;
       const { approved, message } = await requestApproval(ctx, {
@@ -732,8 +742,9 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ productId, newPrice, compareAt, evidence }, ctx) => {
       const no = noStoreWrites(ctx.store, PRICE_WRITE_PLATFORMS);
       if (no) return no;
-      const p = ctx.db.prepare('SELECT * FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId);
-      if (!p) return `No product ${productId} in this store. Use list_products for ids.`;
+      const gone = productGone(ctx, productId);
+      if (gone) return gone;
+      const p = ctx.db.prepare('SELECT * FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId)!;
       const [from, to] = [Number(p.price), r2(newPrice)];
       const $ = (n: number) => cash(n, ctx.store.currency);
       if (to === from) return `${$(to)} is already the price.`;

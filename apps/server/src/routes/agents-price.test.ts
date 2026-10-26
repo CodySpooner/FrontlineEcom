@@ -56,6 +56,12 @@ test('a price test is checked, approved and applied to a demo store', async () =
   expect(await run('glow', [price(id, cost)])).toEqual([`Not sent: ${cost} EUR is at or below the unit cost (${cost} EUR).`]);
 });
 
+test('an archived product (deleted on the platform) gets no price test', async () => {
+  const id = String(db.prepare(`SELECT id FROM products WHERE store_id = 'glow' AND cost IS NOT NULL LIMIT 1`).get()!.id);
+  db.prepare(`UPDATE products SET status = 'archived' WHERE store_id = 'glow' AND id = ?`).run(id);
+  expect(await run('glow', [price(id, 30)])).toEqual([`Product ${id} is archived (deleted or trashed on the platform). Pick an active product from list_products.`]);
+});
+
 test("a price that covers the unit cost but not the store's fees is refused", async () => {
   const p = db.prepare(`SELECT id, price, cost FROM products WHERE store_id = 'glow' AND cost > 5 ORDER BY price DESC LIMIT 1`).get()!;
   const [id, cost] = [String(p.id), Number(p.cost)];
