@@ -106,6 +106,18 @@ test('cancel stops running and queued runs', async () => {
   expect(getRun(db, queued.id)?.startedAt).toBeUndefined();
 });
 
+test("taking an agent offline stops its running and queued work, not the squad's", async () => {
+  const { engine, open } = gated();
+  const m = manager({ engine });
+  const running = ok(m.start('glow:copywriter', 'x'));
+  const queued = ok(m.start('glow:copywriter', 'y'));
+  const other = ok(m.start('glow:ad_strategist', 'z'));
+  m.cancelAgent('glow:copywriter');
+  open();
+  await m.idle();
+  expect([running, queued, other].map((r) => getRun(db, r.id)?.status)).toEqual(['cancelled', 'cancelled', 'done']);
+});
+
 test("a run waiting on the owner's decision doesn't hold the store's slot", async () => {
   const usageDone = { type: 'done', sessionId: 's', usage } as const;
   const m = manager({

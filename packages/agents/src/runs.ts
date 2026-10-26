@@ -100,6 +100,11 @@ export function createRunManager(opts: RunManagerOptions) {
     for (const a of active.values()) if (a.storeId === storeId) a.abort.abort();
   }
 
+  /** Stops an agent's queued and running work when the owner takes it offline. */
+  const cancelAgent = (agentId: string) => {
+    for (const r of db.prepare(`SELECT id FROM agent_runs WHERE agent_id = ? AND status IN ('queued', 'running')`).all(agentId)) cancel(String(r.id));
+  };
+
   /** The run with its transcript so far while it is still running. */
   function get(id: string): AgentRunDetail | undefined {
     const run = getRun(db, id);
@@ -283,7 +288,7 @@ export function createRunManager(opts: RunManagerOptions) {
     if (typeof again !== 'string') once(db, `retried:${again.id}`);
   }
 
-  return { start, cancel, cancelStore, get, idle };
+  return { start, cancel, cancelStore, cancelAgent, get, idle };
 }
 
 const SHOWN = 4000;

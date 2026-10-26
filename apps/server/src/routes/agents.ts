@@ -327,6 +327,7 @@ export function agentRoutes(db: Db) {
         return c.json({ error: 'Expected { enabled?: boolean, autonomy?: suggest|ask|autopilot }' }, 400);
       }
       const agent = updateAgent(db, c.req.param('id'), { enabled: body.enabled, autonomy: body.autonomy });
+      if (agent && body.enabled === false) runManager(db).cancelAgent(agent.id); // offline means it stops working now
       return agent ? c.json(agent) : c.json({ error: 'Agent not found' }, 404);
     })
     .post('/api/agents/:id/runs', async (c) => {
