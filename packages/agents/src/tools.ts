@@ -394,7 +394,9 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async (find, ctx) => {
       if (!ctx.recordFind) return 'The research feed is not available.';
-      const p = await ctx.recordFind({ ...find, niche: ctx.store.niche });
+      // A custom niche's finds carry its slug, so each custom niche's feed is its own (core's niche_detail).
+      const nicheDetail = nicheKey(ctx.store).split(':')[1];
+      const p = await ctx.recordFind({ ...find, niche: ctx.store.niche, ...(nicheDetail ? { nicheDetail } : {}) });
       return `${p.repeat ? `Already in the research feed as ${p.id}; refreshed its numbers` : `Added to the research feed as ${p.id}`}: AI score ${p.score} (margin ${p.scoreParts.margin}, trend ${p.scoreParts.trend}, competition ${p.scoreParts.competition}, shipping ${p.scoreParts.shipping}), margin ${p.margin}%.`;
     },
   }),
@@ -423,10 +425,8 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ tab, q, anyNiche, limit }, ctx) => {
       if (!ctx.research) return 'The research feed is not available.';
-      const items = await ctx.research({ tab, q, limit, ...(anyNiche ? {} : { niche: ctx.store.niche }) });
-      // Finds carry the niche, not a custom niche's name: every custom-niche store's finds share "other".
-      const mixed = !anyNiche && ctx.store.niche === 'other' ? `# Custom niche: these are every custom-niche store's finds; keep only those that fit ${ctx.store.nicheDetail}.\n` : '';
-      return mixed + (await usdNote(ctx)) + csv(
+      const items = await ctx.research({ tab, q, limit, ...(anyNiche ? {} : { niche: nicheKey(ctx.store) }) }); // other:<slug> for a custom niche
+      return (await usdNote(ctx)) + csv(
         items.map((p) => ({ id: p.id, title: p.title, category: p.category, source: p.source, cost: p.cost, price: p.price, compare_at: p.compareAt, margin_pct: p.margin, trend_pct: p.trend, competition: p.competition, shipping_days: p.shippingDays, score: p.score })),
       );
     },

@@ -408,13 +408,25 @@ describe('agent tools on demo data', () => {
     expect(rows.every((r) => Number(r.split(',')[7]) >= 70)).toBe(true);
   });
 
-  test("research_feed tells a custom-niche store its feed holds every custom niche's finds", async () => {
-    db.prepare(`UPDATE stores SET niche = 'other', niche_detail = 'Scented candles' WHERE id = 'glow'`).run();
+  test("a custom-niche store's finds are its own: its feed doesn't show another custom niche's", async () => {
+    const custom = db.prepare(`UPDATE stores SET niche = 'other', niche_detail = ? WHERE id = ?`);
+    custom.run('Scented candles', 'glow');
+    custom.run('Fishing gear', 'pawsome');
+    const find = (title: string): FakeStep => ({
+      call: 'record_product_find',
+      input: { title, category: 'Gifts', source: 'tiktok', cost: 4, price: 24, compareAt: 34, trend: 40, competition: 30, shippingDays: 8 },
+    });
     try {
-      const [feed] = results(await run(input('glow', 'product_hunter'), [{ call: 'research_feed' }, done]));
-      expect(feed!.output.split('\n')[0]).toBe("# Custom niche: these are every custom-niche store's finds; keep only those that fit Scented candles.");
+      await run(input('glow', 'product_hunter'), [find('Soy Wax Melt Set'), find('Gift Box'), done]);
+      const [again] = results(await run(input('pawsome', 'product_hunter'), [find('Lure Kit'), find('Gift Box'), { call: 'research_feed' }, done])).slice(1);
+      expect(again!.output).toMatch(/^Added to the research feed as find-/); // the same title in another custom niche is its own find
+      const [, , feed] = results(await run(input('pawsome', 'product_hunter'), [find('Lure Kit'), find('Gift Box'), { call: 'research_feed' }, done]));
+      expect(feed!.output.split('\n').slice(1).map((r) => r.split(',')[1]).sort()).toEqual(['Gift Box', 'Lure Kit']);
     } finally {
-      db.prepare(`UPDATE stores SET niche = 'beauty', niche_detail = 'at-home skincare devices' WHERE id = 'glow'`).run(); // the db is shared by these tests
+      custom.run('at-home skincare devices', 'glow'); // the db is shared by these tests
+      custom.run('dog travel gear', 'pawsome');
+      db.prepare(`UPDATE stores SET niche = CASE id WHEN 'glow' THEN 'beauty' ELSE 'pet' END WHERE id IN ('glow', 'pawsome')`).run();
+      db.prepare(`DELETE FROM research_products WHERE id LIKE 'find-%'`).run();
     }
   });
 
