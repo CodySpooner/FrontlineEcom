@@ -12,7 +12,7 @@ import { listOrders, listProducts } from './catalog';
 import { competitorRoutes } from './competitors';
 import { dataDir, type Db } from './db';
 import { addDays, localDate } from './dates';
-import { deleteIntegration, listIntegrations, saveIntegration } from './integrations';
+import { deleteIntegration, health, listIntegrations, saveIntegration } from './integrations';
 import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
 import { settingsRoutes } from './settings';
@@ -33,7 +33,7 @@ const json = (req: Request): Promise<unknown> => req.json().catch(() => undefine
 export const createApp = (db: Db, secretKey?: Buffer) => {
   const key = () => (secretKey ??= loadKey(dataDir()));
   return new Hono()
-    .get('/api/health', (c) => c.json({ ok: true }))
+    .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))
     .get('/api/stores/:id', (c) => {
       const store = getStore(db, c.req.param('id'));

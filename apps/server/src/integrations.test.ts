@@ -99,3 +99,24 @@ test('credentials saved under another key read as an error to re-enter, never a 
   const res = await reset.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', accessToken: TOKEN } }));
   expect(await res.json()).toMatchObject({ status: 'connected', secretsSet: ['accessToken'] });
 });
+
+test('GET /api/health lists each connector state without secrets', async () => {
+  const { db, app } = setup();
+  expect((await app.request('/api/health')).status).toBe(200);
+  await app.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', accessToken: TOKEN } }));
+  db.prepare("UPDATE integrations SET status = 'error', error = 'Shopify rejected the access token' WHERE id = 'shopify:glow'").run();
+  await app.request('/api/integrations', put({ kind: 'cj', values: { email: 'a@b.co', apiKey: 'cj-secret' } }));
+  db.prepare("UPDATE integrations SET synced_at = '2026-10-26T10:00:00.000Z' WHERE id = 'cj:global'").run();
+
+  const res = await (await app.request('/api/health')).text();
+  expect(res).not.toContain(TOKEN);
+  expect(res).not.toContain('cj-secret');
+  expect(JSON.parse(res)).toEqual({
+    ok: true,
+    uptimeSec: expect.any(Number),
+    connectors: [
+      { id: 'cj:global', kind: 'cj', status: 'connected', syncedAt: '2026-10-26T10:00:00.000Z' },
+      { id: 'shopify:glow', kind: 'shopify', storeId: 'glow', status: 'error', error: 'Shopify rejected the access token' },
+    ],
+  });
+});

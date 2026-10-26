@@ -7,6 +7,7 @@ import { syncMeta } from './connectors/meta';
 import { syncShopify } from './connectors/shopify';
 import { syncTikTokAds, syncTikTokShop } from './connectors/tiktok';
 import type { Db } from './db';
+import { log } from './log';
 
 type Syncer = (db: Db, key: Buffer, storeId: string) => Promise<void>;
 
@@ -31,7 +32,11 @@ export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs =
       if (!due || running.has(id)) continue;
       lastTry.set(id, now.toISOString());
       running.add(id);
-      syncers[r.kind as IntegrationKind]!(db, key, String(r.store_id)).finally(() => running.delete(id));
+      syncers[r.kind as IntegrationKind]!(db, key, String(r.store_id)).finally(() => {
+        running.delete(id);
+        const after = db.prepare('SELECT status, error FROM integrations WHERE id = ?').get(id);
+        if (after) log(after.status === 'error' ? 'warn' : 'info', 'sync', { id, ms: Date.now() - now.getTime(), status: after.status, ...(after.error ? { error: after.error } : {}) });
+      });
     }
   };
   tick();

@@ -55,13 +55,14 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
       Electron's Node; fall back to better-sqlite3 if needed.
 - [x] CORE-19 Packaging: electron-builder Windows installer + icon from brand; `pnpm package`.
 - [x] CORE-20 Settings + budget caps + notifications API.
-- [ ] CORE-21 Health: `/api/health` with connector statuses, structured logs to the data dir.
+- [x] CORE-21 Health: `/api/health` with connector statuses, structured logs to the data dir.
 - [ ] CORE-22 OAuth connect flows: "Connect" buttons that run Etsy (PKCE), TikTok Shop (auth code) and Google Ads OAuth through a
       127.0.0.1 redirect and store the tokens, so owners don't have to mint refresh tokens by hand.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-21 `GET /api/health` → `Health` (`ok`, `uptimeSec`, per-connector status / error / syncedAt, no secrets) + JSON-lines log at `<data dir>/logs/api.log` (start, each sync with duration and outcome, crashes; one rotated copy at 5 MB)
 - 2026-10-26 — CORE-19 `pnpm package` → `apps/desktop/release/Frontline Ecom Setup 0.1.0.exe` (NSIS, per-user, 224 MB). The API is bundled to one file by `scripts/stage.mjs`, with the Agent SDK's native `claude.exe` beside it, the web build, and the agent playbooks/packs under resources/. Brand bolt icon (`build/icon.svg`, render with `pnpm --filter @frontline/desktop icon`). Verified: the unpacked build runs the dashboard. Unsigned, so SmartScreen warns until a code-signing cert is set (`CSC_LINK`)
 - 2026-10-26 — Inbox (ui): demo orders were seeded across the UTC day, so some were in the future. They now fall within the local day and stop at the current time
 - 2026-10-26 — CORE-13: `GET /api/suppliers/products?q=&limit=` → `SupplierProduct[]` (CJ catalog search, lowest variant price; demo matches from the research catalog without CJ). DSers has no public API, so it is skipped

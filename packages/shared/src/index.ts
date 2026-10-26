@@ -614,6 +614,13 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
 
 export type IntegrationStatus = 'connected' | 'error';
 
+/** GET /api/health → Health. `ok` means the API is up; connector problems are listed here, not fatal. */
+export interface Health {
+  ok: true;
+  uptimeSec: number;
+  connectors: { id: string; kind: IntegrationKind; storeId?: string; status: IntegrationStatus; error?: string; syncedAt?: string }[];
+}
+
 /** GET /api/integrations?stores=a,b → Integration[] (global ones always included). */
 export interface Integration {
   id: string;

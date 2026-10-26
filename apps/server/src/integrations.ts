@@ -1,4 +1,4 @@
-import { INTEGRATION_KINDS, type Integration, type IntegrationInput, type IntegrationKind, type IntegrationStatus } from '@frontline/shared';
+import { INTEGRATION_KINDS, type Health, type Integration, type IntegrationInput, type IntegrationKind, type IntegrationStatus } from '@frontline/shared';
 import type { Db } from './db';
 import { decrypt, encrypt } from './secrets';
 import { getStore } from './stores';
@@ -97,4 +97,20 @@ export function updateSecrets(db: Db, key: Buffer, id: string, secrets: Record<s
 /** Connectors report health here; shows on the Integrations screen. Never put credentials in `error`. */
 export function setIntegrationStatus(db: Db, id: string, status: IntegrationStatus, error?: string) {
   db.prepare('UPDATE integrations SET status = ?, error = ? WHERE id = ?').run(status, error ?? null, id);
+}
+
+/** Health: the API is up; each integration's last known sync state. */
+export function health(db: Db): Health {
+  const connectors = db
+    .prepare('SELECT id, kind, store_id, status, error, synced_at FROM integrations ORDER BY id')
+    .all()
+    .map((r) => ({
+      id: String(r.id),
+      kind: r.kind as IntegrationKind,
+      ...(r.store_id ? { storeId: String(r.store_id) } : {}),
+      status: r.status as IntegrationStatus,
+      ...(r.error ? { error: String(r.error) } : {}),
+      ...(r.synced_at ? { syncedAt: String(r.synced_at) } : {}),
+    }));
+  return { ok: true, uptimeSec: Math.round(process.uptime()), connectors };
 }
