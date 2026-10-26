@@ -151,10 +151,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-68 A campaign deleted on Meta or TikTok kept showing as active with its old budget.
 - [x] CORE-69 A daily-budget change on a TikTok lifetime-budget campaign would have set its lifetime total.
 - [x] CORE-70 Reconnect (Connect on a saved Google Ads, Etsy or TikTok Shop integration) asked for every saved secret again.
+- [x] CORE-71 TikTok Shop calls were signed with the sync's start time, so a long first sync would go stale partway.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-71 (TikTok Shop/Amazon review): every TikTok Shop call carried `timestamp` = the sync's `now`; a big shop's two-year first sync (hundreds of order pages, then products, returns and images) runs past the minutes TikTok accepts (from memory: ~5), after which every call fails, no cursor is saved and the backfill restarts forever. Now each call is signed with the clock when it's sent; `now` still decides token renewal.
 - 2026-10-26 — CORE-70: the Integrations form leaves saved secrets blank ("Saved. Leave blank to keep it.") and Save keeps them, but Connect (`startOAuth`) required every field, so reconnecting Google Ads (refresh tokens of apps in Testing expire weekly) failed with "OAuth client secret is required" unless the owner typed the secret again. A blank secret is now the saved one (`getCredentials`), also for the token exchange.
 - 2026-10-26 — Ad connector review, left as is (not verifiable from the vendors' docs): Meta account insights may leave out deleted campaigns' spend unless filtered on effective_status (an invalid filter would fail every sync, so not added blind); Meta throttling (HTTP 400, codes 4/17) and TikTok 40100 aren't retried, the next sync tries again. GA4's addToCarts/checkouts count events (confirmed in its API schema) where Shopify counts sessions; no per-session metric confirmed, so the README says so instead.
 - 2026-10-26 — CORE-69 (ad connector review): campaigns without a daily budget of their own sync as `daily_budget` 0 (TikTok lifetime/unlimited, Meta budgets on ad sets, Google total budgets, archived). `setCampaignBudget` now refuses those before any network call ("no daily budget of its own ... change it in the ads manager"): TikTok's `budget` field is the lifetime total on a lifetime campaign, and the approval check passed when both values were 0. Agents told.

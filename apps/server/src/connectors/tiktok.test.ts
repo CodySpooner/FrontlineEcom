@@ -382,3 +382,12 @@ test("a TikTok product image whose signed link expires (x-expires) is read again
   db.prepare("UPDATE products SET image = ? WHERE store_id = 'glow' AND id = 'tt-17301'").run(at(72));
   expect(await reads()).toEqual([]);
 });
+
+test("TikTok Shop calls are signed at the time they're sent, not the sync's start (TikTok refuses a stale timestamp mid-backfill)", async () => {
+  const db = shopSetup();
+  const { fetchFn, calls } = fakeShop();
+  await syncTikTokShop(db, key, 'glow', fetchFn, new Date('2026-01-01T00:00:00Z'));
+  const stamps = calls.flatMap((c) => (c.url.searchParams.get('timestamp') ? [Number(c.url.searchParams.get('timestamp'))] : []));
+  expect(stamps.length).toBeGreaterThan(0);
+  for (const t of stamps) expect(Math.abs(t - Date.now() / 1000)).toBeLessThan(60);
+});

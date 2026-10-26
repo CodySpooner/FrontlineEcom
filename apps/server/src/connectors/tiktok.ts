@@ -207,7 +207,8 @@ async function shopClient(db: Db, key: Buffer, id: string, creds: Record<string,
   const token = fresh ? creds.accessToken! : await refreshShopToken(db, key, id, creds, fetchFn);
   const api = async <T>(method: 'GET' | 'POST', path: string, query: Record<string, string> = {}, body?: object) => {
     const json = body ? JSON.stringify(body) : '';
-    const params = { ...query, app_key: creds.appKey!, timestamp: String(Math.floor(now.getTime() / 1000)) };
+    // The clock at sending: TikTok refuses a timestamp minutes old, and a first sync can page for longer than that.
+    const params = { ...query, app_key: creds.appKey!, timestamp: String(Math.floor(Date.now() / 1000)) };
     const res = await fetchFn(`${SHOP_API}${path}?${new URLSearchParams({ ...params, sign: signTikTokShop(creds.appSecret!, path, params, json) })}`, {
       method,
       headers: { 'x-tts-access-token': token, 'content-type': 'application/json' },
