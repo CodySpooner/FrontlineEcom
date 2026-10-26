@@ -7,7 +7,7 @@ import { useOrderIssues, useOrders, useSetIssueStatus, useStartRun, type OrderQu
 import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, Chip, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, Segmented, Table } from '../components/ui';
+import { Badge, Button, Chip, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, Segmented, Table, useFocusBack } from '../components/ui';
 import { ago, cents } from '../lib/format';
 import { orderIssues, type Issue, type IssueKind } from '../lib/orders';
 import { NAV } from '../nav';
@@ -156,6 +156,7 @@ export function AgentIssue({ i }: { i: OrderIssue }) {
   const set = useSetIssueStatus();
   const [resolving, setResolving] = useState(false);
   const [fix, setFix] = useState('');
+  const opener = useFocusBack(resolving);
   return (
     <IssueRow
       icon={AGENT_ISSUE_ICON[i.kind]}
@@ -191,7 +192,7 @@ export function AgentIssue({ i }: { i: OrderIssue }) {
             )}
           </form>
         ) : (
-          <Button size="sm" onClick={() => setResolving(true)}>
+          <Button ref={opener} size="sm" onClick={() => setResolving(true)}>
             Mark resolved
           </Button>
         )

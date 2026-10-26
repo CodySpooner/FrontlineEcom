@@ -347,6 +347,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-136 Deny opens a reason field; its "Back" unmounted the field and dropped keyboard focus to <body>, so a keyboard
       user started over from the top of the page. Backing out now returns focus to that request's Deny button (Dashboard
       requests board and every request card: chat transcripts and the agent page).
+- [x] UI-137 Same bug as UI-136 in the other inline forms: closing Knowledge's playbook editor, a memory's edit field,
+      the "Restore original" confirm or an order issue's resolve note (Cancel or save) dropped focus to the page body.
+      A small `useFocusBack` hook in components/ui hands focus back to the button that opened the form.
 
 ## Blocked
 
@@ -528,3 +531,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-134: Shell passes `useLive()`'s online flag as the Outlet context; `LiveActivity` (now exported) reads it, online outside Shell. New Dashboard test (Outlet context false: "Reconnecting…", no "Live"). Orca: stopped the dev API, so the badge read "Reconnecting…" (grey, no pulse) beside the sidebar's "System status: Reconnecting…"; restarted it, back to "Live" in ~5s
 - 2026-10-26 — UI-135: AgentDetail filters `useApprovals()` to the agent, skipping a request whose `runId` is in the open chat thread, and reuses Chat's `ApprovalCard`. Two new AgentDetail tests (a request no run raised shows with its Approve button and another agent's doesn't; one raised in the open run appears once). Chrome at 1440: Ad Strategist · Pawsome Gear shows "Needs your approval · Change ad budgets / Raise daily budget 20% ($216 → $259)" above the tabs (not clicked); the idle Copywriter shows none. Same pass: zero console warnings or errors across all 14 pages, the Orders table pages, the Automation form covers trigger/approval/cap, Creative matches the reference's action bar (captions for video only)
 - 2026-10-26 — UI-136: a `backed` state per call site gives the remounted Deny button `autoFocus`. New Dashboard and Chat tests (red on the old code: focus on body). Orca: Deny → Back on "Pause Spark Ads · UGC" left focus on BODY before, on "Deny: Pause …" after (no request was denied). Also found while verifying UI-135: after a ship's rebase the dev Vite can serve stale modules; restarted it clean
+- 2026-10-26 — UI-137: `useFocusBack(open)` returns a ref that's focused when `open` goes true → false; `Button` now takes a ref (`ComponentProps<'button'>`). Wired on Knowledge's Edit and Restore original, a memory row's Edit, and Orders' Mark resolved. Three new tests (red on the old code). Orca: Knowledge Edit → Cancel leaves focus on Edit (nothing saved); the dev DB has no flagged order issues to try live. Dialog forms (store, connect) already get focus back from the native <dialog>

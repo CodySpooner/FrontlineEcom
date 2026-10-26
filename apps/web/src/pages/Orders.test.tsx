@@ -67,3 +67,13 @@ describe('orders table', () => {
     expect(link.getAttribute('target')).toBe('_blank');
   });
 });
+
+describe('cancelling a resolve note', () => {
+  it('puts focus back on Mark resolved', async () => {
+    stubApi(() => undefined);
+    renderApp(<AgentIssue i={issue} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Mark resolved' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Mark resolved' }));
+  });
+});

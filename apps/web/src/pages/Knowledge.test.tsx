@@ -40,3 +40,25 @@ describe('Knowledge Base › store memory', () => {
     expect(screen.queryByText(/becomes your note/)).toBeNull();
   });
 });
+
+describe('Knowledge Base › closing an editor', () => {
+  it("puts focus back on the playbook's Edit button", async () => {
+    const doc = { kind: 'playbook', key: 'ad_strategist', title: 'Ad Strategist playbook', chars: 9, markdown: '# Mission' };
+    stubApi((url) => (url === '/api/knowledge' ? [doc] : url.startsWith('/api/knowledge/') ? doc : undefined));
+    renderApp(<Knowledge />, '/knowledge');
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit' }));
+  });
+
+  it("puts focus back on a memory's Edit button", async () => {
+    stubApi((url) => {
+      if (url === '/api/stores') return [{ id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', color: '#ff2a3a', currency: 'USD', timezone: 'UTC' }];
+      if (url === '/api/stores/peak/memory') return [{ id: 'm1', storeId: 'peak', agentId: 'owner', kind: 'learning', text: 'Never discount the bands', confidence: 0.6, tags: [], createdAt: '2026-10-26T08:00:00Z' }];
+    });
+    renderApp(<Knowledge />, '/knowledge?tab=memory');
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit' }));
+  });
+});

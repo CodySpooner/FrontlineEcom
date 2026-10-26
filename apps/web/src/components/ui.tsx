@@ -1,6 +1,6 @@
 // UI-01 design system: the small set of primitives every screen is built from.
 import { cloneElement, useEffect, useId, useRef } from 'react';
-import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactElement, ReactNode, TableHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, ComponentProps, HTMLAttributes, InputHTMLAttributes, ReactElement, ReactNode, TableHTMLAttributes } from 'react';
 import { Inbox, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 import { AGENT_ROLES, type AgentRole, type AgentStatus, type MemoryKind, type RunStatus, type StoreHealthStatus } from '@frontline/shared';
 import { usedShare } from '../lib/usage';
@@ -27,7 +27,19 @@ export function Panel({ title, sub, action, children, className }: { title: stri
   );
 }
 
-type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost'; size?: 'sm' | 'md' };
+type ButtonProps = ComponentProps<'button'> & { variant?: 'primary' | 'ghost'; size?: 'sm' | 'md' };
+
+/** For the button that opens an inline form (Edit, Mark resolved…): focus returns to it when the form closes (Cancel or
+ *  save), instead of dropping to the top of the page with the unmounted form. */
+export function useFocusBack(open: boolean) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const was = useRef(open);
+  useEffect(() => {
+    if (was.current && !open) ref.current?.focus();
+    was.current = open;
+  }, [open]);
+  return ref;
+}
 
 /** Button look, also used by router links that act as buttons. */
 export const buttonClass = (variant: 'primary' | 'ghost' = 'ghost', size: 'sm' | 'md' = 'md') =>

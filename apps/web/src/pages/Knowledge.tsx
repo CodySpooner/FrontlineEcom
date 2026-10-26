@@ -8,7 +8,7 @@ import { Hero } from '../components/Hero';
 import { Markdown } from '../components/Markdown';
 import { SharedLearnings } from '../components/NicheLearnings';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Tabs } from '../components/ui';
+import { Badge, Button, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Tabs, useFocusBack } from '../components/ui';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -96,6 +96,8 @@ function DocView({ d }: { d: KnowledgeDoc }) {
   const [draft, setDraft] = useState<string>();
   const [confirm, setConfirm] = useState(false);
   const editing = draft !== undefined;
+  const editRef = useFocusBack(editing);
+  const restoreRef = useFocusBack(confirm);
   const actions = !editing && q.data && (
     <span className="flex items-center gap-2">
       {d.edited &&
@@ -109,12 +111,12 @@ function DocView({ d }: { d: KnowledgeDoc }) {
             </Button>
           </>
         ) : (
-          <Button size="sm" onClick={() => setConfirm(true)}>
+          <Button ref={restoreRef} size="sm" onClick={() => setConfirm(true)}>
             Restore original
           </Button>
         ))}
       {!confirm && (
-        <Button size="sm" onClick={() => setDraft(q.data.markdown ?? '')}>
+        <Button ref={editRef} size="sm" onClick={() => setDraft(q.data.markdown ?? '')}>
           Edit
         </Button>
       )}
@@ -213,6 +215,7 @@ function MemoryRow({ m }: { m: StoreMemory }) {
   const update = useUpdateMemory();
   const forget = useForgetMemory(m.storeId);
   const [draft, setDraft] = useState<string>();
+  const memEditRef = useFocusBack(draft !== undefined);
   return (
     <li className={cx('rounded-lg border bg-bg-2 px-3 py-2.5', m.pinned ? 'border-red/45' : 'border-line')}>
       <div className="flex items-start gap-3">
@@ -271,7 +274,7 @@ function MemoryRow({ m }: { m: StoreMemory }) {
             <Pin className={cx('size-4', m.pinned && 'fill-current')} />
           </button>
           {draft === undefined && (
-            <button type="button" onClick={() => setDraft(m.text)} className="cursor-pointer rounded-md px-2 py-1 text-xs text-text-2 transition hover:bg-panel-2 hover:text-white">
+            <button ref={memEditRef} type="button" onClick={() => setDraft(m.text)} className="cursor-pointer rounded-md px-2 py-1 text-xs text-text-2 transition hover:bg-panel-2 hover:text-white">
               Edit
             </button>
           )}
