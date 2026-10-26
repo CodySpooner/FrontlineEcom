@@ -107,10 +107,11 @@ test('missions: 4 per store; completing one pays the commander once', async () =
 
 test('achievements unlock from store results and level the commander', async () => {
   const list = await get<Achievement[]>('/api/achievements');
-  expect(list).toHaveLength(10);
+  expect(list).toHaveLength(12);
   const unlocked = list.filter((a) => a.unlockedAt).map((a) => a.id);
   expect(unlocked).toEqual(expect.arrayContaining(['first_sale', 'squad_deployed', 'ten_k_month']));
   expect(unlocked).not.toContain('first_orders');
+  expect(unlocked).not.toContain('first_win');
   const commander = await get<Commander>('/api/commander');
   expect(commander.xp).toBe(list.filter((a) => a.unlockedAt).reduce((n, a) => n + a.xp, 0));
   expect(commander).toMatchObject({ level: levelForXp(commander.xp), rank: expect.any(String), streakDays: expect.any(Number) });

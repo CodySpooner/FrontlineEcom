@@ -101,6 +101,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-50 The owner hears how each approved change turned out (measured wins and misses), not only a passing XP toast.
 - [x] AGT-51 A runaway real-engine run can't burn past the store's daily AI budget: the cap was only checked when a run started.
 - [x] AGT-52 Ask AI across stores: the palette asks one store's Market Analyst, which could only see that store.
+- [x] AGT-53 Achievements for measured wins: the strongest moment in the loop had XP but no badge.
 - [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
@@ -108,6 +109,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-53 New achievements "First Measured Win" (+100) and "Proven Squad" (10 wins, +300), counted from XP awards whose reason starts "Measured win:". That covers ad, product, price and page wins. `Facts.wins` is added.
 - 2026-10-26 — Claude engine permissions: every tool call goes through `canUseTool`. The role's built-ins and app tools are allowed there, external reads run, and other external calls ask the owner. With no `allowedTools`, the SDK no longer prints its ~800-char "canUseTool shadowed" warning into the server log on every run. Verified with one short real run: the tool was allowed, the answer streamed, no warning, $0.011 with a warm cache.
 - 2026-10-26 — Real-engine smoke run (1 short run, Glow Market Analyst, `maxTurns` 4, $0.5 budget): `mcp__frontline__store_summary` was called through the in-process MCP server, returned real numbers and finished in 4 s. Cost $0.14: 34.5k input tokens over 2 turns, mostly prompt and tool schemas. Checked core's demo-approvals FYI: the seeded `ads.set_budget` has no `network`, and `applyAdChange` falls back to the campaign row, so it executes.
 - 2026-10-26 — AGT-52 `compare_stores` (Market Analyst) shows every store side by side over 7, 30 or 90 days in the owner's base currency (core's FX): revenue, profit, net margin, ad spend, ROAS, orders, revenue change and health. Biggest first, with the asking store marked. It comes from a new `ToolEnv.portfolio`. The playbook points cross-store questions at it.

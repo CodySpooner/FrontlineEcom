@@ -141,6 +141,8 @@ export interface Facts {
   approved: number;
   memories: number;
   topLevel: number;
+  /** Measured wins paid so far (an agent's change improved the numbers it was judged on). */
+  wins: number;
 }
 
 // Revenue milestones read in the owner's base currency: core converts multi-store totals (CORE-26).
@@ -154,6 +156,8 @@ export const ACHIEVEMENTS: (Omit<Achievement, 'unlockedAt'> & { check: (f: Facts
   { id: 'trusted_advisor', title: 'Trusted Advisor', description: 'Approved 10 agent requests.', xp: 100, check: (f) => f.approved >= 10 },
   { id: 'learning_machine', title: 'Learning Machine', description: 'Your squads learned 25 things about your stores.', xp: 100, check: (f) => f.memories >= 25 },
   { id: 'battle_hardened', title: 'Battle-Hardened', description: 'An agent reached Veteran rank.', xp: 150, check: (f) => f.topLevel >= RANK_FROM.Veteran },
+  { id: 'first_win', title: 'First Measured Win', description: "An agent's change measurably improved the numbers.", xp: 100, check: (f) => f.wins >= 1 },
+  { id: 'proven_squad', title: 'Proven Squad', description: '10 measured wins across your stores.', xp: 300, check: (f) => f.wins >= 10 },
   { id: 'hundred_k_month', title: '$100K Month', description: 'A store did $100,000 in revenue over 30 days.', xp: 500, check: (f) => f.best30Revenue >= 100_000 },
 ];
 

@@ -83,6 +83,8 @@ test('on a real store a price test is judged on gross profit 14 days before vs a
   expect(xp()).toBe(before + 50);
   expect(listMemory(db, 'peak').find((m) => m.text === 'Grip Socks are underpriced vs rivals')?.confidence).toBe(0.7);
   expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Measured win: Market Analyst'`).all()).toEqual([{ body: texts[0] }]);
+  const achievements = (await (await app.request('/api/achievements')).json()) as { id: string; unlockedAt?: string }[];
+  expect(achievements.find((a) => a.id === 'first_win')?.unlockedAt).toEqual(expect.any(String));
 });
 
 test('connected stores get the price on Shopify; other platforms and write errors tell the owner and start no test', async () => {

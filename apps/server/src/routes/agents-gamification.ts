@@ -208,6 +208,7 @@ function facts(db: Db): Facts {
     approved: count(db, `SELECT count(*) AS n FROM approvals WHERE status = 'approved'`),
     memories: count(db, 'SELECT count(*) AS n FROM store_memory'),
     topLevel: levelForXp(count(db, 'SELECT coalesce(max(xp), 0) AS n FROM agents')),
+    wins: count(db, `SELECT count(*) AS n FROM xp_events WHERE reason LIKE 'Measured win:%'`),
   };
 }
 
