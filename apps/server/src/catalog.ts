@@ -1,5 +1,6 @@
 import type { FulfillmentStatus, Order, OrderStatus, Page, Product, ProductStatus } from '@frontline/shared';
-import type { Db } from './db';
+import { rebuildRevenue } from './connectors/common';
+import { tx, type Db } from './db';
 
 type Row = Record<string, unknown>;
 type Query = (key: string) => string | undefined;
@@ -91,4 +92,36 @@ const ORDERS: ListSpec = {
 };
 
 export const listProducts = (db: Db, storeIds: string[], q: Query) => list(db, PRODUCTS, storeIds, q, toProduct);
+
+/**
+ * The owner's unit cost for a product whose platform has none (Etsy, TikTok Shop, Woo without COGS). Its past lines
+ * without a platform cost (0, or the previous owner cost) are re-priced, with their orders' cogs and days. Undefined =
+ * no such product; a string = bad input.
+ */
+export function setProductCost(db: Db, storeId: string, productId: string, body: unknown): string | Product | undefined {
+  const cost = (body as { cost?: unknown } | undefined)?.cost;
+  if (typeof cost !== 'number' || !Number.isFinite(cost) || cost < 0 || cost > 1_000_000) return 'cost must be a number from 0 to 1000000';
+  const store = db.prepare('SELECT platform, connected FROM stores WHERE id = ?').get(storeId);
+  if (store?.platform === 'shopify' && store.connected) return 'Shopify keeps unit costs: set "Cost per item" on the product in Shopify and the next sync brings it here';
+  const old = db.prepare('SELECT cost FROM products WHERE store_id = ? AND id = ?').get(storeId, productId);
+  if (!old) return undefined;
+  tx(db, () => {
+    db.prepare('UPDATE products SET cost = ? WHERE store_id = ? AND id = ?').run(cost, storeId, productId);
+    const lines = db
+      .prepare(
+        `SELECT i.order_id, i.quantity, i.cost, o.local_date FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+         WHERE i.store_id = ? AND i.product_id = ? AND (i.cost = 0 OR abs(i.cost - i.quantity * ?) < 0.005)`,
+      )
+      .all(storeId, productId, Number(old.cost));
+    const line = db.prepare('UPDATE order_items SET cost = ? WHERE store_id = ? AND order_id = ? AND product_id = ?');
+    const order = db.prepare('UPDATE orders SET cogs = round(max(0, cogs + ?), 2) WHERE store_id = ? AND id = ?');
+    for (const l of lines) {
+      const next = r2(Number(l.quantity) * cost);
+      line.run(next, storeId, String(l.order_id), productId);
+      order.run(next - Number(l.cost), storeId, String(l.order_id));
+    }
+    rebuildRevenue(db, storeId, new Set(lines.map((l) => String(l.local_date))));
+  });
+  return toProduct(db.prepare('SELECT * FROM products WHERE store_id = ? AND id = ?').get(storeId, productId)!);
+}
 export const listOrders = (db: Db, storeIds: string[], q: Query) => list(db, ORDERS, storeIds, q, toOrder);

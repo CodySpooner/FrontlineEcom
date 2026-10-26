@@ -803,7 +803,11 @@ export interface Product {
   image?: string;
   price: number;
   compareAt?: number;
-  /** Unit cost incl. shipping. */
+  /**
+   * Unit cost incl. shipping. Where the platform has none (Etsy, TikTok Shop, Woo without COGS) the owner sets it with
+   * PATCH /api/products/:storeId/:id { cost } → Product; past orders of it are re-priced. 400 on a connected Shopify
+   * store (costs live in Shopify).
+   */
   cost: number;
   inventory: number;
   status: ProductStatus;

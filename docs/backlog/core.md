@@ -97,6 +97,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Owner-entered unit costs for platforms without them (Etsy, TikTok Shop, Woo without COGS): `PATCH /api/products/:storeId/:id { cost }` sets the cost and re-prices the product's past lines that had no platform cost (0, or the previous owner cost), adjusting orders' COGS and rebuilding those days. New synced lines without a platform cost take it (`setOrderItems`), and Shopify/Woo product syncs keep an existing cost when the platform reports 0. Connected Shopify stores get 400 (costs live in Shopify). ui Inbox note for the editor. Test
 - 2026-10-26 — Inbox (ui): `AnalyticsSummary.byStore[].previous: MetricTotals` (additive), the store's previous-period totals with the same partial-today handling as the top level. All zero means nothing in the previous period, so the per-store table can show "New" instead of +0.0%. Test
 - 2026-10-26 — Inbox (agents): the seeded Pawsome budget request now quotes pawsome-c1's seeded budget ("Raise daily budget 20% ($216 → $259)", payload `from`/`to` to match), both on a fresh seed and for a demo request still pending. Approving it no longer trips the stale-budget check. Test
 - 2026-10-26 — Saving an integration with different non-secret settings (another shop domain, ad account, customer or advertiser ID) clears its sync cursor, so the new account backfills 2 years instead of only the last few weeks. A new token or secret keeps the cursor. Test

@@ -44,7 +44,11 @@ export interface OrderItem {
   cost: number;
 }
 
-/** Replaces an order's line items, summed per product (an order can hold several variants of one product). */
+/**
+ * Replaces an order's line items, summed per product (an order can hold several variants of one product). A line the
+ * platform gave no cost for (Etsy, TikTok Shop, Woo without COGS) takes the owner's unit cost, and an order with no
+ * cogs of its own gets its lines' costs.
+ */
 export function setOrderItems(db: Db, storeId: string, orderId: string, items: OrderItem[]) {
   db.prepare('DELETE FROM order_items WHERE store_id = ? AND order_id = ?').run(storeId, orderId);
   const byProduct = new Map<string, OrderItem>();
@@ -53,7 +57,12 @@ export function setOrderItems(db: Db, storeId: string, orderId: string, items: O
     byProduct.set(i.productId, p ? { ...p, quantity: p.quantity + i.quantity, revenue: p.revenue + i.revenue, cost: p.cost + i.cost } : i);
   }
   const ins = db.prepare('INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES (?, ?, ?, ?, ?, ?)');
-  for (const i of byProduct.values()) ins.run(storeId, orderId, i.productId, i.quantity, Math.round(i.revenue * 100) / 100, Math.round(i.cost * 100) / 100);
+  const unit = db.prepare('SELECT cost FROM products WHERE store_id = ? AND id = ?');
+  for (const i of byProduct.values()) {
+    const cost = i.cost || i.quantity * Number(unit.get(storeId, i.productId)?.cost ?? 0);
+    ins.run(storeId, orderId, i.productId, i.quantity, Math.round(i.revenue * 100) / 100, Math.round(cost * 100) / 100);
+  }
+  db.prepare('UPDATE orders SET cogs = (SELECT round(coalesce(sum(cost), 0), 2) FROM order_items WHERE store_id = ?1 AND order_id = ?2) WHERE store_id = ?1 AND id = ?2 AND cogs = 0').run(storeId, orderId);
 }
 
 /** An approved change to a live campaign: a new daily budget (account currency) or a pause. */

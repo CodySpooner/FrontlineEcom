@@ -13,7 +13,7 @@ import { fxFor } from './fx';
 import { log } from './log';
 import { oauthKinds, oauthRoutes } from './oauth';
 import { demoSupplierProducts, searchCj } from './connectors/cj';
-import { listOrders, listProducts } from './catalog';
+import { listOrders, listProducts, setProductCost } from './catalog';
 import { competitorRoutes } from './competitors';
 import { dataDir, type Db } from './db';
 import { addDays, dayFraction, localDate } from './dates';
@@ -102,6 +102,11 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .get('/api/products', (c) => {
       const page = listProducts(db, pickStores(db, c.req.query('stores')), (k) => c.req.query(k));
       return typeof page === 'string' ? c.json({ error: page }, 400) : c.json(page);
+    })
+    .patch('/api/products/:storeId/:id', async (c) => {
+      const p = setProductCost(db, c.req.param('storeId'), c.req.param('id'), await json(c.req.raw));
+      if (!p) return c.json({ error: 'product not found' }, 404);
+      return typeof p === 'string' ? c.json({ error: p }, 400) : c.json(p);
     })
     .get('/api/orders', (c) => {
       const page = listOrders(db, pickStores(db, c.req.query('stores')), (k) => c.req.query(k));

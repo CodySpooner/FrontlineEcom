@@ -208,7 +208,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
-           cost = excluded.cost, inventory = excluded.inventory, status = excluded.status`,
+           cost = CASE WHEN excluded.cost > 0 THEN excluded.cost ELSE cost END, inventory = excluded.inventory, status = excluded.status`,
       );
       for (const p of products) {
         const v = p.variants.nodes[0];

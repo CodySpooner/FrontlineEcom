@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import type { Order, Page, Product } from '@frontline/shared';
 import { createApp } from './app';
+import { rebuildRevenue, setOrderItems, switchToReal } from './connectors/common';
 import { openDb } from './db';
 import { seedDemo } from './demo';
 
@@ -52,4 +53,35 @@ test('invalid list params are 400s', async () => {
   for (const q of ['/api/products?sort=evil;drop', '/api/products?dir=sideways', '/api/products?status=gone', '/api/orders?fulfillment=lost', '/api/orders?sort=title']) {
     expect((await app.request(q)).status, q).toBe(400);
   }
+});
+
+test("the owner's unit cost fills order lines the platform gave no cost for, now and in past orders", async () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'peak'); // TikTok Shop: no unit costs
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('peak', 'tt-1', 'Mat', 30, 0, 5, 'active')").run();
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES ('peak', ?, '2026-10-25T12:00:00Z', 60, 'paid', 'unfulfilled', 0, '2026-10-25')");
+  order.run('tt-a');
+  setOrderItems(db, 'peak', 'tt-a', [{ productId: 'tt-1', quantity: 2, revenue: 60, cost: 0 }]);
+  rebuildRevenue(db, 'peak', ['2026-10-25']);
+  const cogs = (id: string) => db.prepare("SELECT cogs FROM orders WHERE store_id = 'peak' AND id = ?").get(id)?.cogs;
+  const day = () => db.prepare("SELECT cogs FROM daily_metrics WHERE store_id = 'peak' AND date = '2026-10-25'").get()?.cogs;
+  expect([cogs('tt-a'), day()]).toEqual([0, 0]);
+
+  const app = createApp(db);
+  const patch = (cost: unknown, store = 'peak') => app.request(`/api/products/${store}/tt-1`, { method: 'PATCH', body: JSON.stringify({ cost }), headers: { 'content-type': 'application/json' } });
+  expect(((await (await patch(7.5)).json()) as Product).cost).toBe(7.5);
+  expect([cogs('tt-a'), day()]).toEqual([15, 15]);
+  await patch(8); // changed again: lines priced at the old cost follow
+  expect([cogs('tt-a'), day()]).toEqual([16, 16]);
+
+  order.run('tt-b'); // a later sync: the line takes the owner's cost
+  setOrderItems(db, 'peak', 'tt-b', [{ productId: 'tt-1', quantity: 1, revenue: 30, cost: 0 }]);
+  expect(cogs('tt-b')).toBe(8);
+
+  expect((await patch(-1)).status).toBe(400);
+  expect((await app.request('/api/products/peak/nope', { method: 'PATCH', body: JSON.stringify({ cost: 1 }) })).status).toBe(404);
+  db.prepare("UPDATE stores SET connected = 1 WHERE id = 'glow'").run();
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', 'tt-1', 'X', 10, 0, 1, 'active')").run();
+  expect(((await (await patch(2, 'glow')).json()) as { error: string }).error).toContain('Shopify');
 });
