@@ -44,6 +44,22 @@ describe('Ask AI palette', () => {
     );
   });
 
+  it('with several stores in view, offers each Market Analyst, so the question goes where the owner picks', async () => {
+    const fetch = stubApi((url, init) => {
+      if (init?.method === 'POST') return { id: 'r2', agentId: 'glow:market_analyst', status: 'queued', transcript: [] };
+      if (url.startsWith('/api/stores')) return [...stores, { id: 'glow', name: 'Glow Haus', currency: 'USD' }];
+    });
+    renderApp(<AskPalette />);
+    window.dispatchEvent(new Event('frontline:ask'));
+    const input = await screen.findByRole('combobox');
+    fireEvent.change(input, { target: { value: 'Which ads should I pause?' } });
+    await screen.findByText('Ask the Market Analyst · Glow Haus');
+    expect(screen.getByText('Ask the Market Analyst · Pawsome Gear')).toBeTruthy();
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/agents/glow%3Amarket_analyst/runs', expect.objectContaining({ method: 'POST' })));
+  });
+
   it("a budget refusal links to the agent's settings and closes the palette on the way", async () => {
     stubApi((url, init) => {
       if (init?.method === 'POST') return reply({ error: "Today's budget for this agent ($0.3) is used up. Raise it in its settings." }, 409);

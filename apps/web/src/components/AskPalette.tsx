@@ -40,8 +40,9 @@ function Palette({ onClose }: { onClose: () => void }) {
   const [q, setQ] = useState('');
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
-  const { ids, stores } = useStoreSelection();
-  const store = stores.find((s) => s.id === ids[0]) ?? stores[0];
+  const { stores, has } = useStoreSelection();
+  // One row per store in view (the first is Enter's default), so a question never lands on a store the owner didn't mean.
+  const inView = stores.filter((s) => has(s.id));
   const start = useStartRun();
   const ask = q.trim();
   const go = (path: string) => {
@@ -49,17 +50,13 @@ function Palette({ onClose }: { onClose: () => void }) {
     onClose();
   };
   const items: Item[] = [
-    ...(ask && store
-      ? [
-          {
-            key: 'ask',
-            icon: Sparkles,
-            label: ask,
-            hint: `Ask the Market Analyst · ${store.name}`,
-            run: () => start.mutate({ agentId: `${store.id}:market_analyst`, task: ask }, { onSuccess: (r) => go(`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`) }),
-          },
-        ]
-      : []),
+    ...(ask ? inView : []).map((store) => ({
+      key: `ask:${store.id}:market_analyst`,
+      icon: Sparkles,
+      label: ask,
+      hint: `Ask the Market Analyst · ${store.name}`,
+      run: () => start.mutate({ agentId: `${store.id}:market_analyst`, task: ask }, { onSuccess: (r) => go(`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`) }),
+    })),
     ...matchPages(q, NAV).map((p) => ({ key: p.path, icon: p.icon, label: p.label, hint: 'Go to page', run: () => go(p.path) })),
   ];
   const sel = Math.min(active, items.length - 1);
@@ -107,7 +104,7 @@ function Palette({ onClose }: { onClose: () => void }) {
           >
             <it.icon className={cx('size-4 shrink-0', it.key === 'ask' ? 'text-red' : 'text-muted')} aria-hidden />
             <span className="min-w-0 flex-1 truncate text-[13px]">{it.label}</span>
-            <span className="shrink-0 text-xs text-muted">{it.key === 'ask' && start.isPending ? 'Asking…' : it.hint}</span>
+            <span className="shrink-0 text-xs text-muted">{start.isPending && it.key === `ask:${start.variables?.agentId}` ? 'Asking…' : it.hint}</span>
           </li>
         ))}
         {!items.length && <li className="px-3 py-6 text-center text-[13px] text-muted">No page by that name.</li>}
