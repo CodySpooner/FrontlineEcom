@@ -9,5 +9,19 @@ export function themeChange(action: ApprovalAction) {
   return { previewUrl, files };
 }
 
+/** The products a `store.add_products` request would add (agent-written payload, so malformed entries drop out). */
+export function addedProducts(action: ApprovalAction) {
+  if (action.kind !== 'store.add_products') return undefined;
+  const list = (action.payload as { products?: unknown } | undefined)?.products;
+  const num = (v: unknown) => (typeof v === 'number' && v > 0 ? v : undefined);
+  return (Array.isArray(list) ? list : []).flatMap((p: { title?: unknown; price?: unknown; compareAt?: unknown; cost?: unknown } | null) => {
+    const price = num(p?.price);
+    if (typeof p?.title !== 'string' || !price) return [];
+    const compareAt = num(p.compareAt);
+    const cost = num(p.cost);
+    return [{ title: p.title, price, ...(compareAt && { compareAt }), ...(cost && { margin: Math.round(((price - cost) / price) * 100) }) }];
+  });
+}
+
 /** "a, b, c +2 more" */
 export const fileList = (files: string[], max = 3) => files.slice(0, max).join(', ') + (files.length > max ? ` +${files.length - max} more` : '');

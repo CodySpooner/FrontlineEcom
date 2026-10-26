@@ -1,9 +1,29 @@
 // Kind-specific detail under an approval request (Dashboard, chat, Store Builder).
 import { ExternalLink } from 'lucide-react';
 import type { ApprovalAction } from '@frontline/shared';
-import { fileList, themeChange } from '../lib/approvals';
+import { addedProducts, fileList, themeChange } from '../lib/approvals';
+import { cents } from '../lib/format';
+import { useStoreSelection } from './StoreFilter';
 
-export function ApprovalExtras({ action }: { action: ApprovalAction }) {
+const SHOWN = 5;
+
+export function ApprovalExtras({ action, storeId }: { action: ApprovalAction; storeId?: string }) {
+  const { currency } = useStoreSelection();
+  const cur = storeId && currency(storeId);
+  const added = addedProducts(action);
+  if (added?.length)
+    return (
+      <ul className="mt-1.5 grid gap-0.5 text-xs text-muted">
+        {added.slice(0, SHOWN).map((p, i) => (
+          <li key={i} className="truncate">
+            <span className="font-semibold text-text-2">{p.title}</span> · {cents(p.price, cur || undefined)}
+            {p.compareAt && ` · was ${cents(p.compareAt, cur || undefined)}`}
+            {p.margin !== undefined && ` · ${p.margin}% margin`}
+          </li>
+        ))}
+        {added.length > SHOWN && <li>+{added.length - SHOWN} more</li>}
+      </ul>
+    );
   const t = themeChange(action);
   if (!t || (!t.previewUrl && !t.files.length)) return null;
   return (

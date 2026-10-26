@@ -228,7 +228,7 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
         {a.reason}
         {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
       </div>
-      <ApprovalExtras action={a.action} />
+      <ApprovalExtras action={a.action} storeId={a.storeId} />
       <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
         {open && denying ? (
           <DenyReason title={a.title} disabled={decide.isPending} onDeny={(note) => act('deny', note)} onBack={() => setDenying(false)} />

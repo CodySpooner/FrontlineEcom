@@ -374,7 +374,7 @@ export function Requests() {
                     {a.reason}
                     {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold whitespace-nowrap text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
                   </div>
-                  <ApprovalExtras action={a.action} />
+                  <ApprovalExtras action={a.action} storeId={a.storeId} />
                   {failed === a.id && (
                     <div role="alert" className="mt-1 text-xs text-red">
                       Couldn't send that. Try again.

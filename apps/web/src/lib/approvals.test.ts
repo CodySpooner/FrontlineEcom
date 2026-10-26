@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fileList, themeChange } from './approvals';
+import { addedProducts, fileList, themeChange } from './approvals';
 
 const theme = (payload: unknown) => themeChange({ kind: 'store.publish_theme', payload });
 
@@ -23,5 +23,22 @@ describe('fileList', () => {
   it('names the first few and counts the rest', () => {
     expect(fileList(['a', 'b'])).toBe('a, b');
     expect(fileList(['a', 'b', 'c', 'd', 'e'])).toBe('a, b, c +2 more');
+  });
+});
+
+describe('addedProducts', () => {
+  const add = (products: unknown) => addedProducts({ kind: 'store.add_products', payload: { products } });
+
+  it('lists what a request would add, with the margin at that price', () => {
+    expect(add([{ title: 'Gua Sha Stone Set', price: 24.99, compareAt: 39.99, cost: 5.2 }, { title: 'Eye Patches', price: 19.99 }])).toEqual([
+      { title: 'Gua Sha Stone Set', price: 24.99, compareAt: 39.99, margin: 79 },
+      { title: 'Eye Patches', price: 19.99 },
+    ]);
+  });
+
+  it('skips malformed entries and other kinds', () => {
+    expect(add([{ title: 'No price' }, 'x', null, { title: 'Ok', price: 10, compareAt: '20', cost: 0 }])).toEqual([{ title: 'Ok', price: 10 }]);
+    expect(add('nope')).toEqual([]);
+    expect(addedProducts({ kind: 'store.set_price', payload: { products: [{ title: 'x', price: 1 }] } })).toBeUndefined();
   });
 });
