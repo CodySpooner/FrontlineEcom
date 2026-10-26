@@ -12,7 +12,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-02 Demo generator: 3 seeded stores (Pawsome Gear pet/Shopify, Glow Haus beauty/Shopify, Peak Fit
       fitness/TikTok Shop), 2 years of daily metrics with trend + weekly seasonality + noise, products, orders, campaigns,
       pending approvals; deterministic seed; `demo` flag per store. (`dashboard-mockup-v3.html` has a seeded generator to start from.)
-- [ ] CORE-03 Analytics API: `GET /api/analytics/summary?stores=a,b&range=7|30|90|365` → totals (revenue, profit, ad
+- [x] CORE-03 Analytics API: `GET /api/analytics/summary?stores=a,b&range=7|30|90|365` → totals (revenue, profit, ad
       spend, ROAS, orders, AOV), previous-period deltas, daily series per metric, per-store breakdown. Tests for the math.
 - [ ] CORE-04 Stores API: list/get/create/update/delete with platform + niche; on create call the agents lane's
       `createSquad(store)` (stub until it exists).
@@ -46,6 +46,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-03 `GET /api/analytics/summary` (totals, previous, deltas, daily series, per-store), math tested
 - 2026-10-26 — CORE-02 demo generator: deterministic per (store, date), 2y history topped up to today on every start, products, campaigns + campaign_daily, last-week orders, 3 pending approvals
 - 2026-10-26 — CORE-01 SQLite layer (`node:sqlite`, `PRAGMA user_version` migrations, Phase 1 tables, stores read from DB); API contracts in shared
 - 2026-10-26 — Phase 0: Hono app with `/api/health` + `/api/stores` (static demo), shared domain types (coordinator)
