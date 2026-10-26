@@ -273,6 +273,8 @@ Orca's browser against the reference before ticking it.
       the squad card's "N learned" link opens on them, rather than among up to 300 shared squad memories.
 - [x] UI-104 The empty Conversion Funnel tells a connected TikTok Shop store which scope brings its visitors (core now
       reads TikTok's shop performance), alongside the GA4 and Shopify read_reports hints.
+- [x] UI-105 A live agent's header names the model it thinks with ("Claude Opus 5.5"), the counterpart to UI-95's
+      Demo engine badge, and the header's badge row wraps instead of running into the XP bar in a narrow window.
 
 ## Blocked
 
@@ -421,3 +423,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-102 follow-up: the Store Memory panel says "Your notes, your no's and pinned items go into every run" (AGT-121's `always`: pinned, agentId 'owner', `denied` tag). It said pinned only
 - 2026-10-26 — UI-103: AgentDetail Memory has a "Whose" Segmented, shown only when the list mixes this agent's memories with others'. It starts on the agent when the URL has `by=agent`, which the UI-99 card link now adds. AgentDetail.test: by=agent shows only its own; "Everyone (2)" widens. Orca at 800px with a client-side memory patch: clicking "2 things learned" on Copywriter → "Everyone (4) | Copywriter (2)*" with its 2 items. Patch dropped by reload
 - 2026-10-26 — UI-104: FunnelPanel's empty note is now one GA4 sentence plus one hint per connected platform: Shopify read_reports (unchanged text) and TikTok Shop Analytics scope (new, matching core's tiktok_shop help). Analytics.test adds the TikTok case. Orca at 800px with a client-side patch (empty funnel; stores connected as TikTok Shop and Shopify): both hints in a 78px paragraph. Patch dropped by reload
+- 2026-10-26 — UI-105: `modelName` in lib/format ("claude-opus-5-5" → "Opus 5.5", dated ids drop the date, others unchanged; format.test). The AgentDetail badge shows `Claude ${modelName}` when `engine.provider === 'claude'`. Found in Orca at 800px with a client-side patch (live engine + $1.50 budget): the non-wrapping badge row overflowed under the XP bar, and "Needs you" broke onto 2 lines (the budget and Demo engine badges together would do the same). The row is now `flex-wrap`, with status dot + label in a nowrap span: 45px tall, ends 16px left of the XP bar. AgentDetail.test covers the model badge. Patch dropped by reload

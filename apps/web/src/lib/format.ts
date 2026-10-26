@@ -42,3 +42,9 @@ export const day = (ymd: string) => {
 
 export const fmtDay = (ymd: string, long = false) =>
   day(ymd).toLocaleDateString('en-US', long ? { month: 'short', day: 'numeric', year: 'numeric' } : { month: 'short', day: 'numeric' });
+
+/** "claude-opus-5-5" → "Opus 5.5" (a dated id drops its date); anything else as given. */
+export function modelName(id: string) {
+  const m = /^claude-([a-z]+)-(\d+)-(\d+)(?:-\d{8})?$/.exec(id);
+  return m ? `${m[1]![0]!.toUpperCase()}${m[1]!.slice(1)} ${m[2]}.${m[3]}` : id;
+}

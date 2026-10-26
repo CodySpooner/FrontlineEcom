@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ago, cents, day, money, noBaseline, shortMoney, signedPct } from './format';
+import { ago, cents, day, modelName, money, noBaseline, shortMoney, signedPct } from './format';
 
 describe('format', () => {
   it('formats money with a real minus sign for losses', () => {
@@ -40,5 +40,14 @@ describe('noBaseline', () => {
     expect(noBaseline(0, 974)).toBe(true);
     expect(noBaseline(0, 0)).toBe(false);
     expect(noBaseline(500, 974)).toBe(false);
+  });
+});
+
+describe('modelName', () => {
+  it('names a Claude model the way people say it', () => {
+    expect(modelName('claude-opus-5-5')).toBe('Opus 5.5');
+    expect(modelName('claude-fable-5-1')).toBe('Fable 5.1');
+    expect(modelName('claude-sonnet-4-5-20250929')).toBe('Sonnet 4.5');
+    expect(modelName('some-other-model')).toBe('some-other-model');
   });
 });

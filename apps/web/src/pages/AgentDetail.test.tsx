@@ -68,6 +68,18 @@ describe('agent header', () => {
     expect(await screen.findByText('Demo engine')).toBeTruthy();
   });
 
+  it('names the Claude model a live agent thinks with', async () => {
+    stubApi((url) => (url === '/api/agents' ? [{ ...agent, status: 'idle', level: 3, rank: 'recruit', engine: { provider: 'claude', model: 'claude-opus-5-5' } }] : undefined));
+    renderApp(
+      <Routes>
+        <Route path="/agents/:id" element={<AgentDetail />} />
+      </Routes>,
+      '/agents/peak%3Aad_strategist',
+    );
+    expect(await screen.findByText('Claude Opus 5.5')).toBeTruthy();
+    expect(screen.queryByText('Demo engine')).toBeNull();
+  });
+
   it("opens on this agent's own memories from its card, and can widen to the squad's", async () => {
     const mem = (id: string, agentId: string, text: string) => ({ id, storeId: 'peak', agentId, kind: 'learning', text, confidence: 0.6, tags: [], createdAt: '2026-10-26T08:00:00Z' });
     stubApi((url) =>

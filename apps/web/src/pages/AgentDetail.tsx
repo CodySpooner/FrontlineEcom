@@ -12,7 +12,7 @@ import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, buttonClass, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
 import { describeTrigger, when } from '../lib/automation';
-import { ago, cents, money } from '../lib/format';
+import { ago, cents, modelName, money } from '../lib/format';
 import { NAV } from '../nav';
 
 const TABS = [
@@ -67,13 +67,17 @@ export function AgentDetail() {
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Portrait role={agent.role} rank={agent.rank} className="size-12" />
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs text-text-2">
-              <StatusDot tone={st.tone} pulse={st.pulse} />
-              {st.label}
+            {/* Wraps rather than running into the XP bar when the badges outgrow a narrow window. */}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-2">
+              <span className="flex items-center gap-2 whitespace-nowrap">
+                <StatusDot tone={st.tone} pulse={st.pulse} />
+                {st.label}
+              </span>
               <Badge>{AUTONOMY[agent.autonomy ?? 'ask'].label}</Badge>
               {agent.dailyBudgetUsd !== undefined && <Badge>AI ≤ {cents(agent.dailyBudgetUsd)}/day</Badge>}
               {/* Scripted answers on demo stores: never touches the owner's Claude plan. */}
               {agent.engine?.provider === 'demo' && <Badge>Demo engine</Badge>}
+              {agent.engine?.provider === 'claude' && <Badge>{agent.engine.model ? `Claude ${modelName(agent.engine.model)}` : 'Claude'}</Badge>}
             </div>
             <p className="mt-1 max-w-xl truncate text-xs text-muted">{role.blurb}</p>
           </div>
