@@ -866,6 +866,10 @@ export const APP_TOOLS: AppTool[] = [
       if (change === 'budget' && !(from > 0)) return `Not sent: ${String(c.name)} has no daily budget of its own (a lifetime budget, or budgets on its ad sets), so it can't be changed from here. Pause it, or say what to change in the ad manager.`;
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
       if (change === 'budget' && to === from) return `Not sent: ${cash(to, ctx.store.currency)}/day is already its budget.`;
+      // A big jump restarts the network's learning phase and the winner with it (the playbook: 20-30% every 48-72 h).
+      if (to > from * 1.3) {
+        return `Not sent: raise a budget at most 30% at a time (${cash(from, ctx.store.currency)} → up to ${cash(Math.floor(from * 1.3), ctx.store.currency)}/day); a bigger jump restarts the network's learning. Raise again once it has held for 3 days.`;
+      }
       // A change is judged on the 3 days after it, and delivery takes 48-72 h to settle after a budget edit: one at a
       // time. A pause can always go: it stops a loss.
       const recent =

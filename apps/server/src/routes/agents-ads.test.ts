@@ -79,6 +79,16 @@ test('a campaign with no daily budget of its own gets no budget suggestion or ch
   expect(requests).toEqual([]);
 });
 
+test('a budget is raised at most 30% at a time; a cut can go further', async () => {
+  db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 'jump', 'pawsome', 'Winner', 'active', 50)`).run();
+  const { outputs, requests } = await run([
+    propose({ campaignId: 'jump', change: 'budget', newDailyBudget: 100 }),
+    propose({ campaignId: 'jump', change: 'budget', newDailyBudget: 20 }),
+  ]);
+  expect(outputs[0]).toBe("Not sent: raise a budget at most 30% at a time ($50 → up to $65/day); a bigger jump restarts the network's learning. Raise again once it has held for 3 days.");
+  expect(requests.map((r) => r.title)).toEqual(['Lower Winner budget $50 → $20/day']);
+});
+
 test('a campaign gets one budget change per 3 days; a pause can still go', async () => {
   db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 'step', 'pawsome', 'Broad', 'active', 40)`).run();
   const first = await run([propose({ campaignId: 'step', change: 'budget', newDailyBudget: 48 })]);

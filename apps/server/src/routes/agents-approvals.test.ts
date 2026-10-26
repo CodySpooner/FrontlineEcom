@@ -48,6 +48,7 @@ describe('autopilot', () => {
 
   test('approves on its own within the store cap for that kind, then asks', async () => {
     autopilot('pawsome:ad_strategist', 'pawsome');
+    db.prepare(`UPDATE campaigns SET daily_budget = 300 WHERE id IN ('pawsome-c2', 'pawsome-c3')`).run(); // +$60: a 20% step
     const events = await run(input('pawsome:ad_strategist'), [raise('pawsome-c2', 60), raise('pawsome-c3', 60)]);
     const [auto, asked] = requests(events);
     expect(auto).toMatchObject({ status: 'approved', action: { amountUsd: 60, auto: true }, reason: expect.stringContaining('[autopilot: $60 of $100/day cap, $0 used before]') });
@@ -91,6 +92,7 @@ describe('autopilot', () => {
   test('a raise asked before midnight and approved after it counts toward the day it was approved', async () => {
     autopilot('pawsome:ad_strategist', 'pawsome');
     updateAgent(db, 'pawsome:ad_strategist', { autonomy: 'ask' });
+    db.prepare(`UPDATE campaigns SET daily_budget = 300 WHERE id = 'pawsome-c2'`).run();
     await run(input('pawsome:ad_strategist'), [raise('pawsome-c2', 40)]); // the owner approves it now
     const lastNight = new Date();
     lastNight.setHours(0, 0, 0, 0);
