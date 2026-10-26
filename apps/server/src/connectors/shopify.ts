@@ -46,9 +46,11 @@ const PRODUCTS_Q = `query ($after: String, $q: String) {
       variants(first: 1) { nodes { price compareAtPrice inventoryItem { unitCost { amount } } } } }
     pageInfo { hasNextPage endCursor } } }`;
 
-// ponytail: 25 orders × 20 line items keeps query cost under Shopify's 1000 limit; orders with >20 lines undercount cogs
+// Shopify prices a query before running it (max 1000): objects 1, connections 2 + first × child. Per order:
+// 1 + total 2 + fulfillment 2 + lineItems (2 + 20 × 4) = 87, so 10 orders = 872. Products: 2 + 50 × 9 = 452.
+// ponytail: orders with more than 20 line items undercount cogs.
 const ORDERS_Q = `query ($after: String, $q: String) {
-  orders(first: 25, after: $after, query: $q, sortKey: UPDATED_AT) {
+  orders(first: 10, after: $after, query: $q, sortKey: UPDATED_AT) {
     nodes { name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus
       currentTotalPriceSet { shopMoney { amount } }
       fulfillments(first: 1) { displayStatus trackingInfo(first: 1) { number } }

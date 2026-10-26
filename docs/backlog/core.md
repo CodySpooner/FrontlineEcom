@@ -56,6 +56,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Fix: Shopify orders query cost was ~2177 points (> Shopify's 1000 max, so real syncs would fail); page size 25 → 10 orders (872), cost math documented
 - 2026-10-26 — Inbox (ui UI-11, 1/2): `AnalyticsSummary.funnel` (sessions / add to carts / checkouts / orders) and `GET /api/analytics/campaigns?stores=&range=` → `CampaignStats[]` (shared types `Funnel`, `AdNetwork`, `CampaignStats`)
 - 2026-10-26 — CORE-12 (2/2) Amazon SP-API connector (read-only analytics): LWA token → Sales API orderMetrics (daily, store timezone, offsets DST-correct) → new `channel_daily` table (migration 13); revenue rebuild now sums platform orders + channel totals
 - 2026-10-26 — CORE-12 (1/2) Etsy connector: Open API v3 (`x-api-key` keystring:secret), hourly token renewal with rotating refresh tokens saved encrypted, paid receipts → orders/revenue, listings newest-changed first with early stop
