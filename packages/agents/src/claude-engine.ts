@@ -51,6 +51,7 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
         ...(appTools.length ? { mcpServers: { frontline } } : {}),
         permissionMode: 'default',
         // Anything not pre-approved above (e.g. a write tool on a connected store's MCP) goes to the owner.
+        // The SDK warns this is shadowed for the pre-approved tools: intended, ours gate through request_approval.
         canUseTool: async (toolName, toolInput) => {
           if (!ctx) return { behavior: 'deny', message: 'Tool not available in this run.' };
           const { approved, message } = await requestApproval(ctx, {

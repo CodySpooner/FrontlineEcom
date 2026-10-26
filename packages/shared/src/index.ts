@@ -208,7 +208,11 @@ export interface ApprovalsHook {
 export type LiveMessage =
   | { type: 'event'; event: StoreEvent }
   | { type: 'approval'; approval: ApprovalRequest }
-  | { type: 'notification'; notification: AppNotification };
+  | { type: 'notification'; notification: AppNotification }
+  /** An agent run was queued, started or finished (agents lane). */
+  | { type: 'run'; run: AgentRun }
+  /** One streamed event of a running agent (text, tool calls, approvals, memories, done/error). */
+  | { type: 'run_event'; runId: string; agentId: string; storeId: string; event: AgentEvent };
 
 /** Error body for any non-2xx API response. */
 export interface ApiError {
@@ -230,6 +234,29 @@ export interface StoreMemory {
   confidence: number;
   tags: string[];
   createdAt: string;
+}
+
+export type RunStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';
+
+/** One task given to an agent. A follow-up chat message is a new run that resumes the previous run's session. */
+export interface AgentRun {
+  id: string;
+  storeId: string;
+  agentId: string;
+  task: string;
+  status: RunStatus;
+  /** Set when the run finished; pass the run id as `resumeRunId` to continue the conversation. */
+  sessionId?: string;
+  usage: RunUsage;
+  error?: string;
+  createdAt: string;
+  startedAt?: string;
+  endedAt?: string;
+}
+
+/** A run with its transcript (consecutive text deltas merged into one). */
+export interface AgentRunDetail extends AgentRun {
+  transcript: AgentEvent[];
 }
 
 export interface RunUsage {

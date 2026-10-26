@@ -26,13 +26,13 @@ export function listAgents(db: DatabaseSync, storeIds?: string[]): Agent[] {
   const rows = db
     .prepare(`SELECT a.* FROM agents a JOIN stores s ON s.id = a.store_id ${filter} ORDER BY s.created_at, s.rowid, a.rowid`)
     .all(...(storeIds?.length ? storeIds : []));
-  const waiting = pendingApprovals(db);
-  return rows.map((r) => toAgent(r, waiting));
+  const busy = busyAgents(db);
+  return rows.map((r) => toAgent(r, busy));
 }
 
 export function getAgent(db: DatabaseSync, id: string): Agent | undefined {
   const row = db.prepare('SELECT * FROM agents WHERE id = ?').get(id);
-  return row && toAgent(row, pendingApprovals(db));
+  return row && toAgent(row, busyAgents(db));
 }
 
 export function updateAgent(db: DatabaseSync, id: string, patch: AgentUpdate): Agent | undefined {
@@ -41,25 +41,30 @@ export function updateAgent(db: DatabaseSync, id: string, patch: AgentUpdate): A
   return getAgent(db, id);
 }
 
-/** agent id → title of its oldest pending approval request. */
-function pendingApprovals(db: DatabaseSync) {
-  const rows = db.prepare(`SELECT agent_id, title FROM approvals WHERE status = 'pending' ORDER BY created_at DESC`).all();
-  return new Map(rows.map((r) => [String(r.agent_id), String(r.title)]));
+/** agent id → title of its oldest pending approval request, and → task of its oldest queued/running run. */
+function busyAgents(db: DatabaseSync) {
+  const latestWins = (rows: Record<string, unknown>[]) => new Map(rows.map((r) => [String(r.agent_id), String(r.what)]));
+  return {
+    waiting: latestWins(db.prepare(`SELECT agent_id, title AS what FROM approvals WHERE status = 'pending' ORDER BY created_at DESC`).all()),
+    running: latestWins(db.prepare(`SELECT agent_id, task AS what FROM agent_runs WHERE status IN ('queued', 'running') ORDER BY created_at DESC`).all()),
+  };
 }
 
-// ponytail: status is derived from the DB; the run manager (AGT-11) adds live 'running' + current task.
-function toAgent(r: Record<string, unknown>, waiting: Map<string, string>): Agent {
+// Status is derived from the DB: offline > waiting for the owner > working on a run > idle.
+function toAgent(r: Record<string, unknown>, busy: ReturnType<typeof busyAgents>): Agent {
   const id = String(r.id);
   const enabled = r.enabled === 1;
-  const request = enabled ? waiting.get(id) : undefined;
+  const request = enabled ? busy.waiting.get(id) : undefined;
+  const task = enabled ? busy.running.get(id) : undefined;
+  const currentTask = request ?? task;
   return {
     id,
     storeId: String(r.store_id),
     role: r.role as AgentRole,
-    status: !enabled ? 'offline' : request ? 'waiting_approval' : 'idle',
+    status: !enabled ? 'offline' : request ? 'waiting_approval' : task ? 'running' : 'idle',
     level: Number(r.level),
     xp: Number(r.xp),
-    ...(request ? { currentTask: request } : {}),
+    ...(currentTask ? { currentTask } : {}),
     enabled,
     autonomy: r.autonomy as Autonomy,
   };

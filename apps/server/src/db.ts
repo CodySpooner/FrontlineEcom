@@ -202,6 +202,27 @@ export const MIGRATIONS = [
   ALTER TABLE integrations ADD COLUMN synced_at TEXT;
   ALTER TABLE integrations ADD COLUMN cursor TEXT;
   `,
+  /* 7 (agents lane: agent runs, AGT-11) */ `
+  CREATE TABLE agent_runs (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL,
+    task TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued',
+    resume TEXT,
+    session_id TEXT,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0,
+    error TEXT,
+    transcript_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    ended_at TEXT
+  );
+  CREATE INDEX agent_runs_by_agent ON agent_runs (agent_id, created_at);
+  CREATE INDEX agent_runs_by_status ON agent_runs (status, created_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

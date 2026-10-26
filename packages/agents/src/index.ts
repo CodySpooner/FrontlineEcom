@@ -19,3 +19,4 @@ export {
 } from './memory';
 export { APP_TOOLS, toolsFor, callTool, requestApproval, type AppTool, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
+export { createRunManager, getRun, listRuns, costToday, type RunManager, type RunManagerOptions } from './runs';

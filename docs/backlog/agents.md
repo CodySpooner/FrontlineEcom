@@ -39,7 +39,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
       memory read/write, create approval, create creative); per-role allowlists.
 - [x] AGT-10 Approvals: side-effect tools and `canUseTool` create approval requests through core's approvals hook; run
       pauses, resumes on decision; autopilot rules auto-approve within caps and log.
-- [ ] AGT-11 Run manager: queue, global concurrency (default 3), per-store limits, cancel/resume, persisted transcripts,
+- [x] AGT-11 Run manager: queue, global concurrency (default 3), per-store limits, cancel/resume, persisted transcripts,
       token/cost + Higgsfield-credit accounting with daily caps.
 - [ ] AGT-12 Agent API routes (`apps/server/src/routes/agents.ts`, mounted in app.ts): squads, agent detail, start run,
       stream run events (over `/api/live` or SSE), chat (resume), cancel, memory CRUD.
@@ -59,6 +59,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-11 Run manager (`createRunManager`): `agent_runs` table is the queue (migration 7); global concurrency 3, 2 per store, 1 per agent; cancel (queued/running); persisted transcripts (text deltas merged) + tokens/cost; store's daily `agentCostPerDay` cap blocks new runs; prompt gets top-12 memories for the task; runs that used tools reflect in the same session → memories; follow-ups resume the previous run's session; restart marks in-flight runs interrupted; agent status `running` + task; server publishes `run`/`run_event` on the live bus and notifies done/error. Real smoke: tool call → answer → 3 memories, $0.29. Higgsfield-credit accounting lands with AGT-15.
 - 2026-10-26 — AGT-10 Approvals: shared `requestApproval` used by the `request_approval` tool and the Claude engine's `canUseTool` (any non-pre-approved tool, e.g. future external-MCP writes, asks the owner); autopilot agents auto-approve when the store's `StoreCaps.autopilot[kind]` is enabled and `amountUsd` fits today's remaining cap for that kind (logged as `action.auto` + reason note); approved `save_niche_pack` executes; `research_feed` tool over core's feed. Shared: `ApprovalAction` (+`amountUsd`, `auto`).
 - 2026-10-26 — AGT-05 Niche packs for beauty, pet, tech, fitness, home, fashion, kids, outdoor + `_template.md`; `draftNichePackTask(store)` has the Market Analyst research a custom niche and request `save_niche_pack`; on approval it is saved to `<data dir>/packs/niche/<slug>.md` and `assemblePrompt` uses it for stores without a built-in pack.
 - 2026-10-26 — AGT-09 Store tools: engine-agnostic `APP_TOOLS` (store_summary, metrics_timeseries, list_products/orders/campaigns, search/write_memory, request_approval) + per-role `toolsFor`; Claude engine serves them as in-process MCP server `frontline`, fake engine runs them for real (`{ call }` script steps); tool events stream through a channel so approval requests show while the run waits. `toolEnv(db)` wires core's analytics + approvals hook. Competitors/research/create_creative tools wait on CORE-15/16 and AGT-15. Real smoke: Claude called store_summary and cited the numbers.
