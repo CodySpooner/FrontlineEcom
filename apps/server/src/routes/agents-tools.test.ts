@@ -408,6 +408,16 @@ describe('agent tools on demo data', () => {
     expect(rows.every((r) => Number(r.split(',')[7]) >= 70)).toBe(true);
   });
 
+  test("research_feed tells a custom-niche store its feed holds every custom niche's finds", async () => {
+    db.prepare(`UPDATE stores SET niche = 'other', niche_detail = 'Scented candles' WHERE id = 'glow'`).run();
+    try {
+      const [feed] = results(await run(input('glow', 'product_hunter'), [{ call: 'research_feed' }, done]));
+      expect(feed!.output.split('\n')[0]).toBe("# Custom niche: these are every custom-niche store's finds; keep only those that fit Scented candles.");
+    } finally {
+      db.prepare(`UPDATE stores SET niche = 'beauty', niche_detail = 'at-home skincare devices' WHERE id = 'glow'`).run(); // the db is shared by these tests
+    }
+  });
+
   test('write_memory saves a learning and streams memory_written', async () => {
     const events = await run(input('glow', 'copywriter'), [
       { call: 'write_memory', input: { kind: 'learning', text: 'Benefit-first headlines beat feature lists here', evidence: 'CTR 2.1% vs 1.3%', confidence: 0.7 } },
