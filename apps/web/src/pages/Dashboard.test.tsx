@@ -4,7 +4,7 @@ import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { ApprovalRequest, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
 import { DemoMixNote } from '../components/StoreFilter';
-import { profitFormula, Requests } from './Dashboard';
+import { Missions, profitFormula, Requests } from './Dashboard';
 
 const store = { id: 'pawsome', name: 'Pawsome Gear', currency: 'USD' } as Store;
 const approval: ApprovalRequest = {
@@ -99,5 +99,19 @@ describe('demo numbers in real totals', () => {
     renderApp(<DemoMixNote />);
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByText(/demo numbers/)).toBeNull();
+  });
+});
+
+describe('Daily Missions', () => {
+  it("shows the first 8 and lets the owner see the rest, so a third store's missions aren't cut off", async () => {
+    const missions = Array.from({ length: 12 }, (_, i) => ({ id: `m${i}`, storeId: 'pawsome', title: `Mission ${i + 1}`, progress: 0, target: 2, xp: 40 }));
+    stubApi((url) => (url.startsWith('/api/stores') ? [store] : url.startsWith('/api/missions') ? missions : []));
+    renderApp(<Missions />);
+    await screen.findByText('Mission 8');
+    expect(screen.queryByText('Mission 9')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Show all 12' }));
+    expect(screen.getByText('Mission 12')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show fewer' }));
+    expect(screen.queryByText('Mission 12')).toBeNull();
   });
 });

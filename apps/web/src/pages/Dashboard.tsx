@@ -288,14 +288,16 @@ function AgentsStrip() {
   );
 }
 
-function Missions() {
+export function Missions() {
   const { has, name } = useStoreSelection();
   const q = useMissions();
+  const [more, setMore] = useState(false);
   const all = (q.data ?? []).filter((m) => has(m.storeId));
   const isDone = (m: { progress: number; target: number }) => m.progress >= m.target;
   const done = all.filter(isDone).length;
-  // Open missions first: that's what the owner can still act on.
-  const list = [...all].sort((a, b) => Number(isDone(a)) - Number(isDone(b))).slice(0, 8);
+  // Open missions first: that's what the owner can still act on. Two rows of 4 until asked (3+ stores have more).
+  const sorted = [...all].sort((a, b) => Number(isDone(a)) - Number(isDone(b)));
+  const list = more ? sorted : sorted.slice(0, 8);
   return (
     <Panel title="Daily Missions" action={all.length > 0 && <span className="text-xs text-muted">{`${done}/${all.length} complete`}</span>}>
       {q.isPending ? (
@@ -325,6 +327,11 @@ function Missions() {
             );
           })}
         </ul>
+      )}
+      {sorted.length > 8 && (
+        <Button size="sm" className="mt-3" onClick={() => setMore(!more)}>
+          {more ? 'Show fewer' : `Show all ${sorted.length}`}
+        </Button>
       )}
     </Panel>
   );

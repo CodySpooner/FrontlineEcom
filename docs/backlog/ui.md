@@ -319,6 +319,8 @@ Orca's browser against the reference before ticking it.
       UI-114's note (connecting the store switches its jobs on; a demo run is scripted and free).
 - [x] UI-125 Store Analytics splits sales by platform (DESIGN §4.3 channel split) under Revenue & Profit when the stores in
       view sell on 2+ platforms: a store with a second channel (UI-121), or stores on different platforms.
+- [x] UI-126 Daily Missions showed 8 of "0/12 complete" with All stores: a third store's 4 missions (Peak Fit's) were cut
+      off with no way to see them. A "Show all N" / "Show fewer" button (Orders' pattern) appears past 8.
 
 ## Blocked
 
@@ -489,3 +491,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-123: core's add-to-store returns the pending request for the same product (200, not 201) since 126f829. `api()` hides the status, so ProductDetails tells them apart by `createdAt` more than 5s before the mutation's `submittedAt` (same machine's clock): "<Store> already has a request waiting for this product. Approve it on the Dashboard". New Research test (fails on the old code). Orca at 800px with a fetch patch answering the POST with an old pending request (no server write): that sentence shows under Add to a store. Patch dropped by reload
 - 2026-10-26 — UI-124: `DemoJobsNote` moved from pages/Automation to components/ (pages are lazy chunks, so AgentDetail shouldn't import a page) and is rendered above the Schedule panel's rule list. Its test now imports from components. Chrome at 1440, Pawsome Gear's Ad Strategist Settings: "Pawsome Gear is a demo store: its squad's jobs switch on when you connect it. … Connect a store" above "Daily campaign review" (off). Automation still shows the three-store note
 - 2026-10-26 — UI-125: `PlatformSplit` (exported, 2 Analytics tests) renders core's `byPlatform` at the foot of the Revenue & Profit panel when it has 2+ entries: per platform its name (StoreForm's PLATFORM_NAME), revenue, a share bar like Channels', orders (singular/plural) and "% of sales". Nothing for one platform. Chrome at 1440 with All stores: Shopify $52,763 · 1,141 orders · 80.9% and TikTok Shop $12,462 · 305 orders · 19.1% (adds up to the $65,225 total)
+- 2026-10-26 — UI-126: `Missions` (now exported) keeps open-first order and shows 8 until "Show all N". New Dashboard test: 12 missions show 8, then 12, then 8 again. Chrome at 1440 with All stores: "Show all 12" brings in Peak Fit's row (Hit $500 revenue, Get 12 orders, Clear requests, Launch 2 creatives) with "Show fewer" under it. The AI Agents strip's empty space beside a tall Agent Requests board is the approved mockup v3 layout (one row of 5), left as is
