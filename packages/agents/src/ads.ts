@@ -67,8 +67,8 @@ export function economics(db: DatabaseSync, storeId: string, since: string): Eco
   return { margin: revenue ? (revenue - Number(r?.cogs ?? 0)) / revenue : 0, aov: Number(r?.orders) ? revenue / Number(r?.orders) : 0 };
 }
 
-/** Blended ROAS (store revenue ÷ ad spend) over [from, to], YYYY-MM-DD inclusive. */
-export function blendedRoas(db: DatabaseSync, storeId: string, from: string, to: string) {
+/** The store's own site revenue and its ad spend over [from, to], YYYY-MM-DD inclusive (blended ROAS = revenue ÷ spend). */
+export function adWindow(db: DatabaseSync, storeId: string, from: string, to: string) {
   // Amazon as an extra channel (core's channel_daily) is in the store's revenue, but the store's ads didn't make those sales.
   const r = db
     .prepare(
@@ -77,5 +77,5 @@ export function blendedRoas(db: DatabaseSync, storeId: string, from: string, to:
        FROM daily_metrics WHERE store_id = ?1 AND date BETWEEN ?2 AND ?3`,
     )
     .get(storeId, from, to);
-  return Number(r?.spend) ? Number(r?.revenue) / Number(r?.spend) : undefined;
+  return { revenue: Number(r?.revenue ?? 0), spend: Number(r?.spend ?? 0) };
 }

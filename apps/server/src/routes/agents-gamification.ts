@@ -1,4 +1,4 @@
-import { awardXp, blendedRoas, cash, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, nicheKey, once, profitStreak, promotionCandidates, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
+import { adWindow, awardXp, cash, checkAchievements, commander, dailyMissions, economics, getAgent, judgeRun, levelForXp, nicheKey, once, profitStreak, promotionCandidates, thresholds, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
 import { AGENT_ROLES, PRODUCT_WRITE_PLATFORMS, type MetricTotals, type Mission, type Store } from '@frontline/shared';
 import { Hono } from 'hono';
 import { currentWindow, summarize } from '../analytics';
@@ -80,7 +80,8 @@ const sinceLive = (at: string, storeId: string) =>
 export function checkAdOutcomes(db: Db, today?: string) {
   const rows = db
     .prepare(
-      `SELECT id, store_id, agent_id, run_id, title, decided_at FROM approvals
+      `SELECT id, store_id, agent_id, run_id, title, decided_at, json_extract(action_json, '$.kind') AS kind, json_extract(action_json, '$.payload.from') AS bfrom,
+         json_extract(action_json, '$.payload.to') AS bto, (SELECT currency FROM stores WHERE id = approvals.store_id) AS currency FROM approvals
        WHERE status = 'approved' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign', 'ads.pause_adsets') AND decided_at >= ?
          AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'not-applied:' || approvals.id) AND ${sinceLive('decided_at', 'approvals.store_id')}`,
     )
@@ -89,12 +90,21 @@ export function checkAdOutcomes(db: Db, today?: string) {
     const day = storeDay(db, String(r.store_id), String(r.decided_at));
     if (addDays(day, 3) >= (today ?? storeDay(db, String(r.store_id)))) continue; // the 3 days after aren't complete yet
     if (!synced(db, String(r.store_id), addDays(day, 3))) continue;
-    const before = blendedRoas(db, String(r.store_id), addDays(day, -7), addDays(day, -1));
-    const after = blendedRoas(db, String(r.store_id), addDays(day, 1), addDays(day, 3));
-    if (before === undefined || after === undefined) continue;
+    const b = adWindow(db, String(r.store_id), addDays(day, -7), addDays(day, -1));
+    const a = adWindow(db, String(r.store_id), addDays(day, 1), addDays(day, 3));
+    if (!b.spend || !a.spend) continue;
     if (!once(db, `ads-outcome:${r.id}`)) continue; // judged once: an outcome the owner deleted stays deleted
-    const worked = after > before;
-    const roas = `blended ROAS ${before.toFixed(2)} → ${after.toFixed(2)}`;
+    const [before, after] = [b.revenue / b.spend, a.revenue / a.spend];
+    // A raise is judged on what its extra spend brought: blended ROAS dips as a winner scales even when it pays back.
+    // ponytail: per-day averages, store-wide; whatever else moved revenue in those days counts too.
+    const [extra, more] = [a.spend / 3 - b.spend / 7, a.revenue / 3 - b.revenue / 7];
+    const raise = r.kind === 'ads.set_budget' && Number(r.bto) > Number(r.bfrom) && extra > 0;
+    const breakEven = raise ? thresholds(economics(db, String(r.store_id), addDays(day, -30))).breakEven : 0;
+    const worked = raise ? more / extra >= breakEven : after > before;
+    const money = (n: number) => `${n < 0 ? '-' : '+'}${Math.round(Math.abs(n)).toLocaleString('en-US')} ${String(r.currency)}/day`;
+    const roas = raise
+      ? `${money(extra)} ad spend brought ${money(more)} revenue (incremental ROAS ${(more / extra).toFixed(2)} vs break-even ${breakEven.toFixed(2)})`
+      : `blended ROAS ${before.toFixed(2)} → ${after.toFixed(2)}`;
     recordOutcome(db, `ads:${r.id}`, worked, {
       storeId: String(r.store_id), agentId: String(r.agent_id), kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'ads'],
       text: `"${r.title}" ${worked ? 'worked' : 'did not help'}: ${roas} in the 3 days after.`,
@@ -105,7 +115,9 @@ export function checkAdOutcomes(db: Db, today?: string) {
     if (!worked) continue;
     award(db, {
       ref: `win:${r.id}`, amount: XP.win, storeId: String(r.store_id), agentId: String(r.agent_id),
-      reason: `Measured win: ROAS ${before.toFixed(2)} → ${after.toFixed(2)} after "${r.title}"`,
+      reason: raise
+        ? `Measured win: incremental ROAS ${(more / extra).toFixed(2)} vs break-even ${breakEven.toFixed(2)} after "${r.title}"`
+        : `Measured win: ROAS ${before.toFixed(2)} → ${after.toFixed(2)} after "${r.title}"`,
     });
   }
 }

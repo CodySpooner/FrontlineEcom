@@ -384,6 +384,25 @@ test('an approved ad change followed by better blended ROAS is a measured win, p
   ]);
 });
 
+test('a budget raise is judged on what its extra spend brought vs break-even, not on blended ROAS (which dips as a winner scales)', () => {
+  const day = decided();
+  db.prepare(`UPDATE stores SET fee_percent = 0, fee_per_order = 0 WHERE id = 'peak'`).run();
+  db.prepare(`UPDATE daily_metrics SET revenue = 1000, cogs = 400, ad_spend = 250 WHERE store_id = 'peak' AND date >= ?`).run(addDays(day, -30)); // margin 60%: break-even 1.67
+  db.prepare(`UPDATE daily_metrics SET revenue = 1600, cogs = 640, ad_spend = 500 WHERE store_id = 'peak' AND date BETWEEN ? AND ?`).run(addDays(day, 1), addDays(day, 3));
+  const raise = (id: string, title: string) =>
+    db.prepare(
+      `INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at, decided_at) VALUES (?, 'peak', 'peak:ad_strategist', NULL, ?, 'r', ?, 'approved', ?, ?)`,
+    ).run(id, title, JSON.stringify({ kind: 'ads.set_budget', payload: { from: 250, to: 500 } }), `${day}T09:00:00Z`, `${day}T12:00:00Z`);
+  raise('scale', 'Raise Broad budget $250 → $500/day');
+  const xp = getAgent(db, 'peak:ad_strategist')!.xp;
+  checkAdOutcomes(db);
+  // Blended ROAS fell 4.00 → 3.20, but +250/day of spend brought +600/day of revenue: 2.40 against a 1.67 break-even.
+  expect(outcomes().map((m) => m.text)).toEqual([
+    '"Raise Broad budget $250 → $500/day" worked: +250 USD/day ad spend brought +600 USD/day revenue (incremental ROAS 2.40 vs break-even 1.67) in the 3 days after.',
+  ]);
+  expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(xp + 50);
+});
+
 test('a change that did not help is remembered too, without XP', async () => {
   approvedChange('a-flop', 'Raise Prospecting · Broad budget $50 → $80/day', 0.3);
   const before = getAgent(db, 'peak:ad_strategist')!.xp;

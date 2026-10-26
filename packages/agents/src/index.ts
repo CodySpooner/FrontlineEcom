@@ -25,7 +25,7 @@ export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from '.
 export { createRunManager, getRun, listRuns, runGist, type RunManager, type RunManagerOptions } from './runs';
 export { XP, xpForLevel, levelForXp, levelProgress, rankForLevel, demoXp, awardXp, listXpEvents, commander, profitStreak, dailyMissions, ACHIEVEMENTS, checkAchievements, type Award, type Facts, type StoreDay } from './gamification';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
-export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats, type Economics, type Verdict } from './ads';
+export { reviewCampaigns, thresholds, economics, adWindow, type CampaignStats, type Economics, type Verdict } from './ads';
 export { ADS_JOB, DEFAULT_JOBS, createDefaultJobs, enableDefaultJobs } from './jobs';
 export { MISSION_TEMPLATES, advanceMissions, cancelMission, createMission, getMission, listMissions, parseMission } from './missions';
 export { IDLE_CAMPAIGN_STATUSES } from './ads';
