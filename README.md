@@ -70,7 +70,8 @@ pnpm check    # typecheck + tests
   network attributes to that campaign.
 - **Funnel:** without GA4, a TikTok Shop store's sessions are its product-page visitors from TikTok Shop Analytics
   (the last 30 days each sync, plus one older month back to two years or the first month without visitors; TikTok has
-  no cart or checkout counts).
+  no cart or checkout counts). With GA4, the cart and checkout steps count GA4's add-to-cart and begin-checkout events,
+  not sessions (as Shopify's do), so they can read a little high when shoppers add several items.
 - **Days** follow each store's own timezone (the shop's, where the platform reports it), also in "All stores" and the
   morning digest. Changing a store's timezone in Settings moves its synced orders onto the new zone's days. Today's change compares against the same point of the earlier day: the share of that day's sales
   the store's orders had made by this time of day. Ad spend and GA4 sessions come by day as each network reports
