@@ -109,6 +109,7 @@ function fakeShop(refreshError?: { code: number; message: string }, shops = [{ c
     // Update Price (Product Modify scope): ACTIVATE products only; the response has no data.
     if (u.pathname === '/product/202309/products/17301/prices/update') return ok({});
     if (u.pathname === '/product/202309/products/17301') return ok({ id: '17301', status: 'ACTIVATE', skus: [{ id: 'S1', price: { currency: 'USD', sale_price: '24.90' } }, { id: 'S2', price: { currency: 'USD', sale_price: '24.90' } }], main_images: [{ uri: 'tos-1', urls: ['https://p16-oec.example/ice-roller.jpeg'], thumb_urls: ['https://p16-oec.example/ice-roller-thumb.jpeg'], width: 800, height: 800 }] });
+    if (u.pathname === '/product/202309/products/17303') return ok({ id: '17303', status: 'ACTIVATE', skus: [{ id: 'S4', price: { currency: 'USD', sale_price: '19.90' } }, { id: 'S5', price: { currency: 'USD', sale_price: '49.90' } }] });
     if (u.pathname === '/product/202309/products/17302') return ok({ id: '17302', status: 'DRAFT', skus: [{ id: 'S3' }], main_images: [] });
     // Get Shop Performance (TikTok Shop Analytics scope; partner docs, checked 2026-10-26): one interval a day at 1D.
     if (u.pathname === '/analytics/202609/shop/performance') {
@@ -122,6 +123,7 @@ function fakeShop(refreshError?: { code: number; message: string }, shops = [{ c
           { return_id: 'R1', order_id: '5762', return_status: 'RETURN_OR_REFUND_REQUEST_COMPLETE', refund_amount: { currency: 'USD', refund_total: '8.00', refund_subtotal: '7.40', refund_tax: '0.60' } },
           { return_id: 'R2', order_id: '5761', return_status: 'RETURN_OR_REFUND_REQUEST_PENDING', refund_amount: { currency: 'USD', refund_total: '30.00' } },
           { return_id: 'R3', order_id: '5763', return_status: 'RETURN_OR_REFUND_REQUEST_SUCCESS', refund_amount: { currency: 'USD', refund_total: '15.00' } }, // a cancelled order: already out
+          { return_id: 'R4', order_id: '5761', return_type: 'REPLACEMENT', return_status: 'RETURN_OR_REFUND_REQUEST_COMPLETE', refund_amount: { currency: 'USD', refund_total: '12.45' } },
         ],
         next_page_token: '',
       });
@@ -174,20 +176,22 @@ test('TikTok Shop sync renews the token, pulls products + paid orders, and rebui
     { id: 'tt-5762', total: 20, status: 'paid', fulfillment_status: 'delivered', tracking: 'TT123' },
     { id: 'tt-5763', total: 15, status: 'refunded', fulfillment_status: 'unfulfilled', tracking: null },
   ]);
-  // 30 + 20 paid, less #5762's completed refund net of its tax (the order's tax already counts against profit).
-  expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ revenue: 42.6, orders: 2 });
+  // 30 + 20 paid, less #5762's completed $8 refund; its $0.60 of tax comes back off the order's $1.60 tax (a cost).
+  expect(db.prepare("SELECT revenue, cogs, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ revenue: 42, cogs: 1, orders: 2 });
   // Returns name SKUs, not products: a refund on a one-product order comes off that product; on a mixed order, off none.
-  expect(db.prepare("SELECT id, product_id FROM amazon_refunds WHERE store_id = 'glow' ORDER BY id").all()).toEqual([
-    { id: 'tt-R1', product_id: 'tt-17302' },
-    { id: 'tt-R2', product_id: 'tt-17301' },
-    { id: 'tt-R3', product_id: null },
+  // amount is net of tax, as per-product revenue is. Pending requests and replacements give no money back.
+  expect(db.prepare("SELECT id, amount, tax, product_id FROM amazon_refunds WHERE store_id = 'glow' ORDER BY id").all()).toEqual([
+    { id: 'tt-R1', amount: 7.4, tax: 0.6, product_id: 'tt-17302' },
+    { id: 'tt-R2', amount: 0, tax: 0, product_id: 'tt-17301' },
+    { id: 'tt-R3', amount: 15, tax: 0, product_id: null },
+    { id: 'tt-R4', amount: 0, tax: 0, product_id: 'tt-17301' },
   ]);
   const returns = api.find((c) => c.url.pathname === '/return_refund/202309/returns/search')!;
   expect([returns.url.searchParams.get('page_size'), returns.url.searchParams.get('sort_field'), returns.url.searchParams.get('shop_cipher')]).toEqual(['50', 'update_time', 'CIPHER']);
   expect(JSON.parse(returns.body)).toEqual({ update_time_ge: T('2024-10-26T18:00:00Z') });
   // The buyer's tax is in the order total; it counts against profit.
   expect(db.prepare("SELECT tax FROM orders WHERE store_id = 'glow' AND id = 'tt-5762'").get()?.tax).toBe(1.6);
-  expect(db.prepare("SELECT cogs FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()?.cogs).toBe(1.6);
+  expect(db.prepare("SELECT cogs FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()?.cogs).toBe(1); // less the $0.60 refunded
   expect(db.prepare("SELECT product_id, quantity, revenue FROM order_items WHERE order_id = 'tt-5761'").all()).toEqual([{ product_id: 'tt-17301', quantity: 2, revenue: 24.9 }]);
   // Search results carry no images: each product's first gallery image comes from Get Product, once.
   const details = api.filter((c) => /^\/product\/202309\/products\/\d+$/.test(c.url.pathname));
@@ -272,7 +276,7 @@ test("TikTok Shop without the Return & Refund scope still syncs, nets cancellati
   const { fetchFn, calls } = fakeShop();
   await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
   expect(JSON.parse(calls.find((c) => c.url.pathname.includes('/return_refund/'))!.body)).toEqual({ update_time_ge: T('2024-10-26T18:00:00Z') });
-  expect(db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()?.revenue).toBe(42.6);
+  expect(db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()?.revenue).toBe(42);
 });
 
 test('TikTok Shop price change sets every SKU of a live product, logged; drafts and compare-at prices are refused', async () => {
@@ -287,13 +291,21 @@ test('TikTok Shop price change sets every SKU of a live product, logged; drafts 
   expect(listActions(db, ['glow'], 1)[0]).toMatchObject({ action: 'price_change', target: 'tt-17301', detail: { price: 22 }, ok: true });
 
   await expect(setTikTokProductPrice(db, key, 'glow', 'tt-17302', { price: 10 }, fetchFn, NOW)).rejects.toThrow('only reprices live products; tt-17302 is DRAFT');
+  // One price for all would sell the 3-pack at the 1-pack's price.
+  await expect(setTikTokProductPrice(db, key, 'glow', 'tt-17303', { price: 22 }, fetchFn, NOW)).rejects.toThrow("tt-17303's SKUs have different prices; change them in Seller Center");
   await expect(setTikTokProductPrice(db, key, 'glow', 'tt-17301', { price: 22, compareAt: 30 }, fetchFn, NOW)).rejects.toThrow('compare-at');
   await expect(setTikTokProductPrice(db, key, 'glow', '17301', { price: 22 }, fetchFn, NOW)).rejects.toThrow('not a TikTok Shop product');
   expect(calls.filter((c) => c.url.pathname.endsWith('/prices/update'))).toHaveLength(1);
 });
 
-test("TikTok Shop visitors fill the funnel's sessions up to the last day TikTok has ready; GA4 owns them when connected", async () => {
+test("TikTok Shop visitors fill a TikTok Shop store's funnel up to the last day TikTok has ready; GA4 owns it when connected", async () => {
   const db = shopSetup();
+  // Glow is a Shopify store: a TikTok Shop connected alongside leaves Shopify's sessions alone.
+  const mixed = fakeShop();
+  await syncTikTokShop(db, key, 'glow', mixed.fetchFn, NOW);
+  expect(mixed.calls.some((c) => c.url.pathname.startsWith('/analytics/'))).toBe(false);
+
+  db.prepare("UPDATE stores SET platform = 'tiktok_shop' WHERE id = 'glow'").run();
   const { fetchFn, calls } = fakeShop();
   await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
   const perf = calls.find((c) => c.url.pathname === '/analytics/202609/shop/performance')!;

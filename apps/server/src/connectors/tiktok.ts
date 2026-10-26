@@ -156,6 +156,8 @@ interface ShopOrder {
 interface ShopReturn {
   return_id: string;
   order_id: string;
+  /** REFUND, RETURN_AND_REFUND or REPLACEMENT (no money back). */
+  return_type?: string;
   return_status: string;
   /** Strings in the shop's currency; refund_total includes refund_tax. */
   refund_amount?: { refund_total?: string; refund_tax?: string };
@@ -251,12 +253,14 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     const lastReturns = returnReads.get(id);
     const returnsSince = lastReturns?.shop === shop.cipher ? lastReturns.since : Math.floor(now.getTime() / 1000) - BACKFILL_DAYS * 86400;
     const returns = await search<ShopReturn>('/return_refund/202309/returns/search', 'return_orders', { page_size: '50', sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: returnsSince }).catch(() => undefined);
-    const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
-    // Product-page visitors a day are the funnel's sessions (TikTok Shop Analytics scope), unless GA4 is connected (it owns
-    // the funnel there). TikTok has no cart or checkout counts. Without the scope (or on any error) sessions stay empty.
+    const store = db.prepare('SELECT timezone, platform FROM stores WHERE id = ?').get(storeId);
+    const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(store?.timezone ?? 'UTC') });
+    // Product-page visitors a day are a TikTok Shop store's funnel sessions (TikTok Shop Analytics scope), unless GA4 is
+    // connected (it owns the funnel there). A TikTok Shop alongside another platform leaves that one's sessions alone.
+    // TikTok has no cart or checkout counts. Without the scope (or on any error) sessions stay empty.
     // ponytail: the last 30 days each sync, no older history; TikTok documents no longest range to backfill with.
     const storeDay = dayOf.format(now);
-    const traffic = db.prepare('SELECT 1 FROM integrations WHERE id = ?').get(`ga4:${storeId}`) ? undefined
+    const traffic = store?.platform !== 'tiktok_shop' || db.prepare('SELECT 1 FROM integrations WHERE id = ?').get(`ga4:${storeId}`) ? undefined
       : await api<{ latest_available_date?: string; performance?: { intervals?: { start_date: string; traffic?: { avg_visitors?: number } }[] } }>('GET', '/analytics/202609/shop/performance', {
           shop_cipher: shop.cipher, start_date_ge: addDays(storeDay, -30), end_date_lt: addDays(storeDay, 1), granularity: '1D',
         }).catch(() => undefined);
@@ -296,17 +300,20 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       for (const d of traffic?.performance?.intervals ?? []) if (d.start_date <= ready) visits.run(storeId, d.start_date, d.traffic?.avg_visitors ?? 0);
       if (returns) {
         // Into the refund lines Amazon's go to too (rebuildRevenue takes them off their order's day). One per return,
-        // re-written as its status moves, so a refund only counts once TikTok has granted it. Net of its tax: the order's
-        // tax already counts against profit. Returns name SKUs, not products: a refund on an order of one product comes off
+        // re-written as its status moves, so a refund only counts once TikTok has granted it; a replacement never does.
+        // The refunded tax is kept apart (rebuildRevenue). Returns name SKUs, not products: a refund on an order of one product comes off
         // that product (price tests measure it), one on a mixed order off the store only.
         // ponytail: a mixed order's refund isn't split; return lines carry order_line_item_id, which order_items doesn't keep.
-        const refund = db.prepare('INSERT INTO amazon_refunds (store_id, id, order_id, amount, product_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT (store_id, id) DO UPDATE SET amount = excluded.amount, product_id = excluded.product_id');
+        const refund = db.prepare(
+          'INSERT INTO amazon_refunds (store_id, id, order_id, amount, tax, product_id) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (store_id, id) DO UPDATE SET amount = excluded.amount, tax = excluded.tax, product_id = excluded.product_id',
+        );
         const onlyProduct = db.prepare('SELECT min(product_id) AS product FROM order_items WHERE store_id = ? AND order_id = ? HAVING count(DISTINCT product_id) = 1');
         const orderDay = db.prepare('SELECT local_date FROM orders WHERE store_id = ? AND id = ?');
         for (const r of returns) {
           const a = r.refund_amount;
-          const amount = REFUNDED.has(r.return_status) ? cents(Number(a?.refund_total ?? 0) - Number(a?.refund_tax ?? 0)) : 0;
-          refund.run(storeId, `tt-${r.return_id}`, `tt-${r.order_id}`, amount, onlyProduct.get(storeId, `tt-${r.order_id}`)?.product ?? null);
+          const paid = REFUNDED.has(r.return_status) && r.return_type !== 'REPLACEMENT';
+          const tax = paid ? cents(Number(a?.refund_tax ?? 0)) : 0;
+          refund.run(storeId, `tt-${r.return_id}`, `tt-${r.order_id}`, paid ? cents(Number(a?.refund_total ?? 0) - tax) : 0, tax, onlyProduct.get(storeId, `tt-${r.order_id}`)?.product ?? null);
           const day = orderDay.get(storeId, `tt-${r.order_id}`)?.local_date;
           if (day) days.add(String(day));
         }
@@ -350,6 +357,8 @@ export async function setTikTokProductPrice(db: Db, key: Buffer, storeId: string
     const { api, shop } = await shopClient(db, key, `tiktok_shop:${storeId}`, creds, fetchFn, now);
     const p = await api<{ status?: string; skus?: { id: string; price?: { currency?: string } }[] }>('GET', path, { shop_cipher: shop.cipher });
     if (p.status !== 'ACTIVATE') throw new Error(`TikTok Shop only reprices live products; ${productId} is ${p.status ?? 'not live'}`);
+    // One price for all would flatten e.g. a 1-pack and a 3-pack. Whole price objects are compared: any difference refuses.
+    if (new Set((p.skus ?? []).map((k) => JSON.stringify(k.price ?? null))).size > 1) throw new Error(`TikTok Shop: ${productId}'s SKUs have different prices; change them in Seller Center`);
     const currency = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency);
     const skus = (p.skus ?? []).map((k) => ({ id: k.id, price: { amount: price.toFixed(2), currency: k.price?.currency ?? currency } }));
     await api('POST', `${path}/prices/update`, { shop_cipher: shop.cipher }, { skus });
