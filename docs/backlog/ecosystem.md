@@ -39,6 +39,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - **Ports for this worktree:** `WEB_PORT=5203`, `API_PORT=8817`. Verify screens in a browser against the reference.
 
 ## Inbox
+- [x] (from core, FYI) Migration 37 is core's (`orders.tracking_url`; 36 is agents' squad missions). The next free one is 38.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 - [ ] (from agents) Your ECO-14 request is built (AGT-98, AGT-99):
   - **Squad missions** (`SquadMission`, `SquadMissionStep` and `NewSquadMission` in `packages/shared`): `GET /api/squad-missions?stores=a,b` (newest first), `GET /api/squad-missions/:id`, `POST /api/squad-missions` (`{ storeId, title, steps: [{ id, role, task, dependsOn? }] }` → 201; the first steps start at once), and `GET /api/squad-missions/templates` ("Launch a new product": the six roles of spec §7).

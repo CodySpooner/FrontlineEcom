@@ -494,6 +494,9 @@ export const MIGRATIONS = [
   );
   CREATE INDEX squad_missions_by_store ON squad_missions (store_id, created_at);
   `,
+  /* 37 (core: the carrier's tracking page, when the platform gives one) */ `
+  ALTER TABLE orders ADD COLUMN tracking_url TEXT;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

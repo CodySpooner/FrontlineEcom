@@ -39,7 +39,12 @@ test('orders: newest first, pagination, filters, search', async () => {
 
   const unfulfilled = await get<Order>('/api/orders?fulfillment=unfulfilled&limit=200');
   expect(unfulfilled.total).toBeGreaterThan(0);
-  expect(unfulfilled.items.every((o) => o.fulfillmentStatus === 'unfulfilled' && !o.tracking)).toBe(true);
+  expect(unfulfilled.items.every((o) => o.fulfillmentStatus === 'unfulfilled' && !o.tracking && !o.trackingUrl)).toBe(true);
+  // No carrier link from the platform: a tracking number opens on 17TRACK, which finds the carrier from the number.
+  const shipped = (await get<Order>('/api/orders?stores=glow&fulfillment=in_transit')).items[0]!;
+  expect(shipped.trackingUrl).toBe(`https://t.17track.net/en#nums=${shipped.tracking}`);
+  db.prepare("UPDATE orders SET tracking_url = 'javascript:alert(1)' WHERE store_id = 'glow' AND id = ?").run(shipped.id);
+  expect((await get<Order>('/api/orders?stores=glow&fulfillment=in_transit')).items[0]!.trackingUrl).toMatch(/^https:\/\/t\.17track\.net\//);
 
   const byTotal = await get<Order>('/api/orders?sort=total&dir=asc&limit=5');
   expect(byTotal.items.map((o) => o.total)).toEqual([...byTotal.items.map((o) => o.total)].sort((a, b) => a - b));

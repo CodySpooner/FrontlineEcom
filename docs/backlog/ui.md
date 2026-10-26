@@ -7,6 +7,8 @@ Orca's browser against the reference before ticking it.
 
 ## Inbox
 - [x] (from core, small) Integrations: a "Sync now" button on connected cards, most useful on one in error (after the owner fixes the role or scope it names). `POST /api/integrations/:id/sync` → 202; the sync runs within 30 s and the card's `syncedAt`/`status` update on the next `GET /api/integrations` poll.
+- [ ] (from core, small) Orders & Fulfillment: `Order.trackingUrl` is set whenever `tracking` is. It's the carrier's page for Shopify (when its fulfillment has one), else a 17TRACK link that finds the carrier from the number. Make the tracking number a link that opens it in the browser.
+- [ ] (from core, small) Integrations: a "Sync now" button on connected cards, most useful on one in error (after the owner fixes the role or scope it names). `POST /api/integrations/:id/sync` → 202; the sync runs within 30 s and the card's `syncedAt`/`status` update on the next `GET /api/integrations` poll.
 - [x] (from agents, small) Two ponytail notes waiting on agents are done:
   - AgentDetail › NicheLearnings: `GET /api/niche-learnings?store=<id>` returns that store's niche learnings, including custom niches (keyed `other:<slug>` server-side). Custom-niche stores now get learnings too (AGT-94 shares them between stores of the same custom niche), so the `store.niche !== 'other'` guard hides real data. Query by `store` and drop the guard.
   - Creative.tsx: `CREDITS` is exported from `@frontline/shared`, so the local mirror can import it.

@@ -55,7 +55,7 @@ interface ShopifyOrder {
   currentTotalTaxSet?: { shopMoney: { amount: string } };
   /** Prices include tax (VAT stores): line totals then hold it too. */
   taxesIncluded?: boolean;
-  fulfillments: { displayStatus: string | null; trackingInfo: { number: string | null }[] }[];
+  fulfillments: { displayStatus: string | null; trackingInfo: { number: string | null; url?: string | null }[] }[];
   lineItems: { nodes: LineItem[]; pageInfo: PageInfo };
 }
 
@@ -79,7 +79,7 @@ const ORDERS_Q = `query ($after: String, $q: String) {
   orders(first: 12, after: $after, query: $q, sortKey: UPDATED_AT) {
     nodes { id name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus taxesIncluded
       currentTotalPriceSet { shopMoney { amount } } currentTotalTaxSet { shopMoney { amount } }
-      fulfillments(first: 1) { displayStatus trackingInfo(first: 1) { number } }
+      fulfillments(first: 1) { displayStatus trackingInfo(first: 1) { number url } }
       lineItems(first: 10) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } }
     pageInfo { hasNextPage endCursor } } }`;
 const ORDER_ITEMS_Q = `query ($id: ID!, $after: String) {
@@ -255,9 +255,9 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     });
 
     const ord = db.prepare(
-      `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
+      `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
        ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
-         tracking = coalesce(excluded.tracking, tracking), cogs = excluded.cogs, tax = excluded.tax`,
+         tracking = coalesce(excluded.tracking, tracking), cogs = excluded.cogs, tax = excluded.tax, tracking_url = coalesce(excluded.tracking_url, tracking_url)`,
     );
     // Not paid yet (cash on delivery, bank transfer, an uncaptured authorization): left out of revenue until it is, and
     // removed if an earlier sync stored it. Its updated_at moves when it's paid, so the next sync brings it back.
@@ -284,7 +284,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
             continue;
           }
           const cogs = o.lineItems.nodes.reduce((a, li) => a + li.quantity * num(li.variant?.inventoryItem?.unitCost), 0);
-          ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day, num(o.currentTotalTaxSet?.shopMoney.amount));
+          ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day, num(o.currentTotalTaxSet?.shopMoney.amount), o.fulfillments[0]?.trackingInfo[0]?.url ?? null);
           // Custom line items (no product) only count toward the order total. Where prices include VAT, each line gives up
           // the order's share of it. ponytail: one rate for all lines; reduced-rate lines come out a little low.
           const total = num(o.currentTotalPriceSet.shopMoney.amount);

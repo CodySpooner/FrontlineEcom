@@ -79,7 +79,7 @@ test('first sync switches the store from demo to real data', async () => {
   const { db, app } = await setup();
   const { fetchFn, calls } = fakeShopify([
     // 23:30 UTC on Oct 24 is Oct 25 in Berlin
-    order('#1001', '2026-10-24T23:30:00Z', '100.00', { displayFulfillmentStatus: 'FULFILLED', fulfillments: [{ displayStatus: 'IN_TRANSIT', trackingInfo: [{ number: 'TRK1' }] }] }),
+    order('#1001', '2026-10-24T23:30:00Z', '100.00', { displayFulfillmentStatus: 'FULFILLED', fulfillments: [{ displayStatus: 'IN_TRANSIT', trackingInfo: [{ number: 'TRK1', url: 'https://www.ups.com/track?tracknum=TRK1' }] }] }),
     order('#1002', '2026-10-25T09:00:00Z', '50.00'),
     order('#1003', '2026-10-25T10:00:00Z', '80.00', { cancelledAt: '2026-10-25T11:00:00Z' }),
     order('#1004', '2026-10-26T08:00:00Z', '30.00', { test: true }),
@@ -100,7 +100,7 @@ test('first sync switches the store from demo to real data', async () => {
   expect(orders.items.map((o) => [o.id, o.status, o.fulfillmentStatus])).toEqual([
     ['#1005', 'paid', 'unfulfilled'], ['#1003', 'refunded', 'unfulfilled'], ['#1002', 'paid', 'unfulfilled'], ['#1001', 'paid', 'in_transit'],
   ]);
-  expect(orders.items.find((o) => o.id === '#1001')!.tracking).toBe('TRK1');
+  expect(orders.items.find((o) => o.id === '#1001')).toMatchObject({ tracking: 'TRK1', trackingUrl: 'https://www.ups.com/track?tracknum=TRK1' }); // the carrier's own page
 
   // demo history is gone; real days are rebuilt from orders (cogs = 2 × $5 per order)
   const rows = db.prepare("SELECT date, revenue, cogs, orders, ad_spend AS adSpend FROM daily_metrics WHERE store_id = 'glow' ORDER BY date").all();

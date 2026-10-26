@@ -930,6 +930,8 @@ export interface Order {
   fulfillmentStatus: FulfillmentStatus;
   supplier?: string;
   tracking?: string;
+  /** Where to follow `tracking`: the carrier's page when the platform gives one, else 17TRACK (finds the carrier from the number). */
+  trackingUrl?: string;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

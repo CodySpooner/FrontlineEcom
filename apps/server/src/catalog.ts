@@ -29,7 +29,7 @@ const toOrder = (r: Row): Order => ({
   status: r.status as OrderStatus,
   fulfillmentStatus: r.fulfillment_status as FulfillmentStatus,
   ...(r.supplier ? { supplier: String(r.supplier) } : {}),
-  ...(r.tracking ? { tracking: String(r.tracking) } : {}),
+  ...(r.tracking ? { tracking: String(r.tracking), trackingUrl: /^https:\/\//.test(String(r.tracking_url)) ? String(r.tracking_url) : `https://t.17track.net/en#nums=${encodeURIComponent(String(r.tracking))}` } : {}),
 });
 
 interface ListSpec {
