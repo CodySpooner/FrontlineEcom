@@ -105,6 +105,15 @@ describe('agent tools on demo data', () => {
     expect(events.at(-1)).toEqual(done);
   });
 
+  test("list_products says 'not tracked' for stock the platform doesn't count, instead of a sold-out 0", async () => {
+    db.prepare(`UPDATE products SET inventory = 0, inventory_tracked = 0 WHERE store_id = 'pawsome'`).run();
+    db.prepare(`UPDATE products SET inventory = 0, inventory_tracked = 1 WHERE store_id = 'pawsome' AND id = (SELECT min(id) FROM products WHERE store_id = 'pawsome')`).run();
+    const [products] = results(await run(input('pawsome', 'market_analyst'), [{ call: 'list_products' }, done]));
+    const stock = products!.output.split('\n').slice(1).map((r) => r.split(',')[6]);
+    expect(stock.filter((s) => s === '0')).toHaveLength(1);
+    expect(stock.filter((s) => s === 'not tracked')).toHaveLength(stock.length - 1);
+  });
+
   test('compare_stores puts every store side by side in one currency, biggest first', async () => {
     const [cmp] = results(await run(input('glow', 'market_analyst'), [{ call: 'compare_stores', input: { range: 7 } }, done]));
     const [period, header, ...rows] = cmp!.output.split('\n');
