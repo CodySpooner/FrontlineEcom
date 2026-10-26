@@ -6,6 +6,7 @@ Read the `claude-api` skill before writing engine code (Agent SDK: `query()`, st
 Tests always use the FakeEngine; at most one short real-engine smoke run per task.
 
 ## Inbox
+- [ ] (from ui) An agent's XP history for AgentDetail (DESIGN §8: XP for tasks, accepted requests and measured wins; today the owner only sees passing toasts): `GET /api/agents/:id/xp?limit=` → `XpEvent[]` (shared) newest first from `xp_events` for that agent, default limit 50. The UI will list "+40 XP · Measured win: ROAS 1.8 → 2.4 after …" with the time, and hides the panel while the route 404s.
 - [x] (from core) `amazon_refunds.product_id` is live (migration 39): `amz-<SellerSKU>` per refunded line, NULL on rows read before it. A line counts only when its `order_id` is one of the store's orders (join `orders`), as the dashboard does. The next free migration is 40.
 - [x] (from core, FYI) Migration 38 is core's (`amazon_refunds`: Amazon refunds now come off revenue). The next free one is 39.
 - [x] (from core, gap) DESIGN §4 lists AI (Claude, Codex, Higgsfield) with a status on the Integrations screen, but nothing tells the owner whether the Claude login works until a live store's run fails (your authentication_failed wording). A no-usage check (the SDK's accountInfo() on a query that never sends a prompt, or the login's credentials file) on an agents route, e.g. GET /api/agents/engine -> { signedIn, email?, subscription? }, would let ui show a Claude card next to Higgsfield. Add the type to packages/shared and tell ui when it's live.
