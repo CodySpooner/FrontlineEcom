@@ -47,6 +47,13 @@ function watchApprovals(db: Db) {
 }
 
 /**
+ * SQL: `at` (a time or date) is on or after the store went live. Requests from its demo phase acted on demo data the
+ * real sync replaced, so real numbers say nothing about them. Demo stores (never live) always pass.
+ */
+// ponytail: "went live" = the first time the agents saw the store connected (activateConnectedStores), minutes after the sync.
+const sinceLive = (at: string, storeId: string) => `${at} >= coalesce((SELECT at FROM done_once WHERE ref = 'activate:' || ${storeId}), '')`;
+
+/**
  * Outcomes of approved ad changes: the store's blended ROAS over the 3 days after vs the 7 days before. Each outcome
  * becomes a store learning for the agent (so its next review knows what worked), and a win pays it once.
  * Checked lazily (commander/achievements reads); changes older than 30 days are left alone.
@@ -56,7 +63,7 @@ export function checkAdOutcomes(db: Db, today = localDate()) {
     .prepare(
       `SELECT id, store_id, agent_id, run_id, title, decided_at FROM approvals
        WHERE status = 'approved' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign', 'ads.pause_adsets') AND decided_at >= ?
-         AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'not-applied:' || approvals.id)`,
+         AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'not-applied:' || approvals.id) AND ${sinceLive('decided_at', 'approvals.store_id')}`,
     )
     .all(new Date(Date.now() - 30 * 86_400_000).toISOString());
   for (const r of rows) {
@@ -90,8 +97,9 @@ export function checkAdOutcomes(db: Db, today = localDate()) {
 export function checkProductOutcomes(db: Db, today = localDate()) {
   const tests = db
     .prepare(
-      `SELECT t.*, s.currency, a.run_id FROM product_tests t JOIN stores s ON s.id = t.store_id LEFT JOIN approvals a ON a.id = t.approval_id
-       WHERE t.judged_at IS NULL AND s.demo = 0 AND t.added_on <= ?`,
+      `SELECT t.*, s.currency, a.run_id, p.status FROM product_tests t JOIN stores s ON s.id = t.store_id LEFT JOIN approvals a ON a.id = t.approval_id
+       LEFT JOIN products p ON p.store_id = t.store_id AND p.id = t.product_id
+       WHERE t.judged_at IS NULL AND s.demo = 0 AND t.added_on <= ? AND ${sinceLive('coalesce(a.decided_at, t.added_on)', 't.store_id')}`,
     )
     .all(addDays(today, -15));
   for (const t of tests) {
@@ -104,6 +112,11 @@ export function checkProductOutcomes(db: Db, today = localDate()) {
       )
       .get(String(t.store_id), String(t.product_id), String(t.added_on), end)!;
     const [units, revenue, profit] = [Number(s.units), Number(s.revenue), Number(s.profit)];
+    // Never put on sale (still a draft, or gone): no sales say nothing about demand.
+    if (!units && t.status !== 'active') {
+      db.prepare('UPDATE product_tests SET judged_at = ? WHERE store_id = ? AND product_id = ?').run(new Date().toISOString(), String(t.store_id), String(t.product_id));
+      continue;
+    }
     // ponytail: no per-product ad spend yet, so the bar is units + gross profit, not ROAS vs break-even.
     const won = units >= 10 && profit > 0;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
@@ -141,7 +154,7 @@ export function checkPriceOutcomes(db: Db, today = localDate()) {
   const tests = db
     .prepare(
       `SELECT t.*, s.currency, a.run_id FROM price_tests t JOIN stores s ON s.id = t.store_id LEFT JOIN approvals a ON a.id = t.approval_id
-       WHERE t.judged_at IS NULL AND s.demo = 0 AND t.changed_on <= ?`,
+       WHERE t.judged_at IS NULL AND s.demo = 0 AND t.changed_on <= ? AND ${sinceLive('coalesce(a.decided_at, t.changed_on)', 't.store_id')}`,
     )
     .all(addDays(today, -15));
   for (const t of tests) {
@@ -174,7 +187,8 @@ export function checkPageOutcomes(db: Db, today = localDate()) {
     .prepare(
       `SELECT d.id, d.store_id, d.agent_id, d.run_id, d.product_id, d.title, substr(d.published_at, 1, 10) AS day, s.currency
        FROM page_drafts d JOIN stores s ON s.id = d.store_id
-       WHERE d.kind = 'product' AND d.product_id IS NOT NULL AND d.published_at IS NOT NULL AND s.demo = 0 AND substr(d.published_at, 1, 10) <= ?`,
+       WHERE d.kind = 'product' AND d.product_id IS NOT NULL AND d.published_at IS NOT NULL AND s.demo = 0 AND substr(d.published_at, 1, 10) <= ?
+         AND ${sinceLive('d.published_at', 'd.store_id')}`,
     )
     .all(addDays(today, -15));
   for (const d of pages) {

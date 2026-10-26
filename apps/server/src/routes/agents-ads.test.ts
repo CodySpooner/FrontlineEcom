@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, listMemory, runAgent, updateAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
+import { fakeEngine, getAgent, listMemory, once, runAgent, updateAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
@@ -10,6 +10,7 @@ import { updateCaps } from '../settings';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
 import { applyAdChange } from './agents-actions';
+import { checkAdOutcomes } from './agents-gamification';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -168,6 +169,14 @@ function approvedChange(id: string, title: string, revenueFactorAfter: number) {
 }
 const outcomes = () => listMemory(db, 'peak').filter((m) => m.tags.includes('outcome'));
 const basis = (title: string) => listMemory(db, 'peak').find((m) => m.text === `Basis for ${title}`)?.confidence;
+
+test("an ad change from a store's demo phase isn't judged on its real numbers", () => {
+  approvedChange('demo-era', 'Pause Spark Ads', 1.5);
+  once(db, 'activate:peak'); // the store went live after the change was approved
+  checkAdOutcomes(db);
+  expect(outcomes()).toEqual([]);
+  expect(basis('Pause Spark Ads')).toBe(0.6);
+});
 
 test('a late approval does not undo a budget the owner moved, nor pause a paused campaign, and is not scored', async () => {
   const writes: unknown[] = [];

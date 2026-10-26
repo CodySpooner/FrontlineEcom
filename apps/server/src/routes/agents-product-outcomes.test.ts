@@ -1,4 +1,4 @@
-import { getAgent, listMemory } from '@frontline/agents';
+import { getAgent, listMemory, once } from '@frontline/agents';
 import type { ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -50,6 +50,22 @@ test('products added on a real store are judged on their first 14 days of sales'
     '"Smart Jump Rope" sold: 12 units, 240 USD revenue, 168 USD gross profit in its first 14 days.',
   ]);
   expect(xp()).toBe(before + 50);
+});
+
+test("products from a store's demo phase aren't judged once it's live; one never put on sale isn't called a flop", async () => {
+  await addProducts(db, approval('peak', ['Demo Band']), () => undefined, async () => []); // demo phase: a local draft
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  db.prepare(`UPDATE product_tests SET added_on = ?`).run(addDays(localDate(), -20));
+  const judged = () => db.prepare('SELECT judged_at FROM product_tests').get()?.judged_at;
+  once(db, 'activate:peak'); // went live after it was added
+  await app.request('/api/achievements');
+  expect(outcomes('peak')).toEqual([]);
+  expect(judged()).toBeNull(); // left alone
+
+  db.prepare(`DELETE FROM done_once WHERE ref = 'activate:peak'`).run(); // as if added after going live
+  await app.request('/api/achievements'); // still a draft with no sales: closed quietly, not "did not take off"
+  expect(outcomes('peak')).toEqual([]);
+  expect(judged()).toEqual(expect.any(String));
 });
 
 test('demo stores have no real line items, so their products are never judged', async () => {
