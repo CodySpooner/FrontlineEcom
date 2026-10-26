@@ -58,9 +58,9 @@ pnpm check    # typecheck + tests
 - **Revenue** is what customers paid for paid orders, including shipping and tax, minus refunds. Pending and on-hold
   payments (cash on delivery, bank transfer), test and sample orders don't count until paid, and a cancelled order
   counts as refunded. TikTok Shop subtracts granted refunds and returns when its app has the Return & Refund Basic scope,
-  and cancellations only otherwise. Amazon subtracts refunds of the orders the app has read
-  (from 30 days before connecting) when its app has the Finance and Accounting role, and counts sales before refunds
-  otherwise.
+  and cancellations only otherwise. Amazon subtracts refunds posted since 30 days before connecting, each from its
+  order's day (an older order a refund names is read then), when its app has the Finance and Accounting role, and
+  counts sales before refunds otherwise. Days further back stay before refunds.
 - **Profit** is revenue minus product costs minus ad spend. Costs come from the platform (Shopify "Cost per item",
   WooCommerce Cost of Goods Sold) or from Store Analytics → Unit costs (for Amazon, on the days the app has its
   orders: the 30 days before connecting, and every day since). Platform and payment fees come off only as

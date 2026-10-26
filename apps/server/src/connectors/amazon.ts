@@ -1,6 +1,6 @@
 import { gunzipSync } from 'node:zlib';
 import { logAction } from '../actions';
-import { tx, type Db } from '../db';
+import { once, tx, type Db } from '../db';
 import { addDays, localDate, midnight } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { adRate, archiveMissing, backfillRate, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal, syncView } from './common';
@@ -54,6 +54,7 @@ async function fbaStock(fetchFn: Fetch, host: string, token: string, marketplace
 interface AmazonOrder {
   orderId: string;
   createdTime: string;
+  salesChannel?: { marketplaceId?: string };
   fulfillment?: { fulfillmentStatus?: string; fulfilledBy?: string };
   /** With includedData PROCEEDS. */
   proceeds?: { grandTotal?: { amount: string } };
@@ -84,6 +85,25 @@ async function ordersOf(read: OrderRead | undefined, fetchFn: Fetch, host: strin
     page = body.pagination?.nextToken;
     if (!page) return { orders, next: { from: body.lastUpdatedBefore ?? from } };
   }
+}
+
+/**
+ * Orders refunds point at that the store doesn't have (bought before its orders read began, 30 days before connecting),
+ * read one by one (getOrder: 0.5 a second, bursts of 30), up to 20 a sync. Returns this marketplace's, and the ids
+ * settled (found, another marketplace's, or not there) so they aren't asked for again. Stops at the first other error.
+ */
+async function refundedOrders(ids: string[], fetchFn: Fetch, host: string, token: string, marketplace: string) {
+  const found: AmazonOrder[] = [];
+  const settled: string[] = [];
+  for (const id of ids.slice(0, 20)) {
+    const res = await fetchFn(`https://${host}/orders/2026-01-01/orders/${encodeURIComponent(id)}?includedData=PROCEEDS,FULFILLMENT,PACKAGES`, { headers: { 'x-amz-access-token': token } });
+    if (!res.ok && res.status !== 404) break;
+    const body = (await res.json().catch(() => ({}))) as AmazonOrder & { order?: AmazonOrder };
+    const o = body.order ?? body; // ponytail: wrapped as in the docs' searchOrders; bare taken too
+    if (o.orderId === id && o.salesChannel?.marketplaceId === marketplace) found.push(o);
+    settled.push(id);
+  }
+  return { found, settled };
 }
 
 interface RefundEvent {
@@ -274,6 +294,14 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const refundReads = stateOf<RefundRead>(db, REFUNDS_KEY);
     const refundRead = refundReads.get(id);
     const refunds = !own ? undefined : await refundsOf(refundRead?.account === account ? refundRead : undefined, fetchFn, host, token, now).catch(() => undefined);
+    const looked = (orderId: string) => `amazon-order:${storeId}:${orderId}`;
+    const known = db.prepare('SELECT 1 FROM orders WHERE store_id = ? AND id = ?');
+    const asked = db.prepare('SELECT 1 FROM done_once WHERE ref = ?');
+    const missing = !own ? [] : [...new Set([
+      ...(refunds?.refunds ?? []).flatMap((e) => (e.AmazonOrderId ? [e.AmazonOrderId] : [])),
+      ...db.prepare('SELECT DISTINCT substr(order_id, 5) AS id FROM amazon_refunds r WHERE store_id = ? AND NOT EXISTS (SELECT 1 FROM orders o WHERE o.store_id = r.store_id AND o.id = r.order_id)').all(storeId).map((r) => String(r.id)),
+    ])].filter((o) => !known.get(storeId, `amz-${o}`) && !orders?.orders.some((x) => x.orderId === o) && !asked.get(looked(o)));
+    const older = missing.length ? await refundedOrders(missing, fetchFn, host, token, marketplace) : undefined;
 
     if (syncView(db, id) !== view) return;
     tx(db, () => {
@@ -302,7 +330,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
          ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
            supplier = excluded.supplier, tracking = coalesce(excluded.tracking, tracking)`,
       );
-      for (const o of orders?.orders ?? []) {
+      for (const o of [...(orders?.orders ?? []), ...(older?.found ?? [])]) {
         const s = o.fulfillment?.fulfillmentStatus;
         if (s === 'PENDING' || s === 'PENDING_AVAILABILITY') continue; // not paid for yet
         const created = new Date(o.createdTime);
@@ -331,6 +359,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
           if (day) days.add(String(day));
         }
       }
+      for (const o of older?.settled ?? []) once(db, looked(o));
       rebuildRevenue(db, storeId, days);
       if (orders) reads.set(id, { ...orders.next, account });
       if (refunds) refundReads.set(id, { ...refunds.next, account });

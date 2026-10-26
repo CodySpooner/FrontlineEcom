@@ -542,3 +542,32 @@ test("Amazon as an extra channel: a first sync converts each day at that day's E
   await syncAmazon(db, key, 'peak', withHistory, NOW);
   expect(urls.filter((u) => u.includes('eurofxref-hist'))).toHaveLength(1); // later syncs re-read a few days at today's rate
 });
+
+test("a refund on an order from before the orders read brings that order in (getOrder), so it comes off its day; another marketplace's stays out", async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  const lookups: string[] = [];
+  const base = fakeAmazon().fetchFn;
+  const refund = (orderId: string, adjustment: string) => ({
+    AmazonOrderId: orderId, PostedDate: '2026-10-26T10:00:00Z',
+    ShipmentItemAdjustmentList: [{ SellerSKU: 'MUG-1', OrderAdjustmentItemId: adjustment, ItemChargeAdjustmentList: [{ ChargeType: 'Principal', ChargeAmount: { CurrencyAmount: -12.5 } }] }],
+  });
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (u.pathname === '/orders/2026-01-01/orders') return Response.json({ orders: [], lastUpdatedBefore: '2026-10-26T17:58:00Z' });
+    const id = /^\/orders\/2026-01-01\/orders\/([\w-]+)$/.exec(u.pathname)?.[1];
+    if (id) {
+      lookups.push(id);
+      const marketplaceId = id === '333-3' ? 'A2EUQ1WTGCTBG2' : 'ATVPDKIKX0DER';
+      return Response.json({ order: { orderId: id, createdTime: '2026-10-25T15:00:00Z', salesChannel: { marketplaceId }, fulfillment: { fulfillmentStatus: 'SHIPPED' }, proceeds: { grandTotal: { amount: '30.00' } } } });
+    }
+    if (u.pathname === '/finances/v0/financialEvents') return Response.json({ payload: { FinancialEvents: { RefundEventList: [refund('222-1', 'adj-1'), refund('333-3', 'adj-3')] } } });
+    return base(url, init);
+  }) as typeof fetch;
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect(lookups.sort()).toEqual(['222-1', '333-3']);
+  expect(db.prepare("SELECT id FROM orders WHERE store_id = 'peak' AND id GLOB 'amz-*'").all()).toEqual([{ id: 'amz-222-1' }]);
+  expect(db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'peak' AND date = '2026-10-25'").get()?.revenue).toBe(400); // 412.50 - 12.50
+  await syncAmazon(db, key, 'peak', fetchFn, new Date(NOW.getTime() + 2 * 3_600_000));
+  expect(lookups).toHaveLength(2); // neither is asked for again
+});
