@@ -73,6 +73,12 @@ export function createRunManager(opts: RunManagerOptions) {
     const cap = env.caps?.(agent.storeId).agentCostPerDay;
     if (cap !== undefined && costToday(db, agent.storeId) >= cap) return `Today's AI budget for this store ($${cap}) is used up. Raise it in Settings.`;
     if (agent.dailyBudgetUsd !== undefined && costToday(db, agent.storeId, agentId) >= agent.dailyBudgetUsd) return ownUsedUp(agent.dailyBudgetUsd);
+    // A job that fires again while its last copy still waits in the queue (the agent is busy, e.g. on a request the owner
+    // hasn't answered) doesn't stack another: the queued one does it.
+    if (!resumeRunId && !parentRunId) {
+      const queued = db.prepare(`SELECT id FROM agent_runs WHERE agent_id = ? AND status = 'queued' AND task = ? AND resume IS NULL AND parent_run_id IS NULL`).get(agentId, task);
+      if (queued) return getRun(db, String(queued.id))!;
+    }
     const id = randomUUID();
     db.prepare('INSERT INTO agent_runs (id, store_id, agent_id, task, resume, parent_run_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
       id, agent.storeId, agentId, task, resume ?? null, parentRunId ?? null, new Date().toISOString(),
@@ -170,10 +176,13 @@ export function createRunManager(opts: RunManagerOptions) {
       const last = transcript.at(-1);
       if (event.type === 'text_delta' && last?.type === 'text_delta') transcript[transcript.length - 1] = { type: 'text_delta', text: last.text + event.text };
       else transcript.push(event);
+      // Paused on the owner, a run can wait for days: what it did so far is kept, so a crash or restart meanwhile doesn't lose it.
+      if (waiting) db.prepare('UPDATE agent_runs SET transcript_json = ? WHERE id = ?').run(JSON.stringify(transcript), run.id);
       opts.onEvent?.(run, event);
     };
 
-    // What the run has spent so far, saved as it goes: a cancel, crash or restart (no result from the engine) still counts it.
+    // What the run has spent so far, saved as it goes with its transcript: a cancel, crash or restart (no result from the
+    // engine) still counts it, and shows what it did.
     let ended = false;
     let spent = 0;
     let cap = env.caps?.(run.storeId).agentCostPerDay;
@@ -185,7 +194,7 @@ export function createRunManager(opts: RunManagerOptions) {
       spent = Math.max(spent, usd); // the reflection reports from the engine's figure, which can be under the estimate
       const slot = active.get(run.id);
       if (slot) slot.spent = spent;
-      db.prepare('UPDATE agent_runs SET cost_usd = ? WHERE id = ?').run(spent, run.id);
+      db.prepare('UPDATE agent_runs SET cost_usd = ?, transcript_json = ? WHERE id = ?').run(spent, JSON.stringify(transcript), run.id);
       cap = env.caps?.(run.storeId).agentCostPerDay; // read again: the owner may lower either mid-run
       own = getAgent(db, run.agentId)?.dailyBudgetUsd;
       // Shares split the cap; this holds it however many runs paused on the owner come back at once.
@@ -251,7 +260,7 @@ export function createRunManager(opts: RunManagerOptions) {
        WHERE id = ?`,
     ).run(
       status,
-      end.type === 'done' ? end.sessionId : null,
+      end.type === 'done' || end.type === 'error' ? (end.sessionId ?? null) : null, // a reply cut off by a limit goes on from here too
       usage.inputTokens,
       usage.outputTokens,
       usage.costUsd,

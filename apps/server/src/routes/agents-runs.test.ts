@@ -1,4 +1,4 @@
-import { createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, updateAgent, type Engine, type FakeStep, type RunManagerOptions } from '@frontline/agents';
+import { costToday, createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, updateAgent, type Engine, type FakeStep, type RunManagerOptions } from '@frontline/agents';
 import type { AgentEvent, AgentRun, LiveMessage } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -98,11 +98,48 @@ test('get() returns the transcript so far while a run waits for approval', async
   await new Promise((r) => setTimeout(r, 20));
   const live = m.get(run.id)!;
   expect(live.transcript.map((e) => e.type)).toEqual(['text_delta', 'tool_call', 'approval_request']);
+  // Saved while it waits: a crash or restart now keeps what it did.
+  expect((JSON.parse(String(db.prepare('SELECT transcript_json FROM agent_runs WHERE id = ?').get(run.id)?.transcript_json)) as AgentEvent[]).map((e) => e.type)).toEqual(['text_delta', 'tool_call', 'approval_request']);
   expect(getAgent(db, 'glow:copywriter')).toMatchObject({ status: 'waiting_approval', currentTask: 'Rewrite hero' });
   const request = live.transcript[2];
   if (request?.type === 'approval_request') decide(db, request.approval.id, 'approve');
   await m.idle();
   expect(m.get(run.id)?.transcript.at(-1)?.type).toBe('done');
+});
+
+test("a task fired again while its copy still waits in the queue doesn't stack another", async () => {
+  const { engine, open } = gated();
+  const m = manager({ engine });
+  const first = ok(m.start('glow:copywriter', 'Daily copy check')); // running, held
+  const second = ok(m.start('glow:copywriter', 'Daily copy check')); // queued behind it
+  expect(second.id).not.toBe(first.id);
+  expect(ok(m.start('glow:copywriter', 'Daily copy check')).id).toBe(second.id);
+  expect(ok(m.start('glow:copywriter', 'Something else')).id).not.toBe(second.id);
+  open();
+  await m.idle();
+  expect(listRuns(db, { storeIds: ['glow'] }).filter((r) => r.task === 'Daily copy check')).toHaveLength(2);
+});
+
+test('a run queued or begun before midnight counts toward the day it spends in', () => {
+  const yesterday = new Date(Date.now() - 86_400_000).toISOString();
+  const before = costToday(db, 'glow');
+  const add = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at, ended_at) VALUES (?, 'glow', 'glow:copywriter', 't', ?, ?, ?, ?)`);
+  add.run('late', 'done', 5, yesterday, new Date().toISOString()); // queued yesterday, spent today
+  add.run('going', 'running', 2, yesterday, null); // still going
+  add.run('over', 'done', 7, yesterday, yesterday); // done yesterday
+  expect(costToday(db, 'glow') - before).toBe(7);
+  expect(costToday(db, 'glow', 'glow:copywriter')).toBeGreaterThanOrEqual(7);
+});
+
+test('a reply cut off by its turn or budget limit keeps its conversation for the next message', async () => {
+  const engine: Engine = async function* () {
+    yield { type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing.', sessionId: 'sess-1' };
+  };
+  const m = manager({ engine });
+  const run = ok(m.start('glow:copywriter', 'Long job'));
+  await m.idle();
+  expect(getRun(db, run.id)).toMatchObject({ status: 'error', sessionId: 'sess-1' });
+  expect(ok(m.start('glow:copywriter', 'Go on', run.id))).toMatchObject({ status: expect.any(String) });
 });
 
 test('global, per-store and per-agent limits queue runs in order', async () => {

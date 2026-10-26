@@ -135,6 +135,7 @@ describe('Claude engine', () => {
 
   test('maps failed results to error events', () => {
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }))).toEqual([{ type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.' }]);
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [], session_id: 'abc' }))[0]).toMatchObject({ sessionId: 'abc' }); // the next message goes on from it
     const u = { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 10_000, output_tokens: 500 };
     expect(estimate(u)).toBeCloseTo(0.032);
     expect(estimate(u, 'claude-sonnet-5-5')).toBeCloseTo(0.017); // 2 + 8 + 2 + 5 thousandths

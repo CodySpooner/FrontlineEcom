@@ -710,7 +710,7 @@ export type AgentEvent =
   /** `sessionId` continues the conversation when passed back as `resume`. */
   | { type: 'done'; sessionId: string; usage: RunUsage }
   /** `usage`: what the run spent before it stopped, when the engine reports it. */
-  | { type: 'error'; message: string; usage?: RunUsage };
+  | { type: 'error'; message: string; usage?: RunUsage; sessionId?: string /* the conversation, when it got one (a run cut off by its turn or budget limit) */ };
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Integrations (core lane). Secret values never leave the server; the API only says which secret fields are set.

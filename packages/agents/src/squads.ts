@@ -46,12 +46,15 @@ export function listAgents(db: DatabaseSync, storeIds?: string[]): Agent[] {
   return rows.map((r) => toAgent(r, busy, costToday(db, String(r.store_id), String(r.id))));
 }
 
-/** What the store's runs (or one agent's) cost since local midnight. */
+/**
+ * What the store's runs (or one agent's) cost today: every run not over before local midnight, so one queued or begun
+ * yesterday that spends today counts. ponytail: all of such a run's cost counts today; a cap errs high, never low.
+ */
 export function costToday(db: DatabaseSync, storeId: string, agentId?: string): number {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
   const row = db
-    .prepare(`SELECT coalesce(sum(cost_usd), 0) AS cost FROM agent_runs WHERE store_id = ? AND created_at >= ? ${agentId ? 'AND agent_id = ?' : ''}`)
+    .prepare(`SELECT coalesce(sum(cost_usd), 0) AS cost FROM agent_runs WHERE store_id = ? AND coalesce(ended_at, iif(status = 'running', '~', created_at)) >= ? ${agentId ? 'AND agent_id = ?' : ''}`)
     .get(storeId, midnight.toISOString(), ...(agentId ? [agentId] : []));
   return Number(row?.cost ?? 0);
 }

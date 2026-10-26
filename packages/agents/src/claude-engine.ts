@@ -189,7 +189,7 @@ export function toAgentEvents(message: SDKMessage): AgentEvent[] {
       const u = message.usage;
       // A run that stops early still spent money: errors carry it too, so the store's daily AI budget sees it.
       const usage = u && { inputTokens: u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens, outputTokens: u.output_tokens, costUsd: message.total_cost_usd };
-      const failed = (text: string): AgentEvent[] => [{ type: 'error', message: text, ...(usage ? { usage } : {}) }];
+      const failed = (text: string): AgentEvent[] => [{ type: 'error', message: text, ...(usage ? { usage } : {}), ...(message.session_id ? { sessionId: message.session_id } : {}) }];
       if (message.subtype !== 'success') return failed(STOPPED[message.subtype] ?? (message.errors.join('; ') || message.subtype));
       if (message.is_error) return failed(message.result || 'Claude returned an error');
       return [{ type: 'done', sessionId: message.session_id, usage }];
