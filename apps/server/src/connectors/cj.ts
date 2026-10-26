@@ -18,7 +18,13 @@ interface CjOrder { orderNum: string | null; shopName: string | null; orderStatu
 const RANK: FulfillmentStatus[] = ['unfulfilled', 'fulfilled', 'in_transit', 'delivered'];
 const CJ_STATUS: Record<string, FulfillmentStatus> = { SHIPPED: 'in_transit', DELIVERED: 'delivered' };
 
-async function call<T>(fetchFn: Fetch, path: string, init: RequestInit): Promise<T> {
+let nextCallAt = 0;
+/** Every CJ call (sync, search, token) waits its turn: CJ allows one per second per account. */
+async function call<T>(fetchFn: Fetch, path: string, init: RequestInit, gapMs: number): Promise<T> {
+  const now = Date.now();
+  const at = Math.max(now, nextCallAt);
+  nextCallAt = at + gapMs;
+  if (at > now) await new Promise((r) => setTimeout(r, at - now));
   const res = await fetchFn(`${API}${path}`, init);
   const body = (await res.json().catch(() => ({}))) as Partial<CjResponse<T>>;
   if (!res.ok || !body.result) throw new Error(`CJ: ${body.message ?? `HTTP ${res.status}`}`);
@@ -26,13 +32,13 @@ async function call<T>(fetchFn: Fetch, path: string, init: RequestInit): Promise
 }
 
 /** Cached access token, renewed from the API key a day before it expires (CJ serves the same token for 24h anyway). */
-async function accessToken(db: Db, key: Buffer, creds: Record<string, string>, fetchFn: Fetch, now: Date) {
+async function accessToken(db: Db, key: Buffer, creds: Record<string, string>, fetchFn: Fetch, now: Date, gapMs: number) {
   if (creds.accessToken && Number(creds.accessTokenExpiresAt) * 1000 > now.getTime() + 86_400_000) return creds.accessToken;
   const t = await call<{ accessToken: string; accessTokenExpiryDate: string }>(fetchFn, '/authentication/getAccessToken', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ apiKey: creds.apiKey!.trim() }),
-  });
+  }, gapMs);
   updateSecrets(db, key, ID, { accessToken: t.accessToken, accessTokenExpiresAt: String(Math.floor(Date.parse(t.accessTokenExpiryDate) / 1000)) });
   return t.accessToken;
 }
@@ -43,13 +49,12 @@ export async function syncCj(db: Db, key: Buffer, _storeId: string, fetchFn: Fet
   const creds = getCredentials(db, key, 'cj');
   if (!creds) return;
   try {
-    const token = await accessToken(db, key, creds, fetchFn, now);
+    const token = await accessToken(db, key, creds, fetchFn, now, gapMs);
     const orders: CjOrder[] = [];
     for (const status of STATUSES) {
       for (let page = 1; ; page++) {
-        await new Promise((r) => setTimeout(r, gapMs));
         const q = new URLSearchParams({ pageNum: String(page), pageSize: String(PAGE_SIZE), status, paymentDateFrom: utc(new Date(now.getTime() - WINDOW_DAYS * 86_400_000)), paymentDateTo: utc(now) });
-        const data = await call<{ total: number; list: CjOrder[] | null }>(fetchFn, `/shopping/order/list?${q}`, { headers: { 'CJ-Access-Token': token } });
+        const data = await call<{ total: number; list: CjOrder[] | null }>(fetchFn, `/shopping/order/list?${q}`, { headers: { 'CJ-Access-Token': token } }, gapMs);
         orders.push(...(data.list ?? []));
         if (!data.list?.length || page * PAGE_SIZE >= data.total) break;
       }
@@ -83,16 +88,13 @@ export async function syncCj(db: Db, key: Buffer, _storeId: string, fetchFn: Fet
 
 interface CjProduct { id: string; sku: string; nameEn: string; bigImage?: string; sellPrice: string | number; listedNum?: number }
 
-/**
- * CJ catalog search by product name or SKU. Undefined when CJ isn't connected. Throws "CJ: <message>".
- * ponytail: no shared limiter with syncCj, so a search during a sync can hit CJ's 1 call/second limit and show its error.
- */
-export async function searchCj(db: Db, key: Buffer, q: string, limit: number, fetchFn: Fetch = fetch, now = new Date()): Promise<SupplierProduct[] | undefined> {
+/** CJ catalog search by product name or SKU. Undefined when CJ isn't connected. Throws "CJ: <message>". */
+export async function searchCj(db: Db, key: Buffer, q: string, limit: number, fetchFn: Fetch = fetch, now = new Date(), gapMs = 1100): Promise<SupplierProduct[] | undefined> {
   const creds = getCredentials(db, key, 'cj');
   if (!creds) return undefined;
-  const token = await accessToken(db, key, creds, fetchFn, now);
+  const token = await accessToken(db, key, creds, fetchFn, now, gapMs);
   const params = new URLSearchParams({ keyWord: q, page: '1', size: String(limit) });
-  const data = await call<{ content?: { productList?: CjProduct[] }[] }>(fetchFn, `/product/listV2?${params}`, { headers: { 'CJ-Access-Token': token } });
+  const data = await call<{ content?: { productList?: CjProduct[] }[] }>(fetchFn, `/product/listV2?${params}`, { headers: { 'CJ-Access-Token': token } }, gapMs);
   return (data.content ?? []).flatMap((c) => c.productList ?? []).slice(0, limit).map((p) => ({
     supplier: 'cj',
     id: String(p.id),

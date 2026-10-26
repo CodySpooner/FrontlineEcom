@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { SupplierProduct } from '@frontline/shared';
 import { createApp } from '../app';
 import { openDb } from '../db';
@@ -94,7 +94,7 @@ test('CJ catalog search maps products (lowest variant price); without CJ the rou
       { id: '3C4D', sku: 'CJYD1002', nameEn: 'Ice Roller Mini', sellPrice: 1.9 },
     ] }] } });
   }) as typeof fetch;
-  expect(await searchCj(db, key, 'ice roller', 10, fetchFn, NOW)).toEqual([
+  expect(await searchCj(db, key, 'ice roller', 10, fetchFn, NOW, 0)).toEqual([
     { supplier: 'cj', id: '1A2B', sku: 'CJYD1001', title: 'Ice Roller', image: 'https://cf.cjdropshipping.com/roller.jpg', price: 2.47, listed: 812 },
     { supplier: 'cj', id: '3C4D', sku: 'CJYD1002', title: 'Ice Roller Mini', price: 1.9, listed: 0 },
   ]);
@@ -111,4 +111,23 @@ test('CJ catalog search maps products (lowest variant price); without CJ the rou
   expect(res.length).toBeLessThanOrEqual(3);
   expect(res.every((p) => p.demo && p.price > 0 && p.title.toLowerCase().includes(title.split(' ')[0]!.toLowerCase()))).toBe(true);
   expect((await app.request('/api/suppliers/products?q=')).status).toBe(400);
+});
+
+test('CJ calls take turns (one per second for real), so two searches at once are not rate limited', async () => {
+  const db = setup();
+  const at: number[] = [];
+  const fetchFn = (async (url: string) => {
+    at.push(Date.now());
+    if (url.endsWith('/getAccessToken')) return Response.json({ code: 200, result: true, message: 'Success', data: { accessToken: 'cj-access', accessTokenExpiryDate: '2026-11-10T09:16:33+08:00' } });
+    return Response.json({ code: 200, result: true, message: 'Success', data: { content: [] } });
+  }) as typeof fetch;
+  vi.useFakeTimers({ toFake: ['setTimeout', 'Date'] });
+  try {
+    const both = Promise.all([searchCj(db, key, 'roller', 5, fetchFn, NOW), searchCj(db, key, 'mask', 5, fetchFn, NOW)]);
+    await vi.advanceTimersByTimeAsync(5000);
+    await both;
+  } finally {
+    vi.useRealTimers();
+  }
+  expect(at.slice(1).map((t, i) => t - at[i]!)).toEqual([1100, 1100, 1100]);
 });
