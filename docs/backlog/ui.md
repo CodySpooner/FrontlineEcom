@@ -62,4 +62,4 @@ Orca's browser against the reference before ticking it.
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
 - 2026-10-26 — UI-01..04: design-system primitives (+ /dev/ui gallery), app shell with 12 routes + persisted store filter,
-  typed data layer (react-query + /api/live, stubs in `src/api/stubs.ts` until core/agents ship routes), Dashboard ported from mockup v3
+  typed data layer on the real API (react-query + /api/live; only missions stubbed in `src/api/stubs.ts`), Dashboard ported from mockup v3

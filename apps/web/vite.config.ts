@@ -10,6 +10,6 @@ export default defineConfig({
   server: {
     port: Number(process.env.WEB_PORT ?? 5173),
     strictPort: true,
-    proxy: { '/api': { target: `http://localhost:${apiPort}`, ws: true } },
+    proxy: { '/api': { target: `http://127.0.0.1:${apiPort}`, ws: true } },
   },
 });

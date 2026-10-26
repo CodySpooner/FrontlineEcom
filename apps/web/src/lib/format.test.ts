@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ago, money, pctChange, shortMoney, signedPct, day } from './format';
+import { ago, day, money, shortMoney, signedPct } from './format';
 
 describe('format', () => {
   it('formats money with a real minus sign for losses', () => {
@@ -12,12 +12,10 @@ describe('format', () => {
     expect(shortMoney(3000)).toBe('$3K');
     expect(shortMoney(1_250_000)).toBe('$1.3M');
   });
-  it('computes deltas vs the previous period', () => {
-    expect(pctChange(120, 100)).toBeCloseTo(20);
-    expect(pctChange(-50, -100)).toBeCloseTo(50); // loss halved = improvement
-    expect(pctChange(10, 0)).toBe(0);
+  it('signs deltas', () => {
     expect(signedPct(18.44)).toBe('+18.4%');
     expect(signedPct(-8.1)).toBe('−8.1%');
+    expect(signedPct(-0.04)).toBe('+0.0%');
   });
   it('prints relative times', () => {
     const now = Date.parse('2026-10-26T12:00:00Z');

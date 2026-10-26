@@ -7,6 +7,8 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from ui) `GET /api/missions` → `Mission[]` for every store, `Mission { id, storeId, title, progress, target, xp }` (add
+      `Mission` to `packages/shared`). The Dashboard's Daily Missions panel uses a stub in `apps/web/src/api/stubs.ts` until it lands.
 - [ ] (from core) For AGT-10/11: `getCaps(db, storeId)` (`apps/server/src/settings.ts`) → `StoreCaps` (adSpendChangePerDay, higgsfieldCreditsPerDay, agentCostPerDay, `autopilot[actionKind] = { enabled, maxUsdPerDay }`) — the owner edits these in Settings. `notify(db, { kind: 'agent_done' | 'error' | 'info', title, body?, storeId?, link? })` creates a bell notification (approvals already notify on create).
 - [ ] (from core) For AGT-16: research data is in `research_products` (see `apps/server/src/research.ts`); `scoreProduct()` is exported. Product Hunter can insert new finds there (same columns) and they show in the UI feed. Approved `store.add_products` approvals carry `payload.products[]` (researchProductId, title, price, compareAt, cost) — executing them (adding to the store) is yours.
 - [x] (from core) For AGT-09 tools, core's data functions are plain sync functions over `Db` you can wrap/inject from `routes/agents.ts`: `summarize(loadRows(db, storeIds, range, to), {range, to, storeIds})` (`analytics.ts`), `listProducts` / `listOrders(db, storeIds, q)` → `Page<T>` (`catalog.ts`, `q` = query-param getter), `listEvents` (`live.ts`), `listApprovals` (`approvals.ts`). Or call the HTTP API. Tell core if you want a different shape.

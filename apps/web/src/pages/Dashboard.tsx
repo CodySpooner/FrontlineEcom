@@ -3,27 +3,27 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight, Check, CreditCard, RotateCcw, ShoppingBag, ShoppingCart } from 'lucide-react';
-import { AGENT_ROLES, type AgentStatus, type ApprovalRequest, type StoreEventType } from '@frontline/shared';
-import { useAgents, useApprovals, useDecide, useEvents, useMissions, useSummary, type AnalyticsSummary, type Range } from '../api/client';
+import { AGENT_ROLES, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type StoreEventType } from '@frontline/shared';
+import { useAgents, useApprovals, useDecide, useEvents, useMissions, useSummary } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Portrait } from '../components/Art';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
 import { sparkPoints, weekly } from '../lib/chart';
-import { ago, cents, money, pctChange, signedPct } from '../lib/format';
+import { ago, cents, money, signedPct } from '../lib/format';
 import { NAV } from '../nav';
 
-const RANGES: { value: Range; label: string }[] = [
+const RANGES: { value: AnalyticsRange; label: string }[] = [
   { value: 7, label: '7D' },
   { value: 30, label: '30D' },
   { value: 90, label: '90D' },
   { value: 365, label: '1Y' },
 ];
-const PERIOD: Record<Range, string> = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months' };
+const PERIOD: Record<AnalyticsRange, string> = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months' };
 
 export function Dashboard() {
-  const [range, setRange] = useState<Range>(30);
+  const [range, setRange] = useState<AnalyticsRange>(30);
   const { ids, name } = useStoreSelection();
   const summary = useSummary(ids, range);
   const who = ids.length ? ids.map(name).join(' + ') : 'All stores';
@@ -83,10 +83,10 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
         ))}
       </div>
     );
-  const { totals: t, previous: p, series } = s;
+  const { totals: t, deltas: d, series } = s;
   return (
     <div className={cx(grid, 'transition-opacity', q.isPlaceholderData && 'opacity-60')}>
-      <Kpi label="Total Revenue" value={money(t.revenue)} d={pctChange(t.revenue, p.revenue)} series={series.map((d) => d.revenue)} />
+      <Kpi label="Total Revenue" value={money(t.revenue)} d={d.revenue} series={series.map((p) => p.revenue)} />
       <Kpi
         hero
         label={
@@ -98,18 +98,18 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
         }
         value={money(t.profit)}
         negative={t.profit < 0}
-        d={pctChange(t.profit, p.profit)}
-        series={series.map((d) => d.profit)}
+        d={d.profit}
+        series={series.map((p) => p.profit)}
       />
-      <Kpi label="Ad Spend" value={money(t.adSpend)} d={pctChange(t.adSpend, p.adSpend)} series={series.map((d) => d.adSpend)} />
-      <Kpi label="ROAS" value={`${t.roas.toFixed(1)}x`} d={pctChange(t.roas, p.roas)} series={series.map((d) => (d.adSpend ? d.revenue / d.adSpend : 0))} />
-      <Kpi label="Total Orders" extra={`AOV ${cents(t.aov)}`} value={t.orders.toLocaleString('en-US')} d={pctChange(t.orders, p.orders)} series={series.map((d) => d.orders)} />
+      <Kpi label="Ad Spend" value={money(t.adSpend)} d={d.adSpend} series={series.map((p) => p.adSpend)} />
+      <Kpi label="ROAS" value={`${t.roas.toFixed(1)}x`} d={d.roas} series={series.map((p) => p.roas)} />
+      <Kpi label="Total Orders" extra={`AOV ${cents(t.aov)}`} value={t.orders.toLocaleString('en-US')} d={d.orders} series={series.map((p) => p.orders)} />
     </div>
   );
 }
 
 function Kpi({ label, extra, value, d, series, hero, negative }: { label: ReactNode; extra?: string; value: string; d: number; series: number[]; hero?: boolean; negative?: boolean }) {
-  const up = d >= 0;
+  const up = Math.round(d * 10) >= 0; // same rounding as signedPct, so "+0.0%" is never red
   return (
     <div
       className={cx(
