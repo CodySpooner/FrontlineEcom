@@ -294,11 +294,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-166 A pause or budget cut is judged on what the spend it took away was bringing. Judged on blended ROAS, which rises whenever spend goes (even spend that paid back above break-even), every cut read as a win and taught the Ad Strategist to cut; a pause of all spend was never judged.
 - [x] AGT-167 A price test or new page isn't judged on a handful of sales. Any profit change counted, so on a product selling 2-3 units a fortnight one order decided a win (XP, confidence up) or a loss.
 - [x] AGT-168 A theme change isn't judged on a handful of orders. Any conversion change counted, so on a small store one order either way decided a win or a loss (as AGT-167 for prices and pages).
+- [x] AGT-169 A store with no sales yet doesn't get "pause" on every campaign. With no 30-day sales, margin read 0: break-even ROAS infinite and max CPA 0, so a launch's campaigns were judged ("pause", budget 0) on their first cent of spend.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-169: `economics` falls back to the active products with a unit cost (average price as AOV, average margin after the store's fees) when the window has no revenue, flagged `catalog`; `review_campaigns` says so in its header. No costed products: unchanged (0).
 - 2026-10-26 — AGT-168: a theme change with under 30 orders across its 28 days is recorded as "can't be judged on N orders" (confidence 0.5, no XP, its run's learnings unmoved; "result unclear on too few orders").
 - 2026-10-26 — AGT-167: price tests and product pages with under 10 units across their 28 days are recorded as "can't be judged on N units sold" (confidence 0.5, no XP, no confidence move on the run's learnings; the owner's notice says "result unclear on too few sales").
 - 2026-10-26 — AGT-166: an approved pause or budget cut whose spend did fall is judged on revenue lost per spend saved (per day, 3 after vs 7 before) against 30-day break-even ROAS: under it worked, at or over it didn't. Same uncosted-sales fallback to blended ROAS as raises (AGT-155); a pause that left no spend is judged now.

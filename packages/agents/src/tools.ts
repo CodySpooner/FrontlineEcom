@@ -798,7 +798,7 @@ export const APP_TOOLS: AppTool[] = [
       // Losing campaigns come out as "scale" when break-even ROAS reads low. ponytail: no per-product list.
       const uncosted = uncostedShare(ctx.db, ctx.store.id, since(30, ctx.store));
       return [
-        `margin after cost, tax and fees ${r2(econ.margin * 100)}%, AOV ${r2(econ.aov)}, break-even ROAS ${r2(t.breakEven)}, target ROAS ${r2(t.target)}, max CPA ${r2(t.maxCpa)} (30 days); campaigns over ${days} days:`,
+        `margin after cost, tax and fees ${r2(econ.margin * 100)}%, AOV ${r2(econ.aov)}, break-even ROAS ${r2(t.breakEven)}, target ROAS ${r2(t.target)}, max CPA ${r2(t.maxCpa)} (${econ.catalog ? 'no sales in 30 days: from the active products\' prices and unit costs' : '30 days'}); campaigns over ${days} days:`,
         uncosted >= 0.1
           ? `(${Math.round(uncosted * 100)}% of the last 30 days' product sales have no unit cost set, so margin reads high and break-even ROAS low: don't scale on these verdicts until the owner fills in costs (Shopify "Cost per item", else Products here). Products that truly cost nothing, like digital ones, are fine.)`
           : '',

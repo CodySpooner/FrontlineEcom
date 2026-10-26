@@ -96,6 +96,19 @@ test("a change that changes nothing isn't sent: pausing a paused campaign, a bud
   expect(requests).toEqual([]);
 });
 
+test("a store with no sales yet is judged on its catalog's margin, not as if every cent of spend were lost", async () => {
+  db.prepare(`UPDATE daily_metrics SET revenue = 0, orders = 0, cogs = 0 WHERE store_id = 'pawsome'`).run(); // launched, nothing sold yet
+  db.prepare(`UPDATE stores SET fee_percent = 0, fee_per_order = 0 WHERE id = 'pawsome'`).run();
+  db.prepare(`UPDATE products SET status = 'archived' WHERE store_id = 'pawsome'`).run();
+  db.prepare(`INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('pawsome', 'n1', 'Lick Mat', 20, 8, 0, 'active'), ('pawsome', 'n2', 'Bowl', 40, 16, 0, 'active')`).run();
+  db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 'launch', 'pawsome', 'Launch', 'active', 20)`).run();
+  db.prepare(`INSERT INTO campaign_daily (network, campaign_id, date, spend, revenue, purchases, clicks, impressions) VALUES ('meta', 'launch', ?, 15, 0, 0, 40, 900)`).run(addDays(localDate(), -1));
+  const { outputs } = await run([{ call: 'review_campaigns' }]);
+  // Margin 60%, AOV 30: break-even 1.67, max CPA 18, so 15 spent with no sale is still learning, not "pause".
+  expect(outputs[0]).toContain("margin after cost, tax and fees 60%, AOV 30, break-even ROAS 1.67, target ROAS 2.17, max CPA 18 (no sales in 30 days: from the active products' prices and unit costs)");
+  expect(outputs[0]!.split('\n').find((r) => r.startsWith('meta,launch,'))!.split(',')[9]).toBe('learning');
+});
+
 test("an old account's paused campaigns with no spend are left out; one that is on but spends nothing stays", async () => {
   const add = db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, 'pawsome', ?, ?, 0)`);
   for (let i = 0; i < 3; i++) add.run(`old-${i}`, `Black Friday ${2020 + i}`, i ? 'paused' : 'archived');

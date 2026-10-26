@@ -22,6 +22,8 @@ export interface Economics {
   /** Margin after product cost, sales tax (core keeps it in daily cogs) and the owner's fee estimate, (revenue − cogs − fees) / revenue. */
   margin: number;
   aov: number;
+  /** No sales in the window: margin and AOV are the active catalog's (price, unit cost, fees), not orders'. */
+  catalog?: boolean;
 }
 
 export function thresholds({ margin, aov }: Economics) {
@@ -64,7 +66,16 @@ export function economics(db: DatabaseSync, storeId: string, since: string): Eco
     )
     .get(storeId, since);
   const revenue = Number(r?.revenue ?? 0);
-  return { margin: revenue ? (revenue - Number(r?.cogs ?? 0)) / revenue : 0, aov: Number(r?.orders) ? revenue / Number(r?.orders) : 0 };
+  if (revenue) return { margin: (revenue - Number(r?.cogs ?? 0)) / revenue, aov: Number(r?.orders) ? revenue / Number(r?.orders) : 0 };
+  // No sales yet (a launch): margin 0 makes break-even infinite and max CPA 0, so every campaign that spent a cent read
+  // "pause". The costed active products stand in. ponytail: a plain average, one unit per order, no sales tax.
+  const c = db
+    .prepare(
+      `SELECT avg(p.price) AS aov, avg((p.price * (1 - s.fee_percent / 100.0) - s.fee_per_order - p.cost) / p.price) AS margin
+       FROM products p JOIN stores s ON s.id = p.store_id WHERE p.store_id = ? AND p.status = 'active' AND p.price > 0 AND p.cost > 0`,
+    )
+    .get(storeId);
+  return c?.aov == null ? { margin: 0, aov: 0 } : { margin: Number(c.margin), aov: Number(c.aov), catalog: true };
 }
 
 /**
