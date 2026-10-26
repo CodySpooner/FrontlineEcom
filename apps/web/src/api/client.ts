@@ -1,6 +1,6 @@
 // UI-03 data layer: typed fetchers + react-query hooks over the local API, and the /api/live socket.
 import { useEffect } from 'react';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   Agent,
   AgentRun,
@@ -24,6 +24,8 @@ import type {
   FulfillmentStatus,
   Integration,
   IntegrationInput,
+  KnowledgeDoc,
+  KnowledgeKind,
   LiveMessage,
   MemoryInput,
   Mission,
@@ -131,6 +133,44 @@ export function useForgetMemory(storeId: string) {
   return useMutation({
     mutationFn: (id: string) => api<void>(`/api/memory/${id}`, { method: 'DELETE' }),
     onSuccess: (_, id) => qc.setQueryData<StoreMemory[]>(['memory', storeId], (old = []) => old.filter((m) => m.id !== id)),
+  });
+}
+
+/** Memory of several stores at once; shares the per-store cache with useMemory. */
+export const useMemories = (storeIds: string[]) =>
+  useQueries({
+    queries: storeIds.map((id) => ({ queryKey: ['memory', id], queryFn: () => api<StoreMemory[]>(`/api/stores/${id}/memory`) })),
+    combine: (rs) => ({
+      data: rs.every((r) => r.data) ? rs.flatMap((r) => r.data ?? []) : undefined,
+      isPending: rs.some((r) => r.isPending),
+      isError: rs.some((r) => r.isError),
+      refetch: () => rs.forEach((r) => r.refetch()),
+    }),
+  });
+
+/** Edit or pin a memory (pinned ones go into every run's prompt for that store). */
+export function useUpdateMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string; text?: string; pinned?: boolean }) => api<StoreMemory>(`/api/memory/${id}`, json('PATCH', patch)),
+    onSuccess: (m) => qc.setQueryData<StoreMemory[]>(['memory', m.storeId], (old = []) => old.map((x) => (x.id === m.id ? m : x))),
+  });
+}
+
+export const useKnowledge = () => useQuery({ queryKey: ['knowledge'], queryFn: () => api<KnowledgeDoc[]>('/api/knowledge') });
+export const useKnowledgeDoc = (kind: KnowledgeKind, key: string) =>
+  useQuery({ queryKey: ['knowledge', kind, key], queryFn: () => api<KnowledgeDoc>(`/api/knowledge/${kind}/${encodeURIComponent(key)}`), enabled: !!key });
+
+/** Save the owner's version of a doc, or (markdown undefined) go back to the shipped one. */
+export function useSaveKnowledge() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kind, key, markdown }: { kind: KnowledgeKind; key: string; markdown?: string }) =>
+      api<KnowledgeDoc>(`/api/knowledge/${kind}/${encodeURIComponent(key)}`, markdown === undefined ? { method: 'DELETE' } : json('PUT', { markdown })),
+    onSuccess: (d) => {
+      qc.setQueryData(['knowledge', d.kind, d.key], d);
+      qc.invalidateQueries({ queryKey: ['knowledge'], exact: true });
+    },
   });
 }
 

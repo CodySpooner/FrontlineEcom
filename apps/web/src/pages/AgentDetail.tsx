@@ -8,7 +8,7 @@ import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, XPBar } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, XPBar } from '../components/ui';
 import { ago, cents, money } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -152,12 +152,6 @@ function History({ agentId, onOpen }: { agentId: string; onOpen: (runId: string)
   );
 }
 
-const KINDS: { value: MemoryKind; label: string }[] = [
-  { value: 'fact', label: 'Fact' },
-  { value: 'learning', label: 'Learning' },
-  { value: 'preference', label: 'Preference' },
-];
-
 /** Owner-approved learnings every store in this niche sees (promoted from one store's memory). */
 function NicheLearnings({ storeId }: { storeId: string }) {
   const store = useStores().data?.find((s) => s.id === storeId);
@@ -211,7 +205,6 @@ function Memory({ agent }: { agent: Agent }) {
   const forget = useForgetMemory(agent.storeId);
   const [kind, setKind] = useState<MemoryKind>('fact');
   const [text, setText] = useState('');
-  const author = (agentId: string) => (agentId === 'owner' ? 'You' : AGENT_ROLES[agentId.split(':')[1] as Agent['role']]?.name ?? 'Agent');
 
   const teach = (e: FormEvent) => {
     e.preventDefault();
@@ -221,7 +214,7 @@ function Memory({ agent }: { agent: Agent }) {
   return (
     <Panel title={`What the squad knows about ${name(agent.storeId)}`} sub="Shared by every agent on this store. Agents add learnings as they work; you can teach them too.">
       <form onSubmit={teach} className="mb-4 flex flex-wrap items-center gap-2">
-        <Segmented label="Kind" options={KINDS} value={kind} onChange={setKind} />
+        <Segmented label="Kind" options={MEMORY_KINDS} value={kind} onChange={setKind} />
         <label htmlFor="mem-text" className="sr-only">
           What should the squad know?
         </label>
@@ -257,8 +250,8 @@ function Memory({ agent }: { agent: Agent }) {
             <li key={m.id} className="grid grid-cols-[minmax(0,1fr)_120px_auto] items-center gap-4 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 text-[11px] text-muted">
-                  <Badge tone={m.agentId === agent.id ? 'red' : 'muted'}>{KINDS.find((k) => k.value === m.kind)?.label}</Badge>
-                  {author(m.agentId)} · {ago(m.createdAt, Date.now())}
+                  <Badge tone={m.agentId === agent.id ? 'red' : 'muted'}>{MEMORY_KINDS.find((k) => k.value === m.kind)?.label}</Badge>
+                  {memoryAuthor(m.agentId)} · {ago(m.createdAt, Date.now())}
                 </div>
                 <p className="mt-1 text-[13px]">{m.text}</p>
                 {m.evidence && <p className="mt-0.5 text-xs text-muted">{m.evidence}</p>}

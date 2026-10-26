@@ -2,7 +2,7 @@
 import { cloneElement, useEffect, useId, useRef } from 'react';
 import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactElement, ReactNode, TableHTMLAttributes } from 'react';
 import { Inbox, TriangleAlert, X, type LucideIcon } from 'lucide-react';
-import type { AgentStatus, RunStatus } from '@frontline/shared';
+import { AGENT_ROLES, type AgentRole, type AgentStatus, type MemoryKind, type RunStatus } from '@frontline/shared';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -161,6 +161,15 @@ export const RUN_STATUS: Record<RunStatus, { label: string; tone: 'red' | 'good'
 };
 
 /** `value` 0..1. `scan` = indeterminate "working" sweep instead of a fill. */
+export const MEMORY_KINDS: { value: MemoryKind; label: string }[] = [
+  { value: 'fact', label: 'Fact' },
+  { value: 'learning', label: 'Learning' },
+  { value: 'preference', label: 'Preference' },
+];
+
+/** Who saved a memory: the owner or one of the squad's roles. */
+export const memoryAuthor = (agentId: string) => (agentId === 'owner' ? 'You' : AGENT_ROLES[agentId.split(':')[1] as AgentRole]?.name ?? 'Agent');
+
 export function ProgressBar({ value = 0, tone = 'red', scan, label }: { value?: number; tone?: 'red' | 'good'; scan?: boolean; label: string }) {
   const v = Math.min(1, Math.max(0, value));
   return (
