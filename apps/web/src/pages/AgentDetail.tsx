@@ -2,13 +2,13 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
-import { AGENT_ROLES, type Agent, type AgentRole, type Autonomy, type MemoryKind, type RunStatus } from '@frontline/shared';
+import { AGENT_ROLES, type Agent, type AgentRole, type Autonomy, type MemoryKind } from '@frontline/shared';
 import { useAddMemory, useAgents, useCaps, useForgetMemory, useForgetNicheLearning, useMemory, useNicheLearnings, useRun, useRuns, useStores, useUpdateAgent } from '../api/client';
 import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Table, Tabs, XPBar } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, RUN_STATUS, Segmented, StatusDot, Table, Tabs, XPBar } from '../components/ui';
 import { ago, cents, money } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -95,14 +95,6 @@ export function AgentDetail() {
     </>
   );
 }
-
-const RUN_STATUS: Record<RunStatus, { label: string; tone: 'red' | 'good' | 'muted' }> = {
-  queued: { label: 'Queued', tone: 'muted' },
-  running: { label: 'Running', tone: 'good' },
-  done: { label: 'Done', tone: 'muted' },
-  error: { label: 'Failed', tone: 'red' },
-  cancelled: { label: 'Stopped', tone: 'muted' },
-};
 
 /** Links a run a squadmate assigned (`assign_task`) back to the run that assigned it. */
 function AssignedBy({ runId }: { runId: string }) {

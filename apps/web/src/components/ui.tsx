@@ -2,7 +2,7 @@
 import { cloneElement, useEffect, useId, useRef } from 'react';
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactElement, ReactNode, TableHTMLAttributes } from 'react';
 import { Inbox, TriangleAlert, X, type LucideIcon } from 'lucide-react';
-import type { AgentStatus } from '@frontline/shared';
+import type { AgentStatus, RunStatus } from '@frontline/shared';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
@@ -127,6 +127,14 @@ export const AGENT_STATUS: Record<AgentStatus, { label: string; tone: keyof type
   idle: { label: 'Idle', tone: 'idle' },
   error: { label: 'Error', tone: 'red' },
   offline: { label: 'Offline', tone: 'idle' },
+};
+
+export const RUN_STATUS: Record<RunStatus, { label: string; tone: 'red' | 'good' | 'muted' }> = {
+  queued: { label: 'Queued', tone: 'muted' },
+  running: { label: 'Running', tone: 'good' },
+  done: { label: 'Done', tone: 'muted' },
+  error: { label: 'Failed', tone: 'red' },
+  cancelled: { label: 'Stopped', tone: 'muted' },
 };
 
 /** `value` 0..1. `scan` = indeterminate "working" sweep instead of a fill. */

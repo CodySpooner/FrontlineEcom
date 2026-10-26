@@ -13,6 +13,9 @@ import type {
   ApprovalStatus,
   CampaignStats,
   Commander,
+  Competitor,
+  CompetitorInput,
+  CompetitorSnapshot,
   Creative,
   CreativeKind,
   FulfillmentStatus,
@@ -25,6 +28,7 @@ import type {
   OrderIssueStatus,
   OrderStatus,
   Page,
+  PriceChange,
   ProductList,
   ResearchProduct,
   ResearchTab,
@@ -188,6 +192,20 @@ export const useOrders = (storeIds: string[], o: OrderQuery) =>
       api<Page<Order>>(`/api/orders?stores=${storeIds.join(',')}&${new URLSearchParams(Object.entries(o).flatMap(([k, v]) => (v === undefined || v === '' ? [] : [[k, String(v)]])))}`),
     placeholderData: keepPreviousData,
   });
+
+export const useCompetitors = () => useQuery({ queryKey: ['competitors'], queryFn: () => api<Competitor[]>('/api/competitors') });
+export const usePriceChanges = () => useQuery({ queryKey: ['price-changes'], queryFn: () => api<PriceChange[]>('/api/competitors/price-changes?limit=100') });
+export const useSnapshots = (competitorId: string, kind: CompetitorSnapshot['kind']) =>
+  useQuery({ queryKey: ['snapshots', competitorId, kind], queryFn: () => api<CompetitorSnapshot[]>(`/api/competitors/${competitorId}/snapshots?kind=${kind}&limit=50`), enabled: !!competitorId });
+
+export function useCompetitorActions() {
+  const qc = useQueryClient();
+  const refresh = () => ['competitors', 'price-changes'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  return {
+    add: useMutation({ mutationFn: (c: CompetitorInput) => api<Competitor>('/api/competitors', json('POST', c)), onSuccess: refresh }),
+    remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/competitors/${id}`, { method: 'DELETE' }), onSuccess: refresh }),
+  };
+}
 
 export const useTopProducts = (storeIds: string[], range: AnalyticsRange, limit: number) =>
   useQuery({
