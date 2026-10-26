@@ -17,7 +17,7 @@ const STOPPED: Partial<Record<string, string>> = {
 export interface ClaudeEngineOptions {
   /** Defaults to `FRONTLINE_AGENT_MODEL` or claude-opus-5-5. */
   model?: string;
-  /** Per-run extras: `mcpServers`, `allowedTools`, `canUseTool`, `maxBudgetUsd`… */
+  /** Per-run extras: `mcpServers`, `canUseTool`, `maxBudgetUsd`… */
   queryOptions?: (input: RunInput) => Partial<Options>;
   /** Swapped in tests so they never call Claude. */
   query?: (params: { prompt: string; options: Options }) => AsyncIterable<SDKMessage>;
@@ -55,12 +55,13 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
         // Isolated from the owner's coding setup: no CLAUDE.md/settings, no file or shell tools.
         settingSources: [],
         tools: builtins,
-        allowedTools: [...builtins, ...appTools.map((t) => `mcp__frontline__${t.name}`)],
         mcpServers: { ...(appTools.length ? { frontline } : {}), ...externalMcp },
         permissionMode: 'default',
-        // Anything not pre-approved above (e.g. a write tool on a connected store's MCP) goes to the owner.
-        // The SDK warns this is shadowed for the pre-approved tools: intended, ours gate through request_approval.
+        // Every call comes here (no allowedTools, so the SDK doesn't warn that they shadow this callback): the role's
+        // built-ins and app tools run (app tools gate their own side effects through request_approval), external reads
+        // run, and anything else (e.g. a write tool on a connected store's MCP) goes to the owner.
         canUseTool: async (toolName, toolInput) => {
+          if ((builtins as string[]).includes(toolName) || toolName.startsWith('mcp__frontline__')) return { behavior: 'allow', updatedInput: toolInput };
           if (!ctx) return { behavior: 'deny', message: 'Tool not available in this run.' };
           if (isReadOnly(toolName)) return { behavior: 'allow', updatedInput: toolInput };
           const { approved, message } = await requestApproval(ctx, {

@@ -51,7 +51,7 @@ function recording(tools: string[]) {
 }
 
 test('ad roles get the server; reads are allowed, writes become approval requests', async () => {
-  const { seen, query } = recording(['mcp__meta_ads__get_insights', 'mcp__meta_ads__create_campaign']);
+  const { seen, query } = recording(['mcp__frontline__review_campaigns', 'WebFetch', 'mcp__meta_ads__get_insights', 'mcp__meta_ads__create_campaign']);
   const events: AgentEvent[] = [];
   for await (const e of runAgent(input('peak:ad_strategist'), claudeEngine({ query }))) {
     events.push(e);
@@ -61,7 +61,7 @@ test('ad roles get the server; reads are allowed, writes become approval request
   const requests = events.flatMap((e) => (e.type === 'approval_request' ? [e.approval.title] : []));
   expect(requests).toEqual(['Allow meta_ads: create_campaign']);
   expect(events.filter((e) => e.type === 'text_delta').map((e) => (e as { text: string }).text).join('')).toBe(
-    'mcp__meta_ads__get_insights=allow mcp__meta_ads__create_campaign=deny ',
+    'mcp__frontline__review_campaigns=allow WebFetch=allow mcp__meta_ads__get_insights=allow mcp__meta_ads__create_campaign=deny ',
   );
 
   const copy = recording([]);

@@ -145,7 +145,6 @@ describe('Claude engine', () => {
       includePartialMessages: true,
       settingSources: [],
       tools: ['WebSearch', 'WebFetch'],
-      allowedTools: ['WebSearch', 'WebFetch'],
       maxTurns: 3,
     });
   });
