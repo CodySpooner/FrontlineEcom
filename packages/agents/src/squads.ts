@@ -1,6 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, type Agent, type AgentRole, type AgentUpdate, type Autonomy, type Store } from '@frontline/shared';
 import { demoXp, levelForXp, levelProgress, rankForLevel, xpForLevel } from './gamification';
+import { createDefaultJobs } from './jobs';
 
 // Squads live in core's `agents` table (apps/server/src/db.ts). Agent id = `<storeId>:<role>`.
 
@@ -9,10 +10,13 @@ export const DEFAULT_AUTONOMY: Autonomy = 'ask';
 
 export const agentId = (storeId: string, role: AgentRole) => `${storeId}:${role}`;
 
-/** One agent per role for the store. Idempotent: existing agents keep their level, XP and settings. */
+/** One agent per role for the store, plus its default jobs when the squad is new. Idempotent: existing agents keep their level, XP and settings. */
 export function createSquad(db: DatabaseSync, store: Pick<Store, 'id'>): Agent[] {
   const insert = db.prepare('INSERT OR IGNORE INTO agents (id, store_id, role, autonomy) VALUES (?, ?, ?, ?)');
-  for (const role of Object.keys(AGENT_ROLES) as AgentRole[]) insert.run(agentId(store.id, role), store.id, role, DEFAULT_AUTONOMY);
+  const roles = Object.keys(AGENT_ROLES) as AgentRole[];
+  let added = 0;
+  for (const role of roles) added += Number(insert.run(agentId(store.id, role), store.id, role, DEFAULT_AUTONOMY).changes);
+  if (added === roles.length) createDefaultJobs(db, store.id);
   return listAgents(db, [store.id]);
 }
 

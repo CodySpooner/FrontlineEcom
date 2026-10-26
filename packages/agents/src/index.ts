@@ -23,3 +23,4 @@ export { createRunManager, getRun, listRuns, costToday, type RunManager, type Ru
 export { XP, xpForLevel, levelForXp, levelProgress, rankForLevel, demoXp, awardXp, commander, profitStreak, dailyMissions, ACHIEVEMENTS, checkAchievements, type Award, type Facts, type StoreDay } from './gamification';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, creditsToday, demoMedia, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats, type Economics, type Verdict } from './ads';
+export { DEFAULT_JOBS, createDefaultJobs } from './jobs';
