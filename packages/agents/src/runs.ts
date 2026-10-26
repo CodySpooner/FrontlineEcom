@@ -336,14 +336,19 @@ function trimOldTranscripts(db: DatabaseSync, now = new Date()) {
   const cutoff = new Date(now.getTime() - 90 * 86_400_000).toISOString();
   // Each startup goes on from where the last one stopped: years of runs already trimmed aren't parsed again.
   const from = String(db.prepare(`SELECT at FROM done_once WHERE ref = 'transcripts-trimmed-to'`).get()?.at ?? '');
-  db.prepare(`INSERT INTO done_once (ref, at) VALUES ('transcripts-trimmed-to', ?) ON CONFLICT (ref) DO UPDATE SET at = excluded.at`).run(cutoff);
   for (const r of db.prepare('SELECT id, transcript_json FROM agent_runs WHERE created_at >= ? AND created_at < ? AND length(transcript_json) > 8000').all(from, cutoff)) {
     const before = String(r.transcript_json);
-    const after = JSON.stringify(
-      (JSON.parse(before) as AgentEvent[]).map((e) => (e.type === 'tool_result' && e.output.length > 300 ? { ...e, output: `${e.output.slice(0, 200)}\n… (trimmed after 90 days)` } : e)),
-    );
+    let events: AgentEvent[];
+    try {
+      events = JSON.parse(before) as AgentEvent[];
+    } catch {
+      continue; // a damaged transcript stays as it is rather than stopping the app's startup
+    }
+    const after = JSON.stringify(events.map((e) => (e.type === 'tool_result' && e.output.length > 300 ? { ...e, output: `${e.output.slice(0, 200)}\n… (trimmed after 90 days)` } : e)));
     if (after !== before) db.prepare('UPDATE agent_runs SET transcript_json = ? WHERE id = ?').run(after, String(r.id));
   }
+  // After the loop: a startup stopped halfway picks up the same window next time.
+  db.prepare(`INSERT INTO done_once (ref, at) VALUES ('transcripts-trimmed-to', ?) ON CONFLICT (ref) DO UPDATE SET at = excluded.at`).run(cutoff);
 }
 
 const addUsage = (a: RunUsage, b: RunUsage): RunUsage => ({

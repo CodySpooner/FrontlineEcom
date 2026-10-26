@@ -199,11 +199,16 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-95 Stores activated before a default job's task text improved kept the old wording: no measured outcomes in the weekly report, no `stale` order check, and so on. Jobs the owner never edited now move to the current text.
 - [x] AGT-96 The daily mission "Approve a product to test" couldn't be completed on a live Amazon, Etsy or TikTok Shop store: the app can't add products there, so the Product Hunter is never allowed to ask. Those stores now get the creatives mission, or nothing.
 - [x] AGT-97 The daily campaign review switched on as soon as an ad account synced any campaign. An old account with only archived or paused campaigns then got a daily Claude run reviewing nothing. It now waits for a running campaign: on, or spent in the last 30 days.
+- [x] (from review, low) propose_ad_change on "suggest" closed a stale request it couldn't replace (requestApproval sends nothing on suggest). The close also ran after the rate lookup without checking the request still waited.
+- [x] (from review, low) trimOldTranscripts saved its mark before the loop. A startup stopped halfway left that window untrimmed for good, and a damaged transcript threw out of startup.
+- [x] (from review, low) AGT-93 note on 1–2 day windows: GA4/Amazon report a day or two late, so a fresh day at 0 read as "not reported".
+- [x] (from review, low) Custom-niche promotion titles weren't cut to 80 characters; an unused import was left in agents-gamification.ts.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — Review fixes (round 3). A stale ad request is replaced only by an agent that can send one, and only while it still waits ("Not sent: the owner just decided…" otherwise). The trim mark is saved after the loop and a damaged transcript is skipped. The funnel note checks settled days only (all but the newest 2). Promotion titles are cut to 80 characters. Tests added; each failed on the old code.
 - 2026-10-26 — AGT-97: go-live and the wait-for-ads step count only running campaigns. `IDLE_CAMPAIGN_STATUSES` is exported from tools.ts and shared with the idle-campaign filter, and the notification wording says "running campaign". The activation test covers an archived-only account; it failed on the old code.
 - 2026-10-26 — AGT-96: the product mission needs the app to be able to add products to the store (demo, or a live store on a PRODUCT_WRITE_PLATFORMS platform). The missions test covers a live Etsy store; it failed on the old code.
 - 2026-10-26 — Core's Amazon orders note: the Amazon pack tells Operations that "Amazon FBA" orders are Amazon's to ship (a Seller Central case, kept out of the supplier scorecard) and that sales come from store_summary. No agents code sums `orders.total`. Saw migration 34; ours is next at 35.

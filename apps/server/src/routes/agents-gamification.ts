@@ -1,4 +1,4 @@
-import { awardXp, blendedRoas, cash, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, listNicheLearnings, nicheKey, once, profitStreak, promotionCandidates, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
+import { awardXp, blendedRoas, cash, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, nicheKey, once, profitStreak, promotionCandidates, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
 import { AGENT_ROLES, PRODUCT_WRITE_PLATFORMS, type MetricTotals, type Mission, type Store } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
@@ -341,7 +341,7 @@ export function proposeNichePromotions(db: Db) {
       approvalsHook(db).create({
         storeId: stores[0]!.id,
         agentId: `${stores[0]!.id}:market_analyst`,
-        title: `Share a learning with all ${niche} stores`,
+        title: `Share a learning with all ${niche} stores`.slice(0, 80),
         reason: `${c.text} Found on its own in ${names} (confidence ${c.confidence.toFixed(1)}). Approved, every ${niche} store's squad sees it.`.slice(0, 400),
         action: { kind: 'niche.promote_learning', payload: { niche: key, text: c.text, evidence: `Held in ${names}` } },
       });

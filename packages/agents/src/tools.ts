@@ -185,7 +185,8 @@ export const APP_TOOLS: AppTool[] = [
         )
         .all(ctx.store.id, since(days, ctx.store));
       // Only Shopify and GA4 report the whole funnel (Amazon: sessions only): an unreported step reads as 0, not as no traffic.
-      const total = (k: string) => rows.reduce((n, r) => n + Number(r[k]), 0);
+      // Settled days only: GA4 and Amazon report a day or two late, so the newest days can still be 0.
+      const total = (k: string) => rows.slice(0, -2).reduce((n, r) => n + Number(r[k]), 0);
       const missing = total('orders') ? ['sessions', 'add_to_carts', 'checkouts'].filter((k) => !total(k)) : [];
       const note = missing.length ? `(${missing.join(', ')}: not reported for this store, so 0 means no data, not no traffic.)\n` : '';
       return note + csv(rows);
@@ -720,7 +721,8 @@ export const APP_TOOLS: AppTool[] = [
         .get(ctx.store.id, campaignId);
       // A live store's request over 4 days old is never applied (its numbers moved), so a fresh one replaces it (below,
       // once the fresh one passed every check) instead of being blocked by it.
-      const replace = waiting && ctx.store.connected && ctx.decide && String(waiting.created_at) < ago(4) ? String(waiting.id) : undefined;
+      const replace =
+        waiting && ctx.store.connected && ctx.decide && ctx.agent.autonomy !== 'suggest' && String(waiting.created_at) < ago(4) ? String(waiting.id) : undefined;
       if (waiting && !replace) return `Not sent: "${waiting.title}" is already waiting for the owner. One change per campaign at a time.`;
       const from = Number(c.daily_budget);
       if (change === 'budget' && newDailyBudget === undefined) return 'newDailyBudget is required for a budget change.';
@@ -737,7 +739,11 @@ export const APP_TOOLS: AppTool[] = [
       }
       const amount = usd !== undefined ? { amountUsd: usd } : {};
       if (replace) {
-        ctx.db.prepare('UPDATE approvals SET reason = reason || ? WHERE id = ?').run(' [Expired: asked over 4 days ago; a fresh request replaced it.]', replace);
+        // Only while it still waits: the owner may have decided it during the rate lookup above.
+        const expired = ctx.db
+          .prepare(`UPDATE approvals SET reason = reason || ? WHERE id = ? AND status = 'pending'`)
+          .run(' [Expired: asked over 4 days ago; a fresh request replaced it.]', replace).changes;
+        if (!expired) return `Not sent: the owner just decided "${waiting!.title}". Look again next run.`;
         ctx.decide!(replace, 'deny');
       }
       const { approved, message } = await requestApproval(ctx, {

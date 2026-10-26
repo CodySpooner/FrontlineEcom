@@ -119,6 +119,8 @@ describe('agent tools on demo data', () => {
       db.prepare(`UPDATE daily_metrics SET sessions = 0 WHERE store_id = 'glow'`).run(); // Etsy, TikTok Shop, Woo without GA4
       const [none] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
       expect(funnel(none!.output)).toMatch(/^\(sessions, add_to_carts, checkouts: not reported/);
+      const [late] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 2 } }, done])); // GA4/Amazon may not have reported yet
+      expect(funnel(late!.output)).toMatch(/^date,revenue,/);
     } finally {
       const put = db.prepare(`UPDATE daily_metrics SET sessions = ?, add_to_carts = ?, checkouts = ? WHERE store_id = 'glow' AND date = ?`);
       for (const r of saved) put.run(Number(r.sessions), Number(r.add_to_carts), Number(r.checkouts), String(r.date));

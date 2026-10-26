@@ -31,6 +31,7 @@ test('tool outputs of runs older than 90 days are trimmed at startup; the text, 
   db.prepare(`DELETE FROM done_once WHERE ref = 'transcripts-trimmed-to'`).run(); // a first startup (setup already ran one)
   add.run('old', new Date(Date.now() - 91 * 86_400_000).toISOString(), transcript);
   add.run('new', new Date(Date.now() - 89 * 86_400_000).toISOString(), transcript);
+  add.run('damaged', new Date(Date.now() - 92 * 86_400_000).toISOString(), `[{"type":"text_delta"${' '.repeat(9000)}`); // skipped, startup goes on
   manager();
   const events = (id: string) => JSON.parse(String(db.prepare('SELECT transcript_json FROM agent_runs WHERE id = ?').get(id)?.transcript_json)) as AgentEvent[];
   const outputs = (id: string) => events(id).flatMap((e) => (e.type === 'tool_result' ? [e.output.length] : []));

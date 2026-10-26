@@ -235,6 +235,16 @@ test("on a live store, a request too old to be applied gives way to a fresh one,
   expect(listMemory(db, 'pawsome').filter((m) => m.tags.includes('denied'))).toHaveLength(1); // the fresh one the owner denied, not the expired one
 });
 
+test('an agent on "suggest" sends nothing, so it leaves a stale request in place instead of closing it', async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
+  db.prepare(`UPDATE agents SET autonomy = 'suggest' WHERE id = 'pawsome:ad_strategist'`).run();
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('old', 'pawsome', 'pawsome:ad_strategist', 'Pause Prospecting · Broad', 'r', ?, 'pending', ?)`)
+    .run(JSON.stringify({ kind: 'ads.pause_campaign', payload: { campaignId: 'pawsome-c1' } }), new Date(Date.now() - 5 * 86_400_000).toISOString());
+  const { outputs } = await run([propose({ campaignId: 'pawsome-c1', change: 'pause' })], 'deny');
+  expect(outputs[0]).toBe('Not sent: "Pause Prospecting · Broad" is already waiting for the owner. One change per campaign at a time.');
+  expect(db.prepare(`SELECT status, reason FROM approvals WHERE id = 'old'`).get()).toEqual({ status: 'pending', reason: 'r' });
+});
+
 test("a real store's ad change approved days after it was asked is not applied: its numbers are stale", async () => {
   const writes: unknown[] = [];
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
