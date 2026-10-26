@@ -25,4 +25,27 @@ describe('SystemStatus', () => {
     render('idle', 'error', 'offline');
     expect(await screen.findAllByText('1 agent needs attention')).toBeTruthy();
   });
+
+  it('says when the Claude login that live stores run on is signed out', async () => {
+    stubApi((url) =>
+      url.startsWith('/api/agents')
+        ? [{ id: 's:copywriter', storeId: 's', role: 'copywriter', status: 'idle', engine: { provider: 'claude' } }]
+        : url.startsWith('/api/health')
+          ? { connectors: [] }
+          : url.startsWith('/api/claude-account')
+            ? { signedIn: false, checkedAt: '2026-10-26T08:00:00Z' }
+            : [],
+    );
+    renderApp(<SystemStatus online />);
+    expect(await screen.findAllByText('Check Claude login')).toBeTruthy();
+  });
+
+  it("doesn't check the Claude login when every store runs on the demo engine", async () => {
+    const fetch = stubApi((url) =>
+      url.startsWith('/api/agents') ? [{ id: 's:copywriter', storeId: 's', role: 'copywriter', status: 'idle', engine: { provider: 'demo' } }] : url.startsWith('/api/health') ? { connectors: [] } : [],
+    );
+    renderApp(<SystemStatus online />);
+    expect(await screen.findAllByText('All agents online')).toBeTruthy();
+    expect(fetch.mock.calls.some(([url]) => String(url).startsWith('/api/claude-account'))).toBe(false);
+  });
 });

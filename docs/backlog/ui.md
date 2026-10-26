@@ -249,6 +249,8 @@ Orca's browser against the reference before ticking it.
       AI Agents. It was only a badge in Analytics' compare table, and `storeHealth().bar` was unused.
 - [x] UI-93 Competitor Intel › Price Moves showed every rival price in USD. It uses the watching store's currency now,
       and core's inbox asks for the rival's own currency (in its Woo/Etsy/Shopify sources).
+- [x] UI-94 System Status (sidebar) says "Check Claude login" → Integrations when a live store's agents run on Claude
+      and the login is signed out, so it's noticed before their runs fail.
 
 ## Blocked
 
@@ -382,3 +384,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-93: Price Moves formats `from`/`to` with `currency(p.storeId)`, with a ponytail note that it's a guess until `PriceChange.currency` exists. Asked core for an optional `currency` on `PriceSnapshotData`/`PriceChange`. New Competitors.test (EUR store → €32.00). Orca: demo (USD) moves unchanged, "$49.99 → $41.99 Cut 16%"
 - 2026-10-26 — Agents inbox (Claude card): Integrations ends with an "AI" panel holding a Claude card in the same markup as the others. It shows "Signed in as … · Claude Max" (green), "Not signed in" (red, with the `claude` / `/login` steps), or the server's `error` (grey, e.g. the demo engine). "Check again" GETs `?refresh=1` and writes the answer into the `['claude-account']` cache (staleTime 5 min, like the server's). Two Integrations tests. Orca at 800px on the real endpoint: signed in · Claude Max, and Check again → "Checking…" → same
 - 2026-10-26 — Core inbox (openDataFolder): Settings already had Open folder through CORE-42's API route, so `useOpenDataFolder` now calls `window.desktop.openDataFolder()` when the bridge exists and throws its error text into the same alert, else POSTs as before. The type is in UpdatePrompt.tsx (its test fixture got the method). Settings.test covers the bridge and its error, with no API call. Not run in Electron here; the browser path is unchanged
+- 2026-10-26 — UI-94: `useClaudeAccount(enabled)`. SystemStatus enables it only when some agent's `engine.provider` is `claude`, so demo-only setups never start the CLI-backed check (verified: 0 `/api/claude-account` requests on demo). Signed out ranks above failed agents (it's their cause). The text was shortened from "Claude login needs attention" (2 lines in the 188px box at 1024) to "Check Claude login" (1 line). Two Shell tests. Orca with a fetch patch (agents on claude, account signed out), after `visibilitychange` on window: "Check Claude login" → /integrations. Patch dropped by reload

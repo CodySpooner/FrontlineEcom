@@ -1,7 +1,7 @@
 import { Component, Suspense, useEffect, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { TriangleAlert } from 'lucide-react';
-import { useAgents, useGoLiveRefresh, useHealth, useLive } from '../api/client';
+import { useAgents, useClaudeAccount, useGoLiveRefresh, useHealth, useLive } from '../api/client';
 import { NAV, pageTitle } from '../nav';
 import { SvgDefs } from './Art';
 import { AskPalette } from './AskPalette';
@@ -93,18 +93,24 @@ export function SystemStatus({ online }: { online: boolean }) {
   const down = agents.filter((a) => a.status === 'error').length;
   const off = agents.filter((a) => a.status === 'offline').length;
   const failing = useHealth().data?.connectors.filter((c) => c.status === 'error').length ?? 0;
-  const ok = !isError && down === 0 && failing === 0;
+  // Live stores' agents run on the owner's Claude login; demo-only setups never start the (CLI-backed) check.
+  const live = agents.some((a) => a.engine?.provider === 'claude');
+  const claude = useClaudeAccount(live).q.data;
+  const claudeOut = live && claude?.signedIn === false;
+  const ok = !isError && !claudeOut && down === 0 && failing === 0;
   const text = !online
     ? 'Reconnecting…'
     : isError
       ? 'Agents unreachable'
-      : down
-        ? `${down} agent${down > 1 ? 's need' : ' needs'} attention`
-        : failing
-          ? `${failing} connector${failing > 1 ? 's need' : ' needs'} attention`
-          : off
-            ? `${agents.length - off} agent${agents.length - off === 1 ? '' : 's'} online · ${off} off`
-            : 'All agents online';
+      : claudeOut
+        ? 'Check Claude login'
+        : down
+          ? `${down} agent${down > 1 ? 's need' : ' needs'} attention`
+          : failing
+            ? `${failing} connector${failing > 1 ? 's need' : ' needs'} attention`
+            : off
+              ? `${agents.length - off} agent${agents.length - off === 1 ? '' : 's'} online · ${off} off`
+              : 'All agents online';
   const dot = <StatusDot tone={!online ? 'idle' : ok ? 'good' : 'red'} pulse={!online} />;
   return (
     <>
@@ -117,7 +123,7 @@ export function SystemStatus({ online }: { online: boolean }) {
         <div className="text-xs text-muted">System Status</div>
         <div role="status" className="mt-1.5 mb-[9px] flex items-center gap-2 text-[13px]">
           {dot}
-          {online && !isError && !down && failing ? (
+          {online && !isError && (claudeOut || (!down && failing)) ? (
             <Link to="/integrations" className="hover:underline">
               {text}
             </Link>

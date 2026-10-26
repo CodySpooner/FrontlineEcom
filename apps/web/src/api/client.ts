@@ -309,9 +309,9 @@ export const useOrders = (storeIds: string[], o: OrderQuery) =>
 export const useHealth = () => useQuery({ queryKey: ['health'], queryFn: () => api<Health>('/api/health'), refetchInterval: 60_000 });
 
 /** The Claude Code login agents run on. Asking starts the CLI (~5 s, no usage), so the server keeps an answer 5 minutes. */
-export function useClaudeAccount() {
+export function useClaudeAccount(enabled = true) {
   const qc = useQueryClient();
-  const q = useQuery({ queryKey: ['claude-account'], queryFn: () => api<ClaudeAccount>('/api/claude-account'), staleTime: 5 * 60_000 });
+  const q = useQuery({ queryKey: ['claude-account'], queryFn: () => api<ClaudeAccount>('/api/claude-account'), staleTime: 5 * 60_000, enabled });
   const recheck = useMutation({ mutationFn: () => api<ClaudeAccount>('/api/claude-account?refresh=1'), onSuccess: (a) => qc.setQueryData(['claude-account'], a) });
   return { q, recheck };
 }
