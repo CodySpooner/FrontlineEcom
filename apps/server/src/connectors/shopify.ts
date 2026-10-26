@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { cursorAt, rebuildRevenue, setOrderItems, switchToReal } from './common';
+import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -204,7 +204,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
 
     tx(db, () => {
       switchToReal(db, storeId);
-      db.prepare('UPDATE stores SET connected = 1, currency = ?, timezone = ? WHERE id = ?').run(shop.currencyCode, shop.ianaTimezone, storeId);
+      setStoreCurrency(db, storeId, shop.currencyCode);
+      db.prepare('UPDATE stores SET connected = 1, timezone = ? WHERE id = ?').run(shop.ianaTimezone, storeId);
 
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

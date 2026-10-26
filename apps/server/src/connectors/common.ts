@@ -12,6 +12,15 @@ export function switchToReal(db: Db, storeId: string) {
 }
 
 /**
+ * Sets a store's currency as its platform reports it. A change re-syncs the store's ad accounts and Amazon from scratch:
+ * their history was converted into the old currency (e.g. an ad account that synced before the platform's first sync).
+ */
+export function setStoreCurrency(db: Db, storeId: string, currency: string) {
+  if (!db.prepare('UPDATE stores SET currency = ? WHERE id = ? AND currency != ?').run(currency, storeId, currency).changes) return;
+  db.prepare("UPDATE integrations SET cursor = NULL WHERE store_id = ? AND kind IN ('meta_ads', 'google_ads', 'tiktok_ads', 'amazon')").run(storeId);
+}
+
+/**
  * Where the next incremental sync of a platform starts: this sync's start (`now`) minus 5 minutes of clock skew. Not
  * the newest change seen: a refund made while the sync was reading would fall below that and never be fetched again.
  * Callers keep the previous cursor if it's later; re-reading the overlap is safe because upserts are idempotent.

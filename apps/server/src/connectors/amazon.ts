@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, rebuildRevenue, switchToReal } from './common';
+import { adRate, rebuildRevenue, setStoreCurrency, switchToReal } from './common';
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
@@ -66,7 +66,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
 
     tx(db, () => {
       switchToReal(db, storeId);
-      if (own && currency) db.prepare('UPDATE stores SET currency = ? WHERE id = ?').run(currency, storeId);
+      if (own && currency) setStoreCurrency(db, storeId, currency);
       const up = db.prepare(
         `INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES (?, 'amazon', ?, ?, ?)
          ON CONFLICT (store_id, channel, date) DO UPDATE SET revenue = excluded.revenue, orders = excluded.orders`,

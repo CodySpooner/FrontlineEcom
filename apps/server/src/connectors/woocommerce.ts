@@ -2,7 +2,7 @@ import type { ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { convertRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { cursorAt, rebuildRevenue, setOrderItems, switchToReal } from './common';
+import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
 
 // WooCommerce REST API v3 with a read-only consumer key/secret (Basic auth, so https only).
 /** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
@@ -89,7 +89,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
 
     tx(db, () => {
       switchToReal(db, storeId);
-      if (base) db.prepare('UPDATE stores SET currency = ? WHERE id = ?').run(base, storeId);
+      if (base) setStoreCurrency(db, storeId, base);
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,

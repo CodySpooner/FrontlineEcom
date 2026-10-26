@@ -3,7 +3,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { adRate, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, switchToReal, type CampaignChange } from './common';
+import { adRate, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal, type CampaignChange } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -221,7 +221,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       switchToReal(db, storeId);
       // Orders are in the shop's currency.
       const currency = orders.find((o) => o.payment?.currency)?.payment!.currency;
-      if (currency) db.prepare('UPDATE stores SET currency = ? WHERE id = ?').run(currency, storeId);
+      if (currency) setStoreCurrency(db, storeId, currency);
       // Ids get a tt- prefix so they can't collide with another platform's ids in the same store.
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, NULL, 0, ?, ?)
