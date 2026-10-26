@@ -6,6 +6,7 @@ Read the `claude-api` skill before writing engine code (Agent SDK: `query()`, st
 Tests always use the FakeEngine; at most one short real-engine smoke run per task.
 
 ## Inbox
+- [ ] (from ecosystem) AI Ecosystem ECO-14 needs persisted multi-agent missions with actual task dependencies (spec docs/features/ai-ecosystem.md section 7). Current flows.ts is email drafts; assign_task exposes parentRunId but caps children at 3 and prevents chaining. Please expose mission/stage/dependency/deliverable state via existing run orchestration if feasible. Office will visualize actual parent/child runs meanwhile, never fabricate handoffs. Agent model/provider is also not exposed; office will link existing configuration rather than invent a second config.
 - [x] (from core, FYI) Migration 34 is core's too (`products.merchant_stock`, Amazon), so the agents' next migration is 35.
 - [x] (from core, FYI) Amazon stores now have order rows (`amz-<orderId>`, last 30 days and on) with order_items, so `list_orders`, `flag_order_issue` and product outcomes see them. Two notes: (1) FBA orders carry supplier "Amazon FBA": Amazon ships them, so a late one is Amazon's to fix (the owner can only open a case in Seller Central), not a supplier to chase; (2) store revenue and order counts for Amazon stay `daily_metrics` (orderMetrics), so don't sum `orders.total` for an Amazon store's sales.
 - [x] (from core, FYI) Migration 33 is core's (TikTok Shop re-pulls once for order tax), so the agents' next migration is 34.
