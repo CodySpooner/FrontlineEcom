@@ -227,6 +227,7 @@ export function createRunManager(opts: RunManagerOptions) {
           ...(resume ? { resume: String(resume), sessionCostUsd: sessionCost(String(resume)) } : {}),
           ...(budget !== undefined ? { budgetUsd: budget } : {}),
           onSpend: spend,
+          onSession: (sessionId) => db.prepare('UPDATE agent_runs SET session_id = ? WHERE id = ?').run(sessionId, run.id),
         };
         let toolCalls = 0;
         let attempt = input;
@@ -256,7 +257,7 @@ export function createRunManager(opts: RunManagerOptions) {
     // The engine's figure, unless the live estimate is higher: crash results can carry zeros, a cut-off reflection reports none.
     const usage = { ...reported, costUsd: Math.max(reported.costUsd, spent) };
     db.prepare(
-      `UPDATE agent_runs SET status = ?, session_id = ?, input_tokens = ?, output_tokens = ?, cost_usd = ?, error = ?, transcript_json = ?, ended_at = ?
+      `UPDATE agent_runs SET status = ?, session_id = coalesce(?, session_id), input_tokens = ?, output_tokens = ?, cost_usd = ?, error = ?, transcript_json = ?, ended_at = ?
        WHERE id = ?`,
     ).run(
       status,

@@ -131,6 +131,19 @@ test('a run queued or begun before midnight counts toward the day it spends in',
   expect(costToday(db, 'glow', 'glow:copywriter')).toBeGreaterThanOrEqual(7);
 });
 
+test('a reply cancelled before its result keeps its conversation for the next message', async () => {
+  const engine: Engine = async function* (input) {
+    input.onSession?.('sess-c');
+    await new Promise<void>((_, no) => input.signal?.addEventListener('abort', () => no(new Error('aborted'))));
+  };
+  const m = manager({ engine });
+  const run = ok(m.start('glow:copywriter', 'Long reply'));
+  await new Promise((r) => setTimeout(r, 10));
+  m.cancel(run.id);
+  await m.idle();
+  expect(getRun(db, run.id)).toMatchObject({ status: 'cancelled', sessionId: 'sess-c' });
+});
+
 test('a reply cut off by its turn or budget limit keeps its conversation for the next message', async () => {
   const engine: Engine = async function* () {
     yield { type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing.', sessionId: 'sess-1' };

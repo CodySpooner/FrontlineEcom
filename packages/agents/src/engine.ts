@@ -20,6 +20,8 @@ export interface RunInput {
   sessionCostUsd?: number;
   /** Told, as the run goes, what this query has spent so far (USD, estimated), so a run that never finishes still counts. */
   onSpend?: (usd: number) => void;
+  /** Told the conversation's id as soon as the engine has one, so a reply cancelled before its result can still be continued. */
+  onSession?: (sessionId: string) => void;
 }
 
 /** Streams one agent run. Engines may throw or stop early; `runAgent` normalizes that. */

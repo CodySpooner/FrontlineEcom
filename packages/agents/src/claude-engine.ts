@@ -130,6 +130,7 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     const spent = new Map<string, number>(); // assistant message id → its estimated cost (the SDK repeats a message per block)
     (async () => {
       for await (const message of messages) {
+        if (message.type === 'system' && message.subtype === 'init') input.onSession?.(message.session_id);
         if (message.type === 'assistant' && message.message.usage) {
           spent.set(message.message.id, estimate(message.message.usage, model));
           input.onSpend?.([...spent.values()].reduce((a, b) => a + b, 0));

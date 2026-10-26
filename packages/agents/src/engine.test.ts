@@ -188,6 +188,13 @@ describe('Claude engine', () => {
     expect(stopped.at(-1)).toMatchObject({ type: 'error', usage: { costUsd: 0.5 } });
   });
 
+  test('tells the run its conversation as soon as Claude starts one, so a cancelled reply can still be continued', async () => {
+    const seen: string[] = [];
+    const engine = claudeEngine({ query: () => (async function* () { yield sdk({ type: 'system', subtype: 'init', session_id: 'abc' }); })() });
+    await collect(runAgent({ ...input, onSession: (id) => seen.push(id) }, engine));
+    expect(seen).toEqual(['abc']);
+  });
+
   test('reports its running spend from each assistant message, once per message id', async () => {
     const said = (id: string, output_tokens: number) => sdk({ type: 'assistant', parent_tool_use_id: null, message: { id, content: [], usage: { input_tokens: 1000, output_tokens } } });
     const engine = claudeEngine({ query: () => (async function* () { yield* [said('m1', 0), said('m1', 500), said('m2', 1000)]; })() });
