@@ -5,7 +5,7 @@ import { INTEGRATION_KINDS, type Integration, type IntegrationCategory, type Int
 import { useClaudeAccount, useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds, useSyncIntegration } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Button, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot } from '../components/ui';
+import { Button, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot } from '../components/ui';
 import { ago, fmtDay } from '../lib/format';
 import { importing } from '../lib/sync';
 import { NAV } from '../nav';
@@ -31,9 +31,12 @@ export function Integrations() {
   const [open, setOpen] = useState<{ kind: IntegrationKind; store?: Store }>();
   const byKey = new Map(q.data?.map((i) => [`${i.kind}:${i.storeId ?? ''}`, i]));
   const shown = stores.filter((s) => has(s.id));
-  // Per-store connectors list the selected stores (platform ones only the stores on that platform); global ones one row.
+  // Per-store connectors list the selected stores (platform ones only the stores on that platform, or selling on it too);
+  // global ones one row.
   const targets = (kind: IntegrationKind) =>
-    !INTEGRATION_KINDS[kind].perStore ? [undefined] : shown.filter((s) => INTEGRATION_KINDS[kind].category !== 'platform' || s.platform === kind);
+    !INTEGRATION_KINDS[kind].perStore
+      ? [undefined]
+      : shown.filter((s) => INTEGRATION_KINDS[kind].category !== 'platform' || s.platform === kind || byKey.has(keyOf(kind, s)));
 
   return (
     <>
@@ -68,6 +71,7 @@ export function Integrations() {
                     </section>
                   ))}
                 </div>
+                {cat === 'platform' && <AlsoSells stores={shown} onOpen={(kind, store) => setOpen({ kind, store })} />}
               </Panel>
             );
           })}
@@ -83,6 +87,44 @@ export function Integrations() {
         {open && <ConnectForm key={keyOf(open.kind, open.store)} {...open} current={byKey.get(keyOf(open.kind, open.store))} onDone={() => setOpen(undefined)} />}
       </Dialog>
     </>
+  );
+}
+
+/** A store can sell on a second platform (a TikTok Shop or Amazon next to its Shopify); core adds those sales to the store's. */
+function AlsoSells({ stores, onOpen }: { stores: Store[]; onOpen: (kind: IntegrationKind, store: Store) => void }) {
+  const [storeId, setStoreId] = useState('');
+  const [kind, setKind] = useState<IntegrationKind>();
+  const store = stores.find((s) => s.id === storeId) ?? stores[0];
+  const kinds = KINDS.filter((k) => INTEGRATION_KINDS[k].category === 'platform' && k !== store?.platform);
+  const pick = kind && kinds.includes(kind) ? kind : kinds[0];
+  if (!store || !pick) return null;
+  const select = cx(inputClass, 'cursor-pointer py-1 text-text');
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
+      <span>Also sells on another platform?</span>
+      <select aria-label="Platform" value={pick} onChange={(e) => setKind(e.target.value as IntegrationKind)} className={select}>
+        {kinds.map((k) => (
+          <option key={k} value={k}>
+            {INTEGRATION_KINDS[k].name}
+          </option>
+        ))}
+      </select>
+      for
+      {stores.length > 1 ? (
+        <select aria-label="Store" value={store.id} onChange={(e) => setStoreId(e.target.value)} className={select}>
+          {stores.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span className="text-text-2">{store.name}</span>
+      )}
+      <Button size="sm" aria-label="Connect another platform" onClick={() => onOpen(pick, store)}>
+        Connect
+      </Button>
+    </div>
   );
 }
 
@@ -268,6 +310,12 @@ export function ConnectForm({ kind, store, current, onDone }: { kind: Integratio
       <p className="text-xs text-muted">
         {store ? `For ${store.name} only.` : 'Shared by all your stores.'} Saved encrypted on this computer. Secrets are never shown again.
       </p>
+      {kind === 'amazon' && store?.platform === 'shopify' && (
+        <p className="rounded-lg border border-line bg-bg-2 p-2.5 text-xs text-text-2">
+          If {store.name}'s Shopify already imports its Amazon orders (Marketplace Connect), don't connect Amazon here too: those sales would
+          count twice.
+        </p>
+      )}
       {current?.status === 'error' && (
         <p role="alert" className="rounded-lg border border-red/35 bg-red-soft p-2.5 text-xs text-red">
           Last sync failed{current.error ? `: ${current.error}` : '.'} Check the values below and save again.

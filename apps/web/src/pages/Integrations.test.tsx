@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
-import type { Integration } from '@frontline/shared';
+import type { Integration, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { ClaudeCard, ConnectForm, Connection } from './Integrations';
+import { ClaudeCard, ConnectForm, Connection, Integrations } from './Integrations';
 
 const saved: Integration = { id: 'i1', kind: 'cj', status: 'connected', settings: { email: 'ops@shop.test' }, secretsSet: ['apiKey'], updatedAt: '2026-10-26T08:00:00Z' };
 const sent = (fetch: ReturnType<typeof stubApi>) => JSON.parse(String(fetch.mock.calls.find(([, init]) => init?.method === 'PUT')?.[1]?.body));
@@ -27,6 +27,16 @@ describe('connect form', () => {
 
     await vi.waitFor(() => expect(onDone).toHaveBeenCalled());
     expect(sent(fetch)).toEqual({ kind: 'cj', values: { email: 'buyer@shop.test' } });
+  });
+
+  it("warns that Amazon on a Shopify store that imports its Amazon orders would count them twice", () => {
+    stubApi(() => undefined);
+    const store = (platform: Store['platform']) => ({ id: 's1', name: 'Peak Fit', platform, niche: 'fitness', currency: 'USD', timezone: 'UTC', color: '#f00', connected: true }) as Store;
+    renderApp(<ConnectForm kind="amazon" store={store('shopify')} onDone={() => {}} />);
+    expect(screen.getByText(/If Peak Fit's Shopify already imports its Amazon orders \(Marketplace Connect\), don't connect Amazon here too/)).toBeTruthy();
+    cleanup();
+    renderApp(<ConnectForm kind="amazon" store={store('amazon')} onDone={() => {}} />);
+    expect(screen.queryByText(/Marketplace Connect/)).toBeNull();
   });
 
   it('requires the secret on a new connection and shows why the API refused it', async () => {
@@ -91,5 +101,28 @@ describe('Claude card', () => {
     stubApi(() => ({ signedIn: false, checkedAt: '2026-10-26T08:00:00Z', error: 'FRONTLINE_AGENT_ENGINE=demo: agents run on the demo engine' }));
     renderApp(<ClaudeCard />);
     expect(await screen.findByText(/demo engine/)).toBeTruthy();
+  });
+});
+
+describe('a second sales platform on a store', () => {
+  const paws = { id: 'paws', name: 'Pawsome Gear', platform: 'shopify', niche: 'pet', currency: 'USD', timezone: 'UTC', color: '#f00', connected: true } as Store;
+
+  it('can be connected from Store Platforms, and the store then shows under that platform', async () => {
+    stubApi((url) => (url.startsWith('/api/stores') ? [paws] : url.startsWith('/api/integrations') ? [] : undefined));
+    renderApp(<Integrations />);
+    await screen.findByText('Also sells on another platform?');
+    expect(screen.queryByRole('heading', { name: 'Amazon SP-API' })).toBeNull();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Platform' }), { target: { value: 'amazon' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Connect another platform' }));
+    expect(await screen.findByText(/If Pawsome Gear's Shopify already imports its Amazon orders/)).toBeTruthy();
+  });
+
+  it('lists a store under a second platform it is connected to', async () => {
+    const amazon: Integration = { id: 'amazon:paws', kind: 'amazon', storeId: 'paws', status: 'connected', settings: {}, secretsSet: [], updatedAt: '2026-10-26T08:00:00Z' };
+    stubApi((url) => (url.startsWith('/api/stores') ? [paws] : url.startsWith('/api/integrations') ? [amazon] : undefined));
+    renderApp(<Integrations />);
+    const card = (await screen.findByRole('heading', { name: 'Amazon SP-API' })).parentElement!;
+    expect(card.textContent).toContain('Pawsome Gear');
+    expect(card.textContent).toContain('Manage');
   });
 });
