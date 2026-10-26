@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, listMemory, runAgent, type FakeStep, type ToolEnv } from '@frontline/agents';
+import { fakeEngine, getAgent, listMemory, runAgent, updateAgent, type FakeStep, type ToolEnv } from '@frontline/agents';
 import type { AgentEvent, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -98,6 +98,7 @@ test('draftThemeCopy waits for Shopify to finish the copy before writing to it',
       list: async () => (calls.push('list'), [theme('1', 'MAIN'), theme('9', 'UNPUBLISHED', ++polls < 3)]),
       duplicate: async (id, name) => (calls.push(`duplicate ${id} ${name}`), { ...theme('9', 'UNPUBLISHED', true), name }),
       upsert: async (id, files) => (calls.push(`upsert ${id} ${files.length}`), files.map((f) => f.filename)),
+      remove: async () => {},
     },
     'Frontline: test',
     [{ filename: 'sections/a.liquid', body: 'a' }],
@@ -105,9 +106,23 @@ test('draftThemeCopy waits for Shopify to finish the copy before writing to it',
   );
   expect(calls).toEqual(['list', 'duplicate 1 Frontline: test', 'list', 'list', 'upsert 9 1']);
   expect(copy).toMatchObject({ id: '9', processing: false });
-  await expect(draftThemeCopy({ list: async () => [theme('2')], duplicate: async () => theme('3'), upsert: async () => [] }, 'n', [], async () => {})).rejects.toThrow(
+  await expect(draftThemeCopy({ list: async () => [theme('2')], duplicate: async () => theme('3'), upsert: async () => [], remove: async () => {} }, 'n', [], async () => {})).rejects.toThrow(
     'Shopify: the store has no live theme',
   );
+});
+
+test("a failed theme draft deletes its copy, and a 'suggest' agent copies nothing", async () => {
+  const removed: string[] = [];
+  const api = { list: async () => [theme('1', 'MAIN')], duplicate: async () => theme('9'), remove: async (id: string) => removed.push(id) };
+  const files = [{ filename: 'sections/a.liquid', body: '{% if %}' }];
+  await expect(draftThemeCopy({ ...api, upsert: async () => { throw new Error('Liquid syntax error'); } }, 'n', files, async () => {})).rejects.toThrow('Liquid syntax error');
+  expect(removed).toEqual(['9']);
+
+  let drafted = 0;
+  updateAgent(db, 'glow:store_developer', { autonomy: 'suggest' });
+  const out = await run([change()], { themes: themes({ draft: async () => (drafted++, theme('9')) }) });
+  expect(drafted).toBe(0);
+  expect(out).toEqual(['Not sent: your autonomy is "suggest". Put the change in your answer instead.']);
 });
 
 test('publishThemeChange publishes the approved copy', async () => {

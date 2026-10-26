@@ -185,21 +185,30 @@ export interface ThemeApi {
   list: () => Promise<ShopifyTheme[]>;
   duplicate: (themeId: string, name: string) => Promise<ShopifyTheme>;
   upsert: (themeId: string, files: { filename: string; body: string }[]) => Promise<string[]>;
+  remove: (themeId: string) => Promise<unknown>;
 }
 
-/** Copies the live theme, waits for Shopify to finish the copy, and writes the files to it. */
-// ponytail: polls every 3 s for up to 2 minutes inside the agent's tool call; a slower copy fails the draft (the copy stays in the library).
+/**
+ * Copies the live theme, waits for Shopify to finish the copy, and writes the files to it. A failed draft deletes its
+ * copy (the library holds 20 themes, and the agent will try again).
+ */
+// ponytail: polls every 3 s for up to 2 minutes inside the agent's tool call; a slower copy fails the draft.
 export async function draftThemeCopy(api: ThemeApi, name: string, files: { filename: string; body: string }[], wait = (ms: number) => new Promise((r) => setTimeout(r, ms))) {
   const live = (await api.list()).find((t) => t.role === 'MAIN');
   if (!live) throw new Error('Shopify: the store has no live theme');
   let copy = await api.duplicate(live.id, name);
-  for (let i = 0; copy.processing; i++) {
-    if (i === 40) throw new Error(`Shopify is still copying the theme ("${name}"); try again in a few minutes`);
-    await wait(3000);
-    copy = (await api.list()).find((t) => t.id === copy.id) ?? copy;
+  try {
+    for (let i = 0; copy.processing; i++) {
+      if (i === 40) throw new Error(`Shopify is still copying the theme ("${name}"); try again in a few minutes`);
+      await wait(3000);
+      copy = (await api.list()).find((t) => t.id === copy.id) ?? copy;
+    }
+    await api.upsert(copy.id, files);
+    return copy;
+  } catch (e) {
+    await api.remove(copy.id).catch(() => {});
+    throw e;
   }
-  await api.upsert(copy.id, files);
-  return copy;
 }
 
 /** An approved theme change: its copy becomes the live theme. */

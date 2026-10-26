@@ -495,6 +495,7 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ title, summary, files }, ctx) => {
       if (!ctx.themes) return 'Theme editing is not available in this run.';
+      if (ctx.agent.autonomy === 'suggest') return 'Not sent: your autonomy is "suggest". Put the change in your answer instead.'; // before copying a theme for nothing
       // Each draft is a full copy of the live theme (Shopify keeps 20 themes at most): one waiting at a time.
       const pending = ctx.db
         .prepare(`SELECT 1 FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') = 'store.publish_theme'`)

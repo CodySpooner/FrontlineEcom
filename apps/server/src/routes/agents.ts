@@ -160,6 +160,7 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
             list: () => listThemes(db, loadKey(dataDir()), storeId),
             duplicate: (themeId, n) => duplicateTheme(db, loadKey(dataDir()), storeId, themeId, n),
             upsert: (themeId, f) => upsertThemeFiles(db, loadKey(dataDir()), storeId, themeId, f),
+            remove: (themeId) => deleteTheme(db, loadKey(dataDir()), storeId, themeId),
           },
           name,
           files,
