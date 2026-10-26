@@ -150,6 +150,8 @@ describe('Claude engine', () => {
       includePartialMessages: true,
       settingSources: [],
       tools: ['WebSearch', 'WebFetch'],
+      skills: [],
+      strictMcpConfig: true, // the owner's claude.ai connectors stay out of agent runs
       maxTurns: 3,
     });
   });

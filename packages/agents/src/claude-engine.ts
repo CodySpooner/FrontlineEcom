@@ -60,9 +60,12 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
         model: opts.model ?? process.env.FRONTLINE_AGENT_MODEL ?? 'claude-opus-5-5',
         systemPrompt: input.systemPrompt ?? assemblePrompt(input),
         includePartialMessages: true,
-        // Isolated from the owner's coding setup: no CLAUDE.md/settings, no file or shell tools.
+        // Isolated from the owner's coding setup: no CLAUDE.md/settings, no file or shell tools, no skill listing, and
+        // only our MCP servers (the login's claude.ai connectors otherwise attach to every run: ~8k tokens a turn).
         settingSources: [],
         tools: builtins,
+        skills: [],
+        strictMcpConfig: true,
         mcpServers: { ...(appTools.length ? { frontline } : {}), ...externalMcp },
         permissionMode: 'default',
         // Every call comes here (no allowedTools, so the SDK doesn't warn that they shadow this callback): the role's
