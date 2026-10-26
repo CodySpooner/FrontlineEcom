@@ -5,7 +5,7 @@ import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ad
 import { CREDITS, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
 import { searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
-import { getPageDraft, listPageDrafts, savePageDraft } from './pages';
+import { getPageDraft, listPageDrafts, savePageDraft, unsafeHtml } from './pages';
 import { listFlowDrafts, saveFlowDraft } from './flows';
 import { flagOrderIssue, listOrderIssues } from './issues';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
@@ -550,6 +550,8 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ kind, productId, ...d }, ctx) => {
       if (kind === 'product' && !productId) return 'productId is required for a product page.';
+      const bad = unsafeHtml(d.html);
+      if (bad) return `Not saved: ${bad} in a storefront page. Use headings, paragraphs, lists, tables, images and http(s) links only.`;
       if (productId && !ctx.db.prepare('SELECT 1 FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId)) return `No product ${productId} in this store. Use list_products for ids.`;
       // One page per product at a time: overlapping page changes can't be judged apart (14 days of sales after publishing).
       const prior = kind === 'product' ? listPageDrafts(ctx.db, { storeIds: [ctx.store.id], limit: 1000 }).find((d) => d.productId === productId && d.status !== 'rejected') : undefined;

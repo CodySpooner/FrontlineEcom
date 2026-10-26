@@ -27,7 +27,7 @@ export { CREDITS, saveCreative, listCreatives, deleteCreative, creditsToday, dem
 export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats, type Economics, type Verdict } from './ads';
 export { DEFAULT_JOBS, createDefaultJobs, enableDefaultJobs } from './jobs';
 export { nicheKey, addNicheLearning, listNicheLearnings, deleteNicheLearning } from './niche';
-export { savePageDraft, getPageDraft, listPageDrafts, markPublished, deletePageDraft, type NewPageDraft } from './pages';
+export { savePageDraft, getPageDraft, listPageDrafts, markPublished, deletePageDraft, unsafeHtml, type NewPageDraft } from './pages';
 export { closeAnsweredIssues, flagOrderIssue, listOrderIssues, setIssueStatus, type NewOrderIssue } from './issues';
 export { knowledgeIndex, knowledgeDoc, resetKnowledge, saveKnowledge } from './knowledge';
 export { deleteFlowDraft, listFlowDrafts, saveFlowDraft, type NewFlowDraft } from './flows';

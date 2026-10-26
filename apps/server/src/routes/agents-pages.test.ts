@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, listPageDrafts, runAgent, type FakeStep } from '@frontline/agents';
+import { fakeEngine, getAgent, listPageDrafts, runAgent, savePageDraft, type FakeStep } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, PageDraft } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -82,6 +82,19 @@ test('connected stores get it on the platform; a platform error tells the owner;
   await publishDraft(db, listPageDrafts(db)[0]!, async (d) => pushed.push(d.title));
   expect(pushed).toEqual(['About us']);
   expect(listPageDrafts(db)[0]?.status).toBe('published');
+});
+
+test('a draft with active HTML is refused, and one saved before the check never reaches the storefront', async () => {
+  const [out] = await run(() => [draft({ html: '<p>Great roller.</p><img src=x onerror="fetch(1)">' })]);
+  expect(out).toBe('Not saved: the onerror attribute is not allowed in a storefront page. Use headings, paragraphs, lists, tables, images and http(s) links only.');
+  expect(listPageDrafts(db)).toEqual([]);
+
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
+  const old = savePageDraft(db, { storeId: 'glow', agentId: 'glow:store_developer', kind: 'page', title: 'About us', html: '<p>Hi</p><script src="https://x.js"></script>', notes: 'from before the check' });
+  await run(() => [{ call: 'publish_page', input: { draftId: old.id } }], 'approve');
+  expect(db.prepare(`SELECT body FROM notifications WHERE kind = 'error' AND store_id = 'glow'`).get()?.body).toBe(
+    "The draft has HTML a storefront must not run (<script> is not allowed); ask the Store Developer for a clean draft. It's approved and waiting in Store Builder.",
+  );
 });
 
 test('Store Builder routes', async () => {

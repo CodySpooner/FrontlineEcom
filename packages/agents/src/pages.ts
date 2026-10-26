@@ -12,6 +12,36 @@ const SELECT = `SELECT d.*, a.id AS approval_id, a.status AS approval_status FRO
     SELECT id FROM approvals WHERE json_extract(action_json, '$.kind') = 'store.publish_page' AND json_extract(action_json, '$.payload.draftId') = d.id
     ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
 
+const TAGS = new Set('h1 h2 h3 h4 h5 h6 p br hr ul ol li strong b em i u s small sup sub span div blockquote a img figure figcaption table caption thead tbody tfoot tr th td'.split(' '));
+const ATTRS = new Set('href src alt title width height colspan rowspan target rel class id loading'.split(' '));
+
+/**
+ * Why `html` can't go on a storefront, or undefined when it's clean: structural tags only, no scripts, handlers,
+ * styles or embeds, links only to http(s)/mailto/tel. The owner previews drafts sandboxed, where none of that shows.
+ */
+// ponytail: an allowlist that refuses, not a sanitizer; a parser (e.g. parse5) if legit pages start getting refused.
+export function unsafeHtml(html: string): string | undefined {
+  // Quoted values are taken whole, so `title="x>" onerror=…` can't hide an attribute.
+  for (const [, slash, name, attrs] of html.matchAll(/<(\/?)([a-zA-Z][^\s/>]*)((?:"[^"]*"|'[^']*'|[^'">])*)/g)) {
+    const tag = name!.toLowerCase();
+    if (!TAGS.has(tag)) return `<${tag}> is not allowed`;
+    if (slash) continue;
+    for (const [, attr, ...vals] of attrs!.matchAll(/([^\s"'>/=]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*)))?/g)) {
+      const a = attr!.toLowerCase();
+      if (!ATTRS.has(a)) return `the ${a} attribute is not allowed`;
+      if (a !== 'href' && a !== 'src') continue;
+      const url = (vals.find((v) => v !== undefined) ?? '')
+        .replace(/&#(x?)([0-9a-f]+);?/gi, (_, x: string, n: string) => String.fromCharCode(parseInt(n, x ? 16 : 10)))
+        .replace(/&colon;/gi, ':')
+        .replace(/[\s\u0000-\u001f]+/g, '')
+        .toLowerCase();
+      const scheme = /^([a-z][a-z0-9+.-]*):/.exec(url)?.[1];
+      if (scheme && !['http', 'https', 'mailto', 'tel'].includes(scheme)) return `${scheme}: links are not allowed`;
+    }
+  }
+  return undefined;
+}
+
 export function savePageDraft(db: DatabaseSync, d: NewPageDraft, now = new Date()): PageDraft {
   const id = randomUUID();
   db.prepare(

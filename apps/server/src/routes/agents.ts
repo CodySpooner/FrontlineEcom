@@ -30,6 +30,7 @@ import {
   listRuns,
   getRun,
   runGist,
+  unsafeHtml,
   updateAgent,
   updateMemory,
   writeMemory,
@@ -85,6 +86,8 @@ const onLiveShopify = <T,>(db: Db, storeId: string, fn: () => Promise<T>) =>
 const pushPage =
   (db: Db): PushPage =>
   (d) => {
+    const bad = unsafeHtml(d.html);
+    if (bad) return Promise.reject(new Error(`The draft has HTML a storefront must not run (${bad}); ask the Store Developer for a clean draft`));
     const seo = { ...(d.seoTitle ? { seoTitle: d.seoTitle } : {}), ...(d.seoDescription ? { seoDescription: d.seoDescription } : {}) };
     return onShopify<unknown>(db, d.storeId, () =>
       d.kind === 'product' && d.productId
