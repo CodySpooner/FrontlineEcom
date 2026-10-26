@@ -137,6 +137,8 @@ Orca's browser against the reference before ticking it.
       so ("Importing order history: through Mar 2025") instead of showing a half-empty dashboard. Needs core: see Inbox.
 - [x] UI-44 Profit caveat: when products in the selection have no unit cost, the Dashboard Profit tile says so ("2
       products at full price") and links to Store Analytics › Unit costs, since that profit is overstated until set.
+- [x] UI-45 Drift check of the other three reference screens (AI Agents, Product Research, Creative Studio) against
+      `ui-reference.webp` at 1440, as UI-38 did for the Dashboard; fix what drifted.
 
 ## Blocked
 - UI-43 First-sync progress: waiting on core for `Integration.backfill` (core Inbox, 2026-10-26).
@@ -206,3 +208,5 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-42: the bell drawer shows "Recently decided" (last 3 approved/denied by `decidedAt`): Approved / Autopilot approved (green ✓) or Denied (muted ✕), the title, then role · store · when. Test (autopilot row) + Chrome with 2 ui-fx decided fixtures (deleted after)
 - 2026-10-26 — Inbox (core) unit costs: Store Analytics gets a "Unit costs" panel, shown only when products in the selection have cost 0 (first 200 per call, ponytail note). It lists up to 8, each with a cost field and "Save cost" (PATCH; refetches products/summary/top products/orders). Shopify's 400 reason shows inline. Tests: save posts `{cost}`, the 400 message shows. Chrome: zeroed glow-p1, the panel showed it, entering 28 saved, the cost went back to 28 and the panel went away
 - 2026-10-26 — UI-44: the Dashboard Profit tile shows "N cost(s) missing" (red link, title explains) when products in the selection have no unit cost, linking to Store Analytics' Unit costs panel. Chrome: zeroed glow-p1 → "1 cost missing" → link → panel; fixture restored (cost 28)
+- 2026-10-26 — E2E (UI-30/42): on the live server, Deny on a ui-fx request in the bell drawer (from Competitors) moved it to "Recently decided · just now" while the 3 seeded requests stayed. Fixture approval and its denial memory removed, plus a stale +25 XP event left by an earlier session's fixture (agent XP mirror corrected)
+- 2026-10-26 — UI-45: AI Agents, Product Research and Creative Studio re-compared with the reference at 1440. Structure still matches (squad cards with portrait, status, LV/XP, Configure/Chat, Deploy Agent; research tabs, AI Research, score-badged cards; Create Your Ad, Generate with credits, Preview, library). Fixed: Creative Studio's static "demo renders until connected" text is now the reference's Integration row (Higgsfield chip with a live status dot linking to Integrations, Claude · copy, daily cap). Asked core to seed demo creatives so the library isn't empty on a fresh install. Research cards use category icons, since demo products have no photos

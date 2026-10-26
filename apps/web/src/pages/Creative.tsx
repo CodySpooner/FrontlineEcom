@@ -3,10 +3,10 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Captions, Copy, Download, PenLine, Sparkles, Trash2, Wand2, Zap } from 'lucide-react';
 import type { AgentRole, AspectRatio, Creative as CreativeT, CreativeKind } from '@frontline/shared';
-import { useCaps, useCreatives, useDeleteCreative, useStartRun } from '../api/client';
+import { useCaps, useCreatives, useDeleteCreative, useIntegrations, useStartRun } from '../api/client';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, buttonClass, cx, EmptyState, ErrorState, LoadingState, Panel, Tabs } from '../components/ui';
+import { Badge, Button, buttonClass, cx, EmptyState, ErrorState, LoadingState, Panel, StatusDot, Tabs } from '../components/ui';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -41,6 +41,7 @@ export function Creative() {
   const [aspect, setAspect] = useState<AspectRatio>('9:16');
   const start = useStartRun();
   const cap = useCaps(store?.id ?? '').data;
+  const hf = useIntegrations().data?.find((i) => i.kind === 'higgsfield')?.status;
   const lib = useCreatives(tab.show);
   const list = (lib.data ?? []).filter((c) => has(c.storeId) && (tab.show || c.kind !== 'copy'));
   const [picked, setPicked] = useState<string>();
@@ -128,10 +129,19 @@ export function Creative() {
                 {start.error.message}
               </p>
             )}
-            <p className="border-t border-line pt-3 text-xs text-muted">
-              Renders: <span className="text-text-2">Higgsfield AI</span> (demo renders until connected) · Copy: <span className="text-text-2">Claude</span>
-              {cap && ` · Daily cap ${cap.higgsfieldCreditsPerDay} credits`}
-            </p>
+            <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3 text-xs text-muted">
+              Integration
+              <Link
+                to="/integrations"
+                title={hf === 'connected' ? 'Renders images and video' : 'Connect Higgsfield for real renders'}
+                className="inline-flex items-center gap-1.5 rounded-md border border-line bg-bg-2 px-2 py-1 text-text-2 hover:text-white"
+              >
+                <StatusDot tone={hf === 'connected' ? 'good' : hf === 'error' ? 'red' : 'idle'} />
+                Higgsfield AI{hf !== 'connected' && <span className="text-muted">{hf === 'error' ? ' · needs attention' : ' · demo renders'}</span>}
+              </Link>
+              <span className="inline-flex items-center rounded-md border border-line bg-bg-2 px-2 py-1 text-text-2">Claude · copy</span>
+              {cap && <span className="ml-auto">Daily cap {cap.higgsfieldCreditsPerDay} credits</span>}
+            </div>
           </div>
         </Panel>
         <Panel title="Preview" sub={shown && `${name(shown.storeId)} · ${KIND_LABEL[shown.kind]}${shown.aspect ? ` · ${shown.aspect}` : ''} · ${ago(shown.createdAt, Date.now())}`}>
