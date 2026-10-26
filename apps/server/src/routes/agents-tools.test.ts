@@ -163,6 +163,11 @@ describe('agent tools on demo data', () => {
     const glow = input('glow', 'market_analyst');
     const funnel = (out: string) => out.split('\n')[0]!;
     try {
+      // Traffic data from mid-window on (GA4 connected later): conversion counts from its first day.
+      const days = db.prepare(`SELECT date FROM daily_metrics WHERE store_id = 'glow' ORDER BY date DESC LIMIT 7`).all().map((r) => String(r.date));
+      db.prepare(`UPDATE daily_metrics SET sessions = 0 WHERE store_id = 'glow' AND date < ?`).run(days[3]!);
+      const [partial] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
+      expect(funnel(partial!.output)).toBe(`(sessions start on ${days[3]}: work out conversion from that day on; earlier orders have no traffic data.)`);
       db.prepare(`UPDATE daily_metrics SET add_to_carts = 0, checkouts = 0 WHERE store_id = 'glow'`).run(); // Amazon: sessions only
       const [amazon] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
       expect(funnel(amazon!.output)).toBe('(add_to_carts, checkouts: not reported for this store, so 0 means no data, not no traffic.)');
