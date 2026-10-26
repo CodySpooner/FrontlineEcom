@@ -37,6 +37,16 @@ test('a learning two live stores of a niche found on their own is offered to the
   expect(listNicheLearnings(db, 'beauty').map((l) => l.text)).toEqual(['Before/after UGC beats studio shots for LED masks']);
 });
 
+test('the request shows the whole learning that would be shared, however long', () => {
+  const long = `Before/after UGC beats studio shots for LED masks ${'because buyers trust a real face over a polished render, '.repeat(8)}`.trim();
+  learn('glow', long);
+  learn('lumi', long);
+  proposeNichePromotions(db);
+  const [r] = requests();
+  expect(JSON.parse(String(r!.action_json)).payload.text).toBe(long);
+  expect(String(db.prepare('SELECT reason FROM approvals WHERE id = ?').get(String(r!.id))?.reason)).toContain(long);
+});
+
 test('a learning offered once is not offered again when another store words it more confidently', async () => {
   learn('glow', 'Before/after UGC beats studio shots for LED masks');
   learn('lumi', 'Before/after UGC beats studio shots for serums', 0.75);

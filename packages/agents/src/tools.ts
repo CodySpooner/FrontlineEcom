@@ -659,7 +659,7 @@ export const APP_TOOLS: AppTool[] = [
       const label = ctx.store.niche === 'other' ? ctx.store.nicheDetail : ctx.store.niche;
       const { approved, message } = await requestApproval(ctx, {
         title: `Share a learning with all ${label} stores`.slice(0, 80),
-        reason: `${text} Evidence: ${evidence}`.slice(0, 400),
+        reason: `${text} Evidence: ${evidence}`, // both are shared as written: not cut
         action: { kind: 'niche.promote_learning', payload: { niche, text, evidence } },
       });
       if (!approved) return message;

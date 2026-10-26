@@ -356,7 +356,8 @@ export function proposeNichePromotions(db: Db) {
         storeId: stores[0]!.id,
         agentId: `${stores[0]!.id}:market_analyst`,
         title: `Share a learning with all ${niche} stores`.slice(0, 80),
-        reason: `${c.text} Found on its own in ${names} (confidence ${c.confidence.toFixed(1)}). Approved, every ${niche} store's squad sees it.`.slice(0, 400),
+        // Not cut: approved, the whole text reaches every store of the niche (a reflection's learning has no length cap).
+        reason: `${c.text} Found on its own in ${names} (confidence ${c.confidence.toFixed(1)}). Approved, every ${niche} store's squad sees it.`,
         action: { kind: 'niche.promote_learning', payload: { niche: key, text: c.text, evidence: `Held in ${names}` } },
       });
     }
