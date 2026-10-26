@@ -16,10 +16,13 @@ export function StoreForm({ store, onDone }: { store?: Store; onDone: (saved?: S
   const [nicheDetail, setNicheDetail] = useState(store?.nicheDetail ?? '');
   const [currency, setCurrency] = useState(store?.currency ?? 'USD');
   const [color, setColor] = useState(store?.color ?? '#ff2a3a');
+  const [timezone, setTimezone] = useState(store?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
+  // The saved zone stays pickable even when this browser's list leaves it out (e.g. "UTC").
+  const [zones] = useState(() => [...new Set([timezone, ...Intl.supportedValuesOf('timeZone')])]);
   const submit = (e: FormEvent) => {
     e.preventDefault();
     save.mutate(
-      { id: store?.id, name: name.trim(), platform, niche, ...(nicheDetail.trim() && { nicheDetail: nicheDetail.trim() }), currency: currency.trim().toUpperCase(), color },
+      { id: store?.id, name: name.trim(), platform, niche, ...(nicheDetail.trim() && { nicheDetail: nicheDetail.trim() }), currency: currency.trim().toUpperCase(), timezone, color },
       { onSuccess: (saved) => onDone(saved) },
     );
   };
@@ -67,6 +70,14 @@ export function StoreForm({ store, onDone }: { store?: Store; onDone: (saved?: S
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className={cx(inputClass, 'h-[38px] w-full cursor-pointer p-1')} />
         </Field>
       </div>
+      <Field label="Time zone">
+        <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className={cx(inputClass, 'cursor-pointer')}>
+          {zones.map((z) => (
+            <option key={z}>{z}</option>
+          ))}
+        </select>
+        <span className="text-[11px] text-muted">Each day in its reports runs midnight to midnight here. A connected Shopify store uses the shop's own.</span>
+      </Field>
       {save.isError && (
         <p role="alert" className="text-xs text-red">
           {save.error.message}
