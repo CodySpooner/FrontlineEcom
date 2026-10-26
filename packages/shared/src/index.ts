@@ -279,6 +279,10 @@ export interface TopProduct {
   revenue: number;
   /** Revenue minus product cost and the store's fee % (ad spend and the per-order fee are not allocated per product). */
   profit: number;
+  /** The product's stock as on Products (absent for a product no longer in the catalog). */
+  inventory?: number;
+  inventoryTracked?: boolean;
+  status?: ProductStatus;
 }
 
 /**

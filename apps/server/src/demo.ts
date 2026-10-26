@@ -339,12 +339,12 @@ export function seedDemo(db: Db, today = localDate()) {
  */
 export function demoTopProducts(db: Db, storeId: string, from: string, to: string): TopProduct[] {
   const revenue = Number(db.prepare('SELECT coalesce(sum(revenue), 0) AS r FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?').get(storeId, from, to)!.r);
-  const products = db.prepare("SELECT id, title, image, price, cost FROM products WHERE store_id = ? AND status = 'active' AND price > 0").all(storeId);
+  const products = db.prepare("SELECT id, title, image, price, cost, inventory, inventory_tracked FROM products WHERE store_id = ? AND status = 'active' AND price > 0").all(storeId);
   const weights = products.map((p) => 0.2 + mulberry32(hash(`${storeId}:${p.id}`))());
   const total = weights.reduce((a, w) => a + w, 0);
   return products.map((p, i) => {
     const price = Number(p.price);
     const units = Math.round((revenue * weights[i]!) / total / price);
-    return { storeId, productId: String(p.id), title: String(p.title), ...(p.image ? { image: String(p.image) } : {}), units, revenue: cents(units * price), profit: cents(units * (price - Number(p.cost))) };
+    return { storeId, productId: String(p.id), title: String(p.title), ...(p.image ? { image: String(p.image) } : {}), units, revenue: cents(units * price), profit: cents(units * (price - Number(p.cost))), inventory: Number(p.inventory), inventoryTracked: !!p.inventory_tracked, status: 'active' };
   });
 }

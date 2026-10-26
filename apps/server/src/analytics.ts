@@ -1,4 +1,4 @@
-import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, MetricTotals, TopProduct } from '@frontline/shared';
+import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, MetricTotals, ProductStatus, TopProduct } from '@frontline/shared';
 import type { Db } from './db';
 import { addDays } from './dates';
 import { demoTopProducts } from './demo';
@@ -136,7 +136,7 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
   const rows = real.length
     ? db
         .prepare(
-          `SELECT i.store_id, i.product_id, p.title, p.image, sum(i.quantity) AS units, sum(i.revenue) AS revenue, sum(i.revenue - i.cost) AS profit
+          `SELECT i.store_id, i.product_id, p.title, p.image, p.inventory, p.inventory_tracked, p.status, sum(i.quantity) AS units, sum(i.revenue) AS revenue, sum(i.revenue - i.cost) AS profit
            FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
            LEFT JOIN products p ON p.store_id = i.store_id AND p.id = i.product_id
            WHERE i.store_id IN (${real.map(() => '?').join(',')}) AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?
@@ -152,6 +152,7 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
           units: Number(r.units),
           revenue: r2(Number(r.revenue)),
           profit: r2(Number(r.profit)),
+          ...(r.status == null ? {} : { inventory: Number(r.inventory), inventoryTracked: !!r.inventory_tracked, status: String(r.status) as ProductStatus }),
         }))
     : [];
   const { rate } = fxFor(db, storeIds);

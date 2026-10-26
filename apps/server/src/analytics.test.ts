@@ -103,7 +103,8 @@ test('top products: real stores from line items of paid orders, demo stores spli
   order.run('#4', 90, 'paid', '2026-10-10'); item.run('#4', 'mask', 1, 90, 30); // before the period
 
   expect(topProducts(db, ['glow'], '2026-10-20', '2026-10-26', 8)).toEqual([
-    { storeId: 'glow', productId: 'mask', title: 'LED Mask', units: 2, revenue: 180, profit: 120 },
+    // Stock comes along so a best seller's "sold out" shows without a catalog lookup; a removed product has none.
+    { storeId: 'glow', productId: 'mask', title: 'LED Mask', units: 2, revenue: 180, profit: 120, inventory: 5, inventoryTracked: true, status: 'active' },
     { storeId: 'glow', productId: 'gone', title: 'Removed product', units: 1, revenue: 25, profit: 25 },
   ]);
 
@@ -111,7 +112,7 @@ test('top products: real stores from line items of paid orders, demo stores spli
   const revenue = Number(db.prepare("SELECT sum(revenue) AS r FROM daily_metrics WHERE store_id = 'peak' AND date BETWEEN '2026-10-20' AND '2026-10-26'").get()!.r);
   expect(demo.length).toBeGreaterThan(1);
   expect(Math.abs(demo.reduce((a, p) => a + p.revenue, 0) - revenue) / revenue).toBeLessThan(0.1);
-  expect(demo.every((p) => p.profit < p.revenue && p.units > 0)).toBe(true);
+  expect(demo.every((p) => p.profit < p.revenue && p.units > 0 && p.status === 'active' && typeof p.inventory === 'number')).toBe(true);
   expect(topProducts(db, ['peak'], '2026-10-20', '2026-10-26', 50)).toEqual(demo);
 
   const app = createApp(db);
