@@ -225,7 +225,7 @@ export function UnitCosts({ ids, multi }: { ids: string[]; multi: boolean }) {
     >
       <ul className="divide-y divide-line">
         {missing.slice(0, 8).map((p) => (
-          <CostRow key={p.storeId + p.id} p={p} multi={multi} />
+          <CostRow key={p.storeId + p.id} p={p} multi={multi} thumbs={missing.some((x) => x.image)} />
         ))}
       </ul>
       {missing.length > 8 && <p className="mt-2 text-xs text-muted">{missing.length - 8} more show up here as you fill these in.</p>}
@@ -233,7 +233,7 @@ export function UnitCosts({ ids, multi }: { ids: string[]; multi: boolean }) {
   );
 }
 
-function CostRow({ p, multi }: { p: Product; multi: boolean }) {
+function CostRow({ p, multi, thumbs }: { p: Product; multi: boolean; thumbs: boolean }) {
   const save = useSetCost();
   const { name, currency } = useStoreSelection();
   const [value, setValue] = useState('');
@@ -248,6 +248,7 @@ function CostRow({ p, multi }: { p: Product; multi: boolean }) {
         }}
         className="flex flex-wrap items-center gap-x-3 gap-y-1.5"
       >
+        {thumbs && <Thumb src={p.image} />}
         <span className="min-w-0 flex-1">
           <span className="block truncate text-[13px] font-semibold" title={p.title}>
             {p.title}
@@ -277,8 +278,13 @@ function CostRow({ p, multi }: { p: Product; multi: boolean }) {
   );
 }
 
-function TopTable({ rows, name, cur, stock }: { rows: TopProduct[]; name?: (id: string) => string; cur?: string; stock: (p: TopProduct) => ReturnType<typeof stockLeft> }) {
+/** A product's photo at row size. Lists render it only when some product has one; a blank tile keeps titles aligned. */
+const Thumb = ({ src }: { src?: string }) =>
+  src ? <img data-thumb src={src} alt="" loading="lazy" className="size-9 shrink-0 rounded-md bg-panel-2 object-cover" /> : <span data-thumb aria-hidden className="size-9 shrink-0 rounded-md bg-panel-2" />;
+
+export function TopTable({ rows, name, cur, stock }: { rows: TopProduct[]; name?: (id: string) => string; cur?: string; stock: (p: TopProduct) => ReturnType<typeof stockLeft> }) {
   if (!rows.length) return <p className="text-[13px] text-muted">No product sales in this period.</p>;
+  const thumbs = rows.some((p) => p.image);
   return (
     <Table>
       <thead>
@@ -296,16 +302,21 @@ function TopTable({ rows, name, cur, stock }: { rows: TopProduct[]; name?: (id: 
           return (
             <tr key={p.storeId + p.productId}>
               <td className="max-w-[280px]">
-                <div className="truncate" title={p.title}>
-                  {p.title}
-                </div>
-                {(name || st) && (
-                  <div className="text-xs text-muted">
-                    {name?.(p.storeId)}
-                    {name && st && ' · '}
-                    {st && <span className={cx(st.low && 'text-red')}>{st.label}</span>}
+                <div className="flex items-center gap-2.5">
+                  {thumbs && <Thumb src={p.image} />}
+                  <div className="min-w-0">
+                    <div className="truncate" title={p.title}>
+                      {p.title}
+                    </div>
+                    {(name || st) && (
+                      <div className="text-xs text-muted">
+                        {name?.(p.storeId)}
+                        {name && st && ' · '}
+                        {st && <span className={cx(st.low && 'text-red')}>{st.label}</span>}
+                      </div>
+                    )}
                   </div>
-                )}
+                </div>
               </td>
               <td className="text-right">{num(p.units)}</td>
               <td className="text-right">{money(p.revenue, cur)}</td>

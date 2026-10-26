@@ -184,6 +184,8 @@ Orca's browser against the reference before ticking it.
       opening the form.
 - [x] UI-67 Automation's run log decides a waiting request in place (Approve / Deny with the request's card), instead of
       a generic link to the Dashboard. `AutomationRun.approvalId` was unused.
+- [x] UI-68 Product photos (connectors fill `image` for Shopify, Woo, Etsy) in Analytics' top-products table and Unit
+      costs, so real stores' rows are recognizable at a glance.
 
 ## Blocked
 
@@ -281,3 +283,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-65 (core inbox, fees in profit): the store form has "Fees, % of revenue" and "Fees per order" fields. The platform's usual fees are the placeholders and a hint (Shopify/Woo 2.9% + 0.30, Etsy 9.5% + 0.25, TikTok Shop 8%, Amazon and Walmart 15%), and blank sends 0. When any selected store has an estimate, the Profit tooltip reads "Revenue − cost of goods − your fee estimate − ad spend". StoreForm.test covers it. Chrome: Glow Haus saved at 2.9% + 0.30, and its 30-day profit went from 4,228.21 to 3,534.17. The tooltip updated. Glow restored to no fees
 - 2026-10-26 — UI-66: `feeEstimate(s)` (StoreForm, tested) adds "Fees 8%" / "Fees 9.5% + 0.25 per order" to the store row's summary line, and nothing when unset. Chrome: Peak Fit at 8% read "TikTok Shop · Fitness · home workout accessories · USD · Fees 8%". Peak restored to 0
 - 2026-10-26 — UI-67: RunLog (now exported) looks up `approvalId` in the pending approvals and renders the shared ApprovalCard under that log entry. It falls back to the Dashboard link when the request isn't in the waiting list. The server flips the row in its decision callback and the live handler already refetches `automation-runs`, so it settles on Started or Denied. New Automation.test covers the approve POST and the fallback. Chrome with a fixture request and log row: the entry showed "Needs you" and the card with Approve / Deny. Not clicked, to avoid firing hooks. Fixtures removed
+- 2026-10-26 — UI-68: a 36px `Thumb` in TopTable and Unit costs rows. It renders only when some product in that list has a photo, with a blank tile for the rest so titles line up; demo stores have no photos and look unchanged. Analytics.test covers the mixed and none cases. Chrome with a main-world patch adding data-URI photos to 2 top products and 1 cost-less product: photos and blank tiles aligned in both lists

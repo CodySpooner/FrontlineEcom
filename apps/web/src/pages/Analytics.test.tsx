@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { AnalyticsSummary, Product, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { FunnelPanel, UnitCosts } from './Analytics';
+import { FunnelPanel, TopTable, UnitCosts } from './Analytics';
 
 const product = (id: string, cost: number): Product => ({ id, storeId: 'etsy-shop', title: `Mug ${id}`, price: 24, cost, inventory: 10, status: 'active', margin: 0 });
 
@@ -57,5 +57,23 @@ describe('Conversion funnel with no sessions', () => {
     expect(await screen.findByRole('link', { name: 'Connect GA4' })).toBeTruthy();
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByText(/read_reports/)).toBeNull();
+  });
+});
+
+describe('product photos', () => {
+  const imgs = () => [...document.querySelectorAll('img')].map((i) => i.getAttribute('src'));
+
+  it("shows a store's product photos once any listed product has one, a blank tile for the rest", async () => {
+    stubApi((url) => (url.startsWith('/api/products') ? { items: [{ ...product('a', 0), image: 'https://cdn.example/a.jpg' }, product('b', 0)], total: 2 } : []));
+    renderApp(<UnitCosts ids={[]} multi={false} />);
+    await screen.findByText('Mug b');
+    expect(imgs()).toEqual(['https://cdn.example/a.jpg']);
+    expect(document.querySelectorAll('[data-thumb]')).toHaveLength(2);
+  });
+
+  it('leaves the column out when no product has a photo (demo stores)', () => {
+    renderApp(<TopTable rows={[{ storeId: 's', productId: 'p', title: 'Collar', units: 3, revenue: 60, profit: 30 }]} stock={() => undefined} />);
+    expect(screen.getByText('Collar')).toBeTruthy();
+    expect(document.querySelectorAll('[data-thumb]')).toHaveLength(0);
   });
 });
