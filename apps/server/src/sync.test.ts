@@ -20,7 +20,7 @@ test('sync loop runs new integrations once, retries when stale or when credentia
   const stop = startSyncLoop(db, key, { everyMs: 1000, staleMs: 60_000, syncers: { shopify } });
 
   expect(shopify).toHaveBeenCalledTimes(1);
-  expect(shopify).toHaveBeenCalledWith(db, key, 'glow');
+  expect(shopify).toHaveBeenCalledWith(db, key, 'glow', expect.any(Function));
   await vi.advanceTimersByTimeAsync(5000);
   expect(shopify).toHaveBeenCalledTimes(1);
 

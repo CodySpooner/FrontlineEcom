@@ -57,3 +57,16 @@ export function setOrderItems(db: Db, storeId: string, orderId: string, items: O
 
 /** An approved change to a live campaign: a new daily budget (account currency) or a pause. */
 export type CampaignChange = { dailyBudget: number } | { status: 'PAUSED' };
+
+/**
+ * For syncs: a rate-limited response (429) waits Retry-After (1 s if missing, at most a minute) and asks again, up to 5
+ * tries, so a long first sync (Etsy allows 5–10 calls a second) isn't failed and restarted from scratch.
+ */
+export const retry429 = (fetchFn: typeof fetch): typeof fetch => async (input, init) => {
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetchFn(input, init);
+    if (res.status !== 429 || attempt === 5) return res;
+    const seconds = Number(res.headers.get('retry-after'));
+    await new Promise((r) => setTimeout(r, Math.min(60, seconds > 0 ? seconds : 1) * 1000));
+  }
+};
