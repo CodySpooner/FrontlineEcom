@@ -35,6 +35,19 @@ function demoWork(input: RunInput): FakeStep[] {
     case 'product_hunter':
       return [{ call: 'research_feed', input: { limit: 5 } }];
     case 'operations': {
+      // "Hand to Operations" on one order (Orders page): flag that order with what the page saw. A refunded one is
+      // 'other', since refunds close the other kinds on their own.
+      const asked = input.task.match(/^Order (\S+) \([^)]*\): ([^.]+)\./);
+      if (asked) {
+        const [, orderId, detail] = asked;
+        const kind = /refunded/i.test(detail!) ? 'other' : /tracking/i.test(detail!) ? 'supplier' : 'late';
+        const suggestedAction = {
+          other: 'Cancel it with the supplier before it ships.',
+          supplier: 'Ask the supplier for the tracking number and add it to the order.',
+          late: 'Ask the supplier for a ship date today and tell the customer.',
+        }[kind];
+        return [{ call: 'flag_order_issue', input: { orderId, kind, severity: kind === 'late' ? 'high' : 'medium', note: `${detail}.`, suggestedAction } }];
+      }
       // The oldest late order not flagged before, so a resolved issue doesn't come back with the next daily check.
       const late = db
         .prepare(

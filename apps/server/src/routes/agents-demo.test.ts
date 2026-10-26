@@ -100,6 +100,18 @@ test("the Store Builder's FAQ and promo ideas get store page drafts in demo, pro
   expect((await drafted("Rewrite our best seller's product page to lift conversion: benefits first, social proof, FAQ, clear CTA."))?.kind).toBe('product');
 });
 
+test('demo Operations handed one order flags that order, as the Orders page saw it', async () => {
+  const o = db.prepare(`SELECT id FROM orders WHERE store_id = 'glow' AND fulfillment_status = 'unfulfilled' ORDER BY local_date DESC LIMIT 1`).get()!;
+  const hand = async (detail: string) => {
+    const m = runManager(db);
+    if (typeof m.start('glow:operations', `Order ${o.id} ($48.00, CJ): ${detail}. Find out why and fix it, or tell me what to do.`) === 'string') throw new Error('not started');
+    await m.idle();
+    return db.prepare(`SELECT kind, severity, note FROM order_issues WHERE store_id = 'glow' AND order_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1`).get(String(o.id));
+  };
+  expect(await hand('Not shipped after 4 days')).toEqual({ kind: 'late', severity: 'high', note: 'Not shipped after 4 days.' });
+  expect((await hand('Shipped without a tracking number'))?.kind).toBe('supplier');
+});
+
 test("a demo Ask AI question reads the data it's about", async () => {
   const asked = async (q: string) => {
     const m = runManager(db);
