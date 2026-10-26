@@ -46,11 +46,11 @@ import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Hono } from 'hono';
-import { loadRows, summarize } from '../analytics';
+import { loadRows, salesShares, summarize } from '../analytics';
 import { convertRate, fxFor } from '../fx';
 import { approvalsHook, decide } from '../approvals';
 import { listCompetitors, priceChanges } from '../competitors';
-import { dayFraction, localDate } from '../dates';
+import { addDays, dayFraction, localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
@@ -129,11 +129,15 @@ const setPrice =
       amazon: () => setAmazonListingPrice(db, loadKey(dataDir()), storeId, productId, change),
     });
 
-/** The dashboard's window (app.ts windowEnd): today in the store's zone, with today's comparison scaled to the hours gone. */
-const windowEnd = (db: Db, storeIds: string[]) => {
+/**
+ * The dashboard's window (app.ts windowEnd): today in the store's zone, with the comparison day cut to the share of its
+ * sales made by this time of day (each store's own order times; the clock where it had none).
+ */
+const windowEnd = (db: Db, storeIds: string[], range: number) => {
   const tz = storeZone(db, storeIds[0]);
-  const to = localDate(new Date(), tz);
-  return { to, todayFraction: dayFraction(to, Date.now(), tz) };
+  const now = Date.now();
+  const to = localDate(new Date(now), tz);
+  return { to, todayFraction: salesShares(db, storeIds, addDays(to, -range), new Date(now - range * 86_400_000), dayFraction(to, now, tz)) };
 };
 
 /** App data + approvals for agent tools. `key` decrypts integration credentials (default: the data dir's key file). */
@@ -187,7 +191,7 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
     return ((await res.json()) as Page<ResearchProduct>).items;
   },
   summary: (storeId, range) => {
-    const { to, todayFraction } = windowEnd(db, [storeId]);
+    const { to, todayFraction } = windowEnd(db, [storeId], range);
     return summarize(loadRows(db, [storeId], range, to), { range, to, storeIds: [storeId], todayFraction });
   },
   themes: {
@@ -216,7 +220,7 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
   },
   portfolio: (range) => {
     const ids = listStores(db).map((s) => s.id);
-    const { to, todayFraction } = windowEnd(db, ids);
+    const { to, todayFraction } = windowEnd(db, ids, range);
     const { currency, unconverted } = fxFor(db, ids);
     return { ...summarize(loadRows(db, ids, range, to), { range, to, storeIds: ids, todayFraction }), currency, ...(unconverted.length ? { unconverted } : {}) };
   },

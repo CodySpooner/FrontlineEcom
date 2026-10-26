@@ -78,10 +78,16 @@ test("store_summary's change vs the previous period matches the dashboard's in t
     const nine = new Date();
     nine.setHours(9, 0, 0, 0);
     vi.setSystemTime(nine);
+    // A week ago most of the day's sales came in the evening: the morning's share is its orders', not the clock's.
+    const glow = listStores(db).find((s) => s.id === 'glow')!;
+    const day = addDays(localDate(nine, glow.timezone), -7);
+    db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', 'late-buy', ?, 5000, 'paid', 'fulfilled', ?)`)
+      .run(new Date(nine.getTime() - 7 * 86_400_000 + 3_600_000).toISOString(), day);
     const [r] = results(await run(input('glow', 'market_analyst'), [{ call: 'store_summary', input: { range: 7 } }]));
     const api = (await (await createApp(db).request('/api/analytics/summary?range=7&stores=glow')).json()) as { deltas: unknown };
     expect((JSON.parse(r!.output) as { deltasPct: unknown }).deltasPct).toEqual(api.deltas);
   } finally {
+    db.prepare(`DELETE FROM orders WHERE id = 'late-buy'`).run(); // the db is shared by these tests
     vi.useRealTimers();
   }
 });
