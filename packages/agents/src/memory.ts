@@ -27,6 +27,8 @@ export function writeMemory(db: DatabaseSync, m: NewMemory, now = new Date()): S
   const text = m.text.trim();
   const same = db.prepare('SELECT * FROM store_memory WHERE store_id = ? AND lower(text) = lower(?)').get(m.storeId, text);
   if (same?.agent_id === 'owner' && m.agentId !== 'owner') return toMemory(same); // the owner's note stays theirs, evidence and all
+  // The owner writing what the squad wrote makes it the owner's note: kept at go-live and past the cap, not judged by outcomes.
+  if (same && m.agentId === 'owner') db.prepare(`UPDATE store_memory SET agent_id = 'owner', run_id = NULL, kind = ? WHERE id = ?`).run(m.kind, String(same.id));
   if (same) {
     const tags = [...new Set([...parseTags(same.tags), ...(m.tags ?? [])])];
     db.prepare('UPDATE store_memory SET confidence = max(confidence, ?), evidence = coalesce(?, evidence), tags = ? WHERE id = ?').run(
@@ -65,11 +67,13 @@ export function getMemory(db: DatabaseSync, id: string): StoreMemory | undefined
 export const listMemory = (db: DatabaseSync, storeId: string) =>
   db.prepare('SELECT * FROM store_memory WHERE store_id = ? ORDER BY pinned DESC, created_at DESC, rowid DESC').all(storeId).map(toMemory);
 
+/** The owner's edit (Knowledge Base). Rewording a squad memory makes it the owner's; a pin or a confidence change doesn't. */
 export function updateMemory(db: DatabaseSync, id: string, patch: Partial<Pick<StoreMemory, 'text' | 'evidence' | 'confidence' | 'tags' | 'kind' | 'pinned'>>) {
   const cur = getMemory(db, id);
   if (!cur) return undefined;
   const next = { ...cur, ...patch };
-  db.prepare('UPDATE store_memory SET text = ?, evidence = ?, confidence = ?, tags = ?, kind = ?, pinned = ? WHERE id = ?').run(
+  const reworded = next.text.trim() !== cur.text;
+  db.prepare(`UPDATE store_memory SET text = ?, evidence = ?, confidence = ?, tags = ?, kind = ?, pinned = ?${reworded ? ", agent_id = 'owner', run_id = NULL" : ''} WHERE id = ?`).run(
     next.text.trim(),
     next.evidence ?? null,
     clamp(next.confidence),
@@ -107,10 +111,13 @@ export function judgeRun(db: DatabaseSync, ref: string, runId: string, worked: b
 }
 
 /**
- * Pinned memories, then the top-k others for a task: relevance × recency × confidence.
+ * Pinned memories, the owner's notes and no's (however old or off-topic: the prompt fits them in first), then the top-k
+ * others for a task: relevance × recency × confidence.
  * relevance = 0.3 + bm25 share of the best match (unmatched memories can still rank on confidence + recency),
  * recency = 0.2 + 0.8 × 0.5^(age / 90 days). Marks the returned memories as used.
  */
+const always = (m: StoreMemory) => m.pinned || m.agentId === 'owner' || m.tags.includes('denied');
+
 // ponytail: scores every memory of the store in JS; fine to a few thousand rows per store.
 export function searchMemory(db: DatabaseSync, storeId: string, query = '', k = 8, now = new Date()): StoreMemory[] {
   const terms = [...new Set(query.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? [])].slice(0, 24);
@@ -135,8 +142,8 @@ export function searchMemory(db: DatabaseSync, storeId: string, query = '', k = 
       const age = Math.max(0, now.getTime() - Date.parse(m.createdAt)) / day;
       return { m, score: relevance * (0.2 + 0.8 * 0.5 ** (age / 90)) * m.confidence };
     })
-    .sort((a, b) => Number(!!b.m.pinned) - Number(!!a.m.pinned) || b.score - a.score);
-  const ranked = scored.slice(0, k + scored.filter((s) => s.m.pinned).length).map((s) => s.m);
+    .sort((a, b) => Number(always(b.m)) - Number(always(a.m)) || Number(!!b.m.pinned) - Number(!!a.m.pinned) || b.score - a.score);
+  const ranked = scored.slice(0, k + scored.filter((s) => always(s.m)).length).map((s) => s.m);
   const used = db.prepare('UPDATE store_memory SET last_used_at = ? WHERE id = ?');
   for (const m of ranked) used.run(now.toISOString(), m.id);
   return ranked;

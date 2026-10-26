@@ -840,6 +840,7 @@ export const APP_TOOLS: AppTool[] = [
       tags: z.array(z.string()).max(6).optional(),
     },
     run: async (args, ctx) => {
+      if (wentLive(ctx)) return "Not saved: the store went live during this run, so the demo numbers behind it are gone.";
       const memory = writeMemory(ctx.db, { ...args, tags: agentTags(args.tags), storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}) });
       ctx.emit({ type: 'memory_written', memory });
       return 'Saved.';
@@ -901,12 +902,15 @@ export const outsideHosts = (bodies: string[]) =>
  * the store and the amount at stake fits what is left of today's cap for that kind (logged on the request as `auto` +
  * a note in the reason).
  */
+/** The store's first real sync landed during this run (core's switchToReal): the demo rows it read are gone. */
+const wentLive = (ctx: ToolContext) => !ctx.store.connected && ctx.db.prepare('SELECT connected FROM stores WHERE id = ?').get(ctx.store.id)?.connected === 1;
+
 export async function requestApproval(ctx: ToolContext, req: { title: string; reason: string; action: ApprovalAction; autopilot?: boolean }) {
   const { agent } = ctx;
   const autonomy = autonomyNow(ctx);
   if (autonomy === 'suggest') return { approved: false, message: 'Not sent: your autonomy is "suggest". Put the recommendation in your answer instead.' };
   // Going live wiped the demo rows this run read and expired its requests; one more would act on the live store.
-  if (!ctx.store.connected && ctx.db.prepare('SELECT connected FROM stores WHERE id = ?').get(ctx.store.id)?.connected === 1) {
+  if (wentLive(ctx)) {
     return { approved: false, message: 'Not sent: the store went live during this run, so the demo numbers behind it are gone. Stop here; the owner can ask again on real data.' };
   }
   const { kind, amountUsd: amount } = req.action;

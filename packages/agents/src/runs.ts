@@ -308,6 +308,8 @@ export function createRunManager(opts: RunManagerOptions) {
 
   /** Asks the agent, in the same session, what it learned, and saves that as store memory. Never fails the run. */
   async function reflect(input: RunInput, done: Extract<AgentEvent, { type: 'done' }>, emit: (e: AgentEvent) => void) {
+    // The store went live during the run: its demo numbers are gone, and so is what the squad learned from them (startFresh).
+    if (!input.store.connected && opts.store(input.store.id)?.connected) return done;
     let reply = '';
     let usage = done.usage;
     // The reflection spends from what the run left of today's budget; nothing left, no reflection.

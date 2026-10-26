@@ -1,4 +1,4 @@
-import { costToday, createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, updateAgent, type Engine, type FakeStep, type RunManagerOptions } from '@frontline/agents';
+import { costToday, createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, runAgent, updateAgent, type Engine, type FakeStep, type RunManagerOptions } from '@frontline/agents';
 import type { AgentEvent, AgentRun, LiveMessage } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -80,6 +80,32 @@ test('a run streams, persists its transcript and usage, and shows the agent as r
   });
   expect(listMemory(db, 'glow')).toEqual([]); // reflection learns nothing in demo mode
   expect(getAgent(db, 'glow:copywriter')?.status).toBe('idle');
+});
+
+test('a demo run that ends after the store went live learns nothing from its numbers', async () => {
+  const engine: Engine = async function* (input) {
+    if (input.task === REFLECTION_PROMPT) {
+      yield { type: 'text_delta', text: '[{"kind":"learning","text":"Serums convert at 4% here","evidence":"demo","confidence":0.7}]' };
+      yield { type: 'done', sessionId: 's', usage };
+      return;
+    }
+    yield { type: 'tool_call', id: 't1', name: 'store_summary', input: {} };
+    db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run(); // the first real sync lands meanwhile
+    yield { type: 'done', sessionId: 's', usage };
+  };
+  const m = manager({ engine });
+  ok(m.start('glow:copywriter', 'Check the serums'));
+  await m.idle();
+  expect(listMemory(db, 'glow').some((x) => x.text === 'Serums convert at 4% here')).toBe(false);
+
+  const out: string[] = [];
+  const demo = { ...getStore(db, 'glow')!, connected: false }; // as a run that started before the sync sees it
+  const save: FakeStep = { call: 'write_memory', input: { kind: 'learning', text: 'Serums convert at 4% here', confidence: 0.7 } };
+  for await (const e of runAgent({ agent: getAgent(db, 'glow:copywriter')!, store: demo, task: 't', env: toolEnv(db) }, fakeEngine(() => [save]))) {
+    if (e.type === 'tool_result') out.push(e.output);
+  }
+  expect(out).toEqual(['Not saved: the store went live during this run, so the demo numbers behind it are gone.']);
+  expect(listMemory(db, 'glow').some((x) => x.text === 'Serums convert at 4% here')).toBe(false);
 });
 
 test('get() returns the transcript so far while a run waits for approval', async () => {

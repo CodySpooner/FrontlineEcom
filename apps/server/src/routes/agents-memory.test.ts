@@ -51,6 +51,28 @@ describe('store memory', () => {
     expect(listMemory(db, 'glow')).toEqual([note]);
   });
 
+  test("the owner writing a squad memory word for word, or rewording one, makes it the owner's", () => {
+    const a = writeMemory(db, mem('Bundles do not sell', { runId: 'r1' }));
+    const b = writeMemory(db, mem('Mornings convert best', { runId: 'r2' }));
+    const c = writeMemory(db, mem('Serums need a shade guide', { runId: 'r3' }));
+    writeMemory(db, mem('bundles do not sell', { agentId: 'owner', kind: 'fact', confidence: 0.8 }));
+    updateMemory(db, b.id, { text: 'Mornings convert best on weekdays' });
+    updateMemory(db, c.id, { pinned: true, confidence: 0.9 });
+    const who = (id: string) => db.prepare('SELECT agent_id, run_id, kind FROM store_memory WHERE id = ?').get(id);
+    expect(who(a.id)).toEqual({ agent_id: 'owner', run_id: null, kind: 'fact' });
+    expect(who(b.id)).toEqual({ agent_id: 'owner', run_id: null, kind: 'learning' });
+    expect(who(c.id)).toEqual({ agent_id: 'glow:market_analyst', run_id: 'r3', kind: 'learning' }); // a pin isn't a rewrite
+  });
+
+  test("the owner's notes and no's are always recalled, however old or off-topic", () => {
+    writeMemory(db, mem('We ship from Austin', { agentId: 'owner', kind: 'fact', confidence: 0.8 }), daysAgo(150));
+    writeMemory(db, mem('Owner turned down: creator gifting', { kind: 'preference', tags: ['denied'] }), daysAgo(200));
+    for (let i = 0; i < 12; i++) writeMemory(db, mem(`Fresh squad learning ${i}`), daysAgo(1));
+    const got = searchMemory(db, 'glow', 'review the campaigns', 12, now).map((m) => m.text);
+    expect(got).toHaveLength(14);
+    expect(got.slice(0, 2).sort()).toEqual(['Owner turned down: creator gifting', 'We ship from Austin']);
+  });
+
   test('ranks by relevance × recency × confidence', () => {
     const led = writeMemory(db, mem('LED face masks convert best with before/after UGC'), now);
     const pref = writeMemory(db, mem('Owner wants weekly reports on Monday mornings', { kind: 'preference', confidence: 0.9 }), now);

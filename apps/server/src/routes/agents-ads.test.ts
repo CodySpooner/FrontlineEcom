@@ -205,6 +205,17 @@ function approvedChange(id: string, title: string, revenueFactorAfter: number) {
 const outcomes = () => listMemory(db, 'peak').filter((m) => m.tags.includes('outcome'));
 const basis = (title: string) => listMemory(db, 'peak').find((m) => m.text === `Basis for ${title}`)?.confidence;
 
+test("one run's ad changes judged on the same days move what it learned once", () => {
+  approvedChange('one', 'Raise Broad', 1.5);
+  const day = decided();
+  db.prepare(
+    `INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at, decided_at) VALUES ('two', 'peak', 'peak:ad_strategist', 'run-one', 'Pause UGC', 'r', ?, 'approved', ?, ?)`,
+  ).run(JSON.stringify({ kind: 'ads.pause_campaign', payload: {} }), `${day}T09:00:00Z`, `${day}T13:00:00Z`);
+  checkAdOutcomes(db);
+  expect(outcomes()).toHaveLength(2);
+  expect(basis('Raise Broad')).toBeCloseTo(0.7);
+});
+
 test('outcomes are judged without the dashboard open: the server loop checks them at start', () => {
   approvedChange('unattended', 'Raise Broad', 1.5);
   startOutcomeLoop(db)(); // started, then stopped before the hourly tick

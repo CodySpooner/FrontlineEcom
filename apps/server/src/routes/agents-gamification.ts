@@ -99,7 +99,8 @@ export function checkAdOutcomes(db: Db, today?: string) {
       text: `"${r.title}" ${worked ? 'worked' : 'did not help'}: ${roas} in the 3 days after.`,
       evidence: `7 days before vs 3 days after ${day} (request ${r.id})`,
     });
-    if (r.run_id) judgeRun(db, `ads:${r.id}`, String(r.run_id), worked);
+    // Once per run and day: its other changes that day are judged on the same store-wide ROAS, not new evidence.
+    if (r.run_id) judgeRun(db, `ads:${r.run_id}:${day}`, String(r.run_id), worked);
     if (!worked) continue;
     award(db, {
       ref: `win:${r.id}`, amount: XP.win, storeId: String(r.store_id), agentId: String(r.agent_id),
