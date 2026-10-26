@@ -1,7 +1,7 @@
 // UI-03 data layer: typed fetchers + react-query hooks over the local API, and the /api/live socket.
 import { useEffect } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { Agent, AnalyticsRange, AnalyticsSummary, ApprovalDecision, ApprovalRequest, ApprovalStatus, LiveMessage, Settings, Store, StoreEvent } from '@frontline/shared';
+import type { Agent, AgentUpdate, AnalyticsRange, AnalyticsSummary, ApprovalDecision, ApprovalRequest, ApprovalStatus, LiveMessage, Settings, Store, StoreEvent } from '@frontline/shared';
 import * as stub from './stubs';
 import type { Mission } from './stubs';
 
@@ -37,6 +37,15 @@ export function useDecide() {
   return useMutation({
     mutationFn: ({ id, verdict }: { id: string; verdict: ApprovalDecision }) => api<ApprovalRequest>(`/api/approvals/${id}/${verdict}`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
+  });
+}
+
+export function useUpdateAgent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...body }: AgentUpdate & { id: string }) =>
+      api<Agent>(`/api/agents/${encodeURIComponent(id)}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }),
+    onSuccess: (a) => qc.setQueryData<Agent[]>(['agents'], (old = []) => old.map((o) => (o.id === a.id ? a : o))),
   });
 }
 

@@ -42,7 +42,7 @@ const ROLES = Object.keys(AGENT_ROLES) as AgentRole[];
 
 export function Portrait({ role, className }: { role: AgentRole; className?: string }) {
   return (
-    <div className={cx('size-[42px] shrink-0 overflow-hidden rounded-[9px] border border-red/25 bg-[radial-gradient(circle_at_50%_30%,rgb(255_42_58/.38),#0b0b0d_72%)]', className)}>
+    <div className={cx('shrink-0 overflow-hidden rounded-[9px] border border-red/25 bg-[radial-gradient(circle_at_50%_30%,rgb(255_42_58/.38),#0b0b0d_72%)]', className ?? 'size-[42px]')}>
       <svg viewBox="0 0 64 64" className="block size-full" aria-hidden="true">
         <use href={ROLES.indexOf(role) % 2 ? '#helm' : '#hood'} />
       </svg>

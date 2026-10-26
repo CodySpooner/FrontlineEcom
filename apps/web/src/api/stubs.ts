@@ -20,3 +20,6 @@ const MISSIONS: Mission[] = [
 ];
 
 export const missions = () => MISSIONS;
+
+/** XP that fills the bar at `level` (agents lane AGT-13 owns the real curve; requested in docs/backlog/agents.md). */
+export const nextLevelXp = (level: number) => 100 * level; // ponytail: linear stand-in

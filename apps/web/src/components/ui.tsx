@@ -28,19 +28,16 @@ export function Panel({ title, sub, action, children, className }: { title: stri
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost'; size?: 'sm' | 'md' };
 
-export function Button({ variant = 'ghost', size = 'md', className, type = 'button', ...p }: ButtonProps) {
-  return (
-    <button
-      type={type}
-      className={cx(
-        'inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border font-semibold transition duration-150 hover:brightness-115 active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-50',
-        size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
-        variant === 'primary' ? 'border-red bg-red text-white shadow-glow' : 'border-line-2 bg-panel-2 text-text-2',
-        className,
-      )}
-      {...p}
-    />
+/** Button look, also used by router links that act as buttons. */
+export const buttonClass = (variant: 'primary' | 'ghost' = 'ghost', size: 'sm' | 'md' = 'md') =>
+  cx(
+    'inline-flex cursor-pointer items-center justify-center gap-2 rounded-lg border font-semibold transition duration-150 hover:brightness-115 active:scale-[.97] disabled:cursor-not-allowed disabled:opacity-50',
+    size === 'sm' ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
+    variant === 'primary' ? 'border-red bg-red text-white shadow-glow' : 'border-line-2 bg-panel-2 text-text-2',
   );
+
+export function Button({ variant, size, className, type = 'button', ...p }: ButtonProps) {
+  return <button type={type} className={cx(buttonClass(variant, size), className)} {...p} />;
 }
 
 /** Toggle chip, e.g. one store in the store filter. `color` adds an identity dot. */
@@ -78,6 +75,30 @@ export function Segmented<T extends string | number>({ label, options, value, on
           )}
         >
           {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Underlined tab bar (store tabs, page sections). `color` adds an identity dot. */
+export function Tabs<T extends string>({ label, tabs, value, onChange }: { label: string; tabs: { value: T; label: string; color?: string }[]; value: T; onChange: (v: T) => void }) {
+  return (
+    <div role="tablist" aria-label={label} className="flex gap-1 overflow-x-auto shadow-[inset_0_-1px_0_var(--color-line)]">
+      {tabs.map((t) => (
+        <button
+          key={t.value}
+          type="button"
+          role="tab"
+          aria-selected={t.value === value}
+          onClick={() => onChange(t.value)}
+          className={cx(
+            'flex shrink-0 cursor-pointer items-center gap-1.5 border-b-2 px-4 py-2.5 text-[13px] font-semibold transition duration-150',
+            t.value === value ? 'border-red bg-red-soft text-white' : 'border-transparent text-muted hover:text-white',
+          )}
+        >
+          {t.color && <i className="size-[7px] rounded-full" style={{ background: t.color }} />}
+          {t.label}
         </button>
       ))}
     </div>

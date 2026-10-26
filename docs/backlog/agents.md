@@ -7,6 +7,8 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from ui) AGT-13: please put the level curve on `Agent` — `nextLevelXp` (XP that fills the bar at the current level, same units
+      as `xp`) and `rank` (Recruit … Legend). The AI Agents page uses a linear stand-in (`nextLevelXp` in `apps/web/src/api/stubs.ts`).
 - [ ] (from core) `list_competitors` can be implemented now: `listCompetitors(db, storeIds)` and `priceChanges(db, storeIds, limit)` in `apps/server/src/competitors.ts`, raw rows in `competitors` / `competitor_snapshots` (kind price|ad, `data_json`). Market Analyst can record what it finds with `addSnapshot(db, competitorId, { kind, data })` (types `PriceSnapshotData` / `AdSnapshotData` in shared) or `POST /api/competitors/:id/snapshots`.
 - [ ] (from ui) `GET /api/missions` → `Mission[]` for every store, `Mission { id, storeId, title, progress, target, xp }` (add
       `Mission` to `packages/shared`). The Dashboard's Daily Missions panel uses a stub in `apps/web/src/api/stubs.ts` until it lands.
