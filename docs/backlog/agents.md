@@ -157,6 +157,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — Review fixes (fresh review of the lane since 54ef164):
+  (1) storefront HTML: any colon before the first / ? # must start http/https/mailto/tel, so `java&Tab;script:` / `&NewLine;` links are refused like plain `javascript:`;
+  (2) a run's saved cost is the larger of the engine's figure and the live estimate, so zeroed crash results and cut-off reflections keep what was spent;
+  (3) a run stops with "today's AI budget ... is used up" once the store's saved spend today passes the cap, so runs paused on the owner can't take the day past it when they come back;
+  (4) a product archived or removed after selling nothing is judged "did not take off" (only a still-draft product is skipped);
+  (5) squad_log windows on hours (UTC timestamps), not the store's date, so stores ahead of UTC see this morning's work.
+  Tests for each.
 - 2026-10-26 — (core inbox) list_products shows inventory "not tracked" for products whose stock the platform doesn't count (`inventory_tracked = 0`), and the tool description says that isn't sold out. Test added. No migration needed (next is 30).
 - 2026-10-26 — AGT-68: squads derive `error` when the agent's latest finished run (done/error/cancelled, by created_at) errored, with `currentTask` "Last run failed: <reason>". Precedence is offline > needs you > running > error > idle. A newer finished run clears it. Demo seeds no runs, so demo cards are unchanged. Test added.
 - 2026-10-26 — AGT-67: `startOutcomeLoop(db)` (routes/agents-gamification.ts) runs every outcome check plus achievements at startup and hourly. Errors are logged, never thrown into the timer. Mounted with one line in core's `apps/server/src/index.ts` next to the other loops. Test: an approved ad change is judged by the loop alone. API smoke-started clean.

@@ -68,6 +68,15 @@ test("products from a store's demo phase aren't judged once it's live; one never
   expect(judged()).toEqual(expect.any(String));
 });
 
+test('a product archived after selling nothing is a flop the squad learns from', async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  await addProducts(db, approval('peak', ['Ab Roller']), () => undefined, async () => [{ id: '903', title: 'Ab Roller' }]);
+  db.prepare(`UPDATE product_tests SET added_on = ?`).run(addDays(localDate(), -20));
+  db.prepare(`UPDATE products SET status = 'archived' WHERE store_id = 'peak' AND id = '903'`).run();
+  await app.request('/api/achievements');
+  expect(outcomes('peak')).toEqual(['"Ab Roller" did not take off: 0 units, 0 USD revenue, 0 USD gross profit in its first 14 days.']);
+});
+
 test('demo stores have no real line items, so their products are never judged', async () => {
   await addProducts(db, approval('glow', ['Ice Roller']), () => undefined, async () => []);
   db.prepare(`UPDATE product_tests SET added_on = ?`).run(addDays(localDate(), -20));

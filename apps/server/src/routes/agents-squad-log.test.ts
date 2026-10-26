@@ -1,6 +1,6 @@
 import { fakeEngine, getAgent, runAgent, writeMemory, type FakeStep } from '@frontline/agents';
 import type { AgentEvent } from '@frontline/shared';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
@@ -38,4 +38,17 @@ test("the squad log shows the week's requests with their decision and finished r
   expect(runs).toMatch(/^date,agent,task,gist\n\d{4}-\d{2}-\d{2},Copywriter,Write 3 hooks,Copywriter for Glow Haus: on it — "Write 3 hooks"\.$/);
   expect(outcomes).toMatch(/^date,agent,result\n\d{4}-\d{2}-\d{2},Ad Strategist,"Pause X" worked: blended ROAS 1\.2 → 1\.9 in the 3 days after\.$/);
   expect((await run('peak:market_analyst', [{ call: 'squad_log' }]))[0]).toMatch(/\n\nruns:\n\(none\)\n\noutcomes:\n\(none\)$/);
+});
+
+test("a store ahead of UTC still sees this morning's work: the log window is hours, not the store's date", async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-10-26T20:00:00Z')); // 10:00 on the 27th in Kiritimati (UTC+14)
+  try {
+    db.prepare(`UPDATE stores SET connected = 1, timezone = 'Pacific/Kiritimati' WHERE id = 'glow'`).run();
+    db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('early', 'glow', 'glow:copywriter', 'Early hooks', 'r', '{"kind":"tool_use"}', 'pending', '2026-10-26T19:59:00Z')`).run();
+    const [log] = await run('glow:market_analyst', [{ call: 'squad_log', input: { days: 1 } }]);
+    expect(log).toContain('2026-10-26,Copywriter,Early hooks,pending');
+  } finally {
+    vi.useRealTimers();
+  }
 });

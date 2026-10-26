@@ -342,7 +342,7 @@ export const APP_TOOLS: AppTool[] = [
       "What this store's squad did in the last N days: requests to the owner with the decision, finished runs with the gist of each answer, and the measured outcomes of approved changes (CSV).",
     input: { days: z.number().int().min(1).max(30).default(7) },
     run: async ({ days }, ctx) => {
-      const from = since(days, ctx.store);
+      const from = ago(days); // timestamps (UTC), not store dates: a store-local date would cut its early morning
       const who = (agentId: string) => AGENT_ROLES[agentId.split(':')[1] as AgentRole]?.name ?? agentId;
       const requests = ctx.db
         .prepare(`SELECT created_at, agent_id, title, status, json_extract(action_json, '$.auto') AS auto FROM approvals WHERE store_id = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 50`)

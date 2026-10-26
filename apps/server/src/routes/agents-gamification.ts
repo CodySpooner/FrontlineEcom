@@ -113,8 +113,9 @@ export function checkProductOutcomes(db: Db, today = localDate()) {
       )
       .get(String(t.store_id), String(t.product_id), String(t.added_on), end)!;
     const [units, revenue, profit] = [Number(s.units), Number(s.revenue), Number(s.profit)];
-    // Never put on sale (still a draft, or gone): no sales say nothing about demand.
-    if (!units && t.status !== 'active') {
+    // Still a draft with no sales: the owner never put it on sale, which says nothing about demand. Archived or removed
+    // without a sale is judged: it flopped, or the owner turned the pick down after approving it.
+    if (!units && t.status === 'draft') {
       db.prepare('UPDATE product_tests SET judged_at = ? WHERE store_id = ? AND product_id = ?').run(new Date().toISOString(), String(t.store_id), String(t.product_id));
       continue;
     }

@@ -182,6 +182,35 @@ test('what a run spends is saved as it goes, so a cancelled run still counts aga
   expect(budgets.map((b) => b?.toFixed(2))).toEqual(['1.00', '0.70']);
 });
 
+test("a run stops once the store's spend today passes the cap, whatever share it started with", async () => {
+  const m = manager({
+    engine: async function* (input) {
+      input.onSpend?.(0.4);
+      yield { type: 'text_delta', text: 'Looking' };
+      input.onSpend?.(0.75); // with $0.30 spent elsewhere today (a paused run that came back), past the $1 cap
+      await new Promise((r) => (input.signal?.aborted ? r(0) : input.signal?.addEventListener('abort', r)));
+      yield { type: 'error', message: 'aborted' };
+    },
+  });
+  updateCaps(db, 'glow', { agentCostPerDay: 1 });
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at) VALUES ('r0', 'glow', 'glow:ad_strategist', 't', 'running', 0.3, ?)`).run(new Date().toISOString());
+  const run = ok(m.start('glow:copywriter', 'x'));
+  await m.idle();
+  expect(getRun(db, run.id)).toMatchObject({ status: 'error', error: "Stopped: today's AI budget for this store ($1) is used up. Raise it in Settings.", usage: { costUsd: 0.75 } });
+});
+
+test('a crash result reporting $0 keeps what the run was seen spending', async () => {
+  const m = manager({
+    engine: async function* (input) {
+      input.onSpend?.(1.2);
+      yield { type: 'error', message: 'Claude Code process exited with code 1', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
+    },
+  });
+  const run = ok(m.start('glow:copywriter', 'x'));
+  await m.idle();
+  expect(getRun(db, run.id)).toMatchObject({ status: 'error', usage: { costUsd: 1.2 } });
+});
+
 test("runs side by side share the store's daily AI budget instead of each getting all of it", async () => {
   const budgets: (number | undefined)[] = [];
   const m = manager({ engine: fakeEngine((input) => (budgets.push(input.budgetUsd), [{ type: 'done', sessionId: 's', usage: { ...usage, costUsd: 0.1 } }])) });

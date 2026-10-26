@@ -12,5 +12,9 @@ test('storefront HTML: structure and http(s) links pass; scripts, handlers, styl
   expect(unsafeHtml('<a href="javascript:alert(1)">x</a>')).toBe('javascript: links are not allowed');
   expect(unsafeHtml('<a href=" jav&#x61;script&colon;alert(1)">x</a>')).toBe('javascript: links are not allowed');
   expect(unsafeHtml("<img src='data:image/svg+xml;base64,PHN2Zz4='>")).toBe('data: links are not allowed');
+  // Browsers turn &Tab; / &NewLine; into whitespace the URL parser drops: java<tab>script: is still javascript:.
+  expect(unsafeHtml('<a href="java&Tab;script:alert(1)">x</a>')).toBe('java&tab;script: links are not allowed');
+  expect(unsafeHtml('<a href="java&NewLine;script&colon;alert(1)">x</a>')).toBe('java&newline;script: links are not allowed');
+  expect(unsafeHtml('<a href="/collections/all?sort=a:z">All</a> <a href="tel:+15550100">Call</a>')).toBeUndefined();
   expect(unsafeHtml('<a href="mailto:hi@shop.com">Mail</a> <a href="#faq">FAQ</a>')).toBeUndefined();
 });

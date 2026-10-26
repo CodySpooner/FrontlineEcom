@@ -35,8 +35,9 @@ export function unsafeHtml(html: string): string | undefined {
         .replace(/&colon;/gi, ':')
         .replace(/[\s\u0000-\u001f]+/g, '')
         .toLowerCase();
-      const scheme = /^([a-z][a-z0-9+.-]*):/.exec(url)?.[1];
-      if (scheme && !['http', 'https', 'mailto', 'tel'].includes(scheme)) return `${scheme}: links are not allowed`;
+      // Any colon before the first / ? # must end an allowed scheme: what we can't decode (&Tab; …) can't make one.
+      const scheme = /^([^/?#:]*):/.exec(url)?.[1];
+      if (scheme !== undefined && !['http', 'https', 'mailto', 'tel'].includes(scheme)) return `${scheme}: links are not allowed`;
     }
   }
   return undefined;

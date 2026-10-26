@@ -122,8 +122,8 @@ export function createRunManager(opts: RunManagerOptions) {
    * far) after the unspent shares its other runs hold, and at most a perStore-th of the cap, so the store's runs can still
    * go side by side and never add up past it.
    */
-  // ponytail: like slots, a run paused on the owner holds no share, so an unanswered request can't stall the store; once
-  // decided it may take the day past the cap by at most the rest of its share.
+  // ponytail: like slots, a run paused on the owner holds no share, so an unanswered request can't stall the store; the
+  // cap itself still holds, since a run stops as soon as the store's spend today passes it (spend in execute).
   function budgetFor(storeId: string) {
     const cap = env.caps?.(storeId).agentCostPerDay;
     if (cap === undefined) return undefined;
@@ -140,7 +140,7 @@ export function createRunManager(opts: RunManagerOptions) {
       if (budget !== undefined && budget < 0.01 && working().some((a) => a.storeId === run.storeId)) continue; // waits for a share to free up
       const abort = new AbortController();
       const transcript: AgentEvent[] = [];
-      const done = execute(run, abort.signal, transcript, budget)
+      const done = execute(run, abort, transcript, budget)
         .catch((e) => console.error(`Run ${run.id} failed to finish:`, e))
         .finally(() => {
           active.delete(run.id);
@@ -150,7 +150,8 @@ export function createRunManager(opts: RunManagerOptions) {
     }
   }
 
-  async function execute(queued: AgentRun, signal: AbortSignal, transcript: AgentEvent[], budget: number | undefined) {
+  async function execute(queued: AgentRun, abort: AbortController, transcript: AgentEvent[], budget: number | undefined) {
+    const signal = abort.signal;
     db.prepare(`UPDATE agent_runs SET status = 'running', started_at = ? WHERE id = ?`).run(new Date().toISOString(), queued.id);
     const run = getRun(db, queued.id)!;
     opts.onRun?.(run);
@@ -172,12 +173,19 @@ export function createRunManager(opts: RunManagerOptions) {
     // What the run has spent so far, saved as it goes: a cancel, crash or restart (no result from the engine) still counts it.
     let ended = false;
     let spent = 0;
+    const cap = env.caps?.(run.storeId).agentCostPerDay;
+    let overCap = false;
     const spend = (usd: number) => {
       if (ended) return;
       spent = usd;
       const slot = active.get(run.id);
       if (slot) slot.spent = usd;
       db.prepare('UPDATE agent_runs SET cost_usd = ? WHERE id = ?').run(usd, run.id);
+      // Shares split the cap; this holds it however many runs paused on the owner come back at once.
+      if (cap !== undefined && !overCap && costToday(db, run.storeId) > cap) {
+        overCap = true;
+        abort.abort();
+      }
     };
     let end: AgentEvent = { type: 'error', message: 'Agent or store not found' };
     try {
@@ -216,11 +224,14 @@ export function createRunManager(opts: RunManagerOptions) {
     } catch (err) {
       end = { type: 'error', message: err instanceof Error ? err.message : String(err) };
     }
+    if (overCap && end.type === 'error') end = { type: 'error', message: `Stopped: today's AI budget for this store ($${cap}) is used up. Raise it in Settings.` };
     emit(end);
 
-    const status: RunStatus = end.type === 'done' ? 'done' : signal.aborted ? 'cancelled' : 'error';
+    const status: RunStatus = end.type === 'done' ? 'done' : signal.aborted && !overCap ? 'cancelled' : 'error';
     ended = true;
-    const usage = end.type === 'done' ? end.usage : (end.type === 'error' && end.usage) || { inputTokens: 0, outputTokens: 0, costUsd: spent };
+    const reported = end.type === 'done' ? end.usage : (end.type === 'error' && end.usage) || { inputTokens: 0, outputTokens: 0, costUsd: 0 };
+    // The engine's figure, unless the live estimate is higher: crash results can carry zeros, a cut-off reflection reports none.
+    const usage = { ...reported, costUsd: Math.max(reported.costUsd, spent) };
     db.prepare(
       `UPDATE agent_runs SET status = ?, session_id = ?, input_tokens = ?, output_tokens = ?, cost_usd = ?, error = ?, transcript_json = ?, ended_at = ?
        WHERE id = ?`,
