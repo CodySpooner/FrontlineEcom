@@ -33,7 +33,7 @@ test('the Knowledge Base lists every layer the agents read, custom niche packs i
   expect((await get<KnowledgeDoc>('/api/knowledge/niche/other:vintage-fountain-pens')).markdown).toContain('provenance');
   expect((await app.request('/api/knowledge/niche/other')).status).toBe(404);
   expect((await app.request('/api/knowledge/recipes/x')).status).toBe(404);
-});
+}, 15_000); // like the test below: timed out at 5 s under the full suite's load
 
 test('the owner edits a layer: agents read the edit until it is reset to the shipped one', async () => {
   saveNichePack('vintage-fountain-pens', '# Vintage fountain pens\n\nCollectors pay for provenance.');
