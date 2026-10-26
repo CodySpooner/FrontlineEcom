@@ -179,7 +179,7 @@ function MemoryBrowser() {
       <div className="mb-3.5">
         <StoreFilter />
       </div>
-      <Panel title="Store Memory" sub="What the squads learned while working, plus what you taught them. Pinned items go into every run for that store.">
+      <Panel title="Store Memory" sub="What the squads learned while working, plus what you taught them. Your notes, your no's and pinned items go into every run for that store.">
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <Segmented label="Kind" options={[{ value: 'all' as const, label: 'All' }, ...MEMORY_KINDS]} value={kind} onChange={setKind} />
           <label className="relative min-w-60 flex-1">
