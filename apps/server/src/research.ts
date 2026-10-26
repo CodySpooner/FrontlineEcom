@@ -131,7 +131,7 @@ export function researchRoutes(db: Db) {
 }
 
 // [title, category, niche, source, cost, price, compareAt, trend %, competition 0-100, shipping days]
-const DEMO: [string, string, Niche, ResearchSource, number, number, number, number, number, number][] = [
+export const DEMO: [string, string, Niche, ResearchSource, number, number, number, number, number, number][] = [
   ['Electric Scalp Massager', 'Health & Beauty', 'beauty', 'tiktok', 3.9, 14.32, 49.99, 248, 28, 7],
   ['Portable Car Vacuum', 'Automotive', 'tech', 'tiktok', 6.2, 18.25, 59.99, 196, 35, 8],
   ['LED Motion Light', 'Home & Living', 'home', 'shopify', 3.1, 12.4, 33.99, 172, 30, 9],
@@ -157,6 +157,11 @@ const DEMO: [string, string, Niche, ResearchSource, number, number, number, numb
   ['Under-Desk Walking Pad', 'Fitness', 'fitness', 'amazon', 98, 219.99, 399.99, 91, 61, 6],
   ['Sunset Projection Lamp', 'Home & Living', 'home', 'tiktok', 4.9, 19.99, 39.99, 117, 50, 10],
   ['Cloud Slides', 'Fashion', 'fashion', 'tiktok', 3.8, 19.99, 39.99, 144, 62, 9],
+  ['Crossbody Phone Bag', 'Fashion', 'fashion', 'tiktok', 3.2, 21.99, 39.99, 118, 47, 10],
+  ['Minimalist Ring Set', 'Fashion', 'fashion', 'shopify', 1.6, 14.99, 29.99, 93, 51, 12],
+  ['Rechargeable Milk Frother', 'Home & Living', 'home', 'amazon', 2.8, 14.99, 29.99, 86, 57, 8],
+  ['Portable Neck Fan', 'Outdoor', 'outdoor', 'amazon', 4.1, 19.99, 34.99, 108, 53, 9],
+  ['Bubble Machine Gun', 'Kids & Toys', 'kids', 'tiktok', 3.4, 16.99, 32.99, 151, 41, 10],
   ['Waterproof Phone Pouch', 'Outdoor', 'outdoor', 'amazon', 1.1, 8.99, 19.99, 49, 44, 8],
   ['Collapsible Camping Lantern', 'Outdoor', 'outdoor', 'shopify', 5.4, 22.99, 39.99, 83, 27, 11],
   ['Kids Drawing Projector', 'Kids & Toys', 'kids', 'tiktok', 6.7, 24.99, 49.99, 167, 34, 12],

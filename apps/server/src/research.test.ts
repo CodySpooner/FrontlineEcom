@@ -25,7 +25,7 @@ test('scoreProduct weights margin, trend, competition and shipping', () => {
 test('feed defaults to best score first; tabs filter and sort', async () => {
   const app = setup();
   const all = await page(app);
-  expect(all.total).toBe(30);
+  expect(all.total).toBe(35);
   const scores = all.items.map((p) => p.score);
   expect(scores).toEqual([...scores].sort((a, b) => b - a));
 

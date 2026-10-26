@@ -83,6 +83,9 @@ test("a demo store the owner creates gets its niche's products and orders that m
     const orders = (await (await app.request(`/api/orders?stores=${store.id}`)).json()) as Page<Order>;
     const summary = (await (await app.request(`/api/analytics/summary?range=7&stores=${store.id}`)).json()) as AnalyticsSummary;
     expect(products.total).toBeGreaterThan(0);
+    // No built-in tech demo store: its products come from the tech side of the research catalog, not another niche's.
+    expect(products.items.map((p) => p.title)).toEqual(expect.arrayContaining(['Mini Projector', 'Magnetic Phone Mount']));
+    expect(products.items.map((p) => p.title).join()).not.toMatch(/Dog|Pet|Leash|Harness/);
     expect(orders.total).toBe(summary.totals.orders); // seeded orders cover exactly the last 7 days
     const beauty = (await (await app.request('/api/stores', send('POST', { name: 'Dewy', platform: 'etsy', niche: 'beauty' }))).json()) as Store;
     expect(((await (await app.request(`/api/products?stores=${beauty.id}`)).json()) as Page<Product>).items.map((p) => p.title)).toContain('Heated Eyelash Curler');

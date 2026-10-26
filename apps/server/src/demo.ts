@@ -3,6 +3,7 @@ import { demoMedia, saveCreative } from '@frontline/agents';
 import { CREDITS, type AspectRatio, type CreativeKind, type Store, type StoreEvent, type StoreEventType, type TopProduct } from '@frontline/shared';
 import { once, tx, type Db } from './db';
 import { addDays, dayFraction, dayNumber, localDate } from './dates';
+import { DEMO as RESEARCH } from './research';
 import { insertStore } from './stores';
 
 /** Days of history kept for demo stores (2 years). */
@@ -149,12 +150,17 @@ const APPROVALS = [
   },
 ];
 
-/** A demo store's products: its own, else the built-in demo store's for its niche, else the pet store's. */
-function productsFor(db: Db, storeId: string) {
+/**
+ * A demo store's products: its own, else the built-in demo store's for its niche, else its niche's research products
+ * (a general store's mix for 'other').
+ */
+function productsFor(db: Db, storeId: string): [title: string, price: number, compareAt: number, cost: number][] {
   if (PRODUCTS[storeId]) return PRODUCTS[storeId];
   const niche = db.prepare('SELECT niche FROM stores WHERE id = ?').get(storeId)?.niche;
-  // ponytail: niches without a built-in demo store (tech, home, …) borrow the pet catalog; give them their own lists if demos need it.
-  return PRODUCTS[DEMO_STORES.find((s) => s.niche === niche)?.id ?? 'pawsome']!;
+  const builtIn = DEMO_STORES.find((s) => s.niche === niche)?.id;
+  if (builtIn) return PRODUCTS[builtIn]!;
+  const picks = RESEARCH.filter((p) => p[2] === niche);
+  return (picks.length ? picks : RESEARCH.slice(0, 6)).map(([title, , , , cost, price, compareAt]) => [title, price, compareAt, cost]);
 }
 
 /** Creative Studio's starting library per demo store: [kind, aspect, headline, primary text, CTA]. */
