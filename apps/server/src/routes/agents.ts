@@ -17,6 +17,7 @@ import {
 } from '@frontline/agents';
 import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type ResearchProduct, type StartRunInput } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
+import { join } from 'node:path';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
 import { approvalsHook, decide } from '../approvals';
@@ -27,7 +28,7 @@ import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
 import { addProducts, applyAdChange, onApproved } from './agents-actions';
 import { award, gamificationRoutes } from './agents-gamification';
-import { creativeRoutes } from './agents-creatives';
+import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { createProducts } from '../connectors/shopify';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
@@ -41,6 +42,11 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
   approvals: approvalsHook(db),
   decide: (id, decision) => decide(db, id, decision),
   caps: (storeId) => getCaps(db, storeId),
+  generateMedia: async (req, signal) => {
+    const creds = db.prepare(`SELECT 1 FROM integrations WHERE kind = 'higgsfield'`).get() && getCredentials(db, key(), 'higgsfield');
+    if (!creds?.keyId || !creds.keySecret) return undefined;
+    return higgsfieldGenerate({ keyId: creds.keyId, keySecret: creds.keySecret }, req, join(dataDir(), 'creatives'), { signal });
+  },
   externalMcp: (storeId) => {
     if (!db.prepare(`SELECT 1 FROM integrations WHERE kind = 'meta_ads' AND store_id = ?`).get(storeId)) return {};
     const meta = getCredentials(db, key(), 'meta_ads', storeId);

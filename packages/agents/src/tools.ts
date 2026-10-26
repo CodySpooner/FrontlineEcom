@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps } from '@frontline/shared';
+import { RESEARCH_TABS, type Agent, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
@@ -23,6 +23,8 @@ export interface ToolEnv {
   externalMcp?: (storeId: string) => Partial<Record<ExternalMcpKind, ExternalMcp>>;
   /** Adds a product found on the web to core's research feed; returns it with its AI score. */
   recordFind?: (find: Omit<ResearchProduct, 'id' | 'margin' | 'score' | 'scoreParts'>) => Promise<ResearchProduct>;
+  /** Renders media on Higgsfield and returns a local URL for it; undefined when Higgsfield isn't connected (demo render). */
+  generateMedia?: (req: { kind: Exclude<CreativeKind, 'copy'>; aspect: AspectRatio; prompt: string }, signal?: AbortSignal) => Promise<string | undefined>;
   /** Core's research feed (scored trending products). */
   research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number }) => Promise<ResearchProduct[]>;
   runId?: string;
@@ -234,9 +236,18 @@ export const APP_TOOLS: AppTool[] = [
         action: { kind: 'creative.generate', payload: { kind, aspect, prompt, headline, primaryText, cta, credits } },
       });
       if (!approved) return message;
-      // ponytail: demo render only; the Higgsfield MCP call goes here once core adds the integration (see Blocked).
+      let mediaUrl: string | undefined;
+      try {
+        mediaUrl = await ctx.generateMedia?.({ kind, aspect, prompt }, ctx.signal);
+      } catch (e) {
+        return `${message}, but generation failed: ${(e as Error).message}. Nothing was saved; failed renders are not charged by Higgsfield.`;
+      }
+      if (mediaUrl) {
+        const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'higgsfield', mediaUrl });
+        return `${message}. Rendered on Higgsfield and saved to the library (${saved.id}).`;
+      }
       const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'demo', mediaUrl: demoMedia(ctx.store, { kind, aspect, headline, cta }) });
-      return `${message}. Generated a demo render and saved it to the library (${saved.id}).`;
+      return `${message}. Higgsfield isn't connected, so this is a demo render, saved to the library (${saved.id}).`;
     },
   }),
   defineTool({

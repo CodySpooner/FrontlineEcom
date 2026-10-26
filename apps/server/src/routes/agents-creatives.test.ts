@@ -1,4 +1,4 @@
-import { demoMedia, fakeEngine, getAgent, listCreatives, runAgent, type FakeStep, type RunInput } from '@frontline/agents';
+import { demoMedia, fakeEngine, getAgent, listCreatives, runAgent, type FakeStep, type RunInput, type ToolEnv } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, Creative } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -7,7 +7,11 @@ import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { updateCaps } from '../settings';
 import { getStore } from '../stores';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { toolEnv } from './agents';
+import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -15,11 +19,13 @@ beforeEach(() => {
   db = openDb();
   seedDemo(db);
   app = createApp(db);
+  generateMedia = undefined;
 });
 
+let generateMedia: ToolEnv['generateMedia'];
 const input = (agentId: string): RunInput => {
   const agent = getAgent(db, agentId)!;
-  return { agent, store: getStore(db, agent.storeId)!, task: 't', env: toolEnv(db) };
+  return { agent, store: getStore(db, agent.storeId)!, task: 't', env: { ...toolEnv(db), ...(generateMedia ? { generateMedia } : {}) } };
 };
 const ad = (kind: string, extra: object = {}): FakeStep => ({
   call: 'create_creative',
@@ -51,7 +57,7 @@ test('ad copy goes straight to the library', async () => {
 test('media asks first, then saves a demo render with its credits', async () => {
   const { outputs, requests } = await run('glow:creative_studio', [ad('video')]);
   expect(requests[0]).toMatchObject({ title: 'Generate 9:16 video ad: Glow in 3 steps', action: { kind: 'creative.generate', payload: { credits: 20 } } });
-  expect(outputs[0]).toMatch(/Approved by the owner: .*Generated a demo render and saved it to the library/);
+  expect(outputs[0]).toMatch(/Approved by the owner: .*Higgsfield isn't connected, so this is a demo render, saved to the library/);
   expect(listCreatives(db, { storeIds: ['glow'] })[0]).toMatchObject({ kind: 'video', aspect: '9:16', credits: 20, source: 'demo', mediaUrl: expect.stringMatching(/^data:image\/svg\+xml/) });
 
   const denied = await run('glow:creative_studio', [ad('image')], 'deny');
@@ -81,4 +87,47 @@ test('library routes', async () => {
   expect((await app.request('/api/creatives?kind=gif')).status).toBe(400);
   expect((await app.request(`/api/creatives/${c!.id}`, { method: 'DELETE' })).status).toBe(204);
   expect((await app.request(`/api/creatives/${c!.id}`, { method: 'DELETE' })).status).toBe(404);
+});
+
+test('with Higgsfield connected the render is saved as a higgsfield creative; a failed render saves nothing', async () => {
+  generateMedia = async (req) => `/api/creatives/media/req-1.${req.kind === 'image' ? 'jpg' : 'mp4'}`;
+  expect((await run('glow:creative_studio', [ad('image')])).outputs[0]).toMatch(/Rendered on Higgsfield and saved to the library/);
+  expect(listCreatives(db, { storeIds: ['glow'] })[0]).toMatchObject({ kind: 'image', source: 'higgsfield', mediaUrl: '/api/creatives/media/req-1.jpg', credits: 2 });
+
+  generateMedia = async () => {
+    throw new Error('Higgsfield render nsfw');
+  };
+  expect((await run('glow:creative_studio', [ad('video')])).outputs[0]).toMatch(/, but generation failed: Higgsfield render nsfw\. Nothing was saved/);
+  expect(listCreatives(db, { storeIds: ['glow'] })).toHaveLength(1);
+});
+
+test('higgsfieldGenerate submits, polls, downloads the output and serves it locally', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'hf-'));
+  const calls: [string, RequestInit | undefined][] = [];
+  const statuses = ['queued', 'in_progress', 'completed'];
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    calls.push([url, init]);
+    if (url === 'https://api.higgsfield.ai/higgsfield-ai/soul/standard') return Response.json({ request_id: 'r-42', status_url: 'https://api.higgsfield.ai/requests/r-42/status' });
+    if (url.endsWith('/requests/r-42/status')) {
+      const status = statuses.shift();
+      return Response.json({ request_id: 'r-42', status, ...(status === 'completed' ? { images: [{ url: 'https://cdn.example.com/out.png' }] } : {}) });
+    }
+    if (url === 'https://cdn.example.com/out.png') return new Response(new Uint8Array([137, 80, 78, 71]), { headers: { 'content-type': 'image/png' } });
+    return new Response('nope', { status: 404 });
+  }) as typeof fetch;
+
+  const url = await higgsfieldGenerate({ keyId: 'kid', keySecret: 'ksec' }, { kind: 'image', aspect: '4:5', prompt: 'serum on marble' }, dir, { fetch: fetchFn, pollMs: 1 });
+  expect(url).toBe('/api/creatives/media/r-42.png');
+  expect(calls[0]![1]).toMatchObject({ method: 'POST', body: JSON.stringify({ prompt: 'serum on marble', aspect_ratio: '4:5' }), headers: { Authorization: 'Key kid:ksec' } });
+  expect(calls.filter(([u]) => u.includes('/status'))).toHaveLength(3);
+
+  const routes = creativeRoutes(db, () => dir);
+  const res = await routes.request(url);
+  expect(res.headers.get('content-type')).toBe('image/png');
+  expect([...new Uint8Array(await res.arrayBuffer())]).toEqual([137, 80, 78, 71]);
+  expect((await routes.request('/api/creatives/media/..%2Fsecret.key')).status).toBe(404);
+
+  const failing = (async (u: string) =>
+    u.includes('/status') ? Response.json({ request_id: 'r-9', status: 'failed', error: 'bad prompt' }) : Response.json({ request_id: 'r-9' })) as typeof fetch;
+  await expect(higgsfieldGenerate({ keyId: 'k', keySecret: 's' }, { kind: 'video', aspect: '9:16', prompt: 'x' }, dir, { fetch: failing })).rejects.toThrow('Higgsfield render failed: bad prompt');
 });
