@@ -6,5 +6,5 @@ export async function officeApi<T>(path: string, method = 'GET', body?: unknown)
   if (!response.ok) throw new Error((await response.json().catch(() => null))?.error ?? `Office request failed (${response.status})`);
   return response.json() as Promise<T>;
 }
-export const useSeats = () => useQuery({ queryKey: ['ecosystem', 'seats'], queryFn: () => officeApi<OfficeSeat[]>('/api/ecosystem/seats'), refetchInterval: 5000 });
-export const useOfficeStats = () => useQuery({ queryKey: ['ecosystem', 'stats'], queryFn: () => officeApi<OfficeStats>('/api/ecosystem/stats'), refetchInterval: 5000 });
+export const useSeats = (enabled = true) => useQuery({ queryKey: ['ecosystem', 'seats'], queryFn: () => officeApi<OfficeSeat[]>('/api/ecosystem/seats'), refetchInterval: 5000, enabled });
+export const useOfficeStats = (enabled = true) => useQuery({ queryKey: ['ecosystem', 'stats'], queryFn: () => officeApi<OfficeStats>('/api/ecosystem/stats'), refetchInterval: 5000, enabled });

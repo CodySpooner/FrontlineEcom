@@ -5,6 +5,7 @@ import { Badge, Button, Field, inputClass } from '../components/ui';
 import { cents } from '../lib/format';
 import { activeRun, workerActivity, type OfficeState } from './events';
 import { WorkerPortrait } from './WorkerPortrait';
+import { OfficeLink } from './OfficeLink';
 
 export const recentRuns = (office: OfficeState) => Object.values(office.runs).sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 200);
 export function taskColumn(run: AgentRun, office: OfficeState) {
@@ -12,7 +13,7 @@ export function taskColumn(run: AgentRun, office: OfficeState) {
   return run.status === 'queued' ? 'Queued' : run.status === 'running' ? 'Running' : run.status === 'done' ? 'Completed' : 'Failed / cancelled';
 }
 
-export function OfficeViews({ tab, office, seats, stats, onSelect }: { tab: string; office: OfficeState; seats: OfficeSeat[]; stats?: OfficeStats; onSelect: (id: string) => void }) {
+export function OfficeViews({ tab, office, seats, stats, onSelect, preview = false }: { tab: string; office: OfficeState; seats: OfficeSeat[]; stats?: OfficeStats; onSelect: (id: string) => void; preview?: boolean }) {
   const [search, setSearch] = useState('');
   const active = seats.filter((s) => !s.archived), runs = recentRuns(office);
   const name = (id: string) => { const agent = office.agents.find((a) => a.id === id); return seats.find((s) => s.agentId === id)?.displayName || (agent ? AGENT_ROLES[agent.role].name : id); };
@@ -26,7 +27,7 @@ export function OfficeViews({ tab, office, seats, stats, onSelect }: { tab: stri
   })}</div>{!active.length && <p className="eco-profile-copy">Deploy an agent to fill your first workstation.</p>}</div>;
   if (tab === 'Task Board') return <div className="eco-view"><h2>Task board</h2><p className="eco-profile-copy">Latest 200 runs across store agents. Open a task for its transcript and controls.</p><div className="eco-task-board">{['Queued', 'Running', 'Awaiting approval', 'Completed', 'Failed / cancelled'].map((column) => {
     const tasks = runs.filter((r) => taskColumn(r, office) === column);
-    return <section key={column}><h3>{column} <Badge>{tasks.length}</Badge></h3>{!tasks.length && <p>No tasks</p>}{tasks.map((r) => <Link key={r.id} to={`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`}><strong>{name(r.agentId)} · {r.storeId}</strong><span>{r.task.split('\n')[0]}</span>{r.error && <small>{r.error}</small>}</Link>)}</section>;
+    return <section key={column}><h3>{column} <Badge>{tasks.length}</Badge></h3>{!tasks.length && <p>No tasks</p>}{tasks.map((r) => <OfficeLink key={r.id} onPreview={preview ? () => onSelect(r.agentId) : undefined} to={`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`}><strong>{name(r.agentId)} · {r.storeId}</strong><span>{r.task.split('\n')[0]}</span>{r.error && <small>{r.error}</small>}</OfficeLink>)}</section>;
   })}</div></div>;
   return <div className="eco-view"><h2>Workforce performance</h2><p className="eco-profile-copy">All-time execution totals. Model usage is reported by the existing engine.</p>{stats ? <div className="eco-performance"><div><strong>{stats.completedTasks}</strong><small>Completed tasks</small></div><div><strong>{stats.failedTasks}</strong><small>Failed tasks</small></div><div><strong>{cents(stats.costUsd)}</strong><small>API cost</small></div><div><strong>{(stats.inputTokens + stats.outputTokens).toLocaleString()}</strong><small>Input + output tokens</small></div></div> : <p>Performance totals are unavailable.</p>}
     <h3 className="eco-panel-heading">Per-agent activity · latest 200 runs</h3><div className="eco-table-wrap"><table className="eco-table"><thead><tr><th>Agent</th><th>Completed</th><th>Failed</th><th>Cost</th><th>Tokens</th></tr></thead><tbody>{office.agents.map((a) => {

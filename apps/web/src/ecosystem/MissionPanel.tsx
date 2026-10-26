@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { OfficeLink } from './OfficeLink';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { AGENT_ROLES, type NewSquadMission, type SquadMission } from '@frontline/shared';
 import { useStores } from '../api/client';
@@ -7,17 +7,17 @@ import { Badge, Button, Dialog, ErrorState, Field, LoadingState, inputClass } fr
 import { officeApi } from './api';
 import type { OfficeState } from './events';
 
-export function MissionPanel({ office, create, onCreate, onCloseCreate }: { office: OfficeState; create: boolean; onCreate: () => void; onCloseCreate: () => void }) {
+export function MissionPanel({ office, create, onCreate, onCloseCreate, onPreview }: { office: OfficeState; create: boolean; onCreate: () => void; onCloseCreate: () => void; onPreview?: (id: string) => void }) {
   const [selected, setSelected] = useState('');
   const missions = Object.values(office.missions).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const mission = missions.find((m) => m.id === selected) ?? missions[0];
   const stages = mission?.steps.filter((s) => s.status === 'running' || s.status === 'queued' || s.status === 'waiting') ?? [];
   return <section className="eco-missions" aria-label="Team missions">
-    <header><h2>TEAM MISSIONS</h2><Button size="sm" onClick={onCreate}>Create Team</Button></header>
+    <header><h2>TEAM MISSIONS</h2><Button size="sm" disabled={!!onPreview} onClick={onCreate}>Create Team</Button></header>
     {!mission ? <p className="eco-profile-copy">Launch a coordinated mission for your store squad. Each stage uses real agent tasks and dependencies.</p> : <>
       <Field label="Mission"><select className={inputClass} value={mission.id} onChange={(e) => setSelected(e.target.value)}>{missions.map((m) => <option key={m.id} value={m.id}>{m.title} · {m.storeId} · {m.status}</option>)}</select></Field>
       <p className="eco-profile-copy"><Badge>{mission.status}</Badge> · Current stage: {stages.length ? stages.map((s) => AGENT_ROLES[s.role].name).join(', ') : mission.status === 'done' ? 'All deliverables ready' : 'Needs attention'}<br />{mission.steps.filter((s) => s.status === 'done').length} completed · {stages.length} pending / active · {mission.steps.filter((s) => ['blocked', 'error', 'cancelled'].includes(s.status)).length} blocked</p>
-      <div className="eco-mission-steps">{mission.steps.map((s) => <details key={s.id}><summary><span>{AGENT_ROLES[s.role].name}</span><Badge>{s.status}</Badge></summary><p>{s.task}</p>{s.dependsOn.length > 0 && <small>Depends on: {s.dependsOn.join(', ')}</small>}{s.note && <p className="eco-blocker">{s.note}</p>}{s.deliverable && <p><strong>Deliverable:</strong> {s.deliverable}</p>}<Link to={`/agents/${encodeURIComponent(`${mission.storeId}:${s.role}`)}${s.runId ? `?run=${s.runId}` : ''}`}>{s.runId ? 'Open task and output' : 'View assigned agent'} →</Link></details>)}</div>
+      <div className="eco-mission-steps">{mission.steps.map((s) => <details key={s.id}><summary><span>{AGENT_ROLES[s.role].name}</span><Badge>{s.status}</Badge></summary><p>{s.task}</p>{s.dependsOn.length > 0 && <small>Depends on: {s.dependsOn.join(', ')}</small>}{s.note && <p className="eco-blocker">{s.note}</p>}{s.deliverable && <p><strong>Deliverable:</strong> {s.deliverable}</p>}<OfficeLink onPreview={onPreview && (() => onPreview(`${mission.storeId}:${s.role}`))} to={`/agents/${encodeURIComponent(`${mission.storeId}:${s.role}`)}${s.runId ? `?run=${s.runId}` : ''}`}>{s.runId ? 'Open task and output' : 'View assigned agent'} →</OfficeLink></details>)}</div>
       <details className="eco-mission-history"><summary>Collaboration history</summary>{office.events.filter((e) => e.type === 'handoff' && mission.steps.some((s) => s.runId === e.runId)).map((e) => <p key={e.id}>{e.agentId} → {e.toAgentId}: {e.summary.split('\n')[0]}</p>)}</details>
     </>}
     {create && <CreateTeam onClose={onCloseCreate} onCreated={(m) => { setSelected(m.id); onCloseCreate(); }} />}

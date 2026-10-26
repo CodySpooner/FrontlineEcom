@@ -67,7 +67,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-14 Meetings: multi-agent flows gather participants at the table, objective above it, then they return to work; mission panel (spec §7).
 - [x] ECO-15 Other tabs: Department View, Agent List, Task Board, Performance — built from the same data, compact.
 - [x] ECO-16 Bottom bar + display toggles (names, bubbles, department labels, workload, connections, status icons), Office Settings.
-- [ ] ECO-17 Demo Mode provider: clearly labeled, separate from the real provider, exercises every visual (spec §15).
+- [x] ECO-17 Demo Mode provider: clearly labeled, separate from the real provider, exercises every visual (spec §15).
 - [ ] ECO-18 Customization: outfits/colors/accessories per seat, data-driven desk/decor themes so cosmetics can be added without rewriting the map.
 - [ ] ECO-19 Gamification: levels from existing XP/ranks, office achievements from real data, trophy area.
 - [ ] ECO-20 Performance: 30 characters at ~60 FPS (measure and note it), atlases/batching, no React rerender per frame, reduced-motion, low-power fallback.
@@ -76,6 +76,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-17: Isolated local 30-worker provider covers work/tool/approval/error/offline/completion, entry motion, meetings and real-shaped simulated handoffs. Clear banner/data labels and separate demo profile/task form; production office subscriptions, seat/stat polling and position writes stop in demo. Example links stay in preview panels. Browser simulated task completed and switching back restored 6 saved workers (.agent/eco-17-*.png). Isolation/no-POST and scenario tests; 128 files / 652 tests pass.
 
 - 2026-10-26 ECO-16: Bottom bar exposes Quick Assign, deployment, teams, settings, live capacity/jobs and status key. Six independent display switches persist locally; approval/error bubbles and workload labels reflect actual state. Browser hide/reload/restore and Quick Assign→composer verified (.agent/eco-16-*.png). Preferences validation/accessibility tests; pnpm check 126 files / 651 tests pass.
 
