@@ -1,4 +1,4 @@
-import { Component, useEffect, type ReactNode } from 'react';
+import { Component, Suspense, useEffect, type ReactNode } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { TriangleAlert } from 'lucide-react';
 import { useAgents, useGoLiveRefresh, useHealth, useLive } from '../api/client';
@@ -9,7 +9,7 @@ import { BrandLogo } from './BrandLogo';
 import { XpToasts } from './Gamification';
 import { Onboarding } from './Onboarding';
 import { useStoreSelection } from './StoreFilter';
-import { Button, buttonClass, Card, ProgressBar, StatusDot, cx } from './ui';
+import { Button, buttonClass, Card, LoadingState, ProgressBar, StatusDot, cx } from './ui';
 
 export function Shell() {
   const online = useLive();
@@ -76,7 +76,9 @@ export function Shell() {
       <main id="main" tabIndex={-1} className="min-w-0 px-[22px] pb-8 outline-none">
         {/* Keyed by path: moving to another page clears a caught error. */}
         <PageBoundary key={pathname}>
-          <Outlet />
+          <Suspense fallback={<LoadingState rows={6} />}>
+            <Outlet />
+          </Suspense>
         </PageBoundary>
       </main>
     </div>
