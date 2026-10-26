@@ -220,20 +220,24 @@ export const APP_TOOLS: AppTool[] = [
     input: {
       days: z.number().int().min(1).max(90).default(14),
       fulfillment: z.enum(['unfulfilled', 'fulfilled', 'in_transit', 'delivered']).optional(),
+      stale: z.boolean().optional().describe('only orders unfulfilled 3+ days or in transit 10+ days, oldest first'),
       limit: z.number().int().min(1).max(500).default(100),
     },
-    run: async ({ days, fulfillment, limit }, ctx) => {
+    run: async ({ days, fulfillment, stale, limit }, ctx) => {
       // Real orders carry the shop's own date (local_date); demo ones only a timestamp.
       const from = since(days, ctx.store);
       const counts = ctx.db
         .prepare('SELECT fulfillment_status AS status, count(*) AS n FROM orders WHERE store_id = ? AND coalesce(local_date, substr(created_at, 1, 10)) >= ? GROUP BY 1 ORDER BY 2 DESC')
         .all(ctx.store.id, from);
+      // Newest first, a busy store's late orders fall past the limit: `stale` lists just those, the oldest (worst) first.
       const rows = ctx.db
         .prepare(
           `SELECT id, created_at, total, status, fulfillment_status, supplier, tracking FROM orders
-           WHERE store_id = ? AND coalesce(local_date, substr(created_at, 1, 10)) >= ? ${fulfillment ? 'AND fulfillment_status = ?' : ''} ORDER BY created_at DESC LIMIT ?`,
+           WHERE store_id = ? AND coalesce(local_date, substr(created_at, 1, 10)) >= ? ${fulfillment ? 'AND fulfillment_status = ?' : ''}
+           ${stale ? `AND ((fulfillment_status = 'unfulfilled' AND created_at < ?) OR (fulfillment_status = 'in_transit' AND created_at < ?))` : ''}
+           ORDER BY created_at ${stale ? 'ASC' : 'DESC'} LIMIT ?`,
         )
-        .all(...([ctx.store.id, from, ...(fulfillment ? [fulfillment] : []), limit] as string[]));
+        .all(...([ctx.store.id, from, ...(fulfillment ? [fulfillment] : []), ...(stale ? [ago(3), ago(10)] : []), limit] as string[]));
       const suppliers = ctx.db
         .prepare(
           `SELECT coalesce(o.supplier, '(none)') AS supplier, count(*) AS orders,
@@ -248,7 +252,7 @@ export const APP_TOOLS: AppTool[] = [
         `counts: ${counts.map((c) => `${c.status} ${c.n}`).join(', ') || 'none'}`,
         '# By supplier',
         csv(suppliers),
-        '# Orders',
+        `# Orders${rows.length === limit && !stale ? ` (the newest ${limit}; older ones are cut: stale true lists the late ones, oldest first)` : ''}`,
         csv(rows),
       ].join('\n');
     },

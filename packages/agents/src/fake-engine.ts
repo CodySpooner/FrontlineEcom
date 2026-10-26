@@ -110,7 +110,7 @@ function demoWork(input: RunInput): FakeStep[] {
       const flag: FakeStep[] = late
         ? [{ call: 'flag_order_issue', input: { orderId: String(late.id), kind: 'late', severity: 'medium', note: `Unfulfilled since ${late.local_date}, past the 3-day handling promise.`, suggestedAction: 'Ask the supplier for tracking today.' } }]
         : [];
-      return [{ call: 'list_orders', input: { days: 14, fulfillment: 'unfulfilled' } }, ...flag];
+      return [{ call: 'list_orders', input: { days: 30, stale: true } }, ...flag];
     }
     case 'store_developer': {
       // A store page the Store Builder asks for (its FAQ / promo landing ideas), unless the task is about a product page.

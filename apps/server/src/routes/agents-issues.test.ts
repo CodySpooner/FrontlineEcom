@@ -94,6 +94,20 @@ test('list_order_issues shows the open queue first, then resolutions the owner w
   expect((await run([{ call: 'list_order_issues', input: { status: 'open' } }]))[0]!.split('\n')).toHaveLength(2);
 });
 
+test('list_orders with stale lists only late orders, oldest first, however many newer orders there are', async () => {
+  const [late, slow, fresh] = db.prepare(`SELECT id FROM orders WHERE store_id = 'peak' ORDER BY created_at DESC LIMIT 3`).all().map((r) => String(r.id));
+  const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  db.prepare(`UPDATE orders SET fulfillment_status = 'delivered' WHERE store_id = 'peak'`).run();
+  const set = db.prepare(`UPDATE orders SET created_at = ?, local_date = ?, fulfillment_status = ? WHERE store_id = 'peak' AND id = ?`);
+  set.run(ago(5), ago(5).slice(0, 10), 'unfulfilled', late!);
+  set.run(ago(20), ago(20).slice(0, 10), 'in_transit', slow!);
+  set.run(ago(1), ago(1).slice(0, 10), 'unfulfilled', fresh!); // not late yet
+  const [out] = await run([{ call: 'list_orders', input: { days: 30, stale: true, limit: 5 } }]);
+  expect(out!.split('# Orders\n')[1]!.split('\n').slice(1).map((r) => r.split(',')[0])).toEqual([slow, late]);
+  const [cut] = await run([{ call: 'list_orders', input: { days: 30, limit: 2 } }]);
+  expect(cut).toContain('# Orders (the newest 2; older ones are cut: stale true lists the late ones, oldest first)\n');
+});
+
 test('list_orders scores each supplier over every order in the window, not just the rows shown', async () => {
   const [late, slow, refunded] = db.prepare(`SELECT id FROM orders WHERE store_id = 'peak' ORDER BY created_at DESC LIMIT 3`).all().map((r) => String(r.id));
   const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
