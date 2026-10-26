@@ -139,7 +139,8 @@ interface ShopOrder {
   update_time: number;
   is_sample_order?: boolean;
   tracking_number?: string;
-  payment?: { total_amount?: string; currency?: string };
+  /** total_amount includes `tax` (product + shipping tax the buyer paid). */
+  payment?: { total_amount?: string; currency?: string; tax?: string };
   /** One entry per unit unless `quantity` says otherwise; `sale_price` is per unit. */
   line_items?: { product_id: string; sale_price?: string; quantity?: number }[];
 }
@@ -238,8 +239,8 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       }
       // ponytail: TikTok has no unit costs, so TikTok orders add revenue with cogs 0.
       const ord = db.prepare(
-        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking)`,
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking), tax = excluded.tax`,
       );
       const days = new Set<string>();
       for (const o of orders) {
@@ -247,7 +248,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         const created = new Date(o.create_time * 1000);
         const day = dayOf.format(created);
         days.add(day);
-        ord.run(storeId, `tt-${o.id}`, created.toISOString(), Number(o.payment?.total_amount ?? 0), o.status === 'CANCELLED' ? 'refunded' : 'paid', shopFulfillment(o.status), o.tracking_number || null, day);
+        ord.run(storeId, `tt-${o.id}`, created.toISOString(), Number(o.payment?.total_amount ?? 0), o.status === 'CANCELLED' ? 'refunded' : 'paid', shopFulfillment(o.status), o.tracking_number || null, day, Number(o.payment?.tax ?? 0));
         setOrderItems(db, storeId, `tt-${o.id}`, (o.line_items ?? []).map((li) => ({ productId: `tt-${li.product_id}`, quantity: li.quantity ?? 1, revenue: Number(li.sale_price ?? 0) * (li.quantity ?? 1), cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);
