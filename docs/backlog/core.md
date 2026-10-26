@@ -87,6 +87,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Review fix: WooCommerce orders are dated by the shop's own `date_created` (site timezone), not the store record's timezone, which the form never asks for. The store takes the newest order's currency, so an EUR shop isn't treated as USD
 - 2026-10-26 — Review fixes (2/2): `createProducts` logs each product, and a failure part-way names the drafts already made, so nobody adds them twice. A client-credentials token Shopify rejects early (app reinstalled, secret rotated) is renewed once and the call retried. The 401 message no longer says "check the token"
 - 2026-10-26 — Review fixes (1/2): a store that goes real drops its pending seeded sample requests, and the seed rewrite only touches demo stores. Before, approving "Add 3 trending products" on a newly connected Shopify store made real drafts. The guard now requires Origin == the request's host:port, so another localhost port is refused, including for WebSocket. Best sellers across currencies are ranked after conversion (SQL LIMIT removed)
 - 2026-10-26 — Fix: a store created without a timezone got `America/Chicago`, so on this machine (America/New_York) its days were cut an hour off. It now defaults to the machine's timezone. Connecting Shopify still sets the shop's own

@@ -9,7 +9,7 @@ const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
 
 const order = (n: string, status: string, total: string, paid: boolean, extra: Record<string, unknown> = {}) => ({
-  number: n, status, total, date_created_gmt: '2026-10-25T12:00:00', date_modified_gmt: '2026-10-25T14:00:00', date_paid_gmt: paid ? '2026-10-25T12:01:00' : null, ...extra,
+  number: n, status, total, currency: 'EUR', date_created: '2026-10-25T14:00:00', date_created_gmt: '2026-10-25T12:00:00', date_modified_gmt: '2026-10-25T14:00:00', date_paid_gmt: paid ? '2026-10-25T12:01:00' : null, ...extra,
 });
 
 /** Fake Woo: orders over two pages (x-wp-totalpages), one page of products. */
@@ -81,4 +81,16 @@ test('WooCommerce sync refuses http sites and reports rejected keys', async () =
   await syncWooCommerce(denied, key, 'pawsome', fakeWoo(401).fetchFn, NOW);
   expect(denied.prepare("SELECT status, error FROM integrations WHERE id = 'woocommerce:pawsome'").get()).toMatchObject({ status: 'error', error: expect.stringContaining('refused the keys') });
   expect(denied.prepare("SELECT demo FROM stores WHERE id = 'pawsome'").get()).toEqual({ demo: 1 });
+});
+
+test("orders land on the shop's own day and the store takes the shop's currency", async () => {
+  const db = setup();
+  const fetchFn = (async (url: string) =>
+    new URL(url).pathname.endsWith('/orders')
+      ? Response.json([order('2001', 'processing', '40.00', true, { currency: 'EUR', date_created: '2026-10-26T00:30:00', date_created_gmt: '2026-10-25T22:30:00' })], { headers: { 'x-wp-totalpages': '1' } })
+      : Response.json([], { headers: { 'x-wp-totalpages': '1' } })) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  // 00:30 in Berlin is still the 25th in UTC (and in America/*): the shop's day wins.
+  expect(db.prepare("SELECT local_date AS day FROM orders WHERE store_id = 'pawsome'").all()).toEqual([{ day: '2026-10-26' }]);
+  expect(db.prepare("SELECT currency FROM stores WHERE id = 'pawsome'").get()).toEqual({ currency: 'EUR' });
 });

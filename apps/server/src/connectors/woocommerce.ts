@@ -12,6 +12,9 @@ type Fetch = typeof fetch;
 interface WooOrder {
   number: string;
   status: string;
+  currency: string;
+  /** In the shop's own timezone, so its date is the shop's day. */
+  date_created: string;
   date_created_gmt: string;
   date_modified_gmt: string;
   date_paid_gmt: string | null;
@@ -68,10 +71,11 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const changed = { modified_after: since, dates_are_gmt: 'true' };
     const orders = await all<WooOrder>('orders', changed);
     const products = await all<WooProduct>('products', changed);
-    const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 
     tx(db, () => {
       switchToReal(db, storeId);
+      // ponytail: newest order's currency (orders come newest first); a multi-currency plugin's mixed orders aren't split.
+      if (orders[0]?.currency) db.prepare('UPDATE stores SET currency = ? WHERE id = ?').run(orders[0].currency, storeId);
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
@@ -93,7 +97,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         // Unpaid (pending, on-hold bank transfers, failed, drafts) never counts; cancelled or refunded after payment is a refund.
         if (!o.date_paid_gmt) continue;
         const created = gmt(o.date_created_gmt);
-        const day = dayOf.format(created);
+        const day = o.date_created.slice(0, 10);
         days.add(day);
         const refunded = o.status === 'refunded' || o.status === 'cancelled' || o.status === 'trash';
         ord.run(storeId, `woo-${o.number}`, created.toISOString(), Number(o.total), refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', day);
