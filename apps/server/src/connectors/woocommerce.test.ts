@@ -161,6 +161,19 @@ test('a partly refunded Woo order counts what the customer kept', async () => {
   expect(db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()?.revenue).toBe(54.5);
 });
 
+test("a Woo order's tax counts against profit, less the share a refund gave back", async () => {
+  const db = setup();
+  const woo = fakeWoo().fetchFn;
+  const fetchFn = (async (url: string, init: RequestInit) =>
+    new URL(url).pathname.endsWith('/orders')
+      ? Response.json([order('2001', 'completed', '80.00', true, { total_tax: '16.00', refunds: [{ id: 9, reason: 'half back', total: '-40.00' }] })], { headers: { 'x-wp-totalpages': '1' } })
+      : woo(url, init)) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT total, tax FROM orders WHERE id = 'woo-2001'").get()).toEqual({ total: 40, tax: 8 });
+  // Revenue stays what the platform reports; the tax sits with the costs, so profit nets it.
+  expect(db.prepare("SELECT revenue, cogs FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()).toEqual({ revenue: 40, cogs: 8 });
+});
+
 test("orders a multi-currency plugin took in another currency are converted into the shop's own", async () => {
   const db = setup();
   db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-23', fetchedAt: NOW.toISOString(), rates: { EUR: 1, USD: 1.25 } }));

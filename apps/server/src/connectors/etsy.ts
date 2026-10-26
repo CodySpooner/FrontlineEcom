@@ -25,8 +25,10 @@ interface Receipt {
   is_shipped: boolean;
   create_timestamp: number;
   updated_timestamp: number;
-  /** As placed: refunds don't lower it. */
+  /** As placed: refunds don't lower it. Includes the sales tax and VAT below. */
   grandtotal: Money;
+  total_tax_cost?: Money;
+  total_vat_cost?: Money;
   refunds?: { amount: Money }[];
   shipments?: { tracking_code?: string | null }[];
   transactions?: { listing_id: number; quantity: number; price: Money }[];
@@ -122,8 +124,8 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       for (const l of listings) prod.run(storeId, `etsy-${l.listing_id}`, l.title, photo(l), money(l.price), l.state === 'sold_out' ? 0 : l.quantity, LISTING_STATUS[l.state] ?? 'archived');
       // ponytail: Etsy has no unit costs, so Etsy orders add revenue with cogs 0.
       const ord = db.prepare(
-        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking)`,
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking), tax = excluded.tax`,
       );
       const days = new Set<string>();
       for (const r of receipts) {
@@ -133,7 +135,10 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         days.add(day);
         const refunded = r.status === 'canceled' || r.status === 'fully refunded';
         const total = Math.max(0, money(r.grandtotal) - (r.refunds ?? []).reduce((a, x) => a + money(x.amount), 0)); // net of partial refunds
-        ord.run(storeId, `etsy-${r.receipt_id}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', r.is_shipped ? 'fulfilled' : 'unfulfilled', r.shipments?.[0]?.tracking_code || null, day);
+        // A refund gives back its share of the tax (pro rata: Etsy doesn't split a refund's tax out).
+        const gross = money(r.grandtotal);
+        const tax = gross > 0 ? ((money(r.total_tax_cost) + money(r.total_vat_cost)) * total) / gross : 0;
+        ord.run(storeId, `etsy-${r.receipt_id}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', r.is_shipped ? 'fulfilled' : 'unfulfilled', r.shipments?.[0]?.tracking_code || null, day, Math.round(tax * 100) / 100);
         setOrderItems(db, storeId, `etsy-${r.receipt_id}`, (r.transactions ?? []).map((t) => ({ productId: `etsy-${t.listing_id}`, quantity: t.quantity, revenue: money(t.price) * t.quantity, cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);

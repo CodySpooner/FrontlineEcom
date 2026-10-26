@@ -529,3 +529,15 @@ test('once a day every Shopify product id is read, and products it lacks are arc
   await syncShopify(db, key, 'glow', again.fetchFn, NOW);
   expect(again.calls.some((c) => c.body.query.includes('products(first: 250'))).toBe(false); // once a day
 });
+
+test("a Shopify order's tax counts against profit, revenue stays the order total", async () => {
+  const { db } = await setup();
+  const { fetchFn, calls } = fakeShopify([order('#1001', '2026-10-25T09:00:00Z', '120.00', { currentTotalTaxSet: { shopMoney: money('20.00') } })]);
+  await syncShopify(db, key, 'glow', fetchFn, NOW);
+  expect(db.prepare("SELECT error FROM integrations WHERE id = 'shopify:glow'").get()?.error).toBeNull();
+  expect(calls.find((c) => c.body.query.includes('orders('))!.body.query).toContain('currentTotalTaxSet');
+  const day = db.prepare("SELECT revenue, cogs FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()!;
+  const itemCost = Number(db.prepare("SELECT cogs FROM orders WHERE store_id = 'glow' AND id = '#1001'").get()?.cogs);
+  expect(db.prepare("SELECT total, tax FROM orders WHERE store_id = 'glow' AND id = '#1001'").get()).toEqual({ total: 120, tax: 20 });
+  expect(day).toEqual({ revenue: 120, cogs: itemCost + 20 });
+});

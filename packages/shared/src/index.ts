@@ -107,7 +107,7 @@ export interface DailyMetrics {
   date: string;
   revenue: number;
   adSpend: number;
-  /** Cost of goods + shipping + fees. Profit = revenue - cogs - adSpend. */
+  /** Cost of goods + shipping + fees + the sales tax/VAT in the orders' totals. Profit = revenue - cogs - adSpend. */
   cogs: number;
   orders: number;
   sessions: number;

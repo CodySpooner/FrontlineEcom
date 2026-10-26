@@ -461,6 +461,10 @@ export const MIGRATIONS = [
   /* 31 (core: Etsy and WooCommerce re-pull once, for listings that sold out or expired and products trashed before 29-30's syncs saw those states) */ `
   UPDATE integrations SET cursor = NULL WHERE kind IN ('etsy', 'woocommerce');
   `,
+  /* 32 (core: sales tax / VAT in each order's total, netted from profit; Shopify, WooCommerce and Etsy re-pull once to fill it) */ `
+  ALTER TABLE orders ADD COLUMN tax REAL NOT NULL DEFAULT 0;
+  UPDATE integrations SET cursor = NULL WHERE kind IN ('shopify', 'woocommerce', 'etsy');
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

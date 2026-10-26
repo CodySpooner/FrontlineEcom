@@ -197,3 +197,15 @@ test('Etsy: later syncs read changed listings only; once a day all of them, arch
   expect(status()).toBe('archived');
   expect(db.prepare("SELECT status FROM products WHERE store_id = 'pawsome' AND id = 'etsy-12'").get()?.status).toBe('active');
 });
+
+test("an Etsy receipt's sales tax and VAT count against profit, less the share a refund gave back", async () => {
+  const db = setup();
+  const base = fakeEtsy().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) =>
+    new URL(url).pathname.endsWith('/receipts')
+      ? Response.json({ count: 1, results: [receipt(7, 'paid', 6000, { total_tax_cost: usd(400), total_vat_cost: usd(800), refunds: [{ amount: usd(1500) }] })] })
+      : base(url, init)) as typeof fetch;
+  await syncEtsy(db, key, 'pawsome', fetchFn, NOW);
+  // $60 with $12 of tax, $15 refunded: $45 kept, holding three quarters of the tax.
+  expect(db.prepare("SELECT total, tax FROM orders WHERE id = 'etsy-7'").get()).toEqual({ total: 45, tax: 9 });
+});

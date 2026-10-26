@@ -49,7 +49,8 @@ pnpm check    # typecheck + tests
   counts as refunded. TikTok Shop subtracts cancellations only, and Amazon counts sales before refunds.
 - **Profit** is revenue minus product costs minus ad spend. Costs come from the platform (Shopify "Cost per item",
   WooCommerce Cost of Goods Sold) or from Store Analytics → Unit costs. Platform and payment fees come off only as
-  the estimate you set per store: a % of revenue plus an amount per order. Shipping labels aren't subtracted.
+  the estimate you set per store: a % of revenue plus an amount per order. Sales tax and VAT in Shopify, WooCommerce
+  and Etsy orders come off too (revenue still shows the order totals). Shipping labels aren't subtracted.
 - **ROAS** on the dashboard is store revenue ÷ total ad spend. In the campaigns table, it's the purchase value each
   network attributes to that campaign.
 - **Days** follow each store's own timezone (the shop's, where the platform reports it). Today's change compares

@@ -51,6 +51,8 @@ interface ShopifyOrder {
   displayFinancialStatus: string | null;
   displayFulfillmentStatus: string;
   currentTotalPriceSet: { shopMoney: { amount: string } };
+  /** Tax in that total, after returns. */
+  currentTotalTaxSet?: { shopMoney: { amount: string } };
   fulfillments: { displayStatus: string | null; trackingInfo: { number: string | null }[] }[];
   lineItems: { nodes: LineItem[]; pageInfo: PageInfo };
 }
@@ -68,13 +70,13 @@ const DELETED_Q = `query ($after: String, $q: String) {
   events(first: 250, after: $after, query: $q) { nodes { ... on BasicEvent { subjectId } } pageInfo { hasNextPage endCursor } } }`;
 
 // Shopify prices a query before running it (max 1000): objects 1, connections 2 + first × child. Per order:
-// 1 + total 2 + fulfillment 2 + lineItems (2 + 10 × 7 + pageInfo 1) = 78, so 12 orders = 938. Products: 2 + 50 × 9 = 452.
+// 1 + total 2 + tax 2 + fulfillment 2 + lineItems (2 + 10 × 7 + pageInfo 1) = 80, so 12 orders = 961. Products: 2 + 50 × 9 = 452.
 // An order with more line items gets the rest from ORDER_ITEMS_Q (2 + 1 + 100 × 7 + 1 = 704).
 const LINE_ITEM = 'quantity product { id } discountedTotalSet { shopMoney { amount } } variant { inventoryItem { unitCost { amount } } }';
 const ORDERS_Q = `query ($after: String, $q: String) {
   orders(first: 12, after: $after, query: $q, sortKey: UPDATED_AT) {
     nodes { id name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus
-      currentTotalPriceSet { shopMoney { amount } }
+      currentTotalPriceSet { shopMoney { amount } } currentTotalTaxSet { shopMoney { amount } }
       fulfillments(first: 1) { displayStatus trackingInfo(first: 1) { number } }
       lineItems(first: 10) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } }
     pageInfo { hasNextPage endCursor } } }`;
@@ -251,9 +253,9 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     });
 
     const ord = db.prepare(
-      `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+      `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)
        ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
-         tracking = coalesce(excluded.tracking, tracking), cogs = excluded.cogs`,
+         tracking = coalesce(excluded.tracking, tracking), cogs = excluded.cogs, tax = excluded.tax`,
     );
     // Not paid yet (cash on delivery, bank transfer, an uncaptured authorization): left out of revenue until it is, and
     // removed if an earlier sync stored it. Its updated_at moves when it's paid, so the next sync brings it back.
@@ -280,7 +282,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
             continue;
           }
           const cogs = o.lineItems.nodes.reduce((a, li) => a + li.quantity * num(li.variant?.inventoryItem?.unitCost), 0);
-          ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day);
+          ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day, num(o.currentTotalTaxSet?.shopMoney.amount));
           // Custom line items (no product) only count toward the order total.
           setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product ? [{ productId: tail(li.product.id), quantity: li.quantity, revenue: num(li.discountedTotalSet.shopMoney.amount), cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));
         }
