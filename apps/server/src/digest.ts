@@ -1,4 +1,4 @@
-import { loadRows, totalsOf } from './analytics';
+import { currentWindow, totalsOf } from './analytics';
 import { addDays, localDate } from './dates';
 import type { Db } from './db';
 import { fxFor } from './fx';
@@ -7,12 +7,15 @@ import { getSettings, notify } from './settings';
 /** Local hour the digest goes out (or the first check after it, if the app was off then). */
 const HOUR = 8;
 
-/** One notification: yesterday across every store vs the day before, and how many approvals are waiting. */
+/**
+ * One notification: yesterday across every store vs the day before (each store's own, in its day zone), and how many
+ * approvals are waiting.
+ */
 export function sendDigest(db: Db, now = new Date()) {
   const ids = db.prepare('SELECT id FROM stores').all().map((r) => String(r.id));
   if (!ids.length) return;
-  const yesterday = addDays(localDate(now), -1);
-  const rows = loadRows(db, ids, 7, yesterday);
+  const { to, rows } = currentWindow(db, ids, 7, now.getTime());
+  const yesterday = addDays(to, -1);
   const day = (date: string) => totalsOf(rows.filter((r) => r.date === date));
   const [y, before] = [day(yesterday), day(addDays(yesterday, -1))];
   const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: fxFor(db, ids).currency, maximumFractionDigits: 0 }).format;

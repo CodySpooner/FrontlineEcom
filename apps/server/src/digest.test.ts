@@ -41,3 +41,22 @@ test('the loop sends one digest a day from 8:00, and none while it is turned off
   expect(digests(db)).toHaveLength(2);
   stop();
 });
+
+test("each store's yesterday is its own: a shop whose day isn't over yet reports its last full day", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("DELETE FROM stores WHERE id = 'pawsome'").run();
+  db.prepare("UPDATE stores SET demo = 0, timezone = ? WHERE id = ?").run('Europe/Berlin', 'glow');
+  db.prepare("UPDATE stores SET demo = 0, timezone = ? WHERE id = ?").run('Pacific/Honolulu', 'peak');
+  db.prepare('DELETE FROM daily_metrics').run();
+  const day = db.prepare('INSERT INTO daily_metrics (store_id, date, revenue, ad_spend, cogs, orders) VALUES (?, ?, ?, 0, 0, 1)');
+  day.run('glow', '2026-10-24', 80);
+  day.run('glow', '2026-10-25', 100);
+  day.run('peak', '2026-10-23', 400);
+  day.run('peak', '2026-10-24', 500);
+  day.run('peak', '2026-10-25', 50); // Honolulu's 25th is still going (21:30)
+  // 07:30 UTC: 08:30 on the 26th in Berlin, 21:30 on the 25th in Honolulu.
+  const n = sendDigest(db, new Date('2026-10-26T07:30:00Z'))!;
+  expect(n.title).toMatch(/^Yesterday: \$600 revenue/); // Berlin's 25th + Honolulu's 24th
+  expect(n.body).toMatch(/^2 orders \(revenue \+25% vs the day before\)/); // vs 80 + 400
+});
