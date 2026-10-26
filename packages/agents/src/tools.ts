@@ -320,6 +320,7 @@ export const APP_TOOLS: AppTool[] = [
           const [spend, revenue, purchases, clicks, impressions] = [r.spend, r.revenue, r.purchases, r.clicks, r.impressions].map(Number) as number[];
           return {
             ...r,
+            daily_budget: Number(r.daily_budget) > 0 ? r.daily_budget : 'none (lifetime or ad set budgets)',
             spend: r2(spend!),
             revenue: r2(revenue!),
             roas: spend ? r2(revenue! / spend) : 0,

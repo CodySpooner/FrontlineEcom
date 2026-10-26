@@ -277,6 +277,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-147 follow-up: `list_campaigns` shows a 0 daily budget as "none (lifetime or ad set budgets)" too, like `review_campaigns`.
 - 2026-10-26 — AGT-148: a campaign reads "paused" only when its status is one of `IDLE_CAMPAIGN_STATUSES` (moved to ads.ts, still exported); other statuses are judged on their numbers.
 - 2026-10-26 — AGT-147 (core inbox FYI, `setCampaignBudget` refuses 0-budget campaigns): `review_campaigns` shows their budget as "none (lifetime or ad set budgets)" with no suggestion unless the verdict is pause; `propose_ad_change` refuses a budget change for them up front (a pause still goes).
 - 2026-10-26 — AGT-146: a pending `niche.promote_learning` request with the same niche and text (any case) answers "Already waiting for the owner" instead of asking again.

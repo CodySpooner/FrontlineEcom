@@ -70,9 +70,11 @@ test('a campaign with no daily budget of its own gets no budget suggestion or ch
   const { outputs, requests } = await run([
     { call: 'review_campaigns' },
     propose({ campaignId: 'lifetime', change: 'budget', newDailyBudget: 300 }),
+    { call: 'list_campaigns' },
   ]);
   const row = outputs[0]!.split('\n').find((r) => r.startsWith('tiktok,lifetime,'))!.split(',');
   expect([row[4], row[9], row[10]]).toEqual(['none (lifetime or ad set budgets)', 'scale', '']);
+  expect(outputs[2]!.split('\n').find((r) => r.startsWith('tiktok,lifetime,'))!.split(',')[4]).toBe('none (lifetime or ad set budgets)');
   expect(outputs[1]).toBe("Not sent: Lifetime launch has no daily budget of its own (a lifetime budget, or budgets on its ad sets), so it can't be changed from here. Pause it, or say what to change in the ad manager.");
   expect(requests).toEqual([]);
 });
