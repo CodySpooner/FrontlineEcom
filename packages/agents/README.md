@@ -60,7 +60,8 @@ has something to show. A store's first real sync (core's `switchToReal`) wipes i
 - demo-order issues close;
 - product-page drafts go.
 
-The default jobs (`jobs.ts`) switch on at the same time (the daily campaign review once an ad account syncs campaigns),
+The default jobs (`jobs.ts`) switch on at the same time (the daily campaign review once an ad account syncs campaigns;
+the weekly page refresh only on platforms where the app publishes product pages),
 since they would otherwise spend Claude usage on simulated numbers. Outcome checks and the squad log only count what happened after go-live.
 
 ## Adding things

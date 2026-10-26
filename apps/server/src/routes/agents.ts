@@ -338,7 +338,7 @@ function activateConnectedStores(db: Db, runs: RunManager) {
       startFresh(db, store);
       // No campaigns yet: the campaign review waits for them (marked, so a job the owner turned off is never turned back on).
       if (!ads) once(db, `ads-job-wait:${store.id}`);
-      const names = DEFAULT_JOBS.map((j) => j.name).filter((n) => ads || n !== ADS_JOB);
+      const names = DEFAULT_JOBS.filter((j) => (ads || j.name !== ADS_JOB) && (!j.platforms || j.platforms.includes(store.platform))).map((j) => j.name);
       if (enableDefaultJobs(db, store.id, names)) {
         const later = ads ? '' : ` The ${ADS_JOB.toLowerCase()} starts once an ad account syncs campaigns.`;
         notify(db, { kind: 'info', title: `${store.name} is live: the squad's scheduled jobs are on`, body: `${names.join(', ')}.${later} They run on your Claude login; pause or change them in Automation.`, storeId: store.id, link: '/automation' });

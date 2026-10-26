@@ -92,6 +92,18 @@ test('a demo run still going when the store goes live asks nothing more: its num
   ]);
 });
 
+test("a live TikTok Shop store doesn't get the weekly page refresh: its drafts could never be published there", async () => {
+  const res = await app.request('/api/stores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Tok', platform: 'tiktok_shop', niche: 'home' }) });
+  const store = (await res.json()) as Store;
+  switchToReal(db, store.id);
+  await app.request('/api/agents');
+  const on = db.prepare('SELECT name FROM automation_rules WHERE store_id = ? AND enabled = 1').all(store.id).map((r) => r.name);
+  expect(on).not.toContain('Weekly page refresh');
+  expect(on).toContain('Weekly price check'); // its findings still go to the owner, to apply by hand
+  expect(db.prepare('SELECT enabled FROM automation_rules WHERE store_id = ? AND name = ?').get(store.id, 'Weekly page refresh')?.enabled).toBe(0); // still there to switch on
+  await runManager(db).idle();
+});
+
 test("going live clears what the agents learned from simulated numbers, not the owner's notes, pins or preferences", async () => {
   await app.request('/api/agents');
   // Demo-phase leftovers: a request asked on simulated numbers, an issue on a demo order, a draft for a demo product.

@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { AgentRole } from '@frontline/shared';
+import { PRODUCT_PAGE_PLATFORMS, type AgentRole, type Platform } from '@frontline/shared';
 import { once } from './memory';
 
 // Default scheduled work for a squad, as rows in core's `automation_rules` (apps/server/src/automations.ts runs them).
 
-export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: string }[] = [
+/** `platforms`: the job switches on at go-live only there (it ends in a change the app can't make elsewhere). */
+export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: string; platforms?: readonly Platform[] }[] = [
   {
     name: 'Daily briefing',
     role: 'market_analyst',
@@ -53,6 +54,7 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
     name: 'Weekly page refresh',
     role: 'store_developer',
     cron: '0 9 * * 4',
+    platforms: PRODUCT_PAGE_PLATFORMS,
     task:
       'Weekly page refresh: list_products and take the best seller (most revenue_30d) that draft_page accepts. Draft one improved product page for it with draft_page: ' +
       'benefit-first headline, the objections buyers raise, proof, shipping and returns. Then ask to publish it with publish_page.',
