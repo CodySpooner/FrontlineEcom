@@ -63,7 +63,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-10 Assign Task: compact command panel → real run on that agent; loading / success / failure / awaiting-approval states shown in the panel and on the character.
 - [x] ECO-11 Deploy wizard: "+ Deploy Agent" picks an existing agent, department, free desk, name override, appearance; entry walk-in animation; counter `n / 30`; capacity block; archive keeps history.
 - [x] ECO-12 Live activity feed + stat cards from real data (deployed n/30, active tasks, success rate, active teams); click an event → focus agent / open task.
-- [ ] ECO-13 Handoffs: when real flow steps hand work between agents, the sender walks to the receiver, speech bubble summarizes the real event; communication history.
+- [x] ECO-13 Handoffs: when real flow steps hand work between agents, the sender walks to the receiver, speech bubble summarizes the real event; communication history.
 - [ ] ECO-14 Meetings: multi-agent flows gather participants at the table, objective above it, then they return to work; mission panel (spec §7).
 - [ ] ECO-15 Other tabs: Department View, Agent List, Task Board, Performance — built from the same data, compact.
 - [ ] ECO-16 Bottom bar + display toggles (names, bubbles, department labels, workload, connections, status icons), Office Settings.
@@ -76,6 +76,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-13: Recent real parent/child handoffs trigger a collision-aware visit to a free receiving-desk tile, actual brief bubble, connection line and collaboration pose; sender returns after delivery. Replayed IDs do not restart visits; old events remain history only. Browser two-step Glow mission completed with visible copywriter→analyst handoff (.agent/eco-13-handoff.png); communication history links receiving output. 122 files / 641 tests pass, including all-department visit targets and dwell expiry.
 
 - 2026-10-26 ECO-12: Real all-time run totals and active mission counts via read-only stats API; labelled success denominator excludes cancelled/unfinished runs. Feed shows actual outputs/tools/approvals/handoffs/mission progress, focuses seated agents and links runs. Mission snapshots reject regressed steps; 214-run aggregation and feed navigation tests. Browser cards/feed/focus inspected (.agent/eco-12*.png); pnpm check 121 files / 635 tests pass.
 

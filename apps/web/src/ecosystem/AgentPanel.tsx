@@ -40,6 +40,9 @@ export function AgentPanel({ agent, seat, office, onClose, onFocus }: { agent: A
     <Button size="sm" disabled={archive.isPending} onClick={() => archive.mutate()}>Archive office worker</Button>
     <p className="eco-profile-copy">Archiving frees this desk. The agent, its tasks and history stay available.</p>
     {archive.error && <ErrorState message={archive.error.message} />}
+    <h3 className="eco-panel-heading">Communication history</h3>
+    {!office.events.some((e) => e.type === 'handoff' && (e.agentId === agent.id || e.toAgentId === agent.id)) && <p className="eco-profile-copy">No task handoffs in the recent history.</p>}
+    {office.events.filter((e) => e.type === 'handoff' && (e.agentId === agent.id || e.toAgentId === agent.id)).slice(0, 8).map((e) => <Link className="eco-history" key={e.id} to={`/agents/${encodeURIComponent(e.toAgentId!)}?run=${e.runId}`}><span>{e.summary}</span><small>{e.agentId} → {e.toAgentId} · {ago(e.at)}</small></Link>)}
     <h3 className="eco-panel-heading">Recent performance · latest 50 runs</h3>
     {history.isPending ? <LoadingState rows={2} /> : history.isError ? <ErrorState onRetry={() => history.refetch()} /> : <>
       <div className="eco-performance"><div><strong>{runs.filter((r) => r.status === 'done').length}</strong><small>Completed</small></div><div><strong>{runs.filter((r) => r.status === 'error').length}</strong><small>Failed</small></div><div><strong>{cents(runs.reduce((sum, r) => sum + r.usage.costUsd, 0))}</strong><small>Cost</small></div><div><strong>{runs.reduce((sum, r) => sum + r.usage.inputTokens + r.usage.outputTokens, 0).toLocaleString()}</strong><small>Tokens</small></div></div>
