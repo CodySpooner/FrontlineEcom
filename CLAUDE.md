@@ -23,13 +23,14 @@ Reference material: `docs/reference/ui-reference.webp` (the look we're matching)
 (approved dashboard layout + interactions), `C:/dev/_reference/t3code` and `C:/dev/_reference/orca` (MIT source we
 borrow agent-harness patterns from — see DESIGN.md "Reuse map"; keep their MIT notice in any file you port).
 
-## Lanes — three workers, one Orca worktree each
+## Lanes — one worker per lane, one Orca worktree each
 
 | Lane | Owns |
 |------|------|
-| `ui` | `apps/web/**` |
-| `core` | `apps/server/**` (except `src/routes/agents*`), `packages/shared/**`, `apps/desktop/**`, root config |
+| `ui` | `apps/web/**` (except `src/ecosystem/**`, `public/ecosystem/**`) |
+| `core` | `apps/server/**` (except `src/routes/agents*`, `src/routes/ecosystem*`), `packages/shared/**`, `apps/desktop/**`, root config |
 | `agents` | `packages/agents/**`, `apps/server/src/routes/agents*.ts` |
+| `ecosystem` (Codex) | the AI Ecosystem page: `apps/web/src/ecosystem/**`, `apps/web/public/ecosystem/**`, `apps/server/src/routes/ecosystem*.ts` — touch points in `docs/backlog/ecosystem.md` |
 
 Edit outside your lane only for a tiny unblocking change (an added export, mounting a route). Otherwise append a
 request to the other lane's backlog **Inbox** and stub the dependency behind a small interface so you can keep going.
