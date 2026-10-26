@@ -33,6 +33,8 @@ export interface PromptInput {
   nicheLearnings?: NicheLearning[];
   /** The store's requests still waiting for the owner, one line each, so nobody asks twice. */
   waiting?: string[];
+  /** The store's scheduled agent jobs, one line each, so a run doesn't hand off what one of them does anyway. */
+  scheduled?: string[];
   /** Whole-prompt token budget. */
   budget?: number;
   /** YYYY-MM-DD in the store's timezone. Defaults to now. */
@@ -43,7 +45,7 @@ export interface PromptInput {
  * Expertise layers: role + playbook → platform pack → niche pack → store profile → store memory.
  * Stable layers come first and volatile ones (memories, date) last, so the prompt prefix stays cacheable.
  */
-export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [], waiting = [], budget = 8000, today }: PromptInput): string {
+export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [], waiting = [], scheduled = [], budget = 8000, today }: PromptInput): string {
   const role = ROLES[agent.role];
   const fixed = [
     `You are the ${AGENT_ROLES[agent.role].name} of ${store.name}, a ${store.niche} store on ${store.platform}.`,
@@ -72,7 +74,8 @@ export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [
   }
   const memory = known.length ? `# What the squad has learned about ${store.name}\n${known.join('\n')}` : '';
   const open = waiting.length ? `# Waiting for the owner\nAlready asked in this store; don't ask for these again:\n${waiting.map((w) => `- ${w}`).join('\n')}` : '';
-  return [...fixed, memory, open, date].filter(Boolean).join('\n\n');
+  const jobs = scheduled.length ? `# Scheduled jobs\nThese run on their own (cron, the owner's computer time); don't assign_task what one of them does today:\n${scheduled.map((s) => `- ${s}`).join('\n')}` : '';
+  return [...fixed, memory, jobs, open, date].filter(Boolean).join('\n\n');
 }
 
 /** What an approved request can change on a connected store: the same lists the request tools gate on (tools.ts noStoreWrites). */

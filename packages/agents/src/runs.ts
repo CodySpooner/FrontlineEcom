@@ -199,7 +199,7 @@ export function createRunManager(opts: RunManagerOptions) {
           agent,
           store,
           task: run.task,
-          systemPrompt: assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id) }),
+          systemPrompt: assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id) }),
           signal,
           env: { ...env, runId: run.id },
           ...(resume ? { resume: String(resume), sessionCostUsd: sessionCost(String(resume)) } : {}),
@@ -256,6 +256,15 @@ export function createRunManager(opts: RunManagerOptions) {
   const sessionCost = (sessionId: string) => Number(db.prepare('SELECT coalesce(sum(cost_usd), 0) AS n FROM agent_runs WHERE session_id = ?').get(sessionId)?.n ?? 0);
 
   /** The store's open requests, newest first: "<title> (<agent>, <date>)". */
+  function scheduledFor(storeId: string) {
+    return db.prepare('SELECT name, trigger_json, action_json FROM automation_rules WHERE store_id = ? AND enabled = 1 ORDER BY name').all(storeId).flatMap((r) => {
+      const t = JSON.parse(String(r.trigger_json)) as { type?: string; cron?: string };
+      const a = JSON.parse(String(r.action_json)) as { type?: string; agentId?: string };
+      const role = AGENT_ROLES[String(a.agentId).split(':')[1] as AgentRole];
+      return t.type === 'schedule' && a.type === 'agent_task' && role ? [`${r.name} (${role.name}, cron ${t.cron})`] : [];
+    });
+  }
+
   function waitingFor(storeId: string) {
     return db
       .prepare(`SELECT title, agent_id, created_at FROM approvals WHERE store_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 15`)

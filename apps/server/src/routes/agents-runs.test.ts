@@ -335,6 +335,19 @@ test('an account problem (usage limit) is told once a day, not once per failed r
   expect(db.prepare(`SELECT body FROM notifications WHERE kind = 'error'`).all()).toEqual([{ body: limit }]);
 });
 
+test("the store's scheduled jobs are in the prompt, so a run doesn't hand off what one does anyway", async () => {
+  db.prepare(`UPDATE automation_rules SET enabled = 0 WHERE store_id = 'pawsome'`).run();
+  db.prepare(`UPDATE automation_rules SET enabled = 1 WHERE store_id = 'pawsome' AND name IN ('Daily campaign review', 'Daily order check')`).run();
+  let prompt = '';
+  const m = manager({ engine: async function* (input) { prompt = input.systemPrompt ?? ''; yield { type: 'done', sessionId: 's', usage }; } });
+  ok(m.start('pawsome:market_analyst', 'Daily briefing'));
+  await m.idle();
+  expect(prompt).toContain(
+    "# Scheduled jobs\nThese run on their own (cron, the owner's computer time); don't assign_task what one of them does today:\n" +
+      '- Daily campaign review (Ad Strategist, cron 30 8 * * *)\n- Daily order check (Operations, cron 0 10 * * *)\n\n',
+  );
+});
+
 test("the store's open requests are in the prompt, so nobody asks twice", async () => {
   db.prepare(`DELETE FROM approvals WHERE store_id = 'pawsome'`).run();
   db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('w1', 'pawsome', 'pawsome:product_hunter', 'Add 2 products', 'r', '{"kind":"store.add_products"}', 'pending', '2026-10-24T09:00:00Z')`).run();
