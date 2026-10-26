@@ -163,7 +163,8 @@ function DraftView({ d }: { d: PageDraft }) {
   const [confirm, setConfirm] = useState(false);
   const st = STATUS[d.status];
   const store = name(d.storeId);
-  const canPublish = d.status === 'draft' || d.status === 'pending' || d.status === 'rejected';
+  // `approved`: the approval's push to the platform failed (5xx, rate limit); publishing again retries it.
+  const canPublish = d.status !== 'published';
   // The same gate as agents' publish_page: product pages reach more platforms than other pages.
   const manual = byHand(stores.find((s) => s.id === d.storeId), d.kind === 'product' && d.productId ? PRODUCT_PAGE_PLATFORMS : PRODUCT_WRITE_PLATFORMS);
   const error = publish.error ?? remove.error;
@@ -187,7 +188,7 @@ function DraftView({ d }: { d: PageDraft }) {
           <span className="text-xs text-text-2">
             {d.status === 'published' && `Live on ${store}${d.publishedAt ? ` since ${ago(d.publishedAt)}` : ''}.`}
             {d.status === 'pending' && 'The Store Developer asked to publish this.'}
-            {d.status === 'approved' && `Approved, but it couldn't be pushed to ${store}. Apply it by hand.`}
+            {d.status === 'approved' && `Approved, but it couldn't be pushed to ${store}. ${manual ? 'Apply it by hand.' : 'Try again, or apply it by hand.'}`}
             {d.status === 'rejected' && 'You turned this down. You can still publish it.'}
             {d.status === 'draft' && 'Not published yet.'}
           </span>
@@ -198,7 +199,7 @@ function DraftView({ d }: { d: PageDraft }) {
               </span>
             ) : (
               <Button variant="primary" className="ml-auto" disabled={publish.isPending} onClick={() => publish.mutate(d.id)}>
-                {d.status === 'pending' ? 'Approve and publish' : `Publish to ${store}`}
+                {d.status === 'pending' ? 'Approve and publish' : d.status === 'approved' ? 'Try again' : `Publish to ${store}`}
               </Button>
             ))}
         </div>

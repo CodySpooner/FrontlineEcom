@@ -36,4 +36,10 @@ describe('Builder › publishing a draft', () => {
     expect(await screen.findByText(/can't publish this kind of page to Etsy yet/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Publish to Clay Co' })).toBeNull();
   });
+
+  it('lets an approved draft whose push failed be tried again, or applied by hand', async () => {
+    render('shopify', { ...draft, status: 'approved' });
+    expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy();
+    expect(screen.getByText(/couldn't be pushed to Clay Co\. Try again, or apply it by hand/)).toBeTruthy();
+  });
 });
