@@ -94,6 +94,12 @@ export function createRunManager(opts: RunManagerOptions) {
     return run && getRun(db, id);
   }
 
+  /** Stops every run of a store that is being deleted, so none waits forever on requests that go with it. */
+  function cancelStore(storeId: string) {
+    db.prepare(`UPDATE agent_runs SET status = 'cancelled', ended_at = ? WHERE store_id = ? AND status = 'queued'`).run(new Date().toISOString(), storeId);
+    for (const a of active.values()) if (a.storeId === storeId) a.abort.abort();
+  }
+
   /** The run with its transcript so far while it is still running. */
   function get(id: string): AgentRunDetail | undefined {
     const run = getRun(db, id);
@@ -113,10 +119,12 @@ export function createRunManager(opts: RunManagerOptions) {
       if ([...active.values()].some((a) => a.agentId === run.agentId) || working().filter((a) => a.storeId === run.storeId).length >= perStore) continue;
       const abort = new AbortController();
       const transcript: AgentEvent[] = [];
-      const done = execute(run, abort.signal, transcript).finally(() => {
-        active.delete(run.id);
-        pump();
-      });
+      const done = execute(run, abort.signal, transcript)
+        .catch((e) => console.error(`Run ${run.id} failed to finish:`, e))
+        .finally(() => {
+          active.delete(run.id);
+          pump();
+        });
       active.set(run.id, { storeId: run.storeId, agentId: run.agentId, abort, done, transcript });
     }
   }
@@ -195,7 +203,8 @@ export function createRunManager(opts: RunManagerOptions) {
       run.id,
     );
     if (status !== 'done') expireApprovals([run.id]);
-    opts.onRun?.(getRun(db, run.id)!);
+    const final = getRun(db, run.id); // gone when its store was deleted meanwhile
+    if (final) opts.onRun?.(final);
   }
 
   /** What a session has cost so far: every run that continued it. */
@@ -245,7 +254,7 @@ export function createRunManager(opts: RunManagerOptions) {
     if (typeof again !== 'string') once(db, `retried:${again.id}`);
   }
 
-  return { start, cancel, get, idle };
+  return { start, cancel, cancelStore, get, idle };
 }
 
 const SHOWN = 4000;

@@ -252,6 +252,22 @@ test('a follow-up and a reflection are told what their session already cost; a r
   expect(getRun(db, big.id)).toMatchObject({ status: 'error', usage: { costUsd: 0.4 } });
 });
 
+test("deleting a store stops its runs, including one waiting on the owner, and nothing reports a run that's gone", async () => {
+  const seen: (AgentRun | undefined)[] = [];
+  const ask: FakeStep = { call: 'request_approval', input: { title: 'Message 3 late customers', reason: 'r', kind: 'customer_message', payload: {} } };
+  const m = manager({ engine: fakeEngine(() => [ask]), perStore: 1, onRun: (r) => seen.push(r) });
+  ok(m.start('peak:operations', 'Check late orders'));
+  ok(m.start('peak:copywriter', 'Write hooks')); // queued behind it
+  const waiting = () => db.prepare(`SELECT 1 FROM approvals WHERE store_id = 'peak' AND status = 'pending' AND title = 'Message 3 late customers'`).get();
+  for (let i = 0; i < 20 && !waiting(); i++) await new Promise((r) => setImmediate(r));
+  expect(waiting()).toBeTruthy();
+  m.cancelStore('peak');
+  db.prepare(`DELETE FROM stores WHERE id = 'peak'`).run();
+  await m.idle();
+  expect(seen.every(Boolean)).toBe(true);
+  expect(db.prepare(`SELECT count(*) AS n FROM agent_runs WHERE store_id = 'peak'`).get()?.n).toBe(0);
+});
+
 test('a restart marks runs that were in flight as interrupted', () => {
   db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at) VALUES ('r1', 'glow', 'glow:copywriter', 't', 'running', '2026-01-01T00:00:00Z')`).run();
   manager();

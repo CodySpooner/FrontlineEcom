@@ -21,7 +21,7 @@ import { deleteIntegration, health, listIntegrations, saveIntegration } from './
 import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
 import { settingsRoutes } from './settings';
-import { agentRoutes } from './routes/agents';
+import { agentRoutes, runManager } from './routes/agents';
 import { loadKey } from './secrets';
 import { createStore, deleteStore, getStore, listStores, parseStoreInput, storeZone, updateStore } from './stores';
 
@@ -84,7 +84,10 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const store = updateStore(db, c.req.param('id'), input);
       return store ? c.json(store) : c.json({ error: 'store not found' }, 404);
     })
-    .delete('/api/stores/:id', (c) => (deleteStore(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'store not found' }, 404)))
+    .delete('/api/stores/:id', (c) => {
+      runManager(db).cancelStore(c.req.param('id')); // its runs would otherwise wait forever on requests deleted with it
+      return deleteStore(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'store not found' }, 404);
+    })
     .get('/api/events', (c) => {
       const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 20));
       return c.json(listEvents(db, pickStores(db, c.req.query('stores')), limit));
