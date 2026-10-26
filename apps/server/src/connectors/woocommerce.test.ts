@@ -442,3 +442,33 @@ test("a first sync's older orders in another currency are converted at their own
   await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
   expect(urls.filter((u) => u.includes('eurofxref-hist'))).toHaveLength(1); // their rates are kept: no history the second time
 });
+
+test("a partly refunded Woo order's products lose what was refunded on their lines (its refunds list); a failed read keeps them as ordered", async () => {
+  const db = setup();
+  const woo = fakeWoo().fetchFn;
+  let refundsUp = true;
+  const urls: string[] = [];
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    const path = new URL(url).pathname;
+    urls.push(path);
+    if (path.endsWith('/orders')) {
+      return Response.json([order('2001', 'completed', '80.00', true, {
+        id: 7001, refunds: [{ id: 9, total: '-25.50' }],
+        line_items: [{ product_id: 7, quantity: 2, total: '50.00' }, { product_id: 8, quantity: 1, total: '30.00' }],
+      })], { headers: { 'x-wp-totalpages': '1' } });
+    }
+    if (path.endsWith('/orders/7001/refunds')) {
+      return refundsUp
+        ? Response.json([{ id: 9, amount: '25.50', line_items: [{ product_id: 7, quantity: -1, total: '-25.00' }] }], { headers: { 'x-wp-totalpages': '1' } })
+        : new Response('', { status: 503 });
+    }
+    return woo(url, init);
+  }) as typeof fetch;
+  const items = () => db.prepare("SELECT product_id, quantity, revenue FROM order_items WHERE store_id = 'pawsome' AND order_id = 'woo-2001' ORDER BY product_id").all();
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(items()).toEqual([{ product_id: 'woo-7', quantity: 1, revenue: 25 }, { product_id: 'woo-8', quantity: 1, revenue: 30 }]);
+  refundsUp = false;
+  db.prepare("UPDATE integrations SET cursor = NULL WHERE id = 'woocommerce:pawsome'").run();
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(items()).toEqual([{ product_id: 'woo-7', quantity: 2, revenue: 50 }, { product_id: 'woo-8', quantity: 1, revenue: 30 }]);
+});

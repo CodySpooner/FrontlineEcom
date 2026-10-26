@@ -17,6 +17,8 @@ type Fetch = typeof fetch;
 
 interface WooOrder {
   number: string;
+  /** The REST id (`number` is what the shop shows, and a sequential-numbers plugin can make them differ). */
+  id: number;
   status: string;
   currency: string;
   /** In the shop's own timezone, so its date is the shop's day. */
@@ -151,6 +153,18 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     // Default order (newest created first): edits don't move an order between pages, so paging can't skip it.
     const changed = { modified_after: since, dates_are_gmt: 'true' };
     const orders = await all<WooOrder>('orders', changed);
+    // The order list has only each refund's total: a partly refunded order's refunds list says which lines lost what, one
+    // request each. Read as amounts (signs vary between versions); a failed read leaves the lines as ordered.
+    const lineRefunds = new Map<number, Map<number, { quantity: number; total: number }>>();
+    for (const o of orders.filter((o) => o.refunds?.length && o.status !== 'refunded' && o.date_paid_gmt)) {
+      const refunds = await all<{ line_items?: { product_id: number; quantity: number; total: string }[] }>(`orders/${o.id}/refunds`, {}).catch(() => undefined);
+      const back = new Map<number, { quantity: number; total: number }>();
+      for (const li of (refunds ?? []).flatMap((r) => r.line_items ?? [])) {
+        const b = back.get(li.product_id) ?? { quantity: 0, total: 0 };
+        back.set(li.product_id, { quantity: b.quantity + Math.abs(li.quantity), total: b.total + Math.abs(Number(li.total)) });
+      }
+      lineRefunds.set(o.id, back);
+    }
     // The default status (any) leaves out the trash, where a deleted product goes first; trashing it counts as a change.
     // The first sync and once a day after read every product, however long unchanged (the backfill window is for orders):
     // that refreshes variation stock an order may change without touching its product, and archives deleted products.
@@ -232,7 +246,16 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         const tax = Number(o.total) > 0 ? (rate * Number(o.total_tax ?? 0) * total) / (rate * Number(o.total)) : 0;
         const tracking = wooTracking(o);
         ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', tracking.number, Number(o.cost_of_goods_sold?.total_value ?? 0), day, Math.round(tax * 100) / 100, tracking.url, rate);
-        setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total) * rate, cost: Number(li.cost_of_goods_sold?.value ?? 0) })));
+        // A product's refunds come off its first line(s); cost stays on what was ordered (a refund needn't be a return).
+        const back = lineRefunds.get(o.id);
+        const items = (o.line_items ?? []).filter((li) => li.product_id).map((li) => {
+          const b = back?.get(li.product_id);
+          const quantity = Math.min(li.quantity, b?.quantity ?? 0);
+          const total = Math.min(Number(li.total), b?.total ?? 0);
+          if (b) back!.set(li.product_id, { quantity: b.quantity - quantity, total: b.total - total });
+          return { productId: `woo-${li.product_id}`, quantity: li.quantity - quantity, revenue: (Number(li.total) - total) * rate, cost: Number(li.cost_of_goods_sold?.value ?? 0) };
+        });
+        setOrderItems(db, storeId, `woo-${o.number}`, items.filter((i) => i.quantity > 0));
       }
       rebuildRevenue(db, storeId, days);
       if (full) archiveMissing(db, id, storeId, 'woo-*', products.map((p) => `woo-${p.id}`), today);
