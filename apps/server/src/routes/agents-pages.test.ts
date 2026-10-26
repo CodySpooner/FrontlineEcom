@@ -2,12 +2,13 @@ import { fakeEngine, getAgent, listPageDrafts, runAgent, savePageDraft, type Fak
 import type { AgentEvent, ApprovalDecision, PageDraft } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
-import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
+import { decide, getApproval } from '../approvals';
+import { publish, subscribe } from '../live';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
-import { publishDraft } from './agents-actions';
+import { onDecision, publishDraft } from './agents-actions';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -79,9 +80,23 @@ test('connected stores get it on the platform; a platform error tells the owner;
   });
 
   const pushed: string[] = [];
+  const seen: string[] = []; // what the Store Builder reads when the live message tells it to refetch
+  const stop = subscribe((m) => m.type === 'approval' && seen.push(listPageDrafts(db)[0]!.status));
   await publishDraft(db, listPageDrafts(db)[0]!, async (d) => pushed.push(d.title));
+  stop();
   expect(pushed).toEqual(['About us']);
   expect(listPageDrafts(db)[0]?.status).toBe('published');
+  expect(seen).toEqual(['published']);
+});
+
+test('a decision said twice on the live bus runs its action once', async () => {
+  const runs: string[] = [];
+  onDecision(db, 'approved', (_, a) => runs.push(a.id));
+  const a = db.prepare(`SELECT id FROM approvals WHERE status = 'pending' LIMIT 1`).get()!;
+  decide(db, String(a.id), 'approve');
+  publish({ type: 'approval', approval: getApproval(db, String(a.id))! });
+  await tick();
+  expect(runs).toEqual([String(a.id)]);
 });
 
 test('a draft with active HTML is refused, and one saved before the check never reaches the storefront', async () => {

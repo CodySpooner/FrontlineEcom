@@ -1,7 +1,8 @@
 import { cash, getPageDraft, markPublished, once, writeMemory } from '@frontline/agents';
 import type { AdNetwork, ApprovalRequest, PageDraft } from '@frontline/shared';
 import type { Db } from '../db';
-import { subscribe } from '../live';
+import { publish, subscribe } from '../live';
+import { getApproval } from '../approvals';
 import { notify } from '../settings';
 import { localDate } from '../dates';
 import { getStore } from '../stores';
@@ -13,11 +14,13 @@ import type { ShopifyTheme } from '../connectors/shopify';
  */
 export function onDecision(db: Db, status: 'approved' | 'denied', fn: (db: Db, a: ApprovalRequest) => unknown) {
   const ref = new WeakRef(db);
+  const done = new Set<string>(); // a repeated message (publishDraft says it again) doesn't run the action twice
   const off = subscribe((m) => {
     const db = ref.deref();
     if (!db) return off();
-    if (m.type !== 'approval' || m.approval.status !== status) return;
+    if (m.type !== 'approval' || m.approval.status !== status || done.has(m.approval.id)) return;
     if (!db.prepare(`SELECT 1 FROM approvals WHERE id = ? AND status = ?`).get(m.approval.id, status)) return; // another DB's (tests)
+    done.add(m.approval.id);
     const a = m.approval;
     setImmediate(async () => {
       try {
@@ -49,6 +52,9 @@ export async function publishDraft(db: Db, d: PageDraft, push: PushPage) {
       return;
     }
     markPublished(db, d.id);
+    // The approval's own message went out while the push ran: say it again so the Store Builder reads "published".
+    const a = d.approvalId ? getApproval(db, d.approvalId) : undefined;
+    if (a) publish({ type: 'approval', approval: a });
     return;
   }
   markPublished(db, d.id);
