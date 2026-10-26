@@ -84,7 +84,7 @@ Orca's browser against the reference before ticking it.
       missions widget, store health badges (Winning/Steady/Bleeding). Respect prefers-reduced-motion.
 - [x] UI-19 Ask AI palette (Ctrl+K): questions → selected store's Market Analyst chat; also jump-to-page commands.
 - [x] UI-20 Notification center (bell): approvals, agent finished, errors; mark read.
-- [ ] UI-21 Onboarding: first run → explore demo, or add store → pick niche → meet your squad.
+- [x] UI-21 Onboarding: first run → explore demo, or add store → pick niche → meet your squad.
 - [ ] UI-22 Polish: 1280–1920 first, usable to 900px; focus rings, keyboard nav, AA contrast; run styleseed-design-review.
 - [x] UI-24 Store Builder: the Store Developer agent's workspace — pages/sections it's building, change list, previews,
       approve to publish (DESIGN.md §4.6).
@@ -129,3 +129,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Inbox: Shopify connect form explains client ID + secret or an older access token (no misleading "(optional)" on that group)
 - 2026-10-26 — UI-19: Ask AI palette — Ctrl/Cmd+K or the top-bar search opens it; typed text becomes "Ask the Market Analyst · <selected store>" (starts the run, opens its chat), pages filter by name/subtitle (prefix first); arrows + Enter, Esc closes
 - 2026-10-26 — Inbox: today is in progress — the area chart dashes its last segment and labels it "Today so far" / "This week so far" (Dashboard + Analytics); KPI sparklines leave out today
+- 2026-10-26 — UI-21: Onboarding — first-run welcome (per-device flag): Explore the demo, or Add my store (shared StoreForm, moved out of Settings) → Meet your squad (8 portraits, niche pack line) → Open the Command Center with the new store selected

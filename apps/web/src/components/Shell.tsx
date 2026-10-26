@@ -6,6 +6,7 @@ import { SvgDefs } from './Art';
 import { AskPalette } from './AskPalette';
 import { BrandLogo } from './BrandLogo';
 import { XpToasts } from './Gamification';
+import { Onboarding } from './Onboarding';
 import { ProgressBar, StatusDot, cx } from './ui';
 
 export function Shell() {
@@ -25,6 +26,7 @@ export function Shell() {
       <SvgDefs />
       <XpToasts />
       <AskPalette />
+      <Onboarding />
       <aside className="sticky top-0 flex h-dvh flex-col gap-[18px] overflow-y-auto border-r border-line bg-linear-to-b from-bg-2 to-bg px-2.5 py-4 min-[900px]:px-3.5 min-[900px]:py-[18px]">
         <div className="hidden px-1 min-[900px]:block">
           <BrandLogo />
