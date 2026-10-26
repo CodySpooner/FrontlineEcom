@@ -99,6 +99,14 @@ export const cash = (n: number, currency: string) => (currency === 'USD' ? `$${n
 const inUsd = async (ctx: ToolContext, amount: number) =>
   ctx.store.currency === 'USD' || !amount ? amount : ctx.toUsd?.(amount, ctx.store.currency).then((n) => n && Math.round(n * 100) / 100);
 
+/** Research and supplier prices are USD: a first line saying so (with the rate) for stores priced in another currency. */
+async function usdNote(ctx: ToolContext) {
+  const cur = ctx.store.currency;
+  if (cur === 'USD') return '';
+  const usd = await ctx.toUsd?.(1, cur);
+  return `# Amounts in USD${usd ? ` (1 USD = ${r2(1 / usd)} ${cur})` : ''}; this store sells in ${cur}.\n`;
+}
+
 export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'store_summary',
@@ -266,9 +274,9 @@ export const APP_TOOLS: AppTool[] = [
       title: z.string().min(3).max(120),
       category: z.string().min(2).max(60),
       source: z.enum(['tiktok', 'shopify', 'amazon', 'aliexpress']).describe('where you saw it selling'),
-      cost: z.number().positive().describe('supplier cost incl. shipping'),
-      price: z.number().positive().describe('suggested sell price'),
-      compareAt: z.number().positive(),
+      cost: z.number().positive().describe('supplier cost incl. shipping, USD'),
+      price: z.number().positive().describe('suggested sell price, USD'),
+      compareAt: z.number().positive().describe('USD'),
       trend: z.number().describe('demand growth over the last 30 days, %'),
       competition: z.number().min(0).max(100).describe('0-100, lower = fewer competing sellers/ads'),
       shippingDays: z.number().int().min(1).max(60),
@@ -290,13 +298,13 @@ export const APP_TOOLS: AppTool[] = [
       const rows = await ctx.searchSuppliers(q, limit ?? 10);
       if (!rows.length) return `No supplier listings for "${q}".`;
       const table = csv(rows.map((p) => ({ sku: p.sku, title: p.title, price_usd: p.price, listed_by_sellers: p.listed })));
-      return rows[0]!.demo ? `# Demo supplier data (CJ is not connected)\n${table}` : table;
+      return `${rows[0]!.demo ? '# Demo supplier data (CJ is not connected)\n' : ''}${await usdNote(ctx)}${table}`;
     },
   }),
   defineTool({
     name: 'research_feed',
     description:
-      'Trending product candidates with cost, price, margin %, 30-day demand trend %, competition (0-100, lower is better), shipping days and AI score (CSV, best first). Defaults to the store niche.',
+      'Trending product candidates with cost, price (USD), margin %, 30-day demand trend %, competition (0-100, lower is better), shipping days and AI score (CSV, best first). Defaults to the store niche.',
     input: {
       tab: z.enum(RESEARCH_TABS as [ResearchTab, ...ResearchTab[]]).optional(),
       q: z.string().optional().describe('search title/category'),
@@ -306,7 +314,7 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ tab, q, anyNiche, limit }, ctx) => {
       if (!ctx.research) return 'The research feed is not available.';
       const items = await ctx.research({ tab, q, limit, ...(anyNiche ? {} : { niche: ctx.store.niche }) });
-      return csv(
+      return (await usdNote(ctx)) + csv(
         items.map((p) => ({ id: p.id, title: p.title, category: p.category, source: p.source, cost: p.cost, price: p.price, compare_at: p.compareAt, margin_pct: p.margin, trend_pct: p.trend, competition: p.competition, shipping_days: p.shippingDays, score: p.score })),
       );
     },
@@ -737,7 +745,7 @@ export const APP_TOOLS: AppTool[] = [
       kind: z
         .string()
         .max(40)
-        .describe('action type. Carried out by the app: store.add_products with payload {products: [{researchProductId?, title, price, compareAt?, cost}]}, save_niche_pack. Anything else (e.g. price_test, customer_message) the owner applies by hand.'),
+        .describe("action type. Carried out by the app: store.add_products with payload {products: [{researchProductId?, title, price, compareAt?, cost}]} (amounts in the store's currency), save_niche_pack. Anything else (e.g. price_test, customer_message) the owner applies by hand."),
       payload: z.record(z.string(), z.unknown()).describe('everything needed to carry the action out'),
       amount: z.number().min(0).optional().describe("money at stake per day in the store's currency (budget added, spend, refund total); lets autopilot decide within the owner's cap"),
     },
