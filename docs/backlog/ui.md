@@ -120,7 +120,7 @@ Orca's browser against the reference before ticking it.
       "AI Agents", so two agent windows/tabs can be told apart.
 - [x] UI-36 Reconnecting status: while `/api/live` is down (API restart, restore, sleep) the sidebar System Status says
       "Reconnecting…" instead of "All agents online", so stale numbers aren't mistaken for live ones.
-- [ ] UI-37 Console sweep: visit every page (plus drawer, palette, onboarding) and fix any React warnings or errors in
+- [x] UI-37 Console sweep: visit every page (plus drawer, palette, onboarding) and fix any React warnings or errors in
       the console (keys, nested interactive elements, uncontrolled→controlled).
 
 ## Blocked
@@ -181,3 +181,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Fix (UI-30 follow-up): with requests waiting, the bell drawer's empty list said "You're all caught up" right under them; it now says "Nothing else new." (test + Chrome)
 - 2026-10-26 — UI-35: `pageTitle(pathname, storeName)` names agent pages ("Ad Strategist · Pawsome Gear · Frontline Ecom"; own-key role check, no decodeURIComponent throw), Shell feeds it store names. Test + Chrome (Agents → Configure)
 - 2026-10-26 — UI-36: `useLive` returns whether the socket is up; System Status shows a pulsing grey "Reconnecting…" (role=status, muted bar) while it's down. Hook test covers online → offline → online; Chrome saw Reconnecting… → All agents online across an API restart
+- 2026-10-26 — UI-37: console sweep found nothing to fix. Full loads of all 12 pages + agent chat/flows + 404, bell drawer, Commander profile, 1Y range, Ctrl+K with a question, Automation rule editor, Research tabs, Settings add store, onboarding → Explore the demo: browser console had only the React DevTools info line; `pnpm check` output has no act/key/nesting warnings
