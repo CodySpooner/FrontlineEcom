@@ -71,3 +71,18 @@ test('Amazon: a missing sales role shows a clear error and keeps demo data', asy
   expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'amazon:peak'").get()).toEqual({ status: 'error', error: expect.stringContaining('Selling Partner Insights') });
   expect(db.prepare("SELECT demo FROM stores WHERE id = 'peak'").get()).toEqual({ demo: 1 });
 });
+
+test("Amazon as an extra channel is converted into the store's currency; an Amazon store takes its marketplace's", async () => {
+  const db = setup();
+  db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-23', fetchedAt: NOW.toISOString(), rates: { EUR: 1, USD: 1.25 } }));
+  db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'peak'").run(); // a TikTok Shop store in euros, selling on amazon.com too
+  await syncAmazon(db, key, 'peak', fakeAmazon().fetchFn, NOW);
+  expect(db.prepare("SELECT revenue FROM channel_daily WHERE store_id = 'peak' AND date = '2026-10-25'").get()?.revenue).toBe(330);
+  expect(db.prepare("SELECT currency FROM stores WHERE id = 'peak'").get()?.currency).toBe('EUR');
+
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  db.prepare("UPDATE integrations SET cursor = NULL WHERE id = 'amazon:peak'").run();
+  await syncAmazon(db, key, 'peak', fakeAmazon().fetchFn, NOW);
+  expect(db.prepare("SELECT currency FROM stores WHERE id = 'peak'").get()?.currency).toBe('USD');
+  expect(db.prepare("SELECT revenue FROM channel_daily WHERE store_id = 'peak' AND date = '2026-10-25'").get()?.revenue).toBe(412.5);
+});

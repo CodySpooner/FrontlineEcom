@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { rebuildRevenue, switchToReal } from './common';
+import { adRate, rebuildRevenue, switchToReal } from './common';
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
@@ -56,12 +56,17 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
       granularityTimeZone: timeZone,
     });
     const res = await fetchFn(`https://${host}/sales/v1/orderMetrics?${params}`, { headers: { 'x-amz-access-token': auth.access_token } });
-    const body = (await res.json().catch(() => ({}))) as { payload?: { interval: string; orderCount: number; totalSales: { amount: number } }[]; errors?: { message: string }[] };
+    const body = (await res.json().catch(() => ({}))) as { payload?: { interval: string; orderCount: number; totalSales: { amount: number; currencyCode?: string } }[]; errors?: { message: string }[] };
     if (res.status === 403) throw new Error('Amazon refused access; the SP-API app needs the Selling Partner Insights (sales) role for this seller');
     if (!res.ok) throw new Error(`Amazon: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
+    // An Amazon store takes its marketplace's currency; Amazon as an extra channel is converted into the store's.
+    const currency = body.payload?.find((d) => d.totalSales?.currencyCode)?.totalSales.currencyCode;
+    const own = db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform === 'amazon';
+    const rate = own ? 1 : await adRate(db, storeId, currency, fetchFn, 'Amazon');
 
     tx(db, () => {
       switchToReal(db, storeId);
+      if (own && currency) db.prepare('UPDATE stores SET currency = ? WHERE id = ?').run(currency, storeId);
       const up = db.prepare(
         `INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES (?, 'amazon', ?, ?, ?)
          ON CONFLICT (store_id, channel, date) DO UPDATE SET revenue = excluded.revenue, orders = excluded.orders`,
@@ -70,7 +75,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
       for (const d of body.payload ?? []) {
         const date = d.interval.slice(0, 10);
         days.add(date);
-        up.run(storeId, date, Number(d.totalSales?.amount ?? 0), d.orderCount ?? 0);
+        up.run(storeId, date, Math.round(Number(d.totalSales?.amount ?? 0) * rate * 100) / 100, d.orderCount ?? 0);
       }
       rebuildRevenue(db, storeId, days);
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);

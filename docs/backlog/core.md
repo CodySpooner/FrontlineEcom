@@ -108,6 +108,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Store currency from every platform:
+  - Etsy reads it from its receipts' or listings' `currency_code`.
+  - TikTok Shop reads it from its orders' `payment.currency`.
+  - An Amazon store takes its marketplace's `totalSales.currencyCode`.
+  - Amazon as an extra channel on another platform's store is converted into that store's currency instead.
+  Before, a EUR Etsy shop on a store created with USD showed euros labelled as dollars. Tests
 - 2026-10-26 — WooCommerce store currency comes from the shop's own setting (`/settings/general/woocommerce_currency`), falling back to the newest order's. Orders that a multi-currency plugin took in another currency are converted into it at the ECB rate, line revenue too. One with no rate is left out instead of counted at par. Before, the store currency flipped to whatever the newest order used. Test
 - 2026-10-26 — Packaged-app smoke after the Inbox batch (rebuilt installer, unpacked exe, isolated profile, two launches):
   - Both launches used the same API port.

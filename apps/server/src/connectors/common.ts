@@ -99,7 +99,7 @@ export type CampaignChange = { dailyBudget: number } | { status: 'PAUSED' };
 export async function adRate(db: Db, storeId: string, accountCurrency: string | undefined, fetchFn: typeof fetch, network: string) {
   const store = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency);
   const rate = await convertRate(db, accountCurrency ?? store, store, fetchFn);
-  if (!rate) throw new Error(`${network}: no exchange rate from the ad account's ${accountCurrency} to the store's ${store}`);
+  if (!rate) throw new Error(`${network}: no exchange rate from the account's ${accountCurrency} to the store's ${store}`);
   return rate;
 }
 

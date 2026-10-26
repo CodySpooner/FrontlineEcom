@@ -139,7 +139,7 @@ interface ShopOrder {
   update_time: number;
   is_sample_order?: boolean;
   tracking_number?: string;
-  payment?: { total_amount?: string };
+  payment?: { total_amount?: string; currency?: string };
   /** One entry per unit unless `quantity` says otherwise; `sale_price` is per unit. */
   line_items?: { product_id: string; sale_price?: string; quantity?: number }[];
 }
@@ -219,6 +219,9 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
 
     tx(db, () => {
       switchToReal(db, storeId);
+      // Orders are in the shop's currency.
+      const currency = orders.find((o) => o.payment?.currency)?.payment!.currency;
+      if (currency) db.prepare('UPDATE stores SET currency = ? WHERE id = ?').run(currency, storeId);
       // Ids get a tt- prefix so they can't collide with another platform's ids in the same store.
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, NULL, 0, ?, ?)

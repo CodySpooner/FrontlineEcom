@@ -11,7 +11,7 @@ const BACKFILL_DAYS = 730;
 const LISTING_STATES = ['active', 'draft', 'inactive'];
 
 type Fetch = typeof fetch;
-type Money = { amount: number; divisor: number };
+type Money = { amount: number; divisor: number; currency_code?: string };
 
 interface Receipt {
   receipt_id: number;
@@ -87,6 +87,9 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
 
     tx(db, () => {
       switchToReal(db, storeId);
+      // Receipts and listings are in the shop's currency.
+      const currency = receipts[0]?.grandtotal.currency_code ?? listings[0]?.price.currency_code;
+      if (currency) db.prepare('UPDATE stores SET currency = ? WHERE id = ?').run(currency, storeId);
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, NULL, 0, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, price = excluded.price, inventory = excluded.inventory, status = excluded.status`,

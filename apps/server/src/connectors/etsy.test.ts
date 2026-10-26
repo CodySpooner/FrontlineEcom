@@ -88,3 +88,14 @@ test('a partly refunded Etsy receipt counts what the buyer kept', async () => {
   await syncEtsy(db, key, 'pawsome', fetchFn, NOW);
   expect(db.prepare("SELECT total, status FROM orders WHERE store_id = 'pawsome' AND id = 'etsy-9'").get()).toEqual({ total: 27.5, status: 'paid' });
 });
+
+test("an Etsy store takes its shop's currency from the receipts", async () => {
+  const db = setup();
+  const etsy = fakeEtsy().fetchFn;
+  const eur = (cents: number) => ({ amount: cents, divisor: 100, currency_code: 'EUR' });
+  const fetchFn = (async (url: string, init: RequestInit) =>
+    new URL(url).pathname.endsWith('/receipts') ? Response.json({ count: 1, results: [receipt(7, 'paid', 0, { grandtotal: eur(3100) })] }) : etsy(url, init)) as typeof fetch;
+  await syncEtsy(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT currency FROM stores WHERE id = 'pawsome'").get()?.currency).toBe('EUR');
+  expect(db.prepare("SELECT total FROM orders WHERE store_id = 'pawsome' AND id = 'etsy-7'").get()?.total).toBe(31);
+});

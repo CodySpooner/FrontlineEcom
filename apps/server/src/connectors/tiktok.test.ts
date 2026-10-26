@@ -183,3 +183,14 @@ test('an app several TikTok shops authorized syncs the shop the owner named, and
   await syncTikTokShop(db, key, 'glow', fakeShop(undefined, shops).fetchFn, NOW);
   expect(db.prepare("SELECT error FROM integrations WHERE id = 'tiktok_shop:glow'").get()?.error).toContain('no authorized shop is "Glow Haus FR"');
 });
+
+test("a TikTok Shop store takes its shop's currency from the orders", async () => {
+  const db = shopSetup();
+  const shop = fakeShop().fetchFn;
+  const fetchFn = (async (url: string, init: RequestInit) =>
+    new URL(url).pathname.includes('/orders/search')
+      ? Response.json({ code: 0, message: 'Success', data: { orders: [shopOrder('5801', 'COMPLETED', '25.00', { payment: { total_amount: '25.00', currency: 'GBP' } })], next_page_token: '' } })
+      : shop(url, init)) as typeof fetch;
+  await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
+  expect(db.prepare("SELECT currency FROM stores WHERE id = 'glow'").get()?.currency).toBe('GBP');
+});
