@@ -1,5 +1,7 @@
 import {
   budgetAddedToday,
+  claudeEngine,
+  defaultEngine,
   costToday,
   creditsToday,
   XP,
@@ -36,7 +38,8 @@ import {
 } from '@frontline/agents';
 import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type ResearchProduct, type StartRunInput, type StoreUsage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
+import { mkdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
 import { fxFor } from '../fx';
@@ -170,6 +173,13 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
 });
 
 /** What the app does with runs: stream them over the live bus, pay XP, notify the owner when one finishes or fails. */
+/** Real runs start in their own folder, so their Claude Code sessions stay out of the owner's projects (`claude --resume`). */
+const agentSessions = () => {
+  const cwd = resolve(dataDir(), 'agent-sessions');
+  mkdirSync(cwd, { recursive: true });
+  return { cwd };
+};
+
 export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent'> => ({
   onEvent: (run, event) => {
     publish({ type: 'run_event', runId: run.id, agentId: run.agentId, storeId: run.storeId, event });
@@ -195,7 +205,7 @@ const managers = new WeakMap<Db, RunManager>();
 export function runManager(db: Db): RunManager {
   let manager = managers.get(db);
   if (!manager) {
-    manager = createRunManager({ db, env: toolEnv(db), store: (id) => getStore(db, id), ...runHooks(db) });
+    manager = createRunManager({ db, env: toolEnv(db), store: (id) => getStore(db, id), engine: defaultEngine(claudeEngine({ queryOptions: agentSessions })), ...runHooks(db) });
     managers.set(db, manager);
     // Approved actions that can come from outside a run (research screen, automations) are carried out here.
     onApproved(db, (db, a) => {

@@ -4,7 +4,7 @@ import type { AspectRatio, Creative, CreativeKind, Store } from '@frontline/shar
 
 // The creatives library lives in `creatives` (agents-lane migration in apps/server/src/db.ts).
 
-// ponytail: flat demo prices per generation; real per-model costs come from Higgsfield once it is connected (Blocked).
+// ponytail: flat credits per generation kind; Higgsfield's REST API reports no cost per request (its OpenAPI, checked 2026-10-26).
 export { CREDITS } from '@frontline/shared';
 
 export type NewCreative = Omit<Creative, 'id' | 'createdAt'>;
