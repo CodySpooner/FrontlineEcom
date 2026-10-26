@@ -149,3 +149,50 @@ test('Shopify is polled every couple of minutes for new orders; ad networks wait
   expect([shopify.mock.calls.length, meta_ads.mock.calls.length]).toEqual([5, 2]);
   stop();
 });
+
+test("an order older than the store's newest still reaches the feed when it's new to the store: paid later, or another platform's", async () => {
+  vi.useFakeTimers({ now: new Date('2026-10-26T12:00:00Z') });
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow');
+  const key = randomBytes(32);
+  saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow.myshopify.com', accessToken: 't' } });
+  const order = db.prepare("INSERT OR REPLACE INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, ?, ?, 'paid', 'unfulfilled', '2026-10-26')");
+  let batch: [string, string, number][] = [['5001', '2026-10-26T11:59:30Z', 30]]; // the loop's first sync runs at once
+  const shopify = vi.fn(async () => {
+    for (const o of batch) order.run(...o);
+    batch = [];
+  });
+  const seen: string[] = [];
+  const off = subscribe((m) => m.type === 'event' && m.event.type === 'order' && seen.push(m.event.id));
+  const stop = startSyncLoop(db, key, { everyMs: 1000, staleMs: 60_000, fastMs: 60_000, syncers: { shopify } });
+  await vi.advanceTimersByTimeAsync(0);
+  batch = [['tt-9', '2026-10-26T11:58:00Z', 20]]; // placed before 5001, here only now (paid later, or a slower platform's sync)
+  await vi.advanceTimersByTimeAsync(61_000);
+  expect(seen).toEqual(['order:glow:5001', 'order:glow:tt-9']);
+  stop();
+  off();
+});
+
+test("a cancelled order with a refund line is one refund of its value, not two", async () => {
+  vi.useFakeTimers({ now: new Date('2026-10-26T12:00:00Z') });
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow');
+  const key = randomBytes(32);
+  saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow.myshopify.com', accessToken: 't' } });
+  db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', 'tt-5', '2026-10-25T10:00:00Z', 50, 'paid', 'unfulfilled', '2026-10-25')").run();
+  let change = () => {};
+  const seen: string[] = [];
+  const off = subscribe((m) => m.type === 'event' && m.event.type === 'refund' && seen.push(`${m.event.amount}`));
+  const stop = startSyncLoop(db, key, { everyMs: 1000, staleMs: 60_000, fastMs: 60_000, syncers: { shopify: vi.fn(async () => change()) } });
+  await vi.advanceTimersByTimeAsync(0);
+  change = () => {
+    db.prepare("UPDATE orders SET status = 'refunded' WHERE store_id = 'glow' AND id = 'tt-5'").run();
+    db.prepare("INSERT INTO amazon_refunds (store_id, id, order_id, amount, tax) VALUES ('glow', 'tt-R5', 'tt-5', 50, 0)").run();
+  };
+  await vi.advanceTimersByTimeAsync(61_000);
+  expect(seen).toEqual(['50']);
+  stop();
+  off();
+});
