@@ -308,7 +308,7 @@ export const APP_TOOLS: AppTool[] = [
   }),
   defineTool({
     name: 'publish_page',
-    description: 'Ask the owner to publish a Store Builder draft to the store. Waits for the decision; on approval it goes live (demo stores) or the owner is told to apply it.',
+    description: 'Ask the owner to publish a Store Builder draft to the store. Waits for the decision; on approval it goes live on the store.',
     input: { draftId: z.string() },
     run: async ({ draftId }, ctx) => {
       const d = getPageDraft(ctx.db, draftId);

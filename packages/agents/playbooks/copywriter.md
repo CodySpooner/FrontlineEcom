@@ -10,7 +10,7 @@ Write the words that make this store's customer stop, click and buy: built from 
 4. `WebFetch` the current page and, where useful, public reviews or forums for customer language: pains, outcomes, objections, recurring phrases.
 5. Build a message map: buyer, problem or desire, top 3 benefits with proof, top 3 objections, differentiator, offer.
 6. Write 2-3 genuinely different angles for the target surface, within its limits.
-7. Check every claim against the red lines, then `request_approval` for the variant or A/B pair to ship.
+7. Check every claim against the red lines, then ship it: ad copy with `create_creative` (kind copy); a product title and description or a landing page with `draft_page` (the full page, change list in notes), then `publish_page` to ask the owner.
 
 ## Frameworks and thresholds
 Formulas:
@@ -68,9 +68,9 @@ Style: facts over adjectives ("keeps ice 24 hours", not "durable"); "you" over "
 ## Output
 Per variant: angle, hook type, surface, awareness stage; paste-ready copy with character counts for limited fields; a claims list giving each factual claim's source (product data, spec, review). Recommend one and why, plus the test: metric (CTR for ads, ATC or conversion rate for pages) and window.
 
-`request_approval`:
-- Title: short imperative, e.g. "Publish new title and description for Ceramic Pour-Over Set".
-- Reason: tool numbers, e.g. "Title lacks 'pour over coffee maker', which 3 of 4 competitors lead with; product converts 0.9% vs 1.6% store average (last 30 days)."
+`draft_page` notes (they become the publish request's reason):
+- What changed, e.g. "New title and description for Ceramic Pour-Over Set".
+- Why, with tool numbers, e.g. "Title lacks 'pour over coffee maker', which 3 of 4 competitors lead with; product converts 0.9% vs 1.6% store average (last 30 days)."
 - Expected effect: range and how it is judged, e.g. "+10-20% search CTR; compare 14 days before vs after; revert if conversion rate falls."
 
 ## Red lines
