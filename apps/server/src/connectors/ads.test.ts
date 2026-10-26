@@ -56,7 +56,7 @@ test('budget and pause writes per network', async () => {
   await setCampaignBudget(db, key, 'glow', 'tiktok', IDS.tiktok, 45.5, fetchFn);
   await pauseCampaign(db, key, 'glow', 'tiktok', IDS.tiktok, fetchFn);
   expect(calls.map((c) => [c.url.split('/v1.3')[1], c.headers.get('access-token'), c.body && JSON.parse(c.body)])).toEqual([
-    ['/advertiser/info/?advertiser_ids=%5B%227001%22%5D&fields=%5B%22currency%22%5D', 'tt-token', ''],
+    ['/advertiser/info/?advertiser_ids=%5B%227001%22%5D&fields=%5B%22currency%22%2C%22timezone%22%2C%22display_timezone%22%5D', 'tt-token', ''],
     ['/campaign/update/', 'tt-token', { advertiser_id: '7001', campaign_id: IDS.tiktok, budget: 45.5 }],
     ['/campaign/status/update/', 'tt-token', { advertiser_id: '7001', campaign_ids: [IDS.tiktok], operation_status: 'DISABLE' }],
   ]);

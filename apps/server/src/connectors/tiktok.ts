@@ -3,7 +3,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal, type CampaignChange } from './common';
+import { AD_ZONES, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal, type CampaignChange } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -44,13 +44,15 @@ async function pages<T>(path: string, params: Record<string, string>, token: str
 }
 
 /** The advertiser account's currency (report and budget amounts are in it). */
-async function advertiserCurrency(advertiser: string, token: string, fetchFn: Fetch) {
-  const q = new URLSearchParams({ advertiser_ids: JSON.stringify([advertiser]), fields: JSON.stringify(['currency']) });
+/** The advertiser account's currency and the zone its reports' days are in (named, else its fixed offset). */
+async function advertiserInfo(advertiser: string, token: string, fetchFn: Fetch) {
+  const q = new URLSearchParams({ advertiser_ids: JSON.stringify([advertiser]), fields: JSON.stringify(['currency', 'timezone', 'display_timezone']) });
   const res = await fetchFn(`${ADS_API}/advertiser/info/?${q}`, { headers: { 'Access-Token': token } });
-  const body = (await res.json().catch(() => ({}))) as { code?: number; message?: string; data?: { list?: { currency?: string }[] } };
+  const body = (await res.json().catch(() => ({}))) as { code?: number; message?: string; data?: { list?: { currency?: string; timezone?: string; display_timezone?: string }[] } };
   if (body.code !== undefined && body.code >= 40100 && body.code < 40200) throw new Error('TikTok rejected the access token; generate a new one for the advertiser account');
   if (!res.ok || body.code !== 0) throw new Error(`TikTok Ads: ${body.message ?? `HTTP ${res.status}`}`);
-  return body.data?.list?.[0]?.currency;
+  const info = body.data?.list?.[0];
+  return { currency: info?.currency, zone: info?.display_timezone || info?.timezone };
 }
 
 export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
@@ -87,7 +89,8 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
       );
     }
     const campaigns = await pages<CampaignRow>('/campaign/get/', { advertiser_id: advertiser }, token, fetchFn);
-    const currency = await advertiserCurrency(advertiser, token, fetchFn);
+    const { currency, zone } = await advertiserInfo(advertiser, token, fetchFn);
+    if (zone) stateOf<string>(db, AD_ZONES).set(id, zone);
     const rate = await adRate(db, storeId, currency, fetchFn, 'TikTok Ads');
     const rateOn = cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
 
@@ -273,7 +276,7 @@ export async function updateTikTokCampaign(db: Db, key: Buffer, storeId: string,
   const [path, body] =
     'status' in change
       ? ['/campaign/status/update/', { advertiser_id, campaign_ids: [campaignId], operation_status: 'DISABLE' }]
-      : ['/campaign/update/', { advertiser_id, campaign_id: campaignId, budget: cents(change.dailyBudget / (await adRate(db, storeId, await advertiserCurrency(advertiser_id, creds.accessToken!, fetchFn), fetchFn, 'TikTok Ads'))) }];
+      : ['/campaign/update/', { advertiser_id, campaign_id: campaignId, budget: cents(change.dailyBudget / (await adRate(db, storeId, (await advertiserInfo(advertiser_id, creds.accessToken!, fetchFn)).currency, fetchFn, 'TikTok Ads'))) }];
   const res = await fetchFn(`${ADS_API}${path}`, { method: 'POST', headers: { 'Access-Token': creds.accessToken!, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const json = (await res.json().catch(() => ({}))) as { code?: number; message?: string };
   if (json.code !== undefined && json.code >= 40100 && json.code < 40200) throw new Error('TikTok rejected the access token; generate a new one for the advertiser account');

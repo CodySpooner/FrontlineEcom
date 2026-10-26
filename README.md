@@ -67,8 +67,8 @@ pnpm check    # typecheck + tests
 - **Days** follow each store's own timezone (the shop's, where the platform reports it), also in "All stores" and the
   morning digest. Today's change compares against the same point of the earlier day: the share of that day's sales
   the store's orders had made by this time of day. Ad spend and GA4 sessions come by day as each network reports
-  them, in the ad account's or GA4 property's timezone. The Meta, Google Ads and GA4 cards in Integrations say when
-  theirs is hours apart from the store's.
+  them, in the ad account's or GA4 property's timezone. The Meta, Google Ads, TikTok Ads and GA4 cards in
+  Integrations say when theirs is hours apart from the store's (an ad account's zone is often fixed when it's created).
 - **Currencies:** a store reports in its shop's currency. Ad spend in another currency is converted at the European
   Central Bank's rate for its day (the last few days at the latest rate until their numbers settle), and "All stores"
   totals (in the base currency from Settings) at the latest rate.
