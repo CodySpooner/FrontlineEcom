@@ -72,13 +72,14 @@ export function StoreForm({ store, onDone }: { store?: Store; onDone: (saved?: S
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className={cx(inputClass, 'h-[38px] w-full cursor-pointer p-1')} />
         </Field>
       </div>
+      <p className="-mt-2 text-xs text-muted">Once connected, the store takes the currency its platform reports.</p>
       <Field label="Time zone">
         <select value={timezone} onChange={(e) => setTimezone(e.target.value)} className={cx(inputClass, 'cursor-pointer')}>
           {zones.map((z) => (
             <option key={z}>{z}</option>
           ))}
         </select>
-        <span className="text-[11px] text-muted">Each day in its reports runs midnight to midnight here. A connected Shopify store uses the shop's own.</span>
+        <span className="text-[11px] text-muted">Each day in its reports runs midnight to midnight here. A connected Shopify or WooCommerce store uses the shop's own.</span>
       </Field>
       {save.isError && (
         <p role="alert" className="text-xs text-red">

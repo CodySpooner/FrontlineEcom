@@ -165,6 +165,8 @@ Orca's browser against the reference before ticking it.
       to add the product there by hand (matches AGT-62 for agents).
 - [x] UI-57 Store Builder doesn't offer "Publish to <store>" on a connected store the app can't write to; it says to copy the
       page over by hand.
+- [x] UI-58 Store form hints match what the connectors do now: WooCommerce also takes the shop's time zone, and a connected
+      store takes its platform's currency (so the owner knows a typed one gets replaced).
 
 ## Blocked
 
@@ -249,3 +251,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-55: the live approval handler invalidates `['memory', storeId]` on a denial (rememberDenial writes it), covered by a live.test case. Chrome against the live API with Knowledge Base › Store memory open: denying a fixture request from the bell drawer with a reason added "The owner turned down … : UI-FX not during the promo." with no reload. This also confirms agents' rememberDenial keeps the note. Server hooks run once per approval id, so reusing a reset fixture won't write again (a test artifact, not a bug). Fixtures removed
 - 2026-10-26 — UI-56: ProductDetails replaces "Request to add" with "The app can't add products to <Platform> stores yet. Add it in <Platform> by hand." when the chosen store is connected and not Shopify. Before, approving one only produced "Only Shopify stores are updated automatically". Research.test.tsx covers both the Etsy and Shopify paths and the POST body. Chrome with a main-world `/api/stores` patch (Glow Haus as connected Etsy, no real sync): Glow showed the hint, Pawsome kept the button. Asked core to refuse it server-side as well (core Inbox)
 - 2026-10-26 — UI-57: `byHand(store)` (StoreForm, next to PLATFORM_NAME) is now shared by Research (UI-56) and Builder. DraftView swaps the publish button for "The app can't publish to <Platform> stores yet. Copy the page into <Platform> by hand." Before, publishing created an approval whose push failed, leaving "Approved, but it couldn't be pushed". Builder.test.tsx covers Shopify vs Etsy. Chrome with a fixture draft on Glow Haus: the demo store showed "Publish to Glow Haus"; with the main-world patch making it connected Etsy, it showed the hint. Fixture removed
+- 2026-10-26 — UI-58: the time zone hint names Shopify or WooCommerce (core 08c7cec: woocommerce.ts adopts the WordPress zone). A note under Currency/Color says a connected store takes its platform's currency (setStoreCurrency in shopify, woocommerce, etsy, tiktok, amazon). Checked in Chrome in Settings › Edit Pawsome Gear; cancelled without saving
