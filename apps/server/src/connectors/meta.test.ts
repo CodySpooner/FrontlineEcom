@@ -221,3 +221,13 @@ test('a campaign the account stops listing (deleted on Meta) shows as archived w
   await syncMeta(db, key, 'pawsome', fetchFn, NOW);
   expect(campaign()).toEqual({ status: 'archived', daily_budget: 0 });
 });
+
+test('a budget change needs a campaign with a daily budget of its own (not a lifetime one, nor one on its ad sets)', async () => {
+  const { db } = setup();
+  const { fetchFn } = fakeGraph([insight('201', '2026-10-25', '60.00', '210.50')]);
+  await syncMeta(db, key, 'pawsome', fetchFn, NOW);
+  db.prepare("UPDATE campaigns SET daily_budget = 0 WHERE network = 'meta' AND id = '201'").run();
+  const writes = fakeGraph([]);
+  await expect(setCampaignBudget(db, key, 'pawsome', 'meta', '201', 80, writes.fetchFn)).rejects.toThrow(/no daily budget/);
+  expect(writes.calls).toHaveLength(0);
+});

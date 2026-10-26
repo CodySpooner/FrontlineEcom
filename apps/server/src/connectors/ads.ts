@@ -19,8 +19,11 @@ const WRITERS: Record<AdNetwork, (db: Db, key: Buffer, storeId: string, campaign
 /** Only campaigns synced for this store: an id from an agent can't reach another store's account or an arbitrary URL. */
 function write(db: Db, key: Buffer, storeId: string, network: AdNetwork, campaignId: string, change: CampaignChange, fetchFn: Fetch) {
   if (!Object.hasOwn(WRITERS, network)) return Promise.reject(new Error(`Unknown ad network ${network}`));
-  if (!db.prepare('SELECT 1 FROM campaigns WHERE network = ? AND id = ? AND store_id = ?').get(network, campaignId, storeId)) {
-    return Promise.reject(new Error(`No ${network} campaign ${campaignId} in this store`));
+  const campaign = db.prepare('SELECT daily_budget FROM campaigns WHERE network = ? AND id = ? AND store_id = ?').get(network, campaignId, storeId);
+  if (!campaign) return Promise.reject(new Error(`No ${network} campaign ${campaignId} in this store`));
+  // Synced as 0: a lifetime budget (TikTok would take the new amount as that), budgets on its ad sets, or archived.
+  if ('dailyBudget' in change && !Number(campaign.daily_budget)) {
+    return Promise.reject(new Error(`This ${network} campaign has no daily budget of its own (a lifetime budget, or budgets on its ad sets): change it in the ads manager`));
   }
   const action = 'status' in change ? 'ad_pause' : 'ad_budget';
   return logAction(db, storeId, action, `${network}:${campaignId}`, change, () => WRITERS[network](db, key, storeId, campaignId, change, fetchFn));
