@@ -215,7 +215,7 @@ export const APP_TOOLS: AppTool[] = [
                  SELECT i.product_id, i.quantity AS units, i.revenue
                  FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
                  WHERE i.store_id = ? AND o.status = 'paid' AND o.local_date >= ?
-                 -- core's Amazon refund lines, off their order's day as on the dashboard. ponytail: units stay gross (a refund line has no quantity).
+                 -- core's refund lines, off their order's day as on the dashboard (TikTok's name no product, so they land on none). ponytail: units stay gross (a refund line has no quantity).
                  UNION ALL SELECT r.product_id, 0, -r.amount
                  FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
                  WHERE r.store_id = ? AND o.status = 'paid' AND o.local_date >= ?
