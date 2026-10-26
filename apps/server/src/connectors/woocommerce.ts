@@ -1,9 +1,10 @@
 import type { ProductStatus } from '@frontline/shared';
 import { logAction } from '../actions';
+import { localDate } from '../dates';
 import { tx, type Db } from '../db';
 import { convertRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
 import type { NewProduct, ProductPage } from './shopify';
 
 // WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
@@ -40,8 +41,9 @@ interface WooProduct {
   regular_price: string;
   sale_price: string;
   stock_quantity: number | null;
-  /** Off: Woo doesn't count its stock. ponytail: a variable product counting stock per variation reads as untracked here. */
+  /** Off: Woo doesn't count the product's own stock (a variable product may count it per variation instead). */
   manage_stock?: boolean;
+  type?: string;
   images?: { src: string }[];
   date_modified_gmt: string;
   cost_of_goods_sold?: { total_value: number };
@@ -120,9 +122,21 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const changed = { modified_after: since, dates_are_gmt: 'true' };
     const orders = await all<WooOrder>('orders', changed);
     // The default status (any) leaves out the trash, where a deleted product goes first; trashing it counts as a change.
-    // The first sync reads every product, however long unchanged (the backfill window is for orders).
-    const productsSince = cursor ? changed : { dates_are_gmt: 'true' };
+    // The first sync and once a day after read every product, however long unchanged (the backfill window is for orders):
+    // that refreshes variation stock an order may change without touching its product, and archives deleted products.
+    const today = localDate(now);
+    const full = !cursor || catalogPassDue(db, id, today);
+    const productsSince = full ? { dates_are_gmt: 'true' } : changed;
     const products = [...(await all<WooProduct>('products', productsSince)), ...(await all<WooProduct>('products', { ...productsSince, status: 'trash' }))];
+    // A variable product (sizes, colors) usually counts stock per variation: its stock is theirs. A variation's manage_stock
+    // is true, false or 'parent' (the product's own count, already read).
+    // ponytail: one request per variable product read; batch through the Store API if big catalogs make syncs slow.
+    const variationStock = new Map<number, number>();
+    for (const p of products) {
+      if (p.type !== 'variable' || p.manage_stock || p.status === 'trash') continue;
+      const counted = (await all<{ manage_stock: boolean | 'parent'; stock_quantity: number | null }>(`products/${p.id}/variations`, {})).filter((v) => v.manage_stock === true);
+      if (counted.length) variationStock.set(p.id, counted.reduce((a, v) => a + (v.stock_quantity ?? 0), 0));
+    }
     // The shop's own currency (Settings → General), else the newest order's. A multi-currency plugin's orders in another
     // currency are converted into it at today's ECB rate; one with no rate is left out rather than counted at par.
     const setting = await fetchFn(`${site}/wp-json/wc/v3/settings/general/woocommerce_currency`, { headers: { authorization: auth } })
@@ -148,7 +162,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         const price = Number(p.price || p.regular_price || 0);
         const regular = Number(p.regular_price || 0);
         const status: ProductStatus = p.status === 'publish' ? 'active' : p.status === 'trash' ? 'archived' : 'draft';
-        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), p.stock_quantity ?? 0, p.manage_stock === false ? 0 : 1, status);
+        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), variationStock.get(p.id) ?? p.stock_quantity ?? 0, p.manage_stock === false && !variationStock.has(p.id) ? 0 : 1, status);
       }
       // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking needs a plugin.
       const ord = db.prepare(
@@ -169,6 +183,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total) * rate, cost: Number(li.cost_of_goods_sold?.value ?? 0) })));
       }
       rebuildRevenue(db, storeId, days);
+      if (full) archiveMissing(db, id, storeId, 'woo-*', products.map((p) => `woo-${p.id}`), today);
       const next = cursorAt(now).toISOString().slice(0, 19);
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(next > since ? next : since, now.toISOString(), id);
     });

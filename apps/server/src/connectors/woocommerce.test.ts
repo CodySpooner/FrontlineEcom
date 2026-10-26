@@ -25,12 +25,18 @@ function fakeWoo(status = 200) {
         : [order('1003', 'refunded', '15.00', true), order('1004', 'pending', '9.99', false), order('1005', 'on-hold', '12.00', false, { date_modified_gmt: '2026-10-26T09:30:00' })];
       return Response.json(page, { headers: { 'x-wp-totalpages': '2' } });
     }
+    if (u.pathname.endsWith('/products/10/variations')) {
+      return Response.json([{ manage_stock: true, stock_quantity: 3 }, { manage_stock: true, stock_quantity: 4 }, { manage_stock: false, stock_quantity: null }], { headers: { 'x-wp-totalpages': '1' } });
+    }
+    if (u.pathname.endsWith('/products/11/variations')) return Response.json([{ manage_stock: false, stock_quantity: null }], { headers: { 'x-wp-totalpages': '1' } });
     if (u.searchParams.get('status') === 'trash') {
       return Response.json([{ id: 9, name: 'Old Collar', status: 'trash', price: '9.00', regular_price: '9.00', sale_price: '', stock_quantity: 3, date_modified_gmt: '2026-10-25T00:00:00' }], { headers: { 'x-wp-totalpages': '1' } });
     }
     return Response.json([
       { id: 7, name: 'Travel Bowl', status: 'publish', price: '19.00', regular_price: '24.00', sale_price: '19.00', stock_quantity: 5, images: [{ src: 'https://shop.test/bowl.jpg' }], date_modified_gmt: '2026-10-20T00:00:00' },
       { id: 8, name: 'Leash', status: 'draft', price: '', regular_price: '', sale_price: '', stock_quantity: null, manage_stock: false, date_modified_gmt: '2026-10-21T00:00:00' },
+      { id: 10, name: 'Harness', type: 'variable', status: 'publish', price: '30.00', regular_price: '', sale_price: '', stock_quantity: null, manage_stock: false, date_modified_gmt: '2026-10-21T00:00:00' },
+      { id: 11, name: 'Bandana', type: 'variable', status: 'publish', price: '9.00', regular_price: '', sale_price: '', stock_quantity: null, manage_stock: false, date_modified_gmt: '2026-10-21T00:00:00' },
     ], { headers: { 'x-wp-totalpages': '1' } });
   }) as typeof fetch;
   return { fetchFn, calls };
@@ -48,13 +54,15 @@ test('WooCommerce sync pulls paid orders + products since the cursor and rebuild
   const { fetchFn, calls } = fakeWoo();
   await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
 
-  expect(calls.map((c) => `${c.url.pathname} ${c.url.searchParams.get('page')}`)).toEqual(['/store/wp-json/wc/v3/orders 1', '/store/wp-json/wc/v3/orders 2', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/settings/general/woocommerce_currency null', '/store/wp-json/ null']);
+  expect(calls.map((c) => `${c.url.pathname} ${c.url.searchParams.get('page')}`)).toEqual(['/store/wp-json/wc/v3/orders 1', '/store/wp-json/wc/v3/orders 2', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/products/10/variations 1', '/store/wp-json/wc/v3/products/11/variations 1', '/store/wp-json/wc/v3/settings/general/woocommerce_currency null', '/store/wp-json/ null']);
   expect(calls.every((c) => c.headers.get('authorization') === `Basic ${Buffer.from('ck_1:cs_2').toString('base64')}`)).toBe(true);
   expect(calls[0]!.url.searchParams.get('modified_after')).toBe('2024-10-26T18:00:00');
   expect(calls[3]!.url.searchParams.get('status')).toBe('trash');
   expect([calls[2]!, calls[3]!].map((c) => c.url.searchParams.get('modified_after'))).toEqual([null, null]); // first sync: every product
 
   expect(db.prepare("SELECT id, price, compare_at AS compareAt, inventory, inventory_tracked AS tracked, status FROM products WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
+    { id: 'woo-10', price: 30, compareAt: null, inventory: 7, tracked: 1, status: 'active' }, // stock counted per variation (S 3, M 4, L untracked)
+    { id: 'woo-11', price: 9, compareAt: null, inventory: 0, tracked: 0, status: 'active' }, // no variation counts stock
     { id: 'woo-7', price: 19, compareAt: 24, inventory: 5, tracked: 1, status: 'active' },
     { id: 'woo-8', price: 0, compareAt: null, inventory: 0, tracked: 0, status: 'draft' }, // Manage stock off: 0 isn't sold out
     { id: 'woo-9', price: 9, compareAt: null, inventory: 3, tracked: 1, status: 'archived' }, // in the trash
@@ -263,4 +271,20 @@ test('approved store pages go to WordPress with the application password; withou
   expect(sent).toEqual([{ url: 'https://shop.test/store/wp-json/wp/v2/pages', auth: `Basic ${Buffer.from('owner:abcd efgh').toString('base64')}`, body: { title: 'Shipping', content: '<p>Free over 50</p>', status: 'publish' } }]);
   // The keys were kept (secrets left blank keep their value) and no backfill restarted.
   expect(db.prepare("SELECT cursor FROM integrations WHERE id = 'woocommerce:pawsome'").get()?.cursor).toBe('2026-10-26T17:55:00');
+});
+
+test('Woo: once a day every product is read again; products deleted for good are archived', async () => {
+  const db = setup();
+  await syncWooCommerce(db, key, 'pawsome', fakeWoo().fetchFn, NOW);
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('pawsome', 'woo-99', 'Gone', 5, 0, 1, 'active')").run();
+  const sameDay = fakeWoo();
+  await syncWooCommerce(db, key, 'pawsome', sameDay.fetchFn, NOW);
+  const productReads = (c: { url: URL }[]) => c.filter((x) => x.url.pathname.endsWith('/products')).map((x) => x.url.searchParams.get('modified_after'));
+  expect(productReads(sameDay.calls).every(Boolean)).toBe(true); // changes only
+  const status = () => db.prepare("SELECT status FROM products WHERE store_id = 'pawsome' AND id = 'woo-99'").get()?.status;
+  expect(status()).toBe('active');
+  const nextDay = fakeWoo();
+  await syncWooCommerce(db, key, 'pawsome', nextDay.fetchFn, new Date('2026-10-27T18:00:00Z'));
+  expect(productReads(nextDay.calls)).toEqual([null, null]);
+  expect(status()).toBe('archived');
 });
