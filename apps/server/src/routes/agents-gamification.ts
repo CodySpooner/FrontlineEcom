@@ -255,9 +255,11 @@ export function checkThemeOutcomes(db: Db, today?: string) {
     )
     .all(roughly15DaysAgo(today));
   // Amazon as an extra channel (core's channel_daily; a theme store is Shopify) is in orders, but its shoppers never saw the theme.
+  // Only days with sessions: before traffic was reported (GA4 connected mid-window) a day's orders have no sessions to divide by.
   const funnel = db.prepare(
-    `SELECT coalesce(sum(orders), 0) - coalesce((SELECT sum(orders) FROM channel_daily WHERE store_id = ?1 AND channel = 'amazon' AND date BETWEEN ?2 AND ?3), 0) AS orders,
-       coalesce(sum(sessions), 0) AS sessions FROM daily_metrics WHERE store_id = ?1 AND date BETWEEN ?2 AND ?3`,
+    `SELECT coalesce(sum(d.orders - coalesce(c.orders, 0)), 0) AS orders, coalesce(sum(d.sessions), 0) AS sessions
+     FROM daily_metrics d LEFT JOIN channel_daily c ON c.store_id = d.store_id AND c.date = d.date AND c.channel = 'amazon'
+     WHERE d.store_id = ?1 AND d.date BETWEEN ?2 AND ?3 AND d.sessions > 0`,
   );
   for (const t of live) {
     const [storeId, agentId] = [String(t.store_id), String(t.agent_id)];

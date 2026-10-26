@@ -187,6 +187,25 @@ test("a published theme change is judged on store conversion, 14 days before vs 
   expect(getAgent(db, 'glow:store_developer')!.xp).toBeGreaterThan(xp);
 });
 
+test('a theme change is judged on the days with traffic reported, not orders from before GA4 was connected', async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'glow'`).run();
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('a1', 'glow', 'glow:store_developer', NULL, 'Publish theme change: Sticky ATC', 'r', ?, 'approved', ?)`).run(
+    JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9' } }),
+    new Date().toISOString(),
+  );
+  const day = addDays(localDate(), -20);
+  once(db, 'theme-live:a1', new Date(`${day}T15:00:00Z`));
+  const window = (from: number, to: number, orders: number, sessions: number) =>
+    db.prepare(`UPDATE daily_metrics SET orders = ?, sessions = ? WHERE store_id = 'glow' AND date BETWEEN ? AND ?`).run(orders, sessions, addDays(day, from), addDays(day, to));
+  window(-14, -8, 20, 0); // no traffic data yet
+  window(-7, -1, 20, 1000); // 2.00%
+  window(1, 14, 25, 1000); // 2.50%
+  checkThemeOutcomes(db);
+  expect(listMemory(db, 'glow').filter((m) => m.tags.includes('theme')).map((m) => m.text)).toEqual([
+    'The theme change "Sticky ATC" worked: conversion 2.00% → 2.50% (14 days before vs after, 7,000 → 14,000 sessions).',
+  ]);
+});
+
 test("a denied theme draft's copy is deleted; a theme the app didn't make never is", async () => {
   const deleted: string[] = [];
   onDecision(db, 'denied', (_, a) => discardThemeCopy(db, a, async (storeId, themeId) => deleted.push(`${storeId} ${themeId}`)));

@@ -273,11 +273,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-147 Campaigns with no daily budget of their own (synced 0: lifetime or ad set budgets) get no budget change. `review_campaigns` suggested 0 for a winning one (reads as pause) and `propose_ad_change` sent a budget change core's writer now refuses at approval.
 - [x] AGT-148 `review_campaigns` judges Meta campaigns that still deliver. Meta campaigns keep their raw status, and `in_process` / `with_issues` ones spend money, but any status other than `active` came out "paused" and was never judged.
 - [x] AGT-149 Price and page outcomes on products with no unit cost aren't called wins. Their sales count the whole price as profit, so a price cut that sold more at a loss was recorded as "worked", paid XP and taught the squad that cuts work.
+- [x] AGT-150 The theme outcome check counts only days with traffic reported. It divided every order in the 14-day window by the sessions of the days that had any, so a store that connected GA4 mid-window read a high conversion before the change and a good theme "did not help".
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-150: `checkThemeOutcomes` sums orders (less Amazon channel orders, per day) and sessions over the days with sessions > 0 on each side.
 - 2026-10-26 — AGT-149: when either 14-day window has a sold line with cost 0, the price/page outcome learning says it can't be judged (profit before product cost, confidence 0.5): no XP, the run's learnings keep their confidence, and the owner's note reads "result unclear without unit costs". Product tests keep judging on units + profit (their cost comes from the request).
 - 2026-10-26 — AGT-147 follow-up: `list_campaigns` shows a 0 daily budget as "none (lifetime or ad set budgets)" too, like `review_campaigns`.
 - 2026-10-26 — AGT-148: a campaign reads "paused" only when its status is one of `IDLE_CAMPAIGN_STATUSES` (moved to ads.ts, still exported); other statuses are judged on their numbers.
