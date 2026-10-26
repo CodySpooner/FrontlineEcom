@@ -108,15 +108,18 @@ test('missions: 4 per store; completing one pays the commander once', async () =
 
 test('achievements unlock from store results and level the commander', async () => {
   const list = await get<Achievement[]>('/api/achievements');
-  expect(list).toHaveLength(15);
+  expect(list).toHaveLength(16);
   const unlocked = list.filter((a) => a.unlockedAt).map((a) => a.id);
   expect(unlocked).toEqual(expect.arrayContaining(['first_sale', 'squad_deployed', 'ten_k_month']));
+  expect(unlocked).not.toContain('open_for_business'); // demo stores only
   expect(unlocked).not.toContain('first_orders');
   expect(unlocked).not.toContain('first_win');
   const commander = await get<Commander>('/api/commander');
   expect(commander.xp).toBe(list.filter((a) => a.unlockedAt).reduce((n, a) => n + a.xp, 0));
   expect(commander).toMatchObject({ level: levelForXp(commander.xp), rank: expect.any(String), streakDays: expect.any(Number) });
   expect((await get<Commander>('/api/commander')).xp).toBe(commander.xp);
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  expect((await get<Achievement[]>('/api/achievements')).find((a) => a.id === 'open_for_business')?.unlockedAt).toEqual(expect.any(String));
 });
 
 test('"$10K Month" counts dollars: ~35,000 yen a month is not it', async () => {

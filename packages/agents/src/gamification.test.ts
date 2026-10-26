@@ -3,10 +3,11 @@ import { expect, test } from 'vitest';
 import { ACHIEVEMENTS, dailyMissions, demoXp, levelForXp, levelProgress, profitStreak, rankForLevel, xpForLevel, type Facts, type StoreDay } from './index';
 
 test('long-run achievements: a 30-day profit streak and Elite / Legend agents', () => {
-  const none: Facts = { orders: 0, best30Revenue: 0, best7Roas: 0, profitStreak: 0, fullSquad: false, runsDone: 0, approved: 0, memories: 0, topLevel: 1, wins: 0 };
+  const none: Facts = { orders: 0, best30Revenue: 0, best7Roas: 0, profitStreak: 0, fullSquad: false, runsDone: 0, approved: 0, memories: 0, topLevel: 1, wins: 0, liveStores: 0 };
   const unlocked = (f: Partial<Facts>) => ACHIEVEMENTS.filter((a) => a.check({ ...none, ...f })).map((a) => a.id);
   expect(unlocked({ profitStreak: 29, topLevel: 19 })).toEqual(['profit_streak_7', 'battle_hardened']);
   expect(unlocked({ profitStreak: 30, topLevel: 30 })).toEqual(['profit_streak_7', 'battle_hardened', 'profit_streak_30', 'elite_agent', 'legend_agent']);
+  expect(unlocked({ liveStores: 1 })).toEqual(['open_for_business']); // demo stores never count
 });
 
 test('level curve: each level costs 100 more than the last', () => {

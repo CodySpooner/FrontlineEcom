@@ -147,6 +147,8 @@ export interface Facts {
   topLevel: number;
   /** Measured wins paid so far (an agent's change improved the numbers it was judged on). */
   wins: number;
+  /** Stores running on real platform data (connected, not demo). */
+  liveStores: number;
 }
 
 // Revenue milestones read in the owner's base currency: core converts multi-store totals (CORE-26).
@@ -166,6 +168,7 @@ export const ACHIEVEMENTS: (Omit<Achievement, 'unlockedAt'> & { check: (f: Facts
   { id: 'profit_streak_30', title: '30-Day Profit Streak', description: 'Profitable every day for 30 days.', xp: 400, check: (f) => f.profitStreak >= 30 },
   { id: 'elite_agent', title: 'Elite Operator', description: 'An agent reached Elite rank.', xp: 300, check: (f) => f.topLevel >= RANK_FROM.Elite },
   { id: 'legend_agent', title: 'Living Legend', description: 'An agent reached Legend rank.', xp: 500, check: (f) => f.topLevel >= RANK_FROM.Legend },
+  { id: 'open_for_business', title: 'Open for Business', description: 'Connected a real store: its squad works on live numbers now.', xp: 100, check: (f) => f.liveStores >= 1 },
 ];
 
 /** Unlocks what the facts now satisfy (paying its XP once) and returns the whole catalog with unlock times. */
