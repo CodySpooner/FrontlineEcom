@@ -6,12 +6,13 @@ import { AgentDetail } from './pages/AgentDetail';
 import { Analytics } from './pages/Analytics';
 import { Agents } from './pages/Agents';
 import { Creative } from './pages/Creative';
+import { Orders } from './pages/Orders';
 import { Dashboard } from './pages/Dashboard';
 import { DevGallery } from './pages/DevGallery';
 import { Placeholder } from './pages/Placeholder';
 import { Research } from './pages/Research';
 
-const PAGES: Record<string, ReactNode> = { '/agents': <Agents />, '/research': <Research />, '/creative': <Creative />, '/analytics': <Analytics /> };
+const PAGES: Record<string, ReactNode> = { '/agents': <Agents />, '/research': <Research />, '/creative': <Creative />, '/analytics': <Analytics />, '/orders': <Orders /> };
 
 export function App() {
   return (

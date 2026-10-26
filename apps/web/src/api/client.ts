@@ -15,10 +15,13 @@ import type {
   Commander,
   Creative,
   CreativeKind,
+  FulfillmentStatus,
   LiveMessage,
   MemoryInput,
-  NicheLearning,
   Mission,
+  NicheLearning,
+  Order,
+  OrderStatus,
   Page,
   Product,
   ProductList,
@@ -172,6 +175,15 @@ export const useCampaigns = (storeIds: string[], range: AnalyticsRange) =>
   useQuery({
     queryKey: ['campaigns', storeIds, range],
     queryFn: () => api<CampaignStats[]>(`/api/analytics/campaigns?stores=${storeIds.join(',')}&range=${range}`),
+    placeholderData: keepPreviousData,
+  });
+
+export type OrderQuery = { q?: string; status?: OrderStatus; fulfillment?: FulfillmentStatus; sort?: 'createdAt' | 'total'; dir?: 'asc' | 'desc'; offset?: number; limit?: number };
+export const useOrders = (storeIds: string[], o: OrderQuery) =>
+  useQuery({
+    queryKey: ['orders', storeIds, o],
+    queryFn: () =>
+      api<Page<Order>>(`/api/orders?stores=${storeIds.join(',')}&${new URLSearchParams(Object.entries(o).flatMap(([k, v]) => (v === undefined || v === '' ? [] : [[k, String(v)]])))}`),
     placeholderData: keepPreviousData,
   });
 

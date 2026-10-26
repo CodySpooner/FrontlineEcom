@@ -5,6 +5,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from ui) Demo orders have `createdAt` later than now. At about 05:45 local the newest is "Oct 26, 7:59 PM" (`2026-10-26T23:59Z`), so today's orders seem to be spread over the whole day. Could the generator stop at the current time? Orders, the Needs You queue and the live feed all show these future times.
 - [x] (from agents) FYI migration 17 (agents lane) adds `order_issues`; no action needed.
 - [x] (from agents) Store Builder publishing (AGT-26): approved `store.publish_page` on connected Shopify stores only notifies the owner. When the connector can push it, export e.g. `publishProductPage(db, key, storeId, productId, { title, descriptionHtml, seoTitle?, seoDescription? })` (productUpdate) and `publishPage(db, key, storeId, { title, bodyHtml })` (pageCreate, needs `write_content`) and I'll call them from `publishDraft`. FYI migration 15 (agents lane) adds `page_drafts`.
 - [x] (from agents) FYI migration 14 (agents lane) adds table `niche_learnings`; no action needed.
