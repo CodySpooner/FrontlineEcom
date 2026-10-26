@@ -1,7 +1,8 @@
-import { createDefaultJobs, createSquad, DEFAULT_JOBS } from '@frontline/agents';
+import { createDefaultJobs, createSquad, DEFAULT_JOBS, enableDefaultJobs } from '@frontline/agents';
 import type { AutomationRule } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
+import { startScheduler } from '../automations';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { agentRoutes } from './agents';
@@ -44,7 +45,16 @@ test('connected stores start with the jobs on', async () => {
   db.prepare(`DELETE FROM done_once WHERE ref LIKE 'default-job:peak:%'`).run();
   expect(createDefaultJobs(db, 'peak')).toEqual(DEFAULT_JOBS.map((j) => j.name));
   const peak = await rules('peak');
-  expect(peak.every((r) => r.enabled && r.nextRunAt)).toBe(true);
+  expect(peak.filter((r) => !r.enabled).map((r) => r.name)).toEqual(['Weekly page refresh']); // the app can't publish TikTok Shop pages
+  expect(peak.filter((r) => r.enabled).every((r) => r.nextRunAt)).toBe(true);
+});
+
+test("a job switched on at go-live waits for its next slot instead of running for the ones it was off for", () => {
+  db.prepare(`UPDATE automation_rules SET created_at = ? WHERE store_id = 'glow'`).run(new Date(Date.now() - 3 * 86_400_000).toISOString()); // off since
+  enableDefaultJobs(db, 'glow');
+  const started: string[] = [];
+  startScheduler(db, (agentId, task) => (started.push(`${agentId} ${task}`), { id: 'r' }), { everyMs: 3_600_000 }).stop();
+  expect(started.filter((s) => s.startsWith('glow:') && DEFAULT_JOBS.some((j) => s.includes(j.task)))).toEqual([]);
 });
 
 test('stores made before a job shipped get it on the next start; a job the owner deleted stays deleted', async () => {

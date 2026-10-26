@@ -94,9 +94,12 @@ const taskHash = (task: string) => createHash('sha256').update(task).digest('hex
 export const ADS_JOB = 'Daily campaign review';
 
 /** Switches a store's default jobs on (it just got connected); returns how many were off. */
-export function enableDefaultJobs(db: DatabaseSync, storeId: string, names = DEFAULT_JOBS.map((j) => j.name)): number {
+export function enableDefaultJobs(db: DatabaseSync, storeId: string, names = DEFAULT_JOBS.map((j) => j.name), now = new Date()): number {
+  // Checked as of now: the scheduler skips rules while they're off, so an old check would run today's earlier slots at once.
   return Number(
-    db.prepare(`UPDATE automation_rules SET enabled = 1 WHERE store_id = ? AND enabled = 0 AND name IN (${names.map(() => '?').join(',')})`).run(storeId, ...names).changes,
+    db
+      .prepare(`UPDATE automation_rules SET enabled = 1, checked_at = ? WHERE store_id = ? AND enabled = 0 AND name IN (${names.map(() => '?').join(',')})`)
+      .run(now.toISOString(), storeId, ...names).changes,
   );
 }
 
@@ -112,7 +115,9 @@ export function createDefaultJobs(db: DatabaseSync, storeId: string, now = new D
     const job = DEFAULT_JOBS.find((j) => j.name === r.name);
     if (job && FORMER_TASKS[job.name]?.includes(taskHash(String(r.task)))) setTask.run(job.task, String(r.id));
   }
-  const connected = db.prepare('SELECT connected FROM stores WHERE id = ?').get(storeId)?.connected === 1;
+  const store = db.prepare('SELECT connected, platform FROM stores WHERE id = ?').get(storeId);
+  // A live store gets it on, unless its platform can't take the job's work (as activation's job gates decide).
+  const on = (j: (typeof DEFAULT_JOBS)[number]) => store?.connected === 1 && (!j.platforms || j.platforms.includes(store.platform as Platform));
   const has = db.prepare('SELECT 1 FROM automation_rules WHERE store_id = ? AND name = ?');
   const insert = db.prepare(
     `INSERT INTO automation_rules (id, store_id, name, enabled, trigger_json, action_json, approval, max_runs_per_day, cooldown_hours, created_at)
@@ -121,7 +126,7 @@ export function createDefaultJobs(db: DatabaseSync, storeId: string, now = new D
   const added = DEFAULT_JOBS.filter((j) => once(db, `default-job:${storeId}:${j.name}`, now) && !has.get(storeId, j.name));
   for (const j of added) {
     insert.run(
-      randomUUID(), storeId, j.name, connected ? 1 : 0, JSON.stringify({ type: 'schedule', cron: j.cron }),
+      randomUUID(), storeId, j.name, on(j) ? 1 : 0, JSON.stringify({ type: 'schedule', cron: j.cron }),
       JSON.stringify({ type: 'agent_task', agentId: `${storeId}:${j.role}`, task: j.task }), now.toISOString(),
     );
   }
