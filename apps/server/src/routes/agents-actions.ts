@@ -1,4 +1,4 @@
-import { cash, getPageDraft, markPublished, once, writeMemory } from '@frontline/agents';
+import { cash, getPageDraft, IDLE_CAMPAIGN_STATUSES, markPublished, once, writeMemory } from '@frontline/agents';
 import type { AdNetwork, ApprovalRequest, PageDraft } from '@frontline/shared';
 import type { Db } from '../db';
 import { publish, subscribe } from '../live';
@@ -48,13 +48,13 @@ export async function publishDraft(db: Db, d: PageDraft, push: PushPage) {
     try {
       await push(d);
     } catch (e) {
-      notify(db, { kind: 'error', title: `Couldn't publish "${d.title}" to ${store.name}`, body: `${(e as Error).message}. It's approved and waiting in Store Builder.`, storeId: store.id });
+      notify(db, { kind: 'error', title: `Couldn't publish "${d.title}" to ${store.name}`, body: `${(e as Error).message}. It's ${d.status === 'approved' ? 'approved and ' : ''}waiting in Store Builder.`, storeId: store.id });
       return;
     }
     markPublished(db, d.id);
     // The approval's own message went out while the push ran: say it again so the Store Builder reads "published".
     const a = d.approvalId ? getApproval(db, d.approvalId) : undefined;
-    if (a) publish({ type: 'approval', approval: a });
+    if (a?.status === 'approved') publish({ type: 'approval', approval: a }); // a denied one would replay the owner's no
     return;
   }
   markPublished(db, d.id);
@@ -83,7 +83,7 @@ export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) 
   const network = (typeof p.network === 'string' ? p.network : c?.network) as AdNetwork;
   // Nothing changes (already off, refused, failed): `not-applied` keeps checkAdOutcomes from scoring it.
   const skip = () => void once(db, `not-applied:${a.id}`);
-  if (pause && c && c.status !== 'active') return skip();
+  if (pause && c && IDLE_CAMPAIGN_STATUSES.includes(String(c.status))) return skip(); // Meta's delivering ones read in_process, with_issues…
   // A real account's results move in days: a change asked on last week's numbers is asked again, not applied.
   const days = Math.floor((Date.parse(a.decidedAt ?? new Date().toISOString()) - Date.parse(a.createdAt)) / 86_400_000);
   if (store.connected && days > STALE_DAYS) {

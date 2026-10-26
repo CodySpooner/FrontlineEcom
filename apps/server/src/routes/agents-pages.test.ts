@@ -79,6 +79,18 @@ test('denied requests leave the draft rejected; the owner can still publish it f
   expect((await app.request(`/api/page-drafts/${d!.id}/publish`, { method: 'POST' })).status).toBe(409);
 });
 
+test("publishing a draft the owner turned down doesn't say the no again (it would be remembered twice)", async () => {
+  await run(() => [draft()]);
+  await run(() => [{ call: 'publish_page', input: { draftId: listPageDrafts(db)[0]!.id } }], 'deny');
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
+  const said: string[] = [];
+  const stop = subscribe((m) => m.type === 'approval' && said.push(m.approval.status));
+  await publishDraft(db, listPageDrafts(db)[0]!, async () => {});
+  stop();
+  expect(listPageDrafts(db)[0]?.status).toBe('published');
+  expect(said).toEqual([]);
+});
+
 test('connected stores get it on the platform; a platform error tells the owner; bad input is refused', async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
   const out = await run(() => [draft({ productId: 'nope' }), draft({ productId: undefined }), draft({ kind: 'page', productId: undefined, title: 'About us' })]);

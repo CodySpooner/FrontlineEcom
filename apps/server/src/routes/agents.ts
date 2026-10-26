@@ -216,6 +216,7 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
         once(db, `theme-copy:${storeId}:${copy.id}`); // ours: a denial may delete it (discardThemeCopy)
         return copy;
       }),
+    remove: (storeId, themeId) => onLiveShopify(db, storeId, () => deleteTheme(db, loadKey(dataDir()), storeId, themeId)),
   },
   portfolio: (range) => {
     const ids = listStores(db).map((s) => s.id);
@@ -271,6 +272,13 @@ export function runManager(db: Db): RunManager {
       }
     });
     onApproved(db, (db, a) => {
+      // The store's first real sync landed after this was asked, before the squad noticed (activation): it was asked on
+      // demo numbers, so it expires like the other waiting ones instead of acting on the live store.
+      if (db.prepare('SELECT 1 FROM stores WHERE id = ? AND connected = 1 AND demo = 0').get(a.storeId) && !db.prepare('SELECT 1 FROM done_once WHERE ref = ?').get(`activate:${a.storeId}`)) {
+        activateConnectedStores(db, runManager(db));
+        once(db, `not-applied:${a.id}`);
+        return notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: 'It was asked on the demo data, before the store went live. Ask the squad again for a read on the real numbers.', storeId: a.storeId });
+      }
       if (a.action.kind === 'store.add_products') {
         return addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task), (storeId, products) =>
           onStore(db, storeId, {
@@ -321,7 +329,7 @@ export function parseMemoryInput(body: unknown, partial: boolean): string | Part
  * is cleared (startFresh), its default jobs switch on (they run on the owner's Claude login, so the owner is told), and a
  * custom niche without a pack gets the Market Analyst drafting one.
  */
-// ponytail: checked at startup and on squad reads (the dashboard polls them); core has no connect event to hook.
+// ponytail: checked at startup, on squad reads, each minute and before an approved request runs; core has no connect event to hook.
 /**
  * Core wiped the store's simulated rows; everything the squad made before now came from them (activation runs once,
  * before any real-data job). Its facts and learnings go (the owner's notes, pins and preferences stay), requests asked
@@ -426,7 +434,7 @@ export function agentRoutes(db: Db) {
   advanceSquadMissions(db); // runs that ended while the app was closed
   // A step turned down for budget can start once the owner raises the store's cap (core's caps route) or the day turns
   // over, neither of which ends a run. ponytail: a minute's poll over open missions; an event from the caps route if that lags.
-  setInterval(() => advanceSquadMissions(db), 60_000).unref();
+  setInterval(() => (activateConnectedStores(db, runs), advanceSquadMissions(db)), 60_000).unref();
   // Default jobs that shipped after a store was made; a live store's owner hears about them (they use Claude usage).
   for (const store of listStores(db)) {
     const added = createDefaultJobs(db, store.id);

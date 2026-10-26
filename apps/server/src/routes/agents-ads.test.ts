@@ -167,6 +167,13 @@ test('a campaign with a change already waiting for the owner gets no second requ
   expect(outputs).toEqual(['Not sent: "Pause Prospecting · Broad" is already waiting for the owner. One change per campaign at a time.']);
 });
 
+test('an approved pause applies to a campaign delivering under another status (Meta reads in_process after an edit)', async () => {
+  db.prepare(`UPDATE campaigns SET status = 'in_process' WHERE id = 'pawsome-c3'`).run();
+  const a = { id: 'x2', storeId: 'pawsome', agentId: 'pawsome:ad_strategist', title: 't', reason: 'r', status: 'approved', createdAt: '', action: { kind: 'ads.pause_campaign', payload: { campaignId: 'pawsome-c3' } } };
+  await applyAdChange(db, a as ApprovalRequest, async () => {});
+  expect(budget('pawsome-c3').status).toBe('paused');
+});
+
 test('connected stores get it on the ad account; an ad account error tells the owner and changes nothing', async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
   await run([propose({ campaignId: 'pawsome-c3', change: 'pause' })]); // no ad credentials in tests

@@ -56,6 +56,8 @@ export interface ToolEnv {
     read: (storeId: string, filenames: string[], themeId?: string) => Promise<{ filename: string; content: string | null }[]>;
     /** Copies the live theme as an unpublished theme named `name` and writes the files to the copy. */
     draft: (storeId: string, name: string, files: { filename: string; body: string }[]) => Promise<Theme>;
+    /** Deletes an unpublished theme (a copy `draft` made). */
+    remove: (storeId: string, themeId: string) => Promise<unknown>;
   };
   runId?: string;
 }
@@ -595,6 +597,8 @@ export const APP_TOOLS: AppTool[] = [
         reason: `${hosts.length ? `It loads from outside Shopify: ${hosts.join(', ')}. ` : ''}${summary} Preview: ${copy.previewUrl} . Publishing makes the copy "${copy.name}" the live theme; edits made to the live theme after ${new Date().toISOString().slice(0, 10)} are not in it.`,
         action: { kind: 'store.publish_theme', payload: { themeId: copy.id, name: copy.name, previewUrl: copy.previewUrl, files: files.map((f) => f.filename) } },
       });
+      // No request was made (the agent was set to "suggest" during the copy, say): nothing would ever delete the copy.
+      if (message.startsWith('Not sent')) await ctx.themes.remove(ctx.store.id, copy.id).catch(() => {});
       return approved ? `${message}. "${copy.name}" goes live now; compare the same funnel stage over an equal window before calling it.` : message;
     },
   }),

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
+import { decide } from '../approvals';
 import { switchToReal } from '../connectors/common';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
@@ -126,6 +127,21 @@ test('a store that went live before the job rules gets them once: jobs with noth
   db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('tiktok', 't1', ?, 'Spark', 'active', 30)`).run(store.id);
   await app.request('/api/agents');
   expect(on()).toHaveLength(DEFAULT_JOBS.length);
+  await runManager(db).idle();
+});
+
+test("a demo request approved after the store's first sync, before the squad noticed, doesn't act on the live store", async () => {
+  await app.request('/api/agents');
+  const ask = db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'glow', 'glow:product_hunter', ?, 'AI score 90', ?, 'pending', ?)`);
+  ask.run('ask2', 'Add Ice roller', '{"kind":"store.add_products","payload":{"products":[{"title":"Ice roller","price":19.9}]}}', new Date().toISOString());
+  ask.run('ask3', 'Add Gua sha', '{"kind":"store.add_products","payload":{"products":[{"title":"Gua sha","price":24}]}}', new Date().toISOString());
+  switchToReal(db, 'glow');
+  decide(db, 'ask2', 'approve'); // the owner answers before any squad read
+  await new Promise((r) => setTimeout(r, 20));
+  expect(notes('glow')).toContain('Not applied: "Add Ice roller"');
+  expect(db.prepare(`SELECT title FROM notifications WHERE store_id = 'glow' AND kind = 'error'`).all()).toEqual([]); // nothing tried on Shopify
+  expect(db.prepare(`SELECT count(*) AS n FROM product_tests WHERE approval_id = 'ask2'`).get()?.n).toBe(0);
+  expect(db.prepare(`SELECT status FROM approvals WHERE id = 'ask3'`).get()?.status).toBe('denied'); // the squad caught up: the rest expired
   await runManager(db).idle();
 });
 

@@ -20,7 +20,7 @@ beforeEach(() => {
 const tick = () => new Promise((r) => setImmediate(r));
 const theme = (id: string, role = 'UNPUBLISHED', processing = false) => ({ id, name: `Theme ${id}`, role, processing, previewUrl: `https://glow.example/?preview_theme_id=${id}` });
 type Themes = NonNullable<ToolEnv['themes']>;
-const themes = (over: Partial<Themes> = {}): Themes => ({ list: async () => [theme('1', 'MAIN')], read: async () => [], draft: async (_, name) => ({ ...theme('9'), name }), ...over });
+const themes = (over: Partial<Themes> = {}): Themes => ({ list: async () => [theme('1', 'MAIN')], read: async () => [], draft: async (_, name) => ({ ...theme('9'), name }), remove: async () => {}, ...over });
 
 async function run(steps: FakeStep[], env: Partial<ToolEnv> = {}, onEvent?: (e: AgentEvent) => void) {
   const out: string[] = [];
@@ -139,6 +139,18 @@ test("a failed theme draft deletes its copy, and a 'suggest' agent copies nothin
   const out = await run([change()], { themes: themes({ draft: async () => (drafted++, theme('9')) }) });
   expect(drafted).toBe(0);
   expect(out).toEqual(['Not sent: your autonomy is "suggest". Put the change in your answer instead.']);
+});
+
+test('a copy made for a request that is then not sent is deleted', async () => {
+  const removed: string[] = [];
+  const out = await run([change()], {
+    themes: themes({
+      draft: async () => (updateAgent(db, 'glow:store_developer', { autonomy: 'suggest' }), theme('9')), // switched while it copied
+      remove: async (storeId, id) => removed.push(`${storeId} ${id}`),
+    }),
+  });
+  expect(out[0]).toMatch(/^Not sent: your autonomy is "suggest"/);
+  expect(removed).toEqual(['glow 9']);
 });
 
 test('publishThemeChange publishes the approved copy', async () => {
