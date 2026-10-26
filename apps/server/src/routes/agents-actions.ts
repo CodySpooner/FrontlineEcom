@@ -68,6 +68,9 @@ export type WriteAd = (storeId: string, network: AdNetwork, campaignId: string, 
  * Applies an approved ad change: connected stores on the ad account first (an error tells the owner and leaves the
  * campaign as it was), then the local campaign row; demo stores locally only.
  */
+/** Days an ad change stays fresh enough to apply once approved. */
+const STALE_DAYS = 3;
+
 /** A request approved after its number moved (the owner edited it, or a sync brought a change): applying it would undo that. */
 const moved = (from: number, now: number) => Math.abs(now - from) > from * 0.01;
 
@@ -81,6 +84,12 @@ export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) 
   // Nothing changes (already off, refused, failed): `not-applied` keeps checkAdOutcomes from scoring it.
   const skip = () => void once(db, `not-applied:${a.id}`);
   if (pause && c && c.status !== 'active') return skip();
+  // A real account's results move in days: a change asked on last week's numbers is asked again, not applied.
+  const days = Math.floor((Date.parse(a.decidedAt ?? new Date().toISOString()) - Date.parse(a.createdAt)) / 86_400_000);
+  if (store.connected && days > STALE_DAYS) {
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `It was asked ${days} days ago, on numbers that have moved since. Ask the Ad Strategist again for a fresh read.`, storeId: store.id });
+    return skip();
+  }
   if (!pause && typeof p.from === 'number' && c && moved(p.from, Number(c.daily_budget))) {
     notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The budget moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(c.daily_budget), store.currency)}). Ask the Ad Strategist again if it still makes sense.`, storeId: store.id });
     return skip();

@@ -178,6 +178,21 @@ test("an ad change from a store's demo phase isn't judged on its real numbers", 
   expect(basis('Pause Spark Ads')).toBe(0.6);
 });
 
+test("a real store's ad change approved days after it was asked is not applied: its numbers are stale", async () => {
+  const writes: unknown[] = [];
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
+  db.prepare(`UPDATE campaigns SET daily_budget = 60 WHERE id = 'pawsome-c1'`).run();
+  const asked = (daysAgo: number) =>
+    ({ id: `old-${daysAgo}`, storeId: 'pawsome', agentId: 'pawsome:ad_strategist', title: 'Raise it', reason: 'r', status: 'approved', createdAt: new Date(Date.now() - daysAgo * 86_400_000).toISOString(), decidedAt: new Date().toISOString(), action: { kind: 'ads.set_budget', payload: { campaignId: 'pawsome-c1', from: 60, to: 72 } } }) as ApprovalRequest;
+  await applyAdChange(db, asked(5), async (...args) => void writes.push(args));
+  expect(budget('pawsome-c1').daily_budget).toBe(60);
+  expect(db.prepare(`SELECT body FROM notifications WHERE title LIKE 'Not applied%'`).get()?.body).toBe('It was asked 5 days ago, on numbers that have moved since. Ask the Ad Strategist again for a fresh read.');
+  expect(db.prepare(`SELECT 1 FROM done_once WHERE ref = 'not-applied:old-5'`).get()).toBeTruthy(); // not scored either
+  await applyAdChange(db, asked(2), async (...args) => void writes.push(args));
+  expect(budget('pawsome-c1').daily_budget).toBe(72);
+  expect(writes).toEqual([['pawsome', expect.any(String), 'pawsome-c1', { dailyBudget: 72 }]]); // only the fresh one reached the account
+});
+
 test('a late approval does not undo a budget the owner moved, nor pause a paused campaign, and is not scored', async () => {
   const writes: unknown[] = [];
   const write = async (...args: unknown[]) => void writes.push(args);

@@ -142,11 +142,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-59 Runs cut off by an app restart run again (the scheduler counts a cut-off job as fired, so the day's briefing was lost).
 
 - [x] AGT-60 A live Creative Studio in demo mode: "Generate with Higgsfield" on the Creative page did nothing on demo stores (no demo work for the role). It now asks for the render like a real run, and once approved a demo render lands in the gallery.
+- [x] AGT-61 Stale ad changes aren't applied: on a real store, a budget or pause request approved more than 3 days after it was asked is refused with a note to ask again, so a pile of old requests approved after a few days away doesn't move spend on last week's numbers.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-61: `applyAdChange` refuses a real store's ad change approved more than 3 days after it was asked. The owner gets "Not applied: … asked N days ago … ask the Ad Strategist again", and the change is marked not-applied so it isn't scored. Demo stores are exempt: their seeded requests can wait days and their numbers don't move. Test: 5 days old is refused and never reaches the account, 2 days old applies.
 - 2026-10-26 — Taking an agent offline stops it now: PATCH /api/agents/:id {enabled:false} cancels its queued runs and aborts its running one through the new `runManager.cancelAgent`, leaving the rest of the squad's work alone. Before, the card said "offline" while the work went on. Test added.
 - 2026-10-26 — The prompt's "Today is …" uses the same zone as the tools' windows: a connected shop's own, demo stores' this machine's. Demo agents no longer read a date one off from their data at some hours.
 - 2026-10-26 — Partial-spend estimate checked on one real run ("reply OK"). The first price list said $0.047 against $0.076 billed: Claude Code caches for an hour, so cache writes bill at 2× input ($8/MTok). Repriced, the estimate gives $0.0757 for the same run.
