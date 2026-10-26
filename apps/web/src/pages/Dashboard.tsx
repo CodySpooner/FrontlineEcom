@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight, Check, CreditCard, RotateCcw, ShoppingBag, ShoppingCart } from 'lucide-react';
-import { AGENT_ROLES, APPROVAL_KINDS, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type StoreEventType } from '@frontline/shared';
+import { AGENT_ROLES, APPROVAL_KINDS, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type Store, type StoreEventType } from '@frontline/shared';
 import { useAgents, useApprovals, useDecide, useEvents, useIntegrations, useMissingCosts, useMissions, useSummary } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Portrait } from '../components/Art';
@@ -79,11 +79,17 @@ function RevenueChart({ s, who }: { s: AnalyticsSummary; who: string }) {
   return <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} partial currency={s.currency} label={`Revenue for ${who}, ${PERIOD[s.range]}: ${money(s.totals.revenue, s.currency)} total`} />;
 }
 
+/** What profit takes off revenue for these stores: the fee estimate where set, order tax where core reads it. */
+export function profitFormula(stores: Store[]) {
+  const fees = stores.some((x) => x.feePercent || x.feePerOrder);
+  const tax = stores.some((x) => x.connected && ['shopify', 'woocommerce', 'etsy'].includes(x.platform));
+  return ['Revenue', 'cost of goods', fees && 'your fee estimate', tax && 'sales tax', 'ad spend'].filter(Boolean).join(' − ');
+}
+
 function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
   // Products the platform has no cost for count their whole price as profit until the owner sets one.
   const { ids, stores, has } = useStoreSelection();
   const atFullPrice = useMissingCosts(ids).data?.length ?? 0;
-  const fees = stores.some((x) => has(x.id) && (x.feePercent || x.feePerOrder));
   const grid = 'mb-3.5 grid grid-cols-2 gap-3 min-[620px]:grid-cols-3 min-[1280px]:grid-cols-5';
   if (q.isError)
     return (
@@ -110,7 +116,7 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
       <Kpi
         hero
         label={
-          <Tooltip tip={fees ? 'Revenue − cost of goods − your fee estimate − ad spend' : 'Revenue − cost of goods − ad spend'}>
+          <Tooltip tip={profitFormula(stores.filter((x) => has(x.id)))}>
             <span tabIndex={0} className="cursor-help underline decoration-muted/50 decoration-dotted underline-offset-3">
               Profit
             </span>

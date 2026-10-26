@@ -205,6 +205,8 @@ Orca's browser against the reference before ticking it.
       our request), so a best seller past the first 200 products still shows stock, and the extra products fetch is gone.
 - [x] UI-77 A request card in a past transcript says how it ended (Approved / Denied / Expired) instead of "Decided",
       and its heading reads "Request" rather than "Needs your approval" once it's out of the waiting list.
+- [x] UI-78 The Profit tooltip names everything that comes off for the picked stores: the fee estimate where set, and
+      sales tax/VAT for connected Shopify, WooCommerce and Etsy stores (core 1d3b000).
 
 ## Blocked
 
@@ -313,3 +315,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-76: TopProducts (now exported) passes the row to `stockLeft`, or undefined when the product left the catalog, and no longer calls `useProducts`. Analytics.test asserts "40 left · ~4 days" with no `/api/products` fetch. Chrome: the five Pawsome rows show stock from the row. "176 left" is right at 15.2 days of cover (the flag starts under 14)
 - 2026-10-26 — UI-65 follow-up: the fee placeholders read "e.g. 2.9" / "e.g. 0.30". At Orca 800px the bare "2.9" / "0.30" looked like saved values. Orca check of the edit dialog: the fee row fits two columns with the hint under it
 - 2026-10-26 — UI-77: ApprovalCard's new `Outcome` mounts only for a closed card that wasn't decided right there. It finds the request in the approved/denied lists (the ones the bell uses) and labels it Approved, Denied, or Expired via `expiredWhy`. It falls back to "Decided" for ones too old to be listed. Chat.test covers decided-elsewhere and expired. Chrome with a fixture run holding two requests (one expired, one approved): the cards read "REQUEST · PAUSE CAMPAIGNS … Expired" and "… Approved". Fixtures removed
+- 2026-10-26 — UI-78: `profitFormula(stores)` (Dashboard, tested) builds "Revenue − cost of goods − [your fee estimate] − [sales tax] − ad spend" for the selected stores. Chrome: the demo read "Revenue − cost of goods − ad spend". With Pawsome patched as connected Shopify, it read "… − sales tax − ad spend"

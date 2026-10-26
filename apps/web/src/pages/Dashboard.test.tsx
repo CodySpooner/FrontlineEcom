@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { ApprovalRequest, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { Requests } from './Dashboard';
+import { profitFormula, Requests } from './Dashboard';
 
 const store = { id: 'pawsome', name: 'Pawsome Gear', currency: 'USD' } as Store;
 const approval: ApprovalRequest = {
@@ -66,5 +66,17 @@ describe('approvals flow', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm deny: Raise daily budget 20%' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Deny: Raise daily budget 20%' })).toBeTruthy();
+  });
+});
+
+describe('profitFormula', () => {
+  const store = (extra: Partial<Store>) => ({ id: 's', name: 'S', platform: 'shopify', connected: false, ...extra }) as Store;
+
+  it('names only what comes off for the stores picked', () => {
+    expect(profitFormula([store({})])).toBe('Revenue − cost of goods − ad spend');
+    expect(profitFormula([store({ feePercent: 9.5 })])).toBe('Revenue − cost of goods − your fee estimate − ad spend');
+    // Order tax is read from connected Shopify, WooCommerce and Etsy stores only.
+    expect(profitFormula([store({ connected: true, platform: 'etsy' })])).toBe('Revenue − cost of goods − sales tax − ad spend');
+    expect(profitFormula([store({ connected: true, platform: 'amazon' })])).toBe('Revenue − cost of goods − ad spend');
   });
 });
