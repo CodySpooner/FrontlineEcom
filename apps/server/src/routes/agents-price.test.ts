@@ -67,8 +67,8 @@ test("a price that covers the unit cost but not the store's fees is refused", as
   expect(sent).toMatch(/^Approved by the owner/);
 });
 
-test('on a real store a price test is judged on gross profit 14 days before vs after, once', async () => {
-  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+test("on a real store a price test is judged on profit after the store's fee %, 14 days before vs after, once", async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1, fee_percent = 20 WHERE id = 'peak'`).run();
   once(db, 'activate:peak', new Date('2020-01-01')); // live long before
   const day = addDays(localDate(), -20);
   db.prepare(
@@ -83,15 +83,15 @@ test('on a real store a price test is judged on gross profit 14 days before vs a
       db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('peak', ?, '77', 1, ?, 6)`).run(id, price);
     }
   };
-  sell(10, addDays(day, -5), 20); // 140 gross profit before
-  sell(9, addDays(day, 5), 25); // 171 after
+  sell(10, addDays(day, -5), 20); // 140 gross profit before, 100 after the 20% fee
+  sell(9, addDays(day, 5), 25); // 171 gross, 126 net
   const xp = () => getAgent(db, 'peak:market_analyst')!.xp;
   const before = xp();
   await app.request('/api/achievements');
   await app.request('/api/achievements');
 
   const texts = listMemory(db, 'peak').filter((m) => m.tags.includes('pricing')).map((m) => m.text);
-  expect(texts).toEqual(['Pricing "Grip Socks" $20 → $25 worked: gross profit 140 USD → 171 USD, 10 → 9 units (14 days before vs after).']);
+  expect(texts).toEqual(['Pricing "Grip Socks" $20 → $25 worked: profit 100 USD → 126 USD, 10 → 9 units (14 days before vs after).']);
   expect(xp()).toBe(before + 50);
   expect(listMemory(db, 'peak').find((m) => m.text === 'Grip Socks are underpriced vs rivals')?.confidence).toBe(0.7);
   expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Measured win: Market Analyst'`).all()).toEqual([{ body: texts[0] }]);

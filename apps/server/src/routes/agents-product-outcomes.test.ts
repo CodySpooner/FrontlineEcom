@@ -47,8 +47,8 @@ test('products added on a real store are judged on their first 14 days of sales'
   await app.request('/api/achievements');
 
   expect(outcomes('peak')).toEqual([
-    '"Grip Socks" did not take off: 2 units, 40 USD revenue, 28 USD gross profit in its first 14 days.',
-    '"Smart Jump Rope" sold: 12 units, 240 USD revenue, 168 USD gross profit in its first 14 days.',
+    '"Grip Socks" did not take off: 2 units, 40 USD revenue, 28 USD profit in its first 14 days.',
+    '"Smart Jump Rope" sold: 12 units, 240 USD revenue, 168 USD profit in its first 14 days.',
   ]);
   expect(xp()).toBe(before + 50);
 });
@@ -78,7 +78,7 @@ test('a product archived after selling nothing is a flop the squad learns from',
   db.prepare(`UPDATE product_tests SET added_on = ?`).run(addDays(localDate(), -20));
   db.prepare(`UPDATE products SET status = 'archived' WHERE store_id = 'peak' AND id = '903'`).run();
   await app.request('/api/achievements');
-  expect(outcomes('peak')).toEqual(['"Ab Roller" did not take off: 0 units, 0 USD revenue, 0 USD gross profit in its first 14 days.']);
+  expect(outcomes('peak')).toEqual(['"Ab Roller" did not take off: 0 units, 0 USD revenue, 0 USD profit in its first 14 days.']);
 });
 
 test('demo stores have no real line items, so their products are never judged', async () => {

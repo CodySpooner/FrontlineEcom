@@ -27,7 +27,7 @@ test('a product page published on a real store is judged on the 14 days before v
   const day = addDays(localDate(), -20);
   db.prepare('UPDATE page_drafts SET published_at = ? WHERE id = ?').run(`${day}T15:00:00Z`, draft.id);
   writeMemory(db, { storeId: 'peak', agentId: 'peak:store_developer', kind: 'learning', text: 'Rope buyers care about cable length', confidence: 0.6, runId: 'run-page' });
-  sell(8, addDays(day, -3)); // 112 gross profit before
+  sell(8, addDays(day, -3)); // 112 profit before
   sell(5, addDays(day, 3)); // 70 after
   const xp = () => getAgent(db, 'peak:store_developer')!.xp;
   const before = xp();
@@ -35,7 +35,7 @@ test('a product page published on a real store is judged on the 14 days before v
   await app.request('/api/achievements');
 
   expect(listMemory(db, 'peak').filter((m) => m.tags.includes('page')).map((m) => m.text)).toEqual([
-    'The new "Jump Rope" page did not help: gross profit 112 USD → 70 USD, 8 → 5 units (14 days before vs after).',
+    'The new "Jump Rope" page did not help: profit 112 USD → 70 USD, 8 → 5 units (14 days before vs after).',
   ]);
   expect(listMemory(db, 'peak').find((m) => m.text === 'Rope buyers care about cable length')?.confidence).toBe(0.5);
   expect(xp()).toBe(before);

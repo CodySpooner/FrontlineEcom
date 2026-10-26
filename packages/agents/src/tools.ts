@@ -722,7 +722,7 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'propose_price_change',
     description:
-      "Ask the owner to test a new price for a product, with the evidence. Applied to the store once approved, then judged on the product's gross profit in the 14 days after vs the 14 before.",
+      "Ask the owner to test a new price for a product, with the evidence. Applied to the store once approved, then judged on the product's profit (after unit cost and the store's fee %) in the 14 days after vs the 14 before.",
     input: {
       productId: z.string(),
       newPrice: z.number().positive(),
