@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
-import type { StoreCaps } from '@frontline/shared';
+import type { Settings as SettingsT, StoreCaps } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
-import { Backups, CapsForm } from './Settings';
+import { Backups, CapsForm, Settings } from './Settings';
 
 const caps: StoreCaps = { storeId: 'peak', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {} };
 const amount = () => screen.getByLabelText('Change ad budgets: most per day in dollars');
@@ -50,5 +50,17 @@ describe('backups', () => {
     );
     renderApp(<Backups />);
     expect(await screen.findAllByText('Before update')).toHaveLength(1);
+  });
+});
+
+describe('your data', () => {
+  const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, sound: false, notifications: { approvals: true, agentDone: true, errors: true, digest: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
+  it.each([
+    ['0.1.3', 'Version 0.1.3'],
+    ['dev', 'Development build'],
+  ])('shows the running version %s', async (version, text) => {
+    stubApi((url) => (url === '/api/settings' ? settings : url === '/api/health' ? { ok: true, uptimeSec: 1, version, connectors: [] } : undefined));
+    renderApp(<Settings />, '/settings');
+    expect(await screen.findByText(text)).toBeTruthy();
   });
 });

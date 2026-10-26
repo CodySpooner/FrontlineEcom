@@ -1,7 +1,7 @@
 // UI-17 Settings: stores, per-store caps and autopilot, profile, notifications, sound, where the data lives.
 import { useState, type FormEvent } from 'react';
 import { APPROVAL_KINDS, type Store, type StoreCaps } from '@frontline/shared';
-import { useBackupNow, useBackups, useCaps, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings, useUsage } from '../api/client';
+import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings, useUsage } from '../api/client';
 import { Hero } from '../components/Hero';
 import { feeEstimate, nicheName, PLATFORM_NAME, StoreForm } from '../components/StoreForm';
 import { Badge, Button, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../components/ui';
@@ -224,6 +224,7 @@ function Preferences() {
   const [base, setBase] = useState<string>();
   const [copied, setCopied] = useState(false);
   const openDir = useOpenDataFolder();
+  const version = useHealth().data?.version;
   if (q.isPending) return <Panel title="Profile"><LoadingState rows={3} /></Panel>;
   if (q.isError) return <Panel title="Profile"><ErrorState message="Couldn't load your settings." onRetry={() => q.refetch()} /></Panel>;
   const s = q.data;
@@ -283,7 +284,11 @@ function Preferences() {
           </p>
         )}
       </Panel>
-      <Panel title="Your Data" sub="The database and encryption key live on this computer.">
+      <Panel
+        title="Your Data"
+        sub="The database and encryption key live on this computer."
+        action={version && <span className="shrink-0 text-xs text-muted tabular-nums">{version === 'dev' ? 'Development build' : `Version ${version}`}</span>}
+      >
         <div className="flex items-center gap-2">
           <code className="min-w-0 flex-1 truncate rounded-md border border-line bg-bg-2 px-2.5 py-1.5 font-mono text-xs text-text-2" title={s.dataDir}>
             {s.dataDir}
