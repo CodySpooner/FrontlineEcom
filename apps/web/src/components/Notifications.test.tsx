@@ -68,3 +68,21 @@ describe('bell drawer', () => {
     expect(screen.getByTestId('where').textContent).toBe('/analytics');
   });
 });
+
+describe('notification list', () => {
+  it("shows an error's whole body: it says how to recover", async () => {
+    const fix = "Shopify said no. Approved: Lamp, Rug. Lamp was created without its price: set it in Shopify rather than adding it again; add any not created yet by hand.";
+    stubApi((url) =>
+      url.startsWith('/api/notifications')
+        ? [
+            { id: 'n1', kind: 'error', title: "Couldn't add products to Peak Fit", body: fix, createdAt: '2026-10-26T08:00:00Z' },
+            { id: 'n2', kind: 'info', title: 'Measured win', body: 'Short hooks lifted CTR', createdAt: '2026-10-26T08:00:00Z' },
+          ]
+        : [],
+    );
+    renderApp(<NotificationBell />);
+    fireEvent.click(await screen.findByRole('button', { name: /Notifications/ }));
+    expect((await screen.findByText(fix)).className).not.toContain('line-clamp');
+    expect(screen.getByText('Short hooks lifted CTR').className).toContain('line-clamp-2');
+  });
+});

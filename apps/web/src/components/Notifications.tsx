@@ -138,7 +138,8 @@ function Drawer({ onClose }: { onClose: () => void }) {
                   <k.icon className={cx('mt-0.5 size-[18px]', n.kind === 'error' ? 'text-red' : 'text-muted')} aria-label={k.label} />
                   <span className="min-w-0">
                     <span className={cx('block text-[13px]', n.readAt ? 'text-text-2' : 'font-semibold')}>{n.title}</span>
-                    {n.body && <span className="line-clamp-2 block text-xs text-muted">{n.body}</span>}
+                    {/* An error's body says how to recover (and clicking only follows its link), so it isn't cut. */}
+                    {n.body && <span className={cx('block text-xs text-muted', n.kind !== 'error' && 'line-clamp-2')}>{n.body}</span>}
                     <span className="mt-0.5 block text-[11px] text-muted">{[n.storeId && name(n.storeId), ago(n.createdAt)].filter(Boolean).join(' · ')}</span>
                   </span>
                   {!n.readAt && <i aria-label="Unread" className="mt-1.5 size-2 rounded-full bg-red" />}
