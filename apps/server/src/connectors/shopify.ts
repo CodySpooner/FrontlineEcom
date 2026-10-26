@@ -62,6 +62,8 @@ const PRODUCTS_Q = `query ($after: String, $q: String) {
       featuredMedia { preview { image { url } } }
       variants(first: 1) { nodes { price compareAtPrice inventoryItem { unitCost { amount } } } } }
     pageInfo { hasNextPage endCursor } } }`;
+const DELETED_Q = `query ($after: String, $q: String) {
+  events(first: 250, after: $after, query: $q) { nodes { ... on BasicEvent { subjectId } } pageInfo { hasNextPage endCursor } } }`;
 
 // Shopify prices a query before running it (max 1000): objects 1, connections 2 + first × child. Per order:
 // 1 + total 2 + fulfillment 2 + lineItems (2 + 10 × 7 + pageInfo 1) = 78, so 12 orders = 938. Products: 2 + 50 × 9 = 452.
@@ -211,6 +213,10 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const since = cursor ?? `${addDays(localDate(now), -BACKFILL_DAYS)}T00:00:00Z`;
     const filter = `updated_at:>='${since}'`;
     const products = await all((after) => q<{ products: { nodes: ShopifyProduct[]; pageInfo: PageInfo } }>(PRODUCTS_Q, { after, q: filter }).then((d) => d.products));
+    // A deleted product just stops coming back, so its delete event archives it here. Failing to read events never stops a sync.
+    const deleted = !cursor ? [] : await all((after) =>
+      q<{ events: { nodes: { subjectId?: string }[]; pageInfo: PageInfo } }>(DELETED_Q, { after, q: `action:'destroy' AND subject_type:'PRODUCT' AND created_at:>='${since}'` }).then((d) => d.events),
+    ).catch(() => []);
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: shop.ianaTimezone });
     // A page's resume point never passes the sync start, so a product edited while orders page in is fetched again.
     const start = cursorAt(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
@@ -230,6 +236,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         const compareAt = v?.compareAtPrice ? num(v.compareAtPrice) : null;
         prod.run(storeId, tail(p.id), p.title, p.featuredMedia?.preview?.image?.url ?? null, num(v?.price), compareAt, num(v?.inventoryItem?.unitCost), p.totalInventory ?? 0, p.tracksInventory === false ? 0 : 1, p.status.toLowerCase() as ProductStatus);
       }
+      const archive = db.prepare("UPDATE products SET status = 'archived' WHERE store_id = ? AND id = ?");
+      for (const e of deleted) if (e.subjectId) archive.run(storeId, tail(e.subjectId));
     });
 
     const ord = db.prepare(

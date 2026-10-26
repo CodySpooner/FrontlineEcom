@@ -30,7 +30,7 @@ const PRODUCT = {
 };
 
 /** Fake Shopify: answers by query type, pages orders 2 at a time, records requests. */
-function fakeShopify(orders: ReturnType<typeof order>[], status = 200, funnel = false) {
+function fakeShopify(orders: ReturnType<typeof order>[], status = 200, funnel = false, deleted: string[] = []) {
   const calls: { url: string; token: string | null; body: { query: string; variables: Record<string, unknown> } }[] = [];
   const fetchFn = (async (url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body));
@@ -39,6 +39,7 @@ function fakeShopify(orders: ReturnType<typeof order>[], status = 200, funnel = 
     const json = (data: unknown) => Response.json({ data });
     if (body.query.includes('shop {')) return json({ shop: { name: 'Glow Haus', currencyCode: 'EUR', ianaTimezone: 'Europe/Berlin' } });
     if (body.query.includes('products(')) return json({ products: { nodes: [PRODUCT], pageInfo: { hasNextPage: false, endCursor: null } } });
+    if (body.query.includes('events(')) return json({ events: { nodes: deleted.map((subjectId) => ({ subjectId })), pageInfo: { hasNextPage: false, endCursor: null } } });
     if (body.query.includes('shopifyqlQuery')) {
       if (!funnel) return Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });
       const columns = ['day', 'sessions', 'sessions_with_cart_additions', 'sessions_that_reached_checkout'].map((name) => ({ name, dataType: 'INTEGER' }));
@@ -476,4 +477,18 @@ test("a product whose stock Shopify doesn't track reads as untracked, not sold o
   await syncShopify(db, key, 'glow', fetchFn, NOW);
   const [p] = ((await (await app.request('/api/products?stores=glow')).json()) as Page<Product>).items;
   expect(p).toMatchObject({ id: '111', inventory: 0, inventoryTracked: false });
+});
+
+test("a product deleted in Shopify is archived from its delete event (later syncs only)", async () => {
+  const { db } = await setup();
+  const first = fakeShopify([], 200, false, ['gid://shopify/Product/111']);
+  await syncShopify(db, key, 'glow', first.fetchFn, NOW);
+  expect(first.calls.some((c) => c.body.query.includes('events('))).toBe(false); // nothing local to archive yet
+  const status = () => db.prepare("SELECT status FROM products WHERE store_id = 'glow' AND id = '111'").get()?.status;
+  expect(status()).toBe('active');
+
+  const second = fakeShopify([], 200, false, ['gid://shopify/Product/111']);
+  await syncShopify(db, key, 'glow', second.fetchFn, NOW);
+  expect(second.calls.find((c) => c.body.query.includes('events('))!.body.variables.q).toBe("action:'destroy' AND subject_type:'PRODUCT' AND created_at:>='2026-10-26T17:55:00Z'");
+  expect(status()).toBe('archived');
 });
