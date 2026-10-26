@@ -51,9 +51,19 @@ describe('approvals flow', () => {
     expect(screen.getByText('all clear')).toBeTruthy();
   });
 
+  it('denies with the reason the owner gives, so the squad learns why', async () => {
+    const fetch = serve(200);
+    fireEvent.click(await screen.findByRole('button', { name: 'Deny: Raise daily budget 20%' }));
+    fireEvent.change(screen.getByLabelText('Why deny Raise daily budget 20%?'), { target: { value: ' Too early in the month ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm deny: Raise daily budget 20%' }));
+    expect(await screen.findByText('Denied')).toBeTruthy();
+    expect(fetch).toHaveBeenCalledWith('/api/approvals/a1/deny', expect.objectContaining({ method: 'POST', body: '{"note":"Too early in the month"}' }));
+  });
+
   it('puts the buttons back and says so when the verdict fails', async () => {
     serve(500);
     fireEvent.click(await screen.findByRole('button', { name: 'Deny: Raise daily budget 20%' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm deny: Raise daily budget 20%' }));
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Deny: Raise daily budget 20%' })).toBeTruthy();
   });

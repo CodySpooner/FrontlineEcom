@@ -148,13 +148,12 @@ Orca's browser against the reference before ticking it.
       resolved issues with the owner's resolution, but the UI never sent one. PATCH errors are shown too (they were silent).
 - [x] UI-49 Store form: time zone. The API takes and validates `timezone` and non-Shopify connectors date orders by it,
       but the form couldn't set it, so every store got the computer's zone.
-- [ ] UI-50 "Why not?" on Deny: Deny opens an optional one-line reason (Dashboard Requests, bell drawer, chat cards) that is
+- [x] UI-50 "Why not?" on Deny: Deny opens an optional one-line reason (Dashboard Requests, bell drawer, chat cards) that is
       sent with the deny, so the denial memory tells the squad why. Needs core `decisionNote` + agents `rememberDenial`.
 - [x] UI-51 Chat: a failed or stopped newest message offers "Try again" (same task, same conversation) instead of making
       the owner retype it, e.g. after "Interrupted by an app restart".
 
 ## Blocked
-- UI-50 Deny reason: waiting on core (`decisionNote` on deny) and agents (`rememberDenial` uses it), Inbox requests 2026-10-26.
 
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
@@ -230,3 +229,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-48: "Mark resolved" on an Operations-flagged issue opens a focused "What fixed #1071" field (max 500, optional) with Cancel / Resolve. It sends `{ status: 'resolved', resolution }` (trimmed, omitted when blank), and the API's error shows in role=alert. Orders.test.tsx covers both. Chrome against the live API with fixture issue ui-fx-oi on #1071: resolution and resolvedAt saved, issue left the queue, no XP/memory side effects; fixture deleted
 - 2026-10-26 — UI-49: StoreForm (Settings add/edit, onboarding) has a "Time zone" select built from `Intl.supportedValuesOf('timeZone')`. It starts at the store's saved zone, kept even when the list omits it (e.g. UTC), or this computer's zone for a new store, and is sent on save. The hint says a connected Shopify store uses the shop's own zone (the connector overwrites it). StoreForm.test.tsx covers the default, the sent value and the UTC case. Chrome 1440: Edit Pawsome Gear shows America/Chicago with 418 zones, no overflow; cancelled without saving
 - 2026-10-26 — UI-51: Transcript takes `onRetry`, which Chat passes to the newest message only. Failed/Stopped runs get a "Try again" text button beside the status (Stop's style) that resends `run.task`, resuming its session. Chat.test.tsx covers the newest-only rule, the POST body (`resumeRunId`) and the thread append, plus none after Done (stubs ResizeObserver). Chrome with the fake engine on peak:copywriter: fixture run marked failed → Try again → same task re-ran and finished, and the old failure lost its button. Fixture runs and their side effects removed: 2 runs, 2 copy creatives, 2 notifications, +20 agent XP (mirror corrected), and the +50 mission XP they triggered
+- 2026-10-26 — UI-50: Deny is two steps on the Dashboard board, the bell drawer and chat cards. `DenyReason` (components/Chat.tsx) shows a focused "Why not? (optional)" field (max 300) with Back / Deny, and the note goes out as core's `{ note }` (useDecide sends a body only when there is one). The drawer's Recently decided shows the quoted `decisionNote`. Tests: Dashboard (note in body, failure restores buttons) and Notifications (two-step deny, note shown). Chrome on the live API with fixture ui-fx-deny: decisionNote saved and shown in the drawer, and the drawer card's form layout was checked via Back. Placeholder shortened after it truncated in the drawer. Still open in agents' Inbox: `rememberDenial` doesn't put the note in the memory yet (seen: memory text had no reason). Fixture approval and memory removed

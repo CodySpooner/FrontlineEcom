@@ -88,6 +88,7 @@ function Drawer({ onClose }: { onClose: () => void }) {
                     <span className="block truncate" title={a.title}>
                       <b className="font-semibold">{ok ? (a.action.auto ? 'Autopilot approved' : 'Approved') : 'Denied'}</b> · {a.title}
                     </span>
+                    {a.decisionNote && <span className="block text-xs text-text-2">“{a.decisionNote}”</span>}
                     <span className="block text-xs text-muted">
                       {who(a)} · {ago(a.decidedAt ?? a.createdAt)}
                     </span>

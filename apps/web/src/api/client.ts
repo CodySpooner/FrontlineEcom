@@ -122,7 +122,9 @@ export const useAchievements = () => useQuery({ queryKey: ['achievements'], quer
 export function useDecide() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, verdict }: { id: string; verdict: ApprovalDecision }) => api<ApprovalRequest>(`/api/approvals/${id}/${verdict}`, { method: 'POST' }),
+    // A deny can carry the owner's reason; the denial memory keeps it.
+    mutationFn: ({ id, verdict, note }: { id: string; verdict: ApprovalDecision; note?: string }) =>
+      api<ApprovalRequest>(`/api/approvals/${id}/${verdict}`, note ? json('POST', { note }) : { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['agents'] }),
   });
 }

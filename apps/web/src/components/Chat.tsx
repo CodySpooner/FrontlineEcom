@@ -7,7 +7,7 @@ import { cents, money } from '../lib/format';
 import { isLive, toBlocks } from '../lib/transcript';
 import { ApprovalExtras } from './ApprovalExtras';
 import { Portrait } from './Art';
-import { Badge, Button, cx, EmptyState, LoadingState, Panel, StatusDot } from './ui';
+import { Badge, Button, cx, EmptyState, inputClass, LoadingState, Panel, StatusDot } from './ui';
 
 export function Chat({ agent, thread, onThread }: { agent: Agent; thread: string[]; onThread: (ids: string[]) => void }) {
   const name = AGENT_ROLES[agent.role].name;
@@ -181,6 +181,36 @@ export function Transcript({ run, role, onRetry }: { run: AgentRunDetail; role: 
   );
 }
 
+/** Deny's second step: an optional reason, sent with the deny, so the squad's memory of the "no" says why. */
+export function DenyReason({ title, disabled, onDeny, onBack, className }: { title: string; disabled?: boolean; onDeny: (note?: string) => void; onBack: () => void; className?: string }) {
+  const [note, setNote] = useState('');
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onDeny(note.trim() || undefined);
+      }}
+      className={cx('flex min-w-0 flex-1 flex-wrap items-center gap-1.5', className)}
+    >
+      <input
+        value={note}
+        onChange={(e) => setNote(e.target.value)}
+        maxLength={300}
+        autoFocus
+        aria-label={`Why deny ${title}?`}
+        placeholder="Why not? (optional)"
+        className={cx(inputClass, 'min-w-40 flex-1 py-1.5')}
+      />
+      <Button size="sm" onClick={onBack}>
+        Back
+      </Button>
+      <Button size="sm" type="submit" disabled={disabled} aria-label={`Confirm deny: ${title}`}>
+        Deny
+      </Button>
+    </form>
+  );
+}
+
 /** A request raised mid-run. Decided ones (here or on the dashboard) drop their buttons. */
 /** `who` (e.g. "Ad Strategist · Pawsome Gear") replaces the generic heading where the store isn't obvious. */
 export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
@@ -188,7 +218,8 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
   const decide = useDecide();
   const [verdict, setVerdict] = useState<'approve' | 'deny'>();
   const open = !verdict && (pending?.some((p) => p.id === a.id) ?? a.status === 'pending');
-  const act = (v: 'approve' | 'deny') => decide.mutateAsync({ id: a.id, verdict: v }).then(() => setVerdict(v), () => {});
+  const [denying, setDenying] = useState(false);
+  const act = (v: 'approve' | 'deny', note?: string) => decide.mutateAsync({ id: a.id, verdict: v, note }).then(() => setVerdict(v), () => {});
   return (
     <div className="rounded-lg border border-red/40 bg-red-soft/40 p-3">
       <div className="font-display text-[11px] font-bold tracking-[.12em] text-red uppercase">{who ?? 'Needs your approval'}{APPROVAL_KINDS[a.action.kind] && ` · ${APPROVAL_KINDS[a.action.kind]!.label}`}</div>
@@ -198,13 +229,15 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
         {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
       </div>
       <ApprovalExtras action={a.action} />
-      <div className="mt-2.5 flex items-center gap-1.5">
-        {open ? (
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        {open && denying ? (
+          <DenyReason title={a.title} disabled={decide.isPending} onDeny={(note) => act('deny', note)} onBack={() => setDenying(false)} />
+        ) : open ? (
           <>
             <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => act('approve')} aria-label={`Approve: ${a.title}`}>
               Approve
             </Button>
-            <Button size="sm" disabled={decide.isPending} onClick={() => act('deny')} aria-label={`Deny: ${a.title}`}>
+            <Button size="sm" disabled={decide.isPending} onClick={() => setDenying(true)} aria-label={`Deny: ${a.title}`}>
               Deny
             </Button>
           </>

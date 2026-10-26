@@ -36,6 +36,7 @@ describe('bell drawer', () => {
       if (init?.method === 'POST') return { ...approval, status: 'denied' };
       if (url.startsWith('/api/approvals?status=pending')) return [approval];
       if (url.startsWith('/api/approvals?status=approved')) return [decided];
+      if (url.startsWith('/api/approvals?status=denied')) return [{ ...approval, id: 'a9', title: 'Add 3 products', status: 'denied', decisionNote: 'Wrong niche', decidedAt: decided.decidedAt }];
       if (url.startsWith('/api/stores')) return [{ id: 'peak', name: 'Peak Fit', currency: 'USD' }];
       if (url.startsWith('/api/agents')) return [{ id: 'peak:ad_strategist', storeId: 'peak', role: 'ad_strategist' }];
     });
@@ -46,11 +47,14 @@ describe('bell drawer', () => {
     expect(await within(waiting).findByText(/Ad Strategist · Peak Fit/)).toBeTruthy();
     const recent = screen.getByRole('region', { name: 'Recently decided' });
     expect(within(recent).getByText('Autopilot approved')).toBeTruthy();
-    expect(within(recent).getByText(/Ad Strategist · Peak Fit · 2 h ago/)).toBeTruthy();
+    expect(within(recent).getAllByText(/Ad Strategist · Peak Fit · 2 h ago/)).toHaveLength(2);
+    // A denial shows the owner's reason.
+    expect(within(recent).getByText(/Wrong niche/)).toBeTruthy();
     // Requests are waiting, so the empty list below doesn't claim you're caught up.
     expect(await screen.findByText('Nothing else new.')).toBeTruthy();
     expect(screen.queryByText("You're all caught up")).toBeNull();
     fireEvent.click(within(waiting).getByRole('button', { name: `Deny: ${approval.title}` }));
+    fireEvent.click(within(waiting).getByRole('button', { name: `Confirm deny: ${approval.title}` }));
     expect(await within(waiting).findByText('Denied')).toBeTruthy();
     expect(fetch).toHaveBeenCalledWith('/api/approvals/a1/deny', { method: 'POST' });
     // Decided from the drawer, no trip to the Dashboard.

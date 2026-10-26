@@ -8,6 +8,7 @@ import { useAgents, useApprovals, useDecide, useEvents, useIntegrations, useMiss
 import { AreaChart } from '../components/AreaChart';
 import { Portrait } from '../components/Art';
 import { ApprovalExtras } from '../components/ApprovalExtras';
+import { DenyReason } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
@@ -328,13 +329,15 @@ export function Requests() {
   const decide = useDecide();
   const [verdicts, setVerdicts] = useState<Record<string, 'approve' | 'deny'>>({});
   const [failed, setFailed] = useState<string>();
+  const [denying, setDenying] = useState<string>();
   const list = (q.data ?? []).filter((a) => has(a.storeId));
   const waiting = list.filter((a) => !verdicts[a.id]).length;
 
-  const act = (id: string, verdict: 'approve' | 'deny') => {
+  const act = (id: string, verdict: 'approve' | 'deny', note?: string) => {
     setFailed(undefined);
+    setDenying(undefined);
     setVerdicts((v) => ({ ...v, [id]: verdict }));
-    decide.mutateAsync({ id, verdict }).then(
+    decide.mutateAsync({ id, verdict, note }).then(
       // Leave the verdict on screen for a beat, then drop the row.
       () => setTimeout(() => qc.setQueryData<ApprovalRequest[]>(['approvals', 'pending'], (old = []) => old.filter((a) => a.id !== id)), 900),
       () => {
@@ -380,12 +383,14 @@ export function Requests() {
                 </div>
                 {v ? (
                   <span className={cx('font-display text-xs font-bold tracking-widest uppercase', v === 'approve' ? 'text-good' : 'text-red')}>{v === 'approve' ? 'Approved' : 'Denied'}</span>
+                ) : denying === a.id ? (
+                  <DenyReason title={a.title} onDeny={(note) => act(a.id, 'deny', note)} onBack={() => setDenying(undefined)} className="col-span-2" />
                 ) : (
                   <div className="flex gap-1.5">
                     <Button size="sm" variant="primary" aria-label={`Approve: ${a.title}`} onClick={() => act(a.id, 'approve')}>
                       Approve
                     </Button>
-                    <Button size="sm" aria-label={`Deny: ${a.title}`} onClick={() => act(a.id, 'deny')}>
+                    <Button size="sm" aria-label={`Deny: ${a.title}`} onClick={() => setDenying(a.id)}>
                       Deny
                     </Button>
                   </div>
