@@ -1,10 +1,13 @@
 // Component-test helpers (jsdom): the app's providers and a fake API. Import from `*.test.tsx` files only.
 import type { ReactNode } from 'react';
-import { render } from '@testing-library/react';
+import { configure, render } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import { StoreSelectionProvider } from './components/StoreFilter';
+
+// `findBy*` waits 1 s by default; a first render under the full parallel suite can take longer (a Builder test flaked).
+configure({ asyncUtilTimeout: 3000 });
 
 // jsdom has no modal dialogs; the app's Dialog only needs `open` to follow.
 HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {

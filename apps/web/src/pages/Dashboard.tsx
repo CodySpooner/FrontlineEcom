@@ -82,7 +82,7 @@ function RevenueChart({ s, who }: { s: AnalyticsSummary; who: string }) {
 /** What profit takes off revenue for these stores: the fee estimate where set, order tax where core reads it. */
 export function profitFormula(stores: Store[]) {
   const fees = stores.some((x) => x.feePercent || x.feePerOrder);
-  const tax = stores.some((x) => x.connected && ['shopify', 'woocommerce', 'etsy'].includes(x.platform));
+  const tax = stores.some((x) => x.connected && ['shopify', 'woocommerce', 'etsy', 'tiktok_shop'].includes(x.platform));
   return ['Revenue', 'cost of goods', fees && 'your fee estimate', tax && 'sales tax', 'ad spend'].filter(Boolean).join(' − ');
 }
 

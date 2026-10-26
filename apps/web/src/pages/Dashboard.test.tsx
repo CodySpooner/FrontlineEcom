@@ -75,8 +75,9 @@ describe('profitFormula', () => {
   it('names only what comes off for the stores picked', () => {
     expect(profitFormula([store({})])).toBe('Revenue − cost of goods − ad spend');
     expect(profitFormula([store({ feePercent: 9.5 })])).toBe('Revenue − cost of goods − your fee estimate − ad spend');
-    // Order tax is read from connected Shopify, WooCommerce and Etsy stores only.
+    // Order tax is read from connected Shopify, WooCommerce, Etsy and TikTok Shop stores only.
     expect(profitFormula([store({ connected: true, platform: 'etsy' })])).toBe('Revenue − cost of goods − sales tax − ad spend');
+    expect(profitFormula([store({ connected: true, platform: 'tiktok_shop' })])).toBe('Revenue − cost of goods − sales tax − ad spend');
     expect(profitFormula([store({ connected: true, platform: 'amazon' })])).toBe('Revenue − cost of goods − ad spend');
   });
 });
