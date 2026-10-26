@@ -53,7 +53,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-18 Electron shell `apps/desktop`: starts the server in a utilityProcess, loads the web build (dev: Vite URL),
       single instance, frameless window with themed title bar, tray, safeStorage for secrets. Check `node:sqlite` under
       Electron's Node; fall back to better-sqlite3 if needed.
-- [ ] CORE-19 Packaging: electron-builder Windows installer + icon from brand; `pnpm package`.
+- [x] CORE-19 Packaging: electron-builder Windows installer + icon from brand; `pnpm package`.
 - [x] CORE-20 Settings + budget caps + notifications API.
 - [ ] CORE-21 Health: `/api/health` with connector statuses, structured logs to the data dir.
 - [ ] CORE-22 OAuth connect flows: "Connect" buttons that run Etsy (PKCE), TikTok Shop (auth code) and Google Ads OAuth through a
@@ -62,6 +62,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-19 `pnpm package` → `apps/desktop/release/Frontline Ecom Setup 0.1.0.exe` (NSIS, per-user, 224 MB). The API is bundled to one file by `scripts/stage.mjs`, with the Agent SDK's native `claude.exe` beside it, the web build, and the agent playbooks/packs under resources/. Brand bolt icon (`build/icon.svg`, render with `pnpm --filter @frontline/desktop icon`). Verified: the unpacked build runs the dashboard. Unsigned, so SmartScreen warns until a code-signing cert is set (`CSC_LINK`)
 - 2026-10-26 — Inbox (ui): demo orders were seeded across the UTC day, so some were in the future. They now fall within the local day and stop at the current time
 - 2026-10-26 — CORE-13: `GET /api/suppliers/products?q=&limit=` → `SupplierProduct[]` (CJ catalog search, lowest variant price; demo matches from the research catalog without CJ). DSers has no public API, so it is skipped
 - 2026-10-26 — CORE-13 (1/2): CJ Dropshipping connector (global): order status + tracking matched to store orders by order number (store name breaks ties), status only moves forward; platform resyncs keep supplier tracking

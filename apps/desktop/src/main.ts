@@ -6,8 +6,11 @@ import { loadKey } from './key';
 // Set FRONTLINE_DEV_URL (e.g. http://localhost:5173 with `pnpm dev` running) to load Vite with HMR; UI and API then
 // come from the dev servers. Otherwise the app starts its own API, which also serves the web build.
 const DEV_URL = process.env.FRONTLINE_DEV_URL;
-// ponytail: repo paths; CORE-19 (packaging) points these at the bundled server + web build under process.resourcesPath.
+// Installed: the bundled API and web build sit in resources/ (scripts/stage.mjs). From the repo: the sources.
 const root = join(import.meta.dirname, '../../..');
+const API_ENTRY = app.isPackaged ? join(process.resourcesPath, 'server/server.mjs') : join(root, 'apps/server/src/tsx-entry.mjs');
+const WEB_DIR = app.isPackaged ? join(process.resourcesPath, 'web') : join(root, 'apps/web/dist');
+const ICON = join(app.getAppPath(), 'build/icon.png');
 const BG = '#08080a';
 
 let win: BrowserWindow | undefined;
@@ -42,6 +45,7 @@ async function start() {
     show: false,
     backgroundColor: BG,
     title: 'Frontline Ecom',
+    icon: ICON,
     // Frameless: the web app's top bar is the title bar (drag region); Windows keeps its native buttons on top.
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: BG, symbolColor: '#d4d4d8', height: 40 },
@@ -63,7 +67,7 @@ async function start() {
   });
   await win.loadURL(url);
 
-  tray = new Tray(trayIcon());
+  tray = new Tray(nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 }));
   tray.setToolTip('Frontline Ecom');
   tray.on('click', show);
   tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Frontline Ecom', click: show }, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));
@@ -73,14 +77,14 @@ async function start() {
 async function startApi() {
   const port = await freePort();
   const userData = app.getPath('userData');
-  const api = utilityProcess.fork(join(root, 'apps/server/src/tsx-entry.mjs'), [], {
+  const api = utilityProcess.fork(API_ENTRY, [], {
     serviceName: 'Frontline API',
     stdio: 'inherit',
     env: {
       ...process.env,
       API_PORT: String(port),
       FRONTLINE_DATA_DIR: join(userData, 'data'),
-      FRONTLINE_WEB_DIR: join(root, 'apps/web/dist'),
+      FRONTLINE_WEB_DIR: WEB_DIR,
       FRONTLINE_SECRET_KEY: loadKey(join(userData, 'secret.key.enc'), safeStorage, confirmKeyReset).toString('base64'),
     },
   });
@@ -127,9 +131,3 @@ function freePort() {
   });
 }
 
-// ponytail: plain red square until CORE-19 adds the brand icon.
-function trayIcon() {
-  const px = Buffer.alloc(16 * 16 * 4);
-  for (let i = 0; i < px.length; i += 4) px.set([0x3a, 0x2a, 0xff, 0xff], i); // BGRA #ff2a3a
-  return nativeImage.createFromBitmap(px, { width: 16, height: 16 });
-}

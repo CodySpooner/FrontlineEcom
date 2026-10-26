@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
     "desktop": "pnpm --filter @frontline/desktop start",
+    "package": "pnpm --filter @frontline/desktop package",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
