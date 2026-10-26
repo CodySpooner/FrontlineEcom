@@ -310,11 +310,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-180 An SMS step in a drafted flow carries its opt-out and stays within 2 segments. The owner pastes them into their SMS tool as written; one without "STOP" breaks carrier rules and the TCPA, and a 1,000-character one bills 7 segments a send.
 - [x] AGT-181 Operations can look up a backup supplier. Its playbook says to propose one when a supplier fails (stock-out, stuck orders, silence), but it had no supplier search, so "switch supplier" came with no candidate or cost.
 - [x] AGT-182 `research_feed` tells a custom-niche store its feed holds every custom niche's finds. Finds are filed under the niche ("other"), not the custom niche's name, so a candle store's daily product scan read a fishing store's finds as its niche's.
+- [x] AGT-183 A price test approved over 2 weeks after it was asked on a live store is asked again, not applied. Ad changes expire after 4 days; a price test went live on whatever evidence it was asked with, however old (competitor prices, conversion), as long as the price itself hadn't moved.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-183: `applyPriceChange` skips (`not-applied`, no test) a connected store's price change decided 15+ days after it was asked and tells the owner to ask the Market Analyst again.
 - 2026-10-26 — AGT-182: for a custom-niche store (and not `anyNiche`), `research_feed` leads with a note to keep only finds that fit its niche. ponytail: a note, not a filter (finds don't record the custom niche; core's schema).
 - 2026-10-26 — AGT-181: `search_suppliers` is on the Operations allowlist and its playbook names it for the backup-supplier step.
 - 2026-10-26 — AGT-180: `draft_flow` refuses an SMS step without the word STOP or over 320 characters.

@@ -128,6 +128,13 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
   const p = (a.action.payload ?? {}) as { productId?: unknown; title?: unknown; from?: unknown; to?: unknown; compareAt?: unknown };
   const store = getStore(db, a.storeId);
   if (!store || typeof p.productId !== 'string' || typeof p.to !== 'number' || typeof p.from !== 'number') return;
+  // A live store's sales and its competitors' prices move in weeks: a test asked on two-week-old numbers is asked again.
+  const days = Math.floor((Date.parse(a.decidedAt ?? new Date().toISOString()) - Date.parse(a.createdAt)) / 86_400_000);
+  if (store.connected && days > 14) {
+    once(db, `not-applied:${a.id}`);
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `It was asked ${days} days ago, on prices that may have moved since. Ask the Market Analyst again for a fresh read.`, storeId: store.id });
+    return;
+  }
   const now = db.prepare('SELECT price FROM products WHERE store_id = ? AND id = ?').get(store.id, p.productId)?.price;
   if (now != null && moved(p.from, Number(now))) {
     once(db, `not-applied:${a.id}`); // squad_log: approved, not shipped

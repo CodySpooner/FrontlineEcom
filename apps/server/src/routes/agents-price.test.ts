@@ -269,6 +269,27 @@ test("connected stores get the price on Shopify or WooCommerce; other platforms 
   expect(db.prepare('SELECT approval_id, to_price FROM price_tests').all()).toEqual([{ approval_id: 'a1', to_price: to }]);
 });
 
+test('a price approved over 2 weeks after it was asked on a live store is asked again, not applied', async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'peak'`).run();
+  const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'peak' LIMIT 1`).get()!;
+  const [id, from] = [String(p.id), Number(p.price)];
+  const approval = (id2: string, daysAgo: number) =>
+    ({
+      id: id2, storeId: 'peak', agentId: 'peak:market_analyst', title: 'Test price', reason: 'r', status: 'approved',
+      createdAt: new Date(Date.now() - daysAgo * 86_400_000).toISOString(), decidedAt: new Date().toISOString(),
+      action: { kind: 'store.set_price', payload: { productId: id, title: 'T', from, to: from + 1 } },
+    }) as ApprovalRequest;
+  const writes: unknown[] = [];
+  await applyPriceChange(db, approval('a-old', 15), async (...args) => void writes.push(args));
+  expect(writes).toEqual([]);
+  expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
+  expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Not applied: "Test price"'`).get()?.body).toBe(
+    'It was asked 15 days ago, on prices that may have moved since. Ask the Market Analyst again for a fresh read.',
+  );
+  await applyPriceChange(db, approval('a-new', 13), async (...args) => void writes.push(args));
+  expect(writes).toHaveLength(1);
+});
+
 test('a price approved after the price moved is not applied and starts no test', async () => {
   const id = String(db.prepare(`SELECT id FROM products WHERE store_id = 'peak' LIMIT 1`).get()!.id);
   db.prepare(`UPDATE products SET price = 22 WHERE id = ?`).run(id);
