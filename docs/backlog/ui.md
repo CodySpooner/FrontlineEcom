@@ -139,6 +139,8 @@ Orca's browser against the reference before ticking it.
       products at full price") and links to Store Analytics › Unit costs, since that profit is overstated until set.
 - [x] UI-45 Drift check of the other three reference screens (AI Agents, Product Research, Creative Studio) against
       `ui-reference.webp` at 1440, as UI-38 did for the Dashboard; fix what drifted.
+- [x] UI-46 Tests for the Integrations connect form (credential handling): a saved secret left blank is not sent, a new
+      connection requires it, and the API's refusal is shown.
 
 ## Blocked
 - UI-43 First-sync progress: waiting on core for `Integration.backfill` (core Inbox, 2026-10-26).
@@ -210,3 +212,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-44: the Dashboard Profit tile shows "N cost(s) missing" (red link, title explains) when products in the selection have no unit cost, linking to Store Analytics' Unit costs panel. Chrome: zeroed glow-p1 → "1 cost missing" → link → panel; fixture restored (cost 28)
 - 2026-10-26 — E2E (UI-30/42): on the live server, Deny on a ui-fx request in the bell drawer (from Competitors) moved it to "Recently decided · just now" while the 3 seeded requests stayed. Fixture approval and its denial memory removed, plus a stale +25 XP event left by an earlier session's fixture (agent XP mirror corrected)
 - 2026-10-26 — UI-45: AI Agents, Product Research and Creative Studio re-compared with the reference at 1440. Structure still matches (squad cards with portrait, status, LV/XP, Configure/Chat, Deploy Agent; research tabs, AI Research, score-badged cards; Create Your Ad, Generate with credits, Preview, library). Fixed: Creative Studio's static "demo renders until connected" text is now the reference's Integration row (Higgsfield chip with a live status dot linking to Integrations, Claude · copy, daily cap). Asked core to seed demo creatives so the library isn't empty on a fresh install. Research cards use category icons, since demo products have no photos
+- 2026-10-26 — UI-46: Integrations.test.tsx covers ConnectForm. With a saved API key and a blank field, Save sends only the trimmed non-secret values (the key stays out, so the server keeps it) and the field isn't required. A new connection requires the key as a password input and shows the API's 400 reason. Mutation check: sending blank secrets fails the first test

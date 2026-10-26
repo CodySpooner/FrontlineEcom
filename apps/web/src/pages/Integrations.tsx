@@ -103,7 +103,7 @@ function Connection({ store, i, onOpen }: { store?: Store; i?: Integration; onOp
   );
 }
 
-function ConnectForm({ kind, store, current, onDone }: { kind: IntegrationKind; store?: Store; current?: Integration; onDone: () => void }) {
+export function ConnectForm({ kind, store, current, onDone }: { kind: IntegrationKind; store?: Store; current?: Integration; onDone: () => void }) {
   const k = INTEGRATION_KINDS[kind];
   const { save, remove } = useIntegrationActions();
   const oauth = useOAuth();
