@@ -72,6 +72,10 @@ test('issues the order has since answered close themselves: delivered, or suppli
   expect(listOrderIssues(db, { status: 'resolved' }).map((i) => i.resolution).sort()).toEqual([
     'Delivered; closed automatically.', 'Delivered; closed automatically.', 'Supplier shipped (tracking CJ123); closed automatically.',
   ]);
+  // The owner reopens one (delivered, but the customer says it never came): it stays open, though the order still says delivered.
+  const late = listOrderIssues(db, { status: 'resolved' }).find((i) => i.orderId === orderId && i.kind === 'late')!;
+  expect((await patch(late.id, { status: 'open' })).status).toBe(200);
+  expect(await open()).toEqual(['a:address', 'a:late']);
 });
 
 test("a refunded or cancelled order closes its issues, and the agent's list sees it without the owner's page open", async () => {

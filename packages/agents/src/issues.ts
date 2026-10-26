@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { OrderIssue, OrderIssueStatus } from '@frontline/shared';
+import { once } from './memory';
 
 // Operations issue queue: one open issue per order and kind (partial unique index), resolved by the owner.
 
@@ -39,6 +40,7 @@ export function listOrderIssues(db: DatabaseSync, q: { storeIds?: string[]; stat
 }
 
 export function setIssueStatus(db: DatabaseSync, id: string, status: OrderIssueStatus, resolution?: string, now = new Date()): OrderIssue | undefined {
+  if (status === 'open') once(db, `issue-reopened:${id}`, now); // only the owner reopens: it's theirs now, closeAnsweredIssues leaves it
   db.prepare('UPDATE order_issues SET status = ?, resolution = ?, resolved_at = ? WHERE id = ?').run(
     status, status === 'resolved' ? (resolution ?? null) : null, status === 'resolved' ? now.toISOString() : null, id,
   );
@@ -48,14 +50,16 @@ export function setIssueStatus(db: DatabaseSync, id: string, status: OrderIssueS
 
 /**
  * Issues the order itself has since answered: late/stuck once delivered, supplier once it has tracking, and all but
- * 'other' once it's refunded or cancelled (core syncs both as status 'refunded'). Checked on read.
+ * 'other' once it's refunded or cancelled (core syncs both as status 'refunded'). Checked on read. One the owner reopened
+ * stays open (say, delivered but the customer says it never came).
  */
 export function closeAnsweredIssues(db: DatabaseSync, now = new Date()) {
   const rows = db
     .prepare(
       `SELECT i.id, i.kind, o.status, o.fulfillment_status, o.tracking FROM order_issues i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
        WHERE i.status = 'open' AND ((i.kind IN ('late', 'stuck', 'supplier') AND o.fulfillment_status = 'delivered') OR (i.kind = 'supplier' AND o.tracking IS NOT NULL)
-         OR (i.kind != 'other' AND o.status = 'refunded'))`,
+         OR (i.kind != 'other' AND o.status = 'refunded'))
+         AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'issue-reopened:' || i.id)`,
     )
     .all();
   for (const r of rows) {
