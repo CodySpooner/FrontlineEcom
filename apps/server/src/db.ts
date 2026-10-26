@@ -439,6 +439,9 @@ export const MIGRATIONS = [
   /* 26 (core: a store's campaigns; per-day ad spend scanned all of campaign_daily, 4 s for a 2-year sync, without it) */ `
   CREATE INDEX campaigns_by_store ON campaigns (store_id);
   `,
+  /* 27 (core: the owner's optional reason for a denial) */ `
+  ALTER TABLE approvals ADD COLUMN decision_note TEXT;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

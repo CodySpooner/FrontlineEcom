@@ -149,6 +149,11 @@ export interface ApprovalRequest {
   runId?: string;
   /** ISO timestamp, set when approved or denied. */
   decidedAt?: string;
+  /**
+   * The owner's reason for a denial, e.g. "too expensive": POST /api/approvals/:id/deny takes an optional JSON body
+   * { note?: string } (1-300 characters, trimmed; 400 otherwise). Approve takes no body.
+   */
+  decisionNote?: string;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

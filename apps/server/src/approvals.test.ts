@@ -56,3 +56,20 @@ test('hook: an agent creates a request and awaits the owner decision', async () 
   expect((await hook.decision(req.id)).status).toBe('approved');
   await expect(hook.decision('nope')).rejects.toThrow('not found');
 });
+
+test("a denial can carry the owner's reason; approvals and bad notes can't", async () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const app = createApp(db);
+  const post = (path: string, body?: unknown) => app.request(path, { method: 'POST', ...(body === undefined ? {} : { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } }) });
+  expect((await post('/api/approvals/demo-appr-1/deny', { note: ' ' })).status).toBe(400);
+  expect((await post('/api/approvals/demo-appr-1/deny', { note: 'x'.repeat(301) })).status).toBe(400);
+  expect((await post('/api/approvals/demo-appr-1/deny', { note: 42 })).status).toBe(400);
+  const denied = (await (await post('/api/approvals/demo-appr-1/deny', { note: '  Too expensive this month ' })).json()) as ApprovalRequest;
+  expect(denied).toMatchObject({ status: 'denied', decisionNote: 'Too expensive this month' });
+  expect(((await (await app.request('/api/approvals?status=denied')).json()) as ApprovalRequest[]).find((a) => a.id === 'demo-appr-1')?.decisionNote).toBe('Too expensive this month');
+  const approved = (await (await post('/api/approvals/demo-appr-2/approve', { note: 'ignored' })).json()) as ApprovalRequest;
+  expect(approved.status).toBe('approved');
+  expect(approved.decisionNote).toBeUndefined();
+  expect(((await (await post('/api/approvals/demo-appr-3/deny')).json()) as ApprovalRequest).decisionNote).toBeUndefined();
+});

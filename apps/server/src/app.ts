@@ -107,8 +107,11 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       if (status && !['pending', 'approved', 'denied'].includes(status)) return c.json({ error: 'status must be pending, approved or denied' }, 400);
       return c.json(listApprovals(db, pickStores(db, c.req.query('stores')), status));
     })
-    .post('/api/approvals/:id/:decision{approve|deny}', (c) => {
-      const a = decide(db, c.req.param('id'), c.req.param('decision') as ApprovalDecision);
+    .post('/api/approvals/:id/:decision{approve|deny}', async (c) => {
+      const decision = c.req.param('decision') as ApprovalDecision;
+      const note = decision === 'deny' ? ((await json(c.req.raw)) as { note?: unknown } | undefined)?.note : undefined;
+      if (note !== undefined && (typeof note !== 'string' || !note.trim() || note.trim().length > 300)) return c.json({ error: 'note must be 1 to 300 characters' }, 400);
+      const a = decide(db, c.req.param('id'), decision, note?.trim());
       if (!a) return c.json({ error: 'approval not found' }, 404);
       return a === 'decided' ? c.json({ error: 'approval already decided' }, 409) : c.json(a);
     })

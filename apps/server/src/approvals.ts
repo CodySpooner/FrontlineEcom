@@ -17,6 +17,7 @@ const toApproval = (r: Row): ApprovalRequest => ({
   createdAt: String(r.created_at),
   ...(r.run_id ? { runId: String(r.run_id) } : {}),
   ...(r.decided_at ? { decidedAt: String(r.decided_at) } : {}),
+  ...(r.decision_note ? { decisionNote: String(r.decision_note) } : {}),
 });
 
 export const getApproval = (db: Db, id: string) => {
@@ -35,10 +36,15 @@ export function listApprovals(db: Db, storeIds: string[], status?: ApprovalStatu
     .map(toApproval);
 }
 
-/** Approves or denies a pending request and broadcasts it. Returns undefined if missing, 'decided' if not pending. */
-export function decide(db: Db, id: string, decision: ApprovalDecision): ApprovalRequest | 'decided' | undefined {
+/**
+ * Approves or denies a pending request (a denial can carry the owner's `note`) and broadcasts it. Returns undefined if
+ * missing, 'decided' if not pending.
+ */
+export function decide(db: Db, id: string, decision: ApprovalDecision, note?: string): ApprovalRequest | 'decided' | undefined {
   const status: ApprovalStatus = decision === 'approve' ? 'approved' : 'denied';
-  const changed = db.prepare("UPDATE approvals SET status = ?, decided_at = ? WHERE id = ? AND status = 'pending'").run(status, new Date().toISOString(), id).changes;
+  const changed = db
+    .prepare("UPDATE approvals SET status = ?, decided_at = ?, decision_note = ? WHERE id = ? AND status = 'pending'")
+    .run(status, new Date().toISOString(), decision === 'deny' ? (note ?? null) : null, id).changes;
   const a = getApproval(db, id);
   if (!a) return undefined;
   if (!changed) return 'decided';
