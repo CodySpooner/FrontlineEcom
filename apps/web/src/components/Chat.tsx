@@ -174,7 +174,8 @@ export function Transcript({ run, role }: { run: AgentRunDetail; role: AgentRole
 }
 
 /** A request raised mid-run. Decided ones (here or on the dashboard) drop their buttons. */
-export function ApprovalCard({ a }: { a: ApprovalRequest }) {
+/** `who` (e.g. "Ad Strategist · Pawsome Gear") replaces the generic heading where the store isn't obvious. */
+export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
   const pending = useApprovals().data;
   const decide = useDecide();
   const [verdict, setVerdict] = useState<'approve' | 'deny'>();
@@ -182,7 +183,7 @@ export function ApprovalCard({ a }: { a: ApprovalRequest }) {
   const act = (v: 'approve' | 'deny') => decide.mutateAsync({ id: a.id, verdict: v }).then(() => setVerdict(v), () => {});
   return (
     <div className="rounded-lg border border-red/40 bg-red-soft/40 p-3">
-      <div className="font-display text-[11px] font-bold tracking-[.12em] text-red uppercase">Needs your approval{APPROVAL_KINDS[a.action.kind] && ` · ${APPROVAL_KINDS[a.action.kind]!.label}`}</div>
+      <div className="font-display text-[11px] font-bold tracking-[.12em] text-red uppercase">{who ?? 'Needs your approval'}{APPROVAL_KINDS[a.action.kind] && ` · ${APPROVAL_KINDS[a.action.kind]!.label}`}</div>
       <div className="mt-1 text-[13px] font-semibold">{a.title}</div>
       <div className="mt-0.5 text-xs text-muted">
         {a.reason}

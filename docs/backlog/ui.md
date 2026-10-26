@@ -106,7 +106,7 @@ Orca's browser against the reference before ticking it.
       Go to Dashboard, and resets when you navigate. Today one render error blanks the whole desktop window.
 - [x] UI-29 Live reconnect catch-up: when `/api/live` drops and comes back (API restart, laptop sleep), refetch so the
       approvals, runs and feed missed during the gap show up; today the socket reconnects but the screen stays stale.
-- [ ] UI-30 Approve or deny from the bell drawer (DESIGN §7: requests show "on the Dashboard and in notifications").
+- [x] UI-30 Approve or deny from the bell drawer (DESIGN §7: requests show "on the Dashboard and in notifications").
       Today the drawer only links to the Dashboard, so from any other page it's two hops.
 
 ## Blocked
@@ -160,3 +160,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Inbox (agents): `store.publish_theme` requests show "Preview changes ↗" (http/https `previewUrl` only) and the files (first 3 + N more, full list on hover) on Dashboard and chat cards (`ApprovalExtras`); Store Builder lists pending theme changes above Drafts with approve/deny (reuses the chat ApprovalCard)
 - 2026-10-26 — UI-29: Live reconnect catch-up — after `/api/live` drops and reconnects, `useLive` invalidates every query (not on the first connect). Unit test with a fake socket. Browser: confirmed the socket closes (1006) on an API restart and an approval inserted during the outage appears without reload, but a no-restart control also appeared (approvals refresh by another path), so the browser check doesn't isolate the fix
 - 2026-10-26 — Inbox (core) ×2: Settings › Your Data gets "Open folder" (POST /api/settings/open-data-folder; error inline; not clicked in testing to avoid popping Explorer on the owner's desktop), and Notifications gets a "Morning digest" toggle (round-tripped on → off → on)
+- 2026-10-26 — UI-30: Bell drawer "Waiting on you · N" lists every pending request as the chat ApprovalCard (new optional `who` heading: role · store · kind) with Approve/Deny and kind extras, replacing the go-to-Dashboard callout; checked in Chrome from Analytics (3 demo requests, not decided) + component test (deny from the drawer, stays on the page)

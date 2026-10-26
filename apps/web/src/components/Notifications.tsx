@@ -1,10 +1,11 @@
 // UI-20 Notification center: the bell in the top bar and its drawer.
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useNavigate } from 'react-router';
 import { Bell, CircleAlert, CircleCheck, Info, ShieldCheck, type LucideIcon } from 'lucide-react';
-import type { AppNotification, NotificationKind } from '@frontline/shared';
-import { useApprovals, useMarkRead, useNotifications } from '../api/client';
+import { AGENT_ROLES, type AppNotification, type NotificationKind } from '@frontline/shared';
+import { useAgents, useApprovals, useMarkRead, useNotifications } from '../api/client';
 import { ago } from '../lib/format';
+import { ApprovalCard } from './Chat';
 import { useStoreSelection } from './StoreFilter';
 import { Button, cx, Dialog, EmptyState, ErrorState, LoadingState } from './ui';
 
@@ -35,13 +36,15 @@ export function NotificationBell() {
         )}
       </button>
       <Dialog open={open} onClose={() => setOpen(false)} title="Notifications" side="right">
-        {open && <Drawer pending={pending} onClose={() => setOpen(false)} />}
+        {open && <Drawer onClose={() => setOpen(false)} />}
       </Dialog>
     </>
   );
 }
 
-function Drawer({ pending, onClose }: { pending: number; onClose: () => void }) {
+function Drawer({ onClose }: { onClose: () => void }) {
+  const approvals = useApprovals().data ?? [];
+  const agents = useAgents().data ?? [];
   const q = useNotifications();
   const read = useMarkRead();
   const navigate = useNavigate();
@@ -56,16 +59,14 @@ function Drawer({ pending, onClose }: { pending: number; onClose: () => void }) 
   };
   return (
     <div className="grid gap-3">
-      {pending > 0 && (
-        <Link to="/" onClick={onClose} className="flex items-center gap-3 rounded-lg border border-red/35 bg-red-soft px-3 py-2.5 text-[13px] transition hover:border-red/60">
-          <ShieldCheck className="size-4 shrink-0 text-red" aria-hidden />
-          <span className="flex-1">
-            <b>
-              {pending} {pending === 1 ? 'approval is' : 'approvals are'} waiting on you
-            </b>
-            <span className="block text-xs text-text-2">Review them on the Dashboard.</span>
-          </span>
-        </Link>
+      {approvals.length > 0 && (
+        <section aria-label="Waiting on you" className="grid gap-2">
+          <h3 className="font-display text-[11px] font-semibold tracking-[.15em] text-muted uppercase">Waiting on you · {approvals.length}</h3>
+          {approvals.map((a) => {
+            const role = agents.find((g) => g.id === a.agentId)?.role;
+            return <ApprovalCard key={a.id} a={a} who={`${role ? AGENT_ROLES[role].name : 'Agent'} · ${name(a.storeId)}`} />;
+          })}
+        </section>
       )}
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs text-muted">{unread ? `${unread} unread` : 'All read'}</span>
