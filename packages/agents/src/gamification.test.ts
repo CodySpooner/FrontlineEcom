@@ -28,9 +28,11 @@ test('store health: bleeding when losing money, winning from 15% net margin', ()
   expect(storeHealth({ revenue: 100, profit: 60 }).bar).toBe(1);
 });
 
-test('profit streak counts back from the last day', () => {
+test('profit streak counts back from today; today counts once profitable and does not break it before', () => {
   expect(profitStreak([{ profit: 5 }, { profit: -1 }, { profit: 2 }, { profit: 3 }])).toBe(2);
-  expect(profitStreak([{ profit: 1 }, { profit: 0 }])).toBe(0);
+  expect(profitStreak([...Array(29).fill({ profit: 40 }), { profit: -12 }])).toBe(29); // 7am: ad spend ahead of orders
+  expect(profitStreak([{ profit: 1 }, { profit: -3 }, { profit: 0 }])).toBe(0);
+  expect(profitStreak([])).toBe(0);
 });
 
 test('demo XP is stable and varied', () => {

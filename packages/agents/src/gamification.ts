@@ -78,10 +78,14 @@ export function commander(db: DatabaseSync, streakDays: number): Commander {
   return { level, xp, rank: rankForLevel(level), levelProgress: levelProgress(xp), streakDays };
 }
 
-/** Days in a row, ending with the last day of the series, that made a profit. */
+/**
+ * Days in a row that made a profit, counting back from the end of the series. The last point is today, still in
+ * progress: it counts once it's profitable, and a morning before the orders cover the ad spend doesn't break the streak.
+ */
 export function profitStreak(series: Pick<MetricPoint, 'profit'>[]) {
+  const end = series.length && series.at(-1)!.profit <= 0 ? series.length - 1 : series.length;
   let days = 0;
-  for (let i = series.length - 1; i >= 0 && series[i]!.profit > 0; i--) days++;
+  for (let i = end - 1; i >= 0 && series[i]!.profit > 0; i--) days++;
   return days;
 }
 
