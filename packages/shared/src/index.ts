@@ -564,6 +564,8 @@ export interface IntegrationField {
   placeholder?: string;
   /** Filled by the Connect button (OAuth); the owner can still paste it. Leave it out of POST /api/integrations/oauth/start. */
   oauth?: boolean;
+  /** May stay empty when saving; Connect may still need it. */
+  optional?: boolean;
 }
 
 /**
@@ -585,11 +587,12 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'shopDomain', label: 'Shop domain', secret: false, placeholder: 'your-store.myshopify.com' },
     { key: 'accessToken', label: 'Admin API access token', secret: true, placeholder: 'shpat_…' },
   ] },
-  tiktok_shop: { name: 'TikTok Shop', category: 'platform', perStore: true, help: 'TikTok Shop Partner Center → App & Service → create a custom app with Order and Product read scopes → copy the App key and App secret → authorize the app for your shop → get the shop access token and refresh token (Partner Center API testing tool, or the auth code exchange) → paste both. The app renews the access token itself.', fields: [
+  tiktok_shop: { name: 'TikTok Shop', category: 'platform', perStore: true, help: 'TikTok Shop Partner Center → App & Service → create a custom app with Order and Product read scopes, and set its redirect URL to https://localhost/frontline-oauth → copy the App key, App secret and the authorization link. Press Connect, approve your shop, then paste the address the browser lands on (the page itself will not load).', fields: [
     { key: 'appKey', label: 'App key', secret: false },
     { key: 'appSecret', label: 'App secret', secret: true },
-    { key: 'accessToken', label: 'Access token', secret: true },
-    { key: 'refreshToken', label: 'Refresh token', secret: true },
+    { key: 'authLink', label: 'Authorization link', secret: false, optional: true, placeholder: 'https://services.tiktokshop.com/open/authorize?service_id=…' },
+    { key: 'accessToken', label: 'Access token', secret: true, oauth: true },
+    { key: 'refreshToken', label: 'Refresh token', secret: true, oauth: true },
   ] },
   etsy: { name: 'Etsy', category: 'platform', perStore: true, help: 'etsy.com/developers → Create a new app → copy the keystring and shared secret, and add https://localhost/frontline-oauth as a callback URL. Enter them with your shop ID, press Connect, approve in the browser, then paste the address the browser lands on (the page itself will not load). The app renews the access token itself (it lasts an hour).', fields: [
     { key: 'shopId', label: 'Shop ID', secret: false },

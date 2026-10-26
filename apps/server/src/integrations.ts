@@ -64,7 +64,10 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
   const secrets: Record<string, string> = {};
   for (const f of spec.fields) {
     const v = values[f.key]?.trim() || (f.secret ? oldSecrets[f.key] : undefined);
-    if (!v) return `${f.label} is required`;
+    if (!v) {
+      if (f.optional) continue;
+      return `${f.label} is required`;
+    }
     (f.secret ? secrets : settings)[f.key] = v;
   }
 

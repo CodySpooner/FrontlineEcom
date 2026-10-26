@@ -71,3 +71,26 @@ test('Connect validates input, reports a cancelled consent and escapes provider 
   expect(page).not.toContain('<script>');
   expect((await app.request('/api/integrations/oauth/finish', post({ url: 'not a url' }))).status).toBe(400);
 });
+
+test('TikTok Shop: Connect uses the Partner Center link (any market host) and exchanges the pasted code', async () => {
+  const db = openDb();
+  seedDemo(db);
+  const urls: URL[] = [];
+  const fetchFn = (async (url: string) => {
+    urls.push(new URL(url));
+    return Response.json({ code: 0, message: 'success', data: { access_token: 'ROW_access', access_token_expire_in: 1793000000, refresh_token: 'ROW_refresh', refresh_token_expire_in: 1800000000 } });
+  }) as typeof fetch;
+  const app = oauthRoutes(db, () => key, fetchFn);
+  const start = async (authLink: string) => (await app.request('/api/integrations/oauth/start', post({ kind: 'tiktok_shop', storeId: 'glow', values: { appKey: 'ak', appSecret: 'as', authLink } }))).json();
+
+  expect(((await start('https://services.tiktokshop.com.evil.io/open/authorize?service_id=1')) as { error: string }).error).toContain('Authorization link must be');
+  expect(((await start('http://services.tiktokshop.com/open/authorize?service_id=1')) as { error: string }).error).toContain('Authorization link must be');
+  const ok = (await start('https://services.us.tiktokshop.com/open/authorize?service_id=7123')) as OAuthStart;
+  const auth = new URL(ok.url);
+  expect([auth.host, auth.searchParams.get('service_id'), ok.finish]).toEqual(['services.us.tiktokshop.com', '7123', 'paste']);
+
+  const saved = (await (await app.request('/api/integrations/oauth/finish', post({ url: `${PASTE_REDIRECT}?code=tt-code&state=${auth.searchParams.get('state')}` }))).json()) as Integration;
+  expect(saved).toMatchObject({ id: 'tiktok_shop:glow', status: 'connected', settings: { appKey: 'ak', authLink: ok.url.replace(/&state=[^&]+/, '') } });
+  expect(Object.fromEntries(urls[0]!.searchParams)).toEqual({ app_key: 'ak', app_secret: 'as', auth_code: 'tt-code', grant_type: 'authorized_code' });
+  expect(getCredentials(db, key, 'tiktok_shop', 'glow')).toMatchObject({ accessToken: 'ROW_access', refreshToken: 'ROW_refresh', accessTokenExpiresAt: '1793000000' });
+});

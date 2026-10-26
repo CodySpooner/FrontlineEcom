@@ -8,12 +8,15 @@ import { getStore } from './stores';
 // "Connect" buttons: the owner enters the app credentials, consents in the browser, and the tokens are saved for them.
 // Google sends the browser back to this API (loopback). Etsy only redirects to https://, which a local app can't serve,
 // so the owner pastes the address the browser lands on (it carries the code) into POST /api/integrations/oauth/finish.
+// TikTok Shop works the same way, with the redirect URL set in Partner Center.
 
 type Fetch = typeof fetch;
 type Values = Record<string, string>;
 interface Provider {
   /** 'loopback' = this API's /api/oauth/callback; otherwise the fixed https:// address the owner registers. */
   redirect: 'loopback' | string;
+  /** Extra checks on the entered values; returns a message for the owner. */
+  validate?(values: Values): string | undefined;
   authorizeUrl(p: { values: Values; redirectUri: string; state: string; challenge: string }): string;
   /** Returns the token fields to store; extra keys (e.g. accessTokenExpiresAt) go to the secrets, not the form. */
   exchange(p: { values: Values; redirectUri: string; code: string; verifier: string }, fetchFn: Fetch, now: Date): Promise<Values>;
@@ -53,6 +56,26 @@ const PROVIDERS: Partial<Record<IntegrationKind, Provider>> = {
       return { accessToken: t.access_token!, refreshToken: t.refresh_token!, accessTokenExpiresAt: String(Math.floor(now.getTime() / 1000) + (t.expires_in ?? 3600)) };
     },
   },
+  tiktok_shop: {
+    redirect: PASTE_REDIRECT,
+    // The link Partner Center shows carries the right host (US sellers have their own) and the app's service_id.
+    validate: ({ authLink }) => {
+      const u = URL.canParse(authLink!) ? new URL(authLink!) : undefined;
+      return u?.protocol === 'https:' && /(^|\.)tiktokshop\.com$/.test(u.hostname) && u.searchParams.get('service_id') ? undefined : 'Authorization link must be the https://…tiktokshop.com/open/authorize?service_id=… link from Partner Center';
+    },
+    authorizeUrl: ({ values, state }) => {
+      const u = new URL(values.authLink!);
+      u.searchParams.set('state', state);
+      return u.href;
+    },
+    exchange: async ({ values, code }, fetchFn) => {
+      const q = new URLSearchParams({ app_key: values.appKey!, app_secret: values.appSecret!, auth_code: code, grant_type: 'authorized_code' });
+      const res = await fetchFn(`https://auth.tiktok-shops.com/api/v2/token/get?${q}`);
+      const body = (await res.json().catch(() => ({}))) as { code?: number; message?: string; data?: { access_token?: string; access_token_expire_in?: number; refresh_token?: string } };
+      if (body.code !== 0 || !body.data?.access_token || !body.data.refresh_token) throw new Error(`TikTok Shop sign-in failed: ${body.message ?? `HTTP ${res.status}`}`);
+      return { accessToken: body.data.access_token, refreshToken: body.data.refresh_token, accessTokenExpiresAt: String(body.data.access_token_expire_in ?? 0) };
+    },
+  },
 };
 
 export const oauthKinds = () => Object.keys(PROVIDERS) as IntegrationKind[];
@@ -76,6 +99,8 @@ export function startOAuth(db: Db, body: unknown, callbackUrl: string, pending: 
     if (typeof v !== 'string' || !v.trim()) return `${f.label} is required`;
     given[f.key] = v.trim();
   }
+  const invalid = provider.validate?.(given);
+  if (invalid) return invalid;
   for (const [s, p] of pending) if (p.expires < now) pending.delete(s);
   const state = base64url(randomBytes(24));
   const verifier = base64url(randomBytes(32));

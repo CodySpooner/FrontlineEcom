@@ -56,12 +56,13 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-19 Packaging: electron-builder Windows installer + icon from brand; `pnpm package`.
 - [x] CORE-20 Settings + budget caps + notifications API.
 - [x] CORE-21 Health: `/api/health` with connector statuses, structured logs to the data dir.
-- [ ] CORE-22 OAuth connect flows: "Connect" buttons that run Etsy (PKCE), TikTok Shop (auth code) and Google Ads OAuth through a
+- [x] CORE-22 OAuth connect flows: "Connect" buttons that run Etsy (PKCE), TikTok Shop (auth code) and Google Ads OAuth through a
       127.0.0.1 redirect and store the tokens, so owners don't have to mint refresh tokens by hand.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-22: TikTok Shop Connect via the Partner Center authorization link (validated https `*.tiktokshop.com`, so the US host works) using the paste flow and `token/get`. New `IntegrationField.optional` (TikTok Shop `authLink`)
 - 2026-10-26 — CORE-22 (1/2): OAuth Connect for Google Ads (PKCE, loopback callback `/api/oauth/callback`) and Etsy (PKCE, paste flow, since Etsy only redirects to https://). Covers `POST /api/integrations/oauth/start` and `/finish`, `GET /api/integrations/oauth`, and `IntegrationField.oauth` marks token fields. States are single-use with a 15 min expiry, and provider text is HTML-escaped
 - 2026-10-26 — CORE-21 `GET /api/health` → `Health` (`ok`, `uptimeSec`, per-connector status / error / syncedAt, no secrets) + JSON-lines log at `<data dir>/logs/api.log` (start, each sync with duration and outcome, crashes; one rotated copy at 5 MB)
 - 2026-10-26 — CORE-19 `pnpm package` → `apps/desktop/release/Frontline Ecom Setup 0.1.0.exe` (NSIS, per-user, 224 MB). The API is bundled to one file by `scripts/stage.mjs`, with the Agent SDK's native `claude.exe` beside it, the web build, and the agent playbooks/packs under resources/. Brand bolt icon (`build/icon.svg`, render with `pnpm --filter @frontline/desktop icon`). Verified: the unpacked build runs the dashboard. Unsigned, so SmartScreen warns until a code-signing cert is set (`CSC_LINK`)
