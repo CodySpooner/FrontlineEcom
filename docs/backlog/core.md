@@ -108,6 +108,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Packaged-app smoke after the Inbox batch (rebuilt installer, unpacked exe, isolated profile, two launches):
+  - Both launches used the same API port.
+  - Health OK and 12 seeded creatives.
+  - A deny with a note stored decisionNote (migration 27 ran).
+  - The created tech store and the creatives survived the restart, with no demo re-seed.
+  - 0 log errors.
 - 2026-10-26 — Deny reason (UI-50): `POST /api/approvals/:id/deny` takes an optional `{ note }` (1-300 chars, trimmed, 400 otherwise). It's stored in `approvals.decision_note` (migration 27) and returned and broadcast as `ApprovalRequest.decisionNote`. Approve ignores a body. `decide(db, id, decision, note?)`. Agents told via their Inbox; their next migration is 28. Test
 - 2026-10-26 — Partial refunds lower revenue for WooCommerce and Etsy, as they already did for Shopify. Both platforms report the order total as placed. Woo orders are now netted by `refunds[].total` (negative strings, checked in Woo's v2 orders controller), and Etsy receipts by `refunds[].amount` (checked in Etsy's OpenAPI ShopRefund). Tests. TikTok Shop is still gross: its refunds come from a separate returns API
 - 2026-10-26 — README "Using the app" section for the owner: install (unsigned installer, SmartScreen), demo first, going live (which integrations, refresh cadence, Claude login), approvals and autopilot, and where data, logs and backups live
