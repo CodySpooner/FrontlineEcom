@@ -79,6 +79,23 @@ test('a campaign with no daily budget of its own gets no budget suggestion or ch
   expect(requests).toEqual([]);
 });
 
+test("a change that changes nothing isn't sent: pausing a paused campaign, a budget on one, or the budget it already has", async () => {
+  const add = db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, 'pawsome', ?, ?, 40)`);
+  add.run('off', 'Old UGC', 'paused');
+  add.run('on', 'Broad', 'active');
+  const { outputs, requests } = await run([
+    propose({ campaignId: 'off', change: 'pause' }),
+    propose({ campaignId: 'off', change: 'budget', newDailyBudget: 60 }),
+    propose({ campaignId: 'on', change: 'budget', newDailyBudget: 40.2 }),
+  ]);
+  expect(outputs).toEqual([
+    'Not sent: Old UGC is paused, so there is nothing to pause.',
+    'Not sent: Old UGC is paused, so a budget change does nothing until the owner turns it back on in the ad manager.',
+    'Not sent: $40/day is already its budget.',
+  ]);
+  expect(requests).toEqual([]);
+});
+
 test("an old account's paused campaigns with no spend are left out; one that is on but spends nothing stays", async () => {
   const add = db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, 'pawsome', ?, ?, 0)`);
   for (let i = 0; i < 3; i++) add.run(`old-${i}`, `Black Friday ${2020 + i}`, i ? 'paused' : 'archived');

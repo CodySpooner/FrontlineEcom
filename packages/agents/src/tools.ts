@@ -827,11 +827,16 @@ export const APP_TOOLS: AppTool[] = [
       const replace =
         waiting && ctx.store.connected && ctx.decide && autonomyNow(ctx) !== 'suggest' && String(waiting.created_at) < ago(4) ? String(waiting.id) : undefined;
       if (waiting && !replace) return `Not sent: "${waiting.title}" is already waiting for the owner. One change per campaign at a time.`;
+      // A change that changes nothing would still be judged (and win XP) on whatever else moved ROAS in the days after.
+      if (IDLE_CAMPAIGN_STATUSES.includes(String(c.status))) {
+        return `Not sent: ${String(c.name)} is ${String(c.status)}, so ${change === 'pause' ? 'there is nothing to pause' : 'a budget change does nothing until the owner turns it back on in the ad manager'}.`;
+      }
       const from = Number(c.daily_budget);
       if (change === 'budget' && newDailyBudget === undefined) return 'newDailyBudget is required for a budget change.';
       // Core's budget writer refuses these (on TikTok it would replace the lifetime total).
       if (change === 'budget' && !(from > 0)) return `Not sent: ${String(c.name)} has no daily budget of its own (a lifetime budget, or budgets on its ad sets), so it can't be changed from here. Pause it, or say what to change in the ad manager.`;
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
+      if (change === 'budget' && to === from) return `Not sent: ${cash(to, ctx.store.currency)}/day is already its budget.`;
       // Autopilot caps bound the budget a change touches (a pause stops all of it); the added-spend cap counts raises only.
       // ponytail: no rate → no amount, so the caps can't be checked and autopilot can't take it: the owner decides. Same
       // for a pause with no campaign budget (ad set or lifetime budgets, synced as 0): what it stops is unknown, not $0.
