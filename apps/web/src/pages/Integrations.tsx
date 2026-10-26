@@ -2,7 +2,7 @@
 // Secrets go in and never come back out: the API only says which secret fields are set.
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { INTEGRATION_KINDS, type Integration, type IntegrationCategory, type IntegrationKind, type OAuthStart, type Store } from '@frontline/shared';
-import { useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds, useSyncIntegration } from '../api/client';
+import { useClaudeAccount, useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds, useSyncIntegration } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Button, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot } from '../components/ui';
@@ -71,6 +71,7 @@ export function Integrations() {
               </Panel>
             );
           })}
+          <ClaudeCard />
         </div>
       )}
       <Dialog
@@ -82,6 +83,53 @@ export function Integrations() {
         {open && <ConnectForm key={keyOf(open.kind, open.store)} {...open} current={byKey.get(keyOf(open.kind, open.store))} onDone={() => setOpen(undefined)} />}
       </Dialog>
     </>
+  );
+}
+
+/** The engine every agent thinks with: the owner's Claude Code login on this computer (no API key). */
+export function ClaudeCard() {
+  const { q, recheck } = useClaudeAccount();
+  return (
+    <Panel title="AI" sub="What your agents think with: your Claude Code login on this computer.">
+      <div className="grid gap-3 min-[900px]:grid-cols-2 min-[1280px]:grid-cols-3">
+        <section className="rounded-lg border border-line bg-bg-2 p-3.5">
+          <h3 className="mb-2.5 text-[14px] font-semibold">Claude</h3>
+          {q.isPending ? (
+            <p className="text-xs text-muted">Checking your Claude login…</p>
+          ) : q.isError ? (
+            <ErrorState message="Couldn't check your Claude login." onRetry={() => q.refetch()} />
+          ) : (
+            <>
+              <div className="flex items-center gap-2 text-[13px]">
+                <StatusDot tone={q.data.signedIn ? 'good' : q.data.error ? 'idle' : 'red'} />
+                <span className="min-w-0 flex-1 truncate">
+                  {q.data.signedIn ? (q.data.email ? `Signed in as ${q.data.email}` : 'Signed in') : 'Not signed in'}
+                  {q.data.subscription && <span className="text-xs text-muted"> · {q.data.subscription}</span>}
+                </span>
+                <Button size="sm" disabled={recheck.isPending} onClick={() => recheck.mutate()}>
+                  {recheck.isPending ? 'Checking…' : 'Check again'}
+                </Button>
+              </div>
+              {q.data.error ? (
+                <p className="mt-1 pl-4 text-xs text-muted">{q.data.error}</p>
+              ) : (
+                !q.data.signedIn && (
+                  <p className="mt-1 pl-4 text-xs text-muted">
+                    Agents on live stores need it. Run <code className="font-mono text-text-2">claude</code> in a terminal, sign in with{' '}
+                    <code className="font-mono text-text-2">/login</code>, then check again.
+                  </p>
+                )
+              )}
+              {recheck.isError && (
+                <p role="alert" className="mt-1 pl-4 text-xs text-red">
+                  {recheck.error.message}
+                </p>
+              )}
+            </>
+          )}
+        </section>
+      </div>
+    </Panel>
   );
 }
 

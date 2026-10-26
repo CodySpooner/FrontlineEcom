@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Integration } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { ConnectForm, Connection } from './Integrations';
+import { ClaudeCard, ConnectForm, Connection } from './Integrations';
 
 const saved: Integration = { id: 'i1', kind: 'cj', status: 'connected', settings: { email: 'ops@shop.test' }, secretsSet: ['apiKey'], updatedAt: '2026-10-26T08:00:00Z' };
 const sent = (fetch: ReturnType<typeof stubApi>) => JSON.parse(String(fetch.mock.calls.find(([, init]) => init?.method === 'PUT')?.[1]?.body));
@@ -59,5 +59,28 @@ describe('Sync now', () => {
     stubApi(() => undefined);
     renderApp(<Connection i={{ ...saved, kind: 'higgsfield' }} onOpen={() => {}} />);
     expect(screen.queryByRole('button', { name: 'Sync now' })).toBeNull();
+  });
+});
+
+describe('Claude card', () => {
+  it('says how to sign in, then checks again', async () => {
+    const fetch = stubApi((url) =>
+      url === '/api/claude-account?refresh=1'
+        ? { signedIn: true, email: 'owner@shop.test', subscription: 'Claude Max', checkedAt: '2026-10-26T08:00:00Z' }
+        : { signedIn: false, checkedAt: '2026-10-26T08:00:00Z' },
+    );
+    renderApp(<ClaudeCard />);
+    expect(await screen.findByText(/Not signed in/)).toBeTruthy();
+    expect(screen.getByText(/\/login/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    expect(await screen.findByText(/owner@shop\.test/)).toBeTruthy();
+    expect(screen.getByText(/Claude Max/)).toBeTruthy();
+    expect(fetch.mock.calls.map(([url]) => url)).toContain('/api/claude-account?refresh=1');
+  });
+
+  it("says why it couldn't ask", async () => {
+    stubApi(() => ({ signedIn: false, checkedAt: '2026-10-26T08:00:00Z', error: 'FRONTLINE_AGENT_ENGINE=demo: agents run on the demo engine' }));
+    renderApp(<ClaudeCard />);
+    expect(await screen.findByText(/demo engine/)).toBeTruthy();
   });
 });

@@ -19,6 +19,7 @@ import type {
   AutomationRun,
   Backup,
   CampaignStats,
+  ClaudeAccount,
   Commander,
   Competitor,
   CompetitorInput,
@@ -298,6 +299,14 @@ export const useOrders = (storeIds: string[], o: OrderQuery) =>
 // ponytail: polls so a sync result (connected → error) shows up; push it over the live socket if this ever gets chatty.
 /** Connector status for the sidebar (sync failures surface here). */
 export const useHealth = () => useQuery({ queryKey: ['health'], queryFn: () => api<Health>('/api/health'), refetchInterval: 60_000 });
+
+/** The Claude Code login agents run on. Asking starts the CLI (~5 s, no usage), so the server keeps an answer 5 minutes. */
+export function useClaudeAccount() {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['claude-account'], queryFn: () => api<ClaudeAccount>('/api/claude-account'), staleTime: 5 * 60_000 });
+  const recheck = useMutation({ mutationFn: () => api<ClaudeAccount>('/api/claude-account?refresh=1'), onSuccess: (a) => qc.setQueryData(['claude-account'], a) });
+  return { q, recheck };
+}
 
 export const useIntegrations = () => useQuery({ queryKey: ['integrations'], queryFn: () => api<Integration[]>('/api/integrations'), refetchInterval: 10_000 });
 
