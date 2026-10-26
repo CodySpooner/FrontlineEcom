@@ -128,3 +128,15 @@ test('a refund made while the sync was still reading is fetched by the next sync
   await syncWooCommerce(db, key, 'pawsome', fetchFn, new Date('2026-10-26T18:10:00Z'));
   expect(day()).toEqual({ revenue: 0, orders: 0 });
 });
+
+test('a partly refunded Woo order counts what the customer kept', async () => {
+  const db = setup();
+  const woo = fakeWoo().fetchFn;
+  const fetchFn = (async (url: string, init: RequestInit) =>
+    new URL(url).pathname.endsWith('/orders')
+      ? Response.json([order('2001', 'completed', '80.00', true, { refunds: [{ id: 9, reason: 'one mug broke', total: '-25.50' }] })], { headers: { 'x-wp-totalpages': '1' } })
+      : woo(url, init)) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT total, status FROM orders WHERE store_id = 'pawsome' AND id = 'woo-2001'").get()).toEqual({ total: 54.5, status: 'paid' });
+  expect(db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()?.revenue).toBe(54.5);
+});

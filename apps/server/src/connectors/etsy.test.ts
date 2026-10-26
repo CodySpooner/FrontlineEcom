@@ -77,3 +77,14 @@ test('Etsy: an expired refresh token shows on the integration and keeps demo dat
   expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'etsy:pawsome'").get()).toEqual({ status: 'error', error: 'Etsy sign-in failed: refresh token expired; connect the shop again' });
   expect(db.prepare("SELECT demo FROM stores WHERE id = 'pawsome'").get()).toEqual({ demo: 1 });
 });
+
+test('a partly refunded Etsy receipt counts what the buyer kept', async () => {
+  const db = setup();
+  const etsy = fakeEtsy().fetchFn;
+  const fetchFn = (async (url: string, init: RequestInit) =>
+    new URL(url).pathname.endsWith('/receipts')
+      ? Response.json({ count: 1, results: [receipt(9, 'partially refunded', 4000, { refunds: [{ amount: usd(1250), created_timestamp: T('2026-10-26T09:00:00Z'), reason: 'damaged' }] })] })
+      : etsy(url, init)) as typeof fetch;
+  await syncEtsy(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT total, status FROM orders WHERE store_id = 'pawsome' AND id = 'etsy-9'").get()).toEqual({ total: 27.5, status: 'paid' });
+});

@@ -20,7 +20,9 @@ interface Receipt {
   is_shipped: boolean;
   create_timestamp: number;
   updated_timestamp: number;
+  /** As placed: refunds don't lower it. */
   grandtotal: Money;
+  refunds?: { amount: Money }[];
   shipments?: { tracking_code?: string | null }[];
   transactions?: { listing_id: number; quantity: number; price: Money }[];
 }
@@ -102,7 +104,8 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         const day = dayOf.format(created);
         days.add(day);
         const refunded = r.status === 'canceled' || r.status === 'fully refunded';
-        ord.run(storeId, `etsy-${r.receipt_id}`, created.toISOString(), money(r.grandtotal), refunded ? 'refunded' : 'paid', r.is_shipped ? 'fulfilled' : 'unfulfilled', r.shipments?.[0]?.tracking_code || null, day);
+        const total = Math.max(0, money(r.grandtotal) - (r.refunds ?? []).reduce((a, x) => a + money(x.amount), 0)); // net of partial refunds
+        ord.run(storeId, `etsy-${r.receipt_id}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', r.is_shipped ? 'fulfilled' : 'unfulfilled', r.shipments?.[0]?.tracking_code || null, day);
         setOrderItems(db, storeId, `etsy-${r.receipt_id}`, (r.transactions ?? []).map((t) => ({ productId: `etsy-${t.listing_id}`, quantity: t.quantity, revenue: money(t.price) * t.quantity, cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);

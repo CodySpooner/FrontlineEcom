@@ -18,7 +18,10 @@ interface WooOrder {
   date_created_gmt: string;
   date_modified_gmt: string;
   date_paid_gmt: string | null;
+  /** As placed: refunds don't lower it. */
   total: string;
+  /** Each refund's total is negative, e.g. "-10.00". */
+  refunds?: { total: string }[];
   line_items?: { product_id: number; quantity: number; total: string; cost_of_goods_sold?: { value: number } }[];
   /** Only when the store has WooCommerce's Cost of Goods Sold feature on (Settings → Advanced → Features, Woo 9.5+). */
   cost_of_goods_sold?: { total_value: number };
@@ -103,7 +106,8 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         const day = o.date_created.slice(0, 10);
         days.add(day);
         const refunded = o.status === 'refunded' || o.status === 'cancelled' || o.status === 'trash';
-        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Number(o.total), refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', Number(o.cost_of_goods_sold?.total_value ?? 0), day);
+        const total = Math.max(0, Number(o.total) + (o.refunds ?? []).reduce((a, r) => a + Number(r.total), 0)); // net of partial refunds
+        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', Number(o.cost_of_goods_sold?.total_value ?? 0), day);
         setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total), cost: Number(li.cost_of_goods_sold?.value ?? 0) })));
       }
       rebuildRevenue(db, storeId, days);

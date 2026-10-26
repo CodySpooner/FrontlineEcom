@@ -108,6 +108,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Partial refunds lower revenue for WooCommerce and Etsy, as they already did for Shopify. Both platforms report the order total as placed. Woo orders are now netted by `refunds[].total` (negative strings, checked in Woo's v2 orders controller), and Etsy receipts by `refunds[].amount` (checked in Etsy's OpenAPI ShopRefund). Tests. TikTok Shop is still gross: its refunds come from a separate returns API
 - 2026-10-26 — README "Using the app" section for the owner: install (unsigned installer, SmartScreen), demo first, going live (which integrations, refresh cadence, Claude login), approvals and autopilot, and where data, logs and backups live
 - 2026-10-26 — Ad networks (Meta, Google, TikTok): a full sync, meaning the first or one after the account ID changed, drops the store's campaigns for that network that the connected account didn't return, with their daily rows, and rebuilds ad spend. A wrong account the owner corrected leaves no spend in profit, and no campaign an approved change could still reach. Incremental syncs keep everything. Test
 - 2026-10-26 — TikTok Shop: an app that several shops authorized (say US and UK) syncs the shop named in the new optional "Shop" field, matched by name, code or ID, case-insensitive. With no field it errors and lists the authorized shops; before, it silently took the first. With one shop, nothing changes. Test
