@@ -11,6 +11,7 @@ import { Badge, Button, ErrorState, inputClass, LoadingState, Panel, Segmented, 
 import { breakEvenRoas, byNetwork, rate, roasTone } from '../lib/analytics';
 import { PERIOD, RANGES, weekly } from '../lib/chart';
 import { cents, fmtDay, money, noBaseline, signedPct } from '../lib/format';
+import { stockLeft } from '../lib/stock';
 import { NAV } from '../nav';
 
 type Metric = 'revenue' | 'profit' | 'adSpend';
@@ -197,6 +198,8 @@ function Channels({ q, be, cur }: { q: Campaigns; be: number; cur?: string }) {
 
 function TopProducts({ ids, range, name, cur }: { ids: string[]; range: AnalyticsRange; name?: (id: string) => string; cur?: string }) {
   const q = useTopProducts(ids, range, 5);
+  // The same products Unit costs loads (first 200 per call): a top product past that shows no stock.
+  const products = useProducts(ids).data?.items;
   return (
     <Panel title="Top Products" sub={`Best 5 by revenue, ${PERIOD[range]}`}>
       {q.isPending ? (
@@ -204,7 +207,7 @@ function TopProducts({ ids, range, name, cur }: { ids: string[]; range: Analytic
       ) : q.isError ? (
         <ErrorState message="Couldn't load products." onRetry={() => q.refetch()} />
       ) : (
-        <TopTable rows={q.data} name={name} cur={cur} />
+        <TopTable rows={q.data} name={name} cur={cur} stock={(p) => stockLeft(products?.find((x) => x.storeId === p.storeId && x.id === p.productId), p.units, range)} />
       )}
     </Panel>
   );
@@ -274,7 +277,7 @@ function CostRow({ p, multi }: { p: Product; multi: boolean }) {
   );
 }
 
-function TopTable({ rows, name, cur }: { rows: TopProduct[]; name?: (id: string) => string; cur?: string }) {
+function TopTable({ rows, name, cur, stock }: { rows: TopProduct[]; name?: (id: string) => string; cur?: string; stock: (p: TopProduct) => ReturnType<typeof stockLeft> }) {
   if (!rows.length) return <p className="text-[13px] text-muted">No product sales in this period.</p>;
   return (
     <Table>
@@ -288,20 +291,29 @@ function TopTable({ rows, name, cur }: { rows: TopProduct[]; name?: (id: string)
         </tr>
       </thead>
       <tbody>
-        {rows.map((p) => (
-          <tr key={p.storeId + p.productId}>
-            <td className="max-w-[280px]">
-              <div className="truncate" title={p.title}>
-                {p.title}
-              </div>
-              {name && <div className="text-xs text-muted">{name(p.storeId)}</div>}
-            </td>
-            <td className="text-right">{num(p.units)}</td>
-            <td className="text-right">{money(p.revenue, cur)}</td>
-            <td className="text-right">{money(p.profit, cur)}</td>
-            <td className="text-right text-text-2">{pct(rate(p.profit, p.revenue))}</td>
-          </tr>
-        ))}
+        {rows.map((p) => {
+          const st = stock(p);
+          return (
+            <tr key={p.storeId + p.productId}>
+              <td className="max-w-[280px]">
+                <div className="truncate" title={p.title}>
+                  {p.title}
+                </div>
+                {(name || st) && (
+                  <div className="text-xs text-muted">
+                    {name?.(p.storeId)}
+                    {name && st && ' · '}
+                    {st && <span className={cx(st.low && 'text-red')}>{st.label}</span>}
+                  </div>
+                )}
+              </td>
+              <td className="text-right">{num(p.units)}</td>
+              <td className="text-right">{money(p.revenue, cur)}</td>
+              <td className="text-right">{money(p.profit, cur)}</td>
+              <td className="text-right text-text-2">{pct(rate(p.profit, p.revenue))}</td>
+            </tr>
+          );
+        })}
       </tbody>
     </Table>
   );

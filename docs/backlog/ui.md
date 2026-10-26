@@ -168,6 +168,8 @@ Orca's browser against the reference before ticking it.
       page over by hand.
 - [x] UI-58 Store form hints match what the connectors do now: WooCommerce also takes the shop's time zone, and a connected
       store takes its platform's currency (so the owner knows a typed one gets replaced).
+- [x] UI-59 Top Products shows each best seller's stock: "N left", red with days of cover when it runs out within two
+      weeks at the period's pace, "Sold out", or "Not tracked" (dropshipped). Before this, the app showed no stock anywhere.
 
 ## Blocked
 
@@ -257,3 +259,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-58: the time zone hint names Shopify or WooCommerce (core 08c7cec: woocommerce.ts adopts the WordPress zone). A note under Currency/Color says a connected store takes its platform's currency (setStoreCurrency in shopify, woocommerce, etsy, tiktok, amazon). Checked in Chrome in Settings › Edit Pawsome Gear; cancelled without saving
 - 2026-10-26 — Inbox (core c349a34): Analytics' Conversion Funnel empty state adds "or for a Shopify store from Shopify's own reports … add the read_reports scope (with Level 2 protected customer data) to your Shopify app" when a connected Shopify store is in the filter. Otherwise it's the GA4-only copy. Two tests in Analytics.test.tsx. Chrome with a main-world patch (Pawsome as connected Shopify, zero sessions): All stores showed the Shopify copy, and scoping to Glow Haus showed GA4 only
 - 2026-10-26 — Inbox (core, inventoryTracked): no UI view shows `Product.inventory` (Analytics' unit costs, top products and the orders table don't), so there's no 0/sold-out to relabel. Revisit if a stock column is added
+- 2026-10-26 — UI-59: `stockLeft(product, unitsSold, days)` (lib/stock, tested) feeds a stock note under each Top Products row, after the store name. Products come from the `['products', ids]` query Unit costs already loads, so there's no extra request; a product past its first 200 shows none. Chrome against the live API: demo stock was "340 left" etc. With pawsome-p1 set to 40 and p6 untracked in the DB, it showed red "40 left · ~3 days" and "Not tracked". Both were restored
