@@ -58,10 +58,11 @@ pnpm check    # typecheck + tests
 - **Currencies:** a store reports in its shop's currency. Ad spend in another currency, and "All stores" totals (in
   the base currency from Settings), are converted at the European Central Bank's daily rates.
 
-## The three Orca workers
+## The Orca workers
 
 Three Claude Code agents build this in parallel, each in its own Orca worktree
-(`C:\Users\Xody2\orca\workspaces\FrontlineEcom\ui`, `\core`, `\agents`). A Stop hook (`scripts/agent/keep-going.mjs`,
+(`C:\Users\Xody2\orca\workspaces\FrontlineEcom\ui`, `\core`, `\agents`). A Codex agent builds the AI Ecosystem page in
+`\ecosystem` (spec: `docs/features/ai-ecosystem.md`) and stops by itself once that backlog is done. A Stop hook (`scripts/agent/keep-going.mjs`,
 enabled only in those worktrees' `.claude/settings.local.json`) keeps each one working, and `scripts/agent/watchdog.mjs`
 (running in the "Watchdog" terminal of the main FrontlineEcom workspace in Orca) nudges any that go idle and relaunches
 any that exit.
