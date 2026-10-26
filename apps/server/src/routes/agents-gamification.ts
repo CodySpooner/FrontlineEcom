@@ -25,7 +25,7 @@ function recordOutcome(db: Db, ref: string, worked: boolean, m: NewMemory) {
   if (!once(db, `outcome-note:${ref}`)) return;
   const agent = getAgent(db, m.agentId);
   const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
-  notify(db, { kind: 'info', title: worked ? `Measured win: ${name}` : `${name}: no lift this time`, body: m.text, storeId: m.storeId, link: `/agents/${m.agentId}` });
+  notify(db, { kind: 'info', title: worked ? `Measured win: ${name}` : `${name}: no lift this time`, body: m.text, storeId: m.storeId, link: `/agents/${m.agentId}?tab=${worked ? 'history' : 'memory'}` }); // a win's XP line, else the learning
 }
 
 const count = (db: Db, sql: string, ...args: string[]) => Number(db.prepare(sql).get(...args)?.n ?? 0);

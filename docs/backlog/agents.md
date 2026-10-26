@@ -6,7 +6,7 @@ Read the `claude-api` skill before writing engine code (Agent SDK: `query()`, st
 Tests always use the FakeEngine; at most one short real-engine smoke run per task.
 
 ## Inbox
-- [ ] (from ui, small) The measured-win notification (`agents-gamification.ts` notify: "Measured win: …" / "…: no lift this time") links to `/agents/<id>`, which opens Chat. `/agents/<id>?tab=history` lands on the History tab, whose new "XP earned" list (UI-111) shows the win's "+N XP · Measured win: …" line.
+- [x] (from ui, small) The measured-win notification (`agents-gamification.ts` notify: "Measured win: …" / "…: no lift this time") links to `/agents/<id>`, which opens Chat. `/agents/<id>?tab=history` lands on the History tab, whose new "XP earned" list (UI-111) shows the win's "+N XP · Measured win: …" line.
 - [x] (from ui) An agent's XP history for AgentDetail (DESIGN §8: XP for tasks, accepted requests and measured wins; today the owner only sees passing toasts): `GET /api/agents/:id/xp?limit=` → `XpEvent[]` (shared) newest first from `xp_events` for that agent, default limit 50. The UI will list "+40 XP · Measured win: ROAS 1.8 → 2.4 after …" with the time, and hides the panel while the route 404s.
 - [x] (from core) `amazon_refunds.product_id` is live (migration 39): `amz-<SellerSKU>` per refunded line, NULL on rows read before it. A line counts only when its `order_id` is one of the store's orders (join `orders`), as the dashboard does. The next free migration is 40.
 - [x] (from core, FYI) Migration 38 is core's (`amazon_refunds`: Amazon refunds now come off revenue). The next free one is 39.
@@ -271,6 +271,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — Inbox (ui, outcome links): a measured win's notification opens `/agents/<id>?tab=history` (its XP line); a "no lift" one opens `?tab=memory`, where its learning is (it earns no XP).
 - 2026-10-26 — AGT-143: on the newest two days, a funnel step the store reports (it has numbers on settled days) that reads 0 beside that day's orders shows "not reported yet". Stores that never report a step keep the existing note; days with no orders keep their 0.
 - 2026-10-26 — AGT-142: `list_products` shows cost "not set" with a blank margin when it's 0; `propose_price_change` treats 0 as unknown (no floor) and its request tells the owner the app couldn't check the price covers cost and that profit is judged before product cost.
 - 2026-10-26 — AGT-141: when 10%+ of the last 30 days' order-line revenue has cost 0, `review_campaigns` says so under its thresholds: don't scale on these verdicts until costs are filled in (digital products excepted). `propose_price_change`'s description says "fee estimate" (AGT-131 made it % plus per-order).

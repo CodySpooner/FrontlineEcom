@@ -183,7 +183,7 @@ test("a published theme change is judged on store conversion, 14 days before vs 
   expect(listMemory(db, 'glow').filter((m) => m.tags.includes('theme')).map((m) => m.text)).toEqual([
     'The theme change "Sticky ATC" worked: conversion 2.00% → 2.50% (14 days before vs after, 14,000 → 14,000 sessions).',
   ]);
-  expect(db.prepare(`SELECT count(*) AS n FROM notifications WHERE title = 'Measured win: Store Developer'`).get()?.n).toBe(1);
+  expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Measured win: Store Developer'`).all()).toEqual([{ link: '/agents/glow:store_developer?tab=history' }]); // its XP line
   expect(getAgent(db, 'glow:store_developer')!.xp).toBeGreaterThan(xp);
 });
 
