@@ -430,6 +430,38 @@ export interface KnowledgeDoc {
   markdown?: string;
 }
 
+/** One step of an email/SMS flow. */
+export interface FlowMessage {
+  /** Hours after the trigger (or the previous step). */
+  delayHours: number;
+  channel: 'email' | 'sms';
+  /** Email only. */
+  subject?: string;
+  preview?: string;
+  body: string;
+  /** e.g. "10% code WELCOME10, step 3 only". */
+  offer?: string;
+}
+
+/**
+ * An email/SMS flow designed by the Email & SMS agent, for the owner to set up in their email/SMS tool (no sending
+ * integration yet). GET /api/flow-drafts?stores=&limit= → FlowDraft[] newest first; DELETE /api/flow-drafts/:id → 204.
+ */
+export interface FlowDraft {
+  id: string;
+  storeId: string;
+  agentId: string;
+  runId?: string;
+  /** e.g. "Checkout abandonment"; a newer draft of the same name replaces the old one. */
+  name: string;
+  /** e.g. "Checkout started, no order within 1 hour; exclude buyers in the last 30 days". */
+  trigger: string;
+  messages: FlowMessage[];
+  /** Why this flow, sized with the numbers. */
+  notes: string;
+  createdAt: string;
+}
+
 export type OrderIssueKind = 'late' | 'stuck' | 'refund' | 'supplier' | 'address' | 'other';
 export type OrderIssueStatus = 'open' | 'resolved';
 

@@ -6,6 +6,7 @@ import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
 import { searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
 import { getPageDraft, savePageDraft } from './pages';
+import { saveFlowDraft } from './flows';
 import { flagOrderIssue } from './issues';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 
@@ -267,6 +268,34 @@ export const APP_TOOLS: AppTool[] = [
       }
       const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'demo', mediaUrl: demoMedia(ctx.store, { kind, aspect, headline, cta }) });
       return `${message}. Higgsfield isn't connected, so this is a demo render, saved to the library (${saved.id}).`;
+    },
+  }),
+  defineTool({
+    name: 'draft_flow',
+    description:
+      'Save an email/SMS flow to the flow library for the owner to set up in their email/SMS tool (nothing is sent from here). A newer draft with the same name replaces the old one.',
+    input: {
+      name: z.string().min(3).max(80).describe('e.g. "Checkout abandonment"'),
+      trigger: z.string().min(10).max(300).describe('entry event, timing and exclusions'),
+      messages: z
+        .array(
+          z.object({
+            delayHours: z.number().min(0).max(24 * 120),
+            channel: z.enum(['email', 'sms']),
+            subject: z.string().max(80).optional(),
+            preview: z.string().max(120).optional(),
+            body: z.string().min(10).max(4000).describe('email: content bullets or full copy; sms: the full text with opt-out'),
+            offer: z.string().max(120).optional(),
+          }),
+        )
+        .min(1)
+        .max(8),
+      notes: z.string().min(10).max(1000).describe('why this flow and its sizing: triggers/month × conversion × AOV'),
+    },
+    run: async (f, ctx) => {
+      if (f.messages.some((m) => m.channel === 'email' && !m.subject)) return 'Every email step needs a subject.';
+      const flow = saveFlowDraft(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), ...f });
+      return `Saved "${flow.name}" (${flow.messages.length} steps) to the flow library. The owner sets it up in their email/SMS tool.`;
     },
   }),
   defineTool({

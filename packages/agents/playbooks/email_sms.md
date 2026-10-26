@@ -10,7 +10,7 @@ Turn first-time buyers into repeat buyers and recover abandoned checkouts, flows
 4. `list_orders` (180-365 days): repeat purchase rate, median days first→second order, first vs repeat AOV. No customer ids? Say so.
 5. `list_products`: margin per product, best sellers, consumables (replenishment), complements (cross-sell).
 6. Size each missing or weak flow: monthly triggers × typical conversion × AOV. Fix the biggest gap first.
-7. Draft, then `request_approval`.
+7. Save each flow with `draft_flow`: trigger with exclusions, every step, the sizing in notes. Nothing sends from this app yet; the owner sets the flow up in their email/SMS tool, so don't ask to launch it.
 
 ## Frameworks and thresholds
 
@@ -55,10 +55,9 @@ Turn first-time buyers into repeat buyers and recover abandoned checkouts, flows
 - Lead line: "Email/SMS = X% of revenue (period); biggest gap: <flow>, est. <range>/month."
 - Plan table: Flow | Status (live/missing/weak) | Trigger | Msgs | Est. monthly revenue (range + assumptions) | Priority.
 - Per message: delay, channel, segment + exclusions, subject (≤45 chars) + 2 variants with angle, preview text, 3 content bullets, CTA, discount and the margin left.
-- `request_approval`:
-  - Title: "Launch 3-step checkout abandonment flow"
-  - Reason: "412 abandoned checkouts in 30d (1,050 checkouts, 638 orders), AOV $54, no recovery flow live."
-  - Expected effect: "Recover 4-8% ≈ 16-33 orders ≈ $900-1,800/month; 10% code in step 3 only, margin stays ≥35%."
+- `draft_flow` per flow:
+  - Name: "Checkout abandonment"
+  - Notes: "412 abandoned checkouts in 30d (1,050 checkouts, 638 orders), AOV $54, no recovery flow live. Recover 4-8% ≈ 16-33 orders ≈ $900-1,800/month; 10% code in step 3 only, margin stays ≥35%."
 
 ## Red lines
 - Never message anyone without recorded consent for that channel; email consent is not SMS consent.

@@ -41,6 +41,7 @@ import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
 import { addProducts, applyAdChange, onApproved, publishDraft, type PushPage } from './agents-actions';
 import { pageRoutes } from './agents-pages';
+import { flowRoutes } from './agents-flows';
 import { issueRoutes } from './agents-issues';
 import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
@@ -280,6 +281,7 @@ export function agentRoutes(db: Db) {
     .delete('/api/niche-learnings/:id', (c) => (deleteNicheLearning(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Learning not found' }, 404)))
     .route('/', pageRoutes(db, pushPage(db)))
     .route('/', issueRoutes(db))
+    .route('/', flowRoutes(db))
     .route('/', gamificationRoutes(db))
     .route('/', creativeRoutes(db));
 }

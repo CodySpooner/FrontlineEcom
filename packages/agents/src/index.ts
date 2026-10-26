@@ -30,3 +30,4 @@ export { nicheKey, addNicheLearning, listNicheLearnings, deleteNicheLearning } f
 export { savePageDraft, getPageDraft, listPageDrafts, markPublished, deletePageDraft, type NewPageDraft } from './pages';
 export { closeAnsweredIssues, flagOrderIssue, listOrderIssues, setIssueStatus, type NewOrderIssue } from './issues';
 export { knowledgeIndex, knowledgeDoc, resetKnowledge, saveKnowledge } from './knowledge';
+export { deleteFlowDraft, listFlowDrafts, saveFlowDraft, type NewFlowDraft } from './flows';

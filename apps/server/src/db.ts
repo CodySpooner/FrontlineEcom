@@ -394,6 +394,20 @@ export const MIGRATIONS = [
   /* 21 (agents lane: one generic "done once" ledger, AGT-37) */ `
   ALTER TABLE memory_feedback RENAME TO done_once;
   `,
+  /* 22 (agents lane: Email & SMS flow drafts, AGT-40) */ `
+  CREATE TABLE flow_drafts (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL,
+    run_id TEXT,
+    name TEXT NOT NULL,
+    trigger TEXT NOT NULL,
+    messages_json TEXT NOT NULL,
+    notes TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX flow_drafts_by_store ON flow_drafts (store_id, created_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
