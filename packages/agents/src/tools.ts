@@ -70,6 +70,8 @@ function csv(rows: Record<string, unknown>[]): string {
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const since = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+/** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
+const cash = (n: number, currency: string) => (currency === 'USD' ? `$${n}` : `${n} ${currency}`);
 
 export const APP_TOOLS: AppTool[] = [
   defineTool({
@@ -433,10 +435,11 @@ export const APP_TOOLS: AppTool[] = [
       const cap = ctx.caps?.(ctx.store.id).adSpendChangePerDay;
       const addedToday = added ? budgetAddedToday(ctx) : 0;
       if (cap !== undefined && added && addedToday + added > cap) {
-        return `Not sent: +$${added}/day would pass the owner's $${cap}/day cap on added ad spend ($${addedToday} already approved today). Propose a smaller step.`;
+        const $ = (n: number) => cash(n, ctx.store.currency);
+        return `Not sent: +${$(added)}/day would pass the owner's ${$(cap)}/day cap on added ad spend (${$(addedToday)} already approved today). Propose a smaller step.`;
       }
       const { approved, message } = await requestApproval(ctx, {
-        title: (change === 'pause' ? `Pause ${c.name}` : `${to > from ? 'Raise' : 'Lower'} ${c.name} budget $${from} → $${to}/day`).slice(0, 80),
+        title: (change === 'pause' ? `Pause ${c.name}` : `${to > from ? 'Raise' : 'Lower'} ${c.name} budget ${cash(from, ctx.store.currency)} → ${cash(to, ctx.store.currency)}/day`).slice(0, 80),
         reason: evidence,
         action: change === 'pause'
           ? { kind: 'ads.pause_campaign', payload: { network: c.network, campaignId, from }, amountUsd: 0 }
@@ -459,8 +462,9 @@ export const APP_TOOLS: AppTool[] = [
       const p = ctx.db.prepare('SELECT * FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId);
       if (!p) return `No product ${productId} in this store. Use list_products for ids.`;
       const [from, to] = [Number(p.price), r2(newPrice)];
-      if (to === from) return `$${to} is already the price.`;
-      if (p.cost != null && to <= Number(p.cost)) return `Not sent: $${to} is at or below the unit cost ($${Number(p.cost)}).`;
+      const $ = (n: number) => cash(n, ctx.store.currency);
+      if (to === from) return `${$(to)} is already the price.`;
+      if (p.cost != null && to <= Number(p.cost)) return `Not sent: ${$(to)} is at or below the unit cost (${$(Number(p.cost))}).`;
       if (Math.abs(to - from) / from > 0.3) return 'Not sent: test within ±30% of the current price, one step at a time.';
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
       // Overlapping tests on one product can't be judged apart.
@@ -471,7 +475,7 @@ export const APP_TOOLS: AppTool[] = [
         .get(ctx.store.id, productId);
       if (pending) return 'Not sent: a price change for this product is already waiting for the owner.';
       const { approved, message } = await requestApproval(ctx, {
-        title: `Price ${String(p.title)} $${from} → $${to}`.slice(0, 80),
+        title: `Price ${String(p.title)} ${$(from)} → ${$(to)}`.slice(0, 80),
         reason: evidence,
         action: { kind: 'store.set_price', payload: { productId, title: String(p.title), from, to, ...(compareAt ? { compareAt: r2(compareAt) } : {}) } },
       });
