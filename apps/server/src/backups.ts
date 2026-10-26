@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import type { Backup } from '@frontline/shared';
 import { dataDir, dbFile, MIGRATIONS, type Db } from './db';
 import { log } from './log';
+import { notify } from './settings';
 
 /** Snapshots kept in <data dir>/backups; older ones are deleted. */
 const KEEP = 7;
@@ -40,15 +41,24 @@ export function backupNow(db: Db, dir = backupDir(), now = new Date()): Backup {
   return { name, size: statSync(file).size, createdAt: statSync(file).mtime.toISOString() };
 }
 
-/** Backs up when the newest snapshot is a day old (checked hourly). Returns stop(). */
+/**
+ * Backs up when the newest snapshot is a day old (checked hourly). A failure raises one error notification (not one per
+ * retry), and an info one once backups work again. Returns stop().
+ */
 export function startBackupLoop(db: Db, dir = backupDir()) {
+  let failing = false;
   const check = () => {
     const newest = listBackups(dir)[0];
     if (newest && Date.now() - Date.parse(newest.createdAt) < DAY_MS) return;
     try {
       backupNow(db, dir);
+      if (failing) notify(db, { kind: 'info', title: 'Backups are working again', link: '/settings' });
+      failing = false;
     } catch (e) {
-      log('error', 'backup failed', { error: e instanceof Error ? e.message : String(e) });
+      const error = e instanceof Error ? e.message : String(e);
+      log('error', 'backup failed', { error });
+      if (!failing) notify(db, { kind: 'error', title: 'The daily backup failed', body: `${error}. Check free disk space and the data folder (Settings).`, link: '/settings' });
+      failing = true;
     }
   };
   check();

@@ -1,8 +1,8 @@
-import { copyFileSync, existsSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { Backup } from '@frontline/shared';
 import { backupNow, backupRoutes, listBackups, startBackupLoop } from './backups';
 import { openDb } from './db';
@@ -91,4 +91,27 @@ test('restore: checks the snapshot, keeps an undo backup, stages it and asks for
   expect(restarts).toBe(0);
   await new Promise((r) => setTimeout(r, 350));
   expect(restarts).toBe(1);
+});
+
+test('a failing daily backup raises one error notification, and an info one when it works again', () => {
+  vi.useFakeTimers();
+  try {
+    const db = openDb();
+    seedDemo(db, '2026-10-26');
+    const root = mkdtempSync(join(tmpdir(), 'frontline-backup-'));
+    writeFileSync(join(root, 'blocked'), ''); // a file where the folder should be
+    const dir = join(root, 'blocked', 'backups');
+    const notes = () => db.prepare('SELECT kind, title FROM notifications ORDER BY rowid').all();
+    const stop = startBackupLoop(db, dir);
+    vi.advanceTimersByTime(2 * 3_600_000);
+    expect(notes()).toEqual([{ kind: 'error', title: 'The daily backup failed' }]);
+
+    rmSync(join(root, 'blocked'));
+    vi.advanceTimersByTime(3_600_000);
+    expect(notes()).toEqual([{ kind: 'error', title: 'The daily backup failed' }, { kind: 'info', title: 'Backups are working again' }]);
+    expect(listBackups(dir)).toHaveLength(1);
+    stop();
+  } finally {
+    vi.useRealTimers();
+  }
 });
