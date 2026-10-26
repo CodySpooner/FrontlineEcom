@@ -143,3 +143,17 @@ test("CJ leaves demo stores out: a real order whose number a demo store also has
     { store_id: 'peak', tracking: null },
   ]);
 });
+
+test("CJ's tracking number replaces the platform's link only when it's another parcel: a stale carrier link isn't kept", async () => {
+  const db = setup();
+  const link = db.prepare("UPDATE orders SET tracking = ?, tracking_url = ? WHERE store_id = 'glow' AND id = ?");
+  link.run('SHOP1', 'https://carrier.example/SHOP1', '#2001');
+  link.run('CJPKL9', 'https://carrier.example/CJPKL9', 'tt-5761');
+  const { fetchFn } = fakeCj({ SHIPPED: [cjOrder('2001', 'SHIPPED', 'CJPKL7'), cjOrder('5761', 'SHIPPED', 'CJPKL9')] });
+  await syncCj(db, key, 'null', fetchFn, NOW, 0);
+  const rows = db.prepare("SELECT id, tracking, tracking_url FROM orders WHERE store_id = 'glow' AND id IN ('#2001', 'tt-5761') ORDER BY id").all();
+  expect(rows.map((r) => ({ ...r }))).toEqual([
+    { id: '#2001', tracking: 'CJPKL7', tracking_url: null }, // shown through 17track
+    { id: 'tt-5761', tracking: 'CJPKL9', tracking_url: 'https://carrier.example/CJPKL9' },
+  ]);
+});

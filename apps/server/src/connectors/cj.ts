@@ -67,7 +67,11 @@ export async function syncCj(db: Db, key: Buffer, _storeId: string, fetchFn: Fet
         `SELECT o.store_id, o.id, o.fulfillment_status, lower(s.name) AS store FROM orders o JOIN stores s ON s.id = o.store_id
          WHERE o.id IN (?1, '#' || ?1, 'tt-' || ?1, 'etsy-' || ?1, 'woo-' || ?1) AND s.demo = 0`,
       );
-      const up = db.prepare("UPDATE orders SET supplier = 'CJ Dropshipping', tracking = coalesce(?, tracking), fulfillment_status = ? WHERE store_id = ? AND id = ?");
+      // Another parcel's number than the platform's drops the platform's carrier link (17track's is shown instead).
+      const up = db.prepare(
+        `UPDATE orders SET supplier = 'CJ Dropshipping', tracking_url = iif(?1 IS NULL OR ?1 IS tracking, tracking_url, NULL), tracking = coalesce(?1, tracking),
+           fulfillment_status = ?2 WHERE store_id = ?3 AND id = ?4`,
+      );
       for (const o of orders) {
         if (!o.orderNum) continue;
         let hits = find.all(o.orderNum.replace(/^#/, ''));

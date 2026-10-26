@@ -170,10 +170,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-85 The daily digest added demo stores' sample numbers and requests to a real store's.
 - [x] CORE-86 A cancelled order with a refund line reached the live feed as a refund of twice its value.
 - [x] CORE-87 Paid orders older than the store's newest (paid later, or another platform's) never reached the live feed.
+- [x] CORE-88 A CJ tracking number kept the platform's carrier link for another parcel.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-88: the CJ sync replaced an order's tracking number but kept the platform's `tracking_url`, so an order whose platform had another parcel's number linked to that parcel's carrier page. A different CJ number now clears the link (the order falls back to 17track's); the same number keeps it.
 - 2026-10-26 — CORE-86/87 (review): `orderValues` subtracted refund lines from a cancelled order too (50 → −50: "refund 100"); refund lines now count only while it's paid, as in `rebuildRevenue`. `announceOrders` took only orders newer than the store's newest before the sync, across platforms: a TikTok Shop order synced after a newer Shopify one (most of them on a store with both, Shopify polling every 2 min, TikTok every 10), or a Woo order paid after a later one was placed, never showed. It now announces the last hour's paid orders the store didn't have paid before the sync.
 - 2026-10-26 — CORE-85 (review): with one store real and the rest still demo, the 8:00 digest summed every store and counted every pending request, so a just-connected store with no sales read "Yesterday: $1,541 revenue … 2 approvals waiting" from the demo stores. Once any store is real, the digest covers real stores only; with demo stores alone it's unchanged.
 - 2026-10-26 — CORE-84 (review): an 'ask' automation's approval named one agent and task, but on approval the scheduler re-read the rule and started its current agent (and after a restart rebuilt the task from the rule's current text, which the owner or an agent's `setTask` may have changed). The run now starts the request's agent (`approval.agentId`) and task (`payload.task`), with the request's reason.
