@@ -168,11 +168,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-80 Demo Email/SMS drafts the flow it's asked for: the Flow Library's own "Design a welcome series" button got a checkout-abandonment flow, and every later ask replaced that same draft.
 - [x] AGT-81 The live spend estimate prices the model in use: a run saves max(engine total, live estimate), and the estimate was always at Opus prices, so on Sonnet or Haiku (`FRONTLINE_AGENT_MODEL`) every run was charged about 2x or 40x against the store's daily AI budget.
 - [x] AGT-82 Store memory stays bounded: four daily jobs, each writing up to 5 learnings, would grow a store's memory by about 7k rows a year. The Knowledge Base lists all of them unpaged, and the niche-promotion scan compares every pair.
+- [x] AGT-83 Old run transcripts shrink: every run stores up to 4,000 characters per tool output forever, about 50 MB a year per store in the database and in each of its 7 daily backups.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-83: at startup, runs older than 90 days keep their text and tool calls, but each tool output is cut to its first 200 characters plus "… (trimmed after 90 days)". Recent runs, run rows and costs are untouched. Test added.
 - 2026-10-26 — AGT-82: writeMemory keeps a store's 300 strongest agent facts and learnings (`MEMORY_CAP`). Past that, the oldest unproven ones go first and proven ones (0.8+) last. Pins, preferences and the owner's own notes are never dropped. Test added; README notes it.
 - 2026-10-26 — list_products leaves archived (deleted or trashed) products out by default; `status: archived` lists them. Core's daily catalog pass now archives deleted products, and they were crowding the best-seller list agents pick from. Test added.
 - 2026-10-26 — Core's archived-products Inbox item: `productGone` (tools.ts) makes propose_price_change, draft_page and publish_page refuse an archived product ("Product X is archived (deleted or trashed on the platform). Pick an active product from list_products."), so no approval is created only to 404 at the platform. Tests added.

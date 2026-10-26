@@ -1,5 +1,5 @@
 import { createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, type Engine, type FakeStep, type RunManagerOptions } from '@frontline/agents';
-import type { AgentRun, LiveMessage } from '@frontline/shared';
+import type { AgentEvent, AgentRun, LiveMessage } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
@@ -18,6 +18,26 @@ beforeEach(() => {
 });
 
 const manager = (o: Partial<RunManagerOptions> = {}) => createRunManager({ db, env: toolEnv(db), store: (id) => getStore(db, id), ...o });
+
+test('tool outputs of runs older than 90 days are trimmed at startup; the text, tool calls and recent runs stay whole', () => {
+  const transcript = JSON.stringify([
+    { type: 'tool_call', id: 't1', name: 'list_orders', input: { days: 30 } },
+    { type: 'tool_result', id: 't1', output: 'x'.repeat(4000), isError: false },
+    { type: 'tool_result', id: 't2', output: 'short', isError: false },
+    { type: 'tool_result', id: 't3', output: 'y'.repeat(4000), isError: false },
+    { type: 'text_delta', text: 'Orders are fine.' },
+  ]);
+  const add = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at, transcript_json) VALUES (?, 'glow', 'glow:operations', 't', 'done', ?, ?)`);
+  add.run('old', new Date(Date.now() - 91 * 86_400_000).toISOString(), transcript);
+  add.run('new', new Date(Date.now() - 89 * 86_400_000).toISOString(), transcript);
+  manager();
+  const events = (id: string) => JSON.parse(String(db.prepare('SELECT transcript_json FROM agent_runs WHERE id = ?').get(id)?.transcript_json)) as AgentEvent[];
+  const outputs = (id: string) => events(id).flatMap((e) => (e.type === 'tool_result' ? [e.output.length] : []));
+  expect(outputs('old')).toEqual([226, 5, 226]);
+  expect(events('old')[0]).toEqual({ type: 'tool_call', id: 't1', name: 'list_orders', input: { days: 30 } });
+  expect(events('old').at(-1)).toEqual({ type: 'text_delta', text: 'Orders are fine.' });
+  expect(outputs('new')).toEqual([4000, 5, 4000]);
+});
 const ok = (r: AgentRun | string) => {
   if (typeof r === 'string') throw new Error(r);
   return r;

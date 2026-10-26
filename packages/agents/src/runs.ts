@@ -59,6 +59,7 @@ export function createRunManager(opts: RunManagerOptions) {
     new Date().toISOString(),
   );
   expireApprovals(interrupted.map((r) => String(r.id)));
+  trimOldTranscripts(db);
 
   /** Queues a task. Returns an error message when the agent can't take it. */
   function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string): AgentRun | string {
@@ -303,6 +304,22 @@ export function createRunManager(opts: RunManagerOptions) {
 }
 
 const SHOWN = 4000;
+
+/**
+ * Runs older than 90 days keep their text and tool calls, but each tool output shrinks to its first 200 characters:
+ * a store's runs would otherwise add ~50 MB a year to the database and to each of its 7 daily backups.
+ */
+// ponytail: runs at startup only; the app restarts often enough (updates, reboots). A daily timer if it ever doesn't.
+function trimOldTranscripts(db: DatabaseSync, now = new Date()) {
+  const cutoff = new Date(now.getTime() - 90 * 86_400_000).toISOString();
+  for (const r of db.prepare('SELECT id, transcript_json FROM agent_runs WHERE created_at < ? AND length(transcript_json) > 8000').all(cutoff)) {
+    const before = String(r.transcript_json);
+    const after = JSON.stringify(
+      (JSON.parse(before) as AgentEvent[]).map((e) => (e.type === 'tool_result' && e.output.length > 300 ? { ...e, output: `${e.output.slice(0, 200)}\n… (trimmed after 90 days)` } : e)),
+    );
+    if (after !== before) db.prepare('UPDATE agent_runs SET transcript_json = ? WHERE id = ?').run(after, String(r.id));
+  }
+}
 
 const addUsage = (a: RunUsage, b: RunUsage): RunUsage => ({
   inputTokens: a.inputTokens + b.inputTokens,
