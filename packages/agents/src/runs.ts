@@ -30,7 +30,7 @@ export type RunManager = ReturnType<typeof createRunManager>;
 export function createRunManager(opts: RunManagerOptions) {
   const { db, env, concurrency = 3, perStore = 2 } = opts;
   const engine = opts.engine ?? defaultEngine();
-  const active = new Map<string, { storeId: string; agentId: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[]; waiting?: boolean }>();
+  const active = new Map<string, { storeId: string; agentId: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[]; waiting?: boolean; budget?: number }>();
   /** Runs paused on the owner's decision don't hold a slot, so one unanswered request can't stall the store's other work. */
   // ponytail: a resumed run can briefly push past the limits; they only gate starting runs.
   const working = () => [...active.values()].filter((a) => !a.waiting);
@@ -112,24 +112,39 @@ export function createRunManager(opts: RunManagerOptions) {
     while (active.size) await Promise.all([...active.values()].map((a) => a.done));
   }
 
+  /**
+   * What a starting run may spend: what is left of the store's daily AI budget after the shares its other runs hold, and
+   * at most a perStore-th of the cap, so the store's runs can still go side by side and never add up past it.
+   */
+  // ponytail: like slots, a run paused on the owner holds no share, so an unanswered request can't stall the store; once
+  // decided it may take the day past the cap by at most its own share. Exact: count spend as it happens.
+  function budgetFor(storeId: string) {
+    const cap = env.caps?.(storeId).agentCostPerDay;
+    if (cap === undefined) return undefined;
+    const held = working().reduce((n, a) => n + (a.storeId === storeId ? (a.budget ?? 0) : 0), 0);
+    return Math.max(0, Math.min(cap / perStore, cap - costToday(db, storeId) - held));
+  }
+
   function pump() {
     const queued = db.prepare(`SELECT * FROM agent_runs WHERE status = 'queued' ORDER BY created_at, rowid`).all().map(toRun);
     for (const run of queued) {
       if (working().length >= concurrency) return;
       if ([...active.values()].some((a) => a.agentId === run.agentId) || working().filter((a) => a.storeId === run.storeId).length >= perStore) continue;
+      const budget = budgetFor(run.storeId);
+      if (budget !== undefined && budget < 0.01 && working().some((a) => a.storeId === run.storeId)) continue; // waits for a share to free up
       const abort = new AbortController();
       const transcript: AgentEvent[] = [];
-      const done = execute(run, abort.signal, transcript)
+      const done = execute(run, abort.signal, transcript, budget)
         .catch((e) => console.error(`Run ${run.id} failed to finish:`, e))
         .finally(() => {
           active.delete(run.id);
           pump();
         });
-      active.set(run.id, { storeId: run.storeId, agentId: run.agentId, abort, done, transcript });
+      active.set(run.id, { storeId: run.storeId, agentId: run.agentId, abort, done, transcript, ...(budget !== undefined ? { budget } : {}) });
     }
   }
 
-  async function execute(queued: AgentRun, signal: AbortSignal, transcript: AgentEvent[]) {
+  async function execute(queued: AgentRun, signal: AbortSignal, transcript: AgentEvent[], budget: number | undefined) {
     db.prepare(`UPDATE agent_runs SET status = 'running', started_at = ? WHERE id = ?`).run(new Date().toISOString(), queued.id);
     const run = getRun(db, queued.id)!;
     opts.onRun?.(run);
@@ -152,9 +167,9 @@ export function createRunManager(opts: RunManagerOptions) {
     try {
       const agent = getAgent(db, run.agentId);
       const store = opts.store(run.storeId);
-      if (agent && store) {
+      if (budget !== undefined && budget < 0.01) end = { type: 'error', message: `Today's AI budget for this store ($${env.caps?.(run.storeId).agentCostPerDay}) is used up. Raise it in Settings.` };
+      else if (agent && store) {
         const resume = db.prepare('SELECT resume FROM agent_runs WHERE id = ?').get(run.id)?.resume;
-        const cap = env.caps?.(store.id).agentCostPerDay;
         const input: RunInput = {
           agent,
           store,
@@ -163,7 +178,7 @@ export function createRunManager(opts: RunManagerOptions) {
           signal,
           env: { ...env, runId: run.id },
           ...(resume ? { resume: String(resume), sessionCostUsd: sessionCost(String(resume)) } : {}),
-          ...(cap !== undefined ? { budgetUsd: Math.max(0, cap - costToday(db, store.id)) } : {}),
+          ...(budget !== undefined ? { budgetUsd: budget } : {}),
         };
         let toolCalls = 0;
         let attempt = input;

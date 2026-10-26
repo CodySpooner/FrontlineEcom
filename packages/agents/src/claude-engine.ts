@@ -11,7 +11,7 @@ import { callTool, channel, requestApproval, toolsFor } from './tools';
 /** Why the SDK stopped a run early, in the owner's words (the run's error notification). */
 const STOPPED: Partial<Record<string, string>> = {
   error_max_turns: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.',
-  error_max_budget_usd: "Stopped: the run used what was left of today's AI budget for this store. Raise it in Settings.",
+  error_max_budget_usd: "Stopped: the run used its share of today's AI budget for this store. Raise it in Settings.",
 };
 
 export interface ClaudeEngineOptions {

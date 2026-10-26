@@ -118,7 +118,7 @@ describe('Claude engine', () => {
 
   test('maps failed results to error events', () => {
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }))).toEqual([{ type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.' }]);
-    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: ['x'] }))[0]).toMatchObject({ message: expect.stringMatching(/^Stopped: the run used what was left of today's AI budget/) });
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: ['x'] }))[0]).toMatchObject({ message: expect.stringMatching(/^Stopped: the run used its share of today's AI budget/) });
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_during_execution', errors: ['boom', 'bang'] }))).toEqual([{ type: 'error', message: 'boom; bang' }]);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in' }))).toEqual([{ type: 'error', message: 'Not logged in' }]);
     // Account problems arrive on an assistant message first, worded for Claude Code ("run /login"): the owner gets Frontline's words.

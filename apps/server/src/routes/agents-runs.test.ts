@@ -140,10 +140,27 @@ test("each run is told what is left of the store's daily AI budget", async () =>
   const budgets: (number | undefined)[] = [];
   const m = manager({ engine: fakeEngine((input) => (budgets.push(input.budgetUsd), [{ type: 'done', sessionId: 's', usage }])) });
   updateCaps(db, 'glow', { agentCostPerDay: 1 });
-  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at) VALUES ('r0', 'glow', 'glow:copywriter', 't', 'done', 0.25, ?)`).run(new Date().toISOString());
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at) VALUES ('r0', 'glow', 'glow:copywriter', 't', 'done', 0.75, ?)`).run(new Date().toISOString());
   ok(m.start('glow:copywriter', 'one'));
   await m.idle();
-  expect(budgets).toEqual([0.75]);
+  expect(budgets).toEqual([0.25]);
+});
+
+test("runs side by side share the store's daily AI budget instead of each getting all of it", async () => {
+  const budgets: (number | undefined)[] = [];
+  const m = manager({ engine: fakeEngine((input) => (budgets.push(input.budgetUsd), [{ type: 'done', sessionId: 's', usage: { ...usage, costUsd: 0.1 } }])) });
+  updateCaps(db, 'glow', { agentCostPerDay: 1 });
+  ok(m.start('glow:copywriter', 'one'));
+  ok(m.start('glow:ad_strategist', 'two'));
+  await m.idle();
+  expect(budgets).toEqual([0.5, 0.5]); // a share each (perStore 2), together the cap
+
+  db.prepare(`UPDATE agent_runs SET cost_usd = 0.4 WHERE store_id = 'glow'`).run(); // $0.80 spent, $0.20 left
+  ok(m.start('glow:copywriter', 'three'));
+  ok(m.start('glow:ad_strategist', 'four')); // nothing unheld: waits for 'three', then gets what it left
+  await m.idle();
+  expect(budgets.slice(2).map((b) => b!.toFixed(2))).toEqual(['0.20', '0.10']);
+  expect(db.prepare(`SELECT status FROM agent_runs WHERE task = 'four'`).get()?.status).toBe('done');
 });
 
 test("the reflection gets what the run left of today's budget, and is skipped when nothing is left", async () => {
@@ -158,10 +175,10 @@ test("the reflection gets what the run left of today's budget, and is skipped wh
   updateCaps(db, 'glow', { agentCostPerDay: 1 });
   ok(m.start('glow:copywriter', '0.4'));
   await m.idle();
-  expect(budgets.map((b) => b?.toFixed(2))).toEqual(['1.00', '0.60']);
+  expect(budgets.map((b) => b?.toFixed(2))).toEqual(['0.50', '0.10']); // a run's share is half the cap (perStore 2)
   ok(m.start('glow:copywriter', '0.7'));
   await m.idle();
-  expect(budgets.slice(2).map((b) => b?.toFixed(2))).toEqual(['0.58']); // after the first reflection's $0.02; this run spends it all: no reflection call
+  expect(budgets.slice(2).map((b) => b?.toFixed(2))).toEqual(['0.50']); // this run spends it all: no reflection call
 });
 
 test('runs that used tools reflect, and the learnings become store memory', async () => {
