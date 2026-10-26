@@ -4,6 +4,9 @@ import type { DatabaseSync } from 'node:sqlite';
 
 export type Verdict = 'scale' | 'hold' | 'cut' | 'pause' | 'learning' | 'paused';
 
+/** Campaign statuses (as core stores them, every network) of a campaign that is off. */
+export const IDLE_CAMPAIGN_STATUSES = ['paused', 'campaign_paused', 'archived', 'deleted'];
+
 export interface CampaignStats {
   network: string;
   id: string;
@@ -34,7 +37,8 @@ export function reviewCampaigns(campaigns: CampaignStats[], econ: Economics) {
   return campaigns.map((c) => {
     const roas = c.spend ? c.revenue / c.spend : 0;
     const verdict: Verdict =
-      c.status !== 'active' ? 'paused'
+      // Meta's raw statuses: in_process and with_issues ones still deliver, so they're judged like active ones.
+      IDLE_CAMPAIGN_STATUSES.includes(c.status) ? 'paused'
       : c.spend < 2 * maxCpa ? 'learning'
       : roas >= target ? 'scale'
       : roas >= breakEven ? 'hold'

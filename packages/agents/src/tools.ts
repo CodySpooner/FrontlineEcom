@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
-import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
+import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
 import { agentTags, searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
@@ -1016,8 +1016,6 @@ export async function requestApproval(ctx: ToolContext, req: { title: string; re
  * A years-old ad account lists hundreds of paused campaigns: the ones off with no spend in the window are left out (a
  * campaign that is on but spends nothing stays: something is wrong with it).
  */
-/** Campaign statuses (as core stores them, every network) of a campaign that is off. */
-export const IDLE_CAMPAIGN_STATUSES = ['paused', 'campaign_paused', 'archived', 'deleted'];
 // sum(), not the alias: in HAVING SQLite reads `spend` as one campaign_daily row's column.
 const LIVE_CAMPAIGNS = `HAVING coalesce(sum(d.spend), 0) > 0 OR c.status NOT IN (${IDLE_CAMPAIGN_STATUSES.map((s) => `'${s}'`).join(', ')})`;
 const idleNote = (ctx: ToolContext, shown: number) => {

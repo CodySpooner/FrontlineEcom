@@ -271,11 +271,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-145 `flag_order_issue` respects an issue the owner just resolved. The owner resolves a late order ("emailed CJ, ships Friday") while it still reads unfulfilled; the next morning's Daily order check flagged it again as a new open issue, and every morning after until the order caught up.
 - [x] AGT-146 `promote_niche_learning` doesn't stack the same proposal. It checked only learnings already shared, so an agent proposing it again before the owner answered put a second identical card in the queue.
 - [x] AGT-147 Campaigns with no daily budget of their own (synced 0: lifetime or ad set budgets) get no budget change. `review_campaigns` suggested 0 for a winning one (reads as pause) and `propose_ad_change` sent a budget change core's writer now refuses at approval.
+- [x] AGT-148 `review_campaigns` judges Meta campaigns that still deliver. Meta campaigns keep their raw status, and `in_process` / `with_issues` ones spend money, but any status other than `active` came out "paused" and was never judged.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-148: a campaign reads "paused" only when its status is one of `IDLE_CAMPAIGN_STATUSES` (moved to ads.ts, still exported); other statuses are judged on their numbers.
 - 2026-10-26 — AGT-147 (core inbox FYI, `setCampaignBudget` refuses 0-budget campaigns): `review_campaigns` shows their budget as "none (lifetime or ad set budgets)" with no suggestion unless the verdict is pause; `propose_ad_change` refuses a budget change for them up front (a pause still goes).
 - 2026-10-26 — AGT-146: a pending `niche.promote_learning` request with the same niche and text (any case) answers "Already waiting for the owner" instead of asking again.
 - 2026-10-26 — AGT-145: within 3 days of the owner resolving an order's issue of a kind (and none of that kind open), a re-flag at the same or a lower severity is refused with the owner's resolution; a higher severity flags it as before.
