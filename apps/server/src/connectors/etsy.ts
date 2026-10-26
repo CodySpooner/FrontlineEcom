@@ -2,10 +2,11 @@ import type { ProductStatus } from '@frontline/shared';
 import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
+import type { ProductPage } from './shopify';
 import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
 
 // Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r, and
-// listings_w for approved price changes: setEtsyListingPrice).
+// listings_w for approved listing changes: setEtsyListingPrice, publishEtsyProductPage).
 const API = 'https://openapi.etsy.com/v3/application';
 const TOKEN_URL = 'https://api.etsy.com/v3/public/oauth/token';
 /** First sync pulls this many days of receipts (1Y range + the previous year for deltas). */
@@ -127,6 +128,37 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
   }
 }
 
+/** 'etsy-123' → '123'; another platform's product id throws. */
+function listingIdOf(productId: string) {
+  const id = /^etsy-(\d+)$/.exec(productId)?.[1];
+  if (!id) throw new Error(`${productId} is not an Etsy listing`);
+  return id;
+}
+
+/** A listing request for an approved change. Shops connected before the app asked for listings_w get a 403. */
+async function etsyEdit<T>(fetchFn: Fetch, url: string, init: RequestInit) {
+  const res = await fetchFn(url, init);
+  const json = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (res.status === 401 || res.status === 403) throw new Error(`Etsy refused the change (${json.error ?? `HTTP ${res.status}`}); connect Etsy again so the app may edit listings`);
+  if (!res.ok) throw new Error(`Etsy: ${json.error ?? `HTTP ${res.status}`}`);
+  return json;
+}
+
+/** Store Builder drafts are HTML; Etsy shows descriptions as plain text. ponytail: named entities past the basic five stay as typed. */
+export function htmlToText(html: string) {
+  const named: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+  return html
+    .replace(/>\s*\n\s*</g, '><') // source formatting between tags
+    .replace(/<\s*br\b[^>]*>|<\/\s*li\s*>/gi, '\n')
+    .replace(/<\/\s*(p|div|h[1-6]|ul|ol|blockquote)\s*>/gi, '\n\n')
+    .replace(/<\s*li\b[^>]*>/gi, '• ')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&(?:#(\d+)|#x([\da-f]+)|(amp|lt|gt|quot|apos|nbsp));/gi, (m, d, h, n) => (d ? String.fromCodePoint(Number(d)) : h ? String.fromCodePoint(parseInt(h, 16)) : named[n.toLowerCase()] ?? m))
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 interface Inventory {
   products: {
     sku: string;
@@ -147,24 +179,15 @@ interface Inventory {
 export async function setEtsyListingPrice(db: Db, key: Buffer, storeId: string, productId: string, { price, compareAt }: { price: number; compareAt?: number | null }, fetchFn: Fetch = fetch, now = new Date()) {
   if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be more than 0');
   if (compareAt != null) throw new Error('Etsy has no compare-at price; put the listing on sale from Shop Manager → Marketing → Sales and discounts');
-  const listingId = /^etsy-(\d+)$/.exec(productId)?.[1];
-  if (!listingId) throw new Error(`${productId} is not an Etsy listing`);
+  const url = `${API}/listings/${listingIdOf(productId)}/inventory`;
   const creds = getCredentials(db, key, 'etsy', storeId);
   if (!creds) throw new Error('Etsy is not connected for this store');
   await logAction(db, storeId, 'price_change', productId, { price }, async () => {
     const { headers } = await etsyAuth(db, key, `etsy:${storeId}`, creds, fetchFn, now);
-    const call = async <T>(body?: object) => {
-      const res = await fetchFn(`${API}/listings/${listingId}/inventory`, body ? { method: 'PUT', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) } : { headers });
-      const json = (await res.json().catch(() => ({}))) as Partial<T> & { error?: string };
-      // Shops connected before listings_w was asked for get a 403 here.
-      if (res.status === 401 || res.status === 403) throw new Error(`Etsy refused the change (${json.error ?? `HTTP ${res.status}`}); connect Etsy again so the app may edit listings`);
-      if (!res.ok) throw new Error(`Etsy: ${json.error ?? `HTTP ${res.status}`}`);
-      return json;
-    };
-    const inv = (await call<Inventory>()) as Inventory;
+    const inv = await etsyEdit<Inventory>(fetchFn, url, { headers });
     if (inv.price_on_property?.length) throw new Error(`Etsy: listing ${productId} is priced per variation; change its prices in Shop Manager`);
     // The PUT replaces the whole inventory: every product goes back as read, minus the read-only ids, at the new price.
-    await call({
+    const body = {
       products: inv.products.filter((p) => !p.is_deleted).map((p) => ({
         sku: p.sku,
         property_values: p.property_values.map(({ property_id, property_name, scale_id, value_ids, values }) => ({ property_id, ...(property_name ? { property_name } : {}), scale_id: scale_id ?? null, value_ids, values })),
@@ -174,7 +197,23 @@ export async function setEtsyListingPrice(db: Db, key: Buffer, storeId: string, 
       quantity_on_property: inv.quantity_on_property,
       sku_on_property: inv.sku_on_property,
       ...(inv.readiness_state_on_property ? { readiness_state_on_property: inv.readiness_state_on_property } : {}),
-    });
+    };
+    await etsyEdit(fetchFn, url, { method: 'PUT', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   });
   db.prepare('UPDATE products SET price = ?, compare_at = NULL WHERE store_id = ? AND id = ?').run(price, storeId, productId);
+}
+
+/**
+ * Replaces a live listing's title and description. Call only for an approved request. Same contract as Shopify's
+ * publishProductPage. ponytail: SEO fields are skipped (Etsy search reads the title and tags; tags are left alone).
+ */
+export async function publishEtsyProductPage(db: Db, key: Buffer, storeId: string, productId: string, page: ProductPage, fetchFn: Fetch = fetch, now = new Date()) {
+  const listingId = listingIdOf(productId);
+  const creds = getCredentials(db, key, 'etsy', storeId);
+  if (!creds) throw new Error('Etsy is not connected for this store');
+  await logAction(db, storeId, 'product_page_publish', productId, { title: page.title }, async () => {
+    const { shopId, headers } = await etsyAuth(db, key, `etsy:${storeId}`, creds, fetchFn, now);
+    await etsyEdit(fetchFn, `${API}/shops/${shopId}/listings/${listingId}`, { method: 'PATCH', headers, body: new URLSearchParams({ title: page.title, description: htmlToText(page.descriptionHtml) }) });
+  });
+  db.prepare('UPDATE products SET title = ? WHERE store_id = ? AND id = ?').run(page.title, storeId, productId);
 }

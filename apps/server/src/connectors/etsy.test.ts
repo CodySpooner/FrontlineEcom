@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { getCredentials, saveIntegration, updateSecrets } from '../integrations';
-import { setEtsyListingPrice, syncEtsy } from './etsy';
+import { htmlToText, publishEtsyProductPage, setEtsyListingPrice, syncEtsy } from './etsy';
 
 const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
@@ -139,4 +139,25 @@ test('an approved Etsy price goes back with the whole inventory as read; per-var
   expect(db.prepare("SELECT action, error IS NULL AS ok FROM action_log WHERE store_id = 'pawsome' ORDER BY rowid").all()).toEqual([
     { action: 'price_change', ok: 1 }, { action: 'price_change', ok: 0 }, { action: 'price_change', ok: 0 },
   ]);
+});
+
+test('an approved product page replaces the listing title and a plain-text description', async () => {
+  const db = setup();
+  updateSecrets(db, key, 'etsy:pawsome', { accessTokenExpiresAt: String(T('2026-10-27T00:00:00Z')) });
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('pawsome', 'etsy-555', 'Mug', 20, 0, 9, 'active')").run();
+  const sent: { url: string; method?: string; body: Record<string, string> }[] = [];
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    sent.push({ url, method: init.method, body: Object.fromEntries(init.body as URLSearchParams) });
+    return Response.json({ listing_id: 555 });
+  }) as typeof fetch;
+  await publishEtsyProductPage(db, key, 'pawsome', 'etsy-555', { title: 'Hand-thrown Mug', descriptionHtml: '<p>Holds 12 oz.</p><ul><li>Glazed</li></ul>', seoTitle: 'ignored' }, fetchFn, NOW);
+  expect(sent).toEqual([{ url: 'https://openapi.etsy.com/v3/application/shops/4455/listings/555', method: 'PATCH', body: { title: 'Hand-thrown Mug', description: 'Holds 12 oz.\n\n• Glazed' } }]);
+  expect(db.prepare("SELECT title FROM products WHERE store_id = 'pawsome' AND id = 'etsy-555'").get()?.title).toBe('Hand-thrown Mug');
+  expect(db.prepare("SELECT action, target FROM action_log WHERE store_id = 'pawsome'").all()).toEqual([{ action: 'product_page_publish', target: 'etsy-555' }]);
+});
+
+test('HTML to Etsy plain text: paragraphs, breaks, list bullets, entities', () => {
+  expect(htmlToText('<h2>Why</h2><p>Soft &amp; warm<br>Machine-wash</p><ul>\n<li>Cotton</li>\n<li>Wool</li>\n</ul><p>It&#39;s 5&nbsp;&lt; 6 &#x2014; <b>yes</b> &hellip;</p>')).toBe(
+    "Why\n\nSoft & warm\nMachine-wash\n\n• Cotton\n• Wool\n\nIt's 5 < 6 \u2014 yes &hellip;",
+  );
 });
