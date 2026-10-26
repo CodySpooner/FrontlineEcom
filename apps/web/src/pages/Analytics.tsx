@@ -8,7 +8,7 @@ import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
 import { DemoMixNote, StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, ErrorState, inputClass, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
-import { breakEvenRoas, byNetwork, rate, roasTone } from '../lib/analytics';
+import { breakEvenRoas, byNetwork, rate, roasTone, times } from '../lib/analytics';
 import { PERIOD, RANGES, weekly } from '../lib/chart';
 import { cents, fmtDay, money, noBaseline, signedPct } from '../lib/format';
 import { stockLeft } from '../lib/stock';
@@ -22,7 +22,6 @@ const METRICS: { value: Metric; label: string }[] = [
 ];
 const NETWORK: Record<AdNetwork, string> = { meta: 'Meta', tiktok: 'TikTok', google: 'Google' };
 const TONE = { bad: 'text-red', ok: 'text-text', good: 'text-good' };
-const times = (n: number) => `${n.toFixed(2)}×`;
 const pct = (n: number) => `${n.toFixed(1)}%`;
 const num = (n: number) => n.toLocaleString('en-US');
 
@@ -100,7 +99,7 @@ function Trend({ s, be }: { s: AnalyticsSummary; be: number }) {
       </p>
       <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} partial currency={s.currency} label={`${label}, ${PERIOD[s.range]}: ${money(s.totals[metric], s.currency)} total`} />
       <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-line pt-3 text-[13px] min-[620px]:grid-cols-4">
-        <Stat label="ROAS" value={times(s.totals.roas)} />
+        <Stat label="ROAS" value={times(s.totals.roas, s.totals.adSpend)} />
         <Stat label="Break-even ROAS" value={Number.isFinite(be) ? times(be) : 'n/a'} />
         <Stat label="Orders" value={num(s.totals.orders)} />
         <Stat label="Avg. order" value={money(s.totals.aov, s.currency)} />
@@ -195,7 +194,7 @@ function Channels({ q, be, cur }: { q: Campaigns; be: number; cur?: string }) {
                 <span>
                   {money(c.spend, cur)} spend · {num(c.purchases)} purchases
                 </span>
-                <span className={TONE[roasTone(c.roas, be)]}>{times(c.roas)} ROAS</span>
+                <span className={c.spend ? TONE[roasTone(c.roas, be)] : undefined}>{times(c.roas, c.spend)} ROAS</span>
               </div>
             </li>
           ))}
@@ -378,7 +377,7 @@ function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number; beOf:
                   <td className="text-right">{money(c.dailyBudget, cur)}</td>
                   <td className="text-right">{money(c.spend, cur)}</td>
                   <td className="text-right">{money(c.revenue, cur)}</td>
-                  <td className={cx('text-right font-semibold', TONE[roasTone(c.roas, beOf(c.storeId))])}>{times(c.roas)}</td>
+                  <td className={cx('text-right font-semibold', c.spend ? TONE[roasTone(c.roas, beOf(c.storeId))] : 'text-muted')}>{times(c.roas, c.spend)}</td>
                   <td className="text-right">{num(c.purchases)}</td>
                   <td className="text-right">{c.purchases ? money(c.spend / c.purchases, cur) : '–'}</td>
                   <td className="text-right">{pct(rate(c.clicks, c.impressions))}</td>
@@ -438,7 +437,7 @@ function ByStore({ s, name }: { s: AnalyticsSummary; name: (id: string) => strin
                   </td>
                   <td className="text-right">{money(t.profit, s.currency)}</td>
                   <td className="text-right">{money(t.adSpend, s.currency)}</td>
-                  <td className="text-right">{times(t.roas)}</td>
+                  <td className="text-right">{times(t.roas, t.adSpend)}</td>
                   <td className="text-right">{num(t.orders)}</td>
                 </tr>
               );

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MetricTotals } from '@frontline/shared';
-import { breakEvenRoas, byNetwork, roasTone } from './analytics';
+import { breakEvenRoas, byNetwork, roasTone, times } from './analytics';
 
 const totals: MetricTotals = { revenue: 10_000, profit: 2_000, adSpend: 3_000, roas: 3.33, orders: 200, aov: 50 };
 
@@ -28,5 +28,14 @@ describe('byNetwork', () => {
       { network: 'meta', spend: 200, revenue: 600, purchases: 12, roas: 3 },
       { network: 'tiktok', spend: 50, revenue: 300, purchases: 6, roas: 6 },
     ]);
+  });
+});
+
+describe('times', () => {
+  it('shows ROAS as a multiple, and a dash when nothing was spent (0× would read as a loss)', () => {
+    expect(times(2.614, 120)).toBe('2.61×');
+    expect(times(0, 120)).toBe('0.00×');
+    expect(times(0, 0)).toBe('–');
+    expect(times(1.8)).toBe('1.80×'); // a break-even ROAS has no spend behind it
   });
 });

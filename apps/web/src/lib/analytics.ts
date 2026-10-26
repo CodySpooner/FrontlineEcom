@@ -9,6 +9,9 @@ export function breakEvenRoas(t: MetricTotals) {
 /** bad = below break-even, good = at least 1.5× break-even. */
 export const roasTone = (roas: number, breakEven: number) => (roas < breakEven ? 'bad' : roas >= 1.5 * breakEven ? 'good' : 'ok');
 
+/** ROAS as "2.61×"; a dash when the ad spend behind it is 0, where the ratio means nothing. */
+export const times = (roas: number, spend?: number) => (spend === 0 ? '–' : `${roas.toFixed(2)}×`);
+
 /** Percent of `b` that `a` is (0 when b is 0). */
 export const rate = (a: number, b: number) => (b ? (100 * a) / b : 0);
 
