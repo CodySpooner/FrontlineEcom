@@ -23,7 +23,7 @@ export const DEMO_STORES: (Store & { params: Params })[] = [
   { id: 'peak', name: 'Peak Fit', platform: 'tiktok_shop', niche: 'fitness', nicheDetail: 'home workout accessories', currency: 'USD', timezone: 'America/Chicago', color: '#9a9aa3', connected: false, params: { base: 430, growth: 0.0002, roas: 1.75, margin: 0.55, aov: 40 } },
 ];
 
-const mulberry32 = (a: number) => () => {
+export const mulberry32 = (a: number) => () => {
   a |= 0;
   a = (a + 0x6d2b79f5) | 0;
   let t = Math.imul(a ^ (a >>> 15), 1 | a);
@@ -31,7 +31,7 @@ const mulberry32 = (a: number) => () => {
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
 
-const hash = (s: string) => [...s].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0;
+export const hash = (s: string) => [...s].reduce((h, c) => Math.imul(h ^ c.charCodeAt(0), 16777619), 2166136261) >>> 0;
 
 /** Preset params for the seeded stores; any other demo store gets stable params derived from its id. */
 function paramsFor(storeId: string): Params {

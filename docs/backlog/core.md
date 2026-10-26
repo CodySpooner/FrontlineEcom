@@ -5,7 +5,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from agents) FYI: agents appended migration 7 (`agent_runs`) to `MIGRATIONS`, and two `LiveMessage` variants in shared (`run`, `run_event`). `apps/server/src/routes/agents.ts` calls your `notify()` for finished/failed runs and `getCaps().agentCostPerDay` before starting one.
+- [x] (from agents) FYI: agents appended migration 7 (`agent_runs`) to `MIGRATIONS`, and two `LiveMessage` variants in shared (`run`, `run_event`). `apps/server/src/routes/agents.ts` calls your `notify()` for finished/failed runs and `getCaps().agentCostPerDay` before starting one.
 - [x] (from agents) FYI: agents lane appended migration 4 (`store_memory` + `store_memory_fts` FTS5 + sync triggers) to `MIGRATIONS` in `db.ts`. Next agents migrations (agent_runs, xp_events) will be appended the same way — rebase before adding yours to avoid number clashes.
 - [x] (from agents) CORE-04: after inserting a store in POST /api/stores, call `createSquad(db, store)` from `@frontline/agents` (idempotent; ids `<storeId>:<role>`). Startup already runs `ensureSquads(db)` via `agentRoutes(db)`, mounted in `app.ts` (one line, agents lane).
 
@@ -36,7 +36,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-14 Products & Orders API for the UI (filters, pagination, sort).
 - [x] CORE-15 Research feed: trending products dataset (demo) with scoring (margin, competition, trend, shipping),
       tabs as filters, saved lists API.
-- [ ] CORE-16 Competitors: competitors per store, price snapshots, ad snapshots; API.
+- [x] CORE-16 Competitors: competitors per store, price snapshots, ad snapshots; API.
 - [ ] CORE-17 Automation scheduler: rules (schedule cron | metric threshold) → action (agent task) with approval policy
       and caps; run log; survives restarts.
 - [ ] CORE-18 Electron shell `apps/desktop`: starts the server in a utilityProcess, loads the web build (dev: Vite URL),
@@ -49,6 +49,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-16 competitors: `competitors` + `competitor_snapshots` (price | ad), `GET/POST /api/competitors`, `DELETE /api/competitors/:id`, `GET/POST /api/competitors/:id/snapshots`, `GET /api/competitors/price-changes`; demo rivals for the 3 demo stores
 - 2026-10-26 — Fix: `pnpm dev` API never started (tsx watch restarts on stdin data under `pnpm --parallel`); server dev now `node --watch --import tsx`. Verified Command Center on the real API in the browser.
 - 2026-10-26 — CORE-09 Meta Ads connector: campaigns + daily campaign insights (spend, de-duplicated purchases/value, clicks, impressions), 730-day backfill in 90-day chunks then 28-day attribution re-pull, `daily_metrics.ad_spend` rebuilt across networks; shared `switchToReal`/`rebuildAdSpend`
 - 2026-10-26 — CORE-08 Shopify connector: Admin GraphQL (custom-app token, myshopify.com-only host), incremental products/orders sync by `updated_at` (2y backfill), daily revenue/orders/cogs rebuilt per store-local day, first sync wipes demo rows and flips the store to connected, errors surface on the integration; sync loop every 30s (stale 10 min / on credential change)

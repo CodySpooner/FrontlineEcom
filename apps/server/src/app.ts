@@ -6,6 +6,7 @@ import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type Appr
 import { loadRows, summarize } from './analytics';
 import { decide, listApprovals } from './approvals';
 import { listOrders, listProducts } from './catalog';
+import { competitorRoutes } from './competitors';
 import { dataDir, type Db } from './db';
 import { localDate } from './dates';
 import { deleteIntegration, listIntegrations, saveIntegration } from './integrations';
@@ -95,6 +96,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       return c.json(summarize(loadRows(db, storeIds, range, to), { range, to, storeIds }));
     })
     .route('/', researchRoutes(db))
+    .route('/', competitorRoutes(db, (q) => pickStores(db, q)))
     .route('/', settingsRoutes(db))
     .route('/', agentRoutes(db));
 };

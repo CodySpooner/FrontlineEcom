@@ -1,4 +1,5 @@
 import { startServer } from './app';
+import { seedCompetitors } from './competitors';
 import { dataDir, dbFile, openDb } from './db';
 import { seedDemo } from './demo';
 import { startDemoEmitter } from './live';
@@ -9,6 +10,7 @@ import { startSyncLoop } from './sync';
 const db = openDb(dbFile());
 seedDemo(db);
 seedResearch(db);
+seedCompetitors(db);
 startDemoEmitter(db);
 startSyncLoop(db, loadKey(dataDir()));
 

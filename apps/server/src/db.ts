@@ -223,6 +223,24 @@ export const MIGRATIONS = [
   CREATE INDEX agent_runs_by_agent ON agent_runs (agent_id, created_at);
   CREATE INDEX agent_runs_by_status ON agent_runs (status, created_at);
   `,
+  /* 8 */ `
+  CREATE TABLE competitors (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE competitor_snapshots (
+    id TEXT PRIMARY KEY,
+    competitor_id TEXT NOT NULL REFERENCES competitors(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    captured_at TEXT NOT NULL,
+    data_json TEXT NOT NULL
+  );
+  CREATE INDEX competitor_snapshots_by_time ON competitor_snapshots (competitor_id, kind, captured_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

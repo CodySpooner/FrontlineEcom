@@ -549,3 +549,66 @@ export interface AppNotification {
 
 /** What server code passes to notify(). */
 export type NewNotification = Omit<AppNotification, 'id' | 'createdAt' | 'readAt'>;
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Competitor intel (core lane).
+
+/** GET /api/competitors?stores= → Competitor[]; POST /api/competitors (CompetitorInput) → Competitor; DELETE /api/competitors/:id. */
+export interface Competitor {
+  id: string;
+  storeId: string;
+  name: string;
+  url: string;
+  notes?: string;
+  createdAt: string;
+  /** Distinct products with price snapshots. */
+  productsTracked: number;
+  /** Ads seen in the last 3 days. */
+  activeAds: number;
+}
+
+export interface CompetitorInput {
+  storeId: string;
+  name: string;
+  url: string;
+  notes?: string;
+}
+
+export interface PriceSnapshotData {
+  product: string;
+  price: number;
+  compareAt?: number;
+}
+
+export interface AdSnapshotData {
+  network: 'meta' | 'tiktok' | 'google';
+  format: 'image' | 'video' | 'carousel';
+  headline: string;
+  body: string;
+  cta?: string;
+  /** YYYY-MM-DD. */
+  firstSeen: string;
+  lastSeen: string;
+  landingUrl?: string;
+}
+
+/**
+ * GET /api/competitors/:id/snapshots?kind=price|ad&limit= → CompetitorSnapshot[] newest first.
+ * POST /api/competitors/:id/snapshots { kind, data } → CompetitorSnapshot (agents and scrapers record what they see).
+ */
+export type CompetitorSnapshot = { id: string; competitorId: string; capturedAt: string } & (
+  | { kind: 'price'; data: PriceSnapshotData }
+  | { kind: 'ad'; data: AdSnapshotData }
+);
+
+/** GET /api/competitors/price-changes?stores=&limit= → PriceChange[] newest first (derived from consecutive price snapshots). */
+export interface PriceChange {
+  competitorId: string;
+  storeId: string;
+  product: string;
+  from: number;
+  to: number;
+  /** (to - from) / from × 100. */
+  changePct: number;
+  at: string;
+}

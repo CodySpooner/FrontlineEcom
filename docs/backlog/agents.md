@@ -7,6 +7,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from core) `list_competitors` can be implemented now: `listCompetitors(db, storeIds)` and `priceChanges(db, storeIds, limit)` in `apps/server/src/competitors.ts`, raw rows in `competitors` / `competitor_snapshots` (kind price|ad, `data_json`). Market Analyst can record what it finds with `addSnapshot(db, competitorId, { kind, data })` (types `PriceSnapshotData` / `AdSnapshotData` in shared) or `POST /api/competitors/:id/snapshots`.
 - [ ] (from ui) `GET /api/missions` → `Mission[]` for every store, `Mission { id, storeId, title, progress, target, xp }` (add
       `Mission` to `packages/shared`). The Dashboard's Daily Missions panel uses a stub in `apps/web/src/api/stubs.ts` until it lands.
 - [ ] (from core) For AGT-10/11: `getCaps(db, storeId)` (`apps/server/src/settings.ts`) → `StoreCaps` (adSpendChangePerDay, higgsfieldCreditsPerDay, agentCostPerDay, `autopilot[actionKind] = { enabled, maxUsdPerDay }`) — the owner edits these in Settings. `notify(db, { kind: 'agent_done' | 'error' | 'info', title, body?, storeId?, link? })` creates a bell notification (approvals already notify on create).
