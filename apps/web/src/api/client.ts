@@ -1,5 +1,5 @@
 // UI-03 data layer: typed fetchers + react-query hooks over the local API, and the /api/live socket.
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   Achievement,
@@ -432,8 +432,10 @@ export function useMarkRead() {
 }
 
 /** Mount once: streams /api/live into the react-query cache, reconnecting if the server restarts. */
+/** Mount once (Shell). Returns false while the socket is down, so the UI can say it's reconnecting. */
 export function useLive() {
   const qc = useQueryClient();
+  const [online, setOnline] = useState(true);
   useEffect(() => {
     let ws: WebSocket | undefined;
     let retry = 0;
@@ -487,11 +489,14 @@ export function useLive() {
       ws.onopen = () => {
         if (dropped) qc.invalidateQueries();
         dropped = false;
+        setOnline(true);
       };
       ws.onmessage = (e) => onMessage(JSON.parse(String(e.data)) as LiveMessage);
       ws.onclose = () => {
         dropped = true;
-        if (!closed) retry = window.setTimeout(connect, 3000);
+        if (closed) return;
+        setOnline(false);
+        retry = window.setTimeout(connect, 3000);
       };
     };
     connect();
@@ -501,4 +506,5 @@ export function useLive() {
       clearTimeout(retry);
     };
   }, [qc]);
+  return online;
 }

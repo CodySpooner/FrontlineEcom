@@ -12,7 +12,7 @@ import { useStoreSelection } from './StoreFilter';
 import { Button, buttonClass, Card, ProgressBar, StatusDot, cx } from './ui';
 
 export function Shell() {
-  useLive();
+  const online = useLive();
   const { pathname } = useLocation();
   const title = pageTitle(pathname, useStoreSelection().name);
   useEffect(() => {
@@ -70,7 +70,7 @@ export function Shell() {
             </NavLink>
           ))}
         </nav>
-        <SystemStatus />
+        <SystemStatus online={online} />
       </aside>
       <main id="main" tabIndex={-1} className="min-w-0 px-[22px] pb-8 outline-none">
         {/* Keyed by path: moving to another page clears a caught error. */}
@@ -82,7 +82,7 @@ export function Shell() {
   );
 }
 
-function SystemStatus() {
+function SystemStatus({ online }: { online: boolean }) {
   const { data: agents = [], isError } = useAgents();
   const down = agents.filter((a) => a.status === 'error' || a.status === 'offline').length;
   const failing = useHealth().data?.connectors.filter((c) => c.status === 'error').length ?? 0;
@@ -90,9 +90,11 @@ function SystemStatus() {
   return (
     <div className="mt-auto hidden rounded-[11px] border border-line bg-panel p-3 min-[900px]:block">
       <div className="text-xs text-muted">System Status</div>
-      <div className="mt-1.5 mb-[9px] flex items-center gap-2 text-[13px]">
-        <StatusDot tone={ok ? 'good' : 'red'} />
-        {isError ? (
+      <div role="status" className="mt-1.5 mb-[9px] flex items-center gap-2 text-[13px]">
+        <StatusDot tone={!online ? 'idle' : ok ? 'good' : 'red'} pulse={!online} />
+        {!online ? (
+          'Reconnecting…'
+        ) : isError ? (
           'Agents unreachable'
         ) : down ? (
           `${down} agent${down > 1 ? 's need' : ' needs'} attention`
@@ -104,7 +106,7 @@ function SystemStatus() {
           'All agents online'
         )}
       </div>
-      <ProgressBar value={agents.length ? (agents.length - down) / agents.length : 0} tone={ok ? 'good' : 'red'} label="Agents online" />
+      <ProgressBar value={agents.length ? (agents.length - down) / agents.length : 0} tone={!online ? 'muted' : ok ? 'good' : 'red'} label="Agents online" />
     </div>
   );
 }

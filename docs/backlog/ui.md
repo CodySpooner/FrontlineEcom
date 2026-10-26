@@ -118,7 +118,7 @@ Orca's browser against the reference before ticking it.
       this agent (trigger, next run, on/off) with a link to Automation to add one.
 - [x] UI-35 Agent page title names the agent ("Market Analyst · Pawsome Gear · Frontline Ecom") instead of the generic
       "AI Agents", so two agent windows/tabs can be told apart.
-- [ ] UI-36 Reconnecting status: while `/api/live` is down (API restart, restore, sleep) the sidebar System Status says
+- [x] UI-36 Reconnecting status: while `/api/live` is down (API restart, restore, sleep) the sidebar System Status says
       "Reconnecting…" instead of "All agents online", so stale numbers aren't mistaken for live ones.
 - [ ] UI-37 Console sweep: visit every page (plus drawer, palette, onboarding) and fix any React warnings or errors in
       the console (keys, nested interactive elements, uncontrolled→controlled).
@@ -180,3 +180,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-34: agent Settings tab gets a "Schedule" panel listing the automation rules whose action targets this agent (name, trigger, next run when on, task, on/off switch) with Manage rules / New rule → /automation; `when` moved to lib/automation. Chrome: Pawsome Market Analyst shows its 3 seeded rules; switch round-tripped off → on → off
 - 2026-10-26 — Fix (UI-30 follow-up): with requests waiting, the bell drawer's empty list said "You're all caught up" right under them; it now says "Nothing else new." (test + Chrome)
 - 2026-10-26 — UI-35: `pageTitle(pathname, storeName)` names agent pages ("Ad Strategist · Pawsome Gear · Frontline Ecom"; own-key role check, no decodeURIComponent throw), Shell feeds it store names. Test + Chrome (Agents → Configure)
+- 2026-10-26 — UI-36: `useLive` returns whether the socket is up; System Status shows a pulsing grey "Reconnecting…" (role=status, muted bar) while it's down. Hook test covers online → offline → online; Chrome saw Reconnecting… → All agents online across an API restart
