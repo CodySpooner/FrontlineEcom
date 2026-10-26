@@ -43,7 +43,8 @@ pnpm check    # typecheck + tests
     price outside its min/max in Seller Central, is left for you to change. Needs the Product Listing role.
   - TikTok Shop: agents put the change in their answer and you make it.
 - **Your data:** everything stays on this PC in `%APPDATA%\Frontline Ecom\data`. That folder holds the database,
-  `logs\api.log`, and `backups\` (daily, newest 7 kept, restorable from Settings). Connector credentials are encrypted
+  `logs\api.log`, and `backups\` (daily, newest 7 kept, plus a copy taken just before an update changes the data; all
+  restorable from Settings). Connector credentials are encrypted
   with your Windows login and never leave the machine except to their own service.
 
 ### How the numbers are counted
@@ -52,13 +53,15 @@ pnpm check    # typecheck + tests
   payments (cash on delivery, bank transfer), test and sample orders don't count until paid, and a cancelled order
   counts as refunded. TikTok Shop subtracts cancellations only, and Amazon counts sales before refunds.
 - **Profit** is revenue minus product costs minus ad spend. Costs come from the platform (Shopify "Cost per item",
-  WooCommerce Cost of Goods Sold) or from Store Analytics → Unit costs. Platform and payment fees come off only as
+  WooCommerce Cost of Goods Sold) or from Store Analytics → Unit costs (for Amazon, on the days the app has its
+  orders: the 30 days before connecting, and every day since). Platform and payment fees come off only as
   the estimate you set per store: a % of revenue plus an amount per order. Sales tax and VAT in Shopify, WooCommerce,
   Etsy and TikTok Shop orders come off too (revenue still shows the order totals). Shipping labels aren't subtracted.
 - **ROAS** on the dashboard is store revenue ÷ total ad spend. In the campaigns table, it's the purchase value each
   network attributes to that campaign.
-- **Days** follow each store's own timezone (the shop's, where the platform reports it). Today's change compares
-  against the same hours of earlier days.
+- **Days** follow each store's own timezone (the shop's, where the platform reports it), also in "All stores" and the
+  morning digest. Today's change compares against the same point of the earlier day: the share of that day's sales
+  the store's orders had made by this time of day.
 - **Currencies:** a store reports in its shop's currency. Ad spend in another currency, and "All stores" totals (in
   the base currency from Settings), are converted at the European Central Bank's daily rates.
 
