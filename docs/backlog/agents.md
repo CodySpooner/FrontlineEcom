@@ -317,6 +317,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-178 follow-up: budgets are whole amounts, so 30% of one under $4/day rounded to no raise at all; a raise of $1 always goes.
 - 2026-10-26 — AGT-184 (Inbox, core's AGT-182 reply): `record_product_find` passes the custom niche's slug, `recordFind` writes `niche_detail` and matches it in the repeat lookup, `research_feed` asks for `nicheKey` (`other:<slug>`); AGT-182's note is gone.
 - 2026-10-26 — AGT-183: `applyPriceChange` skips (`not-applied`, no test) a connected store's price change decided 15+ days after it was asked and tells the owner to ask the Market Analyst again.
 - 2026-10-26 — AGT-182: for a custom-niche store (and not `anyNiche`), `research_feed` leads with a note to keep only finds that fit its niche. ponytail: a note, not a filter (finds don't record the custom niche; core's schema).
