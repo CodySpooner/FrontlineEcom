@@ -513,6 +513,9 @@ export const MIGRATIONS = [
   /* 40 (core: the tax a refund line gives back, on top of its amount; 0 where the platform doesn't split it out) */ `
   ALTER TABLE amazon_refunds ADD COLUMN tax REAL NOT NULL DEFAULT 0;
   `,
+  /* 41 (core: refund lines by order, for rebuildRevenue's per-day join) */ `
+  CREATE INDEX amazon_refunds_by_order ON amazon_refunds (store_id, order_id);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
