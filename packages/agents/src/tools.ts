@@ -146,7 +146,7 @@ export const APP_TOOLS: AppTool[] = [
     name: 'store_summary',
     description:
       'Revenue, profit, ad spend, ROAS, orders and AOV for the last N days, with the previous period, % deltas and store health (net margin: bleeding / steady / winning), ' +
-      'plus amazonChannel when the store also sells on Amazon as a channel.',
+      'plus amazonChannel / tiktokShop when the store also sells on Amazon / TikTok Shop as a channel.',
     input: { range: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(365)]).default(30).describe('days') },
     run: async ({ range }, ctx) => {
       const s = ctx.summary(ctx.store.id, range);
@@ -156,7 +156,13 @@ export const APP_TOOLS: AppTool[] = [
       const amazonChannel = Number(amazon?.revenue) || Number(amazon?.orders)
         ? { revenue: Number(amazon!.revenue), orders: Number(amazon!.orders), note: "In the totals. Profit counts an estimate of its costs (the store's own cost ratio plus Amazon's 15% referral fee); ROAS and AOV count its sales, which the store's ads mostly didn't drive: take it out for the site's own ROAS and AOV." }
         : undefined;
-      return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals), ...(amazonChannel && { amazonChannel }) });
+      // TikTok Shop next to the site (`tt-` orders, core's CORE-82) is in the totals too, with its own product costs.
+      const tt = ctx.store.platform === 'tiktok_shop' ? undefined
+        : ctx.db.prepare(`SELECT round(sum(total), 2) AS revenue, count(*) AS orders FROM orders WHERE store_id = ? AND id GLOB 'tt-*' AND status = 'paid' AND local_date BETWEEN ? AND ?`).get(ctx.store.id, s.from, s.to);
+      const tiktokShop = Number(tt?.orders)
+        ? { revenue: Number(tt!.revenue), orders: Number(tt!.orders), note: "In the totals, with its own product costs. Its buyers shopped on TikTok Shop, not the site: take it out for the site's own AOV and conversion." }
+        : undefined;
+      return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals), ...(amazonChannel && { amazonChannel }), ...(tiktokShop && { tiktokShop }) });
     },
   }),
   defineTool({

@@ -104,6 +104,21 @@ test('store_summary names the Amazon channel sales in its totals', async () => {
   }
 });
 
+test('store_summary names the TikTok Shop sales in its totals', async () => {
+  const summary = async () => JSON.parse(results(await run(input('glow', 'market_analyst'), [{ call: 'store_summary', input: { range: 7 } }]))[0]!.output) as { to: string; tiktokShop?: unknown };
+  const plain = await summary();
+  expect(plain.tiktokShop).toBeUndefined();
+  const order = db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, ?, ?, ?, 'delivered', ?)`);
+  order.run('tt-a', `${plain.to}T12:00:00Z`, 30.5, 'paid', plain.to);
+  order.run('tt-b', `${plain.to}T13:00:00Z`, 19.5, 'paid', plain.to);
+  order.run('tt-c', `${plain.to}T14:00:00Z`, 99, 'refunded', plain.to);
+  try {
+    expect((await summary()).tiktokShop).toEqual({ revenue: 50, orders: 2, note: expect.stringMatching(/^In the totals, with its own product costs\..+AOV and conversion\.$/) });
+  } finally {
+    db.prepare(`DELETE FROM orders WHERE store_id = 'glow' AND id GLOB 'tt-*'`).run(); // the db is shared by these tests
+  }
+});
+
 test('list_products shows a unit cost nobody set as "not set", with no margin, not a 97% margin', async () => {
   const p = db.prepare(`SELECT id, cost FROM products WHERE store_id = 'glow' ORDER BY price DESC LIMIT 1`).get()!;
   db.prepare(`UPDATE products SET cost = 0 WHERE store_id = 'glow' AND id = ?`).run(String(p.id));
