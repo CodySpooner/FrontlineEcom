@@ -136,11 +136,19 @@ async function usdNote(ctx: ToolContext) {
 export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'store_summary',
-    description: 'Revenue, profit, ad spend, ROAS, orders and AOV for the last N days, with the previous period, % deltas and store health (net margin: bleeding / steady / winning).',
+    description:
+      'Revenue, profit, ad spend, ROAS, orders and AOV for the last N days, with the previous period, % deltas and store health (net margin: bleeding / steady / winning), ' +
+      'plus amazonChannel when the store also sells on Amazon as a channel.',
     input: { range: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(365)]).default(30).describe('days') },
     run: async ({ range }, ctx) => {
       const s = ctx.summary(ctx.store.id, range);
-      return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals) });
+      // Amazon as an extra channel (core's channel_daily) is in these totals, as in metrics_timeseries (see there).
+      const amazon = ctx.store.platform === 'amazon' ? undefined
+        : ctx.db.prepare(`SELECT round(sum(revenue), 2) AS revenue, sum(orders) AS orders FROM channel_daily WHERE store_id = ? AND channel = 'amazon' AND date BETWEEN ? AND ?`).get(ctx.store.id, s.from, s.to);
+      const amazonChannel = Number(amazon?.revenue) || Number(amazon?.orders)
+        ? { revenue: Number(amazon!.revenue), orders: Number(amazon!.orders), note: "In the totals, but its product costs aren't in profit and the store's ads mostly drive its own site: take it out for site profit, margin, ROAS and conversion." }
+        : undefined;
+      return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals), ...(amazonChannel && { amazonChannel }) });
     },
   }),
   defineTool({

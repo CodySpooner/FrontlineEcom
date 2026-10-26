@@ -92,6 +92,18 @@ test("store_summary's change vs the previous period matches the dashboard's in t
   }
 });
 
+test('store_summary names the Amazon channel sales in its totals', async () => {
+  const summary = async () => JSON.parse(results(await run(input('glow', 'market_analyst'), [{ call: 'store_summary', input: { range: 7 } }]))[0]!.output) as { to: string; amazonChannel?: unknown };
+  const plain = await summary();
+  expect(plain.amazonChannel).toBeUndefined();
+  db.prepare(`INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('glow', 'amazon', ?, 210.25, 7)`).run(plain.to);
+  try {
+    expect((await summary()).amazonChannel).toEqual({ revenue: 210.25, orders: 7, note: expect.stringMatching(/take it out for site profit, margin, ROAS and conversion/) });
+  } finally {
+    db.prepare(`DELETE FROM channel_daily WHERE store_id = 'glow'`).run(); // the db is shared by these tests
+  }
+});
+
 test("compare_stores matches the dashboard store by store when the stores' days are in different zones", async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   const saved = db.prepare('SELECT id, demo, timezone FROM stores').all();
