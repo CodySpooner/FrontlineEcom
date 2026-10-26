@@ -56,27 +56,33 @@ export function updateAgent(db: DatabaseSync, id: string, patch: AgentUpdate): A
   return getAgent(db, id);
 }
 
-/** agent id → title of its oldest pending approval request, and → task of its oldest queued/running run. */
+/**
+ * agent id → title of its oldest pending approval request, → task of its oldest queued/running run, and → the error of
+ * its latest finished run when that one failed (SQLite takes the bare columns from the max(created_at) row).
+ */
 function busyAgents(db: DatabaseSync) {
   const latestWins = (rows: Record<string, unknown>[]) => new Map(rows.map((r) => [String(r.agent_id), String(r.what)]));
+  const finished = db.prepare(`SELECT agent_id, status, error AS what, max(created_at) FROM agent_runs WHERE status IN ('done', 'error', 'cancelled') GROUP BY agent_id`).all();
   return {
     waiting: latestWins(db.prepare(`SELECT agent_id, title AS what FROM approvals WHERE status = 'pending' ORDER BY created_at DESC`).all()),
     running: latestWins(db.prepare(`SELECT agent_id, task AS what FROM agent_runs WHERE status IN ('queued', 'running') ORDER BY created_at DESC`).all()),
+    failed: latestWins(finished.filter((r) => r.status === 'error')),
   };
 }
 
-// Status is derived from the DB: offline > waiting for the owner > working on a run > idle.
+// Status is derived from the DB: offline > waiting for the owner > working on a run > last run failed > idle.
 function toAgent(r: Record<string, unknown>, busy: ReturnType<typeof busyAgents>): Agent {
   const id = String(r.id);
   const enabled = r.enabled === 1;
   const request = enabled ? busy.waiting.get(id) : undefined;
   const task = enabled ? busy.running.get(id) : undefined;
-  const currentTask = request ?? task;
+  const failed = enabled ? busy.failed.get(id) : undefined;
+  const currentTask = request ?? task ?? (failed && `Last run failed: ${failed}`);
   return {
     id,
     storeId: String(r.store_id),
     role: r.role as AgentRole,
-    status: !enabled ? 'offline' : request ? 'waiting_approval' : task ? 'running' : 'idle',
+    status: !enabled ? 'offline' : request ? 'waiting_approval' : task ? 'running' : failed ? 'error' : 'idle',
     level: levelForXp(Number(r.xp)),
     xp: Number(r.xp),
     rank: rankForLevel(levelForXp(Number(r.xp))),

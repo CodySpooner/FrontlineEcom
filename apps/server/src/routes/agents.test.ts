@@ -38,6 +38,16 @@ test('an agent with a pending request is waiting on the owner', async () => {
   expect(await get(`/api/agents/${encodeURIComponent(id)}`)).toMatchObject({ status: 'idle' });
 });
 
+test("an agent whose last run failed shows the error until a newer run finishes", async () => {
+  const runAt = (id: string, status: string, at: string, error: string | null = null) =>
+    db.prepare(`INSERT INTO agent_runs (id, agent_id, store_id, task, status, error, created_at) VALUES (?, 'glow:copywriter', 'glow', 't', ?, ?, ?)`).run(id, status, error, at);
+  runAt('r1', 'done', '2026-10-25T08:00:00Z');
+  runAt('r2', 'error', '2026-10-26T08:00:00Z', "Claude isn't signed in on this computer.");
+  expect(await get('/api/agents/glow%3Acopywriter')).toMatchObject({ status: 'error', currentTask: "Last run failed: Claude isn't signed in on this computer." });
+  runAt('r3', 'done', '2026-10-26T09:00:00Z');
+  expect(await get('/api/agents/glow%3Acopywriter')).toMatchObject({ status: 'idle' });
+});
+
 test('disable, re-deploy and change autonomy', async () => {
   const off = await patch('glow:copywriter', { enabled: false });
   expect(await off.json()).toMatchObject({ enabled: false, status: 'offline' });
