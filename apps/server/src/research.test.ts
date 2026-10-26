@@ -126,3 +126,17 @@ test('a double click on add to store still makes one request', async () => {
   const ids = await Promise.all([add(), add()].map(async (r) => ((await (await r).json()) as ApprovalRequest).id));
   expect(ids[1]).toBe(ids[0]);
 });
+
+test("a custom niche's finds are its own: niche=other:<slug> gives that niche's, niche=other every custom niche's", async () => {
+  const db = openDb();
+  seedDemo(db);
+  seedResearch(db);
+  const app = createApp(db);
+  const find = db.prepare("INSERT INTO research_products (id, title, category, niche, niche_detail, source, cost, price, compare_at, trend, competition, shipping_days) VALUES (?, ?, 'Hobby', 'other', ?, 'tiktok', 2, 10, 20, 50, 30, 8)");
+  find.run('find-1', 'Soy Candle Kit', 'candles');
+  find.run('find-2', 'Glow Lure Set', 'fishing-lures');
+  const titles = async (q: string) => (await page(app, q)).items.map((p) => p.title).sort();
+  expect(await titles('?niche=other:candles')).toEqual(['Soy Candle Kit']);
+  expect(await titles('?niche=other')).toEqual(['Glow Lure Set', 'Soy Candle Kit']);
+  expect((await page(app, '?niche=other:candles')).items[0]!.nicheDetail).toBe('candles');
+});

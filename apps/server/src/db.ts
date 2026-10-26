@@ -519,6 +519,9 @@ export const MIGRATIONS = [
   /* 42 (core: the rate an order in another currency was first converted at, so later syncs don't re-price it; NULL = not locked) */ `
   ALTER TABLE orders ADD COLUMN fx_rate REAL;
   `,
+  /* 43 (core: a custom-niche store's find, filed under niche 'other', keeps that niche's slug) */ `
+  ALTER TABLE research_products ADD COLUMN niche_detail TEXT;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

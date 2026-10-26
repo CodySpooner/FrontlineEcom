@@ -979,6 +979,8 @@ export interface ResearchProduct {
   /** Display category, e.g. "Health & Beauty". */
   category: string;
   niche: Niche;
+  /** With niche 'other': the custom niche's slug (nicheSlug of the store's nicheDetail), so each custom niche's finds stay its own. */
+  nicheDetail?: string;
   image?: string;
   source: ResearchSource;
   /** Supplier cost incl. shipping. */

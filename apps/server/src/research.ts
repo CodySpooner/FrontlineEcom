@@ -29,6 +29,7 @@ const toProduct = (r: Row): ResearchProduct => {
     title: String(r.title),
     category: String(r.category),
     niche: r.niche as Niche,
+    ...(r.niche_detail ? { nicheDetail: String(r.niche_detail) } : {}),
     ...(r.image ? { image: String(r.image) } : {}),
     source: r.source as ResearchSource,
     ...p,
@@ -64,7 +65,7 @@ export function researchRoutes(db: Db) {
     .get('/api/research', (c) => {
       const tab = c.req.query('tab') as ResearchTab | undefined;
       if (tab && !RESEARCH_TABS.includes(tab)) return c.json({ error: `tab must be one of ${RESEARCH_TABS.join(', ')}` }, 400);
-      const niche = c.req.query('niche');
+      const [niche, nicheDetail] = c.req.query('niche')?.split(':', 2) ?? []; // other:<slug> = one custom niche's
       const q = c.req.query('q')?.trim().toLowerCase();
       const offset = Math.max(0, Math.floor(Number(c.req.query('offset')) || 0));
       const limit = Math.min(200, Math.max(1, Math.floor(Number(c.req.query('limit')) || 50)));
@@ -74,7 +75,7 @@ export function researchRoutes(db: Db) {
         .prepare('SELECT * FROM research_products ORDER BY id')
         .all()
         .map(toProduct)
-        .filter((p) => t.keep(p) && (!niche || p.niche === niche) && (!q || `${p.title} ${p.category}`.toLowerCase().includes(q)))
+        .filter((p) => t.keep(p) && (!niche || p.niche === niche) && (!nicheDetail || p.nicheDetail === nicheDetail) && (!q || `${p.title} ${p.category}`.toLowerCase().includes(q)))
         .sort(t.by);
       return c.json({ items: all.slice(offset, offset + limit), total: all.length, offset, limit });
     })
