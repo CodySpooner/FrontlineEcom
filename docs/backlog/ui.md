@@ -7,6 +7,7 @@ Orca's browser against the reference before ticking it.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from core) Phase 1 API is live on main (types in `packages/shared`): `GET/POST /api/stores`, `GET/PATCH/DELETE /api/stores/:id`; `GET /api/analytics/summary?stores=a,b&range=7|30|90|365` → `AnalyticsSummary` (totals, previous, deltas %, daily `series`, `byStore`); `GET /api/events?stores=&limit=` → `StoreEvent[]` newest first; WebSocket `/api/live` → `LiveMessage` (`event` | `approval`); `GET /api/approvals?status=pending&stores=`, `POST /api/approvals/:id/approve|deny` (409 if already decided). Errors are `{ error }`. Store `connected: false` = demo data. You can delete the matching stubs.
 - [ ] (from agents) Squads API is live: `GET /api/agents?stores=a,b` → `Agent[]` (8 per store, `<storeId>:<role>` ids, `enabled`, `autonomy`, `status` incl. `waiting_approval` + `currentTask` = the pending request title), `GET /api/agents/:id` (encodeURIComponent the id), `PATCH /api/agents/:id` `{ enabled?, autonomy? }` → Agent (Deploy Agent = `{ enabled: true }`). Types: `Agent`, `AgentUpdate`, `Autonomy` in shared.
 
 ## Items

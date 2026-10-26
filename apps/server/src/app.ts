@@ -2,8 +2,9 @@ import { createSquad } from '@frontline/agents';
 import { serve, upgradeWebSocket } from '@hono/node-server';
 import { Hono } from 'hono';
 import { WebSocketServer } from 'ws';
-import { ANALYTICS_RANGES, type AnalyticsRange, type StoreInput } from '@frontline/shared';
+import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type ApprovalStatus, type StoreInput } from '@frontline/shared';
 import { loadRows, summarize } from './analytics';
+import { decide, listApprovals } from './approvals';
 import type { Db } from './db';
 import { localDate } from './dates';
 import { listEvents, subscribe } from './live';
@@ -55,6 +56,16 @@ export const createApp = (db: Db) =>
         };
       }),
     )
+    .get('/api/approvals', (c) => {
+      const status = c.req.query('status') as ApprovalStatus | undefined;
+      if (status && !['pending', 'approved', 'denied'].includes(status)) return c.json({ error: 'status must be pending, approved or denied' }, 400);
+      return c.json(listApprovals(db, pickStores(db, c.req.query('stores')), status));
+    })
+    .post('/api/approvals/:id/:decision{approve|deny}', (c) => {
+      const a = decide(db, c.req.param('id'), c.req.param('decision') as ApprovalDecision);
+      if (!a) return c.json({ error: 'approval not found' }, 404);
+      return a === 'decided' ? c.json({ error: 'approval already decided' }, 409) : c.json(a);
+    })
     .get('/api/analytics/summary', (c) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);

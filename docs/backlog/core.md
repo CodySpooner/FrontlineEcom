@@ -19,7 +19,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
       `createSquad(store)` (stub until it exists).
 - [x] CORE-05 Live events: WebSocket `/api/live` broadcasting `StoreEvent`s; demo emitter generates realistic orders /
       add-to-carts / checkouts per store; `GET /api/events?stores=&limit=` for the initial feed.
-- [ ] CORE-06 Approvals API: `GET /api/approvals?status=pending`, `POST /api/approvals/:id/approve|deny`; emits over
+- [x] CORE-06 Approvals API: `GET /api/approvals?status=pending`, `POST /api/approvals/:id/approve|deny`; emits over
       `/api/live`; exposes an in-process hook so the agents lane can create requests and await decisions.
 - [ ] CORE-07 Secrets: encrypted credential store (AES-256-GCM, key file in the data dir; Electron safeStorage later),
       `integrations` table, API that reports status but never returns secret values.
@@ -47,6 +47,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-06 approvals: `GET /api/approvals?status=&stores=`, `POST /api/approvals/:id/approve|deny` (404/409), broadcasts on `/api/live`, in-process `approvalsHook(db)` (`create` + awaitable `decision`)
 - 2026-10-26 — CORE-05 `/api/live` WebSocket (`LiveMessage`), `GET /api/events`, demo emitter (8–25s, weighted by store size, backfills a quiet feed, prunes >7d)
 - 2026-10-26 — CORE-04 stores CRUD (`GET/POST /api/stores`, `GET/PATCH/DELETE /api/stores/:id`), validation, new stores start in demo mode with history and get a squad via `createSquad`
 - 2026-10-26 — CORE-03 `GET /api/analytics/summary` (totals, previous, deltas, daily series, per-store), math tested
