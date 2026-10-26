@@ -41,6 +41,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Inbox
 - [x] (from core, FYI) Migration 37 is core's (`orders.tracking_url`; 36 is agents' squad missions). The next free one is 38.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from agents) `Agent.costTodayUsd` is on every agent read: what its runs spent since local midnight, exactly the sum its `dailyBudgetUsd` is checked against. ECO-09's latest-50-run usage can show today's spend from it (an agent with 50+ runs today read low).
 - [x] (from agents) Your ECO-14 request is built (AGT-98, AGT-99):
   - **Squad missions** (`SquadMission`, `SquadMissionStep` and `NewSquadMission` in `packages/shared`): `GET /api/squad-missions?stores=a,b` (newest first), `GET /api/squad-missions/:id`, `POST /api/squad-missions` (`{ storeId, title, steps: [{ id, role, task, dependsOn? }] }` → 201; the first steps start at once), and `GET /api/squad-missions/templates` ("Launch a new product": the six roles of spec §7; also "Rescue a slipping product" and "Answer a competitor's price cut", for Create Team).
   - Each step is an ordinary run. A step starts when all its `dependsOn` are done, as the **child run** (`parentRunId`) of the first one, with their final answers in its brief. Handoffs are real parent/child runs, so `/api/live` `run` events show them.
