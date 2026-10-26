@@ -6,7 +6,7 @@ import { openDb } from '../db';
 import { rebuildRevenue } from './common';
 import { seedDemo } from '../demo';
 import { listActions } from '../actions';
-import { createProducts, deleteTheme, duplicateTheme, fulfillmentOf, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, shopHost, syncShopify, upsertThemeFiles } from './shopify';
+import { createProducts, deleteTheme, duplicateTheme, fulfillmentOf, funnelDays, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, shopHost, syncShopify, upsertThemeFiles } from './shopify';
 
 const key = randomBytes(32);
 const TOKEN = 'shpat_fixture_token';
@@ -30,7 +30,7 @@ const PRODUCT = {
 };
 
 /** Fake Shopify: answers by query type, pages orders 2 at a time, records requests. */
-function fakeShopify(orders: ReturnType<typeof order>[], status = 200) {
+function fakeShopify(orders: ReturnType<typeof order>[], status = 200, funnel = false) {
   const calls: { url: string; token: string | null; body: { query: string; variables: Record<string, unknown> } }[] = [];
   const fetchFn = (async (url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body));
@@ -39,6 +39,11 @@ function fakeShopify(orders: ReturnType<typeof order>[], status = 200) {
     const json = (data: unknown) => Response.json({ data });
     if (body.query.includes('shop {')) return json({ shop: { name: 'Glow Haus', currencyCode: 'EUR', ianaTimezone: 'Europe/Berlin' } });
     if (body.query.includes('products(')) return json({ products: { nodes: [PRODUCT], pageInfo: { hasNextPage: false, endCursor: null } } });
+    if (body.query.includes('shopifyqlQuery')) {
+      if (!funnel) return Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });
+      const columns = ['day', 'sessions', 'sessions_with_cart_additions', 'sessions_that_reached_checkout'].map((name) => ({ name, dataType: 'INTEGER' }));
+      return json({ shopifyqlQuery: { parseErrors: [], tableData: { columns, rows: [['2026-10-25', '120', '14', '6'], ['2026-10-26', 80, 9, 4]] } } });
+    }
     const start = body.variables.after ? Number(body.variables.after) : 0;
     const nodes = orders.slice(start, start + 2);
     return json({ orders: { nodes, pageInfo: { hasNextPage: start + 2 < orders.length, endCursor: String(start + 2) } } });
@@ -435,4 +440,28 @@ test('only paid orders count as revenue: unpaid ones stay out, and one that expi
   expect(revenue()).toEqual({ revenue: 200, orders: 2 });
   await syncShopify(db, key, 'glow', fakeShopify([order('#300', day, '50.00', { updatedAt: '2026-10-26T11:00:00Z' })]).fetchFn, NOW); // paid at last
   expect(revenue()).toEqual({ revenue: 250, orders: 3 });
+});
+
+test("without GA4, the funnel comes from Shopify's analytics; without its scope, orders still sync", async () => {
+  const { db } = await setup();
+  const funnel = () => db.prepare("SELECT date, sessions, add_to_carts AS carts, checkouts FROM daily_metrics WHERE store_id = 'glow' AND date >= '2026-10-25' ORDER BY date").all();
+  await syncShopify(db, key, 'glow', fakeShopify([order('#1', '2026-10-25T09:00:00Z', '10.00')]).fetchFn, NOW);
+  expect(db.prepare("SELECT status FROM integrations WHERE id = 'shopify:glow'").get()?.status).toBe('connected');
+  expect(funnel().every((d) => !d.sessions)).toBe(true);
+
+  const { fetchFn, calls } = fakeShopify([], 200, true);
+  await syncShopify(db, key, 'glow', fetchFn, NOW);
+  expect(calls.find((c) => c.body.query.includes('shopifyqlQuery'))?.body.variables.q).toContain('FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout TIMESERIES day SINCE -3d');
+  expect(funnel()).toEqual([
+    { date: '2026-10-25', sessions: 120, carts: 14, checkouts: 6 },
+    { date: '2026-10-26', sessions: 80, carts: 9, checkouts: 4 },
+  ]);
+});
+
+test('ShopifyQL rows read the same as arrays or as objects, and rows without a day are skipped', () => {
+  const columns = [{ name: 'day' }, { name: 'sessions' }, { name: 'sessions_with_cart_additions' }, { name: 'sessions_that_reached_checkout' }];
+  const day = { date: '2026-10-25', sessions: 5, carts: 2, checkouts: 1 };
+  expect(funnelDays({ columns, rows: [['2026-10-25T00:00:00-05:00', 5, 2, 1]] })).toEqual([day]);
+  expect(funnelDays({ columns, rows: [{ day: '2026-10-25', sessions: '5', sessions_with_cart_additions: '2', sessions_that_reached_checkout: '1' }, { day: null }] })).toEqual([day]);
+  expect(funnelDays(null)).toEqual([]);
 });

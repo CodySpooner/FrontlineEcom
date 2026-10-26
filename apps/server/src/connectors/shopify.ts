@@ -7,7 +7,7 @@ import { cursorAt, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
-// write_online_store_pages for store pages (publishPage).
+// write_online_store_pages for store pages (publishPage); read_reports (+ Level 2 customer data) for the funnel.
 export const SHOPIFY_API_VERSION = '2026-07';
 /** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
 const BACKFILL_DAYS = 730;
@@ -15,6 +15,18 @@ const BACKFILL_DAYS = 730;
 type Fetch = typeof fetch;
 type Money = { amount: string } | null;
 interface PageInfo { hasNextPage: boolean; endCursor: string | null }
+
+/** ShopifyQL's table: rows as arrays in column order or as objects by column name (the docs show neither). */
+type Table = { columns: { name: string }[]; rows: unknown } | null;
+const FUNNEL_Q = `query ($q: String!) { shopifyqlQuery(query: $q) { parseErrors tableData { columns { name } rows } } }`;
+
+/** Daily funnel rows from a ShopifyQL sessions table. */
+export function funnelDays(t: Table) {
+  const at = (r: unknown, name: string) => (Array.isArray(r) ? r[t!.columns.findIndex((c) => c.name === name)] : (r as Record<string, unknown>)?.[name]);
+  return (Array.isArray(t?.rows) ? t.rows : [])
+    .map((r) => ({ date: String(at(r, 'day')).slice(0, 10), sessions: Number(at(r, 'sessions')) || 0, carts: Number(at(r, 'sessions_with_cart_additions')) || 0, checkouts: Number(at(r, 'sessions_that_reached_checkout')) || 0 }))
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date));
+}
 
 interface ShopifyProduct {
   id: string;
@@ -260,6 +272,21 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       });
       after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
     } while (after);
+
+    // The funnel from Shopify's own analytics for a store without GA4 (GA4 owns it there). It needs read_reports and Level 2
+    // customer data access, so without them orders sync on and the funnel stays empty.
+    // ponytail: bot sessions count too; add WHERE human_or_bot_session = 'human' once checked against a live shop.
+    if (!db.prepare('SELECT 1 FROM integrations WHERE id = ?').get(`ga4:${storeId}`)) {
+      const query = `FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout TIMESERIES day SINCE -${cursor ? 3 : BACKFILL_DAYS}d ORDER BY day ASC`;
+      const table = await q<{ shopifyqlQuery?: { tableData: Table } }>(FUNNEL_Q, { q: query }).then((d) => d.shopifyqlQuery?.tableData ?? null, () => null);
+      const up = db.prepare(
+        `INSERT INTO daily_metrics (store_id, date, sessions, add_to_carts, checkouts) VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, date) DO UPDATE SET sessions = excluded.sessions, add_to_carts = excluded.add_to_carts, checkouts = excluded.checkouts`,
+      );
+      tx(db, () => {
+        for (const d of funnelDays(table)) up.run(storeId, d.date, d.sessions, d.carts, d.checkouts);
+      });
+    }
     db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(start > since ? start : since, now.toISOString(), id);
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Shopify sync failed');
