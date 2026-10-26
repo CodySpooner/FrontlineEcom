@@ -262,6 +262,17 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       const next = Math.max(since, Math.floor(cursorAt(now).getTime() / 1000));
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(String(next), now.toISOString(), id);
     });
+
+    // Search results carry no images; Get Product does (main_images[].urls). Up to 50 a sync for products still without
+    // one, and '' marks "looked, none" so a product with no gallery isn't asked again.
+    // ponytail: read once per product, so a new main image on TikTok isn't picked up (nor a URL that expires).
+    const setImage = db.prepare('UPDATE products SET image = ? WHERE store_id = ? AND id = ?');
+    for (const r of db.prepare("SELECT id FROM products WHERE store_id = ? AND id GLOB 'tt-*' AND image IS NULL AND status != 'archived' ORDER BY id LIMIT 50").all(storeId)) {
+      const d = await api<{ main_images?: { urls?: string[] }[] }>('GET', `/product/202309/products/${String(r.id).slice(3)}`, { shop_cipher: shop.cipher }).catch(() => undefined);
+      if (!d) continue; // asked again next sync
+      const url = d.main_images?.[0]?.urls?.[0];
+      setImage.run(url?.startsWith('https://') ? url : '', storeId, String(r.id));
+    }
   } catch (e) {
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'TikTok Shop sync failed');
   }

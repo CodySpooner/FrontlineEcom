@@ -104,6 +104,9 @@ function fakeShop(refreshError?: { code: number; message: string }, shops = [{ c
     expect(params.sign).toBe(signTikTokShop('app_secret_fixture', u.pathname, params, body));
     const ok = (data: unknown) => Response.json({ code: 0, message: 'Success', data });
     if (u.pathname === '/authorization/202309/shops') return ok({ shops });
+    // Get Product: main_images[].urls (TikTok's partner docs, checked 2026-10-26). The draft has none yet.
+    if (u.pathname === '/product/202309/products/17301') return ok({ id: '17301', main_images: [{ uri: 'tos-1', urls: ['https://p16-oec.example/ice-roller.jpeg'], thumb_urls: ['https://p16-oec.example/ice-roller-thumb.jpeg'], width: 800, height: 800 }] });
+    if (u.pathname === '/product/202309/products/17302') return ok({ id: '17302', main_images: [] });
     if (u.pathname === '/product/202309/products/search') {
       return params.page_token
         ? ok({ products: [{ id: '17302', title: 'Gua Sha', status: 'DRAFT', update_time: T('2026-10-20T00:00:00Z'), skus: [{ price: { sale_price: '19.00' }, inventory: [] }] }], next_page_token: '' })
@@ -157,11 +160,19 @@ test('TikTok Shop sync renews the token, pulls products + paid orders, and rebui
   expect(db.prepare("SELECT tax FROM orders WHERE store_id = 'glow' AND id = 'tt-5762'").get()?.tax).toBe(1.6);
   expect(db.prepare("SELECT cogs FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()?.cogs).toBe(1.6);
   expect(db.prepare("SELECT product_id, quantity, revenue FROM order_items WHERE order_id = 'tt-5761'").all()).toEqual([{ product_id: 'tt-17301', quantity: 2, revenue: 24.9 }]);
+  // Search results carry no images: each product's first gallery image comes from Get Product, once.
+  const details = api.filter((c) => /^\/product\/202309\/products\/\d+$/.test(c.url.pathname));
+  expect(details.map((c) => [c.url.pathname, c.url.searchParams.get('shop_cipher')])).toEqual([['/product/202309/products/17301', 'CIPHER'], ['/product/202309/products/17302', 'CIPHER']]);
+  expect(db.prepare("SELECT id, image FROM products WHERE store_id = 'glow' ORDER BY id").all()).toEqual([
+    { id: 'tt-17301', image: 'https://p16-oec.example/ice-roller.jpeg' },
+    { id: 'tt-17302', image: '' }, // looked, none: not asked again
+  ]);
 
   // Token still good for a week: no renewal; incremental from the newest update_time.
   const again = fakeShop();
   await syncTikTokShop(db, key, 'glow', again.fetchFn, NOW);
   expect(again.calls.some((c) => c.url.host === 'auth.tiktok-shops.com')).toBe(false);
+  expect(again.calls.some((c) => /^\/product\/202309\/products\/\d+$/.test(c.url.pathname))).toBe(false);
   expect(JSON.parse(again.calls.find((c) => c.url.pathname.includes('orders'))!.body)).toEqual({ update_time_ge: T('2026-10-26T17:55:00Z') });
   expect(productSearch(again.calls)).toEqual({ update_time_ge: T('2026-10-26T17:55:00Z') });
 });
