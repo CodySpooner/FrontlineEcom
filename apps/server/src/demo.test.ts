@@ -62,6 +62,21 @@ test('demo orders are never in the future and fall within their local day', () =
   expect(rows.every((r) => r.local_date === localDate(new Date(String(r.created_at))))).toBe(true);
 });
 
+test("a 23-hour day's demo orders stay inside it", () => {
+  const tz = process.env.TZ;
+  process.env.TZ = 'America/New_York'; // clocks went forward on 2026-03-08
+  try {
+    const db = openDb();
+    seedDemo(db, '2026-03-10');
+    const rows = db.prepare("SELECT created_at, local_date FROM orders WHERE local_date = '2026-03-08'").all();
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((r) => localDate(new Date(String(r.created_at))) === '2026-03-08')).toBe(true);
+  } finally {
+    if (tz === undefined) delete process.env.TZ;
+    else process.env.TZ = tz;
+  }
+});
+
 test('demoSoFar: nothing at midnight, the full day at the end, sales step with whole orders', () => {
   const full = demoDay('glow', '2026-10-21');
   expect(demoSoFar('glow', '2026-10-21', 0)).toMatchObject({ revenue: 0, adSpend: 0, orders: 0, sessions: 0 });
