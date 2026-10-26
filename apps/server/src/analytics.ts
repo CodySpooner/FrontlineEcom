@@ -1,6 +1,7 @@
-import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, MetricTotals } from '@frontline/shared';
+import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, MetricTotals, TopProduct } from '@frontline/shared';
 import type { Db } from './db';
 import { addDays } from './dates';
+import { demoTopProducts } from './demo';
 
 export interface MetricRow {
   storeId: string;
@@ -102,4 +103,33 @@ export function campaignStats(db: Db, storeIds: string[], from: string, to: stri
         impressions: Number(r.impressions),
       };
     });
+}
+
+/** Best sellers over [from, to]: paid orders' line items for real stores, a revenue-consistent split for demo stores. */
+export function topProducts(db: Db, storeIds: string[], from: string, to: string, limit: number): TopProduct[] {
+  if (!storeIds.length) return [];
+  const marks = storeIds.map(() => '?').join(',');
+  const demo = db.prepare(`SELECT id FROM stores WHERE demo = 1 AND id IN (${marks})`).all(...storeIds).map((r) => String(r.id));
+  const real = storeIds.filter((id) => !demo.includes(id));
+  const rows = real.length
+    ? db
+        .prepare(
+          `SELECT i.store_id, i.product_id, p.title, p.image, sum(i.quantity) AS units, sum(i.revenue) AS revenue, sum(i.revenue - i.cost) AS profit
+           FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+           LEFT JOIN products p ON p.store_id = i.store_id AND p.id = i.product_id
+           WHERE i.store_id IN (${real.map(() => '?').join(',')}) AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?
+           GROUP BY i.store_id, i.product_id ORDER BY revenue DESC LIMIT ?`,
+        )
+        .all(...real, from, to, limit)
+        .map((r) => ({
+          storeId: String(r.store_id),
+          productId: String(r.product_id),
+          title: r.title == null ? 'Removed product' : String(r.title),
+          ...(r.image ? { image: String(r.image) } : {}),
+          units: Number(r.units),
+          revenue: r2(Number(r.revenue)),
+          profit: r2(Number(r.profit)),
+        }))
+    : [];
+  return [...rows, ...demo.flatMap((id) => demoTopProducts(db, id, from, to))].sort((a, b) => b.revenue - a.revenue).slice(0, limit);
 }

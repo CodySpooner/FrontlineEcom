@@ -341,6 +341,18 @@ export const MIGRATIONS = [
   );
   CREATE INDEX page_drafts_by_store ON page_drafts (store_id, created_at);
   `,
+  /* 16 */ `
+  CREATE TABLE order_items (
+    store_id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    revenue REAL NOT NULL,
+    cost REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (store_id, order_id, product_id),
+    FOREIGN KEY (store_id, order_id) REFERENCES orders (store_id, id) ON DELETE CASCADE
+  );
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

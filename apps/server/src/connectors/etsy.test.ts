@@ -26,7 +26,7 @@ function fakeEtsy(refreshError = false) {
     }
     const offset = Number(u.searchParams.get('offset'));
     if (u.pathname.endsWith('/receipts')) {
-      const all = [receipt(1, 'paid', 3000), receipt(2, 'completed', 2000, { is_shipped: true, shipments: [{ tracking_code: '9400' }] }), receipt(3, 'fully refunded', 1500), receipt(4, 'open', 999, { is_paid: false })];
+      const all = [receipt(1, 'paid', 3000, { transactions: [{ listing_id: 11, quantity: 2, price: usd(1250) }] }), receipt(2, 'completed', 2000, { is_shipped: true, shipments: [{ tracking_code: '9400' }] }), receipt(3, 'fully refunded', 1500), receipt(4, 'open', 999, { is_paid: false })];
       return Response.json({ count: 104, results: offset === 0 ? all : [] });
     }
     const state = u.searchParams.get('state');
@@ -63,6 +63,7 @@ test('Etsy sync renews the token, pulls paid receipts + changed listings, rebuil
     { id: 'etsy-3', total: 15, status: 'refunded', fulfillment_status: 'unfulfilled', tracking: null },
   ]);
   expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()).toEqual({ revenue: 50, orders: 2 });
+  expect(db.prepare("SELECT product_id, quantity, revenue FROM order_items WHERE order_id = 'etsy-1'").all()).toEqual([{ product_id: 'etsy-11', quantity: 2, revenue: 25 }]);
 
   const again = fakeEtsy();
   await syncEtsy(db, key, 'pawsome', again.fetchFn, NOW);

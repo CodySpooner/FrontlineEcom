@@ -106,7 +106,7 @@ function fakeShop(refreshError?: { code: number; message: string }) {
     }
     return ok({
       orders: [
-        shopOrder('5761', 'AWAITING_SHIPMENT', '30.00'),
+        shopOrder('5761', 'AWAITING_SHIPMENT', '30.00', { line_items: [{ product_id: '17301', sale_price: '12.45' }, { product_id: '17301', sale_price: '12.45' }] }),
         shopOrder('5762', 'COMPLETED', '20.00', { tracking_number: 'TT123' }),
         shopOrder('5763', 'CANCELLED', '15.00'),
         shopOrder('5764', 'UNPAID', '99.00'),
@@ -146,6 +146,7 @@ test('TikTok Shop sync renews the token, pulls products + paid orders, and rebui
     { id: 'tt-5763', total: 15, status: 'refunded', fulfillment_status: 'unfulfilled', tracking: null },
   ]);
   expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ revenue: 50, orders: 2 });
+  expect(db.prepare("SELECT product_id, quantity, revenue FROM order_items WHERE order_id = 'tt-5761'").all()).toEqual([{ product_id: 'tt-17301', quantity: 2, revenue: 24.9 }]);
 
   // Token still good for a week: no renewal; incremental from the newest update_time.
   const again = fakeShop();

@@ -2,7 +2,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { rebuildRevenue, switchToReal } from './common';
+import { rebuildRevenue, setOrderItems, switchToReal } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts).
@@ -34,7 +34,7 @@ interface ShopifyOrder {
   displayFulfillmentStatus: string;
   currentTotalPriceSet: { shopMoney: { amount: string } };
   fulfillments: { displayStatus: string | null; trackingInfo: { number: string | null }[] }[];
-  lineItems: { nodes: { quantity: number; variant: { inventoryItem: { unitCost: Money } | null } | null }[] };
+  lineItems: { nodes: { quantity: number; product: { id: string } | null; discountedTotalSet: { shopMoney: { amount: string } }; variant: { inventoryItem: { unitCost: Money } | null } | null }[] };
 }
 
 const SHOP_Q = `{ shop { name currencyCode ianaTimezone } }`;
@@ -47,14 +47,14 @@ const PRODUCTS_Q = `query ($after: String, $q: String) {
     pageInfo { hasNextPage endCursor } } }`;
 
 // Shopify prices a query before running it (max 1000): objects 1, connections 2 + first × child. Per order:
-// 1 + total 2 + fulfillment 2 + lineItems (2 + 20 × 4) = 87, so 10 orders = 872. Products: 2 + 50 × 9 = 452.
-// ponytail: orders with more than 20 line items undercount cogs.
+// 1 + total 2 + fulfillment 2 + lineItems (2 + 10 × 7) = 77, so 12 orders = 926. Products: 2 + 50 × 9 = 452.
+// ponytail: orders with more than 10 line items undercount cogs and top products.
 const ORDERS_Q = `query ($after: String, $q: String) {
-  orders(first: 10, after: $after, query: $q, sortKey: UPDATED_AT) {
+  orders(first: 12, after: $after, query: $q, sortKey: UPDATED_AT) {
     nodes { name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus
       currentTotalPriceSet { shopMoney { amount } }
       fulfillments(first: 1) { displayStatus trackingInfo(first: 1) { number } }
-      lineItems(first: 20) { nodes { quantity variant { inventoryItem { unitCost { amount } } } } } }
+      lineItems(first: 10) { nodes { quantity product { id } discountedTotalSet { shopMoney { amount } } variant { inventoryItem { unitCost { amount } } } } } }
     pageInfo { hasNextPage endCursor } } }`;
 
 // productCreate makes one default variant; its price and cost are set right after.
@@ -149,6 +149,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         const day = dayOf.format(new Date(o.createdAt));
         days.add(day);
         ord.run(storeId, o.name, o.createdAt, num(o.currentTotalPriceSet.shopMoney.amount), refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day);
+        // Custom line items (no product) only count toward the order total.
+        setOrderItems(db, storeId, o.name, o.lineItems.nodes.flatMap((li) => (li.product ? [{ productId: tail(li.product.id), quantity: li.quantity, revenue: num(li.discountedTotalSet.shopMoney.amount), cost: li.quantity * num(li.variant?.inventoryItem?.unitCost) }] : [])));
       }
 
       rebuildRevenue(db, storeId, days);

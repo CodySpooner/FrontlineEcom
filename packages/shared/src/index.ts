@@ -201,6 +201,18 @@ export interface CampaignStats {
   impressions: number;
 }
 
+/** GET /api/analytics/top-products?stores=&range=&limit= → TopProduct[], best revenue first (paid orders in the period). */
+export interface TopProduct {
+  storeId: string;
+  productId: string;
+  title: string;
+  image?: string;
+  units: number;
+  revenue: number;
+  /** Revenue minus product cost (ad spend is not allocated per product). */
+  profit: number;
+}
+
 /** POST /api/stores body. Response: the created Store. */
 export interface StoreInput {
   name: string;

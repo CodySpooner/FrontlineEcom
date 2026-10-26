@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
-import type { AnalyticsSummary, CampaignStats } from '@frontline/shared';
+import type { AnalyticsSummary, CampaignStats, TopProduct } from '@frontline/shared';
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { campaignStats, summarize, totalsOf, type MetricRow } from './analytics';
+import { campaignStats, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
 
 const row = (storeId: string, date: string, revenue: number, adSpend: number, cogs: number, orders: number): MetricRow => ({ storeId, date, revenue, adSpend, cogs, orders });
 
@@ -87,4 +87,36 @@ test('campaign stats over the period, folded statuses, biggest spend first; GET 
   const res = (await (await app.request('/api/analytics/campaigns?stores=glow,peak&range=7')).json()) as CampaignStats[];
   expect(new Set(res.map((c) => c.storeId))).toEqual(new Set(['glow', 'peak']));
   expect((await app.request('/api/analytics/campaigns?range=12')).status).toBe(400);
+});
+
+test('top products: real stores from line items of paid orders, demo stores split their real revenue', async () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("UPDATE stores SET demo = 0 WHERE id = 'glow'").run();
+  for (const t of ['orders', 'products']) db.prepare(`DELETE FROM ${t} WHERE store_id = 'glow'`).run();
+  db.prepare("INSERT INTO products (store_id, id, title, price, compare_at, cost, inventory, status) VALUES ('glow', 'mask', 'LED Mask', 90, 0, 30, 5, 'active')").run();
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES ('glow', ?, '', ?, ?, 'unfulfilled', 0, ?)");
+  const item = db.prepare("INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('glow', ?, ?, ?, ?, ?)");
+  order.run('#1', 180, 'paid', '2026-10-25'); item.run('#1', 'mask', 2, 180, 60);
+  order.run('#2', 90, 'refunded', '2026-10-25'); item.run('#2', 'mask', 1, 90, 30);
+  order.run('#3', 25, 'paid', '2026-10-24'); item.run('#3', 'gone', 1, 25, 0);
+  order.run('#4', 90, 'paid', '2026-10-10'); item.run('#4', 'mask', 1, 90, 30); // before the period
+
+  expect(topProducts(db, ['glow'], '2026-10-20', '2026-10-26', 8)).toEqual([
+    { storeId: 'glow', productId: 'mask', title: 'LED Mask', units: 2, revenue: 180, profit: 120 },
+    { storeId: 'glow', productId: 'gone', title: 'Removed product', units: 1, revenue: 25, profit: 25 },
+  ]);
+
+  const demo = topProducts(db, ['peak'], '2026-10-20', '2026-10-26', 50);
+  const revenue = Number(db.prepare("SELECT sum(revenue) AS r FROM daily_metrics WHERE store_id = 'peak' AND date BETWEEN '2026-10-20' AND '2026-10-26'").get()!.r);
+  expect(demo.length).toBeGreaterThan(1);
+  expect(Math.abs(demo.reduce((a, p) => a + p.revenue, 0) - revenue) / revenue).toBeLessThan(0.1);
+  expect(demo.every((p) => p.profit < p.revenue && p.units > 0)).toBe(true);
+  expect(topProducts(db, ['peak'], '2026-10-20', '2026-10-26', 50)).toEqual(demo);
+
+  const app = createApp(db);
+  const both = (await (await app.request('/api/analytics/top-products?stores=glow,peak&range=7&limit=3')).json()) as TopProduct[];
+  expect(both).toHaveLength(3);
+  expect(both.map((p) => p.revenue)).toEqual([...both.map((p) => p.revenue)].sort((a, b) => b - a));
+  expect((await app.request('/api/analytics/top-products?range=12')).status).toBe(400);
 });

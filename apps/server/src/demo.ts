@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { Store, StoreEvent, StoreEventType } from '@frontline/shared';
+import type { Store, StoreEvent, StoreEventType, TopProduct } from '@frontline/shared';
 import { tx, type Db } from './db';
 import { addDays, dayNumber, localDate } from './dates';
 import { insertStore } from './stores';
@@ -188,5 +188,21 @@ export function seedDemo(db: Db, today = localDate()) {
       APPROVALS.forEach((a, i) => appr.run(`demo-appr-${i + 1}`, a.storeId, `${a.storeId}:${a.role}`, a.title, a.reason, JSON.stringify(a.action), 'pending', new Date(Date.now() - (i + 1) * 3600000).toISOString()));
     }
     for (const { id } of db.prepare('SELECT id FROM stores WHERE demo = 1').all()) topUp(db, String(id), today);
+  });
+}
+
+/**
+ * Demo stores keep only daily totals for most of their history, so their best sellers split the period's real revenue
+ * across active products with fixed per-product weights: the numbers agree with the KPIs and don't move between loads.
+ */
+export function demoTopProducts(db: Db, storeId: string, from: string, to: string): TopProduct[] {
+  const revenue = Number(db.prepare('SELECT coalesce(sum(revenue), 0) AS r FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?').get(storeId, from, to)!.r);
+  const products = db.prepare("SELECT id, title, image, price, cost FROM products WHERE store_id = ? AND status = 'active' AND price > 0").all(storeId);
+  const weights = products.map((p) => 0.2 + mulberry32(hash(`${storeId}:${p.id}`))());
+  const total = weights.reduce((a, w) => a + w, 0);
+  return products.map((p, i) => {
+    const price = Number(p.price);
+    const units = Math.round((revenue * weights[i]!) / total / price);
+    return { storeId, productId: String(p.id), title: String(p.title), ...(p.image ? { image: String(p.image) } : {}), units, revenue: cents(units * price), profit: cents(units * (price - Number(p.cost))) };
   });
 }

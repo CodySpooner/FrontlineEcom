@@ -1,7 +1,7 @@
 import type { ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { rebuildRevenue, switchToReal } from './common';
+import { rebuildRevenue, setOrderItems, switchToReal } from './common';
 
 // Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r).
 const API = 'https://openapi.etsy.com/v3/application';
@@ -22,6 +22,7 @@ interface Receipt {
   updated_timestamp: number;
   grandtotal: Money;
   shipments?: { tracking_code?: string | null }[];
+  transactions?: { listing_id: number; quantity: number; price: Money }[];
 }
 
 interface Listing {
@@ -102,6 +103,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         days.add(day);
         const refunded = r.status === 'canceled' || r.status === 'fully refunded';
         ord.run(storeId, `etsy-${r.receipt_id}`, created.toISOString(), money(r.grandtotal), refunded ? 'refunded' : 'paid', r.is_shipped ? 'fulfilled' : 'unfulfilled', r.shipments?.[0]?.tracking_code || null, day);
+        setOrderItems(db, storeId, `etsy-${r.receipt_id}`, (r.transactions ?? []).map((t) => ({ productId: `etsy-${t.listing_id}`, quantity: t.quantity, revenue: money(t.price) * t.quantity, cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);
       const newest = [...receipts, ...listings].reduce((m, x) => Math.max(m, x.updated_timestamp), since);

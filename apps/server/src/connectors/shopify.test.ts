@@ -14,7 +14,10 @@ const money = (amount: string) => ({ amount });
 const order = (name: string, createdAt: string, total: string, extra: Record<string, unknown> = {}) => ({
   name, createdAt, updatedAt: createdAt, cancelledAt: null, test: false, displayFinancialStatus: 'PAID', displayFulfillmentStatus: 'UNFULFILLED',
   currentTotalPriceSet: { shopMoney: money(total) }, fulfillments: [],
-  lineItems: { nodes: [{ quantity: 2, variant: { inventoryItem: { unitCost: money('5.00') } } }] },
+  lineItems: { nodes: [
+    { quantity: 2, product: { id: 'gid://shopify/Product/111' }, discountedTotalSet: { shopMoney: money('80.00') }, variant: { inventoryItem: { unitCost: money('5.00') } } },
+    { quantity: 1, product: null, discountedTotalSet: { shopMoney: money('4.00') }, variant: null }, // custom line item, e.g. gift wrap
+  ] },
   ...extra,
 });
 
@@ -95,6 +98,10 @@ test('first sync switches the store from demo to real data', async () => {
     { date: '2026-10-25', revenue: 150, cogs: 20, orders: 2, adSpend: 0 },
     { date: '2026-10-26', revenue: 40, cogs: 10, orders: 1, adSpend: 0 },
   ]);
+  expect(db.prepare("SELECT order_id, product_id, quantity, revenue, cost FROM order_items WHERE store_id = 'glow' AND order_id = '#1002'").all()).toEqual([
+    { order_id: '#1002', product_id: '111', quantity: 2, revenue: 80, cost: 10 },
+  ]);
+  expect(db.prepare("SELECT count(*) AS n FROM order_items WHERE order_id = '#1004'").get()?.n).toBe(0); // test order skipped
   expect(db.prepare("SELECT count(*) AS n FROM campaigns WHERE store_id = 'glow'").get()?.n).toBe(0);
   expect(db.prepare("SELECT count(*) AS n FROM daily_metrics WHERE store_id = 'pawsome'").get()?.n).toBe(730);
 

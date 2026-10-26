@@ -3,7 +3,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { rebuildAdSpend, rebuildRevenue, switchToReal } from './common';
+import { rebuildAdSpend, rebuildRevenue, setOrderItems, switchToReal } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -128,6 +128,8 @@ interface ShopOrder {
   is_sample_order?: boolean;
   tracking_number?: string;
   payment?: { total_amount?: string };
+  /** One entry per unit unless `quantity` says otherwise; `sale_price` is per unit. */
+  line_items?: { product_id: string; sale_price?: string; quantity?: number }[];
 }
 
 /** Request signature: HMAC-SHA256 keyed by the secret over secret + path + sorted key+value params (minus sign/access_token) + body + secret, hex. */
@@ -221,6 +223,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         const day = dayOf.format(created);
         days.add(day);
         ord.run(storeId, `tt-${o.id}`, created.toISOString(), Number(o.payment?.total_amount ?? 0), o.status === 'CANCELLED' ? 'refunded' : 'paid', shopFulfillment(o.status), o.tracking_number || null, day);
+        setOrderItems(db, storeId, `tt-${o.id}`, (o.line_items ?? []).map((li) => ({ productId: `tt-${li.product_id}`, quantity: li.quantity ?? 1, revenue: Number(li.sale_price ?? 0) * (li.quantity ?? 1), cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);
       const newest = [...products, ...orders].reduce((m, x) => Math.max(m, x.update_time), since);

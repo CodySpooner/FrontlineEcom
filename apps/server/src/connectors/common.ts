@@ -33,3 +33,22 @@ export function rebuildRevenue(db: Db, storeId: string, dates: Iterable<string>)
     up.run(storeId, date, Math.round(Number(a.revenue) * 100) / 100, Math.round(Number(a.cogs) * 100) / 100, Number(a.n));
   }
 }
+
+export interface OrderItem {
+  productId: string;
+  quantity: number;
+  revenue: number;
+  cost: number;
+}
+
+/** Replaces an order's line items, summed per product (an order can hold several variants of one product). */
+export function setOrderItems(db: Db, storeId: string, orderId: string, items: OrderItem[]) {
+  db.prepare('DELETE FROM order_items WHERE store_id = ? AND order_id = ?').run(storeId, orderId);
+  const byProduct = new Map<string, OrderItem>();
+  for (const i of items) {
+    const p = byProduct.get(i.productId);
+    byProduct.set(i.productId, p ? { ...p, quantity: p.quantity + i.quantity, revenue: p.revenue + i.revenue, cost: p.cost + i.cost } : i);
+  }
+  const ins = db.prepare('INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES (?, ?, ?, ?, ?, ?)');
+  for (const i of byProduct.values()) ins.run(storeId, orderId, i.productId, i.quantity, Math.round(i.revenue * 100) / 100, Math.round(i.cost * 100) / 100);
+}
