@@ -21,18 +21,18 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-03 Playbooks `packages/agents/playbooks/<role>.md`: concise expert playbooks distilled from the installed skills
       (ecommerce-ppc-strategy-planner, dropshipping-product-research, shopify-*, tiktok-shop-*, etsy-*,
       ecommerce-email-marketing-builder, ecommerce-landing-page, product-description-generator, competitor/pricing skills…).
-- [ ] AGT-04 Platform packs `packs/platform/<platform>.md`: shopify, tiktok_shop, etsy, amazon, woocommerce.
+- [x] AGT-04 Platform packs `packs/platform/<platform>.md`: shopify, tiktok_shop, etsy, amazon, woocommerce.
 - [ ] AGT-05 Niche packs `packs/niche/<niche>.md`: beauty, pet, tech, fitness, home, fashion, kids, outdoor + template
       (audience, triggers, compliance, seasonality, creative angles, price norms, suppliers) + a Market Analyst task that
       drafts a pack for a custom niche (saving it needs approval).
 - [x] AGT-06 Squads: `createSquad(store)` makes one agent per role (persisted via core's DB once CORE-01 lands; in-memory
       until then); enable/disable; level/XP/status/currentTask; API for the UI.
-- [ ] AGT-07 Prompt assembly: role + playbook + platform pack + niche pack + store profile + top-K memories, token-budgeted.
+- [x] AGT-07 Prompt assembly: role + playbook + platform pack + niche pack + store profile + top-K memories, token-budgeted.
       Tests assert the right layers are included per store.
-- [ ] AGT-08 Store memory + learning loop: post-run reflection → `store_memory` rows (text, evidence, confidence, tags);
+- [x] AGT-08 Store memory + learning loop: post-run reflection → `store_memory` rows (text, evidence, confidence, tags);
       FTS5 retrieval (relevance × recency × confidence); outcome feedback adjusts confidence; promote cross-store
       learnings to niche packs via approval.
-- [ ] AGT-09 Tools: in-process MCP server over app data (analytics, products, orders, campaigns, competitors, research,
+- [x] AGT-09 Tools: in-process MCP server over app data (analytics, products, orders, campaigns, competitors, research,
       memory read/write, create approval, create creative); per-role allowlists.
 - [ ] AGT-10 Approvals: side-effect tools and `canUseTool` create approval requests through core's approvals hook; run
       pauses, resumes on decision; autopilot rules auto-approve within caps and log.
@@ -56,6 +56,10 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-09 Store tools: engine-agnostic `APP_TOOLS` (store_summary, metrics_timeseries, list_products/orders/campaigns, search/write_memory, request_approval) + per-role `toolsFor`; Claude engine serves them as in-process MCP server `frontline`, fake engine runs them for real (`{ call }` script steps); tool events stream through a channel so approval requests show while the run waits. `toolEnv(db)` wires core's analytics + approvals hook. Competitors/research/create_creative tools wait on CORE-15/16 and AGT-15. Real smoke: Claude called store_summary and cited the numbers.
+- 2026-10-26 — AGT-08 Store memory: `store_memory` + FTS5 (migration 4), write (merges duplicates), search (relevance × recency × confidence), CRUD, outcome confidence feedback, reflection prompt + `parseLearnings`, cross-store `promotionCandidates`. Reflection runs + promotion approvals hook into the run manager (AGT-11) / approvals (AGT-10).
+- 2026-10-26 — AGT-07 `assemblePrompt`: role + KPI + squad rules → playbook → platform pack → niche pack → store profile → ranked memories (token-budgeted) → date; stable layers first for prompt caching. Claude engine uses it by default.
+- 2026-10-26 — AGT-04 Platform packs `packs/platform/<platform>.md` for shopify, tiktok_shop, etsy, amazon, woocommerce, walmart (how selling works, fees as ranges, listing rules, account health, ads levers, notes per role). Fee/threshold numbers are approximate — verify against current platform docs before quoting.
 - 2026-10-26 — AGT-03 Playbooks for all 8 roles (`packages/agents/playbooks/<role>.md`, ~950 words each: mission, operating loop with tools, frameworks + thresholds, approval wording, red lines, what to learn), distilled from the installed ecommerce skills + expert rules of thumb.
 - 2026-10-26 — AGT-06 Squads on core's `agents` table: `createSquad`/`ensureSquads`/`listAgents`/`updateAgent`, default autonomy `ask`, status derived (offline / waiting_approval + request title / idle); `GET/PATCH /api/agents` mounted in app.ts; `Autonomy`/`AgentUpdate` in shared.
 - 2026-10-26 — AGT-02 Role catalog `ROLES`: per-role prompt, KPI (feeds "measured win" XP in AGT-13), tool allowlist; `SQUAD_RULES`; Claude engine enables the role's WebSearch/WebFetch. Default autonomy lands with squads (AGT-06).

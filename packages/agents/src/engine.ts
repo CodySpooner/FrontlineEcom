@@ -1,7 +1,7 @@
-import { AGENT_ROLES, type Agent, type AgentEvent, type Store } from '@frontline/shared';
+import type { Agent, AgentEvent, Store } from '@frontline/shared';
 import { claudeEngine } from './claude-engine';
 import { fakeEngine } from './fake-engine';
-import { ROLES, SQUAD_RULES } from './roles';
+import type { ToolEnv } from './tools';
 
 export interface RunInput {
   agent: Agent;
@@ -9,9 +9,11 @@ export interface RunInput {
   task: string;
   /** `sessionId` from an earlier run's `done` event: continues that chat. */
   resume?: string;
-  /** Assembled system prompt (role + playbook + packs + memory). */
+  /** Overrides the assembled prompt (`assemblePrompt`). */
   systemPrompt?: string;
   signal?: AbortSignal;
+  /** App data access for the role's tools. Without it the agent only has its built-ins. */
+  env?: ToolEnv;
 }
 
 /** Streams one agent run. Engines may throw or stop early; `runAgent` normalizes that. */
@@ -20,16 +22,6 @@ export type Engine = (input: RunInput) => AsyncIterable<AgentEvent>;
 /** `FRONTLINE_AGENT_ENGINE=claude` uses the owner's Claude Code login; anything else is the free fake engine. */
 export function defaultEngine(): Engine {
   return process.env.FRONTLINE_AGENT_ENGINE === 'claude' ? claudeEngine() : fakeEngine();
-}
-
-export function basicSystemPrompt({ agent, store }: Pick<RunInput, 'agent' | 'store'>): string {
-  const role = ROLES[agent.role];
-  return [
-    `You are the ${AGENT_ROLES[agent.role].name} of ${store.name}, a ${store.niche} store on ${store.platform}.`,
-    role.prompt,
-    `You are measured on ${role.kpi}.`,
-    SQUAD_RULES,
-  ].join('\n\n');
 }
 
 /** Runs an agent and guarantees the stream ends with exactly one `done` or `error` event. */

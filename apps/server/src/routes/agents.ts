@@ -1,7 +1,20 @@
-import { ensureSquads, getAgent, listAgents, updateAgent } from '@frontline/agents';
+import { ensureSquads, getAgent, listAgents, updateAgent, type ToolEnv } from '@frontline/agents';
 import { AUTONOMY_LEVELS, type AgentUpdate } from '@frontline/shared';
 import { Hono } from 'hono';
+import { loadRows, summarize } from '../analytics';
+import { approvalsHook } from '../approvals';
+import { localDate } from '../dates';
 import type { Db } from '../db';
+
+/** App data + approvals for agent tools. */
+export const toolEnv = (db: Db): ToolEnv => ({
+  db,
+  approvals: approvalsHook(db),
+  summary: (storeId, range) => {
+    const to = localDate();
+    return summarize(loadRows(db, [storeId], range, to), { range, to, storeIds: [storeId] });
+  },
+});
 
 export function agentRoutes(db: Db) {
   ensureSquads(db);

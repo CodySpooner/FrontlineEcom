@@ -149,6 +149,32 @@ export const MIGRATIONS = [
     PRIMARY KEY (list_id, product_id)
   );
   `,
+  /* 4 (agents lane: store memory, AGT-08) */ `
+  CREATE TABLE store_memory (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    text TEXT NOT NULL,
+    evidence TEXT,
+    confidence REAL NOT NULL DEFAULT 0.5,
+    tags TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
+    last_used_at TEXT
+  );
+  CREATE INDEX store_memory_by_store ON store_memory (store_id, created_at);
+  CREATE VIRTUAL TABLE store_memory_fts USING fts5(text, tags, content='store_memory', content_rowid='rowid', tokenize='porter unicode61');
+  CREATE TRIGGER store_memory_ai AFTER INSERT ON store_memory BEGIN
+    INSERT INTO store_memory_fts (rowid, text, tags) VALUES (new.rowid, new.text, new.tags);
+  END;
+  CREATE TRIGGER store_memory_ad AFTER DELETE ON store_memory BEGIN
+    INSERT INTO store_memory_fts (store_memory_fts, rowid, text, tags) VALUES ('delete', old.rowid, old.text, old.tags);
+  END;
+  CREATE TRIGGER store_memory_au AFTER UPDATE OF text, tags ON store_memory BEGIN
+    INSERT INTO store_memory_fts (store_memory_fts, rowid, text, tags) VALUES ('delete', old.rowid, old.text, old.tags);
+    INSERT INTO store_memory_fts (rowid, text, tags) VALUES (new.rowid, new.text, new.tags);
+  END;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
