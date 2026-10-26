@@ -244,9 +244,9 @@ function PriceTimeline({ competitors }: { competitors: Competitor[] }) {
                         <span className="text-xs text-muted"> · vs {name(p.storeId)}</span>
                       </span>
                       <span className="flex items-center gap-2 tabular-nums">
-                        {/* ponytail: the rival's own currency isn't captured yet (core inbox); the store watching it is the likelier match than USD. */}
-                        <span className="text-muted line-through">{cents(p.from, currency(p.storeId))}</span>
-                        <b>{cents(p.to, currency(p.storeId))}</b>
+                        {/* Older snapshots and demo rivals have no currency: the watching store's is the likelier match. */}
+                        <span className="text-muted line-through">{cents(p.from, p.currency ?? currency(p.storeId))}</span>
+                        <b>{cents(p.to, p.currency ?? currency(p.storeId))}</b>
                         <span className={cx('inline-flex w-[68px] items-center justify-end gap-0.5 text-xs font-semibold', cut ? 'text-red' : 'text-muted')}>
                           <Icon aria-hidden className="size-3.5" />
                           {cut ? 'Cut' : 'Up'} {Math.abs(p.changePct).toFixed(0)}%
