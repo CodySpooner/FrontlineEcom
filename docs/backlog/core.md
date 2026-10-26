@@ -113,6 +113,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - TikTok Shop price changes: the path is confirmed (`POST /product/202309/products/{id}/prices/update`, EcomPHP/tiktokshop-php), but the body (`skus[].id`, `price.amount`/`currency`?) and the scope are only in TikTok's JavaScript-rendered partner docs. Needs a verified request body or a live shop. Woo and Etsy price writers are done.
 
 ## Done
+- 2026-10-26 — README: "What an approval changes" lists, per platform and ad network, what an approved request does now that agents route the Woo and Etsy writers. TikTok Shop and Amazon changes are made by hand.
 - 2026-10-26 — WooCommerce products moved to the trash are archived. Before, the default `status=any` left them out, so they stayed active. The sync adds a `status=trash` page since the cursor; trashing updates `post_modified`. Test
 - 2026-10-26 — Products deleted in Shopify are archived. Before, they stayed active here forever, because a deleted product just stops matching `updated_at`. Later syncs page `events(action:'destroy' subject_type:'PRODUCT' created_at>=cursor)`; `deletionEvents` is deprecated. Order history keeps its titles, and a failed events read never stops the sync. Test
 - 2026-10-26 — The Etsy sync also pulls `sold_out` and `expired` listings. Before, a listing that sold out or expired left the `active` pages and stayed in stock and live in the app. Sold out maps to active at 0 stock, expired to archived. Also under Blocked: TikTok Shop price changes (unverified request body). Test

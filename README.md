@@ -28,6 +28,13 @@ pnpm check    # typecheck + tests
   every 10. Agents on connected stores use your local Claude Code login.
 - **Safety:** agents ask before they spend, publish or change a live store or ad account. Requests wait on the
   Dashboard unless you turned on autopilot for that action, with a cap.
+- **What an approval changes:**
+  - Shopify: new products, prices, product and store pages, and themes.
+  - WooCommerce: new products, prices and product pages. Store pages also need a WordPress application password.
+  - Etsy: prices and listing titles and descriptions. Etsy has no compare-at price. An Etsy shop connected before
+    this feature must be connected again once.
+  - Meta, Google and TikTok ads: daily budgets and pausing campaigns.
+  - TikTok Shop and Amazon: agents put the change in their answer and you make it.
 - **Your data:** everything stays on this PC in `%APPDATA%\Frontline Ecom\data`. That folder holds the database,
   `logs\api.log`, and `backups\` (daily, newest 7 kept, restorable from Settings). Connector credentials are encrypted
   with your Windows login and never leave the machine except to their own service.
