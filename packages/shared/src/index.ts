@@ -667,8 +667,8 @@ export interface SquadMission {
   storeId: string;
   title: string;
   createdAt: string;
-  /** `done`: every step is; `blocked`: a step failed or was cancelled and nothing is running any more. */
-  status: 'running' | 'done' | 'blocked';
+  /** `done`: every step is; `blocked`: a step failed or was cancelled and nothing is running any more; `cancelled`: the owner called it off. */
+  status: 'running' | 'done' | 'blocked' | 'cancelled';
   steps: SquadMissionStep[];
 }
 

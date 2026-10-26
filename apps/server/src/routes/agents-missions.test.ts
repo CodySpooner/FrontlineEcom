@@ -1,5 +1,5 @@
 import { parseMission } from '@frontline/agents';
-import type { AgentRun, NewSquadMission, SquadMission } from '@frontline/shared';
+import type { AgentRun, LiveMessage, NewSquadMission, SquadMission } from '@frontline/shared';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
@@ -155,6 +155,34 @@ test('a step its agent turned down starts when the owner brings the agent back',
   expect(notes()).toEqual([{ title: 'Mission waiting: Paused copy', body: "The Copywriter can't take its step yet: This agent is offline. Redeploy it first." }]);
   await send('PATCH', '/api/agents/glow:copywriter', { enabled: true });
   expect((await settle(created.id)).status).toBe('done');
+});
+
+test('the owner calls a mission off: its queued run stops, its waiting steps never start, and no "stuck" note', async () => {
+  await send('PATCH', '/api/agents/glow:copywriter', { enabled: false });
+  runManager(db).start('glow:market_analyst', 'Something else first.'); // the numbers step queues behind it
+  const created = await create({
+    title: 'Called off',
+    steps: [
+      { id: 'numbers', role: 'market_analyst', task: 'Pull the numbers for the copy.' },
+      { id: 'copy', role: 'copywriter', task: 'Write the ad copy, no numbers needed.' },
+      { id: 'ads', role: 'ad_strategist', task: 'Review the campaigns with the numbers.', dependsOn: ['numbers'] },
+    ],
+  });
+  expect(created.steps.map((s) => s.status)).toEqual(['queued', 'waiting', 'waiting']);
+  const live: LiveMessage[] = [];
+  const off = subscribe((m) => live.push(m));
+  const res = await send('POST', `/api/squad-missions/${created.id}/cancel`);
+  off();
+  const m = (await res.json()) as SquadMission;
+  expect([m.status, ...m.steps.map((s) => s.status)]).toEqual(['cancelled', 'cancelled', 'cancelled', 'cancelled']);
+  expect(live).toContainEqual({ type: 'mission', mission: m });
+  // Bringing the agent back doesn't start the called-off step, and the end isn't reported as stuck.
+  await send('PATCH', '/api/agents/glow:copywriter', { enabled: true });
+  await runManager(db).idle();
+  expect(await get<SquadMission>(`/api/squad-missions/${created.id}`)).toEqual(m);
+  expect(notes().map((n) => n.title)).toEqual(['Mission waiting: Called off']);
+  expect((await send('POST', `/api/squad-missions/${created.id}/cancel`)).status).toBe(409);
+  expect((await send('POST', '/api/squad-missions/nope/cancel')).status).toBe(404);
 });
 
 test('plans are checked (a step only waits on steps before it); every template is a valid plan; the launch has the six roles', async () => {

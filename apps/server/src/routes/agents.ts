@@ -14,6 +14,7 @@ import {
   advanceMissions,
   createMission,
   getMission,
+  cancelMission,
   listMissions,
   parseMission,
   createDefaultJobs,
@@ -509,6 +510,13 @@ export function agentRoutes(db: Db) {
       const { id } = createMission(db, input);
       advanceSquadMissions(db); // starts its first steps and puts it on the live feed
       return c.json(getMission(db, id), 201);
+    })
+    .post('/api/squad-missions/:id/cancel', (c) => {
+      if (!getMission(db, c.req.param('id'))) return c.json({ error: 'Mission not found' }, 404);
+      const mission = cancelMission(db, c.req.param('id'), runs.cancel);
+      if (!mission) return c.json({ error: 'This mission has already ended.' }, 409);
+      publish({ type: 'mission', mission });
+      return c.json(mission);
     })
     .get('/api/runs', (c) =>
       c.json(listRuns(db, { agentId: c.req.query('agent'), storeIds: c.req.query('stores')?.split(',').filter(Boolean), limit: limit(c.req.query('limit')) })),

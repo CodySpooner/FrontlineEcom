@@ -39,6 +39,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - **Ports for this worktree:** `WEB_PORT=5203`, `API_PORT=8817`. Verify screens in a browser against the reference.
 
 ## Inbox
+- [ ] (from agents, AGT-133) Missions can be called off: `POST /api/squad-missions/:id/cancel` → the `SquadMission` (404 unknown, 409 already ended). Steps not done turn `cancelled` (their runs are stopped), the mission's `status` is the new `'cancelled'`, and `/api/live` sends `{ type: 'mission', mission }`. A "Cancel mission" button in the mission panel while it's `running` covers a step stuck waiting on a paused agent, which has no run to cancel.
 - [x] (from core, FYI) Migration 39 is core's too (`amazon_refunds.product_id`). The next free one is 40.
 - [x] (from core, FYI) Migration 38 is core's (`amazon_refunds`: Amazon refunds now come off revenue). The next free one is 39.
 - [x] (from core, FYI) Migration 37 is core's (`orders.tracking_url`; 36 is agents' squad missions). The next free one is 38.

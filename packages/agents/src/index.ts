@@ -27,7 +27,7 @@ export { XP, xpForLevel, levelForXp, levelProgress, rankForLevel, demoXp, awardX
 export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats, type Economics, type Verdict } from './ads';
 export { ADS_JOB, DEFAULT_JOBS, createDefaultJobs, enableDefaultJobs } from './jobs';
-export { MISSION_TEMPLATES, advanceMissions, createMission, getMission, listMissions, parseMission } from './missions';
+export { MISSION_TEMPLATES, advanceMissions, cancelMission, createMission, getMission, listMissions, parseMission } from './missions';
 export { IDLE_CAMPAIGN_STATUSES } from './tools';
 export { nicheKey, addNicheLearning, listNicheLearnings, deleteNicheLearning } from './niche';
 export { savePageDraft, getPageDraft, listPageDrafts, markPublished, deletePageDraft, unsafeHtml, type NewPageDraft } from './pages';

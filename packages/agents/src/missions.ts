@@ -6,7 +6,7 @@ import { finalText, getRun, INTERRUPTED, runGist } from './runs';
 // A squad mission is a plan over ordinary agent runs, not a second task system: only the plan, each step's run id and
 // its one-line deliverable are stored; every status is read off the runs.
 
-type Stored = { id: string; role: AgentRole; task: string; dependsOn: string[]; runId?: string; note?: string; deliverable?: string };
+type Stored = { id: string; role: AgentRole; task: string; dependsOn: string[]; runId?: string; note?: string; deliverable?: string; cancelled?: boolean };
 type Start = (agentId: string, task: string, resumeRunId?: string, parentRunId?: string) => AgentRun | string;
 const and = new Intl.ListFormat('en', { type: 'conjunction' });
 
@@ -196,6 +196,21 @@ function advanceOnce(db: DatabaseSync, start: Start): SquadMission[] {
   return moved;
 }
 
+/**
+ * The owner calls the mission off: every step not done yet is cancelled (`cancelRun` stops its run) and the mission ends
+ * now, without a "stuck" note. Undefined when there's no such mission still going.
+ */
+export function cancelMission(db: DatabaseSync, id: string, cancelRun: (runId: string) => unknown, now = new Date()): SquadMission | undefined {
+  const r = db.prepare('SELECT * FROM squad_missions WHERE id = ? AND ended_at IS NULL').get(id);
+  if (!r) return;
+  const before = toMission(db, r);
+  const stored = (JSON.parse(String(r.steps_json)) as Stored[]).map((s, i) => (before.steps[i]!.status === 'done' ? s : { ...s, cancelled: true }));
+  // Ended first: the runs stopped below advance missions as they end, and this one isn't stuck.
+  db.prepare('UPDATE squad_missions SET steps_json = ?, ended_at = ? WHERE id = ?').run(JSON.stringify(stored), now.toISOString(), id);
+  for (const s of before.steps) if (s.runId && (s.status === 'queued' || s.status === 'running')) cancelRun(s.runId);
+  return getMission(db, id);
+}
+
 /** A step's run, or the one that retried it after an app restart (`retry:<run>:<retry>` in done_once, from runs.ts). */
 function stepRun(db: DatabaseSync, id: string): { id: string; status: AgentRun['status'] } | undefined {
   const r = db.prepare('SELECT id, status, error FROM agent_runs WHERE id = ?').get(id);
@@ -209,15 +224,16 @@ function stepRun(db: DatabaseSync, id: string): { id: string; status: AgentRun['
 
 function toMission(db: DatabaseSync, r: Record<string, unknown>): SquadMission {
   const steps: SquadMissionStep[] = [];
-  for (const s of JSON.parse(String(r.steps_json)) as Stored[]) {
+  const stored = JSON.parse(String(r.steps_json)) as Stored[];
+  for (const s of stored) {
     const run = s.runId ? stepRun(db, s.runId) : undefined;
     const stuck = s.dependsOn.some((d) => ['error', 'cancelled', 'blocked'].includes(steps.find((x) => x.id === d)!.status));
     steps.push({
       id: s.id, role: s.role, task: s.task, dependsOn: s.dependsOn,
-      status: s.runId ? (run?.status ?? 'cancelled') : stuck ? 'blocked' : 'waiting',
+      status: s.runId ? (run?.status ?? 'cancelled') : s.cancelled ? 'cancelled' : stuck ? 'blocked' : 'waiting',
       ...(run ? { runId: run.id } : {}),
       ...(s.deliverable && run?.status === 'done' ? { deliverable: s.deliverable } : {}),
-      ...(s.note && !s.runId ? { note: s.note } : {}),
+      ...(s.note && !s.runId && !s.cancelled ? { note: s.note } : {}),
     });
   }
   const all = steps.map((s) => s.status);
@@ -225,7 +241,7 @@ function toMission(db: DatabaseSync, r: Record<string, unknown>): SquadMission {
   const failed = all.some((s) => s === 'error' || s === 'cancelled' || s === 'blocked');
   return {
     id: String(r.id), storeId: String(r.store_id), title: String(r.title), createdAt: String(r.created_at),
-    status: all.every((s) => s === 'done') ? 'done' : failed && !moving ? 'blocked' : 'running',
+    status: stored.some((s) => s.cancelled) ? 'cancelled' : all.every((s) => s === 'done') ? 'done' : failed && !moving ? 'blocked' : 'running',
     steps,
   };
 }
