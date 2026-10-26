@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight, Check, CreditCard, RotateCcw, ShoppingBag, ShoppingCart } from 'lucide-react';
-import { AGENT_ROLES, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type StoreEventType } from '@frontline/shared';
+import { AGENT_ROLES, APPROVAL_KINDS, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type StoreEventType } from '@frontline/shared';
 import { useAgents, useApprovals, useDecide, useEvents, useMissions, useSummary } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Portrait } from '../components/Art';
@@ -55,7 +55,7 @@ export function Dashboard() {
 
 function RevenueChart({ s, who }: { s: AnalyticsSummary; who: string }) {
   const daily = s.series.map((d) => ({ date: d.date, value: d.revenue }));
-  return <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} label={`Revenue for ${who}, ${PERIOD[s.range]}: ${money(s.totals.revenue)} total`} />;
+  return <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} currency={s.currency} label={`Revenue for ${who}, ${PERIOD[s.range]}: ${money(s.totals.revenue, s.currency)} total`} />;
 }
 
 function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
@@ -78,7 +78,7 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
   const { totals: t, deltas: d, series } = s;
   return (
     <div className={cx(grid, 'transition-opacity', q.isPlaceholderData && 'opacity-60')}>
-      <Kpi label="Total Revenue" value={money(t.revenue)} d={d.revenue} series={series.map((p) => p.revenue)} />
+      <Kpi label="Total Revenue" value={money(t.revenue, s.currency)} d={d.revenue} series={series.map((p) => p.revenue)} />
       <Kpi
         hero
         label={
@@ -88,14 +88,14 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
             </span>
           </Tooltip>
         }
-        value={money(t.profit)}
+        value={money(t.profit, s.currency)}
         negative={t.profit < 0}
         d={d.profit}
         series={series.map((p) => p.profit)}
       />
-      <Kpi label="Ad Spend" value={money(t.adSpend)} d={d.adSpend} series={series.map((p) => p.adSpend)} />
+      <Kpi label="Ad Spend" value={money(t.adSpend, s.currency)} d={d.adSpend} series={series.map((p) => p.adSpend)} />
       <Kpi label="ROAS" value={`${t.roas.toFixed(1)}x`} d={d.roas} series={series.map((p) => p.roas)} />
-      <Kpi label="Total Orders" extra={`AOV ${cents(t.aov)}`} value={t.orders.toLocaleString('en-US')} d={d.orders} series={series.map((p) => p.orders)} />
+      <Kpi label="Total Orders" extra={`AOV ${cents(t.aov, s.currency)}`} value={t.orders.toLocaleString('en-US')} d={d.orders} series={series.map((p) => p.orders)} />
     </div>
   );
 }
@@ -142,7 +142,7 @@ const EVENT: Record<StoreEventType, { label: string; icon: typeof ShoppingBag; c
 };
 
 function LiveActivity() {
-  const { has, name } = useStoreSelection();
+  const { has, name, currency } = useStoreSelection();
   const q = useEvents();
   useTick(30_000);
   const list = (q.data ?? []).filter((e) => has(e.storeId)).slice(0, 5);
@@ -177,7 +177,7 @@ function LiveActivity() {
                     {name(e.storeId)} · {ago(e.at)}
                   </div>
                 </div>
-                <div className="font-display text-sm font-bold tabular-nums">{cents(e.amount)}</div>
+                <div className="font-display text-sm font-bold tabular-nums">{cents(e.amount, currency(e.storeId))}</div>
               </li>
             );
           })}
@@ -333,6 +333,7 @@ function Requests() {
                   </div>
                   <div className="mt-0.5 text-[13px] font-semibold">{a.title}</div>
                   <div className="mt-0.5 text-xs text-muted">
+                    {APPROVAL_KINDS[a.action.kind] && <span className="text-text-2">{APPROVAL_KINDS[a.action.kind]!.label} · </span>}
                     {a.reason}
                     {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold whitespace-nowrap text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
                   </div>

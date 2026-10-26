@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ago, day, money, shortMoney, signedPct } from './format';
+import { ago, cents, day, money, shortMoney, signedPct } from './format';
 
 describe('format', () => {
   it('formats money with a real minus sign for losses', () => {
@@ -11,6 +11,12 @@ describe('format', () => {
     expect(shortMoney(4500)).toBe('$4.5K');
     expect(shortMoney(3000)).toBe('$3K');
     expect(shortMoney(1_250_000)).toBe('$1.3M');
+  });
+  it('formats other currencies', () => {
+    expect(money(24532.4, 'EUR')).toBe('€24,532');
+    expect(money(-5, 'GBP')).toBe('−£5');
+    expect(cents(41.5, 'CAD')).toBe('CA$41.50');
+    expect(shortMoney(4500, 'EUR')).toBe('€4.5K');
   });
   it('signs deltas', () => {
     expect(signedPct(18.44)).toBe('+18.4%');

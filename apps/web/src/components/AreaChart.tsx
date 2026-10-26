@@ -10,7 +10,7 @@ const PT = 14;
 const PB = 28;
 
 /** Single-series money area chart (ported from the mockup): crosshair + tooltip on hover, arrow keys when focused. */
-export function AreaChart({ points, weekly, label }: { points: { date: string; value: number }[]; weekly?: boolean; label: string }) {
+export function AreaChart({ points, weekly, label, currency }: { points: { date: string; value: number }[]; weekly?: boolean; label: string; currency?: string }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
@@ -81,7 +81,7 @@ export function AreaChart({ points, weekly, label }: { points: { date: string; v
             <g key={f}>
               <line x1={PL} x2={W - PR} y1={y(max * f)} y2={y(max * f)} className="stroke-grid" />
               <text x={PL - 8} y={y(max * f) + 4} textAnchor="end">
-                {shortMoney(max * f)}
+                {shortMoney(max * f, currency)}
               </text>
             </g>
           ))}
@@ -104,7 +104,7 @@ export function AreaChart({ points, weekly, label }: { points: { date: string; v
         className="pointer-events-none absolute rounded-[9px] border border-line-2 bg-bg-2/95 px-[11px] py-[7px] whitespace-nowrap shadow-[0_8px_24px_-6px_rgb(0_0_0/.55),0_0_18px_-8px_rgb(255_42_58/.35)]"
         style={{ left: px, top: py, transform: `translate(${shift}, calc(-100% - 14px))` }}
       >
-        <b className="block font-display text-base">{money(p.value)}</b>
+        <b className="block font-display text-base">{money(p.value, currency)}</b>
         <span className="text-[11px] text-muted">
           {weekly ? 'Week ending ' : ''}
           {fmtDay(p.date, true)}

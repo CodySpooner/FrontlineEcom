@@ -1,7 +1,7 @@
 // UI-07 agent chat: each message is a run; follow-ups resume the previous run's session. Runs stream in over /api/live.
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { Brain, ChevronRight, MessageSquare, SendHorizontal, Wrench } from 'lucide-react';
-import { AGENT_ROLES, type Agent, type AgentRole, type AgentRunDetail, type ApprovalRequest } from '@frontline/shared';
+import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type AgentRunDetail, type ApprovalRequest } from '@frontline/shared';
 import { useApprovals, useCancelRun, useDecide, useRun, useStartRun } from '../api/client';
 import { cents, money } from '../lib/format';
 import { isLive, toBlocks } from '../lib/transcript';
@@ -181,7 +181,7 @@ function ApprovalCard({ a }: { a: ApprovalRequest }) {
   const act = (v: 'approve' | 'deny') => decide.mutateAsync({ id: a.id, verdict: v }).then(() => setVerdict(v), () => {});
   return (
     <div className="rounded-lg border border-red/40 bg-red-soft/40 p-3">
-      <div className="font-display text-[11px] font-bold tracking-[.12em] text-red uppercase">Needs your approval</div>
+      <div className="font-display text-[11px] font-bold tracking-[.12em] text-red uppercase">Needs your approval{APPROVAL_KINDS[a.action.kind] && ` · ${APPROVAL_KINDS[a.action.kind]!.label}`}</div>
       <div className="mt-1 text-[13px] font-semibold">{a.title}</div>
       <div className="mt-0.5 text-xs text-muted">
         {a.reason}

@@ -1,24 +1,15 @@
 // UI-17 Settings: stores, per-store caps and autopilot, profile, notifications, sound, where the data lives.
 import { useState, type FormEvent } from 'react';
-import { NICHES, PLATFORMS, type Niche, type Platform, type Store, type StoreCaps } from '@frontline/shared';
-import { useCaps, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings } from '../api/client';
+import { APPROVAL_KINDS, NICHES, PLATFORMS, type Niche, type Platform, type Store, type StoreCaps } from '@frontline/shared';
+import { useBackupNow, useBackups, useCaps, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings } from '../api/client';
 import { Hero } from '../components/Hero';
 import { Badge, Button, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch } from '../components/ui';
 import { NAV } from '../nav';
 
 const PLATFORM_NAME: Record<Platform, string> = { shopify: 'Shopify', tiktok_shop: 'TikTok Shop', etsy: 'Etsy', amazon: 'Amazon', woocommerce: 'WooCommerce', walmart: 'Walmart' };
 const nicheName = (n: Niche) => n.charAt(0).toUpperCase() + n.slice(1);
-// ponytail: approval action kinds aren't listed in shared yet (asked agents); unknown kinds already in caps still show by key.
-const AUTOPILOT: { kind: string; label: string }[] = [
-  { kind: 'ads.pause_adsets', label: 'Pause losing ad sets' },
-  { kind: 'ads.pause_campaign', label: 'Pause campaigns' },
-  { kind: 'ads.set_budget', label: 'Change ad budgets' },
-  { kind: 'creative.generate', label: 'Generate ad creatives' },
-  { kind: 'store.set_price', label: 'Change prices' },
-  { kind: 'store.update_products', label: 'Edit products' },
-  { kind: 'store.add_products', label: 'Add products' },
-  { kind: 'store.publish_page', label: 'Publish store pages' },
-];
+// Only kinds with a $ amount can be checked against a daily cap.
+const AUTOPILOT = Object.entries(APPROVAL_KINDS).flatMap(([kind, k]) => (k.autopilot ? [{ kind, label: k.label }] : []));
 
 export function Settings() {
   const nav = NAV.find((n) => n.path === '/settings')!;
@@ -225,7 +216,6 @@ function CapsForm({ caps }: { caps: StoreCaps }) {
   const [draft, setDraft] = useState(caps);
   const [saved, setSaved] = useState(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(caps);
-  const kinds = [...AUTOPILOT, ...Object.keys(caps.autopilot).filter((k) => !AUTOPILOT.some((a) => a.kind === k)).map((kind) => ({ kind, label: kind }))];
   const rule = (kind: string) => draft.autopilot[kind] ?? { enabled: false, maxUsdPerDay: 50 };
   const setRule = (kind: string, r: Partial<StoreCaps['autopilot'][string]>) => setDraft((d) => ({ ...d, autopilot: { ...d.autopilot, [kind]: { ...rule(kind), ...r } } }));
   const num = (key: 'adSpendChangePerDay' | 'higgsfieldCreditsPerDay' | 'agentCostPerDay', label: string, help: string) => (
@@ -248,9 +238,9 @@ function CapsForm({ caps }: { caps: StoreCaps }) {
       </div>
       <fieldset>
         <legend className="mb-1 text-[13px] font-semibold">Autopilot</legend>
-        <p className="mb-2 text-xs text-muted">Only for agents set to Autopilot on their page. Off means the agent always asks first.</p>
+        <p className="mb-2 text-xs text-muted">Only for agents set to Autopilot on their page, and only for actions with a dollar amount to check. Off means the agent always asks first.</p>
         <ul className="divide-y divide-line rounded-lg border border-line bg-bg-2">
-          {kinds.map(({ kind, label }) => {
+          {AUTOPILOT.map(({ kind, label }) => {
             const r = rule(kind);
             return (
               <li key={kind} className="flex flex-wrap items-center gap-3 px-3 py-2">
@@ -300,11 +290,14 @@ function Preferences() {
   const q = useSettings();
   const update = useUpdateSettings();
   const [name, setName] = useState<string>();
+  const [base, setBase] = useState<string>();
   const [copied, setCopied] = useState(false);
   if (q.isPending) return <Panel title="Profile"><LoadingState rows={3} /></Panel>;
   if (q.isError) return <Panel title="Profile"><ErrorState message="Couldn't load your settings." onRetry={() => q.refetch()} /></Panel>;
   const s = q.data;
   const shown = name ?? s.profile.name;
+  const cur = base ?? s.baseCurrency;
+  const dirty = shown.trim() !== s.profile.name || cur.toUpperCase() !== s.baseCurrency;
   const toggle = (label: string, help: string, checked: boolean, patch: (v: boolean) => Parameters<typeof update.mutate>[0]) => (
     <label className="flex cursor-pointer items-center justify-between gap-4 py-2">
       <span>
@@ -320,14 +313,26 @@ function Preferences() {
         <form
           onSubmit={(e) => {
             e.preventDefault();
-            update.mutate({ profile: { name: shown.trim() } }, { onSuccess: () => setName(undefined) });
+            update.mutate(
+              { profile: { name: shown.trim() }, baseCurrency: cur.trim().toUpperCase() },
+              {
+                onSuccess: () => {
+                  setName(undefined);
+                  setBase(undefined);
+                },
+              },
+            );
           }}
-          className="flex items-end gap-2"
+          className="grid gap-3"
         >
-          <Field label="Your name" className="flex-1">
+          <Field label="Your name">
             <input value={shown} onChange={(e) => setName(e.target.value)} required maxLength={40} className={inputClass} />
           </Field>
-          <Button type="submit" variant="primary" disabled={shown.trim() === s.profile.name || !shown.trim() || update.isPending}>
+          <Field label="Base currency">
+            <input value={cur} onChange={(e) => setBase(e.target.value)} required pattern="[A-Za-z]{3}" maxLength={3} placeholder="USD" className={cx(inputClass, 'uppercase')} />
+            <span className="text-[11px] text-muted">Totals across stores are converted to this. One store shows its own currency.</span>
+          </Field>
+          <Button type="submit" variant="primary" className="justify-self-end" disabled={!dirty || !shown.trim() || update.isPending}>
             Save
           </Button>
         </form>
@@ -345,7 +350,7 @@ function Preferences() {
           </p>
         )}
       </Panel>
-      <Panel title="Your Data" sub="The database and encryption key live on this computer. Back up this folder to keep your stores' history.">
+      <Panel title="Your Data" sub="The database and encryption key live on this computer.">
         <div className="flex items-center gap-2">
           <code className="min-w-0 flex-1 truncate rounded-md border border-line bg-bg-2 px-2.5 py-1.5 font-mono text-xs text-text-2" title={s.dataDir}>
             {s.dataDir}
@@ -354,7 +359,47 @@ function Preferences() {
             {copied ? 'Copied' : 'Copy path'}
           </Button>
         </div>
+        <Backups />
       </Panel>
     </>
+  );
+}
+
+function Backups() {
+  const q = useBackups();
+  const now = useBackupNow();
+  return (
+    <div className="mt-4 border-t border-line pt-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <h3 className="text-[13px] font-semibold">Backups</h3>
+        <Button size="sm" disabled={now.isPending} onClick={() => now.mutate()}>
+          {now.isPending ? 'Backing up…' : 'Back up now'}
+        </Button>
+      </div>
+      {q.isPending ? (
+        <LoadingState rows={2} />
+      ) : q.isError ? (
+        <ErrorState message="Couldn't list the backups." onRetry={() => q.refetch()} />
+      ) : !q.data.length ? (
+        <p className="text-xs text-muted">No backups yet. One is made every day; the newest 7 are kept.</p>
+      ) : (
+        <ul className="grid gap-1 text-xs">
+          {q.data.map((b) => (
+            <li key={b.name} className="flex justify-between gap-2">
+              <span className="truncate text-text-2" title={b.name}>
+                {new Date(b.createdAt).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </span>
+              <span className="text-muted tabular-nums">{(b.size / 1e6).toFixed(1)} MB</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {now.isError && (
+        <p role="alert" className="mt-2 text-xs text-red">
+          {now.error.message}
+        </p>
+      )}
+      <p className="mt-3 text-[11px] leading-relaxed text-muted">To restore: quit Frontline Ecom, then copy a backup from the backups folder over frontline.db in the data folder.</p>
+    </div>
   );
 }

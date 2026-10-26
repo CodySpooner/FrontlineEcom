@@ -15,6 +15,7 @@ import type {
   AutomationRule,
   AutomationRuleInput,
   AutomationRun,
+  Backup,
   CampaignStats,
   Commander,
   Competitor,
@@ -71,7 +72,14 @@ export const useStores = () => useQuery({ queryKey: ['stores'], queryFn: () => a
 
 export function useUpdateSettings() {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (u: SettingsUpdate) => api<Settings>('/api/settings', json('PATCH', u)), onSuccess: (st) => qc.setQueryData(['settings'], st) });
+  return useMutation({
+    mutationFn: (u: SettingsUpdate) => api<Settings>('/api/settings', json('PATCH', u)),
+    onSuccess: (st, u) => {
+      qc.setQueryData(['settings'], st);
+      // Multi-store totals are converted to the base currency.
+      if (u.baseCurrency) ['summary', 'campaigns', 'top-products'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+    },
+  });
 }
 
 export function useStoreActions() {
@@ -380,6 +388,13 @@ export function usePageDraftActions() {
     publish: useMutation({ mutationFn: (id: string) => api<PageDraft>(`/api/page-drafts/${id}/publish`, { method: 'POST' }), onSuccess: done }),
     remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/page-drafts/${id}`, { method: 'DELETE' }), onSuccess: done }),
   };
+}
+
+export const useBackups = () => useQuery({ queryKey: ['backups'], queryFn: () => api<Backup[]>('/api/backups') });
+
+export function useBackupNow() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: () => api<Backup>('/api/backups', { method: 'POST' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['backups'] }) });
 }
 
 export const useNotifications = () => useQuery({ queryKey: ['notifications'], queryFn: () => api<AppNotification[]>('/api/notifications?limit=40') });

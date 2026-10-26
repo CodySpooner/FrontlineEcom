@@ -1,13 +1,20 @@
 // Number/date formatting for KPIs, charts and feeds.
-// ponytail: USD only; switch to Intl currency per store when a non-USD store shows up.
+// Amounts are in a store's own currency, or Settings.baseCurrency across stores (the API says which); default USD.
 
-export const money = (n: number) => (n < 0 ? '−$' : '$') + Math.round(Math.abs(n)).toLocaleString('en-US');
+const fmt = (currency: string, whole = false) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency, ...(whole && { minimumFractionDigits: 0, maximumFractionDigits: 0 }) });
 
-export const cents = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+export const money = (n: number, currency = 'USD') => (n < 0 ? '−' : '') + fmt(currency, true).format(Math.round(Math.abs(n)));
+
+export const cents = (n: number, currency = 'USD') => fmt(currency).format(n);
+
+const symbol = (currency: string) => fmt(currency).formatToParts(0).find((p) => p.type === 'currency')?.value ?? '';
 
 /** Axis labels: $850, $4.5K, $1.2M */
-export const shortMoney = (v: number) =>
-  v >= 1e6 ? `$${+(v / 1e6).toFixed(1)}M` : v >= 1000 ? `$${+(v / 1000).toFixed(1)}K` : `$${Math.round(v)}`;
+export const shortMoney = (v: number, currency = 'USD') => {
+  const s = symbol(currency);
+  return v >= 1e6 ? `${s}${+(v / 1e6).toFixed(1)}M` : v >= 1000 ? `${s}${+(v / 1000).toFixed(1)}K` : `${s}${Math.round(v)}`;
+};
 
 /** "+18.4%" / "−8.1%"; anything that rounds to 0.0 reads "+0.0%", never "−0.0%". */
 export const signedPct = (d: number) => {

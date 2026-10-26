@@ -128,7 +128,7 @@ function AgentIssue({ i }: { i: OrderIssue }) {
 }
 
 function CheckIssue({ i: { order: o, kind, detail } }: { i: Issue }) {
-  const { name } = useStoreSelection();
+  const { name, currency } = useStoreSelection();
   const start = useStartRun();
   return (
     <IssueRow
@@ -143,7 +143,7 @@ function CheckIssue({ i: { order: o, kind, detail } }: { i: Issue }) {
             size="sm"
             disabled={start.isPending}
             onClick={() =>
-              start.mutate({ agentId: `${o.storeId}:operations`, task: `Order ${o.id} (${cents(o.total)}${o.supplier ? `, ${o.supplier}` : ''}): ${detail}. Find out why and fix it, or tell me what to do.` })
+              start.mutate({ agentId: `${o.storeId}:operations`, task: `Order ${o.id} (${cents(o.total, currency(o.storeId))}${o.supplier ? `, ${o.supplier}` : ''}): ${detail}. Find out why and fix it, or tell me what to do.` })
             }
           >
             Hand to Operations
@@ -155,7 +155,7 @@ function CheckIssue({ i: { order: o, kind, detail } }: { i: Issue }) {
         <b>{o.id}</b>
         <span className="text-muted">
           {' '}
-          · {name(o.storeId)} · {cents(o.total)} · {when(o.createdAt)}
+          · {name(o.storeId)} · {cents(o.total, currency(o.storeId))} · {when(o.createdAt)}
         </span>
       </p>
       <p className="text-xs text-text-2">{detail}</p>
@@ -169,7 +169,7 @@ function CheckIssue({ i: { order: o, kind, detail } }: { i: Issue }) {
 }
 
 function OrderList({ ids }: { ids: string[] }) {
-  const { name } = useStoreSelection();
+  const { name, currency } = useStoreSelection();
   const [fulfillment, setFulfillment] = useState<FulfillmentStatus | ''>('');
   const [status, setStatus] = useState<OrderStatus | ''>('');
   const [q, setQ] = useState('');
@@ -276,7 +276,7 @@ function OrderList({ ids }: { ids: string[] }) {
                     </td>
                     <td className="whitespace-nowrap text-text-2">{o.supplier ?? '–'}</td>
                     <td className="font-mono text-xs text-text-2">{o.tracking ?? '–'}</td>
-                    <td className="text-right font-semibold">{cents(o.total)}</td>
+                    <td className="text-right font-semibold">{cents(o.total, currency(o.storeId))}</td>
                   </tr>
                 );
               })}

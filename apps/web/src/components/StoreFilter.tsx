@@ -43,6 +43,8 @@ export function useStoreSelection() {
     setPicked,
     has: (storeId: string) => !ids.length || ids.includes(storeId),
     name: (storeId: string) => stores.find((s) => s.id === storeId)?.name ?? storeId,
+    /** The store's own currency, for its orders and feed amounts. */
+    currency: (storeId: string) => stores.find((s) => s.id === storeId)?.currency,
   };
 }
 

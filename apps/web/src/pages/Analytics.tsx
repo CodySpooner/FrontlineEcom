@@ -67,10 +67,10 @@ function Report({ s, ids, name, dim }: { s: AnalyticsSummary; ids: string[]; nam
         <FunnelPanel s={s} />
       </div>
       <div className="grid gap-3.5 min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <Channels q={campaigns} be={be} />
-        <TopProducts ids={ids} range={s.range} name={multi ? name : undefined} />
+        <Channels q={campaigns} be={be} cur={s.currency} />
+        <TopProducts ids={ids} range={s.range} name={multi ? name : undefined} cur={s.currency} />
       </div>
-      <Campaigns q={campaigns} be={be} beOf={(id) => breakEvenRoas(s.byStore.find((b) => b.storeId === id)?.totals ?? s.totals)} name={multi ? name : undefined} />
+      <Campaigns q={campaigns} be={be} beOf={(id) => breakEvenRoas(s.byStore.find((b) => b.storeId === id)?.totals ?? s.totals)} name={multi ? name : undefined} cur={s.currency} />
       {multi && <ByStore s={s} name={name} />}
     </div>
   );
@@ -89,16 +89,16 @@ function Trend({ s, be }: { s: AnalyticsSummary; be: number }) {
       action={<Segmented label="Metric" options={METRICS} value={metric} onChange={setMetric} />}
     >
       <p className="mb-2 flex items-baseline gap-2">
-        <b className="font-display text-2xl tabular-nums">{money(s.totals[metric])}</b>
+        <b className="font-display text-2xl tabular-nums">{money(s.totals[metric], s.currency)}</b>
         <span className={cx('text-xs font-semibold tabular-nums', tone)}>{signedPct(d)}</span>
         <span className="text-xs text-muted">vs previous period</span>
       </p>
-      <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} label={`${label}, ${PERIOD[s.range]}: ${money(s.totals[metric])} total`} />
+      <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} currency={s.currency} label={`${label}, ${PERIOD[s.range]}: ${money(s.totals[metric], s.currency)} total`} />
       <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-line pt-3 text-[13px] min-[620px]:grid-cols-4">
         <Stat label="ROAS" value={times(s.totals.roas)} />
         <Stat label="Break-even ROAS" value={Number.isFinite(be) ? times(be) : 'n/a'} />
         <Stat label="Orders" value={num(s.totals.orders)} />
-        <Stat label="Avg. order" value={money(s.totals.aov)} />
+        <Stat label="Avg. order" value={money(s.totals.aov, s.currency)} />
       </dl>
     </Panel>
   );
@@ -153,7 +153,7 @@ function FunnelPanel({ s }: { s: AnalyticsSummary }) {
 
 type Campaigns = UseQueryResult<CampaignStats[]>;
 
-function Channels({ q, be }: { q: Campaigns; be: number }) {
+function Channels({ q, be, cur }: { q: Campaigns; be: number; cur?: string }) {
   const ch = byNetwork(q.data ?? []);
   const top = Math.max(1, ...ch.map((c) => c.revenue));
   return (
@@ -170,14 +170,14 @@ function Channels({ q, be }: { q: Campaigns; be: number }) {
             <li key={c.network}>
               <div className="mb-1.5 flex items-baseline justify-between text-[13px]">
                 <span className="font-semibold">{NETWORK[c.network]}</span>
-                <b className="tabular-nums">{money(c.revenue)}</b>
+                <b className="tabular-nums">{money(c.revenue, cur)}</b>
               </div>
               <div className="h-2 rounded-full bg-white/5">
                 <div className="h-full rounded-full bg-red" style={{ width: `${rate(c.revenue, top)}%` }} />
               </div>
               <div className="mt-1 flex justify-between text-xs text-muted tabular-nums">
                 <span>
-                  {money(c.spend)} spend · {num(c.purchases)} purchases
+                  {money(c.spend, cur)} spend · {num(c.purchases)} purchases
                 </span>
                 <span className={TONE[roasTone(c.roas, be)]}>{times(c.roas)} ROAS</span>
               </div>
@@ -189,7 +189,7 @@ function Channels({ q, be }: { q: Campaigns; be: number }) {
   );
 }
 
-function TopProducts({ ids, range, name }: { ids: string[]; range: AnalyticsRange; name?: (id: string) => string }) {
+function TopProducts({ ids, range, name, cur }: { ids: string[]; range: AnalyticsRange; name?: (id: string) => string; cur?: string }) {
   const q = useTopProducts(ids, range, 5);
   return (
     <Panel title="Top Products" sub={`Best 5 by revenue, ${PERIOD[range]}`}>
@@ -198,13 +198,13 @@ function TopProducts({ ids, range, name }: { ids: string[]; range: AnalyticsRang
       ) : q.isError ? (
         <ErrorState message="Couldn't load products." onRetry={() => q.refetch()} />
       ) : (
-        <TopTable rows={q.data} name={name} />
+        <TopTable rows={q.data} name={name} cur={cur} />
       )}
     </Panel>
   );
 }
 
-function TopTable({ rows, name }: { rows: TopProduct[]; name?: (id: string) => string }) {
+function TopTable({ rows, name, cur }: { rows: TopProduct[]; name?: (id: string) => string; cur?: string }) {
   if (!rows.length) return <p className="text-[13px] text-muted">No product sales in this period.</p>;
   return (
     <Table>
@@ -227,8 +227,8 @@ function TopTable({ rows, name }: { rows: TopProduct[]; name?: (id: string) => s
               {name && <div className="text-xs text-muted">{name(p.storeId)}</div>}
             </td>
             <td className="text-right">{num(p.units)}</td>
-            <td className="text-right">{money(p.revenue)}</td>
-            <td className="text-right">{money(p.profit)}</td>
+            <td className="text-right">{money(p.revenue, cur)}</td>
+            <td className="text-right">{money(p.profit, cur)}</td>
             <td className="text-right text-text-2">{pct(rate(p.profit, p.revenue))}</td>
           </tr>
         ))}
@@ -238,7 +238,7 @@ function TopTable({ rows, name }: { rows: TopProduct[]; name?: (id: string) => s
 }
 
 /** Each campaign is judged against its own store's break-even (margins differ per store); `be` is the blended one. */
-function Campaigns({ q, be, beOf, name }: { q: Campaigns; be: number; beOf: (storeId: string) => number; name?: (id: string) => string }) {
+function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number; beOf: (storeId: string) => number; name?: (id: string) => string; cur?: string }) {
   const cs = q.data ?? [];
   return (
     <Panel title="Campaigns" sub={`${cs.length} campaigns, biggest spend first`}>
@@ -275,12 +275,12 @@ function Campaigns({ q, be, beOf, name }: { q: Campaigns; be: number; beOf: (sto
                     </div>
                   </td>
                   <td>{c.status === 'active' ? <span className="text-text-2">Active</span> : <Badge>{c.status === 'paused' ? 'Paused' : 'Archived'}</Badge>}</td>
-                  <td className="text-right">{money(c.dailyBudget)}</td>
-                  <td className="text-right">{money(c.spend)}</td>
-                  <td className="text-right">{money(c.revenue)}</td>
+                  <td className="text-right">{money(c.dailyBudget, cur)}</td>
+                  <td className="text-right">{money(c.spend, cur)}</td>
+                  <td className="text-right">{money(c.revenue, cur)}</td>
                   <td className={cx('text-right font-semibold', TONE[roasTone(c.roas, beOf(c.storeId))])}>{times(c.roas)}</td>
                   <td className="text-right">{num(c.purchases)}</td>
-                  <td className="text-right">{c.purchases ? money(c.spend / c.purchases) : '–'}</td>
+                  <td className="text-right">{c.purchases ? money(c.spend / c.purchases, cur) : '–'}</td>
                   <td className="text-right">{pct(rate(c.clicks, c.impressions))}</td>
                 </tr>
               ))}
@@ -332,10 +332,10 @@ function ByStore({ s, name }: { s: AnalyticsSummary; name: (id: string) => strin
                       <span className="text-xs text-muted">{h.marginPct < 0 ? '−' : ''}{Math.abs(h.marginPct)}% net margin</span>
                     </span>
                   </td>
-                  <td className="text-right">{money(t.revenue)}</td>
+                  <td className="text-right">{money(t.revenue, s.currency)}</td>
                   <td className={cx('text-right', Math.abs(d.revenue) < 0.05 ? 'text-muted' : d.revenue > 0 ? 'text-good' : 'text-red')}>{signedPct(d.revenue)}</td>
-                  <td className="text-right">{money(t.profit)}</td>
-                  <td className="text-right">{money(t.adSpend)}</td>
+                  <td className="text-right">{money(t.profit, s.currency)}</td>
+                  <td className="text-right">{money(t.adSpend, s.currency)}</td>
                   <td className="text-right">{times(t.roas)}</td>
                   <td className="text-right">{num(t.orders)}</td>
                 </tr>
