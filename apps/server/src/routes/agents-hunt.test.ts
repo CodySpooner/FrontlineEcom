@@ -41,6 +41,19 @@ test("a Product Hunter's own request goes through the same path; denied ones add
     call: 'request_approval',
     input: { title: `Add ${title}`, reason: 'score 81', kind: 'store.add_products', payload: { products: [{ researchProductId: 'lick-mat-slow-feeder', title, price: 9.99, cost: 1.2 }] } },
   });
+  // One priced below its cost, or that the app couldn't create, isn't sent.
+  db.prepare(`UPDATE stores SET fee_percent = 10, fee_per_order = 0.3 WHERE id = 'pawsome'`).run();
+  const sent = async (products: object[]) => {
+    const outs: string[] = [];
+    const step: FakeStep = { call: 'request_approval', input: { title: 'Add it', reason: 'r', kind: 'store.add_products', payload: { products } } };
+    for await (const e of runAgent({ ...input, store: getStore(db, 'pawsome')! }, fakeEngine(() => [step])) as AsyncIterable<AgentEvent>) if (e.type === 'tool_result') outs.push(e.output);
+    return outs;
+  };
+  expect(await sent([{ title: 'Lick Mat', price: 1.5, cost: 1.2 }])).toEqual(['Not sent: "Lick Mat" at $1.5 is at or below its unit cost plus fees ($1.67).']);
+  expect(await sent([{ title: 'Lick Mat', cost: 1.2 }])).toEqual(["Not sent: payload.products needs each product's title and a price above 0, in the store's currency."]);
+  expect(await sent([])).toHaveLength(1);
+  expect(db.prepare(`SELECT count(*) AS n FROM approvals WHERE title = 'Add it'`).get()?.n).toBe(0);
+
   // A second request for a product already waiting isn't sent.
   const waits = db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('w1', 'pawsome', 'pawsome:product_hunter', 'Add the lick mat', 'r', ?, 'pending', ?)`);
   waits.run(JSON.stringify({ kind: 'store.add_products', payload: { products: [{ title: 'Lick Mat Slow Feeder', price: 9.99 }] } }), new Date().toISOString());

@@ -120,6 +120,12 @@ const noStoreWrites = (store: Store, platforms = PRODUCT_WRITE_PLATFORMS) =>
   store.connected && !platforms.includes(store.platform)
     ? `Not sent: the app doesn't change ${store.platform} stores yet, so approving it would do nothing. Put the change in your answer so the owner can make it by hand.`
     : undefined;
+/**
+ * The lowest price that still covers a unit costing `cost` and the store's fee estimate. A cost of 0 is one nobody set
+ * (Shopify's empty "Cost per item"; Etsy and TikTok Shop send none): no floor to check. ponytail: the per-order fee is
+ * counted per unit, so a multi-unit order's floor is a little high.
+ */
+const priceFloor = (store: Store, cost: number) => (cost > 0 ? r2((cost + (store.feePerOrder ?? 0)) / (1 - (store.feePercent ?? 0) / 100)) : undefined);
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
 export const cash = (n: number, currency: string) => (currency === 'USD' ? `$${n}` : `${n} ${currency}`);
 
@@ -876,12 +882,9 @@ export const APP_TOOLS: AppTool[] = [
       const [from, to] = [Number(p.price), r2(newPrice)];
       const $ = (n: number) => cash(n, ctx.store.currency);
       if (to === from) return `${$(to)} is already the price.`;
-      // The lowest price that still covers the unit and the store's fee estimate. ponytail: the per-order fee is counted
-      // per unit, so a multi-unit order's floor is a little high.
       const fees = ctx.store.feePercent || ctx.store.feePerOrder;
-      // A cost of 0 is one nobody set (Shopify's empty "Cost per item"; Etsy and TikTok Shop send none): no floor to check.
       const costed = Number(p.cost) > 0;
-      const floor = !costed ? undefined : r2((Number(p.cost) + (ctx.store.feePerOrder ?? 0)) / (1 - (ctx.store.feePercent ?? 0) / 100));
+      const floor = priceFloor(ctx.store, Number(p.cost));
       if (floor !== undefined && to <= floor) return `Not sent: ${$(to)} is at or below the unit cost${fees ? ' plus fees' : ''} (${$(floor)}).`;
       if (Math.abs(to - from) / from > 0.3) return 'Not sent: test within ±30% of the current price, one step at a time.';
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
@@ -955,8 +958,19 @@ export const APP_TOOLS: AppTool[] = [
       const no = kind === 'store.add_products' && noStoreWrites(ctx.store);
       if (no) return no;
       if (kind === 'store.add_products') {
+        // The app skips a product it can't create and adds one priced below its cost: say so before the owner approves.
+        const products = (Array.isArray(payload.products) ? payload.products : []) as { title?: unknown; price?: unknown; cost?: unknown }[];
+        if (!products.length || products.some((p) => typeof p?.title !== 'string' || !p.title.trim() || !(typeof p.price === 'number' && p.price > 0))) {
+          return "Not sent: payload.products needs each product's title and a price above 0, in the store's currency.";
+        }
+        const fees = ctx.store.feePercent || ctx.store.feePerOrder;
+        for (const p of products) {
+          const floor = priceFloor(ctx.store, Number(p.cost) || 0);
+          const $ = (n: number) => cash(n, ctx.store.currency);
+          if (floor !== undefined && Number(p.price) <= floor) return `Not sent: "${String(p.title).trim()}" at ${$(Number(p.price))} is at or below its unit cost${fees ? ' plus fees' : ''} (${$(floor)}).`;
+        }
         // Two approvals for one product would add it twice: one request per product at a time.
-        const titles = ((payload.products ?? []) as { title?: unknown }[]).map((p) => String(p?.title ?? '').trim().toLowerCase()).filter(Boolean);
+        const titles = products.map((p) => String(p.title).trim().toLowerCase());
         const waiting = ctx.db
           .prepare(
             `SELECT a.title FROM approvals a, json_each(a.action_json, '$.payload.products') p WHERE a.store_id = ? AND a.status = 'pending'
