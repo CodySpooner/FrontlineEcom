@@ -8,7 +8,7 @@ import { useAgents, useApprovals, useDecide, useEvents, useMissions, useSummary 
 import { AreaChart } from '../components/AreaChart';
 import { Portrait } from '../components/Art';
 import { Hero } from '../components/Hero';
-import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
+import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
 import { PERIOD, RANGES, sparkPoints, weekly } from '../lib/chart';
 import { ago, cents, money, signedPct } from '../lib/format';
@@ -28,6 +28,7 @@ export function Dashboard() {
         <div className="min-[620px]:ml-auto">
           <Segmented label="Date range" options={RANGES} value={range} onChange={setRange} />
         </div>
+        <UnconvertedNote codes={summary.data?.unconverted} />
       </div>
       <Kpis q={summary} />
       <div className="mb-3.5 grid gap-3.5 min-[1100px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">

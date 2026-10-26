@@ -1,6 +1,7 @@
 // Global store selection (All stores or any subset), persisted across sessions. Every store-scoped view reads it.
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import { useStores } from '../api/client';
 import { Chip } from './ui';
 
@@ -64,5 +65,16 @@ export function StoreFilter() {
         ))}
       </div>
     </div>
+  );
+}
+
+/** Multi-store totals leave out stores whose currency has no exchange rate (`AnalyticsSummary.unconverted`). */
+export function UnconvertedNote({ codes }: { codes?: string[] }) {
+  if (!codes?.length) return null;
+  return (
+    <p className="flex basis-full items-center gap-1.5 text-xs text-text-2">
+      <TriangleAlert aria-hidden className="size-3.5 shrink-0 text-red" />
+      {codes.join(', ')} stores aren't included: no exchange rate. Open the store on its own to see it.
+    </p>
   );
 }

@@ -6,7 +6,7 @@ import { storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary
 import { useCampaigns, useSummary, useTopProducts } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
-import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
+import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { Badge, ErrorState, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
 import { breakEvenRoas, byNetwork, rate, roasTone } from '../lib/analytics';
 import { PERIOD, RANGES, weekly } from '../lib/chart';
@@ -44,6 +44,7 @@ export function Analytics() {
         <div className="min-[620px]:ml-auto">
           <Segmented label="Date range" options={RANGES} value={range} onChange={setRange} />
         </div>
+        <UnconvertedNote codes={s?.unconverted} />
       </div>
       {summary.isError ? (
         <ErrorState message="Couldn't load analytics." onRetry={() => summary.refetch()} />
