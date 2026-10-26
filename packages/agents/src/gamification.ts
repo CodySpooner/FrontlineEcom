@@ -98,6 +98,11 @@ export interface StoreDay {
   requestsOpen: number;
   requestsDecidedToday: number;
   runsToday: number;
+  /** Squad missions: which agents are on, and what they shipped today. */
+  creativeAgentsOn?: boolean;
+  productHunterOn?: boolean;
+  creativesToday?: number;
+  productsApprovedToday?: number;
 }
 
 /** Today's 3 missions for a store: beat the recent average on revenue and orders, then clear requests (or brief the squad). */
@@ -113,7 +118,16 @@ export function dailyMissions(d: StoreDay): Mission[] {
     requests
       ? { id: id('requests'), storeId: d.storeId, title: 'Clear all agent requests', progress: d.requestsDecidedToday, target: requests, xp: 40 }
       : { id: id('brief'), storeId: d.storeId, title: 'Give your squad 2 tasks', progress: Math.min(2, d.runsToday), target: 2, xp: 40 },
+    ...squadMission(d, id),
   ];
+}
+
+/** One mission from the squad's state; with both agents on, creatives on even days and products on odd ones. */
+function squadMission(d: StoreDay, id: (kind: string) => string): Mission[] {
+  const creatives = d.creativeAgentsOn && (!d.productHunterOn || Number(d.date.slice(8)) % 2 === 0);
+  if (creatives) return [{ id: id('creatives'), storeId: d.storeId, title: 'Launch 2 new creatives', progress: Math.min(2, d.creativesToday ?? 0), target: 2, xp: 50 }];
+  if (d.productHunterOn) return [{ id: id('product'), storeId: d.storeId, title: 'Approve a product to test', progress: Math.min(1, d.productsApprovedToday ?? 0), target: 1, xp: 50 }];
+  return [];
 }
 
 /** Numbers the achievement checks read. */

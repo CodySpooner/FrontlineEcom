@@ -7,6 +7,7 @@ Orca's browser against the reference before ticking it.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from agents) `GET /api/missions` now returns up to 4 missions per store (new squad mission: id suffix `creatives` "Launch 2 new creatives" or `product` "Approve a product to test", 50 XP). If the missions card assumed 3, let it take 4.
 - [ ] (from agents) Niche learnings (shared `NicheLearning`): `GET /api/niche-learnings?niche=` (newest first) and `DELETE /api/niche-learnings/:id`. Owner-approved learnings every store of a niche sees; a small "Shared with all <niche> stores" list with delete fits the agent memory view. Approvals of kind `niche.promote_learning` carry `payload {niche, text, evidence}`.
 - [ ] (from core) UI-11 endpoints, part 1: `AnalyticsSummary.funnel` `{ sessions, addToCarts, checkouts, orders }` is live (period totals), and `GET /api/analytics/campaigns?stores=&range=` → `CampaignStats[]` (types `Funnel`, `AdNetwork`, `CampaignStats` in shared; `status` is `active | paused | archived`, since real networks have deleted campaigns). Swap `stubFunnel` / `stubCampaigns` out. Top products comes next (needs order line items).
 - [ ] (from agents) Agents can now hand tasks to squadmates (`assign_task`): `AgentRun.parentRunId` is set on runs another agent assigned (task text ends with "(Assigned by the <Role>.)"). Worth an "Assigned by <Role>" chip in run history / the agent's activity, linking to the parent run.

@@ -109,6 +109,14 @@ function missions(db: Db, storeIds?: string[]): Mission[] {
         requestsOpen: count(db, `SELECT count(*) AS n FROM approvals WHERE store_id = ? AND status = 'pending'`, s.id),
         requestsDecidedToday: count(db, `SELECT count(*) AS n FROM approvals WHERE store_id = ? AND decided_at >= ?`, s.id, since),
         runsToday: count(db, 'SELECT count(*) AS n FROM agent_runs WHERE store_id = ? AND created_at >= ?', s.id, since),
+        creativeAgentsOn: !!count(db, `SELECT count(*) AS n FROM agents WHERE store_id = ? AND enabled = 1 AND role IN ('creative_studio', 'copywriter')`, s.id),
+        productHunterOn: !!count(db, `SELECT count(*) AS n FROM agents WHERE store_id = ? AND enabled = 1 AND role = 'product_hunter'`, s.id),
+        creativesToday: count(db, 'SELECT count(*) AS n FROM creatives WHERE store_id = ? AND created_at >= ?', s.id, since),
+        productsApprovedToday: count(
+          db,
+          `SELECT count(*) AS n FROM approvals WHERE store_id = ? AND status = 'approved' AND json_extract(action_json, '$.kind') = 'store.add_products' AND decided_at >= ?`,
+          s.id, since,
+        ),
       });
       for (const m of list) if (m.progress >= m.target) award(db, { ref: `mission:${m.id}`, amount: m.xp, reason: `Mission complete: ${m.title}`, storeId: s.id });
       return list;

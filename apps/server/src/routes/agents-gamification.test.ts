@@ -88,9 +88,13 @@ test('an approved request pays the agent that made it; a denied one does not', a
   if (a!.agent !== b!.agent) expect(xpOf(b!.agent)).toBe(before[1]);
 });
 
-test('missions: 3 per store; completing one pays the commander once', async () => {
-  expect(await get<Mission[]>('/api/missions')).toHaveLength(9);
-  expect((await get<Mission[]>('/api/missions?stores=glow')).map((m) => m.id.split(':').at(-1))).toEqual(['revenue', 'orders', 'requests']);
+test('missions: 4 per store; completing one pays the commander once', async () => {
+  expect(await get<Mission[]>('/api/missions')).toHaveLength(12);
+  expect((await get<Mission[]>('/api/missions?stores=glow')).map((m) => m.id.split(':').at(-1))).toEqual(['revenue', 'orders', 'requests', expect.stringMatching(/^(creatives|product)$/)]);
+  db.prepare(`UPDATE agents SET enabled = 0 WHERE store_id = 'peak' AND role IN ('creative_studio', 'copywriter')`).run();
+  expect((await get<Mission[]>('/api/missions?stores=peak')).at(-1)?.title).toBe('Approve a product to test');
+  db.prepare(`UPDATE agents SET enabled = 0 WHERE id = 'peak:product_hunter'`).run();
+  expect(await get<Mission[]>('/api/missions?stores=peak')).toHaveLength(3);
 
   const before = (await get<Commander>('/api/commander')).xp;
   for (const r of db.prepare(`SELECT id FROM approvals WHERE store_id = 'glow' AND status = 'pending'`).all()) decide(db, String(r.id), 'approve');

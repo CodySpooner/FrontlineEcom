@@ -46,3 +46,12 @@ test('daily missions stretch the recent average and track requests', () => {
   expect(quiet[0]?.title).toBe('Hit €50 revenue today');
   expect(quiet[2]).toMatchObject({ title: 'Give your squad 2 tasks', progress: 2, target: 2 });
 });
+
+test('the squad mission follows which agents are on, alternating by day when both are', () => {
+  const both = { ...day, creativeAgentsOn: true, productHunterOn: true, creativesToday: 3, productsApprovedToday: 0 };
+  expect(dailyMissions(both)[3]).toEqual({ id: 'glow:2026-10-26:creatives', storeId: 'glow', title: 'Launch 2 new creatives', progress: 2, target: 2, xp: 50 });
+  expect(dailyMissions({ ...both, date: '2026-10-27' })[3]).toEqual({ id: 'glow:2026-10-27:product', storeId: 'glow', title: 'Approve a product to test', progress: 0, target: 1, xp: 50 });
+  expect(dailyMissions({ ...both, creativeAgentsOn: false })[3]?.title).toBe('Approve a product to test');
+  expect(dailyMissions({ ...both, date: '2026-10-27', productHunterOn: false })[3]?.title).toBe('Launch 2 new creatives');
+  expect(dailyMissions({ ...both, creativeAgentsOn: false, productHunterOn: false })).toHaveLength(3);
+});
