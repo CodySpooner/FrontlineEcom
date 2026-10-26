@@ -658,6 +658,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'appKey', label: 'App key', secret: false },
     { key: 'appSecret', label: 'App secret', secret: true },
     { key: 'authLink', label: 'Authorization link', secret: false, optional: true, placeholder: 'https://services.tiktokshop.com/open/authorize?service_id=…' },
+    { key: 'shop', label: 'Shop (when several shops authorized the app)', secret: false, optional: true, placeholder: 'Shop name, code or ID' },
     { key: 'accessToken', label: 'Access token', secret: true, oauth: true },
     { key: 'refreshToken', label: 'Refresh token', secret: true, oauth: true },
   ] },

@@ -86,7 +86,7 @@ const shopOrder = (id: string, status: string, total: string, extra: Record<stri
 });
 
 /** Fake TikTok Shop: token refresh, shops, products (two pages), orders. Checks every signature. */
-function fakeShop(refreshError?: { code: number; message: string }) {
+function fakeShop(refreshError?: { code: number; message: string }, shops = [{ cipher: 'CIPHER', name: 'Glow Haus TT' }]) {
   const calls: { url: URL; token: string | null; body: string }[] = [];
   const fetchFn = (async (url: string, init: RequestInit = {}) => {
     const u = new URL(url);
@@ -99,7 +99,7 @@ function fakeShop(refreshError?: { code: number; message: string }) {
     const params = Object.fromEntries(u.searchParams);
     expect(params.sign).toBe(signTikTokShop('app_secret_fixture', u.pathname, params, body));
     const ok = (data: unknown) => Response.json({ code: 0, message: 'Success', data });
-    if (u.pathname === '/authorization/202309/shops') return ok({ shops: [{ cipher: 'CIPHER', name: 'Glow Haus TT' }] });
+    if (u.pathname === '/authorization/202309/shops') return ok({ shops });
     if (u.pathname === '/product/202309/products/search') {
       return params.page_token
         ? ok({ products: [{ id: '17302', title: 'Gua Sha', status: 'DRAFT', update_time: T('2026-10-20T00:00:00Z'), skus: [{ price: { sale_price: '19.00' }, inventory: [] }] }], next_page_token: '' })
@@ -162,4 +162,24 @@ test('TikTok Shop: a rejected refresh token shows on the integration and keeps d
   const row = db.prepare("SELECT status, error FROM integrations WHERE id = 'tiktok_shop:glow'").get();
   expect(row).toEqual({ status: 'error', error: 'TikTok Shop sign-in failed: refresh token is expired; authorize the shop again and paste new tokens' });
   expect(db.prepare("SELECT demo FROM stores WHERE id = 'glow'").get()).toEqual({ demo: 1 });
+});
+
+test('an app several TikTok shops authorized syncs the shop the owner named, and asks for one otherwise', async () => {
+  const db = shopSetup();
+  const shops = [{ cipher: 'US', id: '7001', name: 'Glow Haus US', code: 'USGLOW' }, { cipher: 'UK', id: '7002', name: 'Glow Haus UK', code: 'GBGLOW' }];
+  await syncTikTokShop(db, key, 'glow', fakeShop(undefined, shops).fetchFn, NOW);
+  expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'tiktok_shop:glow'").get()).toEqual({
+    status: 'error', error: 'TikTok Shop: several shops authorized this app. Enter one of Glow Haus US, Glow Haus UK as the Shop',
+  });
+
+  const values = { appKey: 'app_key_fixture', appSecret: 'app_secret_fixture', accessToken: 'at_old', refreshToken: 'rt_old' };
+  saveIntegration(db, key, { kind: 'tiktok_shop', storeId: 'glow', values: { ...values, shop: 'glow haus uk' } });
+  const { fetchFn, calls } = fakeShop(undefined, shops);
+  await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
+  expect(db.prepare("SELECT status FROM integrations WHERE id = 'tiktok_shop:glow'").get()?.status).toBe('connected');
+  expect(new Set(calls.filter((c) => c.url.pathname.includes('/search')).map((c) => c.url.searchParams.get('shop_cipher')))).toEqual(new Set(['UK']));
+
+  saveIntegration(db, key, { kind: 'tiktok_shop', storeId: 'glow', values: { ...values, shop: 'Glow Haus FR' } });
+  await syncTikTokShop(db, key, 'glow', fakeShop(undefined, shops).fetchFn, NOW);
+  expect(db.prepare("SELECT error FROM integrations WHERE id = 'tiktok_shop:glow'").get()?.error).toContain('no authorized shop is "Glow Haus FR"');
 });

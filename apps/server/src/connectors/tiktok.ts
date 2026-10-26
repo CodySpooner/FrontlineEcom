@@ -191,9 +191,15 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       return b.data as T;
     };
 
-    // ponytail: first authorized shop only; an app authorized by several shops needs a shop picker on the Integrations screen.
-    const shop = (await api<{ shops?: { cipher: string }[] }>('GET', '/authorization/202309/shops')).shops?.[0];
-    if (!shop) throw new Error('TikTok Shop: no shop has authorized this app');
+    // An app several shops authorized (say a US and a UK shop) syncs the one named in the Shop field; with one, that one.
+    const shops = (await api<{ shops?: { cipher: string; id?: string; name?: string; code?: string }[] }>('GET', '/authorization/202309/shops')).shops ?? [];
+    const want = creds.shop?.trim().toLowerCase();
+    const shop = want ? shops.find((s) => [s.id, s.name, s.code].some((v) => v?.toLowerCase() === want)) : shops.length === 1 ? shops[0] : undefined;
+    if (!shops.length) throw new Error('TikTok Shop: no shop has authorized this app');
+    if (!shop) {
+      const why = want ? `no authorized shop is "${creds.shop!.trim()}"` : 'several shops authorized this app';
+      throw new Error(`TikTok Shop: ${why}. Enter one of ${shops.map((s) => s.name ?? s.id).join(', ')} as the Shop`);
+    }
     const search = async <T>(path: string, list: string, query: Record<string, string>, body: object) => {
       const out: T[] = [];
       let pageToken = '';
