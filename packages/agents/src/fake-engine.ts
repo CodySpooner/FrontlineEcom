@@ -38,10 +38,19 @@ function demoWork(input: RunInput): FakeStep[] {
       return [{ call: 'list_orders', input: { days: 14, fulfillment: 'unfulfilled' } }, ...flag];
     }
     case 'store_developer': {
-      const p = product(input.task.match(/\(productId ([^)]+)\)/)?.[1]);
-      if (!p || db.prepare('SELECT 1 FROM page_drafts WHERE store_id = ? AND product_id = ? AND published_at IS NULL').get(storeId, String(p.id))) return [{ call: 'list_products' }];
-      const html = `<h2>${p.title}</h2><p>Why customers pick it, in one line.</p><ul><li>Benefit one, with the spec behind it</li><li>Benefit two</li><li>What's in the box</li></ul><p>Ships in 3-5 days. 30-day returns.</p>`;
-      return [{ call: 'draft_page', input: { kind: 'product', productId: String(p.id), title: String(p.title), html, notes: 'Demo draft: benefit-first layout with shipping and returns up top.' } }];
+      // Every product the task names ("New draft product(s) just added…"), else the top one.
+      const named = [...input.task.matchAll(/\(productId ([^)]+)\)/g)].map((m) => product(m[1]));
+      const todo = (named.length ? named : [product()]).filter(
+        (p) => p && !db.prepare('SELECT 1 FROM page_drafts WHERE store_id = ? AND product_id = ? AND published_at IS NULL').get(storeId, String(p.id)),
+      );
+      if (!todo.length) return [{ call: 'list_products' }];
+      return todo.map((p) => ({
+        call: 'draft_page',
+        input: {
+          kind: 'product', productId: String(p!.id), title: String(p!.title), notes: 'Demo draft: benefit-first layout with shipping and returns up top.',
+          html: `<h2>${p!.title}</h2><p>Why customers pick it, in one line.</p><ul><li>Benefit one, with the spec behind it</li><li>Benefit two</li><li>What's in the box</li></ul><p>Ships in 3-5 days. 30-day returns.</p>`,
+        },
+      }));
     }
     case 'copywriter': {
       const p = product();

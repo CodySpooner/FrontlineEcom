@@ -24,6 +24,9 @@ test('demo runs do one real, non-blocking piece of each role’s work', async ()
   await go('glow:store_developer', `Draft the product pages for: Cheap thing (productId ${productId}).`);
   await go('glow:store_developer', `Draft the product pages for: Cheap thing (productId ${productId}).`);
   expect(listPageDrafts(db, { storeIds: ['glow'] }).map((d) => [d.productId, d.status])).toEqual([[productId, 'draft']]);
+  const [a, b] = db.prepare(`SELECT id FROM products WHERE store_id = 'glow' ORDER BY price DESC LIMIT 2`).all().map((r) => String(r.id));
+  await go('glow:store_developer', `New draft product(s) just added to Glow Haus: A (productId ${a}), B (productId ${b}).`);
+  expect(listPageDrafts(db, { storeIds: ['glow'] }).map((d) => d.productId).sort()).toEqual([productId, a, b].sort()); // one page per new product
 
   const orderId = String(db.prepare(`SELECT id FROM orders WHERE store_id = 'glow' ORDER BY created_at LIMIT 1`).get()?.id);
   db.prepare(`UPDATE orders SET fulfillment_status = 'unfulfilled', local_date = ? WHERE store_id = 'glow' AND id = ?`).run(addDays(localDate(), -9), orderId);
