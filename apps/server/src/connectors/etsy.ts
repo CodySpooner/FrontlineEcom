@@ -109,6 +109,20 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         if (!page.results.length || offset + 100 >= page.count || page.results.some((l) => l.updated_timestamp < listedSince)) break;
       }
     }
+    // Offset pages in change order skip a listing edited (or moved to another state) while they're read: one the full read
+    // missed is archived only once Etsy answers 404 for it, and kept as Etsy has it otherwise (on any other error, as is).
+    const kept: string[] = [];
+    if (full) {
+      const seen = new Set(listings.map((l) => `etsy-${l.listing_id}`));
+      for (const r of db.prepare("SELECT id FROM products WHERE store_id = ? AND id GLOB 'etsy-*' AND status != 'archived'").all(storeId)) {
+        if (seen.has(String(r.id))) continue;
+        const res = await fetchFn(`${API}/listings/${String(r.id).slice(5)}?includes=Images`, { headers }).catch(() => undefined);
+        if (res?.status === 404) continue;
+        const l = res?.ok ? ((await res.json().catch(() => undefined)) as Listing | undefined) : undefined;
+        if (l && LISTING_STATES.includes(l.state)) listings.push(l);
+        else if (!l) kept.push(String(r.id));
+      }
+    }
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 
     tx(db, () => {
@@ -142,7 +156,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         setOrderItems(db, storeId, `etsy-${r.receipt_id}`, (r.transactions ?? []).map((t) => ({ productId: `etsy-${t.listing_id}`, quantity: t.quantity, revenue: money(t.price) * t.quantity, cost: 0 })));
       }
       rebuildRevenue(db, storeId, days);
-      if (full) archiveMissing(db, id, storeId, 'etsy-*', listings.map((l) => `etsy-${l.listing_id}`), today);
+      if (full) archiveMissing(db, id, storeId, 'etsy-*', [...listings.map((l) => `etsy-${l.listing_id}`), ...kept], today);
       const next = Math.max(since, Math.floor(cursorAt(now).getTime() / 1000));
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(String(next), now.toISOString(), id);
     });

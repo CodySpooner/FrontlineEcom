@@ -19,13 +19,19 @@ const listing = (id: number, state: string, updated: string) => ({
 });
 
 /** Fake Etsy: token refresh, receipts (two pages), listings sorted newest-changed first. */
-function fakeEtsy(refreshError = false, gone: number[] = []) {
+/** `gone`: deleted on Etsy (404 when asked for). `skipped`: still on Etsy, but missed by the listing pages (edited mid-read). */
+function fakeEtsy(refreshError = false, gone: number[] = [], skipped: number[] = []) {
   const calls: { url: URL; headers: Headers; body: string }[] = [];
   const fetchFn = (async (url: string, init: RequestInit = {}) => {
     const u = new URL(url);
     calls.push({ url: u, headers: new Headers(init.headers), body: String(init.body ?? '') });
     if (u.pathname === '/v3/public/oauth/token') {
       return refreshError ? Response.json({ error: 'invalid_grant', error_description: 'refresh token expired' }, { status: 400 }) : Response.json({ access_token: '123.at_new', refresh_token: '123.rt_new', expires_in: 3600 });
+    }
+    const single = /^\/v3\/application\/listings\/(\d+)$/.exec(u.pathname);
+    if (single) {
+      const n = Number(single[1]);
+      return gone.includes(n) ? Response.json({ error: 'Listing not found' }, { status: 404 }) : Response.json(listing(n, 'active', '2026-10-27T17:00:00Z'));
     }
     const offset = Number(u.searchParams.get('offset'));
     if (u.pathname.endsWith('/receipts')) {
@@ -34,7 +40,7 @@ function fakeEtsy(refreshError = false, gone: number[] = []) {
     }
     const state = u.searchParams.get('state');
     const one = { draft: listing(13, 'draft', '2026-10-01T00:00:00Z'), sold_out: listing(14, 'sold_out', '2026-10-25T00:00:00Z'), expired: listing(15, 'expired', '2026-10-20T00:00:00Z') }[state!];
-    const results = (state === 'active' ? [listing(11, 'active', '2026-10-24T00:00:00Z'), listing(12, 'active', '2020-01-01T00:00:00Z')] : one ? [one] : []).filter((l) => !gone.includes(l.listing_id));
+    const results = (state === 'active' ? [listing(11, 'active', '2026-10-24T00:00:00Z'), listing(12, 'active', '2020-01-01T00:00:00Z')] : one ? [one] : []).filter((l) => !gone.includes(l.listing_id) && !skipped.includes(l.listing_id));
     return Response.json({ count: state === 'inactive' ? 500 : results.length, results });
   }) as typeof fetch;
   return { fetchFn, calls };
@@ -208,4 +214,14 @@ test("an Etsy receipt's sales tax and VAT count against profit, less the share a
   await syncEtsy(db, key, 'pawsome', fetchFn, NOW);
   // $60 with $12 of tax, $15 refunded: $45 kept, holding three quarters of the tax.
   expect(db.prepare("SELECT total, tax FROM orders WHERE id = 'etsy-7'").get()).toEqual({ total: 45, tax: 9 });
+});
+
+test("a listing the daily full read missed is archived only once Etsy says it's gone; one edited mid-read is kept as Etsy has it", async () => {
+  const db = setup();
+  await syncEtsy(db, key, 'pawsome', fakeEtsy().fetchFn, NOW);
+  const nextDay = fakeEtsy(false, [13], [14]); // 13 deleted; 14 moved from sold out to active while the pages were read
+  await syncEtsy(db, key, 'pawsome', nextDay.fetchFn, new Date('2026-10-27T18:00:00Z'));
+  const status = (n: number) => db.prepare("SELECT status FROM products WHERE store_id = 'pawsome' AND id = ?").get(`etsy-${n}`)?.status;
+  expect([status(13), status(14)]).toEqual(['archived', 'active']);
+  expect(nextDay.calls.filter((c) => /\/listings\/\d+$/.test(c.url.pathname)).map((c) => c.url.pathname.split('/').pop()).sort()).toEqual(['13', '14']);
 });
