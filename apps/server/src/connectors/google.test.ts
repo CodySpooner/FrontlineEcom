@@ -103,7 +103,11 @@ test('auth and API errors show on the integration without leaking secrets, and k
   expect(listed).not.toContain(REFRESH);
   expect(listed).not.toContain('PRIVATE KEY');
   const byKind = Object.fromEntries((JSON.parse(listed) as Integration[]).map((i) => [i.kind, i.error]));
-  expect(byKind).toEqual({ google_ads: 'Google sign-in failed: Token has been expired or revoked.', ga4: 'Google Analytics sign-in failed: Invalid JWT Signature.' });
+  expect(byKind).toEqual({
+    // A lapsed refresh token says how to fix it (the 7-day lapse of an OAuth app left in Testing).
+    google_ads: 'Google sign-in expired: press Connect to sign in again. If it lapses again after a week, publish the OAuth app (Google Cloud → Google Auth Platform → Audience → Publish app).',
+    ga4: 'Google Analytics sign-in failed: Invalid JWT Signature.',
+  });
   expect(db.prepare("SELECT demo FROM stores WHERE id = 'glow'").get()).toEqual({ demo: 1 });
 
   await syncGoogleAds(db, key, 'glow', fakeGoogle({ adsError: { error: { message: 'The caller does not have permission', details: [{ errors: [{ message: 'User doesn\'t have permission to access customer.' }] }] } } }).fetchFn, NOW);

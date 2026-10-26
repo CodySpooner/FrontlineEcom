@@ -48,7 +48,13 @@ async function call<T>(url: string, init: RequestInit, fetchFn: Fetch, service: 
 
 /** Trades a refresh token or a service-account JWT for an access token. */
 async function accessToken(grant: Record<string, string>, fetchFn: Fetch, service: string) {
-  const body = await call<{ access_token?: string }>(TOKEN_URL, { method: 'POST', body: new URLSearchParams(grant) }, fetchFn, `${service} sign-in failed`);
+  const res = await fetchFn(TOKEN_URL, { method: 'POST', body: new URLSearchParams(grant) });
+  const body = (await res.json().catch(() => ({}))) as { access_token?: string } & GoogleError;
+  // A refresh token lapses after 7 days while the owner's OAuth app is in Testing (and when revoked).
+  if (body.error === 'invalid_grant' && grant.grant_type === 'refresh_token') {
+    throw new Error(`${service} sign-in expired: press Connect to sign in again. If it lapses again after a week, publish the OAuth app (Google Cloud → Google Auth Platform → Audience → Publish app).`);
+  }
+  if (!res.ok) throw new Error(`${service} sign-in failed: ${errorText(body, res.status)}`);
   if (!body.access_token) throw new Error(`${service} sign-in failed: no access token`);
   return body.access_token;
 }
