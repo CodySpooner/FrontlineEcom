@@ -4,7 +4,6 @@ import { Shell } from './components/Shell';
 import { NAV } from './nav';
 import { Dashboard } from './pages/Dashboard';
 import { Placeholder } from './pages/Placeholder';
-import { Ecosystem } from './ecosystem/Ecosystem';
 
 // The landing page ships in the main bundle; every other page loads on first visit (Shell's Suspense shows a skeleton).
 const page = <K extends string>(load: () => Promise<Record<K, ComponentType>>, name: K) => lazy(() => load().then((m) => ({ default: m[name] })));
@@ -16,6 +15,7 @@ const Builder = page(() => import('./pages/Builder'), 'Builder');
 const Competitors = page(() => import('./pages/Competitors'), 'Competitors');
 const Creative = page(() => import('./pages/Creative'), 'Creative');
 const DevGallery = page(() => import('./pages/DevGallery'), 'DevGallery');
+const Ecosystem = page(() => import('./ecosystem/Ecosystem'), 'Ecosystem'); // keeps pixi.js (~330 kB) out of the main bundle
 const Integrations = page(() => import('./pages/Integrations'), 'Integrations');
 const Knowledge = page(() => import('./pages/Knowledge'), 'Knowledge');
 const Orders = page(() => import('./pages/Orders'), 'Orders');
