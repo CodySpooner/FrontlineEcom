@@ -121,7 +121,11 @@ describe('Claude engine', () => {
 
   test('maps failed results to error events', () => {
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }))).toEqual([{ type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.' }]);
-    expect(estimate({ input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 10_000, output_tokens: 500 })).toBeCloseTo(0.032);
+    const u = { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 10_000, output_tokens: 500 };
+    expect(estimate(u)).toBeCloseTo(0.032);
+    expect(estimate(u, 'claude-sonnet-5-5')).toBeCloseTo(0.017); // 2 + 8 + 2 + 5 thousandths
+    expect(estimate(u, 'claude-haiku-5-5')).toBeCloseTo(0.00085, 5); // 0.1 + 0.4 + 0.1 + 0.25 thousandths
+    expect(estimate(u, 'some-new-model')).toBe(estimate(u));
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: ['x'] }))[0]).toMatchObject({ message: expect.stringMatching(/^Stopped: the run used its share of today's AI budget/) });
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_during_execution', errors: ['boom', 'bang'] }))).toEqual([{ type: 'error', message: 'boom; bang' }]);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in' }))).toEqual([{ type: 'error', message: 'Not logged in' }]);

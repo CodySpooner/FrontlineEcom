@@ -57,10 +57,11 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     });
     const abortController = new AbortController();
     input.signal?.addEventListener('abort', () => abortController.abort(), { once: true });
+    const model = opts.model ?? process.env.FRONTLINE_AGENT_MODEL ?? 'claude-opus-5-5';
     const messages = run({
       prompt: input.task,
       options: {
-        model: opts.model ?? process.env.FRONTLINE_AGENT_MODEL ?? 'claude-opus-5-5',
+        model,
         systemPrompt: input.systemPrompt ?? assemblePrompt(input),
         includePartialMessages: true,
         // Isolated from the owner's coding setup: no CLAUDE.md/settings, no file or shell tools, no skill listing, and
@@ -103,7 +104,7 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     (async () => {
       for await (const message of messages) {
         if (message.type === 'assistant' && message.message.usage) {
-          spent.set(message.message.id, estimate(message.message.usage));
+          spent.set(message.message.id, estimate(message.message.usage, model));
           input.onSpend?.([...spent.values()].reduce((a, b) => a + b, 0));
         }
         for (const event of toAgentEvents(message)) events.push(own(event));
@@ -113,14 +114,24 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
   };
 }
 
+/** List prices by model family, USD per million tokens: [input, output, cache read] (claude-api skill, 2026-10-26). */
+const PRICES: Record<string, [number, number, number]> = { fable: [10, 50, 0.25], opus: [4, 20, 0.2], sonnet: [2, 10, 0.2], haiku: [0.1, 0.5, 0.01] };
+
 /**
- * An assistant message's cost at Claude Opus 5.5 list prices, USD per million tokens: input $4, cache write $8 (Claude Code
- * caches for an hour, at 2x input), cache read $0.20, output $20. The result's exact total replaces it; it's what counts
- * for a run that never gets one (cancelled, crashed). Checked 2026-10-26 on a real run: $0.0757 estimated vs $0.0758 billed.
+ * An assistant message's cost at the run model's list prices, cache writes at 2x input (Claude Code caches for an hour).
+ * It counts for a run that never gets an exact total (cancelled, crashed, a cut-off reflection), and the run saves
+ * whichever is higher, so it must not read high: on Opus prices a Haiku run would be charged ~40x against the store's
+ * budget. Checked 2026-10-26 on a real Opus run: $0.0757 estimated vs $0.0758 billed.
  */
-// ponytail: one price list whatever FRONTLINE_AGENT_MODEL is; a cheaper model reads high, which errs on the cap's side.
-export const estimate = (u: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null }) =>
-  (u.input_tokens * 4 + (u.cache_creation_input_tokens ?? 0) * 8 + (u.cache_read_input_tokens ?? 0) * 0.2 + u.output_tokens * 20) / 1e6;
+// ponytail: the family's current prices (Haiku's cache read assumed 0.1x input); an older, pricier model in a family
+// reads low until its result's exact total arrives. Unknown families use Opus.
+export const estimate = (
+  u: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null },
+  model = 'claude-opus-5-5',
+) => {
+  const [input, output, read] = Object.entries(PRICES).find(([family]) => model.includes(family))?.[1] ?? PRICES.opus!;
+  return (u.input_tokens * input + (u.cache_creation_input_tokens ?? 0) * input * 2 + (u.cache_read_input_tokens ?? 0) * read + u.output_tokens * output) / 1e6;
+};
 
 /** Maps one SDK message to our events. Subagent traffic (parent_tool_use_id set) is not surfaced. */
 export function toAgentEvents(message: SDKMessage): AgentEvent[] {
