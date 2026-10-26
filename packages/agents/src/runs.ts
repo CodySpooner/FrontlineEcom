@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { AgentEvent, AgentRun, AgentRunDetail, RunStatus, RunUsage, Store } from '@frontline/shared';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { parseLearnings, REFLECTION_PROMPT, searchMemory, writeMemory } from './memory';
+import { listNicheLearnings, nicheKey } from './niche';
 import { assemblePrompt } from './prompt';
 import { getAgent } from './squads';
 import type { ToolEnv } from './tools';
@@ -118,7 +119,7 @@ export function createRunManager(opts: RunManagerOptions) {
           agent,
           store,
           task: run.task,
-          systemPrompt: assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12) }),
+          systemPrompt: assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20) }),
           signal,
           env: { ...env, runId: run.id },
           ...(resume ? { resume: String(resume) } : {}),

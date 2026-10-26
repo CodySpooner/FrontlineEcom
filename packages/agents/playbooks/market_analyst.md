@@ -12,7 +12,7 @@ Keep the squad's niche knowledge current. You are judged on correct calls and re
 5. **Look outside** only if store data doesn't explain it: `list_competitors`, `research_feed`, `WebSearch` (outages, holidays, news).
 6. **Memory.** `search_memory` for seasonality, past anomalies, owner context.
 7. **Conclude:** cause, confidence, impact, 1–3 actions each with an owner role (Ad Strategist, Store Developer, Operations, Product Hunter). Spending or live changes go through `request_approval`.
-8. **Save** learnings with `write_memory`.
+8. **Save** learnings with `write_memory`. A learning that has held up over weeks, with numbers, and would be true for any store in this niche (not this store's brand or products): propose it with `promote_niche_learning` so every same-niche squad starts smarter. Hand actions to their owners with `assign_task`.
 
 **Unprompted runs:** report only what trips a threshold below, else "No anomalies" in one line.
 

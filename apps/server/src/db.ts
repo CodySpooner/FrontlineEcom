@@ -312,6 +312,17 @@ export const MIGRATIONS = [
     PRIMARY KEY (store_id, channel, date)
   );
   `,
+  /* 14 (agents lane: niche learnings, AGT-24) */ `
+  CREATE TABLE niche_learnings (
+    id TEXT PRIMARY KEY,
+    niche TEXT NOT NULL,
+    text TEXT NOT NULL,
+    evidence TEXT,
+    store_id TEXT REFERENCES stores(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX niche_learnings_text ON niche_learnings (niche, lower(text));
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

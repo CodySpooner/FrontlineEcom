@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { CREDITS, creditsToday, demoMedia, saveCreative } from './creatives';
 import { searchMemory, writeMemory } from './memory';
-import { saveNichePack } from './niche';
+import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 
 /** What the server hands a run so its tools can read and act on app data. */
@@ -250,6 +250,28 @@ export const APP_TOOLS: AppTool[] = [
       }
       const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'demo', mediaUrl: demoMedia(ctx.store, { kind, aspect, headline, cta }) });
       return `${message}. Higgsfield isn't connected, so this is a demo render, saved to the library (${saved.id}).`;
+    },
+  }),
+  defineTool({
+    name: 'promote_niche_learning',
+    description:
+      "Propose sharing a learning that has held up in this store with every store of the same niche: once the owner approves, all their agents see it. Only for durable, evidence-backed findings that aren't specific to this store's brand or products.",
+    input: {
+      text: z.string().min(10).max(300).describe('one sentence, true for any store in this niche'),
+      evidence: z.string().min(10).max(300).describe('the numbers, the period and where it was learned'),
+    },
+    run: async ({ text, evidence }, ctx) => {
+      const niche = nicheKey(ctx.store);
+      if (listNicheLearnings(ctx.db, niche, 1000).some((l) => l.text.toLowerCase() === text.trim().toLowerCase())) return 'Already shared with this niche.';
+      const label = ctx.store.niche === 'other' ? ctx.store.nicheDetail : ctx.store.niche;
+      const { approved, message } = await requestApproval(ctx, {
+        title: `Share a learning with all ${label} stores`.slice(0, 80),
+        reason: `${text} Evidence: ${evidence}`.slice(0, 400),
+        action: { kind: 'niche.promote_learning', payload: { niche, text, evidence } },
+      });
+      if (!approved) return message;
+      addNicheLearning(ctx.db, { niche, text, evidence, storeId: ctx.store.id });
+      return `${message}. Every ${label} store's squad now sees it.`;
     },
   }),
   defineTool({

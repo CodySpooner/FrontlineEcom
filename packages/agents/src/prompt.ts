@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { AGENT_ROLES, type Agent, type AgentRole, type Niche, type Platform, type Store, type StoreMemory } from '@frontline/shared';
+import { AGENT_ROLES, type Agent, type AgentRole, type Niche, type NicheLearning, type Platform, type Store, type StoreMemory } from '@frontline/shared';
 import { customNichePack } from './niche';
 import { ROLES, SQUAD_RULES } from './roles';
 
@@ -23,6 +23,8 @@ export interface PromptInput {
   store: Store;
   /** Ranked best-first. The tail is dropped to fit the budget; the other layers always stay. */
   memories?: StoreMemory[];
+  /** Owner-approved learnings shared across the store's niche. */
+  nicheLearnings?: NicheLearning[];
   /** Whole-prompt token budget. */
   budget?: number;
   /** YYYY-MM-DD in the store's timezone. Defaults to now. */
@@ -33,7 +35,7 @@ export interface PromptInput {
  * Expertise layers: role + playbook → platform pack → niche pack → store profile → store memory.
  * Stable layers come first and volatile ones (memories, date) last, so the prompt prefix stays cacheable.
  */
-export function assemblePrompt({ agent, store, memories = [], budget = 8000, today }: PromptInput): string {
+export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [], budget = 8000, today }: PromptInput): string {
   const role = ROLES[agent.role];
   const fixed = [
     `You are the ${AGENT_ROLES[agent.role].name} of ${store.name}, a ${store.niche} store on ${store.platform}.`,
@@ -43,6 +45,9 @@ export function assemblePrompt({ agent, store, memories = [], budget = 8000, tod
     playbook(agent.role),
     platformPack(store.platform),
     nichePack(store.niche) || customNichePack(store.nicheDetail),
+    nicheLearnings.length
+      ? [`# Learned across ${store.niche === 'other' ? store.nicheDetail : store.niche} stores (owner-approved)`, ...nicheLearnings.map((l) => `- ${l.text}${l.evidence ? ` Evidence: ${l.evidence}.` : ''}`)].join('\n')
+      : '',
     storeProfile(store),
   ].filter(Boolean);
   const date = `Today is ${today ?? new Date().toLocaleDateString('en-CA', { timeZone: store.timezone })} (${store.timezone}).`;

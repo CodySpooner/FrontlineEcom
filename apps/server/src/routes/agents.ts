@@ -2,11 +2,13 @@ import {
   XP,
   createRunManager,
   deleteMemory,
+  deleteNicheLearning,
   ensureSquads,
   seedDemoXp,
   getAgent,
   listAgents,
   listMemory,
+  listNicheLearnings,
   listRuns,
   updateAgent,
   updateMemory,
@@ -203,6 +205,8 @@ export function agentRoutes(db: Db) {
       return memory ? c.json(memory) : c.json({ error: 'Memory not found' }, 404);
     })
     .delete('/api/memory/:id', (c) => (deleteMemory(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Memory not found' }, 404)))
+    .get('/api/niche-learnings', (c) => c.json(listNicheLearnings(db, c.req.query('niche') || undefined)))
+    .delete('/api/niche-learnings/:id', (c) => (deleteNicheLearning(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Learning not found' }, 404)))
     .route('/', gamificationRoutes(db))
     .route('/', creativeRoutes(db));
 }

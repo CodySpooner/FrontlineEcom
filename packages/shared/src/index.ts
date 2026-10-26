@@ -336,6 +336,21 @@ export interface AgentRun {
 }
 
 /**
+ * An owner-approved learning shared by every store of a niche (shown in their agents' prompts).
+ * GET /api/niche-learnings?niche= → NicheLearning[] newest first; DELETE /api/niche-learnings/:id → 204.
+ */
+export interface NicheLearning {
+  id: string;
+  /** The store niche, or `other:<slug of nicheDetail>` for custom niches. */
+  niche: string;
+  text: string;
+  evidence?: string;
+  /** The store it was learned in. */
+  storeId?: string;
+  createdAt: string;
+}
+
+/**
  * POST /api/agents/:id/runs → 201 AgentRun (409 when the agent is offline, the store's AI budget is spent, or
  * resumeRunId isn't this agent's). GET /api/runs?stores=&agent=&limit= → AgentRun[] newest first.
  * GET /api/runs/:id → AgentRunDetail (live transcript while running). POST /api/runs/:id/cancel → AgentRun.

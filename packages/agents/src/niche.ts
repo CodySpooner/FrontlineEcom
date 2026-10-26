@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import type { Store } from '@frontline/shared';
+import type { DatabaseSync } from 'node:sqlite';
+import type { NicheLearning, Store } from '@frontline/shared';
 
 // Custom niches (store.niche 'other') get a pack drafted by the Market Analyst and saved, after approval,
 // in the owner's data dir: <FRONTLINE_DATA_DIR>/packs/niche/<slug>.md.
@@ -42,3 +44,28 @@ ${template()}
 Then call request_approval with kind "save_niche_pack", title "Save the ${niche} niche pack", a one-line reason,
 and payload {"slug": "${nicheSlug(niche)}", "markdown": "<the full pack>"}.`;
 }
+
+// Learnings promoted from one store to every store of its niche (owner-approved, see promote_niche_learning).
+
+export const nicheKey = (store: Pick<Store, 'niche' | 'nicheDetail'>) => (store.niche === 'other' ? `other:${nicheSlug(store.nicheDetail ?? '')}` : store.niche);
+
+/** Returns false when the niche already has this learning. */
+export function addNicheLearning(db: DatabaseSync, l: Omit<NicheLearning, 'id' | 'createdAt'>, now = new Date()): boolean {
+  const r = db
+    .prepare('INSERT OR IGNORE INTO niche_learnings (id, niche, text, evidence, store_id, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(randomUUID(), l.niche, l.text.trim(), l.evidence ?? null, l.storeId ?? null, now.toISOString());
+  return r.changes > 0;
+}
+
+/** Newest first. */
+export function listNicheLearnings(db: DatabaseSync, niche?: string, limit = 50): NicheLearning[] {
+  return db
+    .prepare(`SELECT * FROM niche_learnings ${niche ? 'WHERE niche = ?' : ''} ORDER BY created_at DESC, rowid DESC LIMIT ?`)
+    .all(...(niche ? [niche] : []), limit)
+    .map((r) => ({
+      id: String(r.id), niche: String(r.niche), text: String(r.text), createdAt: String(r.created_at),
+      ...(r.evidence ? { evidence: String(r.evidence) } : {}), ...(r.store_id ? { storeId: String(r.store_id) } : {}),
+    }));
+}
+
+export const deleteNicheLearning = (db: DatabaseSync, id: string) => db.prepare('DELETE FROM niche_learnings WHERE id = ?').run(id).changes > 0;

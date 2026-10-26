@@ -24,3 +24,4 @@ export { XP, xpForLevel, levelForXp, levelProgress, rankForLevel, demoXp, awardX
 export { CREDITS, saveCreative, listCreatives, deleteCreative, creditsToday, demoMedia, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, blendedRoas, type CampaignStats, type Economics, type Verdict } from './ads';
 export { DEFAULT_JOBS, createDefaultJobs } from './jobs';
+export { nicheKey, addNicheLearning, listNicheLearnings, deleteNicheLearning } from './niche';
