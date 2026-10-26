@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import type { Agent, AgentEvent, AgentRun, ApprovalRequest, LiveMessage } from '@frontline/shared';
+import type { Agent, AgentEvent, AgentRun, ApprovalRequest, LiveMessage, SquadMission } from '@frontline/shared';
 import { applyOfficeMessage, emptyOffice, mergeOfficeSnapshot, workerActivity } from './events';
 
 const agent: Agent = { id: 'glow:copywriter', storeId: 'glow', role: 'copywriter', status: 'idle', level: 1, xp: 0 };
@@ -54,4 +54,15 @@ test('an old run cannot replace a newer active task, and disabled agents stay of
   expect(workerActivity(state, agent.id).run?.id).toBe('new');
   state = { ...state, agents: [{ ...agent, status: 'offline' }] };
   expect(workerActivity(state, agent.id).status).toBe('offline');
+});
+
+test('mission progress deduplicates across reconnects and rejects old step snapshots', () => {
+  const mission: SquadMission = { id: 'm1', storeId: 'glow', title: 'Launch', createdAt: run.createdAt, status: 'running', steps: [{ id: 'copy', role: 'copywriter', task: 'Write', dependsOn: [], status: 'running', runId: 'r1' }] };
+  let state = mergeOfficeSnapshot(emptyOffice(), [agent], [run], [], [mission]);
+  const done: SquadMission = { ...mission, status: 'done', steps: [{ ...mission.steps[0]!, status: 'done', deliverable: 'Headline ready' }] };
+  state = applyOfficeMessage(state, { type: 'mission', mission: done });
+  state = applyOfficeMessage(state, { type: 'mission', mission: done });
+  state = mergeOfficeSnapshot(state, [agent], [run], [], [mission]);
+  expect(state.missions.m1).toEqual(done);
+  expect(state.events.filter((e) => e.type === 'workflow.advanced')).toHaveLength(2);
 });

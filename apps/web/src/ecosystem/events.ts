@@ -1,16 +1,17 @@
-import type { Agent, AgentRun, ApprovalRequest, LiveMessage } from '@frontline/shared';
+import type { Agent, AgentRun, ApprovalRequest, LiveMessage, SquadMission } from '@frontline/shared';
 import type { Animation } from './characters';
 
 export type OfficeStatus = 'idle' | 'queued' | 'planning' | 'running' | 'using_tool' | 'collaborating' | 'awaiting_approval' | 'completed' | 'failed' | 'offline';
 export interface AgentOfficeEvent {
   id: string;
-  type: 'task.queued' | 'task.started' | 'task.completed' | 'task.failed' | 'task.cancelled' | 'tool.started' | 'approval.required' | 'handoff';
+  type: 'task.queued' | 'task.started' | 'task.completed' | 'task.failed' | 'task.cancelled' | 'tool.started' | 'approval.required' | 'handoff' | 'workflow.advanced';
   agentId: string;
   runId: string;
   at: string;
   summary: string;
   toAgentId?: string;
   approvalId?: string;
+  missionId?: string;
 }
 interface ToolActivity { calls: Record<string, string>; resolved: string[] }
 export interface OfficeState {
@@ -19,8 +20,9 @@ export interface OfficeState {
   approvals: Record<string, ApprovalRequest>;
   tools: Record<string, ToolActivity>;
   events: AgentOfficeEvent[];
+  missions: Record<string, SquadMission>;
 }
-export const emptyOffice = (): OfficeState => ({ agents: [], runs: {}, approvals: {}, tools: {}, events: [] });
+export const emptyOffice = (): OfficeState => ({ agents: [], runs: {}, approvals: {}, tools: {}, events: [], missions: {} });
 export const activeRun = (run: AgentRun) => run.status === 'running' || run.status === 'queued';
 const ORDER = { queued: 0, running: 1, done: 2, error: 2, cancelled: 2 };
 const EVENT = { queued: 'task.queued', running: 'task.started', done: 'task.completed', error: 'task.failed', cancelled: 'task.cancelled' } as const;
@@ -51,6 +53,7 @@ function handoffs(state: OfficeState): OfficeState {
   return state;
 }
 export function applyOfficeMessage(state: OfficeState, message: LiveMessage, now = new Date().toISOString()): OfficeState {
+  if (message.type === 'mission') return missionEvent(state, message.mission, now);
   if (message.type === 'run') return handoffs(runEvent(state, message.run));
   if (message.type === 'approval') return approvalEvent(state, message.approval);
   if (message.type !== 'run_event') return state;
@@ -66,10 +69,22 @@ export function applyOfficeMessage(state: OfficeState, message: LiveMessage, now
   state = { ...state, tools: { ...state.tools, [run.id]: { ...old, calls: { ...old.calls, [e.id]: e.name } } } };
   return event(state, { id: `${run.id}:tool:${e.id}`, type: 'tool.started', agentId: run.agentId, runId: run.id, at: now, summary: e.name });
 }
-export function mergeOfficeSnapshot(state: OfficeState, agents: Agent[], runs: AgentRun[], approvals: ApprovalRequest[]): OfficeState {
+function missionEvent(state: OfficeState, mission: SquadMission, at = mission.createdAt): OfficeState {
+  const old = state.missions[mission.id];
+  if (old && old.status !== 'running' && mission.status === 'running') return state;
+  // A delayed snapshot must not rewind a step that has already finished.
+  if (old && old.steps.some((step) => ['done', 'error', 'cancelled'].includes(step.status) && mission.steps.find((s) => s.id === step.id)?.status !== step.status)) return state;
+  state = { ...state, missions: { ...state.missions, [mission.id]: mission } };
+  const step = mission.steps.find((s) => s.status === 'running') ?? mission.steps.at(-1);
+  if (!step) return state;
+  return event(state, { id: `mission:${mission.id}:${mission.steps.map((s) => `${s.id}:${s.status}:${s.runId ?? ''}`).join(',')}`, type: 'workflow.advanced', missionId: mission.id,
+    agentId: `${mission.storeId}:${step.role}`, runId: step.runId ?? '', at, summary: `${mission.title} · ${mission.steps.filter((s) => s.status === 'done').length}/${mission.steps.length} steps complete · ${mission.status}` });
+}
+export function mergeOfficeSnapshot(state: OfficeState, agents: Agent[], runs: AgentRun[], approvals: ApprovalRequest[], missions: SquadMission[] = []): OfficeState {
   state = { ...state, agents };
   for (const run of runs) state = runEvent(state, run);
   for (const approval of approvals) state = approvalEvent(state, approval);
+  for (const mission of missions) state = missionEvent(state, mission);
   return handoffs(state);
 }
 export function workerActivity(state: OfficeState, agentId: string, now = Date.now()): { status: OfficeStatus; animation: Animation; run?: AgentRun; tool?: string } {

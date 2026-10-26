@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSquad } from '@frontline/agents';
-import { OFFICE_DESKS, type OfficeSeat } from '@frontline/shared';
+import { OFFICE_DESKS, type OfficeSeat, type OfficeStats } from '@frontline/shared';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
@@ -56,4 +56,15 @@ test('validates untrusted inputs and refuses unknown desks and agents', async ()
   await deploy();
   for (const body of [null, {}, { archived: false }, { deskId: null }, { position: { x: 36, y: 0 } }, { position: { x: 0.5, y: 1 } }, { displayName: 'x'.repeat(61) }, { appearance: { color: 'url(evil)' } }]) expect((await send('PATCH', '/one:copywriter', body)).status).toBe(400);
   expect((await send('DELETE', '/missing')).status).toBe(404);
+});
+
+test('statistics count durable runs beyond the recent feed and exclude cancellations from success', async () => {
+  expect(await (await app.request('/api/ecosystem/stats')).json()).toMatchObject({ activeTasks: 0, successRate: null, costUsd: 0 });
+  const insert = db.prepare("INSERT INTO agent_runs (id,store_id,agent_id,task,status,created_at,input_tokens,output_tokens,cost_usd) VALUES (?,'one','one:copywriter','Task',?,'2026-10-26',10,5,0.1)");
+  for (let i = 0; i < 210; i++) insert.run(String(i), 'done');
+  for (const status of ['error', 'cancelled', 'running', 'queued']) insert.run(status, status);
+  db.prepare("INSERT INTO squad_missions (id,store_id,title,steps_json,created_at) VALUES ('m','one','Launch','[]','2026-10-26')").run();
+  const stats = await (await app.request('/api/ecosystem/stats')).json() as OfficeStats;
+  expect(stats).toMatchObject({ activeTasks: 2, completedTasks: 210, failedTasks: 1, successRate: 210 / 211, activeTeams: 1, inputTokens: 2140, outputTokens: 1070 });
+  expect(stats.costUsd).toBeCloseTo(21.4);
 });

@@ -1222,3 +1222,14 @@ export interface OfficeSeat {
   archived: boolean;
   updatedAt: string;
 }
+
+export interface OfficeStats {
+  activeTasks: number;
+  completedTasks: number;
+  failedTasks: number;
+  successRate: number | null;
+  activeTeams: number;
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}

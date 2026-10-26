@@ -61,7 +61,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-09 Agent panel: click a character → profile, live activity, performance (runs, cost/tokens where present), actions (chat, assign task, output, history, configure, pause/cancel, focus) using existing endpoints.
 - [x] ECO-10 Assign Task: compact command panel → real run on that agent; loading / success / failure / awaiting-approval states shown in the panel and on the character.
 - [x] ECO-11 Deploy wizard: "+ Deploy Agent" picks an existing agent, department, free desk, name override, appearance; entry walk-in animation; counter `n / 30`; capacity block; archive keeps history.
-- [ ] ECO-12 Live activity feed + stat cards from real data (deployed n/30, active tasks, success rate, active teams); click an event → focus agent / open task.
+- [x] ECO-12 Live activity feed + stat cards from real data (deployed n/30, active tasks, success rate, active teams); click an event → focus agent / open task.
 - [ ] ECO-13 Handoffs: when real flow steps hand work between agents, the sender walks to the receiver, speech bubble summarizes the real event; communication history.
 - [ ] ECO-14 Meetings: multi-agent flows gather participants at the table, objective above it, then they return to work; mission panel (spec §7).
 - [ ] ECO-15 Other tabs: Department View, Agent List, Task Board, Performance — built from the same data, compact.
@@ -75,6 +75,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-12: Real all-time run totals and active mission counts via read-only stats API; labelled success denominator excludes cancelled/unfinished runs. Feed shows actual outputs/tools/approvals/handoffs/mission progress, focuses seated agents and links runs. Mission snapshots reject regressed steps; 214-run aggregation and feed navigation tests. Browser cards/feed/focus inspected (.agent/eco-12*.png); pnpm check 121 files / 635 tests pass.
 
 - 2026-10-26 ECO-11: Deploy dialog selects existing specialists with inherited engine/permissions, available desks, name and six appearance controls with live portrait. Archived workers restore identity; full office is blocked. Browser deployed Redline at advertising-1 then archived it, counter 4→5→4 and preserved seat record verified (.agent/eco-11.png). 119 files / 631 tests pass, including conflict recovery and capacity.
 

@@ -6,7 +6,7 @@ import { Ecosystem } from './Ecosystem';
 
 vi.mock('./OfficeScene', () => ({ OfficeScene: () => <div>Office canvas</div> }));
 vi.mock('./useOffice', () => ({ useOffice: () => ({ state: { agents: [], runs: {}, approvals: {}, tools: {}, events: [] }, connected: true, error: '' }) }));
-vi.mock('./api', () => ({ useSeats: () => ({ data: [] }) }));
+vi.mock('./api', () => ({ useSeats: () => ({ data: [] }), useOfficeStats: () => ({ data: { activeTasks: 0, activeTeams: 0, successRate: null } }) }));
 
 afterEach(cleanup);
 test('office tabs and collapsible activity are keyboard-addressable', () => {

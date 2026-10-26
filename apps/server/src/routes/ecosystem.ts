@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { OFFICE_DESKS, OFFICE_GRID, type OfficeAppearance, type OfficeSeat } from '@frontline/shared';
+import { OFFICE_DESKS, OFFICE_GRID, type OfficeAppearance, type OfficeSeat, type OfficeStats } from '@frontline/shared';
 import type { Db } from '../db';
 
 const DEFAULT_LOOK: OfficeAppearance = { color: '#ff2a3a', hair: 0, skin: 0, outfit: 'jacket', accessory: 'headset' };
@@ -16,6 +16,17 @@ function seat(r: Record<string, unknown>): OfficeSeat {
 export function ecosystemRoutes(db: Db) {
   const get = (id: string) => { const r = db.prepare('SELECT * FROM ecosystem_seats WHERE agent_id = ?').get(id); return r && seat(r); };
   return new Hono()
+    .get('/api/ecosystem/stats', (c) => {
+      const r = db.prepare(`SELECT coalesce(sum(status IN ('queued','running')),0) AS active,
+        coalesce(sum(status = 'done'),0) AS completed, coalesce(sum(status = 'error'),0) AS failed,
+        coalesce(sum(input_tokens),0) AS input, coalesce(sum(output_tokens),0) AS output, coalesce(sum(cost_usd),0) AS cost FROM agent_runs`).get()!;
+      const completed = Number(r.completed), failed = Number(r.failed);
+      return c.json({ activeTasks: Number(r.active), completedTasks: completed, failedTasks: failed,
+        successRate: completed + failed ? completed / (completed + failed) : null,
+        activeTeams: Number(db.prepare('SELECT count(*) AS n FROM squad_missions WHERE ended_at IS NULL').get()!.n),
+        inputTokens: Number(r.input), outputTokens: Number(r.output), costUsd: Number(r.cost),
+      } satisfies OfficeStats);
+    })
     .get('/api/ecosystem/seats', (c) => c.json(db.prepare('SELECT * FROM ecosystem_seats ORDER BY desk_id, agent_id').all().map(seat)))
     .post('/api/ecosystem/seats', async (c) => {
       const body: unknown = await c.req.json().catch(() => null);
