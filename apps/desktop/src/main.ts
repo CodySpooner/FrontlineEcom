@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, nativeImage, safeStorage, shell, Tray, utilityProcess } from 'electron';
+import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, safeStorage, shell, Tray, utilityProcess } from 'electron';
 import { createServer, type AddressInfo } from 'node:net';
 import { join } from 'node:path';
 import { loadKey } from './key';
@@ -20,6 +20,9 @@ let win: BrowserWindow | undefined;
 let tray: Tray | undefined;
 let quitting = false;
 
+// Windows only shows toasts for an app id it knows: the installer's shortcut carries this one (electron-builder appId).
+if (app.isPackaged) app.setAppUserModelId('com.frontline-ecom.app');
+
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
   app.on('second-instance', show);
@@ -40,6 +43,8 @@ function show() {
 async function start() {
   Menu.setApplicationMenu(null);
   const url = DEV_URL ?? (await startApi());
+  // Before the window loads (the first start takes a while): nothing raised meanwhile is missed.
+  toastNotifications(url);
   win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -78,6 +83,36 @@ async function start() {
     ? [{ label: 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings(LOGIN).openAtLogin, click: (item) => app.setLoginItemSettings({ ...LOGIN, openAtLogin: item.checked }) }]
     : [];
   tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Frontline Ecom', click: show }, ...startWithWindows, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));
+}
+
+// Shown toasts are kept referenced: a garbage-collected Notification no longer reports its click.
+const toasts = new Set<Notification>();
+
+/**
+ * While the window is hidden or in the background, the app's notifications (already filtered by Settings →
+ * Notifications) also show as Windows toasts; a click opens the window on that notification's page.
+ */
+function toastNotifications(url: string) {
+  const ws = new WebSocket(`${url.replace(/^http/, 'ws')}/api/live`);
+  ws.onmessage = (m) => {
+    const msg = JSON.parse(String(m.data)) as { type: string; notification?: { title: string; body?: string; link?: string } };
+    const n = msg.notification;
+    if (msg.type !== 'notification' || !n || (win?.isVisible() && win.isFocused())) return;
+    const toast = new Notification({ title: n.title, body: n.body ?? '', icon: ICON });
+    const done = () => toasts.delete(toast);
+    toast.on('click', () => {
+      done();
+      if (n.link && win && new URL(win.webContents.getURL()).pathname !== n.link) void win.loadURL(new URL(n.link, url).href);
+      show();
+    });
+    toast.on('close', done);
+    toasts.add(toast);
+    toast.show();
+  };
+  // The API restarted (or the app is quitting): reconnect.
+  ws.onclose = () => {
+    if (!quitting) setTimeout(() => toastNotifications(url), 3000);
+  };
 }
 
 /** Exit code the API uses to ask for a restart (e.g. after staging a backup restore); not counted as a crash. */
