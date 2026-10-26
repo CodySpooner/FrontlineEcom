@@ -38,7 +38,9 @@ outcome checks.
    - themes: 14 days before vs after
 
    Windows are counted in the store's own days (a live store dates its data in its zone), and a change is judged only once
-   its last day there is over. Each judgement becomes a memory and moves the confidence of what that run learned. Learnings that 2+ live stores of
+   its last day there is over. Each judgement becomes a memory and moves the confidence of what that run learned. In the prompt every memory says
+   who it's from (owner, owner's no, measured, squad); only the app sets the `outcome` and `denied` tags, and an agent
+   can't rewrite an owner note. Learnings that 2+ live stores of
    a niche (a custom niche by its name) found on their own become a request to share them with the whole niche (hourly, `proposeNichePromotions`;
    the Market Analyst can also ask with `promote_niche_learning`).
 

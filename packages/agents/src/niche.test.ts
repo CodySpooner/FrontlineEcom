@@ -38,17 +38,24 @@ test('a saved custom pack reaches the prompt of stores in that niche', () => {
   expect(assemblePrompt({ agent, store, today: '2026-10-26' })).toContain(pack);
 });
 
-test('approving save_niche_pack stores the drafted pack', async () => {
+test("approving save_niche_pack stores the drafted pack: the store's own niche only, with the pack on the request", async () => {
+  const asked: { reason: string }[] = [];
   const approvals = {
-    create: (i: object) => ({ ...i, id: 'a1', status: 'pending' as const, createdAt: '' }) as never,
+    create: (i: { reason: string }) => (asked.push(i), { ...i, id: 'a1', status: 'pending' as const, createdAt: '' }) as never,
     decision: async () => ({ status: 'approved' }) as never,
   };
   const env = { db: { prepare: () => ({ get: () => undefined }) } as never, summary: () => ({}) as never, approvals };
   const analyst = { ...agent, id: 'pens:market_analyst', role: 'market_analyst' as const, autonomy: 'ask' as const };
   const pack = '# Vintage fountain pens niche pack\n\n## Customer\n- Collectors.';
-  const steps = [{ call: 'request_approval' as const, input: { title: 'Save the pack', reason: 'drafted', kind: 'save_niche_pack', payload: { slug: 'vintage-fountain-pens', markdown: pack } } }];
+  // Aimed at another niche: every store of that niche would load it. It lands on this store's own niche instead.
+  const steps = [{ call: 'request_approval' as const, input: { title: 'Save the pack', reason: 'drafted', kind: 'save_niche_pack', payload: { slug: 'k-beauty', markdown: pack } } }];
   const events = [];
   for await (const e of runAgent({ agent: analyst, store, task: 't', env }, fakeEngine(() => steps))) events.push(e);
   expect(events.find((e) => e.type === 'tool_result')).toMatchObject({ isError: false, output: expect.stringContaining('Niche pack saved') });
   expect(customNichePack(store.nicheDetail)).toBe(pack);
+  expect(customNichePack('k-beauty')).toBe('');
+  expect(asked[0]!.reason).toBe(`drafted\n\n${pack}`); // the owner approves the pack itself
+  const outputs: string[] = [];
+  for await (const e of runAgent({ agent: analyst, store: { ...store, niche: 'beauty' }, task: 't', env }, fakeEngine(() => steps))) if (e.type === 'tool_result') outputs.push(e.output);
+  expect(outputs).toEqual(['Not sent: only a store in a custom niche saves a niche pack, and only its own.']);
 });

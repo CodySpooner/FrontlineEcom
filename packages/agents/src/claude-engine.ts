@@ -106,9 +106,12 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
           if (movesSpend(toolName, toolInput)) {
             return { behavior: 'deny', message: "Not allowed: budget, bid and status changes on an ad account go through propose_ad_change (the Ad Strategist's), where the owner's caps apply." };
           }
+          const shown = JSON.stringify(toolInput);
+          // The owner approves what they can read: an input cut to fit would run in full.
+          if (shown.length > 2000) return { behavior: 'deny', message: `Not sent: the input is ${shown.length} characters and the owner's request shows 2000. Split it into smaller calls.` };
           const { approved, message } = await requestApproval(ctx, {
             title: `Allow ${toolName.replace(/^mcp__/, '').replace('__', ': ')}`,
-            reason: JSON.stringify(toolInput).slice(0, 2000),
+            reason: shown,
             action: { kind: 'tool_use', payload: { tool: toolName, input: toolInput } },
           });
           return approved ? { behavior: 'allow', updatedInput: toolInput } : { behavior: 'deny', message };
@@ -207,6 +210,12 @@ function resultText(content: unknown): string {
 const READ_VERBS = /^(get|list|search|read|fetch|describe|lookup|find)(_|$)/;
 export const isReadOnly = (toolName: string) => toolName.startsWith('mcp__') && READ_VERBS.test(toolName.split('__').at(-1) ?? '');
 
-/** A write on an ad server (mcp__meta_ads__…) whose name or input keys touch budget, bid, spend or status. */
+/**
+ * A write on an ad server (mcp__meta_ads__…) whose name, or any identifier in its input (a key, or a value like
+ * {"field": "daily_budget"}), touches budget, bid, spend or status. Identifiers split on _ and camelCase, so ad copy
+ * ("Forbidden fruit") doesn't count.
+ */
 export const movesSpend = (toolName: string, input: unknown) =>
-  /^mcp__\w+_ads__/.test(toolName) && (/budget|bid|spend|status|pause|resume|activate/i.test(toolName.split('__').at(-1)!) || /"[^"]*(budget|bid|spend|status)[^"]*"\s*:/i.test(JSON.stringify(input)));
+  /^mcp__\w+_ads__/.test(toolName) &&
+  (/budget|bid|spend|status|pause|resume|activate/i.test(toolName.split('__').at(-1)!) ||
+    [...JSON.stringify(input).matchAll(/"([A-Za-z][A-Za-z0-9_]*)"/g)].some((m) => m[1]!.split(/_|(?<=[a-z0-9])(?=[A-Z])/).some((w) => /^(budget|bids?|spend|status)$/i.test(w))));

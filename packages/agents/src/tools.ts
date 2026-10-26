@@ -3,7 +3,7 @@ import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRI
 import { z } from 'zod';
 import { economics, reviewCampaigns, thresholds, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
-import { searchMemory, writeMemory } from './memory';
+import { agentTags, searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
 import { getPageDraft, listPageDrafts, savePageDraft, unsafeHtml } from './pages';
 import { listFlowDrafts, saveFlowDraft } from './flows';
@@ -88,7 +88,7 @@ const defineTool = <Shape extends z.ZodRawShape>(t: AppTool<Shape>) => t as unkn
 function csv(rows: Record<string, unknown>[]): string {
   if (!rows.length) return '(none)';
   const cols = Object.keys(rows[0]!);
-  return [cols.join(','), ...rows.map((r) => cols.map((c) => String(r[c] ?? '').replaceAll(',', ';')).join(','))].join('\n');
+  return [cols.join(','), ...rows.map((r) => cols.map((c) => String(r[c] ?? '').replaceAll(',', ';').replace(/[\r\n]+/g, ' ')).join(','))].join('\n');
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -583,9 +583,10 @@ export const APP_TOOLS: AppTool[] = [
       } catch (e) {
         return `Not sent: ${(e as Error).message}`;
       }
+      const hosts = outsideHosts(files.map((f) => f.body));
       const { approved, message } = await requestApproval(ctx, {
         title: `Publish theme change: ${title}`.slice(0, 80),
-        reason: `${summary} Preview: ${copy.previewUrl} . Publishing makes the copy "${copy.name}" the live theme; edits made to the live theme after ${new Date().toISOString().slice(0, 10)} are not in it.`,
+        reason: `${hosts.length ? `It loads from outside Shopify: ${hosts.join(', ')}. ` : ''}${summary} Preview: ${copy.previewUrl} . Publishing makes the copy "${copy.name}" the live theme; edits made to the live theme after ${new Date().toISOString().slice(0, 10)} are not in it.`,
         action: { kind: 'store.publish_theme', payload: { themeId: copy.id, name: copy.name, previewUrl: copy.previewUrl, files: files.map((f) => f.filename) } },
       });
       return approved ? `${message}. "${copy.name}" goes live now; compare the same funnel stage over an equal window before calling it.` : message;
@@ -820,7 +821,7 @@ export const APP_TOOLS: AppTool[] = [
       tags: z.array(z.string()).max(6).optional(),
     },
     run: async (args, ctx) => {
-      const memory = writeMemory(ctx.db, { ...args, storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}) });
+      const memory = writeMemory(ctx.db, { ...args, tags: agentTags(args.tags), storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}) });
       ctx.emit({ type: 'memory_written', memory });
       return 'Saved.';
     },
@@ -844,6 +845,11 @@ export const APP_TOOLS: AppTool[] = [
       if (OWN_TOOL[kind]) return `Not sent: ${kind} requests come from ${OWN_TOOL[kind]}, which checks the numbers and the owner's caps. Use it instead.`;
       const no = kind === 'store.add_products' && noStoreWrites(ctx.store);
       if (no) return no;
+      if (kind === 'save_niche_pack') {
+        if (ctx.store.niche !== 'other' || !ctx.store.nicheDetail) return 'Not sent: only a store in a custom niche saves a niche pack, and only its own.';
+        payload = { ...payload, slug: ctx.store.nicheDetail }; // every store of that niche loads it: never another niche's
+        reason = `${reason}\n\n${String(payload.markdown ?? '')}`; // what the owner approves is what gets saved
+      }
       const amountUsd = amount === undefined ? undefined : await inUsd(ctx, amount);
       // Nothing in the app carries some kinds out (price tests, customer messages...): the owner does, so say so up front.
       const manual = !ACTIONS[kind] && !OUTLIVE_RUN.includes(kind);
@@ -857,15 +863,25 @@ export const APP_TOOLS: AppTool[] = [
   }),
 ];
 
+/** The agent's autonomy now: `ctx.agent` is the run's copy, and the owner may have taken it off autopilot since. */
+const autonomyNow = (ctx: ToolContext) => String(ctx.db.prepare('SELECT autonomy FROM agents WHERE id = ?').get(ctx.agent.id)?.autonomy ?? ctx.agent.autonomy);
+
+/**
+ * Hosts outside Shopify's own that theme files reference (src/href/url(), protocol-relative included): a theme runs
+ * scripts, and the preview looks the same with a skimmer in it. ponytail: literal URLs only; a script that assembles
+ * one at runtime isn't seen, so a list here is a warning, its absence no guarantee.
+ */
+export const outsideHosts = (bodies: string[]) =>
+  [...new Set(bodies.flatMap((b) => [...b.matchAll(/(?:https?:)?\/\/([a-z0-9-]+(?:\.[a-z0-9-]+)+)/gi)].map((m) => m[1]!.toLowerCase())))]
+    .filter((h) => !/(^|\.)(shopify\.com|shopifycdn\.com|shopifycloud\.com|myshopify\.com|shopifysvc\.com)$/.test(h))
+    .sort();
+
 /**
  * Asks the owner and waits. `suggest` agents may not ask. With `autopilot` (only tools that compute the amount
  * themselves pass it), `autopilot` agents approve themselves when the owner enabled autopilot for this action kind on
  * the store and the amount at stake fits what is left of today's cap for that kind (logged on the request as `auto` +
  * a note in the reason).
  */
-/** The agent's autonomy now: `ctx.agent` is the run's copy, and the owner may have taken it off autopilot since. */
-const autonomyNow = (ctx: ToolContext) => String(ctx.db.prepare('SELECT autonomy FROM agents WHERE id = ?').get(ctx.agent.id)?.autonomy ?? ctx.agent.autonomy);
-
 export async function requestApproval(ctx: ToolContext, req: { title: string; reason: string; action: ApprovalAction; autopilot?: boolean }) {
   const { agent } = ctx;
   const autonomy = autonomyNow(ctx);

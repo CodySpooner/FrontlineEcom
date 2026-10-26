@@ -19,10 +19,14 @@ export interface NewMemory {
 const KINDS: MemoryKind[] = ['fact', 'learning', 'preference'];
 const clamp = (n: number) => Math.min(1, Math.max(0, n));
 
+/** Tags only the app sets: `outcome` (a measured result of an approved change) and `denied` (the owner's no). */
+export const agentTags = (tags: string[] = []) => tags.filter((t) => !['outcome', 'denied'].includes(t.trim().toLowerCase()));
+
 /** Saves a memory. The same text (case-insensitive) for the same store is merged instead of duplicated. */
 export function writeMemory(db: DatabaseSync, m: NewMemory, now = new Date()): StoreMemory {
   const text = m.text.trim();
   const same = db.prepare('SELECT * FROM store_memory WHERE store_id = ? AND lower(text) = lower(?)').get(m.storeId, text);
+  if (same?.agent_id === 'owner' && m.agentId !== 'owner') return toMemory(same); // the owner's note stays theirs, evidence and all
   if (same) {
     const tags = [...new Set([...parseTags(same.tags), ...(m.tags ?? [])])];
     db.prepare('UPDATE store_memory SET confidence = max(confidence, ?), evidence = coalesce(?, evidence), tags = ? WHERE id = ?').run(
@@ -165,7 +169,7 @@ export function parseLearnings(reply: string): Omit<NewMemory, 'storeId' | 'agen
       text: (i.text as string).trim(),
       ...(typeof i.evidence === 'string' && i.evidence ? { evidence: i.evidence } : {}),
       confidence: clamp(typeof i.confidence === 'number' ? i.confidence : 0.5),
-      tags: Array.isArray(i.tags) ? i.tags.filter((t): t is string => typeof t === 'string') : [],
+      tags: agentTags(Array.isArray(i.tags) ? i.tags.filter((t): t is string => typeof t === 'string') : []),
     }));
 }
 

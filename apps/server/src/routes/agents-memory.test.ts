@@ -45,6 +45,12 @@ describe('store memory', () => {
     expect(listMemory(db, 'glow')).toHaveLength(1);
   });
 
+  test("an agent writing the owner's note word for word leaves it the owner's", () => {
+    const note = writeMemory(db, mem('Never discount below $30', { agentId: 'owner', kind: 'preference', confidence: 1 }), now);
+    expect(writeMemory(db, mem('never discount below $30', { evidence: 'the owner changed their mind', tags: ['pricing'] }), now)).toEqual(note);
+    expect(listMemory(db, 'glow')).toEqual([note]);
+  });
+
   test('ranks by relevance × recency × confidence', () => {
     const led = writeMemory(db, mem('LED face masks convert best with before/after UGC'), now);
     const pref = writeMemory(db, mem('Owner wants weekly reports on Monday mornings', { kind: 'preference', confidence: 0.9 }), now);
@@ -95,6 +101,7 @@ describe('reflection', () => {
       {"kind":"fact","text":"   "},
       {"kind":"preference","text":"Owner caps tests at $50/day"}
     ]\n\`\`\``;
+    expect(parseLearnings(reply.replace('"tags":["tiktok"]', '"tags":["tiktok","Outcome","denied"]'))[0]!.tags).toEqual(['tiktok']); // the app's tags, not an agent's
     expect(parseLearnings(reply)).toEqual([
       { kind: 'learning', text: 'TikTok hooks under 2s double hold rate', evidence: 'hold 41% vs 19%', confidence: 1, tags: ['tiktok'] },
       { kind: 'preference', text: 'Owner caps tests at $50/day', confidence: 0.5, tags: [] },
