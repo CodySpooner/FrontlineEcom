@@ -213,6 +213,19 @@ describe('agent tools on demo data', () => {
     expect(plain!.output.split('\n')[0]).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts');
   });
 
+  test("metrics_timeseries marks today's row as today so far, not a whole day", async () => {
+    const day = new Date().toLocaleDateString('en-CA'); // a demo store's today is this machine's
+    const added = db.prepare(`INSERT OR IGNORE INTO daily_metrics (store_id, date) VALUES ('glow', ?)`).run(day).changes;
+    try {
+      const [series] = results(await run(input('glow', 'market_analyst'), [{ call: 'metrics_timeseries', input: { days: 3 } }, done]));
+      const dates = series!.output.split('\n').slice(1).map((r) => r.split(',')[0]);
+      expect(dates.at(-1)).toBe(`${day} (today so far)`);
+      expect(dates.slice(0, -1).every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d!))).toBe(true);
+    } finally {
+      if (added) db.prepare(`DELETE FROM daily_metrics WHERE store_id = 'glow' AND date = ?`).run(day); // the db is shared by these tests
+    }
+  });
+
   test("metrics_timeseries profit nets the store's fee estimate, like the dashboard's", async () => {
     db.prepare(`UPDATE stores SET fee_percent = 10, fee_per_order = 0.3 WHERE id = 'pawsome'`).run();
     const [series] = results(await run(input('pawsome', 'market_analyst'), [{ call: 'metrics_timeseries', input: { days: 3 } }, done]));

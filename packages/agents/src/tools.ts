@@ -95,8 +95,10 @@ function csv(rows: Record<string, unknown>[]): string {
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 /** The first of the last `days` dates, today included, in the zone the store's data is dated in: a connected shop's own, else this machine's (demo data). */
+/** The store's today: a connected shop's own day, demo data's this machine's. */
+const today = (store: Store) => new Date().toLocaleDateString('en-CA', store.connected ? { timeZone: store.timezone } : {});
 const since = (days: number, store: Store) => {
-  const d = new Date(`${new Date().toLocaleDateString('en-CA', store.connected ? { timeZone: store.timezone } : {})}T00:00:00Z`);
+  const d = new Date(`${today(store)}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + 1 - days);
   return d.toISOString().slice(0, 10);
 };
@@ -182,7 +184,7 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'metrics_timeseries',
     description:
-      'Daily revenue, ad spend, COGS (product cost plus the sales tax/VAT collected on orders), fees (the estimate set for the store), profit (revenue - ad spend - COGS - fees), orders, sessions, add-to-carts and checkouts for the last N days (CSV, oldest first), plus amazon_revenue and amazon_orders when the store also sells on Amazon as a channel.',
+      'Daily revenue, ad spend, COGS (product cost plus the sales tax/VAT collected on orders), fees (the estimate set for the store), profit (revenue - ad spend - COGS - fees), orders, sessions, add-to-carts and checkouts for the last N days (CSV, oldest first; the row for today is marked "(today so far)"), plus amazon_revenue and amazon_orders when the store also sells on Amazon as a channel.',
     input: { days: z.number().int().min(1).max(365).default(30) },
     run: async ({ days }, ctx) => {
       const rows = ctx.db
@@ -210,6 +212,9 @@ export const APP_TOOLS: AppTool[] = [
       // store's ads mostly send shoppers to its own site. An Amazon store's own sales are the whole store: no split.
       const amazon = ctx.store.platform !== 'amazon' && rows.some((r) => Number(r.amazon_orders) || Number(r.amazon_revenue));
       if (!amazon) for (const r of rows) delete r.amazon_revenue, delete r.amazon_orders;
+      // Today's row counts up through the day: read as a whole day, every morning would look like a collapse.
+      const last = rows.at(-1);
+      if (last?.date === today(ctx.store)) last.date = `${String(last.date)} (today so far)`;
       const split = amazon
         ? "(revenue and orders include Amazon's sales as a channel (amazon_revenue, amazon_orders): its shoppers aren't in sessions, its product costs aren't in cogs, and the store's ads mostly drive its own site, so take them out for conversion, margin and MER.)\n"
         : '';
