@@ -736,6 +736,11 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ text, evidence }, ctx) => {
       const niche = nicheKey(ctx.store);
+      // A demo store's numbers are seeded: what they "prove" mustn't reach a live store's squad. Alone in demo mode it's fine.
+      const live = ctx.db.prepare('SELECT niche, niche_detail FROM stores WHERE connected = 1').all();
+      if (!ctx.store.connected && live.some((s) => nicheKey({ niche: s.niche as Store['niche'], nicheDetail: String(s.niche_detail ?? '') }) === niche)) {
+        return "Not sent: this store runs on demo data, and a learning shared with its niche reaches the owner's live stores too.";
+      }
       if (listNicheLearnings(ctx.db, niche, 1000).some((l) => l.text.toLowerCase() === text.trim().toLowerCase())) return 'Already shared with this niche.';
       const pending = ctx.db
         .prepare(`SELECT 1 FROM approvals WHERE status = 'pending' AND json_extract(action_json, '$.kind') = 'niche.promote_learning' AND json_extract(action_json, '$.payload.niche') = ? AND lower(json_extract(action_json, '$.payload.text')) = ?`)

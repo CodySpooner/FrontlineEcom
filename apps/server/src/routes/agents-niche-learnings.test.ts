@@ -39,6 +39,14 @@ test('a learning already waiting for the owner is not proposed twice', async () 
   expect([out[0], kinds]).toEqual(['Already waiting for the owner: the same learning was proposed for this niche.', []]);
 });
 
+test("a demo store's learning isn't shared with a niche that has a live store", async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'peak'`).run(); // live, another niche: demo-only beauty, so fine
+  expect((await run([promote()], 'deny')).kinds).toEqual(['niche.promote_learning']);
+  db.prepare(`UPDATE stores SET connected = 1, niche = 'beauty' WHERE id = 'peak'`).run();
+  const { out, kinds } = await run([promote()]);
+  expect([out[0], kinds]).toEqual(["Not sent: this store runs on demo data, and a learning shared with its niche reaches the owner's live stores too.", []]);
+});
+
 test("an approved learning reaches every same-niche store's prompt, once", async () => {
   expect((await run([promote()], 'deny')).out[0]).toMatch(/^Denied by the owner/);
   expect(listNicheLearnings(db)).toEqual([]);
