@@ -247,7 +247,11 @@ export function checkThemeOutcomes(db: Db, today?: string) {
        WHERE s.demo = 0 AND substr(o.at, 1, 10) <= ?`,
     )
     .all(roughly15DaysAgo(today));
-  const funnel = db.prepare('SELECT coalesce(sum(orders), 0) AS orders, coalesce(sum(sessions), 0) AS sessions FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?');
+  // Amazon as an extra channel (core's channel_daily; a theme store is Shopify) is in orders, but its shoppers never saw the theme.
+  const funnel = db.prepare(
+    `SELECT coalesce(sum(orders), 0) - coalesce((SELECT sum(orders) FROM channel_daily WHERE store_id = ?1 AND channel = 'amazon' AND date BETWEEN ?2 AND ?3), 0) AS orders,
+       coalesce(sum(sessions), 0) AS sessions FROM daily_metrics WHERE store_id = ?1 AND date BETWEEN ?2 AND ?3`,
+  );
   for (const t of live) {
     const [storeId, agentId] = [String(t.store_id), String(t.agent_id)];
     const day = storeDay(db, storeId, String(t.at));

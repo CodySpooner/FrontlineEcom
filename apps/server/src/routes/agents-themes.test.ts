@@ -161,7 +161,7 @@ test('publishThemeChange publishes the approved copy', async () => {
   expect(db.prepare(`SELECT count(*) AS n FROM notifications WHERE title LIKE 'Couldn''t publish%'`).get()?.n).toBe(0);
 });
 
-test('a published theme change is judged on store conversion, 14 days before vs after, once', async () => {
+test("a published theme change is judged on store conversion, 14 days before vs after, once, without Amazon's orders", async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'glow'`).run();
   db.prepare(`INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('a1', 'glow', 'glow:store_developer', 'run-t', 'Publish theme change: Sticky ATC', 'r', ?, 'approved', ?)`).run(
     JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9', name: 'Frontline: Sticky ATC' } }),
@@ -174,6 +174,9 @@ test('a published theme change is judged on store conversion, 14 days before vs 
     db.prepare(`UPDATE daily_metrics SET orders = ?, sessions = ? WHERE store_id = 'glow' AND date BETWEEN ? AND ?`).run(orders, sessions, addDays(day, from), addDays(day, to));
   window(-14, -1, 20, 1000); // 2.00%
   window(1, 14, 25, 1000); // 2.50%
+  // Amazon as an extra channel adds 10 orders a day before (core's rebuild puts them in orders): not the theme's shoppers.
+  db.prepare(`UPDATE daily_metrics SET orders = orders + 10 WHERE store_id = 'glow' AND date BETWEEN ? AND ?`).run(addDays(day, -14), addDays(day, -1));
+  for (let d = -14; d <= -1; d++) db.prepare(`INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('glow', 'amazon', ?, 300, 10)`).run(addDays(day, d));
   const xp = getAgent(db, 'glow:store_developer')!.xp;
   checkThemeOutcomes(db);
   checkThemeOutcomes(db);
