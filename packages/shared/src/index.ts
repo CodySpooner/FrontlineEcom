@@ -1246,4 +1246,8 @@ export interface OfficeStats {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
+  teamsCreated: number;
+  completedMissions: number;
+  handoffs: number;
+  fullOffice: boolean;
 }

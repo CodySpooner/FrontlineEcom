@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AGENT_ROLES, OFFICE_DEPARTMENTS, OFFICE_DESKS, type Agent, type OfficeSeat } from '@frontline/shared';
 import { useCancelRun, useRuns, useUpdateAgent } from '../api/client';
-import { Badge, Button, Dialog, ErrorState, LoadingState, buttonClass } from '../components/ui';
+import { Badge, Button, Dialog, ErrorState, LoadingState, XPBar, buttonClass } from '../components/ui';
 import { ago, cents } from '../lib/format';
 import { activeRun, workerActivity, type OfficeState } from './events';
 import { WorkerPortrait } from './WorkerPortrait';
@@ -26,6 +26,7 @@ export function AgentPanel({ agent, seat, office, onClose, onFocus, assignInitia
   return <Dialog open onClose={onClose} title={name} side="right">
     <div className="eco-profile"><WorkerPortrait appearance={seat.appearance} name={name} /><div><Badge>{department?.name}</Badge><h3>{role.name}</h3><p>{agent.storeId} · {seat.deskId}</p><p>Level {agent.level} · {agent.rank ?? 'Recruit'} · {agent.xp} XP</p></div></div>
     <p className="eco-profile-copy">{role.blurb}</p>
+    {agent.levelProgress && <XPBar level={agent.level} rank={agent.rank} xp={agent.levelProgress.xp} next={agent.levelProgress.needed} />}
     <dl className="eco-details"><dt>Model</dt><dd>{agent.engine?.provider === 'demo' ? 'Demo engine · no API cost' : agent.engine?.model ?? 'Managed by the agent engine'}</dd><dt>Permissions</dt><dd>{agent.autonomy ?? 'ask'} · existing approval policy</dd><dt>Status</dt><dd>{activity.status.replaceAll('_', ' ')}</dd><dt>Current task</dt><dd>{activity.run && activeRun(activity.run) ? activity.run.task : 'No active task'}</dd>{activity.tool && <><dt>Current tool</dt><dd>{activity.tool}</dd></>}{recent && <><dt>Latest activity</dt><dd>{recent.summary}<small>{ago(recent.at)}</small></dd></>}</dl>
     <div className="eco-panel-actions">
       <Link className={buttonClass('primary', 'sm')} to={base}>Chat with Agent</Link>

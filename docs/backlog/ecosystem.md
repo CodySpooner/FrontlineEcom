@@ -69,13 +69,15 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-16 Bottom bar + display toggles (names, bubbles, department labels, workload, connections, status icons), Office Settings.
 - [x] ECO-17 Demo Mode provider: clearly labeled, separate from the real provider, exercises every visual (spec §15).
 - [x] ECO-18 Customization: outfits/colors/accessories per seat, data-driven desk/decor themes so cosmetics can be added without rewriting the map.
-- [ ] ECO-19 Gamification: levels from existing XP/ranks, office achievements from real data, trophy area.
+- [x] ECO-19 Gamification: levels from existing XP/ranks, office achievements from real data, trophy area.
 - [ ] ECO-20 Performance: 30 characters at ~60 FPS (measure and note it), atlases/batching, no React rerender per frame, reduced-motion, low-power fallback.
 - [ ] ECO-21 Acceptance pass: walk every line of spec §17 in the browser, fix gaps, record the result here.
 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-19: Trophy cabinet computes seven milestones from real seats and all-time task/mission/handoff counts. Full capacity is recorded in the existing once-only ledger during deployment and survives archive; no new XP awards or agent system. Profiles reuse the house XP bar and actual engine rank/progress. Browser cabinet verified 4/7 earned (.agent/eco-19-trophies.png); mission-success, historical-full-capacity and threshold tests. 131 files / 662 tests pass.
 
 - 2026-10-26 ECO-18: Existing workers can edit persistent names, desks and sprite appearance; occupied desks are excluded and backend conflicts retained. Three data-driven desk/floor/wall/plant/rail palettes plus a ten-department decor catalog add distinct conference, product, chart, library, mail, rack and studio props without moving geometry. Browser saved Nova's suit/glasses and reloaded the Midnight theme (.agent/eco-18-midnight.png). 129 files / 656 tests pass.
 

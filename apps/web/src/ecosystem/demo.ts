@@ -47,5 +47,5 @@ export function advanceDemo(state: OfficeState, tick: number, now = Date.now()):
 }
 export function demoStats(state: OfficeState): OfficeStats {
   const runs = Object.values(state.runs), completedTasks = runs.filter((r) => r.status === 'done').length, failedTasks = runs.filter((r) => r.status === 'error').length;
-  return { activeTasks: runs.filter(activeRun).length, completedTasks, failedTasks, successRate: completedTasks + failedTasks ? completedTasks / (completedTasks + failedTasks) : null, activeTeams: Object.values(state.missions).filter((m) => m.status === 'running').length, inputTokens: 0, outputTokens: 0, costUsd: 0 };
+  return { activeTasks: runs.filter(activeRun).length, completedTasks, failedTasks, successRate: completedTasks + failedTasks ? completedTasks / (completedTasks + failedTasks) : null, activeTeams: Object.values(state.missions).filter((m) => m.status === 'running').length, inputTokens: 0, outputTokens: 0, costUsd: 0, teamsCreated: Object.keys(state.missions).length, completedMissions: Object.values(state.missions).filter((m) => m.status === 'done').length, handoffs: runs.filter((r) => r.parentRunId).length, fullOffice: true };
 }
