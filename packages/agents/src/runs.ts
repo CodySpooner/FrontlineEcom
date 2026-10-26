@@ -187,7 +187,10 @@ export function createRunManager(opts: RunManagerOptions) {
   async function reflect(input: RunInput, done: Extract<AgentEvent, { type: 'done' }>, emit: (e: AgentEvent) => void) {
     let reply = '';
     let usage = done.usage;
-    for await (const event of runAgent({ ...input, task: REFLECTION_PROMPT, resume: done.sessionId }, engine)) {
+    // The reflection spends from what the run left of today's budget; nothing left, no reflection.
+    const left = input.budgetUsd === undefined ? undefined : input.budgetUsd - done.usage.costUsd;
+    if (left !== undefined && left <= 0) return done;
+    for await (const event of runAgent({ ...input, task: REFLECTION_PROMPT, resume: done.sessionId, ...(left !== undefined ? { budgetUsd: left } : {}) }, engine)) {
       if (event.type === 'text_delta') reply += event.text;
       if (event.type === 'done') usage = addUsage(usage, event.usage);
     }

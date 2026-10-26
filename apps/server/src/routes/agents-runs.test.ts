@@ -127,6 +127,24 @@ test("each run is told what is left of the store's daily AI budget", async () =>
   expect(budgets).toEqual([0.75]);
 });
 
+test("the reflection gets what the run left of today's budget, and is skipped when nothing is left", async () => {
+  const budgets: (number | undefined)[] = [];
+  const m = manager({
+    engine: fakeEngine((input) => {
+      budgets.push(input.budgetUsd);
+      const cost = input.task === REFLECTION_PROMPT ? 0 : Number(input.task);
+      return input.task === REFLECTION_PROMPT ? [{ type: 'done', sessionId: 's', usage }] : [{ call: 'store_summary' }, { type: 'done', sessionId: 's', usage: { ...usage, costUsd: cost } }];
+    }),
+  });
+  updateCaps(db, 'glow', { agentCostPerDay: 1 });
+  ok(m.start('glow:copywriter', '0.4'));
+  await m.idle();
+  expect(budgets.map((b) => b?.toFixed(2))).toEqual(['1.00', '0.60']);
+  ok(m.start('glow:copywriter', '0.7'));
+  await m.idle();
+  expect(budgets.slice(2).map((b) => b?.toFixed(2))).toEqual(['0.58']); // after the first reflection's $0.02; this run spends it all: no reflection call
+});
+
 test('runs that used tools reflect, and the learnings become store memory', async () => {
   const learning = '[{"kind":"learning","text":"Glow buyers respond to routine-based bundles","evidence":"AOV +18% on bundles, 30d","confidence":0.7,"tags":["offer"]}]';
   const m = manager({
