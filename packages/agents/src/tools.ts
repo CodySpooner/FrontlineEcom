@@ -16,6 +16,8 @@ export interface ToolEnv {
   db: DatabaseSync;
   /** Core's analytics summary for this store (the math lives in apps/server). */
   summary: (storeId: string, range: AnalyticsRange) => AnalyticsSummary;
+  /** The same over every store, converted to the owner's base currency (`currency`), with `byStore`. */
+  portfolio?: (range: AnalyticsRange) => AnalyticsSummary;
   approvals: ApprovalsHook;
   /** Core's decide(): lets autopilot approve within its cap. Without it every request waits for the owner. */
   decide?: (id: string, decision: ApprovalDecision) => unknown;
@@ -82,6 +84,29 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ range }, ctx) => {
       const s = ctx.summary(ctx.store.id, range);
       return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals) });
+    },
+  }),
+  defineTool({
+    name: 'compare_stores',
+    description:
+      "All of the owner's stores side by side over the last N days, in one currency: revenue, profit, net margin, ad spend, ROAS, orders, health and revenue change vs the period before (CSV). For questions across stores.",
+    input: { range: z.union([z.literal(7), z.literal(30), z.literal(90)]).default(30).describe('days') },
+    run: async ({ range }, ctx) => {
+      const p = ctx.portfolio?.(range);
+      if (!p) return 'Not available in this run.';
+      const stores = new Map(ctx.db.prepare('SELECT id, name, platform, niche FROM stores').all().map((s) => [String(s.id), s]));
+      const rows = p.byStore
+        .map(({ storeId, totals: t, deltas: d }) => {
+          const s = stores.get(storeId);
+          const health = storeHealth(t);
+          return {
+            store: `${s?.name ?? storeId}${storeId === ctx.store.id ? ' (this store)' : ''}`, platform: s?.platform, niche: s?.niche,
+            revenue: r2(t.revenue), profit: r2(t.profit), margin_pct: health.marginPct, ad_spend: r2(t.adSpend), roas: t.roas, orders: t.orders,
+            revenue_change_pct: d.revenue, health: health.status,
+          };
+        })
+        .sort((a, b) => b.revenue - a.revenue);
+      return `${p.from} to ${p.to}, amounts in ${p.currency ?? 'USD'}\n${csv(rows)}`;
     },
   }),
   defineTool({

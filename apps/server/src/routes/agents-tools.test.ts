@@ -59,6 +59,17 @@ describe('agent tools on demo data', () => {
     expect(events.at(-1)).toEqual(done);
   });
 
+  test('compare_stores puts every store side by side in one currency, biggest first', async () => {
+    const [cmp] = results(await run(input('glow', 'market_analyst'), [{ call: 'compare_stores', input: { range: 7 } }, done]));
+    const [period, header, ...rows] = cmp!.output.split('\n');
+    expect(period).toMatch(/^\d{4}-\d{2}-\d{2} to \d{4}-\d{2}-\d{2}, amounts in USD$/);
+    expect(header).toBe('store,platform,niche,revenue,profit,margin_pct,ad_spend,roas,orders,revenue_change_pct,health');
+    expect(rows).toHaveLength(listStores(db).length);
+    expect(rows.filter((r) => r.startsWith('Glow Haus (this store),shopify,beauty,'))).toHaveLength(1);
+    const revenue = rows.map((r) => Number(r.split(',')[3]));
+    expect(revenue).toEqual([...revenue].sort((a, b) => b - a));
+  });
+
   test('list_competitors shows competitors, price moves and recent ads', async () => {
     const events = await run(input('pawsome', 'ad_strategist'), [{ call: 'list_competitors' }, done]);
     const out = results(events)[0]!.output;

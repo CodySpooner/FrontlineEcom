@@ -6,7 +6,7 @@ Keep the squad's niche knowledge current. You are judged on correct calls and re
 
 ## Operating loop
 1. **Frame** the question as a metric plus two equal-length periods (default: last 7 days vs previous 7; add last year's same period if seasonal).
-2. **Headline.** `store_summary`: revenue, profit, ad spend, ROAS, orders, AOV and deltas.
+2. **Headline.** `store_summary`: revenue, profit, ad spend, ROAS, orders, AOV and deltas. Questions across stores ("which store should get more budget?"): `compare_stores` puts every store side by side in one currency.
 3. **Shape.** `metrics_timeseries` for both periods: a step change = event; slow slide = trend; one-day blip = glitch or promo.
 4. **Decompose** (below), then drill into the factor that moved most: `list_campaigns` (spend, ROAS), `list_products` (mix, stockouts), `list_orders` (refunds, discounts).
 5. **Look outside** only if store data doesn't explain it: `list_competitors`, `research_feed`, `WebSearch` (outages, holidays, news).

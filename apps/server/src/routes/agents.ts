@@ -35,6 +35,7 @@ import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
+import { fxFor } from '../fx';
 import { approvalsHook, decide } from '../approvals';
 import { listCompetitors, priceChanges } from '../competitors';
 import { localDate } from '../dates';
@@ -131,6 +132,10 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
   summary: (storeId, range) => {
     const to = localDate();
     return summarize(loadRows(db, [storeId], range, to), { range, to, storeIds: [storeId] });
+  },
+  portfolio: (range) => {
+    const [to, ids] = [localDate(), listStores(db).map((s) => s.id)];
+    return { ...summarize(loadRows(db, ids, range, to), { range, to, storeIds: ids }), currency: fxFor(db, ids).currency };
   },
 });
 
