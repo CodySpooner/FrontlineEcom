@@ -167,6 +167,9 @@ test("connected stores get the price on Shopify or WooCommerce; other platforms 
     db.prepare(`UPDATE stores SET platform = ? WHERE id = 'peak'`).run(platform); // their writers refuse one too
     expect((await run('peak', [withCompareAt]))[0]).toMatch(new RegExp(`^Not sent: ${name} has no compare-at price`));
   }
+  db.prepare(`UPDATE products SET status = 'draft' WHERE store_id = 'peak' AND id = ?`).run(id);
+  expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Not sent: TikTok Shop only reprices live products, and .* is draft\.$/);
+  db.prepare(`UPDATE products SET status = 'active' WHERE store_id = 'peak' AND id = ?`).run(id);
   db.prepare(`UPDATE stores SET platform = 'etsy' WHERE id = 'peak'`).run();
   expect((await run('peak', [price(id, to)]))[0]).toMatch(/^Approved by the owner/);
   for (let i = 0; i < 20 && !db.prepare(`SELECT 1 FROM notifications WHERE body LIKE '%not an Etsy listing%'`).get(); i++) await tick();

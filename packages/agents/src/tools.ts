@@ -806,6 +806,8 @@ export const APP_TOOLS: AppTool[] = [
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
       const sale = NO_COMPARE_AT[ctx.store.platform];
       if (compareAt !== undefined && ctx.store.connected && sale) return `Not sent: ${sale} Propose the price alone.`;
+      // Core's TikTok writer refuses a product that isn't live (draft, under review, deactivated).
+      if (ctx.store.connected && ctx.store.platform === 'tiktok_shop' && p.status !== 'active') return `Not sent: TikTok Shop only reprices live products, and ${String(p.title)} is ${String(p.status)}.`;
       // Overlapping tests on one product can't be judged apart.
       const running = ctx.db.prepare('SELECT changed_on FROM price_tests WHERE store_id = ? AND product_id = ? AND changed_on >= ?').get(ctx.store.id, productId, since(29, ctx.store));
       if (running) return `Not sent: a price test on this product has been running since ${running.changed_on}; it is judged after 14 days of sales.`;
