@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Agent, Store } from '@frontline/shared';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { assemblePrompt, customNichePack, draftNichePackTask, fakeEngine, nicheSlug, runAgent, saveNichePack } from './index';
 
 const store: Store = { id: 'pens', name: 'Ink & Nib', platform: 'etsy', niche: 'other', nicheDetail: 'Vintage Fountain Pens!', currency: 'USD', timezone: 'America/New_York', color: '#fff', connected: false };
@@ -11,10 +11,10 @@ const agent: Agent = { id: 'pens:copywriter', storeId: 'pens', role: 'copywriter
 let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'frontline-niche-'));
-  process.env.FRONTLINE_DATA_DIR = dir;
+  vi.stubEnv('FRONTLINE_DATA_DIR', dir);
 });
 afterEach(() => {
-  delete process.env.FRONTLINE_DATA_DIR;
+  vi.unstubAllEnvs();
   rmSync(dir, { recursive: true, force: true });
 });
 

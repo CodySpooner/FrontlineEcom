@@ -3,7 +3,7 @@ import type { Store } from '@frontline/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
 import { switchToReal } from '../connectors/common';
@@ -14,13 +14,13 @@ import { runManager } from './agents';
 let db: Db;
 let app: ReturnType<typeof createApp>;
 beforeEach(() => {
-  process.env.FRONTLINE_DATA_DIR = mkdtempSync(join(tmpdir(), 'activate-')); // no custom packs yet
+  vi.stubEnv('FRONTLINE_DATA_DIR', mkdtempSync(join(tmpdir(), 'activate-'))); // no custom packs yet
   db = openDb();
   seedDemo(db);
   app = createApp(db);
 });
 afterEach(() => {
-  delete process.env.FRONTLINE_DATA_DIR;
+  vi.unstubAllEnvs();
 });
 const jobsOn = (storeId: string) => Number(db.prepare('SELECT count(*) AS n FROM automation_rules WHERE store_id = ? AND enabled = 1').get(storeId)?.n);
 const notes = (storeId: string) => db.prepare(`SELECT title FROM notifications WHERE store_id = ? AND kind = 'info'`).all(storeId).map((r) => r.title);

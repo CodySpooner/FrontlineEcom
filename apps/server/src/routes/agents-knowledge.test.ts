@@ -3,20 +3,20 @@ import type { KnowledgeDoc } from '@frontline/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, beforeEach, expect, test } from 'vitest';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 
 let app: ReturnType<typeof createApp>;
 beforeEach(() => {
-  process.env.FRONTLINE_DATA_DIR = mkdtempSync(join(tmpdir(), 'kb-'));
+  vi.stubEnv('FRONTLINE_DATA_DIR', mkdtempSync(join(tmpdir(), 'kb-')));
   const db = openDb();
   seedDemo(db);
   app = createApp(db);
 });
 afterEach(() => {
-  delete process.env.FRONTLINE_DATA_DIR;
+  vi.unstubAllEnvs();
 });
 const get = async <T>(path: string) => (await (await app.request(path)).json()) as T;
 

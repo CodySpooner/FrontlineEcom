@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { listBackups } from './backups';
-import { MIGRATIONS, openDb } from './db';
+import { dataDir, MIGRATIONS, openDb } from './db';
 
 test('migrations create the Phase 1 tables and set user_version', () => {
   const db = openDb();
@@ -74,4 +74,8 @@ test("before an update's migrations run on existing data, the data is copied int
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test("tests use a temp data folder, never the dev instance's (its Knowledge Base edits, its key)", () => {
+  expect(dataDir().startsWith(tmpdir())).toBe(true);
 });
