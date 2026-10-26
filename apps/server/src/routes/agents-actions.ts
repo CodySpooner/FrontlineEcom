@@ -37,19 +37,25 @@ export const onApproved = (db: Db, fn: (db: Db, a: ApprovalRequest) => unknown) 
 /** Pushes a draft to the store's platform (core's Shopify productUpdate / pageCreate); throws a readable error. */
 export type PushPage = (d: PageDraft) => Promise<unknown>;
 
+/** Drafts on their way to a platform: a second publish (the owner's retry while the approval's push runs) would create the page twice. */
+const pushing = new Set<string>();
+
 /**
  * Publishes a Store Builder draft: connected stores get it on the platform (an error tells the owner and leaves it
  * approved); demo stores go live locally, and a draft product the page is for becomes active.
  */
 export async function publishDraft(db: Db, d: PageDraft, push: PushPage) {
   const store = getStore(db, d.storeId);
-  if (!store || d.publishedAt) return;
+  if (!store || d.publishedAt || pushing.has(d.id)) return;
   if (store.connected) {
+    pushing.add(d.id);
     try {
       await push(d);
     } catch (e) {
       notify(db, { kind: 'error', title: `Couldn't publish "${d.title}" to ${store.name}`, body: `${(e as Error).message}. It's ${d.status === 'approved' ? 'approved and ' : ''}waiting in Store Builder.`, storeId: store.id });
       return;
+    } finally {
+      pushing.delete(d.id);
     }
     markPublished(db, d.id);
     // The approval's own message went out while the push ran: say it again so the Store Builder reads "published".

@@ -113,6 +113,38 @@ test('connected stores get it on the platform; a platform error tells the owner;
   expect(seen).toEqual(['published']);
 });
 
+test('an approved draft whose push failed is published again from the Store Builder, one push at a time', async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
+  await run(() => [draft({ kind: 'page', productId: undefined, title: 'About us' })]);
+  await run(() => [{ call: 'publish_page', input: { draftId: listPageDrafts(db)[0]!.id } }], 'approve');
+  const [d] = listPageDrafts(db);
+  expect(d?.status).toBe('approved'); // Shopify isn't connected: the push failed
+  const pushed: string[] = [];
+  let done!: () => void;
+  const slow = (x: PageDraft) => new Promise<void>((r) => (done = () => (pushed.push(x.title), r())));
+  const first = publishDraft(db, d!, slow);
+  await publishDraft(db, d!, slow); // a retry while the first push runs does nothing
+  done();
+  await first;
+  expect(pushed).toEqual(['About us']);
+
+  await run(() => [draft({ kind: 'page', productId: undefined, title: 'FAQ' })]);
+  const faq = listPageDrafts(db).find((x) => x.title === 'FAQ')!;
+  await run(() => [{ call: 'publish_page', input: { draftId: faq.id } }], 'approve');
+  db.prepare(`UPDATE stores SET connected = 0 WHERE id = 'glow'`).run(); // ponytail: stands in for the platform recovering
+  const res = await app.request(`/api/page-drafts/${faq.id}/publish`, { method: 'POST' });
+  expect([res.status, ((await res.json()) as PageDraft).status]).toEqual([200, 'published']);
+});
+
+test('a store page names no product: publishing it leaves the product as it was', async () => {
+  await run(() => [draft({ kind: 'page', title: 'Summer landing' })]); // productId p-new passed along by mistake
+  const [d] = listPageDrafts(db);
+  expect(d?.productId).toBeUndefined();
+  await run(() => [{ call: 'publish_page', input: { draftId: d!.id } }], 'approve');
+  expect(listPageDrafts(db)[0]?.status).toBe('published');
+  expect(product()).toEqual({ title: 'Ice roller', status: 'draft' });
+});
+
 test('Etsy takes product pages (to the listing) but not other pages', async () => {
   db.prepare(`UPDATE stores SET connected = 1, platform = 'etsy' WHERE id = 'glow'`).run();
   await run(() => [draft(), draft({ kind: 'page', productId: undefined, title: 'About us' })]);

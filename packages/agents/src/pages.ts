@@ -14,7 +14,9 @@ const SELECT = `SELECT d.*, a.id AS approval_id, a.status AS approval_status FRO
 
 const TAGS = new Set('h1 h2 h3 h4 h5 h6 p br hr ul ol li strong b em i u s small sup sub span div blockquote a img figure figcaption table caption thead tbody tfoot tr th td'.split(' '));
 const ATTRS = new Set('href src alt title width height colspan rowspan target rel class id loading'.split(' '));
-const TAG = /<(\/?)([a-zA-Z][^\s/>]*)/y;
+// Whitespace is HTML's (tab, LF, FF, CR, space), not JS's \s: a browser keeps U+00A0 and other Unicode spaces inside a
+// name or value, so treating them as separators would read a different tag than the browser does.
+const TAG = /<(\/?)([a-zA-Z][^\t\n\f\r />]*)/y;
 
 /**
  * Why `html` can't go on a storefront, or undefined when it's clean: structural tags only, no scripts, handlers,
@@ -37,21 +39,21 @@ export function unsafeHtml(html: string): string | undefined {
     if (!TAGS.has(tag)) return `<${tag}> is not allowed`;
     i += open[0].length;
     for (;;) {
-      i += at(/[\s/]*/y).length;
+      i += at(/[\t\n\f\r /]*/y).length;
       if (i >= html.length || html[i] === '>') break;
-      const attr = at(/[^][^\s/>=]*/y); // a name may start with "=" and hold quotes
+      const attr = at(/[^][^\t\n\f\r />=]*/y); // a name may start with "=" and hold quotes
       i += attr.length;
-      i += at(/\s*/y).length;
+      i += at(/[\t\n\f\r ]*/y).length;
       let value = '';
       if (html[i] === '=') {
-        i += at(/=\s*/y).length;
+        i += at(/=[\t\n\f\r ]*/y).length;
         const q = html[i];
         if (q === '"' || q === "'") {
           const end = html.indexOf(q, i + 1);
           value = html.slice(i + 1, end === -1 ? undefined : end);
           i = end === -1 ? html.length : end + 1;
         } else {
-          value = at(/[^\s>]*/y);
+          value = at(/[^\t\n\f\r >]*/y);
           i += value.length;
         }
       }

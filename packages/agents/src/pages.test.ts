@@ -18,6 +18,11 @@ test('storefront HTML: structure and http(s) links pass; scripts, handlers, styl
   expect(unsafeHtml(`<a/href=javascript:alert(1)>x</a>`)).toBe('javascript: links are not allowed');
   expect(unsafeHtml(`<img src=/a.png/onerror=alert(1)>`)).toBeUndefined(); // one unquoted value, as a browser reads it
   expect(unsafeHtml('<p style="display:none">hidden link</p>')).toBe('the style attribute is not allowed');
+  // Only tab, LF, FF, CR and space split a tag for a browser: U+00A0 / U+3000 stay inside the name or value.
+  expect(unsafeHtml('<p\u00a0title="x onclick=alert(1) y">x</p>')).toBe('<p\u00a0title="x> is not allowed');
+  expect(unsafeHtml('<p title=\u00a0"x onclick=alert(1) y">x</p>')).toBe('the onclick attribute is not allowed');
+  expect(unsafeHtml('<img src=x\u3000onerror=alert(1)>')).toBeUndefined(); // one unquoted value, as a browser reads it
+  expect(unsafeHtml('<p class="a"\tid=b\nalt=c>Hi</p>')).toBeUndefined();
   expect(unsafeHtml('<a href="javascript:alert(1)">x</a>')).toBe('javascript: links are not allowed');
   expect(unsafeHtml('<a href=" jav&#x61;script&colon;alert(1)">x</a>')).toBe('javascript: links are not allowed');
   expect(unsafeHtml("<img src='data:image/svg+xml;base64,PHN2Zz4='>")).toBe('data: links are not allowed');

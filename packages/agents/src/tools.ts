@@ -617,6 +617,7 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ kind, productId, ...d }, ctx) => {
       if (kind === 'product' && !productId) return 'productId is required for a product page.';
+      if (kind === 'page') productId = undefined; // a store page is no product's: publishing it must not rename or activate one
       const bad = unsafeHtml(d.html);
       if (bad) return `Not saved: ${bad} in a storefront page. Use headings, paragraphs, lists, tables, images and http(s) links only.`;
       const gone = productId && productGone(ctx, productId);

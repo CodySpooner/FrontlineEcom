@@ -20,11 +20,12 @@ export function pageRoutes(db: Db, push: PushPage) {
       const d = getPageDraft(db, c.req.param('id'));
       return d ? c.json(d) : c.json({ error: 'Draft not found' }, 404);
     })
-    // The owner publishes: a pending request is approved (the approvals watcher publishes it); a plain draft publishes now.
+    // The owner publishes: a pending request is approved (the approvals watcher publishes it); a plain draft publishes now,
+    // and so does an approved one whose push failed (a platform error), which nothing else would retry.
     .post('/api/page-drafts/:id/publish', async (c) => {
       const d = getPageDraft(db, c.req.param('id'));
       if (!d) return c.json({ error: 'Draft not found' }, 404);
-      if (d.status === 'published' || d.status === 'approved') return c.json({ error: `Already ${d.status}` }, 409);
+      if (d.status === 'published') return c.json({ error: 'Already published' }, 409);
       if (d.status === 'pending') {
         decide(db, d.approvalId!, 'approve');
         return c.json(getPageDraft(db, d.id), 202);
