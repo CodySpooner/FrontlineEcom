@@ -25,12 +25,14 @@ import type {
   Health,
   Integration,
   IntegrationInput,
+  IntegrationKind,
   KnowledgeDoc,
   KnowledgeKind,
   LiveMessage,
   MemoryInput,
   Mission,
   NicheLearning,
+  OAuthStart,
   Order,
   OrderIssue,
   OrderIssueStatus,
@@ -252,6 +254,20 @@ export function useIntegrationActions() {
   return {
     save: useMutation({ mutationFn: (i: IntegrationInput) => api<Integration>('/api/integrations', json('PUT', i)), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/integrations/${id}`, { method: 'DELETE' }), onSuccess: refresh }),
+  };
+}
+
+export const useOAuthKinds = () => useQuery({ queryKey: ['oauth-kinds'], queryFn: () => api<IntegrationKind[]>('/api/integrations/oauth'), staleTime: Infinity });
+
+/** Connect button: start gets the provider URL to open; paste-style flows finish with the address the browser landed on. */
+export function useOAuth() {
+  const qc = useQueryClient();
+  return {
+    start: useMutation({ mutationFn: (i: IntegrationInput) => api<OAuthStart>('/api/integrations/oauth/start', json('POST', i)) }),
+    finish: useMutation({
+      mutationFn: (url: string) => api<Integration>('/api/integrations/oauth/finish', json('POST', { url })),
+      onSuccess: () => ['integrations', 'health'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+    }),
   };
 }
 
