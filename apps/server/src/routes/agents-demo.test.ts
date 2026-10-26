@@ -128,6 +128,18 @@ test('demo AI Research adds a new scored find to the feed each time, from the st
   for (const f of finds) expect(f).toMatchObject({ niche: 'beauty', title: expect.stringMatching(/ bundle$/) });
 });
 
+test("demo Ad Copy leads with the brief's offer, else a new hook each time", async () => {
+  const write = async (brief: string) => {
+    const m = runManager(db);
+    if (typeof m.start('glow:copywriter', `Write ad copy (headline, primary text, CTA) and save it to the creatives library. Brief: ${brief}`) === 'string') throw new Error('not started');
+    await m.idle();
+    return listCreatives(db, { storeIds: ['glow'], kind: 'copy' })[0]!;
+  };
+  const first = await write('Headline for busy mornings.');
+  expect((await write('Same product, new angle.')).headline).not.toBe(first.headline);
+  expect(await write('Meta ad for busy dog owners, 20% off this week.')).toMatchObject({ headline: expect.stringMatching(/: 20% off this week$/), primaryText: expect.stringContaining(', 20% off for a limited time.') });
+});
+
 test("a demo Ask AI question reads the data it's about", async () => {
   const asked = async (q: string) => {
     const m = runManager(db);

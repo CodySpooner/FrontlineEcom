@@ -163,11 +163,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-76 Demo Store Builder ideas draft what they ask for: "FAQ page" and "Promo landing page" drafted the best seller's product page in demo mode, or nothing at all if that product already had a draft.
 - [x] AGT-77 Demo "Hand to Operations" works on the order it was handed: the Orders page sends one order and what it saw, but the demo flagged the store's oldest late order instead, or nothing.
 - [x] AGT-78 Demo AI Research finds something: the Research page's AI Research button ran the demo Product Hunter, which only read the feed, so no new card ever appeared.
+- [x] AGT-79 Demo Ad Copy follows the brief: the Copywriter wrote the same headline for every brief, so the Ad Copy tab looked stuck in demo mode.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-79: the demo Copywriter leads with the brief's offer ("20% off") when there is one, in the headline and the primary text, and otherwise rotates through three hooks. Test added.
 - 2026-10-26 — AGT-78: the demo Product Hunter records a "<item> bundle" of the niche's most trending feed item not bundled yet, via record_product_find, so each click adds a new scored card until the niche runs out. Test added.
 - 2026-10-26 — AGT-77: the demo Operations flags the order named in "Order <id> (...): <detail>." as late (high), supplier (missing tracking), or other (refunded but open at the supplier, since refunds close the other kinds). The daily check still takes the oldest late order. Test added.
 - 2026-10-26 — AGT-76: the demo Store Developer drafts a store page (FAQ, or "This week's offer" for landing/promo asks) unless the task is about a product page. The weekly refresh and the after-add tasks still draft product pages. Test added.

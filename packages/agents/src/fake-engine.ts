@@ -100,8 +100,20 @@ function demoWork(input: RunInput): FakeStep[] {
       }));
     }
     case 'copywriter': {
+      // The brief's offer ("20% off") leads; otherwise a different hook each time, so Ad Copy doesn't repeat itself.
       const p = product();
-      return p ? [{ call: 'create_creative', input: { kind: 'copy', headline: `${p.title}, done right`.slice(0, 80), primaryText: `Meet ${p.title}: the upgrade your routine was missing. Now ${cash(Number(p.price), input.store.currency)}.`, cta: 'Shop now' } }] : [];
+      const offer = input.task.match(/\b\d+% off\b/i)?.[0];
+      const made = Number(db.prepare(`SELECT count(*) AS n FROM creatives WHERE store_id = ? AND kind = 'copy'`).get(storeId)?.n);
+      const hook = ['done right', 'the one everyone is switching to', 'made for your routine'][made % 3];
+      return p
+        ? [{
+            call: 'create_creative',
+            input: {
+              kind: 'copy', headline: (offer ? `${p.title}: ${offer} this week` : `${p.title}, ${hook}`).slice(0, 80), cta: 'Shop now',
+              primaryText: `Meet ${p.title}: the upgrade your routine was missing. Now ${cash(Number(p.price), input.store.currency)}${offer ? `, ${offer} for a limited time` : ''}.`,
+            },
+          }]
+        : [];
     }
     case 'market_analyst': {
       // Ask AI (Ctrl+K) lands here: read what the question is about, so the demo answer shows the data behind it.
