@@ -28,6 +28,7 @@ export function Agents() {
   const idle = squad.filter((a) => a.enabled === false);
   const working = squad.filter((a) => a.status === 'running').length;
   const needsYou = squad.filter((a) => a.status === 'waiting_approval').length;
+  const failing = squad.filter((a) => a.status === 'error').length;
 
   const enable = (a: Agent) => deploy.mutate({ id: a.id, enabled: true });
 
@@ -49,6 +50,7 @@ export function Agents() {
             <p className="text-[13px] text-muted">
               <b className="font-semibold text-text-2">{squad.length - idle.length} of {squad.length}</b> deployed · {working} working
               {needsYou > 0 && <span className="text-red"> · {needsYou} need{needsYou === 1 ? 's' : ''} you</span>}
+              {failing > 0 && <span className="text-red"> · {failing} failed</span>}
             </p>
             <Button variant="primary" onClick={() => setPicking(true)}>
               <Plus className="size-4" strokeWidth={2.2} />
@@ -111,7 +113,9 @@ function AgentCard({ a, onDeploy, deploying, failed }: { a: Agent; onDeploy: () 
       <p className="line-clamp-3 min-h-[3lh] text-xs text-muted">{role.blurb}</p>
       {a.currentTask && !off && (
         <p className="truncate text-xs text-text-2" title={a.currentTask}>
-          <span className="text-muted">Now:</span> {a.currentTask}
+          {/* An error's task is "Last run failed: …" (AGT-68), which isn't happening now. */}
+          {a.status !== 'error' && <span className="text-muted">Now: </span>}
+          {a.currentTask}
         </p>
       )}
       {failed && (

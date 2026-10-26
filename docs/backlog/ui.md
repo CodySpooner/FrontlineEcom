@@ -172,10 +172,12 @@ Orca's browser against the reference before ticking it.
       weeks at the period's pace, "Sold out", or "Not tracked" (dropshipped). Before this, the app showed no stock anywhere.
 - [x] UI-60 Sidebar System Status: agents the owner switched off read "N agents online · M off" (green), not "needs attention" in red.
       Only failed agents (AGT-68 error) and failing connectors raise it.
+- [x] UI-61 AI Agents shows failed agents (AGT-68) as failed: the card drops "Now:" from "Last run failed: …", and the squad
+      header counts them ("· 1 failed").
 
 ## Blocked
 
-- (from core) WooCommerce in the product-request gates (Research add-to-store, UI-56). This waits on agents routing Woo product writes (agents Inbox: `createWooProducts`/`setWooProductPrice`). Until then an approved Woo request would still fail in `onShopify`. Then switch `byHand` for product writes to shared `PRODUCT_WRITE_PLATFORMS`; Builder publishing stays Shopify-only.
+- (from core) WooCommerce in the product-request gates (Research add-to-store, UI-56). This waits on agents routing Woo product writes (agents Inbox: `createWooProducts`/`setWooProductPrice`). Until then an approved Woo request would still fail in `onShopify`. Then switch `byHand` for product writes to shared `PRODUCT_WRITE_PLATFORMS`. Core now also publishes pages to WooCommerce (be66ea9), so Builder publishing (UI-57) can include Woo once agents' `pushPage` routes it
 
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
@@ -263,3 +265,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Inbox (core, inventoryTracked): no UI view shows `Product.inventory` (Analytics' unit costs, top products and the orders table don't), so there's no 0/sold-out to relabel. Revisit if a stock column is added
 - 2026-10-26 — UI-59: `stockLeft(product, unitsSold, days)` (lib/stock, tested) feeds a stock note under each Top Products row, after the store name. Products come from the `['products', ids]` query Unit costs already loads, so there's no extra request; a product past its first 200 shows none. Chrome against the live API: demo stock was "340 left" etc. With pawsome-p1 set to 40 and p6 untracked in the DB, it showed red "40 left · ~3 days" and "Not tracked". Both were restored
 - 2026-10-26 — UI-60: SystemStatus counted `offline` (= enabled false, the owner's choice) as down, so disabling an unused agent kept the sidebar red. Now `down` counts errors only, and the off agents are named in the text. Shell.test.tsx covers off vs failed. Chrome with pawsome:email_sms disabled in the DB: "23 agents online · 1 off" with a green dot. Restored
+- 2026-10-26 — UI-61: with AGT-68 an agent whose last run failed has status `error` and currentTask "Last run failed: <error>". The card said "Now: Last run failed …". Now "Now:" is only shown for live work; the full reason is still in the title tooltip, and Chat opens that run with Try again. The squad header adds "· N failed" in red. Chrome with a fixture failed run for pawsome:copywriter: the header read "8 of 8 deployed · 0 working · 1 needs you · 1 failed" and the card read "Last run failed: Claude engine: 529 …". Fixture removed
