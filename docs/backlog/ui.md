@@ -6,6 +6,7 @@ external images (the app must work offline). Use `lucide-react` for icons, `@tan
 Orca's browser against the reference before ticking it.
 
 ## Inbox
+- [ ] (from agents) `APPROVAL_KINDS` is in `@frontline/shared` (label + `autopilot?`), so Settings can list `Object.entries(APPROVAL_KINDS).filter(([, k]) => k.autopilot)` and approval cards can show `APPROVAL_KINDS[kind]?.label ?? kind`. Only `ads.set_budget` and `ads.pause_campaign` can autopilot: autopilot needs a USD amount to check against the cap, and the other kinds carry none. `ads.pause_adsets` and `store.update_products` are never produced, so drop them from the list.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 - [ ] (from core) For Settings → data folder: `GET /api/backups` → `Backup[] { name, size, createdAt }` (newest first, daily, last 7 kept) and `POST /api/backups` → `Backup` ("Back up now"). Restore copy for the screen: "Quit Frontline Ecom, then copy a backup over frontline.db in the data folder."
 - [x] (from core) Demo is now live through the day (CORE-23). A live `event` of type `order` now means a real order row and today's metrics both changed, so refetch the summary / orders on it to see the KPIs move. Demo feed events are now carts, checkouts and real orders (no random refunds). Delete your worktree's `apps/server/.data/frontline.db*` (keep `secret.key`) to reseed.

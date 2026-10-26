@@ -108,6 +108,23 @@ export interface StoreEvent {
 
 export type ApprovalStatus = 'pending' | 'approved' | 'denied';
 
+/**
+ * Approval action kinds the app produces, with owner-facing labels. `autopilot`: it carries a USD amount, so the
+ * owner can let it auto-approve within a daily cap (StoreCaps.autopilot). Agents may ask for other kinds; the owner
+ * applies those by hand.
+ */
+export const APPROVAL_KINDS: Record<string, { label: string; autopilot?: boolean }> = {
+  'ads.set_budget': { label: 'Change ad budgets', autopilot: true },
+  'ads.pause_campaign': { label: 'Pause campaigns', autopilot: true },
+  'creative.generate': { label: 'Generate ad creatives' },
+  'store.add_products': { label: 'Add products' },
+  'store.publish_page': { label: 'Publish store pages' },
+  'store.set_price': { label: 'Change prices' },
+  'niche.promote_learning': { label: 'Share a learning with the niche' },
+  save_niche_pack: { label: 'Save a niche pack' },
+  tool_use: { label: 'Use a connected tool' },
+};
+
 export interface ApprovalAction {
   kind: string;
   payload: unknown;

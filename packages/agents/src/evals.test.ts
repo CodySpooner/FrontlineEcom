@@ -1,4 +1,5 @@
-import { AGENT_ROLES, type AgentRole } from '@frontline/shared';
+import { AGENT_ROLES, APPROVAL_KINDS, type AgentRole } from '@frontline/shared';
+import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
 import { APP_TOOLS, DEFAULT_JOBS, playbook, ROLES, SQUAD_RULES, toolsFor } from './index';
 
@@ -31,4 +32,12 @@ test.each(ROLE_IDS)('%s is only told to use tools it has', (role) => {
 test('every app tool is used by some role', () => {
   const used = new Set(ROLE_IDS.flatMap((r) => ROLES[r].tools));
   expect(APP_TOOLS.map((t) => t.name).filter((t) => !used.has(t))).toEqual([]);
+});
+
+test('every approval kind an agent tool or engine produces has an owner-facing label', () => {
+  const src = ['tools.ts', 'claude-engine.ts'].map((f) => readFileSync(new URL(f, import.meta.url), 'utf8')).join('\n');
+  // `kind: 'x.y'` in approval actions, plus the in-run ACTIONS executors (`  save_niche_pack: async ({`).
+  const kinds = [...src.matchAll(/kind: '([a-z_]+\.[a-z_]+|tool_use)'|^ {2}(\w+): async \(\{/gm)].map((m) => (m[1] ?? m[2])!);
+  expect(kinds).toContain('save_niche_pack');
+  for (const k of kinds) expect(APPROVAL_KINDS[k], k).toBeDefined();
 });
