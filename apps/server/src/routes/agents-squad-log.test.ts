@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, runAgent, type FakeStep } from '@frontline/agents';
+import { fakeEngine, getAgent, runAgent, writeMemory, type FakeStep } from '@frontline/agents';
 import type { AgentEvent } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -29,10 +29,13 @@ test("the squad log shows the week's requests with their decision and finished r
   const m = runManager(db);
   m.start('glow:copywriter', 'Write 3 hooks');
   await m.idle();
+  writeMemory(db, { storeId: 'glow', agentId: 'glow:ad_strategist', kind: 'learning', confidence: 0.7, tags: ['outcome', 'ads'], text: '"Pause X" worked: blended ROAS 1.2 → 1.9 in the 3 days after.' });
   const [log] = await run('glow:market_analyst', [{ call: 'squad_log', input: { days: 7 } }]);
-  const [requests, runs] = log!.split('\n\nruns:\n');
+  const [requests, rest] = log!.split('\n\nruns:\n');
+  const [runs, outcomes] = rest!.split('\n\noutcomes:\n');
   expect(requests).toMatch(/^requests:\ndate,agent,title,decision\n/);
   expect(requests).toMatch(/^\d{4}-\d{2}-\d{2},Ad Strategist,Pause .+,approved$/m);
   expect(runs).toMatch(/^date,agent,task,gist\n\d{4}-\d{2}-\d{2},Copywriter,Write 3 hooks,Copywriter for Glow Haus: on it — "Write 3 hooks"\.$/);
-  expect((await run('peak:market_analyst', [{ call: 'squad_log' }]))[0]).toMatch(/\n\nruns:\n\(none\)$/);
+  expect(outcomes).toMatch(/^date,agent,result\n\d{4}-\d{2}-\d{2},Ad Strategist,"Pause X" worked: blended ROAS 1\.2 → 1\.9 in the 3 days after\.$/);
+  expect((await run('peak:market_analyst', [{ call: 'squad_log' }]))[0]).toMatch(/\n\nruns:\n\(none\)\n\noutcomes:\n\(none\)$/);
 });

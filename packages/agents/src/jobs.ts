@@ -71,7 +71,7 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
     cron: '0 9 * * 1',
     task:
       'Weekly report: last 7 days vs the 7 before (revenue, profit, ROAS, orders, AOV), best and worst products and campaigns, what the squad shipped ' +
-      '(squad_log: approved requests and finished work), and the 3 priorities for next week with owners. Under 250 words.',
+      '(squad_log: approved requests and finished work) and what its measured outcomes say worked, and the 3 priorities for next week with owners. Under 250 words.',
   },
 ];
 

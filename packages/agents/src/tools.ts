@@ -307,7 +307,8 @@ export const APP_TOOLS: AppTool[] = [
   }),
   defineTool({
     name: 'squad_log',
-    description: "What this store's squad did in the last N days: requests to the owner with the decision, and finished runs with the gist of each answer (CSV).",
+    description:
+      "What this store's squad did in the last N days: requests to the owner with the decision, finished runs with the gist of each answer, and the measured outcomes of approved changes (CSV).",
     input: { days: z.number().int().min(1).max(30).default(7) },
     run: async ({ days }, ctx) => {
       const from = since(days);
@@ -320,7 +321,12 @@ export const APP_TOOLS: AppTool[] = [
         .prepare(`SELECT created_at, agent_id, task, transcript_json FROM agent_runs WHERE store_id = ? AND status = 'done' AND created_at >= ? ORDER BY created_at DESC LIMIT 40`)
         .all(ctx.store.id, from)
         .map((r) => ({ date: String(r.created_at).slice(0, 10), agent: who(String(r.agent_id)), task: String(r.task).slice(0, 120), gist: runGist(JSON.parse(String(r.transcript_json))) ?? '' }));
-      return `requests:\n${csv(requests)}\n\nruns:\n${csv(runs)}`;
+      // What the outcome checks measured for approved changes (did they work), from the squad's memory.
+      const outcomes = ctx.db
+        .prepare(`SELECT created_at, agent_id, text FROM store_memory WHERE store_id = ? AND created_at >= ? AND tags LIKE '%"outcome"%' ORDER BY created_at DESC LIMIT 20`)
+        .all(ctx.store.id, from)
+        .map((r) => ({ date: String(r.created_at).slice(0, 10), agent: who(String(r.agent_id)), result: r.text }));
+      return `requests:\n${csv(requests)}\n\nruns:\n${csv(runs)}\n\noutcomes:\n${csv(outcomes)}`;
     },
   }),
   defineTool({
