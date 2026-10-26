@@ -8,26 +8,28 @@ import { getStore } from '../stores';
 import type { ShopifyTheme } from '../connectors/shopify';
 
 /**
- * Calls `fn` once for each request approved in this DB, on the next tick (after the approval message itself has
- * reached every listener). The bus is process-wide, so the handler holds the DB weakly; `fn` gets it as an argument.
+ * Calls `fn` once for each request approved (or denied) in this DB, on the next tick (after the approval message itself
+ * has reached every listener). The bus is process-wide, so the handler holds the DB weakly; `fn` gets it as an argument.
  */
-export function onApproved(db: Db, fn: (db: Db, a: ApprovalRequest) => unknown) {
+export function onDecision(db: Db, status: 'approved' | 'denied', fn: (db: Db, a: ApprovalRequest) => unknown) {
   const ref = new WeakRef(db);
   const off = subscribe((m) => {
     const db = ref.deref();
     if (!db) return off();
-    if (m.type !== 'approval' || m.approval.status !== 'approved') return;
-    if (!db.prepare(`SELECT 1 FROM approvals WHERE id = ? AND status = 'approved'`).get(m.approval.id)) return; // another DB's (tests)
+    if (m.type !== 'approval' || m.approval.status !== status) return;
+    if (!db.prepare(`SELECT 1 FROM approvals WHERE id = ? AND status = ?`).get(m.approval.id, status)) return; // another DB's (tests)
     const a = m.approval;
     setImmediate(async () => {
       try {
         await fn(db, a);
       } catch (e) {
-        console.error(`approved action ${a.action.kind} (${a.id}) failed:`, e);
+        console.error(`${status} action ${a.action.kind} (${a.id}) failed:`, e);
       }
     });
   });
 }
+
+export const onApproved = (db: Db, fn: (db: Db, a: ApprovalRequest) => unknown) => onDecision(db, 'approved', fn);
 
 /** Pushes a draft to the store's platform (core's Shopify productUpdate / pageCreate); throws a readable error. */
 export type PushPage = (d: PageDraft) => Promise<unknown>;
@@ -194,4 +196,10 @@ export async function publishThemeChange(db: Db, a: ApprovalRequest, publish: (s
   } catch (e) {
     notify(db, { kind: 'error', title: `Couldn't publish the theme on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Publish "${String(p.name ?? p.themeId)}" by hand in Online Store > Themes.`, storeId: store.id });
   }
+}
+
+/** A denied theme draft: its copy is deleted, so drafts don't fill Shopify's 20-theme library. */
+export async function discardThemeCopy(a: ApprovalRequest, del: (storeId: string, themeId: string) => Promise<unknown>) {
+  const themeId = (a.action.payload as { themeId?: unknown } | undefined)?.themeId;
+  if (typeof themeId === 'string') await del(a.storeId, themeId);
 }

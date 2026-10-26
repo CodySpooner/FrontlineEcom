@@ -8,7 +8,7 @@ import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
-import { draftThemeCopy, publishThemeChange } from './agents-actions';
+import { discardThemeCopy, draftThemeCopy, onDecision, publishThemeChange } from './agents-actions';
 import { checkThemeOutcomes } from './agents-gamification';
 
 let db: Db;
@@ -139,4 +139,16 @@ test('a published theme change is judged on store conversion, 14 days before vs 
   ]);
   expect(db.prepare(`SELECT count(*) AS n FROM notifications WHERE title = 'Measured win: Store Developer'`).get()?.n).toBe(1);
   expect(getAgent(db, 'glow:store_developer')!.xp).toBeGreaterThan(xp);
+});
+
+test("a denied theme draft's copy is deleted", async () => {
+  const deleted: string[] = [];
+  onDecision(db, 'denied', (_, a) => discardThemeCopy(a, async (storeId, themeId) => deleted.push(`${storeId} ${themeId}`)));
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('d1', 'glow', 'glow:store_developer', 't', 'r', ?, 'pending', ?)`).run(
+    JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9', name: 'Frontline: x' } }),
+    new Date().toISOString(),
+  );
+  decide(db, 'd1', 'deny');
+  await tick();
+  expect(deleted).toEqual(['glow 9']);
 });

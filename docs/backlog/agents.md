@@ -7,7 +7,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from core) AGT-58: `deleteTheme(db, key, storeId, themeId)` is in `connectors/shopify.ts`. It throws `"<name>" is the live theme; it can't be deleted` for MAIN, and `theme <id> not found` for an unknown id, before any write. It's action-logged as `theme_delete`
+- [x] (from core) AGT-58: `deleteTheme(db, key, storeId, themeId)` is in `connectors/shopify.ts`. It throws `"<name>" is the live theme; it can't be deleted` for MAIN, and `theme <id> not found` for an unknown id, before any write. It's action-logged as `theme_delete`
 - [x] (from core) AGT-19 theme connector is in `apps/server/src/connectors/shopify.ts`:
   - `listThemes(db, key, storeId)` → `ShopifyTheme[]` (`{ id, name, role, processing, previewUrl }`, MAIN = live)
   - `readThemeFiles(db, key, storeId, themeId, filenames)` → `{ filename, content | null }[]` (1–50 names, `*` wildcards, first 250 matches)
@@ -118,12 +118,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-55 Supplier scorecard for Operations: per supplier over 30 days, orders, unfulfilled 3+ days, in transit 10+ days and open issues, so the daily order check can name the supplier behind the problems.
 - [x] AGT-56 Competitor brief: a weekly Market Analyst job over `list_competitors` (price moves, new ads and angles) that says what changed and hands one action to its owner. DESIGN §4.8 "Market Analyst briefs".
 - [x] AGT-57 Store Developer edits the Shopify theme: copy, preview, approve to publish (DESIGN §4.6).
-- [ ] AGT-58 Delete a theme copy when its publish request is denied, so drafts don't fill Shopify's 20-theme library (waits on core `deleteTheme`).
+- [x] AGT-58 Delete a theme copy when its publish request is denied, so drafts don't fill Shopify's 20-theme library (waits on core `deleteTheme`).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed.
 
 ## Done
+- 2026-10-26 — AGT-58 A denied `store.publish_theme` request deletes its theme copy (core `deleteTheme`) on connected stores, so drafts don't fill Shopify's 20-theme library. `onApproved` is now `onDecision(db, 'approved' | 'denied', fn)`, with `onApproved` kept as a wrapper.
 - 2026-10-26 — Real runs' tool steps read like demo ones in chat and transcripts: `store_summary` instead of `mcp__frontline__store_summary`. The UI shows names raw. External tools keep their server prefix (`mcp__meta_ads__get_insights`).
 - 2026-10-26 — Real agent runs start in `<data dir>/agent-sessions` (created on the first real run), so their Claude Code session files stay out of the owner's own projects and `claude --resume` lists. Verified with one short real run: the session file landed in the `…-agent-sessions` project. Also corrected the stale "(Blocked)" note in creatives.ts: Higgsfield's OpenAPI has no per-request cost, so flat credits per kind stay.
 - 2026-10-26 — Tool outputs in the stored run transcript and the live feed are cut at 4,000 characters, ending "… (N more characters)". The agent still gets the whole output through MCP. `read_theme_files` can return about 300k characters and `list_orders` tens of KB, which bloated `agent_runs` and the run view.
