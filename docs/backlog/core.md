@@ -153,10 +153,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-70 Reconnect (Connect on a saved Google Ads, Etsy or TikTok Shop integration) asked for every saved secret again.
 - [x] CORE-71 TikTok Shop calls were signed with the sync's start time, so a long first sync would go stale partway.
 - [x] CORE-72 An Amazon refund on an order from before the orders read (older than 30 days at connecting) never came off revenue.
+- [x] CORE-73 An Amazon listings answer without an items list counted as an empty catalog, so the daily full pass archived every listing.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-73 (TikTok Shop/Amazon review): `listingsOf` read a 200 whose body wasn't JSON (or had no `items`) as zero listings and marked the read complete, so the day's full pass archived every amz- product. A page without an `items` array now fails the read, which leaves the catalog as it is.
 - 2026-10-26 — CORE-72 (TikTok Shop/Amazon review): a refund counts only once its order is one of the store's, but orders are read from 30 days before connecting, so a refund posted on an older order stayed out forever (that day kept its gross sales). Each sync now reads up to 20 such orders by id (`getOrder`, 0.5/s burst 30; refunds read now or stored earlier): this marketplace's comes in and its refund comes off its day; another marketplace's, or one not there, is marked in done_once and not asked again; any other error stops until the next sync. Response taken wrapped (`order`) or bare. Refunds posted before the 30-day window still aren't read (history stays gross there); README says so.
 - 2026-10-26 — CORE-71 (TikTok Shop/Amazon review): every TikTok Shop call carried `timestamp` = the sync's `now`; a big shop's two-year first sync (hundreds of order pages, then products, returns and images) runs past the minutes TikTok accepts (from memory: ~5), after which every call fails, no cursor is saved and the backfill restarts forever. Now each call is signed with the clock when it's sent; `now` still decides token renewal.
 - 2026-10-26 — CORE-70: the Integrations form leaves saved secrets blank ("Saved. Leave blank to keep it.") and Save keeps them, but Connect (`startOAuth`) required every field, so reconnecting Google Ads (refresh tokens of apps in Testing expire weekly) failed with "OAuth client secret is required" unless the owner typed the secret again. A blank secret is now the saved one (`getCredentials`), also for the token exchange.

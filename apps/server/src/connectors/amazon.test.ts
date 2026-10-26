@@ -571,3 +571,17 @@ test("a refund on an order from before the orders read brings that order in (get
   await syncAmazon(db, key, 'peak', fetchFn, new Date(NOW.getTime() + 2 * 3_600_000));
   expect(lookups).toHaveLength(2); // neither is asked for again
 });
+
+test("a listings answer with no items list (an error page sent as 200) archives nothing on the daily full pass", async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  await syncAmazon(db, key, 'peak', fakeAmazon().fetchFn, NOW);
+  const active = () => db.prepare("SELECT count(*) AS n FROM products WHERE store_id = 'peak' AND id GLOB 'amz-*' AND status != 'archived'").get()?.n;
+  const before = active();
+  expect(before).toBeGreaterThan(0);
+  const base = fakeAmazon().fetchFn;
+  const broken = (async (url: string, init?: RequestInit) =>
+    new URL(url).pathname.startsWith('/listings/') ? new Response('<html>Service Unavailable</html>', { status: 200 }) : base(url, init)) as typeof fetch;
+  await syncAmazon(db, key, 'peak', broken, new Date(NOW.getTime() + 86_400_000));
+  expect(active()).toBe(before);
+});

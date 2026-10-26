@@ -212,9 +212,10 @@ async function listingsOf(fetchFn: Fetch, host: string, token: string, sellerId:
       });
       const res = await fetchFn(`https://${host}/listings/2021-08-01/items/${encodeURIComponent(sellerId)}?${q}`, { headers: { 'x-amz-access-token': token } });
       const body = (await res.json().catch(() => ({}))) as { items?: Listing[]; pagination?: { nextToken?: string }; errors?: { message: string }[] };
-      if (!res.ok) throw new Error(`Amazon listings: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
-      out.push(...(body.items ?? []));
-      n += body.items?.length ?? 0;
+      // No items list (an error page sent as 200, say) isn't an empty catalog: the full pass would archive every listing.
+      if (!res.ok || !Array.isArray(body.items)) throw new Error(`Amazon listings: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
+      out.push(...body.items);
+      n += body.items.length;
       pageToken = body.pagination?.nextToken;
     } while (pageToken);
     const last = out.at(-1)?.summaries?.[0]?.lastUpdatedDate;
