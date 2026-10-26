@@ -41,6 +41,13 @@ test("a Product Hunter's own request goes through the same path; denied ones add
     call: 'request_approval',
     input: { title: `Add ${title}`, reason: 'score 81', kind: 'store.add_products', payload: { products: [{ researchProductId: 'lick-mat-slow-feeder', title, price: 9.99, cost: 1.2 }] } },
   });
+  // A second request for a product already waiting isn't sent.
+  const waits = db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('w1', 'pawsome', 'pawsome:product_hunter', 'Add the lick mat', 'r', ?, 'pending', ?)`);
+  waits.run(JSON.stringify({ kind: 'store.add_products', payload: { products: [{ title: 'Lick Mat Slow Feeder', price: 9.99 }] } }), new Date().toISOString());
+  const outs: string[] = [];
+  for await (const e of runAgent(input, fakeEngine(() => [ask(' lick mat slow feeder ')])) as AsyncIterable<AgentEvent>) if (e.type === 'tool_result') outs.push(e.output);
+  expect(outs).toEqual(['Not sent: "Add the lick mat" already asks to add that product and is waiting for the owner.']);
+  db.prepare(`DELETE FROM approvals WHERE id = 'w1'`).run();
   for (const [title, answer] of [['Lick Mat Slow Feeder', 'deny'], ['Lick Mat Slow Feeder', 'approve']] as const) {
     for await (const e of runAgent(input, fakeEngine(() => [ask(title)])) as AsyncIterable<AgentEvent>) if (e.type === 'approval_request') decide(db, e.approval.id, answer);
     await tick();
@@ -78,6 +85,16 @@ test('connected stores get platform drafts; a platform error tells the owner ins
   expect(await addProducts(db, second, (agentId) => runs.push(agentId), async (storeId, products) => (created.push([storeId, products]), []))).toEqual([]);
   expect(created).toHaveLength(1);
   expect(runs).toHaveLength(1);
+
+  // Two approvals for one product decided in the same second: the second doesn't wait for the first's create to return.
+  let finish = (_: { id: string; title: string }[]) => {};
+  const slow = async (storeId: string, products: unknown) => (created.push([storeId, products]), new Promise<{ id: string; title: string }[]>((r) => (finish = r)));
+  const ask = (id: string) => ({ ...approval, id, action: { kind: 'store.add_products', payload: { products: [{ title: 'Grip Socks', price: 12 }] } } });
+  const first = addProducts(db, ask('twice-1'), () => undefined, slow);
+  expect(await addProducts(db, ask('twice-2'), () => undefined, slow)).toEqual([]);
+  finish([{ id: '902', title: 'Grip Socks' }]);
+  expect(await first).toEqual(['Grip Socks']);
+  expect(created).toHaveLength(2); // the jump rope, then the socks once
 });
 
 test('record_product_find puts a web find in the feed with its AI score', async () => {

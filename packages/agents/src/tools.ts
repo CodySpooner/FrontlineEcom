@@ -952,6 +952,17 @@ export const APP_TOOLS: AppTool[] = [
       if (OWN_TOOL[kind]) return `Not sent: ${kind} requests come from ${OWN_TOOL[kind]}, which checks the numbers and the owner's caps. Use it instead.`;
       const no = kind === 'store.add_products' && noStoreWrites(ctx.store);
       if (no) return no;
+      if (kind === 'store.add_products') {
+        // Two approvals for one product would add it twice: one request per product at a time.
+        const titles = ((payload.products ?? []) as { title?: unknown }[]).map((p) => String(p?.title ?? '').trim().toLowerCase()).filter(Boolean);
+        const waiting = ctx.db
+          .prepare(
+            `SELECT a.title FROM approvals a, json_each(a.action_json, '$.payload.products') p WHERE a.store_id = ? AND a.status = 'pending'
+               AND json_extract(a.action_json, '$.kind') = 'store.add_products' AND lower(trim(json_extract(p.value, '$.title'))) IN (SELECT value FROM json_each(?)) LIMIT 1`,
+          )
+          .get(ctx.store.id, JSON.stringify(titles));
+        if (waiting) return `Not sent: "${String(waiting.title)}" already asks to add that product and is waiting for the owner.`;
+      }
       if (kind === 'save_niche_pack') {
         if (ctx.store.niche !== 'other' || !ctx.store.nicheDetail) return 'Not sent: only a store in a custom niche saves a niche pack, and only its own.';
         payload = { ...payload, slug: ctx.store.nicheDetail }; // every store of that niche loads it: never another niche's

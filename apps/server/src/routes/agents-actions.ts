@@ -159,6 +159,9 @@ interface AddProduct {
   cost?: number;
 }
 
+/** Products being created on a platform (store + lower-cased title): a second approval in the same second skips them. */
+const adding = new Set<string>();
+
 /** Creates draft products on the store's platform (core's Shopify `createProducts`); throws a readable error. */
 export type CreateProducts = (storeId: string, products: Omit<AddProduct, 'researchProductId'>[]) => Promise<{ id: string; title: string }[]>;
 
@@ -174,16 +177,24 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
   const have = db.prepare(
     'SELECT 1 FROM product_tests t JOIN products p ON p.store_id = t.store_id AND p.id = t.product_id WHERE t.store_id = ? AND t.approval_id != ? AND lower(t.title) = lower(?)',
   );
-  const valid = products.filter((p) => typeof p?.title === 'string' && p.title.trim() && typeof p.price === 'number' && p.price > 0 && !have.get(store.id, a.id, p.title.trim()));
+  // `have` only sees one once its create returned: one still on its way is claimed here, before the network call.
+  const key = (p: AddProduct) => `${store.id}:${p.title.trim().toLowerCase()}`;
+  const valid = products.filter(
+    (p) => typeof p?.title === 'string' && p.title.trim() && typeof p.price === 'number' && p.price > 0 && !adding.has(key(p)) && !have.get(store.id, a.id, p.title.trim()),
+  );
   if (!valid.length) return [];
   const titles = valid.map((p) => p.title.trim());
   let added: { id: string; title: string }[];
   if (store.connected) {
+    const claimed = valid.map(key);
+    for (const k of claimed) adding.add(k);
     try {
       added = await createRemote(store.id, valid.map((p, i) => ({ title: titles[i]!, price: p.price, compareAt: p.compareAt, cost: p.cost })));
     } catch (e) {
       notify(db, { kind: 'error', title: `Couldn't add products to ${store.name}`, body: `${(e as Error).message}. Approved: ${titles.join(', ')}. Add any not created yet by hand.`, storeId: store.id });
       return [];
+    } finally {
+      for (const k of claimed) adding.delete(k); // product_tests (written below, before any other await) answers from here on
     }
   } else {
     const image = db.prepare('SELECT image FROM research_products WHERE id = ?');
