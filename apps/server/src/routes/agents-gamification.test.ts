@@ -94,6 +94,10 @@ test('missions: 4 per store; completing one pays the commander once', async () =
   expect((await get<Mission[]>('/api/missions?stores=glow')).map((m) => m.id.split(':').at(-1))).toEqual(['revenue', 'orders', 'requests', expect.stringMatching(/^(creatives|product)$/)]);
   db.prepare(`UPDATE agents SET enabled = 0 WHERE store_id = 'peak' AND role IN ('creative_studio', 'copywriter')`).run();
   expect((await get<Mission[]>('/api/missions?stores=peak')).at(-1)?.title).toBe('Approve a product to test');
+  const { platform } = db.prepare(`SELECT platform FROM stores WHERE id = 'peak'`).get()!;
+  db.prepare(`UPDATE stores SET connected = 1, platform = 'etsy' WHERE id = 'peak'`).run(); // the app can't add products there
+  expect(await get<Mission[]>('/api/missions?stores=peak')).toHaveLength(3);
+  db.prepare(`UPDATE stores SET connected = 0, platform = ? WHERE id = 'peak'`).run(String(platform));
   db.prepare(`UPDATE agents SET enabled = 0 WHERE id = 'peak:product_hunter'`).run();
   expect(await get<Mission[]>('/api/missions?stores=peak')).toHaveLength(3);
 

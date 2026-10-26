@@ -1,5 +1,5 @@
 import { awardXp, blendedRoas, cash, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, listNicheLearnings, nicheKey, once, profitStreak, promotionCandidates, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
-import { AGENT_ROLES, type MetricTotals, type Mission, type Store } from '@frontline/shared';
+import { AGENT_ROLES, PRODUCT_WRITE_PLATFORMS, type MetricTotals, type Mission, type Store } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
 import { approvalsHook } from '../approvals';
@@ -292,7 +292,10 @@ function missions(db: Db, storeIds?: string[]): Mission[] {
         requestsDecidedToday: count(db, `SELECT count(*) AS n FROM approvals WHERE store_id = ? AND decided_at >= ?`, s.id, since),
         runsToday: count(db, 'SELECT count(*) AS n FROM agent_runs WHERE store_id = ? AND created_at >= ?', s.id, since),
         creativeAgentsOn: !!count(db, `SELECT count(*) AS n FROM agents WHERE store_id = ? AND enabled = 1 AND role IN ('creative_studio', 'copywriter')`, s.id),
-        productHunterOn: !!count(db, `SELECT count(*) AS n FROM agents WHERE store_id = ? AND enabled = 1 AND role = 'product_hunter'`, s.id),
+        // A live store the app can't add products to can't get a product approved: no mission for it there.
+        productHunterOn:
+          (!s.connected || PRODUCT_WRITE_PLATFORMS.includes(s.platform)) &&
+          !!count(db, `SELECT count(*) AS n FROM agents WHERE store_id = ? AND enabled = 1 AND role = 'product_hunter'`, s.id),
         creativesToday: count(db, 'SELECT count(*) AS n FROM creatives WHERE store_id = ? AND created_at >= ?', s.id, since),
         productsApprovedToday: count(
           db,
