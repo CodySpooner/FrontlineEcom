@@ -270,6 +270,8 @@ Orca's browser against the reference before ticking it.
       recalled, no longer moved by outcomes), before the owner saves.
 - [x] UI-103 An agent's Memory tab can show just that agent's own memories ("Everyone (N) / Copywriter (M)"), and
       the squad card's "N learned" link opens on them, rather than among up to 300 shared squad memories.
+- [x] UI-104 The empty Conversion Funnel tells a connected TikTok Shop store which scope brings its visitors (core now
+      reads TikTok's shop performance), alongside the GA4 and Shopify read_reports hints.
 
 ## Blocked
 
@@ -417,3 +419,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-102: Knowledge MemoryRow's edit form has a muted line "Saved, it becomes your note: always recalled, and results no longer change it." when the memory isn't already the owner's (agentId 'owner' or the `denied` tag). Knowledge.test covers squad memory → hint, owner memory → none. Orca at 800px with a client-side memory patch: hint under the edit row. Only Edit/Cancel clicked; patch dropped by reload
 - 2026-10-26 — UI-102 follow-up: the Store Memory panel says "Your notes, your no's and pinned items go into every run" (AGT-121's `always`: pinned, agentId 'owner', `denied` tag). It said pinned only
 - 2026-10-26 — UI-103: AgentDetail Memory has a "Whose" Segmented, shown only when the list mixes this agent's memories with others'. It starts on the agent when the URL has `by=agent`, which the UI-99 card link now adds. AgentDetail.test: by=agent shows only its own; "Everyone (2)" widens. Orca at 800px with a client-side memory patch: clicking "2 things learned" on Copywriter → "Everyone (4) | Copywriter (2)*" with its 2 items. Patch dropped by reload
+- 2026-10-26 — UI-104: FunnelPanel's empty note is now one GA4 sentence plus one hint per connected platform: Shopify read_reports (unchanged text) and TikTok Shop Analytics scope (new, matching core's tiktok_shop help). Analytics.test adds the TikTok case. Orca at 800px with a client-side patch (empty funnel; stores connected as TikTok Shop and Shopify): both hints in a 78px paragraph. Patch dropped by reload

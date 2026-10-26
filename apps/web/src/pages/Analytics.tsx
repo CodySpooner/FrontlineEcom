@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Product, type TopProduct } from '@frontline/shared';
+import { storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Platform, type Product, type TopProduct } from '@frontline/shared';
 import { useCampaigns, useMissingCosts, useSetCost, useSummary, useTopProducts } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
@@ -119,8 +119,11 @@ const Stat = ({ label, value }: { label: string; value: string }) => (
 export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
   const f = s.funnel;
   const { stores, has } = useStoreSelection();
-  // Without GA4, a connected Shopify store's sessions come from ShopifyQL, which needs the app's read_reports scope.
-  const shopify = stores.some((x) => has(x.id) && x.connected && x.platform === 'shopify');
+  // Without GA4, a connected Shopify store's sessions come from ShopifyQL (the app's read_reports scope), and a TikTok
+  // Shop's from its shop performance (the TikTok Shop Analytics scope).
+  const connected = (platform: Platform) => stores.some((x) => has(x.id) && x.connected && x.platform === platform);
+  const shopify = connected('shopify');
+  const tiktok = connected('tiktok_shop');
   const all: [string, number][] = [
     ['Sessions', f.sessions],
     ['Added to cart', f.addToCarts],
@@ -133,11 +136,13 @@ export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
     <Panel title="Conversion Funnel" sub={f.sessions ? `${pct(rate(f.orders, f.sessions))} of sessions place an order` : `${num(f.orders)} orders`}>
       {!f.sessions ? (
         <p className="text-[13px] text-muted">
-          Sessions, carts and checkouts come from Google Analytics{shopify && ", or for a Shopify store from Shopify's own reports"}.{' '}
+          Sessions, carts and checkouts come from Google Analytics.{' '}
           <Link to="/integrations" className="text-red hover:underline">
             Connect GA4
-          </Link>
-          {shopify && ', or add the read_reports scope (with Level 2 protected customer data) to your Shopify app,'} to see where shoppers drop off.
+          </Link>{' '}
+          to see where shoppers drop off.
+          {shopify && " A Shopify store can use Shopify's own reports instead: add the read_reports scope (with Level 2 protected customer data) to your Shopify app."}
+          {tiktok && " A TikTok Shop store's visitors can come from TikTok: add the TikTok Shop Analytics scope to your TikTok Shop app."}
         </p>
       ) : (
         <ol className="grid gap-4">

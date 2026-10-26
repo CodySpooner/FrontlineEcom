@@ -61,6 +61,13 @@ describe('Conversion funnel with no sessions', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(screen.queryByText(/read_reports/)).toBeNull();
   });
+
+  it("tells a connected TikTok Shop store which scope brings its visitors", async () => {
+    stubApi((url) => (url.startsWith('/api/stores') ? [store('tiktok_shop', true)] : []));
+    renderApp(<FunnelPanel s={s} />);
+    expect(await screen.findByText(/TikTok Shop Analytics scope/)).toBeTruthy();
+    expect(screen.queryByText(/read_reports/)).toBeNull();
+  });
 });
 
 describe('Conversion funnel with steps the platform does not report', () => {
