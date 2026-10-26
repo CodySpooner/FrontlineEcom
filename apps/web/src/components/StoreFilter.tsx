@@ -1,9 +1,10 @@
 // Global store selection (All stores or any subset), persisted across sessions. Every store-scoped view reads it.
 import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Link } from 'react-router';
 import { TriangleAlert } from 'lucide-react';
 import { useStores } from '../api/client';
-import { Chip } from './ui';
+import { Chip, StatusDot } from './ui';
 
 const KEY = 'fe.stores';
 
@@ -69,6 +70,25 @@ export function StoreFilter() {
 }
 
 /** Multi-store totals leave out stores whose currency has no exchange rate (`AnalyticsSummary.unconverted`). */
+/** Stores without credentials run on generated numbers, so a total that mixes them with a connected store isn't all real. */
+export function DemoMixNote() {
+  const { stores, has } = useStoreSelection();
+  const picked = stores.filter((s) => has(s.id));
+  const demo = picked.filter((s) => !s.connected);
+  if (!demo.length || demo.length === picked.length) return null;
+  return (
+    <p className="flex basis-full items-center gap-2 text-xs text-text-2">
+      <StatusDot tone="idle" />
+      <span>
+        {new Intl.ListFormat('en').format(demo.map((s) => s.name))} {demo.length > 1 ? 'show' : 'shows'} demo numbers until connected, and these totals include them.{' '}
+        <Link to="/settings" className="text-red hover:underline">
+          Manage stores
+        </Link>
+      </span>
+    </p>
+  );
+}
+
 export function UnconvertedNote({ codes }: { codes?: string[] }) {
   if (!codes?.length) return null;
   return (

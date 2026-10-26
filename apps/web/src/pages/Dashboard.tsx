@@ -10,7 +10,7 @@ import { Portrait } from '../components/Art';
 import { ApprovalExtras } from '../components/ApprovalExtras';
 import { DenyReason } from '../components/Chat';
 import { Hero } from '../components/Hero';
-import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
+import { DemoMixNote, StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
 import { PERIOD, RANGES, sparkPoints, weekly } from '../lib/chart';
 import { ago, cents, fmtDay, money, noBaseline, signedPct } from '../lib/format';
@@ -56,25 +56,6 @@ export function Dashboard() {
       </div>
       <Missions />
     </>
-  );
-}
-
-/** Stores without credentials run on generated numbers, so a total that mixes them with a connected store isn't all real. */
-export function DemoMixNote() {
-  const { stores, has } = useStoreSelection();
-  const picked = stores.filter((s) => has(s.id));
-  const demo = picked.filter((s) => !s.connected);
-  if (!demo.length || demo.length === picked.length) return null;
-  return (
-    <p className="flex basis-full items-center gap-2 text-xs text-text-2">
-      <StatusDot tone="idle" />
-      <span>
-        {new Intl.ListFormat('en').format(demo.map((s) => s.name))} {demo.length > 1 ? 'show' : 'shows'} demo numbers until connected, and these totals include them.{' '}
-        <Link to="/settings" className="text-red hover:underline">
-          Manage stores
-        </Link>
-      </span>
-    </p>
   );
 }
 
