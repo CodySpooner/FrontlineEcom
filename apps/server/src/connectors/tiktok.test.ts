@@ -136,6 +136,8 @@ test('TikTok Shop sync renews the token, pulls products + paid orders, and rebui
   const api = calls.slice(1);
   expect(api.every((c) => c.token === 'at_new')).toBe(true);
   expect(api.filter((c) => c.url.pathname.includes('/search')).every((c) => c.url.searchParams.get('shop_cipher') === 'CIPHER')).toBe(true);
+  const productSearch = (c: { url: URL; body: string }[]) => JSON.parse(c.find((x) => x.url.pathname.includes('products/search'))!.body);
+  expect(productSearch(api)).toEqual({}); // first sync: every product, however long unchanged
 
   expect(db.prepare("SELECT id, title, price, inventory, status FROM products WHERE store_id = 'glow' ORDER BY id").all()).toEqual([
     { id: 'tt-17301', title: 'Ice Roller', price: 24.9, inventory: 10, status: 'active' },
@@ -154,6 +156,7 @@ test('TikTok Shop sync renews the token, pulls products + paid orders, and rebui
   await syncTikTokShop(db, key, 'glow', again.fetchFn, NOW);
   expect(again.calls.some((c) => c.url.host === 'auth.tiktok-shops.com')).toBe(false);
   expect(JSON.parse(again.calls.find((c) => c.url.pathname.includes('orders'))!.body)).toEqual({ update_time_ge: T('2026-10-26T17:55:00Z') });
+  expect(productSearch(again.calls)).toEqual({ update_time_ge: T('2026-10-26T17:55:00Z') });
 });
 
 test('TikTok Shop: a rejected refresh token shows on the integration and keeps demo data', async () => {

@@ -52,6 +52,7 @@ test('WooCommerce sync pulls paid orders + products since the cursor and rebuild
   expect(calls.every((c) => c.headers.get('authorization') === `Basic ${Buffer.from('ck_1:cs_2').toString('base64')}`)).toBe(true);
   expect(calls[0]!.url.searchParams.get('modified_after')).toBe('2024-10-26T18:00:00');
   expect(calls[3]!.url.searchParams.get('status')).toBe('trash');
+  expect([calls[2]!, calls[3]!].map((c) => c.url.searchParams.get('modified_after'))).toEqual([null, null]); // first sync: every product
 
   expect(db.prepare("SELECT id, price, compare_at AS compareAt, inventory, inventory_tracked AS tracked, status FROM products WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
     { id: 'woo-7', price: 19, compareAt: 24, inventory: 5, tracked: 1, status: 'active' },

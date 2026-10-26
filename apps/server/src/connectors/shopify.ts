@@ -213,7 +213,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const since = cursor ?? `${addDays(localDate(now), -BACKFILL_DAYS)}T00:00:00Z`;
     const filter = `updated_at:>='${since}'`;
-    const products = await all((after) => q<{ products: { nodes: ShopifyProduct[]; pageInfo: PageInfo } }>(PRODUCTS_Q, { after, q: filter }).then((d) => d.products));
+    // The first sync reads every product, however long unchanged; the backfill window is for orders.
+    const products = await all((after) => q<{ products: { nodes: ShopifyProduct[]; pageInfo: PageInfo } }>(PRODUCTS_Q, { after, q: cursor ? filter : null }).then((d) => d.products));
     // A deleted product just stops coming back, so its delete event archives it here. Failing to read events never stops a sync.
     const deleted = !cursor ? [] : await all((after) =>
       q<{ events: { nodes: { subjectId?: string }[]; pageInfo: PageInfo } }>(DELETED_Q, { after, q: `action:'destroy' AND subject_type:'PRODUCT' AND created_at:>='${since}'` }).then((d) => d.events),

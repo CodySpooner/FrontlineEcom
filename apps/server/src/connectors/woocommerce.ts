@@ -120,7 +120,9 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const changed = { modified_after: since, dates_are_gmt: 'true' };
     const orders = await all<WooOrder>('orders', changed);
     // The default status (any) leaves out the trash, where a deleted product goes first; trashing it counts as a change.
-    const products = [...(await all<WooProduct>('products', changed)), ...(await all<WooProduct>('products', { ...changed, status: 'trash' }))];
+    // The first sync reads every product, however long unchanged (the backfill window is for orders).
+    const productsSince = cursor ? changed : { dates_are_gmt: 'true' };
+    const products = [...(await all<WooProduct>('products', productsSince)), ...(await all<WooProduct>('products', { ...productsSince, status: 'trash' }))];
     // The shop's own currency (Settings → General), else the newest order's. A multi-currency plugin's orders in another
     // currency are converted into it at today's ECB rate; one with no rate is left out rather than counted at par.
     const setting = await fetchFn(`${site}/wp-json/wc/v3/settings/general/woocommerce_currency`, { headers: { authorization: auth } })

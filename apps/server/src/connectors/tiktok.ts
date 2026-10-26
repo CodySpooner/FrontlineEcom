@@ -213,7 +213,8 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     };
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const since = cursor ? Number(cursor) : Math.floor(now.getTime() / 1000) - BACKFILL_DAYS * 86400;
-    const products = await search<ShopProduct>('/product/202309/products/search', 'products', {}, { update_time_ge: since });
+    // The first sync reads every product, however long unchanged (the backfill window is for orders).
+    const products = await search<ShopProduct>('/product/202309/products/search', 'products', {}, cursor ? { update_time_ge: since } : {});
     const orders = await search<ShopOrder>('/order/202309/orders/search', 'orders', { sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: since });
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 

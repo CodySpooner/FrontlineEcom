@@ -119,11 +119,14 @@ test('first sync switches the store from demo to real data', async () => {
 
 test('later syncs are incremental and update changed orders in place', async () => {
   const { db } = await setup();
-  await syncShopify(db, key, 'glow', fakeShopify([order('#1001', '2026-10-25T09:00:00Z', '100.00')]).fetchFn, NOW);
+  const first = fakeShopify([order('#1001', '2026-10-25T09:00:00Z', '100.00')]);
+  await syncShopify(db, key, 'glow', first.fetchFn, NOW);
+  expect(first.calls.find((c) => c.body.query.includes('products(first: 50'))!.body.variables.q).toBeNull(); // every product, however old
   const refunded = order('#1001', '2026-10-25T09:00:00Z', '0.00', { updatedAt: '2026-10-26T12:00:00Z', displayFinancialStatus: 'REFUNDED' });
   const second = fakeShopify([refunded]);
   await syncShopify(db, key, 'glow', second.fetchFn, NOW);
   expect(second.calls.find((c) => c.body.query.includes('orders('))!.body.variables.q).toBe("updated_at:>='2026-10-26T17:55:00Z'");
+  expect(second.calls.find((c) => c.body.query.includes('products(first: 50'))!.body.variables.q).toBe("updated_at:>='2026-10-26T17:55:00Z'");
   // Thumbnails, not the multi-megabyte originals.
   expect(second.calls.find((c) => c.body.query.includes('products('))!.body.query).toContain('url(transform: { maxWidth: 480 })');
   expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ revenue: 0, orders: 0 });
