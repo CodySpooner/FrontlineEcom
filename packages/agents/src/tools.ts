@@ -571,7 +571,7 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ title, summary, files }, ctx) => {
       if (!ctx.themes) return 'Theme editing is not available in this run.';
-      if (ctx.agent.autonomy === 'suggest') return 'Not sent: your autonomy is "suggest". Put the change in your answer instead.'; // before copying a theme for nothing
+      if (autonomyNow(ctx) === 'suggest') return 'Not sent: your autonomy is "suggest". Put the change in your answer instead.'; // before copying a theme for nothing
       // Each draft is a full copy of the live theme (Shopify keeps 20 themes at most): one waiting at a time.
       const pending = ctx.db
         .prepare(`SELECT 1 FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') = 'store.publish_theme'`)
@@ -722,14 +722,15 @@ export const APP_TOOLS: AppTool[] = [
       // A live store's request over 4 days old is never applied (its numbers moved), so a fresh one replaces it (below,
       // once the fresh one passed every check) instead of being blocked by it.
       const replace =
-        waiting && ctx.store.connected && ctx.decide && ctx.agent.autonomy !== 'suggest' && String(waiting.created_at) < ago(4) ? String(waiting.id) : undefined;
+        waiting && ctx.store.connected && ctx.decide && autonomyNow(ctx) !== 'suggest' && String(waiting.created_at) < ago(4) ? String(waiting.id) : undefined;
       if (waiting && !replace) return `Not sent: "${waiting.title}" is already waiting for the owner. One change per campaign at a time.`;
       const from = Number(c.daily_budget);
       if (change === 'budget' && newDailyBudget === undefined) return 'newDailyBudget is required for a budget change.';
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
       // Autopilot caps bound the budget a change touches (a pause stops all of it); the added-spend cap counts raises only.
-      // ponytail: no rate → no amount, so the caps can't be checked and autopilot can't take it: the owner decides.
-      const usd = await inUsd(ctx, change === 'pause' ? from : Math.abs(to - from));
+      // ponytail: no rate → no amount, so the caps can't be checked and autopilot can't take it: the owner decides. Same
+      // for a pause with no campaign budget (ad set or lifetime budgets, synced as 0): what it stops is unknown, not $0.
+      const usd = change === 'pause' && !(from > 0) ? undefined : await inUsd(ctx, change === 'pause' ? from : Math.abs(to - from));
       const addedUsd = to > from ? usd : 0;
       const cap = ctx.caps?.(ctx.store.id).adSpendChangePerDay;
       const addedToday = addedUsd ? budgetAddedToday(ctx.db, ctx.store.id) : 0;
@@ -862,15 +863,19 @@ export const APP_TOOLS: AppTool[] = [
  * the store and the amount at stake fits what is left of today's cap for that kind (logged on the request as `auto` +
  * a note in the reason).
  */
+/** The agent's autonomy now: `ctx.agent` is the run's copy, and the owner may have taken it off autopilot since. */
+const autonomyNow = (ctx: ToolContext) => String(ctx.db.prepare('SELECT autonomy FROM agents WHERE id = ?').get(ctx.agent.id)?.autonomy ?? ctx.agent.autonomy);
+
 export async function requestApproval(ctx: ToolContext, req: { title: string; reason: string; action: ApprovalAction; autopilot?: boolean }) {
   const { agent } = ctx;
-  if (agent.autonomy === 'suggest') return { approved: false, message: 'Not sent: your autonomy is "suggest". Put the recommendation in your answer instead.' };
+  const autonomy = autonomyNow(ctx);
+  if (autonomy === 'suggest') return { approved: false, message: 'Not sent: your autonomy is "suggest". Put the recommendation in your answer instead.' };
   // Going live wiped the demo rows this run read and expired its requests; one more would act on the live store.
   if (!ctx.store.connected && ctx.db.prepare('SELECT connected FROM stores WHERE id = ?').get(ctx.store.id)?.connected === 1) {
     return { approved: false, message: 'Not sent: the store went live during this run, so the demo numbers behind it are gone. Stop here; the owner can ask again on real data.' };
   }
   const { kind, amountUsd: amount } = req.action;
-  const rule = req.autopilot && agent.autonomy === 'autopilot' ? ctx.caps?.(ctx.store.id).autopilot[kind] : undefined;
+  const rule = req.autopilot && autonomy === 'autopilot' ? ctx.caps?.(ctx.store.id).autopilot[kind] : undefined;
   const cap = rule?.enabled ? rule.maxUsdPerDay : 0;
   const used = rule?.enabled ? autopilotUsedToday(ctx.db, ctx.store.id, kind) : 0;
   const auto = !!rule?.enabled && ctx.decide !== undefined && amount !== undefined && used + amount <= cap;
@@ -919,14 +924,14 @@ function campaignStats(ctx: ToolContext, days: number): CampaignStats[] {
     .map((r) => ({ network: String(r.network), id: String(r.id), name: String(r.name), status: String(r.status), dailyBudget: Number(r.daily_budget), spend: Number(r.spend), revenue: Number(r.revenue), purchases: Number(r.purchases) }));
 }
 
-/** Daily ad budget added by approved or pending budget changes for this store since local midnight. */
+/** Daily ad budget added by budget changes approved since local midnight, or still waiting (whenever asked: approving it adds it today). */
 export function budgetAddedToday(db: DatabaseSync, storeId: string): number {
   const midnight = new Date();
   midnight.setHours(0, 0, 0, 0);
   const row = db
     .prepare(
       `SELECT coalesce(sum(coalesce(json_extract(action_json, '$.payload.addedUsd'), json_extract(action_json, '$.amountUsd'))), 0) AS added FROM approvals
-       WHERE store_id = ? AND json_extract(action_json, '$.kind') = 'ads.set_budget' AND status != 'denied' AND created_at >= ?`,
+       WHERE store_id = ? AND json_extract(action_json, '$.kind') = 'ads.set_budget' AND (status = 'pending' OR (status = 'approved' AND decided_at >= ?))`,
     )
     .get(storeId, midnight.toISOString());
   return Number(row?.added ?? 0);

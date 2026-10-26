@@ -57,11 +57,14 @@ like the scheduled jobs.
 - **Store AI budget per day** (`agentCostPerDay`): each starting run gets at most `cap / perStore`, minus what working
   runs already hold. Spend is saved as the run goes (`onSpend`, an estimate from token usage), so cancelled or crashed
   runs still count. A run stops as soon as the store's saved spend today passes the cap. An agent's own
-  `dailyBudgetUsd` caps its runs inside that (one run per agent, so no shares).
+  `dailyBudgetUsd` caps its runs inside that (one run per agent, so no shares). Both are read again at each spend, so a
+  cap the owner lowers mid-run holds.
 - **Higgsfield credits** (`higgsfieldCreditsPerDay`): pending requests count as asked, credits are charged before the
   render, and they stay charged if it fails or the creative is deleted (`creative_credits`).
-- **Ad spend** (`adSpendChangePerDay`): only increases count toward it. Pauses and cuts count toward the autopilot
-  caps for those kinds.
+- **Ad spend** (`adSpendChangePerDay`): only increases count toward it, on the day they're approved (a waiting one
+  counts whenever it was asked). Pauses and cuts count toward the autopilot caps for those kinds. A pause of a
+  campaign with no campaign budget (ad set or lifetime budgets) has no amount, so the owner decides it.
+- **Autopilot** is read from the agent at each request, so taking an agent off it mid-run takes effect at once.
 
 ## Demo, then live
 

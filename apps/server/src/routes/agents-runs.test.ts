@@ -174,6 +174,29 @@ test("the store's daily AI budget blocks new runs once spent", async () => {
   expect(m.start('glow:nobody', 'x')).toBe('Agent not found');
 });
 
+test("a cap the owner lowers mid-run (the store's or the agent's own) stops the run once it's passed", async () => {
+  let go = () => {};
+  const engine: Engine = async function* (input) {
+    input.onSpend?.(0.3);
+    await new Promise<void>((r) => (go = r));
+    input.onSpend?.(1.5);
+    yield input.signal?.aborted ? { type: 'error', message: 'aborted' } : { type: 'done', sessionId: 's', usage: { ...usage, costUsd: 1.5 } };
+  };
+  const m = manager({ engine });
+  updateCaps(db, 'glow', { agentCostPerDay: 5 });
+  for (const lower of [() => updateCaps(db, 'glow', { agentCostPerDay: 0.5 }), () => updateAgent(db, 'glow:copywriter', { dailyBudgetUsd: 0.5 })]) {
+    const r = m.start('glow:copywriter', 'Draft 3 headlines') as AgentRun;
+    for (let i = 0; i < 50 && getRun(db, r.id)?.usage.costUsd !== 0.3; i++) await new Promise((res) => setImmediate(res));
+    lower();
+    go();
+    await m.idle();
+    expect(getRun(db, r.id)).toMatchObject({ status: 'error', error: expect.stringMatching(/^Stopped: today's (AI budget for this store|budget for this agent) \(\$0\.5\) is used up\./) });
+    updateCaps(db, 'glow', { agentCostPerDay: 5 });
+    updateAgent(db, 'glow:copywriter', { dailyBudgetUsd: null });
+    db.prepare(`UPDATE agent_runs SET cost_usd = 0`).run();
+  }
+});
+
 test("an agent's own daily budget caps its runs inside the store's; the rest of the squad keeps the store's", async () => {
   const budgets: (number | undefined)[] = [];
   const m = manager({ engine: fakeEngine((input) => (budgets.push(input.budgetUsd), [{ type: 'done', sessionId: 's', usage }])) });

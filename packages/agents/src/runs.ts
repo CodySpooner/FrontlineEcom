@@ -176,8 +176,8 @@ export function createRunManager(opts: RunManagerOptions) {
     // What the run has spent so far, saved as it goes: a cancel, crash or restart (no result from the engine) still counts it.
     let ended = false;
     let spent = 0;
-    const cap = env.caps?.(run.storeId).agentCostPerDay;
-    const own = getAgent(db, run.agentId)?.dailyBudgetUsd;
+    let cap = env.caps?.(run.storeId).agentCostPerDay;
+    let own = getAgent(db, run.agentId)?.dailyBudgetUsd;
     let overCap = false;
     let overOwn = false;
     const spend = (usd: number) => {
@@ -186,6 +186,8 @@ export function createRunManager(opts: RunManagerOptions) {
       const slot = active.get(run.id);
       if (slot) slot.spent = spent;
       db.prepare('UPDATE agent_runs SET cost_usd = ? WHERE id = ?').run(spent, run.id);
+      cap = env.caps?.(run.storeId).agentCostPerDay; // read again: the owner may lower either mid-run
+      own = getAgent(db, run.agentId)?.dailyBudgetUsd;
       // Shares split the cap; this holds it however many runs paused on the owner come back at once.
       if (cap !== undefined && !overCap && costToday(db, run.storeId) > cap) {
         overCap = true;
@@ -202,7 +204,7 @@ export function createRunManager(opts: RunManagerOptions) {
       const store = opts.store(run.storeId);
       if (budget !== undefined && budget < 0.01) {
         const ownGone = own !== undefined && costToday(db, run.storeId, run.agentId) >= own - 0.01;
-        end = { type: 'error', message: ownGone ? ownUsedUp(own) : `Today's AI budget for this store ($${env.caps?.(run.storeId).agentCostPerDay}) is used up. Raise it in Settings.` };
+        end = { type: 'error', message: ownGone ? ownUsedUp(own!) : `Today's AI budget for this store ($${env.caps?.(run.storeId).agentCostPerDay}) is used up. Raise it in Settings.` };
       }
       else if (agent && store) {
         const resume = db.prepare('SELECT resume FROM agent_runs WHERE id = ?').get(run.id)?.resume;

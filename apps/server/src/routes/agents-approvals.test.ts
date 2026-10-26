@@ -70,6 +70,34 @@ describe('autopilot', () => {
     expect(budgetAddedToday(db, 'pawsome')).toBe(0);
   });
 
+  test("a pause of a campaign with no campaign budget (ad set or lifetime budgets) isn't $0: the owner decides", async () => {
+    autopilot('pawsome:ad_strategist', 'pawsome');
+    updateCaps(db, 'pawsome', { autopilot: { 'ads.pause_campaign': { enabled: true, maxUsdPerDay: 0 } } });
+    db.prepare(`UPDATE campaigns SET daily_budget = 0 WHERE id = 'pawsome-c2'`).run();
+    const [paused] = requests(await run(input('pawsome:ad_strategist'), [{ call: 'propose_ad_change', input: { campaignId: 'pawsome-c2', change: 'pause', evidence: 'CPA 3x target' } }]));
+    expect(paused).toMatchObject({ status: 'pending' });
+    expect(paused!.action).not.toHaveProperty('amountUsd');
+  });
+
+  test('an agent the owner takes off autopilot mid-run asks from then on', async () => {
+    autopilot('pawsome:ad_strategist', 'pawsome');
+    const started = input('pawsome:ad_strategist'); // the run's copy says autopilot
+    updateAgent(db, 'pawsome:ad_strategist', { autonomy: 'ask' });
+    expect(requests(await run(started, [raise('pawsome-c2', 10)]))[0]).toMatchObject({ status: 'pending' });
+    updateAgent(db, 'pawsome:ad_strategist', { autonomy: 'suggest' });
+    expect(outputs(await run(started, [raise('pawsome-c3', 10)]))).toEqual(['Not sent: your autonomy is "suggest". Put the recommendation in your answer instead.']);
+  });
+
+  test('a raise asked before midnight and approved after it counts toward the day it was approved', async () => {
+    autopilot('pawsome:ad_strategist', 'pawsome');
+    updateAgent(db, 'pawsome:ad_strategist', { autonomy: 'ask' });
+    await run(input('pawsome:ad_strategist'), [raise('pawsome-c2', 40)]); // the owner approves it now
+    const lastNight = new Date();
+    lastNight.setHours(0, 0, 0, 0);
+    db.prepare(`UPDATE approvals SET created_at = ? WHERE status = 'approved'`).run(new Date(lastNight.getTime() - 600_000).toISOString());
+    expect(budgetAddedToday(db, 'pawsome')).toBe(40);
+  });
+
   test('asks for a kind with no rule, a hand-made request, or an agent not on autopilot', async () => {
     autopilot('pawsome:ad_strategist', 'pawsome');
     const status = async (agentId: string, step: FakeStep) => requests(await run(input(agentId), [step]))[0]?.status;

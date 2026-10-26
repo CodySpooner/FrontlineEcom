@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, listMemory, runAgent, type FakeStep, type RunInput } from '@frontline/agents';
+import { fakeEngine, getAgent, listMemory, runAgent, updateAgent, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, AgentRole } from '@frontline/shared';
 import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
@@ -281,13 +281,14 @@ describe('agent tools on demo data', () => {
   });
 
   test('suggest-only agents cannot raise requests; tools outside the role and bad input are errors', async () => {
-    const agent = { ...getAgent(db, 'glow:email_sms')!, autonomy: 'suggest' as const };
-    const events = await run(input('glow', 'email_sms', { agent }), [
+    const was = getAgent(db, 'glow:email_sms')!.autonomy;
+    updateAgent(db, 'glow:email_sms', { autonomy: 'suggest' }); // read from the agent at each request, not the run's copy
+    const events = await run(input('glow', 'email_sms'), [
       { call: 'request_approval', input: { title: 'Launch win-back flow', reason: 'r', kind: 'k', payload: {} } },
       { call: 'list_campaigns' },
       { call: 'list_orders', input: { days: 9999 } },
       done,
-    ]);
+    ]).finally(() => updateAgent(db, 'glow:email_sms', { autonomy: was }));
     const [suggest, notAllowed, invalid] = results(events);
     expect(suggest).toMatchObject({ isError: false, output: expect.stringContaining('autonomy is "suggest"') });
     expect(notAllowed).toMatchObject({ isError: true, output: 'Tool list_campaigns is not available' });
