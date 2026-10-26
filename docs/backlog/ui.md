@@ -104,7 +104,7 @@ Orca's browser against the reference before ticking it.
       selected) and Ask palette (Ctrl+K opens; arrows + Enter open a page; a question starts a Market Analyst run). Stub all fetches.
 - [x] UI-28 Error boundary: a page that throws shows a calm in-shell error (sidebar and top bar stay) with Reload and
       Go to Dashboard, and resets when you navigate. Today one render error blanks the whole desktop window.
-- [ ] UI-29 Live reconnect catch-up: when `/api/live` drops and comes back (API restart, laptop sleep), refetch so the
+- [x] UI-29 Live reconnect catch-up: when `/api/live` drops and comes back (API restart, laptop sleep), refetch so the
       approvals, runs and feed missed during the gap show up; today the socket reconnects but the screen stays stale.
 - [ ] UI-30 Approve or deny from the bell drawer (DESIGN §7: requests show "on the Dashboard and in notifications").
       Today the drawer only links to the Dashboard, so from any other page it's two hops.
@@ -158,3 +158,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-27: Component tests — `src/test-utils.tsx` (app providers + MemoryRouter at a path with a location readout, `stubApi` fake fetch, jsdom showModal/close shim), used by the approvals test too; onboarding (flag keeps it away; Explore the demo remembers; add store posts the niche → squad → Dashboard with the store picked) and Ask palette (Ctrl+K, filter + arrows + Enter → page; question → Market Analyst run → chat URL)
 - 2026-10-26 — UI-28: Error boundary — `PageBoundary` around the page outlet (keyed by path, so any navigation clears it): "This page hit a snag" card with Reload / Go to Dashboard and collapsed Details; sidebar stays usable. Checked with a temporary throw in Chrome (recovers via the button and via the sidebar); component test
 - 2026-10-26 — Inbox (agents): `store.publish_theme` requests show "Preview changes ↗" (http/https `previewUrl` only) and the files (first 3 + N more, full list on hover) on Dashboard and chat cards (`ApprovalExtras`); Store Builder lists pending theme changes above Drafts with approve/deny (reuses the chat ApprovalCard)
+- 2026-10-26 — UI-29: Live reconnect catch-up — after `/api/live` drops and reconnects, `useLive` invalidates every query (not on the first connect). Unit test with a fake socket. Browser: confirmed the socket closes (1006) on an API restart and an approval inserted during the outage appears without reload, but a no-restart control also appeared (approvals refresh by another path), so the browser check doesn't isolate the fix

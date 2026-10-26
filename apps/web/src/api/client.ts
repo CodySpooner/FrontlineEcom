@@ -435,6 +435,7 @@ export function useLive() {
     let ws: WebSocket | undefined;
     let retry = 0;
     let closed = false;
+    let dropped = false;
     const onMessage = (m: LiveMessage) => {
       if (m.type === 'event') {
         qc.setQueryData<StoreEvent[]>(['events'], (old = []) => [m.event, ...old].slice(0, 30));
@@ -479,8 +480,14 @@ export function useLive() {
     };
     const connect = () => {
       ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/live`);
+      // Back after a drop (API restart, laptop sleep): refetch whatever changed while nothing was listening.
+      ws.onopen = () => {
+        if (dropped) qc.invalidateQueries();
+        dropped = false;
+      };
       ws.onmessage = (e) => onMessage(JSON.parse(String(e.data)) as LiveMessage);
       ws.onclose = () => {
+        dropped = true;
         if (!closed) retry = window.setTimeout(connect, 3000);
       };
     };
