@@ -103,3 +103,13 @@ test('connected stores get the price on Shopify; other platforms and write error
   expect(writes).toEqual([['peak', id, { price: to, compareAt: 99 }]]);
   expect(db.prepare('SELECT approval_id, to_price FROM price_tests').all()).toEqual([{ approval_id: 'a1', to_price: to }]);
 });
+
+test('a price approved after the price moved is not applied and starts no test', async () => {
+  const id = String(db.prepare(`SELECT id FROM products WHERE store_id = 'peak' LIMIT 1`).get()!.id);
+  db.prepare(`UPDATE products SET price = 22 WHERE id = ?`).run(id);
+  const approval = { id: 'a1', storeId: 'peak', agentId: 'peak:market_analyst', title: 'Test $24', reason: 'r', status: 'approved', createdAt: '', action: { kind: 'store.set_price', payload: { productId: id, title: 'T', from: 20, to: 24 } } } as ApprovalRequest;
+  await applyPriceChange(db, approval, async () => {});
+  expect(db.prepare('SELECT price FROM products WHERE id = ?').get(id)?.price).toBe(22);
+  expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
+  expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Not applied: "Test $24"'`).get()?.body).toBe('The price moved since this was asked (20 → now 22). Ask the Market Analyst again if it still makes sense.');
+});

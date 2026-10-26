@@ -91,7 +91,7 @@ test('connected stores get it on the ad account; an ad account error tells the o
   const writes: unknown[] = [];
   const approval = (kind: string, payload: object) => ({ id: 'x', storeId: 'pawsome', agentId: 'pawsome:ad_strategist', title: 't', reason: 'r', status: 'approved', createdAt: '', action: { kind, payload } }) as ApprovalRequest;
   const write = async (...args: unknown[]) => void writes.push(args);
-  await applyAdChange(db, approval('ads.set_budget', { campaignId: 'pawsome-c3', from: 40, to: 55 }), write);
+  await applyAdChange(db, approval('ads.set_budget', { campaignId: 'pawsome-c3', from: budget('pawsome-c3').daily_budget, to: 55 }), write);
   await applyAdChange(db, approval('ads.pause_campaign', { network: 'meta', campaignId: 'pawsome-c3' }), write);
   const network = String(db.prepare(`SELECT network FROM campaigns WHERE id = 'pawsome-c3'`).get()?.network);
   expect(writes).toEqual([['pawsome', network, 'pawsome-c3', { dailyBudget: 55 }], ['pawsome', 'meta', 'pawsome-c3', 'pause']]);
@@ -110,6 +110,27 @@ function approvedChange(id: string, title: string, revenueFactorAfter: number) {
 }
 const outcomes = () => listMemory(db, 'peak').filter((m) => m.tags.includes('outcome'));
 const basis = (title: string) => listMemory(db, 'peak').find((m) => m.text === `Basis for ${title}`)?.confidence;
+
+test('a late approval does not undo a budget the owner moved, nor pause a paused campaign, and is not scored', async () => {
+  const writes: unknown[] = [];
+  const write = async (...args: unknown[]) => void writes.push(args);
+  const approval = (id: string, kind: string, payload: object) => ({ id, storeId: 'pawsome', agentId: 'pawsome:ad_strategist', title: 'Raise it', reason: 'r', status: 'approved', createdAt: '', action: { kind, payload } }) as ApprovalRequest;
+  db.prepare(`UPDATE campaigns SET daily_budget = 90 WHERE id = 'pawsome-c1'`).run();
+  db.prepare(`UPDATE campaigns SET status = 'paused' WHERE id = 'pawsome-c2'`).run();
+  await applyAdChange(db, approval('late', 'ads.set_budget', { campaignId: 'pawsome-c1', from: 60, to: 72 }), write);
+  await applyAdChange(db, approval('noop', 'ads.pause_campaign', { campaignId: 'pawsome-c2' }), write);
+  await applyAdChange(db, approval('ok', 'ads.set_budget', { campaignId: 'pawsome-c1', from: 90.5, to: 100 }), write); // within 1%
+  expect(budget('pawsome-c1').daily_budget).toBe(100);
+  expect(db.prepare(`SELECT title, body FROM notifications WHERE title LIKE 'Not applied%'`).all()).toEqual([
+    { title: 'Not applied: "Raise it"', body: 'The budget moved since this was asked ($60 → now $90). Ask the Ad Strategist again if it still makes sense.' },
+  ]);
+  expect(db.prepare(`SELECT ref FROM done_once WHERE ref LIKE 'not-applied:%' ORDER BY ref`).all()).toEqual([{ ref: 'not-applied:late' }, { ref: 'not-applied:noop' }]);
+
+  approvedChange('a-skip', 'Raise it', 3);
+  db.prepare(`INSERT INTO done_once (ref, at) VALUES ('not-applied:a-skip', '')`).run();
+  await app.request('/api/commander');
+  expect(outcomes()).toEqual([]);
+});
 
 test('an approved ad change followed by better blended ROAS is a measured win, paid once and remembered', async () => {
   approvedChange('a-win', 'Pause Spark Ads · UGC', 3);

@@ -62,16 +62,28 @@ export type WriteAd = (storeId: string, network: AdNetwork, campaignId: string, 
  * Applies an approved ad change: connected stores on the ad account first (an error tells the owner and leaves the
  * campaign as it was), then the local campaign row; demo stores locally only.
  */
+/** A request approved after its number moved (the owner edited it, or a sync brought a change): applying it would undo that. */
+const moved = (from: number, now: number) => Math.abs(now - from) > from * 0.01;
+
 export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) {
-  const p = (a.action.payload ?? {}) as { network?: unknown; campaignId?: unknown; to?: unknown };
+  const p = (a.action.payload ?? {}) as { network?: unknown; campaignId?: unknown; from?: unknown; to?: unknown };
   const store = getStore(db, a.storeId);
   const pause = a.action.kind === 'ads.pause_campaign';
   if (!store || typeof p.campaignId !== 'string' || (!pause && !(typeof p.to === 'number' && p.to >= 1))) return;
-  const network = (typeof p.network === 'string' ? p.network : db.prepare('SELECT network FROM campaigns WHERE id = ? AND store_id = ?').get(p.campaignId, store.id)?.network) as AdNetwork;
+  const c = db.prepare('SELECT network, daily_budget, status FROM campaigns WHERE id = ? AND store_id = ?').get(p.campaignId, store.id);
+  const network = (typeof p.network === 'string' ? p.network : c?.network) as AdNetwork;
+  // Nothing changes (already off, refused, failed): `not-applied` keeps checkAdOutcomes from scoring it.
+  const skip = () => void once(db, `not-applied:${a.id}`);
+  if (pause && c && c.status !== 'active') return skip();
+  if (!pause && typeof p.from === 'number' && c && moved(p.from, Number(c.daily_budget))) {
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The budget moved since this was asked ($${p.from} → now $${Number(c.daily_budget)}). Ask the Ad Strategist again if it still makes sense.`, storeId: store.id });
+    return skip();
+  }
   if (store.connected) {
     try {
       await write(store.id, network, p.campaignId, pause ? 'pause' : { dailyBudget: p.to as number });
     } catch (e) {
+      skip();
       notify(db, { kind: 'error', title: `Couldn't apply "${a.title}" on the ad account`, body: `${(e as Error).message}. Apply it by hand in the ad manager.`, storeId: store.id });
       return;
     }
@@ -95,6 +107,11 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
   const p = (a.action.payload ?? {}) as { productId?: unknown; title?: unknown; from?: unknown; to?: unknown; compareAt?: unknown };
   const store = getStore(db, a.storeId);
   if (!store || typeof p.productId !== 'string' || typeof p.to !== 'number' || typeof p.from !== 'number') return;
+  const now = db.prepare('SELECT price FROM products WHERE store_id = ? AND id = ?').get(store.id, p.productId)?.price;
+  if (now != null && moved(p.from, Number(now))) {
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The price moved since this was asked (${p.from} → now ${Number(now)}). Ask the Market Analyst again if it still makes sense.`, storeId: store.id });
+    return;
+  }
   const compareAt = typeof p.compareAt === 'number' ? p.compareAt : undefined;
   if (store.connected) {
     try {

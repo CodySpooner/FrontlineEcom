@@ -54,7 +54,8 @@ export function checkAdOutcomes(db: Db, today = localDate()) {
   const rows = db
     .prepare(
       `SELECT id, store_id, agent_id, run_id, title, decided_at FROM approvals
-       WHERE status = 'approved' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign', 'ads.pause_adsets') AND decided_at >= ?`,
+       WHERE status = 'approved' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign', 'ads.pause_adsets') AND decided_at >= ?
+         AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'not-applied:' || approvals.id)`,
     )
     .all(new Date(Date.now() - 30 * 86_400_000).toISOString());
   for (const r of rows) {
