@@ -383,8 +383,8 @@ function Schedule({ agent }: { agent: Agent }) {
             <li key={r.id} className="flex items-center justify-between gap-4 py-2.5 first:pt-0 last:pb-0">
               <span className="min-w-0">
                 <span className="block text-[13px] font-semibold">{r.name}</span>
-                <span className="block text-xs text-muted">{[describeTrigger(r.trigger), r.enabled && r.nextRunAt && `next ${when(r.nextRunAt)}`].filter(Boolean).join(' · ')}</span>
-                <span className="block truncate text-xs text-text-2" title={r.action.task}>
+                <span className="block text-xs text-text-2">{[describeTrigger(r.trigger), r.enabled && r.nextRunAt && `next ${when(r.nextRunAt)}`].filter(Boolean).join(' · ')}</span>
+                <span className="block truncate text-xs text-muted" title={r.action.task}>
                   {r.action.task}
                 </span>
               </span>

@@ -1,5 +1,5 @@
 // UI-18 Gamification: XP toasts (with a level-up burst and optional sound) and the Commander profile with achievements.
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Flame, Lock, Trophy } from 'lucide-react';
 import { AGENT_ROLES, type AgentRole, type LiveMessage } from '@frontline/shared';
 import { useAchievements, useCommander, useSettings } from '../api/client';
@@ -32,11 +32,15 @@ const MISSION = 'Mission complete: ';
 /** Mount once (Shell): "+25 XP" toasts as agents and the owner earn XP. */
 export function XpToasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const box = useRef<HTMLDivElement>(null);
   const sound = useSettings().data?.sound ?? false;
   const { name } = useStoreSelection();
   useEffect(() => {
     let key = 0;
     const on = (e: Event) => {
+      // Re-show so the toasts sit above a modal opened since (the bell drawer, where approving earns XP).
+      box.current?.hidePopover?.();
+      box.current?.showPopover?.();
       const m = (e as CustomEvent<XpMessage>).detail;
       const t = { ...m, key: ++key };
       setToasts((list) => [...list, t].slice(-3));
@@ -48,7 +52,12 @@ export function XpToasts() {
     return () => window.removeEventListener('frontline:xp', on);
   }, [sound]);
   return (
-    <div aria-live="polite" className="pointer-events-none fixed right-4 bottom-4 z-50 grid w-[min(320px,calc(100vw-32px))] gap-2">
+    <div
+      ref={box}
+      popover="manual"
+      aria-live="polite"
+      className="pointer-events-none fixed inset-auto right-4 bottom-4 z-50 m-0 grid w-[min(320px,calc(100vw-32px))] gap-2 overflow-visible border-0 bg-transparent p-0 text-text"
+    >
       {toasts.map(({ key, xp, levelUp }) => {
         const role = xp.agentId?.split(':')[1] as AgentRole | undefined;
         const who = role && AGENT_ROLES[role] ? `${AGENT_ROLES[role].name}${xp.storeId ? ` · ${name(xp.storeId)}` : ''}` : 'Commander';
