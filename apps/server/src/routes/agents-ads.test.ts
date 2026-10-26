@@ -49,6 +49,18 @@ test('review_campaigns gives thresholds and a verdict per campaign', async () =>
   for (const r of rows) expect(['scale', 'hold', 'cut', 'pause', 'learning', 'paused']).toContain(r.split(',')[9]);
 });
 
+test("an old account's paused campaigns with no spend are left out; one that is on but spends nothing stays", async () => {
+  const add = db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, 'pawsome', ?, ?, 0)`);
+  for (let i = 0; i < 3; i++) add.run(`old-${i}`, `Black Friday ${2020 + i}`, i ? 'paused' : 'archived');
+  add.run('stuck', 'Stuck in review', 'with_issues');
+  const { outputs } = await run([{ call: 'review_campaigns' }, { call: 'list_campaigns' }], 'approve', 'pawsome:ad_strategist');
+  for (const out of outputs) {
+    expect(out).toContain('(3 paused or archived campaigns with no spend in the window left out)\n');
+    expect(out).toContain('Stuck in review');
+    expect(out).not.toContain('Black Friday');
+  }
+});
+
 test("break-even ROAS nets the owner's fee estimate, like the store's profit", async () => {
   const head = async () => {
     const [out] = (await run([{ call: 'review_campaigns' }])).outputs;

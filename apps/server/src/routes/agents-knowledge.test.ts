@@ -54,4 +54,4 @@ test('the owner edits a layer: agents read the edit until it is reset to the shi
   expect((await send('DELETE', '/api/knowledge/niche/other:vintage-fountain-pens')).status).toBe(400);
   expect((await send('PUT', '/api/knowledge/playbook/../../etc', { markdown: '# x' })).status).toBe(404);
   expect((await send('PUT', '/api/knowledge/niche/pet', { markdown: ' ' })).status).toBe(400);
-});
+}, 15_000); // file writes: 1 s alone, timed out at 5 s once under the full suite's load

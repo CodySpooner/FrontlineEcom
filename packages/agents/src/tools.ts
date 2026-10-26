@@ -268,10 +268,10 @@ export const APP_TOOLS: AppTool[] = [
           `SELECT c.network, c.id, c.name, c.status, c.daily_budget, coalesce(sum(d.spend), 0) AS spend, coalesce(sum(d.revenue), 0) AS revenue,
              coalesce(sum(d.purchases), 0) AS purchases, coalesce(sum(d.clicks), 0) AS clicks, coalesce(sum(d.impressions), 0) AS impressions
            FROM campaigns c LEFT JOIN campaign_daily d ON d.network = c.network AND d.campaign_id = c.id AND d.date >= ?
-           WHERE c.store_id = ? GROUP BY c.network, c.id ORDER BY spend DESC`,
+           WHERE c.store_id = ? GROUP BY c.network, c.id ${LIVE_CAMPAIGNS} ORDER BY spend DESC`,
         )
         .all(since(days, ctx.store), ctx.store.id);
-      return csv(
+      return idleNote(ctx, rows.length) + csv(
         rows.map((r) => {
           const [spend, revenue, purchases, clicks, impressions] = [r.spend, r.revenue, r.purchases, r.clicks, r.impressions].map(Number) as number[];
           return {
@@ -686,13 +686,16 @@ export const APP_TOOLS: AppTool[] = [
       const rows = campaignStats(ctx, days);
       return [
         `margin after cost, tax and fees ${r2(econ.margin * 100)}%, AOV ${r2(econ.aov)}, break-even ROAS ${r2(t.breakEven)}, target ROAS ${r2(t.target)}, max CPA ${r2(t.maxCpa)} (30 days); campaigns over ${days} days:`,
+        idleNote(ctx, rows.length).trimEnd(),
         csv(
           reviewCampaigns(rows, econ).map((c) => ({
             network: c.network, id: c.id, name: c.name, status: c.status, daily_budget: c.dailyBudget, spend: r2(c.spend), roas: c.roas, cpa: c.cpa ?? '',
             purchases: c.purchases, verdict: c.verdict, suggested_budget: c.suggestedBudget,
           })),
         ),
-      ].join('\n');
+      ]
+        .filter(Boolean)
+        .join('\n');
     },
   }),
   defineTool({
@@ -878,13 +881,23 @@ export async function requestApproval(ctx: ToolContext, req: { title: string; re
     : { approved: false, message: `Denied by the owner: ${req.title}. Do not do it; suggest an alternative if useful.` };
 }
 
+/**
+ * A years-old ad account lists hundreds of paused campaigns: the ones off with no spend in the window are left out (a
+ * campaign that is on but spends nothing stays: something is wrong with it).
+ */
+const LIVE_CAMPAIGNS = `HAVING spend > 0 OR c.status NOT IN ('paused', 'campaign_paused', 'archived', 'deleted')`;
+const idleNote = (ctx: ToolContext, shown: number) => {
+  const left = Number(ctx.db.prepare('SELECT count(*) AS n FROM campaigns WHERE store_id = ?').get(ctx.store.id)?.n) - shown;
+  return left > 0 ? `(${left} paused or archived campaigns with no spend in the window left out)\n` : '';
+};
+
 function campaignStats(ctx: ToolContext, days: number): CampaignStats[] {
   return ctx.db
     .prepare(
       `SELECT c.network, c.id, c.name, c.status, c.daily_budget, coalesce(sum(d.spend), 0) AS spend, coalesce(sum(d.revenue), 0) AS revenue,
          coalesce(sum(d.purchases), 0) AS purchases
        FROM campaigns c LEFT JOIN campaign_daily d ON d.network = c.network AND d.campaign_id = c.id AND d.date >= ?
-       WHERE c.store_id = ? GROUP BY c.network, c.id ORDER BY spend DESC`,
+       WHERE c.store_id = ? GROUP BY c.network, c.id ${LIVE_CAMPAIGNS} ORDER BY spend DESC`,
     )
     .all(since(days, ctx.store), ctx.store.id)
     .map((r) => ({ network: String(r.network), id: String(r.id), name: String(r.name), status: String(r.status), dailyBudget: Number(r.daily_budget), spend: Number(r.spend), revenue: Number(r.revenue), purchases: Number(r.purchases) }));
