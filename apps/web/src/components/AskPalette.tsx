@@ -5,6 +5,7 @@ import { Search, Sparkles, type LucideIcon } from 'lucide-react';
 import { useStartRun } from '../api/client';
 import { matchPages } from '../lib/palette';
 import { NAV } from '../nav';
+import { FixLink } from './Chat';
 import { useStoreSelection } from './StoreFilter';
 import { cx, Dialog } from './ui';
 
@@ -113,7 +114,7 @@ function Palette({ onClose }: { onClose: () => void }) {
       </ul>
       {start.isError && (
         <p role="alert" className="px-5 pb-2 text-xs text-red">
-          {start.error.message}
+          {start.error.message} <FixLink message={start.error.message} agentId={start.variables?.agentId ?? ''} onClick={onClose} />
         </p>
       )}
       <p className="border-t border-line px-5 py-2 text-[11px] text-muted">↑ ↓ to move · Enter to open · Esc to close</p>

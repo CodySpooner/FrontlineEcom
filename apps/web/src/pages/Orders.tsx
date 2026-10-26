@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { ChevronDown, ChevronUp, CircleCheck, CircleHelp, Clock, Factory, MapPin, PackageCheck, PackageSearch, RotateCcw, Search, Truck, type LucideIcon } from 'lucide-react';
 import type { FulfillmentStatus, OrderIssue, OrderIssueKind, OrderStatus } from '@frontline/shared';
 import { useOrderIssues, useOrders, useSetIssueStatus, useStartRun, type OrderQuery } from '../api/client';
+import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, Chip, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, Segmented, Table } from '../components/ui';
@@ -195,7 +196,7 @@ function CheckIssue({ i: { order: o, kind, detail } }: { i: Issue }) {
       <p className="text-xs text-text-2">{detail}</p>
       {start.isError && (
         <p role="alert" className="mt-1 text-xs text-red">
-          {start.error.message}
+          {start.error.message} <FixLink message={start.error.message} agentId={start.variables?.agentId ?? ''} />
         </p>
       )}
     </IssueRow>

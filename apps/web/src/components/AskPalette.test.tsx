@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
-import { renderApp, stubApi } from '../test-utils';
+import { renderApp, reply, stubApi } from '../test-utils';
 import { AskPalette } from './AskPalette';
 
 const stores = [{ id: 'pawsome', name: 'Pawsome Gear', currency: 'USD' }];
@@ -42,5 +42,21 @@ describe('Ask AI palette', () => {
       '/api/agents/pawsome%3Amarket_analyst/runs',
       expect.objectContaining({ method: 'POST', body: JSON.stringify({ task: 'Why is profit down?' }) }),
     );
+  });
+
+  it("a budget refusal links to the agent's settings and closes the palette on the way", async () => {
+    stubApi((url, init) => {
+      if (init?.method === 'POST') return reply({ error: "Today's budget for this agent ($0.3) is used up. Raise it in its settings." }, 409);
+      if (url.startsWith('/api/stores')) return stores;
+    });
+    renderApp(<AskPalette />);
+    window.dispatchEvent(new Event('frontline:ask'));
+    const input = await screen.findByRole('combobox');
+    fireEvent.change(input, { target: { value: 'Why is profit down?' } });
+    await screen.findByText('Ask the Market Analyst · Pawsome Gear');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.click(await screen.findByRole('link', { name: "Raise the agent's budget" }));
+    expect(screen.getByTestId('where').textContent).toBe('/agents/pawsome%3Amarket_analyst?tab=settings');
+    expect(screen.queryByRole('combobox')).toBeNull();
   });
 });

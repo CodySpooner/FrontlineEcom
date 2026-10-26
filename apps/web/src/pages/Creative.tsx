@@ -4,6 +4,7 @@ import { Link, useSearchParams } from 'react-router';
 import { Captions, Copy, Download, PenLine, Sparkles, Trash2, Wand2, Zap } from 'lucide-react';
 import type { AgentRole, AspectRatio, Creative as CreativeT, CreativeKind } from '@frontline/shared';
 import { useCaps, useCreatives, useDeleteCreative, useIntegrations, useStartRun } from '../api/client';
+import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, buttonClass, cx, EmptyState, ErrorState, LoadingState, Panel, StatusDot, Tabs } from '../components/ui';
@@ -126,7 +127,7 @@ export function Creative() {
             )}
             {start.isError && (
               <p role="alert" className="text-xs text-red">
-                {start.error.message}
+                {start.error.message} <FixLink message={start.error.message} agentId={start.variables?.agentId ?? ''} />
               </p>
             )}
             <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3 text-xs text-muted">

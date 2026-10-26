@@ -4,7 +4,7 @@ import { Link, useSearchParams } from 'react-router';
 import { LayoutTemplate } from 'lucide-react';
 import { PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, type PageDraft, type PageDraftStatus } from '@frontline/shared';
 import { useApprovals, usePageDraftActions, usePageDrafts, useStartRun } from '../api/client';
-import { ApprovalCard } from '../components/Chat';
+import { ApprovalCard, FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { Markdown } from '../components/Markdown';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
@@ -114,7 +114,7 @@ function Brief() {
         </div>
         {start.isError && (
           <p role="alert" className="text-xs text-red">
-            {start.error.message}
+            {start.error.message} <FixLink message={start.error.message} agentId={start.variables?.agentId ?? ''} />
           </p>
         )}
         {start.data && (

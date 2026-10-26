@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { ArrowDownRight, ArrowUpRight, ExternalLink, Eye, Megaphone, Sparkles } from 'lucide-react';
 import type { AdSnapshotData, Competitor, CompetitorSnapshot, PriceChange } from '@frontline/shared';
 import { useCompetitorActions, useCompetitors, usePriceChanges, useRuns, useSnapshots, useStartRun } from '../api/client';
+import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, RUN_STATUS } from '../components/ui';
@@ -281,7 +282,7 @@ function Briefs({ c }: { c: Competitor }) {
       </Button>
       {start.isError && (
         <p role="alert" className="mt-2 text-xs text-red">
-          {start.error.message}
+          {start.error.message} <FixLink message={start.error.message} agentId={start.variables?.agentId ?? ''} />
         </p>
       )}
       <div className="mt-4">

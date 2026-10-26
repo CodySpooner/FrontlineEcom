@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Baby, Bookmark, Cpu, Dumbbell, Lamp, Package, PawPrint, Search, Shirt, Sparkles, Tent, type LucideIcon } from 'lucide-react';
 import { NICHES, PRODUCT_WRITE_PLATFORMS, type Niche, type ProductList, type ResearchProduct, type ResearchSource, type ResearchTab } from '@frontline/shared';
 import { useAddToStore, useListActions, useLists, useResearch, useStartRun, useSupplierSearch } from '../api/client';
+import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { byHand } from '../components/StoreForm';
@@ -82,7 +83,7 @@ export function Research() {
           </Button>
           {start.isError && (
             <p role="alert" className="w-full text-right text-xs text-red">
-              {start.error.message}
+              {start.error.message} <FixLink message={start.error.message} agentId={start.variables?.agentId ?? ''} />
             </p>
           )}
         </div>

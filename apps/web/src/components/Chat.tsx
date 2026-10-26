@@ -189,10 +189,10 @@ export function Transcript({ run, role, onRetry }: { run: AgentRunDetail; role: 
 }
 
 /** A link to the setting that lifts a budget refusal; nothing for other errors. */
-function FixLink({ message, agentId }: { message: string; agentId: string }) {
+export function FixLink({ message, agentId, onClick }: { message: string; agentId: string; onClick?: () => void }) {
   const fix = budgetFix(message, agentId);
   return fix ? (
-    <Link to={fix.to} className="font-semibold text-text-2 underline underline-offset-2 hover:text-white">
+    <Link to={fix.to} onClick={onClick} className="font-semibold whitespace-nowrap text-text-2 underline underline-offset-2 hover:text-white">
       {fix.label}
     </Link>
   ) : null;
