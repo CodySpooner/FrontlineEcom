@@ -62,6 +62,15 @@ describe('Sync now', () => {
   });
 });
 
+describe('connection notice', () => {
+  it("shows core's note on a working connection, in full", () => {
+    stubApi(() => undefined);
+    const notice = "Meta Ads reports its days in America/Phoenix, 16 h behind the store's Asia/Tokyo, so a day's ad spend covers other hours than its sales.";
+    renderApp(<Connection i={{ ...saved, kind: 'meta_ads', notice }} onOpen={() => {}} />);
+    expect(screen.getByText(notice).className).not.toContain('truncate');
+  });
+});
+
 describe('Claude card', () => {
   it('says how to sign in, then checks again', async () => {
     const fetch = stubApi((url) =>
