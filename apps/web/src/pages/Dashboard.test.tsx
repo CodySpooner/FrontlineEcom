@@ -102,6 +102,18 @@ describe('demo numbers in real totals', () => {
   });
 });
 
+describe('Autopilot · last 24h', () => {
+  it('says how many more autopilot approved past the 3 it lists', async () => {
+    const now = new Date().toISOString();
+    const auto = Array.from({ length: 5 }, (_, i) => ({ ...approval, id: `auto${i}`, title: `Auto change ${i + 1}`, status: 'approved', decidedAt: now, action: { ...approval.action, auto: true } }));
+    stubApi((url) => (url.startsWith('/api/stores') ? [store] : url.includes('status=approved') ? auto : []));
+    renderApp(<Requests />);
+    await screen.findByText('Auto change 3', { exact: false });
+    expect(screen.queryByText('Auto change 4', { exact: false })).toBeNull();
+    expect(screen.getByText('+2 more in the last 24h')).toBeTruthy();
+  });
+});
+
 describe('Daily Missions', () => {
   it("shows the first 8 and lets the owner see the rest, so a third store's missions aren't cut off", async () => {
     const missions = Array.from({ length: 12 }, (_, i) => ({ id: `m${i}`, storeId: 'pawsome', title: `Mission ${i + 1}`, progress: 0, target: 2, xp: 40 }));

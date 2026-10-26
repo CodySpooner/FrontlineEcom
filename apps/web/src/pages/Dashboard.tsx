@@ -426,7 +426,8 @@ const DAY_MS = 86_400_000;
 /** What autopilot approved on its own (within the agent's cap) in the last 24h, so the owner can see it acted. */
 function Autopiloted() {
   const { has, name } = useStoreSelection();
-  const list = (useApprovals('approved').data ?? []).filter((a) => a.action.auto && has(a.storeId) && Date.now() - Date.parse(a.decidedAt ?? a.createdAt) < DAY_MS).slice(0, 3);
+  const all = (useApprovals('approved').data ?? []).filter((a) => a.action.auto && has(a.storeId) && Date.now() - Date.parse(a.decidedAt ?? a.createdAt) < DAY_MS);
+  const list = all.slice(0, 3);
   if (!list.length) return null;
   return (
     <div className="mt-3 border-t border-line pt-3">
@@ -441,6 +442,7 @@ function Autopiloted() {
           </li>
         ))}
       </ul>
+      {all.length > list.length && <p className="mt-1.5 text-xs text-muted">{`+${all.length - list.length} more in the last 24h`}</p>}
     </div>
   );
 }
