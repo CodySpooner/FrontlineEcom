@@ -98,7 +98,7 @@ test('store_summary names the Amazon channel sales in its totals', async () => {
   expect(plain.amazonChannel).toBeUndefined();
   db.prepare(`INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('glow', 'amazon', ?, 210.25, 7)`).run(plain.to);
   try {
-    expect((await summary()).amazonChannel).toEqual({ revenue: 210.25, orders: 7, note: expect.stringMatching(/take it out for site profit, margin, ROAS and conversion/) });
+    expect((await summary()).amazonChannel).toEqual({ revenue: 210.25, orders: 7, note: expect.stringMatching(/Profit counts an estimate of its costs .+take it out for the site's own ROAS and AOV\./) });
   } finally {
     db.prepare(`DELETE FROM channel_daily WHERE store_id = 'glow'`).run(); // the db is shared by these tests
   }

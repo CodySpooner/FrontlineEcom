@@ -148,7 +148,7 @@ export const APP_TOOLS: AppTool[] = [
       const amazon = ctx.store.platform === 'amazon' ? undefined
         : ctx.db.prepare(`SELECT round(sum(revenue), 2) AS revenue, sum(orders) AS orders FROM channel_daily WHERE store_id = ? AND channel = 'amazon' AND date BETWEEN ? AND ?`).get(ctx.store.id, s.from, s.to);
       const amazonChannel = Number(amazon?.revenue) || Number(amazon?.orders)
-        ? { revenue: Number(amazon!.revenue), orders: Number(amazon!.orders), note: "In the totals, but its product costs aren't in profit and the store's ads mostly drive its own site: take it out for site profit, margin, ROAS and conversion." }
+        ? { revenue: Number(amazon!.revenue), orders: Number(amazon!.orders), note: "In the totals. Profit counts an estimate of its costs (the store's own cost ratio plus Amazon's 15% referral fee); ROAS and AOV count its sales, which the store's ads mostly didn't drive: take it out for the site's own ROAS and AOV." }
         : undefined;
       return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals), ...(amazonChannel && { amazonChannel }) });
     },
