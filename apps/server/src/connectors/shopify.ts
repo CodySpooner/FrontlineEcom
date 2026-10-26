@@ -69,7 +69,7 @@ const VARIANT_M = `mutation ($productId: ID!, $variants: [ProductVariantsBulkInp
 const PRODUCT_UPDATE_M = `mutation ($product: ProductUpdateInput!) {
   productUpdate(product: $product) { product { id } userErrors { message } } }`;
 
-const VARIANT_IDS_Q = `query ($id: ID!) { product(id: $id) { variants(first: 250) { nodes { id } pageInfo { hasNextPage } } } }`;
+const VARIANT_IDS_Q = `query ($id: ID!) { product(id: $id) { variants(first: 250) { nodes { id price } pageInfo { hasNextPage } } } }`;
 
 const PAGE_CREATE_M = `mutation ($page: PageCreateInput!) {
   pageCreate(page: $page) { page { id handle } userErrors { message } } }`;
@@ -296,9 +296,11 @@ export async function setProductPrice(db: Db, key: Buffer, storeId: string, prod
 
 async function repriceVariants(q: ReturnType<typeof admin>, productId: string, price: number, compareAt: number | null | undefined) {
   const productGid = `gid://shopify/Product/${productId}`;
-  const { product } = await q<{ product: { variants: { nodes: { id: string }[]; pageInfo: { hasNextPage: boolean } } } | null }>(VARIANT_IDS_Q, { id: productGid });
+  const { product } = await q<{ product: { variants: { nodes: { id: string; price: string }[]; pageInfo: { hasNextPage: boolean } } } | null }>(VARIANT_IDS_Q, { id: productGid });
   if (!product?.variants.nodes.length) throw new Error(`Shopify: product ${productId} not found`);
   if (product.variants.pageInfo.hasNextPage) throw new Error(`Shopify: product ${productId} has over 250 variants; change its price in Shopify`);
+  // One price for all would flatten e.g. S $20 / XL $25.
+  if (new Set(product.variants.nodes.map((v) => Number(v.price))).size > 1) throw new Error(`Shopify: product ${productId}'s variants have different prices; change them in Shopify`);
   const change = { price: price.toFixed(2), ...(compareAt !== undefined ? { compareAtPrice: compareAt === null ? null : compareAt.toFixed(2) } : {}) };
   const variants = product.variants.nodes.map((v) => ({ id: v.id, ...change }));
   const { productVariantsBulkUpdate: u } = await q<{ productVariantsBulkUpdate: { userErrors: { message: string }[] } }>(VARIANT_M, { productId: productGid, variants });

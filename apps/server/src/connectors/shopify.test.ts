@@ -187,7 +187,8 @@ test('setProductPrice reprices every variant and the local product', async () =>
     const body = JSON.parse(String(init.body));
     calls.push(body);
     if (body.query.includes('variants(first')) {
-      return Response.json({ data: { product: body.variables.id.endsWith('/404') ? null : { variants: { nodes: [{ id: 'gid://shopify/ProductVariant/1' }, { id: 'gid://shopify/ProductVariant/2' }], pageInfo: { hasNextPage: body.variables.id.endsWith('/999') } } } } });
+      const xl = body.variables.id.endsWith('/777') ? '25.00' : '49.00';
+      return Response.json({ data: { product: body.variables.id.endsWith('/404') ? null : { variants: { nodes: [{ id: 'gid://shopify/ProductVariant/1', price: '49.00' }, { id: 'gid://shopify/ProductVariant/2', price: xl }], pageInfo: { hasNextPage: body.variables.id.endsWith('/999') } } } } });
     }
     const bad = body.variables.variants[0].price === '1.00';
     return Response.json({ data: { productVariantsBulkUpdate: { userErrors: bad ? [{ message: 'Price is too low' }] : [] } } });
@@ -209,11 +210,13 @@ test('setProductPrice reprices every variant and the local product', async () =>
   expect(calls).toHaveLength(0);
   await expect(setProductPrice(db, key, 'glow', '404', { price: 10 }, fetchFn)).rejects.toThrow('Shopify: product 404 not found');
   await expect(setProductPrice(db, key, 'glow', '999', { price: 10 }, fetchFn)).rejects.toThrow('over 250 variants');
+  await expect(setProductPrice(db, key, 'glow', '777', { price: 10 }, fetchFn)).rejects.toThrow("product 777's variants have different prices");
   expect(calls.some((c) => c.query.includes('productVariantsBulkUpdate'))).toBe(false);
   await expect(setProductPrice(db, key, 'glow', '111', { price: 1 }, fetchFn)).rejects.toThrow('Shopify: Price is too low');
   expect(local()).toEqual({ price: 39.5, compareAt: null });
   expect(listActions(db, ['glow'], 10).map((a) => [a.action, a.target, a.detail, a.ok])).toEqual([
     ['price_change', '111', { price: 1 }, false],
+    ['price_change', '777', { price: 10 }, false],
     ['price_change', '999', { price: 10 }, false],
     ['price_change', '404', { price: 10 }, false],
     ['price_change', '111', { price: 39.5, compareAt: null }, true],

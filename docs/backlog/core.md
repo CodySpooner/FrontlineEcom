@@ -87,6 +87,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Fix: `setProductPrice` refuses a product whose variants have different prices ("change them in Shopify"), instead of flattening e.g. S $20 / XL $25 to one price on an approved price change
 - 2026-10-26 — Review fix: demo orders match `daily_metrics` on every day of the last week, not only today. Days the app was closed and the rest of yesterday are filled in, spread across the gap. Only orders from the last minute go to the live feed, so there is no burst after a restart. `dayFraction` uses the real day length, so 23 h and 25 h DST days reach 1. Verified on the dev DB (3 stores x 3 days equal)
 - 2026-10-26 — Review fix: a store whose currency has no exchange rate (not an ECB currency, or nothing fetched yet) is left out of combined amounts instead of counted 1:1, and `AnalyticsSummary.unconverted` lists its currency. The rate loop checks every 10 min, so a store that just changed currency gets rates soon, and waits an hour after a failed fetch
 - 2026-10-26 — Review fix: WooCommerce orders are dated by the shop's own `date_created` (site timezone), not the store record's timezone, which the form never asks for. The store takes the newest order's currency, so an EUR shop isn't treated as USD
