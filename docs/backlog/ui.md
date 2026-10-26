@@ -200,6 +200,8 @@ Orca's browser against the reference before ticking it.
       newest 50/100 across all stores and filtering, where a busy store crowds a quiet one out.
 - [x] UI-75 The Dashboard's Live Store Activity is fetched for the picked stores, and live events join only the feeds
       they belong to, so busy (e.g. demo) stores can't push a quiet store's activity out of the 30-event cache.
+- [x] UI-76 Top products' stock label reads the row's own `inventory`/`inventoryTracked`/`status` (core 9388061, from
+      our request), so a best seller past the first 200 products still shows stock, and the extra products fetch is gone.
 
 ## Blocked
 
@@ -305,3 +307,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-73: `useMissingCosts(ids)` asks for `status=active&sort=margin&dir=desc&limit=200`. A cost of 0 is a 100% margin, so every missing cost comes first; up to 200 are shown (ponytail note on that ceiling). Its key starts with `products`, so cost saves and approvals refresh it. Both Unit costs and the Dashboard use it, and archived products now drop out server-side (UI-69). The Analytics test asserts the query. Chrome with Pet Water Fountain's cost zeroed: the API returned it first, the Dashboard read "1 cost missing" and Unit costs listed it. Cost restored (14.75)
 - 2026-10-26 — UI-74: `useAutomationRuns(ids)` and `usePriceChanges(ids)` pass `stores=` (both APIs take it). Keys are `[name, ids]`, so the existing prefix invalidations still hit them, and the client-side `has()` filters are gone. Automation.test asserts `?stores=peak&limit=50`. Chrome on Competitors: Peak showed 4 moves, all "vs Peak Fit"; All stores showed 29 across three stores, matching the API. Selection reset to All
 - 2026-10-26 — UI-75: `useEvents(ids)` is keyed `['events', ids]` with `stores=`. useLive walks `getQueriesData(['events'])` and prepends an event only where the key's ids are empty or include its store. live.test covers it: a Glow event lands in the all-stores feed, not Peak's. Chrome: with Peak picked, the feed listed only Peak events going back 8 min. With All stores, a new Pawsome event streamed in live
+- 2026-10-26 — UI-76: TopProducts (now exported) passes the row to `stockLeft`, or undefined when the product left the catalog, and no longer calls `useProducts`. Analytics.test asserts "40 left · ~4 days" with no `/api/products` fetch. Chrome: the five Pawsome rows show stock from the row. "176 left" is right at 15.2 days of cover (the flag starts under 14)

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Product, type TopProduct } from '@frontline/shared';
-import { useCampaigns, useMissingCosts, useProducts, useSetCost, useSummary, useTopProducts } from '../api/client';
+import { useCampaigns, useMissingCosts, useSetCost, useSummary, useTopProducts } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
 import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
@@ -196,10 +196,8 @@ function Channels({ q, be, cur }: { q: Campaigns; be: number; cur?: string }) {
   );
 }
 
-function TopProducts({ ids, range, name, cur }: { ids: string[]; range: AnalyticsRange; name?: (id: string) => string; cur?: string }) {
+export function TopProducts({ ids, range, name, cur }: { ids: string[]; range: AnalyticsRange; name?: (id: string) => string; cur?: string }) {
   const q = useTopProducts(ids, range, 5);
-  // The first 200 products by title: a top product past that shows no stock.
-  const products = useProducts(ids).data?.items;
   return (
     <Panel title="Top Products" sub={`Best 5 by revenue, ${PERIOD[range]}`}>
       {q.isPending ? (
@@ -207,7 +205,7 @@ function TopProducts({ ids, range, name, cur }: { ids: string[]; range: Analytic
       ) : q.isError ? (
         <ErrorState message="Couldn't load products." onRetry={() => q.refetch()} />
       ) : (
-        <TopTable rows={q.data} name={name} cur={cur} stock={(p) => stockLeft(products?.find((x) => x.storeId === p.storeId && x.id === p.productId), p.units, range)} />
+        <TopTable rows={q.data} name={name} cur={cur} stock={(p) => stockLeft(p.inventory === undefined ? undefined : { ...p, inventory: p.inventory }, p.units, range)} />
       )}
     </Panel>
   );

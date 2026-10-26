@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { AnalyticsSummary, Product, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { FunnelPanel, TopTable, UnitCosts } from './Analytics';
+import { FunnelPanel, TopProducts, TopTable, UnitCosts } from './Analytics';
 
 const product = (id: string, cost: number): Product => ({ id, storeId: 'etsy-shop', title: `Mug ${id}`, price: 24, cost, inventory: 10, status: 'active', margin: 0 });
 
@@ -78,5 +78,16 @@ describe('product photos', () => {
     renderApp(<TopTable rows={[{ storeId: 's', productId: 'p', title: 'Collar', units: 3, revenue: 60, profit: 30 }]} stock={() => undefined} />);
     expect(screen.getByText('Collar')).toBeTruthy();
     expect(document.querySelectorAll('[data-thumb]')).toHaveLength(0);
+  });
+});
+
+describe('top products stock', () => {
+  it("reads each row's own stock, so a best seller deep in a big catalog still shows it", async () => {
+    const fetch = stubApi((url) =>
+      url.startsWith('/api/analytics/top-products') ? [{ storeId: 's', productId: 'p9', title: 'Kettlebell', units: 300, revenue: 9000, profit: 3000, inventory: 40, inventoryTracked: true, status: 'active' }] : [],
+    );
+    renderApp(<TopProducts ids={[]} range={30} />);
+    expect(await screen.findByText('40 left · ~4 days')).toBeTruthy();
+    expect(fetch.mock.calls.some(([u]) => String(u).startsWith('/api/products'))).toBe(false);
   });
 });
