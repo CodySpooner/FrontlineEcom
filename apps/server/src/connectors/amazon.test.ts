@@ -352,3 +352,59 @@ test("an Amazon store's daily sessions come from the Sales and Traffic report: a
   await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-27T18:00:00Z'));
   expect(reportCalls.at(-1)).toMatchObject({ call: 'POST /reports/2021-06-30/reports', body: { dataStartTime: '2026-10-23', dataEndTime: '2026-10-27' } });
 });
+
+test("an Amazon store's orders fill the orders page and top products; revenue stays Amazon's daily totals", async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  const queries: URLSearchParams[] = [];
+  let limited = true;
+  const order = (orderId: string, fulfillmentStatus: string, createdTime: string, extra: Record<string, unknown> = {}) => ({
+    orderId, createdTime, lastUpdatedTime: createdTime, salesChannel: { marketplaceId: 'ATVPDKIKX0DER' },
+    fulfillment: { fulfillmentStatus, fulfilledBy: 'MERCHANT' },
+    proceeds: { grandTotal: { amount: '30.00', currencyCode: 'USD' } },
+    orderItems: [{ orderItemId: '1', quantityOrdered: 2, product: { sellerSku: 'MUG-1', price: { unitPrice: { amount: '12.50', currencyCode: 'USD' } } } }],
+    ...extra,
+  });
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (u.pathname !== '/orders/2026-01-01/orders') return base(url, init);
+    queries.push(u.searchParams);
+    if (!u.searchParams.get('paginationToken')) {
+      return Response.json({
+        orders: [order('111-1', 'SHIPPED', '2026-10-25T15:00:00Z', { packages: [{ packageReferenceId: '1', trackingNumber: '1Z999' }] }), order('111-2', 'PENDING', '2026-10-26T15:00:00Z')],
+        pagination: { nextToken: 'n2' }, lastUpdatedBefore: '2026-10-26T17:58:00Z',
+      });
+    }
+    if (limited) return Response.json({ errors: [{ code: 'QuotaExceeded', message: 'You exceeded your quota for the requested resource.' }] }, { status: 429 });
+    return Response.json({
+      orders: [order('111-3', 'CANCELLED', '2026-10-26T16:00:00Z'), order('111-4', 'UNSHIPPED', '2026-10-26T17:00:00Z', { fulfillment: { fulfillmentStatus: 'UNSHIPPED', fulfilledBy: 'AMAZON' } })],
+      lastUpdatedBefore: '2026-10-26T17:58:00Z',
+    });
+  }) as typeof fetch;
+  const orders = () => db.prepare("SELECT id, local_date AS day, total, status, fulfillment_status AS f, supplier, tracking FROM orders WHERE store_id = 'peak' ORDER BY id").all();
+
+  // The rate limit cuts the first read short after a page: what it got is in, and the next sync carries on from its page token.
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect([queries[0]!.get('lastUpdatedAfter'), queries[0]!.get('includedData'), queries[0]!.get('marketplaceIds')]).toEqual(['2026-09-26T18:00:00.000Z', 'PROCEEDS,FULFILLMENT,PACKAGES', 'ATVPDKIKX0DER']);
+  expect(orders()).toEqual([{ id: 'amz-111-1', day: '2026-10-25', total: 30, status: 'paid', f: 'fulfilled', supplier: null, tracking: '1Z999' }]); // 111-2 isn't paid for yet
+  limited = false;
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect([queries[2]!.get('paginationToken'), queries[2]!.get('lastUpdatedAfter')]).toEqual(['n2', '2026-09-26T18:00:00.000Z']);
+  expect(orders()).toEqual([
+    { id: 'amz-111-1', day: '2026-10-25', total: 30, status: 'paid', f: 'fulfilled', supplier: null, tracking: '1Z999' },
+    { id: 'amz-111-3', day: '2026-10-26', total: 30, status: 'refunded', f: 'unfulfilled', supplier: null, tracking: null },
+    { id: 'amz-111-4', day: '2026-10-26', total: 30, status: 'paid', f: 'unfulfilled', supplier: 'Amazon FBA', tracking: null },
+  ]);
+  expect(db.prepare("SELECT product_id, quantity, revenue FROM order_items WHERE store_id = 'peak' AND order_id = 'amz-111-1'").all()).toEqual([{ product_id: 'amz-MUG-1', quantity: 2, revenue: 25 }]);
+  // Revenue and order counts are still Amazon's daily totals, not counted twice.
+  expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'peak' AND date = '2026-10-25'").get()).toEqual({ revenue: 412.5, orders: 9 });
+
+  // The read is complete: the next one starts where Amazon said this one ended.
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect([queries[3]!.get('lastUpdatedAfter'), queries[3]!.get('paginationToken')]).toEqual(['2026-10-26T17:58:00Z', null]);
+  // Reconnected (the cursor starts over): so does the read.
+  db.prepare("UPDATE integrations SET cursor = NULL WHERE id = 'amazon:peak'").run();
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect(queries.at(-2)!.get('lastUpdatedAfter')).toBe('2026-09-26T18:00:00.000Z');
+});

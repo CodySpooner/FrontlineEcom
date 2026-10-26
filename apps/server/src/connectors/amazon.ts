@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, archiveMissing, catalogPassDone, catalogPassDue, rebuildRevenue, setStoreCurrency, switchToReal } from './common';
+import { adRate, archiveMissing, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, switchToReal } from './common';
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
@@ -51,19 +51,65 @@ async function fbaStock(fetchFn: Fetch, host: string, token: string, marketplace
   return out;
 }
 
+/** An integration's entry in a settings row that maps integration ids to read state. */
+const stateOf = <T>(db: Db, key: string) => {
+  const all = JSON.parse(String(db.prepare('SELECT value_json FROM settings WHERE key = ?').get(key)?.value_json ?? '{}')) as Record<string, T>;
+  return {
+    get: (id: string) => all[id] as T | undefined,
+    set: (id: string, v: T) => {
+      all[id] = v;
+      db.prepare('INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json').run(key, JSON.stringify(all));
+    },
+  };
+};
+
+interface AmazonOrder {
+  orderId: string;
+  createdTime: string;
+  fulfillment?: { fulfillmentStatus?: string; fulfilledBy?: string };
+  /** With includedData PROCEEDS. */
+  proceeds?: { grandTotal?: { amount: string } };
+  orderItems?: { quantityOrdered: number; product?: { sellerSku?: string; price?: { unitPrice?: { amount: string } } } }[];
+  /** Merchant-fulfilled orders only, with includedData PACKAGES. */
+  packages?: { trackingNumber?: string }[];
+}
+type OrderRead = { from: string; page?: string };
+
+/**
+ * Orders updated in the last 30 days, then since the last read ended (Orders API 2026-01-01, Inventory and Order Tracking
+ * role): 100 a page, a page per 3 minutes after a burst of 20. A read the rate limit cuts short carries on next sync from
+ * its page token (good for 24 hours); any other error drops the token, so the read starts over. Returns the orders and
+ * where the next read starts.
+ */
+async function ordersOf(read: OrderRead | undefined, fetchFn: Fetch, host: string, token: string, marketplace: string, now: Date) {
+  const from = read?.from ?? new Date(now.getTime() - 30 * 86_400_000).toISOString();
+  const orders: AmazonOrder[] = [];
+  for (let page = read?.page; ; ) {
+    const q = new URLSearchParams({
+      marketplaceIds: marketplace, lastUpdatedAfter: from, includedData: 'PROCEEDS,FULFILLMENT,PACKAGES', maxResultsPerPage: '100', ...(page ? { paginationToken: page } : {}),
+    });
+    const res = await fetchFn(`https://${host}/orders/2026-01-01/orders?${q}`, { headers: { 'x-amz-access-token': token } });
+    if (!res.ok) return { orders, next: { from, ...(res.status === 429 && page ? { page } : {}) } };
+    const body = (await res.json().catch(() => ({}))) as { orders?: AmazonOrder[]; pagination?: { nextToken?: string }; lastUpdatedBefore?: string };
+    orders.push(...(body.orders ?? []));
+    page = body.pagination?.nextToken;
+    if (!page) return { orders, next: { from: body.lastUpdatedBefore ?? from } };
+  }
+}
+
 const TRAFFIC_KEY = 'amazon_traffic';
+const ORDERS_KEY = 'amazon_orders';
 
 /**
  * Daily sessions from Amazon's Sales and Traffic report (Selling Partner Insights role), for the funnel. A report takes
  * minutes to build, so a sync asks for one a day (two years the first time, then from three days before the last one it
  * got) and a later sync collects it. Undefined until one is ready.
  */
-async function trafficOf(db: Db, id: string, fetchFn: Fetch, host: string, token: string, marketplace: string, today: string) {
+async function trafficOf(db: Db, id: string, fetchFn: Fetch, host: string, token: string, marketplace: string, today: string, fresh: boolean) {
   type State = { day: string; reportId?: string; got?: string };
-  const all = JSON.parse(String(db.prepare('SELECT value_json FROM settings WHERE key = ?').get(TRAFFIC_KEY)?.value_json ?? '{}')) as Record<string, State>;
-  const st: State = all[id] ?? { day: '' };
-  const save = (v: Partial<State>) =>
-    db.prepare('INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json').run(TRAFFIC_KEY, JSON.stringify({ ...all, [id]: { ...st, ...v } }));
+  const state = stateOf<State>(db, TRAFFIC_KEY);
+  const st: State = (!fresh && state.get(id)) || { day: '' };
+  const save = (v: Partial<State>) => state.set(id, { ...st, ...v });
   const api = async <T>(path: string, init: RequestInit = {}) => {
     const res = await fetchFn(`https://${host}/reports/2021-06-30${path}`, { ...init, headers: { 'x-amz-access-token': token, 'content-type': 'application/json' } });
     const body = (await res.json().catch(() => ({}))) as T & { errors?: { message: string }[] };
@@ -193,7 +239,10 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const fba = !own ? undefined : await fbaStock(fetchFn, host, token, marketplace, changedSince).catch(() => undefined);
     // Sessions for the funnel, unless GA4 is connected (it owns the funnel there).
     const traffic = !own || db.prepare('SELECT 1 FROM integrations WHERE id = ?').get(`ga4:${storeId}`) ? undefined
-      : await trafficOf(db, id, fetchFn, host, token, marketplace, today).catch(() => undefined);
+      : await trafficOf(db, id, fetchFn, host, token, marketplace, today, !cursor).catch(() => undefined);
+    // Both start over with the cursor (a new connection, or another seller's account).
+    const reads = stateOf<OrderRead>(db, ORDERS_KEY);
+    const orders = own ? await ordersOf(cursor ? reads.get(id) : undefined, fetchFn, host, token, marketplace, now) : undefined;
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -211,6 +260,26 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
       rebuildRevenue(db, storeId, days);
       const visits = db.prepare('INSERT INTO daily_metrics (store_id, date, sessions) VALUES (?, ?, ?) ON CONFLICT (store_id, date) DO UPDATE SET sessions = excluded.sessions');
       for (const d of traffic ?? []) visits.run(storeId, d.date, d.sessions);
+      // Orders fill the orders page and top products; revenue and order counts stay the daily totals above (rebuildRevenue
+      // leaves amz- orders out). ponytail: no unit costs here either, so items cost 0.
+      const ord = db.prepare(
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
+           supplier = excluded.supplier, tracking = coalesce(excluded.tracking, tracking)`,
+      );
+      for (const o of orders?.orders ?? []) {
+        const s = o.fulfillment?.fulfillmentStatus;
+        if (s === 'PENDING' || s === 'PENDING_AVAILABILITY') continue; // not paid for yet
+        const created = new Date(o.createdTime);
+        const items = (o.orderItems ?? []).flatMap((i) => (i.product?.sellerSku ? [{ productId: `amz-${i.product.sellerSku}`, quantity: i.quantityOrdered, revenue: Number(i.product.price?.unitPrice?.amount ?? 0) * i.quantityOrdered, cost: 0 }] : []));
+        ord.run(
+          storeId, `amz-${o.orderId}`, created.toISOString(), Number(o.proceeds?.grandTotal?.amount ?? items.reduce((a, i) => a + i.revenue, 0)),
+          s === 'CANCELLED' || s === 'UNFULFILLABLE' ? 'refunded' : 'paid', s === 'SHIPPED' ? 'fulfilled' : 'unfulfilled', o.fulfillment?.fulfilledBy === 'AMAZON' ? 'Amazon FBA' : null,
+          o.packages?.find((p) => p.trackingNumber)?.trackingNumber ?? null, localDate(created, timeZone),
+        );
+        setOrderItems(db, storeId, `amz-${o.orderId}`, items);
+      }
+      if (orders) reads.set(id, orders.next);
       // ponytail: Amazon has no unit costs. An FBA listing keeps the stock fbaStock last gave it (its listing has no count).
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?1, ?2, ?3, ?4, ?5, NULL, 0, ?6, ?7, ?8)

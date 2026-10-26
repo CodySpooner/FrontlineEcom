@@ -56,8 +56,9 @@ export function rebuildAdSpend(db: Db, storeId: string, dates: Iterable<string>)
 export function rebuildRevenue(db: Db, storeId: string, dates: Iterable<string>) {
   const agg = db.prepare(
     // An order's tax (sales tax, VAT) is in its total but owed to the tax office: it counts against profit with the costs.
+    // Amazon's orders are in channel_daily already (its daily totals), so their rows don't count again.
     `SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(cogs), 0) AS cogs, coalesce(sum(n), 0) AS n FROM (
-       SELECT total AS revenue, cogs + tax AS cogs, 1 AS n FROM orders WHERE store_id = ?1 AND local_date = ?2 AND status = 'paid'
+       SELECT total AS revenue, cogs + tax AS cogs, 1 AS n FROM orders WHERE store_id = ?1 AND local_date = ?2 AND status = 'paid' AND id NOT GLOB 'amz-*'
        UNION ALL SELECT revenue, 0, orders FROM channel_daily WHERE store_id = ?1 AND date = ?2)`,
   );
   const up = db.prepare(

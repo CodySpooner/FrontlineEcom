@@ -707,7 +707,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'accessToken', label: 'OAuth access token', secret: true, oauth: true },
     { key: 'refreshToken', label: 'OAuth refresh token', secret: true, oauth: true },
   ] },
-  amazon: { name: 'Amazon SP-API', category: 'platform', perStore: true, help: 'Seller Central → Apps and Services → Develop Apps → add a private app with the Selling Partner Insights role (and Product Listing, for the product list of an Amazon store; Amazon Fulfillment, for FBA stock) → copy the LWA client ID and secret → Authorize app → copy the refresh token. Region: na (US, CA, MX, BR), eu (Europe, UK, India, Middle East) or fe (Japan, Australia, Singapore). Marketplace ID, e.g. ATVPDKIKX0DER for amazon.com. Daily sales and order counts, and the listings of an Amazon store.', fields: [
+  amazon: { name: 'Amazon SP-API', category: 'platform', perStore: true, help: 'Seller Central → Apps and Services → Develop Apps → add a private app with the Selling Partner Insights role (and Product Listing, for the product list of an Amazon store; Amazon Fulfillment, for FBA stock; Inventory and Order Tracking, for its orders) → copy the LWA client ID and secret → Authorize app → copy the refresh token. Region: na (US, CA, MX, BR), eu (Europe, UK, India, Middle East) or fe (Japan, Australia, Singapore). Marketplace ID, e.g. ATVPDKIKX0DER for amazon.com. Daily sales, order counts and sessions, and the listings and orders of an Amazon store.', fields: [
     { key: 'sellerId', label: 'Seller ID', secret: false },
     { key: 'region', label: 'Region', secret: false, placeholder: 'na | eu | fe' },
     { key: 'marketplaceId', label: 'Marketplace ID', secret: false, placeholder: 'ATVPDKIKX0DER' },
