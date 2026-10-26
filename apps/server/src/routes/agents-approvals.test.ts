@@ -142,10 +142,13 @@ test("the owner's no is remembered for the squad; a request that expired with it
   const add = db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'glow', 'glow:ad_strategist', ?, ?, '{"kind":"ads.set_budget"}', 'pending', ?)`);
   add.run('n1', 'Raise Prospecting budget', 'ROAS 3.4 for 5 days', new Date().toISOString());
   add.run('n2', 'Pause Retargeting', 'CPA up 40% [Expired: the agent run ended before a decision.]', new Date().toISOString());
+  add.run('n3', 'Launch Halloween bundle', 'Seasonal demand +30%', new Date().toISOString());
   decide(db, 'n1', 'deny');
   decide(db, 'n2', 'deny');
+  decide(db, 'n3', 'deny', 'We never discount the starter kit');
   await new Promise((r) => setImmediate(r));
   expect(listMemory(db, 'glow').filter((m) => m.tags.includes('denied'))).toEqual([
+    expect.objectContaining({ text: expect.stringMatching(/^The owner turned down "Launch Halloween bundle" on \d{4}-\d\d-\d\d: We never discount the starter kit\.$/) }),
     expect.objectContaining({
       agentId: 'glow:ad_strategist', kind: 'preference', evidence: 'ROAS 3.4 for 5 days',
       text: expect.stringMatching(/^The owner turned down "Raise Prospecting budget" on \d{4}-\d\d-\d\d\.$/),

@@ -242,7 +242,8 @@ export function rememberDenial(db: Db, a: ApprovalRequest) {
   if (a.reason.endsWith('[Expired: the agent run ended before a decision.]')) return;
   writeMemory(db, {
     storeId: a.storeId, agentId: a.agentId, kind: 'preference', confidence: 0.6, tags: ['denied'],
-    text: `The owner turned down "${a.title}"${a.decidedAt ? ` on ${a.decidedAt.slice(0, 10)}` : ''}.`,
+    // The owner's reason, when given, is what the squad learns from: why, not just that.
+    text: `The owner turned down "${a.title}"${a.decidedAt ? ` on ${a.decidedAt.slice(0, 10)}` : ''}${a.decisionNote ? `: ${a.decisionNote.slice(0, 300)}` : ''}.`,
     evidence: a.reason.slice(0, 300),
   });
 }
