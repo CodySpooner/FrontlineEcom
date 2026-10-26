@@ -82,9 +82,11 @@ export function Shell() {
   );
 }
 
-function SystemStatus({ online }: { online: boolean }) {
+export function SystemStatus({ online }: { online: boolean }) {
   const { data: agents = [], isError } = useAgents();
-  const down = agents.filter((a) => a.status === 'error' || a.status === 'offline').length;
+  // Offline = switched off by the owner: not a problem, just not counted as online.
+  const down = agents.filter((a) => a.status === 'error').length;
+  const off = agents.filter((a) => a.status === 'offline').length;
   const failing = useHealth().data?.connectors.filter((c) => c.status === 'error').length ?? 0;
   const ok = !isError && down === 0 && failing === 0;
   const text = !online
@@ -95,7 +97,9 @@ function SystemStatus({ online }: { online: boolean }) {
         ? `${down} agent${down > 1 ? 's need' : ' needs'} attention`
         : failing
           ? `${failing} connector${failing > 1 ? 's need' : ' needs'} attention`
-          : 'All agents online';
+          : off
+            ? `${agents.length - off} agent${agents.length - off === 1 ? '' : 's'} online · ${off} off`
+            : 'All agents online';
   const dot = <StatusDot tone={!online ? 'idle' : ok ? 'good' : 'red'} pulse={!online} />;
   return (
     <>
