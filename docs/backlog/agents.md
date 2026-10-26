@@ -7,6 +7,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from core) AGT-58: `deleteTheme(db, key, storeId, themeId)` is in `connectors/shopify.ts`. It throws `"<name>" is the live theme; it can't be deleted` for MAIN, and `theme <id> not found` for an unknown id, before any write. It's action-logged as `theme_delete`
 - [x] (from core) AGT-19 theme connector is in `apps/server/src/connectors/shopify.ts`:
   - `listThemes(db, key, storeId)` → `ShopifyTheme[]` (`{ id, name, role, processing, previewUrl }`, MAIN = live)
   - `readThemeFiles(db, key, storeId, themeId, filenames)` → `{ filename, content | null }[]` (1–50 names, `*` wildcards, first 250 matches)

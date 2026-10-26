@@ -193,6 +193,7 @@ const ACTION: Record<ActionKind, string> = {
   theme_duplicate: 'Theme copied',
   theme_files: 'Theme files edited',
   theme_publish: 'Theme published',
+  theme_delete: 'Theme draft deleted',
 };
 
 /** What actually ran against a live store or ad account, whoever triggered it. */

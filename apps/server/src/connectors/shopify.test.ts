@@ -5,7 +5,7 @@ import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { listActions } from '../actions';
-import { createProducts, duplicateTheme, fulfillmentOf, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, shopHost, syncShopify, upsertThemeFiles } from './shopify';
+import { createProducts, deleteTheme, duplicateTheme, fulfillmentOf, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, shopHost, syncShopify, upsertThemeFiles } from './shopify';
 
 const key = randomBytes(32);
 const TOKEN = 'shpat_fixture_token';
@@ -331,4 +331,24 @@ test('themes: list, read, copy, edit the copy (never the live theme), publish', 
     ['theme_files', '3', true],
     ['theme_duplicate', '1', true],
   ]);
+});
+
+test('deleteTheme removes a draft and refuses the live theme', async () => {
+  const { db } = await setup();
+  const calls: string[] = [];
+  const fetchFn = (async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    calls.push(body.query);
+    if (body.query.includes('themeDelete')) return Response.json({ data: { themeDelete: { deletedThemeId: body.variables.id, userErrors: [] } } });
+    const id: string = body.variables.id;
+    if (id.endsWith('/404')) return Response.json({ data: { theme: null } });
+    return Response.json({ data: { theme: { id, name: id.endsWith('/1') ? 'Dawn' : 'Frontline draft', role: id.endsWith('/1') ? 'MAIN' : 'UNPUBLISHED', processing: false } } });
+  }) as typeof fetch;
+
+  await expect(deleteTheme(db, key, 'glow', '1', fetchFn)).rejects.toThrow('"Dawn" is the live theme');
+  await expect(deleteTheme(db, key, 'glow', '404', fetchFn)).rejects.toThrow('theme 404 not found');
+  expect(calls.some((q) => q.includes('themeDelete'))).toBe(false);
+  await deleteTheme(db, key, 'glow', '3', fetchFn);
+  expect(calls.filter((q) => q.includes('themeDelete'))).toHaveLength(1);
+  expect(listActions(db, ['glow'], 10).map((a) => [a.action, a.target, a.detail, a.ok])).toEqual([['theme_delete', '3', { name: 'Frontline draft' }, true]]);
 });

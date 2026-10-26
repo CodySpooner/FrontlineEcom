@@ -724,7 +724,7 @@ export interface Backup {
   createdAt: string;
 }
 
-export type ActionKind = 'ad_budget' | 'ad_pause' | 'product_create' | 'price_change' | 'product_page_publish' | 'page_publish' | 'theme_duplicate' | 'theme_files' | 'theme_publish';
+export type ActionKind = 'ad_budget' | 'ad_pause' | 'product_create' | 'price_change' | 'product_page_publish' | 'page_publish' | 'theme_duplicate' | 'theme_files' | 'theme_publish' | 'theme_delete';
 
 /**
  * GET /api/actions?stores=&limit= → ActionLogEntry[], newest first (limit default 50, max 200). Every write to a live

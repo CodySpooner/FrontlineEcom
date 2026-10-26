@@ -326,6 +326,7 @@ const THEME_DUPLICATE_M = `mutation ($id: ID!, $name: String) {
 const THEME_FILES_M = `mutation ($themeId: ID!, $files: [OnlineStoreThemeFilesUpsertFileInput!]!) {
   themeFilesUpsert(themeId: $themeId, files: $files) { upsertedThemeFiles { filename } userErrors { message } } }`;
 const THEME_PUBLISH_M = `mutation ($id: ID!) { themePublish(id: $id) { theme { id name role processing } userErrors { message } } }`;
+const THEME_DELETE_M = `mutation ($id: ID!) { themeDelete(id: $id) { deletedThemeId userErrors { message } } }`;
 
 /** role MAIN is the live theme; a fresh copy is `processing` for a while before its files can be read or written. */
 export interface ShopifyTheme {
@@ -387,6 +388,18 @@ export async function upsertThemeFiles(db: Db, key: Buffer, storeId: string, the
     const { themeFilesUpsert: u } = await q<Upserted>(THEME_FILES_M, { themeId: themeGid(themeId), files: files.map((f) => ({ filename: f.filename, body: { type: 'TEXT', value: f.body } })) });
     check(u.userErrors);
     return (u.upsertedThemeFiles ?? []).map((f) => f.filename);
+  });
+}
+
+/** Deletes an unpublished theme (e.g. a denied draft: a store keeps 20 themes at most). The live theme is refused. */
+export async function deleteTheme(db: Db, key: Buffer, storeId: string, themeId: string, fetchFn: Fetch = fetch) {
+  const { q } = themeApi(db, key, storeId, fetchFn);
+  const { theme } = await q<{ theme: ThemeNode | null }>(THEME_Q, { id: themeGid(themeId) });
+  if (!theme) throw new Error(`Shopify: theme ${themeId} not found`);
+  if (theme.role === 'MAIN') throw new Error(`"${theme.name}" is the live theme; it can't be deleted`);
+  await logAction(db, storeId, 'theme_delete', themeId, { name: theme.name }, async () => {
+    const { themeDelete: d } = await q<{ themeDelete: { deletedThemeId: string | null; userErrors: { message: string }[] } }>(THEME_DELETE_M, { id: themeGid(themeId) });
+    check(d.userErrors);
   });
 }
 
