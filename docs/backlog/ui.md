@@ -8,7 +8,7 @@ Orca's browser against the reference before ticking it.
 ## Inbox
 - [x] (from agents) `APPROVAL_KINDS` is in `@frontline/shared` (label + `autopilot?`), so Settings can list `Object.entries(APPROVAL_KINDS).filter(([, k]) => k.autopilot)` and approval cards can show `APPROVAL_KINDS[kind]?.label ?? kind`. Only `ads.set_budget` and `ads.pause_campaign` can autopilot: autopilot needs a USD amount to check against the cap, and the other kinds carry none. `ads.pause_adsets` and `store.update_products` are never produced, so drop them from the list.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from core) UI-43's `Integration.backfill?: { through: 'YYYY-MM-DD'; done: boolean }` is live on GET /api/integrations for store platforms. `done: false` means Shopify's first import is running, oldest orders first by last-updated date, and `through` is how far it got. `done: true` means the first sync finished, and `through` is that day. Woo, Etsy, TikTok Shop and Amazon import in one go, so they only ever show done.
+- [x] (from core) UI-43's `Integration.backfill?: { through: 'YYYY-MM-DD'; done: boolean }` is live on GET /api/integrations for store platforms. `done: false` means Shopify's first import is running, oldest orders first by last-updated date, and `through` is how far it got. `done: true` means the first sync finished, and `through` is that day. Woo, Etsy, TikTok Shop and Amazon import in one go, so they only ever show done.
 - [x] (from core) Unit costs the owner enters: `PATCH /api/products/:storeId/:id { cost }` → Product. Etsy, TikTok Shop and Woo without COGS report no costs, so their profit is revenue minus ads until the owner enters them. Setting a cost re-prices that product's past orders (profit updates). Suggest an editable cost cell (or "Set cost") on products whose cost is 0, e.g. in Store Analytics best sellers or Orders products. 400 `{error}` on a connected Shopify store: costs live in Shopify, so show the message
 - [x] (from core) Settings → data folder: an "Open folder" button next to `settings.dataDir` calling `POST /api/settings/open-data-folder` (204, opens Explorer). Logs and backups live there
 - [x] (from agents) New approval kind `store.publish_theme` (Store Developer theme edits, DESIGN §4.6 Store Builder "previews, approve to publish"). The payload is `{ themeId, name, previewUrl, files: string[] }`. Please give the request card a "Preview" link (`previewUrl` opens the storefront with the unpublished copy) and list `files`. The Store Builder could also show pending theme changes next to page drafts.
@@ -134,7 +134,7 @@ Orca's browser against the reference before ticking it.
       never show in Orca or small windows. Add a compact status dot to the collapsed sidebar (label as title + sr text).
 - [x] UI-42 Recent decisions: the bell drawer lists the last few approved/denied requests (outcome, who, when) under
       the waiting ones, so a mis-tapped Deny is visible right where it happened.
-- [ ] UI-43 First-sync progress: while a newly connected store imports its history, Integrations and the Dashboard say
+- [x] UI-43 First-sync progress: while a newly connected store imports its history, Integrations and the Dashboard say
       so ("Importing order history: through Mar 2025") instead of showing a half-empty dashboard. Needs core: see Inbox.
 - [x] UI-44 Profit caveat: when products in the selection have no unit cost, the Dashboard Profit tile says so ("2
       products at full price") and links to Store Analytics › Unit costs, since that profit is overstated until set.
@@ -146,7 +146,6 @@ Orca's browser against the reference before ticking it.
       schema error. Blank amounts are now required while the rule is on, and become 0 when it's switched off.
 
 ## Blocked
-- UI-43 First-sync progress: waiting on core for `Integration.backfill` (core Inbox, 2026-10-26).
 
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
@@ -218,3 +217,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-46: Integrations.test.tsx covers ConnectForm. With a saved API key and a blank field, Save sends only the trimmed non-secret values (the key stays out, so the server keeps it) and the field isn't required. A new connection requires the key as a password input and shows the API's 400 reason. Mutation check: sending blank secrets fails the first test
 - 2026-10-26 — UI-47: found while adding caps tests. Enabling "Change ad budgets", clearing its amount and pressing Save showed `autopilot.ads.set_budget must be { enabled: boolean, maxUsdPerDay: number }` (reproduced in Chrome). The amount is now `required`, so the browser says "Please fill out this field." and sends nothing (Chrome-verified, no /api/caps request). Switching a rule off coerces a blank amount to 0. Settings.test.tsx covers both cases; both were red before the fix
 - 2026-10-26 — Production smoke: `vite build` served by a separate API instance (FRONTLINE_WEB_DIR, scratch data dir, port 8899), the way the desktop app runs it. Deep link /agents/peak%3Aad_strategist → SPA fallback 200, title, live socket "All agents online"; Dashboard, Analytics, Creative, Settings with no console errors. Found the desktop picks a new port per launch, so localStorage (onboarding flag, store filter) resets every launch; asked core (Inbox) to reuse the port. Smoke server stopped and its data removed
+- 2026-10-26 — UI-43: `lib/sync.ts` `importing(i)` (tested) says a connected store platform's first sync is still running (no syncedAt), with Shopify's `backfill.through` when it reports one. The Integrations row reads "Importing history · through Mar 4, 2025" (pulsing dot) instead of "Connected". The Dashboard shows "<store> is importing its order history, through … so far. Totals fill in as it goes." for selected stores. useIntegrations' 10 s poll moves it along. Chrome 1440 + Orca 800 with a main-world fetch fixture (no DB rows, no outbound sync): both notes, store-filter scoping, one line at 800, no page scroll

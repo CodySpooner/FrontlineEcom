@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight, Check, CreditCard, RotateCcw, ShoppingBag, ShoppingCart } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type StoreEventType } from '@frontline/shared';
-import { useAgents, useApprovals, useDecide, useEvents, useMissions, useProducts, useSummary } from '../api/client';
+import { useAgents, useApprovals, useDecide, useEvents, useIntegrations, useMissions, useProducts, useSummary } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Portrait } from '../components/Art';
 import { ApprovalExtras } from '../components/ApprovalExtras';
@@ -12,7 +12,8 @@ import { Hero } from '../components/Hero';
 import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
 import { PERIOD, RANGES, sparkPoints, weekly } from '../lib/chart';
-import { ago, cents, money, noBaseline, signedPct } from '../lib/format';
+import { ago, cents, fmtDay, money, noBaseline, signedPct } from '../lib/format';
+import { importing } from '../lib/sync';
 import { NAV } from '../nav';
 
 export function Dashboard() {
@@ -30,6 +31,7 @@ export function Dashboard() {
           <Segmented label="Date range" options={RANGES} value={range} onChange={setRange} />
         </div>
         <UnconvertedNote codes={summary.data?.unconverted} />
+        <ImportNote />
       </div>
       <Kpis q={summary} />
       <div className="mb-3.5 grid gap-3.5 min-[1100px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -53,6 +55,22 @@ export function Dashboard() {
       <Missions />
     </>
   );
+}
+
+/** UI-43: a newly connected store's order history is still coming in, so its totals are partial for now. */
+function ImportNote() {
+  const { has, name } = useStoreSelection();
+  return (useIntegrations().data ?? []).map((i) => {
+    const imp = i.storeId && has(i.storeId) ? importing(i) : undefined;
+    return (
+      imp && (
+        <p key={i.id} className="flex basis-full items-center gap-2 text-xs text-text-2">
+          <StatusDot tone="good" pulse />
+          {name(i.storeId!)} is importing its order history{imp.through && `, through ${fmtDay(imp.through, true)} so far`}. Totals fill in as it goes.
+        </p>
+      )
+    );
+  });
 }
 
 function RevenueChart({ s, who }: { s: AnalyticsSummary; who: string }) {

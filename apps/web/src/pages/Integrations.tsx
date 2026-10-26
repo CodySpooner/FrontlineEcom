@@ -6,7 +6,8 @@ import { useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds } from 
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Button, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot } from '../components/ui';
-import { ago } from '../lib/format';
+import { ago, fmtDay } from '../lib/format';
+import { importing } from '../lib/sync';
 import { NAV } from '../nav';
 
 const CATEGORIES: Record<IntegrationCategory, { title: string; sub: string }> = {
@@ -85,11 +86,20 @@ export function Integrations() {
 }
 
 function Connection({ store, i, onOpen }: { store?: Store; i?: Integration; onOpen: () => void }) {
-  const status = !i ? 'Demo data' : i.status === 'error' ? 'Sync failed' : i.syncedAt ? `Synced ${ago(i.syncedAt)}` : 'Connected';
+  const imp = i && importing(i);
+  const status = !i
+    ? 'Demo data'
+    : i.status === 'error'
+      ? 'Sync failed'
+      : i.syncedAt
+        ? `Synced ${ago(i.syncedAt)}`
+        : imp
+          ? `Importing history${imp.through ? ` · through ${fmtDay(imp.through, true)}` : '…'}`
+          : 'Connected';
   return (
     <li>
       <div className="flex items-center gap-2 text-[13px]">
-        <StatusDot tone={!i ? 'idle' : i.status === 'error' ? 'red' : 'good'} />
+        <StatusDot tone={!i ? 'idle' : i.status === 'error' ? 'red' : 'good'} pulse={!!imp} />
         <span className="min-w-0 flex-1 truncate">
           {store ? store.name : 'All stores'}
           <span className="text-xs text-muted"> · {status}</span>
