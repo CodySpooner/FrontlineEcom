@@ -140,7 +140,7 @@ const APPROVALS = [
   { storeId: 'peak', role: 'ad_strategist', title: 'Pause "Spark Ads · UGC"', reason: 'Losing $45/day for 4 days straight', action: { kind: 'ads.pause_campaign', payload: { network: 'tiktok', campaignId: 'peak-c3' } } },
   { storeId: 'pawsome', role: 'ad_strategist', title: 'Raise daily budget 20% ($60 → $72)', reason: 'ROAS above 3.0 for 5 days', action: { kind: 'ads.set_budget', payload: { campaignId: 'pawsome-c1', from: 60, to: 72 } } },
   {
-    storeId: 'glow', role: 'product_hunter', title: 'Add 3 trending products to the store', reason: 'AI score 85+, about 60% margin',
+    storeId: 'glow', role: 'product_hunter', title: 'Add 3 trending products to the store', reason: 'AI score 85+, about 80% margin',
     action: { kind: 'store.add_products', payload: { products: [
       { title: 'Gua Sha Stone Set', price: 24.99, compareAt: 39.99, cost: 5.2 },
       { title: 'Collagen Eye Patches', price: 19.99, compareAt: 34.99, cost: 3.1 },
