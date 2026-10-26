@@ -381,7 +381,8 @@ export const useOrderIssues = (storeIds: string[]) =>
 export function useSetIssueStatus() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: OrderIssueStatus }) => api<OrderIssue>(`/api/order-issues/${id}`, json('PATCH', { status })),
+    mutationFn: ({ id, status, resolution }: { id: string; status: OrderIssueStatus; resolution?: string }) =>
+      api<OrderIssue>(`/api/order-issues/${id}`, json('PATCH', { status, ...(resolution && { resolution }) })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['order-issues'] }),
   });
 }

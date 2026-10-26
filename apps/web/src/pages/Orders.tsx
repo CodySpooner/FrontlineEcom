@@ -6,7 +6,7 @@ import type { FulfillmentStatus, OrderIssue, OrderIssueKind, OrderStatus } from 
 import { useOrderIssues, useOrders, useSetIssueStatus, useStartRun, type OrderQuery } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, Chip, EmptyState, ErrorState, LoadingState, Panel, Segmented, Table } from '../components/ui';
+import { Badge, Button, Chip, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, Segmented, Table } from '../components/ui';
 import { ago, cents } from '../lib/format';
 import { orderIssues, type Issue, type IssueKind } from '../lib/orders';
 import { NAV } from '../nav';
@@ -102,16 +102,50 @@ const IssueRow = ({ icon: Icon, children, action }: { icon: LucideIcon; children
   </li>
 );
 
-function AgentIssue({ i }: { i: OrderIssue }) {
+export function AgentIssue({ i }: { i: OrderIssue }) {
   const { name } = useStoreSelection();
   const set = useSetIssueStatus();
+  const [resolving, setResolving] = useState(false);
+  const [fix, setFix] = useState('');
   return (
     <IssueRow
       icon={AGENT_ISSUE_ICON[i.kind]}
       action={
-        <Button size="sm" disabled={set.isPending} onClick={() => set.mutate({ id: i.id, status: 'resolved' })}>
-          Mark resolved
-        </Button>
+        resolving ? (
+          // The Operations agent reads resolved issues with this note: it says what actually fixed it.
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              set.mutate({ id: i.id, status: 'resolved', resolution: fix.trim() });
+            }}
+            className="flex basis-full flex-wrap items-center gap-2"
+          >
+            <input
+              value={fix}
+              onChange={(e) => setFix(e.target.value)}
+              maxLength={500}
+              autoFocus
+              aria-label={`What fixed ${i.orderId}`}
+              placeholder="What fixed it? Operations learns from this (optional)"
+              className={cx(inputClass, 'min-w-0 flex-1 py-1.5')}
+            />
+            <Button size="sm" onClick={() => setResolving(false)}>
+              Cancel
+            </Button>
+            <Button size="sm" type="submit" variant="primary" disabled={set.isPending}>
+              Resolve
+            </Button>
+            {set.isError && (
+              <p role="alert" className="basis-full text-xs text-red">
+                {set.error.message}
+              </p>
+            )}
+          </form>
+        ) : (
+          <Button size="sm" onClick={() => setResolving(true)}>
+            Mark resolved
+          </Button>
+        )
       }
     >
       <p className="flex flex-wrap items-center gap-x-2 text-[13px]">
