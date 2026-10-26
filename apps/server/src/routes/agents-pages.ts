@@ -32,5 +32,12 @@ export function pageRoutes(db: Db, push: PushPage) {
       await publishDraft(db, d, push);
       return c.json(getPageDraft(db, d.id));
     })
-    .delete('/api/page-drafts/:id', (c) => (deletePageDraft(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Draft not found' }, 404)));
+    .delete('/api/page-drafts/:id', (c) => {
+      const d = getPageDraft(db, c.req.param('id'));
+      if (!d) return c.json({ error: 'Draft not found' }, 404);
+      // Discarding it is the owner's no: a publish request still waiting would otherwise approve into nothing.
+      if (d.status === 'pending' && d.approvalId) decide(db, d.approvalId, 'deny', 'The owner discarded the draft in the Store Builder.');
+      deletePageDraft(db, d.id);
+      return c.body(null, 204);
+    });
 }

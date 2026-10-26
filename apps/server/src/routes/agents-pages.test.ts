@@ -153,6 +153,17 @@ test('Store Builder routes', async () => {
   expect((await app.request(`/api/page-drafts/${all[0]!.id}`)).status).toBe(404);
 });
 
+test('discarding a draft whose publish request waits denies the request (approving it later would publish nothing)', async () => {
+  await run(() => [draft()]);
+  const [d] = listPageDrafts(db);
+  const waiting = run(() => [{ call: 'publish_page', input: { draftId: d!.id } }]);
+  await tick();
+  const { approvalId } = listPageDrafts(db)[0]!;
+  expect((await app.request(`/api/page-drafts/${d!.id}`, { method: 'DELETE' })).status).toBe(204);
+  await waiting; // the run that asked hears no
+  expect(db.prepare('SELECT status, decision_note FROM approvals WHERE id = ?').get(approvalId!)).toEqual({ status: 'denied', decision_note: 'The owner discarded the draft in the Store Builder.' });
+}, 3000);
+
 test('best sellers come first, and a product gets one page test at a time', async () => {
   db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', 'o-roller', ?, 39.8, 'paid', 'delivered', date('now'))`).run(new Date().toISOString());
   db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('glow', 'o-roller', 'p-new', 2, 39.8, 5.2)`).run();
