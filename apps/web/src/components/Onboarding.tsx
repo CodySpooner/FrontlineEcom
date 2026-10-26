@@ -1,13 +1,13 @@
 // UI-21 First-run onboarding: explore the demo, or add your store → pick its niche → meet the squad.
 import { useState } from 'react';
-import { useNavigate } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Compass, Store as StoreIcon } from 'lucide-react';
 import { AGENT_ROLES, type Store } from '@frontline/shared';
 import { useAgents } from '../api/client';
 import { Portrait } from './Art';
 import { useStoreSelection } from './StoreFilter';
-import { nicheName, StoreForm } from './StoreForm';
-import { Button, cx, Dialog, LoadingState } from './ui';
+import { nicheName, PLATFORM_NAME, StoreForm } from './StoreForm';
+import { Button, buttonClass, cx, Dialog, LoadingState } from './ui';
 
 // ponytail: "seen the welcome" is per device; move it to Settings if the owner runs several machines.
 const SEEN = 'frontline:onboarded';
@@ -25,7 +25,7 @@ export function Onboarding() {
   const [step, setStep] = useState<'welcome' | 'store' | Store>('welcome');
   const navigate = useNavigate();
   const { setPicked } = useStoreSelection();
-  const done = (store?: Store) => {
+  const done = (store?: Store, to = '/') => {
     try {
       localStorage.setItem(SEEN, '1');
     } catch {
@@ -34,7 +34,7 @@ export function Onboarding() {
     setOpen(false);
     if (store) {
       setPicked([store.id]);
-      navigate('/');
+      navigate(to);
     }
   };
   const title = step === 'welcome' ? 'Welcome to Frontline Ecom' : step === 'store' ? 'Add your store' : 'Meet your squad';
@@ -47,7 +47,7 @@ export function Onboarding() {
           <StoreForm onDone={(s) => setStep(s ?? 'welcome')} />
         </div>
       )}
-      {typeof step === 'object' && <Squad store={step} onDone={() => done(step)} />}
+      {typeof step === 'object' && <Squad store={step} onDone={(to) => done(step, to)} />}
     </Dialog>
   );
 }
@@ -85,7 +85,7 @@ function Choice({ icon: Icon, title, children, onClick, primary }: { icon: typeo
   );
 }
 
-function Squad({ store, onDone }: { store: Store; onDone: () => void }) {
+function Squad({ store, onDone }: { store: Store; onDone: (to?: string) => void }) {
   const agents = useAgents().data?.filter((a) => a.storeId === store.id);
   return (
     <div className="grid gap-4">
@@ -104,8 +104,19 @@ function Squad({ store, onDone }: { store: Store; onDone: () => void }) {
           ))}
         </ul>
       )}
-      <div className="flex justify-end border-t border-line pt-4">
-        <Button variant="primary" onClick={onDone}>
+      <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
+        {/* Until it's connected the squad works on demo numbers. */}
+        <Link
+          to="/integrations"
+          className={buttonClass('ghost')}
+          onClick={(e) => {
+            e.preventDefault();
+            onDone('/integrations');
+          }}
+        >
+          Connect {PLATFORM_NAME[store.platform]}
+        </Link>
+        <Button variant="primary" onClick={() => onDone()}>
           Open the Command Center
         </Button>
       </div>

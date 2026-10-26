@@ -60,4 +60,21 @@ describe('onboarding', () => {
     expect(screen.getByTestId('where').textContent).toBe('/');
     expect(JSON.parse(localStorage.getItem('fe.stores')!)).toEqual(['trail-co']);
   });
+
+  it("ends with connecting the store, not only the demo numbers", async () => {
+    let created = false;
+    stubApi((url, init) => {
+      if (url === '/api/stores' && init?.method === 'POST') return (created = true), added;
+      if (url.startsWith('/api/stores')) return created ? [added] : [];
+      if (url.startsWith('/api/agents')) return created ? squad : [];
+    });
+    renderApp(<Onboarding />);
+    fireEvent.click(screen.getByRole('button', { name: /Add my store/ }));
+    fireEvent.change(screen.getByLabelText('Store name'), { target: { value: 'Trail Co' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add store' }));
+    fireEvent.click(await screen.findByRole('link', { name: 'Connect Shopify' }));
+    expect(dialog().open).toBe(false);
+    expect(screen.getByTestId('where').textContent).toBe('/integrations');
+    expect(JSON.parse(localStorage.getItem('fe.stores')!)).toEqual(['trail-co']);
+  });
 });

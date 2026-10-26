@@ -262,6 +262,8 @@ Orca's browser against the reference before ticking it.
       the way budget refusals offer their fix (every FixLink: chat, palette, Flow Library, page actions).
 - [x] UI-99 Squad cards on AI Agents say how much each agent has learned about its store ("3 things learned about
       Pawsome Gear" → its Memory tab), so DESIGN §1's "becomes an expert in its store" shows on the overview.
+- [x] UI-100 First-run onboarding's last step ("Meet your squad") offers "Connect Shopify" (the store's platform) →
+      Integrations next to "Open the Command Center", since the squad works on demo numbers until the store is connected.
 
 ## Blocked
 
@@ -404,3 +406,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Core inbox (Integration.notice): a muted, wrapped (not truncated) line under the connection row, under the red error line when both exist. Integrations.test checks it shows in full. Orca at 800px with a client-side fetch patch (fake Meta Ads connection on Pawsome Gear carrying the timezone notice): two muted lines aligned under the store name. Patch dropped by reload
 - 2026-10-26 — UI-98: `budgetFix` also maps the agents engine's signed-out text (claude-engine.ts ACCOUNT.authentication_failed, matched on its "Claude isn't signed in" start) to /integrations "Check your Claude login". usage.test covers it. No browser run: it needs a real signed-out engine run, and the FixLink render path is unchanged from the budget fixes
 - 2026-10-26 — UI-99: Agents makes one `useMemory(store)` call, and each deployed card counts memories with `agentId === a.id` (owner notes excluded). Nothing is shown at 0. The line sits below the fixed-height blurb so blurbs stay aligned across a row. `useMemory` got `enabled: !!storeId` (no `/api/stores//memory` while stores load). Agents.test covers count, link and no-zero. Orca at 800px with a client-side memory patch (dev DB has no memories): 3 and 1 learned, blurbs aligned at the same y. Patch dropped by reload
+- 2026-10-26 — UI-100: `done(store, to = '/')` in Onboarding. Squad's footer has a ghost Link "Connect {PLATFORM_NAME}" (href kept; its click goes through done → one navigation) beside the primary button. Onboarding.test walks add store → Connect Shopify → /integrations with the store picked. Orca at 800px: cleared the seen flag and fetch-patched POST /api/stores + the squad (no DB write; still 3 stores). Footer "Connect Shopify | Open the Command Center", click → /integrations, dialog closed. localStorage restored
