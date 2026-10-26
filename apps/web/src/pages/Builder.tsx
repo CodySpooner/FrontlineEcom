@@ -8,6 +8,7 @@ import { ApprovalCard } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { Markdown } from '../components/Markdown';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
+import { byHand } from '../components/StoreForm';
 import { Badge, Button, cx, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, Segmented } from '../components/ui';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
@@ -156,13 +157,14 @@ function DraftRow({ d, on, onPick }: { d: PageDraft; on: boolean; onPick: () => 
 }
 
 function DraftView({ d }: { d: PageDraft }) {
-  const { name } = useStoreSelection();
+  const { name, stores } = useStoreSelection();
   const { publish, remove } = usePageDraftActions();
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
   const [confirm, setConfirm] = useState(false);
   const st = STATUS[d.status];
   const store = name(d.storeId);
   const canPublish = d.status === 'draft' || d.status === 'pending' || d.status === 'rejected';
+  const manual = byHand(stores.find((s) => s.id === d.storeId));
   const error = publish.error ?? remove.error;
   return (
     <div className="grid gap-3.5">
@@ -188,11 +190,16 @@ function DraftView({ d }: { d: PageDraft }) {
             {d.status === 'rejected' && 'You turned this down. You can still publish it.'}
             {d.status === 'draft' && 'Not published yet.'}
           </span>
-          {canPublish && (
-            <Button variant="primary" className="ml-auto" disabled={publish.isPending} onClick={() => publish.mutate(d.id)}>
-              {d.status === 'pending' ? 'Approve and publish' : `Publish to ${store}`}
-            </Button>
-          )}
+          {canPublish &&
+            (manual ? (
+              <span className="ml-auto text-xs text-text-2">
+                The app can't publish to {manual} stores yet. Copy the page into {manual} by hand.
+              </span>
+            ) : (
+              <Button variant="primary" className="ml-auto" disabled={publish.isPending} onClick={() => publish.mutate(d.id)}>
+                {d.status === 'pending' ? 'Approve and publish' : `Publish to ${store}`}
+              </Button>
+            ))}
         </div>
         {error && (
           <p role="alert" className="mt-2 text-xs text-red">

@@ -5,6 +5,8 @@ import { useStoreActions } from '../api/client';
 import { Button, cx, Field, inputClass } from './ui';
 
 export const PLATFORM_NAME: Record<Platform, string> = { shopify: 'Shopify', tiktok_shop: 'TikTok Shop', etsy: 'Etsy', amazon: 'Amazon', woocommerce: 'WooCommerce', walmart: 'Walmart' };
+/** The platform's name when the app can't change this store (connected, not Shopify: AGT-62), so changes go in by hand. */
+export const byHand = (s?: Store) => (s?.connected && s.platform !== 'shopify' ? PLATFORM_NAME[s.platform] : undefined);
 export const nicheName = (n: Niche) => n.charAt(0).toUpperCase() + n.slice(1);
 
 /** Add or edit a store. `onDone` gets the saved store, or nothing on Cancel. */
