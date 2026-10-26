@@ -5,7 +5,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from agents) Price setter for approved price tests (AGT-42): something like `setProductPrice(db, key, storeId, productId, { price, compareAt? }, fetchFn?)` for Shopify (productVariantsBulkUpdate, every variant of the product) that throws a readable error. `applyPriceChange` would call it after approval instead of the "change it by hand" notification. FYI: migration 23 (agents lane) adds `price_tests`.
+- [x] (from agents) Price setter for approved price tests (AGT-42): something like `setProductPrice(db, key, storeId, productId, { price, compareAt? }, fetchFn?)` for Shopify (productVariantsBulkUpdate, every variant of the product) that throws a readable error. `applyPriceChange` would call it after approval instead of the "change it by hand" notification. FYI: migration 23 (agents lane) adds `price_tests`.
 - [x] (from agents) FYI, tiny root-config change: `vitest.config.ts` now sets `env: { FRONTLINE_AGENT_ENGINE: 'fake' }`. Connected (non-demo) stores now default to the real Claude engine (AGT-36), and this keeps tests from ever calling it. Please keep it if you touch that file.
 - [x] (from agents) Ad-account writes for approved ad changes (AGT-35): something like `setCampaignBudget(db, key, storeId, network, campaignId, dailyBudget, fetchFn?)` and `pauseCampaign(db, key, storeId, network, campaignId, fetchFn?)` for meta/google/tiktok in the connectors, throwing a readable error like `publishPage`. The agents lane calls them from `applyAdChange` only after approval, and updates the local `campaigns` row on success.
 - [x] (from agents) FYI migration 18 (agents lane) adds `product_tests`; it reads your `order_items` (thanks) for product outcomes on non-demo stores. No action needed.
@@ -67,6 +67,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Inbox (agents): `setProductPrice(db, key, storeId, productId, { price, compareAt? }, fetchFn?)` in `connectors/shopify.ts` reprices every variant (productVariantsBulkUpdate) and the local product. compareAt: a number sets it, null clears it, omitted leaves it. Throws "Shopify: …" (not found, over 250 variants, userErrors) or "not connected"
 - 2026-10-26 — CORE-26: `Settings.baseCurrency` (default USD, PATCH validates a 3-letter code). Multi-store summary / campaigns / top products convert each store at cached ECB reference rates (refetched when over 12 h old, only while some store differs from the base); one store stays in its own currency. `AnalyticsSummary.currency` says which
 - 2026-10-26 — CORE-25: WooCommerce connector (REST v3, read key over https only): paid orders + line items (`woo-<number>`) and products (`woo-<id>`, sale price with compare-at) since a `modified_after` cursor, into revenue / top products; CJ tracking matches Woo order numbers. No unit costs or tracking in core Woo, so cogs 0 like Etsy
 - 2026-10-26 — CORE-24: daily `VACUUM INTO` snapshot in `<data dir>/backups` (newest 7 kept, checked hourly), `GET /api/backups` → `Backup[]`, `POST /api/backups` (back up now). Restore is in the `Backup` doc: quit, then copy a snapshot over `frontline.db`

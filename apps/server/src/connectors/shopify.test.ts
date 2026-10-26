@@ -4,7 +4,7 @@ import type { AnalyticsSummary, Integration, Order, Page, Product, Store } from 
 import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
-import { createProducts, fulfillmentOf, publishPage, publishProductPage, shopHost, syncShopify } from './shopify';
+import { createProducts, fulfillmentOf, publishPage, publishProductPage, setProductPrice, shopHost, syncShopify } from './shopify';
 
 const key = randomBytes(32);
 const TOKEN = 'shpat_fixture_token';
@@ -175,4 +175,40 @@ test('publishProductPage updates the live product; publishPage creates a publish
   expect(calls[1]!.variables).toEqual({ page: { title: 'About us', body: '<h1>Hi</h1>', isPublished: true } });
   await expect(publishPage(db, key, 'glow', { title: 'Bad', bodyHtml: '' }, fetchFn)).rejects.toThrow('Shopify: Access denied');
   await expect(publishPage(db, key, 'peak', { title: 'X', bodyHtml: '' }, fetchFn)).rejects.toThrow('not connected');
+});
+
+test('setProductPrice reprices every variant and the local product', async () => {
+  const { db } = await setup();
+  db.prepare("INSERT INTO products (store_id, id, title, price, compare_at, cost, inventory, status) VALUES ('glow', '111', 'Mask', 49, 79, 0, 0, 'active')").run();
+  const calls: { query: string; variables: Record<string, unknown> }[] = [];
+  const fetchFn = (async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    calls.push(body);
+    if (body.query.includes('variants(first')) {
+      return Response.json({ data: { product: body.variables.id.endsWith('/404') ? null : { variants: { nodes: [{ id: 'gid://shopify/ProductVariant/1' }, { id: 'gid://shopify/ProductVariant/2' }], pageInfo: { hasNextPage: body.variables.id.endsWith('/999') } } } } });
+    }
+    const bad = body.variables.variants[0].price === '1.00';
+    return Response.json({ data: { productVariantsBulkUpdate: { userErrors: bad ? [{ message: 'Price is too low' }] : [] } } });
+  }) as typeof fetch;
+  const local = () => db.prepare("SELECT price, compare_at AS compareAt FROM products WHERE store_id = 'glow' AND id = '111'").get();
+
+  await setProductPrice(db, key, 'glow', '111', { price: 44 }, fetchFn);
+  expect(calls[0]!.variables).toEqual({ id: 'gid://shopify/Product/111' });
+  expect(calls[1]!.variables).toEqual({ productId: 'gid://shopify/Product/111', variants: [{ id: 'gid://shopify/ProductVariant/1', price: '44.00' }, { id: 'gid://shopify/ProductVariant/2', price: '44.00' }] });
+  expect(local()).toEqual({ price: 44, compareAt: 79 });
+
+  await setProductPrice(db, key, 'glow', '111', { price: 39.5, compareAt: null }, fetchFn);
+  expect((calls[3]!.variables.variants as unknown[])[0]).toEqual({ id: 'gid://shopify/ProductVariant/1', price: '39.50', compareAtPrice: null });
+  expect(local()).toEqual({ price: 39.5, compareAt: null });
+
+  calls.length = 0;
+  await expect(setProductPrice(db, key, 'glow', '111', { price: 0 }, fetchFn)).rejects.toThrow('more than 0');
+  await expect(setProductPrice(db, key, 'glow', '111', { price: 10, compareAt: Number.NaN }, fetchFn)).rejects.toThrow('Compare-at');
+  expect(calls).toHaveLength(0);
+  await expect(setProductPrice(db, key, 'glow', '404', { price: 10 }, fetchFn)).rejects.toThrow('Shopify: product 404 not found');
+  await expect(setProductPrice(db, key, 'glow', '999', { price: 10 }, fetchFn)).rejects.toThrow('over 250 variants');
+  expect(calls.some((c) => c.query.includes('productVariantsBulkUpdate'))).toBe(false);
+  await expect(setProductPrice(db, key, 'glow', '111', { price: 1 }, fetchFn)).rejects.toThrow('Shopify: Price is too low');
+  expect(local()).toEqual({ price: 39.5, compareAt: null });
+  await expect(setProductPrice(db, key, 'peak', '111', { price: 10 }, fetchFn)).rejects.toThrow('not connected');
 });

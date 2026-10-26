@@ -68,6 +68,8 @@ const VARIANT_M = `mutation ($productId: ID!, $variants: [ProductVariantsBulkInp
 const PRODUCT_UPDATE_M = `mutation ($product: ProductUpdateInput!) {
   productUpdate(product: $product) { product { id } userErrors { message } } }`;
 
+const VARIANT_IDS_Q = `query ($id: ID!) { product(id: $id) { variants(first: 250) { nodes { id } pageInfo { hasNextPage } } } }`;
+
 const PAGE_CREATE_M = `mutation ($page: PageCreateInput!) {
   pageCreate(page: $page) { page { id handle } userErrors { message } } }`;
 
@@ -224,6 +226,25 @@ export async function publishProductPage(db: Db, key: Buffer, storeId: string, p
   const { productUpdate: u } = await admin(db, key, storeId, fetchFn)<{ productUpdate: { userErrors: { message: string }[] } }>(PRODUCT_UPDATE_M, { product });
   check(u.userErrors);
   db.prepare('UPDATE products SET title = ? WHERE store_id = ? AND id = ?').run(page.title, storeId, productId);
+}
+
+/**
+ * Sets the price of every variant of a live product (compareAt: a number sets it, null clears it, omitted leaves it).
+ * Call only for an approved request.
+ */
+export async function setProductPrice(db: Db, key: Buffer, storeId: string, productId: string, { price, compareAt }: { price: number; compareAt?: number | null }, fetchFn: Fetch = fetch) {
+  if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be more than 0');
+  if (compareAt != null && !(Number.isFinite(compareAt) && compareAt > 0)) throw new Error('Compare-at price must be more than 0');
+  const q = admin(db, key, storeId, fetchFn);
+  const productGid = `gid://shopify/Product/${productId}`;
+  const { product } = await q<{ product: { variants: { nodes: { id: string }[]; pageInfo: { hasNextPage: boolean } } } | null }>(VARIANT_IDS_Q, { id: productGid });
+  if (!product?.variants.nodes.length) throw new Error(`Shopify: product ${productId} not found`);
+  if (product.variants.pageInfo.hasNextPage) throw new Error(`Shopify: product ${productId} has over 250 variants; change its price in Shopify`);
+  const change = { price: price.toFixed(2), ...(compareAt !== undefined ? { compareAtPrice: compareAt === null ? null : compareAt.toFixed(2) } : {}) };
+  const variants = product.variants.nodes.map((v) => ({ id: v.id, ...change }));
+  const { productVariantsBulkUpdate: u } = await q<{ productVariantsBulkUpdate: { userErrors: { message: string }[] } }>(VARIANT_M, { productId: productGid, variants });
+  check(u.userErrors);
+  db.prepare('UPDATE products SET price = ?, compare_at = CASE WHEN ? THEN ? ELSE compare_at END WHERE store_id = ? AND id = ?').run(price, compareAt !== undefined ? 1 : 0, compareAt ?? null, storeId, productId);
 }
 
 /** Creates a published store page (about, FAQ, shipping, landing). Call only for an approved request. Returns its handle (/pages/<handle>). */
