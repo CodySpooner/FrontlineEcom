@@ -167,3 +167,14 @@ test('HTML to Etsy plain text: paragraphs, breaks, list bullets, entities', () =
     "Why\n\nSoft & warm\nMachine-wash\n\n• Cotton\n• Wool\n\nIt's 5 < 6 \u2014 yes &hellip;",
   );
 });
+
+test('a sync and an approved change renewing the token together share one refresh (Etsy rotates the refresh token)', async () => {
+  const db = setup();
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('pawsome', 'etsy-11', 'Mug', 20, 0, 9, 'active')").run();
+  const { fetchFn, calls } = fakeEtsy();
+  const write = (async (url: string, init?: RequestInit) =>
+    new URL(url).pathname.endsWith('/inventory') ? Response.json({ products: [], price_on_property: [], quantity_on_property: [], sku_on_property: [] }) : fetchFn(url, init)) as typeof fetch;
+  await Promise.all([syncEtsy(db, key, 'pawsome', write, NOW), setEtsyListingPrice(db, key, 'pawsome', 'etsy-11', { price: 22 }, write, NOW)]);
+  expect(calls.filter((c) => c.url.pathname === '/v3/public/oauth/token')).toHaveLength(1);
+  expect(db.prepare("SELECT status FROM integrations WHERE id = 'etsy:pawsome'").get()?.status).toBe('connected');
+});

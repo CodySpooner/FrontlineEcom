@@ -18,25 +18,40 @@ type Fetch = typeof fetch;
 interface Listing {
   sku: string;
   /** One per marketplace asked for. */
-  summaries?: { itemName?: string; status?: string[]; mainImage?: { link: string } }[];
+  summaries?: { itemName?: string; status?: string[]; mainImage?: { link: string }; lastUpdatedDate?: string }[];
   offers?: { offerType: string; price: { amount: string } }[];
   /** Merchant-fulfilled stock has a quantity; FBA stock isn't reported here. */
   fulfillmentAvailability?: { quantity?: number }[];
 }
 
-/** The seller's listings in one marketplace, changed since `since` (all of them without it). 20 a page, 5 pages a second. */
+/** A search pages through at most this many SKUs. */
+const SEARCH_CAP = 1000;
+
+/**
+ * The seller's listings in one marketplace changed since `since` (all of them without it), oldest change first: 20 a
+ * page, 5 pages a second. A catalog past the search cap is read in windows, each starting at the last change seen.
+ * ponytail: more than 1000 SKUs changed in the same instant would end the windows early.
+ */
 async function listingsOf(fetchFn: Fetch, host: string, token: string, sellerId: string, marketplace: string, since?: string) {
   const out: Listing[] = [];
-  let pageToken: string | undefined;
-  do {
-    const q = new URLSearchParams({ marketplaceIds: marketplace, includedData: 'summaries,offers,fulfillmentAvailability', pageSize: '20', ...(since ? { lastUpdatedAfter: since } : {}), ...(pageToken ? { pageToken } : {}) });
-    const res = await fetchFn(`https://${host}/listings/2021-08-01/items/${encodeURIComponent(sellerId)}?${q}`, { headers: { 'x-amz-access-token': token } });
-    const body = (await res.json().catch(() => ({}))) as { items?: Listing[]; pagination?: { nextToken?: string }; errors?: { message: string }[] };
-    if (!res.ok) throw new Error(`Amazon listings: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
-    out.push(...(body.items ?? []));
-    pageToken = body.pagination?.nextToken;
-  } while (pageToken);
-  return out;
+  for (let from = since; ; ) {
+    let [pageToken, n] = [undefined as string | undefined, 0];
+    do {
+      const q = new URLSearchParams({
+        marketplaceIds: marketplace, includedData: 'summaries,offers,fulfillmentAvailability', pageSize: '20', sortBy: 'lastUpdatedDate', sortOrder: 'ASC',
+        ...(from ? { lastUpdatedAfter: from } : {}), ...(pageToken ? { pageToken } : {}),
+      });
+      const res = await fetchFn(`https://${host}/listings/2021-08-01/items/${encodeURIComponent(sellerId)}?${q}`, { headers: { 'x-amz-access-token': token } });
+      const body = (await res.json().catch(() => ({}))) as { items?: Listing[]; pagination?: { nextToken?: string }; errors?: { message: string }[] };
+      if (!res.ok) throw new Error(`Amazon listings: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
+      out.push(...(body.items ?? []));
+      n += body.items?.length ?? 0;
+      pageToken = body.pagination?.nextToken;
+    } while (pageToken);
+    const last = out.at(-1)?.summaries?.[0]?.lastUpdatedDate;
+    if (n < SEARCH_CAP || !last || last === from) return out;
+    from = last;
+  }
 }
 
 /** "+02:00" / "-07:00": `timeZone`'s UTC offset at local midnight starting `date`. */
@@ -89,9 +104,10 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const own = db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform === 'amazon';
     const rate = own ? 1 : await adRate(db, storeId, currency, fetchFn, 'Amazon');
     // Everything until the store has Amazon products (so adding the Product Listing role later still pulls the whole
-    // catalog), then what changed in the last two days. Without the role, sales sync on and the catalog stays empty.
+    // catalog), then what changed since two days before the last sync. Without the role, sales sync on and the catalog stays empty.
     const have = db.prepare("SELECT 1 FROM products WHERE store_id = ? AND id GLOB 'amz-*'").get(storeId);
-    const listings = own ? await listingsOf(fetchFn, host, auth.access_token, creds.sellerId!.trim(), marketplace, have ? `${addDays(today, -2)}T00:00:00Z` : undefined).catch(() => []) : [];
+    const changedSince = have ? `${addDays(cursor ?? today, -2)}T00:00:00Z` : undefined;
+    const listings = own ? await listingsOf(fetchFn, host, auth.access_token, creds.sellerId!.trim(), marketplace, changedSince).catch(() => []) : [];
 
     tx(db, () => {
       switchToReal(db, storeId);

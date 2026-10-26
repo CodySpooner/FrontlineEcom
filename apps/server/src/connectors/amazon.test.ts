@@ -119,13 +119,37 @@ test("an Amazon store's listings become its products: all of them at first, then
     { id: 'amz-TENT-2', title: 'Item TENT-2', price: 24.99, inventory: 0, tracked: 0, status: 'active' }, // FBA: stock not reported here
   ]);
 
+  // The app was closed for a week: changes since two days before the last sync, not just the last two days.
+  db.prepare("UPDATE integrations SET cursor = '2026-10-19' WHERE id = 'amazon:peak'").run();
   const later = fakeAmazon();
   await syncAmazon(db, key, 'peak', later.fetchFn, NOW);
-  expect(listingCalls(later.calls)[0]!.get('lastUpdatedAfter')).toBe('2026-10-24T00:00:00Z');
+  expect(listingCalls(later.calls)[0]!.get('lastUpdatedAfter')).toBe('2026-10-17T00:00:00Z');
 
   // Amazon as an extra channel of another platform's store: no listings call.
   db.prepare("UPDATE stores SET platform = 'shopify' WHERE id = 'peak'").run();
   const extra = fakeAmazon();
   await syncAmazon(db, key, 'peak', extra.fetchFn, NOW);
   expect(listingCalls(extra.calls)).toEqual([]);
+});
+
+test('a catalog past the 1000-SKU search cap is read in windows from the last change seen', async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  // 2500 SKUs, one change per minute; the fake applies lastUpdatedAfter (inclusive), sorts oldest first and caps at 1000.
+  const all = Array.from({ length: 2500 }, (_, i) => ({ sku: `S${i}`, summaries: [{ status: ['BUYABLE'], lastUpdatedDate: new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString() }] }));
+  const windows: (string | null)[] = [];
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (!u.pathname.startsWith('/listings/')) return base(url, init);
+    expect([u.searchParams.get('sortBy'), u.searchParams.get('sortOrder')]).toEqual(['lastUpdatedDate', 'ASC']);
+    const from = u.searchParams.get('lastUpdatedAfter');
+    const hits = all.filter((l) => !from || l.summaries[0]!.lastUpdatedDate >= from).slice(0, 1000);
+    const at = Number(u.searchParams.get('pageToken') ?? 0);
+    if (!at) windows.push(from);
+    return Response.json({ numberOfResults: hits.length, items: hits.slice(at, at + 20), ...(at + 20 < hits.length ? { pagination: { nextToken: String(at + 20) } } : {}) });
+  }) as typeof fetch;
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect(windows).toEqual([null, all[999]!.summaries[0]!.lastUpdatedDate, all[1998]!.summaries[0]!.lastUpdatedDate]);
+  expect(db.prepare("SELECT count(*) AS n FROM products WHERE store_id = 'peak' AND id GLOB 'amz-*'").get()?.n).toBe(2500);
 });

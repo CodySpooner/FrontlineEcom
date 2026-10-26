@@ -53,12 +53,17 @@ async function refreshEtsy(db: Db, key: Buffer, id: string, creds: Record<string
   return body.access_token;
 }
 
-/** The shop ID and request headers, renewing the access token when it has under 5 minutes left. */
+/** Refreshes in flight by integration id. Etsy rotates the refresh token, so a second refresh started with the old one fails. */
+const refreshing = new Map<string, Promise<string>>();
+
+/** The shop ID and request headers, renewing the access token when it has under 5 minutes left (once, for concurrent callers). */
 async function etsyAuth(db: Db, key: Buffer, id: string, creds: Record<string, string>, fetchFn: Fetch, now: Date) {
   const shopId = creds.shopId!.trim();
   if (!/^\d+$/.test(shopId)) throw new Error('Shop ID must be the number of your Etsy shop');
   const fresh = Number(creds.accessTokenExpiresAt) * 1000 - now.getTime() > 5 * 60_000;
-  const token = fresh ? creds.accessToken! : await refreshEtsy(db, key, id, creds, fetchFn, now);
+  let renew = refreshing.get(id);
+  if (!fresh && !renew) refreshing.set(id, (renew = refreshEtsy(db, key, id, creds, fetchFn, now).finally(() => refreshing.delete(id))));
+  const token = fresh ? creds.accessToken! : await renew!;
   return { shopId, headers: { 'x-api-key': `${creds.apiKey}:${creds.sharedSecret}`, authorization: `Bearer ${token}` } };
 }
 
