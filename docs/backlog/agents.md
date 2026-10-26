@@ -232,6 +232,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-118 Approval executors review (DESIGN §7 Approvals, §11): an approved action runs exactly once, on what the owner approved, never after a deny/expiry, and a failure never reads as done. Fix what holds up.
 - [x] AGT-119 A cancelled chat reply keeps its conversation: the next message goes on from it instead of starting over.
 - [x] AGT-120 A run retried after a restart doesn't hand a squadmate the same work again.
+- [ ] AGT-121 Learning loop review (DESIGN §7 learning loop, store memory): reflection, recall ranking (FTS relevance × recency × confidence), the 300-memory cap and dedupe, confidence moves from outcomes. A store's memory stays right and useful over months. Fix what holds up.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
