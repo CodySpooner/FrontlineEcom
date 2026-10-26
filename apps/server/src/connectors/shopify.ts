@@ -1,4 +1,5 @@
 import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
+import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
@@ -195,6 +196,10 @@ const check = (errors: { message: string }[]) => {
 };
 
 export async function createProducts(db: Db, key: Buffer, storeId: string, products: NewProduct[], fetchFn: Fetch = fetch) {
+  return logAction(db, storeId, 'product_create', products.map((p) => p.title).join(', '), { products }, () => createProductsNow(db, key, storeId, products, fetchFn));
+}
+
+async function createProductsNow(db: Db, key: Buffer, storeId: string, products: NewProduct[], fetchFn: Fetch) {
   const q = admin(db, key, storeId, fetchFn);
   const insert = db.prepare(`INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 'draft')`);
   const created: { id: string; title: string }[] = [];
@@ -223,8 +228,10 @@ export interface ProductPage {
 export async function publishProductPage(db: Db, key: Buffer, storeId: string, productId: string, page: ProductPage, fetchFn: Fetch = fetch) {
   const seo = { ...(page.seoTitle ? { title: page.seoTitle } : {}), ...(page.seoDescription ? { description: page.seoDescription } : {}) };
   const product = { id: `gid://shopify/Product/${productId}`, title: page.title, descriptionHtml: page.descriptionHtml, ...(Object.keys(seo).length ? { seo } : {}) };
-  const { productUpdate: u } = await admin(db, key, storeId, fetchFn)<{ productUpdate: { userErrors: { message: string }[] } }>(PRODUCT_UPDATE_M, { product });
-  check(u.userErrors);
+  await logAction(db, storeId, 'product_page_publish', productId, { title: page.title, ...(page.seoTitle ? { seoTitle: page.seoTitle } : {}) }, async () => {
+    const { productUpdate: u } = await admin(db, key, storeId, fetchFn)<{ productUpdate: { userErrors: { message: string }[] } }>(PRODUCT_UPDATE_M, { product });
+    check(u.userErrors);
+  });
   db.prepare('UPDATE products SET title = ? WHERE store_id = ? AND id = ?').run(page.title, storeId, productId);
 }
 
@@ -235,7 +242,11 @@ export async function publishProductPage(db: Db, key: Buffer, storeId: string, p
 export async function setProductPrice(db: Db, key: Buffer, storeId: string, productId: string, { price, compareAt }: { price: number; compareAt?: number | null }, fetchFn: Fetch = fetch) {
   if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be more than 0');
   if (compareAt != null && !(Number.isFinite(compareAt) && compareAt > 0)) throw new Error('Compare-at price must be more than 0');
-  const q = admin(db, key, storeId, fetchFn);
+  await logAction(db, storeId, 'price_change', productId, { price, ...(compareAt !== undefined ? { compareAt } : {}) }, () => repriceVariants(admin(db, key, storeId, fetchFn), productId, price, compareAt));
+  db.prepare('UPDATE products SET price = ?, compare_at = CASE WHEN ? THEN ? ELSE compare_at END WHERE store_id = ? AND id = ?').run(price, compareAt !== undefined ? 1 : 0, compareAt ?? null, storeId, productId);
+}
+
+async function repriceVariants(q: ReturnType<typeof admin>, productId: string, price: number, compareAt: number | null | undefined) {
   const productGid = `gid://shopify/Product/${productId}`;
   const { product } = await q<{ product: { variants: { nodes: { id: string }[]; pageInfo: { hasNextPage: boolean } } } | null }>(VARIANT_IDS_Q, { id: productGid });
   if (!product?.variants.nodes.length) throw new Error(`Shopify: product ${productId} not found`);
@@ -244,13 +255,14 @@ export async function setProductPrice(db: Db, key: Buffer, storeId: string, prod
   const variants = product.variants.nodes.map((v) => ({ id: v.id, ...change }));
   const { productVariantsBulkUpdate: u } = await q<{ productVariantsBulkUpdate: { userErrors: { message: string }[] } }>(VARIANT_M, { productId: productGid, variants });
   check(u.userErrors);
-  db.prepare('UPDATE products SET price = ?, compare_at = CASE WHEN ? THEN ? ELSE compare_at END WHERE store_id = ? AND id = ?').run(price, compareAt !== undefined ? 1 : 0, compareAt ?? null, storeId, productId);
 }
 
 /** Creates a published store page (about, FAQ, shipping, landing). Call only for an approved request. Returns its handle (/pages/<handle>). */
 export async function publishPage(db: Db, key: Buffer, storeId: string, page: { title: string; bodyHtml: string }, fetchFn: Fetch = fetch) {
   type Created = { pageCreate: { page: { id: string; handle: string } | null; userErrors: { message: string }[] } };
-  const { pageCreate: c } = await admin(db, key, storeId, fetchFn)<Created>(PAGE_CREATE_M, { page: { title: page.title, body: page.bodyHtml, isPublished: true } });
-  check(c.userErrors);
-  return { id: tail(c.page!.id), handle: c.page!.handle };
+  return logAction(db, storeId, 'page_publish', page.title, { title: page.title }, async () => {
+    const { pageCreate: c } = await admin(db, key, storeId, fetchFn)<Created>(PAGE_CREATE_M, { page: { title: page.title, body: page.bodyHtml, isPublished: true } });
+    check(c.userErrors);
+    return { id: tail(c.page!.id), handle: c.page!.handle };
+  });
 }

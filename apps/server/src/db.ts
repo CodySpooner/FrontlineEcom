@@ -421,6 +421,18 @@ export const MIGRATIONS = [
     judged_at TEXT
   );
   `,
+  /* 24 (core: action log, CORE-28) — no FK: the record outlives a deleted store */ `
+  CREATE TABLE action_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    target TEXT NOT NULL,
+    detail_json TEXT NOT NULL,
+    error TEXT,
+    at TEXT NOT NULL
+  );
+  CREATE INDEX action_log_by_store ON action_log (store_id, id);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

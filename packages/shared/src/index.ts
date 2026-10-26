@@ -711,6 +711,25 @@ export interface Backup {
   createdAt: string;
 }
 
+export type ActionKind = 'ad_budget' | 'ad_pause' | 'product_create' | 'price_change' | 'product_page_publish' | 'page_publish';
+
+/**
+ * GET /api/actions?stores=&limit= → ActionLogEntry[], newest first (limit default 50, max 200). Every write to a live
+ * store or ad account is recorded here with its outcome, whoever triggered it (approval, autopilot, automation).
+ */
+export interface ActionLogEntry {
+  id: number;
+  storeId: string;
+  action: ActionKind;
+  /** What it touched: "meta:<campaign id>", a product id, a page title. */
+  target: string;
+  /** The change, e.g. { dailyBudget: 40 } or { price: 19.9 }. */
+  detail: Record<string, unknown>;
+  ok: boolean;
+  error?: string;
+  at: string;
+}
+
 /** GET /api/health → Health. `ok` means the API is up; connector problems are listed here, not fatal. */
 export interface Health {
   ok: true;

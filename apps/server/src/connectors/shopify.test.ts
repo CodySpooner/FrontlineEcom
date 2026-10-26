@@ -4,6 +4,7 @@ import type { AnalyticsSummary, Integration, Order, Page, Product, Store } from 
 import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
+import { listActions } from '../actions';
 import { createProducts, fulfillmentOf, publishPage, publishProductPage, setProductPrice, shopHost, syncShopify } from './shopify';
 
 const key = randomBytes(32);
@@ -175,6 +176,7 @@ test('publishProductPage updates the live product; publishPage creates a publish
   expect(calls[1]!.variables).toEqual({ page: { title: 'About us', body: '<h1>Hi</h1>', isPublished: true } });
   await expect(publishPage(db, key, 'glow', { title: 'Bad', bodyHtml: '' }, fetchFn)).rejects.toThrow('Shopify: Access denied');
   await expect(publishPage(db, key, 'peak', { title: 'X', bodyHtml: '' }, fetchFn)).rejects.toThrow('not connected');
+  expect(listActions(db, ['glow'], 10).map((a) => [a.action, a.target, a.ok])).toEqual([['page_publish', 'Bad', false], ['page_publish', 'About us', true], ['product_page_publish', '111', true]]);
 });
 
 test('setProductPrice reprices every variant and the local product', async () => {
@@ -210,5 +212,12 @@ test('setProductPrice reprices every variant and the local product', async () =>
   expect(calls.some((c) => c.query.includes('productVariantsBulkUpdate'))).toBe(false);
   await expect(setProductPrice(db, key, 'glow', '111', { price: 1 }, fetchFn)).rejects.toThrow('Shopify: Price is too low');
   expect(local()).toEqual({ price: 39.5, compareAt: null });
+  expect(listActions(db, ['glow'], 10).map((a) => [a.action, a.target, a.detail, a.ok])).toEqual([
+    ['price_change', '111', { price: 1 }, false],
+    ['price_change', '999', { price: 10 }, false],
+    ['price_change', '404', { price: 10 }, false],
+    ['price_change', '111', { price: 39.5, compareAt: null }, true],
+    ['price_change', '111', { price: 44 }, true],
+  ]);
   await expect(setProductPrice(db, key, 'peak', '111', { price: 10 }, fetchFn)).rejects.toThrow('not connected');
 });

@@ -1,4 +1,5 @@
 import type { AdNetwork } from '@frontline/shared';
+import { logAction } from '../actions';
 import type { Db } from '../db';
 import type { CampaignChange } from './common';
 import { updateGoogleCampaign } from './google';
@@ -21,7 +22,8 @@ function write(db: Db, key: Buffer, storeId: string, network: AdNetwork, campaig
   if (!db.prepare('SELECT 1 FROM campaigns WHERE network = ? AND id = ? AND store_id = ?').get(network, campaignId, storeId)) {
     return Promise.reject(new Error(`No ${network} campaign ${campaignId} in this store`));
   }
-  return WRITERS[network](db, key, storeId, campaignId, change, fetchFn);
+  const action = 'status' in change ? 'ad_pause' : 'ad_budget';
+  return logAction(db, storeId, action, `${network}:${campaignId}`, change, () => WRITERS[network](db, key, storeId, campaignId, change, fetchFn));
 }
 
 export function setCampaignBudget(db: Db, key: Buffer, storeId: string, network: AdNetwork, campaignId: string, dailyBudget: number, fetchFn: Fetch = fetch) {

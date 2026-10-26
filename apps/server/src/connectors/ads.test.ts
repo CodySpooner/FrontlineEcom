@@ -3,6 +3,7 @@ import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
+import { listActions } from '../actions';
 import { pauseCampaign, setCampaignBudget } from './ads';
 
 const key = randomBytes(32);
@@ -55,6 +56,8 @@ test('budget and pause writes per network', async () => {
     ['/campaign/update/', 'tt-token', { advertiser_id: '7001', campaign_id: IDS.tiktok, budget: 45.5 }],
     ['/campaign/status/update/', 'tt-token', { advertiser_id: '7001', campaign_ids: [IDS.tiktok], operation_status: 'DISABLE' }],
   ]);
+  expect(listActions(db, ['glow'], 10).map((a) => [a.action, a.target, a.detail, a.ok])[0]).toEqual(['ad_pause', `tiktok:${IDS.tiktok}`, { status: 'PAUSED' }, true]);
+  expect(listActions(db, ['glow'], 10)).toHaveLength(6);
 });
 
 test('ad writes refuse unknown campaigns, bad budgets, shared Google budgets and surface network errors', async () => {
@@ -65,7 +68,9 @@ test('ad writes refuse unknown campaigns, bad budgets, shared Google budgets and
   await expect(setCampaignBudget(db, key, 'glow', 'meta', IDS.meta, Number.NaN, fetchFn)).rejects.toThrow('at least 1');
   expect(calls).toHaveLength(0);
 
+  expect(listActions(db, ['glow', 'pawsome'], 10)).toEqual([]); // refused before reaching the network: nothing ran
   await expect(setCampaignBudget(db, key, 'glow', 'meta', IDS.meta, 5, fetchFn)).rejects.toThrow('Meta: Budget is too low for this campaign');
+  expect(listActions(db, ['glow'], 1)[0]).toMatchObject({ action: 'ad_budget', detail: { dailyBudget: 5 }, ok: false, error: 'Meta: Budget is too low for this campaign' });
   await expect(setCampaignBudget(db, key, 'glow', 'google', IDS.google, 5, fetchFn)).rejects.toThrow('shared budget');
   expect(calls.some((c) => c.url.endsWith('campaignBudgets:mutate'))).toBe(false);
   // Demo campaigns exist locally but the store has no Meta connection.

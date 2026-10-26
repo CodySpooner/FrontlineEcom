@@ -65,11 +65,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-25 WooCommerce connector: REST v3 (consumer key/secret, https only) orders + line items + products into revenue / top products, like the other platforms.
 - [x] CORE-26 Multi-currency totals: a base currency in Settings. "All stores" totals convert each store's numbers with daily ECB reference rates (cached, last known rates when offline); single-store views stay in the store's currency.
 - [x] CORE-27 Sync-failure notifications: when an integration's sync flips to `error` (expired token, revoked key), raise one `error` notification (integration + store name, readable message, link `/integrations`), not one per retry; an `info` one when it recovers.
-- [ ] CORE-28 Action log (DESIGN §11 "every executed action is logged"): every live write (ad budget/pause, product create, price change, page/product-page publish) appends to `action_log` (store, action, target, detail, ok/error, at), and `GET /api/actions?stores=&limit=` lists them newest first.
+- [x] CORE-28 Action log (DESIGN §11 "every executed action is logged"): every live write (ad budget/pause, product create, price change, page/product-page publish) appends to `action_log` (store, action, target, detail, ok/error, at), and `GET /api/actions?stores=&limit=` lists them newest first.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-28: `action_log` (migration 24) + `logAction()`. Every live write (ad budget and pause, Shopify product create, price change, product page and page publish) is recorded with its outcome at the connector layer, whoever called it. `GET /api/actions?stores=&limit=` → `ActionLogEntry[]`
 - 2026-10-26 — CORE-27: the sync loop raises one `error` notification when an integration goes from working to `error` ("Shopify for Glow Haus stopped syncing", with the reason, link `/integrations`), and one `info` when it recovers. Retries that keep failing stay quiet
 - 2026-10-26 — Inbox (agents): `setProductPrice(db, key, storeId, productId, { price, compareAt? }, fetchFn?)` in `connectors/shopify.ts` reprices every variant (productVariantsBulkUpdate) and the local product. compareAt: a number sets it, null clears it, omitted leaves it. Throws "Shopify: …" (not found, over 250 variants, userErrors) or "not connected"
 - 2026-10-26 — CORE-26: `Settings.baseCurrency` (default USD, PATCH validates a 3-letter code). Multi-store summary / campaigns / top products convert each store at cached ECB reference rates (refetched when over 12 h old, only while some store differs from the base); one store stays in its own currency. `AnalyticsSummary.currency` says which
