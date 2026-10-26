@@ -17,6 +17,7 @@ export function switchToReal(db: Db, storeId: string) {
  */
 export function setStoreCurrency(db: Db, storeId: string, currency: string) {
   if (!db.prepare('UPDATE stores SET currency = ? WHERE id = ? AND currency != ?').run(currency, storeId, currency).changes) return;
+  db.prepare('UPDATE orders SET fx_rate = NULL WHERE store_id = ?').run(storeId); // they were into the old currency
   db.prepare("UPDATE integrations SET cursor = NULL WHERE store_id = ? AND kind IN ('meta_ads', 'google_ads', 'tiktok_ads', 'amazon')").run(storeId);
 }
 

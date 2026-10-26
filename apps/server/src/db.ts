@@ -516,6 +516,9 @@ export const MIGRATIONS = [
   /* 41 (core: refund lines by order, for rebuildRevenue's per-day join) */ `
   CREATE INDEX amazon_refunds_by_order ON amazon_refunds (store_id, order_id);
   `,
+  /* 42 (core: the rate an order in another currency was first converted at, so later syncs don't re-price it; NULL = not locked) */ `
+  ALTER TABLE orders ADD COLUMN fx_rate REAL;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

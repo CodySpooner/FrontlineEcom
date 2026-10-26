@@ -98,12 +98,14 @@ export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs =
       lastTry.set(id, now.toISOString());
       running.add(id);
       // Demo stores have no real orders yet; their first real sync replaces the demo ones without announcing history.
-      const store = r.store_id == null ? undefined : db.prepare('SELECT demo, (SELECT max(created_at) FROM orders WHERE store_id = stores.id) AS newest FROM stores WHERE id = ?').get(r.store_id);
+      const store = r.store_id == null ? undefined : db.prepare('SELECT demo, currency, (SELECT max(created_at) FROM orders WHERE store_id = stores.id) AS newest FROM stores WHERE id = ?').get(r.store_id);
       const before = store?.demo === 0 ? orderValues(db, String(r.store_id), now) : undefined;
       syncers[r.kind as IntegrationKind]!(db, key, String(r.store_id), retrying(fetch)).finally(() => {
         running.delete(id);
         if (store?.demo === 0) announceOrders(db, String(r.store_id), store.newest == null ? null : String(store.newest), new Date());
-        if (before) announceRefunds(db, String(r.store_id), before, new Date());
+        // A sync that switched the store's currency re-priced every order in it: lower totals there aren't refunds.
+        const sameCurrency = db.prepare('SELECT currency FROM stores WHERE id = ?').get(String(r.store_id))?.currency === store?.currency;
+        if (before && sameCurrency) announceRefunds(db, String(r.store_id), before, new Date());
         const after = db.prepare('SELECT status, error FROM integrations WHERE id = ?').get(id);
         if (!after) return;
         log(after.status === 'error' ? 'warn' : 'info', 'sync', { id, ms: Date.now() - now.getTime(), status: after.status, ...(after.error ? { error: after.error } : {}) });

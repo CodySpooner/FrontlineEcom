@@ -132,10 +132,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-51 A TikTok Shop store's funnel had only 30 days of visitors, so 90D/1Y showed sessions for a third or less of the range.
 - [x] CORE-52 A failed or interrupted backup left its .part file (up to the database's size) forever.
 - [x] CORE-53 A timezone change during an Amazon or TikTok Shop sync was undone or ignored by that sync.
+- [x] CORE-54 Exchange-rate moves showed as refunds in the live feed (Woo re-priced converted orders at today's rate on every change).
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-54 (from a review of CORE-46): migration 42 `orders.fx_rate`. A Woo order in another currency keeps the rate it was first converted at, so a later modification (completed, a partial refund) no longer re-prices it at today's ECB rate; `setStoreCurrency` clears the locked rates. Woo falls back to the newest order's currency only on a store's first sync, so a failed settings read no longer switches a live store's currency. The live feed skips refund detection on a sync that switched the store's currency. Agents and ecosystem told: next migration is 43.
 - 2026-10-26 — CORE-53 (from a review of CORE-45): Amazon read the store's zone, fetched for minutes (a first backfill is rate-limited), then wrote old-zone daily totals and `cursor = today` over the reset `setStoreTimezone` had made. Its transaction now drops the read when the zone changed meanwhile; the cleared cursor makes the next sync read again in the new zone. TikTok Shop reads the zone for order dates after its requests instead of before. Etsy already read it with no await in between. Both tests fail without the fix.
 - 2026-10-26 — CORE-52 (from a review of CORE-48): a failed backup deletes its `.part` (a full disk gets the space back), and each backup sweeps `.part` files untouched for an hour (the app quit mid-copy, e.g. the restart after a restore). A copy in progress keeps writing, so it is never swept.
 - 2026-10-26 — AGT-128 (agents Inbox): `deleteStore` removes the store's creatives' rendered files (`/api/creatives/media/<name>.<jpg|png|webp|mp4>` only, never outside the folder) after the cascade; demo data: URLs have none, a file held open elsewhere is left. Tested with a temp media folder.

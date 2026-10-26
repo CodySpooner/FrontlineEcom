@@ -389,3 +389,33 @@ test("a Woo order's tracking comes from the Shipment Tracking extension's order 
   await syncWooCommerce(db, key, 'pawsome', reshipped, NOW);
   expect(db.prepare("SELECT tracking, tracking_url AS url FROM orders WHERE store_id = 'pawsome' AND id = 'woo-2001'").get()).toEqual({ tracking: '9400222', url: null });
 });
+
+test("a converted Woo order keeps the rate it was first converted at; a failed currency read doesn't switch the store's", async () => {
+  const db = setup();
+  const fx = (usd: number) => db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json")
+    .run(JSON.stringify({ date: '2026-10-23', fetchedAt: NOW.toISOString(), rates: { EUR: 1, USD: usd } }));
+  let refunds: { total: string }[] = [];
+  let currencyRead = true;
+  const fetchFn = (async (url: string) => {
+    const u = new URL(url);
+    if (u.pathname.endsWith('/woocommerce_currency')) return currencyRead ? Response.json({ value: 'EUR' }) : new Response('', { status: 503 });
+    if (u.pathname.endsWith('/orders')) return Response.json([order('3001', 'completed', '20.00', true, { currency: 'USD', refunds })], { headers: { 'x-wp-totalpages': '1' } });
+    return Response.json([], { headers: { 'x-wp-totalpages': '1' } });
+  }) as typeof fetch;
+  const total = () => db.prepare("SELECT total FROM orders WHERE store_id = 'pawsome' AND id = 'woo-3001'").get()?.total;
+
+  fx(1.25);
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(total()).toBe(16);
+  fx(1.3); // the order is modified (completed) after the rate moved: still worth what it was
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(total()).toBe(16);
+  refunds = [{ total: '-5.00' }]; // a partial refund, at the order's own rate
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(total()).toBe(12);
+
+  currencyRead = false; // the newest order is in USD, but the shop's currency is still EUR
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT currency FROM stores WHERE id = 'pawsome'").get()?.currency).toBe('EUR');
+  expect(total()).toBe(12);
+});

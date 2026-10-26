@@ -175,7 +175,10 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const setting = await fetchFn(`${site}/wp-json/wc/v3/settings/general/woocommerce_currency`, { headers: { authorization: auth } })
       .then((r) => (r.ok ? (r.json() as Promise<{ value?: unknown }>) : undefined))
       .catch(() => undefined);
-    const base = typeof setting?.value === 'string' && /^[A-Z]{3}$/.test(setting.value) ? setting.value : orders[0]?.currency;
+    // ponytail: the newest order's only on the first sync; after it a failed read keeps the store's (else a foreign
+    // newest order would switch it and re-price everything).
+    const store = db.prepare('SELECT demo, currency FROM stores WHERE id = ?').get(storeId);
+    const base = typeof setting?.value === 'string' && /^[A-Z]{3}$/.test(setting.value) ? setting.value : store?.demo ? orders[0]?.currency : String(store?.currency);
     // Orders are dated on the site's day (date_created); the store takes its timezone so "today" is that same day.
     // _fields: the full index lists every route's schema (often megabytes), and this runs every 2 minutes.
     const zone = wpZone(await fetchFn(`${site}/wp-json/?_fields=timezone_string,gmt_offset`, { headers: { authorization: auth } }).then((r) => (r.ok ? (r.json() as Promise<Parameters<typeof wpZone>[0]>) : undefined)).catch(() => undefined));
@@ -199,14 +202,17 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       }
       // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking from a tracking plugin.
       const ord = db.prepare(
-        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, cogs = excluded.cogs, tax = excluded.tax,
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url, fx_rate) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, cogs = excluded.cogs, tax = excluded.tax, fx_rate = excluded.fx_rate,
            tracking = coalesce(excluded.tracking, tracking), tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url)`,
       );
       const days = new Set<string>();
+      // An order keeps the rate it was first converted at: re-pricing it at today's each time it's modified would move
+      // its revenue with the markets and show the dips as refunds in the live feed.
+      const locked = db.prepare('SELECT fx_rate FROM orders WHERE store_id = ? AND id = ?');
       for (const o of orders) {
         // Unpaid (pending, on-hold bank transfers, failed, drafts) never counts; cancelled or refunded after payment is a refund.
-        const rate = rates.get(o.currency);
+        const rate = (locked.get(storeId, `woo-${o.number}`)?.fx_rate as number | null | undefined) ?? rates.get(o.currency);
         if (!o.date_paid_gmt || !rate) continue;
         const created = gmt(o.date_created_gmt);
         const day = o.date_created.slice(0, 10);
@@ -216,7 +222,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         // A refund gives back its share of the tax. ponytail: pro rata, Woo's order list doesn't split a refund's tax out.
         const tax = Number(o.total) > 0 ? (rate * Number(o.total_tax ?? 0) * total) / (rate * Number(o.total)) : 0;
         const tracking = wooTracking(o);
-        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', tracking.number, Number(o.cost_of_goods_sold?.total_value ?? 0), day, Math.round(tax * 100) / 100, tracking.url);
+        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', tracking.number, Number(o.cost_of_goods_sold?.total_value ?? 0), day, Math.round(tax * 100) / 100, tracking.url, rate);
         setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total) * rate, cost: Number(li.cost_of_goods_sold?.value ?? 0) })));
       }
       rebuildRevenue(db, storeId, days);

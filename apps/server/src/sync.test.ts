@@ -121,6 +121,14 @@ test("a connected store's refunds reach the live feed when a sync brings them: f
   change = () => {};
   await vi.advanceTimersByTimeAsync(61_000); // nothing new: nothing repeated
   expect(seen).toHaveLength(3);
+
+  change = () => {
+    // The shop switched currency: every total is re-priced in it, and nothing was refunded.
+    db.prepare("UPDATE stores SET currency = 'GBP' WHERE id = 'glow'").run();
+    db.prepare("UPDATE orders SET total = total * 0.8 WHERE store_id = 'glow'").run();
+  };
+  await vi.advanceTimersByTimeAsync(61_000);
+  expect(seen).toHaveLength(3);
   stop();
   off();
 });
