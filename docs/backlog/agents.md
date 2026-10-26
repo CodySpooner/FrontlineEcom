@@ -98,6 +98,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-48 The squad can see its creatives library, so the Ad Strategist launches what the Creative Studio and Copywriter made instead of asking for more.
 - [x] AGT-49 The Weekly report can see what the squad shipped: its task asked for approved requests, but no tool could read them.
 - [x] AGT-50 The owner hears how each approved change turned out (measured wins and misses), not only a passing XP toast.
+- [x] AGT-51 A runaway real-engine run can't burn past the store's daily AI budget: the cap was only checked when a run started.
 - [ ] AGT-19 (later) Codex as an alternate engine for Store Developer code work.
 - [x] AGT-21 Higgsfield generation over REST: `create_creative` image/video/UGC renders through `https://api.higgsfield.ai` when core's `higgsfield` integration has keys (`Authorization: Key id:secret`), demo render otherwise; same credit cap + approval.
 - [x] AGT-20 Evals: fixture checks that prompt assembly and FakeEngine flows produce the expected tools/approvals/memories.
@@ -105,6 +106,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-51 Run limits: the run manager passes each run what is left of the store's daily AI budget (`RunInput.budgetUsd`, computed when it starts executing). The Claude engine turns that into `maxBudgetUsd` plus `maxTurns: 40`. When the SDK stops a run on either limit, the owner's error notification says why in plain words instead of `error_max_turns`.
 - 2026-10-26 — AGT-50 Outcome notes: every judged ad change, added product, price test and product page posts one notification to the owner's feed ("Measured win: <Agent>" or "<Agent>: no lift this time"). The body is the measured result and the link opens the agent. It goes through `recordOutcome` (learning + a `once` gate), so rechecks don't repeat it.
 - 2026-10-26 — AGT-49 `squad_log` (Market Analyst) lists the last N days of owner requests with their decision (approved, denied, pending or auto-approved) and finished runs with each answer's gist. The Weekly report job uses it for "what the squad shipped".
 - 2026-10-26 — AGT-48 `list_creatives` (Ad Strategist, Creative Studio, Copywriter) is the store's creatives library as CSV, newest first, filterable by kind. Media show as `demo` / `higgsfield` / `none`, never the payload. Playbooks: the Ad Strategist names library creatives to launch before asking the Creative Studio for new ones; the Creative Studio and Copywriter check it so they don't repeat an angle.

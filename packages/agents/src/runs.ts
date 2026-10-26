@@ -136,6 +136,7 @@ export function createRunManager(opts: RunManagerOptions) {
       const store = opts.store(run.storeId);
       if (agent && store) {
         const resume = db.prepare('SELECT resume FROM agent_runs WHERE id = ?').get(run.id)?.resume;
+        const cap = env.caps?.(store.id).agentCostPerDay;
         const input: RunInput = {
           agent,
           store,
@@ -144,6 +145,7 @@ export function createRunManager(opts: RunManagerOptions) {
           signal,
           env: { ...env, runId: run.id },
           ...(resume ? { resume: String(resume) } : {}),
+          ...(cap !== undefined ? { budgetUsd: Math.max(0, cap - costToday(db, store.id)) } : {}),
         };
         let toolCalls = 0;
         for await (const event of runAgent(input, engine)) {

@@ -14,6 +14,8 @@ export interface RunInput {
   signal?: AbortSignal;
   /** App data access for the role's tools. Without it the agent only has its built-ins. */
   env?: ToolEnv;
+  /** What is left of the store's daily AI budget (USD); engines that bill stop the run there. */
+  budgetUsd?: number;
 }
 
 /** Streams one agent run. Engines may throw or stop early; `runAgent` normalizes that. */

@@ -115,7 +115,8 @@ describe('Claude engine', () => {
   });
 
   test('maps failed results to error events', () => {
-    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }))).toEqual([{ type: 'error', message: 'error_max_turns' }]);
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }))).toEqual([{ type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.' }]);
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: ['x'] }))[0]).toMatchObject({ message: expect.stringMatching(/^Stopped: the run used what was left of today's AI budget/) });
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_during_execution', errors: ['boom', 'bang'] }))).toEqual([{ type: 'error', message: 'boom; bang' }]);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in' }))).toEqual([{ type: 'error', message: 'Not logged in' }]);
   });
@@ -145,6 +146,22 @@ describe('Claude engine', () => {
       allowedTools: ['WebSearch', 'WebFetch'],
       maxTurns: 3,
     });
+  });
+
+  test('caps every run at 40 turns and at what is left of the daily AI budget', async () => {
+    let seen: Options | undefined;
+    const engine = claudeEngine({
+      query: (params) => {
+        seen = params.options;
+        return (async function* () {
+          yield* frames;
+        })();
+      },
+    });
+    await collect(runAgent({ ...input, budgetUsd: 1.25 }, engine));
+    expect(seen).toMatchObject({ maxTurns: 40, maxBudgetUsd: 1.25 });
+    await collect(runAgent(input, engine));
+    expect(seen?.maxBudgetUsd).toBeUndefined();
   });
 
   // What Claude sees: every app tool's zod input must come out of the in-process MCP server as a valid object schema.

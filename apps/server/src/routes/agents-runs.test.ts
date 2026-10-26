@@ -117,6 +117,16 @@ test("the store's daily AI budget blocks new runs once spent", async () => {
   expect(m.start('glow:nobody', 'x')).toBe('Agent not found');
 });
 
+test("each run is told what is left of the store's daily AI budget", async () => {
+  const budgets: (number | undefined)[] = [];
+  const m = manager({ engine: fakeEngine((input) => (budgets.push(input.budgetUsd), [{ type: 'done', sessionId: 's', usage }])) });
+  updateCaps(db, 'glow', { agentCostPerDay: 1 });
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at) VALUES ('r0', 'glow', 'glow:copywriter', 't', 'done', 0.25, ?)`).run(new Date().toISOString());
+  ok(m.start('glow:copywriter', 'one'));
+  await m.idle();
+  expect(budgets).toEqual([0.75]);
+});
+
 test('runs that used tools reflect, and the learnings become store memory', async () => {
   const learning = '[{"kind":"learning","text":"Glow buyers respond to routine-based bundles","evidence":"AOV +18% on bundles, 30d","confidence":0.7,"tags":["offer"]}]';
   const m = manager({

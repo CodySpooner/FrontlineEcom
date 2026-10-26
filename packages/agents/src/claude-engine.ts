@@ -8,6 +8,12 @@ import { assemblePrompt } from './prompt';
 import { ROLES } from './roles';
 import { callTool, channel, requestApproval, toolsFor } from './tools';
 
+/** Why the SDK stopped a run early, in the owner's words (the run's error notification). */
+const STOPPED: Partial<Record<string, string>> = {
+  error_max_turns: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.',
+  error_max_budget_usd: "Stopped: the run used what was left of today's AI budget for this store. Raise it in Settings.",
+};
+
 export interface ClaudeEngineOptions {
   /** Defaults to `FRONTLINE_AGENT_MODEL` or claude-opus-5-5. */
   model?: string;
@@ -65,6 +71,9 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
           return approved ? { behavior: 'allow', updatedInput: toolInput } : { behavior: 'deny', message };
         },
         abortController,
+        // Runaway guard: a run stops at 40 turns, or at what is left of the store's daily AI budget.
+        maxTurns: 40,
+        ...(input.budgetUsd !== undefined ? { maxBudgetUsd: Math.max(0.01, input.budgetUsd) } : {}),
         ...(input.resume ? { resume: input.resume } : {}),
         ...opts.queryOptions?.(input),
       },
@@ -100,7 +109,7 @@ export function toAgentEvents(message: SDKMessage): AgentEvent[] {
       );
     }
     case 'result': {
-      if (message.subtype !== 'success') return [{ type: 'error', message: message.errors.join('; ') || message.subtype }];
+      if (message.subtype !== 'success') return [{ type: 'error', message: STOPPED[message.subtype] ?? (message.errors.join('; ') || message.subtype) }];
       if (message.is_error) return [{ type: 'error', message: message.result || 'Claude returned an error' }];
       const u = message.usage;
       return [
