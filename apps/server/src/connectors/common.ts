@@ -99,6 +99,10 @@ const passes = (db: Db) => JSON.parse(String(db.prepare('SELECT value_json FROM 
 /** True while integration `id` hasn't had today's catalog pass. */
 export const catalogPassDue = (db: Db, id: string, today: string) => passes(db)[id] !== today;
 
+/** Records today's catalog pass for integration `id` (archiveMissing does this itself). */
+export const catalogPassDone = (db: Db, id: string, today: string) =>
+  db.prepare('INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json').run(PASS_KEY, JSON.stringify({ ...passes(db), [id]: today }));
+
 /**
  * Applies a catalog pass: the store's products matching `glob` (the platform's ids) that `listed` doesn't hold are
  * archived, and the day is recorded. `listed` must be the complete catalog; a partial read would archive live products.
@@ -109,7 +113,7 @@ export function archiveMissing(db: Db, id: string, storeId: string, glob: string
   for (const r of db.prepare("SELECT id FROM products WHERE store_id = ? AND id GLOB ? AND status != 'archived'").all(storeId, glob)) {
     if (!keep.has(String(r.id))) archive.run(storeId, String(r.id));
   }
-  db.prepare('INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json').run(PASS_KEY, JSON.stringify({ ...passes(db), [id]: today }));
+  catalogPassDone(db, id, today);
 }
 
 export interface OrderItem {

@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, archiveMissing, catalogPassDue, rebuildRevenue, setStoreCurrency, switchToReal } from './common';
+import { adRate, archiveMissing, catalogPassDone, catalogPassDue, rebuildRevenue, setStoreCurrency, switchToReal } from './common';
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
@@ -30,7 +30,7 @@ const SEARCH_CAP = 1000;
 /**
  * The seller's listings in one marketplace changed since `since` (all of them without it), oldest change first: 20 a
  * page, 5 pages a second. A catalog past the search cap is read in windows, each starting at the last change seen.
- * ponytail: more than 1000 SKUs changed in the same instant would end the windows early.
+ * More than 1000 SKUs changed in the same instant end the windows early: the result is then marked incomplete.
  */
 async function listingsOf(fetchFn: Fetch, host: string, token: string, sellerId: string, marketplace: string, since?: string) {
   const out: Listing[] = [];
@@ -49,7 +49,7 @@ async function listingsOf(fetchFn: Fetch, host: string, token: string, sellerId:
       pageToken = body.pagination?.nextToken;
     } while (pageToken);
     const last = out.at(-1)?.summaries?.[0]?.lastUpdatedDate;
-    if (n < SEARCH_CAP || !last || last === from) return out;
+    if (n < SEARCH_CAP || !last || last === from) return Object.assign(out, { complete: n < SEARCH_CAP });
     from = last;
   }
 }
@@ -139,7 +139,11 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
         // BUYABLE and/or DISCOVERABLE: live (an out-of-stock listing keeps DISCOVERABLE); neither: not live yet.
         prod.run(storeId, `amz-${l.sku}`, s?.itemName ?? l.sku, s?.mainImage?.link ?? null, price, counted.reduce((a, f) => a + f.quantity!, 0), counted.length ? 1 : 0, s?.status?.length ? 'active' : 'draft');
       }
-      if (listings && full) archiveMissing(db, id, storeId, 'amz-*', listings.map((l) => `amz-${l.sku}`), today);
+      // A read cut short by the search cap can't tell gone from unread: it archives nothing (and isn't retried until tomorrow).
+      if (listings && full) {
+        if (listings.complete) archiveMissing(db, id, storeId, 'amz-*', listings.map((l) => `amz-${l.sku}`), today);
+        else catalogPassDone(db, id, today);
+      }
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
   } catch (e) {

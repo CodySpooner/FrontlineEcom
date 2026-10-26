@@ -176,3 +176,29 @@ test('once a day the whole Amazon catalog is read again and listings that are go
   expect(queries).toEqual([null, '2026-10-24T00:00:00Z', null]);
   expect(status()).toEqual([{ id: 'amz-A', status: 'active' }, { id: 'amz-B', status: 'archived' }]);
 });
+
+test('a catalog read cut short by the search cap archives nothing', async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  // A bulk upload gave 1200 SKUs the same change time: windows can't get past the first 1000.
+  const all = Array.from({ length: 1200 }, (_, i) => ({ sku: `S${i}`, summaries: [{ status: ['BUYABLE'], lastUpdatedDate: '2026-10-01T00:00:00Z' }] }));
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (!u.pathname.startsWith('/listings/')) return base(url, init);
+    const hits = all.slice(0, 1000);
+    const at = Number(u.searchParams.get('pageToken') ?? 0);
+    return Response.json({ numberOfResults: hits.length, items: hits.slice(at, at + 20), ...(at + 20 < hits.length ? { pagination: { nextToken: String(at + 20) } } : {}) });
+  }) as typeof fetch;
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('peak', 'amz-S1199', 'Live', 5, 0, 1, 'active')").run();
+  await syncAmazon(db, key, 'peak', fetchFn, new Date('2026-10-27T18:00:00Z')); // the next day's full pass
+  expect(db.prepare("SELECT status FROM products WHERE store_id = 'peak' AND id = 'amz-S1199'").get()?.status).toBe('active');
+  const queries: (string | null)[] = [];
+  await syncAmazon(db, key, 'peak', (async (url: string, init?: RequestInit) => {
+    if (new URL(url).pathname.startsWith('/listings/')) queries.push(new URL(url).searchParams.get('lastUpdatedAfter'));
+    return fetchFn(url, init);
+  }) as typeof fetch, new Date('2026-10-27T18:10:00Z'));
+  expect(queries[0]).not.toBeNull(); // the day's pass is done: back to changes only
+  expect(db.prepare("SELECT count(*) AS n FROM products WHERE store_id = 'peak' AND id GLOB 'amz-*'").get()?.n).toBe(1001);
+});
