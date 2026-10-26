@@ -114,12 +114,13 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
 }
 
 /**
- * An assistant message's cost at Claude Opus 5.5 list prices, USD per million tokens: input $4, cache write $5, cache read
- * $0.20, output $20. The result's exact total replaces it; it's what counts for a run that never gets one (cancelled, crashed).
+ * An assistant message's cost at Claude Opus 5.5 list prices, USD per million tokens: input $4, cache write $8 (Claude Code
+ * caches for an hour, at 2x input), cache read $0.20, output $20. The result's exact total replaces it; it's what counts
+ * for a run that never gets one (cancelled, crashed). Checked 2026-10-26 on a real run: $0.0757 estimated vs $0.0758 billed.
  */
 // ponytail: one price list whatever FRONTLINE_AGENT_MODEL is; a cheaper model reads high, which errs on the cap's side.
 export const estimate = (u: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null }) =>
-  (u.input_tokens * 4 + (u.cache_creation_input_tokens ?? 0) * 5 + (u.cache_read_input_tokens ?? 0) * 0.2 + u.output_tokens * 20) / 1e6;
+  (u.input_tokens * 4 + (u.cache_creation_input_tokens ?? 0) * 8 + (u.cache_read_input_tokens ?? 0) * 0.2 + u.output_tokens * 20) / 1e6;
 
 /** Maps one SDK message to our events. Subagent traffic (parent_tool_use_id set) is not surfaced. */
 export function toAgentEvents(message: SDKMessage): AgentEvent[] {

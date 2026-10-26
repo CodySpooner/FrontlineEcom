@@ -118,7 +118,7 @@ describe('Claude engine', () => {
 
   test('maps failed results to error events', () => {
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }))).toEqual([{ type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.' }]);
-    expect(estimate({ input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 10_000, output_tokens: 500 })).toBeCloseTo(0.026);
+    expect(estimate({ input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 10_000, output_tokens: 500 })).toBeCloseTo(0.032);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: ['x'] }))[0]).toMatchObject({ message: expect.stringMatching(/^Stopped: the run used its share of today's AI budget/) });
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_during_execution', errors: ['boom', 'bang'] }))).toEqual([{ type: 'error', message: 'boom; bang' }]);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in' }))).toEqual([{ type: 'error', message: 'Not logged in' }]);
