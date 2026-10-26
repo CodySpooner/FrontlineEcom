@@ -56,10 +56,10 @@ export async function syncCj(db: Db, key: Buffer, _storeId: string, fetchFn: Fet
     }
 
     tx(db, () => {
-      // CJ's order number is the store platform's: "#1001"/"1001" on Shopify, the TikTok Shop order id, the Etsy receipt id.
+      // CJ's order number is the store platform's: "#1001"/"1001" on Shopify, the TikTok Shop order id, the Etsy receipt id, the Woo order number.
       const find = db.prepare(
         `SELECT o.store_id, o.id, o.fulfillment_status, lower(s.name) AS store FROM orders o JOIN stores s ON s.id = o.store_id
-         WHERE o.id IN (?1, '#' || ?1, 'tt-' || ?1, 'etsy-' || ?1)`,
+         WHERE o.id IN (?1, '#' || ?1, 'tt-' || ?1, 'etsy-' || ?1, 'woo-' || ?1)`,
       );
       const up = db.prepare("UPDATE orders SET supplier = 'CJ Dropshipping', tracking = coalesce(?, tracking), fulfillment_status = ? WHERE store_id = ? AND id = ?");
       for (const o of orders) {

@@ -1,0 +1,108 @@
+import type { ProductStatus } from '@frontline/shared';
+import { tx, type Db } from '../db';
+import { getCredentials, setIntegrationStatus } from '../integrations';
+import { rebuildRevenue, setOrderItems, switchToReal } from './common';
+
+// WooCommerce REST API v3 with a read-only consumer key/secret (Basic auth, so https only).
+/** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
+const BACKFILL_DAYS = 730;
+
+type Fetch = typeof fetch;
+
+interface WooOrder {
+  number: string;
+  status: string;
+  date_created_gmt: string;
+  date_modified_gmt: string;
+  date_paid_gmt: string | null;
+  total: string;
+  line_items?: { product_id: number; quantity: number; total: string }[];
+}
+
+interface WooProduct {
+  id: number;
+  name: string;
+  status: string;
+  price: string;
+  regular_price: string;
+  sale_price: string;
+  stock_quantity: number | null;
+  images?: { src: string }[];
+  date_modified_gmt: string;
+}
+
+/** Woo's *_gmt dates have no zone suffix. */
+const gmt = (s: string) => new Date(`${s}Z`);
+
+/** "https://shop.com/" → "https://shop.com"; keys travel in a Basic header, so plain http is refused. */
+export function wooSite(url: string) {
+  const u = URL.canParse(url.trim()) ? new URL(url.trim()) : undefined;
+  if (u?.protocol !== 'https:') throw new Error('Site URL must start with https:// (the keys are sent with every request)');
+  return `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
+}
+
+export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
+  const id = `woocommerce:${storeId}`;
+  const creds = getCredentials(db, key, 'woocommerce', storeId);
+  if (!creds) return;
+  try {
+    const site = wooSite(creds.siteUrl!);
+    const auth = `Basic ${Buffer.from(`${creds.consumerKey!.trim()}:${creds.consumerSecret!.trim()}`).toString('base64')}`;
+    const all = async <T>(path: string, params: Record<string, string>) => {
+      const out: T[] = [];
+      for (let page = 1, pages = 1; page <= pages; page++) {
+        const res = await fetchFn(`${site}/wp-json/wc/v3/${path}?${new URLSearchParams({ ...params, per_page: '100', page: String(page) })}`, { headers: { authorization: auth } });
+        const body = (await res.json().catch(() => undefined)) as T[] | { message?: string } | undefined;
+        if (res.status === 401 || res.status === 403) throw new Error('WooCommerce refused the keys; create a Read key under WooCommerce → Settings → Advanced → REST API');
+        if (!body) throw new Error(`No WooCommerce API at ${site}/wp-json; check the Site URL (and that permalinks are not "Plain")`);
+        if (!res.ok || !Array.isArray(body)) throw new Error(`WooCommerce: ${(body as { message?: string }).message ?? `HTTP ${res.status}`}`);
+        out.push(...body);
+        pages = Number(res.headers.get('x-wp-totalpages') ?? 1);
+      }
+      return out;
+    };
+
+    const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
+    const since = cursor ?? new Date(now.getTime() - BACKFILL_DAYS * 86_400_000).toISOString().slice(0, 19);
+    const changed = { modified_after: since, dates_are_gmt: 'true', orderby: 'modified', order: 'asc' };
+    const orders = await all<WooOrder>('orders', changed);
+    const products = await all<WooProduct>('products', changed);
+    const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
+
+    tx(db, () => {
+      switchToReal(db, storeId);
+      const prod = db.prepare(
+        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
+           inventory = excluded.inventory, status = excluded.status`,
+      );
+      for (const p of products) {
+        const price = Number(p.price || p.regular_price || 0);
+        const regular = Number(p.regular_price || 0);
+        const status: ProductStatus = p.status === 'publish' ? 'active' : 'draft';
+        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, p.stock_quantity ?? 0, status);
+      }
+      // ponytail: WooCommerce has no unit costs (only via plugins), so its orders add revenue with cogs 0; tracking needs a plugin too.
+      const ord = db.prepare(
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, ?, ?, NULL, NULL, 0, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status`,
+      );
+      const days = new Set<string>();
+      for (const o of orders) {
+        // Unpaid (pending, on-hold bank transfers, failed, drafts) never counts; cancelled or refunded after payment is a refund.
+        if (!o.date_paid_gmt) continue;
+        const created = gmt(o.date_created_gmt);
+        const day = dayOf.format(created);
+        days.add(day);
+        const refunded = o.status === 'refunded' || o.status === 'cancelled' || o.status === 'trash';
+        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Number(o.total), refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', day);
+        setOrderItems(db, storeId, `woo-${o.number}`, (o.line_items ?? []).filter((li) => li.product_id).map((li) => ({ productId: `woo-${li.product_id}`, quantity: li.quantity, revenue: Number(li.total), cost: 0 })));
+      }
+      rebuildRevenue(db, storeId, days);
+      const newest = [...orders, ...products].reduce((m, x) => (x.date_modified_gmt > m ? x.date_modified_gmt : m), since);
+      db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(newest, now.toISOString(), id);
+    });
+  } catch (e) {
+    setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'WooCommerce sync failed');
+  }
+}

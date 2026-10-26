@@ -641,7 +641,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'clientSecret', label: 'LWA client secret', secret: true },
     { key: 'refreshToken', label: 'Refresh token', secret: true },
   ] },
-  woocommerce: { name: 'WooCommerce', category: 'platform', perStore: true, fields: [
+  woocommerce: { name: 'WooCommerce', category: 'platform', perStore: true, help: 'WordPress admin → WooCommerce → Settings → Advanced → REST API → Add key → Permissions: Read → copy the consumer key and secret (shown once). The site must use https and pretty permalinks (not Plain).', fields: [
     { key: 'siteUrl', label: 'Site URL', secret: false, placeholder: 'https://yourstore.com' },
     { key: 'consumerKey', label: 'Consumer key', secret: true, placeholder: 'ck_…' },
     { key: 'consumerSecret', label: 'Consumer secret', secret: true, placeholder: 'cs_…' },

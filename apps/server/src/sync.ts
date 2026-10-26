@@ -6,13 +6,14 @@ import { syncGa4, syncGoogleAds } from './connectors/google';
 import { syncMeta } from './connectors/meta';
 import { syncShopify } from './connectors/shopify';
 import { syncTikTokAds, syncTikTokShop } from './connectors/tiktok';
+import { syncWooCommerce } from './connectors/woocommerce';
 import type { Db } from './db';
 import { log } from './log';
 
 type Syncer = (db: Db, key: Buffer, storeId: string) => Promise<void>;
 
 /** Connectors that pull data on a schedule. */
-const SYNCERS: Partial<Record<IntegrationKind, Syncer>> = { shopify: syncShopify, meta_ads: syncMeta, google_ads: syncGoogleAds, ga4: syncGa4, tiktok_ads: syncTikTokAds, tiktok_shop: syncTikTokShop, etsy: syncEtsy, amazon: syncAmazon, cj: syncCj };
+const SYNCERS: Partial<Record<IntegrationKind, Syncer>> = { shopify: syncShopify, meta_ads: syncMeta, google_ads: syncGoogleAds, ga4: syncGa4, tiktok_ads: syncTikTokAds, tiktok_shop: syncTikTokShop, etsy: syncEtsy, amazon: syncAmazon, cj: syncCj, woocommerce: syncWooCommerce };
 
 /**
  * Every `everyMs`, syncs each data integration that was never tried, was last tried over `staleMs` ago, or whose
