@@ -9,7 +9,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 
 ## Items
-- [ ] AGT-01 `packages/agents` package + engine interface: `runAgent({ agent, store, task, resume? })` →
+- [x] AGT-01 `packages/agents` package + engine interface: `runAgent({ agent, store, task, resume? })` →
       `AsyncIterable<AgentEvent>` (`text_delta`, `tool_call`, `tool_result`, `approval_request`, `memory_written`, `done`,
       `error`). `FakeEngine` (scripted, deterministic) and `ClaudeEngine` (Agent SDK `query()` on the owner's local Claude
       Code login, partial-message streaming, resume). Put shared event types in `packages/shared`.
@@ -52,3 +52,4 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 ## Blocked
 
 ## Done
+- 2026-10-26 — AGT-01 `@frontline/agents`: `runAgent` + `Engine`, `fakeEngine` (scripted), `claudeEngine` (Agent SDK `query()`, partial streaming, resume, isolated settings/tools); `AgentEvent`/`StoreMemory` in shared. `FRONTLINE_AGENT_ENGINE=claude` switches engines.

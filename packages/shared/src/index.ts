@@ -185,3 +185,37 @@ export type LiveMessage =
 export interface ApiError {
   error: string;
 }
+
+export type MemoryKind = 'fact' | 'learning' | 'preference';
+
+/** Something an agent learned about its store. Ranked by relevance × recency × confidence. */
+export interface StoreMemory {
+  id: string;
+  storeId: string;
+  agentId: string;
+  kind: MemoryKind;
+  text: string;
+  /** What backs it up, e.g. "Hook A: 3.1 ROAS over 5 days vs 1.4 for hook B". */
+  evidence?: string;
+  /** 0..1 */
+  confidence: number;
+  tags: string[];
+  createdAt: string;
+}
+
+export interface RunUsage {
+  inputTokens: number;
+  outputTokens: number;
+  costUsd: number;
+}
+
+/** Normalized stream event of one agent run, the same for the fake and the Claude engine. Every run ends with exactly one `done` or `error`. */
+export type AgentEvent =
+  | { type: 'text_delta'; text: string }
+  | { type: 'tool_call'; id: string; name: string; input: unknown }
+  | { type: 'tool_result'; id: string; output: string; isError: boolean }
+  | { type: 'approval_request'; approval: ApprovalRequest }
+  | { type: 'memory_written'; memory: StoreMemory }
+  /** `sessionId` continues the conversation when passed back as `resume`. */
+  | { type: 'done'; sessionId: string; usage: RunUsage }
+  | { type: 'error'; message: string };
