@@ -171,6 +171,34 @@ export interface AnalyticsSummary {
   /** One point per day, oldest first (UI buckets 1Y into weeks). */
   series: MetricPoint[];
   byStore: { storeId: string; totals: MetricTotals; deltas: MetricDeltas }[];
+  /** Period totals. Sessions, add to carts and checkouts come from GA4 (or demo data); 0 until it is connected. */
+  funnel: Funnel;
+}
+
+export interface Funnel {
+  sessions: number;
+  addToCarts: number;
+  checkouts: number;
+  orders: number;
+}
+
+export type AdNetwork = 'meta' | 'tiktok' | 'google';
+
+/** GET /api/analytics/campaigns?stores=&range= → CampaignStats[] over the period, biggest spend first. */
+export interface CampaignStats {
+  network: AdNetwork;
+  id: string;
+  storeId: string;
+  name: string;
+  /** Network statuses folded: deleted/removed → archived, anything else running or in review → active. */
+  status: 'active' | 'paused' | 'archived';
+  dailyBudget: number;
+  spend: number;
+  revenue: number;
+  roas: number;
+  purchases: number;
+  clicks: number;
+  impressions: number;
 }
 
 /** POST /api/stores body. Response: the created Store. */

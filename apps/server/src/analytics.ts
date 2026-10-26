@@ -1,4 +1,4 @@
-import type { AnalyticsRange, AnalyticsSummary, MetricTotals } from '@frontline/shared';
+import type { AdNetwork, AnalyticsRange, AnalyticsSummary, CampaignStats, MetricTotals } from '@frontline/shared';
 import type { Db } from './db';
 import { addDays } from './dates';
 
@@ -9,6 +9,9 @@ export interface MetricRow {
   adSpend: number;
   cogs: number;
   orders: number;
+  sessions?: number;
+  addToCarts?: number;
+  checkouts?: number;
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -52,7 +55,9 @@ export function summarize(rows: MetricRow[], { range, to, storeIds }: { range: A
     const t = totalsOf(cur.filter((r) => r.storeId === storeId));
     return { storeId, totals: t, deltas: deltasOf(t, totalsOf(prev.filter((r) => r.storeId === storeId))) };
   });
-  return { range, storeIds, from, to, totals, previous, deltas: deltasOf(totals, previous), series, byStore };
+  const sum = (k: 'sessions' | 'addToCarts' | 'checkouts') => cur.reduce((a, r) => a + (r[k] ?? 0), 0);
+  const funnel = { sessions: sum('sessions'), addToCarts: sum('addToCarts'), checkouts: sum('checkouts'), orders: totals.orders };
+  return { range, storeIds, from, to, totals, previous, deltas: deltasOf(totals, previous), series, byStore, funnel };
 }
 
 /** Loads both periods for the given stores from daily_metrics. */
@@ -60,8 +65,41 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
   if (!storeIds.length) return [];
   return db
     .prepare(
-      `SELECT store_id AS storeId, date, revenue, ad_spend AS adSpend, cogs, orders FROM daily_metrics
+      `SELECT store_id AS storeId, date, revenue, ad_spend AS adSpend, cogs, orders, sessions, add_to_carts AS addToCarts, checkouts FROM daily_metrics
        WHERE store_id IN (${storeIds.map(() => '?').join(',')}) AND date BETWEEN ? AND ?`,
     )
     .all(...storeIds, addDays(to, 1 - 2 * range), to) as unknown as MetricRow[];
+}
+
+const STATUS = (s: string): CampaignStats['status'] => (s === 'paused' ? 'paused' : s === 'archived' || s === 'deleted' || s === 'removed' ? 'archived' : 'active');
+
+/** Every campaign of the stores with its totals over [from, to], biggest spend first. */
+export function campaignStats(db: Db, storeIds: string[], from: string, to: string): CampaignStats[] {
+  if (!storeIds.length) return [];
+  return db
+    .prepare(
+      `SELECT c.network, c.id, c.store_id, c.name, c.status, c.daily_budget, coalesce(sum(d.spend), 0) AS spend, coalesce(sum(d.revenue), 0) AS revenue,
+         coalesce(sum(d.purchases), 0) AS purchases, coalesce(sum(d.clicks), 0) AS clicks, coalesce(sum(d.impressions), 0) AS impressions
+       FROM campaigns c LEFT JOIN campaign_daily d ON d.network = c.network AND d.campaign_id = c.id AND d.date BETWEEN ? AND ?
+       WHERE c.store_id IN (${storeIds.map(() => '?').join(',')}) GROUP BY c.network, c.id ORDER BY spend DESC, c.name`,
+    )
+    .all(from, to, ...storeIds)
+    .map((r) => {
+      const spend = r2(Number(r.spend));
+      const revenue = r2(Number(r.revenue));
+      return {
+        network: r.network as AdNetwork,
+        id: String(r.id),
+        storeId: String(r.store_id),
+        name: String(r.name),
+        status: STATUS(String(r.status)),
+        dailyBudget: Number(r.daily_budget),
+        spend,
+        revenue,
+        roas: spend ? r2(revenue / spend) : 0,
+        purchases: Number(r.purchases),
+        clicks: Number(r.clicks),
+        impressions: Number(r.impressions),
+      };
+    });
 }

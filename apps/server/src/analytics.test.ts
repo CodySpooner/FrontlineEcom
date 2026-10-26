@@ -1,9 +1,9 @@
 import { expect, test } from 'vitest';
-import type { AnalyticsSummary } from '@frontline/shared';
+import type { AnalyticsSummary, CampaignStats } from '@frontline/shared';
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { summarize, totalsOf, type MetricRow } from './analytics';
+import { campaignStats, summarize, totalsOf, type MetricRow } from './analytics';
 
 const row = (storeId: string, date: string, revenue: number, adSpend: number, cogs: number, orders: number): MetricRow => ({ storeId, date, revenue, adSpend, cogs, orders });
 
@@ -56,4 +56,35 @@ test('GET /api/analytics/summary filters stores and validates range', async () =
   expect(one.byStore).toHaveLength(1);
   expect(one.totals.revenue).toBeLessThan(all.totals.revenue);
   expect((await app.request('/api/analytics/summary?range=12')).status).toBe(400);
+});
+
+test('funnel: period totals of sessions, add to carts, checkouts and orders', () => {
+  const s = summarize(
+    [
+      { ...row('a', '2026-10-26', 100, 10, 30, 2), sessions: 500, addToCarts: 40, checkouts: 12 },
+      { ...row('a', '2026-10-25', 100, 10, 30, 3), sessions: 400, addToCarts: 30, checkouts: 9 },
+      { ...row('a', '2026-10-19', 100, 10, 30, 9), sessions: 9999 }, // previous period: not counted
+    ],
+    { range: 7, to: '2026-10-26', storeIds: ['a'] },
+  );
+  expect(s.funnel).toEqual({ sessions: 900, addToCarts: 70, checkouts: 21, orders: 5 });
+});
+
+test('campaign stats over the period, folded statuses, biggest spend first; GET /api/analytics/campaigns', async () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 'old', 'glow', 'Old test', 'deleted', 0)").run();
+  db.prepare("INSERT INTO campaign_daily (network, campaign_id, date, spend, revenue, purchases, clicks, impressions) VALUES ('meta', 'old', '2026-10-01', 50, 0, 0, 10, 100)").run();
+  const week = campaignStats(db, ['glow'], '2026-10-20', '2026-10-26');
+  expect(week.length).toBe(5);
+  expect(week.map((c) => c.spend)).toEqual([...week.map((c) => c.spend)].sort((a, b) => b - a));
+  expect(week.find((c) => c.id === 'old')).toMatchObject({ status: 'archived', spend: 0, roas: 0 });
+  const top = week[0]!;
+  expect(top.roas).toBeCloseTo(top.revenue / top.spend, 1);
+  expect(campaignStats(db, ['glow'], '2026-10-01', '2026-10-26').find((c) => c.id === 'old')).toMatchObject({ spend: 50, clicks: 10 });
+
+  const app = createApp(db);
+  const res = (await (await app.request('/api/analytics/campaigns?stores=glow,peak&range=7')).json()) as CampaignStats[];
+  expect(new Set(res.map((c) => c.storeId))).toEqual(new Set(['glow', 'peak']));
+  expect((await app.request('/api/analytics/campaigns?range=12')).status).toBe(400);
 });

@@ -56,6 +56,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Inbox (ui UI-11, 1/2): `AnalyticsSummary.funnel` (sessions / add to carts / checkouts / orders) and `GET /api/analytics/campaigns?stores=&range=` → `CampaignStats[]` (shared types `Funnel`, `AdNetwork`, `CampaignStats`)
 - 2026-10-26 — CORE-12 (2/2) Amazon SP-API connector (read-only analytics): LWA token → Sales API orderMetrics (daily, store timezone, offsets DST-correct) → new `channel_daily` table (migration 13); revenue rebuild now sums platform orders + channel totals
 - 2026-10-26 — CORE-12 (1/2) Etsy connector: Open API v3 (`x-api-key` keystring:secret), hourly token renewal with rotating refresh tokens saved encrypted, paid receipts → orders/revenue, listings newest-changed first with early stop
 - 2026-10-26 — CORE-11 (2/2) TikTok Shop connector: signed Partner API 202309 requests, access token renewed with the refresh token and saved encrypted, first authorized shop, products + paid orders (tt- ids) → shared revenue rebuild with Shopify

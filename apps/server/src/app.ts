@@ -4,13 +4,13 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { WebSocketServer } from 'ws';
 import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type ApprovalStatus, type StoreInput } from '@frontline/shared';
-import { loadRows, summarize } from './analytics';
+import { campaignStats, loadRows, summarize } from './analytics';
 import { decide, listApprovals } from './approvals';
 import { automationRoutes } from './automations';
 import { listOrders, listProducts } from './catalog';
 import { competitorRoutes } from './competitors';
 import { dataDir, type Db } from './db';
-import { localDate } from './dates';
+import { addDays, localDate } from './dates';
 import { deleteIntegration, listIntegrations, saveIntegration } from './integrations';
 import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
@@ -96,6 +96,12 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const storeIds = pickStores(db, c.req.query('stores'));
       const to = localDate();
       return c.json(summarize(loadRows(db, storeIds, range, to), { range, to, storeIds }));
+    })
+    .get('/api/analytics/campaigns', (c) => {
+      const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
+      if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
+      const to = localDate();
+      return c.json(campaignStats(db, pickStores(db, c.req.query('stores')), addDays(to, 1 - range), to));
     })
     .route('/', researchRoutes(db))
     .route('/', competitorRoutes(db, (q) => pickStores(db, q)))
