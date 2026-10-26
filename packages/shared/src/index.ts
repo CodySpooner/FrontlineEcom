@@ -512,7 +512,7 @@ export interface IntegrationField {
 
 /** Catalog for the Integrations screen: every field listed is required. `perStore` = connected per store (else global). */
 export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category: IntegrationCategory; perStore: boolean; fields: IntegrationField[]; /** Setup steps shown next to the form. */ help?: string }> = {
-  shopify: { name: 'Shopify', category: 'platform', perStore: true, help: 'Shopify admin → Settings → Apps and sales channels → Develop apps → Create an app → Configure Admin API scopes: read_products, read_inventory, read_orders, read_all_orders (plus write_products if agents may add draft products you approve) → Install app → copy the Admin API access token (shown once).', fields: [
+  shopify: { name: 'Shopify', category: 'platform', perStore: true, help: 'Shopify admin → Settings → Apps and sales channels → Develop apps → Create an app → Configure Admin API scopes: read_products, read_inventory, read_orders, read_all_orders (plus write_products and write_online_store_pages if agents may add products and publish pages you approve) → Install app → copy the Admin API access token (shown once).', fields: [
     { key: 'shopDomain', label: 'Shop domain', secret: false, placeholder: 'your-store.myshopify.com' },
     { key: 'accessToken', label: 'Admin API access token', secret: true, placeholder: 'shpat_…' },
   ] },

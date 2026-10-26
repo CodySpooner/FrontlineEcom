@@ -4,7 +4,7 @@ import type { AnalyticsSummary, Integration, Order, Page, Product, Store } from 
 import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
-import { createProducts, fulfillmentOf, shopHost, syncShopify } from './shopify';
+import { createProducts, fulfillmentOf, publishPage, publishProductPage, shopHost, syncShopify } from './shopify';
 
 const key = randomBytes(32);
 const TOKEN = 'shpat_fixture_token';
@@ -153,4 +153,26 @@ test('createProducts makes priced drafts in Shopify and shows them locally', asy
 
   await expect(createProducts(db, key, 'glow', [{ title: 'Bad', price: 5 }], fetchFn)).rejects.toThrow('Shopify: Title is invalid');
   await expect(createProducts(db, key, 'peak', [{ title: 'X', price: 5 }], fetchFn)).rejects.toThrow('not connected');
+});
+
+test('publishProductPage updates the live product; publishPage creates a published page', async () => {
+  const { db } = await setup();
+  db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', '111', 'Old title', 10, 0, 0, 'active')").run();
+  const calls: { query: string; variables: Record<string, unknown> }[] = [];
+  const fetchFn = (async (_url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    calls.push(body);
+    if (body.query.includes('productUpdate')) return Response.json({ data: { productUpdate: { product: { id: 'x' }, userErrors: [] } } });
+    if (body.variables.page.title === 'Bad') return Response.json({ data: { pageCreate: { page: null, userErrors: [{ message: 'Access denied for pageCreate' }] } } });
+    return Response.json({ data: { pageCreate: { page: { id: 'gid://shopify/Page/77', handle: 'about-us' }, userErrors: [] } } });
+  }) as typeof fetch;
+
+  await publishProductPage(db, key, 'glow', '111', { title: 'LED Mask Pro', descriptionHtml: '<p>Glow</p>', seoTitle: 'LED Mask' }, fetchFn);
+  expect(calls[0]!.variables).toEqual({ product: { id: 'gid://shopify/Product/111', title: 'LED Mask Pro', descriptionHtml: '<p>Glow</p>', seo: { title: 'LED Mask' } } });
+  expect(db.prepare("SELECT title FROM products WHERE store_id = 'glow' AND id = '111'").get()).toEqual({ title: 'LED Mask Pro' });
+
+  expect(await publishPage(db, key, 'glow', { title: 'About us', bodyHtml: '<h1>Hi</h1>' }, fetchFn)).toEqual({ id: '77', handle: 'about-us' });
+  expect(calls[1]!.variables).toEqual({ page: { title: 'About us', body: '<h1>Hi</h1>', isPublished: true } });
+  await expect(publishPage(db, key, 'glow', { title: 'Bad', bodyHtml: '' }, fetchFn)).rejects.toThrow('Shopify: Access denied');
+  await expect(publishPage(db, key, 'peak', { title: 'X', bodyHtml: '' }, fetchFn)).rejects.toThrow('not connected');
 });

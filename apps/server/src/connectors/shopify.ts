@@ -5,7 +5,8 @@ import { getCredentials, setIntegrationStatus } from '../integrations';
 import { rebuildRevenue, setOrderItems, switchToReal } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
-// write_products to add products the owner approved (createProducts).
+// write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
+// write_online_store_pages for store pages (publishPage).
 export const SHOPIFY_API_VERSION = '2026-07';
 /** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
 const BACKFILL_DAYS = 730;
@@ -63,6 +64,12 @@ const CREATE_M = `mutation ($product: ProductCreateInput!) {
 
 const VARIANT_M = `mutation ($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
   productVariantsBulkUpdate(productId: $productId, variants: $variants) { userErrors { message } } }`;
+
+const PRODUCT_UPDATE_M = `mutation ($product: ProductUpdateInput!) {
+  productUpdate(product: $product) { product { id } userErrors { message } } }`;
+
+const PAGE_CREATE_M = `mutation ($page: PageCreateInput!) {
+  pageCreate(page: $page) { page { id handle } userErrors { message } } }`;
 
 /** "https://Glow.myshopify.com/" → "glow.myshopify.com"; anything that isn't a myshopify.com host is rejected so the token only goes to Shopify. */
 export function shopHost(domain: string) {
@@ -175,13 +182,18 @@ export interface NewProduct {
  * Call only for an approved request. Throws on the first failure; products created before it stay as drafts, and a
  * product whose price update failed stays a $0 draft in Shopify until the next sync shows it.
  */
-export async function createProducts(db: Db, key: Buffer, storeId: string, products: NewProduct[], fetchFn: Fetch = fetch) {
+function admin(db: Db, key: Buffer, storeId: string, fetchFn: Fetch) {
   const creds = getCredentials(db, key, 'shopify', storeId);
   if (!creds) throw new Error('Shopify is not connected for this store');
-  const q = <T>(query: string, vars: Record<string, unknown>) => gql<T>(shopHost(creds.shopDomain!), creds.accessToken!, query, vars, fetchFn);
-  const check = (errors: { message: string }[]) => {
-    if (errors.length) throw new Error(`Shopify: ${errors.map((e) => e.message).join('; ')}`);
-  };
+  return <T>(query: string, vars: Record<string, unknown>) => gql<T>(shopHost(creds.shopDomain!), creds.accessToken!, query, vars, fetchFn);
+}
+
+const check = (errors: { message: string }[]) => {
+  if (errors.length) throw new Error(`Shopify: ${errors.map((e) => e.message).join('; ')}`);
+};
+
+export async function createProducts(db: Db, key: Buffer, storeId: string, products: NewProduct[], fetchFn: Fetch = fetch) {
+  const q = admin(db, key, storeId, fetchFn);
   const insert = db.prepare(`INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 'draft')`);
   const created: { id: string; title: string }[] = [];
   for (const p of products) {
@@ -196,4 +208,28 @@ export async function createProducts(db: Db, key: Buffer, storeId: string, produ
     created.push({ id: tail(product.id), title: p.title });
   }
   return created;
+}
+
+export interface ProductPage {
+  title: string;
+  descriptionHtml: string;
+  seoTitle?: string;
+  seoDescription?: string;
+}
+
+/** Replaces a live product's title, description and SEO. Call only for an approved request. */
+export async function publishProductPage(db: Db, key: Buffer, storeId: string, productId: string, page: ProductPage, fetchFn: Fetch = fetch) {
+  const seo = { ...(page.seoTitle ? { title: page.seoTitle } : {}), ...(page.seoDescription ? { description: page.seoDescription } : {}) };
+  const product = { id: `gid://shopify/Product/${productId}`, title: page.title, descriptionHtml: page.descriptionHtml, ...(Object.keys(seo).length ? { seo } : {}) };
+  const { productUpdate: u } = await admin(db, key, storeId, fetchFn)<{ productUpdate: { userErrors: { message: string }[] } }>(PRODUCT_UPDATE_M, { product });
+  check(u.userErrors);
+  db.prepare('UPDATE products SET title = ? WHERE store_id = ? AND id = ?').run(page.title, storeId, productId);
+}
+
+/** Creates a published store page (about, FAQ, shipping, landing). Call only for an approved request. Returns its handle (/pages/<handle>). */
+export async function publishPage(db: Db, key: Buffer, storeId: string, page: { title: string; bodyHtml: string }, fetchFn: Fetch = fetch) {
+  type Created = { pageCreate: { page: { id: string; handle: string } | null; userErrors: { message: string }[] } };
+  const { pageCreate: c } = await admin(db, key, storeId, fetchFn)<Created>(PAGE_CREATE_M, { page: { title: page.title, body: page.bodyHtml, isPublished: true } });
+  check(c.userErrors);
+  return { id: tail(c.page!.id), handle: c.page!.handle };
 }

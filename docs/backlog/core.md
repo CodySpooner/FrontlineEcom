@@ -5,9 +5,9 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from agents) FYI migration 17 (agents lane) adds `order_issues`; no action needed.
-- [ ] (from agents) Store Builder publishing (AGT-26): approved `store.publish_page` on connected Shopify stores only notifies the owner. When the connector can push it, export e.g. `publishProductPage(db, key, storeId, productId, { title, descriptionHtml, seoTitle?, seoDescription? })` (productUpdate) and `publishPage(db, key, storeId, { title, bodyHtml })` (pageCreate, needs `write_content`) and I'll call them from `publishDraft`. FYI migration 15 (agents lane) adds `page_drafts`.
-- [ ] (from agents) FYI migration 14 (agents lane) adds table `niche_learnings`; no action needed.
+- [x] (from agents) FYI migration 17 (agents lane) adds `order_issues`; no action needed.
+- [x] (from agents) Store Builder publishing (AGT-26): approved `store.publish_page` on connected Shopify stores only notifies the owner. When the connector can push it, export e.g. `publishProductPage(db, key, storeId, productId, { title, descriptionHtml, seoTitle?, seoDescription? })` (productUpdate) and `publishPage(db, key, storeId, { title, bodyHtml })` (pageCreate, needs `write_content`) and I'll call them from `publishDraft`. FYI migration 15 (agents lane) adds `page_drafts`.
+- [x] (from agents) FYI migration 14 (agents lane) adds table `niche_learnings`; no action needed.
 - [x] (from ui) For UI-11 Store Analytics. These are stubbed in `apps/web/src/api/stubs.ts`, and the interfaces there are the proposed shapes; the page shows an "Estimated" badge until each lands. (1) Funnel: add `funnel: { sessions, addToCarts, checkouts, orders }` (period totals from daily_metrics) to `AnalyticsSummary`, which is additive. (2) `GET /api/analytics/campaigns?stores=&range=` → `CampaignStats[]` `{ network, id, storeId, name, status, dailyBudget, spend, revenue, roas, purchases, clicks, impressions }`, biggest spend first. It's the same query as agents' `list_campaigns`, and channels are grouped by network client-side. (3) `GET /api/analytics/top-products?stores=&range=&limit=` → `{ storeId, productId, title, image?, units, revenue, profit }[]`. This needs order line items; demo stores can derive them.
 - [x] (from agents) FYI migration 12 (agents lane) adds `agent_runs.parent_run_id`; no action needed. The scheduler's `RunTask` call is unchanged (`start(agentId, task)`).
 - [x] (from agents) Approved `store.add_products` now adds draft products to demo stores (agents lane, `routes/agents-actions.ts`). For connected Shopify stores the owner only gets a notification: when the connector can `productCreate` (needs `write_products` in the custom-app scopes/help text), export e.g. `createProducts(db, key, storeId, products[])` and I'll call it from `addProducts`.
@@ -58,6 +58,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Inbox (agents AGT-26): `publishProductPage` (productUpdate: title, description, SEO) and `publishPage` (pageCreate, published) in the Shopify connector; Shopify help text lists `write_online_store_pages`
 - 2026-10-26 — Inbox (ui UI-11, 2/2): `order_items` (migration 16) filled by the Shopify / TikTok Shop / Etsy syncs, and `GET /api/analytics/top-products?stores=&range=&limit=` → `TopProduct[]`; demo stores split their period revenue across active products
 - 2026-10-26 — Fix: Shopify orders query cost was ~2177 points (> Shopify's 1000 max, so real syncs would fail); page size 25 → 10 orders (872), cost math documented
 - 2026-10-26 — Inbox (ui UI-11, 1/2): `AnalyticsSummary.funnel` (sessions / add to carts / checkouts / orders) and `GET /api/analytics/campaigns?stores=&range=` → `CampaignStats[]` (shared types `Funnel`, `AdNetwork`, `CampaignStats`)
