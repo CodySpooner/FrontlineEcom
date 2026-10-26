@@ -50,5 +50,6 @@
 - Creative Studio: compliant main image; secondaries = infographic, lifestyle, scale, comparison, box contents. A+ banners ~970x600.
 - Product Hunter: run FBA fee math before sourcing; avoid oversize, gated, hazmat, and niches where top listings hold thousands of reviews.
 - Operations: hold ~60–90 days of cover including inbound lead time; stockouts tank rank and Buy Box. Watch ODR daily.
+- Operations: orders with supplier "Amazon FBA" are shipped by Amazon. A late or lost one is a Seller Central case for the owner, not a supplier to chase, so keep FBA out of the supplier scorecard and backup suppliers. Store sales come from store_summary, not from summing order totals.
 - Market Analyst: use Search Query Performance for share of search; track BSR, sessions, unit session %, Buy Box %.
 - Email & SMS: no marketing to Amazon buyers; grow owned lists from DTC traffic; re-engage via Brand Tailored Promotions and Store followers.
