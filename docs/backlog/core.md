@@ -109,6 +109,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — A WooCommerce store takes its WordPress site's timezone (`/wp-json/` `timezone_string`, else a whole-hour `gmt_offset` as Etc/GMT±N, validated by Intl), as Shopify already did. Woo orders are dated on the site's day, but "today" used the machine's zone. On a UTC site (the WordPress default) a US owner's evening orders fell into tomorrow. Tests
 - 2026-10-26 — A store's currency changing (its platform reports a different one) re-syncs its ad accounts and Amazon from scratch (`setStoreCurrency`, used by all 5 platforms). Before, an ad account that synced before the platform's first sync kept its whole history converted into the old default (USD), labelled as the new currency. Test
 - 2026-10-26 — Reconnecting a store to another shop (a new Shopify domain, Woo site, Etsy shop, TikTok Shop shop, or Amazon seller or marketplace) drops the old shop's orders, products and Amazon daily totals, and rebuilds revenue (`forgetPlatform`). Before, a dev store connected first stayed mixed into the live store's revenue forever. The same shop with a new token, or a differently written URL, keeps everything. Other platforms' rows and local drafts stay. Test
 - 2026-10-26 — Demo: Glow Haus' "Add 3 trending products" now says "about 80% margin", matching its payload (76–84%). New data dirs only; existing ones keep the old text.

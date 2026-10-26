@@ -51,6 +51,18 @@ export function wooSite(url: string) {
   return `${u.origin}${u.pathname.replace(/\/+$/, '')}`;
 }
 
+/** WordPress' timezone as an IANA name: its city setting, else a whole-hour UTC offset (Etc/GMT names flip the sign). */
+export function wpZone(wp?: { timezone_string?: unknown; gmt_offset?: unknown }) {
+  const h = Number(wp?.gmt_offset);
+  // ponytail: a half-hour offset with no city (UTC+5:30) has no IANA name; the store keeps its own zone.
+  const zone = typeof wp?.timezone_string === 'string' && wp.timezone_string ? wp.timezone_string : !Number.isInteger(h) ? undefined : h ? `Etc/GMT${h > 0 ? '-' : '+'}${Math.abs(h)}` : 'UTC';
+  try {
+    return zone && new Intl.DateTimeFormat('en', { timeZone: zone }).resolvedOptions().timeZone;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `woocommerce:${storeId}`;
   const creds = getCredentials(db, key, 'woocommerce', storeId);
@@ -84,12 +96,15 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       .then((r) => (r.ok ? (r.json() as Promise<{ value?: unknown }>) : undefined))
       .catch(() => undefined);
     const base = typeof setting?.value === 'string' && /^[A-Z]{3}$/.test(setting.value) ? setting.value : orders[0]?.currency;
+    // Orders are dated on the site's day (date_created); the store takes its timezone so "today" is that same day.
+    const zone = wpZone(await fetchFn(`${site}/wp-json/`, { headers: { authorization: auth } }).then((r) => (r.ok ? (r.json() as Promise<Parameters<typeof wpZone>[0]>) : undefined)).catch(() => undefined));
     const rates = new Map<string, number | undefined>();
     for (const c of new Set(orders.map((o) => o.currency))) rates.set(c, !base || c === base ? 1 : await convertRate(db, c, base, fetchFn));
 
     tx(db, () => {
       switchToReal(db, storeId);
       if (base) setStoreCurrency(db, storeId, base);
+      if (zone) db.prepare('UPDATE stores SET timezone = ? WHERE id = ?').run(zone, storeId);
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,

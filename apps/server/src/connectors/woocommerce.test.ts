@@ -3,7 +3,7 @@ import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
-import { syncWooCommerce, wooSite } from './woocommerce';
+import { syncWooCommerce, wooSite, wpZone } from './woocommerce';
 
 const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
@@ -45,7 +45,7 @@ test('WooCommerce sync pulls paid orders + products since the cursor and rebuild
   const { fetchFn, calls } = fakeWoo();
   await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
 
-  expect(calls.map((c) => `${c.url.pathname} ${c.url.searchParams.get('page')}`)).toEqual(['/store/wp-json/wc/v3/orders 1', '/store/wp-json/wc/v3/orders 2', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/settings/general/woocommerce_currency null']);
+  expect(calls.map((c) => `${c.url.pathname} ${c.url.searchParams.get('page')}`)).toEqual(['/store/wp-json/wc/v3/orders 1', '/store/wp-json/wc/v3/orders 2', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/settings/general/woocommerce_currency null', '/store/wp-json/ null']);
   expect(calls.every((c) => c.headers.get('authorization') === `Basic ${Buffer.from('ck_1:cs_2').toString('base64')}`)).toBe(true);
   expect(calls[0]!.url.searchParams.get('modified_after')).toBe('2024-10-26T18:00:00');
 
@@ -85,14 +85,17 @@ test('WooCommerce sync refuses http sites and reports rejected keys', async () =
 
 test("orders land on the shop's own day and the store takes the shop's currency", async () => {
   const db = setup();
-  const fetchFn = (async (url: string) =>
-    new URL(url).pathname.endsWith('/orders')
+  const fetchFn = (async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/wp-json/')) return Response.json({ name: 'Shop', gmt_offset: 2, timezone_string: 'Europe/Berlin' });
+    return path.endsWith('/orders')
       ? Response.json([order('2001', 'processing', '40.00', true, { currency: 'EUR', date_created: '2026-10-26T00:30:00', date_created_gmt: '2026-10-25T22:30:00' })], { headers: { 'x-wp-totalpages': '1' } })
-      : Response.json([], { headers: { 'x-wp-totalpages': '1' } })) as typeof fetch;
+      : Response.json([], { headers: { 'x-wp-totalpages': '1' } });
+  }) as typeof fetch;
   await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
-  // 00:30 in Berlin is still the 25th in UTC (and in America/*): the shop's day wins.
+  // 00:30 in Berlin is still the 25th in UTC (and in America/*): the shop's day wins, and the store's "today" follows it.
   expect(db.prepare("SELECT local_date AS day FROM orders WHERE store_id = 'pawsome'").all()).toEqual([{ day: '2026-10-26' }]);
-  expect(db.prepare("SELECT currency FROM stores WHERE id = 'pawsome'").get()).toEqual({ currency: 'EUR' });
+  expect(db.prepare("SELECT currency, timezone FROM stores WHERE id = 'pawsome'").get()).toEqual({ currency: 'EUR', timezone: 'Europe/Berlin' });
 });
 
 test("with Woo's Cost of Goods Sold on, orders, best sellers and products carry its costs", async () => {
@@ -160,4 +163,13 @@ test("orders a multi-currency plugin took in another currency are converted into
   expect(db.prepare("SELECT currency FROM stores WHERE id = 'pawsome'").get()?.currency).toBe('EUR');
   expect(db.prepare("SELECT id, total FROM orders WHERE store_id = 'pawsome' ORDER BY id").all().map((r) => [r.id, r.total])).toEqual([['woo-3001', 16], ['woo-3002', 30]]);
   expect(db.prepare("SELECT revenue FROM order_items WHERE store_id = 'pawsome' AND order_id = 'woo-3001'").get()?.revenue).toBe(16);
+});
+
+test("WordPress' timezone setting as an IANA zone: a city, a whole-hour offset, else none", () => {
+  expect(wpZone({ timezone_string: 'Europe/Berlin', gmt_offset: 2 })).toBe('Europe/Berlin');
+  expect(wpZone({ timezone_string: '', gmt_offset: 0 })).toBe('UTC'); // a fresh WordPress install
+  expect(wpZone({ timezone_string: '', gmt_offset: -5 })).toBe('Etc/GMT+5');
+  expect(wpZone({ timezone_string: '', gmt_offset: '5.5' })).toBeUndefined();
+  expect(wpZone({ timezone_string: 'Mars/Olympus' })).toBeUndefined();
+  expect(wpZone(undefined)).toBeUndefined();
 });
