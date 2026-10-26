@@ -210,7 +210,7 @@ function Ads({ c }: { c?: Competitor }) {
 }
 
 function PriceTimeline({ competitors }: { competitors: Competitor[] }) {
-  const { ids, name } = useStoreSelection();
+  const { ids, name, currency } = useStoreSelection();
   const q = usePriceChanges(ids);
   const rival = new Map(competitors.map((c) => [c.id, c.name]));
   const changes = q.data ?? [];
@@ -244,8 +244,9 @@ function PriceTimeline({ competitors }: { competitors: Competitor[] }) {
                         <span className="text-xs text-muted"> · vs {name(p.storeId)}</span>
                       </span>
                       <span className="flex items-center gap-2 tabular-nums">
-                        <span className="text-muted line-through">{cents(p.from)}</span>
-                        <b>{cents(p.to)}</b>
+                        {/* ponytail: the rival's own currency isn't captured yet (core inbox); the store watching it is the likelier match than USD. */}
+                        <span className="text-muted line-through">{cents(p.from, currency(p.storeId))}</span>
+                        <b>{cents(p.to, currency(p.storeId))}</b>
                         <span className={cx('inline-flex w-[68px] items-center justify-end gap-0.5 text-xs font-semibold', cut ? 'text-red' : 'text-muted')}>
                           <Icon aria-hidden className="size-3.5" />
                           {cut ? 'Cut' : 'Up'} {Math.abs(p.changePct).toFixed(0)}%
