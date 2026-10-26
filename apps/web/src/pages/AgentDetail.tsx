@@ -3,7 +3,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type Autonomy, type MemoryKind } from '@frontline/shared';
-import { useAddMemory, useAgents, useAutomationActions, useAutomations, useCaps, useForgetMemory, useMemory, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
+import { useAddMemory, useAgents, useAgentXp, useAutomationActions, useAutomations, useCaps, useForgetMemory, useMemory, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
 import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
 import { FlowLibrary } from '../components/FlowLibrary';
@@ -90,13 +90,16 @@ export function AgentDetail() {
       <div className="mt-4">
         {tab === 'chat' && <Chat agent={agent} thread={thread} onThread={setThread} />}
         {tab === 'history' && (
-          <History
-            agentId={agent.id}
-            onOpen={(runId) => {
-              setThread([runId]);
-              go('chat');
-            }}
-          />
+          <div className="grid gap-3.5">
+            <History
+              agentId={agent.id}
+              onOpen={(runId) => {
+                setThread([runId]);
+                go('chat');
+              }}
+            />
+            <XpLog agentId={agent.id} />
+          </div>
         )}
         {tab === 'memory' && (
           <div className="grid gap-3.5">
@@ -128,6 +131,33 @@ function AssignedBy({ runId }: { runId: string }) {
     <Link to={`/agents/${encodeURIComponent(parent.agentId)}?run=${runId}`} className="mt-1 inline-block rounded-md border border-line-2 px-1.5 py-0.5 text-[11px] text-text-2 hover:border-red/60 hover:text-white">
       Assigned by {role?.name ?? 'a squadmate'}
     </Link>
+  );
+}
+
+/** DESIGN §8: agents earn XP for finished tasks, approved requests and measured wins. */
+function XpLog({ agentId }: { agentId: string }) {
+  const xp = useAgentXp(agentId);
+  const now = Date.now();
+  return (
+    <Panel title="XP earned" sub="What raised this agent's level, newest first.">
+      {xp.isPending ? (
+        <LoadingState rows={3} />
+      ) : xp.isError ? (
+        <ErrorState message="Couldn't load its XP." onRetry={() => xp.refetch()} />
+      ) : !xp.data.length ? (
+        <EmptyState title="No XP earned here yet">Agents earn XP for finished tasks, requests you approve and measured wins.</EmptyState>
+      ) : (
+        <ul className="grid gap-2">
+          {xp.data.map((e) => (
+            <li key={e.id} className="flex items-baseline gap-3 text-[13px]">
+              <b className="w-24 shrink-0 text-right font-display text-sm whitespace-nowrap text-red tabular-nums">{`${e.amount < 0 ? '−' : '+'}${Math.abs(e.amount).toLocaleString('en-US')} XP`}</b>
+              <span className="min-w-0 flex-1">{e.reason}</span>
+              <span className="shrink-0 text-xs text-muted">{ago(e.createdAt, now)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
   );
 }
 

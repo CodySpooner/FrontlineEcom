@@ -61,6 +61,7 @@ import type {
   StoreMemory,
   SupplierProduct,
   TopProduct,
+  XpEvent,
 } from '@frontline/shared';
 import { apiUp, waitForApi } from '../lib/restart';
 import { importing } from '../lib/sync';
@@ -148,6 +149,8 @@ export function useUpdateAgent() {
   });
 }
 
+/** What earned an agent its XP, newest first (the ledger behind its level). */
+export const useAgentXp = (agentId: string) => useQuery({ queryKey: ['xp', agentId], queryFn: () => api<XpEvent[]>(`/api/agents/${encodeURIComponent(agentId)}/xp`) });
 export const useRuns = (agentId: string) => useQuery({ queryKey: ['runs', agentId], queryFn: () => api<AgentRun[]>(`/api/runs?agent=${encodeURIComponent(agentId)}&limit=50`) });
 // Live events stream into this cache; the poll only covers a run that finished before its POST response landed.
 export const useRun = (id: string) =>
@@ -544,7 +547,7 @@ export function useLive() {
       }
       if (m.type === 'notification') qc.setQueryData<AppNotification[]>(['notifications'], (old) => old && [m.notification, ...old]);
       if (m.type === 'xp') {
-        ['agents', 'achievements'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+        ['agents', 'achievements', 'xp'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         // XpToasts shows it.
         window.dispatchEvent(new CustomEvent('frontline:xp', { detail: m }));
       } else if (m.type === 'approval') {
