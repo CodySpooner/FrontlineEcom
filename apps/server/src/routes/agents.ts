@@ -6,6 +6,7 @@ import {
   costToday,
   creditsToday,
   XP,
+  ADS_JOB,
   createDefaultJobs,
   DEFAULT_JOBS,
   createRunManager,
@@ -332,13 +333,20 @@ function startFresh(db: Db, store: Store) {
 
 function activateConnectedStores(db: Db, runs: RunManager) {
   for (const store of listStores(db).filter((s) => s.connected)) {
-    if (!once(db, `activate:${store.id}`)) continue;
-    startFresh(db, store);
-    if (enableDefaultJobs(db, store.id)) {
-      const jobs = DEFAULT_JOBS.map((j) => j.name).join(', ');
-      notify(db, { kind: 'info', title: `${store.name} is live: the squad's scheduled jobs are on`, body: `${jobs}. They run on your Claude login; pause or change them in Automation.`, storeId: store.id, link: '/automation' });
+    const ads = !!db.prepare('SELECT 1 FROM campaigns WHERE store_id = ? LIMIT 1').get(store.id);
+    if (once(db, `activate:${store.id}`)) {
+      startFresh(db, store);
+      // No campaigns yet: the campaign review waits for them (marked, so a job the owner turned off is never turned back on).
+      if (!ads) once(db, `ads-job-wait:${store.id}`);
+      const names = DEFAULT_JOBS.map((j) => j.name).filter((n) => ads || n !== ADS_JOB);
+      if (enableDefaultJobs(db, store.id, names)) {
+        const later = ads ? '' : ` The ${ADS_JOB.toLowerCase()} starts once an ad account syncs campaigns.`;
+        notify(db, { kind: 'info', title: `${store.name} is live: the squad's scheduled jobs are on`, body: `${names.join(', ')}.${later} They run on your Claude login; pause or change them in Automation.`, storeId: store.id, link: '/automation' });
+      }
+      if (store.niche === 'other' && store.nicheDetail && !customNichePack(store.nicheDetail)) runs.start(`${store.id}:market_analyst`, draftNichePackTask(store));
+    } else if (ads && db.prepare('DELETE FROM done_once WHERE ref = ?').run(`ads-job-wait:${store.id}`).changes && enableDefaultJobs(db, store.id, [ADS_JOB])) {
+      notify(db, { kind: 'info', title: `${store.name}: the ${ADS_JOB.toLowerCase()} is on`, body: 'Its ad account synced campaigns, so the Ad Strategist reviews them every morning on your Claude login. Pause it in Automation.', storeId: store.id, link: '/automation' });
     }
-    if (store.niche === 'other' && store.nicheDetail && !customNichePack(store.nicheDetail)) runs.start(`${store.id}:market_analyst`, draftNichePackTask(store));
   }
 }
 

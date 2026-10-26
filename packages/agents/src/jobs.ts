@@ -76,8 +76,10 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
 ];
 
 /** Switches a store's default jobs on (it just got connected); returns how many were off. */
-export function enableDefaultJobs(db: DatabaseSync, storeId: string): number {
-  const names = DEFAULT_JOBS.map((j) => j.name);
+/** Has nothing to review until the store has campaigns (an ad account synced); a run a day on none spends Claude usage. */
+export const ADS_JOB = 'Daily campaign review';
+
+export function enableDefaultJobs(db: DatabaseSync, storeId: string, names = DEFAULT_JOBS.map((j) => j.name)): number {
   return Number(
     db.prepare(`UPDATE automation_rules SET enabled = 1 WHERE store_id = ? AND enabled = 0 AND name IN (${names.map(() => '?').join(',')})`).run(storeId, ...names).changes,
   );

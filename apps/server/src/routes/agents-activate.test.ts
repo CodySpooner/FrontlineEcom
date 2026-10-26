@@ -1,4 +1,4 @@
-import { DEFAULT_JOBS, listMemory, listRuns, updateMemory, writeMemory } from '@frontline/agents';
+import { ADS_JOB, DEFAULT_JOBS, listMemory, listRuns, updateMemory, writeMemory } from '@frontline/agents';
 import type { Store } from '@frontline/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -30,7 +30,7 @@ test('a store deleted and created again under the same name gets its jobs, and t
   const first = await create();
   switchToReal(db, first.id);
   await app.request('/api/agents');
-  expect(jobsOn(first.id)).toBe(DEFAULT_JOBS.length);
+  expect(jobsOn(first.id)).toBe(DEFAULT_JOBS.length - 1); // no campaigns yet: the campaign review waits
   await runManager(db).idle();
   expect((await app.request(`/api/stores/${first.id}`, { method: 'DELETE' })).status).toBe(204);
 
@@ -40,7 +40,7 @@ test('a store deleted and created again under the same name gets its jobs, and t
   expect(jobs.sort()).toEqual(DEFAULT_JOBS.map((j) => j.name).sort());
   switchToReal(db, again.id);
   await app.request('/api/agents');
-  expect(jobsOn(again.id)).toBe(DEFAULT_JOBS.length);
+  expect(jobsOn(again.id)).toBe(DEFAULT_JOBS.length - 1);
   await runManager(db).idle();
 });
 
@@ -56,7 +56,7 @@ test("a store's first real sync switches its squad's jobs on once, and a custom 
   switchToReal(db, store.id);
   await app.request('/api/agents');
   await app.request('/api/agents');
-  expect(jobsOn(store.id)).toBe(DEFAULT_JOBS.length);
+  expect(jobsOn(store.id)).toBe(DEFAULT_JOBS.length - 1);
   expect(notes(store.id)).toEqual(["Ink & Nib is live: the squad's scheduled jobs are on"]);
   const runs = listRuns(db, { storeIds: [store.id] });
   expect(runs.map((r) => [r.agentId, r.task.split('\n')[0]])).toEqual([
@@ -65,6 +65,15 @@ test("a store's first real sync switches its squad's jobs on once, and a custom 
   await runManager(db).idle();
 
   expect(jobsOn('glow')).toBe(0); // demo stores stay off
+
+  // An ad account syncs campaigns: the campaign review switches on, once; turned off by the owner, it stays off.
+  db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 'c1', ?, 'Prospecting', 'active', 40)`).run(store.id);
+  await app.request('/api/agents');
+  expect(jobsOn(store.id)).toBe(DEFAULT_JOBS.length);
+  expect(notes(store.id)).toContain(`Ink & Nib: the ${ADS_JOB.toLowerCase()} is on`);
+  db.prepare('UPDATE automation_rules SET enabled = 0 WHERE store_id = ? AND name = ?').run(store.id, ADS_JOB);
+  await app.request('/api/agents');
+  expect(jobsOn(store.id)).toBe(DEFAULT_JOBS.length - 1);
 });
 
 test('a demo run still going when the store goes live asks nothing more: its numbers are gone', async () => {
