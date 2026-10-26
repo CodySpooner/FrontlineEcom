@@ -108,6 +108,8 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-42 Open the data folder from the app: `POST /api/settings/open-data-folder` opens Explorer at the data dir (database, logs, backups). It takes a fixed path and no input, and is local-only. Settings shows the path, and the crash dialog sends the owner to its logs.
 
 ## Blocked
+- TikTok Shop partial refunds and returns: revenue nets cancellations only. Needs the `/return_refund/202309/returns/search` response schema (refund amount fields), which TikTok's partner docs render with JavaScript and no public source confirms, plus the Return & Refund scope. Or a live shop to read one response from.
+- Amazon refunds: `orderMetrics` totalSales is gross. Netting needs the Finances API (refund events) and the Finance and Accounting role. Same: a verified response or a live seller account.
 
 ## Done
 - 2026-10-26 — A Shopify store without GA4 gets its Store Analytics funnel (sessions, cart, checkout) from Shopify's own analytics. It uses ShopifyQL `shopifyqlQuery`, `FROM sessions … TIMESERIES day`: 730 days on the first sync, then 3. It's optional: it needs `read_reports` plus Level 2 customer data (added to the setup help), and without them orders sync on. ShopifyQL rows are parsed as arrays or objects, since the docs show neither. Bot sessions are included until the `human_or_bot_session` filter can be checked against a live shop. Checked DSers: no public API, and it writes tracking into Shopify fulfillments, which the Shopify sync already reads, so no connector. Tests
