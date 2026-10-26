@@ -2,6 +2,7 @@ import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js
 import { DESKS, MEETING, ROOMS, iso, uniso, type Tile } from './world';
 import { paintOffice } from './worldArt';
 import { fitCamera, zoomAt } from './camera';
+import { workerSprites } from './workerSprites';
 
 export async function createOffice(host: HTMLElement, onDesk: (id: string) => void) {
   const app = new Application();
@@ -38,6 +39,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   const continents = new Graphics(); globe.addChild(continents);
   for(let i=0;i<60;i++) { const x=Math.sin(i*1.9)*35, y=Math.cos(i*2.7)*32; if(Math.sin(x*.14)+Math.cos(y*.18)>.1) continents.rect(Math.round(x/3)*3,Math.round(y/3)*3,3,3).fill('#ff6686'); }
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  const workers = workerSprites(world, (desk) => { if (!dragged) onDesk(desk); });
   let camera = fitCamera(host.clientWidth,host.clientHeight);
   world.scale.set(camera.scale); world.position.set(camera.x,camera.y);
   const fit = () => { camera = fitCamera(host.clientWidth,host.clientHeight); };
@@ -62,12 +64,13 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   app.ticker.add((ticker)=>{
     const smooth=reduced.matches?1:1-Math.exp(-ticker.deltaMS/65);
     world.x+=(camera.x-world.x)*smooth;world.y+=(camera.y-world.y)*smooth;world.scale.set(world.scale.x+(camera.scale-world.scale.x)*smooth);
+    workers.tick(ticker.deltaMS,reduced.matches);
     if(reduced.matches) return;
     elapsed+=ticker.deltaMS;
     globe.y=hub.y-60+Math.sin(elapsed/1600)*3;
     meridians.scale.x=.75+Math.sin(elapsed/2400)*.2;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, destroy:()=>{ resize.disconnect();app.destroy(true,{children:true});mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setWorkers: workers.update, destroy:()=>{ resize.disconnect();app.destroy(true,{children:true});workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;

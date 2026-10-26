@@ -53,7 +53,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-03 Seats backend: migration + `routes/ecosystem.ts` — list/deploy/update/archive seats, 30-desk capacity enforced server-side, desk uniqueness, persistence across restarts, tests.
 - [x] ECO-04 World: isometric tile map with the 10 departments (desk counts per spec §3) + central globe area, props, ambient animation, cached static layers, collision grid.
 - [x] ECO-05 Camera: drag pan, wheel zoom, double-click focus, jump to department, reset, fit, fullscreen; sharp pixels at every zoom step.
-- [ ] ECO-06 Characters: sprite sheets with the 10 animations (spec §4), per-agent appearance variation, isometric walk directions, animation state machine.
+- [x] ECO-06 Characters: sprite sheets with the 10 animations (spec §4), per-agent appearance variation, isometric walk directions, animation state machine.
 - [ ] ECO-07 Movement: A* on the grid with occupancy, walk to desk / meeting table / another desk; tests for the pathfinder.
 - [ ] ECO-08 Real state → behavior: `AgentOfficeEvent` adapter over existing live messages + REST snapshot; state table from spec §5; idempotent on reconnect, ignores stale/out-of-order events; tests.
 - [ ] ECO-09 Agent panel: click a character → profile, live activity, performance (runs, cost/tokens where present), actions (chat, assign task, output, history, configure, pause/cancel, focus) using existing endpoints.
@@ -73,6 +73,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+
+- 2026-10-26 ECO-06: Original pixel workers share one packed atlas (ten poses, four directions, four frames); deterministic hair/skin/outfit/accessory variations, completion-to-sitting transition, selectable sprites and persistent seat loading. Browser checked four fake-store workers and atlas (.agent/eco-06*.png); 111 files / 600 tests pass. Movement and execution-driven poses follow in ECO-07/08.
 
 - 2026-10-26 ECO-05: Smooth camera with pointer drag/capture, anchored wheel zoom, +/- and arrow keys, double-click focus, department jumps, fit/reset and fullscreen. Nearest-neighbor map sampling retained. Orca department focus and fullscreen entry/exit verified; .agent/eco-05.png inspected. Camera anchor/limits tests; pnpm check 110 files / 599 tests pass. Worker focus will use the same focus method as workers arrive.
 

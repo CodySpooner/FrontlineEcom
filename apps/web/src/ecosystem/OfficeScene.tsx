@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { DESKS, ROOMS } from './world';
 import { createOffice, type OfficeRenderer } from './renderer';
 import { Button } from '../components/ui';
+import { AGENT_ROLES } from '@frontline/shared';
+import { useAgents } from '../api/client';
+import { useSeats } from './api';
+import type { OfficeWorker } from './workerSprites';
 
 export function OfficeScene() {
   const host = useRef<HTMLDivElement>(null);
@@ -9,9 +13,17 @@ export function OfficeScene() {
   const [desk, setDesk] = useState('');
   const [error, setError] = useState('');
   const [fullscreen, setFullscreen] = useState(false);
+  const seats = useSeats();
+  const agents = useAgents();
+  const workers: OfficeWorker[] = (seats.data ?? []).filter((s) => !s.archived).map((seat) => {
+    const agent = agents.data?.find((a) => a.id === seat.agentId);
+    return { seat, name: seat.displayName || (agent ? AGENT_ROLES[agent.role].name : seat.agentId), animation: 'sit' };
+  });
+  const latestWorkers = useRef(workers); latestWorkers.current = workers;
+  useEffect(() => { scene.current?.setWorkers(workers); }, [seats.data, agents.data]);
   useEffect(()=>{
     let disposed=false; let renderer:OfficeRenderer|undefined;
-    createOffice(host.current!,setDesk).then((r)=>{ if(disposed) r.destroy(); else scene.current=renderer=r; }).catch((e:unknown)=>{if(!disposed)setError(e instanceof Error ? e.message : 'Renderer unavailable');});
+    createOffice(host.current!,setDesk).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setWorkers(latestWorkers.current); } }).catch((e:unknown)=>{if(!disposed)setError(e instanceof Error ? e.message : 'Renderer unavailable');});
     const changed=()=>setFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange',changed);
     return ()=>{disposed=true;renderer?.destroy();scene.current=undefined;document.removeEventListener('fullscreenchange',changed);};
@@ -29,6 +41,7 @@ export function OfficeScene() {
     </div>
     <div ref={host} className="eco-canvas" />
     {error && <p role="alert" className="eco-scene-note">Office renderer unavailable: {error}</p>}
+    {seats.isError && <p role="alert" className="eco-scene-note">Could not load workers: {seats.error.message}</p>}
     <div className="eco-scene-note">{selected ? `${ROOMS.find((r)=>r.id===selected.department)!.name} · Workstation ${selected.id.split('-').at(-1)}` : 'HEADQUARTERS · Select a workstation to inspect it'}</div>
     <details className="eco-desk-access"><summary>Workstation directory</summary><div>{DESKS.map((d)=><button key={d.id} onClick={()=>{setDesk(d.id);scene.current?.focus(d);}}>{d.id}</button>)}</div></details>
   </>;
