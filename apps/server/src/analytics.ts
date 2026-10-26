@@ -98,22 +98,42 @@ export function summarize(rows: MetricRow[], { range, to, storeIds, todayFractio
   return { range, storeIds, from, to, totals, previous, deltas: deltasOf(totals, previous), series, byStore, funnel };
 }
 
+/** Amazon's referral fee on most categories, for its sales next to a store's site. ponytail: FBA fees aren't estimated. */
+const AMAZON_REFERRAL = 0.15;
+
 /**
  * Loads both periods for the given stores from daily_metrics, plus `pad` days either side. `cogs` also carries the store's
- * fee estimate, so profit nets it.
+ * fee estimate, so profit nets it. A channel's sales next to the site (Amazon) come with no costs: they cost the store's
+ * own cost ratio over the year to `to`, and Amazon's referral fee instead of the store's fees.
  */
 export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: string, pad = 0): MetricRow[] {
   if (!storeIds.length) return [];
   const { rate } = fxFor(db, storeIds);
+  const channel = (col: string) =>
+    `iif(s.platform = 'amazon', 0, (SELECT coalesce(sum(c.${col}), 0) FROM channel_daily c WHERE c.store_id = d.store_id AND c.date = d.date))`;
+  const ratios = new Map<string, number>();
+  const ratio = (storeId: string) => {
+    if (!ratios.has(storeId)) {
+      const r = db
+        .prepare(`SELECT sum(d.cogs) AS cogs, sum(d.revenue - ${channel('revenue')}) AS revenue FROM daily_metrics d JOIN stores s ON s.id = d.store_id WHERE d.store_id = ? AND d.date BETWEEN ? AND ?`)
+        .get(storeId, addDays(to, -364), to);
+      ratios.set(storeId, Number(r?.revenue) > 0 ? Number(r!.cogs) / Number(r!.revenue) : 0);
+    }
+    return ratios.get(storeId)!;
+  };
   return (db
     .prepare(
-      `SELECT d.store_id AS storeId, d.date, d.revenue, d.ad_spend AS adSpend, d.cogs + d.revenue * s.fee_percent / 100 + d.orders * s.fee_per_order AS cogs,
-         d.orders, d.sessions, d.add_to_carts AS addToCarts, d.checkouts,
-         iif(s.platform = 'amazon', 0, (SELECT coalesce(sum(c.orders), 0) FROM channel_daily c WHERE c.store_id = d.store_id AND c.date = d.date)) AS channelOrders
+      `SELECT d.store_id AS storeId, d.date, d.revenue, d.ad_spend AS adSpend, d.cogs, s.fee_percent AS feePercent, s.fee_per_order AS feePerOrder,
+         d.orders, d.sessions, d.add_to_carts AS addToCarts, d.checkouts, ${channel('orders')} AS channelOrders, ${channel('revenue')} AS channelRevenue
        FROM daily_metrics d JOIN stores s ON s.id = d.store_id
        WHERE d.store_id IN (${storeIds.map(() => '?').join(',')}) AND d.date BETWEEN ? AND ?`,
     )
-    .all(...storeIds, addDays(to, 1 - 2 * range - pad), addDays(to, pad)) as unknown as MetricRow[])
+    .all(...storeIds, addDays(to, 1 - 2 * range - pad), addDays(to, pad)) as unknown as (MetricRow & { feePercent: number; feePerOrder: number; channelRevenue: number })[])
+    .map(({ feePercent, feePerOrder, channelRevenue, ...r }) => ({
+      ...r,
+      cogs: r.cogs + ((r.revenue - channelRevenue) * feePercent) / 100 + (r.orders - r.channelOrders!) * feePerOrder
+        + (channelRevenue ? channelRevenue * (ratio(r.storeId) + AMAZON_REFERRAL) : 0),
+    }))
     // A store with no exchange rate is left out (the summary lists its currency in `unconverted`).
     .flatMap((r) => {
       const x = rate(r.storeId);
