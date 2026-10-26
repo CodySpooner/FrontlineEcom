@@ -43,9 +43,12 @@ import type {
   ResearchProduct,
   ResearchTab,
   Settings,
+  SettingsUpdate,
   Store,
   StoreCaps,
+  StoreCapsUpdate,
   StoreEvent,
+  StoreInput,
   StoreMemory,
   SupplierProduct,
   TopProduct,
@@ -62,6 +65,23 @@ const json = (method: string, body: unknown): RequestInit => ({ method, headers:
 
 export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/api/settings') });
 export const useStores = () => useQuery({ queryKey: ['stores'], queryFn: () => api<Store[]>('/api/stores') });
+
+export function useUpdateSettings() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (u: SettingsUpdate) => api<Settings>('/api/settings', json('PATCH', u)), onSuccess: (st) => qc.setQueryData(['settings'], st) });
+}
+
+export function useStoreActions() {
+  const qc = useQueryClient();
+  return {
+    save: useMutation({
+      mutationFn: ({ id, ...st }: StoreInput & { id?: string }) => api<Store>(id ? `/api/stores/${id}` : '/api/stores', json(id ? 'PATCH' : 'POST', st)),
+      onSuccess: () => ['stores', 'agents'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
+    }),
+    // A store shows up in nearly every query, so drop them all.
+    remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/stores/${id}`, { method: 'DELETE' }), onSuccess: () => qc.invalidateQueries() }),
+  };
+}
 
 /** Empty `storeIds` = all stores. Keeps the previous range on screen while the next one loads. */
 export const useSummary = (storeIds: string[], range: AnalyticsRange) =>
@@ -178,6 +198,11 @@ export function useSaveKnowledge() {
 }
 
 export const useCaps = (storeId: string) => useQuery({ queryKey: ['caps', storeId], queryFn: () => api<StoreCaps[]>(`/api/caps?stores=${storeId}`).then((c) => c[0]) });
+
+export function useSaveCaps(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (u: StoreCapsUpdate) => api<StoreCaps>(`/api/caps/${storeId}`, json('PUT', u)), onSuccess: (c) => qc.setQueryData(['caps', storeId], c) });
+}
 
 /** Up to 200 products for a research tab (none = best AI score first), filtered by niche and search. */
 export const useResearch = (tab: ResearchTab | undefined, niche: string, q: string) =>

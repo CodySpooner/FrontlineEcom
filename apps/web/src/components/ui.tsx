@@ -63,7 +63,7 @@ export const inputClass = 'rounded-lg border border-line-2 bg-bg-2 px-3 py-2 tex
 
 /** A form control with its visible label above it. */
 export const Field = ({ label, children, className }: { label: string; children: ReactNode; className?: string }) => (
-  <label className={cx('grid gap-1 text-xs text-muted', className)}>
+  <label className={cx('grid content-start gap-1 text-xs text-muted', className)}>
     {label}
     {children}
   </label>
