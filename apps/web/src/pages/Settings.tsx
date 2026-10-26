@@ -137,7 +137,7 @@ function Caps() {
   );
 }
 
-function CapsForm({ caps }: { caps: StoreCaps }) {
+export function CapsForm({ caps }: { caps: StoreCaps }) {
   const save = useSaveCaps(caps.storeId);
   const [draft, setDraft] = useState(caps);
   const [saved, setSaved] = useState(false);
@@ -175,7 +175,7 @@ function CapsForm({ caps }: { caps: StoreCaps }) {
             return (
               <li key={kind} className="flex flex-wrap items-center gap-3 px-3 py-2">
                 <label className="flex flex-1 cursor-pointer items-center gap-3">
-                  <Switch checked={r.enabled} onChange={(e) => setRule(kind, { enabled: e.target.checked })} />
+                  <Switch checked={r.enabled} onChange={(e) => setRule(kind, { enabled: e.target.checked, maxUsdPerDay: r.maxUsdPerDay || 0 })} />
                   <span className="text-[13px]">{label}</span>
                 </label>
                 <label className={cx('flex items-center gap-2 text-xs text-muted', !r.enabled && 'opacity-50')}>
@@ -187,6 +187,7 @@ function CapsForm({ caps }: { caps: StoreCaps }) {
                     step="any"
                     value={r.maxUsdPerDay}
                     disabled={!r.enabled}
+                    required
                     onChange={(e) => setRule(kind, { maxUsdPerDay: e.target.valueAsNumber })}
                     aria-label={`${label}: most per day in dollars`}
                     className={cx(inputClass, 'w-24 py-1')}
