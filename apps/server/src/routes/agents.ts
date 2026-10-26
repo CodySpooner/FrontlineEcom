@@ -413,13 +413,15 @@ function activateConnectedStores(db: Db, runs: RunManager) {
     } else if (ads && db.prepare('DELETE FROM done_once WHERE ref = ?').run(`ads-job-wait:${store.id}`).changes && enableDefaultJobs(db, store.id, [ADS_JOB])) {
       notify(db, { kind: 'info', title: `${store.name}: the ${ADS_JOB.toLowerCase()} is on`, body: 'Its ad account has a running campaign, so the Ad Strategist reviews campaigns every morning on your Claude login. Pause it in Automation.', storeId: store.id, link: '/automation' });
     }
-    // Stores live before those rules get them once: a job with nothing to work on there is switched off.
+    // Stores live before those rules get them once: a job with nothing to work on there is switched off, unless the owner
+    // set it in Automation (then nothing switches it back on, so it stays as they left it).
     if (once(db, `job-gates:${store.id}`)) {
       const why = (j: (typeof DEFAULT_JOBS)[number]) =>
         j.name === ADS_JOB && !ads ? 'no running ad campaigns; it switches back on once an ad account has one'
         : j.platforms && !j.platforms.includes(store.platform) ? `the app can't publish ${store.platform} product pages`
         : '';
-      const off = DEFAULT_JOBS.filter((j) => why(j) && db.prepare('UPDATE automation_rules SET enabled = 0 WHERE store_id = ? AND name = ? AND enabled = 1').run(store.id, j.name).changes);
+      const off = DEFAULT_JOBS.filter((j) => why(j) && db.prepare(`UPDATE automation_rules SET enabled = 0 WHERE store_id = ? AND name = ? AND enabled = 1
+        AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'rule-edited:' || automation_rules.id)`).run(store.id, j.name).changes);
       if (off.some((j) => j.name === ADS_JOB)) once(db, `ads-job-wait:${store.id}`);
       if (off.length) notify(db, { kind: 'info', title: `${store.name}: ${off.map((j) => j.name.toLowerCase()).join(' and ')} switched off`, body: `${off.map((j) => `${j.name}: ${why(j)}.`).join(' ')} You can switch jobs back on in Automation.`, storeId: store.id, link: '/automation' });
     }

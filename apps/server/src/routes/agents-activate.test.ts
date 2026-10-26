@@ -130,6 +130,21 @@ test('a store that went live before the job rules gets them once: jobs with noth
   await runManager(db).idle();
 });
 
+test('jobs the owner switched on in Automation before the store went live stay on through the gates', async () => {
+  const res = await app.request('/api/stores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Tok', platform: 'tiktok_shop', niche: 'home' }) });
+  const store = (await res.json()) as Store;
+  const rule = (name: string) => db.prepare('SELECT id, enabled FROM automation_rules WHERE store_id = ? AND name = ?').get(store.id, name)!;
+  for (const name of [ADS_JOB, 'Weekly page refresh']) {
+    const patch = await app.request(`/api/automations/${rule(name).id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: true }) });
+    expect(patch.status).toBe(200);
+  }
+  switchToReal(db, store.id); // no campaigns, and the app can't publish TikTok Shop pages
+  await app.request('/api/agents');
+  expect([rule(ADS_JOB).enabled, rule('Weekly page refresh').enabled]).toEqual([1, 1]);
+  expect(notes(store.id).filter((t) => String(t).includes('switched off'))).toEqual([]);
+  await runManager(db).idle();
+});
+
 test("a demo request approved after the store's first sync, before the squad noticed, doesn't act on the live store", async () => {
   await app.request('/api/agents');
   const ask = db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'glow', 'glow:product_hunter', ?, 'AI score 90', ?, 'pending', ?)`);
