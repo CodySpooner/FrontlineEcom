@@ -126,3 +126,12 @@ describe('a second sales platform on a store', () => {
     expect(card.textContent).toContain('Manage');
   });
 });
+
+describe('Integrations with no stores', () => {
+  it("says to add a store first, rather than dropping the store and ad sections without a word", async () => {
+    stubApi((url) => (url.startsWith('/api/stores') || url.startsWith('/api/integrations') ? [] : undefined));
+    renderApp(<Integrations />, '/integrations');
+    expect(await screen.findByText('No stores yet')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Add a store' }).getAttribute('href')).toBe('/settings');
+  });
+});

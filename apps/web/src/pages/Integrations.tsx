@@ -1,11 +1,12 @@
 // UI-15 Integrations: connect store platforms, ad accounts, analytics, suppliers and creative tools.
 // Secrets go in and never come back out: the API only says which secret fields are set.
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
+import { Link } from 'react-router';
 import { INTEGRATION_KINDS, type Integration, type IntegrationCategory, type IntegrationKind, type OAuthStart, type Store } from '@frontline/shared';
-import { useClaudeAccount, useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds, useSyncIntegration } from '../api/client';
+import { useClaudeAccount, useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds, useStores, useSyncIntegration } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Button, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot } from '../components/ui';
+import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot } from '../components/ui';
 import { ago, fmtDay } from '../lib/format';
 import { importing } from '../lib/sync';
 import { NAV } from '../nav';
@@ -31,6 +32,8 @@ export function Integrations() {
   const [open, setOpen] = useState<{ kind: IntegrationKind; store?: Store }>();
   const byKey = new Map(q.data?.map((i) => [`${i.kind}:${i.storeId ?? ''}`, i]));
   const shown = stores.filter((s) => has(s.id));
+  // Store platforms and ad accounts connect to a store, so with none they'd have no rows at all.
+  const noStores = useStores().data?.length === 0;
   // Per-store connectors list the selected stores (platform ones only the stores on that platform, or selling on it too);
   // global ones one row.
   const targets = (kind: IntegrationKind) =>
@@ -54,6 +57,20 @@ export function Integrations() {
         </Panel>
       ) : (
         <div className="grid gap-3.5">
+          {noStores && (
+            <Panel title={CATEGORIES.platform.title} sub={CATEGORIES.platform.sub}>
+              <EmptyState
+                title="No stores yet"
+                action={
+                  <Link to="/settings" className={buttonClass('primary')}>
+                    Add a store
+                  </Link>
+                }
+              >
+                Add one in Settings, then connect its platform and ad accounts here.
+              </EmptyState>
+            </Panel>
+          )}
           {Object.entries(CATEGORIES).map(([cat, c]) => {
             const kinds = KINDS.filter((k) => INTEGRATION_KINDS[k].category === cat && targets(k).length);
             if (!kinds.length) return null;

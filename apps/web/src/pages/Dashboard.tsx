@@ -11,7 +11,7 @@ import { ApprovalExtras } from '../components/ApprovalExtras';
 import { DenyReason } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { DemoMixNote, StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
-import { AGENT_STATUS, Badge, Button, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
 import { PERIOD, RANGES, sparkPoints, weekly } from '../lib/chart';
 import { ago, cents, fmtDay, money, noBaseline, signedPct } from '../lib/format';
 import { importing } from '../lib/sync';
@@ -255,7 +255,16 @@ function AgentsStrip() {
       ) : q.isError ? (
         <ErrorState message="Couldn't reach your agents." onRetry={() => q.refetch()} />
       ) : !shown.length ? (
-        <EmptyState title="No agents yet">Add a store and its squad deploys automatically.</EmptyState>
+        <EmptyState
+          title="No agents yet"
+          action={
+            <Link to="/settings" className={buttonClass('primary')}>
+              Add a store
+            </Link>
+          }
+        >
+          Add a store and its squad deploys automatically.
+        </EmptyState>
       ) : (
         // One row only: cards that don't fit land in zero-height rows and are clipped (least urgent last, see the sort).
         <ul className="grid grid-cols-[repeat(auto-fit,minmax(125px,1fr))] grid-rows-[auto] auto-rows-[0] gap-x-2.5 overflow-hidden">

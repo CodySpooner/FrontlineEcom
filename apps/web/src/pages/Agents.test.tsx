@@ -48,3 +48,11 @@ describe('AI agents', () => {
     expect(screen.getAllByRole('link', { name: /learned about/ })).toHaveLength(1);
   });
 });
+
+describe('AI agents with no stores', () => {
+  it('sends the owner to Settings, where stores are added', async () => {
+    stubApi((url) => (url === '/api/stores' || url === '/api/agents' ? [] : undefined));
+    renderApp(<Agents />, '/agents');
+    expect((await screen.findByRole('link', { name: 'Add a store' })).getAttribute('href')).toBe('/settings');
+  });
+});

@@ -41,7 +41,7 @@ export function Agents() {
       ) : stores.isError || agents.isError ? (
         <ErrorState message="Couldn't load your squads." onRetry={() => (stores.isError ? stores.refetch() : agents.refetch())} />
       ) : !store ? (
-        <EmptyState icon={Users} title="No stores yet" action={<Link to="/integrations" className={buttonClass('primary')}>Connect a store</Link>}>
+        <EmptyState icon={Users} title="No stores yet" action={<Link to="/settings" className={buttonClass('primary')}>Add a store</Link>}>
           Each store gets its own squad of eight agents.
         </EmptyState>
       ) : (
