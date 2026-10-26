@@ -94,6 +94,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Shopify orders with more than 10 line items were cut off at 10, undercounting COGS and best sellers. The order query now also returns the line items' `pageInfo` (cost 938 of 1000), and an order with more line items gets the rest via `order(id) { lineItems(first: 100, after) }` (cost 704). A test covers a 12-item order
 - 2026-10-26 — Meta budgets in currencies without cents (JPY, KRW, and 9 more per the Marketing API offset table) were synced as 1/100 of the real budget: a ¥6000 budget showed as ¥60 to the owner and to the Ad Strategist. Sync and write now use units of 1 for those currencies, keyed on the store currency (ad spend already assumes it matches the ad account). Tests cover both directions
 - 2026-10-26 — Perf: migration 26 adds `campaigns (store_id)`. Per-day ad spend (`rebuildAdSpend`) scanned all of `campaign_daily` for each day: 2 years x 150 campaigns took 4.3 s with the API frozen, and now 84 ms. A plan test checks it starts from the store's campaigns. Campaign stats over 365 days: ~45 ms
 - 2026-10-26 — Perf: migration 25 adds `orders (store_id, local_date)`. Rebuilding revenue for a 2-year first sync (730 days, 50k orders) took 8 s, with the API frozen, because `node:sqlite` is synchronous; it now takes 22 ms. A test checks the per-day query plan uses the index. Best sellers over 365 days with 50k orders: ~40 ms

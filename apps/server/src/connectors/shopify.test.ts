@@ -13,12 +13,12 @@ const NOW = new Date('2026-10-26T18:00:00Z');
 
 const money = (amount: string) => ({ amount });
 const order = (name: string, createdAt: string, total: string, extra: Record<string, unknown> = {}) => ({
-  name, createdAt, updatedAt: createdAt, cancelledAt: null, test: false, displayFinancialStatus: 'PAID', displayFulfillmentStatus: 'UNFULFILLED',
+  id: `gid://shopify/Order/${name.slice(1)}`, name, createdAt, updatedAt: createdAt, cancelledAt: null, test: false, displayFinancialStatus: 'PAID', displayFulfillmentStatus: 'UNFULFILLED',
   currentTotalPriceSet: { shopMoney: money(total) }, fulfillments: [],
   lineItems: { nodes: [
     { quantity: 2, product: { id: 'gid://shopify/Product/111' }, discountedTotalSet: { shopMoney: money('80.00') }, variant: { inventoryItem: { unitCost: money('5.00') } } },
     { quantity: 1, product: null, discountedTotalSet: { shopMoney: money('4.00') }, variant: null }, // custom line item, e.g. gift wrap
-  ] },
+  ], pageInfo: { hasNextPage: false, endCursor: null } },
   ...extra,
 });
 
@@ -351,4 +351,22 @@ test('deleteTheme removes a draft and refuses the live theme', async () => {
   await deleteTheme(db, key, 'glow', '3', fetchFn);
   expect(calls.filter((q) => q.includes('themeDelete'))).toHaveLength(1);
   expect(listActions(db, ['glow'], 10).map((a) => [a.action, a.target, a.detail, a.ok])).toEqual([['theme_delete', '3', { name: 'Frontline draft' }, true]]);
+});
+
+test('an order with more than 10 line items gets the rest before its cogs and best sellers are counted', async () => {
+  const { db } = await setup();
+  const item = (n: number) => ({ quantity: 1, product: { id: `gid://shopify/Product/${n}` }, discountedTotalSet: { shopMoney: money('10.00') }, variant: { inventoryItem: { unitCost: money('2.00') } } });
+  const big = order('#2001', '2026-10-26T09:00:00Z', '120.00', { lineItems: { nodes: Array.from({ length: 10 }, (_, i) => item(i + 1)), pageInfo: { hasNextPage: true, endCursor: 'c10' } } });
+  const shop = fakeShopify([big]).fetchFn;
+  const asked: unknown[] = [];
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    const body = JSON.parse(String(init.body));
+    if (!body.query.includes('order(id:')) return shop(url, init);
+    asked.push(body.variables);
+    return Response.json({ data: { order: { lineItems: { nodes: [item(11), item(12)], pageInfo: { hasNextPage: false, endCursor: null } } } } });
+  }) as typeof fetch;
+  await syncShopify(db, key, 'glow', fetchFn, NOW);
+  expect(asked).toEqual([{ id: 'gid://shopify/Order/2001', after: 'c10' }]);
+  expect(db.prepare("SELECT cogs FROM orders WHERE store_id = 'glow' AND id = '#2001'").get()?.cogs).toBe(24);
+  expect(db.prepare("SELECT count(*) AS n FROM order_items WHERE store_id = 'glow' AND order_id = '#2001'").get()?.n).toBe(12);
 });

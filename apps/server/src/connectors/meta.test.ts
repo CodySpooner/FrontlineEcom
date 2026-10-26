@@ -82,7 +82,7 @@ test('Meta spend and Shopify revenue land on the same days without overwriting e
     const page = (nodes: unknown[]) => ({ nodes, pageInfo: { hasNextPage: false, endCursor: null } });
     if (q.includes('shop {')) return Response.json({ data: { shop: { currencyCode: 'USD', ianaTimezone: 'America/Chicago' } } });
     if (q.includes('products(')) return Response.json({ data: { products: page([]) } });
-    return Response.json({ data: { orders: page([{ name: '#1', createdAt: '2026-10-25T15:00:00Z', updatedAt: '2026-10-25T15:00:00Z', cancelledAt: null, test: false, displayFinancialStatus: 'PAID', displayFulfillmentStatus: 'UNFULFILLED', currentTotalPriceSet: { shopMoney: { amount: '200.00' } }, fulfillments: [], lineItems: { nodes: [] } }]) } });
+    return Response.json({ data: { orders: page([{ name: '#1', createdAt: '2026-10-25T15:00:00Z', updatedAt: '2026-10-25T15:00:00Z', cancelledAt: null, test: false, displayFinancialStatus: 'PAID', displayFulfillmentStatus: 'UNFULFILLED', currentTotalPriceSet: { shopMoney: { amount: '200.00' } }, fulfillments: [], id: 'gid://shopify/Order/1', lineItems: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } }]) } });
   }) as typeof fetch;
   await syncShopify(db, key, 'pawsome', shopify, NOW);
   await syncMeta(db, key, 'pawsome', fakeGraph([insight('201', '2026-10-25', '50.00', '0')]).fetchFn, NOW);

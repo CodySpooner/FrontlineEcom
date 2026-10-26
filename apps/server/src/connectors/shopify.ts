@@ -26,7 +26,9 @@ interface ShopifyProduct {
   variants: { nodes: { price: string; compareAtPrice: string | null; inventoryItem: { unitCost: Money } | null }[] };
 }
 
+type LineItem = { quantity: number; product: { id: string } | null; discountedTotalSet: { shopMoney: { amount: string } }; variant: { inventoryItem: { unitCost: Money } | null } | null };
 interface ShopifyOrder {
+  id: string;
   name: string;
   createdAt: string;
   updatedAt: string;
@@ -36,7 +38,7 @@ interface ShopifyOrder {
   displayFulfillmentStatus: string;
   currentTotalPriceSet: { shopMoney: { amount: string } };
   fulfillments: { displayStatus: string | null; trackingInfo: { number: string | null }[] }[];
-  lineItems: { nodes: { quantity: number; product: { id: string } | null; discountedTotalSet: { shopMoney: { amount: string } }; variant: { inventoryItem: { unitCost: Money } | null } | null }[] };
+  lineItems: { nodes: LineItem[]; pageInfo: PageInfo };
 }
 
 const SHOP_Q = `{ shop { name currencyCode ianaTimezone } }`;
@@ -49,15 +51,18 @@ const PRODUCTS_Q = `query ($after: String, $q: String) {
     pageInfo { hasNextPage endCursor } } }`;
 
 // Shopify prices a query before running it (max 1000): objects 1, connections 2 + first × child. Per order:
-// 1 + total 2 + fulfillment 2 + lineItems (2 + 10 × 7) = 77, so 12 orders = 926. Products: 2 + 50 × 9 = 452.
-// ponytail: orders with more than 10 line items undercount cogs and top products.
+// 1 + total 2 + fulfillment 2 + lineItems (2 + 10 × 7 + pageInfo 1) = 78, so 12 orders = 938. Products: 2 + 50 × 9 = 452.
+// An order with more line items gets the rest from ORDER_ITEMS_Q (2 + 1 + 100 × 7 + 1 = 704).
+const LINE_ITEM = 'quantity product { id } discountedTotalSet { shopMoney { amount } } variant { inventoryItem { unitCost { amount } } }';
 const ORDERS_Q = `query ($after: String, $q: String) {
   orders(first: 12, after: $after, query: $q, sortKey: UPDATED_AT) {
-    nodes { name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus
+    nodes { id name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus
       currentTotalPriceSet { shopMoney { amount } }
       fulfillments(first: 1) { displayStatus trackingInfo(first: 1) { number } }
-      lineItems(first: 10) { nodes { quantity product { id } discountedTotalSet { shopMoney { amount } } variant { inventoryItem { unitCost { amount } } } } } }
+      lineItems(first: 10) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } }
     pageInfo { hasNextPage endCursor } } }`;
+const ORDER_ITEMS_Q = `query ($id: ID!, $after: String) {
+  order(id: $id) { lineItems(first: 100, after: $after) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } } }`;
 
 // productCreate makes one default variant; its price and cost are set right after.
 const CREATE_M = `mutation ($product: ProductCreateInput!) {
@@ -172,6 +177,10 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const filter = `updated_at:>='${since}'`;
     const products = await all((after) => q<{ products: { nodes: ShopifyProduct[]; pageInfo: PageInfo } }>(PRODUCTS_Q, { after, q: filter }).then((d) => d.products));
     const orders = await all((after) => q<{ orders: { nodes: ShopifyOrder[]; pageInfo: PageInfo } }>(ORDERS_Q, { after, q: filter }).then((d) => d.orders));
+    for (const o of orders.filter((o) => o.lineItems.pageInfo.hasNextPage)) {
+      const rest = await all((after) => q<{ order: { lineItems: { nodes: LineItem[]; pageInfo: PageInfo } } }>(ORDER_ITEMS_Q, { id: o.id, after: after ?? o.lineItems.pageInfo.endCursor }).then((d) => d.order.lineItems));
+      o.lineItems.nodes.push(...rest);
+    }
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: shop.ianaTimezone });
 
     tx(db, () => {
