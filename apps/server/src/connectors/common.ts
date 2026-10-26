@@ -18,6 +18,16 @@ export function takeCurrency(db: Db, storeId: string, kind: IntegrationKind, cur
   throw new Error(`${name(kind)} sells in ${currency}, but ${store!.name} is in ${store!.currency} (its ${name(own)} sells in that). Add the ${name(kind)} as a store of its own to see its sales.`);
 }
 
+/**
+ * A store platform's sync takes its timezone for the store, unless the store's own platform has synced (as with
+ * takeCurrency): a second platform's zone would re-date the orders back and forth, a sync of each at a time.
+ */
+export function takeTimezone(db: Db, storeId: string, kind: IntegrationKind, zone: string) {
+  const own = String(db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform);
+  if (own !== kind && db.prepare('SELECT 1 FROM integrations WHERE id = ? AND synced_at IS NOT NULL').get(`${own}:${storeId}`)) return;
+  setStoreTimezone(db, storeId, zone);
+}
+
 /** Wipes a demo store's generated rows and marks it connected. Called by the first successful real sync of any connector. */
 export function switchToReal(db: Db, storeId: string) {
   if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo !== 1) return;

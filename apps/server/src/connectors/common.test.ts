@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { updateStore } from '../stores';
-import { rebuildRevenue, retrying, setStoreCurrency, switchToReal } from './common';
+import { rebuildRevenue, retrying, setStoreCurrency, switchToReal, takeTimezone } from './common';
 
 test('a rate-limited sync request waits Retry-After and asks again; it gives up after 5 tries', async () => {
   const statuses = [429, 429, 200];
@@ -88,4 +88,17 @@ test("a real store's new timezone re-dates its orders, rebuilds both calendars' 
   const before = db.prepare("SELECT sum(revenue) AS r FROM daily_metrics WHERE store_id = 'peak'").get()?.r;
   updateStore(db, 'peak', { timezone: 'Asia/Tokyo' });
   expect(db.prepare("SELECT sum(revenue) AS r FROM daily_metrics WHERE store_id = 'peak'").get()?.r).toBe(before);
+});
+
+test("a second platform's timezone doesn't take over from the store's own platform once that has synced", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow'); // a Shopify store
+  const zone = () => db.prepare("SELECT timezone FROM stores WHERE id = 'glow'").get()?.timezone;
+  takeTimezone(db, 'glow', 'woocommerce', 'UTC'); // Woo first: nothing else has synced yet, so it sets the store's days
+  expect(zone()).toBe('UTC');
+  db.prepare("INSERT INTO integrations (id, kind, store_id, status, settings_json, encrypted_credentials, updated_at, synced_at) VALUES ('shopify:glow', 'shopify', 'glow', 'connected', '{}', '', '2026-10-26T00:00:00Z', '2026-10-26T00:00:00Z')").run();
+  takeTimezone(db, 'glow', 'shopify', 'America/Chicago');
+  takeTimezone(db, 'glow', 'woocommerce', 'UTC');
+  expect(zone()).toBe('America/Chicago');
 });

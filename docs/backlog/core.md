@@ -176,10 +176,15 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-90 Disconnecting a shop, then connecting another (or another platform), mixes the two shops' data.
 - [x] CORE-91 A recreated store takes a deleted one's id and its sync bookkeeping (Shopify funnel, Amazon read positions, action log).
 - [x] CORE-92 A double click on "add to store" made two requests for one product.
+- [x] CORE-93 A WooCommerce site next to a Shopify shop switched the store's timezone back and forth.
+- [ ] CORE-94 Amazon's "today" was the computer's date, not the store's: a store ahead of the machine missed today's Amazon sales until the machine's midnight.
+- [ ] CORE-95 Top products ignored Amazon and TikTok Shop refund lines.
+- [ ] CORE-96 Amazon looked up TikTok Shop refund lines' orders on Amazon, with mangled ids, and could stall on them.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-93 (from a review of the Amazon/TikTok/Woo connectors and analytics): the Woo and Shopify syncs each set the store's timezone to their own, so a Shopify store in Chicago with a Woo site left at WordPress's default UTC was re-dated every couple of minutes (a 22:00 order jumping between two days), and every switch had Amazon re-read two years of sales. `takeTimezone` (common.ts) applies takeCurrency's rule: a second platform's zone is taken only until the store's own platform has synced.
 - 2026-10-26 — Inbox (agents, AGT-182): `research_products.niche_detail` (migration 43) and `ResearchProduct.nicheDetail?` (the custom niche's slug, with niche 'other'). `GET /api/research?niche=other:<slug>` gives that custom niche's finds only; `niche=other` still gives every custom niche's. `recordFind` (routes/agents.ts, agents lane) writes it once the agents pass it.
 - 2026-10-26 — CORE-92: add-to-store checked for a pending request for the product, then awaited the exchange rate, then created one, so a double click's two requests both passed the check and the owner got two cards. The check now runs after the await, right before the create (no await between).
 - 2026-10-26 — Packaged-app smoke on 0.1.2 (`pnpm package` → `FrontlineEcom-Setup-0.1.2.exe`; unpacked exe, isolated profile, two launches): starts offline in demo mode with the 3 showcase stores, health reports 0.1.2, 41 of the web app's GET endpoints return 200 (the 3 others are the smoke list's own bad params), a store rename survives the restart on the same port, the startup backup is written, 0 API log errors.
