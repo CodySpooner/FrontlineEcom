@@ -142,7 +142,7 @@ const APPROVALS = [
     storeId: 'glow', role: 'product_hunter', title: 'Add 3 trending products to the store', reason: 'AI score 85+, about 60% margin',
     action: { kind: 'store.add_products', payload: { products: [
       { title: 'Gua Sha Stone Set', price: 24.99, compareAt: 39.99, cost: 5.2 },
-      { title: 'Heated Eyelash Curler', price: 29.99, compareAt: 44.99, cost: 6.8 },
+      { title: 'Collagen Eye Patches', price: 19.99, compareAt: 34.99, cost: 3.1 },
       { title: 'Blue Light Acne Pen', price: 34.99, compareAt: 59.99, cost: 8.4 },
     ] } },
   },

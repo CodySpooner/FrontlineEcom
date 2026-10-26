@@ -139,3 +139,14 @@ test("the seeded budget request quotes the campaign's seeded budget, so approvin
   expect(JSON.parse(String(a.action_json)).payload).toEqual({ campaignId: 'pawsome-c1', from: budget, to: Math.round(budget * 1.2) });
   expect(a.title).toBe(`Raise daily budget 20% ($${budget} → $${Math.round(budget * 1.2)})`);
 });
+
+test("the seeded add-products request offers only products the store doesn't sell yet", () => {
+  const db = openDb();
+  seedDemo(db, TODAY);
+  for (const a of db.prepare("SELECT store_id, action_json FROM approvals WHERE id LIKE 'demo-appr-%'").all()) {
+    const action = JSON.parse(String(a.action_json)) as { kind: string; payload: { products?: { title: string }[] } };
+    if (action.kind !== 'store.add_products') continue;
+    const sold = new Set(db.prepare('SELECT title FROM products WHERE store_id = ?').all(String(a.store_id)).map((p) => String(p.title)));
+    expect(action.payload.products!.filter((p) => sold.has(p.title))).toEqual([]);
+  }
+});
