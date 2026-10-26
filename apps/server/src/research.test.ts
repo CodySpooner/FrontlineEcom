@@ -72,6 +72,20 @@ test('add to store creates a pending approval for the store Product Hunter', asy
   expect((await app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'nope' }))).status).toBe(400);
 });
 
+test("add to store refuses a connected store on a platform the app can't write to, without a request", async () => {
+  const db = openDb();
+  seedDemo(db);
+  seedResearch(db);
+  const app = createApp(db);
+  db.prepare("UPDATE stores SET platform = 'etsy', connected = 1, demo = 0 WHERE id = 'pawsome'").run();
+  const pending = () => db.prepare("SELECT count(*) AS n FROM approvals WHERE store_id = 'pawsome' AND status = 'pending'").get()?.n;
+  const before = pending();
+  const res = await app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'pawsome' }));
+  expect(res.status).toBe(400);
+  expect(((await res.json()) as { error: string }).error).toBe('Products are only added automatically to Shopify stores for now. Add "Pet Water Fountain" to Pawsome Gear by hand.');
+  expect(pending()).toBe(before);
+});
+
 test("add to store converts the research's USD prices into the store's currency", async () => {
   const db = openDb();
   seedDemo(db);

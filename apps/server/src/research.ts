@@ -113,6 +113,8 @@ export function researchRoutes(db: Db) {
       const body = (await c.req.json().catch(() => undefined)) as { storeId?: unknown } | undefined;
       const store = typeof body?.storeId === 'string' ? getStore(db, body.storeId) : undefined;
       if (!store) return c.json({ error: 'storeId must be an existing store' }, 400);
+      // Store writes reach Shopify only (as in the agents' noStoreWrites): approving would do nothing anywhere else.
+      if (store.connected && store.platform !== 'shopify') return c.json({ error: `Products are only added automatically to Shopify stores for now. Add "${p.title}" to ${store.name} by hand.` }, 400);
       // Research prices are USD: converted to the store's currency, rounded to its minor unit. No rate: kept in USD, and the request says so.
       const rate = await convertRate(db, 'USD', store.currency);
       const digits = new Intl.NumberFormat('en', { style: 'currency', currency: store.currency }).resolvedOptions().maximumFractionDigits ?? 2;
