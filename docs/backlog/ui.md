@@ -79,7 +79,7 @@ Orca's browser against the reference before ticking it.
 - [x] UI-15 Integrations: connector cards with status + connect forms (token fields never echo secrets back).
 - [x] UI-16 Knowledge Base: playbooks, platform/niche packs, store memory browser (search, pin, edit, delete).
 - [x] UI-17 Settings: profile, stores (add/edit: name, platform, niche, sub-niche, currency, color), caps, notifications, sound.
-- [ ] UI-18 Gamification layer: commander level in top bar, XP toasts, level-up burst, achievements modal/page,
+- [x] UI-18 Gamification layer: commander level in top bar, XP toasts, level-up burst, achievements modal/page,
       missions widget, store health badges (Winning/Steady/Bleeding). Respect prefers-reduced-motion.
 - [ ] UI-19 Ask AI palette (Ctrl+K): questions → selected store's Market Analyst chat; also jump-to-page commands.
 - [x] UI-20 Notification center (bell): approvals, agent finished, errors; mark read.
@@ -124,3 +124,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-24: Store Builder — brief the Store Developer (store, task, 3 quick ideas, follow in chat), drafts list with status badges, sandboxed iframe preview (desktop/mobile), search snippet with length counts, change list (Markdown), Publish / Approve and publish, delete with confirm, link to the run; refetch on run end and approvals
 - 2026-10-26 — Inbox: APPROVAL_KINDS (Settings autopilot lists only autopilot kinds; approval cards on Dashboard + Chat show the kind label), multi-currency (money/cents/shortMoney take an ISO code; summary-driven KPIs, chart, Analytics in AnalyticsSummary.currency; orders + live feed in the store's own currency; Base currency in Settings → Profile), backups (list + Back up now + restore steps in Your Data); asked core to fix the demo seed's ads.pause_adsets kind
 - 2026-10-26 — Inbox: Executed Actions panel in Automation (action log: label, store, time, target + readable change, Failed badge + error; refetch on approvals)
+- 2026-10-26 — UI-18: Gamification — live XP toasts (who · reason, max 3, auto-dismiss), level-up toast with a burst ring and optional blip (Settings → Sound), Commander profile from the top-bar chip (level, rank, XP bar, profit streak, achievements unlocked/locked with XP); missions widget, level chip and store health badges were already in; motion off under prefers-reduced-motion

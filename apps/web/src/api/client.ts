@@ -2,6 +2,7 @@
 import { useEffect } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
+  Achievement,
   ActionLogEntry,
   Agent,
   AgentRun,
@@ -110,6 +111,7 @@ export const useApprovals = (status: ApprovalStatus = 'pending') =>
 export const useAgents = () => useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/api/agents') });
 export const useMissions = () => useQuery({ queryKey: ['missions'], queryFn: () => api<Mission[]>('/api/missions') });
 export const useCommander = () => useQuery({ queryKey: ['commander'], queryFn: () => api<Commander>('/api/commander') });
+export const useAchievements = () => useQuery({ queryKey: ['achievements'], queryFn: () => api<Achievement[]>('/api/achievements') });
 
 export function useDecide() {
   const qc = useQueryClient();
@@ -443,8 +445,11 @@ export function useLive() {
         ['automation-runs', 'automations'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       }
       if (m.type === 'notification') qc.setQueryData<AppNotification[]>(['notifications'], (old) => old && [m.notification, ...old]);
-      if (m.type === 'xp') qc.invalidateQueries({ queryKey: ['agents'] });
-      else if (m.type === 'approval') {
+      if (m.type === 'xp') {
+        ['agents', 'achievements'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+        // XpToasts shows it.
+        window.dispatchEvent(new CustomEvent('frontline:xp', { detail: m }));
+      } else if (m.type === 'approval') {
         qc.invalidateQueries({ queryKey: ['agents'] });
         // Approved requests change shared learnings or (ad changes) campaign budgets and statuses.
         // Publish requests move Store Builder drafts between pending, approved, published and rejected.
