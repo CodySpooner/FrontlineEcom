@@ -28,6 +28,7 @@ test('tool outputs of runs older than 90 days are trimmed at startup; the text, 
     { type: 'text_delta', text: 'Orders are fine.' },
   ]);
   const add = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at, transcript_json) VALUES (?, 'glow', 'glow:operations', 't', 'done', ?, ?)`);
+  db.prepare(`DELETE FROM done_once WHERE ref = 'transcripts-trimmed-to'`).run(); // a first startup (setup already ran one)
   add.run('old', new Date(Date.now() - 91 * 86_400_000).toISOString(), transcript);
   add.run('new', new Date(Date.now() - 89 * 86_400_000).toISOString(), transcript);
   manager();
@@ -37,6 +38,10 @@ test('tool outputs of runs older than 90 days are trimmed at startup; the text, 
   expect(events('old')[0]).toEqual({ type: 'tool_call', id: 't1', name: 'list_orders', input: { days: 30 } });
   expect(events('old').at(-1)).toEqual({ type: 'text_delta', text: 'Orders are fine.' });
   expect(outputs('new')).toEqual([4000, 5, 4000]);
+  // The next startup reads only runs that turned 90 since: one behind the mark is left alone.
+  add.run('behind', new Date(Date.now() - 95 * 86_400_000).toISOString(), transcript);
+  manager();
+  expect(outputs('behind')).toEqual([4000, 5, 4000]);
 });
 const ok = (r: AgentRun | string) => {
   if (typeof r === 'string') throw new Error(r);

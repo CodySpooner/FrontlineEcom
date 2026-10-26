@@ -334,7 +334,10 @@ const SHOWN = 4000;
 // ponytail: runs at startup only; the app restarts often enough (updates, reboots). A daily timer if it ever doesn't.
 function trimOldTranscripts(db: DatabaseSync, now = new Date()) {
   const cutoff = new Date(now.getTime() - 90 * 86_400_000).toISOString();
-  for (const r of db.prepare('SELECT id, transcript_json FROM agent_runs WHERE created_at < ? AND length(transcript_json) > 8000').all(cutoff)) {
+  // Each startup goes on from where the last one stopped: years of runs already trimmed aren't parsed again.
+  const from = String(db.prepare(`SELECT at FROM done_once WHERE ref = 'transcripts-trimmed-to'`).get()?.at ?? '');
+  db.prepare(`INSERT INTO done_once (ref, at) VALUES ('transcripts-trimmed-to', ?) ON CONFLICT (ref) DO UPDATE SET at = excluded.at`).run(cutoff);
+  for (const r of db.prepare('SELECT id, transcript_json FROM agent_runs WHERE created_at >= ? AND created_at < ? AND length(transcript_json) > 8000').all(from, cutoff)) {
     const before = String(r.transcript_json);
     const after = JSON.stringify(
       (JSON.parse(before) as AgentEvent[]).map((e) => (e.type === 'tool_result' && e.output.length > 300 ? { ...e, output: `${e.output.slice(0, 200)}\n… (trimmed after 90 days)` } : e)),
