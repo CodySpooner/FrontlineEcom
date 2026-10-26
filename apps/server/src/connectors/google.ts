@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, cents, pruneCampaigns, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
+import { adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
 export const GOOGLE_ADS_API_VERSION = 'v26';
@@ -112,7 +112,9 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       `SELECT campaign.id, segments.date, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.clicks, metrics.impressions FROM campaign WHERE segments.date BETWEEN '${start}' AND '${today}'`,
     );
     const campaigns = await search('SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, customer.currency_code FROM campaign');
-    const rate = await adRate(db, storeId, campaigns[0]?.customer?.currencyCode, fetchFn, 'Google Ads');
+    const currency = campaigns[0]?.customer?.currencyCode;
+    const rate = await adRate(db, storeId, currency, fetchFn, 'Google Ads');
+    const rateOn = cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -130,7 +132,8 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       for (const r of rows) {
         const m = r.metrics ?? {};
         dates.add(r.segments!.date);
-        day.run(r.campaign.id, r.segments!.date, cents(micros(m.costMicros) * rate), cents(Number(m.conversionsValue ?? 0) * rate), Math.round(Number(m.conversions ?? 0)), Number(m.clicks ?? 0), Number(m.impressions ?? 0));
+        const k = rateOn(r.segments!.date);
+        day.run(r.campaign.id, r.segments!.date, cents(micros(m.costMicros) * k), cents(Number(m.conversionsValue ?? 0) * k), Math.round(Number(m.conversions ?? 0)), Number(m.clicks ?? 0), Number(m.impressions ?? 0));
       }
       if (!cursor) for (const d of pruneCampaigns(db, storeId, 'google', [...campaigns.map((c) => c.campaign.id), ...rows.map((r) => r.campaign.id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);

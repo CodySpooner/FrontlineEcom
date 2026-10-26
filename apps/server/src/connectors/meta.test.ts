@@ -128,6 +128,28 @@ test('a USD ad account on a euro store: spend, purchase value and budgets are co
   expect(db.prepare("SELECT ad_spend AS s FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-26'").get()?.s).toBe(48);
 });
 
+test("a first sync prices each backfilled day at that day's rate; later syncs use today's", async () => {
+  const { db } = setup();
+  db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'pawsome'").run();
+  db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-26', fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1.25 } }));
+  const graph = fakeGraph([insight('201', '2026-10-01', '60.00', '120'), insight('201', '2026-10-26', '60.00', '120')]).fetchFn;
+  const urls: string[] = [];
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    urls.push(url);
+    return url.includes('eurofxref-hist') ? new Response('<Cube time="2026-09-30"><Cube currency="USD" rate="1.2"/></Cube>') : graph(url, init);
+  }) as typeof fetch;
+  await syncMeta(db, key, 'pawsome', fetchFn, NOW);
+  const spend = () => db.prepare("SELECT date, spend, revenue FROM campaign_daily WHERE campaign_id = '201' ORDER BY date").all().map((r) => ({ ...r }));
+  expect(spend()).toEqual([
+    { date: '2026-10-01', spend: 50, revenue: 100 }, // Sept 30's 1.20, the last published before it
+    { date: '2026-10-26', spend: 48, revenue: 96 }, // no history for it: today's 1.25
+  ]);
+  expect(db.prepare("SELECT daily_budget AS b FROM campaigns WHERE id = '201'").get()?.b).toBe(48); // budgets are today's
+
+  await syncMeta(db, key, 'pawsome', fetchFn, NOW);
+  expect(urls.filter((u) => u.includes('eurofxref-hist'))).toHaveLength(1); // only the first sync reads the history
+});
+
 test("pointing the store at another ad account drops the old account's campaigns and spend", async () => {
   const { db } = setup();
   await syncMeta(db, key, 'pawsome', fakeGraph([insight('201', '2026-10-25', '60.00', '210.50')]).fetchFn, NOW);

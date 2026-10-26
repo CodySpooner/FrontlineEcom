@@ -5,7 +5,7 @@ import { createApp } from './app';
 import { switchToReal } from './connectors/common';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { convertRate, fxFor, parseEcb, refreshFx, startFxLoop } from './fx';
+import { convertRate, fxFor, historicRate, parseEcb, refreshFx, startFxLoop } from './fx';
 import { getSettings, updateSettings } from './settings';
 
 const XML = `<?xml version="1.0" encoding="UTF-8"?><gesmes:Envelope><Cube><Cube time='2026-10-23'>
@@ -23,6 +23,17 @@ const fakeEcb = () => {
 test('parseEcb reads the euro reference rates', () => {
   expect(parseEcb(XML)).toEqual({ date: '2026-10-23', rates: { EUR: 1, USD: 1.25, GBP: 0.8 } });
   expect(() => parseEcb('<html>maintenance</html>')).toThrow('unexpected response');
+});
+
+test("historicRate: each day's rate, a weekend or holiday at the last one published before it", async () => {
+  const hist = `<gesmes:Envelope><Cube><Cube time="2026-10-26"><Cube currency="USD" rate="1.25"/><Cube currency="GBP" rate="0.8"/></Cube>
+    <Cube time="2026-10-23"><Cube currency="USD" rate="1.2"/></Cube></Cube></gesmes:Envelope>`;
+  const urls: string[] = [];
+  const on = await historicRate('USD', 'EUR', (async (url: string) => (urls.push(url), new Response(hist))) as typeof fetch);
+  expect(urls).toEqual(['https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml']);
+  expect([on('2026-10-26'), on('2026-10-25'), on('2026-10-23')]).toEqual([1 / 1.25, 1 / 1.2, 1 / 1.2]); // Sunday → Friday
+  expect(on('2026-10-01')).toBeUndefined(); // nothing in the week before
+  expect((await historicRate('GBP', 'EUR', (async () => new Response(hist)) as typeof fetch))('2026-10-24')).toBeUndefined(); // no GBP that Friday
 });
 
 test('the rates loop only fetches while a store needs converting', async () => {

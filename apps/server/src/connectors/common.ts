@@ -1,6 +1,6 @@
 import type { AdNetwork, IntegrationKind } from '@frontline/shared';
 import type { Db } from '../db';
-import { convertRate } from '../fx';
+import { convertRate, historicRate } from '../fx';
 
 /** Wipes a demo store's generated rows and marks it connected. Called by the first successful real sync of any connector. */
 export function switchToReal(db: Db, storeId: string) {
@@ -156,13 +156,23 @@ export type CampaignChange = { dailyBudget: number } | { status: 'PAUSED' };
 /**
  * Ad numbers are kept in the store's currency: the factor from the ad account's currency into it (1 when they match or
  * the account's isn't known). Throws when the ECB publishes no rate for one of them.
- * ponytail: today's rate for every day; past spend isn't re-priced at its own day's rate.
  */
 export async function adRate(db: Db, storeId: string, accountCurrency: string | undefined, fetchFn: typeof fetch, network: string) {
   const store = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency);
   const rate = await convertRate(db, accountCurrency ?? store, store, fetchFn);
   if (!rate) throw new Error(`${network}: no exchange rate from the account's ${accountCurrency} to the store's ${store}`);
   return rate;
+}
+
+/**
+ * The factor for each day of a first sync, which reads two years back: that day's ECB rate, so old spend isn't priced
+ * at today's. `rate` (today's) for a day the history lacks, or when it can't be read.
+ * ponytail: later syncs re-read only the last few days and keep today's rate for them.
+ */
+export async function backfillRate(db: Db, storeId: string, accountCurrency: string | undefined, rate: number, fetchFn: typeof fetch) {
+  const store = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency);
+  const on = accountCurrency && accountCurrency !== store ? await historicRate(accountCurrency, store, fetchFn).catch(() => undefined) : undefined;
+  return (day: string) => on?.(day) ?? rate;
 }
 
 /** Money as cents (2 decimals). */

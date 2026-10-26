@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, cents, pruneCampaigns, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
+import { adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, switchToReal, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -76,7 +76,7 @@ async function edge<T>(url: string, token: string, fetchFn: Fetch): Promise<T[]>
 /** The factor from the ad account's currency into the store's, and its budget units (minor units, or 1 where it has none). */
 async function accountMoney(db: Db, storeId: string, act: string, token: string, fetchFn: Fetch) {
   const { currency } = await graph<{ currency: string }>(`${GRAPH}/${act}?fields=currency`, token, fetchFn);
-  return { rate: await adRate(db, storeId, currency, fetchFn, 'Meta'), units: ZERO_DECIMAL.has(currency) ? 1 : 100 };
+  return { currency, rate: await adRate(db, storeId, currency, fetchFn, 'Meta'), units: ZERO_DECIMAL.has(currency) ? 1 : 100 };
 }
 
 export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
@@ -91,6 +91,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
     const start = cursor ? addDays(cursor, -ATTRIBUTION_DAYS) : addDays(today, 1 - BACKFILL_DAYS);
 
     const money = await accountMoney(db, storeId, act, token, fetchFn);
+    const rateOn = cursor ? () => money.rate : await backfillRate(db, storeId, money.currency, money.rate, fetchFn);
     const campaigns = await edge<CampaignRow>(`${GRAPH}/${act}/campaigns?fields=id,name,effective_status,daily_budget&limit=200`, token, fetchFn);
     const rows: InsightRow[] = [];
     for (let since = start; since <= today; since = addDays(since, CHUNK_DAYS)) {
@@ -124,7 +125,8 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       const dates = new Set<string>();
       for (const r of rows) {
         dates.add(r.date_start);
-        day.run(r.campaign_id, r.date_start, cents(Number(r.spend ?? 0) * money.rate), cents(purchaseValue(r.action_values) * money.rate), Math.round(purchaseValue(r.actions)), Number(r.clicks ?? 0), Number(r.impressions ?? 0));
+        const rate = rateOn(r.date_start);
+        day.run(r.campaign_id, r.date_start, cents(Number(r.spend ?? 0) * rate), cents(purchaseValue(r.action_values) * rate), Math.round(purchaseValue(r.actions)), Number(r.clicks ?? 0), Number(r.impressions ?? 0));
       }
       if (!cursor) for (const d of pruneCampaigns(db, storeId, 'meta', [...campaigns.map((c) => c.id), ...rows.map((r) => r.campaign_id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);

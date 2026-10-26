@@ -1,3 +1,4 @@
+import { addDays } from './dates';
 import type { Db } from './db';
 import { log } from './log';
 import { getSettings } from './settings';
@@ -63,6 +64,25 @@ export async function convertRate(db: Db, from: string, to: string, fetchFn: Fet
   let fx = cached(db);
   if (!fx?.fetchedAt || Date.now() - Date.parse(fx.fetchedAt) > 24 * 3_600_000) fx = await refreshFx(db, fetchFn).catch(() => fx);
   return fx?.rates[from] && fx.rates[to] ? fx.rates[to] / fx.rates[from] : undefined;
+}
+
+/**
+ * Units of `to` per unit of `from` on each day since 1999: the ECB's rate that day, or on a weekend or holiday the last
+ * one published in the week before. Undefined when there's none. One download (about 1 MB compressed).
+ */
+export async function historicRate(from: string, to: string, fetchFn: Fetch = fetch) {
+  const res = await fetchFn('https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml');
+  if (!res.ok) throw new Error(`ECB rate history: HTTP ${res.status}`);
+  const days = new Map((await res.text()).split('<Cube time=').slice(1).map((day) => {
+    const { date, rates } = parseEcb(`time=${day}`);
+    return [date, rates] as const;
+  }));
+  return (day: string) => {
+    for (let i = 0; i < 7; i++) {
+      const r = days.get(addDays(day, -i));
+      if (r?.[from] && r[to]) return r[to] / r[from];
+    }
+  };
 }
 
 /** Units of `to` per unit of `from` from the rates already fetched (no network); undefined without one. */
