@@ -5,6 +5,7 @@ import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type AgentRunD
 import { useApprovals, useCancelRun, useDecide, useRun, useStartRun } from '../api/client';
 import { cents, money } from '../lib/format';
 import { isLive, toBlocks } from '../lib/transcript';
+import { ApprovalExtras } from './ApprovalExtras';
 import { Portrait } from './Art';
 import { Badge, Button, cx, EmptyState, LoadingState, Panel, StatusDot } from './ui';
 
@@ -173,7 +174,7 @@ export function Transcript({ run, role }: { run: AgentRunDetail; role: AgentRole
 }
 
 /** A request raised mid-run. Decided ones (here or on the dashboard) drop their buttons. */
-function ApprovalCard({ a }: { a: ApprovalRequest }) {
+export function ApprovalCard({ a }: { a: ApprovalRequest }) {
   const pending = useApprovals().data;
   const decide = useDecide();
   const [verdict, setVerdict] = useState<'approve' | 'deny'>();
@@ -187,6 +188,7 @@ function ApprovalCard({ a }: { a: ApprovalRequest }) {
         {a.reason}
         {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
       </div>
+      <ApprovalExtras action={a.action} />
       <div className="mt-2.5 flex items-center gap-1.5">
         {open ? (
           <>

@@ -7,6 +7,7 @@ import { AGENT_ROLES, APPROVAL_KINDS, type AgentStatus, type AnalyticsRange, typ
 import { useAgents, useApprovals, useDecide, useEvents, useMissions, useSummary } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Portrait } from '../components/Art';
+import { ApprovalExtras } from '../components/ApprovalExtras';
 import { Hero } from '../components/Hero';
 import { StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
@@ -341,6 +342,7 @@ export function Requests() {
                     {a.reason}
                     {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold whitespace-nowrap text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
                   </div>
+                  <ApprovalExtras action={a.action} />
                   {failed === a.id && (
                     <div role="alert" className="mt-1 text-xs text-red">
                       Couldn't send that. Try again.

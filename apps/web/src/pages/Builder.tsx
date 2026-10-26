@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { LayoutTemplate } from 'lucide-react';
 import type { PageDraft, PageDraftStatus } from '@frontline/shared';
-import { usePageDraftActions, usePageDrafts, useStartRun } from '../api/client';
+import { useApprovals, usePageDraftActions, usePageDrafts, useStartRun } from '../api/client';
+import { ApprovalCard } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { Markdown } from '../components/Markdown';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
@@ -41,6 +42,7 @@ export function Builder() {
       <div className="grid items-start gap-3.5 min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
         <div className="grid gap-3.5">
           <Brief />
+          <ThemeChanges />
           <Panel title="Drafts" sub={q.data && `${q.data.length} page${q.data.length === 1 ? '' : 's'} from the Store Developer`}>
             {q.isPending ? (
               <LoadingState rows={3} />
@@ -234,5 +236,23 @@ function DraftView({ d }: { d: PageDraft }) {
         </div>
       </Panel>
     </div>
+  );
+}
+
+/** Theme edits the Store Developer is waiting on (`store.publish_theme` requests): preview, then approve or deny. */
+function ThemeChanges() {
+  const { has } = useStoreSelection();
+  const list = (useApprovals().data ?? []).filter((a) => a.action.kind === 'store.publish_theme' && has(a.storeId));
+  if (!list.length) return null;
+  return (
+    <Panel title="Theme changes" sub="Waiting for your go-ahead">
+      <ul className="grid gap-2">
+        {list.map((a) => (
+          <li key={a.id}>
+            <ApprovalCard a={a} />
+          </li>
+        ))}
+      </ul>
+    </Panel>
   );
 }
