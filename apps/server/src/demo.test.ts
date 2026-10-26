@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest';
 import { switchToReal } from './connectors/common';
 import { openDb } from './db';
-import { addDays, localDate } from './dates';
+import { addDays, dayFraction, localDate } from './dates';
 import { advanceDemoDay, DEMO_DAYS, demoDay, demoSoFar, seedDemo } from './demo';
 
 const TODAY = '2026-10-26';
@@ -78,13 +78,15 @@ test('advanceDemoDay adds the orders that came due, keeps orders and metrics in 
     orders: db.prepare("SELECT count(*) AS n, coalesce(sum(total), 0) AS total FROM orders WHERE store_id = 'glow' AND local_date = '2026-10-21'").get()!,
   });
 
+  // The first tick fills the morning in, spread over it; only the latest order reaches the live feed (no burst).
   const morning = advanceDemoDay(db, 'glow', at(10));
-  expect(morning.length).toBe(demoSoFar('glow', '2026-10-21', 10 / 24).orders);
-  expect(morning.every((e) => e.type === 'order' && e.storeId === 'glow' && e.at === at(10).toISOString())).toBe(true);
+  expect(morning).toEqual([expect.objectContaining({ type: 'order', storeId: 'glow', at: at(10).toISOString() })]);
+  expect(day().orders.n).toBe(demoSoFar('glow', '2026-10-21', 10 / 24).orders);
   expect(day().orders.n).toBe(day().metrics.orders);
+  const firstAt = db.prepare("SELECT min(created_at) AS t FROM orders WHERE store_id = 'glow' AND local_date = '2026-10-21'").get()!.t;
+  expect(Date.parse(String(firstAt))).toBeLessThan(at(2).getTime());
 
-  const evening = advanceDemoDay(db, 'glow', at(18));
-  expect(evening.length).toBe(demoSoFar('glow', '2026-10-21', 18 / 24).orders - morning.length);
+  expect(advanceDemoDay(db, 'glow', at(18))).toEqual([expect.objectContaining({ at: at(18).toISOString() })]);
   expect(advanceDemoDay(db, 'glow', at(18))).toEqual([]);
   const { metrics, orders } = day();
   expect(orders.n).toBe(metrics.orders);
@@ -110,4 +112,21 @@ test('a store that goes real drops its pending sample requests, so approving one
   switchToReal(db, 'glow');
   seedDemo(db, '2026-10-26'); // a later start doesn't bring them back
   expect(db.prepare("SELECT id, store_id AS s FROM approvals WHERE id LIKE 'demo-appr-%' ORDER BY id").all()).toEqual([{ id: 'demo-appr-1', s: 'peak' }, { id: 'demo-appr-2', s: 'pawsome' }]);
+});
+
+test('days the app was closed get their orders back, dated on their own day, without flooding the live feed', () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-20');
+  const now = new Date('2026-10-24T09:00:00');
+  const events = advanceDemoDay(db, 'peak', now);
+  expect(events.every((e) => now.getTime() - Date.parse(e.at) < 60_000)).toBe(true);
+  const perDay = (date: string) => db.prepare('SELECT created_at FROM orders WHERE store_id = ? AND created_at >= ? AND created_at < ?')
+    .all('peak', new Date(`${date}T00:00:00`).toISOString(), new Date(`${addDays(date, 1)}T00:00:00`).toISOString()).length;
+  for (const date of ['2026-10-21', '2026-10-22', '2026-10-23']) expect(perDay(date), date).toBe(demoDay('peak', date).orders);
+  expect(perDay('2026-10-24')).toBe(demoSoFar('peak', '2026-10-24', dayFraction('2026-10-24', now.getTime())).orders);
+});
+
+test('dayFraction reaches 1 at the end of a 23-hour DST day', () => {
+  expect(dayFraction('2026-03-08', new Date('2026-03-09T00:00:00').getTime() - 60_000)).toBeGreaterThan(0.999);
+  expect(dayFraction('2026-10-26', new Date('2026-10-26T12:00:00').getTime())).toBeCloseTo(0.5, 5);
 });

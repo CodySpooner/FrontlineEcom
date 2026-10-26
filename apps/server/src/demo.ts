@@ -158,10 +158,14 @@ function topUp(db: Db, storeId: string, today: string) {
   for (let date = start; date <= today; date = addDays(date, 1)) writeDay(db, storeId, date < today ? demoDay(storeId, date) : demoSoFar(storeId, date, dayFraction(date)));
 }
 
+/** New demo orders from this long before `now` go to the live feed; older ones (the app was closed) are only filled in. */
+const LIVE_MS = 60_000;
+
 /**
- * Moves a demo store's numbers to `now`: yesterday becomes final, today is updated so far, and the orders that have
- * come due since the last call are added. Returns those orders as live-feed events, so the feed, the orders table and
- * the KPIs agree.
+ * Moves a demo store's numbers to `now`: yesterday becomes final, today is updated so far, and each day of the last
+ * week (the days that have orders, as seeded) gets the orders that came due: days the app was closed, the rest of
+ * yesterday, today so far. They are spread over the gap since that day's last order. Returns the ones from the last
+ * minute as live-feed events, so the feed, the orders table and the KPIs agree.
  */
 export function advanceDemoDay(db: Db, storeId: string, now = new Date()): StoreEvent[] {
   const today = localDate(now);
@@ -169,17 +173,31 @@ export function advanceDemoDay(db: Db, storeId: string, now = new Date()): Store
   const m = demoSoFar(storeId, today, dayFraction(today, now.getTime()));
   writeDay(db, storeId, m);
   if (!PRODUCTS[storeId]) return [];
-  const have = Number(db.prepare('SELECT count(*) AS n FROM orders WHERE store_id = ? AND created_at >= ?').get(storeId, new Date(`${today}T00:00:00`).toISOString())!.n);
-  if (m.orders <= have) return [];
-  const last = Number(db.prepare("SELECT coalesce(max(CAST(substr(id, 2) AS INTEGER)), 1000) AS n FROM orders WHERE store_id = ? AND id LIKE '#%'").get(storeId)!.n);
-  const full = demoDay(storeId, today);
-  const total = cents(full.revenue / full.orders);
-  const at = now.toISOString();
+  const first = addDays(today, -6);
+  const byDay = new Map<string, number[]>();
+  for (const r of db.prepare('SELECT created_at FROM orders WHERE store_id = ? AND created_at >= ?').all(storeId, new Date(`${first}T00:00:00`).toISOString())) {
+    const t = Date.parse(String(r.created_at));
+    byDay.set(localDate(new Date(t)), [...(byDay.get(localDate(new Date(t))) ?? []), t]);
+  }
+  let last = Number(db.prepare("SELECT coalesce(max(CAST(substr(id, 2) AS INTEGER)), 1000) AS n FROM orders WHERE store_id = ? AND id LIKE '#%'").get(storeId)!.n);
   const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date) VALUES (?, ?, ?, ?, 'paid', 'unfulfilled', ?, NULL, ?, ?)");
-  return Array.from({ length: m.orders - have }, (_, i): StoreEvent => {
-    order.run(storeId, `#${last + 1 + i}`, at, total, SUPPLIERS[(last + i) % SUPPLIERS.length]!, cents(full.cogs / full.orders), today);
-    return { id: randomUUID(), storeId, type: 'order', amount: total, at };
-  });
+  const events: StoreEvent[] = [];
+  for (let date = first; date <= today; date = addDays(date, 1)) {
+    const have = byDay.get(date) ?? [];
+    const due = (date < today ? demoDay(storeId, date) : m).orders - have.length;
+    if (due <= 0) continue;
+    const full = demoDay(storeId, date);
+    const total = cents(full.revenue / full.orders);
+    const from = Math.max(new Date(`${date}T00:00:00`).getTime(), ...have);
+    const to = date < today ? new Date(`${addDays(date, 1)}T00:00:00`).getTime() - 1000 : now.getTime();
+    for (let i = 1; i <= due; i++) {
+      const t = Math.round(from + ((to - from) * i) / due);
+      const at = new Date(t).toISOString();
+      order.run(storeId, `#${++last}`, at, total, SUPPLIERS[(last - 1) % SUPPLIERS.length]!, cents(full.cogs / full.orders), date);
+      if (now.getTime() - t < LIVE_MS) events.push({ id: randomUUID(), storeId, type: 'order', amount: total, at });
+    }
+  }
+  return events;
 }
 
 /** First-run catalog for a demo store: campaigns, products, last week's orders. */
