@@ -55,6 +55,17 @@ describe('chat retry', () => {
   });
 });
 
+describe('a run a daily AI budget stopped', () => {
+  it("links to the setting that lifts it", async () => {
+    const error = "Stopped: today's budget for this agent ($0.3) is used up. Raise it in its settings.";
+    stubApi((url) => (url === '/api/runs/r1' ? run('r1', 'error', { error, transcript: [{ type: 'error', message: error }] }) : undefined));
+    renderApp(<Chat agent={agent} thread={['r1']} onThread={() => {}} />);
+    const link = await screen.findByRole('link', { name: "Raise the agent's budget" });
+    expect(link.getAttribute('href')).toBe('/agents/peak%3Acopywriter?tab=settings');
+    expect(screen.getAllByText(/is used up/)).toHaveLength(1); // the footer doesn't repeat the transcript's error
+  });
+});
+
 describe('a request card in a past transcript', () => {
   const asked = { id: 'a1', storeId: 'peak', agentId: 'peak:ad_strategist', title: 'Pause UGC', reason: 'ROAS 0.8', status: 'pending', createdAt: '2026-10-26T08:00:00Z', action: { kind: 'ads.pause_campaign', payload: {} } } as ApprovalRequest;
   const render = (approved: ApprovalRequest[], denied: ApprovalRequest[]) => {

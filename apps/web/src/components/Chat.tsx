@@ -1,11 +1,13 @@
 // UI-07 agent chat: each message is a run; follow-ups resume the previous run's session. Runs stream in over /api/live.
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { Link } from 'react-router';
 import { Brain, ChevronRight, MessageSquare, SendHorizontal, Wrench } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type AgentRunDetail, type ApprovalRequest } from '@frontline/shared';
 import { useApprovals, useCancelRun, useDecide, useRun, useStartRun } from '../api/client';
 import { expiredWhy } from '../lib/approvals';
 import { cents, money } from '../lib/format';
 import { isLive, toBlocks } from '../lib/transcript';
+import { budgetFix } from '../lib/usage';
 import { ApprovalExtras } from './ApprovalExtras';
 import { Portrait } from './Art';
 import { Badge, Button, cx, EmptyState, inputClass, LoadingState, Panel, StatusDot } from './ui';
@@ -95,7 +97,7 @@ export function Chat({ agent, thread, onThread }: { agent: Agent; thread: string
       </form>
       {start.isError && (
         <p role="alert" className="mt-2 text-xs text-red">
-          {start.error.message}
+          {start.error.message} <FixLink message={start.error.message} agentId={agent.id} />
         </p>
       )}
     </Panel>
@@ -168,7 +170,11 @@ export function Transcript({ run, role, onRetry }: { run: AgentRunDetail; role: 
             ) : run.status === 'cancelled' ? (
               'Stopped'
             ) : (
-              <span className="text-red">Failed{run.error ? `: ${run.error}` : ''}</span>
+              <>
+                {/* The transcript's own error line already says why, when it has one. */}
+                <span className="text-red">Failed{run.error && !run.transcript.some((e) => e.type === 'error' && e.message === run.error) ? `: ${run.error}` : ''}</span>
+                {run.error && <FixLink message={run.error} agentId={run.agentId} />}
+              </>
             )}
             {onRetry && (run.status === 'error' || run.status === 'cancelled') && (
               <button type="button" onClick={() => onRetry(run.task)} className="cursor-pointer underline-offset-2 hover:text-white hover:underline">
@@ -180,6 +186,16 @@ export function Transcript({ run, role, onRetry }: { run: AgentRunDetail; role: 
       </div>
     </div>
   );
+}
+
+/** A link to the setting that lifts a budget refusal; nothing for other errors. */
+function FixLink({ message, agentId }: { message: string; agentId: string }) {
+  const fix = budgetFix(message, agentId);
+  return fix ? (
+    <Link to={fix.to} className="font-semibold text-text-2 underline underline-offset-2 hover:text-white">
+      {fix.label}
+    </Link>
+  ) : null;
 }
 
 /** Deny's second step: an optional reason, sent with the deny, so the squad's memory of the "no" says why. */

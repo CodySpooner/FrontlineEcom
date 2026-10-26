@@ -8,3 +8,9 @@ export function spentToday(runs: Pick<AgentRun, 'createdAt' | 'usage'>[], now = 
   const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
   return runs.reduce((sum, r) => (Date.parse(r.createdAt) >= midnight ? sum + r.usage.costUsd : sum), 0);
 }
+
+/** Where a run refused or stopped by a daily AI budget (the agents lane's fixed "Raise it in …" endings) gets lifted. */
+export function budgetFix(message: string, agentId: string) {
+  if (message.endsWith('Raise it in its settings.')) return { to: `/agents/${encodeURIComponent(agentId)}?tab=settings`, label: "Raise the agent's budget" };
+  if (message.endsWith('Raise it in Settings.')) return { to: '/settings', label: "Raise the store's AI cap" };
+}

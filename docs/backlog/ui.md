@@ -214,6 +214,8 @@ Orca's browser against the reference before ticking it.
       panel only shows the whole store's usage).
 - [x] UI-81 "Track a competitor" says which sites the price watch reads: Shopify and WooCommerce stores, and Etsy shops
       once an Etsy store is connected (core 2fa5e4a).
+- [x] UI-82 A run refused or stopped by a daily AI budget links to the setting that lifts it (the agent's own budget or
+      the store's AI cap), and a failed run's footer stops repeating the error its transcript already shows.
 
 ## Blocked
 
@@ -327,3 +329,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-79 (agents inbox, AGT-90): the agent Settings → Deployment panel has "Daily AI budget" under Autonomy (`AgentBudget`, exported). It's a USD number with Save; blank sends `null` to remove it, and the hint names the store's AI cap. New AgentDetail.test covers save and clear. Chrome on Peak's Ad Strategist: 1.5 saved (the API returned 1.5, and Save disabled once unchanged), then clearing it removed it
 - 2026-10-26 — UI-80: `spentToday(runs)` (lib/usage, tested) sums the agent's run costs since local midnight, the same window as the server's `costToday`. `AgentBudget` shows a UsageMeter "$X of $Y used today" under the field when a budget is set (render test). Chrome on Peak's Ad Strategist with a $1 fixture budget: "$0.00 of $1.00 used today". Fixture removed
 - 2026-10-26 — UI-81: a hint under the Name/Website fields on Competitors: "Prices are read hourly from Shopify and WooCommerce stores, and from Etsy shops (etsy.com/shop/…) once you connect an Etsy store." It matches `watchCompetitorPrices` (shopify/woo/etsy catalogs, 1 h loop). Chrome at 1440: it wraps to two lines under the fields
+- 2026-10-26 — UI-82: `budgetFix(message, agentId)` (lib/usage, tested) maps the agents lane's fixed endings: "Raise it in its settings." goes to the agent's Settings tab, "Raise it in Settings." to /settings. Chat's `FixLink` adds it after a failed run's footer and after a refused start. The footer says just "Failed" when the transcript has the same error (Chat.test). Chrome with a fixture run: "Failed · Raise the agent's budget · Try again", and the link opened the Settings tab with the budget field. Fixture removed
