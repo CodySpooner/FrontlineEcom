@@ -37,6 +37,7 @@ import type {
   StoreCaps,
   StoreEvent,
   StoreMemory,
+  SupplierProduct,
   TopProduct,
 } from '@frontline/shared';
 import { applyRunEvent, isLive } from '../lib/transcript';
@@ -192,6 +193,9 @@ export const useOrders = (storeIds: string[], o: OrderQuery) =>
       api<Page<Order>>(`/api/orders?stores=${storeIds.join(',')}&${new URLSearchParams(Object.entries(o).flatMap(([k, v]) => (v === undefined || v === '' ? [] : [[k, String(v)]])))}`),
     placeholderData: keepPreviousData,
   });
+
+export const useSupplierSearch = (q: string) =>
+  useQuery({ queryKey: ['suppliers', q], queryFn: () => api<SupplierProduct[]>(`/api/suppliers/products?${new URLSearchParams({ q, limit: '5' })}`), enabled: !!q });
 
 export const useCompetitors = () => useQuery({ queryKey: ['competitors'], queryFn: () => api<Competitor[]>('/api/competitors') });
 export const usePriceChanges = () => useQuery({ queryKey: ['price-changes'], queryFn: () => api<PriceChange[]>('/api/competitors/price-changes?limit=100') });

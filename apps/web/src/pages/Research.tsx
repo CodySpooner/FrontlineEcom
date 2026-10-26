@@ -3,7 +3,7 @@ import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'reac
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Baby, Bookmark, Cpu, Dumbbell, Lamp, Package, PawPrint, Search, Shirt, Sparkles, Tent, type LucideIcon } from 'lucide-react';
 import { NICHES, type Niche, type ProductList, type ResearchProduct, type ResearchSource, type ResearchTab } from '@frontline/shared';
-import { useAddToStore, useListActions, useLists, useResearch, useStartRun } from '../api/client';
+import { useAddToStore, useListActions, useLists, useResearch, useStartRun, useSupplierSearch } from '../api/client';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, cx, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Tabs } from '../components/ui';
@@ -287,6 +287,7 @@ function ProductDetails({ p }: { p: ResearchProduct }) {
           ))}
         </div>
       </section>
+      <Suppliers p={p} />
       <section>
         <h3 className="mb-2 text-[13px] font-semibold">Lists</h3>
         <div className="flex flex-wrap gap-2">
@@ -348,6 +349,58 @@ function ProductDetails({ p }: { p: ResearchProduct }) {
         )}
       </section>
     </div>
+  );
+}
+
+/** CJ Dropshipping matches for the product, with the margin left at our sell price (before shipping). */
+function Suppliers({ p }: { p: ResearchProduct }) {
+  const [look, setLook] = useState(false);
+  const q = useSupplierSearch(look ? p.title : '');
+  return (
+    <section>
+      <h3 className="mb-2 text-[13px] font-semibold">Suppliers</h3>
+      {!look ? (
+        <Button size="sm" onClick={() => setLook(true)}>
+          <Search className="size-3.5" />
+          Find on CJ Dropshipping
+        </Button>
+      ) : q.isPending ? (
+        <LoadingState rows={2} />
+      ) : q.isError ? (
+        <ErrorState message="Couldn't search CJ Dropshipping." onRetry={() => q.refetch()} />
+      ) : !q.data.length ? (
+        <p className="text-[13px] text-muted">No CJ Dropshipping match for this product.</p>
+      ) : (
+        <>
+          <ul className="grid gap-2">
+            {q.data.map((s) => (
+              <li key={s.id} className="flex items-center gap-3 rounded-lg border border-line bg-bg-2 px-3 py-2">
+                {s.image && <img src={s.image} alt="" className="size-10 shrink-0 rounded-md object-cover" />}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px]">{s.title}</p>
+                  <p className="text-xs text-muted">
+                    SKU {s.sku} · {s.listed.toLocaleString('en-US')} sellers list it
+                  </p>
+                </div>
+                <div className="text-right tabular-nums">
+                  <b className="text-[13px]">{cents(s.price)}</b>
+                  <p className="text-xs text-muted">{Math.round((1 - s.price / p.price) * 100)}% margin before shipping</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {q.data.some((s) => s.demo) && (
+            <p className="mt-1.5 text-xs text-muted">
+              Demo matches.{' '}
+              <Link to="/integrations" className="text-red hover:underline">
+                Connect CJ Dropshipping
+              </Link>{' '}
+              for live prices.
+            </p>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
