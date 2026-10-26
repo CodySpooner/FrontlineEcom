@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Store, StoreEvent, StoreEventType, TopProduct } from '@frontline/shared';
-import { tx, type Db } from './db';
+import { once, tx, type Db } from './db';
 import { addDays, dayFraction, dayNumber, localDate } from './dates';
 import { insertStore } from './stores';
 
@@ -272,12 +272,12 @@ export function seedDemoStore(db: Db, storeId: string, today = localDate()) {
 }
 
 /**
- * Seeds the three demo stores on an empty DB, then tops up every demo store's history to `today`.
- * Safe to run on every startup.
+ * Seeds the three demo stores once per data dir (on an empty DB: stores the owner deleted stay deleted), then tops up
+ * every demo store's history to `today`. Safe to run on every startup.
  */
 export function seedDemo(db: Db, today = localDate()) {
   tx(db, () => {
-    if (!db.prepare('SELECT count(*) AS n FROM stores').get()?.n) {
+    if (once(db, 'seed:demo') && !db.prepare('SELECT count(*) AS n FROM stores').get()?.n) {
       for (const { params: _, ...s } of DEMO_STORES) {
         insertStore(db, s, true);
         seedCatalog(db, s.id, today);

@@ -466,6 +466,9 @@ export function openDb(file = ':memory:'): Db {
 export const dataDir = () => process.env.FRONTLINE_DATA_DIR ?? './.data';
 export const dbFile = () => join(dataDir(), 'frontline.db');
 
+/** True the first time it's called for `ref` in this data dir, false ever after (the `done_once` ledger). */
+export const once = (db: Db, ref: string) => db.prepare('INSERT OR IGNORE INTO done_once (ref, at) VALUES (?, ?)').run(ref, new Date().toISOString()).changes > 0;
+
 export function tx<T>(db: Db, fn: () => T): T {
   db.exec('BEGIN');
   try {

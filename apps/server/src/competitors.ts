@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import type { AdSnapshotData, Competitor, CompetitorSnapshot, PriceChange, PriceSnapshotData } from '@frontline/shared';
-import { tx, type Db } from './db';
+import { once, tx, type Db } from './db';
 import { addDays, localDate } from './dates';
 import { hash, mulberry32 } from './demo';
 import { log } from './log';
@@ -271,9 +271,9 @@ const DEMO: [string, string, string, [string, number][], [string, string, string
   ]],
 ];
 
-/** Seeds demo competitors for the demo stores: 8 weeks of weekly price snapshots (with a few price moves) and recent ads. */
+/** Seeds demo competitors for the demo stores, once per data dir: 8 weeks of weekly price snapshots (with a few price moves) and recent ads. */
 export function seedCompetitors(db: Db, today = localDate()) {
-  if (db.prepare('SELECT count(*) AS n FROM competitors').get()?.n) return;
+  if (!once(db, 'seed:competitors') || db.prepare('SELECT count(*) AS n FROM competitors').get()?.n) return;
   const demoIds = new Set(db.prepare('SELECT id FROM stores WHERE demo = 1').all().map((r) => String(r.id)));
   tx(db, () => {
     for (const [storeId, name, slug, products, ads] of DEMO) {

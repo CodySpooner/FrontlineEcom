@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { switchToReal } from './connectors/common';
 import { openDb } from './db';
 import { addDays, dayFraction, localDate } from './dates';
+import { seedCompetitors } from './competitors';
 import { advanceDemoDay, DEMO_DAYS, demoDay, demoSoFar, seedDemo } from './demo';
 
 const TODAY = '2026-10-26';
@@ -149,4 +150,16 @@ test("the seeded add-products request offers only products the store doesn't sel
     const sold = new Set(db.prepare('SELECT title FROM products WHERE store_id = ?').all(String(a.store_id)).map((p) => String(p.title)));
     expect(action.payload.products!.filter((p) => sold.has(p.title))).toEqual([]);
   }
+});
+
+test('demo stores and competitors are seeded once: deleted ones stay deleted after a restart', () => {
+  const db = openDb();
+  seedDemo(db, TODAY);
+  seedCompetitors(db, TODAY);
+  expect(count(db, 'SELECT count(*) AS n FROM competitors')).toBeGreaterThan(0);
+  db.prepare('DELETE FROM competitors').run();
+  for (const t of ['approvals', 'stores']) db.prepare(`DELETE FROM ${t}`).run();
+  seedDemo(db, TODAY); // the next startup
+  seedCompetitors(db, TODAY);
+  expect([count(db, 'SELECT count(*) AS n FROM stores'), count(db, 'SELECT count(*) AS n FROM competitors')]).toEqual([0, 0]);
 });
