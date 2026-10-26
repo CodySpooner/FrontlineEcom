@@ -892,8 +892,10 @@ export async function requestApproval(ctx: ToolContext, req: { title: string; re
  * A years-old ad account lists hundreds of paused campaigns: the ones off with no spend in the window are left out (a
  * campaign that is on but spends nothing stays: something is wrong with it).
  */
+/** Campaign statuses (as core stores them, every network) of a campaign that is off. */
+export const IDLE_CAMPAIGN_STATUSES = ['paused', 'campaign_paused', 'archived', 'deleted'];
 // sum(), not the alias: in HAVING SQLite reads `spend` as one campaign_daily row's column.
-const LIVE_CAMPAIGNS = `HAVING coalesce(sum(d.spend), 0) > 0 OR c.status NOT IN ('paused', 'campaign_paused', 'archived', 'deleted')`;
+const LIVE_CAMPAIGNS = `HAVING coalesce(sum(d.spend), 0) > 0 OR c.status NOT IN (${IDLE_CAMPAIGN_STATUSES.map((s) => `'${s}'`).join(', ')})`;
 const idleNote = (ctx: ToolContext, shown: number) => {
   const left = Number(ctx.db.prepare('SELECT count(*) AS n FROM campaigns WHERE store_id = ?').get(ctx.store.id)?.n) - shown;
   return left > 0 ? `(${left} paused or archived campaigns with no spend in the window left out)\n` : '';

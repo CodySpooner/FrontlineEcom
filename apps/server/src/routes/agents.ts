@@ -7,6 +7,7 @@ import {
   creditsToday,
   XP,
   ADS_JOB,
+  IDLE_CAMPAIGN_STATUSES,
   createDefaultJobs,
   DEFAULT_JOBS,
   createRunManager,
@@ -346,24 +347,30 @@ function startFresh(db: Db, store: Store) {
 
 function activateConnectedStores(db: Db, runs: RunManager) {
   for (const store of listStores(db).filter((s) => s.connected)) {
-    const ads = !!db.prepare('SELECT 1 FROM campaigns WHERE store_id = ? LIMIT 1').get(store.id);
+    // A campaign that is on or spent in the last 30 days: an old account's archived ones give the review nothing to do.
+    const ads = !!db
+      .prepare(
+        `SELECT 1 FROM campaigns c WHERE c.store_id = ? AND (c.status NOT IN (SELECT value FROM json_each(?))
+           OR EXISTS (SELECT 1 FROM campaign_daily d WHERE d.network = c.network AND d.campaign_id = c.id AND d.date >= ? AND d.spend > 0)) LIMIT 1`,
+      )
+      .get(store.id, JSON.stringify(IDLE_CAMPAIGN_STATUSES), new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10));
     if (once(db, `activate:${store.id}`)) {
       startFresh(db, store);
-      // No campaigns yet: the campaign review waits for them (marked, so a job the owner turned off is never turned back on).
+      // No running campaigns yet: the campaign review waits for one (marked, so a job the owner turned off is never turned back on).
       if (!ads) once(db, `ads-job-wait:${store.id}`);
       const names = DEFAULT_JOBS.filter((j) => (ads || j.name !== ADS_JOB) && (!j.platforms || j.platforms.includes(store.platform))).map((j) => j.name);
       if (enableDefaultJobs(db, store.id, names)) {
-        const later = ads ? '' : ` The ${ADS_JOB.toLowerCase()} starts once an ad account syncs campaigns.`;
+        const later = ads ? '' : ` The ${ADS_JOB.toLowerCase()} starts once an ad account has a running campaign.`;
         notify(db, { kind: 'info', title: `${store.name} is live: the squad's scheduled jobs are on`, body: `${names.join(', ')}.${later} They run on your Claude login; pause or change them in Automation.`, storeId: store.id, link: '/automation' });
       }
       if (store.niche === 'other' && store.nicheDetail && !customNichePack(store.nicheDetail)) runs.start(`${store.id}:market_analyst`, draftNichePackTask(store));
     } else if (ads && db.prepare('DELETE FROM done_once WHERE ref = ?').run(`ads-job-wait:${store.id}`).changes && enableDefaultJobs(db, store.id, [ADS_JOB])) {
-      notify(db, { kind: 'info', title: `${store.name}: the ${ADS_JOB.toLowerCase()} is on`, body: 'Its ad account synced campaigns, so the Ad Strategist reviews them every morning on your Claude login. Pause it in Automation.', storeId: store.id, link: '/automation' });
+      notify(db, { kind: 'info', title: `${store.name}: the ${ADS_JOB.toLowerCase()} is on`, body: 'Its ad account has a running campaign, so the Ad Strategist reviews campaigns every morning on your Claude login. Pause it in Automation.', storeId: store.id, link: '/automation' });
     }
     // Stores live before those rules get them once: a job with nothing to work on there is switched off.
     if (once(db, `job-gates:${store.id}`)) {
       const why = (j: (typeof DEFAULT_JOBS)[number]) =>
-        j.name === ADS_JOB && !ads ? 'no ad campaigns yet; it switches back on once an ad account syncs them'
+        j.name === ADS_JOB && !ads ? 'no running ad campaigns; it switches back on once an ad account has one'
         : j.platforms && !j.platforms.includes(store.platform) ? `the app can't publish ${store.platform} product pages`
         : '';
       const off = DEFAULT_JOBS.filter((j) => why(j) && db.prepare('UPDATE automation_rules SET enabled = 0 WHERE store_id = ? AND name = ? AND enabled = 1').run(store.id, j.name).changes);

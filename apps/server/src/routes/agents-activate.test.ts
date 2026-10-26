@@ -66,7 +66,11 @@ test("a store's first real sync switches its squad's jobs on once, and a custom 
 
   expect(jobsOn('glow')).toBe(0); // demo stores stay off
 
-  // An ad account syncs campaigns: the campaign review switches on, once; turned off by the owner, it stays off.
+  // An old account's archived campaign, no spend in 30 days: nothing to review yet.
+  db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 'c0', ?, 'BFCM 2023', 'archived', 0)`).run(store.id);
+  await app.request('/api/agents');
+  expect(jobsOn(store.id)).toBe(DEFAULT_JOBS.length - 1);
+  // A running one syncs: the campaign review switches on, once; turned off by the owner, it stays off.
   db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 'c1', ?, 'Prospecting', 'active', 40)`).run(store.id);
   await app.request('/api/agents');
   expect(jobsOn(store.id)).toBe(DEFAULT_JOBS.length);
