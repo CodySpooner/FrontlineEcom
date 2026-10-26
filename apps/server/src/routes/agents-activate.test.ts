@@ -69,6 +69,10 @@ test("a store's first real sync switches its squad's jobs on once, and a custom 
 
 test("going live clears what the agents learned from simulated numbers, not the owner's notes, pins or preferences", async () => {
   await app.request('/api/agents');
+  // Demo-phase leftovers: a request asked on simulated numbers, an issue on a demo order, a draft for a demo product.
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('ask1', 'glow', 'glow:product_hunter', 'Add 2 products', 'AI score 88', '{"kind":"store.add_products","payload":{}}', 'pending', ?)`).run(new Date().toISOString());
+  db.prepare(`INSERT INTO order_issues (id, store_id, order_id, agent_id, kind, severity, note, status, created_at) VALUES ('i1', 'glow', '#1001', 'glow:operations', 'late', 'high', 'Unfulfilled 9 days', 'open', ?)`).run(new Date().toISOString());
+  db.prepare(`INSERT INTO page_drafts (id, store_id, agent_id, kind, product_id, title, html, notes, created_at) VALUES ('d1', 'glow', 'glow:store_developer', 'product', 'glow-p1', 'T', '<p>x</p>', 'n', ?), ('d2', 'glow', 'glow:store_developer', 'page', NULL, 'About us', '<p>x</p>', 'n', ?)`).run(new Date().toISOString(), new Date().toISOString());
   const m = (agentId: string, kind: 'fact' | 'learning' | 'preference', text: string) => writeMemory(db, { storeId: 'glow', agentId, kind, text, confidence: 0.7 });
   m('glow:market_analyst', 'learning', 'LED masks outsell serums 3:1');
   m('glow:ad_strategist', 'fact', 'Broad TOF runs at 2.1 ROAS');
@@ -79,6 +83,13 @@ test("going live clears what the agents learned from simulated numbers, not the 
   await app.request('/api/agents');
   expect(listMemory(db, 'glow').map((x) => x.text).sort()).toEqual(['Customers ask about sensitive skin', 'Owner wants no exclamation marks', 'We ship from Austin']);
   expect(notes('glow')).toContain('Glow Haus: the squad starts fresh on real numbers');
+  expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Glow Haus: the squad starts fresh on real numbers'`).get()?.body).toBe(
+    'Cleared what came from the demo data: 2 learnings, 1 request, 1 order issue. Your own notes, pins and preferences stay.',
+  );
+  expect(db.prepare(`SELECT status FROM approvals WHERE id = 'ask1'`).get()?.status).toBe('denied');
+  expect(listMemory(db, 'glow').some((x) => x.tags.includes('denied'))).toBe(false); // expired, not the owner's no
+  expect(db.prepare(`SELECT status FROM order_issues WHERE id = 'i1'`).get()?.status).toBe('resolved');
+  expect(db.prepare(`SELECT id FROM page_drafts WHERE store_id = 'glow'`).all().map((r) => r.id)).toEqual(['d2']);
   await app.request('/api/agents'); // once: later learnings stay
   m('glow:market_analyst', 'learning', 'Real: mornings convert best');
   await app.request('/api/agents');

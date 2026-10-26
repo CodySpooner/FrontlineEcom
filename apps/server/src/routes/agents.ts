@@ -38,7 +38,7 @@ import {
   type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
-import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type StartRunInput, type StoreUsage } from '@frontline/shared';
+import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -51,7 +51,7 @@ import { dayFraction, localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
-import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
+import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, EXPIRED_DEMO, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { issueRoutes } from './agents-issues';
@@ -298,19 +298,42 @@ export function parseMemoryInput(body: unknown, partial: boolean): string | Part
 }
 
 /**
- * A store's first real sync connects it (core's switchToReal). Once per store: what the agents learned from its
- * simulated numbers is cleared, its default jobs switch on (they run on the owner's Claude login, so the owner is told),
- * and a custom niche without a pack gets the Market Analyst drafting one.
+ * A store's first real sync connects it (core's switchToReal). Once per store: what the squad left from its demo phase
+ * is cleared (startFresh), its default jobs switch on (they run on the owner's Claude login, so the owner is told), and a
+ * custom niche without a pack gets the Market Analyst drafting one.
  */
 // ponytail: checked at startup and on squad reads (the dashboard polls them); core has no connect event to hook.
+/**
+ * Core wiped the store's simulated rows; everything the squad made before now came from them (activation runs once,
+ * before any real-data job). Its facts and learnings go (the owner's notes, pins and preferences stay), requests asked
+ * on demo numbers expire instead of acting on the live store, issues on demo orders close, and page drafts for demo
+ * products go.
+ */
+function startFresh(db: Db, store: Store) {
+  const memories = db.prepare(`DELETE FROM store_memory WHERE store_id = ? AND agent_id != 'owner' AND kind IN ('fact', 'learning') AND pinned = 0`).run(store.id).changes;
+  const pending = db.prepare(`SELECT id FROM approvals WHERE store_id = ? AND status = 'pending'`).all(store.id).map((r) => String(r.id));
+  for (const id of pending) {
+    db.prepare('UPDATE approvals SET reason = reason || ? WHERE id = ?').run(` ${EXPIRED_DEMO}`, id);
+    decide(db, id, 'deny');
+  }
+  const issues = db
+    .prepare(`UPDATE order_issues SET status = 'resolved', resolution = 'Flagged on demo data; closed when the store went live.', resolved_at = ? WHERE store_id = ? AND status = 'open'`)
+    .run(new Date().toISOString(), store.id).changes;
+  db.prepare(`DELETE FROM page_drafts WHERE store_id = ? AND kind = 'product' AND published_at IS NULL`).run(store.id);
+  const n = (k: number | bigint, what: string) => k && `${k} ${what}${Number(k) === 1 ? '' : 's'}`;
+  const parts = [n(memories, 'learning'), n(pending.length, 'request'), n(issues, 'order issue')].filter(Boolean);
+  if (parts.length) {
+    notify(db, {
+      kind: 'info', title: `${store.name}: the squad starts fresh on real numbers`, storeId: store.id, link: '/knowledge',
+      body: `Cleared what came from the demo data: ${parts.join(', ')}. Your own notes, pins and preferences stay.`,
+    });
+  }
+}
+
 function activateConnectedStores(db: Db, runs: RunManager) {
   for (const store of listStores(db).filter((s) => s.connected)) {
     if (!once(db, `activate:${store.id}`)) continue;
-    // Core wiped the demo rows; the agents' facts and learnings came from them. The owner's notes, pins and preferences stay.
-    const cleared = db
-      .prepare(`DELETE FROM store_memory WHERE store_id = ? AND agent_id != 'owner' AND kind IN ('fact', 'learning') AND pinned = 0`)
-      .run(store.id).changes;
-    if (cleared) notify(db, { kind: 'info', title: `${store.name}: the squad starts fresh on real numbers`, body: `Cleared ${cleared} things it learned from the demo data. Your own notes, pins and preferences stay.`, storeId: store.id, link: '/knowledge' });
+    startFresh(db, store);
     if (enableDefaultJobs(db, store.id)) {
       const jobs = DEFAULT_JOBS.map((j) => j.name).join(', ');
       notify(db, { kind: 'info', title: `${store.name} is live: the squad's scheduled jobs are on`, body: `${jobs}. They run on your Claude login; pause or change them in Automation.`, storeId: store.id, link: '/automation' });
