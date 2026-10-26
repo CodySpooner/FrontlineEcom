@@ -1,16 +1,16 @@
 import { awardXp, blendedRoas, cash, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, nicheKey, once, profitStreak, promotionCandidates, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
 import { AGENT_ROLES, PRODUCT_WRITE_PLATFORMS, type MetricTotals, type Mission, type Store } from '@frontline/shared';
 import { Hono } from 'hono';
-import { loadRows, summarize } from '../analytics';
+import { currentWindow, summarize } from '../analytics';
 import { approvalsHook } from '../approvals';
-import { addDays, localDate } from '../dates';
+import { addDays, localDate, midnight } from '../dates';
 import { cachedRate, fxFor } from '../fx';
 import type { Db } from '../db';
 import { publish } from '../live';
 import { log } from '../log';
 import { onApproved } from './agents-actions';
 import { notify } from '../settings';
-import { listStores } from '../stores';
+import { listStores, storeZone } from '../stores';
 
 /** awardXp + an `xp` live message (XP toast / level-up burst). */
 export function award(db: Db, a: Award) {
@@ -28,16 +28,18 @@ function recordOutcome(db: Db, ref: string, worked: boolean, m: NewMemory) {
   notify(db, { kind: 'info', title: worked ? `Measured win: ${name}` : `${name}: no lift this time`, body: m.text, storeId: m.storeId, link: `/agents/${m.agentId}` });
 }
 
-const midnight = () => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-};
 const count = (db: Db, sql: string, ...args: string[]) => Number(db.prepare(sql).get(...args)?.n ?? 0);
+/** The dashboard's window: each store's today is its own (a live store dates its data in its zone). */
 const summary = (db: Db, storeIds: string[], range: 7 | 30) => {
-  const to = localDate();
-  return summarize(loadRows(db, storeIds, range, to), { range, to, storeIds });
+  const { to, todayFraction, rows } = currentWindow(db, storeIds, range);
+  return summarize(rows, { range, to, storeIds, todayFraction });
 };
+/** A day in the store's zone, the one its orders and metrics are dated in (demo stores: this machine's). */
+const storeDay = (db: Db, storeId: string, at: string | number = Date.now()) => localDate(new Date(at), storeZone(db, storeId));
+// The 15-days-on checks pre-filter loosely in SQL (a store's day, or a UTC date, can sit up to 3 days off this machine's
+// date), then gate each row on its store's own today.
+const roughly15DaysAgo = (today?: string) => addDays(today ?? localDate(), -12);
+const settled = (db: Db, storeId: string, day: string, today?: string) => day <= addDays(today ?? storeDay(db, storeId), -15);
 
 const watched = new WeakSet<Db>();
 
@@ -63,7 +65,7 @@ const sinceLive = (at: string, storeId: string) =>
  * becomes a store learning for the agent (so its next review knows what worked), and a win pays it once.
  * Checked lazily (commander/achievements reads); changes older than 30 days are left alone.
  */
-export function checkAdOutcomes(db: Db, today = localDate()) {
+export function checkAdOutcomes(db: Db, today?: string) {
   const rows = db
     .prepare(
       `SELECT id, store_id, agent_id, run_id, title, decided_at FROM approvals
@@ -72,8 +74,8 @@ export function checkAdOutcomes(db: Db, today = localDate()) {
     )
     .all(new Date(Date.now() - 30 * 86_400_000).toISOString());
   for (const r of rows) {
-    const day = localDate(new Date(String(r.decided_at)));
-    if (addDays(day, 3) >= today) continue; // the 3 days after aren't complete yet
+    const day = storeDay(db, String(r.store_id), String(r.decided_at));
+    if (addDays(day, 3) >= (today ?? storeDay(db, String(r.store_id)))) continue; // the 3 days after aren't complete yet
     const before = blendedRoas(db, String(r.store_id), addDays(day, -7), addDays(day, -1));
     const after = blendedRoas(db, String(r.store_id), addDays(day, 1), addDays(day, 3));
     if (before === undefined || after === undefined) continue;
@@ -99,15 +101,16 @@ export function checkAdOutcomes(db: Db, today = localDate()) {
  * stores have none, so they're skipped). Each becomes a store learning for the agent that proposed it; a product that
  * sold 10+ units at a profit pays it once.
  */
-export function checkProductOutcomes(db: Db, today = localDate()) {
+export function checkProductOutcomes(db: Db, today?: string) {
   const tests = db
     .prepare(
       `SELECT t.*, s.currency, a.run_id, p.status FROM product_tests t JOIN stores s ON s.id = t.store_id LEFT JOIN approvals a ON a.id = t.approval_id
        LEFT JOIN products p ON p.store_id = t.store_id AND p.id = t.product_id
        WHERE t.judged_at IS NULL AND s.demo = 0 AND t.added_on <= ? AND ${sinceLive('coalesce(a.decided_at, t.added_on)', 't.store_id')}`,
     )
-    .all(addDays(today, -15));
+    .all(roughly15DaysAgo(today));
   for (const t of tests) {
+    if (!settled(db, String(t.store_id), String(t.added_on), today)) continue;
     const end = addDays(String(t.added_on), 14);
     const s = db
       .prepare(
@@ -157,15 +160,16 @@ const productSales = (db: Db, storeId: string, productId: string, from: string, 
  * before (core's order_items; demo stores have none). A learning either way; more profit is a measured win.
  */
 // ponytail: raw before/after, no seasonality or traffic adjustment; the learning says the windows so the agent can weigh it.
-export function checkPriceOutcomes(db: Db, today = localDate()) {
+export function checkPriceOutcomes(db: Db, today?: string) {
   const tests = db
     .prepare(
       `SELECT t.*, s.currency, a.run_id FROM price_tests t JOIN stores s ON s.id = t.store_id LEFT JOIN approvals a ON a.id = t.approval_id
        WHERE t.judged_at IS NULL AND s.demo = 0 AND t.changed_on <= ? AND ${sinceLive('coalesce(a.decided_at, t.changed_on)', 't.store_id')}`,
     )
-    .all(addDays(today, -15));
+    .all(roughly15DaysAgo(today));
   for (const t of tests) {
     const [storeId, productId, day] = [String(t.store_id), String(t.product_id), String(t.changed_on)];
+    if (!settled(db, storeId, day, today)) continue;
     const before = productSales(db, storeId, productId, addDays(day, -14), addDays(day, -1));
     const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
     db.prepare('UPDATE price_tests SET judged_at = ? WHERE approval_id = ?').run(new Date().toISOString(), String(t.approval_id));
@@ -189,18 +193,19 @@ export function checkPriceOutcomes(db: Db, today = localDate()) {
  * days after publishing vs the 14 before. A learning for the agent that drafted it; more profit is a measured win.
  */
 // ponytail: raw before/after like price tests; a price test on the same product in the window muddies it.
-export function checkPageOutcomes(db: Db, today = localDate()) {
+export function checkPageOutcomes(db: Db, today?: string) {
   const pages = db
     .prepare(
-      `SELECT d.id, d.store_id, d.agent_id, d.run_id, d.product_id, d.title, substr(d.published_at, 1, 10) AS day, s.currency
+      `SELECT d.id, d.store_id, d.agent_id, d.run_id, d.product_id, d.title, d.published_at, s.currency
        FROM page_drafts d JOIN stores s ON s.id = d.store_id
        WHERE d.kind = 'product' AND d.product_id IS NOT NULL AND d.published_at IS NOT NULL AND s.demo = 0 AND substr(d.published_at, 1, 10) <= ?
          AND ${sinceLive('d.published_at', 'd.store_id')}`,
     )
-    .all(addDays(today, -15));
+    .all(roughly15DaysAgo(today));
   for (const d of pages) {
-    if (!once(db, `page-outcome:${d.id}`)) continue;
-    const [storeId, productId, day, agentId] = [String(d.store_id), String(d.product_id), String(d.day), String(d.agent_id)];
+    const [storeId, productId, agentId] = [String(d.store_id), String(d.product_id), String(d.agent_id)];
+    const day = storeDay(db, storeId, String(d.published_at));
+    if (!settled(db, storeId, day, today) || !once(db, `page-outcome:${d.id}`)) continue;
     const before = productSales(db, storeId, productId, addDays(day, -14), addDays(day, -1));
     const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
     if (!before.units && !after.units) continue;
@@ -218,18 +223,19 @@ export function checkPageOutcomes(db: Db, today = localDate()) {
 
 /** Theme changes that went live 15+ days ago: store conversion rate in the 14 days after vs the 14 before, once each. */
 // ponytail: any lift counts as a win, no significance test; small stores need a few thousand sessions a side to mean much.
-export function checkThemeOutcomes(db: Db, today = localDate()) {
+export function checkThemeOutcomes(db: Db, today?: string) {
   const live = db
     .prepare(
-      `SELECT a.id, a.store_id, a.agent_id, a.run_id, a.title, substr(o.at, 1, 10) AS day FROM approvals a
+      `SELECT a.id, a.store_id, a.agent_id, a.run_id, a.title, o.at FROM approvals a
        JOIN done_once o ON o.ref = 'theme-live:' || a.id JOIN stores s ON s.id = a.store_id
        WHERE s.demo = 0 AND substr(o.at, 1, 10) <= ?`,
     )
-    .all(addDays(today, -15));
+    .all(roughly15DaysAgo(today));
   const funnel = db.prepare('SELECT coalesce(sum(orders), 0) AS orders, coalesce(sum(sessions), 0) AS sessions FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?');
   for (const t of live) {
-    if (!once(db, `theme-outcome:${t.id}`)) continue;
-    const [storeId, agentId, day] = [String(t.store_id), String(t.agent_id), String(t.day)];
+    const [storeId, agentId] = [String(t.store_id), String(t.agent_id)];
+    const day = storeDay(db, storeId, String(t.at));
+    if (!settled(db, storeId, day, today) || !once(db, `theme-outcome:${t.id}`)) continue;
     const before = funnel.get(storeId, addDays(day, -14), addDays(day, -1))!;
     const after = funnel.get(storeId, addDays(day, 1), addDays(day, 14))!;
     if (!Number(before.sessions) || !Number(after.sessions)) continue;
@@ -271,12 +277,12 @@ function facts(db: Db): Facts {
 
 /** Today's missions; ones that are complete pay the commander (once). */
 function missions(db: Db, storeIds?: string[]): Mission[] {
-  const to = localDate();
-  const since = midnight();
   return listStores(db)
     .filter((s) => !storeIds?.length || storeIds.includes(s.id))
     .flatMap((s) => {
-      const series = summary(db, [s.id], 30).series;
+      // The store's own today and midnight: a live store in another zone has its day on its own clock.
+      const { series, to } = summary(db, [s.id], 30);
+      const since = new Date(midnight(to, storeZone(db, s.id))).toISOString();
       const today = series.at(-1)?.date === to ? series.at(-1) : undefined;
       const prev = series.filter((p) => p.date !== to).slice(-7);
       const avg = (k: 'revenue' | 'orders') => (prev.length ? prev.reduce((n, p) => n + p[k], 0) / prev.length : 0);

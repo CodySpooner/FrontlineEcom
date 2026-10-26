@@ -9,7 +9,7 @@ export const addDays = (date: string, n: number) => new Date(Date.parse(`${date}
 export const localDate = (now = new Date(), timeZone?: string) => now.toLocaleDateString('en-CA', { timeZone });
 
 /** Epoch ms when `date` starts on the machine, or in IANA `timeZone`. */
-const midnight = (date: string, timeZone?: string) => {
+export const midnight = (date: string, timeZone?: string) => {
   if (!timeZone) return new Date(`${date}T00:00:00`).getTime();
   const utc = Date.parse(`${date}T00:00:00Z`);
   const offset = (t: number) => Date.parse(`${new Date(t).toLocaleString('sv-SE', { timeZone }).replace(' ', 'T')}Z`) - t;

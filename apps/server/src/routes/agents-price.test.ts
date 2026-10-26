@@ -9,6 +9,7 @@ import { seedDemo } from '../demo';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
 import { applyPriceChange } from './agents-actions';
+import { checkPriceOutcomes } from './agents-gamification';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -71,6 +72,24 @@ test("a price that covers the unit cost but not the store's fees is refused", as
   const [refused, sent] = await run('glow', [price(id, floor), price(id, Math.round((floor + 0.5) * 100) / 100)]);
   expect(refused).toBe(`Not sent: $${floor} is at or below the unit cost plus fees ($${floor}).`);
   expect(sent).toMatch(/^Approved by the owner/);
+});
+
+test("a price test is judged once its 14th day after is over in the store's own zone, not this machine's", () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    db.prepare(`UPDATE stores SET demo = 0, connected = 1, timezone = 'Pacific/Honolulu' WHERE id = 'peak'`).run(); // UTC-10
+    once(db, 'activate:peak', new Date('2020-01-01'));
+    db.prepare(`INSERT INTO price_tests (approval_id, store_id, product_id, agent_id, title, from_price, to_price, changed_on) VALUES ('a-late', 'peak', '77', 'peak:market_analyst', 'Grip Socks', 20, 25, '2026-06-01')`).run();
+    const judged = () => db.prepare(`SELECT judged_at FROM price_tests WHERE approval_id = 'a-late'`).get()?.judged_at;
+    vi.setSystemTime(new Date('2026-06-16T07:00:00Z')); // June 15, 9 pm in Honolulu: its 14th day after isn't over
+    checkPriceOutcomes(db);
+    expect(judged()).toBeNull();
+    vi.setSystemTime(new Date('2026-06-16T11:00:00Z')); // June 16 there
+    checkPriceOutcomes(db);
+    expect(judged()).toEqual(expect.any(String));
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("on a real store a price test is judged on profit after the store's fee %, 14 days before vs after, once", async () => {

@@ -5,7 +5,7 @@ import { publish, subscribe } from '../live';
 import { getApproval } from '../approvals';
 import { notify } from '../settings';
 import { localDate } from '../dates';
-import { getStore } from '../stores';
+import { getStore, storeZone } from '../stores';
 import type { ShopifyTheme } from '../connectors/shopify';
 
 /**
@@ -139,7 +139,7 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
     db.prepare('UPDATE products SET price = ?, compare_at = coalesce(?, compare_at) WHERE store_id = ? AND id = ?').run(p.to, compareAt ?? null, store.id, p.productId);
   }
   db.prepare('INSERT OR IGNORE INTO price_tests (approval_id, store_id, product_id, agent_id, title, from_price, to_price, changed_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-    a.id, store.id, p.productId, a.agentId, String(p.title ?? a.title), p.from, p.to, localDate(),
+    a.id, store.id, p.productId, a.agentId, String(p.title ?? a.title), p.from, p.to, localDate(new Date(), storeZone(db, store.id)), // the store's day, as its orders
   );
 }
 
@@ -186,7 +186,7 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
   }
   // Remembered so the product can be judged on its first 14 days of sales (checkProductOutcomes).
   const test = db.prepare('INSERT OR IGNORE INTO product_tests (store_id, product_id, approval_id, agent_id, title, added_on) VALUES (?, ?, ?, ?, ?, ?)');
-  for (const p of added) test.run(store.id, p.id, a.id, a.agentId, p.title, localDate());
+  for (const p of added) test.run(store.id, p.id, a.id, a.agentId, p.title, localDate(new Date(), storeZone(db, store.id)));
   startRun(
     `${store.id}:store_developer`,
     `New draft product(s) just added to ${store.name}: ${added.map((p) => `${p.title} (productId ${p.id})`).join(', ')}. For each, write the product page ` +

@@ -1,8 +1,9 @@
 import { createRunManager, fakeEngine, getAgent, levelForXp, REFLECTION_PROMPT } from '@frontline/agents';
 import type { Achievement, Agent, Commander, LiveMessage, Mission } from '@frontline/shared';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
+import { localDate } from '../dates';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { subscribe } from '../live';
@@ -108,6 +109,20 @@ test('missions: 4 per store; completing one pays the commander once', async () =
   expect(seen.map((s) => s.xp.reason)).toContain('Mission complete: Clear all agent requests');
   expect(await xpMessages(() => get('/api/missions?stores=glow'))).toEqual([]);
   expect((await get<Commander>('/api/commander')).xp - before).toBe(seen.reduce((n, s) => n + s.xp.amount, 0));
+});
+
+test("a live store's daily missions count its own today, not this machine's", async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    const now = new Date('2026-06-16T03:00:00Z'); // June 16, 5 pm in Kiritimati (UTC+14); June 15 across the Americas
+    vi.setSystemTime(now);
+    db.prepare(`UPDATE stores SET demo = 0, timezone = 'Pacific/Kiritimati' WHERE id = 'peak'`).run();
+    db.prepare(`INSERT OR REPLACE INTO daily_metrics (store_id, date, revenue, orders) VALUES ('peak', ?, 4321, 7)`).run(localDate(now, 'Pacific/Kiritimati'));
+    const missions = await get<Mission[]>('/api/missions?stores=peak');
+    expect(missions.filter((m) => /:(revenue|orders)$/.test(m.id)).map((m) => m.progress)).toEqual([4321, 7]);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('achievements unlock from store results and level the commander', async () => {
