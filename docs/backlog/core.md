@@ -21,7 +21,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
       add-to-carts / checkouts per store; `GET /api/events?stores=&limit=` for the initial feed.
 - [x] CORE-06 Approvals API: `GET /api/approvals?status=pending`, `POST /api/approvals/:id/approve|deny`; emits over
       `/api/live`; exposes an in-process hook so the agents lane can create requests and await decisions.
-- [ ] CORE-07 Secrets: encrypted credential store (AES-256-GCM, key file in the data dir; Electron safeStorage later),
+- [x] CORE-07 Secrets: encrypted credential store (AES-256-GCM, key file in the data dir; Electron safeStorage later),
       `integrations` table, API that reports status but never returns secret values.
 - [ ] CORE-08 Shopify connector: Admin GraphQL (custom-app access token first, OAuth later): shop, orders, products,
       inventory; incremental sync into SQLite on an interval; switches the store from demo to real. Fixture-based tests.
@@ -47,6 +47,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-07 secrets: AES-256-GCM (row-bound AAD) with `secret.key` in the data dir, `integrations` table, `GET/PUT /api/integrations`, `DELETE /api/integrations/:id`, `INTEGRATION_KINDS` catalog in shared; secret values never returned
 - 2026-10-26 — CORE-06 approvals: `GET /api/approvals?status=&stores=`, `POST /api/approvals/:id/approve|deny` (404/409), broadcasts on `/api/live`, in-process `approvalsHook(db)` (`create` + awaitable `decision`)
 - 2026-10-26 — CORE-05 `/api/live` WebSocket (`LiveMessage`), `GET /api/events`, demo emitter (8–25s, weighted by store size, backfills a quiet feed, prunes >7d)
 - 2026-10-26 — CORE-04 stores CRUD (`GET/POST /api/stores`, `GET/PATCH/DELETE /api/stores/:id`), validation, new stores start in demo mode with history and get a squad via `createSquad`

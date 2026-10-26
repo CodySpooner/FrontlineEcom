@@ -110,6 +110,18 @@ export const MIGRATIONS = [
   );
   CREATE INDEX approvals_by_status ON approvals (status, created_at);
   `,
+  /* 2 */ `
+  CREATE TABLE integrations (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'connected',
+    error TEXT,
+    settings_json TEXT NOT NULL DEFAULT '{}',
+    encrypted_credentials TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

@@ -238,3 +238,99 @@ export type AgentEvent =
   /** `sessionId` continues the conversation when passed back as `resume`. */
   | { type: 'done'; sessionId: string; usage: RunUsage }
   | { type: 'error'; message: string };
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Integrations (core lane). Secret values never leave the server; the API only says which secret fields are set.
+
+export type IntegrationKind = 'shopify' | 'tiktok_shop' | 'etsy' | 'amazon' | 'woocommerce' | 'meta_ads' | 'google_ads' | 'tiktok_ads' | 'ga4' | 'cj';
+
+export type IntegrationCategory = 'platform' | 'ads' | 'analytics' | 'supplier';
+
+export interface IntegrationField {
+  key: string;
+  label: string;
+  /** Secret fields are encrypted at rest and never returned by the API. */
+  secret: boolean;
+  placeholder?: string;
+}
+
+/** Catalog for the Integrations screen: every field listed is required. `perStore` = connected per store (else global). */
+export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category: IntegrationCategory; perStore: boolean; fields: IntegrationField[] }> = {
+  shopify: { name: 'Shopify', category: 'platform', perStore: true, fields: [
+    { key: 'shopDomain', label: 'Shop domain', secret: false, placeholder: 'your-store.myshopify.com' },
+    { key: 'accessToken', label: 'Admin API access token', secret: true, placeholder: 'shpat_…' },
+  ] },
+  tiktok_shop: { name: 'TikTok Shop', category: 'platform', perStore: true, fields: [
+    { key: 'appKey', label: 'App key', secret: false },
+    { key: 'appSecret', label: 'App secret', secret: true },
+    { key: 'accessToken', label: 'Access token', secret: true },
+  ] },
+  etsy: { name: 'Etsy', category: 'platform', perStore: true, fields: [
+    { key: 'shopId', label: 'Shop ID', secret: false },
+    { key: 'apiKey', label: 'API keystring', secret: true },
+    { key: 'accessToken', label: 'OAuth access token', secret: true },
+  ] },
+  amazon: { name: 'Amazon SP-API', category: 'platform', perStore: true, fields: [
+    { key: 'sellerId', label: 'Seller ID', secret: false },
+    { key: 'region', label: 'Region', secret: false, placeholder: 'na | eu | fe' },
+    { key: 'clientId', label: 'LWA client ID', secret: false },
+    { key: 'clientSecret', label: 'LWA client secret', secret: true },
+    { key: 'refreshToken', label: 'Refresh token', secret: true },
+  ] },
+  woocommerce: { name: 'WooCommerce', category: 'platform', perStore: true, fields: [
+    { key: 'siteUrl', label: 'Site URL', secret: false, placeholder: 'https://yourstore.com' },
+    { key: 'consumerKey', label: 'Consumer key', secret: true, placeholder: 'ck_…' },
+    { key: 'consumerSecret', label: 'Consumer secret', secret: true, placeholder: 'cs_…' },
+  ] },
+  meta_ads: { name: 'Meta Ads', category: 'ads', perStore: true, fields: [
+    { key: 'adAccountId', label: 'Ad account ID', secret: false, placeholder: 'act_…' },
+    { key: 'accessToken', label: 'System user access token', secret: true },
+  ] },
+  google_ads: { name: 'Google Ads', category: 'ads', perStore: true, fields: [
+    { key: 'customerId', label: 'Customer ID', secret: false, placeholder: '123-456-7890' },
+    { key: 'clientId', label: 'OAuth client ID', secret: false },
+    { key: 'clientSecret', label: 'OAuth client secret', secret: true },
+    { key: 'developerToken', label: 'Developer token', secret: true },
+    { key: 'refreshToken', label: 'Refresh token', secret: true },
+  ] },
+  tiktok_ads: { name: 'TikTok Ads', category: 'ads', perStore: true, fields: [
+    { key: 'advertiserId', label: 'Advertiser ID', secret: false },
+    { key: 'accessToken', label: 'Access token', secret: true },
+  ] },
+  ga4: { name: 'Google Analytics 4', category: 'analytics', perStore: true, fields: [
+    { key: 'propertyId', label: 'Property ID', secret: false },
+    { key: 'serviceAccountJson', label: 'Service account JSON', secret: true },
+  ] },
+  cj: { name: 'CJ Dropshipping', category: 'supplier', perStore: false, fields: [
+    { key: 'email', label: 'Account email', secret: false },
+    { key: 'apiKey', label: 'API key', secret: true },
+  ] },
+};
+
+export type IntegrationStatus = 'connected' | 'error';
+
+/** GET /api/integrations?stores=a,b → Integration[] (global ones always included). */
+export interface Integration {
+  id: string;
+  kind: IntegrationKind;
+  /** Absent for global integrations. */
+  storeId?: string;
+  status: IntegrationStatus;
+  /** Last connector error, when status = 'error'. */
+  error?: string;
+  /** Non-secret field values, e.g. { shopDomain }. */
+  settings: Record<string, string>;
+  /** Keys of secret fields that are stored. Values are never returned. */
+  secretsSet: string[];
+  updatedAt: string;
+}
+
+/**
+ * PUT /api/integrations body → the saved Integration. One integration per (kind, store); saving again updates it.
+ * When updating, omitted secret fields keep their stored value.
+ */
+export interface IntegrationInput {
+  kind: IntegrationKind;
+  storeId?: string;
+  values: Record<string, string>;
+}
