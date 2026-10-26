@@ -59,7 +59,7 @@ const SHOP_Q = `{ shop { name currencyCode ianaTimezone } }`;
 const PRODUCTS_Q = `query ($after: String, $q: String) {
   products(first: 50, after: $after, query: $q) {
     nodes { id title status updatedAt totalInventory tracksInventory
-      featuredMedia { preview { image { url } } }
+      featuredMedia { preview { image { url(transform: { maxWidth: 480 }) } } }
       variants(first: 1) { nodes { price compareAtPrice inventoryItem { unitCost { amount } } } } }
     pageInfo { hasNextPage endCursor } } }`;
 const DELETED_Q = `query ($after: String, $q: String) {

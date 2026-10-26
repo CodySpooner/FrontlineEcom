@@ -124,6 +124,8 @@ test('later syncs are incremental and update changed orders in place', async () 
   const second = fakeShopify([refunded]);
   await syncShopify(db, key, 'glow', second.fetchFn, NOW);
   expect(second.calls.find((c) => c.body.query.includes('orders('))!.body.variables.q).toBe("updated_at:>='2026-10-26T17:55:00Z'");
+  // Thumbnails, not the multi-megabyte originals.
+  expect(second.calls.find((c) => c.body.query.includes('products('))!.body.query).toContain('url(transform: { maxWidth: 480 })');
   expect(db.prepare("SELECT revenue, orders FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ revenue: 0, orders: 0 });
 });
 
