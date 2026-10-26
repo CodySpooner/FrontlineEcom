@@ -313,6 +313,17 @@ test('a late approval does not undo a budget the owner moved, nor pause a paused
   expect(outcomes()).toEqual([]);
 });
 
+test("Amazon sales as an extra channel don't count toward an ad change's outcome: the store's ads didn't make them", async () => {
+  approvedChange('a-amz', 'Raise it', 0.5);
+  for (const d of [1, 2, 3].map((n) => addDays(decided(), n))) {
+    const amazon = 3 * Number(db.prepare(`SELECT revenue FROM daily_metrics WHERE store_id = 'peak' AND date = ?`).get(d)!.revenue);
+    db.prepare(`UPDATE daily_metrics SET revenue = revenue + ? WHERE store_id = 'peak' AND date = ?`).run(amazon, d); // as core's rebuild adds it
+    db.prepare(`INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('peak', 'amazon', ?, ?, 9)`).run(d, amazon);
+  }
+  await app.request('/api/commander');
+  expect(outcomes()).toEqual([expect.objectContaining({ text: expect.stringMatching(/^"Raise it" did not help: blended ROAS/) })]);
+});
+
 test('an approved ad change followed by better blended ROAS is a measured win, paid once and remembered', async () => {
   approvedChange('a-win', 'Pause Spark Ads · UGC', 3);
   const xp = () => getAgent(db, 'peak:ad_strategist')!.xp;

@@ -60,6 +60,13 @@ export function economics(db: DatabaseSync, storeId: string, since: string): Eco
 
 /** Blended ROAS (store revenue ÷ ad spend) over [from, to], YYYY-MM-DD inclusive. */
 export function blendedRoas(db: DatabaseSync, storeId: string, from: string, to: string) {
-  const r = db.prepare('SELECT sum(revenue) AS revenue, sum(ad_spend) AS spend FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?').get(storeId, from, to);
+  // Amazon as an extra channel (core's channel_daily) is in the store's revenue, but the store's ads didn't make those sales.
+  const r = db
+    .prepare(
+      `SELECT sum(revenue) - coalesce((SELECT sum(c.revenue) FROM channel_daily c JOIN stores s ON s.id = c.store_id
+         WHERE c.store_id = ?1 AND c.channel = 'amazon' AND s.platform != 'amazon' AND c.date BETWEEN ?2 AND ?3), 0) AS revenue, sum(ad_spend) AS spend
+       FROM daily_metrics WHERE store_id = ?1 AND date BETWEEN ?2 AND ?3`,
+    )
+    .get(storeId, from, to);
   return Number(r?.spend) ? Number(r?.revenue) / Number(r?.spend) : undefined;
 }
