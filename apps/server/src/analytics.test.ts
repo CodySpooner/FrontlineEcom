@@ -3,7 +3,7 @@ import type { AnalyticsSummary, CampaignStats, TopProduct } from '@frontline/sha
 import { createApp } from './app';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { campaignStats, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
+import { campaignStats, salesShares, summarize, topProducts, totalsOf, type MetricRow } from './analytics';
 
 const row = (storeId: string, date: string, revenue: number, adSpend: number, cogs: number, orders: number): MetricRow => ({ storeId, date, revenue, adSpend, cogs, orders });
 
@@ -133,4 +133,18 @@ test('while today is in progress, the previous period\'s last day counts only th
   expect(morning.totals).toEqual(full.totals);
   expect(morning.deltas.revenue).toBe(-25);
   expect(morning.byStore[0]!.deltas.revenue).toBe(-25);
+  // Per store: the share of that day's sales its orders had made by this time.
+  const shared = summarize(rows, { range: 2, to: '2026-11-02', storeIds: ['a'], todayFraction: { a: 0.25 } } as never);
+  expect(shared.previous).toMatchObject({ revenue: 150, orders: 15, adSpend: 12.5 });
+});
+
+test("each store's share of a day's sales by a time of day comes from its paid orders' times, else the clock", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("DELETE FROM orders WHERE store_id IN ('glow', 'peak')").run();
+  const ord = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES ('glow', ?, ?, ?, ?, 'fulfilled', 0, '2026-10-19')");
+  ord.run('#1', '2026-10-19T08:00:00.000Z', 30, 'paid');
+  ord.run('#2', '2026-10-19T20:00:00Z', 90, 'paid');
+  ord.run('#3', '2026-10-19T09:00:00Z', 500, 'refunded');
+  expect(salesShares(db, ['glow', 'peak'], '2026-10-19', new Date('2026-10-19T12:00:00Z'), 0.5)).toEqual({ glow: 0.25, peak: 0.5 });
 });

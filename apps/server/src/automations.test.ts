@@ -145,6 +145,7 @@ test("a metric rule's window is the trailing 24 h per day: steady sales don't re
   const db = openDb();
   seedDemo(db, '2026-10-26');
   db.prepare("DELETE FROM daily_metrics WHERE store_id = 'glow'").run();
+  db.prepare("DELETE FROM orders WHERE store_id = 'glow'").run(); // no order times: the clock stands in
   const now = new Date('2026-10-26T00:15:00'); // machine-local: demo stores are dated on the machine
   const f = dayFraction('2026-10-26', now.getTime());
   const day = db.prepare("INSERT INTO daily_metrics (store_id, date, revenue, ad_spend, cogs, orders) VALUES ('glow', ?, ?, ?, 0, ?)");
@@ -154,4 +155,20 @@ test("a metric rule's window is the trailing 24 h per day: steady sales don't re
   expect(metricValue(db, 'glow', 'revenue', 3, now)).toBeCloseTo(3000, 0);
   expect(metricValue(db, 'glow', 'roas', 1, now)).toBe(4);
   expect(metricValue(db, 'glow', 'revenue', 1, now)! < 800).toBe(false); // 'Revenue < 800 over 1 day' stays quiet
+});
+
+test("a metric rule's oldest day gives up only the share of sales its orders had made by this time of day", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("DELETE FROM daily_metrics WHERE store_id = 'glow'").run();
+  db.prepare("DELETE FROM orders WHERE store_id = 'glow'").run();
+  const now = new Date('2026-10-26T09:00:00'); // machine-local
+  const day = db.prepare("INSERT INTO daily_metrics (store_id, date, revenue, ad_spend, cogs, orders) VALUES ('glow', ?, ?, 0, 0, ?)");
+  day.run('2026-10-25', 1000, 2);
+  day.run('2026-10-26', 50, 1);
+  // Yesterday sold mostly in the evening: by 9:00 it had made 100 of its 1000.
+  const ord = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES ('glow', ?, ?, ?, 'paid', 'fulfilled', 0, '2026-10-25')");
+  ord.run('#1', new Date('2026-10-25T08:00:00').toISOString(), 100);
+  ord.run('#2', new Date('2026-10-25T20:00:00').toISOString(), 900);
+  expect(metricValue(db, 'glow', 'revenue', 1, now)).toBeCloseTo(950, 0); // the clock would say 675
 });

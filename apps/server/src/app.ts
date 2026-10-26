@@ -4,7 +4,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import { Hono } from 'hono';
 import { WebSocketServer } from 'ws';
 import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type ApprovalStatus, type StoreInput } from '@frontline/shared';
-import { campaignStats, loadRows, summarize, topProducts } from './analytics';
+import { campaignStats, loadRows, salesShares, summarize, topProducts } from './analytics';
 import { decide, listApprovals } from './approvals';
 import { automationRoutes } from './automations';
 import { actionRoutes } from './actions';
@@ -35,13 +35,15 @@ const pickStores = (db: Db, q?: string) => {
 const json = (req: Request): Promise<unknown> => req.json().catch(() => undefined);
 
 /**
- * Today for an analytics window over `storeIds`, in the first store's day zone (a connected shop's own timezone).
+ * Today for an analytics window over `storeIds`, in the first store's day zone (a connected shop's own timezone), and
+ * each store's share of the comparison day (`range` days back) made by the same time.
  * ponytail: one reference zone for a mix of stores; a store in another zone is off by its offset at the window edges.
  */
-const windowEnd = (db: Db, storeIds: string[]) => {
+const windowEnd = (db: Db, storeIds: string[], range = 1) => {
   const tz = storeZone(db, storeIds[0]);
-  const to = localDate(new Date(), tz);
-  return { to, todayFraction: dayFraction(to, Date.now(), tz) };
+  const now = Date.now();
+  const to = localDate(new Date(now), tz);
+  return { to, todayFraction: salesShares(db, storeIds, addDays(to, -range), new Date(now - range * 86_400_000), dayFraction(to, now, tz)) };
 };
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
@@ -152,7 +154,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
       const storeIds = pickStores(db, c.req.query('stores'));
-      const { to, todayFraction } = windowEnd(db, storeIds);
+      const { to, todayFraction } = windowEnd(db, storeIds, range);
       const { currency, unconverted } = fxFor(db, storeIds);
       return c.json({ ...summarize(loadRows(db, storeIds, range, to), { range, to, storeIds, todayFraction }), currency, ...(unconverted.length ? { unconverted } : {}) });
     })

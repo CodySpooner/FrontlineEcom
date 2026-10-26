@@ -42,19 +42,37 @@ const deltasOf = (c: MetricTotals, p: MetricTotals) =>
   Object.fromEntries(Object.keys(c).map((k) => [k, pct(c[k as keyof MetricTotals], p[k as keyof MetricTotals])])) as unknown as MetricTotals;
 
 /**
- * Pure: aggregates rows into the selected period ending at `to` and the preceding period of the same length.
- * `todayFraction` < 1 means `to` is still in progress: the previous period's last day then counts only that share,
- * so deltas compare like with like instead of a partial day against a full one.
+ * Each store's share of `day`'s sales made before `cutoff`, from its paid orders' times (sales aren't spread evenly over
+ * the day: a morning holds less than its hours' share). `clock` stands in for a store with no orders that day.
  */
-export function summarize(rows: MetricRow[], { range, to, storeIds, todayFraction = 1 }: { range: AnalyticsRange; to: string; storeIds: string[]; todayFraction?: number }): AnalyticsSummary {
+export function salesShares(db: Db, storeIds: string[], day: string, cutoff: Date, clock: number): Record<string, number> {
+  const q = db.prepare(
+    `SELECT coalesce(sum(total), 0) AS total, coalesce(sum(CASE WHEN julianday(created_at) < julianday(?) THEN total END), 0) AS before
+     FROM orders WHERE store_id = ? AND local_date = ? AND status = 'paid'`,
+  );
+  return Object.fromEntries(storeIds.map((id) => {
+    const r = q.get(cutoff.toISOString(), id, day)!;
+    return [id, Number(r.total) > 0 ? Number(r.before) / Number(r.total) : clock];
+  }));
+}
+
+/**
+ * Pure: aggregates rows into the selected period ending at `to` and the preceding period of the same length.
+ * `todayFraction` < 1 means `to` is still in progress: the previous period's last day then counts only that share (one
+ * for all stores, or per store from salesShares), so deltas compare like with like instead of a partial day against a full one.
+ */
+export function summarize(rows: MetricRow[], { range, to, storeIds, todayFraction = 1 }: { range: AnalyticsRange; to: string; storeIds: string[]; todayFraction?: number | Record<string, number> }): AnalyticsSummary {
   const from = addDays(to, 1 - range);
   const prevFrom = addDays(from, -range);
   const prevLast = addDays(from, -1);
   const cur = rows.filter((r) => r.date >= from && r.date <= to);
-  // ponytail: assumes sales spread evenly over the day; hourly data would sharpen "same time yesterday".
+  const share = (storeId: string) => (typeof todayFraction === 'number' ? todayFraction : (todayFraction[storeId] ?? 1));
   const prev = rows
     .filter((r) => r.date >= prevFrom && r.date < from)
-    .map((r) => (r.date === prevLast && todayFraction < 1 ? { ...r, revenue: r.revenue * todayFraction, adSpend: r.adSpend * todayFraction, cogs: r.cogs * todayFraction, orders: Math.round(r.orders * todayFraction) } : r));
+    .map((r) => {
+      const f = share(r.storeId);
+      return r.date === prevLast && f < 1 ? { ...r, revenue: r.revenue * f, adSpend: r.adSpend * f, cogs: r.cogs * f, orders: Math.round(r.orders * f) } : r;
+    });
   const totals = totalsOf(cur);
   const previous = totalsOf(prev);
   const series = Array.from({ length: range }, (_, i) => {

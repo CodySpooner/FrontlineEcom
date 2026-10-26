@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import type { AnalyticsRange, AutomationRule, AutomationRun, AutomationRunStatus, AutomationTrigger, MetricTotals } from '@frontline/shared';
-import { loadRows, totalsOf } from './analytics';
+import { loadRows, salesShares, totalsOf } from './analytics';
 import { approvalsHook } from './approvals';
 import { cronDueBetween, nextCronTime, parseCron } from './cron';
 import { addDays, dayFraction, localDate } from './dates';
@@ -104,8 +104,8 @@ export function metricValue(db: Db, storeId: string, metric: keyof MetricTotals,
   const tz = storeZone(db, storeId);
   const today = localDate(now, tz);
   const oldest = addDays(today, -windowDays);
-  const left = 1 - dayFraction(today, now.getTime(), tz);
-  // ponytail: assumes sales spread evenly over the day, like summarize's todayFraction.
+  // The oldest day counts the share of its sales made after this time of day (by its orders' times, else the clock).
+  const left = 1 - salesShares(db, [storeId], oldest, new Date(now.getTime() - windowDays * 86_400_000), dayFraction(today, now.getTime(), tz))[storeId]!;
   const rows = loadRows(db, [storeId], windowDays as AnalyticsRange, today)
     .filter((r) => r.date >= oldest)
     .map((r) => (r.date === oldest ? { ...r, revenue: r.revenue * left, adSpend: r.adSpend * left, cogs: r.cogs * left, orders: Math.round(r.orders * left) } : r));
