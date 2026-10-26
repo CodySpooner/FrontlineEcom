@@ -233,20 +233,21 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'list_products',
     description:
-      'The store catalog, best sellers first: price, compare-at, unit cost ("not set" when nobody entered one; margin then blank), margin % (after unit cost and the fee estimate set for the store: its % plus its per-order fee, as if one unit per order), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last 30 days, revenue net of Amazon refunds (CSV).',
+      'The store catalog, best sellers first: price, compare-at, unit cost ("not set" when nobody entered one; margin then blank), margin % (after unit cost and the fee estimate set for the store: its % plus its per-order fee, as if one unit per order), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last `days` days (default 30), revenue net of Amazon refunds (CSV).',
     input: {
       status: z.enum(['active', 'draft', 'archived']).optional().describe('default: active and draft (archived = deleted or trashed on the platform)'),
+      days: z.number().int().min(1).max(90).default(30).describe('sales window, e.g. 7 for the week'),
       limit: z.number().int().min(1).max(500).default(100),
     },
-    run: async ({ status, limit }, ctx) =>
-      amazonUnsplit(ctx) +
+    run: async ({ status, days, limit }, ctx) =>
+      amazonUnsplit(ctx, days) +
       csv(
         ctx.db
           .prepare(
             `SELECT p.id, p.title, p.price, p.compare_at, iif(p.cost > 0, p.cost, 'not set') AS cost,
                iif(p.cost > 0, round(100.0 * (p.price * (1 - (SELECT fee_percent FROM stores WHERE id = p.store_id) / 100.0) - (SELECT fee_per_order FROM stores WHERE id = p.store_id) - p.cost) / nullif(p.price, 0), 1), NULL) AS margin_pct,
                CASE WHEN p.inventory_tracked THEN p.inventory ELSE 'not tracked' END AS inventory, p.status,
-               coalesce(s.units, 0) AS units_30d, round(coalesce(s.revenue, 0), 2) AS revenue_30d
+               coalesce(s.units, 0) AS units_${days}d, round(coalesce(s.revenue, 0), 2) AS revenue_${days}d
              FROM products p LEFT JOIN (
                SELECT product_id, sum(units) AS units, sum(revenue) AS revenue FROM (
                  SELECT i.product_id, i.quantity AS units, i.revenue
@@ -258,9 +259,9 @@ export const APP_TOOLS: AppTool[] = [
                  WHERE r.store_id = ? AND o.status = 'paid' AND o.local_date >= ?
                ) GROUP BY product_id
              ) s ON s.product_id = p.id
-             WHERE p.store_id = ? ${status ? 'AND p.status = ?' : "AND p.status != 'archived'"} ORDER BY revenue_30d DESC, p.title LIMIT ?`,
+             WHERE p.store_id = ? ${status ? 'AND p.status = ?' : "AND p.status != 'archived'"} ORDER BY revenue_${days}d DESC, p.title LIMIT ?`,
           )
-          .all(...([ctx.store.id, since(30, ctx.store), ctx.store.id, since(30, ctx.store), ctx.store.id, ...(status ? [status] : []), limit] as string[])),
+          .all(...([ctx.store.id, since(days, ctx.store), ctx.store.id, since(days, ctx.store), ctx.store.id, ...(status ? [status] : []), limit] as string[])),
       ),
   }),
   defineTool({
@@ -1069,13 +1070,13 @@ const idleNote = (ctx: ToolContext, shown: number) => {
 };
 
 /** Amazon as an extra channel (core's channel_daily) comes as daily totals: say its sales aren't in per-product numbers. */
-function amazonUnsplit(ctx: ToolContext): string {
+function amazonUnsplit(ctx: ToolContext, days: number): string {
   if (ctx.store.platform === 'amazon') return '';
   const r = ctx.db
     .prepare(`SELECT sum(orders) AS orders, round(sum(revenue), 2) AS revenue FROM channel_daily WHERE store_id = ? AND channel = 'amazon' AND date >= ?`)
-    .get(ctx.store.id, since(30, ctx.store));
+    .get(ctx.store.id, since(days, ctx.store));
   return Number(r?.orders)
-    ? `(units_30d and revenue_30d are this store's own orders: its ${Number(r!.orders)} Amazon channel orders (${Number(r!.revenue)} ${ctx.store.currency}) in 30 days aren't split by product, so a product can sell there and show 0 here.)\n`
+    ? `(units_${days}d and revenue_${days}d are this store's own orders: its ${Number(r!.orders)} Amazon channel orders (${Number(r!.revenue)} ${ctx.store.currency}) in ${days} days aren't split by product, so a product can sell there and show 0 here.)\n`
     : '';
 }
 

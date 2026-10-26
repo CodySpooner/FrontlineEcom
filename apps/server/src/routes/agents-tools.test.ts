@@ -155,15 +155,17 @@ describe('agent tools on demo data', () => {
       { call: 'metrics_timeseries', input: { days: 3 } },
       { call: 'list_products' },
       { call: 'list_orders', input: { days: 7 } },
+      { call: 'list_products', input: { days: 7 } },
       { call: 'list_campaigns' },
       done,
     ]);
-    const [summary, series, products, orders, campaigns] = results(events);
+    const [summary, series, products, orders, week, campaigns] = results(events);
     expect(summary?.isError).toBe(false);
     expect(JSON.parse(summary!.output)).toMatchObject({ currency: 'USD', totals: { revenue: expect.any(Number), roas: expect.any(Number) }, health: { status: expect.stringMatching(/^(winning|steady|bleeding)$/) } });
     expect(series!.output.split('\n')[0]).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts');
     expect(series!.output.split('\n').length).toBeGreaterThanOrEqual(3);
     expect(products!.output).toMatch(/^id,title,price,compare_at,cost,margin_pct,inventory,status,units_30d,revenue_30d\n/);
+    expect(week!.output).toMatch(/^id,title,price,compare_at,cost,margin_pct,inventory,status,units_7d,revenue_7d\n/); // the week's, for the weekly report
     expect(orders!.output).toMatch(/^counts: .+\n# By supplier\nsupplier,orders,unfulfilled_3d_plus,in_transit_10d_plus,refunded,open_issues\n/);
     expect(orders!.output).toContain('\n# Orders (the newest 100; older ones are cut: stale true lists the late ones, oldest first)\nid,created_at,total,status,fulfillment_status,supplier,tracking\n');
     expect(campaigns!.output).toMatch(/^network,id,name,status,daily_budget,spend,revenue,purchases,clicks,impressions,roas,cpa,ctr_pct\n/);

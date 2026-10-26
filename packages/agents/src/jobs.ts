@@ -72,7 +72,7 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
     role: 'market_analyst',
     cron: '0 9 * * 1',
     task:
-      'Weekly report: last 7 days vs the 7 before (revenue, profit, ROAS, orders, AOV), best and worst products and campaigns, what the squad shipped ' +
+      'Weekly report: last 7 days vs the 7 before (revenue, profit, ROAS, orders, AOV), best and worst products (list_products with days 7) and campaigns, what the squad shipped ' +
       '(squad_log: approved requests and finished work) and what its measured outcomes say worked, and the 3 priorities for next week with owners. Under 250 words.',
   },
 ];
@@ -86,7 +86,7 @@ const FORMER_TASKS: Record<string, string[]> = {
   'Daily product scan': ['fcd2db3f4ef9'],
   'Daily order check': ['4b257766a792', '68b5e9e81338'],
   'Weekly price check': ['024e94fbffb1'],
-  'Weekly report': ['9f9632c36fba', '8f6e01cc2448'],
+  'Weekly report': ['9f9632c36fba', '8f6e01cc2448', 'fa3ff3a95b54'],
 };
 const taskHash = (task: string) => createHash('sha256').update(task).digest('hex').slice(0, 12);
 

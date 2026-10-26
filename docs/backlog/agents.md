@@ -286,11 +286,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-158 A page draft with an HTML tag in its title is refused when saved. Core's publish refuses it (themes show titles as they are), so it failed only at approval, after the owner had reviewed it (core inbox).
 - [x] AGT-159 A product request priced below its own cost isn't sent. `request_approval` passed `store.add_products` on unchecked, so a product priced under its unit cost (price and cost swapped, or USD research numbers on a store in another currency) was created as asked, and one with no title or price was approved, then silently skipped.
 - [x] AGT-160 An ad change that changes nothing isn't sent. `propose_ad_change` asked to pause an already paused campaign, change a paused one's budget, or set the budget it already had; once approved, each was judged 3 days later on whatever else moved ROAS, and could win the Ad Strategist XP for doing nothing.
+- [x] AGT-161 The weekly report's best and worst products are the week's. Its job asks for them over the last 7 days, but `list_products` only gave 30-day units and revenue, so the report ranked the month's.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-161: `list_products` takes `days` (1-90, default 30; columns `units_<n>d` / `revenue_<n>d`, the Amazon-channel note too) and the Weekly report job asks for `days 7` (its old text's hash added so unedited jobs move to it).
 - 2026-10-26 — AGT-160: `propose_ad_change` refuses a campaign whose status is idle (`IDLE_CAMPAIGN_STATUSES`: paused, archived, deleted) and a budget equal to the current one (after rounding).
 - 2026-10-26 — AGT-159: `store.add_products` requests need each product's title and a price above 0, and a costed product's price above its cost plus the store's fee estimate (`priceFloor`, now shared with `propose_price_change`).
 - 2026-10-26 — AGT-158 (core inbox): `draft_page` refuses a title or SEO title matching core's `hasTag` (`<` then a letter, `!`, `/` or `?`); a bare `<` like "< $20" stays text.
