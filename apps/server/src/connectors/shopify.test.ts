@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import type { AnalyticsSummary, Integration, Order, Page, Product, Store } from '@frontline/shared';
 import { createApp } from '../app';
 import { openDb } from '../db';
@@ -369,4 +369,30 @@ test('an order with more than 10 line items gets the rest before its cogs and be
   expect(asked).toEqual([{ id: 'gid://shopify/Order/2001', after: 'c10' }]);
   expect(db.prepare("SELECT cogs FROM orders WHERE store_id = 'glow' AND id = '#2001'").get()?.cogs).toBe(24);
   expect(db.prepare("SELECT count(*) AS n FROM order_items WHERE store_id = 'glow' AND order_id = '#2001'").get()?.n).toBe(12);
+});
+
+test('a throttled query waits for the cost bucket to refill and runs again instead of failing the sync', async () => {
+  const { db } = await setup();
+  const shop = fakeShopify([order('#1001', '2026-10-25T09:00:00Z', '100.00')]).fetchFn;
+  let throttled = 0;
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    if (!String(init.body).includes('orders(') || throttled++) return shop(url, init);
+    return Response.json({
+      errors: [{ message: 'Throttled', extensions: { code: 'THROTTLED' } }],
+      extensions: { cost: { requestedQueryCost: 938, actualQueryCost: null, throttleStatus: { maximumAvailable: 2000, currentlyAvailable: 638, restoreRate: 100 } } },
+    });
+  }) as typeof fetch;
+  vi.useFakeTimers({ toFake: ['setTimeout'] });
+  try {
+    const sync = syncShopify(db, key, 'glow', fetchFn, NOW);
+    await vi.advanceTimersByTimeAsync(2999); // (938 - 638) / 100 = 3 s
+    expect(throttled).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    await sync;
+  } finally {
+    vi.useRealTimers();
+  }
+  expect(throttled).toBe(2);
+  expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'shopify:glow'").get()).toMatchObject({ status: 'connected', error: null });
+  expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow' AND id = '#1001'").get()?.n).toBe(1);
 });

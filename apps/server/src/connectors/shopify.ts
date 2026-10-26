@@ -86,19 +86,37 @@ export function shopHost(domain: string) {
   return host;
 }
 
+interface GqlBody<T> {
+  data?: T;
+  errors?: { message: string; extensions?: { code?: string } }[];
+  extensions?: { cost?: { requestedQueryCost: number; throttleStatus: { currentlyAvailable: number; restoreRate: number } } };
+}
+
+/**
+ * A query runs only when the app's cost bucket holds its requested cost (an orders page asks 938), so a long sync drains
+ * it within a few pages. A throttled query waits until the bucket has refilled enough (at least 1 s) and runs again.
+ */
 async function gql<T>(host: string, token: string, query: string, variables: Record<string, unknown>, fetchFn: Fetch): Promise<T> {
-  const res = await fetchFn(`https://${host}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'X-Shopify-Access-Token': token },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (res.status === 401 || res.status === 403) {
-    throw Object.assign(new Error(`Shopify rejected the access token (HTTP ${res.status}); check that the app is installed on this store with the scopes it needs`), { auth: true });
+  for (let attempt = 1; ; attempt++) {
+    const res = await fetchFn(`https://${host}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Shopify-Access-Token': token },
+      body: JSON.stringify({ query, variables }),
+    });
+    if (res.status === 401 || res.status === 403) {
+      throw Object.assign(new Error(`Shopify rejected the access token (HTTP ${res.status}); check that the app is installed on this store with the scopes it needs`), { auth: true });
+    }
+    if (!res.ok) throw new Error(`Shopify returned HTTP ${res.status}`);
+    const body = (await res.json()) as GqlBody<T>;
+    const cost = body.extensions?.cost;
+    if (attempt < 10 && body.errors?.some((e) => e.extensions?.code === 'THROTTLED')) {
+      const refill = cost ? ((cost.requestedQueryCost - cost.throttleStatus.currentlyAvailable) / cost.throttleStatus.restoreRate) * 1000 : 0;
+      await new Promise((r) => setTimeout(r, Math.max(1000, Math.ceil(refill))));
+      continue;
+    }
+    if (body.errors?.length || !body.data) throw new Error(`Shopify: ${body.errors?.map((e) => e.message).join('; ') ?? 'empty response'}`);
+    return body.data;
   }
-  if (!res.ok) throw new Error(`Shopify returned HTTP ${res.status}`);
-  const body = (await res.json()) as { data?: T; errors?: { message: string }[] };
-  if (body.errors?.length || !body.data) throw new Error(`Shopify: ${body.errors?.map((e) => e.message).join('; ') ?? 'empty response'}`);
-  return body.data;
 }
 
 async function all<N>(fetchPage: (after: string | null) => Promise<{ nodes: N[]; pageInfo: PageInfo }>): Promise<N[]> {
