@@ -24,6 +24,37 @@ const STORE_PAGES = [
   },
 ];
 
+const coreFlows = (store: string) => [
+  {
+    match: /welcome/i, name: 'Welcome series', trigger: 'Joined the email or SMS list; exclude anyone who already ordered',
+    messages: [
+      { delayHours: 0, channel: 'email', subject: `Welcome to ${store}`, preview: 'Your first-order code is inside', body: 'Who we are in two lines, the best sellers, and a first-order code.' },
+      { delayHours: 48, channel: 'email', subject: 'Why customers pick us', preview: 'Reviews from real buyers', body: 'Three short reviews, shipping and returns, the code again.' },
+    ],
+  },
+  {
+    match: /abandon|cart|checkout/i, name: 'Checkout abandonment', trigger: 'Checkout started, no order within 1 hour; exclude anyone who bought in the last 30 days',
+    messages: [
+      { delayHours: 1, channel: 'email', subject: 'You left something behind', preview: 'Your cart is saved', body: 'The product, 3 short reviews, shipping times, one-click return to checkout.' },
+      { delayHours: 24, channel: 'sms', body: `${store}: your cart is saved for 24h. Reply STOP to opt out.` },
+    ],
+  },
+  {
+    match: /post-purchase|after (an |the )?order|thank/i, name: 'Post-purchase', trigger: 'Order placed; exclude refunded orders',
+    messages: [
+      { delayHours: 1, channel: 'email', subject: 'Thanks for your order', preview: 'Here is what happens next', body: 'Shipping timeline, how to use it, who to contact.' },
+      { delayHours: 24 * 14, channel: 'email', subject: 'How is it going?', preview: 'A quick review helps a lot', body: 'Ask for a review, then show what pairs well with it.' },
+    ],
+  },
+  {
+    match: /win-?back|lapsed|inactive/i, name: 'Win-back', trigger: 'No order in 90 days since the last one; exclude unsubscribed',
+    messages: [
+      { delayHours: 0, channel: 'email', subject: 'We miss you', preview: 'Something new since your last order', body: 'What is new, the best seller, a comeback code.' },
+      { delayHours: 72, channel: 'sms', body: `${store}: your comeback code ends tonight. Reply STOP to opt out.` },
+    ],
+  },
+];
+
 function demoWork(input: RunInput): FakeStep[] {
   const db = input.env!.db;
   const storeId = input.store.id;
@@ -143,19 +174,14 @@ function demoWork(input: RunInput): FakeStep[] {
           }))
         : [];
     }
-    case 'email_sms':
-      return [{
-        call: 'draft_flow',
-        input: {
-          name: 'Checkout abandonment',
-          trigger: 'Checkout started, no order within 1 hour; exclude anyone who bought in the last 30 days',
-          messages: [
-            { delayHours: 1, channel: 'email', subject: 'You left something behind', preview: 'Your cart is saved', body: 'The product, 3 short reviews, shipping times, one-click return to checkout.' },
-            { delayHours: 24, channel: 'sms', body: `${input.store.name}: your cart is saved for 24h. Reply STOP to opt out.` },
-          ],
-          notes: 'Demo flow: the standard 2-step recovery; size it with the real checkout numbers before setting it up.',
-        },
-      }];
+    case 'email_sms': {
+      // The flow the task names, else the first of the four core flows the store's library lacks (the monthly check's order).
+      const flows = coreFlows(input.store.name);
+      const have = new Set(db.prepare('SELECT name FROM flow_drafts WHERE store_id = ?').all(storeId).map((r) => String(r.name)));
+      const flow = flows.find((f) => f.match.test(input.task)) ?? flows.find((f) => !have.has(f.name)) ?? flows[1]!;
+      const { match: _, ...draft } = flow;
+      return [{ call: 'draft_flow', input: { ...draft, notes: 'Demo flow: a standard starting point; size it with the real numbers before setting it up.' } }];
+    }
     default:
       return [];
   }

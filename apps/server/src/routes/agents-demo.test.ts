@@ -39,7 +39,7 @@ test('demo runs do one real, non-blocking piece of each role’s work', async ()
   expect(listOrderIssues(db, { storeIds: ['glow'], status: 'open' }).map((i) => i.orderId)).not.toContain(orderId); // resolved stays resolved
 
   await go('glow:email_sms', 'Plan retention flows');
-  expect(listFlowDrafts(db, { storeIds: ['glow'] }).map((f) => f.name)).toEqual(['Checkout abandonment']);
+  expect(listFlowDrafts(db, { storeIds: ['glow'] }).map((f) => f.name)).toEqual(['Welcome series']); // the first core flow it lacks
 
   await go('glow:ad_strategist', 'Review campaigns');
   expect(db.prepare('SELECT count(*) AS n FROM approvals WHERE run_id IS NOT NULL').get()?.n).toBe(0); // demo runs never wait on the owner
@@ -138,6 +138,17 @@ test("demo Ad Copy leads with the brief's offer, else a new hook each time", asy
   const first = await write('Headline for busy mornings.');
   expect((await write('Same product, new angle.')).headline).not.toBe(first.headline);
   expect(await write('Meta ad for busy dog owners, 20% off this week.')).toMatchObject({ headline: expect.stringMatching(/: 20% off this week$/), primaryText: expect.stringContaining(', 20% off for a limited time.') });
+});
+
+test('demo Email/SMS drafts the flow it is asked for, else the next missing core flow', async () => {
+  const names = async (task: string) => {
+    await go('glow:email_sms', task);
+    return listFlowDrafts(db, { storeIds: ['glow'] }).map((f) => f.name).sort();
+  };
+  expect(await names('Design a welcome series flow for new subscribers: trigger, timing, and the copy for every email and SMS. Save it to the flow library.')).toEqual(['Welcome series']);
+  expect(await names('Plan retention flows')).toEqual(['Checkout abandonment', 'Welcome series']);
+  expect(await names('Plan retention flows')).toEqual(['Checkout abandonment', 'Post-purchase', 'Welcome series']);
+  expect(await names('A win-back flow for lapsed buyers')).toContain('Win-back');
 });
 
 test("a demo Ask AI question reads the data it's about", async () => {
