@@ -3,7 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
 import { AGENT_ROLES, type Agent, type AgentRole, type Autonomy, type MemoryKind, type RunStatus } from '@frontline/shared';
-import { useAddMemory, useAgents, useCaps, useForgetMemory, useMemory, useRun, useRuns, useUpdateAgent } from '../api/client';
+import { useAddMemory, useAgents, useCaps, useForgetMemory, useForgetNicheLearning, useMemory, useNicheLearnings, useRun, useRuns, useStores, useUpdateAgent } from '../api/client';
 import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
 import { Hero } from '../components/Hero';
@@ -84,7 +84,12 @@ export function AgentDetail() {
             }}
           />
         )}
-        {tab === 'memory' && <Memory agent={agent} />}
+        {tab === 'memory' && (
+          <div className="grid gap-3.5">
+            <Memory agent={agent} />
+            <NicheLearnings storeId={agent.storeId} />
+          </div>
+        )}
         {tab === 'settings' && <AgentSettings agent={agent} />}
       </div>
     </>
@@ -160,6 +165,52 @@ const KINDS: { value: MemoryKind; label: string }[] = [
   { value: 'learning', label: 'Learning' },
   { value: 'preference', label: 'Preference' },
 ];
+
+/** Owner-approved learnings every store in this niche sees (promoted from one store's memory). */
+function NicheLearnings({ storeId }: { storeId: string }) {
+  const store = useStores().data?.find((s) => s.id === storeId);
+  // ponytail: custom ("other") niches key on a slug of nicheDetail computed in packages/agents; asked agents for ?store= so we don't copy it.
+  const niche = store && store.niche !== 'other' ? store.niche : '';
+  const q = useNicheLearnings(niche);
+  const forget = useForgetNicheLearning();
+  const { name } = useStoreSelection();
+  if (!niche) return null;
+  return (
+    <Panel title={`Shared with all ${niche} stores`} sub="Learnings you approved for the whole niche. Every squad in it sees them.">
+      {q.isPending ? (
+        <LoadingState rows={2} />
+      ) : q.isError ? (
+        <ErrorState message="Couldn't load the niche learnings." onRetry={() => q.refetch()} />
+      ) : !q.data.length ? (
+        <p className="text-[13px] text-muted">None yet. When an agent finds something every {niche} store should know, it asks you to share it here.</p>
+      ) : (
+        <ul className="grid gap-2">
+          {q.data.map((l) => (
+            <li key={l.id} className="flex items-start justify-between gap-4 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
+              <div className="min-w-0">
+                <p className="text-[13px]">{l.text}</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  {l.storeId && `Learned in ${name(l.storeId)} · `}
+                  {ago(l.createdAt, Date.now())}
+                  {l.evidence && ` · ${l.evidence}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => forget.mutate(l.id)}
+                disabled={forget.isPending}
+                aria-label={`Stop sharing: ${l.text}`}
+                className="cursor-pointer rounded-md p-1.5 text-muted transition hover:bg-panel-2 hover:text-red"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
 
 function Memory({ agent }: { agent: Agent }) {
   const { name } = useStoreSelection();

@@ -16,6 +16,7 @@ import type {
   CreativeKind,
   LiveMessage,
   MemoryInput,
+  NicheLearning,
   Mission,
   Page,
   Product,
@@ -155,6 +156,17 @@ export function useAddToStore() {
   });
 }
 
+export const useNicheLearnings = (niche: string) =>
+  useQuery({ queryKey: ['niche-learnings', niche], queryFn: () => api<NicheLearning[]>(`/api/niche-learnings?niche=${encodeURIComponent(niche)}`), enabled: !!niche });
+
+export function useForgetNicheLearning() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/api/niche-learnings/${id}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['niche-learnings'] }),
+  });
+}
+
 export const useProducts = (storeIds: string[]) =>
   useQuery({ queryKey: ['products', storeIds], queryFn: () => api<Page<Product>>(`/api/products?stores=${storeIds.join(',')}&limit=200`) });
 
@@ -195,6 +207,7 @@ export function useLive() {
       if (m.type === 'xp') qc.invalidateQueries({ queryKey: ['agents'] });
       else if (m.type === 'approval') {
         qc.invalidateQueries({ queryKey: ['agents'] });
+        if (m.approval.status === 'approved') qc.invalidateQueries({ queryKey: ['niche-learnings'] });
         // A decided request lingers ~1s so its "Approved"/"Denied" verdict shows before the row drops.
         setTimeout(() => qc.invalidateQueries({ queryKey: ['approvals'] }), m.approval.status === 'pending' ? 0 : 1000);
       }
