@@ -108,6 +108,42 @@ export function checkProductOutcomes(db: Db, today = localDate()) {
   }
 }
 
+/**
+ * Price tests on real stores, 15+ days after the change: the product's gross profit in the 14 days after vs the 14
+ * before (core's order_items; demo stores have none). A learning either way; more gross profit is a measured win.
+ */
+// ponytail: raw before/after, no seasonality or traffic adjustment; the learning says the windows so the agent can weigh it.
+export function checkPriceOutcomes(db: Db, today = localDate()) {
+  const tests = db
+    .prepare(
+      `SELECT t.*, s.currency, a.run_id FROM price_tests t JOIN stores s ON s.id = t.store_id LEFT JOIN approvals a ON a.id = t.approval_id
+       WHERE t.judged_at IS NULL AND s.demo = 0 AND t.changed_on <= ?`,
+    )
+    .all(addDays(today, -15));
+  const sales = db.prepare(
+    `SELECT coalesce(sum(i.quantity), 0) AS units, coalesce(sum(i.revenue - i.cost), 0) AS profit
+     FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+     WHERE i.store_id = ? AND i.product_id = ? AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?`,
+  );
+  for (const t of tests) {
+    const [storeId, productId, day] = [String(t.store_id), String(t.product_id), String(t.changed_on)];
+    const before = sales.get(storeId, productId, addDays(day, -14), addDays(day, -1))!;
+    const after = sales.get(storeId, productId, addDays(day, 1), addDays(day, 14))!;
+    db.prepare('UPDATE price_tests SET judged_at = ? WHERE approval_id = ?').run(new Date().toISOString(), String(t.approval_id));
+    if (!Number(before.units) && !Number(after.units)) continue; // no sales either side: nothing to learn
+    const worked = Number(after.profit) > Number(before.profit);
+    const money = (n: unknown) => `${Math.round(Number(n)).toLocaleString('en-US')} ${t.currency}`;
+    const agentId = String(t.agent_id);
+    writeMemory(db, {
+      storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'pricing'],
+      text: `Pricing "${t.title}" $${t.from_price} → $${t.to_price} ${worked ? 'worked' : 'did not help'}: gross profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
+      evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.approval_id})`,
+    });
+    if (t.run_id) judgeRun(db, `price:${t.approval_id}`, String(t.run_id), worked);
+    if (worked) award(db, { ref: `price-win:${t.approval_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" at $${t.to_price} made more gross profit` });
+  }
+}
+
 function facts(db: Db): Facts {
   const ids = listStores(db).map((s) => s.id);
   const best = (totals: MetricTotals[], k: keyof MetricTotals) => Math.max(0, ...totals.map((t) => t[k]));
@@ -167,6 +203,7 @@ export function gamificationRoutes(db: Db) {
   const achievements = () => {
     checkAdOutcomes(db);
     checkProductOutcomes(db);
+    checkPriceOutcomes(db);
     return checkAchievements(db, facts(db), (a) => award(db, a));
   };
   return new Hono()

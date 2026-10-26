@@ -446,6 +446,32 @@ export const APP_TOOLS: AppTool[] = [
     },
   }),
   defineTool({
+    name: 'propose_price_change',
+    description:
+      "Ask the owner to test a new price for a product, with the evidence. Applied to the store once approved, then judged on the product's gross profit in the 14 days after vs the 14 before.",
+    input: {
+      productId: z.string(),
+      newPrice: z.number().positive(),
+      compareAt: z.number().positive().optional().describe('new compare-at price; omit to keep the current one'),
+      evidence: z.string().min(10).max(400).describe('the numbers and window, e.g. "converts 3.1% at $29.99 vs competitors at $34-39, margin 62%"'),
+    },
+    run: async ({ productId, newPrice, compareAt, evidence }, ctx) => {
+      const p = ctx.db.prepare('SELECT * FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId);
+      if (!p) return `No product ${productId} in this store. Use list_products for ids.`;
+      const [from, to] = [Number(p.price), r2(newPrice)];
+      if (to === from) return `$${to} is already the price.`;
+      if (p.cost != null && to <= Number(p.cost)) return `Not sent: $${to} is at or below the unit cost ($${Number(p.cost)}).`;
+      if (Math.abs(to - from) / from > 0.3) return 'Not sent: test within ±30% of the current price, one step at a time.';
+      if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
+      const { approved, message } = await requestApproval(ctx, {
+        title: `Price ${String(p.title)} $${from} → $${to}`.slice(0, 80),
+        reason: evidence,
+        action: { kind: 'store.set_price', payload: { productId, title: String(p.title), from, to, ...(compareAt ? { compareAt: r2(compareAt) } : {}) } },
+      });
+      return approved ? `${message}. It will be applied to the store and judged on 14 days of sales after vs before.` : message;
+    },
+  }),
+  defineTool({
     name: 'search_memory',
     description: 'What the squad has learned about this store, most relevant first.',
     input: { query: z.string().describe('what you need to know'), k: z.number().int().min(1).max(20).default(8) },
@@ -566,7 +592,7 @@ function autopilotUsedToday(db: DatabaseSync, storeId: string, kind: string): nu
 }
 
 /** Approval kinds the server carries out when approved (apps/server/src/routes/agents.ts), whether or not the run that asked is still alive. */
-export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'ads.set_budget', 'ads.pause_campaign'];
+export const OUTLIVE_RUN = ['store.add_products', 'store.publish_page', 'store.set_price', 'ads.set_budget', 'ads.pause_campaign'];
 
 /** Actions the agents lane carries out itself once approved. Store/ad actions arrive with the connectors. */
 const ACTIONS: Record<string, (payload: Record<string, unknown>) => Promise<string>> = {

@@ -39,7 +39,7 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
-import { addProducts, applyAdChange, onApproved, publishDraft, type PushPage } from './agents-actions';
+import { addProducts, applyAdChange, applyPriceChange, onApproved, publishDraft, type PushPage } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { issueRoutes } from './agents-issues';
@@ -144,6 +144,7 @@ export function runManager(db: Db): RunManager {
         return addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task), (storeId, products) => createProducts(db, loadKey(dataDir()), storeId, products));
       }
       if (a.action.kind === 'ads.set_budget' || a.action.kind === 'ads.pause_campaign') applyAdChange(db, a);
+      if (a.action.kind === 'store.set_price') applyPriceChange(db, a);
       if (a.action.kind === 'store.publish_page') {
         const d = getPageDraft(db, String((a.action.payload as { draftId?: unknown })?.draftId));
         if (d) return publishDraft(db, d, pushPage(db));

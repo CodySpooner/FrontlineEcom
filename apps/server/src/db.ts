@@ -408,6 +408,19 @@ export const MIGRATIONS = [
   );
   CREATE INDEX flow_drafts_by_store ON flow_drafts (store_id, created_at);
   `,
+  /* 23 (agents lane: price tests, AGT-42) */ `
+  CREATE TABLE price_tests (
+    approval_id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    from_price REAL NOT NULL,
+    to_price REAL NOT NULL,
+    changed_on TEXT NOT NULL,
+    judged_at TEXT
+  );
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

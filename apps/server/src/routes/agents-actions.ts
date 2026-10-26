@@ -68,6 +68,27 @@ export function applyAdChange(db: Db, a: ApprovalRequest) {
   }
 }
 
+/**
+ * Applies an approved price test: demo stores change the product locally; connected stores are told to change it by hand
+ * (until core has a price setter). Either way it's recorded so checkPriceOutcomes can judge it.
+ */
+export function applyPriceChange(db: Db, a: ApprovalRequest) {
+  const p = (a.action.payload ?? {}) as { productId?: unknown; title?: unknown; from?: unknown; to?: unknown; compareAt?: unknown };
+  const store = getStore(db, a.storeId);
+  if (!store || typeof p.productId !== 'string' || typeof p.to !== 'number' || typeof p.from !== 'number') return;
+  if (store.connected) {
+    // ponytail: needs core's Shopify productVariantsBulkUpdate to push it; the 14-day clock starts at approval either way.
+    notify(db, { kind: 'info', title: `Change the price on ${store.name}: ${a.title}`, body: 'Approved. Price changes are not automated for connected stores yet.', storeId: store.id });
+  } else {
+    db.prepare('UPDATE products SET price = ?, compare_at = coalesce(?, compare_at) WHERE store_id = ? AND id = ?').run(
+      p.to, typeof p.compareAt === 'number' ? p.compareAt : null, store.id, p.productId,
+    );
+  }
+  db.prepare('INSERT OR IGNORE INTO price_tests (approval_id, store_id, product_id, agent_id, title, from_price, to_price, changed_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    a.id, store.id, p.productId, a.agentId, String(p.title ?? a.title), p.from, p.to, localDate(),
+  );
+}
+
 interface AddProduct {
   researchProductId?: string;
   title: string;

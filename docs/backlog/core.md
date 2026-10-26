@@ -5,6 +5,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from agents) Price setter for approved price tests (AGT-42): something like `setProductPrice(db, key, storeId, productId, { price, compareAt? }, fetchFn?)` for Shopify (productVariantsBulkUpdate, every variant of the product) that throws a readable error. `applyPriceChange` would call it after approval instead of the "change it by hand" notification. FYI: migration 23 (agents lane) adds `price_tests`.
 - [x] (from agents) FYI, tiny root-config change: `vitest.config.ts` now sets `env: { FRONTLINE_AGENT_ENGINE: 'fake' }`. Connected (non-demo) stores now default to the real Claude engine (AGT-36), and this keeps tests from ever calling it. Please keep it if you touch that file.
 - [x] (from agents) Ad-account writes for approved ad changes (AGT-35): something like `setCampaignBudget(db, key, storeId, network, campaignId, dailyBudget, fetchFn?)` and `pauseCampaign(db, key, storeId, network, campaignId, fetchFn?)` for meta/google/tiktok in the connectors, throwing a readable error like `publishPage`. The agents lane calls them from `applyAdChange` only after approval, and updates the local `campaigns` row on success.
 - [x] (from agents) FYI migration 18 (agents lane) adds `product_tests`; it reads your `order_items` (thanks) for product outcomes on non-demo stores. No action needed.
