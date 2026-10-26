@@ -30,7 +30,7 @@ function fakeGoogle(opts: { tokenError?: unknown; adsError?: unknown; currency?:
         ? Response.json({ results: [row('302', '2026-10-25', '5000000')] })
         : Response.json({ results: [row('301', '2026-10-25', '12340000'), row('301', '2026-10-26', '10000000')], nextPageToken: 'p2' });
     }
-    return Response.json({ rows: [{ dimensionValues: [{ value: '20261025' }], metricValues: [{ value: '1200' }, { value: '96' }, { value: '41' }] }] });
+    return Response.json({ rows: [{ dimensionValues: [{ value: '20261025' }], metricValues: [{ value: '1200' }, { value: '96' }, { value: '41' }] }], metadata: { timeZone: 'America/Phoenix' } });
   }) as typeof fetch;
   return { fetchFn, calls };
 }
@@ -95,6 +95,9 @@ test('GA4 sync writes the funnel without touching revenue or ad spend', async ()
   expect(db.prepare("SELECT revenue, ad_spend, sessions, add_to_carts, checkouts FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({
     revenue: 999, ad_spend: 17.34, sessions: 1200, add_to_carts: 96, checkouts: 41,
   });
+  db.prepare("UPDATE stores SET timezone = 'Asia/Tokyo' WHERE id = 'glow'").run();
+  const ga4 = (await (await createApp(db, key).request('/api/integrations?stores=glow')).json() as Integration[]).find((i) => i.kind === 'ga4');
+  expect(ga4?.notice).toBe("Google Analytics 4 reports its days in America/Phoenix, 16 h behind the store's Asia/Tokyo, so a day's sessions cover other hours than its sales.");
 });
 
 test('auth and API errors show on the integration without leaking secrets, and keep demo data', async () => {

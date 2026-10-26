@@ -48,7 +48,7 @@ export function listIntegrations(db: Db, key: Buffer, storeIds: string[]): Integ
     .map((r) => ({ ...toIntegration(r, key), ...zoneNotice(db, r) }));
 }
 
-/** An ad account whose days run in another timezone than its store's (by today's clocks, so two names for one match). */
+/** An ad account or GA4 property whose days run in another timezone than its store's (by today's clocks, so two names for one match). */
 function zoneNotice(db: Db, r: Row): { notice?: string } {
   const account = stateOf<string>(db, AD_ZONES).get(String(r.id));
   const store = storeZone(db, r.store_id ? String(r.store_id) : undefined);
@@ -56,8 +56,9 @@ function zoneNotice(db: Db, r: Row): { notice?: string } {
   try {
     const behind = utcOffset(store) - utcOffset(account);
     if (!behind) return {};
-    const name = INTEGRATION_KINDS[r.kind as IntegrationKind].name;
-    return { notice: `${name} reports its days in ${account}, ${Math.abs(behind)} h ${behind > 0 ? 'behind' : 'ahead of'} the store's ${store}, so a day's ad spend covers other hours than its sales.` };
+    const { name, category } = INTEGRATION_KINDS[r.kind as IntegrationKind];
+    const what = category === 'ads' ? 'ad spend covers' : 'sessions cover';
+    return { notice: `${name} reports its days in ${account}, ${Math.abs(behind)} h ${behind > 0 ? 'behind' : 'ahead of'} the store's ${store}, so a day's ${what} other hours than its sales.` };
   } catch {
     return {}; // a zone name this machine doesn't know
   }

@@ -157,7 +157,7 @@ export async function syncGa4(db: Db, key: Buffer, storeId: string, fetchFn: Fet
     const today = localDate(now);
     const cursor = cursorOf(db, id);
     const start = cursor ? addDays(cursor, -GA4_SETTLE_DAYS) : addDays(today, 1 - BACKFILL_DAYS);
-    const report = await call<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[] }>(
+    const report = await call<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[]; metadata?: { timeZone?: string } }>(
       `https://analyticsdata.googleapis.com/v1beta/properties/${property}:runReport`,
       {
         method: 'POST',
@@ -167,6 +167,7 @@ export async function syncGa4(db: Db, key: Buffer, storeId: string, fetchFn: Fet
       fetchFn,
       'Google Analytics',
     );
+    if (report.metadata?.timeZone) stateOf<string>(db, AD_ZONES).set(id, report.metadata.timeZone);
 
     tx(db, () => {
       switchToReal(db, storeId);

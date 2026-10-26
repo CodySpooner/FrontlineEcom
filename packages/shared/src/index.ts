@@ -884,8 +884,8 @@ export interface Integration {
    */
   backfill?: { through: string; done: boolean };
   /**
-   * Worth knowing but not an error. Today: a Meta or Google Ads account that reports its days in another timezone than
-   * its store's, so its daily spend and the store's daily sales cover different hours.
+   * Worth knowing but not an error. Today: a Meta or Google Ads account or GA4 property that reports its days in another
+   * timezone than its store's, so its daily spend or sessions and the store's daily sales cover different hours.
    */
   notice?: string;
 }
