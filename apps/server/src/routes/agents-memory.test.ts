@@ -51,6 +51,12 @@ describe('store memory', () => {
     expect(listMemory(db, 'glow')).toEqual([note]);
   });
 
+  test('an agent restating a measured result word for word leaves its evidence and confidence alone', () => {
+    const measured = writeMemory(db, mem('Bundles did not help AOV', { confidence: 0.6, evidence: 'paid orders 2026-09-01 to 2026-09-28', tags: ['outcome', 'pricing'] }), now);
+    expect(writeMemory(db, mem('bundles did not help AOV', { confidence: 1, evidence: 'my read of the dashboard', tags: ['bundles'] }), now)).toEqual(measured);
+    expect(listMemory(db, 'glow')).toEqual([measured]);
+  });
+
   test("the owner writing a squad memory word for word, or rewording one, makes it the owner's", () => {
     const a = writeMemory(db, mem('Bundles do not sell', { runId: 'r1' }));
     const b = writeMemory(db, mem('Mornings convert best', { runId: 'r2' }));

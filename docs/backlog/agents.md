@@ -305,11 +305,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-176 `store_summary` names the TikTok Shop sales in its totals. It split out Amazon's but not a Shopify store's `tt-` orders, so the daily briefing read a TikTok Shop spike as the site selling more.
 - [x] AGT-177 A product sold on TikTok Shop or Amazon next to the store isn't repriced or paged through the store's platform. A Shopify store's `tt-`/`amz-` products could get a price test or a page: on approval the app sent them to Shopify, which has no such product, and the change failed after the owner said yes.
 - [x] AGT-178 A budget is raised at most 30% at a time. With no added-spend cap set, the Ad Strategist could double or 10x a winner in one request; a jump that big restarts the network's learning phase (the playbook says 20-30% every 48-72 h).
+- [x] AGT-179 An agent restating a measured result word for word leaves it alone. Same text merges, so an agent's note could swap its own evidence and a higher confidence into a line the prompt labels "measured" (the app's check).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-179: `writeMemory` returns an `outcome`-tagged memory unchanged when a non-outcome, non-owner write has the same text (as it already does for the owner's notes).
 - 2026-10-26 — Inbox (core CORE-91 FYI): read; store ids are no longer reused, the adjusted `agents-activate` test passes, nothing to change here.
 - 2026-10-26 — AGT-178: `propose_ad_change` refuses a raise above 30% of the current daily budget, naming the most it can ask; cuts and pauses aren't limited.
 - 2026-10-26 — AGT-177: `productGone` (used by `propose_price_change`, `draft_page`, `publish_page`) refuses a `tt-` product on a non-TikTok-Shop store and an `amz-` one on a non-Amazon store, saying to make the change on that channel by hand.
