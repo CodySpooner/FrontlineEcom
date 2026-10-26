@@ -1,4 +1,5 @@
-import type { Store } from '@frontline/shared';
+import { randomUUID } from 'node:crypto';
+import type { Store, StoreEvent, StoreEventType } from '@frontline/shared';
 import { tx, type Db } from './db';
 import { addDays, dayNumber, localDate } from './dates';
 import { insertStore } from './stores';
@@ -146,6 +147,24 @@ function seedCatalog(db: Db, storeId: string, today: string) {
       order.run(storeId, `#${n++}`, new Date(at).toISOString(), cents(price * qty), r() < 0.03 ? 'refunded' : 'paid', fulfillment, SUPPLIERS[Math.floor(r() * SUPPLIERS.length)]!, tracking);
     }
   }
+}
+
+const EVENT_MIX: [StoreEventType, weight: number, amount: [min: number, max: number]][] = [
+  ['add_to_cart', 0.45, [0.4, 1]],
+  ['checkout_started', 0.25, [0.7, 1.5]],
+  ['order', 0.27, [0.6, 1.4]],
+  ['refund', 0.03, [0.5, 1]],
+];
+
+/** One live-feed event for a demo store, picked in proportion to store size; amounts scale with the store's AOV. */
+export function demoEvent(storeIds: string[], rand: () => number, at: Date): StoreEvent | undefined {
+  if (!storeIds.length) return;
+  const weights = storeIds.map((id) => paramsFor(id).base);
+  let pick = rand() * weights.reduce((a, b) => a + b);
+  const storeId = storeIds.find((_, i) => (pick -= weights[i]!) < 0) ?? storeIds[0]!;
+  let t = rand();
+  const [type, , [lo, hi]] = EVENT_MIX.find(([, w]) => (t -= w) < 0) ?? EVENT_MIX[0]!;
+  return { id: randomUUID(), storeId, type, amount: cents(paramsFor(storeId).aov * (lo + (hi - lo) * rand())), at: at.toISOString() };
 }
 
 /** Gives a just-created demo store (no credentials yet) campaigns and 2 years of history. Call inside a transaction. */

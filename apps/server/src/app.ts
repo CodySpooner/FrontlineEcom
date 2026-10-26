@@ -1,9 +1,12 @@
 import { createSquad } from '@frontline/agents';
+import { serve, upgradeWebSocket } from '@hono/node-server';
 import { Hono } from 'hono';
+import { WebSocketServer } from 'ws';
 import { ANALYTICS_RANGES, type AnalyticsRange, type StoreInput } from '@frontline/shared';
 import { loadRows, summarize } from './analytics';
 import type { Db } from './db';
 import { localDate } from './dates';
+import { listEvents, subscribe } from './live';
 import { agentRoutes } from './routes/agents';
 import { createStore, deleteStore, getStore, listStores, parseStoreInput, updateStore } from './stores';
 
@@ -38,6 +41,20 @@ export const createApp = (db: Db) =>
       return store ? c.json(store) : c.json({ error: 'store not found' }, 404);
     })
     .delete('/api/stores/:id', (c) => (deleteStore(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'store not found' }, 404)))
+    .get('/api/events', (c) => {
+      const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 20));
+      return c.json(listEvents(db, pickStores(db, c.req.query('stores')), limit));
+    })
+    .get(
+      '/api/live',
+      upgradeWebSocket(() => {
+        let off = () => {};
+        return {
+          onOpen: (_, ws) => void (off = subscribe((m) => ws.send(JSON.stringify(m)))),
+          onClose: () => off(),
+        };
+      }),
+    )
     .get('/api/analytics/summary', (c) => {
       const range = Number(c.req.query('range') ?? 30) as AnalyticsRange;
       if (!ANALYTICS_RANGES.includes(range)) return c.json({ error: 'range must be 7, 30, 90 or 365' }, 400);
@@ -46,3 +63,7 @@ export const createApp = (db: Db) =>
       return c.json(summarize(loadRows(db, storeIds, range, to), { range, to, storeIds }));
     })
     .route('/', agentRoutes(db));
+
+/** HTTP + WebSocket server on 127.0.0.1 (port 0 = any free port). */
+export const startServer = (db: Db, port: number, onListen?: (port: number) => void) =>
+  serve({ fetch: createApp(db).fetch, port, hostname: '127.0.0.1', websocket: { server: new WebSocketServer({ noServer: true }) } }, (info) => onListen?.(info.port));

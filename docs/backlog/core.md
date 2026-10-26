@@ -17,7 +17,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
       spend, ROAS, orders, AOV), previous-period deltas, daily series per metric, per-store breakdown. Tests for the math.
 - [x] CORE-04 Stores API: list/get/create/update/delete with platform + niche; on create call the agents lane's
       `createSquad(store)` (stub until it exists).
-- [ ] CORE-05 Live events: WebSocket `/api/live` broadcasting `StoreEvent`s; demo emitter generates realistic orders /
+- [x] CORE-05 Live events: WebSocket `/api/live` broadcasting `StoreEvent`s; demo emitter generates realistic orders /
       add-to-carts / checkouts per store; `GET /api/events?stores=&limit=` for the initial feed.
 - [ ] CORE-06 Approvals API: `GET /api/approvals?status=pending`, `POST /api/approvals/:id/approve|deny`; emits over
       `/api/live`; exposes an in-process hook so the agents lane can create requests and await decisions.
@@ -47,6 +47,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-05 `/api/live` WebSocket (`LiveMessage`), `GET /api/events`, demo emitter (8–25s, weighted by store size, backfills a quiet feed, prunes >7d)
 - 2026-10-26 — CORE-04 stores CRUD (`GET/POST /api/stores`, `GET/PATCH/DELETE /api/stores/:id`), validation, new stores start in demo mode with history and get a squad via `createSquad`
 - 2026-10-26 — CORE-03 `GET /api/analytics/summary` (totals, previous, deltas, daily series, per-store), math tested
 - 2026-10-26 — CORE-02 demo generator: deterministic per (store, date), 2y history topped up to today on every start, products, campaigns + campaign_daily, last-week orders, 3 pending approvals
