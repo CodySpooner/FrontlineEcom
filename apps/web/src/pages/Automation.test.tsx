@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { ApprovalRequest, AutomationRule, AutomationRun } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
-import { DemoJobsNote, RunLog } from './Automation';
+import { DemoJobsNote } from '../components/DemoJobsNote';
+import { RunLog } from './Automation';
 
 afterEach(() => {
   cleanup();

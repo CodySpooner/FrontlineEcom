@@ -315,6 +315,8 @@ Orca's browser against the reference before ticking it.
       Markdown bodies (Knowledge docs, Builder draft notes) cap at 75ch, ~70 characters per line.
 - [x] UI-123 Research's "Request to add" said "Sent to <store>'s Product Hunter" even when core handed back the request
       already pending for that product (asked before, or by an agent). It now says the store already has one waiting.
+- [x] UI-124 An agent's Settings → Schedule showed its squad job switched off with no reason on a demo store. It now has
+      UI-114's note (connecting the store switches its jobs on; a demo run is scripted and free).
 
 ## Blocked
 
@@ -483,3 +485,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Correction to UI-118: its premise was wrong. index.css's `:focus-visible` rule is unlayered and Tailwind v4 utilities live in `@layer utilities`, so no `outline-none`/`focus:outline-none` in the app has ever applied (Chrome: the Ask AI input with `focus:outline-none` computes a 2px red outline). The chart had its ring before UI-118; the change only removed a dead class. Left the cascade as is: every focusable element shows the ring
 - 2026-10-26 — UI-122: `Markdown`'s root gets `max-w-[75ch]`. Chrome at 1440, Ad Strategist playbook: before, the 208-character Mission paragraph took 2 lines of ~104 at 738px with 90ch, and ~150 per line uncapped (screenshot). With 75ch the body is 615px and that paragraph wraps to 3 lines (~70 characters each). Edit stays at the panel's top right. Also filed (core Inbox) a request for `AnalyticsSummary.byPlatform` so Store Analytics can split a store's sales by platform once a second channel is connected (UI-121)
 - 2026-10-26 — UI-123: core's add-to-store returns the pending request for the same product (200, not 201) since 126f829. `api()` hides the status, so ProductDetails tells them apart by `createdAt` more than 5s before the mutation's `submittedAt` (same machine's clock): "<Store> already has a request waiting for this product. Approve it on the Dashboard". New Research test (fails on the old code). Orca at 800px with a fetch patch answering the POST with an old pending request (no server write): that sentence shows under Add to a store. Patch dropped by reload
+- 2026-10-26 — UI-124: `DemoJobsNote` moved from pages/Automation to components/ (pages are lazy chunks, so AgentDetail shouldn't import a page) and is rendered above the Schedule panel's rule list. Its test now imports from components. Chrome at 1440, Pawsome Gear's Ad Strategist Settings: "Pawsome Gear is a demo store: its squad's jobs switch on when you connect it. … Connect a store" above "Daily campaign review" (off). Automation still shows the three-store note
