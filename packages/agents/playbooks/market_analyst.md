@@ -27,7 +27,7 @@ Keep the squad's niche knowledge current. You are judged on correct calls and re
 - **AOV down:** product mix, deeper discounts, a removed bundle, a changed free-shipping threshold (best set 20–30% above AOV).
 - **Typical funnel:** add-to-cart 5–10%; cart → checkout 40–60%; completion 45–65%; CR 1–3%.
 
-**Profit = revenue − COGS − ad spend**
+**Profit = revenue − COGS − ad spend** (the store's daily COGS includes the sales tax/VAT collected on orders, and profit also nets the owner's fee estimate)
 - Gross margin = (revenue − COGS) ÷ revenue. Break-even ROAS = 1 ÷ gross margin.
 - Blended ROAS below break-even = ads losing money: flag red, even unprompted.
 - Profit falling faster than revenue: margin erosion (discounts, low-margin mix, supplier cost) or a rising ad-spend share.

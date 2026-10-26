@@ -16,7 +16,7 @@ export interface CampaignStats {
 }
 
 export interface Economics {
-  /** Margin after product cost and the owner's fee estimate, (revenue − cogs − fees) / revenue. */
+  /** Margin after product cost, sales tax (core keeps it in daily cogs) and the owner's fee estimate, (revenue − cogs − fees) / revenue. */
   margin: number;
   aov: number;
 }

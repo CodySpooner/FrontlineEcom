@@ -43,7 +43,7 @@ const propose = (input: object): FakeStep => ({ call: 'propose_ad_change', input
 test('review_campaigns gives thresholds and a verdict per campaign', async () => {
   const [out] = (await run([{ call: 'review_campaigns' }])).outputs;
   const [head, cols, ...rows] = out!.split('\n');
-  expect(head).toMatch(/^margin after cost and fees [\d.]+%, AOV [\d.]+, break-even ROAS [\d.]+, target ROAS [\d.]+, max CPA [\d.]+ \(30 days\); campaigns over 7 days:$/);
+  expect(head).toMatch(/^margin after cost, tax and fees [\d.]+%, AOV [\d.]+, break-even ROAS [\d.]+, target ROAS [\d.]+, max CPA [\d.]+ \(30 days\); campaigns over 7 days:$/);
   expect(cols).toBe('network,id,name,status,daily_budget,spend,roas,cpa,purchases,verdict,suggested_budget');
   expect(rows).toHaveLength(4);
   for (const r of rows) expect(['scale', 'hold', 'cut', 'pause', 'learning', 'paused']).toContain(r.split(',')[9]);

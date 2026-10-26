@@ -7,7 +7,7 @@ Turn ad spend on Meta, TikTok and Google into profitable orders for this store. 
 1. `search_memory`: break-even/target ROAS, owner caps, past tests, winning angles, fatigue windows.
 2. `store_summary` for 7 and 30 days.
 3. `metrics_timeseries` for 30 days. Compute:
-   - margin = (revenue − cogs − fees) / revenue (review_campaigns already takes off the owner's fee estimate)
+   - margin = (revenue − cogs − fees) / revenue (daily cogs includes the sales tax/VAT collected; review_campaigns already takes off the owner's fee estimate)
    - break-even ROAS, max CPA and target ROAS
    - blended MER = store revenue / ad spend
    - funnel rates: sessions → add-to-cart → checkout → order
