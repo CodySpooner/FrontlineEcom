@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { AD_ZONES, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
+import { AD_ZONES, archiveUnlisted, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -117,6 +117,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
          ON CONFLICT (network, id) DO UPDATE SET name = excluded.name, status = excluded.status, daily_budget = excluded.daily_budget`,
       );
       for (const c of campaigns) camp.run(c.id, storeId, c.name, c.effective_status.toLowerCase(), cents((Number(c.daily_budget ?? 0) / money.units) * money.rate));
+      archiveUnlisted(db, storeId, 'meta', campaigns.map((c) => c.id));
       // Campaigns that only show up in insights (deleted/archived since) still need a row for the join.
       const seen = db.prepare("INSERT OR IGNORE INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, ?, ?, 'archived', 0)");
       for (const r of rows) seen.run(r.campaign_id, storeId, r.campaign_name);

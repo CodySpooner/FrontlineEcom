@@ -4,7 +4,7 @@ import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { logAction } from '../actions';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { AD_ZONES, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange } from './common';
+import { AD_ZONES, archiveUnlisted, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -105,6 +105,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
          ON CONFLICT (network, id) DO UPDATE SET name = excluded.name, status = excluded.status, daily_budget = excluded.daily_budget`,
       );
       for (const c of campaigns) camp.run(c.campaign_id, storeId, c.campaign_name, c.operation_status === 'ENABLE' ? 'active' : 'paused', c.budget_mode === 'BUDGET_MODE_DAY' ? cents(Number(c.budget ?? 0) * rate) : 0);
+      archiveUnlisted(db, storeId, 'tiktok', campaigns.map((c) => c.campaign_id));
       // Deleted campaigns only show up in the report but still need a row for the join.
       const seen = db.prepare("INSERT OR IGNORE INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('tiktok', ?, ?, ?, 'archived', 0)");
       const day = db.prepare(

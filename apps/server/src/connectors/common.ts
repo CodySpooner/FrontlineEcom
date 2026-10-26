@@ -83,6 +83,12 @@ export function claimCampaigns(db: Db, storeId: string, network: AdNetwork, ids:
   for (const d of days) rebuildAdSpend(db, String(d.store_id), [String(d.date)]);
 }
 
+/** A store's campaigns its ad account no longer lists (deleted there) can't run or take a budget. */
+export function archiveUnlisted(db: Db, storeId: string, network: AdNetwork, listed: Iterable<string>) {
+  db.prepare("UPDATE campaigns SET status = 'archived', daily_budget = 0 WHERE store_id = ? AND network = ? AND id NOT IN (SELECT value FROM json_each(?))")
+    .run(storeId, network, JSON.stringify([...listed]));
+}
+
 /** daily_metrics.ad_spend = spend across every ad network's campaigns for that store and day. */
 export function rebuildAdSpend(db: Db, storeId: string, dates: Iterable<string>) {
   const sum = db.prepare('SELECT coalesce(sum(d.spend), 0) AS spend FROM campaign_daily d JOIN campaigns c ON c.network = d.network AND c.id = d.campaign_id WHERE c.store_id = ? AND d.date = ?');

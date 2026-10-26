@@ -207,3 +207,17 @@ test("an ad account moved to another store takes its campaigns and spend along (
   expect(db.prepare("SELECT store_id FROM campaigns WHERE network = 'meta' AND id = '201'").get()?.store_id).toBe('glow');
   expect([spend('glow'), spend('pawsome')]).toEqual([60, 0]);
 });
+
+test('a campaign the account stops listing (deleted on Meta) shows as archived with no budget', async () => {
+  const { db } = setup();
+  const { fetchFn: graph } = fakeGraph([insight('201', '2026-10-25', '60.00', '210.50')]);
+  let listed = true;
+  const fetchFn = (async (url: string, init: RequestInit) =>
+    !listed && new URL(url).pathname.endsWith('/campaigns') ? Response.json({ data: [] }) : graph(url, init)) as typeof fetch;
+  await syncMeta(db, key, 'pawsome', fetchFn, NOW);
+  const campaign = () => db.prepare("SELECT status, daily_budget FROM campaigns WHERE network = 'meta' AND id = '201'").get();
+  expect(campaign()).toEqual({ status: 'active', daily_budget: 60 });
+  listed = false;
+  await syncMeta(db, key, 'pawsome', fetchFn, NOW);
+  expect(campaign()).toEqual({ status: 'archived', daily_budget: 0 });
+});
