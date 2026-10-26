@@ -108,6 +108,25 @@ describe('agent tools on demo data', () => {
     expect(events.at(-1)).toEqual(done);
   });
 
+  test("metrics_timeseries says when the platform doesn't report a funnel step, so a 0 isn't read as no traffic", async () => {
+    const saved = db.prepare(`SELECT date, sessions, add_to_carts, checkouts FROM daily_metrics WHERE store_id = 'glow'`).all();
+    const glow = input('glow', 'market_analyst');
+    const funnel = (out: string) => out.split('\n')[0]!;
+    try {
+      db.prepare(`UPDATE daily_metrics SET add_to_carts = 0, checkouts = 0 WHERE store_id = 'glow'`).run(); // Amazon: sessions only
+      const [amazon] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
+      expect(funnel(amazon!.output)).toBe('(add_to_carts, checkouts: not reported for this store, so 0 means no data, not no traffic.)');
+      db.prepare(`UPDATE daily_metrics SET sessions = 0 WHERE store_id = 'glow'`).run(); // Etsy, TikTok Shop, Woo without GA4
+      const [none] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
+      expect(funnel(none!.output)).toMatch(/^\(sessions, add_to_carts, checkouts: not reported/);
+    } finally {
+      const put = db.prepare(`UPDATE daily_metrics SET sessions = ?, add_to_carts = ?, checkouts = ? WHERE store_id = 'glow' AND date = ?`);
+      for (const r of saved) put.run(Number(r.sessions), Number(r.add_to_carts), Number(r.checkouts), String(r.date));
+    }
+    const [whole] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
+    expect(funnel(whole!.output)).toMatch(/^date,revenue,/);
+  });
+
   test("metrics_timeseries profit nets the store's fee estimate, like the dashboard's", async () => {
     db.prepare(`UPDATE stores SET fee_percent = 10, fee_per_order = 0.3 WHERE id = 'pawsome'`).run();
     const [series] = results(await run(input('pawsome', 'market_analyst'), [{ call: 'metrics_timeseries', input: { days: 3 } }, done]));

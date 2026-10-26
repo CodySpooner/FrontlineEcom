@@ -191,11 +191,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] (from review, medium) apps/server/src/routes/agents-gamification.ts:317 (AGT-92): the once-key came from the group's lead wording, which changes as confidence moves. A denied learning came back as a new request once another store worded it more confidently.
 - [x] (from review, low) AGT-92: "live" meant only connected. A store synced but not yet gone live (its demo learnings not yet cleared) counted toward a share proposal.
 - [x] (from review, low) AGT-87: the stale request was closed as replaced before the fresh one passed its checks. A refused fresh one left nothing in its place.
+- [x] AGT-93 metrics_timeseries names the funnel steps a store's platform doesn't report. Amazon reports sessions only; Etsy, TikTok Shop and WooCommerce without GA4 report no funnel at all. Agents would otherwise read the zeros as a broken cart or checkout (core's Amazon funnel note).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-93: metrics_timeseries opens with "(add_to_carts, checkouts: not reported for this store, so 0 means no data, not no traffic.)" when the window has orders but a funnel step sums to 0. Test added; it failed on the old code.
 - 2026-10-26 — Review fixes: the idle-campaign filter sums the window's spend. Niche promotion marks every memory of an offered group (`promote-memory:<id>`) and skips a group whose wording is already a niche learning or a promote request. It counts only stores that have gone live (`activate:` marker). propose_ad_change closes the stale request only right before sending its replacement. Tests added; each failed on the old code. Also saw core's migration-34 note.
 - 2026-10-26 — promotionCandidates (now run hourly by AGT-92) builds each learning's word set once instead of once per pair: 129 → 50 ms for 1,500 learnings across 5 stores.
 - 2026-10-26 — Transcript trimming keeps a high-water mark (`done_once` ref `transcripts-trimmed-to`), so each startup reads only runs that turned 90 days old since the last one. Test extended.
