@@ -55,7 +55,7 @@ test('draft_theme_change writes a copy of the live theme and asks to publish it 
     reason: expect.stringContaining('Preview: https://glow.example/?preview_theme_id=9 . Publishing makes the copy "Frontline: Sticky add-to-cart on mobile" the live theme'),
     action: { kind: 'store.publish_theme', payload: { themeId: '9', name: 'Frontline: Sticky add-to-cart on mobile', previewUrl: 'https://glow.example/?preview_theme_id=9', files: ['sections/main-product.liquid'] } },
   });
-  expect(out).toMatch(/^Approved by the owner: Publish theme change: Sticky add-to-cart on mobile\. "Frontline: Sticky add-to-cart on mobile" goes live now/);
+  expect(out).toMatch(/^Approved by the owner: Publish theme change: Sticky add-to-cart on mobile\. "Frontline: Sticky add-to-cart on mobile" goes live as the app publishes it/);
   await tick();
   // The executor ran: the demo store has no Shopify login, so the owner is told to publish it by hand.
   expect(db.prepare(`SELECT body FROM notifications WHERE title LIKE 'Couldn''t publish the theme on Glow Haus%'`).all()).toEqual([

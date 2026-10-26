@@ -599,7 +599,7 @@ export const APP_TOOLS: AppTool[] = [
       });
       // No request was made (the agent was set to "suggest" during the copy, say): nothing would ever delete the copy.
       if (message.startsWith('Not sent')) await ctx.themes.remove(ctx.store.id, copy.id).catch(() => {});
-      return approved ? `${message}. "${copy.name}" goes live now; compare the same funnel stage over an equal window before calling it.` : message;
+      return approved ? `${message}. "${copy.name}" goes live as the app publishes it (the owner hears if that fails); compare the same funnel stage over an equal window before calling it.` : message;
     },
   }),
   defineTool({
