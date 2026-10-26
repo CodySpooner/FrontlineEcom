@@ -165,16 +165,19 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, status = excluded.status,
            inventory = CASE WHEN ?9 THEN inventory ELSE excluded.inventory END, inventory_tracked = CASE WHEN ?9 THEN inventory_tracked ELSE excluded.inventory_tracked END`,
       );
+      const merchant = new Set<string>(); // listings that count their own stock
       for (const l of listings ?? []) {
         const s = l.summaries?.[0];
         const counted = (l.fulfillmentAvailability ?? []).filter((f) => typeof f.quantity === 'number');
+        if (counted.length) merchant.add(l.sku);
         const price = Number(l.offers?.find((o) => o.offerType === 'B2C')?.price.amount ?? 0);
         // BUYABLE and/or DISCOVERABLE: live (an out-of-stock listing keeps DISCOVERABLE); neither: not live yet.
         const byAmazon = (l.fulfillmentAvailability ?? []).some((f) => f.fulfillmentChannelCode?.startsWith('AMAZON'));
         prod.run(storeId, `amz-${l.sku}`, s?.itemName ?? l.sku, s?.mainImage?.link ?? null, price, counted.reduce((a, f) => a + f.quantity!, 0), counted.length ? 1 : 0, s?.status?.length ? 'active' : 'draft', byAmazon && !counted.length ? 1 : 0);
       }
       const setFba = db.prepare('UPDATE products SET inventory = ?, inventory_tracked = 1 WHERE store_id = ? AND id = ?');
-      for (const [sku, units] of fba ?? []) setFba.run(units, storeId, `amz-${sku}`);
+      // A SKU moved to merchant fulfilment can keep an FBA record (0 units): its listing's own count stands.
+      for (const [sku, units] of fba ?? []) if (!merchant.has(sku)) setFba.run(units, storeId, `amz-${sku}`);
       // A read cut short by the search cap can't tell gone from unread: it archives nothing (and isn't retried until tomorrow).
       if (listings && full) {
         if (listings.complete) archiveMissing(db, id, storeId, 'amz-*', listings.map((l) => `amz-${l.sku}`), today);

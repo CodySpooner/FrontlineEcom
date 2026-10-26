@@ -465,6 +465,9 @@ export const MIGRATIONS = [
   ALTER TABLE orders ADD COLUMN tax REAL NOT NULL DEFAULT 0;
   UPDATE integrations SET cursor = NULL WHERE kind IN ('shopify', 'woocommerce', 'etsy');
   `,
+  /* 33 (core: TikTok Shop re-pulls once, so orders from before it read their tax have it too) */ `
+  UPDATE integrations SET cursor = NULL WHERE kind = 'tiktok_shop';
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

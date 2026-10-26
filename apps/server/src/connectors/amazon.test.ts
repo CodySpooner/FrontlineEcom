@@ -261,7 +261,10 @@ test('FBA listings get their stock from the FBA Inventory API, and keep it when 
     const u = new URL(url);
     if (u.pathname === '/fba/inventory/v1/summaries') {
       fbaQueries.push(u.searchParams);
-      return Response.json({ payload: { granularity: {}, inventorySummaries: fbaUnits === 12 ? [{ sellerSku: 'FBA-1', inventoryDetails: { fulfillableQuantity: fbaUnits } }] : [] } });
+      return Response.json({ payload: { granularity: {}, inventorySummaries: fbaUnits === 12 ? [
+        { sellerSku: 'FBA-1', inventoryDetails: { fulfillableQuantity: fbaUnits } },
+        { sellerSku: 'MFN-1', inventoryDetails: { fulfillableQuantity: 0 } }, // moved to merchant fulfilment; its listing's count stands
+      ] : [] } });
     }
     if (u.pathname.startsWith('/listings/')) {
       return Response.json({ numberOfResults: 2, items: [
