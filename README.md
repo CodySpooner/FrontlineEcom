@@ -29,7 +29,8 @@ pnpm check    # typecheck + tests
 - **Going live:** in Integrations, pick a store and connect its platform (Shopify, WooCommerce, Etsy, TikTok Shop,
   Amazon), its ad accounts (Meta, Google, TikTok) and GA4. Each card lists its setup steps. The first sync replaces
   that store's demo data with real data. After that, Shopify and WooCommerce refresh every 2 minutes and the rest
-  every 10. Once a day each store's whole catalog is read again, and products deleted on the platform show as
+  every 10. New paid orders, and refunds on orders from the last 30 days, show in the dashboard's live activity
+  as each sync brings them. Once a day each store's whole catalog is read again, and products deleted on the platform show as
   archived. Agents on connected stores use your local Claude Code login.
 - **Safety:** agents ask before they spend, publish or change a live store or ad account. Requests wait on the
   Dashboard unless you turned on autopilot for that action, with a cap.

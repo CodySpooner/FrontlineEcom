@@ -88,6 +88,43 @@ test("a connected store's new paid orders reach the live feed once; history and 
   off();
 });
 
+test("a connected store's refunds reach the live feed when a sync brings them: full, partial and refund lines", async () => {
+  vi.useFakeTimers({ now: new Date('2026-10-26T12:00:00Z') });
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow');
+  const key = randomBytes(32);
+  saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow.myshopify.com', accessToken: 't' } });
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, ?, ?, 'paid', 'unfulfilled', '2026-10-25')");
+  order.run('2001', '2026-10-25T10:00:00Z', 40);
+  order.run('2002', '2026-10-25T11:00:00Z', 60);
+  order.run('2003', '2026-10-25T12:00:00Z', 20);
+  order.run('1999', '2026-09-01T12:00:00Z', 80);
+  let change = () => {};
+  const shopify = vi.fn(async () => change());
+  const seen: string[] = [];
+  const off = subscribe((m) => m.type === 'event' && m.event.type === 'refund' && seen.push(`${m.event.id.split(':').slice(0, 3).join(':')} ${m.event.amount}`));
+  const stop = startSyncLoop(db, key, { everyMs: 1000, staleMs: 60_000, fastMs: 60_000, syncers: { shopify } });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(seen).toEqual([]);
+
+  change = () => {
+    db.prepare("UPDATE orders SET status = 'refunded', total = 0 WHERE store_id = 'glow' AND id = '2001'").run(); // in full
+    db.prepare("UPDATE orders SET total = 45 WHERE store_id = 'glow' AND id = '2002'").run(); // 5 back: the total shrinks
+    db.prepare("INSERT INTO amazon_refunds (store_id, id, order_id, amount, tax) VALUES ('glow', 'tt-R9', '2003', 7.4, 0.6)").run(); // a refund line
+    db.prepare("UPDATE orders SET status = 'refunded' WHERE store_id = 'glow' AND id = '1999'").run(); // over a month old: not news
+  };
+  await vi.advanceTimersByTimeAsync(61_000);
+  expect(seen.sort()).toEqual(['refund:glow:2001 40', 'refund:glow:2002 15', 'refund:glow:2003 8']);
+  expect(db.prepare("SELECT count(*) AS n FROM events WHERE type = 'refund' AND store_id = 'glow'").get()).toEqual({ n: 3 });
+
+  change = () => {};
+  await vi.advanceTimersByTimeAsync(61_000); // nothing new: nothing repeated
+  expect(seen).toHaveLength(3);
+  stop();
+  off();
+});
+
 test('Shopify is polled every couple of minutes for new orders; ad networks wait the longer interval', async () => {
   vi.useFakeTimers({ now: new Date('2026-10-26T12:00:00Z') });
   const db = openDb();

@@ -44,6 +44,36 @@ function announceOrders(db: Db, storeId: string, newestBefore: string | null, no
 }
 
 /**
+ * What each of a store's orders from the last 30 days is still worth: its total while paid (Shopify, Woo and Etsy totals
+ * shrink with partial refunds), less its refund lines (Amazon, TikTok Shop). Taken before and after a sync.
+ * ponytail: a refund on an older order isn't announced.
+ */
+function orderValues(db: Db, storeId: string, now: Date) {
+  const rows = db
+    .prepare(
+      `SELECT o.id, iif(o.status = 'paid', o.total, 0) - coalesce(r.v, 0) AS v FROM orders o
+       LEFT JOIN (SELECT order_id, sum(amount + tax) AS v FROM amazon_refunds WHERE store_id = ?1 GROUP BY order_id) r ON r.order_id = o.id
+       WHERE o.store_id = ?1 AND o.created_at >= ?2`,
+    )
+    .all(storeId, new Date(now.getTime() - 30 * 86_400_000).toISOString());
+  return new Map(rows.map((r) => [String(r.id), Number(r.v)]));
+}
+
+/**
+ * An order a sync left worth less than before became a refund: a live-feed event for the difference. Its id names what
+ * the order is worth after it, so two overlapping syncs of one store (say Shopify and Amazon) announce it once.
+ */
+function announceRefunds(db: Db, storeId: string, before: Map<string, number>, now: Date) {
+  const add = db.prepare("INSERT OR IGNORE INTO events (id, store_id, type, amount, at) VALUES (?, ?, 'refund', ?, ?)");
+  for (const [id, v] of orderValues(db, storeId, now)) {
+    const was = before.get(id);
+    if (was === undefined || was - v < 0.01) continue;
+    const e: StoreEvent = { id: `refund:${storeId}:${id}:${v.toFixed(2)}`, storeId, type: 'refund', amount: Math.round((was - v) * 100) / 100, at: now.toISOString() };
+    if (add.run(e.id, e.storeId, e.amount, e.at).changes) publish({ type: 'event', event: e });
+  }
+}
+
+/**
  * Store platforms whose sync is a few cheap incremental requests, polled every `fastMs` so new orders reach the live
  * feed within minutes. Etsy stays at `staleMs` (new apps get 5k calls a day), ad networks re-pull weeks of insights.
  */
@@ -69,9 +99,11 @@ export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs =
       running.add(id);
       // Demo stores have no real orders yet; their first real sync replaces the demo ones without announcing history.
       const store = r.store_id == null ? undefined : db.prepare('SELECT demo, (SELECT max(created_at) FROM orders WHERE store_id = stores.id) AS newest FROM stores WHERE id = ?').get(r.store_id);
+      const before = store?.demo === 0 ? orderValues(db, String(r.store_id), now) : undefined;
       syncers[r.kind as IntegrationKind]!(db, key, String(r.store_id), retrying(fetch)).finally(() => {
         running.delete(id);
         if (store?.demo === 0) announceOrders(db, String(r.store_id), store.newest == null ? null : String(store.newest), new Date());
+        if (before) announceRefunds(db, String(r.store_id), before, new Date());
         const after = db.prepare('SELECT status, error FROM integrations WHERE id = ?').get(id);
         if (!after) return;
         log(after.status === 'error' ? 'warn' : 'info', 'sync', { id, ms: Date.now() - now.getTime(), status: after.status, ...(after.error ? { error: after.error } : {}) });
