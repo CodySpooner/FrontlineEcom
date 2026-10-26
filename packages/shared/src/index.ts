@@ -428,7 +428,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'adAccountId', label: 'Ad account ID', secret: false, placeholder: 'act_…' },
     { key: 'accessToken', label: 'System user access token', secret: true },
   ] },
-  google_ads: { name: 'Google Ads', category: 'ads', perStore: true, fields: [
+  google_ads: { name: 'Google Ads', category: 'ads', perStore: true, help: 'Google Ads → Tools → API Center: apply for a developer token. Google Cloud console → enable the Google Ads API → Credentials → OAuth client ID (Desktop app) → client ID + secret. Get a refresh token for the https://www.googleapis.com/auth/adwords scope with that client (e.g. OAuth Playground → use your own credentials). Sign in with a Google account that has direct access to the ad account. Customer ID is top right in Google Ads.', fields: [
     { key: 'customerId', label: 'Customer ID', secret: false, placeholder: '123-456-7890' },
     { key: 'clientId', label: 'OAuth client ID', secret: false },
     { key: 'clientSecret', label: 'OAuth client secret', secret: true },
@@ -439,7 +439,7 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'advertiserId', label: 'Advertiser ID', secret: false },
     { key: 'accessToken', label: 'Access token', secret: true },
   ] },
-  ga4: { name: 'Google Analytics 4', category: 'analytics', perStore: true, fields: [
+  ga4: { name: 'Google Analytics 4', category: 'analytics', perStore: true, help: 'Google Cloud console → enable the Google Analytics Data API → IAM → Service accounts → Create → Keys → Add key (JSON) → paste the whole file. Then GA4 Admin → Property access management → add the service account email as Viewer. Property ID is in GA4 Admin → Property details.', fields: [
     { key: 'propertyId', label: 'Property ID', secret: false },
     { key: 'serviceAccountJson', label: 'Service account JSON', secret: true },
   ] },

@@ -31,7 +31,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
       inventory; incremental sync into SQLite on an interval; switches the store from demo to real. Fixture-based tests.
 - [x] CORE-09 Meta Ads connector: Marketing API insights per ad account/campaign (spend, purchases, purchase value,
       clicks, impressions); map ad accounts → stores; feed `ad_spend`.
-- [ ] CORE-10 Google Ads + GA4 connectors (spend/conversions; sessions/funnel).
+- [x] CORE-10 Google Ads + GA4 connectors (spend/conversions; sessions/funnel).
 - [ ] CORE-11 TikTok Shop + TikTok Ads connectors.
 - [ ] CORE-12 Etsy + Amazon SP-API connectors (read-only analytics first).
 - [ ] CORE-13 Suppliers: CJ Dropshipping / DSers — product sourcing + order status (read first).
@@ -51,6 +51,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-10 Google Ads (API v26, GAQL search, OAuth refresh token; campaigns + campaign_daily → ad_spend, 30-day re-pull) and GA4 (Data API, service-account JWT, read-only; owns sessions / add_to_carts / checkouts); both in the sync loop, help text in the catalog
 - 2026-10-26 — Inbox: Shopify `createProducts` (priced drafts via productCreate + productVariantsBulkUpdate, `write_products` in help); Meta help lists `ads_mcp_management` / `ads_management`; `higgsfield` integration kind (global, key ID + secret for api.higgsfield.ai)
 - 2026-10-26 — CORE-18 Electron shell `apps/desktop` (`pnpm desktop`): API in a utilityProcess on a free localhost port serving the web build (`FRONTLINE_DEV_URL` = load Vite instead), single instance, frameless window with themed native controls, close-to-tray, data in `%APPDATA%/Frontline Ecom/data`, credentials key in safeStorage (unreadable key → owner can reset; connectors then ask for tokens again instead of crashing). `node:sqlite` + FTS5 verified under Electron 44 (Node 24.21): no better-sqlite3 fallback needed
 - 2026-10-26 — CORE-17 automation scheduler: rules (5-field local cron | metric threshold over N days) → agent task via the run manager; approval `ask` (approvals hook) or `auto`; daily cap + cooldown; run log; survives restarts (persisted `checked_at`, 24h catch-up, pending approvals re-attached); `GET/POST /api/automations`, `PATCH/DELETE /api/automations/:id`, `GET /api/automations/runs`
