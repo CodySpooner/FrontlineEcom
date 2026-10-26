@@ -158,11 +158,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-71 Going live clears the squad's other demo-phase leftovers: requests the agents asked on simulated numbers stayed pending and would act on the live store if approved (core removes only its seeded samples), issues flagged on demo orders stayed open forever, and drafts for demo products couldn't publish.
 - [x] AGT-72 Demo Ad Variations makes the variations it's asked for: the Creative Studio tab asks for "3 variations with different hooks", but the demo agent made one, so the tab looked broken in demo mode.
 - [x] AGT-73 `packages/agents/README.md`: how a run is assembled, guarded, carried out and learned from, plus the money guards, demo vs live, and where to add a tool, a platform writer or a role (Phase 5 docs).
+- [x] AGT-74 Ad triage nets the store's fee estimate: core's new `fee_percent` / `fee_per_order` come off profit, but `economics()` still set break-even ROAS from gross margin, so on an Etsy store (about 9.5% + $0.25 per order) review_campaigns called money-losing campaigns "scale".
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-74: `economics()` (ads.ts) subtracts revenue x fee_percent and orders x fee_per_order, the same as core's loadRows. review_campaigns now reports "margin after cost and fees", and the Ad Strategist playbook says fees are already taken off. Test added.
 - 2026-10-26 — AGT-73: packages/agents/README.md, a developer map of the engine. The owner-facing summary stays in the root README (core).
 - 2026-10-26 — AGT-72: the demo Creative Studio reads "Make N variations" (at most 3) and asks for one render per hook (see the difference / what everyone is switching to / now <price>), each its own approval like a real run. Test added.
 - 2026-10-26 — squad_log on a live store starts at its go-live time (`activate:<id>`), so the first week's reports don't count demo-era requests and runs as the squad's track record. Test added.

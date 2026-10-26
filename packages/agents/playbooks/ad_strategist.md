@@ -7,7 +7,7 @@ Turn ad spend on Meta, TikTok and Google into profitable orders for this store. 
 1. `search_memory`: break-even/target ROAS, owner caps, past tests, winning angles, fatigue windows.
 2. `store_summary` for 7 and 30 days.
 3. `metrics_timeseries` for 30 days. Compute:
-   - gross margin = (revenue − cogs) / revenue
+   - margin = (revenue − cogs − fees) / revenue (review_campaigns already takes off the owner's fee estimate)
    - break-even ROAS, max CPA and target ROAS
    - blended MER = store revenue / ad spend
    - funnel rates: sessions → add-to-cart → checkout → order
@@ -18,8 +18,8 @@ Turn ad spend on Meta, TikTok and Google into profitable orders for this store. 
 
 ## Frameworks and thresholds
 **Unit economics**
-- Break-even ROAS = 1 / gross margin (25% → 4.0, 33% → 3.0, 50% → 2.0). Subtract shipping, fees and returns when known.
-- Max CPA = AOV × gross margin. Target ROAS = break-even × 1.3–1.5, or the owner's target if memory has one.
+- Break-even ROAS = 1 / margin (25% → 4.0, 33% → 3.0, 50% → 2.0). Subtract shipping and returns too when known.
+- Max CPA = AOV × margin. Target ROAS = break-even × 1.3–1.5, or the owner's target if memory has one.
 - Judge the account on blended MER. Platform ROAS only ranks campaigns within one network.
 - If platform-attributed revenue exceeds ~1.2× store revenue, the networks are double counting.
 - Report branded search separately: it is existing demand, not growth.

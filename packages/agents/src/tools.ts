@@ -655,14 +655,14 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'review_campaigns',
     description:
-      'Judge every campaign against break-even ROAS (from 30-day gross margin): verdict scale / hold / cut / pause / learning (not enough spend yet) / paused, with a suggested daily budget. Start every ad review here.',
+      'Judge every campaign against break-even ROAS (from 30-day margin after product cost and the fee estimate set for the store): verdict scale / hold / cut / pause / learning (not enough spend yet) / paused, with a suggested daily budget. Start every ad review here.',
     input: { days: z.number().int().min(3).max(30).default(7) },
     run: async ({ days }, ctx) => {
       const econ = economics(ctx.db, ctx.store.id, since(30, ctx.store));
       const t = thresholds(econ);
       const rows = campaignStats(ctx, days);
       return [
-        `gross margin ${r2(econ.margin * 100)}%, AOV ${r2(econ.aov)}, break-even ROAS ${r2(t.breakEven)}, target ROAS ${r2(t.target)}, max CPA ${r2(t.maxCpa)} (30 days); campaigns over ${days} days:`,
+        `margin after cost and fees ${r2(econ.margin * 100)}%, AOV ${r2(econ.aov)}, break-even ROAS ${r2(t.breakEven)}, target ROAS ${r2(t.target)}, max CPA ${r2(t.maxCpa)} (30 days); campaigns over ${days} days:`,
         csv(
           reviewCampaigns(rows, econ).map((c) => ({
             network: c.network, id: c.id, name: c.name, status: c.status, daily_budget: c.dailyBudget, spend: r2(c.spend), roas: c.roas, cpa: c.cpa ?? '',

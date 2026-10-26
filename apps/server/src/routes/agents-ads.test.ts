@@ -43,10 +43,22 @@ const propose = (input: object): FakeStep => ({ call: 'propose_ad_change', input
 test('review_campaigns gives thresholds and a verdict per campaign', async () => {
   const [out] = (await run([{ call: 'review_campaigns' }])).outputs;
   const [head, cols, ...rows] = out!.split('\n');
-  expect(head).toMatch(/^gross margin [\d.]+%, AOV [\d.]+, break-even ROAS [\d.]+, target ROAS [\d.]+, max CPA [\d.]+ \(30 days\); campaigns over 7 days:$/);
+  expect(head).toMatch(/^margin after cost and fees [\d.]+%, AOV [\d.]+, break-even ROAS [\d.]+, target ROAS [\d.]+, max CPA [\d.]+ \(30 days\); campaigns over 7 days:$/);
   expect(cols).toBe('network,id,name,status,daily_budget,spend,roas,cpa,purchases,verdict,suggested_budget');
   expect(rows).toHaveLength(4);
   for (const r of rows) expect(['scale', 'hold', 'cut', 'pause', 'learning', 'paused']).toContain(r.split(',')[9]);
+});
+
+test("break-even ROAS nets the owner's fee estimate, like the store's profit", async () => {
+  const head = async () => {
+    const [out] = (await run([{ call: 'review_campaigns' }])).outputs;
+    const [margin, aov] = out!.match(/[\d.]+/g)!.map(Number);
+    return { margin: margin!, aov: aov! };
+  };
+  const before = await head();
+  db.prepare(`UPDATE stores SET fee_percent = 9.5, fee_per_order = 0.25 WHERE id = 'pawsome'`).run();
+  const after = await head();
+  expect(after.margin).toBeCloseTo(before.margin - 9.5 - (100 * 0.25) / before.aov, 1);
 });
 
 test('an approved budget change and pause are applied to the demo ad account', async () => {

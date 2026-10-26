@@ -16,7 +16,7 @@ export interface CampaignStats {
 }
 
 export interface Economics {
-  /** Gross margin, (revenue − cogs) / revenue. */
+  /** Margin after product cost and the owner's fee estimate, (revenue − cogs − fees) / revenue. */
   margin: number;
   aov: number;
 }
@@ -45,10 +45,14 @@ export function reviewCampaigns(campaigns: CampaignStats[], econ: Economics) {
   });
 }
 
-/** 30-day gross margin and AOV for a store, from core's daily_metrics. */
+/** 30-day margin and AOV for a store, from core's daily_metrics less the store's fee estimate (as core's profit does). */
 export function economics(db: DatabaseSync, storeId: string, since: string): Economics {
   const r = db
-    .prepare('SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(cogs), 0) AS cogs, coalesce(sum(orders), 0) AS orders FROM daily_metrics WHERE store_id = ? AND date >= ?')
+    .prepare(
+      `SELECT coalesce(sum(d.revenue), 0) AS revenue, coalesce(sum(d.cogs + d.revenue * s.fee_percent / 100 + d.orders * s.fee_per_order), 0) AS cogs,
+         coalesce(sum(d.orders), 0) AS orders
+       FROM daily_metrics d JOIN stores s ON s.id = d.store_id WHERE d.store_id = ? AND d.date >= ?`,
+    )
     .get(storeId, since);
   const revenue = Number(r?.revenue ?? 0);
   return { margin: revenue ? (revenue - Number(r?.cogs ?? 0)) / revenue : 0, aov: Number(r?.orders) ? revenue / Number(r?.orders) : 0 };
