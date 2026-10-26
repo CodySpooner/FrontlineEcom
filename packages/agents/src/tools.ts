@@ -1,7 +1,7 @@
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
-import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, type CampaignStats } from './ads';
+import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, uncostedShare, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
 import { agentTags, searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
@@ -777,15 +777,8 @@ export const APP_TOOLS: AppTool[] = [
       const econ = economics(ctx.db, ctx.store.id, since(30, ctx.store));
       const t = thresholds(econ);
       const rows = campaignStats(ctx, days);
-      // Products with no unit cost (Shopify's "Cost per item" left empty) sell at cost 0: margin reads high and break-even
-      // ROAS low, so losing campaigns come out as "scale". ponytail: 10% of product sales, no per-product list.
-      const lines = ctx.db
-        .prepare(
-          `SELECT sum(i.revenue) AS revenue, sum(iif(i.cost = 0, i.revenue, 0)) AS uncosted FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
-           WHERE i.store_id = ? AND o.status = 'paid' AND o.local_date >= ?`,
-        )
-        .get(ctx.store.id, since(30, ctx.store));
-      const uncosted = Number(lines?.revenue) > 0 ? Number(lines!.uncosted) / Number(lines!.revenue) : 0;
+      // Losing campaigns come out as "scale" when break-even ROAS reads low. ponytail: no per-product list.
+      const uncosted = uncostedShare(ctx.db, ctx.store.id, since(30, ctx.store));
       return [
         `margin after cost, tax and fees ${r2(econ.margin * 100)}%, AOV ${r2(econ.aov)}, break-even ROAS ${r2(t.breakEven)}, target ROAS ${r2(t.target)}, max CPA ${r2(t.maxCpa)} (30 days); campaigns over ${days} days:`,
         uncosted >= 0.1

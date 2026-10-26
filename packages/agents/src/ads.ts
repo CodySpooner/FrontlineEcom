@@ -67,6 +67,20 @@ export function economics(db: DatabaseSync, storeId: string, since: string): Eco
   return { margin: revenue ? (revenue - Number(r?.cogs ?? 0)) / revenue : 0, aov: Number(r?.orders) ? revenue / Number(r?.orders) : 0 };
 }
 
+/**
+ * Share of the store's product sales since `since` with no unit cost (Shopify's "Cost per item" left empty syncs as 0):
+ * their whole price counts as margin, so break-even ROAS reads low. ponytail: 10%+ is called too many, by its callers.
+ */
+export function uncostedShare(db: DatabaseSync, storeId: string, since: string) {
+  const r = db
+    .prepare(
+      `SELECT sum(i.revenue) AS revenue, sum(iif(i.cost = 0, i.revenue, 0)) AS uncosted FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+       WHERE i.store_id = ? AND o.status = 'paid' AND o.local_date >= ?`,
+    )
+    .get(storeId, since);
+  return Number(r?.revenue) > 0 ? Number(r!.uncosted) / Number(r!.revenue) : 0;
+}
+
 /** The store's own site revenue and its ad spend over [from, to], YYYY-MM-DD inclusive (blended ROAS = revenue ÷ spend). */
 export function adWindow(db: DatabaseSync, storeId: string, from: string, to: string) {
   // Amazon as an extra channel (core's channel_daily) is in the store's revenue, but the store's ads didn't make those sales.

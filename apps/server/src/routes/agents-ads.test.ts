@@ -401,6 +401,13 @@ test('a budget raise is judged on what its extra spend brought vs break-even, no
     '"Raise Broad budget $250 → $500/day" worked: +250 USD/day ad spend brought +600 USD/day revenue (incremental ROAS 2.40 vs break-even 1.67) in the 3 days after.',
   ]);
   expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(xp + 50);
+
+  // Most sales with no unit cost: break-even reads low, so the raise is judged on blended ROAS (4.00 → 3.20) instead.
+  db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('peak', 'o-nc', ?, 90, 'paid', 'delivered', ?)`).run(`${day}T08:00:00Z`, day);
+  db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('peak', 'o-nc', 'p-nc', 1, 90, 0)`).run();
+  raise('scale-2', 'Raise UGC budget $250 → $500/day');
+  checkAdOutcomes(db);
+  expect(outcomes().map((m) => m.text)).toContain('"Raise UGC budget $250 → $500/day" did not help: blended ROAS 4.00 → 3.20 in the 3 days after.');
 });
 
 test('a change that did not help is remembered too, without XP', async () => {

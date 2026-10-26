@@ -278,11 +278,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-152 One theme change at a time on the storefront. Only a waiting request blocked a second draft, so a new change could go live inside the last one's 14-day conversion window and both outcomes measured the mix (price tests and product pages already wait out theirs).
 - [x] AGT-153 A product page and a price test on one product don't overlap. Both are judged on the product's profit 14 days before vs after; each tool only checked its own kind, so a price change during a new page's window (or the reverse) was credited to whichever was judged.
 - [x] AGT-154 A budget raise is judged on what its extra spend brought. Every ad change was judged on blended ROAS before vs after, which dips as a winner scales even when the extra spend pays back above break-even, so the Ad Strategist's right scale-ups were remembered as "did not help" and it learned to stay small.
+- [x] AGT-155 A budget raise isn't judged against break-even while many sales have no unit cost. That break-even reads low there (AGT-141), so AGT-154's check would have called a losing raise a win.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-155: with 10%+ of the 30 days' product sales before the change at cost 0, a raise is judged on blended ROAS like other changes. The share is `uncostedShare` in ads.ts, which `review_campaigns`' warning now uses too.
 - 2026-10-26 — AGT-154: an approved `ads.set_budget` raise whose spend did rise is judged on incremental ROAS (per-day revenue change ÷ per-day spend change, 3 days after vs 7 before) against break-even ROAS from 30-day margin; pauses, cuts and raises that didn't spend keep blended ROAS. `blendedRoas` became `adWindow` (revenue and spend).
 - 2026-10-26 — AGT-153: `propose_price_change` refuses while the product's new page went live in the last 29 days, and `publish_page` while a price test on it started in the last 29 (the draft waits in Store Builder) — the same span each already used for its own kind.
 - 2026-10-26 — AGT-152: `draft_theme_change` refuses (before copying the theme) while a theme change went live in the last 15 days, naming it and the day.

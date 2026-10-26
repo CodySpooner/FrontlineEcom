@@ -1,4 +1,4 @@
-import { adWindow, awardXp, cash, checkAchievements, commander, dailyMissions, economics, getAgent, judgeRun, levelForXp, nicheKey, once, profitStreak, promotionCandidates, thresholds, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
+import { adWindow, awardXp, cash, checkAchievements, commander, dailyMissions, economics, getAgent, judgeRun, levelForXp, nicheKey, once, profitStreak, promotionCandidates, thresholds, uncostedShare, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
 import { AGENT_ROLES, PRODUCT_WRITE_PLATFORMS, type MetricTotals, type Mission, type Store } from '@frontline/shared';
 import { Hono } from 'hono';
 import { currentWindow, summarize } from '../analytics';
@@ -98,7 +98,8 @@ export function checkAdOutcomes(db: Db, today?: string) {
     // A raise is judged on what its extra spend brought: blended ROAS dips as a winner scales even when it pays back.
     // ponytail: per-day averages, store-wide; whatever else moved revenue in those days counts too.
     const [extra, more] = [a.spend / 3 - b.spend / 7, a.revenue / 3 - b.revenue / 7];
-    const raise = r.kind === 'ads.set_budget' && Number(r.bto) > Number(r.bfrom) && extra > 0;
+    // Not when many sales have no unit cost: break-even reads low there, and a losing raise would pass.
+    const raise = r.kind === 'ads.set_budget' && Number(r.bto) > Number(r.bfrom) && extra > 0 && uncostedShare(db, String(r.store_id), addDays(day, -30)) < 0.1;
     const breakEven = raise ? thresholds(economics(db, String(r.store_id), addDays(day, -30))).breakEven : 0;
     const worked = raise ? more / extra >= breakEven : after > before;
     const money = (n: number) => `${n < 0 ? '-' : '+'}${Math.round(Math.abs(n)).toLocaleString('en-US')} ${String(r.currency)}/day`;
