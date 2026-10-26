@@ -55,3 +55,17 @@ test('a demo Creative Studio run asks before rendering, like a real one; approve
   await m.idle();
   expect(listCreatives(db, { storeIds: ['glow'] })[0]).toMatchObject({ kind: 'ugc', aspect: '9:16', source: 'demo', prompt: 'A creator unboxes it in a car.', credits: 40 });
 });
+
+test("a demo Ask AI question reads the data it's about", async () => {
+  const asked = async (q: string) => {
+    const m = runManager(db);
+    const run = m.start('glow:market_analyst', q);
+    if (typeof run === 'string') throw new Error(run);
+    await m.idle();
+    return m.get(run.id)!.transcript!.flatMap((e) => (e.type === 'tool_call' ? [e.name] : []));
+  };
+  expect(await asked('Which product sells best this month?')).toEqual(['list_products', 'store_summary']);
+  expect(await asked('Are my ads profitable?')).toEqual(['list_campaigns', 'store_summary']);
+  expect(await asked('What are competitors charging?')).toEqual(['list_competitors', 'store_summary']);
+  expect(await asked('How did we do this week?')).toEqual(['metrics_timeseries', 'store_summary']);
+});

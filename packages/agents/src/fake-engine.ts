@@ -56,6 +56,15 @@ function demoWork(input: RunInput): FakeStep[] {
       const p = product();
       return p ? [{ call: 'create_creative', input: { kind: 'copy', headline: `${p.title}, done right`.slice(0, 80), primaryText: `Meet ${p.title}: the upgrade your routine was missing. Now ${cash(Number(p.price), input.store.currency)}.`, cta: 'Shop now' } }] : [];
     }
+    case 'market_analyst': {
+      // Ask AI (Ctrl+K) lands here: read what the question is about, so the demo answer shows the data behind it.
+      const q = input.task.toLowerCase();
+      if (/competitor|rival/.test(q)) return [{ call: 'list_competitors' }];
+      if (/\bads?\b|campaign|roas|spend|budget/.test(q)) return [{ call: 'list_campaigns', input: { days: 7 } }];
+      if (/order|ship|fulfil|refund/.test(q)) return [{ call: 'list_orders', input: { days: 7, limit: 20 } }];
+      if (/product|sell|seller|price|catalog|stock/.test(q)) return [{ call: 'list_products' }];
+      return [{ call: 'metrics_timeseries', input: { days: 7 } }];
+    }
     case 'creative_studio': {
       // Only the owner starts it (no scheduled jobs), so its demo asks first like a real run: approve → a demo render.
       const p = product();
