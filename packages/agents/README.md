@@ -38,7 +38,7 @@ outcome checks.
    (`routes/agents-gamification.ts`, on dashboard reads and hourly) judge approved changes on real data later:
    - ads: 3 days after vs 7 before (blended ROAS; a raise on its extra spend's ROAS, a pause or cut on the ROAS of the spend it took away, vs break-even)
    - products: their first 14 days on sale (from when first seen active; else from the day added)
-   - prices and pages: 14 days before vs after (10+ units across both, else "can't be judged")
+   - prices and pages: 14 days before vs after, the before scaled by the rest of the store's sales (10+ units across both, else "can't be judged")
    - themes: conversion 14 days before vs after (30+ orders across both)
 
    Windows are counted in the store's own days (a live store dates its data in its zone), and a change is judged only once

@@ -174,6 +174,28 @@ test("a price test on a product with no unit cost isn't called a win: its profit
   expect(db.prepare(`SELECT title, body FROM notifications WHERE body = ?`).all(text)).toEqual([{ title: 'Market Analyst: result unclear without unit costs', body: text }]);
 });
 
+test("a price test is judged against the store's season: more profit while every product sold more isn't a win", () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1, fee_percent = 0, fee_per_order = 0 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01'));
+  const day = addDays(localDate(), -20);
+  db.prepare(`INSERT INTO price_tests (approval_id, store_id, product_id, agent_id, title, from_price, to_price, changed_on) VALUES ('a-bf', 'peak', '77', 'peak:market_analyst', 'Grip Socks', 20, 25, ?)`).run(day);
+  let n = 0;
+  const sell = (product: string, units: number, on: string, price: number) => {
+    for (let k = 0; k < units; k++, n++) {
+      db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('peak', ?, ?, ?, 'paid', 'delivered', ?)`).run(`o-bf-${n}`, `${on}T12:00:00Z`, price, on);
+      db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('peak', ?, ?, 1, ?, 10)`).run(`o-bf-${n}`, product, price);
+    }
+  };
+  sell('77', 10, addDays(day, -5), 20); // 100 profit before
+  sell('77', 8, addDays(day, 5), 25); // 120 after: +20%
+  sell('other', 20, addDays(day, -5), 30);
+  sell('other', 30, addDays(day, 5), 30); // the rest of the store sold 50% more (a holiday week)
+  checkPriceOutcomes(db);
+  expect(listMemory(db, 'peak').filter((m) => m.tags.includes('pricing')).map((m) => m.text)).toEqual([
+    'Pricing "Grip Socks" $20 → $25 did not help: profit 100 USD → 120 USD (par 150 USD: the rest of the store\'s sales moved +50%), 10 → 8 units (14 days before vs after).',
+  ]);
+});
+
 test('a price test on a few units sold is not judged on one order either way', () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
   once(db, 'activate:peak', new Date('2020-01-01'));

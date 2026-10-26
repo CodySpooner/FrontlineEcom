@@ -203,6 +203,23 @@ const productSales = (db: Db, storeId: string, productId: string, from: string, 
   return { units: Number(r.units), revenue: Number(r.revenue), profit: Number(r.profit), uncosted: !!r.uncosted };
 };
 
+/**
+ * The profit a product would have made after `day` had nothing changed but the season: its 14 days before, moved as
+ * much as the rest of the store's product sales did (Black Friday lifts every product; January drops them). `note`
+ * says so when that's 10%+. ponytail: store-wide, revenue-weighted; a loss before isn't scaled.
+ */
+function par(db: Db, storeId: string, productId: string, day: string, before: { profit: number }, money: (n: number) => string) {
+  const rest = db.prepare(
+    `SELECT coalesce(sum(i.revenue), 0) AS revenue FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
+     WHERE i.store_id = ? AND i.product_id != ? AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?`,
+  );
+  const [b, a] = [[-14, -1], [1, 14]].map(([from, to]) => Number(rest.get(storeId, productId, addDays(day, from!), addDays(day, to!))?.revenue));
+  const trend = b! > 0 && a! > 0 && before.profit > 0 ? a! / b! : 1;
+  const moved = Math.round((trend - 1) * 100);
+  const profit = before.profit * trend;
+  return { profit, note: Math.abs(moved) >= 10 ? ` (par ${money(profit)}: the rest of the store's sales moved ${moved > 0 ? '+' : ''}${moved}%)` : '' };
+}
+
 /** Units a price test or page needs across its 28 days to be judged. ponytail: under it one order flips the verdict; no significance test. */
 const MIN_UNITS = 10;
 /** Orders a theme change needs across its 28 days to be judged on conversion. */
@@ -229,8 +246,9 @@ export function checkPriceOutcomes(db: Db, today?: string) {
     if (!before.units) continue; // no sales before (new, or not selling): no baseline, so nothing to compare
     const few = before.units + after.units < MIN_UNITS;
     // Sales with no unit cost (cost 0) count their whole price as profit: a cut that sells more at a loss would read as a win.
-    const worked = few || before.uncosted || after.uncosted ? undefined : after.profit > before.profit;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
+    const season = par(db, storeId, productId, day, before, money);
+    const worked = few || before.uncosted || after.uncosted ? undefined : after.profit > season.profit;
     const price = (n: unknown) => cash(Number(n), String(t.currency));
     const agentId = String(t.agent_id);
     recordOutcome(db, `price:${t.approval_id}`, worked, {
@@ -239,7 +257,7 @@ export function checkPriceOutcomes(db: Db, today?: string) {
         ? `Pricing "${t.title}" ${price(t.from_price)} → ${price(t.to_price)} can't be judged on ${before.units + after.units} units sold (it takes ${MIN_UNITS}): profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`
         : worked === undefined
         ? `Pricing "${t.title}" ${price(t.from_price)} → ${price(t.to_price)} can't be judged: no unit cost is set, so profit before product cost went ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`
-        : `Pricing "${t.title}" ${price(t.from_price)} → ${price(t.to_price)} ${worked ? 'worked' : 'did not help'}: profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
+        : `Pricing "${t.title}" ${price(t.from_price)} → ${price(t.to_price)} ${worked ? 'worked' : 'did not help'}: profit ${money(before.profit)} → ${money(after.profit)}${season.note}, ${before.units} → ${after.units} units (14 days before vs after).`,
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.approval_id})`,
     }, few ? 'on too few sales' : undefined);
     if (t.run_id && worked !== undefined) judgeRun(db, `price:${t.approval_id}`, String(t.run_id), worked);
@@ -269,15 +287,16 @@ export function checkPageOutcomes(db: Db, today?: string) {
     const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
     if (!before.units) continue; // a new product's page (it had no sales before) has no baseline: its product test judges the sales
     const few = before.units + after.units < MIN_UNITS;
-    const worked = few || before.uncosted || after.uncosted ? undefined : after.profit > before.profit; // as price tests
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${d.currency}`;
+    const season = par(db, storeId, productId, day, before, money);
+    const worked = few || before.uncosted || after.uncosted ? undefined : after.profit > season.profit; // as price tests
     recordOutcome(db, `page:${d.id}`, worked, {
       storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : worked === undefined ? 0.5 : 0.6, tags: ['outcome', 'page'],
       text: few
         ? `The new "${d.title}" page can't be judged on ${before.units + after.units} units sold (it takes ${MIN_UNITS}): profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`
         : worked === undefined
         ? `The new "${d.title}" page can't be judged: no unit cost is set, so profit before product cost went ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`
-        : `The new "${d.title}" page ${worked ? 'worked' : 'did not help'}: profit ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`,
+        : `The new "${d.title}" page ${worked ? 'worked' : 'did not help'}: profit ${money(before.profit)} → ${money(after.profit)}${season.note}, ${before.units} → ${after.units} units (14 days before vs after).`,
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (draft ${d.id})`,
     }, few ? 'on too few sales' : undefined);
     if (d.run_id && worked !== undefined) judgeRun(db, `page:${d.id}`, String(d.run_id), worked);
