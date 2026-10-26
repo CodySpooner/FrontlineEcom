@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
-import { Link, NavLink, Outlet } from 'react-router';
+import { Component, useEffect, type ReactNode } from 'react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { TriangleAlert } from 'lucide-react';
 import { useAgents, useHealth, useLive } from '../api/client';
 import { NAV } from '../nav';
 import { SvgDefs } from './Art';
@@ -7,10 +8,11 @@ import { AskPalette } from './AskPalette';
 import { BrandLogo } from './BrandLogo';
 import { XpToasts } from './Gamification';
 import { Onboarding } from './Onboarding';
-import { ProgressBar, StatusDot, cx } from './ui';
+import { Button, buttonClass, Card, ProgressBar, StatusDot, cx } from './ui';
 
 export function Shell() {
   useLive();
+  const { pathname } = useLocation();
   // Desktop app (frameless Electron): Windows' caption buttons overlay the page, so the hero strip becomes the title bar.
   useEffect(() => {
     // Not in TS's DOM lib yet (Chromium-only API).
@@ -56,7 +58,10 @@ export function Shell() {
         <SystemStatus />
       </aside>
       <main className="min-w-0 px-[22px] pb-8">
-        <Outlet />
+        {/* Keyed by path: moving to another page clears a caught error. */}
+        <PageBoundary key={pathname}>
+          <Outlet />
+        </PageBoundary>
       </main>
     </div>
   );
@@ -87,4 +92,33 @@ function SystemStatus() {
       <ProgressBar value={agents.length ? (agents.length - down) / agents.length : 0} tone={ok ? 'good' : 'red'} label="Agents online" />
     </div>
   );
+}
+
+/** A page that throws shows this inside the shell instead of blanking the window. React logs the error itself. */
+export class PageBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
+  state: { error?: Error } = {};
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+  render() {
+    const { error } = this.state;
+    if (!error) return this.props.children;
+    return (
+      <Card role="alert" className="mx-auto mt-16 grid max-w-md justify-items-center gap-3 p-6 text-center">
+        <TriangleAlert className="size-6 text-red" strokeWidth={1.8} />
+        <h1 className="font-display text-lg font-bold">This page hit a snag</h1>
+        <p className="text-[13px] text-text-2">Your stores and agents are fine. Reload the page, or head back to the Command Center.</p>
+        <div className="flex gap-2">
+          <Button onClick={() => location.reload()}>Reload</Button>
+          <Link to="/" className={buttonClass('primary')}>
+            Go to Dashboard
+          </Link>
+        </div>
+        <details className="text-left text-xs text-muted">
+          <summary className="cursor-pointer">Details</summary>
+          <p className="mt-1 break-words">{error.message}</p>
+        </details>
+      </Card>
+    );
+  }
 }

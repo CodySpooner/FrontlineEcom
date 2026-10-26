@@ -100,6 +100,12 @@ Orca's browser against the reference before ticking it.
       clipped buttons or overlapping hero art.
 - [x] UI-27 Component tests: onboarding (first run shows; Explore the demo remembers; add store → squad → that store
       selected) and Ask palette (Ctrl+K opens; arrows + Enter open a page; a question starts a Market Analyst run). Stub all fetches.
+- [x] UI-28 Error boundary: a page that throws shows a calm in-shell error (sidebar and top bar stay) with Reload and
+      Go to Dashboard, and resets when you navigate. Today one render error blanks the whole desktop window.
+- [ ] UI-29 Live reconnect catch-up: when `/api/live` drops and comes back (API restart, laptop sleep), refetch so the
+      approvals, runs and feed missed during the gap show up; today the socket reconnects but the screen stays stale.
+- [ ] UI-30 Approve or deny from the bell drawer (DESIGN §7: requests show "on the Dashboard and in notifications").
+      Today the drawer only links to the Dashboard, so from any other page it's two hops.
 
 ## Blocked
 
@@ -148,3 +154,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Inbox (core): Dashboard + Analytics show "<codes> stores aren't included: no exchange rate. Open the store on its own to see it." under the filter row when `AnalyticsSummary.unconverted` is set (checked with a temp VND store: shown on All, gone on the store alone, which reads ₫)
 - 2026-10-26 — UI-25: Today's usage vs caps — `useUsage` (/api/usage, refreshed on run/approval events); UsageMeter (neutral bar, red from 80%, "x of cap used today") under each cap in Settings › Caps (follows the cap being typed) and in the agent's Store caps panel; autopilot list there shows kind labels instead of raw kinds
 - 2026-10-26 — UI-27: Component tests — `src/test-utils.tsx` (app providers + MemoryRouter at a path with a location readout, `stubApi` fake fetch, jsdom showModal/close shim), used by the approvals test too; onboarding (flag keeps it away; Explore the demo remembers; add store posts the niche → squad → Dashboard with the store picked) and Ask palette (Ctrl+K, filter + arrows + Enter → page; question → Market Analyst run → chat URL)
+- 2026-10-26 — UI-28: Error boundary — `PageBoundary` around the page outlet (keyed by path, so any navigation clears it): "This page hit a snag" card with Reload / Go to Dashboard and collapsed Details; sidebar stays usable. Checked with a temporary throw in Chrome (recovers via the button and via the sidebar); component test
