@@ -112,7 +112,8 @@ export const useSummary = (storeIds: string[], range: AnalyticsRange) =>
   });
 
 // ponytail: the lists below fetch every store once and filter client-side; pass `stores=` when there are dozens of stores.
-export const useEvents = () => useQuery({ queryKey: ['events'], queryFn: () => api<StoreEvent[]>('/api/events?limit=30') });
+export const useEvents = (storeIds: string[]) =>
+  useQuery({ queryKey: ['events', storeIds], queryFn: () => api<StoreEvent[]>(`/api/events?stores=${storeIds.join(',')}&limit=30`) });
 export const useApprovals = (status: ApprovalStatus = 'pending') =>
   useQuery({ queryKey: ['approvals', status], queryFn: () => api<ApprovalRequest[]>(`/api/approvals?status=${status}`) });
 export const useAgents = () => useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/api/agents') });
@@ -491,7 +492,11 @@ export function useLive() {
     let dropped = false;
     const onMessage = (m: LiveMessage) => {
       if (m.type === 'event') {
-        qc.setQueryData<StoreEvent[]>(['events'], (old = []) => [m.event, ...old].slice(0, 30));
+        // Each feed is fetched for its picked stores ([] = all); an event only joins the feeds it belongs to.
+        for (const [key, old] of qc.getQueriesData<StoreEvent[]>({ queryKey: ['events'] })) {
+          const ids = key[1] as string[];
+          if (old && (!ids.length || ids.includes(m.event.storeId))) qc.setQueryData(key, [m.event, ...old].slice(0, 30));
+        }
         // An order event means a real order row and today's metrics moved.
         if (m.event.type === 'order') ['summary', 'orders', 'top-products', 'missions'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       } else if (m.type === 'run_event') qc.setQueryData<AgentRunDetail>(['run', m.runId], (d) => d && applyRunEvent(d, m.event));

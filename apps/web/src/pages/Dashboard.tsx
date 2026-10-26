@@ -178,10 +178,10 @@ const EVENT: Record<StoreEventType, { label: string; icon: typeof ShoppingBag; c
 };
 
 function LiveActivity() {
-  const { has, name, currency } = useStoreSelection();
-  const q = useEvents();
+  const { ids, name, currency } = useStoreSelection();
+  const q = useEvents(ids);
   useTick(30_000);
-  const list = (q.data ?? []).filter((e) => has(e.storeId)).slice(0, 5);
+  const list = (q.data ?? []).slice(0, 5);
   return (
     <Panel
       title="Live Store Activity"

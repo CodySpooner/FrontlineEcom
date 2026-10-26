@@ -71,6 +71,19 @@ describe('useLive', () => {
     expect(refetch).toHaveBeenCalledWith({ queryKey: ['memory', 'glow'] });
   });
 
+  it("adds a live event only to the activity feeds whose stores it belongs to, so busy stores can't crowd out a quiet one", () => {
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const qc = new QueryClient();
+    qc.setQueryData(['events', []], []);
+    qc.setQueryData(['events', ['peak']], []);
+    renderHook(() => useLive(), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+    const event = { id: 'e1', storeId: 'glow', type: 'add_to_cart', title: 'Add to Cart', at: '2026-10-26T08:00:00Z' };
+
+    act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'event', event }) }));
+    expect(qc.getQueryData(['events', []])).toEqual([event]);
+    expect(qc.getQueryData(['events', ['peak']])).toEqual([]);
+  });
+
   it("refreshes the research feed when a run ends (Product Hunter's finds land there)", () => {
     vi.stubGlobal('WebSocket', FakeSocket);
     const qc = new QueryClient();
