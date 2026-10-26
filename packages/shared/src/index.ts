@@ -638,9 +638,11 @@ export interface OAuthStart {
 
 /** Catalog for the Integrations screen: every field listed is required. `perStore` = connected per store (else global). */
 export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category: IntegrationCategory; perStore: boolean; fields: IntegrationField[]; /** Setup steps shown next to the form. */ help?: string }> = {
-  shopify: { name: 'Shopify', category: 'platform', perStore: true, help: 'Shopify admin → Settings → Apps and sales channels → Develop apps → Create an app → Configure Admin API scopes: read_products, read_inventory, read_orders, read_all_orders (plus write_products and write_online_store_pages if agents may add products, change prices and publish pages you approve) → Install app → copy the Admin API access token (shown once).', fields: [
+  shopify: { name: 'Shopify', category: 'platform', perStore: true, help: 'Shopify admin → Settings → Apps and sales channels → Develop apps → Build apps in Dev Dashboard → Create app → new version with Admin API scopes read_products, read_inventory, read_orders, read_all_orders (plus write_products and write_online_store_pages if agents may add products, change prices and publish pages you approve) → Release → Install on your store → Settings: copy the client ID and secret. The app must be in the same organization as the store. Already have a custom app made before 2026? Paste its Admin API access token instead.', fields: [
     { key: 'shopDomain', label: 'Shop domain', secret: false, placeholder: 'your-store.myshopify.com' },
-    { key: 'accessToken', label: 'Admin API access token', secret: true, placeholder: 'shpat_…' },
+    { key: 'clientId', label: 'Client ID', secret: false, optional: true },
+    { key: 'clientSecret', label: 'Client secret', secret: true, optional: true },
+    { key: 'accessToken', label: 'Admin API access token (older custom apps)', secret: true, placeholder: 'shpat_…', optional: true },
   ] },
   tiktok_shop: { name: 'TikTok Shop', category: 'platform', perStore: true, help: 'TikTok Shop Partner Center → App & Service → create a custom app with Order and Product read scopes, and set its redirect URL to https://localhost/frontline-oauth → copy the App key, App secret and the authorization link. Press Connect, approve your shop, then paste the address the browser lands on (the page itself will not load).', fields: [
     { key: 'appKey', label: 'App key', secret: false },

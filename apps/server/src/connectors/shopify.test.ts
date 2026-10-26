@@ -221,3 +221,38 @@ test('setProductPrice reprices every variant and the local product', async () =>
   ]);
   await expect(setProductPrice(db, key, 'peak', '111', { price: 10 }, fetchFn)).rejects.toThrow('not connected');
 });
+
+test('a Dev Dashboard app connects with client credentials; the 24 h token is cached and renewed', async () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const app = createApp(db, key);
+  const res = await app.request('/api/integrations', { method: 'PUT', body: JSON.stringify({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', clientId: 'cid', clientSecret: 'shpss_1' } }), headers: { 'content-type': 'application/json' } });
+  expect(res.status).toBe(200);
+  const shop = fakeShopify([]);
+  const grants: string[] = [];
+  let refuse = false;
+  const fetchFn = (async (url: string, init: RequestInit) => {
+    if (!url.endsWith('/admin/oauth/access_token')) return shop.fetchFn(url, init);
+    grants.push(`${url} ${init.body}`);
+    if (refuse) return Response.json({ error: 'invalid_client', error_description: 'Client authentication failed' }, { status: 401 });
+    return Response.json({ access_token: `tok-${grants.length}`, scope: 'read_products,read_orders', expires_in: 86399 });
+  }) as typeof fetch;
+
+  await syncShopify(db, key, 'glow', fetchFn, new Date('2026-10-26T12:00:00Z'));
+  expect(grants).toEqual(['https://glow-haus.myshopify.com/admin/oauth/access_token grant_type=client_credentials&client_id=cid&client_secret=shpss_1']);
+  expect(new Set(shop.calls.map((c) => c.token))).toEqual(new Set(['tok-1']));
+  expect(db.prepare("SELECT status FROM integrations WHERE id = 'shopify:glow'").get()).toEqual({ status: 'connected' });
+
+  await syncShopify(db, key, 'glow', fetchFn, new Date('2026-10-27T11:50:00Z')); // 23 h 50 min later: cached
+  expect(grants).toHaveLength(1);
+  await syncShopify(db, key, 'glow', fetchFn, new Date('2026-10-27T11:57:00Z')); // under 5 min left: renewed
+  expect(grants).toHaveLength(2);
+  expect(shop.calls.at(-1)!.token).toBe('tok-2');
+
+  refuse = true;
+  await syncShopify(db, key, 'glow', fetchFn, new Date('2026-10-29T00:00:00Z'));
+  expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'shopify:glow'").get()).toMatchObject({ status: 'error', error: expect.stringContaining('Client authentication failed') });
+
+  const bare = await app.request('/api/integrations', { method: 'PUT', body: JSON.stringify({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', clientId: '' } }), headers: { 'content-type': 'application/json' } });
+  expect([bare.status, await bare.json()]).toEqual([400, { error: 'Enter the client ID and secret (or an Admin API access token)' }]);
+});

@@ -70,6 +70,8 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
     }
     (f.secret ? secrets : settings)[f.key] = v;
   }
+  // ponytail: the only kind with alternative credentials (Dev Dashboard app, or a pre-2026 custom app's token).
+  if (kind === 'shopify' && !(secrets.accessToken || (settings.clientId && secrets.clientSecret))) return 'Enter the client ID and secret (or an Admin API access token)';
 
   db.prepare(
     `INSERT INTO integrations (id, kind, store_id, status, error, settings_json, encrypted_credentials, updated_at) VALUES (?, ?, ?, 'connected', NULL, ?, ?, ?)

@@ -2,7 +2,7 @@ import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
 import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
-import { getCredentials, setIntegrationStatus } from '../integrations';
+import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import { rebuildRevenue, setOrderItems, switchToReal } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
@@ -115,6 +115,29 @@ export function fulfillmentOf(o: Pick<ShopifyOrder, 'displayFulfillmentStatus' |
   return o.displayFulfillmentStatus === 'FULFILLED' ? 'fulfilled' : 'unfulfilled';
 }
 
+/**
+ * The Admin API token: a pasted one (legacy custom app), or for a Dev Dashboard app a client-credentials token. Those
+ * last 24 h, so one is minted when the cached one has under 5 minutes left and saved (encrypted) with its expiry.
+ */
+async function adminToken(db: Db, key: Buffer, storeId: string, creds: Record<string, string>, fetchFn: Fetch, now = new Date()) {
+  if (!creds.clientId || !creds.clientSecret) {
+    if (!creds.accessToken) throw new Error("Enter your Dev Dashboard app's client ID and secret (or an older custom app's Admin API access token)");
+    return creds.accessToken;
+  }
+  if (creds.grantToken && Number(creds.grantTokenExpiresAt) - now.getTime() > 5 * 60_000) return creds.grantToken;
+  const res = await fetchFn(`https://${shopHost(creds.shopDomain!)}/admin/oauth/access_token`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: creds.clientId, client_secret: creds.clientSecret }),
+  });
+  const body = (await res.json().catch(() => ({}))) as { access_token?: string; expires_in?: number; error?: string; error_description?: string };
+  if (!res.ok || !body.access_token) {
+    throw new Error(`Shopify refused the client ID and secret (${body.error_description ?? body.error ?? `HTTP ${res.status}`}); install the app on this store from the Dev Dashboard, in the same organization`);
+  }
+  updateSecrets(db, key, `shopify:${storeId}`, { grantToken: body.access_token, grantTokenExpiresAt: String(now.getTime() + (body.expires_in ?? 86399) * 1000) });
+  return body.access_token;
+}
+
 /** Pulls shop, products and orders updated since the last sync and rebuilds revenue/orders/cogs for the touched days. */
 export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `shopify:${storeId}`;
@@ -122,7 +145,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
   if (!creds) return;
   try {
     const host = shopHost(creds.shopDomain!);
-    const q = <T>(query: string, vars: Record<string, unknown> = {}) => gql<T>(host, creds.accessToken!, query, vars, fetchFn);
+    const token = await adminToken(db, key, storeId, creds, fetchFn, now);
+    const q = <T>(query: string, vars: Record<string, unknown> = {}) => gql<T>(host, token, query, vars, fetchFn);
     const { shop } = await q<{ shop: { currencyCode: string; ianaTimezone: string } }>(SHOP_Q);
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const since = cursor ?? `${addDays(localDate(now), -BACKFILL_DAYS)}T00:00:00Z`;
@@ -188,7 +212,8 @@ export interface NewProduct {
 function admin(db: Db, key: Buffer, storeId: string, fetchFn: Fetch) {
   const creds = getCredentials(db, key, 'shopify', storeId);
   if (!creds) throw new Error('Shopify is not connected for this store');
-  return <T>(query: string, vars: Record<string, unknown>) => gql<T>(shopHost(creds.shopDomain!), creds.accessToken!, query, vars, fetchFn);
+  let token: Promise<string> | undefined;
+  return async <T>(query: string, vars: Record<string, unknown>) => gql<T>(shopHost(creds.shopDomain!), await (token ??= adminToken(db, key, storeId, creds, fetchFn)), query, vars, fetchFn);
 }
 
 const check = (errors: { message: string }[]) => {
