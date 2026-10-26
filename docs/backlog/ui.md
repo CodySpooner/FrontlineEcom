@@ -82,7 +82,7 @@ Orca's browser against the reference before ticking it.
 - [x] UI-17 Settings: profile, stores (add/edit: name, platform, niche, sub-niche, currency, color), caps, notifications, sound.
 - [x] UI-18 Gamification layer: commander level in top bar, XP toasts, level-up burst, achievements modal/page,
       missions widget, store health badges (Winning/Steady/Bleeding). Respect prefers-reduced-motion.
-- [ ] UI-19 Ask AI palette (Ctrl+K): questions → selected store's Market Analyst chat; also jump-to-page commands.
+- [x] UI-19 Ask AI palette (Ctrl+K): questions → selected store's Market Analyst chat; also jump-to-page commands.
 - [x] UI-20 Notification center (bell): approvals, agent finished, errors; mark read.
 - [ ] UI-21 Onboarding: first run → explore demo, or add store → pick niche → meet your squad.
 - [ ] UI-22 Polish: 1280–1920 first, usable to 900px; focus rings, keyboard nav, AA contrast; run styleseed-design-review.
@@ -127,3 +127,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Inbox: Executed Actions panel in Automation (action log: label, store, time, target + readable change, Failed badge + error; refetch on approvals)
 - 2026-10-26 — UI-18: Gamification — live XP toasts (who · reason, max 3, auto-dismiss), level-up toast with a burst ring and optional blip (Settings → Sound), Commander profile from the top-bar chip (level, rank, XP bar, profit streak, achievements unlocked/locked with XP); missions widget, level chip and store health badges were already in; motion off under prefers-reduced-motion
 - 2026-10-26 — Inbox: Shopify connect form explains client ID + secret or an older access token (no misleading "(optional)" on that group)
+- 2026-10-26 — UI-19: Ask AI palette — Ctrl/Cmd+K or the top-bar search opens it; typed text becomes "Ask the Market Analyst · <selected store>" (starts the run, opens its chat), pages filter by name/subtitle (prefix first); arrows + Enter, Esc closes

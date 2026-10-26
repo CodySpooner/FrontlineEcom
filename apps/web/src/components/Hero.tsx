@@ -70,8 +70,7 @@ export function Hero({ title, subtitle, icon: Icon, art = 'lone', children }: { 
           {children}
         </div>
         <div className="flex items-center gap-3">
-          {/* ponytail: opens nothing until the Ask AI palette lands (UI-19) */}
-          <button type="button" className="glass hidden w-[200px] cursor-pointer items-center gap-2.5 rounded-[11px] px-3 py-[9px] text-[13px] text-muted transition hover:text-text min-[900px]:flex min-[1100px]:w-[280px]">
+          <button type="button" onClick={() => window.dispatchEvent(new Event('frontline:ask'))} className="glass hidden w-[200px] cursor-pointer items-center gap-2.5 rounded-[11px] px-3 py-[9px] text-[13px] text-muted transition hover:text-text min-[900px]:flex min-[1100px]:w-[280px]">
             <Search className="size-[15px]" strokeWidth={1.8} />
             Ask AI anything…
             <kbd className="ml-auto rounded border border-line-2 px-1.5 font-sans text-[11px] text-muted">Ctrl K</kbd>
