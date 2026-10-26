@@ -153,7 +153,8 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const since = cursor ?? new Date(now.getTime() - BACKFILL_DAYS * 86_400_000).toISOString().slice(0, 19);
     // Default order (newest created first): edits don't move an order between pages, so paging can't skip it.
     const changed = { modified_after: since, dates_are_gmt: 'true' };
-    const orders = await all<WooOrder>('orders', changed);
+    // The default status (any) leaves out the trash: an order trashed after it was counted is read from there.
+    const orders = [...(await all<WooOrder>('orders', changed)), ...(await all<WooOrder>('orders', { ...changed, status: 'trash' }))];
     // The order list has only each refund's total: a partly refunded order's refunds list says which lines lost what, one
     // request each. Read as amounts (signs vary between versions); a failed read leaves the lines as ordered, and the
     // rest of this sync's too (each failure costs ~30 s of retries).

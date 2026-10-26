@@ -19,6 +19,7 @@ function fakeWoo(status = 200) {
     const u = new URL(url);
     calls.push({ url: u, headers: new Headers(init.headers) });
     if (status !== 200) return Response.json({ code: 'woocommerce_rest_cannot_view', message: 'Sorry, you cannot list resources.' }, { status });
+    if (u.pathname.endsWith('/orders') && u.searchParams.get('status') === 'trash') return Response.json([], { headers: { 'x-wp-totalpages': '1' } });
     if (u.pathname.endsWith('/orders')) {
       const page = u.searchParams.get('page') === '1'
         ? [order('1001', 'processing', '30.00', true, { line_items: [{ product_id: 7, quantity: 2, total: '25.00' }, { product_id: 0, quantity: 1, total: '5.00' }] }), order('1002', 'completed', '20.00', true)]
@@ -54,11 +55,11 @@ test('WooCommerce sync pulls paid orders + products since the cursor and rebuild
   const { fetchFn, calls } = fakeWoo();
   await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
 
-  expect(calls.map((c) => `${c.url.pathname} ${c.url.searchParams.get('page')}`)).toEqual(['/store/wp-json/wc/v3/orders 1', '/store/wp-json/wc/v3/orders 2', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/products/10/variations 1', '/store/wp-json/wc/v3/products/11/variations 1', '/store/wp-json/wc/v3/settings/general/woocommerce_currency null', '/store/wp-json/ null']);
+  expect(calls.map((c) => `${c.url.pathname} ${c.url.searchParams.get('page')}`)).toEqual(['/store/wp-json/wc/v3/orders 1', '/store/wp-json/wc/v3/orders 2', '/store/wp-json/wc/v3/orders 1', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/products 1', '/store/wp-json/wc/v3/products/10/variations 1', '/store/wp-json/wc/v3/products/11/variations 1', '/store/wp-json/wc/v3/settings/general/woocommerce_currency null', '/store/wp-json/ null']);
   expect(calls.every((c) => c.headers.get('authorization') === `Basic ${Buffer.from('ck_1:cs_2').toString('base64')}`)).toBe(true);
   expect(calls[0]!.url.searchParams.get('modified_after')).toBe('2024-10-26T18:00:00');
-  expect(calls[3]!.url.searchParams.get('status')).toBe('trash');
-  expect([calls[2]!, calls[3]!].map((c) => c.url.searchParams.get('modified_after'))).toEqual([null, null]); // first sync: every product
+  expect([calls[2]!, calls[4]!].map((c) => c.url.searchParams.get('status'))).toEqual(['trash', 'trash']); // trashed orders, products
+  expect([calls[3]!, calls[4]!].map((c) => c.url.searchParams.get('modified_after'))).toEqual([null, null]); // first sync: every product
 
   expect(db.prepare("SELECT id, price, compare_at AS compareAt, inventory, inventory_tracked AS tracked, status FROM products WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
     { id: 'woo-10', price: 30, compareAt: null, inventory: 7, tracked: 0, status: 'active' }, // S 3 + M 4 counted, L isn't: never "sold out"
@@ -451,7 +452,7 @@ test("a partly refunded Woo order's products lose what was refunded on their lin
   const fetchFn = (async (url: string, init: RequestInit) => {
     const path = new URL(url).pathname;
     urls.push(path);
-    if (path.endsWith('/orders')) {
+    if (path.endsWith('/orders') && new URL(url).searchParams.get('status') !== 'trash') {
       return Response.json([order('2001', 'completed', '80.00', true, {
         id: 7001, refunds: [{ id: 9, total: '-25.50' }],
         line_items: [{ product_id: 7, quantity: 2, total: '50.00' }, { product_id: 8, quantity: 1, total: '30.00' }],
@@ -483,4 +484,19 @@ test("a Woo sync whose shop was swapped while it read writes nothing (the new sh
   await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
   expect(db.prepare("SELECT cursor FROM integrations WHERE id = 'woocommerce:pawsome'").get()?.cursor).toBeNull();
   expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'pawsome' AND id LIKE 'woo-%'").get()?.n).toBe(0);
+});
+
+test("a Woo order moved to the trash after it was counted stops counting (the default order list leaves the trash out)", async () => {
+  const db = setup();
+  await syncWooCommerce(db, key, 'pawsome', fakeWoo().fetchFn, NOW);
+  const status = () => db.prepare("SELECT status FROM orders WHERE store_id = 'pawsome' AND id = 'woo-1002'").get()?.status;
+  expect(status()).toBe('paid');
+  const woo = fakeWoo().fetchFn;
+  const trashed = (async (url: string, init: RequestInit) => {
+    const u = new URL(url);
+    if (!u.pathname.endsWith('/orders')) return woo(url, init);
+    return Response.json(u.searchParams.get('status') === 'trash' ? [order('1002', 'trash', '20.00', true)] : [], { headers: { 'x-wp-totalpages': '1' } });
+  }) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', trashed, new Date(NOW.getTime() + 600_000));
+  expect(status()).toBe('refunded');
 });

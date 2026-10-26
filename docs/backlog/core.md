@@ -155,10 +155,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-72 An Amazon refund on an order from before the orders read (older than 30 days at connecting) never came off revenue.
 - [x] CORE-73 An Amazon listings answer without an items list counted as an empty catalog, so the daily full pass archived every listing.
 - [x] CORE-74 CJ tracking skipped a real order whenever a demo store had the same number (#1001 onwards), and could land on demo orders.
+- [x] CORE-75 A WooCommerce order moved to the trash after it was counted kept counting as paid.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-75: the order read used Woo's default status (any), which leaves out the trash, so the existing `trash` → refunded handling never saw an order trashed after it was counted (a fraud or test order kept its revenue). Each sync now also reads trashed orders modified since the cursor (one more request). An order deleted permanently still can't be seen through the REST API.
 - 2026-10-26 — CORE-74: CJ matches its order number against every store's orders, and demo stores' sample orders count from #1001 like a new Shopify store's. With one store connected and the others still demo, a CJ order matched several stores and needed CJ's shop name to equal the app's store name exactly, else the real order got no tracking; a lone demo match took CJ's status. CJ now matches real stores only.
 - 2026-10-26 — TikTok Shop/Amazon review, left as is: TikTok-funded vouchers (`platform_discount`) may be paid to the seller on top of `total_amount` (from memory, unverified); paging sorted by update time could skip a record edited mid-read if tokens are offsets (unconfirmed); the sync and a price change could both refresh a TikTok token due within a day (needs TikTok to revoke the old pair to matter); Amazon US daily totals exclude tax while a Shopify site's revenue includes it. README now warns that Shopify importing Amazon orders (Marketplace Connect) plus Amazon connected as a channel counts them twice.
 - 2026-10-26 — CORE-73 (TikTok Shop/Amazon review): `listingsOf` read a 200 whose body wasn't JSON (or had no `items`) as zero listings and marked the read complete, so the day's full pass archived every amz- product. A page without an `items` array now fails the read, which leaves the catalog as it is.
