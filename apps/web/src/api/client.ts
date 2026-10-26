@@ -267,9 +267,9 @@ export function useAddToStore() {
   });
 }
 
-/** The learnings shared with this store's niche (custom niches too, keyed server-side). */
-export const useNicheLearnings = (storeId: string) =>
-  useQuery({ queryKey: ['niche-learnings', storeId], queryFn: () => api<NicheLearning[]>(`/api/niche-learnings?store=${encodeURIComponent(storeId)}`) });
+/** The learnings shared with a niche: by store (custom niches keyed server-side) or by niche key (a niche pack's key). */
+export const useNicheLearnings = (by: { store: string } | { niche: string }) =>
+  useQuery({ queryKey: ['niche-learnings', by], queryFn: () => api<NicheLearning[]>(`/api/niche-learnings?${new URLSearchParams(by)}`) });
 
 export function useForgetNicheLearning() {
   const qc = useQueryClient();

@@ -3,10 +3,11 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type Autonomy, type MemoryKind } from '@frontline/shared';
-import { useAddMemory, useAgents, useAutomationActions, useAutomations, useCaps, useForgetMemory, useForgetNicheLearning, useMemory, useNicheLearnings, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
+import { useAddMemory, useAgents, useAutomationActions, useAutomations, useCaps, useForgetMemory, useMemory, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
 import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
 import { FlowLibrary } from '../components/FlowLibrary';
+import { SharedLearnings } from '../components/NicheLearnings';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, buttonClass, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
@@ -168,49 +169,11 @@ function History({ agentId, onOpen }: { agentId: string; onOpen: (runId: string)
   );
 }
 
-/** Owner-approved learnings every store in this niche sees (promoted from one store's memory). */
+/** The learnings shared with this agent's store's niche. */
 export function NicheLearnings({ storeId }: { storeId: string }) {
   const store = useStores().data?.find((s) => s.id === storeId);
-  const q = useNicheLearnings(storeId);
-  const forget = useForgetNicheLearning();
-  const { name } = useStoreSelection();
   if (!store) return null;
-  const niche = store.niche === 'other' ? store.nicheDetail || 'your niche' : store.niche;
-  return (
-    <Panel title={`Shared with all ${niche} stores`} sub="Learnings you approved for the whole niche. Every squad in it sees them.">
-      {q.isPending ? (
-        <LoadingState rows={2} />
-      ) : q.isError ? (
-        <ErrorState message="Couldn't load the niche learnings." onRetry={() => q.refetch()} />
-      ) : !q.data.length ? (
-        <p className="text-[13px] text-muted">None yet. When an agent finds something every {niche} store should know, it asks you to share it here.</p>
-      ) : (
-        <ul className="grid gap-2">
-          {q.data.map((l) => (
-            <li key={l.id} className="flex items-start justify-between gap-4 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
-              <div className="min-w-0">
-                <p className="text-[13px]">{l.text}</p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {l.storeId && `Learned in ${name(l.storeId)} · `}
-                  {ago(l.createdAt, Date.now())}
-                  {l.evidence && ` · ${l.evidence}`}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => forget.mutate(l.id)}
-                disabled={forget.isPending}
-                aria-label={`Stop sharing: ${l.text}`}
-                className="cursor-pointer rounded-md p-1.5 text-muted transition hover:bg-panel-2 hover:text-red"
-              >
-                <Trash2 className="size-4" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Panel>
-  );
+  return <SharedLearnings by={{ store: storeId }} niche={store.niche === 'other' ? store.nicheDetail || 'your niche' : store.niche} />;
 }
 
 function Memory({ agent }: { agent: Agent }) {

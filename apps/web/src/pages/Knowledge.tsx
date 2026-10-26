@@ -6,6 +6,7 @@ import type { KnowledgeDoc, KnowledgeKind, MemoryKind, StoreMemory } from '@fron
 import { useForgetMemory, useKnowledge, useKnowledgeDoc, useMemories, useSaveKnowledge, useUpdateMemory } from '../api/client';
 import { Hero } from '../components/Hero';
 import { Markdown } from '../components/Markdown';
+import { SharedLearnings } from '../components/NicheLearnings';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Tabs } from '../components/ui';
 import { ago } from '../lib/format';
@@ -79,7 +80,12 @@ function Docs({ kind }: { kind: KnowledgeKind }) {
           </ul>
         )}
       </Panel>
-      {sel && <DocView key={`${sel.kind}:${sel.key}`} d={sel} />}
+      {sel && (
+        <div className="grid gap-3.5">
+          {kind === 'niche' && <SharedLearnings key={sel.key} by={{ niche: sel.key }} niche={short(sel)} />}
+          <DocView key={`${sel.kind}:${sel.key}`} d={sel} />
+        </div>
+      )}
     </div>
   );
 }
