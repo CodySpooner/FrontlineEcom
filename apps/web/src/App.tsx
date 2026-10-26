@@ -4,6 +4,7 @@ import { Shell } from './components/Shell';
 import { NAV } from './nav';
 import { AgentDetail } from './pages/AgentDetail';
 import { Analytics } from './pages/Analytics';
+import { Automation } from './pages/Automation';
 import { Competitors } from './pages/Competitors';
 import { Agents } from './pages/Agents';
 import { Creative } from './pages/Creative';
@@ -13,7 +14,7 @@ import { DevGallery } from './pages/DevGallery';
 import { Placeholder } from './pages/Placeholder';
 import { Research } from './pages/Research';
 
-const PAGES: Record<string, ReactNode> = { '/agents': <Agents />, '/research': <Research />, '/creative': <Creative />, '/analytics': <Analytics />, '/orders': <Orders />, '/competitors': <Competitors /> };
+const PAGES: Record<string, ReactNode> = { '/agents': <Agents />, '/research': <Research />, '/creative': <Creative />, '/analytics': <Analytics />, '/orders': <Orders />, '/competitors': <Competitors />, '/automation': <Automation /> };
 
 export function App() {
   return (

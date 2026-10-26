@@ -6,14 +6,13 @@ import type { AdSnapshotData, Competitor, CompetitorSnapshot, PriceChange } from
 import { useCompetitorActions, useCompetitors, usePriceChanges, useRuns, useSnapshots, useStartRun } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, cx, EmptyState, ErrorState, LoadingState, Panel, RUN_STATUS } from '../components/ui';
+import { Badge, Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, RUN_STATUS } from '../components/ui';
 import { ago, cents, fmtDay } from '../lib/format';
 import { NAV } from '../nav';
 
 const NETWORK = { meta: 'Meta', tiktok: 'TikTok', google: 'Google' };
 const DAY = 86_400_000;
 const host = (url: string) => url.replace(/^https?:\/\//, '').replace(/\/$/, '');
-const field = 'rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] placeholder:text-muted focus:border-red/60 focus:outline-none';
 
 export function Competitors() {
   const nav = NAV.find((n) => n.path === '/competitors')!;
@@ -121,17 +120,17 @@ function AddCompetitor() {
       <div className="grid gap-2 min-[620px]:grid-cols-2">
         <label className="grid gap-1 text-xs text-muted">
           Name
-          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} placeholder="e.g. Wag & Wander" className={cx(field, 'text-text')} />
+          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} placeholder="e.g. Wag & Wander" className={cx(inputClass, 'text-text')} />
         </label>
         <label className="grid gap-1 text-xs text-muted">
           Website
-          <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="https://…" className={cx(field, 'text-text')} />
+          <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="https://…" className={cx(inputClass, 'text-text')} />
         </label>
       </div>
       <div className="flex flex-wrap items-end gap-2">
         <label className="grid flex-1 gap-1 text-xs text-muted">
           For store
-          <select value={store} onChange={(e) => setStoreId(e.target.value)} className={cx(field, 'cursor-pointer text-text')}>
+          <select value={store} onChange={(e) => setStoreId(e.target.value)} className={cx(inputClass, 'cursor-pointer text-text')}>
             {stores.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}

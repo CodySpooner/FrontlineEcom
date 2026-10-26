@@ -1,6 +1,6 @@
 // UI-01 design system: the small set of primitives every screen is built from.
 import { cloneElement, useEffect, useId, useRef } from 'react';
-import type { ButtonHTMLAttributes, HTMLAttributes, ReactElement, ReactNode, TableHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactElement, ReactNode, TableHTMLAttributes } from 'react';
 import { Inbox, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 import type { AgentStatus, RunStatus } from '@frontline/shared';
 
@@ -56,6 +56,21 @@ export function Chip({ on, color, className, children, ...p }: ButtonHTMLAttribu
       {color && <i className="size-[7px] rounded-full" style={{ background: color }} />}
       {children}
     </button>
+  );
+}
+
+export const inputClass = 'rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] text-text placeholder:text-muted focus:border-red/60 focus:outline-none';
+
+/** A checkbox drawn as a toggle. Put it inside the <label> that names it. */
+export function Switch(p: Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'role' | 'className'>) {
+  return (
+    <>
+      <input type="checkbox" role="switch" className="peer sr-only" {...p} />
+      <span
+        aria-hidden
+        className="relative h-6 w-11 shrink-0 rounded-full border border-line-2 bg-panel-2 transition peer-checked:border-red peer-checked:bg-red peer-focus-visible:outline-2 peer-focus-visible:outline-red peer-disabled:opacity-60 after:absolute after:top-0.5 after:left-0.5 after:size-[18px] after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5"
+      />
+    </>
   );
 }
 

@@ -8,7 +8,7 @@ import { Portrait } from '../components/Art';
 import { Chat } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, RUN_STATUS, Segmented, StatusDot, Table, Tabs, XPBar } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, XPBar } from '../components/ui';
 import { ago, cents, money } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -303,18 +303,7 @@ function AgentSettings({ agent }: { agent: Agent }) {
             <span className="block text-[13px] font-semibold">Deployed</span>
             <span className="block text-xs text-muted">Off = the agent stops taking tasks for this store. Its memory stays.</span>
           </span>
-          <input
-            type="checkbox"
-            role="switch"
-            checked={agent.enabled !== false}
-            disabled={update.isPending}
-            onChange={(e) => update.mutate({ id: agent.id, enabled: e.target.checked })}
-            className="peer sr-only"
-          />
-          <span
-            aria-hidden
-            className="relative h-6 w-11 shrink-0 rounded-full border border-line-2 bg-panel-2 transition peer-checked:border-red peer-checked:bg-red peer-focus-visible:outline-2 peer-focus-visible:outline-red after:absolute after:top-0.5 after:left-0.5 after:size-[18px] after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5"
-          />
+          <Switch checked={agent.enabled !== false} disabled={update.isPending} onChange={(e) => update.mutate({ id: agent.id, enabled: e.target.checked })} />
         </label>
         <div className="mt-5">
           <div className="mb-2 text-[13px] font-semibold">Autonomy</div>

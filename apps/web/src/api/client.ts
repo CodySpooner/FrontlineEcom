@@ -11,6 +11,9 @@ import type {
   ApprovalDecision,
   ApprovalRequest,
   ApprovalStatus,
+  AutomationRule,
+  AutomationRuleInput,
+  AutomationRun,
   CampaignStats,
   Commander,
   Competitor,
@@ -194,6 +197,23 @@ export const useOrders = (storeIds: string[], o: OrderQuery) =>
     placeholderData: keepPreviousData,
   });
 
+export const useAutomations = () => useQuery({ queryKey: ['automations'], queryFn: () => api<AutomationRule[]>('/api/automations') });
+export const useAutomationRuns = () => useQuery({ queryKey: ['automation-runs'], queryFn: () => api<AutomationRun[]>('/api/automations/runs?limit=50') });
+
+export function useAutomationActions() {
+  const qc = useQueryClient();
+  const refresh = () => qc.invalidateQueries({ queryKey: ['automations'] });
+  return {
+    save: useMutation({
+      mutationFn: ({ id, ...r }: AutomationRuleInput & { id?: string }) =>
+        api<AutomationRule>(id ? `/api/automations/${id}` : '/api/automations', json(id ? 'PATCH' : 'POST', r)),
+      onSuccess: refresh,
+    }),
+    toggle: useMutation({ mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => api<AutomationRule>(`/api/automations/${id}`, json('PATCH', { enabled })), onSuccess: refresh }),
+    remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/automations/${id}`, { method: 'DELETE' }), onSuccess: refresh }),
+  };
+}
+
 export const useSupplierSearch = (q: string) =>
   useQuery({ queryKey: ['suppliers', q], queryFn: () => api<SupplierProduct[]>(`/api/suppliers/products?${new URLSearchParams({ q, limit: '5' })}`), enabled: !!q });
 
@@ -264,6 +284,8 @@ export function useLive() {
       if (m.type === 'approval' || m.type === 'run' || m.type === 'xp') {
         qc.invalidateQueries({ queryKey: ['missions'] });
         qc.invalidateQueries({ queryKey: ['commander'] });
+        // Automation fires start runs or ask for approval; the log and "last fired" follow.
+        ['automation-runs', 'automations'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       }
       if (m.type === 'xp') qc.invalidateQueries({ queryKey: ['agents'] });
       else if (m.type === 'approval') {
