@@ -28,6 +28,7 @@ import { researchRoutes } from '../research';
 import { addProducts, applyAdChange, onApproved } from './agents-actions';
 import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes } from './agents-creatives';
+import { createProducts } from '../connectors/shopify';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
@@ -104,7 +105,9 @@ export function runManager(db: Db): RunManager {
     managers.set(db, manager);
     // Approved actions that can come from outside a run (research screen, automations) are carried out here.
     onApproved(db, (db, a) => {
-      if (a.action.kind === 'store.add_products') addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task));
+      if (a.action.kind === 'store.add_products') {
+        return addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task), (storeId, products) => createProducts(db, loadKey(dataDir()), storeId, products));
+      }
       if (a.action.kind === 'ads.set_budget' || a.action.kind === 'ads.pause_campaign') applyAdChange(db, a);
     });
   }

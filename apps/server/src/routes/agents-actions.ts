@@ -8,7 +8,7 @@ import { getStore } from '../stores';
  * Calls `fn` once for each request approved in this DB, on the next tick (after the approval message itself has
  * reached every listener). The bus is process-wide, so the handler holds the DB weakly; `fn` gets it as an argument.
  */
-export function onApproved(db: Db, fn: (db: Db, a: ApprovalRequest) => void) {
+export function onApproved(db: Db, fn: (db: Db, a: ApprovalRequest) => unknown) {
   const ref = new WeakRef(db);
   const off = subscribe((m) => {
     const db = ref.deref();
@@ -16,7 +16,13 @@ export function onApproved(db: Db, fn: (db: Db, a: ApprovalRequest) => void) {
     if (m.type !== 'approval' || m.approval.status !== 'approved') return;
     if (!db.prepare(`SELECT 1 FROM approvals WHERE id = ? AND status = 'approved'`).get(m.approval.id)) return; // another DB's (tests)
     const a = m.approval;
-    setImmediate(() => fn(db, a));
+    setImmediate(async () => {
+      try {
+        await fn(db, a);
+      } catch (e) {
+        console.error(`approved action ${a.action.kind} (${a.id}) failed:`, e);
+      }
+    });
   });
 }
 
@@ -44,29 +50,36 @@ interface AddProduct {
   cost?: number;
 }
 
+/** Creates draft products on the store's platform (core's Shopify `createProducts`); throws a readable error. */
+export type CreateProducts = (storeId: string, products: Omit<AddProduct, 'researchProductId'>[]) => Promise<{ id: string; title: string }[]>;
+
 /**
- * `store.add_products` (from the research screen or the Product Hunter): demo stores get the products as drafts and
- * their Store Developer drafts each page. Returns the titles added.
+ * `store.add_products` (from the research screen or the Product Hunter): demo stores get the products as local drafts,
+ * connected stores as drafts on the platform; then their Store Developer drafts each page. Returns the titles added.
  */
-export function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId: string, task: string) => unknown): string[] {
+export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId: string, task: string) => unknown, createRemote: CreateProducts): Promise<string[]> {
   const store = getStore(db, a.storeId);
   const products = ((a.action.payload as { products?: unknown })?.products ?? []) as AddProduct[];
   const valid = products.filter((p) => typeof p?.title === 'string' && p.title.trim() && typeof p.price === 'number' && p.price > 0);
   if (!store || !valid.length) return [];
-  const titles = valid.map((p) => p.title.trim());
+  let titles = valid.map((p) => p.title.trim());
   if (store.connected) {
-    // ponytail: no store writes yet; needs core's Shopify productCreate (write_products scope).
-    notify(db, { kind: 'info', title: `Add ${titles.length} product(s) to ${store.name} by hand`, body: `Approved: ${titles.join(', ')}. Adding products to a connected store isn't automated yet.`, storeId: store.id });
-    return [];
-  }
-  const image = db.prepare('SELECT image FROM research_products WHERE id = ?');
-  const insert = db.prepare(
-    `INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'draft')`,
-  );
-  for (const p of valid) {
-    const id = p.researchProductId ? `research-${p.researchProductId}` : `approval-${a.id}-${titles.indexOf(p.title.trim())}`;
-    const img = p.researchProductId ? image.get(p.researchProductId)?.image : undefined;
-    insert.run(store.id, id, p.title.trim(), img == null ? null : String(img), p.price, p.compareAt ?? null, p.cost ?? 0);
+    try {
+      titles = (await createRemote(store.id, valid.map((p, i) => ({ title: titles[i]!, price: p.price, compareAt: p.compareAt, cost: p.cost })))).map((p) => p.title);
+    } catch (e) {
+      notify(db, { kind: 'error', title: `Couldn't add products to ${store.name}`, body: `${(e as Error).message}. Approved: ${titles.join(', ')}. Add them by hand.`, storeId: store.id });
+      return [];
+    }
+  } else {
+    const image = db.prepare('SELECT image FROM research_products WHERE id = ?');
+    const insert = db.prepare(
+      `INSERT OR IGNORE INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 'draft')`,
+    );
+    for (const [i, p] of valid.entries()) {
+      const id = p.researchProductId ? `research-${p.researchProductId}` : `approval-${a.id}-${i}`;
+      const img = p.researchProductId ? image.get(p.researchProductId)?.image : undefined;
+      insert.run(store.id, id, titles[i]!, img == null ? null : String(img), p.price, p.compareAt ?? null, p.cost ?? 0);
+    }
   }
   startRun(
     `${store.id}:store_developer`,

@@ -1,5 +1,6 @@
 import { AGENT_ROLES, type AgentEvent } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
+import { REFLECTION_PROMPT } from './memory';
 import type { ToolName } from './roles';
 import { callTool, channel, toolsFor } from './tools';
 
@@ -7,13 +8,20 @@ import { callTool, channel, toolsFor } from './tools';
 export type FakeStep = AgentEvent | { call: ToolName; input?: Record<string, unknown> };
 export type FakeScript = (input: RunInput) => FakeStep[];
 
-/** Deterministic default: acknowledges the task in a few text chunks, then finishes. */
+/**
+ * Deterministic default (demo mode): with tools available it reads the store's last 30 days for real and quotes them,
+ * then acknowledges the task in a few text chunks. Reflection learns nothing, so demo runs don't fill store memory.
+ */
 export const echoScript: FakeScript = (input) => {
-  const reply = `${AGENT_ROLES[input.agent.role].name} for ${input.store.name}: on it — "${input.task}".`;
-  return [
-    ...reply.split(/(?<= )/).map((text): AgentEvent => ({ type: 'text_delta', text })),
-    { type: 'done', sessionId: input.resume ?? `fake-${input.agent.id}`, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } },
-  ];
+  const done: AgentEvent = { type: 'done', sessionId: input.resume ?? `fake-${input.agent.id}`, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
+  if (input.task === REFLECTION_PROMPT) return [{ type: 'text_delta', text: '[]' }, done];
+  let reply = `${AGENT_ROLES[input.agent.role].name} for ${input.store.name}: on it — "${input.task}".`;
+  const t = input.env?.summary(input.store.id, 30).totals;
+  if (t) {
+    const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${input.store.currency}`;
+    reply += ` Last 30 days: ${money(t.revenue)} revenue, ${money(t.profit)} profit, ROAS ${t.roas.toFixed(2)}, ${t.orders} orders. (Demo engine: switch to Claude for a real answer.)`;
+  }
+  return [...(t ? [{ call: 'store_summary' as const, input: { range: 30 } }] : []), ...reply.split(/(?<= )/).map((text): AgentEvent => ({ type: 'text_delta', text })), done];
 };
 
 /** Scripted engine for tests and demo mode. Costs nothing, never touches the network, but runs tools for real. */

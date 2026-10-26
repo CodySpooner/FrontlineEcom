@@ -8,6 +8,7 @@ import { seedDemo } from '../demo';
 import { seedResearch } from '../research';
 import { getStore } from '../stores';
 import { runManager, toolEnv } from './agents';
+import { addProducts } from './agents-actions';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -48,13 +49,28 @@ test("a Product Hunter's own request goes through the same path; denied ones add
   await runManager(db).idle();
 });
 
-test('connected stores are not written to; the owner is told instead', async () => {
+test('connected stores get platform drafts; a platform error tells the owner instead', async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'peak'`).run();
   const approval = (await (await post('/api/research/smart-jump-rope/add-to-store', { storeId: 'peak' })).json()) as ApprovalRequest;
   await post(`/api/approvals/${approval.id}/approve`);
   await tick();
   expect(product('peak', 'research-smart-jump-rope')).toBeUndefined();
-  expect(db.prepare(`SELECT title FROM notifications WHERE kind = 'info' AND store_id = 'peak'`).get()?.title).toBe('Add 1 product(s) to Peak Fit by hand');
+  expect(db.prepare(`SELECT title, body FROM notifications WHERE kind = 'error' AND store_id = 'peak'`).get()).toEqual({
+    title: "Couldn't add products to Peak Fit",
+    body: 'Shopify is not connected for this store. Approved: Smart Jump Rope. Add them by hand.',
+  });
+
+  const created: unknown[] = [];
+  const runs: string[] = [];
+  const titles = await addProducts(
+    db,
+    { ...approval, action: { kind: 'store.add_products', payload: { products: [{ researchProductId: 'smart-jump-rope', title: ' Smart Jump Rope ', price: 19.9, cost: 4 }] } } },
+    (agentId) => runs.push(agentId),
+    async (storeId, products) => (created.push([storeId, products]), [{ id: '901', title: 'Smart Jump Rope' }]),
+  );
+  expect(titles).toEqual(['Smart Jump Rope']);
+  expect(created).toEqual([['peak', [{ title: 'Smart Jump Rope', price: 19.9, compareAt: undefined, cost: 4 }]]]);
+  expect(runs).toEqual(['peak:store_developer']);
 });
 
 test('record_product_find puts a web find in the feed with its AI score', async () => {
