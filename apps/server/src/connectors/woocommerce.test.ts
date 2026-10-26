@@ -61,7 +61,7 @@ test('WooCommerce sync pulls paid orders + products since the cursor and rebuild
   expect([calls[2]!, calls[3]!].map((c) => c.url.searchParams.get('modified_after'))).toEqual([null, null]); // first sync: every product
 
   expect(db.prepare("SELECT id, price, compare_at AS compareAt, inventory, inventory_tracked AS tracked, status FROM products WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
-    { id: 'woo-10', price: 30, compareAt: null, inventory: 7, tracked: 1, status: 'active' }, // stock counted per variation (S 3, M 4, L untracked)
+    { id: 'woo-10', price: 30, compareAt: null, inventory: 7, tracked: 0, status: 'active' }, // S 3 + M 4 counted, L isn't: never "sold out"
     { id: 'woo-11', price: 9, compareAt: null, inventory: 0, tracked: 0, status: 'active' }, // no variation counts stock
     { id: 'woo-7', price: 19, compareAt: 24, inventory: 5, tracked: 1, status: 'active' },
     { id: 'woo-8', price: 0, compareAt: null, inventory: 0, tracked: 0, status: 'draft' }, // Manage stock off: 0 isn't sold out
@@ -287,4 +287,35 @@ test('Woo: once a day every product is read again; products deleted for good are
   await syncWooCommerce(db, key, 'pawsome', nextDay.fetchFn, new Date('2026-10-27T18:00:00Z'));
   expect(productReads(nextDay.calls)).toEqual([null, null]);
   expect(status()).toBe('archived');
+});
+
+test('Woo: a variable product whose variations all count stock is tracked; a failed variations read leaves it untracked and the sync on', async () => {
+  const db = setup();
+  const base = fakeWoo().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (u.pathname.endsWith('/products/10/variations')) return Response.json([{ manage_stock: true, stock_quantity: 3 }, { manage_stock: true, stock_quantity: 0 }], { headers: { 'x-wp-totalpages': '1' } });
+    if (u.pathname.endsWith('/products/11/variations')) return Response.json({ message: 'Internal error' }, { status: 500 });
+    return base(url, init);
+  }) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'woocommerce:pawsome'").get()).toEqual({ status: 'connected', error: null });
+  expect(db.prepare("SELECT id, inventory, inventory_tracked AS tracked FROM products WHERE id IN ('woo-10', 'woo-11') ORDER BY id").all()).toEqual([
+    { id: 'woo-10', inventory: 3, tracked: 1 },
+    { id: 'woo-11', inventory: 0, tracked: 0 },
+  ]);
+});
+
+test('Woo: with no x-wp-totalpages header (stripped by a proxy) a full page means there is another', async () => {
+  const db = setup();
+  const catalog = Array.from({ length: 120 }, (_, i) => ({ id: 100 + i, name: `P${i}`, status: 'publish', price: '5.00', regular_price: '5.00', sale_price: '', stock_quantity: 1, date_modified_gmt: '2020-01-01T00:00:00' }));
+  const fetchFn = (async (url: string) => {
+    const u = new URL(url);
+    const page = Number(u.searchParams.get('page'));
+    if (u.pathname.endsWith('/products') && u.searchParams.get('status') !== 'trash') return Response.json(catalog.slice((page - 1) * 100, page * 100));
+    return Response.json(u.pathname.endsWith('woocommerce_currency') ? { value: 'USD' } : []);
+  }) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, new Date('2026-10-27T18:00:00Z')); // the next day's full pass
+  expect(db.prepare("SELECT count(*) AS n FROM products WHERE store_id = 'pawsome' AND id GLOB 'woo-*' AND status = 'active'").get()?.n).toBe(120);
 });

@@ -31,7 +31,8 @@ const SEARCH_CAP = 1000;
 /**
  * The seller's listings in one marketplace changed since `since` (all of them without it), oldest change first: 20 a
  * page, 5 pages a second. A catalog past the search cap is read in windows, each starting at the last change seen.
- * More than 1000 SKUs changed in the same instant end the windows early: the result is then marked incomplete.
+ * More than 1000 SKUs changed in the same instant end the windows early: the result is then marked incomplete. Complete
+ * reads rely on lastUpdatedAfter being inclusive ("at or after this time" in the Listings Items spec).
  */
 async function listingsOf(fetchFn: Fetch, host: string, token: string, sellerId: string, marketplace: string, since?: string) {
   const out: Listing[] = [];

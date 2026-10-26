@@ -111,7 +111,10 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         if (!body) throw new Error(`No WooCommerce API at ${site}/wp-json; check the Site URL (and that permalinks are not "Plain")`);
         if (!res.ok || !Array.isArray(body)) throw new Error(`WooCommerce: ${(body as { message?: string }).message ?? `HTTP ${res.status}`}`);
         out.push(...body);
-        pages = Number(res.headers.get('x-wp-totalpages') ?? 1);
+        // A proxy or security plugin may strip the header: then a full page means there's another. A short read would let
+        // the daily catalog pass archive the products it missed.
+        const total = Number(res.headers.get('x-wp-totalpages'));
+        pages = total > 0 ? total : body.length === 100 ? page + 1 : page;
       }
       return out;
     };
@@ -128,14 +131,16 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const full = !cursor || catalogPassDue(db, id, today);
     const productsSince = full ? { dates_are_gmt: 'true' } : changed;
     const products = [...(await all<WooProduct>('products', productsSince)), ...(await all<WooProduct>('products', { ...productsSince, status: 'trash' }))];
-    // A variable product (sizes, colors) usually counts stock per variation: its stock is theirs. A variation's manage_stock
-    // is true, false or 'parent' (the product's own count, already read).
-    // ponytail: one request per variable product read; batch through the Store API if big catalogs make syncs slow.
-    const variationStock = new Map<number, number>();
+    // A variable product (sizes, colors) usually counts stock per variation: its stock is theirs, and it's tracked only when
+    // every variation counts (an uncounted one can always be bought). A failed read leaves the product as it reads alone.
+    // ponytail: one request per variable product read; batch through the Store API if big catalogs make syncs slow. A
+    // parent that counts stock while some variations count their own reads as the parent's count.
+    const variationStock = new Map<number, { stock: number; tracked: boolean }>();
     for (const p of products) {
       if (p.type !== 'variable' || p.manage_stock || p.status === 'trash') continue;
-      const counted = (await all<{ manage_stock: boolean | 'parent'; stock_quantity: number | null }>(`products/${p.id}/variations`, {})).filter((v) => v.manage_stock === true);
-      if (counted.length) variationStock.set(p.id, counted.reduce((a, v) => a + (v.stock_quantity ?? 0), 0));
+      const vs = await all<{ manage_stock: boolean | 'parent'; stock_quantity: number | null }>(`products/${p.id}/variations`, {}).catch(() => []);
+      const counted = vs.filter((v) => v.manage_stock === true);
+      if (counted.length) variationStock.set(p.id, { stock: counted.reduce((a, v) => a + (v.stock_quantity ?? 0), 0), tracked: counted.length === vs.length });
     }
     // The shop's own currency (Settings → General), else the newest order's. A multi-currency plugin's orders in another
     // currency are converted into it at today's ECB rate; one with no rate is left out rather than counted at par.
@@ -162,7 +167,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         const price = Number(p.price || p.regular_price || 0);
         const regular = Number(p.regular_price || 0);
         const status: ProductStatus = p.status === 'publish' ? 'active' : p.status === 'trash' ? 'archived' : 'draft';
-        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), variationStock.get(p.id) ?? p.stock_quantity ?? 0, p.manage_stock === false && !variationStock.has(p.id) ? 0 : 1, status);
+        prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), variationStock.get(p.id)?.stock ?? p.stock_quantity ?? 0, (variationStock.get(p.id)?.tracked ?? p.manage_stock !== false) ? 1 : 0, status);
       }
       // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking needs a plugin.
       const ord = db.prepare(

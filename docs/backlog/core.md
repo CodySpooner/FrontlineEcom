@@ -114,6 +114,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - TikTok Shop price changes: the path is confirmed (`POST /product/202309/products/{id}/prices/update`, EcomPHP/tiktokshop-php), but the body (`skus[].id`, `price.amount`/`currency`?) and the scope are only in TikTok's JavaScript-rendered partner docs. Needs a verified request body or a live shop. Woo and Etsy price writers are done.
 
 ## Done
+- 2026-10-26 — Review fixes for the catalog passes:
+  - WooCommerce paging no longer trusts a missing `x-wp-totalpages` header. A proxy or security plugin that strips it used to stop the read at page 1, and the daily pass then archived products 101+. Now a full page means there's another.
+  - A failed variations read leaves that product untracked instead of failing the whole sync. Before, it also redid the full pass on every sync.
+  - A variable product is tracked only when every variation counts stock; an uncounted size can't be "sold out".
+  - The Amazon windowing comment names its reliance on `lastUpdatedAfter` being inclusive, as the spec says.
+  - Accepted, not fixed: position paging can skip a neighbour while the shop is edited mid-read; the next pass restores it. Tests
 - 2026-10-26 — Amazon price writes (`setAmazonListingPrice`). Listings Items PATCH with `merge` on /attributes/purchasable_offer, using marketplace/currency/audience ALL selectors per Amazon's "Manage purchasable offer" guide, so sale price, min/max and B2B prices are kept. It refuses a running or scheduled sale (the new price wouldn't show), a price outside the seller's min/max (Amazon would deactivate the offer), and compare-at. INVALID responses surface the ERROR issue. `amazon` is added to PRICE_WRITE_PLATFORMS and wired into agents' setPrice (one line, plus their two tests now use tiktok_shop as the unwritable example). The LWA sign-in is shared via `amazonAuth`. Tests
 - 2026-10-26 — README: says the whole catalog is re-read once a day and that products deleted on the platform show as archived.
 - 2026-10-26 — Electron 44.7.0 → 44.9.3 for GHSA-jr5w-w6x2-84p9 (high; mitigation for compromised eMudhra intermediate certificates, patched in 44.9.1). `pnpm audit` is clean again. Repackaged and smoke-tested: health, demo data, deny with note, store survives restart, 0 log errors. Also noted in etsy.ts that the daily full read backs up `sort_on`, which Etsy's spec says may only apply to keyword searches.
