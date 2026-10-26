@@ -3,9 +3,9 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type Autonomy, type MemoryKind } from '@frontline/shared';
-import { useAddMemory, useAgents, useAgentXp, useAutomationActions, useAutomations, useCaps, useForgetMemory, useMemory, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
+import { useAddMemory, useAgents, useAgentXp, useApprovals, useAutomationActions, useAutomations, useCaps, useForgetMemory, useMemory, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
 import { Portrait } from '../components/Art';
-import { Chat } from '../components/Chat';
+import { ApprovalCard, Chat } from '../components/Chat';
 import { DemoJobsNote } from '../components/DemoJobsNote';
 import { FlowLibrary } from '../components/FlowLibrary';
 import { SharedLearnings } from '../components/NicheLearnings';
@@ -40,6 +40,9 @@ export function AgentDetail() {
   const [picked, setThread] = useState<string[]>();
   const linked = params.get('run');
   const thread = picked ?? (linked ? [linked] : runs.data?.[0] ? [runs.data[0].id] : []);
+  // What it's waiting on, answerable here even when no chat run raised it (a scheduled job, a seeded demo request).
+  // One raised in the open conversation already sits in the chat.
+  const waiting = (useApprovals().data ?? []).filter((a) => a.agentId === id && !(tab === 'chat' && a.runId && thread.includes(a.runId)));
 
   const role = agent && AGENT_ROLES[agent.role];
   const nav = NAV[1]!;
@@ -87,6 +90,13 @@ export function AgentDetail() {
           <XPBar level={agent.level} rank={agent.rank} xp={agent.levelProgress?.xp ?? 0} next={agent.levelProgress?.needed ?? 100} />
         </div>
       </div>
+      {waiting.length > 0 && (
+        <div className="mb-4 grid gap-2">
+          {waiting.map((a) => (
+            <ApprovalCard key={a.id} a={a} />
+          ))}
+        </div>
+      )}
       <Tabs label="Agent" tabs={tabs} value={tab} onChange={go} />
       <div className="mt-4">
         {tab === 'chat' && <Chat agent={agent} thread={thread} onThread={setThread} />}

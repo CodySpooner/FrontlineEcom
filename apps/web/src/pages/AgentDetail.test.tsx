@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
-import type { Agent, Store } from '@frontline/shared';
+import type { Agent, AgentRunDetail, ApprovalRequest, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { Route, Routes } from 'react-router';
 import { AgentBudget, AgentDetail, NicheLearnings } from './AgentDetail';
@@ -121,5 +121,54 @@ describe('agent header', () => {
     expect(screen.queryByText('Short hooks win')).toBeNull();
     fireEvent.click(screen.getByRole('radio', { name: 'Everyone (2)' }));
     expect(screen.getByText('Short hooks win')).toBeTruthy();
+  });
+});
+
+describe('an agent that needs the owner', () => {
+  beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }));
+  const request: ApprovalRequest = {
+    id: 'a1',
+    storeId: 'peak',
+    agentId: 'peak:ad_strategist',
+    title: 'Raise daily budget 20%',
+    reason: 'ROAS above 3.0 for 5 days',
+    action: { kind: 'ads.budget', payload: {} },
+    status: 'pending',
+    createdAt: '2026-10-26T08:00:00Z',
+  };
+  const other: ApprovalRequest = { ...request, id: 'a2', agentId: 'peak:copywriter', title: 'Rewrite the hero' };
+  const open = (pending: ApprovalRequest[], run?: AgentRunDetail) => {
+    stubApi((url) =>
+      url === '/api/agents'
+        ? [{ ...agent, status: 'waiting_approval', level: 3, rank: 'recruit' }]
+        : url.startsWith('/api/approvals?status=pending')
+          ? pending
+          : url.startsWith('/api/runs?')
+            ? (run ? [run] : [])
+            : url.startsWith('/api/runs/')
+              ? run
+              : undefined,
+    );
+    renderApp(
+      <Routes>
+        <Route path="/agents/:id" element={<AgentDetail />} />
+      </Routes>,
+      '/agents/peak%3Aad_strategist',
+    );
+  };
+
+  it('shows its waiting request on its own page, even one no chat run raised', async () => {
+    open([request, other]);
+    expect(await screen.findByText('Raise daily budget 20%')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Approve: Raise daily budget 20%' })).toBeTruthy();
+    expect(screen.queryByText('Rewrite the hero')).toBeNull();
+  });
+
+  it('shows a request raised in the open chat run once, in the chat', async () => {
+    const raised = { ...request, runId: 'r1' };
+    const run = { id: 'r1', storeId: 'peak', agentId: 'peak:ad_strategist', task: 'Check budgets', status: 'waiting_approval', usage: {}, createdAt: '2026-10-26T08:00:00Z', transcript: [{ type: 'approval_request', approval: raised }] } as unknown as AgentRunDetail;
+    open([raised], run);
+    await screen.findByText('Check budgets');
+    expect(await screen.findAllByText('Raise daily budget 20%')).toHaveLength(1);
   });
 });

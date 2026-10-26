@@ -340,6 +340,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-134 Live Store Activity's "Live" badge was hard-coded green and pulsing, so it claimed "Live" while the app's live
       connection was down (API restart, laptop asleep) and nothing streamed in. It now follows the connection: grey
       "Reconnecting…" like the sidebar's status, back to "Live" once the socket reconnects.
+- [x] UI-135 An agent marked "Needs you" showed nothing to act on from its own page unless the open chat run had raised
+      the request (e.g. Pawsome's Ad Strategist: a pending budget raise, no runs, an empty "Brief your Ad Strategist" chat).
+      Its waiting requests now sit under the header with Approve / Deny; one already in the open chat shows only there.
 
 ## Blocked
 
@@ -519,3 +522,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-132: `fitMoney` in lib/format (Intl compact, 3 significant digits, the 10-character limit on the unsigned amount so losses match) for Revenue, Profit and Ad Spend. New format test. Chrome with a client-side ×100 summary patch, 1Y, body pinned to 1280px: "$71.2M / $15.5M / $26.7M" with 66–71px sparklines (were ~0); unpatched 30D still "$65,269 / $14,589 / $24,230". Orca at 800px fit even before. Analytics' stat row had no overflow at 1280 with the same patch. Reduced motion is already handled globally in index.css
 - 2026-10-26 — UI-133: one line in App.tsx (`page(() => import('./ecosystem/Ecosystem'), 'Ecosystem')`); src/ecosystem untouched. vite build: main chunk 602 → 423 kB (132 kB gzip), no size warning; Ecosystem is its own 334 kB chunk. Orca: /ecosystem renders the office canvas (685×500) with pixi fetched on visit. Same session's checks: long store names (48 chars) wrap cleanly on every page, dialogs return focus to their trigger on Close and Esc
 - 2026-10-26 — UI-134: Shell passes `useLive()`'s online flag as the Outlet context; `LiveActivity` (now exported) reads it, online outside Shell. New Dashboard test (Outlet context false: "Reconnecting…", no "Live"). Orca: stopped the dev API, so the badge read "Reconnecting…" (grey, no pulse) beside the sidebar's "System status: Reconnecting…"; restarted it, back to "Live" in ~5s
+- 2026-10-26 — UI-135: AgentDetail filters `useApprovals()` to the agent, skipping a request whose `runId` is in the open chat thread, and reuses Chat's `ApprovalCard`. Two new AgentDetail tests (a request no run raised shows with its Approve button and another agent's doesn't; one raised in the open run appears once). Chrome at 1440: Ad Strategist · Pawsome Gear shows "Needs your approval · Change ad budgets / Raise daily budget 20% ($216 → $259)" above the tabs (not clicked); the idle Copywriter shows none. Same pass: zero console warnings or errors across all 14 pages, the Orders table pages, the Automation form covers trigger/approval/cap, Creative matches the reference's action bar (captions for video only)
