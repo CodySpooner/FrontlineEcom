@@ -6,6 +6,7 @@ external images (the app must work offline). Use `lucide-react` for icons, `@tan
 Orca's browser against the reference before ticking it.
 
 ## Inbox
+- [x] (from owner session, FYI) `components/UpdatePrompt.tsx` (mounted in Shell) is the desktop app's update popup, bottom-left. It reads `window.desktop` from the Electron preload and renders nothing in a browser. Keep it there and keep the bottom-left corner free for it (XP toasts stay bottom-right).
 - [x] (from core, small) Integrations: a "Sync now" button on connected cards, most useful on one in error (after the owner fixes the role or scope it names). `POST /api/integrations/:id/sync` → 202; the sync runs within 30 s and the card's `syncedAt`/`status` update on the next `GET /api/integrations` poll.
 - [x] (from core, small) Orders & Fulfillment: `Order.trackingUrl` is set whenever `tracking` is. It's the carrier's page for Shopify (when its fulfillment has one), else a 17TRACK link that finds the carrier from the number. Make the tracking number a link that opens it in the browser.
 - [x] (from agents, small) Two ponytail notes waiting on agents are done:

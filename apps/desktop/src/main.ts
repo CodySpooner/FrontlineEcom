@@ -1,4 +1,5 @@
-import { app, BrowserWindow, dialog, Menu, nativeImage, Notification, safeStorage, screen, shell, Tray, utilityProcess } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, screen, shell, Tray, utilityProcess } from 'electron';
+import { autoUpdater } from 'electron-updater';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { initialBounds, type WindowState } from './bounds';
@@ -70,6 +71,7 @@ async function start() {
     // Frameless: the web app's top bar is the title bar (drag region); Windows keeps its native buttons on top.
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: BG, symbolColor: '#d4d4d8', height: 40 },
+    webPreferences: { preload: join(import.meta.dirname, 'preload.cjs') },
   });
   if (!HIDDEN) win.once('ready-to-show', show);
   // Closing hides to the tray so automations and agents keep running; Quit is in the tray menu.
@@ -90,6 +92,7 @@ async function start() {
     if (new URL(to).origin !== new URL(url).origin) e.preventDefault();
   });
   await win.loadURL(url);
+  checkForUpdates();
 
   tray = new Tray(nativeImage.createFromPath(ICON).resize({ width: 16, height: 16 }));
   tray.setToolTip('Frontline Ecom');
@@ -99,6 +102,27 @@ async function start() {
     ? [{ label: 'Start with Windows', type: 'checkbox', checked: app.getLoginItemSettings(LOGIN).openAtLogin, click: (item) => app.setLoginItemSettings({ ...LOGIN, openAtLogin: item.checked }) }]
     : [];
   tray.setContextMenu(Menu.buildFromTemplate([{ label: 'Open Frontline Ecom', click: show }, ...startWithWindows, { type: 'separator' }, { label: 'Quit', click: () => app.quit() }]));
+}
+
+/**
+ * The installed app checks GitHub Releases (build.publish in package.json, `pnpm release`) at start and hourly, and
+ * downloads a newer version in the background; the window then offers it bottom-left (UpdatePrompt). Not installed
+ * then, it installs on the next quit.
+ */
+function checkForUpdates() {
+  let ready: string | null = null;
+  ipcMain.handle('update:ready', () => ready);
+  ipcMain.handle('update:install', () => autoUpdater.quitAndInstall(true, true));
+  if (!app.isPackaged) return;
+  // Offline, or no release published yet: try again next hour.
+  autoUpdater.on('error', (e) => console.warn(`update check failed: ${e.message}`));
+  autoUpdater.on('update-downloaded', ({ version }) => {
+    ready = version;
+    win?.webContents.send('update:ready', version);
+  });
+  const check = () => void autoUpdater.checkForUpdates().catch(() => {});
+  check();
+  setInterval(check, 60 * 60_000);
 }
 
 // Shown toasts are kept referenced: a garbage-collected Notification no longer reports its click.

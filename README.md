@@ -17,9 +17,13 @@ pnpm check    # typecheck + tests
 
 ## Using the app
 
-- **Install:** `pnpm package` builds `apps/desktop/release/Frontline Ecom Setup <version>.exe`. The installer isn't
+- **Install:** `pnpm package` builds `apps/desktop/release/FrontlineEcom-Setup-<version>.exe`. The installer isn't
   signed yet, so Windows SmartScreen asks first: More info → Run anyway. Closing the window keeps the app in the tray,
   and the tray menu has Quit and Start with Windows.
+- **Updates:** the installed app checks GitHub Releases at start and every hour, downloads a newer version in the
+  background and offers it bottom-left ("Update to version x.y.z"); Later installs it when you quit. To ship one:
+  `pnpm release` (next patch) or `pnpm release 1.2.0` in the main checkout. It bumps the version, pushes it, builds the
+  installer and publishes it as a GitHub release (needs `gh` signed in).
 - **Demo first:** a fresh install opens on three demo stores with two years of data. Agents on demo stores run on a
   free stand-in engine, so exploring never uses your Claude plan.
 - **Going live:** in Integrations, pick a store and connect its platform (Shopify, WooCommerce, Etsy, TikTok Shop,

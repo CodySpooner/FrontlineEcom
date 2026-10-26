@@ -8,7 +8,7 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --external:electron --outfile=dist/main.js",
+    "build": "esbuild src/main.ts --bundle --platform=node --format=esm --external:electron --banner:js=\"import { createRequire as __createRequire } from 'node:module'; const require = __createRequire(import.meta.url);\" --outfile=dist/main.js && esbuild src/preload.ts --bundle --platform=node --format=cjs --external:electron --outfile=dist/preload.cjs",
     "start": "pnpm --filter @frontline/web build && pnpm build && electron .",
     "icon": "electron scripts/icon.mjs",
     "package": "pnpm --filter @frontline/web build && pnpm build && node scripts/stage.mjs && electron-builder --win",
@@ -17,6 +17,7 @@
   "devDependencies": {
     "electron": "44.9.3",
     "electron-builder": "^26.18.0",
+    "electron-updater": "^6.8.11",
     "esbuild": "0.28.2"
   },
   "build": {
@@ -27,6 +28,7 @@
     },
     "files": [
       "dist/main.js",
+      "dist/preload.cjs",
       "build/icon.png",
       "package.json"
     ],
@@ -45,7 +47,13 @@
     "nsis": {
       "oneClick": false,
       "perMachine": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "FrontlineEcom-Setup-${version}.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "CodySpooner",
+      "repo": "FrontlineEcom"
     }
   }
 }

@@ -9,6 +9,7 @@
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
     "desktop": "pnpm --filter @frontline/desktop start",
     "package": "pnpm --filter @frontline/desktop package",
+    "release": "node apps/desktop/scripts/release.mjs",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "vitest run",
