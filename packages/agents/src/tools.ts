@@ -778,9 +778,11 @@ export const APP_TOOLS: AppTool[] = [
           : '',
         idleNote(ctx, rows.length).trimEnd(),
         csv(
+          // No campaign daily budget (synced as 0): a lifetime budget or ad set budgets, which can't be set from here.
           reviewCampaigns(rows, econ).map((c) => ({
-            network: c.network, id: c.id, name: c.name, status: c.status, daily_budget: c.dailyBudget, spend: r2(c.spend), roas: c.roas, cpa: c.cpa ?? '',
-            purchases: c.purchases, verdict: c.verdict, suggested_budget: c.suggestedBudget,
+            network: c.network, id: c.id, name: c.name, status: c.status, daily_budget: c.dailyBudget > 0 ? c.dailyBudget : 'none (lifetime or ad set budgets)',
+            spend: r2(c.spend), roas: c.roas, cpa: c.cpa ?? '', purchases: c.purchases, verdict: c.verdict,
+            suggested_budget: c.dailyBudget > 0 || c.verdict === 'pause' ? c.suggestedBudget : '',
           })),
         ),
       ]
@@ -811,6 +813,8 @@ export const APP_TOOLS: AppTool[] = [
       if (waiting && !replace) return `Not sent: "${waiting.title}" is already waiting for the owner. One change per campaign at a time.`;
       const from = Number(c.daily_budget);
       if (change === 'budget' && newDailyBudget === undefined) return 'newDailyBudget is required for a budget change.';
+      // Core's budget writer refuses these (on TikTok it would replace the lifetime total).
+      if (change === 'budget' && !(from > 0)) return `Not sent: ${String(c.name)} has no daily budget of its own (a lifetime budget, or budgets on its ad sets), so it can't be changed from here. Pause it, or say what to change in the ad manager.`;
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
       // Autopilot caps bound the budget a change touches (a pause stops all of it); the added-spend cap counts raises only.
       // ponytail: no rate → no amount, so the caps can't be checked and autopilot can't take it: the owner decides. Same
