@@ -13,7 +13,7 @@ Turn more existing traffic into orders: find the biggest funnel leak, draft the 
 3. Leak = the stage furthest below range or with the biggest drop. A ~15%+ relative drop on 500+ sessions is signal; otherwise widen the window.
 4. `list_products`: fix the pages where sessions and revenue concentrate before the long tail.
 5. `WebFetch` the live product, collection and cart pages (mobile first) and 1-2 competitor product pages. Record concrete defects against the checklists, not taste.
-6. Rank fixes by (sessions affected x relative lift) / effort. Draft the top one completely (copy, layout, settings, location) and size it. Page copy goes into the Store Builder with `draft_page` (the change list in `notes`), then `publish_page`; theme or settings changes go through `request_approval`.
+6. Rank fixes by (sessions affected x relative lift) / effort. Draft the top one completely (copy, layout, settings, location) and size it. Page copy goes into the Store Builder with `draft_page` (the change list in `notes`), then `publish_page`. Theme changes (Shopify): `read_theme_files` for the files you touch (live theme), then `draft_theme_change` with the whole edited files; the owner gets a preview link and publishes on approval. Settings changes go through `request_approval`.
 7. After it ships, compare the same stage over an equal window and `write_memory` the result, win or loss.
 
 ## Frameworks and thresholds
@@ -76,6 +76,7 @@ Sizing lift:
 - Expected effect: e.g. "+0.3 to +0.6 pt ATC, about 18-35 more orders/month, medium confidence. Roll back if conversion rate falls 10%+ over 14 days."
 
 ## Red lines
+- Theme edits: smallest change that does the job, in sections/snippets/templates/assets. Keep the existing schema settings and blocks working (the owner's customizer settings live there), mobile first, no new render-blocking scripts.
 - Never publish theme, page, navigation, price or checkout changes without approval.
 - Never break checkout, add steps, pop-ups or scripts to it, or test the payment step.
 - No fake urgency (resetting countdowns, invented stock or viewer counts), fake reviews, or badges for guarantees the store doesn't offer.

@@ -46,7 +46,7 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { researchRoutes } from '../research';
-import { addProducts, applyAdChange, applyPriceChange, onApproved, publishDraft, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
+import { addProducts, applyAdChange, applyPriceChange, draftThemeCopy, onApproved, publishDraft, publishThemeChange, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { issueRoutes } from './agents-issues';
@@ -54,7 +54,7 @@ import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
 import { demoSupplierProducts, searchCj } from '../connectors/cj';
-import { createProducts, publishPage, publishProductPage, setProductPrice } from '../connectors/shopify';
+import { createProducts, duplicateTheme, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, upsertThemeFiles } from '../connectors/shopify';
 import { getCredentials } from '../integrations';
 import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
@@ -72,6 +72,10 @@ const writeAd =
 /** Core's store writers are Shopify-only so far: other platforms get a readable error, and the owner applies it by hand. */
 const onShopify = <T,>(db: Db, storeId: string, write: () => Promise<T>) =>
   getStore(db, storeId)?.platform === 'shopify' ? write() : Promise.reject(new Error('Only Shopify stores are updated automatically so far'));
+
+/** Theme work reads and writes the real store only: demo stores have no theme to edit. */
+const onLiveShopify = <T,>(db: Db, storeId: string, fn: () => Promise<T>) =>
+  getStore(db, storeId)?.connected ? onShopify(db, storeId, fn) : Promise.reject(new Error('Theme editing needs a connected Shopify store; this one runs on demo data.'));
 
 /** Store Builder drafts → Shopify: product pages update the product, other pages are created. */
 const pushPage =
@@ -137,6 +141,27 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
     const to = localDate();
     return summarize(loadRows(db, [storeId], range, to), { range, to, storeIds: [storeId] });
   },
+  themes: {
+    list: (storeId) => onLiveShopify(db, storeId, () => listThemes(db, loadKey(dataDir()), storeId)),
+    read: (storeId, filenames, themeId) =>
+      onLiveShopify(db, storeId, async () => {
+        const id = themeId ?? (await listThemes(db, loadKey(dataDir()), storeId)).find((t) => t.role === 'MAIN')?.id;
+        if (!id) throw new Error('Shopify: the store has no live theme');
+        return readThemeFiles(db, loadKey(dataDir()), storeId, id, filenames);
+      }),
+    draft: (storeId, name, files) =>
+      onLiveShopify(db, storeId, () =>
+        draftThemeCopy(
+          {
+            list: () => listThemes(db, loadKey(dataDir()), storeId),
+            duplicate: (themeId, n) => duplicateTheme(db, loadKey(dataDir()), storeId, themeId, n),
+            upsert: (themeId, f) => upsertThemeFiles(db, loadKey(dataDir()), storeId, themeId, f),
+          },
+          name,
+          files,
+        ),
+      ),
+  },
   portfolio: (range) => {
     const [to, ids] = [localDate(), listStores(db).map((s) => s.id)];
     const { currency, unconverted } = fxFor(db, ids);
@@ -181,6 +206,7 @@ export function runManager(db: Db): RunManager {
       }
       if (a.action.kind === 'ads.set_budget' || a.action.kind === 'ads.pause_campaign') return applyAdChange(db, a, writeAd(db));
       if (a.action.kind === 'store.set_price') return applyPriceChange(db, a, setPrice(db));
+      if (a.action.kind === 'store.publish_theme') return publishThemeChange(db, a, (storeId, themeId) => onShopify(db, storeId, () => publishTheme(db, loadKey(dataDir()), storeId, themeId)));
       if (a.action.kind === 'store.publish_page') {
         const d = getPageDraft(db, String((a.action.payload as { draftId?: unknown })?.draftId));
         if (d) return publishDraft(db, d, pushPage(db));

@@ -11,6 +11,15 @@ import { flagOrderIssue, listOrderIssues } from './issues';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 import { runGist } from './runs';
 
+export interface Theme {
+  id: string;
+  name: string;
+  /** MAIN = the live theme. */
+  role: string;
+  processing: boolean;
+  previewUrl: string;
+}
+
 /** What the server hands a run so its tools can read and act on app data. */
 export interface ToolEnv {
   db: DatabaseSync;
@@ -37,6 +46,14 @@ export interface ToolEnv {
   searchSuppliers?: (q: string, limit: number) => Promise<SupplierProduct[]>;
   /** Core's research feed (scored trending products). */
   research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number }) => Promise<ResearchProduct[]>;
+  /** Core's Shopify theme connector; throws a readable error for stores it can't reach (demo, other platforms). */
+  themes?: {
+    list: (storeId: string) => Promise<Theme[]>;
+    /** Text of theme files by name (`*` wildcards); the live theme when `themeId` is omitted. Binary files are null. */
+    read: (storeId: string, filenames: string[], themeId?: string) => Promise<{ filename: string; content: string | null }[]>;
+    /** Copies the live theme as an unpublished theme named `name` and writes the files to the copy. */
+    draft: (storeId: string, name: string, files: { filename: string; body: string }[]) => Promise<Theme>;
+  };
   runId?: string;
 }
 
@@ -427,6 +444,74 @@ export const APP_TOOLS: AppTool[] = [
       if (!ctx.db.prepare('SELECT 1 FROM orders WHERE store_id = ? AND id = ?').get(ctx.store.id, orderId)) return `No order ${orderId} in this store. Use list_orders for ids.`;
       const { issue, created } = flagOrderIssue(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, orderId, ...i });
       return created ? `Flagged order ${orderId} (${i.kind}, ${i.severity}) in the issue queue (${issue.id}).` : `Order ${orderId} already has an open ${i.kind} issue (${issue.id}): ${issue.note}`;
+    },
+  }),
+  defineTool({
+    name: 'list_themes',
+    description: "The store's Shopify themes (CSV). role MAIN is the live one; preview_url opens the storefront with that theme.",
+    input: {},
+    run: async (_, ctx) => {
+      if (!ctx.themes) return 'Theme editing is not available in this run.';
+      try {
+        return csv((await ctx.themes.list(ctx.store.id)).map((t) => ({ id: t.id, name: t.name, role: t.role, processing: t.processing, preview_url: t.previewUrl })));
+      } catch (e) {
+        return (e as Error).message;
+      }
+    },
+  }),
+  defineTool({
+    name: 'read_theme_files',
+    description: 'Read theme files by name, e.g. "sections/main-product.liquid" or "templates/*.json". The live theme unless themeId is given.',
+    input: { filenames: z.array(z.string().min(3).max(200)).min(1).max(20), themeId: z.string().optional() },
+    run: async ({ filenames, themeId }, ctx) => {
+      if (!ctx.themes) return 'Theme editing is not available in this run.';
+      try {
+        const files = await ctx.themes.read(ctx.store.id, filenames, themeId);
+        // ponytail: 15k characters per file keeps a run's context sane; a bigger file is cut, read it on its own if needed.
+        const text = (c: string | null) => (c === null ? '(binary)' : c.length > 15_000 ? `${c.slice(0, 15_000)}\n… (cut at 15,000 of ${c.length} characters)` : c);
+        return files.map((f) => `=== ${f.filename} ===\n${text(f.content)}`).join('\n\n') || 'No matching files.';
+      } catch (e) {
+        return (e as Error).message;
+      }
+    },
+  }),
+  defineTool({
+    name: 'draft_theme_change',
+    description:
+      'Change the storefront theme safely: copies the live theme, writes your files to the copy and asks the owner to publish it, with a preview link. ' +
+      'Send whole files (read them first). The live theme is never edited; layout/ and config/ stay with the owner.',
+    input: {
+      title: z.string().min(5).max(60).describe('e.g. "Sticky add-to-cart on mobile"'),
+      summary: z.string().min(10).max(400).describe('what changes for shoppers and why, with the evidence'),
+      files: z
+        .array(
+          z.object({
+            filename: z.string().regex(/^(?!.*\.\.)(sections|snippets|templates|blocks|assets|locales)\/[\w.\-/]+$/, 'only sections/, snippets/, templates/, blocks/, assets/ or locales/ files'),
+            body: z.string().min(1).max(200_000),
+          }),
+        )
+        .min(1)
+        .max(20),
+    },
+    run: async ({ title, summary, files }, ctx) => {
+      if (!ctx.themes) return 'Theme editing is not available in this run.';
+      // Each draft is a full copy of the live theme (Shopify keeps 20 themes at most): one waiting at a time.
+      const pending = ctx.db
+        .prepare(`SELECT 1 FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') = 'store.publish_theme'`)
+        .get(ctx.store.id);
+      if (pending) return 'Not sent: a theme change is already waiting for the owner. One at a time.';
+      let copy: Theme;
+      try {
+        copy = await ctx.themes.draft(ctx.store.id, `Frontline: ${title}`.slice(0, 50), files);
+      } catch (e) {
+        return `Not sent: ${(e as Error).message}`;
+      }
+      const { approved, message } = await requestApproval(ctx, {
+        title: `Publish theme change: ${title}`.slice(0, 80),
+        reason: `${summary} Preview: ${copy.previewUrl} . Publishing makes the copy "${copy.name}" the live theme; edits made to the live theme after ${new Date().toISOString().slice(0, 10)} are not in it.`,
+        action: { kind: 'store.publish_theme', payload: { themeId: copy.id, name: copy.name, previewUrl: copy.previewUrl, files: files.map((f) => f.filename) } },
+      });
+      return approved ? `${message}. "${copy.name}" goes live now; compare the same funnel stage over an equal window before calling it.` : message;
     },
   }),
   defineTool({

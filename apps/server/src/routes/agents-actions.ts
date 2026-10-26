@@ -5,6 +5,7 @@ import { subscribe } from '../live';
 import { notify } from '../settings';
 import { localDate } from '../dates';
 import { getStore } from '../stores';
+import type { ShopifyTheme } from '../connectors/shopify';
 
 /**
  * Calls `fn` once for each request approved in this DB, on the next tick (after the approval message itself has
@@ -159,4 +160,37 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
       'save it with draft_page (kind product) and ask to publish it with publish_page.',
   );
   return added.map((p) => p.title);
+}
+
+export interface ThemeApi {
+  list: () => Promise<ShopifyTheme[]>;
+  duplicate: (themeId: string, name: string) => Promise<ShopifyTheme>;
+  upsert: (themeId: string, files: { filename: string; body: string }[]) => Promise<string[]>;
+}
+
+/** Copies the live theme, waits for Shopify to finish the copy, and writes the files to it. */
+// ponytail: polls every 3 s for up to 2 minutes inside the agent's tool call; a slower copy fails the draft (the copy stays in the library).
+export async function draftThemeCopy(api: ThemeApi, name: string, files: { filename: string; body: string }[], wait = (ms: number) => new Promise((r) => setTimeout(r, ms))) {
+  const live = (await api.list()).find((t) => t.role === 'MAIN');
+  if (!live) throw new Error('Shopify: the store has no live theme');
+  let copy = await api.duplicate(live.id, name);
+  for (let i = 0; copy.processing; i++) {
+    if (i === 40) throw new Error(`Shopify is still copying the theme ("${name}"); try again in a few minutes`);
+    await wait(3000);
+    copy = (await api.list()).find((t) => t.id === copy.id) ?? copy;
+  }
+  await api.upsert(copy.id, files);
+  return copy;
+}
+
+/** An approved theme change: its copy becomes the live theme. */
+export async function publishThemeChange(db: Db, a: ApprovalRequest, publish: (storeId: string, themeId: string) => Promise<unknown>) {
+  const p = (a.action.payload ?? {}) as { themeId?: unknown; name?: unknown };
+  const store = getStore(db, a.storeId);
+  if (!store || typeof p.themeId !== 'string') return;
+  try {
+    await publish(store.id, p.themeId);
+  } catch (e) {
+    notify(db, { kind: 'error', title: `Couldn't publish the theme on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Publish "${String(p.name ?? p.themeId)}" by hand in Online Store > Themes.`, storeId: store.id });
+  }
 }

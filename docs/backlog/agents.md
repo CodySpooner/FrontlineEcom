@@ -7,7 +7,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from core) AGT-19 theme connector is in `apps/server/src/connectors/shopify.ts`:
+- [x] (from core) AGT-19 theme connector is in `apps/server/src/connectors/shopify.ts`:
   - `listThemes(db, key, storeId)` → `ShopifyTheme[]` (`{ id, name, role, processing, previewUrl }`, MAIN = live)
   - `readThemeFiles(db, key, storeId, themeId, filenames)` → `{ filename, content | null }[]` (1–50 names, `*` wildcards, first 250 matches)
   - `duplicateTheme(db, key, storeId, themeId, name)` → the copy (wait until `processing` is false before reading or writing it)
@@ -116,11 +116,18 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-54 Email & SMS works on its own: `list_flows` so it sees the flows it already drafted, plus a monthly "Flow check" job that drafts the missing core flow (welcome, checkout abandonment, post-purchase, win-back) or improves the weakest.
 - [x] AGT-55 Supplier scorecard for Operations: per supplier over 30 days, orders, unfulfilled 3+ days, in transit 10+ days and open issues, so the daily order check can name the supplier behind the problems.
 - [x] AGT-56 Competitor brief: a weekly Market Analyst job over `list_competitors` (price moves, new ads and angles) that says what changed and hands one action to its owner. DESIGN §4.8 "Market Analyst briefs".
+- [x] AGT-57 Store Developer edits the Shopify theme: copy, preview, approve to publish (DESIGN §4.6).
 
 ## Blocked
-- AGT-19 (later) Codex as an alternate engine for Store Developer code work. Blocked on a place for that code to go: whichever engine writes it, theme sections and snippets need core's Shopify theme-files connector (requested in core's Inbox: list, read and upsert files on an unpublished theme copy with a preview). After that: a `draft_theme_change` tool and Store Builder approvals, then optionally `codex exec --json` as the engine for that role when the owner has Codex installed.
+- AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed.
 
 ## Done
+- 2026-10-26 — AGT-57 Theme edits (core's theme connector). Tools for the Store Developer:
+  - `list_themes`.
+  - `read_theme_files`: the live theme by default; each file is cut at 15k characters.
+  - `draft_theme_change`: copies the live theme, waits for Shopify to finish the copy (polls every 3 s, up to 2 min), writes whole files to the copy, then raises a `store.publish_theme` request. The request carries the preview URL and warns that edits made to the live theme after today are not in the copy.
+  Limits: only sections, snippets, templates, blocks, assets or locales files (no layout or config, no `..`), and one theme request pending at a time (each one is a full copy). Demo stores get "needs a connected Shopify store".
+  Approval publishes the copy through `publishTheme`; if that fails, the owner gets "publish it by hand". `APPROVAL_KINDS` has "Publish theme changes", and the playbook covers the theme loop and its red lines.
 - 2026-10-26 — `list_order_issues` (Operations): the store's issue queue as CSV, open first, then resolved issues with the owner's resolution. Operations can follow up on what is still open and learn what actually fixed past problems. The playbook reads it first, and the Daily order check now calls out issues open 3+ days.
 - 2026-10-26 — The post-run reflection spends from what the run left of today's AI budget instead of getting the run's whole starting allowance again. If nothing is left, it is skipped.
 - 2026-10-26 — Agent runs are sealed off from the owner's Claude account extras. The SDK's `init` showed the login's claude.ai connectors (Claude Docs: 8 tools plus long server instructions, and Replit) attached to every run, with `settingSources: []` not stopping them. That was about 8k of a one-turn run's 13.6k input tokens, plus tools outside the role's allowlist. `strictMcpConfig: true` keeps only our MCP servers and `skills: []` hides the skill listing. Verified with `init` on a real run: `mcp_servers: []`, tools WebFetch and WebSearch only. 2 short real calls total (diagnosis and verification).

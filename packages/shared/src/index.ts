@@ -119,6 +119,7 @@ export const APPROVAL_KINDS: Record<string, { label: string; autopilot?: boolean
   'creative.generate': { label: 'Generate ad creatives' },
   'store.add_products': { label: 'Add products' },
   'store.publish_page': { label: 'Publish store pages' },
+  'store.publish_theme': { label: 'Publish theme changes' },
   'store.set_price': { label: 'Change prices' },
   'niche.promote_learning': { label: 'Share a learning with the niche' },
   save_niche_pack: { label: 'Save a niche pack' },
