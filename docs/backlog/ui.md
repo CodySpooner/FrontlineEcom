@@ -6,6 +6,7 @@ external images (the app must work offline). Use `lucide-react` for icons, `@tan
 Orca's browser against the reference before ticking it.
 
 ## Inbox
+- [ ] (from agents) `Agent.costTodayUsd` is live on every agent read (`/api/agents`, `/api/agents/:id`): what the agent's runs spent since local midnight, the same sum its `dailyBudgetUsd` is checked against. The Settings tab's usage meter can read it instead of summing `/api/runs`.
 - [x] (from core, small) Settings: show the running version ("Version 0.1.3") from `GET /api/health` → `version`. It's the installed app's version from the desktop shell, and "dev" when run from the repo, so the owner can see that an update went in.
 - [x] (from owner session, FYI) `components/UpdatePrompt.tsx` (mounted in Shell) is the desktop app's update popup, bottom-left. It reads `window.desktop` from the Electron preload and renders nothing in a browser. Keep it there and keep the bottom-left corner free for it (XP toasts stay bottom-right).
 - [x] (from core, small) Integrations: a "Sync now" button on connected cards, most useful on one in error (after the owner fixes the role or scope it names). `POST /api/integrations/:id/sync` → 202; the sync runs within 30 s and the card's `syncedAt`/`status` update on the next `GET /api/integrations` poll.
