@@ -1,5 +1,5 @@
 import { awardXp, blendedRoas, cash, checkAchievements, commander, dailyMissions, getAgent, judgeRun, levelForXp, listNicheLearnings, nicheKey, once, profitStreak, promotionCandidates, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
-import { AGENT_ROLES, type MetricTotals, type Mission } from '@frontline/shared';
+import { AGENT_ROLES, type MetricTotals, type Mission, type Store } from '@frontline/shared';
 import { Hono } from 'hono';
 import { loadRows, summarize } from '../analytics';
 import { approvalsHook } from '../approvals';
@@ -312,7 +312,12 @@ function missions(db: Db, storeIds?: string[]): Mission[] {
 export function proposeNichePromotions(db: Db) {
   // Gone live, not just connected: going live (activateConnectedStores) is what clears a store's demo learnings.
   const activated = db.prepare('SELECT 1 FROM done_once WHERE ref = ?');
-  const live = new Map(listStores(db).filter((s) => s.connected && s.niche !== 'other' && activated.get(`activate:${s.id}`)).map((s) => [s.id, s]));
+  // By niche key: custom niches group by their own name ("Soy candles" with "soy candles", not with every custom store).
+  const byNiche = new Map<string, Store[]>();
+  for (const s of listStores(db)) {
+    const key = nicheKey(s);
+    if (s.connected && key !== 'other:' && activated.get(`activate:${s.id}`)) byNiche.set(key, [...(byNiche.get(key) ?? []), s]);
+  }
   // Once per learning: any memory of the group already offered (the group's lead wording can change as confidence
   // moves), or any of its wordings already asked about or shared, and it isn't asked again.
   const offered = db.prepare(`SELECT 1 FROM done_once WHERE ref IN (SELECT 'promote-memory:' || value FROM json_each(?))`);
@@ -321,11 +326,11 @@ export function proposeNichePromotions(db: Db) {
        UNION ALL SELECT lower(json_extract(action_json, '$.payload.text')) FROM approvals WHERE json_extract(action_json, '$.kind') = 'niche.promote_learning' AND json_extract(action_json, '$.payload.niche') = ?1)
      WHERE t IN (SELECT lower(text) FROM store_memory WHERE id IN (SELECT value FROM json_each(?2)))`,
   );
-  for (const niche of new Set([...live.values()].map((s) => s.niche))) {
-    for (const c of promotionCandidates(db, niche)) {
-      const stores = c.storeIds.flatMap((id) => live.get(id) ?? []);
-      if (stores.length < 2 || !live.has(c.storeIds[0]!)) continue;
-      const key = nicheKey(stores[0]!);
+  for (const [key, live] of byNiche) {
+    if (live.length < 2) continue;
+    const niche = live[0]!.niche === 'other' ? live[0]!.nicheDetail : live[0]!.niche;
+    for (const c of promotionCandidates(db, live.map((s) => s.id))) {
+      const stores = c.storeIds.map((id) => live.find((s) => s.id === id)!);
       const ids = JSON.stringify(c.memoryIds);
       if (offered.get(ids) || known.get(key, ids)) continue;
       for (const id of c.memoryIds) once(db, `promote-memory:${id}`);

@@ -112,10 +112,10 @@ describe('niche promotion', () => {
     writeMemory(db, { ...mem('Before/after UGC beats studio shots for LED masks', { confidence: 0.9 }), storeId: 'pawsome' }, now); // other niche
     writeMemory(db, { ...mem('Owner hates red packaging', { confidence: 0.9, kind: 'preference' }), storeId: 'lumi' }, now);
 
-    const [candidate, ...rest] = promotionCandidates(db, 'beauty');
+    const [candidate, ...rest] = promotionCandidates(db, ['glow', 'lumi']);
     expect(rest).toEqual([]);
     expect(candidate).toMatchObject({ storeIds: expect.arrayContaining(['glow', 'lumi']), memoryIds: expect.arrayContaining([a.id, b.id]) });
     expect(candidate?.confidence).toBeCloseTo(0.85);
-    expect(promotionCandidates(db, 'pet')).toEqual([]);
+    expect(promotionCandidates(db, ['pawsome'])).toEqual([]);
   });
 });

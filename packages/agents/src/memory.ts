@@ -172,16 +172,16 @@ export function parseLearnings(reply: string): Omit<NewMemory, 'storeId' | 'agen
 const words = (text: string) => new Set(text.toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []);
 
 /**
- * Learnings that hold in 2+ stores of the same niche (confident, ≥50% word overlap): candidates to promote
+ * Learnings that hold in 2+ of these stores (one niche's; confident, ≥50% word overlap): candidates to promote
  * into the niche pack so the next store in that niche starts smarter. Promotion itself needs approval.
  */
 // ponytail: pairwise Jaccard over confident memories; switch to FTS lookups if a niche grows past ~1k of them.
-export function promotionCandidates(db: DatabaseSync, niche: string, minConfidence = 0.7) {
+export function promotionCandidates(db: DatabaseSync, storeIds: string[], minConfidence = 0.7) {
   const rows = db
     .prepare(
-      `SELECT m.* FROM store_memory m JOIN stores s ON s.id = m.store_id WHERE s.niche = ? AND m.kind = 'learning' AND m.confidence >= ? ORDER BY m.confidence DESC`,
+      `SELECT * FROM store_memory WHERE store_id IN (SELECT value FROM json_each(?)) AND kind = 'learning' AND confidence >= ? ORDER BY confidence DESC`,
     )
-    .all(niche, minConfidence)
+    .all(JSON.stringify(storeIds), minConfidence)
     .map(toMemory);
   const out: { text: string; storeIds: string[]; memoryIds: string[]; confidence: number }[] = [];
   const taken = new Set<string>();

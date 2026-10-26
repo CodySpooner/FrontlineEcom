@@ -1,4 +1,4 @@
-import { listNicheLearnings, writeMemory } from '@frontline/agents';
+import { listNicheLearnings, once, writeMemory } from '@frontline/agents';
 import type { Niche } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -53,6 +53,18 @@ test("a connected store that hasn't gone live yet still holds demo learnings: th
   learn('nova', 'Serum bundles lift AOV by a fifth');
   proposeNichePromotions(db);
   expect(requests()).toEqual([]);
+});
+
+test('custom niches share by their own name: candle stores with each other, not with every custom store', () => {
+  for (const [id, detail] of [['wick', 'Soy candles'], ['flame', 'soy candles'], ['ink', 'Fountain pens']] as const) {
+    insertStore(db, { id, name: id, platform: 'shopify', niche: 'other', nicheDetail: detail, currency: 'USD', timezone: 'America/Chicago', color: '#fff', connected: true });
+    once(db, `activate:${id}`);
+    learn(id, 'Gift sets sell best in the two weeks before Mother’s Day');
+  }
+  proposeNichePromotions(db);
+  const [r, ...more] = requests();
+  expect(more).toEqual([]);
+  expect(JSON.parse(String(r!.action_json)).payload).toMatchObject({ niche: 'other:soy-candles', evidence: expect.stringMatching(/^Held in (wick, flame|flame, wick)$/) });
 });
 
 test("a demo store's simulated learning doesn't count toward sharing", () => {
