@@ -16,7 +16,7 @@ test('create → get → update → delete a store', async () => {
   const res = await app.request('/api/stores', send('POST', { name: 'Glow Haus', platform: 'etsy', niche: 'beauty', nicheDetail: 'K-beauty' }));
   expect(res.status).toBe(201);
   const store = (await res.json()) as Store;
-  expect(store).toEqual({ id: 'glow-haus', name: 'Glow Haus', platform: 'etsy', niche: 'beauty', nicheDetail: 'K-beauty', currency: 'USD', timezone: 'America/Chicago', color: '#ff2a3a', connected: false });
+  expect(store).toEqual({ id: 'glow-haus', name: 'Glow Haus', platform: 'etsy', niche: 'beauty', nicheDetail: 'K-beauty', currency: 'USD', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, color: '#ff2a3a', connected: false });
   const squad = (await (await app.request('/api/agents?stores=glow-haus')).json()) as Agent[];
   expect(squad).toHaveLength(8);
 
@@ -64,4 +64,11 @@ test('deleting a store removes its metrics', async () => {
   const { db, app } = setup();
   await app.request('/api/stores/peak', { method: 'DELETE' });
   expect(db.prepare("SELECT count(*) AS n FROM daily_metrics WHERE store_id = 'peak'").get()?.n).toBe(0);
+});
+
+test("a new store without a timezone gets the owner's machine timezone", async () => {
+  const app = createApp(openDb());
+  const res = await app.request('/api/stores', { method: 'POST', body: JSON.stringify({ name: 'Tide Co', platform: 'shopify', niche: 'outdoor' }), headers: { 'content-type': 'application/json' } });
+  expect(res.status).toBe(201);
+  expect(((await res.json()) as Store).timezone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
 });

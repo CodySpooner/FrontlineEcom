@@ -76,7 +76,7 @@ export function createStore(db: Db, input: StoreInput): Store {
       niche: input.niche,
       ...(input.nicheDetail ? { nicheDetail: input.nicheDetail } : {}),
       currency: input.currency ?? 'USD',
-      timezone: input.timezone ?? 'America/Chicago',
+      timezone: input.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
       color: input.color ?? '#ff2a3a',
       connected: false,
     };

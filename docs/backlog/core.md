@@ -87,6 +87,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
+- 2026-10-26 — Fix: a store created without a timezone got `America/Chicago`, so on this machine (America/New_York) its days were cut an hour off. It now defaults to the machine's timezone. Connecting Shopify still sets the shop's own
 - 2026-10-26 — CORE-36: `POST /api/backups/:name/restore` checks the name, `integrity_check` and schema version, stages `frontline.db.restore`, takes an undo backup, answers 202 `{ restarting: true }`, then exits with 75. The desktop app starts the API again (CORE-35), and `openDb` swaps the staged file in. Verified end to end in the desktop app (marker value back after restore). `pnpm dev` needs a manual restart after a restore
 - 2026-10-26 — CORE-35: the desktop app restarts a dead API process on the same port and reloads the window. Exit code 75 is a requested restart and doesn't count as a crash. More than 3 crashes in 10 min shows the error dialog. Verified by killing the API utility process: it was back on the same port in ~5 s
 - 2026-10-26 — CORE-33: `onError` logs `request failed` (method, path, stack) and returns `{ error: message }` 500. `notFound` returns `{ error: "GET /api/x not found" }` 404. Before, route bugs were plain-text 500s that only reached the console, which the packaged app doesn't show
