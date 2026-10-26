@@ -1,7 +1,8 @@
 import { expect, test } from 'vitest';
 import type { AutomationRule, AutomationRun } from '@frontline/shared';
 import { createApp } from './app';
-import { startScheduler, type RunTask } from './automations';
+import { metricValue, startScheduler, type RunTask } from './automations';
+import { addDays, dayFraction } from './dates';
 import { openDb } from './db';
 import { seedDemo } from './demo';
 
@@ -138,4 +139,19 @@ test('metric rules fire when the condition holds, then wait out the cooldown', a
   s.stop();
   expect(calls).toHaveLength(2);
   expect((await runs()).every((r) => r.status === 'started')).toBe(true);
+});
+
+test("a metric rule's window is the trailing 24 h per day: steady sales don't read low just after midnight", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("DELETE FROM daily_metrics WHERE store_id = 'glow'").run();
+  const now = new Date('2026-10-26T00:15:00'); // machine-local: demo stores are dated on the machine
+  const f = dayFraction('2026-10-26', now.getTime());
+  const day = db.prepare("INSERT INTO daily_metrics (store_id, date, revenue, ad_spend, cogs, orders) VALUES ('glow', ?, ?, ?, 0, ?)");
+  for (let i = 1; i <= 10; i++) day.run(addDays('2026-10-26', -i), 1000, 250, 20);
+  day.run('2026-10-26', 1000 * f, 250 * f, 0);
+  expect(metricValue(db, 'glow', 'revenue', 1, now)).toBeCloseTo(1000, 0);
+  expect(metricValue(db, 'glow', 'revenue', 3, now)).toBeCloseTo(3000, 0);
+  expect(metricValue(db, 'glow', 'roas', 1, now)).toBe(4);
+  expect(metricValue(db, 'glow', 'revenue', 1, now)! < 800).toBe(false); // 'Revenue < 800 over 1 day' stays quiet
 });

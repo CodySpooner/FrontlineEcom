@@ -1016,7 +1016,10 @@ export interface PriceChange {
 export type AutomationTrigger =
   /** 5-field cron in the owner's local time, e.g. "0 9 * * *" = every day 09:00. */
   | { type: 'schedule'; cron: string }
-  /** Fires when the store's metric over the last `windowDays` crosses `value` (checked every 15 min, then `cooldownHours`). */
+  /**
+   * Fires when the store's metric over the trailing `windowDays` x 24 h (today so far plus the uncovered share of the
+   * oldest day) crosses `value` (checked every 15 min, then `cooldownHours`).
+   */
   | { type: 'metric'; metric: keyof MetricTotals; op: '<' | '>'; value: number; windowDays: number };
 
 export interface AutomationAction {

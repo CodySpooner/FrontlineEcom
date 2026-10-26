@@ -4,8 +4,9 @@ import type { AnalyticsRange, AutomationRule, AutomationRun, AutomationRunStatus
 import { loadRows, totalsOf } from './analytics';
 import { approvalsHook } from './approvals';
 import { cronDueBetween, nextCronTime, parseCron } from './cron';
-import { addDays, localDate } from './dates';
+import { addDays, dayFraction, localDate } from './dates';
 import type { Db } from './db';
+import { storeZone } from './stores';
 
 type Row = Record<string, unknown>;
 type Obj = Record<string, unknown>;
@@ -94,10 +95,21 @@ export function parseRule(db: Db, body: unknown, base?: Fields): string | Fields
   return { storeId: b.storeId, name: b.name.trim(), enabled: b.enabled, trigger, action: { type: 'agent_task', agentId: a.agentId, task: a.task.trim() }, approval: b.approval, maxRunsPerDay: b.maxRunsPerDay, cooldownHours: b.cooldownHours };
 }
 
-/** The store's metric over the last `windowDays` (ending today); undefined when the ratio has no denominator. */
-export function metricValue(db: Db, storeId: string, metric: keyof MetricTotals, windowDays: number, today: string) {
-  const from = addDays(today, 1 - windowDays);
-  const t = totalsOf(loadRows(db, [storeId], windowDays as AnalyticsRange, today).filter((r) => r.date >= from));
+/**
+ * The store's metric over the trailing `windowDays` x 24 h: today so far, the full days before it, and the share of the
+ * oldest day today hasn't covered yet, so a sum doesn't read low early in the day. Undefined when the ratio has no
+ * denominator.
+ */
+export function metricValue(db: Db, storeId: string, metric: keyof MetricTotals, windowDays: number, now = new Date()) {
+  const tz = storeZone(db, storeId);
+  const today = localDate(now, tz);
+  const oldest = addDays(today, -windowDays);
+  const left = 1 - dayFraction(today, now.getTime(), tz);
+  // ponytail: assumes sales spread evenly over the day, like summarize's todayFraction.
+  const rows = loadRows(db, [storeId], windowDays as AnalyticsRange, today)
+    .filter((r) => r.date >= oldest)
+    .map((r) => (r.date === oldest ? { ...r, revenue: r.revenue * left, adSpend: r.adSpend * left, cogs: r.cogs * left, orders: Math.round(r.orders * left) } : r));
+  const t = totalsOf(rows);
   if ((metric === 'roas' && !t.adSpend) || (metric === 'aov' && !t.orders)) return undefined;
   return t[metric];
 }
@@ -166,7 +178,7 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
       check.run(t.toISOString(), rule.id);
       if (rule.lastFiredAt && t.getTime() - Date.parse(rule.lastFiredAt) < rule.cooldownHours * 3600000) continue;
       const { metric, op, value, windowDays } = rule.trigger;
-      const v = metricValue(db, rule.storeId, metric, windowDays, localDate(t));
+      const v = metricValue(db, rule.storeId, metric, windowDays, t);
       if (v === undefined || !(op === '<' ? v < value : v > value)) continue;
       fire(rule, `${LABEL[metric]} ${v} ${op} ${value} over the last ${windowDays} day${windowDays > 1 ? 's' : ''}`, t);
     }
