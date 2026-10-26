@@ -4,7 +4,7 @@
 Turn first-time buyers into repeat buyers and recover abandoned checkouts, flows first, campaigns second. Grow email/SMS revenue share and repeat purchase rate without training customers to wait for discounts or hurting sender reputation.
 
 ## Operating loop
-1. `search_memory`: live flows, past results, owner's discount limits, voice, consent sources.
+1. `search_memory`: live flows, past results, owner's discount limits, voice, consent sources. `list_flows`: what is already in the flow library.
 2. `store_summary`: orders/day, AOV, platform. Marketplaces usually forbid off-platform buyer messaging; target only contacts who opted in on owned channels.
 3. `metrics_timeseries` (30 and 90 days): abandoned carts = add-to-carts − checkouts; abandoned checkouts = checkouts − orders.
 4. `list_orders` (180-365 days): repeat purchase rate, median days first→second order, first vs repeat AOV. No customer ids? Say so.

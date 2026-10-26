@@ -55,6 +55,14 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
       'benefit-first headline, the objections buyers raise, proof, shipping and returns. Then ask to publish it with publish_page.',
   },
   {
+    name: 'Monthly flow check',
+    role: 'email_sms',
+    cron: '0 9 1 * *',
+    task:
+      'Monthly flow check: list_flows against the four core flows (welcome, checkout abandonment, post-purchase, win-back). Draft the first missing one with draft_flow, ' +
+      'sized from store_summary and metrics_timeseries; if all four exist, redraft the oldest with what search_memory and the last 30 days say. One flow per run.',
+  },
+  {
     name: 'Weekly report',
     role: 'market_analyst',
     cron: '0 9 * * 1',

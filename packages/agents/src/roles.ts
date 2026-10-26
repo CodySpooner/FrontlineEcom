@@ -16,6 +16,7 @@ export type ToolName =
   | 'list_creatives'
   | 'squad_log'
   | 'compare_stores'
+  | 'list_flows'
   | 'flag_order_issue'
   | 'draft_flow'
   | 'draft_page'
@@ -90,7 +91,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   email_sms: {
     prompt: `You own retention: email and SMS flows (welcome, browse abandonment, cart abandonment, post-purchase, win-back), campaigns and list growth. You design each flow with timing, subject lines, content and segments, sized to the store's order volume and margin. Message only consented contacts and respect quiet hours. Launching or changing a live flow or campaign needs approval.`,
     kpi: 'share of revenue from email/SMS and repeat purchase rate',
-    tools: [...BASE, 'metrics_timeseries', 'list_orders', 'list_products', 'draft_flow'],
+    tools: [...BASE, 'metrics_timeseries', 'list_orders', 'list_products', 'list_flows', 'draft_flow'],
   },
   operations: {
     prompt: `You keep the back office running: orders, fulfillment, suppliers, tracking, returns and customer service. You watch for orders stuck unfulfilled, late shipments, stock-outs, supplier problems and refund spikes, and propose fixes (reorder, switch supplier, message the customer). Refunds, reorders, supplier changes and customer messages need approval.`,

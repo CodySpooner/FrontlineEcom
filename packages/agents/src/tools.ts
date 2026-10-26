@@ -6,7 +6,7 @@ import { CREDITS, creditsToday, demoMedia, listCreatives, saveCreative } from '.
 import { searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
 import { getPageDraft, listPageDrafts, savePageDraft } from './pages';
-import { saveFlowDraft } from './flows';
+import { listFlowDrafts, saveFlowDraft } from './flows';
 import { flagOrderIssue } from './issues';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 import { runGist } from './runs';
@@ -335,6 +335,18 @@ export const APP_TOOLS: AppTool[] = [
       const saved = saveCreative(ctx.db, { ...base, aspect, prompt, credits, source: 'demo', mediaUrl: demoMedia(ctx.store, { kind, aspect, headline, cta }) });
       return `${message}. Higgsfield isn't connected, so this is a demo render, saved to the library (${saved.id}).`;
     },
+  }),
+  defineTool({
+    name: 'list_flows',
+    description: "The store's flow library: email/SMS flows already drafted, newest first, with their trigger and steps (CSV).",
+    input: {},
+    run: async (_, ctx) =>
+      csv(
+        listFlowDrafts(ctx.db, { storeIds: [ctx.store.id] }).map((f) => ({
+          name: f.name, drafted: f.createdAt.slice(0, 10), trigger: f.trigger, steps: f.messages.length,
+          channels: [...new Set(f.messages.map((m) => m.channel))].join('+'), last_step_hours: Math.max(...f.messages.map((m) => m.delayHours)),
+        })),
+      ),
   }),
   defineTool({
     name: 'draft_flow',
