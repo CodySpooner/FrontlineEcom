@@ -27,6 +27,14 @@ describe('automation run log', () => {
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/approvals/a1/approve', { method: 'POST' }));
   });
 
+  it("asks the API for the picked stores' runs, so a busy store can't crowd them out of the newest 50", async () => {
+    localStorage.setItem('fe.stores', JSON.stringify(['peak']));
+    const fetch = stubApi((url) => (url.startsWith('/api/stores') ? [{ id: 'peak', name: 'Peak Fit', currency: 'USD' }, { id: 'glow', name: 'Glow Haus', currency: 'USD' }] : []));
+    renderApp(<RunLog rules={[rule]} />, '/automation');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/automations/runs?stores=peak&limit=50', undefined));
+    localStorage.removeItem('fe.stores');
+  });
+
   it('falls back to the Dashboard link when the request is not in the waiting list', async () => {
     stubApi((url) => (url.startsWith('/api/automations/runs') ? [run] : url.startsWith('/api/stores') ? [{ id: 'peak', name: 'Peak Fit', currency: 'USD' }] : []));
     renderApp(<RunLog rules={[rule]} />, '/automation');

@@ -136,11 +136,11 @@ function RuleRow({ r, onEdit }: { r: AutomationRule; onEdit: () => void }) {
 }
 
 export function RunLog({ rules }: { rules: AutomationRule[] }) {
-  const { has, name } = useStoreSelection();
-  const q = useAutomationRuns();
+  const { ids, name } = useStoreSelection();
+  const q = useAutomationRuns(ids);
   const pending = useApprovals().data;
   const rule = new Map(rules.map((r) => [r.id, r]));
-  const runs = (q.data ?? []).filter((x) => has(x.storeId));
+  const runs = q.data ?? [];
   return (
     <Panel title="Run Log" sub="What your rules did, newest first.">
       {q.isPending ? (

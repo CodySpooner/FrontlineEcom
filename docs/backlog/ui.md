@@ -196,6 +196,8 @@ Orca's browser against the reference before ticking it.
       and profit.
 - [x] UI-73 Unit costs and the Dashboard's "N costs missing" find every cost-less product in a big catalog, not just
       those among the first 200 by title.
+- [x] UI-74 Automation's run log and Competitors' price moves ask the API for the picked stores, instead of taking the
+      newest 50/100 across all stores and filtering, where a busy store crowds a quiet one out.
 
 ## Blocked
 
@@ -299,3 +301,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-71: `priceChange(action)` and `marginAt(price, cost, fees)` live in lib/approvals, with tests. ApprovalExtras mounts `PriceMargin` only for `store.set_price`, so other cards don't fetch products. It looks the product up in `useProducts([storeId])` and stays quiet while the cost is 0. New ApprovalExtras.test covers the fees and no-cost cases. Chrome with a fixture request on Pet Water Fountain ($44.99 → $49.49, cost 14.75): "Margin 67% → 70% after the unit cost". Fixture removed
 - 2026-10-26 — UI-72: `addedProducts(action, fees?)` computes margin with `marginAt`, and ApprovalExtras passes the request's store. Tested: Gua Sha at 2.9% + 0.30 → 75%. Chrome with Glow at 2.9% + 0.30: the demo request read 75/80/72% (was 79/84/76%). Glow restored to no fees
 - 2026-10-26 — UI-73: `useMissingCosts(ids)` asks for `status=active&sort=margin&dir=desc&limit=200`. A cost of 0 is a 100% margin, so every missing cost comes first; up to 200 are shown (ponytail note on that ceiling). Its key starts with `products`, so cost saves and approvals refresh it. Both Unit costs and the Dashboard use it, and archived products now drop out server-side (UI-69). The Analytics test asserts the query. Chrome with Pet Water Fountain's cost zeroed: the API returned it first, the Dashboard read "1 cost missing" and Unit costs listed it. Cost restored (14.75)
+- 2026-10-26 — UI-74: `useAutomationRuns(ids)` and `usePriceChanges(ids)` pass `stores=` (both APIs take it). Keys are `[name, ids]`, so the existing prefix invalidations still hit them, and the client-side `has()` filters are gone. Automation.test asserts `?stores=peak&limit=50`. Chrome on Competitors: Peak showed 4 moves, all "vs Peak Fit"; All stores showed 29 across three stores, matching the API. Selection reset to All

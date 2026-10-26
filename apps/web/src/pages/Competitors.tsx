@@ -208,10 +208,10 @@ function Ads({ c }: { c?: Competitor }) {
 }
 
 function PriceTimeline({ competitors }: { competitors: Competitor[] }) {
-  const { has, name } = useStoreSelection();
-  const q = usePriceChanges();
+  const { ids, name } = useStoreSelection();
+  const q = usePriceChanges(ids);
   const rival = new Map(competitors.map((c) => [c.id, c.name]));
-  const changes = (q.data ?? []).filter((p) => has(p.storeId));
+  const changes = q.data ?? [];
   const days = new Map<string, PriceChange[]>();
   for (const p of changes) {
     const d = new Date(p.at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });

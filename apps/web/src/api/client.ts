@@ -323,7 +323,8 @@ export function useOAuth() {
 }
 
 export const useAutomations = () => useQuery({ queryKey: ['automations'], queryFn: () => api<AutomationRule[]>('/api/automations') });
-export const useAutomationRuns = () => useQuery({ queryKey: ['automation-runs'], queryFn: () => api<AutomationRun[]>('/api/automations/runs?limit=50') });
+export const useAutomationRuns = (storeIds: string[]) =>
+  useQuery({ queryKey: ['automation-runs', storeIds], queryFn: () => api<AutomationRun[]>(`/api/automations/runs?stores=${storeIds.join(',')}&limit=50`) });
 
 export function useAutomationActions() {
   const qc = useQueryClient();
@@ -343,7 +344,8 @@ export const useSupplierSearch = (q: string) =>
   useQuery({ queryKey: ['suppliers', q], queryFn: () => api<SupplierProduct[]>(`/api/suppliers/products?${new URLSearchParams({ q, limit: '5' })}`), enabled: !!q });
 
 export const useCompetitors = () => useQuery({ queryKey: ['competitors'], queryFn: () => api<Competitor[]>('/api/competitors') });
-export const usePriceChanges = () => useQuery({ queryKey: ['price-changes'], queryFn: () => api<PriceChange[]>('/api/competitors/price-changes?limit=100') });
+export const usePriceChanges = (storeIds: string[]) =>
+  useQuery({ queryKey: ['price-changes', storeIds], queryFn: () => api<PriceChange[]>(`/api/competitors/price-changes?stores=${storeIds.join(',')}&limit=100`) });
 export const useSnapshots = (competitorId: string, kind: CompetitorSnapshot['kind']) =>
   useQuery({ queryKey: ['snapshots', competitorId, kind], queryFn: () => api<CompetitorSnapshot[]>(`/api/competitors/${competitorId}/snapshots?kind=${kind}&limit=50`), enabled: !!competitorId });
 
