@@ -889,7 +889,7 @@ export interface Settings {
   notifications: { approvals: boolean; agentDone: boolean; errors: boolean; digest: boolean };
   /** ISO code that multi-store totals are converted to (default USD). */
   baseCurrency: string;
-  /** Read-only: where the local database and key live. */
+  /** Read-only: where the local database and key live (plus logs/ and backups/). POST /api/settings/open-data-folder → 204 opens it in Explorer. */
   dataDir: string;
 }
 

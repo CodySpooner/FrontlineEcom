@@ -4,7 +4,7 @@ import { createApp } from './app';
 import { approvalsHook } from './approvals';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { notify } from './settings';
+import { getSettings, notify, settingsRoutes } from './settings';
 
 const setup = () => {
   const db = openDb();
@@ -61,4 +61,12 @@ test('notifications: approvals raise one, prefs silence a kind, mark read', asyn
   expect(await (await app.request('/api/notifications/read', send('POST', {}))).json()).toEqual({ updated: 1 });
   expect(await (await app.request('/api/notifications?unread=true')).json()).toEqual([]);
   expect((await app.request('/api/notifications/read', send('POST', { ids: 'all' }))).status).toBe(400);
+});
+
+test('open-data-folder opens the data dir and nothing else', async () => {
+  const db = openDb();
+  const opened: string[] = [];
+  const app = settingsRoutes(db, (dir) => void opened.push(dir));
+  expect((await app.request('/api/settings/open-data-folder', { method: 'POST' })).status).toBe(204);
+  expect(opened).toEqual([getSettings(db).dataDir]);
 });

@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Hono } from 'hono';
@@ -129,9 +130,18 @@ export function notify(db: Db, n: NewNotification): AppNotification | undefined 
   return out;
 }
 
-export function settingsRoutes(db: Db) {
+/** Opens a folder in the OS file manager (Explorer on Windows). */
+const openFolder = (dir: string) =>
+  void spawn(process.platform === 'win32' ? 'explorer' : process.platform === 'darwin' ? 'open' : 'xdg-open', [dir], { detached: true, stdio: 'ignore' }).on('error', () => {}).unref();
+
+export function settingsRoutes(db: Db, open = openFolder) {
   return new Hono()
     .get('/api/settings', (c) => c.json(getSettings(db)))
+    // Fixed path, no input: the local UI's "Open data folder" (logs, backups, database).
+    .post('/api/settings/open-data-folder', (c) => {
+      open(getSettings(db).dataDir);
+      return c.body(null, 204);
+    })
     .patch('/api/settings', async (c) => {
       const s = updateSettings(db, await c.req.json().catch(() => undefined));
       return typeof s === 'string' ? c.json({ error: s }, 400) : c.json(s);
