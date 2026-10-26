@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { RESEARCH_TABS, type Niche, type ProductList, type ResearchProduct, type ResearchSource, type ResearchTab } from '@frontline/shared';
 import { approvalsHook } from './approvals';
 import { tx, type Db } from './db';
+import { convertRate } from './fx';
 import { getStore } from './stores';
 
 type Row = Record<string, unknown>;
@@ -112,12 +113,16 @@ export function researchRoutes(db: Db) {
       const body = (await c.req.json().catch(() => undefined)) as { storeId?: unknown } | undefined;
       const store = typeof body?.storeId === 'string' ? getStore(db, body.storeId) : undefined;
       if (!store) return c.json({ error: 'storeId must be an existing store' }, 400);
+      // Research prices are USD: converted to the store's currency, rounded to its minor unit. No rate: kept in USD, and the request says so.
+      const rate = await convertRate(db, 'USD', store.currency);
+      const digits = new Intl.NumberFormat('en', { style: 'currency', currency: store.currency }).resolvedOptions().maximumFractionDigits ?? 2;
+      const money = (usd: number) => (rate ? Math.round(usd * rate * 10 ** digits) / 10 ** digits : usd);
       const approval = approvalsHook(db).create({
         storeId: store.id,
         agentId: `${store.id}:product_hunter`,
         title: `Add "${p.title}" to ${store.name}`,
-        reason: `AI score ${p.score}, ${Math.round(p.margin)}% margin, demand +${p.trend}% in 30 days`,
-        action: { kind: 'store.add_products', payload: { products: [{ researchProductId: p.id, title: p.title, price: p.price, compareAt: p.compareAt, cost: p.cost }] } },
+        reason: `AI score ${p.score}, ${Math.round(p.margin)}% margin, demand +${p.trend}% in 30 days${rate ? '' : `. Prices are in USD (no ${store.currency} rate yet): adjust them before publishing`}`,
+        action: { kind: 'store.add_products', payload: { products: [{ researchProductId: p.id, title: p.title, price: money(p.price), compareAt: money(p.compareAt), cost: money(p.cost) }] } },
       });
       return c.json(approval, 201);
     });

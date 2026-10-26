@@ -71,3 +71,23 @@ test('add to store creates a pending approval for the store Product Hunter', asy
   expect(pending[0]!.id).toBe(a.id);
   expect((await app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'nope' }))).status).toBe(400);
 });
+
+test("add to store converts the research's USD prices into the store's currency", async () => {
+  const db = openDb();
+  seedDemo(db);
+  seedResearch(db);
+  db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-23', fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1.25, JPY: 187.5 } }));
+  const app = createApp(db);
+  const add = async (currency: string) => {
+    db.prepare("UPDATE stores SET currency = ? WHERE id = 'pawsome'").run(currency);
+    const a = (await (await app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'pawsome' }))).json()) as ApprovalRequest;
+    return { reason: a.reason, product: (a.action.payload as { products: { price: number; compareAt: number; cost: number }[] }).products[0]! };
+  };
+  expect((await add('EUR')).product).toMatchObject({ price: 11.8, compareAt: 35.99, cost: 4.08 });
+  const yen = (await add('JPY')).product;
+  expect([yen.price, yen.cost]).toEqual([2213, 765]);
+  expect(Number.isInteger(yen.compareAt)).toBe(true);
+  const usd = await add('XOF'); // no rate: kept in USD, and the request says so
+  expect(usd.product).toMatchObject({ price: 14.75, compareAt: 44.99, cost: 5.1 });
+  expect(usd.reason).toContain('Prices are in USD');
+});
