@@ -250,3 +250,52 @@ test('an Amazon price change the API rejects says why', async () => {
   }) as typeof fetch;
   await expect(setAmazonListingPrice(db, key, 'peak', 'amz-X', { price: 8 }, fetchFn, NOW)).rejects.toThrow("Amazon: 'our_price' is invalid");
 });
+
+test('FBA listings get their stock from the FBA Inventory API, and keep it when the listing alone is read again', async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  const fbaQueries: URLSearchParams[] = [];
+  let fbaUnits = 12;
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (u.pathname === '/fba/inventory/v1/summaries') {
+      fbaQueries.push(u.searchParams);
+      return Response.json({ payload: { granularity: {}, inventorySummaries: fbaUnits === 12 ? [{ sellerSku: 'FBA-1', inventoryDetails: { fulfillableQuantity: fbaUnits } }] : [] } });
+    }
+    if (u.pathname.startsWith('/listings/')) {
+      return Response.json({ numberOfResults: 2, items: [
+        { sku: 'FBA-1', summaries: [{ status: ['BUYABLE'] }], fulfillmentAvailability: [{ fulfillmentChannelCode: 'AMAZON_NA' }] },
+        { sku: 'MFN-1', summaries: [{ status: ['BUYABLE'] }], fulfillmentAvailability: [{ fulfillmentChannelCode: 'DEFAULT', quantity: 3 }] },
+      ] });
+    }
+    return base(url, init);
+  }) as typeof fetch;
+  const stock = () => db.prepare("SELECT id, inventory, inventory_tracked AS tracked FROM products WHERE store_id = 'peak' AND id GLOB 'amz-*' ORDER BY id").all();
+
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect(fbaQueries[0]!.get('details')).toBe('true');
+  expect([fbaQueries[0]!.get('granularityType'), fbaQueries[0]!.get('granularityId'), fbaQueries[0]!.get('startDateTime')]).toEqual(['Marketplace', 'ATVPDKIKX0DER', null]);
+  expect(stock()).toEqual([{ id: 'amz-FBA-1', inventory: 12, tracked: 1 }, { id: 'amz-MFN-1', inventory: 3, tracked: 1 }]);
+
+  // Later the same day: the listing comes back changed but its FBA stock didn't move, so it keeps its 12.
+  fbaUnits = 0;
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect(fbaQueries[1]!.get('startDateTime')).toBe('2026-10-24T00:00:00Z');
+  expect(stock()).toEqual([{ id: 'amz-FBA-1', inventory: 12, tracked: 1 }, { id: 'amz-MFN-1', inventory: 3, tracked: 1 }]);
+});
+
+test('without the Amazon Fulfillment role, FBA listings stay "not tracked" and the sync goes on', async () => {
+  const db = setup();
+  db.prepare("UPDATE stores SET platform = 'amazon' WHERE id = 'peak'").run();
+  const base = fakeAmazon().fetchFn;
+  const fetchFn = (async (url: string, init?: RequestInit) => {
+    const u = new URL(url);
+    if (u.pathname === '/fba/inventory/v1/summaries') return Response.json({ errors: [{ code: 'Unauthorized', message: 'Access to requested resource is denied.' }] }, { status: 403 });
+    if (u.pathname.startsWith('/listings/')) return Response.json({ numberOfResults: 1, items: [{ sku: 'FBA-1', summaries: [{ status: ['BUYABLE'] }], fulfillmentAvailability: [{ fulfillmentChannelCode: 'AMAZON_NA' }] }] });
+    return base(url, init);
+  }) as typeof fetch;
+  await syncAmazon(db, key, 'peak', fetchFn, NOW);
+  expect(db.prepare("SELECT status, error FROM integrations WHERE id = 'amazon:peak'").get()).toEqual({ status: 'connected', error: null });
+  expect(db.prepare("SELECT inventory, inventory_tracked AS tracked FROM products WHERE id = 'amz-FBA-1'").get()).toEqual({ inventory: 0, tracked: 0 });
+});

@@ -21,8 +21,33 @@ interface Listing {
   /** One per marketplace asked for. */
   summaries?: { itemName?: string; status?: string[]; mainImage?: { link: string }; lastUpdatedDate?: string }[];
   offers?: { offerType: string; price: { amount: string } }[];
-  /** Merchant-fulfilled stock has a quantity; FBA stock isn't reported here. */
-  fulfillmentAvailability?: { quantity?: number }[];
+  /** Merchant-fulfilled (DEFAULT) stock has a quantity; FBA (AMAZON_NA, AMAZON_EU, …) stock comes from fbaStock. */
+  fulfillmentAvailability?: { fulfillmentChannelCode?: string; quantity?: number }[];
+}
+
+/**
+ * FBA units Amazon can ship now per SKU (FBA Inventory API, Amazon Fulfillment role): all of them, or those whose stock
+ * changed since `since`. 50 a page, 2 pages a second.
+ */
+async function fbaStock(fetchFn: Fetch, host: string, token: string, marketplace: string, since?: string) {
+  const out = new Map<string, number>();
+  let nextToken: string | undefined;
+  do {
+    const q = new URLSearchParams({
+      details: 'true', granularityType: 'Marketplace', granularityId: marketplace, marketplaceIds: marketplace,
+      ...(since ? { startDateTime: since } : {}), ...(nextToken ? { nextToken } : {}),
+    });
+    const res = await fetchFn(`https://${host}/fba/inventory/v1/summaries?${q}`, { headers: { 'x-amz-access-token': token } });
+    const body = (await res.json().catch(() => ({}))) as {
+      payload?: { inventorySummaries?: { sellerSku?: string; inventoryDetails?: { fulfillableQuantity?: number } }[] };
+      pagination?: { nextToken?: string };
+      errors?: { message: string }[];
+    };
+    if (!res.ok) throw new Error(`Amazon FBA inventory: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
+    for (const s of body.payload?.inventorySummaries ?? []) if (s.sellerSku) out.set(s.sellerSku, s.inventoryDetails?.fulfillableQuantity ?? 0);
+    nextToken = body.pagination?.nextToken;
+  } while (nextToken);
+  return out;
 }
 
 /** A search pages through at most this many SKUs. */
@@ -115,8 +140,10 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     // Without the role (or on any error) sales sync on and the catalog is left as it is.
     const have = db.prepare("SELECT 1 FROM products WHERE store_id = ? AND id GLOB 'amz-*'").get(storeId);
     const full = !have || catalogPassDue(db, id, today);
-    const listings = !own ? undefined
-      : await listingsOf(fetchFn, host, token, creds.sellerId!.trim(), marketplace, full ? undefined : `${addDays(cursor ?? today, -2)}T00:00:00Z`).catch(() => undefined);
+    const changedSince = full ? undefined : `${addDays(cursor ?? today, -2)}T00:00:00Z`;
+    const listings = !own ? undefined : await listingsOf(fetchFn, host, token, creds.sellerId!.trim(), marketplace, changedSince).catch(() => undefined);
+    // FBA stock the same way (without the Amazon Fulfillment role, FBA listings stay "not tracked").
+    const fba = !own ? undefined : await fbaStock(fetchFn, host, token, marketplace, changedSince).catch(() => undefined);
 
     tx(db, () => {
       switchToReal(db, storeId);
@@ -132,20 +159,22 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
         up.run(storeId, date, Math.round(Number(d.totalSales?.amount ?? 0) * rate * 100) / 100, d.orderCount ?? 0);
       }
       rebuildRevenue(db, storeId, days);
-      // ponytail: Amazon has no unit costs and FBA stock isn't in this call (that's the FBA Inventory API), so an FBA-only
-      // listing reads as stock not tracked.
+      // ponytail: Amazon has no unit costs. An FBA listing keeps the stock fbaStock last gave it (its listing has no count).
       const prod = db.prepare(
-        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?, ?, ?, ?, ?, NULL, 0, ?, ?, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, inventory = excluded.inventory,
-           inventory_tracked = excluded.inventory_tracked, status = excluded.status`,
+        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?1, ?2, ?3, ?4, ?5, NULL, 0, ?6, ?7, ?8)
+         ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, status = excluded.status,
+           inventory = CASE WHEN ?9 THEN inventory ELSE excluded.inventory END, inventory_tracked = CASE WHEN ?9 THEN inventory_tracked ELSE excluded.inventory_tracked END`,
       );
       for (const l of listings ?? []) {
         const s = l.summaries?.[0];
         const counted = (l.fulfillmentAvailability ?? []).filter((f) => typeof f.quantity === 'number');
         const price = Number(l.offers?.find((o) => o.offerType === 'B2C')?.price.amount ?? 0);
         // BUYABLE and/or DISCOVERABLE: live (an out-of-stock listing keeps DISCOVERABLE); neither: not live yet.
-        prod.run(storeId, `amz-${l.sku}`, s?.itemName ?? l.sku, s?.mainImage?.link ?? null, price, counted.reduce((a, f) => a + f.quantity!, 0), counted.length ? 1 : 0, s?.status?.length ? 'active' : 'draft');
+        const byAmazon = (l.fulfillmentAvailability ?? []).some((f) => f.fulfillmentChannelCode?.startsWith('AMAZON'));
+        prod.run(storeId, `amz-${l.sku}`, s?.itemName ?? l.sku, s?.mainImage?.link ?? null, price, counted.reduce((a, f) => a + f.quantity!, 0), counted.length ? 1 : 0, s?.status?.length ? 'active' : 'draft', byAmazon && !counted.length ? 1 : 0);
       }
+      const setFba = db.prepare('UPDATE products SET inventory = ?, inventory_tracked = 1 WHERE store_id = ? AND id = ?');
+      for (const [sku, units] of fba ?? []) setFba.run(units, storeId, `amz-${sku}`);
       // A read cut short by the search cap can't tell gone from unread: it archives nothing (and isn't retried until tomorrow).
       if (listings && full) {
         if (listings.complete) archiveMissing(db, id, storeId, 'amz-*', listings.map((l) => `amz-${l.sku}`), today);
