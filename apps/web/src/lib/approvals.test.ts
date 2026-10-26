@@ -67,6 +67,9 @@ describe('addedProducts', () => {
       { title: 'Gua Sha Stone Set', price: 24.99, compareAt: 39.99, margin: 79 },
       { title: 'Eye Patches', price: 19.99 },
     ]);
+    // Net of the store's fee estimate, like profit: (24.99 − 5.20 − 0.72 − 0.30) / 24.99.
+    const shopify = addedProducts({ kind: 'store.add_products', payload: { products: [{ title: 'Gua Sha Stone Set', price: 24.99, cost: 5.2 }] } }, { feePercent: 2.9, feePerOrder: 0.3 });
+    expect(shopify?.[0]?.margin).toBe(75);
   });
 
   it('skips malformed entries and other kinds', () => {

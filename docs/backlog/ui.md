@@ -192,6 +192,8 @@ Orca's browser against the reference before ticking it.
       returning to Product Research instead of the cached feed.
 - [x] UI-71 A price-change request shows the product's margin before and after, net of its unit cost and the store's fee
       estimate, wherever the request card appears (Dashboard, bell, chat).
+- [x] UI-72 An add-products request's per-product margin is net of the store's fee estimate, matching the price card
+      and profit.
 
 ## Blocked
 
@@ -293,3 +295,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-69: Unit costs and the Dashboard's missing-cost count skip `status === 'archived'`. `stockLeft` returns "Archived" (not low) for an archived product. Tests in Analytics.test and stock.test. Chrome with Pawsome's Pet Water Fountain archived at cost 0: Unit costs listed nothing and the Dashboard had no "costs missing" link. Demo top products skip archived ones server-side, so the label is covered by the unit test only. Product restored (active, 14.75)
 - 2026-10-26 — UI-70: useLive invalidates `['research']` on a finished run message. Before, AI Research opened the agent chat, and coming back inside the 30s stale window showed the old feed. live.test covers it (not on running, yes on done). Chrome on the demo with the fake engine: AI Research → run done → client-side back to Research read "31 products" (was 30), with the new "Dog Paw Cleaner Cup bundle". Run, find, XP event (+10, agent restored to 4943), and notification removed
 - 2026-10-26 — UI-71: `priceChange(action)` and `marginAt(price, cost, fees)` live in lib/approvals, with tests. ApprovalExtras mounts `PriceMargin` only for `store.set_price`, so other cards don't fetch products. It looks the product up in `useProducts([storeId])` and stays quiet while the cost is 0. New ApprovalExtras.test covers the fees and no-cost cases. Chrome with a fixture request on Pet Water Fountain ($44.99 → $49.49, cost 14.75): "Margin 67% → 70% after the unit cost". Fixture removed
+- 2026-10-26 — UI-72: `addedProducts(action, fees?)` computes margin with `marginAt`, and ApprovalExtras passes the request's store. Tested: Gua Sha at 2.9% + 0.30 → 75%. Chrome with Glow at 2.9% + 0.30: the demo request read 75/80/72% (was 79/84/76%). Glow restored to no fees

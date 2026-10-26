@@ -18,8 +18,8 @@ export function themeChange(action: ApprovalAction) {
   return { previewUrl, files };
 }
 
-/** The products a `store.add_products` request would add (agent-written payload, so malformed entries drop out). */
-export function addedProducts(action: ApprovalAction) {
+/** The products a `store.add_products` request would add (agent-written payload, so malformed entries drop out), margin net of `fees`. */
+export function addedProducts(action: ApprovalAction, fees?: Pick<Store, 'feePercent' | 'feePerOrder'>) {
   if (action.kind !== 'store.add_products') return undefined;
   const list = (action.payload as { products?: unknown } | undefined)?.products;
   const num = (v: unknown) => (typeof v === 'number' && v > 0 ? v : undefined);
@@ -28,7 +28,7 @@ export function addedProducts(action: ApprovalAction) {
     if (typeof p?.title !== 'string' || !price) return [];
     const compareAt = num(p.compareAt);
     const cost = num(p.cost);
-    return [{ title: p.title, price, ...(compareAt && { compareAt }), ...(cost && { margin: Math.round(((price - cost) / price) * 100) }) }];
+    return [{ title: p.title, price, ...(compareAt && { compareAt }), ...(cost && { margin: marginAt(price, cost, fees) }) }];
   });
 }
 

@@ -10,9 +10,9 @@ import { useStoreSelection } from './StoreFilter';
 const SHOWN = 5;
 
 export function ApprovalExtras({ action, storeId }: { action: ApprovalAction; storeId?: string }) {
-  const { currency } = useStoreSelection();
+  const { currency, stores } = useStoreSelection();
   const cur = storeId && currency(storeId);
-  const added = addedProducts(action);
+  const added = addedProducts(action, stores.find((s) => s.id === storeId));
   if (added?.length)
     return (
       <ul className="mt-1.5 grid gap-0.5 text-xs text-muted">
