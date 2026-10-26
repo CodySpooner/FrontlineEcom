@@ -795,7 +795,10 @@ export interface Health {
   connectors: { id: string; kind: IntegrationKind; storeId?: string; status: IntegrationStatus; error?: string; syncedAt?: string }[];
 }
 
-/** GET /api/integrations?stores=a,b → Integration[] (global ones always included). */
+/**
+ * GET /api/integrations?stores=a,b → Integration[] (global ones always included).
+ * POST /api/integrations/:id/sync → 202: "sync now" (e.g. after fixing what an error names); it runs within 30 s.
+ */
 export interface Integration {
   id: string;
   kind: IntegrationKind;

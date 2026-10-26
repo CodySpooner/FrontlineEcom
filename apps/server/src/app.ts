@@ -140,6 +140,9 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .get('/api/integrations/oauth', (c) => c.json(oauthKinds()))
     .route('/', oauthRoutes(db, key))
     .delete('/api/integrations/:id', (c) => (deleteIntegration(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'integration not found' }, 404)))
+    // Marked changed, like a re-save: the sync loop runs it on its next tick (30 s at most).
+    .post('/api/integrations/:id/sync', (c) =>
+      db.prepare('UPDATE integrations SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), c.req.param('id')).changes ? c.json({}, 202) : c.json({ error: 'integration not found' }, 404))
     .get('/api/suppliers/products', async (c) => {
       const q = (c.req.query('q') ?? '').trim();
       if (!q || q.length > 200) return c.json({ error: 'q must be 1 to 200 characters' }, 400);

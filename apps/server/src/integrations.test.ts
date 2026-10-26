@@ -167,3 +167,12 @@ test("reconnecting a store to another shop drops the old shop's orders, products
   expect(revenue('2026-10-24')).toBe(0);
   expect(ids('orders')).toEqual(['tt-5']);
 });
+
+test('"sync now" marks an integration changed, so the sync loop picks it up on its next tick', async () => {
+  const { db, app } = setup();
+  saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', accessToken: TOKEN } });
+  db.prepare("UPDATE integrations SET updated_at = '2026-01-01T00:00:00.000Z' WHERE id = 'shopify:glow'").run();
+  expect((await app.request('/api/integrations/shopify:glow/sync', { method: 'POST' })).status).toBe(202);
+  expect(String(db.prepare("SELECT updated_at FROM integrations WHERE id = 'shopify:glow'").get()?.updated_at) > '2026-01-01T00:00:00.000Z').toBe(true);
+  expect((await app.request('/api/integrations/shopify:nope/sync', { method: 'POST' })).status).toBe(404);
+});
