@@ -91,7 +91,14 @@ function csv(rows: Record<string, unknown>[]): string {
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
-const since = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+/** The first of the last `days` dates, today included, in the store's zone (its data is dated there). */
+const since = (days: number, timeZone: string) => {
+  const d = new Date(`${new Date().toLocaleDateString('en-CA', { timeZone })}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1 - days);
+  return d.toISOString().slice(0, 10);
+};
+/** `days` × 24 hours ago, to compare with timestamps (an order's age). */
+const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
 export const cash = (n: number, currency: string) => (currency === 'USD' ? `$${n}` : `${n} ${currency}`);
 
@@ -156,7 +163,7 @@ export const APP_TOOLS: AppTool[] = [
             `SELECT date, round(revenue, 2) AS revenue, round(ad_spend, 2) AS ad_spend, round(cogs, 2) AS cogs, orders, sessions, add_to_carts, checkouts
              FROM daily_metrics WHERE store_id = ? AND date >= ? ORDER BY date`,
           )
-          .all(ctx.store.id, since(days)),
+          .all(ctx.store.id, since(days, ctx.store.timezone)),
       ),
   }),
   defineTool({
@@ -177,7 +184,7 @@ export const APP_TOOLS: AppTool[] = [
              ) s ON s.product_id = p.id
              WHERE p.store_id = ? ${status ? 'AND p.status = ?' : ''} ORDER BY revenue_30d DESC, p.title LIMIT ?`,
           )
-          .all(...([ctx.store.id, since(30), ctx.store.id, ...(status ? [status] : []), limit] as string[])),
+          .all(...([ctx.store.id, since(30, ctx.store.timezone), ctx.store.id, ...(status ? [status] : []), limit] as string[])),
       ),
   }),
   defineTool({
@@ -191,7 +198,7 @@ export const APP_TOOLS: AppTool[] = [
       limit: z.number().int().min(1).max(500).default(100),
     },
     run: async ({ days, fulfillment, limit }, ctx) => {
-      const from = since(days);
+      const from = since(days, ctx.store.timezone);
       const counts = ctx.db
         .prepare('SELECT fulfillment_status AS status, count(*) AS n FROM orders WHERE store_id = ? AND created_at >= ? GROUP BY 1 ORDER BY 2 DESC')
         .all(ctx.store.id, from);
@@ -210,7 +217,7 @@ export const APP_TOOLS: AppTool[] = [
              sum(EXISTS (SELECT 1 FROM order_issues i WHERE i.store_id = o.store_id AND i.order_id = o.id AND i.status = 'open')) AS open_issues
            FROM orders o WHERE o.store_id = ? AND o.created_at >= ? GROUP BY 1 ORDER BY 2 DESC`,
         )
-        .all(since(3), since(10), ctx.store.id, from);
+        .all(ago(3), ago(10), ctx.store.id, from);
       return [
         `counts: ${counts.map((c) => `${c.status} ${c.n}`).join(', ') || 'none'}`,
         '# By supplier',
@@ -232,7 +239,7 @@ export const APP_TOOLS: AppTool[] = [
            FROM campaigns c LEFT JOIN campaign_daily d ON d.network = c.network AND d.campaign_id = c.id AND d.date >= ?
            WHERE c.store_id = ? GROUP BY c.network, c.id ORDER BY spend DESC`,
         )
-        .all(since(days), ctx.store.id);
+        .all(since(days, ctx.store.timezone), ctx.store.id);
       return csv(
         rows.map((r) => {
           const [spend, revenue, purchases, clicks, impressions] = [r.spend, r.revenue, r.purchases, r.clicks, r.impressions].map(Number) as number[];
@@ -325,7 +332,7 @@ export const APP_TOOLS: AppTool[] = [
       "What this store's squad did in the last N days: requests to the owner with the decision, finished runs with the gist of each answer, and the measured outcomes of approved changes (CSV).",
     input: { days: z.number().int().min(1).max(30).default(7) },
     run: async ({ days }, ctx) => {
-      const from = since(days);
+      const from = since(days, ctx.store.timezone);
       const who = (agentId: string) => AGENT_ROLES[agentId.split(':')[1] as AgentRole]?.name ?? agentId;
       const requests = ctx.db
         .prepare(`SELECT created_at, agent_id, title, status, json_extract(action_json, '$.auto') AS auto FROM approvals WHERE store_id = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 50`)
@@ -556,7 +563,7 @@ export const APP_TOOLS: AppTool[] = [
       // One page per product at a time: overlapping page changes can't be judged apart (14 days of sales after publishing).
       const prior = kind === 'product' ? listPageDrafts(ctx.db, { storeIds: [ctx.store.id], limit: 1000 }).find((d) => d.productId === productId && d.status !== 'rejected') : undefined;
       if (prior && prior.status !== 'published') return `Not saved: this product already has a page draft ${prior.status === 'draft' ? 'in' : `${prior.status} in`} Store Builder (${prior.id}). The owner publishes or rejects it first; work on another product.`;
-      if (prior?.publishedAt && prior.publishedAt.slice(0, 10) > since(29)) return `Not saved: this product's page went live on ${prior.publishedAt.slice(0, 10)} and is judged after 14 days of sales; work on another product.`;
+      if (prior?.publishedAt && prior.publishedAt.slice(0, 10) >= since(29, ctx.store.timezone)) return `Not saved: this product's page went live on ${prior.publishedAt.slice(0, 10)} and is judged after 14 days of sales; work on another product.`;
       const draft = savePageDraft(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), kind, ...(productId ? { productId } : {}), ...d });
       return `Saved draft ${draft.id} to the Store Builder. When it's ready, ask to publish it with publish_page.`;
     },
@@ -625,7 +632,7 @@ export const APP_TOOLS: AppTool[] = [
       'Judge every campaign against break-even ROAS (from 30-day gross margin): verdict scale / hold / cut / pause / learning (not enough spend yet) / paused, with a suggested daily budget. Start every ad review here.',
     input: { days: z.number().int().min(3).max(30).default(7) },
     run: async ({ days }, ctx) => {
-      const econ = economics(ctx.db, ctx.store.id, since(30));
+      const econ = economics(ctx.db, ctx.store.id, since(30, ctx.store.timezone));
       const t = thresholds(econ);
       const rows = campaignStats(ctx, days);
       return [
@@ -701,7 +708,7 @@ export const APP_TOOLS: AppTool[] = [
       if (Math.abs(to - from) / from > 0.3) return 'Not sent: test within ±30% of the current price, one step at a time.';
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
       // Overlapping tests on one product can't be judged apart.
-      const running = ctx.db.prepare('SELECT changed_on FROM price_tests WHERE store_id = ? AND product_id = ? AND changed_on > ?').get(ctx.store.id, productId, since(29));
+      const running = ctx.db.prepare('SELECT changed_on FROM price_tests WHERE store_id = ? AND product_id = ? AND changed_on >= ?').get(ctx.store.id, productId, since(29, ctx.store.timezone));
       if (running) return `Not sent: a price test on this product has been running since ${running.changed_on}; it is judged after 14 days of sales.`;
       const pending = ctx.db
         .prepare(`SELECT 1 FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') = 'store.set_price' AND json_extract(action_json, '$.payload.productId') = ?`)
@@ -812,7 +819,7 @@ function campaignStats(ctx: ToolContext, days: number): CampaignStats[] {
        FROM campaigns c LEFT JOIN campaign_daily d ON d.network = c.network AND d.campaign_id = c.id AND d.date >= ?
        WHERE c.store_id = ? GROUP BY c.network, c.id ORDER BY spend DESC`,
     )
-    .all(since(days), ctx.store.id)
+    .all(since(days, ctx.store.timezone), ctx.store.id)
     .map((r) => ({ network: String(r.network), id: String(r.id), name: String(r.name), status: String(r.status), dailyBudget: Number(r.daily_budget), spend: Number(r.spend), revenue: Number(r.revenue), purchases: Number(r.purchases) }));
 }
 

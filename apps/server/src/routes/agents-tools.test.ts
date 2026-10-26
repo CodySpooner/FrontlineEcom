@@ -39,6 +39,20 @@ async function run(i: RunInput, steps: FakeStep[], onEvent?: (e: AgentEvent) => 
 }
 const results = (events: AgentEvent[]) => events.flatMap((e) => (e.type === 'tool_result' ? [e] : []));
 
+test('a 7-day window is the 7 store dates ending today, even early in the day east of UTC', async () => {
+  const tz = String(db.prepare(`SELECT timezone FROM stores WHERE id = 'glow'`).get()?.timezone);
+  db.prepare(`UPDATE stores SET timezone = 'Asia/Tokyo' WHERE id = 'glow'`).run();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    vi.setSystemTime(new Date('2026-10-26T23:00:00Z')); // 08:00 on the 27th in Tokyo
+    const [r] = results(await run(input('glow', 'market_analyst'), [{ call: 'metrics_timeseries', input: { days: 7 } }]));
+    expect(r!.output.split('\n')[1]!.slice(0, 10)).toBe('2026-10-21');
+  } finally {
+    vi.useRealTimers();
+    db.prepare(`UPDATE stores SET timezone = ? WHERE id = 'glow'`).run(tz);
+  }
+});
+
 test("store_summary's change vs the previous period matches the dashboard's in the middle of the day", async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   try {
