@@ -345,11 +345,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-213 `review_campaigns` sends the owner to the right place for unit costs. Both of its cost notes said Shopify's "Cost per item", else "Products here", on every platform; costs are entered in Analytics' Unit costs card (Shopify's field only exists on a Shopify store).
 - [x] AGT-214 A chat from the demo phase can't be continued once the store is live. Continuing resumes the agent's session, whose context holds what its tools said then: the demo numbers, which it would quote as the store's. The owner is asked to start a new conversation.
 - [x] AGT-215 A store page whose push may have worked (a 5xx, a timeout, a dropped connection) doesn't invite a second Publish as if nothing happened: the notice says it may be live and to check the store's pages first, or it goes up twice. Refusals and product pages (an update, safe to repeat) keep the old notice. From core's safety review 5.
+- [x] AGT-216 A theme copy whose duplicate call failed after Shopify made it (a 5xx, a dropped connection) is deleted. Its id never came back, so nothing removed it, and the agent's next try made another: copies piled up toward Shopify's 20-theme library limit.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-216: `draftThemeCopy` lists the themes again when `duplicate` throws and removes a new one with the copy's name (one that existed before stays).
 - 2026-10-26 — AGT-215: `publishDraft` tells an unsure store-page push (HTTP 5xx, fetch failed, abort/timeout) apart from a refusal and asks the owner to check the store before publishing again (core's review 5 Inbox item).
 - 2026-10-26 — AGT-214: `runs.start` refuses a `resumeRunId` created before the store's `activate:` marker.
 - 2026-10-26 — AGT-213: `costsWhere(store)` names Analytics' Unit costs, plus Shopify's "Cost per item" on a Shopify store, in both `review_campaigns` notes. Found by a sweep on fresh live Amazon/Walmart/Woo/TikTok stores.

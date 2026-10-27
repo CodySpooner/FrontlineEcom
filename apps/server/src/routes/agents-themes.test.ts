@@ -142,6 +142,17 @@ test("a failed theme draft deletes its copy, and a 'suggest' agent copies nothin
   await expect(draftThemeCopy({ ...api, upsert: async () => { throw new Error('Liquid syntax error'); } }, 'n', files, async () => {})).rejects.toThrow('Liquid syntax error');
   expect(removed).toEqual(['9']);
 
+  // The duplicate call failed after Shopify made the copy: the new theme by that name goes, the owner's same-named one stays.
+  removed.length = 0;
+  const library = [theme('1', 'MAIN'), { ...theme('5'), name: 'n' }];
+  const dropped = { ...api, list: async () => [...library], upsert: async () => [] };
+  const duplicate = async () => {
+    library.push({ ...theme('10', 'UNPUBLISHED', true), name: 'n' });
+    throw new Error('Shopify returned HTTP 502');
+  };
+  await expect(draftThemeCopy({ ...dropped, duplicate }, 'n', files, async () => {})).rejects.toThrow('Shopify returned HTTP 502');
+  expect(removed).toEqual(['10']);
+
   let drafted = 0;
   updateAgent(db, 'glow:store_developer', { autonomy: 'suggest' });
   const out = await run([change()], { themes: themes({ draft: async () => (drafted++, theme('9')) }) });

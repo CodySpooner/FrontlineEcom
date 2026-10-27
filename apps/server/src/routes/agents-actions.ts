@@ -249,9 +249,18 @@ export interface ThemeApi {
  */
 // ponytail: polls every 3 s for up to 2 minutes inside the agent's tool call; a slower copy fails the draft.
 export async function draftThemeCopy(api: ThemeApi, name: string, files: { filename: string; body: string }[], wait = (ms: number) => new Promise((r) => setTimeout(r, ms))) {
-  const live = (await api.list()).find((t) => t.role === 'MAIN');
+  const before = await api.list();
+  const live = before.find((t) => t.role === 'MAIN');
   if (!live) throw new Error('Shopify: the store has no live theme');
-  let copy = await api.duplicate(live.id, name);
+  let copy: ShopifyTheme;
+  try {
+    copy = await api.duplicate(live.id, name);
+  } catch (e) {
+    // A 5xx or a dropped connection can come after Shopify made the copy: one by this name that wasn't there before
+    // is ours. ponytail: a copy that shows up only after this list stays; the owner deletes it in Online Store > Themes.
+    for (const t of await api.list().catch(() => [])) if (t.name === name && !before.some((b) => b.id === t.id)) await api.remove(t.id).catch(() => {});
+    throw e;
+  }
   try {
     for (let i = 0; copy.processing; i++) {
       if (i === 40) throw new Error(`Shopify is still copying the theme ("${name}"); try again in a few minutes`);
