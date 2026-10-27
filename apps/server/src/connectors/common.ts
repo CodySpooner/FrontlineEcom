@@ -178,6 +178,8 @@ export function forgetPlatform(db: Db, storeId: string, kind: IntegrationKind) {
     .all(storeId, ...args, storeId, kind)
     .map((r) => String(r.d));
   for (const t of ['orders', 'products']) db.prepare(`DELETE FROM ${t} WHERE store_id = ? AND ${where}`).run(storeId, ...args);
+  // Its refund lines, by their order's id (left, Amazon would look the old seller's orders up on the new one).
+  db.prepare(`DELETE FROM amazon_refunds WHERE store_id = ? AND ${where.replaceAll('id GLOB', 'order_id GLOB')}`).run(storeId, ...args);
   db.prepare('DELETE FROM channel_daily WHERE store_id = ? AND channel = ?').run(storeId, kind);
   rebuildRevenue(db, storeId, dates);
 }

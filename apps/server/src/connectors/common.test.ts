@@ -2,7 +2,7 @@ import { expect, test, vi } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { updateStore } from '../stores';
-import { rebuildRevenue, retrying, setStoreCurrency, switchToReal, takeTimezone } from './common';
+import { forgetPlatform, rebuildRevenue, retrying, setStoreCurrency, switchToReal, takeTimezone } from './common';
 
 test('a rate-limited sync request waits Retry-After and asks again; it gives up after 5 tries', async () => {
   const statuses = [429, 429, 200];
@@ -101,4 +101,15 @@ test("a second platform's timezone doesn't take over from the store's own platfo
   takeTimezone(db, 'glow', 'shopify', 'America/Chicago');
   takeTimezone(db, 'glow', 'woocommerce', 'UTC');
   expect(zone()).toBe('America/Chicago');
+});
+
+test("forgetting a platform's old shop drops its refund lines too; other platforms' stay", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow');
+  const refund = db.prepare("INSERT INTO amazon_refunds (store_id, id, order_id, amount) VALUES ('glow', ?, ?, 5)");
+  refund.run('tt-R1', 'tt-1');
+  refund.run('amz-R2', 'amz-2');
+  forgetPlatform(db, 'glow', 'tiktok_shop');
+  expect(db.prepare("SELECT id FROM amazon_refunds WHERE store_id = 'glow'").all().map((r) => r.id)).toEqual(['amz-R2']);
 });
