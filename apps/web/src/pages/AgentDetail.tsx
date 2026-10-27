@@ -424,7 +424,7 @@ export function AgentBudget({ agent, storeCap }: { agent: Agent; storeCap?: numb
           value={value}
           onChange={(e) => setValue(e.target.value)}
           placeholder="No own limit"
-          className={cx(inputClass, 'w-36 tabular-nums')}
+          className={cx(inputClass, 'w-36 py-1! tabular-nums')}
         />
         <Button type="submit" size="sm" disabled={!valid || !changed || update.isPending}>
           Save budget

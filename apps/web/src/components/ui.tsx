@@ -92,6 +92,7 @@ export function Chip({ on, color, className, children, ...p }: ButtonHTMLAttribu
   );
 }
 
+/** Its padding and text size win over a plain override (`cx` only joins): resize one with `!`, e.g. `py-1!`. */
 export const inputClass = 'rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] text-text placeholder:text-muted focus:border-red/60 focus:outline-none';
 
 /** A form control with its visible label above it. */

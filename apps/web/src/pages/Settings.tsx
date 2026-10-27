@@ -107,7 +107,7 @@ function Caps() {
         stores.length > 1 && (
           <label>
             <span className="sr-only">Store</span>
-            <select value={storeId} onChange={(e) => setPicked(e.target.value)} className={cx(inputClass, 'cursor-pointer py-1.5')}>
+            <select value={storeId} onChange={(e) => setPicked(e.target.value)} className={cx(inputClass, 'cursor-pointer py-1.5!')}>
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
@@ -184,7 +184,7 @@ export function CapsForm({ caps }: { caps: StoreCaps }) {
                     required
                     onChange={(e) => setRule(kind, { maxUsdPerDay: e.target.valueAsNumber })}
                     aria-label={`${label}: most per day in dollars`}
-                    className={cx(inputClass, 'w-24 py-1')}
+                    className={cx(inputClass, 'w-24 py-1!')}
                   />
                   / day
                 </label>

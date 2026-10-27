@@ -232,7 +232,7 @@ export function DenyReason({ title, disabled, onDeny, onBack, className }: { tit
         autoFocus
         aria-label={`Why deny ${title}?`}
         placeholder="Why not? (optional)"
-        className={cx(inputClass, 'min-w-40 flex-1 py-1.5')}
+        className={cx(inputClass, 'min-w-40 flex-1 py-1!')}
       />
       <Button size="sm" onClick={onBack}>
         Back

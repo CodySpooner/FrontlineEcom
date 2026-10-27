@@ -177,7 +177,7 @@ export function AgentIssue({ i }: { i: OrderIssue }) {
               autoFocus
               aria-label={`What fixed ${i.orderId}`}
               placeholder="What fixed it? Operations learns from this (optional)"
-              className={cx(inputClass, 'min-w-0 flex-1 py-1.5')}
+              className={cx(inputClass, 'min-w-0 flex-1 py-1!')}
             />
             <Button size="sm" onClick={() => setResolving(false)}>
               Cancel

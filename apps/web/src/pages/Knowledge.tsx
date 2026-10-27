@@ -196,7 +196,7 @@ function DocView({ d }: { d: KnowledgeDoc }) {
           <label htmlFor="kb-edit" className="sr-only">
             {d.title} (markdown)
           </label>
-          <textarea id="kb-edit" value={draft} onChange={(e) => setDraft(e.target.value)} rows={24} maxLength={MAX} spellCheck={false} className={cx(inputClass, 'resize-y font-mono text-[12px] leading-relaxed')} />
+          <textarea id="kb-edit" value={draft} onChange={(e) => setDraft(e.target.value)} rows={24} maxLength={MAX} spellCheck={false} className={cx(inputClass, 'resize-y font-mono text-[12px]! leading-relaxed')} />
           <div className="flex flex-wrap items-center justify-end gap-2">
             <span className="mr-auto text-xs text-muted tabular-nums">
               {draft.length.toLocaleString('en-US')} / {MAX.toLocaleString('en-US')} characters

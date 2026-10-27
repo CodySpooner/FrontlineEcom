@@ -494,6 +494,11 @@ Orca's browser against the reference before ticking it.
 - [x] UI-182 At 900–1100px wide (the desktop app opens down to 1024) the header's "Ask AI anything…" field broke onto
       two lines, its "Ctrl K" hint stacked as well, and it stood taller than the bell beside it: the 200px field couldn't
       hold both. The hint shows from 1100px, where the field is 280px, and the words stay on one line.
+- [x] UI-183 Fields meant to be compact never were: `cx` only joins classes, so a `py-1`/`py-1.5`, `text-[12px]` or `p-1`
+      added to `inputClass` lost to its own `py-2`/`text-[13px]`/`px-3`. The deny-reason and resolve-note fields stood 37px
+      beside 30px buttons (also an agent's budget and Integrations' "Also sells on…" row), the pack editor wasn't 12px and
+      the store color swatch was squeezed. Those overrides use `!` now (as `text-right!` already does) and match the
+      buttons beside them; `inputClass` says so.
 
 ## Blocked
 
@@ -723,3 +728,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-180: from a pass over every truncate without a title (the rest are short labels or open in full on click). Layout only, so no new test; the touched suites pass. Orca with a fake failing Shopify connection (GET fixture, writes blocked): its 160-character error reads whole on two lines. Same session, no change needed: the web calls every server route; recent shared fields (sample finds, byPlatform) are shown. Asked core to accept admin.shopify.com/store/<name> as a shop domain
 - 2026-10-26 — UI-181: Dialog remembers where the mouse went down. Test red first (press in a field, click lands on the dialog: no close; press and click on it: close). My own Chrome tab, real mouse, writes blocked: dragging from the Ask AI field onto the backdrop leaves it open; a backdrop click closes it
 - 2026-10-26 — UI-182: seen while checking ten stores with long names at 1024px (my own Chrome tab, GET fixture, writes blocked: no page overflows, no cut text without a title, the chips wrap). Layout only, so no new test. After: one line and 39px tall at 920, 1024 and 1440 (the hint shown only at 1440)
+- 2026-10-26 — UI-183: found by a sweep for rows whose controls differ in height at 1024px (my own Chrome tab, writes blocked), then the computed styles: the class list held py-2 and py-1, and the padding was 8px. CSS only, so no new test. After: deny reason 29/30px (Back), budget 29/30, Integrations select 31/30 (Connect), editor 12px, color swatch padding 4px, caps field 4px

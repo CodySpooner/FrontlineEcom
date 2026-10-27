@@ -115,7 +115,7 @@ function AlsoSells({ stores, onOpen }: { stores: Store[]; onOpen: (kind: Integra
   const kinds = KINDS.filter((k) => INTEGRATION_KINDS[k].category === 'platform' && k !== store?.platform);
   const pick = kind && kinds.includes(kind) ? kind : kinds[0];
   if (!store || !pick) return null;
-  const select = cx(inputClass, 'cursor-pointer py-1 text-text');
+  const select = cx(inputClass, 'cursor-pointer py-1.5! text-text');
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
       <span>Also sells on another platform?</span>

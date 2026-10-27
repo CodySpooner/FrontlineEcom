@@ -94,7 +94,7 @@ export function StoreForm({ store, onDone }: { store?: Store; onDone: (saved?: S
           />
         </Field>
         <Field label="Color">
-          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className={cx(inputClass, 'h-[38px] w-full cursor-pointer p-1')} />
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className={cx(inputClass, 'h-[38px] w-full cursor-pointer p-1!')} />
         </Field>
       </div>
       <p className="-mt-2 text-xs text-muted">
