@@ -342,7 +342,7 @@ export function parseMemoryInput(body: unknown, partial: boolean): string | Part
  * on demo numbers expire instead of acting on the live store, issues on demo orders close, and page drafts for demo
  * products go.
  */
-function startFresh(db: Db, store: Store) {
+function startFresh(db: Db, store: Store, runs: RunManager) {
   const memories = db.prepare(`DELETE FROM store_memory WHERE store_id = ? AND agent_id != 'owner' AND kind IN ('fact', 'learning') AND pinned = 0`).run(store.id).changes;
   const pending = db.prepare(`SELECT id FROM approvals WHERE store_id = ? AND status = 'pending'`).all(store.id).map((r) => String(r.id));
   for (const id of pending) {
@@ -355,10 +355,16 @@ function startFresh(db: Db, store: Store) {
   db.prepare(`DELETE FROM page_drafts WHERE store_id = ? AND kind = 'product' AND published_at IS NULL`).run(store.id);
   // Flows written about the demo catalog and sized on its numbers: the monthly check would count them as done.
   const flows = db.prepare('DELETE FROM flow_drafts WHERE store_id = ?').run(store.id).changes;
+  // A mission's next steps work from the finished ones' answers, read off demo numbers.
+  const missions = db.prepare('SELECT id FROM squad_missions WHERE store_id = ? AND ended_at IS NULL').all(store.id).map((r) => String(r.id));
+  for (const id of missions) {
+    const mission = cancelMission(db, id, runs.cancel);
+    if (mission) publish({ type: 'mission', mission });
+  }
   // What it shared with its niche came from the same demo numbers, and every store of the niche reads it (AGT-164).
   const shared = db.prepare('DELETE FROM niche_learnings WHERE store_id = ?').run(store.id).changes;
   const n = (k: number | bigint, what: string) => k && `${k} ${what}${Number(k) === 1 ? '' : 's'}`;
-  const parts = [n(memories, 'learning'), n(shared, 'niche learning'), n(pending.length, 'request'), n(issues, 'order issue'), n(flows, 'flow draft')].filter(Boolean);
+  const parts = [n(memories, 'learning'), n(shared, 'niche learning'), n(pending.length, 'request'), n(issues, 'order issue'), n(flows, 'flow draft'), n(missions.length, 'running mission')].filter(Boolean);
   if (parts.length) {
     notify(db, {
       kind: 'info', title: `${store.name}: the squad starts fresh on real numbers`, storeId: store.id, link: '/knowledge',
@@ -408,7 +414,7 @@ function activateConnectedStores(db: Db, runs: RunManager) {
       )
       .get(store.id, JSON.stringify(IDLE_CAMPAIGN_STATUSES), new Date(Date.now() - 30 * 86_400_000).toISOString().slice(0, 10));
     if (once(db, `activate:${store.id}`)) {
-      startFresh(db, store);
+      startFresh(db, store, runs);
       // No running campaigns yet: the campaign review waits for one (marked, so a job the owner turned off is never turned back on).
       if (!ads) once(db, `ads-job-wait:${store.id}`);
       const names = DEFAULT_JOBS.filter((j) => (ads || j.name !== ADS_JOB) && (!j.platforms || j.platforms.includes(store.platform))).map((j) => j.name);

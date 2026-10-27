@@ -1,4 +1,4 @@
-import { addNicheLearning, ADS_JOB, DEFAULT_JOBS, listFlowDrafts, listMemory, listNicheLearnings, listRuns, once, saveFlowDraft, updateMemory, writeMemory } from '@frontline/agents';
+import { addNicheLearning, ADS_JOB, createMission, DEFAULT_JOBS, getMission, listFlowDrafts, listMemory, listNicheLearnings, listRuns, once, saveFlowDraft, updateMemory, writeMemory } from '@frontline/agents';
 import type { Store } from '@frontline/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -177,15 +177,17 @@ test("going live clears what the agents learned from simulated numbers, not the 
   const flow = { agentId: 'glow:email_sms', name: 'Checkout abandonment', trigger: 'Checkout started, no order in 1h', messages: [{ delayHours: 1, channel: 'email' as const, subject: 'Your serum waits', body: 'Demo serum reminder' }], notes: '412 demo checkouts' };
   saveFlowDraft(db, { storeId: 'glow', ...flow });
   saveFlowDraft(db, { storeId: 'pawsome', ...flow }); // another store's
+  const mission = createMission(db, { storeId: 'glow', title: 'Launch a new product', steps: [{ id: 'hunt', role: 'product_hunter', task: 'Find the next product to launch.', dependsOn: [] }] });
   switchToReal(db, 'glow');
   await app.request('/api/agents');
   expect(listMemory(db, 'glow').map((x) => x.text).sort()).toEqual(['Customers ask about sensitive skin', 'Owner wants no exclamation marks', 'We ship from Austin']);
   expect(notes('glow')).toContain('Glow Haus: the squad starts fresh on real numbers');
   expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Glow Haus: the squad starts fresh on real numbers'`).get()?.body).toBe(
-    'Cleared what came from the demo data: 2 learnings, 1 niche learning, 1 request, 1 order issue, 1 flow draft. Your own notes, pins and preferences stay.',
+    'Cleared what came from the demo data: 2 learnings, 1 niche learning, 1 request, 1 order issue, 1 flow draft, 1 running mission. Your own notes, pins and preferences stay.',
   );
   expect(listNicheLearnings(db).map((l) => l.text)).toEqual(['Ship in 3 days or lose the sale']);
   expect(listFlowDrafts(db).map((f) => f.storeId)).toEqual(['pawsome']);
+  expect(getMission(db, mission.id)?.status).toBe('cancelled');
   expect(db.prepare(`SELECT status FROM approvals WHERE id = 'ask1'`).get()?.status).toBe('denied');
   expect(listMemory(db, 'glow').some((x) => x.tags.includes('denied'))).toBe(false); // expired, not the owner's no
   expect(db.prepare(`SELECT status FROM order_issues WHERE id = 'i1'`).get()?.status).toBe('resolved');
