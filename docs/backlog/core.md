@@ -185,10 +185,16 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-97 Reconnecting to another shop left the old shop's refund lines behind.
 - [x] CORE-98 Ad accounts and GA4 were read up to the computer's today, not the account's.
 - [x] CORE-99 Endpoint timings on a big live store; Top products over a year took 750 ms.
+- [x] CORE-100 (review 4) Reconnecting the same shop after a disconnect could drop its data: TikTok's optional shop left blank, or a Woo URL with `www.`.
+- [ ] CORE-101 (review 4) Sales by platform counts an Etsy or WooCommerce shop next to Shopify as Shopify.
+- [ ] CORE-102 (review 4) Top products can go negative from a TikTok refund that includes shipping.
+- [ ] CORE-103 (review 4) An ad-account or GA4 timezone Node doesn't know stops that sync for good.
+- [ ] CORE-104 (review 4) An add-products request with `compareAt: 0` (none) fails the whole approved add.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-100 (review 4 of CORE-76+): CORE-90 made a disconnect remember the shop so the next connect can tell another shop from the same one, but it counted any written difference as another shop: reconnecting the same TikTok Shop with its optional Shop field left blank (`'glow haus'` vs nothing), or a Woo site as `https://glow.com` after `https://www.glow.com`, ran `forgetPlatform` and deleted every order and product of that platform, unit costs included (and TikTok's returns read position, kept by shop, never re-read the refunds). A blank on either side now counts as unknown, not different, and `www.` is ignored. Also covers an edit of a live integration (same comparison).
 - 2026-10-26 — CORE-99 (perf): timed every endpoint the web app reads against a scratch data dir with one live store of 110k orders over 2 years (10k TikTok Shop orders with refund lines, 2,000 products, 30 Meta campaigns with 2 years of days, Amazon daily totals), plus the heavier variants. All under 200 ms (summary 1Y 170 ms, orders search 70 ms, orders page 20,000 deep 120 ms) except Top products over a year: 750 ms, as before CORE-95. Its query joined the product to each of ~55k lines before grouping; summing per product first and joining after brings it to 200 ms through the API. ponytail: an orders (store_id, local_date, status, id) index halves it again (measured), not added.
 - 2026-10-26 — Inbox (agents, AGT-185): the sample research catalog showed on a live store's Product Research as if real, and its "Add to store" request quoted the made-up demand ("demand +248% in 30 days"). Sample rows now carry `sample: true`, `GET /api/research?sample=0` leaves them out (paging stays right), and a live store's request for one says it's from the sample catalog with made-up numbers instead of quoting them (a demo store's still quotes them). Badge or hide on the screen: asked of ui.
 - 2026-10-26 — CORE-98 (CORE-94's leftover): Meta, Google Ads, TikTok Ads and GA4 asked for days up to the computer's today, but they date days in the account's zone. An account ahead of the computer had its new day's spend missing until the computer's midnight, and one behind it was asked for a day it hadn't reached. Each now ends at the account's today, in the zone it reported on the last sync (`ad_timezones`), and at the computer's on its first.

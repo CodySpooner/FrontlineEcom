@@ -185,6 +185,29 @@ test("disconnecting, then connecting another shop, still drops the old shop's da
   expect(orders()).toEqual([]);
 });
 
+test("the same shop typed differently, or TikTok's optional shop left blank, isn't another shop: nothing is dropped", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow');
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date) VALUES ('glow', ?, '2026-10-25T12:00:00Z', 10, 'paid', 'unfulfilled', 0, '2026-10-25')");
+  order.run('tt-5');
+  order.run('woo-7');
+  const orders = () => db.prepare("SELECT id FROM orders WHERE store_id = 'glow' ORDER BY id").all().map((r) => r.id);
+  const tiktok = (shop?: string) => saveIntegration(db, key, { kind: 'tiktok_shop', storeId: 'glow', values: { appKey: 'ak', appSecret: 'as', ...(shop ? { shop } : {}) } });
+  const woo = (siteUrl: string) => saveIntegration(db, key, { kind: 'woocommerce', storeId: 'glow', values: { siteUrl, consumerKey: 'ck', consumerSecret: 'cs', wpAppPassword: 'pw' } });
+  tiktok('Glow Haus');
+  deleteIntegration(db, 'tiktok_shop:glow');
+  tiktok();
+  woo('https://www.glow.com');
+  deleteIntegration(db, 'woocommerce:glow');
+  woo('https://glow.com/');
+  expect(orders()).toEqual(['tt-5', 'woo-7']);
+  tiktok('Other Shop'); // blank before, so still unknown
+  expect(orders()).toEqual(['tt-5', 'woo-7']);
+  woo('https://other.com');
+  expect(orders()).toEqual(['tt-5']);
+});
+
 test('"sync now" marks an integration changed, so the sync loop picks it up on its next tick', async () => {
   const { db, app } = setup();
   saveIntegration(db, key, { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', accessToken: TOKEN } });
