@@ -64,6 +64,10 @@ test('daily missions stretch the recent average and track requests', () => {
   ]);
   const quiet = dailyMissions({ ...day, currency: 'EUR', avgRevenue: 0, requestsOpen: 0, requestsDecidedToday: 0, runsToday: 5 });
   expect(quiet[0]?.title).toBe('Hit €50 revenue today');
+  // $50 in the store's currency, to one figure: not ¥50 (a third of a dollar) for 100 XP.
+  expect(dailyMissions({ ...day, currency: 'JPY', usdRate: 152.3, avgRevenue: 0 })[0]).toMatchObject({ title: 'Hit ¥8,000 revenue today', target: 8000 });
+  expect(dailyMissions({ ...day, currency: 'JPY', usdRate: 152.3, avgRevenue: 101_000 })[0]?.target).toBe(112_000);
+  expect(dailyMissions({ ...day, currency: 'GBP', usdRate: 0.79, avgRevenue: 0 })[0]?.title).toBe('Hit £40 revenue today');
   expect(quiet[2]).toMatchObject({ title: 'Give your squad 2 tasks', progress: 2, target: 2 });
 });
 

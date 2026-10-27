@@ -428,6 +428,7 @@ function missions(db: Db, storeIds?: string[]): Mission[] {
         storeId: s.id,
         date: to,
         currency: s.currency,
+        usdRate: cachedRate(db, 'USD', s.currency),
         revenueToday: today?.revenue ?? 0,
         ordersToday: today?.orders ?? 0,
         avgRevenue: avg('revenue'),

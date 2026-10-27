@@ -94,6 +94,8 @@ export interface StoreDay {
   /** YYYY-MM-DD */
   date: string;
   currency: string;
+  /** Units of the store's currency per US dollar; without one fetched yet, 1. */
+  usdRate?: number | undefined;
   revenueToday: number;
   ordersToday: number;
   /** Daily averages over the previous 7 days. */
@@ -113,7 +115,9 @@ export interface StoreDay {
 export function dailyMissions(d: StoreDay): Mission[] {
   const id = (kind: string) => `${d.storeId}:${d.date}:${kind}`;
   const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: d.currency, maximumFractionDigits: 0 });
-  const revenueTarget = Math.max(50, Math.ceil((d.avgRevenue * 1.1) / 50) * 50);
+  // The floor and the step are $50 in the store's currency (¥8,000, not ¥50 for 100 XP), to one significant figure.
+  const step = Number((50 * (d.usdRate || 1)).toPrecision(1));
+  const revenueTarget = Math.max(step, Math.ceil((d.avgRevenue * 1.1) / step) * step);
   const ordersTarget = Math.max(1, Math.ceil(d.avgOrders * 1.1));
   const requests = d.requestsOpen + d.requestsDecidedToday;
   return [
