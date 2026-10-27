@@ -11,6 +11,13 @@ describe('break-even ROAS', () => {
     expect(breakEvenRoas({ ...totals, profit: -3_000 })).toBe(Infinity);
   });
 
+  it('is unknown with no sales, and then judges no campaign', () => {
+    // A fresh live store whose ads synced before its orders: spend, no revenue yet (AGT-202).
+    const be = breakEvenRoas({ ...totals, revenue: 0, profit: -3_000, orders: 0, aov: 0 });
+    expect(be).toBeNaN();
+    expect([roasTone(0, be), roasTone(4, be)]).toEqual(['ok', 'ok']);
+  });
+
   it('tones ROAS against break-even', () => {
     expect([roasTone(1.9, 2), roasTone(2, 2), roasTone(2.9, 2), roasTone(3, 2)]).toEqual(['bad', 'ok', 'ok', 'good']);
   });

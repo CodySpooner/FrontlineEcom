@@ -2,6 +2,8 @@ import type { AdNetwork, CampaignStats, MetricTotals } from '@frontline/shared';
 
 /** ROAS at which ad spend eats the whole gross margin: revenue / (revenue − cogs). Below it, ads lose money. */
 export function breakEvenRoas(t: MetricTotals) {
+  // No sales: nothing to judge against (NaN, which roasTone leaves neutral), not "every campaign loses money".
+  if (!t.revenue) return NaN;
   const gross = t.profit + t.adSpend;
   return gross > 0 ? t.revenue / gross : Infinity;
 }

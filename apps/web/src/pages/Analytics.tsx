@@ -446,6 +446,8 @@ function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number; beOf:
                 {name ? `Each campaign is judged against its store's break-even ROAS (${times(be)} blended)` : `Break-even ROAS is ${times(be)} at your margin`}:{' '}
                 <span className="text-red">red</span> campaigns lose money, <span className="text-good">green</span> ones clear 1.5× break-even.
               </>
+            ) : Number.isNaN(be) ? (
+              "No sales this period, so there's no break-even to judge campaigns against yet."
             ) : (
               'No gross margin this period, so every campaign loses money.'
             )}

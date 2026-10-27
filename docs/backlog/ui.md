@@ -394,6 +394,10 @@ Orca's browser against the reference before ticking it.
 - [x] UI-151 (re AGT-201) A live store with no fee estimate has profit that leaves out platform and payment fees (no
       connector imports them). The agents say so now; the Dashboard's Profit card did not. It shows "Fees left out"
       (linking to Settings, naming the stores) when no product is missing a cost; demo stores stay quiet.
+- [x] UI-152 (re AGT-202) Store Analytics judged campaigns against break-even even with no sales in the period (a
+      fresh live store whose ads synced before its orders): break-even read Infinity, so every campaign went red under
+      "every campaign loses money". With no sales, break-even is now unknown: ROAS stays neutral, the stat reads n/a
+      and the footer says there's nothing to judge against yet. A real negative margin still turns them all red.
 
 ## Blocked
 
@@ -590,3 +594,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-149: `adLibrary(name)` builds the Meta Ad Library keyword search. New Competitors test (red on the old code). Orca with ad snapshots and counts patched empty (read-only): "No ads collected" + "Search Meta's Ad Library" (q=Wag+%26+Wander), rows read "3 products tracked". FYI in core's Inbox
 - 2026-10-26 — UI-150: lib/shop.ts and its test removed; the Integrations "another shop" test still covers the rule end to end through the form. Orca: Integrations serves the shared import, both pages load
 - 2026-10-26 — UI-151: `noFeeEstimate(stores)` in Dashboard.tsx, tested (red first). "N costs missing" keeps the slot when both apply. Orca with Pawsome patched live and fee-less and costs filled (read-only): Profit reads "Profit | Fees left out", title names Pawsome Gear, href /settings
+- 2026-10-26 — UI-152: `breakEvenRoas` returns NaN with no revenue (roasTone leaves NaN neutral), tested red first. Orca with the summary patched to no sales (read-only): campaign ROAS cells text-good → text-text, Break-even ROAS n/a, footer "No sales this period..."
