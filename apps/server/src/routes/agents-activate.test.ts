@@ -67,7 +67,7 @@ test("the owner can ask a custom niche's Market Analyst for its pack again; not 
   await runManager(db).idle();
   db.prepare(
     `INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('np', ?, ?, NULL, 'Save the pack', 'r', ?, 'pending', ?)`,
-  ).run(store.id, `${store.id}:market_analyst`, JSON.stringify({ kind: 'save_niche_pack', payload: { slug: 'vintage-fountain-pens', markdown: '# Pens' } }), new Date().toISOString());
+  ).run(store.id, `${store.id}:market_analyst`, JSON.stringify({ kind: 'save_niche_pack', payload: { slug: 'Vintage fountain pens', markdown: '# Pens' } }) /* as asked before AGT-238 */, new Date().toISOString());
   expect(await error()).toBe('A draft of the "Vintage fountain pens" pack is waiting for your approval in Requests.');
   saveNichePack('vintage-fountain-pens', '# Vintage fountain pens\n- Nibs: verify');
   expect(await error()).toBe('The "Vintage fountain pens" pack exists; edit it in Knowledge.');

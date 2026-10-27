@@ -550,8 +550,9 @@ export function agentRoutes(db: Db) {
         return c.json({ error: "On the demo engine the Market Analyst can't research a niche, and its pack would be made up. Connect the store first." }, 409);
       }
       const pending = db
-        .prepare(`SELECT 1 FROM approvals WHERE status = 'pending' AND json_extract(action_json, '$.kind') = 'save_niche_pack' AND json_extract(action_json, '$.payload.slug') = ?`)
-        .get(nicheSlug(store.nicheDetail));
+        // Requests before AGT-238 carry the niche as typed, not slugged.
+        .prepare(`SELECT 1 FROM approvals WHERE status = 'pending' AND json_extract(action_json, '$.kind') = 'save_niche_pack' AND json_extract(action_json, '$.payload.slug') IN (?, ?)`)
+        .get(nicheSlug(store.nicheDetail), store.nicheDetail);
       if (pending) return c.json({ error: `A draft of the "${store.nicheDetail}" pack is waiting for your approval in Requests.` }, 409);
       const run = runs.start(agent.id, draftNichePackTask(store));
       return typeof run === 'string' ? c.json({ error: run }, 409) : c.json(run, 201);

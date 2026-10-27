@@ -1,10 +1,10 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
+import { AGENT_ROLES, isPrivateHost, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, uncostedShare, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
 import { agentTags, closedByApp, searchMemory, writeMemory } from './memory';
-import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
+import { addNicheLearning, listNicheLearnings, nicheKey, nicheSlug, saveNichePack } from './niche';
 import { getPageDraft, listPageDrafts, savePageDraft, unsafeHtml } from './pages';
 import { listFlowDrafts, saveFlowDraft } from './flows';
 import { flagOrderIssue, listOrderIssues } from './issues';
@@ -149,9 +149,6 @@ function titled(head: string, name: string, tail = '') {
   const room = 80 - head.length - tail.length;
   return `${head}${name.length > room ? `${name.slice(0, room - 1)}…` : name}${tail}`;
 }
-
-/** Loopback, private, link-local and this-network IPv4, and names only a local network resolves. */
-const PRIVATE_HOST = /^(127|10|0|192\.168|169\.254|172\.(1[6-9]|2\d|3[01]))\.[\d.]+$|\.(local|localhost|internal|lan|home|arpa)$/i;
 
 const costsWhere = (store: Store) => `Analytics' Unit costs here${store.platform === 'shopify' ? ', or Shopify\'s "Cost per item"' : ''}`;
 const priceFloor = (store: Store, cost: number) => (cost > 0 ? r2((cost + (store.feePerOrder ?? 0)) / (1 - (store.feePercent ?? 0) / 100)) : undefined);
@@ -464,7 +461,7 @@ export const APP_TOOLS: AppTool[] = [
       if (!/^https?:$/.test(protocol)) return 'Not added: give the shop as an http(s) address.';
       // The app fetches it from the owner's computer now and daily: never that computer or its network, which a page the
       // agent read could ask for. ponytail: a public name that resolves to a private address isn't caught.
-      if (!hostname.includes('.') || hostname.startsWith('[') || PRIVATE_HOST.test(hostname)) {
+      if (isPrivateHost(hostname)) {
         return "Not added: give the shop's public web address (the app reads it from this computer every day, so never a local or private one).";
       }
       return ctx.trackCompetitor(ctx.store.id, { name, url, notes: `${AGENT_ROLES[ctx.agent.role].name}: ${why}` });
@@ -1208,7 +1205,7 @@ export const APP_TOOLS: AppTool[] = [
       }
       if (kind === 'save_niche_pack') {
         if (ctx.store.niche !== 'other' || !ctx.store.nicheDetail) return 'Not sent: only a store in a custom niche saves a niche pack, and only its own.';
-        payload = { ...payload, slug: ctx.store.nicheDetail }; // every store of that niche loads it: never another niche's
+        payload = { ...payload, slug: nicheSlug(ctx.store.nicheDetail) }; // every store of that niche loads it: never another niche's
         reason = `${reason}\n\n${String(payload.markdown ?? '')}`; // what the owner approves is what gets saved
       }
       const amountUsd = amount === undefined ? undefined : await inUsd(ctx, amount);

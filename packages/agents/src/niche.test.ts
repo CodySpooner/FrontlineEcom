@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { Agent, Store } from '@frontline/shared';
+import type { Agent, ApprovalAction, Store } from '@frontline/shared';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { assemblePrompt, customNichePack, draftNichePackTask, fakeEngine, nicheSlug, runAgent, saveNichePack } from './index';
 
@@ -39,9 +39,9 @@ test('a saved custom pack reaches the prompt of stores in that niche', () => {
 });
 
 test("approving save_niche_pack stores the drafted pack: the store's own niche only, with the pack on the request", async () => {
-  const asked: { reason: string }[] = [];
+  const asked: { reason: string; action: ApprovalAction }[] = [];
   const approvals = {
-    create: (i: { reason: string }) => (asked.push(i), { ...i, id: 'a1', status: 'pending' as const, createdAt: '' }) as never,
+    create: (i: { reason: string; action: ApprovalAction }) => (asked.push(i), { ...i, id: 'a1', status: 'pending' as const, createdAt: '' }) as never,
     decision: async () => ({ status: 'approved' }) as never,
   };
   const env = { db: { prepare: () => ({ get: () => undefined }) } as never, summary: () => ({}) as never, approvals };
@@ -55,6 +55,7 @@ test("approving save_niche_pack stores the drafted pack: the store's own niche o
   expect(customNichePack(store.nicheDetail)).toBe(pack);
   expect(customNichePack('k-beauty')).toBe('');
   expect(asked[0]!.reason).toBe(`drafted\n\n${pack}`); // the owner approves the pack itself
+  expect(asked[0]!.action.payload).toMatchObject({ slug: 'vintage-fountain-pens' }); // as the niche-pack route looks for it
   const outputs: string[] = [];
   for await (const e of runAgent({ agent: analyst, store: { ...store, niche: 'beauty' }, task: 't', env }, fakeEngine(() => steps))) if (e.type === 'tool_result') outputs.push(e.output);
   expect(outputs).toEqual(['Not sent: only a store in a custom niche saves a niche pack, and only its own.']);
