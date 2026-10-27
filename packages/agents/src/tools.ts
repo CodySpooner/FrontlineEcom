@@ -1197,17 +1197,24 @@ export const outsideHosts = (bodies: string[]) =>
  * the store and the amount at stake fits what is left of today's cap for that kind (logged on the request as `auto` +
  * a note in the reason).
  */
-/** The store's first real sync landed during this run (core's switchToReal): the demo rows it read are gone. */
-const wentLive = (ctx: ToolContext) => !ctx.store.connected && ctx.db.prepare('SELECT connected FROM stores WHERE id = ?').get(ctx.store.id)?.connected === 1;
+/**
+ * What changed under this run since it started, as the end of a sentence: the store's first real sync (core's
+ * switchToReal: the demo rows it read are gone), or its currency (core's CORE-109: amounts read before are in the old
+ * one, and the caps would convert new ones at the old rate).
+ */
+function storeMoved(ctx: ToolContext): string | undefined {
+  const now = ctx.db.prepare('SELECT connected, currency FROM stores WHERE id = ?').get(ctx.store.id);
+  if (!ctx.store.connected && now?.connected === 1) return 'the store went live during this run, so the demo numbers behind it are gone';
+  if (now && String(now.currency) !== ctx.store.currency) return `the store's currency changed from ${ctx.store.currency} to ${String(now.currency)} during this run, so the amounts it read are in the old one`;
+}
 
 export async function requestApproval(ctx: ToolContext, req: { title: string; reason: string; action: ApprovalAction; autopilot?: boolean }) {
   const { agent } = ctx;
   const autonomy = autonomyNow(ctx);
   if (autonomy === 'suggest') return { approved: false, message: 'Not sent: your autonomy is "suggest". Put the recommendation in your answer instead.' };
-  // Going live wiped the demo rows this run read and expired its requests; one more would act on the live store.
-  if (wentLive(ctx)) {
-    return { approved: false, message: 'Not sent: the store went live during this run, so the demo numbers behind it are gone. Stop here; the owner can ask again on real data.' };
-  }
+  // Going live (or a currency switch) expired the run's requests; one more would act on numbers that no longer hold.
+  const moved = storeMoved(ctx);
+  if (moved) return { approved: false, message: `Not sent: ${moved}. Stop here; the owner can ask again${ctx.store.connected ? '' : ' on real data'}.` };
   const { kind, amountUsd: amount } = req.action;
   const rule = req.autopilot && autonomy === 'autopilot' ? ctx.caps?.(ctx.store.id).autopilot[kind] : undefined;
   const cap = rule?.enabled ? rule.maxUsdPerDay : 0;
@@ -1343,8 +1350,9 @@ function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
 /** Validates args against the tool schema (defaults applied) and runs it. Errors come back as text for the model. */
 export async function callTool(tool: AppTool, args: unknown, ctx: ToolContext): Promise<{ output: string; isError: boolean }> {
   // Going live wiped what this run read and what came of it (startFresh): a draft, creative, issue or learning saved now
-  // would put demo numbers back, and a read would mix real ones into a demo answer.
-  if (wentLive(ctx)) return { output: 'Stopped: the store went live during this run, so the demo numbers behind it are gone. Do nothing more; the owner can ask again on real data.', isError: true };
+  // would put demo numbers back, and a read would mix real ones into a demo answer. A currency switch, the same for amounts.
+  const moved = storeMoved(ctx);
+  if (moved) return { output: `Stopped: ${moved}. Do nothing more; the owner can ask again${ctx.store.connected ? '' : ' on real data'}.`, isError: true };
   const parsed = z.object(tool.input).safeParse(args ?? {});
   if (!parsed.success) return { output: `Invalid input: ${parsed.error.message}`, isError: true };
   try {

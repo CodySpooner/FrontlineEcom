@@ -139,6 +139,15 @@ test('a demo run that ends after the store went live learns nothing from its num
   expect(out).toEqual(Array(3).fill('Stopped: the store went live during this run, so the demo numbers behind it are gone. Do nothing more; the owner can ask again on real data.'));
   expect(listMemory(db, 'glow').some((x) => x.text === 'Serums convert at 4% here')).toBe(false);
   expect(db.prepare(`SELECT count(*) AS n FROM flow_drafts WHERE store_id = 'glow'`).get()?.n).toBe(0);
+
+  // A live store whose currency switched during the run (core closes its priced requests): its amounts are the old one's.
+  const usd = getStore(db, 'glow')!; // connected, USD, as the run saw it
+  db.prepare(`UPDATE stores SET currency = 'EUR' WHERE id = 'glow'`).run();
+  const after: string[] = [];
+  for await (const e of runAgent({ agent: getAgent(db, 'glow:copywriter')!, store: usd, task: 't', env: toolEnv(db) }, fakeEngine(() => [{ call: 'store_summary' }]))) {
+    if (e.type === 'tool_result') after.push(e.output);
+  }
+  expect(after).toEqual(["Stopped: the store's currency changed from USD to EUR during this run, so the amounts it read are in the old one. Do nothing more; the owner can ask again."]);
 });
 
 test('get() returns the transcript so far while a run waits for approval', async () => {
