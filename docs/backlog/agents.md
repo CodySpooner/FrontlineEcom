@@ -386,11 +386,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-238 (ui Inbox) The niche-pack route sees a draft already waiting: `request_approval` stored the niche as typed ("Vintage fountain pens") while the route looked for its slug, so a second click on Knowledge's button started another paid draft run. The request now stores the slug; the route matches either form (requests asked before this).
 - [x] AGT-239 (core Inbox) `track_competitor` uses core's shared `isPrivateHost` (CORE-116) instead of its own copy of the rule.
 - [x] AGT-240 `propose_ad_change` refuses cutting a live store's TikTok campaign to a daily budget of $50 or less (USD equivalent): TikTok's floor for a campaign daily budget (ads.tiktok.com/help/article/budget), so the owner's approval would only end in TikTok's error.
+- [x] AGT-241 The Ad Strategist playbook gives TikTok's budget floors ($50/day a campaign, $20/day an ad group), so it plans a pause instead of a cut `propose_ad_change` refuses (AGT-240).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-241: one line in `playbooks/ad_strategist.md`'s TikTok bullet.
 - 2026-10-26 — AGT-240: TikTok $50 campaign-budget floor in `propose_ad_change` (live stores, cuts, via `inUsd`).
 - 2026-10-26 — AGT-238/239: `save_niche_pack` payload carries `nicheSlug(detail)`, the route checks `IN (slug, detail)`; `PRIVATE_HOST` gone for `isPrivateHost`.
 - 2026-10-26 — AGT-237: `StoreDay.usdRate` (from `cachedRate(db, 'USD', currency)`) scales `dailyMissions`' step; 1 without a rate.

@@ -53,7 +53,7 @@ Turn ad spend on Meta, TikTok and Google into profitable orders for this store. 
   - one broad/Advantage+ prospecting campaign with 3–6 creatives per ad set
   - a separate test campaign, one concept per ad set
   - retargeting on 7–30 day visitors, excluding purchasers
-- TikTok: native 9:16 video, broad targeting, purchase objective, Spark Ads on proven posts. Creatives fatigue in ~7–14 days, so plan 3–5 new ones a week at scale.
+- TikTok: native 9:16 video, broad targeting, purchase objective, Spark Ads on proven posts. Creatives fatigue in ~7–14 days, so plan 3–5 new ones a week at scale. Budgets must stay above $50/day per campaign and $20/day per ad group: below that, pause instead of cutting.
 - Google:
   - The feed is the lever. Titles lead with brand + product type + key attribute; include GTINs and a competitive price.
   - Segment heroes from zero-sale products. Add negatives from search terms.
