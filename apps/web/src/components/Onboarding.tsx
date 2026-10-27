@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Compass, Store as StoreIcon } from 'lucide-react';
 import { AGENT_ROLES, type Store } from '@frontline/shared';
-import { useAgents } from '../api/client';
+import { useAgents, useKnowledge } from '../api/client';
+import { nicheKey } from '../lib/niche';
 import { Portrait } from './Art';
 import { useStoreSelection } from './StoreFilter';
 import { nicheName, PLATFORM_NAME, StoreForm } from './StoreForm';
@@ -87,10 +88,19 @@ function Choice({ icon: Icon, title, children, onClick, primary }: { icon: typeo
 
 function Squad({ store, onDone }: { store: Store; onDone: (to?: string) => void }) {
   const agents = useAgents().data?.filter((a) => a.storeId === store.id);
+  const docs = useKnowledge().data;
+  const detail = store.nicheDetail?.trim();
+  // A custom niche's pack is drafted on the store's first real sync (agents' routes/agents.ts); a sub-niche is only in the store profile.
+  const noPack = store.niche === 'other' && docs && !docs.some((d) => d.kind === 'niche' && d.key === nicheKey(store));
   return (
     <div className="grid gap-4">
       <p className="text-[13px] text-text-2">
-        {store.name}'s squad is reading the {store.nicheDetail || nicheName(store.niche)} niche pack. Give any of them a task from their page.
+        {noPack
+          ? `${detail} has no niche pack yet, so ${store.name}'s squad starts from its playbooks. Once you connect the store, its Market Analyst drafts one for you to approve.`
+          : store.niche === 'other'
+            ? `${store.name}'s squad is reading the ${detail} niche pack.`
+            : `${store.name}'s squad is reading the ${nicheName(store.niche)} niche pack${detail ? ` and knows you focus on ${detail}` : ''}.`}{' '}
+        Give any of them a task from their page.
       </p>
       {!agents?.length ? (
         <LoadingState rows={3} />

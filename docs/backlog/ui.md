@@ -441,6 +441,10 @@ Orca's browser against the reference before ticking it.
 - [x] UI-165 Knowledge › Niche packs never said which stores read a custom pack: "Used by" compared the store's niche
       (`other`) with the pack's key (`other:<slug>`). It now uses the same key the agents file the pack under, so a custom
       pack names its stores (and Fitness no longer claims a store that moved to a custom niche).
+- [x] UI-167 Onboarding's "Meet your squad" named a niche pack that doesn't exist: "reading the ultralight camping
+      gear niche pack" for an Outdoor store (it reads the Outdoor pack; the sub-niche is in its store profile), and the same
+      for a new custom niche, whose pack is only drafted on the store's first real sync. It now names the pack the squad
+      reads, and for a custom niche with none says so and when its Market Analyst drafts one.
 
 ## Blocked
 - [ ] UI-166 Knowledge › Niche packs: a store in a custom niche with no pack gets "Ask its Market Analyst to draft one",
@@ -655,3 +659,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-163: `toolInput(action)` in lib/approvals; `shownReason` drops a reason that is that same input; the Dashboard drops the " · " after the kind when nothing follows. Two tests (red first). Orca with a fixture pending productUpdate request (read-only): line "Use a connected tool", 18-line block, 192px tall, scrolls
 - 2026-10-26 — UI-164: `adBrief(action)` in lib/approvals, `shownReason` stops at " Brief: ", the copy and brief as a small `dl` in ApprovalExtras. Two tests (red first). Orca with a fixture pending video request (read-only): line "Generate ad creatives · 20 generation credits (0/100 used today).", copy with CTA, whole brief (the reason had 400 characters), no overflow
 - 2026-10-26 — UI-165: `nicheKey(store)` in lib/niche (the agents' rule, beside the existing `nicheSlug` mirror), used by Knowledge's Used by. Two tests (red first). Orca with a GET-only fixture (Peak Fit in a custom "Yoga Mats" niche, a matching custom pack): "Yoga mats / Custom / Used by Peak Fit", Fitness shows no store
+- 2026-10-26 — UI-167: Squad step reads the knowledge index and `nicheKey`. One test updated, one added (red first). Orca: onboarding reopened (flag cleared, then restored), the one `POST /api/stores` answered by a client fixture that threw on any other write (server still has its 3 stores): "Yoga Mats has no niche pack yet, so Zen Co's squad starts from its playbooks…"
