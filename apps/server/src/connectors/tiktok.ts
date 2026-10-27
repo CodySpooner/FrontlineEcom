@@ -4,7 +4,7 @@ import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { logAction } from '../actions';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange, stillAsSynced, syncedPrice } from './common';
+import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange, stillAsSynced, syncedBudget, syncedPrice } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -401,11 +401,16 @@ export async function updateTikTokCampaign(db: Db, key: Buffer, storeId: string,
   const creds = getCredentials(db, key, 'tiktok_ads', storeId);
   if (!creds) throw new Error('TikTok Ads is not connected for this store');
   const advertiser_id = creds.advertiserId!.trim();
-  // The budget comes in the store's currency (as synced); TikTok wants the advertiser account's.
-  const [path, body] =
-    'status' in change
-      ? ['/campaign/status/update/', { advertiser_id, campaign_ids: [campaignId], operation_status: 'DISABLE' }]
-      : ['/campaign/update/', { advertiser_id, campaign_id: campaignId, budget: cents(change.dailyBudget / (await adRate(db, storeId, (await advertiserInfo(advertiser_id, creds.accessToken!, fetchFn)).currency, fetchFn, 'TikTok Ads'))) }];
+  let path = '/campaign/status/update/';
+  let body: object = { advertiser_id, campaign_ids: [campaignId], operation_status: 'DISABLE' };
+  if (!('status' in change)) {
+    const synced = syncedBudget(db, storeId, 'tiktok', campaignId);
+    // The budget comes in the store's currency (as synced); TikTok wants the advertiser account's.
+    const rate = await adRate(db, storeId, (await advertiserInfo(advertiser_id, creds.accessToken!, fetchFn)).currency, fetchFn, 'TikTok Ads');
+    const [live] = await pages<CampaignRow>('/campaign/get/', { advertiser_id, filtering: JSON.stringify({ campaign_ids: [campaignId] }) }, creds.accessToken!, fetchFn);
+    stillAsSynced('TikTok Ads', 'daily budget', live?.budget_mode === 'BUDGET_MODE_DAY' ? cents(Number(live.budget) * rate) : NaN, synced);
+    [path, body] = ['/campaign/update/', { advertiser_id, campaign_id: campaignId, budget: cents(change.dailyBudget / rate) }];
+  }
   const res = await fetchFn(`${ADS_API}${path}`, { method: 'POST', headers: { 'Access-Token': creds.accessToken!, 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const json = (await res.json().catch(() => ({}))) as { code?: number; message?: string };
   if (json.code !== undefined && json.code >= 40100 && json.code < 40200) throw new Error('TikTok rejected the access token; generate a new one for the advertiser account');

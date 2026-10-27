@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adZone, AD_ZONES, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
+import { adZone, AD_ZONES, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, stillAsSynced, syncedBudget, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
 export const GOOGLE_ADS_API_VERSION = 'v26';
@@ -205,16 +205,19 @@ export async function updateGoogleCampaign(db: Db, key: Buffer, storeId: string,
     await post('campaigns:mutate', { operations: [{ update: { resourceName: `customers/${customer}/campaigns/${campaignId}`, status: change.status }, updateMask: 'status' }] });
     return;
   }
-  type Row = { campaign: { campaignBudget?: string }; campaignBudget?: { explicitlyShared?: boolean }; customer?: { currencyCode?: string } };
+  const synced = syncedBudget(db, storeId, 'google', campaignId);
+  type Row = { campaign: { campaignBudget?: string }; campaignBudget?: { explicitlyShared?: boolean; amountMicros?: string }; customer?: { currencyCode?: string } };
   const { results } = await post<{ results?: Row[] }>('googleAds:search', {
-    query: `SELECT campaign.campaign_budget, campaign_budget.explicitly_shared, customer.currency_code FROM campaign WHERE campaign.id = ${campaignId}`,
+    query: `SELECT campaign.campaign_budget, campaign_budget.explicitly_shared, campaign_budget.amount_micros, customer.currency_code FROM campaign WHERE campaign.id = ${campaignId}`,
   });
   const row = results?.[0];
   if (!row?.campaign.campaignBudget) throw new Error('Google Ads: campaign not found in this account');
   if (row.campaignBudget?.explicitlyShared) throw new Error('Google Ads: this campaign uses a shared budget; change it in Google Ads so the other campaigns sharing it are not affected');
   // The budget comes in the store's currency (as synced); Google wants the account's, in whole minor units (cents, or yen).
   const currency = row.customer?.currencyCode;
-  const amount = change.dailyBudget / (await adRate(db, storeId, currency, fetchFn, 'Google Ads'));
+  const rate = await adRate(db, storeId, currency, fetchFn, 'Google Ads');
+  stillAsSynced('Google Ads', 'daily budget', cents((Number(row.campaignBudget?.amountMicros) / 1e6) * rate), synced);
+  const amount = change.dailyBudget / rate;
   const digits = currency ? (new Intl.NumberFormat('en', { style: 'currency', currency }).resolvedOptions().maximumFractionDigits ?? 2) : 2;
   const amountMicros = String(Math.round(amount * 10 ** digits) * 10 ** (6 - digits));
   await post('campaignBudgets:mutate', { operations: [{ update: { resourceName: row.campaign.campaignBudget, amountMicros }, updateMask: 'amount_micros' }] });

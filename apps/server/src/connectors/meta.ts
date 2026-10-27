@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
+import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, stillAsSynced, syncedBudget, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -149,8 +149,11 @@ export async function updateMetaCampaign(db: Db, key: Buffer, storeId: string, c
   let form: Record<string, string>;
   if ('status' in change) form = { status: change.status };
   else {
+    const synced = syncedBudget(db, storeId, 'meta', campaignId);
     // The budget comes in the store's currency (as synced); Meta wants the account's, in its minor units.
     const money = await accountMoney(db, storeId, adAccount(creds.adAccountId!), creds.accessToken!, fetchFn);
+    const live = (await (await fetchFn(`${GRAPH}/${campaignId}?fields=daily_budget`, { headers: { Authorization: `Bearer ${creds.accessToken!}` } })).json().catch(() => ({}))) as { daily_budget?: string };
+    stillAsSynced('Meta', 'daily budget', cents((Number(live.daily_budget) / money.units) * money.rate), synced);
     form = { daily_budget: String(Math.round((change.dailyBudget / money.rate) * money.units)) };
   }
   const res = await fetchFn(`${GRAPH}/${campaignId}`, { method: 'POST', headers: { Authorization: `Bearer ${creds.accessToken!}` }, body: new URLSearchParams(form) });

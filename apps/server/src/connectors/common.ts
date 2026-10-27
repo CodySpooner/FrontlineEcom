@@ -67,6 +67,10 @@ export function stillAsSynced(platform: string, what: string, live: number, sync
   throw new Error(`${platform}: the ${what} is ${live} there now, not ${Number(synced)} as last synced (changed outside the app); ask again after the next sync`);
 }
 
+/** The local (synced) daily budget of a store's campaign, for stillAsSynced. */
+export const syncedBudget = (db: Db, storeId: string, network: AdNetwork, campaignId: string) =>
+  db.prepare('SELECT daily_budget FROM campaigns WHERE network = ? AND id = ? AND store_id = ?').get(network, campaignId, storeId)?.daily_budget;
+
 /** The local (synced) price of a store's product, for stillAsSynced. */
 export const syncedPrice = (db: Db, storeId: string, productId: string) => db.prepare('SELECT price FROM products WHERE store_id = ? AND id = ?').get(storeId, productId)?.price;
 
