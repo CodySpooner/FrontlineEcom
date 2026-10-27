@@ -1,8 +1,10 @@
-import type { KbCard, KbCardBrief, KbCategoryCount, KbTaskBrief, KbView, Page } from '@frontline/shared';
-import { beforeEach, describe, expect, test } from 'vitest';
+import { createResearchTask, ensureCategoryPath, getResearchTask } from '@frontline/agents';
+import type { KbCard, KbCardBrief, KbCategoryCount, KbTaskBrief, KbTaskDetail, KbView, LiveMessage, Page } from '@frontline/shared';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
+import { subscribe } from '../live';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -105,6 +107,64 @@ describe('research tasks for the dock', () => {
     expect((await ok<KbTaskBrief[]>('GET', '/api/kb/research/tasks?ws=general&open=1')).map((t) => t.id)).toEqual(['t4']);
     expect((await ok<KbTaskBrief[]>('GET', '/api/kb/research/tasks?ws=all&open=1')).map((t) => t.id)).toEqual(['t2', 't1', 't5', 't4']);
     expect((await ok<KbTaskBrief[]>('GET', '/api/kb/research/tasks?ws=pawsome&open=1'))[0]).toMatchObject({ storeId: 'pawsome', payerId: 'pawsome', role: 'market_analyst', objective: 'Objective t2', status: 'queued', stage: 'discovering' });
+  });
+});
+
+describe('research from source', () => {
+  const md = (s: string) => Buffer.from(s).toString('base64');
+  const start = (body: Record<string, unknown>, status = 201) => ok<KbTaskBrief>('POST', '/api/kb/research/tasks', { agentId: 'pawsome:ad_strategist', ws: 'pawsome', budgetUsd: 1.5, ...body }, status);
+  const refused = async (body: Record<string, unknown>) => (await start(body, 400) as unknown as { error: string }).error;
+
+  test("the owner's links, text and document go to the chosen agent, on its store's budget, into the chosen workspace and category", async () => {
+    const hooks = ensureCategoryPath(db, 'pawsome', ['Advertising', 'Hooks']);
+    const t = await start({ urls: ['https://a.test/hooks', 'https://b.test/guide'], text: '  Our May notes.  ', document: { name: 'Call notes.md', data: md('# Founder call\nRescue stories get the clicks.') }, lookFor: ' hooks for anxious dogs ', categoryId: hooks });
+    expect(t).toMatchObject({ storeId: 'pawsome', payerId: 'pawsome', role: 'ad_strategist', objective: 'hooks for anxious dogs' });
+    const d = await ok<KbTaskDetail>('GET', `/api/kb/research/tasks/${t.id}`);
+    const doc = db.prepare(`SELECT id, kind, store_id, title, status FROM kb_sources WHERE title = 'Founder call'`).get()!;
+    expect(doc).toMatchObject({ kind: 'document', store_id: 'pawsome', status: 'read' });
+    expect(d).toMatchObject({ kind: 'source', origin: 'owner', categoryId: hooks, budgetUsd: 1.5, brief: { urls: ['https://a.test/hooks', 'https://b.test/guide'], text: 'Our May notes.', lookFor: 'hooks for anxious dogs', documentIds: [doc.id] } });
+    // The document was read on upload, so it shows as read before the task gets to it.
+    expect(d.sources).toMatchObject([{ id: doc.id, title: 'Founder call', status: 'read' }]);
+    expect((await req('GET', '/api/kb/research/tasks/nope')).status).toBe(404);
+  });
+
+  test('a store agent can file to General; with nothing to look for, the task is named after its sources', async () => {
+    expect(await start({ agentId: 'pawsome:market_analyst', ws: 'general', urls: ['https://a.test/hooks', 'https://b.test/guide'], text: 'notes' })).toMatchObject({ storeId: null, payerId: 'pawsome', role: 'market_analyst', objective: 'Research from a.test and 2 more' });
+    expect(await start({ document: { name: 'Call notes.md', data: md('Rescue stories.') } })).toMatchObject({ objective: 'Research from Call notes.md' });
+    const t = await start({ text: 'Rescue stories.' });
+    expect(t).toMatchObject({ objective: 'Research from pasted text' });
+    // It starts at once (here it fails: the tests have no Claude).
+    await vi.waitFor(() => expect(getResearchTask(db, t.id)).toMatchObject({ status: 'failed', error: expect.stringMatching(/^Research needs Claude/) }));
+  });
+
+  test("refuses what it can't research: no sources, bad links, too many, another store, a foreign category, a bad budget or an unreadable file", async () => {
+    expect(await refused({})).toBe('Give at least one link, some text or a document');
+    expect(await refused({ text: '   ' })).toBe('Give at least one link, some text or a document');
+    expect(await refused({ urls: ['ftp://a.test/x'] })).toBe('urls must be web addresses (http or https)');
+    expect(await refused({ urls: Array.from({ length: 9 }, (_, i) => `https://a.test/${i}`) })).toBe('At most 8 links in one task');
+    expect(await refused({ agentId: 'nope', urls: ['https://a.test/x'] })).toBe('agentId must be an agent');
+    expect(await refused({ ws: 'glow', urls: ['https://a.test/x'] })).toBe("Findings go to General or the agent's own store");
+    expect(await refused({ urls: ['https://a.test/x'], categoryId: ensureCategoryPath(db, 'glow', ['Advertising']) })).toBe('categoryId must be a category of that workspace');
+    for (const budgetUsd of [0, 25, '1']) expect(await refused({ urls: ['https://a.test/x'], budgetUsd })).toBe('budgetUsd must be between $0.10 and $20');
+    expect(await refused({ document: { name: 'tool.exe', data: md('MZ') } })).toBe('tool.exe: Upload a PDF, or a text, markdown, transcript (.vtt, .srt), CSV or HTML file');
+    expect(await refused({ document: { name: 'a.md' } })).toBe('document must be {name, data} with the file in base64');
+    expect(db.prepare(`SELECT count(*) AS n FROM kb_tasks`).get()!.n).toBe(0);
+    expect(db.prepare(`SELECT count(*) AS n FROM kb_sources`).get()!.n).toBe(0);
+  });
+
+  test('a running task can be stopped, and a stopped or failed one retried; anything else is a 409', async () => {
+    const t = createResearchTask(db, { ws: 'pawsome', payerId: 'pawsome', role: 'market_analyst', kind: 'topic', origin: 'owner', objective: 'Hooks', budgetUsd: 1 });
+    const seen: LiveMessage[] = [];
+    const off = subscribe((m) => seen.push(m));
+    expect(await ok('POST', `/api/kb/research/tasks/${t.id}/retry`, undefined, 409)).toEqual({ error: 'Only a failed or stopped task can be retried' });
+    expect(await ok('POST', `/api/kb/research/tasks/${t.id}/cancel`)).toMatchObject({ id: t.id, status: 'cancelled' });
+    expect(await ok('POST', `/api/kb/research/tasks/${t.id}/cancel`, undefined, 409)).toEqual({ error: 'Only a queued or running task can be stopped' });
+    expect(await ok('POST', `/api/kb/research/tasks/${t.id}/retry`)).toMatchObject({ id: t.id, status: 'running' });
+    await vi.waitFor(() => expect(getResearchTask(db, t.id)!.status).toBe('failed')); // it went on (no Claude here)
+    off();
+    expect(seen.flatMap((m) => (m.type === 'kb_task' ? [m.task.status] : []))).toEqual(['cancelled', 'running', 'failed']);
+    expect((await req('POST', '/api/kb/research/tasks/nope/cancel')).status).toBe(404);
+    expect((await req('POST', '/api/kb/research/tasks/nope/retry')).status).toBe(404);
   });
 });
 

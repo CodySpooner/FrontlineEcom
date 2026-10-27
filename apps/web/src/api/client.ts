@@ -42,7 +42,9 @@ import type {
   KbLinkInput,
   KbRevision,
   KbPositions,
+  KbSourceResearchInput,
   KbTaskBrief,
+  KbTaskDetail,
   KbView,
   KbViewState,
   KbSourceBrief,
@@ -376,6 +378,33 @@ export function useDeleteKbView() {
 /** Research tasks of a workspace ('all' for every one); `open` = queued or running. Research stages are runs, so run messages refresh it. */
 export const useKbTasks = (ws: string, open = false) => useQuery({ queryKey: ['kb', 'tasks', ws, open], queryFn: () => api<KbTaskBrief[]>(`/api/kb/research/tasks?${wsq(ws)}${open ? '&open=1' : ''}`) });
 
+/** A task in full. Polled while it's going: a stage streams only when it ends, and the owner watches each source get read. */
+export const useKbTask = (id: string | undefined) =>
+  useQuery({
+    queryKey: ['kb', 'task', id],
+    queryFn: () => api<KbTaskDetail>(`/api/kb/research/tasks/${encodeURIComponent(id!)}`),
+    enabled: !!id,
+    refetchInterval: (q) => (q.state.data?.status === 'queued' || q.state.data?.status === 'running' ? 2000 : false),
+  });
+
+/** Research From Source: the owner's links, text or document, for an agent to read. */
+export function useStartKbResearch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: KbSourceResearchInput) => api<KbTaskBrief>('/api/kb/research/tasks', json('POST', b)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb', 'tasks'] }),
+  });
+}
+
+/** Stop a task that's going, or Retry a stopped or failed one from where it ended. */
+export function useKbTaskAction() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, action }: { id: string; action: 'cancel' | 'retry' }) => api<KbTaskBrief>(`/api/kb/research/tasks/${encodeURIComponent(id)}/${action}`, json('POST', {})),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
+
 /** Save the owner's version of a doc, or (markdown undefined) go back to the shipped one. */
 export function useSaveKnowledge() {
   const qc = useQueryClient();
@@ -698,7 +727,7 @@ export function useLive() {
         if (!isLive(m.run)) qc.invalidateQueries({ queryKey: ['research'] });
         // A custom niche's Market Analyst saves its pack, once approved, before its run ends.
         if (!isLive(m.run)) qc.invalidateQueries({ queryKey: ['knowledge'] });
-      }
+      } else if (m.type === 'kb_task') qc.invalidateQueries({ queryKey: ['kb'] }); // the task, the task lists, and the cards it filed
       if (m.type === 'approval' || m.type === 'run' || m.type === 'xp') {
         qc.invalidateQueries({ queryKey: ['missions'] });
         qc.invalidateQueries({ queryKey: ['commander'] });

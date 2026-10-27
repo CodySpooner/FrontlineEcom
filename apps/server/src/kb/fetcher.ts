@@ -231,6 +231,18 @@ async function pdf(url: URL, bytes: Buffer): Promise<Fetched> {
   }
 }
 
+const UPLOADS: Record<string, string> = { pdf: 'application/pdf', txt: 'text/plain', vtt: 'text/plain', srt: 'text/plain', md: 'text/markdown', markdown: 'text/markdown', csv: 'text/csv', html: 'text/html', htm: 'text/html' };
+
+/** An uploaded document (Research From Source), read as the same file fetched from a site would be; its name says what it is. */
+export function readUpload(name: string, bytes: Uint8Array, maxBytes = 10 * 1_048_576): Promise<Omit<Fetched, 'url'>> {
+  const type = UPLOADS[name.includes('.') ? name.split('.').pop()!.toLowerCase() : ''];
+  if (!type) return Promise.resolve({ status: 'unsupported', error: 'Upload a PDF, or a text, markdown, transcript (.vtt, .srt), CSV or HTML file' });
+  const body = (async function* () {
+    yield bytes;
+  })();
+  return document(new URL(`upload:/${encodeURIComponent(name)}`), { status: 200, headers: { 'content-type': type }, body, close: () => {} }, maxBytes).then(({ url: _, ...read }) => read);
+}
+
 /**
  * A fetcher. One per server: it remembers robots.txt for a day and spaces requests to a site `gapMs` apart. `blocked`
  * is the workspace's blocked domains (a domain blocks its subdomains).

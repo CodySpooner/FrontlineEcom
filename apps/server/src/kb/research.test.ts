@@ -1,6 +1,6 @@
 import {
   advanceResearch, cancelResearch, createCard, createResearchTask, createRunManager, ensureCategoryPath, fakeEngine, getCard, getResearchTask, listEvidence, listRuns, refineResearch,
-  REFLECTION_PROMPT, retryResearch, writeMemory, type FakeStep, type NewKbTask, type ResearchDeps, type RunInput,
+  REFLECTION_PROMPT, retryResearch, saveSource, writeMemory, type FakeStep, type NewKbTask, type ResearchDeps, type RunInput,
 } from '@frontline/agents';
 import { KB_TASK_STAGES, type LiveMessage } from '@frontline/shared';
 import { beforeEach, describe, expect, test, vi } from 'vitest';
@@ -123,16 +123,19 @@ describe('the research runner', () => {
     });
   });
 
-  test('a source task reads the given link and pasted text with no discovery run; General research gets a store-neutral prompt', async () => {
+  test('a source task reads the given link, pasted text and uploaded document with no discovery run; General research gets a store-neutral prompt', async () => {
     writeMemory(db, { storeId: 'pawsome', agentId: 'pawsome:market_analyst', kind: 'fact', text: 'Bundles of three sell best for us', confidence: 0.9 });
     createCard(db, 'pawsome', { categoryId: ensureCategoryPath(db, 'pawsome', ['Advertising']), title: 'Pawsome-only hook note', type: 'strategy', stage: 'hypothesis', status: 'active', authorId: 'owner', origin: 'owner' });
     const { seen, settle } = setup();
     const inbox = ensureCategoryPath(db, null, ['Research inbox']);
-    const t = createResearchTask(db, { ...TOPIC, ws: null, kind: 'source', objective: 'What does this guide say about hooks?', brief: { urls: ['https://b.test/hooks'], text: 'Our notes: problem-first openings worked in May.' }, categoryId: inbox }, clock);
+    const doc = saveSource(db, null, { kind: 'document', title: 'Call notes', status: 'read', text: 'The founder call: rescue stories get the clicks.', fetchedAt: clock.toISOString() });
+    const brief = { urls: ['https://b.test/hooks'], text: 'Our notes: problem-first openings worked in May.', documentIds: [doc.id] };
+    const t = createResearchTask(db, { ...TOPIC, ws: null, kind: 'source', objective: 'What does this guide say about hooks?', brief, categoryId: inbox }, clock);
     await settle();
     expect(getResearchTask(db, t.id)).toMatchObject({ status: 'done', storeId: null, payerId: 'pawsome' });
     expect(stagesRun(t.id)).toEqual(['planning', 'analyzing', 'evaluating', 'extracting', 'reporting']);
-    expect(getResearchTask(db, t.id)!.sources.map((s) => [s.title, s.status])).toEqual([['Hook guide', 'read'], ['Pasted text', 'read']]);
+    expect(getResearchTask(db, t.id)!.sources.map((s) => [s.title, s.status])).toEqual([['Hook guide', 'read'], ['Pasted text', 'read'], ['Call notes', 'read']]);
+    expect(seen.find((i) => stageOf(i.task) === 'analyzing')!.task).toContain('> The founder call: rescue stories get the clicks.');
     const planning = seen.find((i) => stageOf(i.task) === 'planning')!;
     expect(planning.systemPrompt).toContain('General knowledge base');
     for (const leak of ['Bundles of three', 'Pawsome Gear', 'dog travel gear', 'Pawsome-only hook note']) expect(`${planning.systemPrompt}\n${planning.task}`).not.toContain(leak);
@@ -402,7 +405,7 @@ describe('the research runner', () => {
     off();
     expect(seen.filter((m) => m.type === 'kb_task').map((m) => m.type === 'kb_task' && m.task)).toMatchObject([{ id: t.id, status: 'failed' }]);
     expect(db.prepare(`SELECT kind, title, body, store_id, link FROM notifications WHERE title LIKE 'Research%'`).all()).toMatchObject([
-      { kind: 'error', title: `Research failed: ${TOPIC.objective}`, body: expect.stringMatching(/^Research needs Claude/), store_id: 'pawsome', link: '/knowledge' },
+      { kind: 'error', title: `Research failed: ${TOPIC.objective}`, body: expect.stringMatching(/^Research needs Claude/), store_id: 'pawsome', link: `/knowledge?view=research&task=${t.id}` },
     ]);
   });
 });

@@ -509,7 +509,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - `propose_card` rejects the forbidden types and stages;
   - the provenance invariants;
   - `evals.test.ts` green.
-- [ ] KB-14 **Research from source,** the API plus the B-style bar and a full dialog:
+- [x] KB-14 **Research from source,** the API plus the B-style bar and a full dialog:
   - URLs, pasted text, or an uploaded document (with a size cap);
   - agent type (decision 9), destination workspace and category, what to look for, and budget;
   - live per-source status;
@@ -631,6 +631,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-11 Safe fetcher and source storage: `apps/server/src/kb/fetcher.ts` reads public pages and documents (HTML, PDF, markdown, text, CSV) with each hop's host checked and the connection pinned to the checked address, robots.txt obeyed, a per-site gap, size, time and type caps, paywall/login detection and blocked domains; `kb-sources.ts` stores them with a content hash, excerpt and a domain-class rating the owner can change (PATCH /api/kb/sources/:id), and hands agents only fenced, quoted text.
 - 2026-10-27 KB-12 Research runner: `packages/agents/src/kb-research.ts` walks a research task through the ten stages, checkpointing each in `kb_task_steps`. Planning, discovering, analyzing, evaluating, extracting and reporting are research-mode runs of the task's agent: web search only, no app or store tools, 30 turns, at most what the task has left, on Claude even for a demo store. Each answers with one JSON object, which is checked. Retrieving (through the KB-11 fetcher), deduping, storing and linking are code. A failure is retried after 30 s, then 60 s, then fails the task; a stage its agent can't take waits an hour. Cancel, Retry (from the stage that failed) and Refine (a new linked task) are in; a restart resumes from the last finished stage. Each finding's assessment holds a weak or contested card at Hypothesis. The report lists conclusions, open questions, limitations, applications, cards created and updated, unread sources, conflicts and errors. Tasks stream as `kb_task` messages and notify the owner when they end.
 - 2026-10-27 KB-13 KB agent tools: every role has `search_knowledge` and `recommend_research`. Search returns accepted cards of the agent's store and General, never another store's, unreviewed, archived or blocked ones, with hypotheses labelled. A recommendation is a `kb.research` approval; once the owner approves, the app starts the research, paid by that store. Research runs, whatever the role, get web search plus four tools. `fetch_source` reads through the KB-11 reader and keeps the page as a task source. `propose_card` files a proposed card that the ladder stages: forbidden types and stages are refused, and only read sources count. A card that already says it gains the evidence instead, and an archived or rejected one is left alone. `add_evidence` adds evidence for or against (against opens a conflict). `suggest_link` never suggests a pair the owner rejected. The task report now counts cards the tools made or updated.
+- 2026-10-27 KB-14 Research from source: the "From source" toolbar button opens a full form, and the bar sits along the bottom of the Research Center. The owner pastes links or text, or attaches or drops a document (a PDF, text, markdown, .vtt/.srt transcript, CSV or HTML, up to 10 MB). They pick an agent and file to its store or General, optionally to one of its categories, with what to look for and a budget. The dialog then follows the task: each source as it's read, links still waiting, findings, Stop or Retry, and, at the end, the report with the new cards to accept or reject and the cards it added evidence to. The "Research done/failed" notification opens the task (`?task=`).
 
 ## Blocked
 
@@ -743,3 +744,16 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   Provenance: an agent never edits a card's fields. It can only add evidence or suggest links, and the ladder keeps
   a stage the owner set. Found while testing: a General task's workspace is `null`, so `?? ctx.store.id` would have
   searched the paying store's cards. The code tests `task ?` instead.
+- 2026-10-27 KB-14: `POST /api/kb/research/tasks` (`KbSourceResearchInput`) takes an agent rather than a role.
+  The agent's store pays, and findings go to that store or to General, never another store: decision 9, enforced on
+  both sides. An upload is read when the task is made, by `readUpload` in fetcher.ts, the fetcher's own document reader
+  on the file's extension. So a scan or an .exe is refused at once, with the reason, and nothing is saved. A readable
+  one is kept as a `document` source, linked to the task, and listed in `brief.documentIds`; retrieving reads it with
+  the rest, and a refined task links it again. JSON with base64 rather than multipart, so the client's `api()` helper
+  and the route stay as they are. The task dialog polls every 2 s while the task is going: `kb_task` only streams when
+  a stage ends, and reading 8 links is one stage. The web now handles `kb_task` by refreshing every `['kb']` query.
+  Stop and Retry are in the dialog; Refine and the full drawer (log, steps, categories) are KB-16. A paste counts as
+  text when there's more than links in it; the form shows "Reads 2 links · the pasted text · notes.pdf" before it
+  starts. Checked in the dev app at 1440 and 390 with a seeded finished task (no task run: the dev server is on real
+  Claude). Found there, for KB-16: at 390 px the view switcher (Artboard … Research Center) is wider than the screen
+  in every view, so the page scrolls sideways.

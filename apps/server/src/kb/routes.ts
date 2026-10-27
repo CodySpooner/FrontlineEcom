@@ -2,18 +2,25 @@ import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import {
   addEvidence,
+  cancelResearch,
   cardsUnder,
+  createResearchTask,
   createCard,
   createLink,
   decideLink,
   deleteEvidence,
   detachMerged,
+  getAgent,
+  getResearchTask,
   linked,
   listEvidence,
   listLinks,
   listRevisions,
   restoreRevision,
+  retryResearch,
+  saveSource,
   setSourceReliability,
+  toKbTask,
   createCategory,
   ensureCategoryPath,
   getCard,
@@ -26,8 +33,11 @@ import {
   updateCard,
   updateCategory,
 } from '@frontline/agents';
-import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbSourceReliability, type KbTaskBrief, type KbView, type KbWorkspace } from '@frontline/shared';
+import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbSourceReliability, type KbView, type KbWorkspace } from '@frontline/shared';
 import { tx, type Db } from '../db';
+import { publish } from '../live';
+import { advanceKbResearch, runManager } from '../routes/agents';
+import { readUpload } from './fetcher';
 
 // Knowledge Base routes (knowledge-base lane). Every by-id route names its workspace (?ws=) and 404s on another's id.
 
@@ -50,17 +60,44 @@ const WS_ERROR = 'ws must be general or a store id';
 /** What one bulk action may change on many cards at once. */
 const BULK = ['status', 'blockedRoles', 'researchMarked', 'category'];
 const toView = (r: Record<string, unknown>): KbView => ({ id: String(r.id), storeId: (r.store_id as string | null) ?? null, name: String(r.name), state: JSON.parse(String(r.state_json)), createdAt: String(r.created_at) });
-const toTask = (r: Record<string, unknown>): KbTaskBrief => ({
-  id: String(r.id),
-  storeId: (r.store_id as string | null) ?? null,
-  payerId: String(r.payer_id),
-  role: r.role as KbTaskBrief['role'],
-  objective: String(r.objective),
-  status: r.status as KbTaskBrief['status'],
-  stage: String(r.stage),
-  createdAt: String(r.created_at),
-  ...(r.started_at ? { startedAt: String(r.started_at) } : {}),
-});
+const isWebUrl = (u: unknown) => typeof u === 'string' && /^https?:\/\//i.test(u) && URL.canParse(u);
+const taskExists = (db: Db, id: string) => !!db.prepare('SELECT 1 FROM kb_tasks WHERE id = ?').get(id);
+
+/** Research From Source: what's wrong with the owner's request, or the task, made with its uploaded document kept as a source. */
+async function sourceTask(db: Db, b: Obj) {
+  const agent = typeof b.agentId === 'string' ? getAgent(db, b.agentId) : undefined;
+  if (!agent) return 'agentId must be an agent';
+  const ws = wsOf(db, b.ws);
+  if (ws === undefined || (ws !== null && ws !== agent.storeId)) return "Findings go to General or the agent's own store";
+  const urls = b.urls ?? [];
+  if (!Array.isArray(urls) || !urls.every(isWebUrl)) return 'urls must be web addresses (http or https)';
+  if (urls.length > 8) return 'At most 8 links in one task';
+  if (b.text !== undefined && !text(b.text, 0, 200_000)) return 'text must be at most 200,000 characters';
+  if (b.lookFor !== undefined && !text(b.lookFor, 0, 500)) return 'lookFor must be at most 500 characters';
+  if (b.categoryId !== undefined && !kbRow(db, 'kb_categories', String(b.categoryId), ws)) return 'categoryId must be a category of that workspace';
+  if (typeof b.budgetUsd !== 'number' || !(b.budgetUsd >= 0.1 && b.budgetUsd <= 20)) return 'budgetUsd must be between $0.10 and $20';
+  const doc = b.document;
+  if (doc !== undefined && !(isObj(doc) && text(doc.name, 1, 200) && typeof doc.data === 'string')) return 'document must be {name, data} with the file in base64';
+  const pasted = typeof b.text === 'string' ? b.text.trim() : '';
+  if (!urls.length && !pasted && !doc) return 'Give at least one link, some text or a document';
+  const name = doc && String(doc.name).trim();
+  const read = name ? await readUpload(name, Buffer.from(String(doc.data), 'base64')) : undefined;
+  if (read && read.status !== 'read') return `${name}: ${read.error}`;
+  const lookFor = typeof b.lookFor === 'string' ? b.lookFor.trim() : '';
+  const more = urls.length + (pasted ? 1 : 0) + (name ? 1 : 0) - 1;
+  const from = urls.length ? new URL(urls[0]).hostname : (name ?? 'pasted text');
+  return tx(db, () => {
+    const at = new Date().toISOString();
+    const kept = read && saveSource(db, ws, { kind: 'document', title: read.title || name!, status: 'read', text: read.text, publishedAt: read.publishedAt, fetchedAt: at });
+    const t = createResearchTask(db, {
+      ws, payerId: agent.storeId, role: agent.role, kind: 'source', origin: 'owner', objective: lookFor || `Research from ${from}${more ? ` and ${more} more` : ''}`,
+      brief: { ...(urls.length ? { urls } : {}), ...(pasted ? { text: pasted } : {}), ...(lookFor ? { lookFor } : {}), ...(kept ? { documentIds: [kept.id] } : {}) },
+      ...(b.categoryId !== undefined ? { categoryId: String(b.categoryId) } : {}), budgetUsd: b.budgetUsd as number,
+    });
+    if (kept) db.prepare('INSERT INTO kb_task_sources (task_id, source_id) VALUES (?, ?)').run(t.id, kept.id);
+    return t;
+  });
+}
 
 /** The card fields of a body, trimmed, or what's wrong with them. The category is checked by the caller. */
 function parseCard(b: Obj, partial: boolean): string | KbCardPatch {
@@ -251,7 +288,34 @@ export function kbRoutes(db: Db) {
       if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
       const s = kbScope(ws);
       const open = c.req.query('open') === '1' ? ` AND status IN ('queued', 'running')` : '';
-      return c.json(db.prepare(`SELECT * FROM kb_tasks WHERE ${s.sql}${open} ORDER BY created_at DESC, rowid DESC LIMIT 200`).all(...s.params).map(toTask));
+      return c.json(db.prepare(`SELECT * FROM kb_tasks WHERE ${s.sql}${open} ORDER BY created_at DESC, rowid DESC LIMIT 200`).all(...s.params).map(toKbTask));
+    })
+    .post('/api/kb/research/tasks', async (c) => {
+      const b = await c.req.json().catch(() => null);
+      if (!isObj(b)) return c.json({ error: 'body must be an object' }, 400);
+      const t = await sourceTask(db, b);
+      if (typeof t === 'string') return c.json({ error: t }, 400);
+      advanceKbResearch(db);
+      return c.json(t, 201);
+    })
+    .get('/api/kb/research/tasks/:id', (c) => {
+      const t = getResearchTask(db, c.req.param('id'));
+      return t ? c.json(t) : c.json({ error: 'task not found' }, 404);
+    })
+    .post('/api/kb/research/tasks/:id/cancel', (c) => {
+      if (!taskExists(db, c.req.param('id'))) return c.json({ error: 'task not found' }, 404);
+      const t = cancelResearch(db, c.req.param('id'), (runId) => runManager(db).cancel(runId));
+      if (!t) return c.json({ error: 'Only a queued or running task can be stopped' }, 409);
+      publish({ type: 'kb_task', task: t });
+      return c.json(t);
+    })
+    .post('/api/kb/research/tasks/:id/retry', (c) => {
+      if (!taskExists(db, c.req.param('id'))) return c.json({ error: 'task not found' }, 404);
+      const t = retryResearch(db, c.req.param('id'));
+      if (!t) return c.json({ error: 'Only a failed or stopped task can be retried' }, 409);
+      publish({ type: 'kb_task', task: t });
+      advanceKbResearch(db);
+      return c.json(t);
     })
     .get('/api/kb/categories', (c) => {
       const ws = wsOf(db, c.req.query('ws'), true);

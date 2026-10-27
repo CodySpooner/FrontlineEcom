@@ -12,7 +12,7 @@ import { useFill } from './fill';
 
 const FILTERS = ['category', 'type', 'stage', 'status', 'agent', 'source', 'metric', 'tag', 'createdFrom', 'createdTo', 'verifiedFrom', 'verifiedTo', 'sort', 'dir'] as const;
 type Filter = (typeof FILTERS)[number];
-const STATUS = { proposed: 'Unreviewed', active: 'Active', archived: 'Archived', rejected: 'Rejected', merged: 'Merged' } as const;
+export const STATUS = { proposed: 'Unreviewed', active: 'Active', archived: 'Archived', rejected: 'Rejected', merged: 'Merged' } as const;
 const PAGE = 200;
 /** Behind "More filters" unless one of them is set. */
 const MORE: Filter[] = ['agent', 'source', 'metric', 'tag', 'createdFrom', 'createdTo', 'verifiedFrom', 'verifiedTo'];

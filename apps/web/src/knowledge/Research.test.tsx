@@ -1,0 +1,134 @@
+// @vitest-environment jsdom
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import type { KbTaskDetail } from '@frontline/shared';
+import { Knowledge } from '../pages/Knowledge';
+import { renderApp, stubApi } from '../test-utils';
+import { splitSources } from './Research';
+
+beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }));
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
+
+const now = new Date().toISOString();
+const paw = { id: 'pawsome', name: 'Pawsome Gear', platform: 'shopify', niche: 'pets', color: '#ff2a3a', currency: 'USD', timezone: 'UTC' };
+const agent = (role: string, over = {}) => ({ id: `pawsome:${role}`, storeId: 'pawsome', role, status: 'idle', level: 1, xp: 0, enabled: true, ...over });
+const task = (over: Partial<KbTaskDetail> = {}): KbTaskDetail => ({
+  id: 't1', storeId: 'pawsome', payerId: 'pawsome', role: 'ad_strategist', objective: 'hooks for anxious dogs', status: 'running', stage: 'retrieving', createdAt: now,
+  kind: 'source', origin: 'owner', brief: { urls: ['https://a.test/hooks', 'https://b.test/guide', 'https://c.test/paid'] }, attempt: 0, budgetUsd: 1, spentUsd: 0.12,
+  steps: [{ stage: 'planning', attempt: 1, status: 'done', startedAt: now }], log: [],
+  sources: [{ id: 's1', url: 'https://a.test/hooks', title: 'Hook study', status: 'read', reliability: 'research' }, { id: 's2', url: 'https://c.test/paid', title: '', status: 'paywalled', reliability: 'unknown' }],
+  findings: [], ...over,
+});
+const card = (id: string, title: string, status = 'proposed') => ({
+  id, storeId: 'pawsome', categoryId: 'pawsome-ads', path: ['Advertising'], type: 'strategy', stage: 'supported', status, title, summary: `About ${title}`, tags: [], authorId: 'pawsome:ad_strategist',
+  origin: 'research', pinned: false, blockedRoles: [], researchMarked: false, usedCount: 0, citedCount: 0, createdAt: now, updatedAt: now, body: '', relevance: '', application: '', appliesTo: '', limits: '',
+});
+
+function open(path: string, detail: KbTaskDetail = task()) {
+  const cards = { c1: card('c1', 'Open on the problem'), c2: card('c2', 'Rescue stories lift CTR'), c3: card('c3', 'Old hook card', 'active') };
+  const fetch = stubApi((url, init) => {
+    if (init?.method === 'POST' && url === '/api/kb/research/tasks') return { ...detail, status: 'queued' };
+    if (init?.method && init.method !== 'GET') return {};
+    if (url === '/api/stores') return [paw];
+    if (url === '/api/agents') return [agent('market_analyst'), agent('ad_strategist'), agent('copywriter', { enabled: false })];
+    if (url === '/api/kb/workspaces') return {};
+    if (url.startsWith('/api/kb/categories?ws=pawsome')) return [{ id: 'pawsome-ads', storeId: 'pawsome', parentId: null, name: 'Advertising', position: 1, createdAt: now, cards: 0 }];
+    if (url.startsWith('/api/kb/categories?ws=general')) return [{ id: 'general-ads', storeId: null, parentId: null, name: 'Ads', position: 1, createdAt: now, cards: 0 }];
+    if (url === '/api/kb/research/tasks/t1') return detail;
+    const one = url.match(/^\/api\/kb\/cards\/(\w+)\?ws=all$/);
+    if (one) return cards[one[1] as keyof typeof cards];
+  });
+  renderApp(<Knowledge />, path);
+  return fetch;
+}
+const posts = (fetch: ReturnType<typeof stubApi>, url: string) => fetch.mock.calls.filter(([u, i]) => u === url && i?.method && i.method !== 'GET').map(([, i]) => JSON.parse(String(i!.body)));
+const where = () => screen.getByTestId('where').textContent;
+
+describe('Research from source', () => {
+  it('splits a paste into its links and, when there is more than links, the text to read', () => {
+    expect(splitSources('https://a.test/hooks\nhttps://b.test/guide.\nhttps://a.test/hooks, ')).toEqual({ urls: ['https://a.test/hooks', 'https://b.test/guide'], text: '' });
+    expect(splitSources('Our notes say see https://a.test/x).')).toEqual({ urls: ['https://a.test/x'], text: 'Our notes say see https://a.test/x).' });
+    expect(splitSources('  ')).toEqual({ urls: [], text: '' });
+  });
+
+  it("the Research Center's bar sends links and a document to the agent picked, then follows the task live", async () => {
+    const fetch = open('/knowledge?ws=pawsome&view=research');
+    const bar = await screen.findByRole('region', { name: 'Research from source' });
+    fireEvent.change(within(bar).getByLabelText('Links or text'), { target: { value: 'https://a.test/hooks\nhttps://b.test/guide' } });
+    const file = new File(['# Notes\nProblem first.'], 'notes.md', { type: 'text/markdown' });
+    fireEvent.change(within(bar).getByLabelText('Attach a document'), { target: { files: [file] } });
+    expect(within(bar).getByText('Reads 2 links · notes.md')).toBeTruthy();
+    // Only enabled agents; findings go to the agent's store (with its categories) or General.
+    const agents = within(bar).getByLabelText('Agent') as HTMLSelectElement;
+    await vi.waitFor(() => expect([...agents.options].map((o) => o.text)).toEqual(['Market Analyst · Pawsome Gear', 'Ad Strategist · Pawsome Gear']));
+    fireEvent.change(agents, { target: { value: 'pawsome:ad_strategist' } });
+    const to = within(bar).getByLabelText('Save findings to') as HTMLSelectElement;
+    await vi.waitFor(() => expect([...to.options].map((o) => o.text)).toEqual(['Pawsome Gear', 'Pawsome Gear › Advertising', 'General', 'General › Ads']));
+    fireEvent.change(to, { target: { value: 'pawsome|pawsome-ads' } });
+    fireEvent.change(within(bar).getByLabelText('What to look for (optional)'), { target: { value: ' hooks for anxious dogs ' } });
+    fireEvent.click(within(bar).getByRole('button', { name: 'Start research' }));
+    await vi.waitFor(() => expect(where()).toBe('/knowledge?ws=pawsome&view=research&task=t1'));
+    expect(posts(fetch, '/api/kb/research/tasks')).toEqual([
+      { agentId: 'pawsome:ad_strategist', ws: 'pawsome', categoryId: 'pawsome-ads', urls: ['https://a.test/hooks', 'https://b.test/guide'], document: { name: 'notes.md', data: btoa('# Notes\nProblem first.') }, lookFor: 'hooks for anxious dogs', budgetUsd: 1 },
+    ]);
+    // The task: each source as it's read, the ones still waiting, and Stop.
+    const dialog = await screen.findByRole('dialog', { name: 'Research task' });
+    await within(dialog).findByText('hooks for anxious dogs');
+    expect(within(dialog).getByText('Reading sources')).toBeTruthy();
+    expect(within(dialog).getByText('$0.12 of $1.00')).toBeTruthy();
+    const sources = within(dialog).getByRole('list', { name: 'Sources' });
+    expect(within(sources).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Hook studyread', 'https://c.test/paidpaywalled', 'https://b.test/guidewaiting']);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Stop' }));
+    await vi.waitFor(() => expect(fetch.mock.calls.some(([u, i]) => u === '/api/kb/research/tasks/t1/cancel' && i?.method === 'POST')).toBe(true));
+  });
+
+  it("the toolbar's From source opens the full form, with a budget, and can file to General", async () => {
+    const fetch = open('/knowledge?ws=pawsome&view=library');
+    fireEvent.click(await screen.findByRole('button', { name: 'From source' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Research from source' });
+    const go = within(dialog).getByRole('button', { name: 'Start research' }) as HTMLButtonElement;
+    expect(go.disabled).toBe(true); // nothing to read yet
+    fireEvent.change(within(dialog).getByLabelText('Links or text'), { target: { value: 'Our notes: problem-first openings worked in May.' } });
+    expect(within(dialog).getByText('Reads the pasted text')).toBeTruthy();
+    const to = within(dialog).getByLabelText('Save findings to') as HTMLSelectElement;
+    await vi.waitFor(() => expect(to.options.length).toBe(4));
+    fireEvent.change(to, { target: { value: 'general|' } });
+    fireEvent.change(within(dialog).getByLabelText('Budget (USD)'), { target: { value: '2.5' } });
+    fireEvent.click(go);
+    await vi.waitFor(() => expect(posts(fetch, '/api/kb/research/tasks')).toEqual([{ agentId: 'pawsome:market_analyst', ws: 'general', text: 'Our notes: problem-first openings worked in May.', budgetUsd: 2.5 }]));
+    await within(dialog).findByRole('list', { name: 'Sources' }); // the same dialog follows the task
+    expect(where()).toBe('/knowledge?ws=pawsome&view=library&task=t1');
+  });
+
+  it('a finished task shows its report, and the cards it proposed to accept or reject; a failed one can be retried', async () => {
+    const report = {
+      summary: 'Lead with the problem.', conclusions: ['Problem-first hooks win'], unresolved: ['Does it hold for cats?'], limitations: ['Two sources'], applications: ['Rewrite the top 3 ads'],
+      created: [{ id: 'c1', title: 'Open on the problem' }, { id: 'c2', title: 'Rescue stories lift CTR' }], updated: [{ id: 'c3', title: 'Old hook card' }],
+      failedSources: [{ url: 'https://c.test/paid', status: 'paywalled' as const, error: 'The page is behind a paywall' }], conflicts: ['B says offers matter more'], errors: [],
+    };
+    const fetch = open('/knowledge?ws=pawsome&view=research&task=t1', task({ status: 'done', stage: 'reporting', report }));
+    const dialog = await screen.findByRole('dialog', { name: 'Research task' });
+    await within(dialog).findByText('Lead with the problem.');
+    for (const line of ['Problem-first hooks win', 'Rewrite the top 3 ads', 'Does it hold for cats?', 'Two sources', 'https://c.test/paid: The page is behind a paywall', 'B says offers matter more']) expect(within(dialog).getByText(line)).toBeTruthy();
+    expect(within(dialog).queryByRole('button', { name: 'Stop' })).toBeNull();
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Accept Open on the problem' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Reject Rescue stories lift CTR' }));
+    await vi.waitFor(() => expect(posts(fetch, '/api/kb/cards/c1?ws=pawsome')).toEqual([{ status: 'active' }]));
+    await vi.waitFor(() => expect(posts(fetch, '/api/kb/cards/c2?ws=pawsome')).toEqual([{ status: 'rejected' }]));
+    // An updated card was already live: nothing to review, it opens in the Library.
+    const updated = within(dialog).getByRole('list', { name: 'Updated cards' });
+    expect(within(updated).queryByRole('button', { name: /^Accept/ })).toBeNull();
+    fireEvent.click(within(updated).getByRole('button', { name: 'Old hook card' }));
+    expect(where()).toBe('/knowledge?ws=pawsome&view=library&card=c3');
+    cleanup();
+
+    const failed = open('/knowledge?ws=pawsome&view=research&task=t1', task({ status: 'failed', error: 'None of the sources could be read.' }));
+    const again = await screen.findByRole('dialog', { name: 'Research task' });
+    await within(again).findByText('None of the sources could be read.');
+    fireEvent.click(within(again).getByRole('button', { name: 'Retry' }));
+    await vi.waitFor(() => expect(failed.mock.calls.some(([u, i]) => u === '/api/kb/research/tasks/t1/retry' && i?.method === 'POST')).toBe(true));
+  });
+});

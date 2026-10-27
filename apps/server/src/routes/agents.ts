@@ -445,7 +445,7 @@ export function advanceKbResearch(db: Db) {
     (moved) => {
       for (const t of moved) {
         publish({ type: 'kb_task', task: t });
-        const about = { storeId: t.storeId ?? undefined, link: '/knowledge' };
+        const about = { storeId: t.storeId ?? undefined, link: `/knowledge?view=research&task=${t.id}` };
         if (t.status === 'done') notify(db, { kind: 'agent_done', title: `Research done: ${t.objective.slice(0, 80)}`, body: getResearchTask(db, t.id)?.report?.summary, ...about });
         if (t.status === 'failed') notify(db, { kind: 'error', title: `Research failed: ${t.objective.slice(0, 80)}`, body: t.error, ...about });
       }

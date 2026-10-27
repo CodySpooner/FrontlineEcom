@@ -341,6 +341,11 @@ const CODE: Partial<Record<Stage, Code>> = {
       }
     }
     if (brief.text?.trim()) read.push(keep({ kind: 'text', title: 'Pasted text', status: 'read', text: brief.text, fetchedAt: now.toISOString() }).id);
+    // Uploads were read when the task was made (apps/server kb/routes.ts); a refined task links them again.
+    for (const sourceId of brief.documentIds ?? []) {
+      db.prepare('INSERT OR IGNORE INTO kb_task_sources (task_id, source_id) VALUES (?, ?)').run(id, sourceId);
+      read.push(sourceId);
+    }
     if (!read.length) return { fail: 'None of the sources could be read.', report: { ...EMPTY, summary: 'None of the sources could be read, so nothing was learned.', failedSources: failed } };
     return { out: { read, failed } satisfies Retrieved };
   },

@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { describe, expect, test } from 'vitest';
-import { createFetcher, pinned, readable, robotsAllows, type Transport } from './fetcher';
+import { createFetcher, pinned, readable, readUpload, robotsAllows, type Transport } from './fetcher';
 
 const PUBLIC = '93.184.216.34';
 type Page = { status?: number; type?: string; body?: string | Uint8Array; headers?: Record<string, string> };
@@ -258,6 +258,21 @@ describe('readable text', () => {
     expect(readable('<body><div class="related">Related: 10 more tips</div><article><p>The tip.</p></article><div>Comments (3)</div></body>').text).toBe('The tip.');
     // No article or main: the body, without its menus, sign-up form and footer.
     expect(readable('<body><header><nav>Home</nav></header><h2>Tips</h2><p>One <b>bold</b> tip</p><form><button>Sign up</button></form><footer>©</footer></body>').text).toBe('Tips\n\nOne bold tip');
+  });
+});
+
+describe('uploads', () => {
+  test('an uploaded PDF, markdown, transcript or saved page is read as a fetched one would be; anything else, or too big, is refused', async () => {
+    expect(await readUpload('study.pdf', pdf('Bundles beat discounts', 'Pricing study'))).toMatchObject({ status: 'read', title: 'Pricing study', publishedAt: '2026-09-01', text: 'Bundles beat discounts' });
+    expect(await readUpload('notes.md', Buffer.from('# Hook notes\nProblem first.'))).toMatchObject({ status: 'read', title: 'Hook notes', text: '# Hook notes\nProblem first.' });
+    expect(await readUpload('Call 3.vtt', Buffer.from('WEBVTT\n\n00:01.000 --> 00:04.000\nLead with the problem.'))).toMatchObject({ status: 'read', title: 'Call 3.vtt' });
+    expect(await readUpload('page.HTML', Buffer.from('<title>Saved page</title><article><p>Lead with the problem.</p></article>'))).toMatchObject({ status: 'read', title: 'Saved page', text: 'Lead with the problem.' });
+    const refused = 'Upload a PDF, or a text, markdown, transcript (.vtt, .srt), CSV or HTML file';
+    expect(await readUpload('tool.exe', Buffer.from('MZ'))).toEqual({ status: 'unsupported', error: refused });
+    expect(await readUpload('README', Buffer.from('hi'))).toEqual({ status: 'unsupported', error: refused });
+    expect(await readUpload('big.txt', Buffer.alloc(10 * 1_048_576 + 1, 'a'))).toMatchObject({ status: 'too_large', error: 'The file is over the 10 MB limit' });
+    expect(await readUpload('empty.txt', Buffer.from('  \n'))).toMatchObject({ status: 'failed', error: 'The file is empty' });
+    expect(await readUpload('broken.pdf', Buffer.from('%PDF-1.4 nope'))).toMatchObject({ status: 'failed', error: "The PDF couldn't be read" });
   });
 });
 

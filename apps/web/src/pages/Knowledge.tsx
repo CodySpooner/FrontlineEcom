@@ -28,6 +28,7 @@ import { Badge, Button, Card, ConfirmDelete, cx, EmptyState, ErrorState, inputCl
 import { Artboard } from '../knowledge/Artboard';
 import { CardLibrary } from '../knowledge/Library';
 import { Relationships } from '../knowledge/Relationships';
+import { ResearchDialog, SourceBar } from '../knowledge/Research';
 import { VIEWS, viewOf, withParams, wsFrom, type KbView } from '../knowledge/url';
 import { ago } from '../lib/format';
 import { nicheKey } from '../lib/niche';
@@ -48,6 +49,8 @@ export function Knowledge() {
   const general = ws !== 'general' && params.get('general') !== '0';
   const q = params.get('q') ?? '';
   const card = params.get('card') ?? undefined;
+  const task = params.get('task') ?? undefined;
+  const [fromSource, setFromSource] = useState(false);
   const set: SetParams = (changes) => setParams((p) => withParams(p, changes), { replace: true });
   const search = useRef<HTMLInputElement>(null);
 
@@ -79,7 +82,7 @@ export function Knowledge() {
   return (
     <>
       <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
-      <Toolbar ws={ws} view={view} general={general} q={q} set={set} search={search}>
+      <Toolbar ws={ws} view={view} general={general} q={q} set={set} search={search} onFromSource={() => setFromSource(true)}>
         {view !== 'artboard' && <div className="ml-auto">{switcher}</div>}
       </Toolbar>
       {view === 'artboard' ? (
@@ -89,18 +92,38 @@ export function Knowledge() {
       ) : view === 'relationships' ? (
         <Relationships ws={ws} general={general} q={q} card={card} set={set} />
       ) : (
-        <Card>
-          <EmptyState icon={Radar} title="No research yet">
-            Research tasks, new discoveries and knowledge gaps show here once agents start researching.
-          </EmptyState>
-        </Card>
+        <div className="grid gap-4">
+          <Card>
+            <EmptyState icon={Radar} title="No research yet">
+              Research tasks, new discoveries and knowledge gaps show here once agents start researching.
+            </EmptyState>
+          </Card>
+          <SourceBar ws={ws} onStarted={(id) => set({ task: id })} />
+        </div>
       )}
+      <ResearchDialog
+        ws={ws}
+        open={fromSource || !!task}
+        task={task}
+        onStarted={(id) => {
+          setFromSource(false);
+          set({ task: id });
+        }}
+        onClose={() => {
+          setFromSource(false);
+          set({ task: undefined });
+        }}
+        onOpenCard={(id) => {
+          setFromSource(false);
+          set({ task: undefined, view: 'library', card: id });
+        }}
+      />
     </>
   );
 }
 
 /** Workspace, Include General, search and the research actions; `children` (the view switcher) sits at the right end. */
-function Toolbar({ ws, view, general, q, set, search, children }: { ws: string; view: KbView; general: boolean; q: string; set: SetParams; search: RefObject<HTMLInputElement | null>; children: ReactNode }) {
+function Toolbar({ ws, view, general, q, set, search, onFromSource, children }: { ws: string; view: KbView; general: boolean; q: string; set: SetParams; search: RefObject<HTMLInputElement | null>; onFromSource: () => void; children: ReactNode }) {
   const stores = useStores().data ?? [];
   const counts = useKbWorkspaces().data ?? {};
   const cards = (key: string) => `${counts[key] ?? 0} card${counts[key] === 1 ? '' : 's'}`;
@@ -134,10 +157,10 @@ function Toolbar({ ws, view, general, q, set, search, children }: { ws: string; 
         <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
         <input ref={search} type="search" value={q} onChange={(e) => set({ q: e.target.value || undefined })} placeholder="Search knowledge…" className={cx(inputClass, 'w-full pl-9')} />
       </label>
-      {/* Research arrives with the research runner; until then these say so instead of doing nothing. */}
-      <Button disabled title="Research isn't switched on yet">
+      <Button onClick={onFromSource}>
         <Link2 aria-hidden className="size-4" /> From source
       </Button>
+      {/* New research comes with KB-15; until then it says so instead of doing nothing. */}
       <Button variant="primary" disabled title="Research isn't switched on yet">
         <Plus aria-hidden className="size-4" /> New research
       </Button>

@@ -1551,6 +1551,25 @@ export interface KbResearchBrief {
   urls?: string[];
   text?: string;
   lookFor?: string;
+  /** Uploaded documents: read and kept as sources when the task was made. */
+  documentIds?: string[];
+}
+
+/**
+ * POST /api/kb/research/tasks → 201 KbTaskBrief: Research From Source. The agent works on its store's AI budget and files
+ * to General or that store (`ws`), never another. At least one of: up to 8 links, pasted text (≤ 200,000 characters), or
+ * a document (a PDF, text, markdown, transcript, CSV or HTML file, in base64, ≤ 10 MB). GET /api/kb/research/tasks/:id →
+ * KbTaskDetail; POST …/:id/cancel and …/:id/retry → KbTaskBrief, 409 when it can't.
+ */
+export interface KbSourceResearchInput {
+  agentId: string;
+  ws: string;
+  urls?: string[];
+  text?: string;
+  document?: { name: string; data: string };
+  lookFor?: string;
+  categoryId?: string;
+  budgetUsd: number;
 }
 
 /** The evaluating stage's verdict on one finding, against spec §5's criteria: 1 (poor) to 5 (strong). */
