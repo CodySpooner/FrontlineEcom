@@ -1,5 +1,5 @@
 import { Application, Assets, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
-import { DESKS, MEETING, ROOMS, iso, uniso, type Tile } from './world';
+import { DESKS, MEETING, iso, uniso, type Tile } from './world';
 import { paintOffice } from './worldArt';
 import { cameraBlend, cameraViewport, fitCamera, introCamera, zoomAt } from './camera';
 import { workerSprites } from './workerSprites';
@@ -12,6 +12,7 @@ import { departmentShowpieces } from './showpieces';
 import { hubTelemetry } from './hub';
 import { ambientOffice } from './ambient';
 import { CITY_URL, cityBackdrop } from './backdrop';
+import { departmentPlacards } from './placards';
 
 export async function createOffice(host: HTMLElement, onDesk: (id: string) => void) {
   const [logoTexture, cityTexture] = await Promise.all([Assets.load<Texture>(LOGO_URL), Assets.load<Texture>(CITY_URL)]);
@@ -29,12 +30,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   const showpieces = departmentShowpieces(world);
   let theme: OfficeThemeId = 'frontline';
   const setTheme = (value: OfficeThemeId) => { if (theme === value) return; theme = value; const old = mapTexture; mapTexture = Texture.from(paintOffice(OFFICE_THEMES[value])); mapTexture.source.scaleMode = 'nearest'; map.texture = mapTexture; old.destroy(true); };
-  const labels = new Container(); world.addChild(labels);
-  for (const room of ROOMS) {
-    const p = iso({x:room.x+12.5,y:room.y+12.5});
-    const label = new Text({ text: room.name.toUpperCase(), style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 26, fontWeight: '600', fill: '#e6e6ec', stroke: {color:'#08080c',width:5} } });
-    label.anchor.set(.5); label.position.set(p.x,p.y); labels.addChild(label);
-  }
+  const placards = departmentPlacards(), labels = placards.root; world.addChild(labels);
   const selection = new Graphics(); world.addChild(selection);
   let dragged = false;
   let clickTimer: ReturnType<typeof setTimeout> | undefined, clickedWorker: string | undefined;
@@ -58,6 +54,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   let lowPower = false, autoLow = false;
   app.ticker.maxFPS = 60;
   const workers = workerSprites(world, (desk, id) => { if (!dragged) { clickedWorker = id; selectDesk(desk); } });
+  world.addChild(labels);
   const objective = new Text({ text: '', style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 19, fontWeight: '600', fill: '#ffd9e3', stroke: { color: '#100810', width: 6 }, wordWrap: true, wordWrapWidth: 300, align: 'center' } });
   objective.anchor.set(.5, 1); objective.position.set(hub.x, hub.y - 176); world.addChild(objective);
   let camera = fitCamera(host.clientWidth,host.clientHeight);
@@ -112,6 +109,6 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     if(still) return;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => ({ ...metrics, viewport: cameraViewport({ x: world.x, y: world.y, scale: world.scale.x }, host.clientWidth, host.clientHeight) }), focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setBusiness: (value: Parameters<typeof platforms.update>[0], activeTasks?: number) => { platforms.update(value); showpieces.update(value); telemetry.update(value, activeTasks); }, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => ({ ...metrics, viewport: cameraViewport({ x: world.x, y: world.y, scale: world.scale.x }, host.clientWidth, host.clientHeight) }), focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: (value: Parameters<typeof workers.update>[0]) => { workers.update(value); placards.update(value.map((w) => w.seat)); }, setBusiness: (value: Parameters<typeof platforms.update>[0], activeTasks?: number) => { platforms.update(value); showpieces.update(value); telemetry.update(value, activeTasks); }, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;
