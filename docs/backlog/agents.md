@@ -358,11 +358,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-223 A price or budget change core refuses because the owner changed it on the platform since the sync (CORE-111/112's `stillAsSynced`) reads "Not applied" and opens the agent, instead of an error saying to make the change by hand, which would apply the stale change anyway (core's example: "20 → 22" on a price raised to 35 is a 37% cut).
 - [x] AGT-224 A run whose store's currency switched under it (CORE-109) does nothing more. It kept its start-time currency, so once the ad sync re-read budgets in the new one, a raise's cap check converted it at the old rate (a dollar raise read as yen passes any autopilot cap) and amounts it had read were quoted in the wrong currency.
 - [x] AGT-225 A reflection whose prose holds a bracket before its JSON (a [link], "step [2]") still saves its learnings. The parser took the first [ as the array's start, failed, and dropped the run's learnings without a trace.
+- [x] AGT-226 A tool that sends the agent to another tool now points a role without that tool to the squadmate who has it. `request_approval` told every role to use `propose_price_change` / `propose_ad_change` / `draft_theme_change` for those kinds, and `research_feed` told the Market Analyst to record finds with `record_product_find`, tools those roles don't have: a wasted turn calling a tool that isn't there.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-226: `whose(tool)` names the roles holding a tool; `request_approval`'s own-tool refusal and `research_feed`'s empty live feed use it when the caller lacks the tool (checked every tool's source against each role's allowlist; the other references already name the role).
 - 2026-10-26 — AGT-225: `parseLearnings` tries each [ in turn until the slice to the last ] parses.
 - 2026-10-26 — AGT-224: AGT-217's guard becomes `storeMoved(ctx)` (went live, or currency changed), used by `callTool` and `requestApproval`.
 - 2026-10-26 — AGT-223: `changedOutside(e)` (core's `as last synced (changed outside the app)`) turns the price and ad write failure notices into "Not applied" with the agent's link; tests throw core's own `stillAsSynced`.

@@ -506,7 +506,14 @@ export const APP_TOOLS: AppTool[] = [
       // The sample catalog every install starts with has made-up trend and competition: a live store works from real finds only.
       const live = ctx.store.connected;
       const items = await ctx.research({ tab, q, limit, ...(live ? { sample: 0 as const } : {}), ...(anyNiche ? {} : { niche: nicheKey(ctx.store) }) }); // other:<slug> for a custom niche
-      if (live && !items.length) return 'No finds yet (the built-in sample catalog is left out for a live store). Find products with WebSearch, cost them with search_suppliers and record them with record_product_find.';
+      if (live && !items.length) {
+        const theirs = !ROLES[ctx.agent.role].tools.includes('record_product_find') && whose('record_product_find');
+        return `No finds yet (the built-in sample catalog is left out for a live store). ${
+          theirs
+            ? `Finding and recording products is ${theirs} job: hand it over with assign_task, or say so in your answer.`
+            : 'Find products with WebSearch, cost them with search_suppliers and record them with record_product_find.'
+        }`;
+      }
       const saved = new Map<string, string[]>();
       for (const r of ctx.db.prepare('SELECT i.product_id, l.name FROM product_list_items i JOIN product_lists l ON l.id = i.list_id ORDER BY l.created_at').all()) {
         saved.set(String(r.product_id), [...(saved.get(String(r.product_id)) ?? []), String(r.name)]);
@@ -1130,7 +1137,13 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ title, reason, kind, payload, amount }, ctx) => {
       // The app carries these out on approval: only their own tool, which checks the numbers and caps, may ask.
-      if (OWN_TOOL[kind]) return `Not sent: ${kind} requests come from ${OWN_TOOL[kind]}, which checks the numbers and the owner's caps. Use it instead.`;
+      const own = OWN_TOOL[kind];
+      if (own) {
+        const theirs = !ROLES[ctx.agent.role].tools.includes(own as ToolName) && whose(own);
+        return theirs
+          ? `Not sent: ${kind} requests come from ${own}, ${theirs} tool, not yours. Hand it over with assign_task (with the numbers), or put the recommendation in your answer.`
+          : `Not sent: ${kind} requests come from ${own}, which checks the numbers and the owner's caps. Use it instead.`;
+      }
       const no = kind === 'store.add_products' && noStoreWrites(ctx.store);
       if (no) return no;
       if (kind === 'store.add_products') {
@@ -1312,6 +1325,12 @@ const NO_COMPARE_AT: Partial<Record<Store['platform'], string>> = {
   amazon: 'Amazon has no compare-at price here; a sale price is set in Seller Central.',
   tiktok_shop: 'TikTok Shop has no compare-at price here; a discount is run from Seller Center → Promotions.',
 };
+
+/** Whose tool it is ("the Ad Strategist's"), to point an agent without it to the squadmate who has it; '' for none. */
+function whose(tool: string) {
+  const roles = (Object.keys(ROLES) as AgentRole[]).filter((r) => ROLES[r].tools.includes(tool as ToolName));
+  return new Intl.ListFormat('en', { type: 'disjunction' }).format(roles.map((r) => `the ${AGENT_ROLES[r].name}'s`));
+}
 
 /** Request kinds only their own tool may create (request_approval refuses them). */
 const OWN_TOOL: Record<string, string> = {
