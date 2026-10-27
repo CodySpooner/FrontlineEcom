@@ -6,7 +6,7 @@ import { useDeleteFlowDraft, useFlowDrafts, useStartRun } from '../api/client';
 import { ago } from '../lib/format';
 import { CHANNEL, delayLabel, flowText, messageText } from '../lib/flows';
 import { FixLink } from './Chat';
-import { Badge, Button, cx, EmptyState, ErrorState, LoadingState, Panel } from './ui';
+import { Badge, Button, ConfirmDelete, cx, EmptyState, ErrorState, LoadingState, Panel } from './ui';
 
 const STARTER = 'Design a welcome series flow for new subscribers: trigger, timing, and the copy for every email and SMS. Save it to the flow library.';
 
@@ -67,7 +67,6 @@ export function FlowLibrary({ agent, onOpen }: { agent: Agent; onOpen: (runId: s
 
 function FlowView({ flow, onOpen }: { flow: FlowDraft; onOpen: (runId: string) => void }) {
   const del = useDeleteFlowDraft();
-  const [confirm, setConfirm] = useState(false);
   return (
     <Panel
       title={flow.name}
@@ -86,21 +85,13 @@ function FlowView({ flow, onOpen }: { flow: FlowDraft; onOpen: (runId: string) =
             See the conversation
           </button>
         )}
-        {confirm ? (
-          <span className="ml-auto flex flex-wrap items-center gap-2">
-            <span className="text-text-2">Delete this flow?</span>
-            <Button size="sm" onClick={() => setConfirm(false)}>
-              Keep
-            </Button>
-            <Button size="sm" variant="primary" disabled={del.isPending} onClick={() => del.mutate(flow.id)}>
-              Delete flow
-            </Button>
-          </span>
-        ) : (
-          <button type="button" onClick={() => setConfirm(true)} className="ml-auto cursor-pointer text-muted hover:text-red">
-            Delete
-          </button>
-        )}
+        <ConfirmDelete question="Delete this flow?" confirm="Delete flow" busy={del.isPending} onConfirm={() => del.mutate(flow.id)} className="ml-auto">
+          {(open, ref) => (
+            <button ref={ref} type="button" onClick={open} className="ml-auto cursor-pointer text-muted hover:text-red">
+              Delete
+            </button>
+          )}
+        </ConfirmDelete>
       </div>
       {del.isError && (
         <p role="alert" className="mt-2 text-xs text-red">

@@ -135,3 +135,14 @@ describe('Integrations with no stores', () => {
     expect(screen.getByRole('link', { name: 'Add a store' }).getAttribute('href')).toBe('/settings');
   });
 });
+
+describe('disconnecting', () => {
+  it('asks with focus on Keep, and Keep hands focus back to Disconnect', async () => {
+    stubApi(() => undefined);
+    renderApp(<ConnectForm kind="cj" current={saved} onDone={() => {}} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Disconnect' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Disconnect' }));
+  });
+});

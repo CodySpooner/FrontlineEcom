@@ -8,7 +8,7 @@ import { ApprovalCard } from '../components/Chat';
 import { DemoJobsNote } from '../components/DemoJobsNote';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, Segmented, Switch } from '../components/ui';
+import { Badge, Button, ConfirmDelete, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, Segmented, Switch } from '../components/ui';
 import { describeChange, describeTrigger, METRICS, parseCron, toCron, WEEKDAYS, when, type Schedule } from '../lib/automation';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
@@ -83,7 +83,6 @@ export function Automation() {
 function RuleRow({ r, onEdit }: { r: AutomationRule; onEdit: () => void }) {
   const { name } = useStoreSelection();
   const { toggle, remove } = useAutomationActions();
-  const [confirm, setConfirm] = useState(false);
   const Icon = r.trigger.type === 'schedule' ? CalendarClock : TrendingDown;
   const meta = [
     APPROVAL[r.approval].label,
@@ -105,25 +104,18 @@ function RuleRow({ r, onEdit }: { r: AutomationRule; onEdit: () => void }) {
         </p>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
           <span className="text-xs text-muted">{meta.join(' · ')}</span>
-          {confirm ? (
-            <span className="flex items-center gap-1.5">
-              <Button size="sm" onClick={() => setConfirm(false)}>
-                Keep
-              </Button>
-              <Button size="sm" variant="primary" disabled={remove.isPending} onClick={() => remove.mutate(r.id)}>
-                Delete rule
-              </Button>
-            </span>
-          ) : (
-            <span className="flex gap-3 text-xs">
-              <button type="button" onClick={onEdit} className="cursor-pointer text-text-2 hover:text-white">
-                Edit
-              </button>
-              <button type="button" onClick={() => setConfirm(true)} className="cursor-pointer text-muted hover:text-red">
-                Delete
-              </button>
-            </span>
-          )}
+          <span className="flex items-center gap-3 text-xs">
+            <button type="button" onClick={onEdit} className="cursor-pointer text-text-2 hover:text-white">
+              Edit
+            </button>
+            <ConfirmDelete question="Delete this rule?" confirm="Delete rule" busy={remove.isPending} onConfirm={() => remove.mutate(r.id)}>
+              {(open, ref) => (
+                <button ref={ref} type="button" onClick={open} className="cursor-pointer text-muted hover:text-red">
+                  Delete
+                </button>
+              )}
+            </ConfirmDelete>
+          </span>
         </div>
         {(toggle.isError || remove.isError) && (
           <p role="alert" className="mt-1 text-xs text-red">

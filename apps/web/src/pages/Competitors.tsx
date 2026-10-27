@@ -7,7 +7,7 @@ import { useCompetitorActions, useCompetitors, usePriceChanges, useRuns, useSnap
 import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, RUN_STATUS } from '../components/ui';
+import { Badge, Button, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, RUN_STATUS } from '../components/ui';
 import { ago, cents, fmtDay } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -67,7 +67,6 @@ export function Competitors() {
 function CompetitorRow({ c, on, onPick }: { c: Competitor; on: boolean; onPick: () => void }) {
   const { name } = useStoreSelection();
   const { remove } = useCompetitorActions();
-  const [confirm, setConfirm] = useState(false);
   return (
     <li className={cx('rounded-lg border bg-bg-2 transition', on ? 'border-red/70' : 'border-line hover:border-line-3')}>
       <button type="button" aria-pressed={on} onClick={onPick} className="block w-full cursor-pointer px-3 pt-2.5 text-left">
@@ -85,20 +84,13 @@ function CompetitorRow({ c, on, onPick }: { c: Competitor; on: boolean; onPick: 
           {host(c.url)}
           <ExternalLink aria-hidden className="size-3" />
         </a>
-        {confirm ? (
-          <span className="flex items-center gap-1.5">
-            <Button size="sm" onClick={() => setConfirm(false)}>
-              Keep
-            </Button>
-            <Button size="sm" variant="primary" disabled={remove.isPending} onClick={() => remove.mutate(c.id)}>
+        <ConfirmDelete question="Stop tracking this shop?" confirm="Stop tracking" busy={remove.isPending} onConfirm={() => remove.mutate(c.id)}>
+          {(open, ref) => (
+            <button ref={ref} type="button" onClick={open} className="cursor-pointer text-xs text-muted hover:text-red">
               Stop tracking
-            </Button>
-          </span>
-        ) : (
-          <button type="button" onClick={() => setConfirm(true)} className="cursor-pointer text-xs text-muted hover:text-red">
-            Stop tracking
-          </button>
-        )}
+            </button>
+          )}
+        </ConfirmDelete>
       </div>
     </li>
   );

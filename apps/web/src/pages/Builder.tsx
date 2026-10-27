@@ -9,7 +9,7 @@ import { Hero } from '../components/Hero';
 import { Markdown } from '../components/Markdown';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { byHand } from '../components/StoreForm';
-import { Badge, Button, cx, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, Segmented } from '../components/ui';
+import { Badge, Button, ConfirmDelete, cx, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, Segmented } from '../components/ui';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -170,7 +170,6 @@ function DraftView({ d }: { d: PageDraft }) {
   const { name, stores } = useStoreSelection();
   const { publish, remove } = usePageDraftActions();
   const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
-  const [confirm, setConfirm] = useState(false);
   const st = STATUS[d.status];
   const store = name(d.storeId);
   // `approved`: the approval's push to the platform failed (5xx, rate limit); publishing again retries it.
@@ -238,21 +237,13 @@ function DraftView({ d }: { d: PageDraft }) {
               See the conversation
             </Link>
           )}
-          {confirm ? (
-            <span className="ml-auto flex flex-wrap items-center gap-2">
-              <span className="text-text-2">Delete this draft?</span>
-              <Button size="sm" onClick={() => setConfirm(false)}>
-                Keep
-              </Button>
-              <Button size="sm" variant="primary" disabled={remove.isPending} onClick={() => remove.mutate(d.id)}>
+          <ConfirmDelete question="Delete this draft?" confirm="Delete draft" busy={remove.isPending} onConfirm={() => remove.mutate(d.id)} className="ml-auto">
+            {(open, ref) => (
+              <button ref={ref} type="button" onClick={open} className="ml-auto cursor-pointer text-muted hover:text-red">
                 Delete draft
-              </Button>
-            </span>
-          ) : (
-            <button type="button" onClick={() => setConfirm(true)} className="ml-auto cursor-pointer text-muted hover:text-red">
-              Delete draft
-            </button>
-          )}
+              </button>
+            )}
+          </ConfirmDelete>
         </div>
       </Panel>
     </div>

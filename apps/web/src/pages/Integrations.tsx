@@ -6,7 +6,7 @@ import { INTEGRATION_KINDS, type Integration, type IntegrationCategory, type Int
 import { useClaudeAccount, useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds, useStores, useSyncIntegration } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot } from '../components/ui';
+import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot, useFocusBack } from '../components/ui';
 import { ago, fmtDay } from '../lib/format';
 import { importing } from '../lib/sync';
 import { NAV } from '../nav';
@@ -252,6 +252,7 @@ export function ConnectForm({ kind, store, current, onDone }: { kind: Integratio
   const [pending, setPending] = useState<OAuthStart & { at: string }>();
   const [landed, setLanded] = useState('');
   const [confirm, setConfirm] = useState(false);
+  const disconnect = useFocusBack(confirm);
   const viaConnect = canConnect && !manual;
   const fields = k.fields.filter((f) => !(viaConnect && f.oauth));
   const oneOf = ONE_OF[kind];
@@ -372,9 +373,12 @@ export function ConnectForm({ kind, store, current, onDone }: { kind: Integratio
         </p>
       )}
       {confirm && current ? (
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4">
+        // Keyed: otherwise React reuses the footer's Cancel button as Keep, and autoFocus only fires on mount.
+        <div key="confirm" className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4">
           <span className="mr-auto text-xs text-text-2">Disconnect? Syncing stops until you connect again.</span>
-          <Button onClick={() => setConfirm(false)}>Keep</Button>
+          <Button autoFocus onClick={() => setConfirm(false)}>
+            Keep
+          </Button>
           <Button variant="primary" disabled={remove.isPending} onClick={() => remove.mutate(current.id, { onSuccess: onDone })}>
             Disconnect
           </Button>
@@ -382,7 +386,7 @@ export function ConnectForm({ kind, store, current, onDone }: { kind: Integratio
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-line pt-4">
           {current && (
-            <button type="button" onClick={() => setConfirm(true)} className="mr-auto cursor-pointer text-xs text-muted hover:text-red">
+            <button ref={disconnect} type="button" onClick={() => setConfirm(true)} className="mr-auto cursor-pointer text-xs text-muted hover:text-red">
               Disconnect
             </button>
           )}
