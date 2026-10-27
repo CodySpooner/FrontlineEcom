@@ -320,9 +320,13 @@ test("top products take off the refund lines (TikTok Shop, Amazon) of the produc
   order.run('tt-1', 50); item.run('tt-1', 'tt-p', 50, 10); refund.run('r1', 'tt-1', 50, 'tt-p'); // refunded in full
   order.run('amz-2', 40); item.run('amz-2', 'amz-p', 40, 10); refund.run('r2', 'amz-2', 15, 'amz-p'); // partly
   order.run('tt-3', 30); item.run('tt-3', 'tt-q', 30, 0); refund.run('r3', 'tt-3', 5, null); // names no product: lands on none
+  // Sold twice at 20; one order (20 + 5 shipping) returned in two refunds of 25 in all: only its 20 comes off.
+  order.run('tt-4', 25); item.run('tt-4', 'tt-r', 20, 0); refund.run('r4', 'tt-4', 15, 'tt-r'); refund.run('r5', 'tt-4', 10, 'tt-r');
+  order.run('tt-5', 20); item.run('tt-5', 'tt-r', 20, 0);
   expect(topProducts(db, ['glow'], '2026-10-20', '2026-10-26', 8).map((p) => [p.productId, p.units, p.revenue, p.profit])).toEqual([
     ['tt-q', 1, 30, 30],
     ['amz-p', 1, 25, 15],
+    ['tt-r', 2, 20, 20],
     ['tt-p', 1, 0, -10],
   ]);
 });

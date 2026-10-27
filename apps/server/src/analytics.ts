@@ -280,11 +280,14 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
              JOIN w ON w.store_id = i.store_id AND o.local_date BETWEEN w.d_from AND w.d_to
              WHERE o.status = 'paid'
              -- Refund lines (TikTok Shop, Amazon) off their order's day, as rebuildRevenue takes them off the store's. One
-             -- that names no product (a TikTok refund of a mixed order) lands on none. ponytail: units stay gross.
-             UNION ALL SELECT r.store_id, r.product_id, 0, -r.amount, 0
+             -- that names no product (a TikTok refund of a mixed order) lands on none. A product's refunds on an order come
+             -- off at most what it sold for there: TikTok's refund total also returns shipping. ponytail: units stay gross.
+             UNION ALL SELECT r.store_id, r.product_id, 0,
+               -min(sum(r.amount), (SELECT coalesce(sum(i.revenue), 0) FROM order_items i WHERE i.store_id = r.store_id AND i.order_id = r.order_id AND i.product_id = r.product_id)), 0
              FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
              JOIN w ON w.store_id = r.store_id AND o.local_date BETWEEN w.d_from AND w.d_to
              WHERE o.status = 'paid' AND r.product_id IS NOT NULL
+             GROUP BY r.store_id, r.order_id, r.product_id
            ),
            -- Summed before the product join: a lookup per product, not per line (1Y of a 110k-order store: 700 → 180 ms).
            -- ponytail: an orders (store_id, local_date, status, id) index would halve it again, if it's ever needed.
