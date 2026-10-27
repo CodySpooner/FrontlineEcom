@@ -94,17 +94,22 @@ like the scheduled jobs.
 Demo stores run every role on the fake engine, with templated work drawn from the store's own rows, so each screen
 has something to show. A store's first real sync (core's `switchToReal`) wipes its simulated rows. The agents then
 `startFresh` once:
-- they drop the facts and learnings they drew from demo data;
+- they drop the facts and learnings they drew from demo data, and what they shared with the niche;
 - pending requests expire, without counting as the owner's "no";
 - demo-order issues close;
-- product-page drafts go.
+- product-page and flow drafts go;
+- running missions are cancelled.
+
+A live store's tools also leave demo stand-ins out: `research_feed` skips the sample catalog, `search_suppliers` gives
+no demo listings without CJ, `create_creative` makes no placeholder render without Higgsfield, `compare_stores` leaves
+demo stores out.
 
 The default jobs (`jobs.ts`) switch on at the same time (the daily campaign review once an ad account has a running campaign;
 the weekly page refresh only on platforms where the app publishes product pages, also for jobs added to a live store
 later), since they would otherwise spend Claude usage on simulated numbers. A job switched on waits for its next slot:
 it doesn't run for the ones it was off for. A job the owner edited in Automation keeps the on/off they gave it. Outcome checks and the squad log only count what happened after go-live.
 A job whose task text the owner never edited moves to the current text at startup. When you change a task, add the
-old text's hash to `FORMER_TASKS`.
+old text's hash to `FORMER_TASKS` (agents-jobs.test pins each task's hash and fails until you do).
 
 ## Adding things
 
