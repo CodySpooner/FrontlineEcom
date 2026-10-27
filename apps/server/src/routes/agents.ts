@@ -353,10 +353,12 @@ function startFresh(db: Db, store: Store) {
     .prepare(`UPDATE order_issues SET status = 'resolved', resolution = 'Flagged on demo data; closed when the store went live.', resolved_at = ? WHERE store_id = ? AND status = 'open'`)
     .run(new Date().toISOString(), store.id).changes;
   db.prepare(`DELETE FROM page_drafts WHERE store_id = ? AND kind = 'product' AND published_at IS NULL`).run(store.id);
+  // Flows written about the demo catalog and sized on its numbers: the monthly check would count them as done.
+  const flows = db.prepare('DELETE FROM flow_drafts WHERE store_id = ?').run(store.id).changes;
   // What it shared with its niche came from the same demo numbers, and every store of the niche reads it (AGT-164).
   const shared = db.prepare('DELETE FROM niche_learnings WHERE store_id = ?').run(store.id).changes;
   const n = (k: number | bigint, what: string) => k && `${k} ${what}${Number(k) === 1 ? '' : 's'}`;
-  const parts = [n(memories, 'learning'), n(shared, 'niche learning'), n(pending.length, 'request'), n(issues, 'order issue')].filter(Boolean);
+  const parts = [n(memories, 'learning'), n(shared, 'niche learning'), n(pending.length, 'request'), n(issues, 'order issue'), n(flows, 'flow draft')].filter(Boolean);
   if (parts.length) {
     notify(db, {
       kind: 'info', title: `${store.name}: the squad starts fresh on real numbers`, storeId: store.id, link: '/knowledge',
