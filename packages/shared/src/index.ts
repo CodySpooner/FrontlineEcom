@@ -819,6 +819,17 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
   ] },
 };
 
+/** The settings that name which shop an integration reads (another one there means the old shop's data goes). */
+const SHOP_KEYS: Partial<Record<IntegrationKind, string[]>> = { shopify: ['shopDomain'], tiktok_shop: ['shop'], etsy: ['shopId'], amazon: ['sellerId', 'marketplaceId'], woocommerce: ['siteUrl'] };
+const bareShop = (v = '') => v.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
+
+/**
+ * Whether saving `now` over `was` connects another shop: the server then drops the old shop's orders, products and unit
+ * costs, and the connect form warns first. A blank side (TikTok's optional shop) is unknown, not another shop.
+ */
+export const anotherShop = (kind: IntegrationKind, was: Record<string, string | undefined>, now: Record<string, string | undefined>) =>
+  (SHOP_KEYS[kind] ?? []).some((k) => bareShop(was[k]) && bareShop(now[k]) && bareShop(was[k]) !== bareShop(now[k]));
+
 export type IntegrationStatus = 'connected' | 'error';
 
 /**

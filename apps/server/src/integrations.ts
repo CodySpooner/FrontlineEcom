@@ -1,4 +1,4 @@
-import { INTEGRATION_KINDS, type Health, type Integration, type IntegrationInput, type IntegrationKind, type IntegrationStatus } from '@frontline/shared';
+import { anotherShop, INTEGRATION_KINDS, type Health, type Integration, type IntegrationInput, type IntegrationKind, type IntegrationStatus } from '@frontline/shared';
 import { AD_ZONES, forgetPlatform, stateOf } from './connectors/common';
 import { utcOffset } from './dates';
 import { tx, type Db } from './db';
@@ -66,9 +66,7 @@ function zoneNotice(db: Db, r: Row): { notice?: string } {
 
 /** Validates and saves (create or update) an integration. Returns an error message or the saved Integration. */
 /** The settings naming the shop a platform integration reads: a new value is another shop. */
-const SHOP_KEYS: Partial<Record<IntegrationKind, string[]>> = { shopify: ['shopDomain'], tiktok_shop: ['shop'], etsy: ['shopId'], amazon: ['sellerId', 'marketplaceId'], woocommerce: ['siteUrl'] };
 const AD_ACCOUNT_KEYS: Partial<Record<IntegrationKind, string>> = { meta_ads: 'adAccountId', google_ads: 'customerId', tiktok_ads: 'advertiserId' };
-const bare = (v = '') => v.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/+$/, '');
 
 export function saveIntegration(db: Db, key: Buffer, body: unknown): string | Integration {
   if (!body || typeof body !== 'object') return 'body must be a JSON object';
@@ -114,8 +112,7 @@ export function saveIntegration(db: Db, key: Buffer, body: unknown): string | In
   // Before a disconnect, the shop it was (its synced data stays): another shop now still drops that data.
   const was = existing?.settings_json ?? db.prepare('SELECT value_json FROM settings WHERE key = ?').get(`shop:${id}`)?.value_json;
   const old = was ? (JSON.parse(String(was)) as Record<string, string>) : {};
-  // A blank optional field (TikTok's shop) is unknown, not another shop: forgetting deletes orders, products and unit costs.
-  const otherShop = (SHOP_KEYS[kind] ?? []).some((k) => bare(old[k]) && bare(settings[k]) && bare(old[k]) !== bare(settings[k]));
+  const otherShop = anotherShop(kind, old, settings);
 
   tx(db, () => {
     db.prepare(
