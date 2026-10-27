@@ -41,27 +41,65 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
   };
 
   const corners = [iso({x:0,y:0}),iso({x:OFFICE_GRID.width,y:0}),iso({x:OFFICE_GRID.width,y:OFFICE_GRID.height}),iso({x:0,y:OFFICE_GRID.height})];
-  poly(corners.flatMap((p) => [p.x,p.y+24]),'#030309');
+  poly(corners.flatMap((p) => [p.x,p.y+50]),'#030309');
   for (let y = 0; y < OFFICE_GRID.height; y++) for (let x = 0; x < OFFICE_GRID.width; x++) {
     const p = iso({x,y}); const room = ROOMS.find((r) => x >= r.x && x < r.x+ROOM_SIZE && y >= r.y && y < r.y+ROOM_SIZE);
-    diamond(p.x,p.y,24,12,room ? theme.floor[(x+y)%2]! : (x+y)%2 ? '#1d202a' : '#22252e','#3c3b45');
+    diamond(p.x,p.y,24,12,room ? theme.floor[(x+y)%2]! : (x+y)%2 ? '#1d202a' : '#22252e',room ? '#3c3b45' : '#292d39');
+    if (room) {
+      if (room.id === 'copywriting' || room.id === 'executive') {
+        poly([p.x-18,p.y+10,p.x,p.y+19,p.x+18,p.y+10,p.x+18,p.y+11,p.x,p.y+20,p.x-18,p.y+11],'#54434a');
+      } else if (room.id === 'operations' || room.id === 'development' || room.id === 'integrations') {
+        for (const dx of [-10,10]) rect(p.x+dx,p.y+11,2,2,'#555864');
+      }
+      if (x === room.x+1 || y === room.y+1 || x === room.x+ROOM_SIZE-1 || y === room.y+ROOM_SIZE-1) {
+        c.globalAlpha = .28;
+        diamond(p.x,p.y+7,10,5,room.color);
+        c.globalAlpha = 1;
+      }
+    }
     if (!room && (x%16===15 || y%16===15)) { rect(p.x-4,p.y+10,8,2,'#713b51'); }
   }
   // The front edges expose the headquarters' foundation and red power rails.
   for (const [a,b] of [[corners[1]!,corners[2]!],[corners[2]!,corners[3]!]] as const) {
-    poly([a.x,a.y,b.x,b.y,b.x,b.y+22,a.x,a.y+22],'#191a23','#3d3645');
+    poly([a.x,a.y,b.x,b.y,b.x,b.y+50,a.x,a.y+50],'#191a23','#3d3645');
     poly([a.x,a.y+4,b.x,b.y+4,b.x,b.y+7,a.x,a.y+7],theme.rail);
+    poly([a.x,a.y+43,b.x,b.y+43,b.x,b.y+47,a.x,a.y+47],'#333543');
+    const bays = Math.abs(b.x-a.x)/96;
+    for (let i=0;i<bays;i++) {
+      const x=a.x+(b.x-a.x)*i/bays, y=a.y+(b.y-a.y)*i/bays, dx=(b.x-a.x)/bays, dy=(b.y-a.y)/bays;
+      poly([x,y+10,x+4,y+12,x+4,y+43,x,y+41],'#515260');
+      for (let j=0;j<3;j++) poly([x+dx*.25,y+dy*.25+14+j*5,x+dx*.75,y+dy*.75+14+j*5,x+dx*.75,y+dy*.75+16+j*5,x+dx*.25,y+dy*.25+16+j*5],'#0c1019');
+    }
   }
   const props: { depth: number; draw: () => void }[] = [];
   for (const room of ROOMS) {
+    for (const side of [0,1]) {
+      const a=iso({x:room.x+(side ? ROOM_SIZE:0),y:room.y+(side ? 0:ROOM_SIZE)});
+      const b=iso({x:room.x+ROOM_SIZE,y:room.y+ROOM_SIZE});
+      poly([a.x,a.y,b.x,b.y,b.x,b.y+6,a.x,a.y+6],'#141824');
+      poly([a.x,a.y,b.x,b.y,b.x,b.y+2,a.x,a.y+2],room.color);
+      for (const i of [6,7]) {
+        const p=iso({x:room.x+(side ? 0:i),y:room.y+(side ? i:0)}), dx=side ? -24:24;
+        diamond(p.x,p.y+3,24,12,'#505464');
+        poly([p.x,p.y+3,p.x+dx,p.y+15,p.x+dx,p.y+18,p.x,p.y+6],room.color);
+        poly([p.x,p.y-64,p.x+dx,p.y-52,p.x+dx,p.y-47,p.x,p.y-59],'#727285');
+        poly([p.x,p.y-59,p.x+dx,p.y-47,p.x+dx,p.y-45,p.x,p.y-57],room.color);
+      }
+    }
     for (let i = 0; i < ROOM_SIZE; i++) if (i !== 6 && i !== 7) {
       for (const side of [0,1]) {
         const p = iso({x:room.x+(side ? 0:i),y:room.y+(side ? i:0)});
         const dx = side ? -24:24;
-        poly([p.x,p.y,p.x+dx,p.y+12,p.x+dx,p.y-38,p.x,p.y-50],theme.wall[side ? 0 : 1],'#55515e');
-        poly([p.x,p.y-48,p.x+dx,p.y-36,p.x+dx,p.y-33,p.x,p.y-45],theme.rail);
+        poly([p.x,p.y,p.x+dx,p.y+12,p.x+dx,p.y-52,p.x,p.y-64],theme.wall[side ? 0 : 1],'#55515e');
+        poly([p.x,p.y-64,p.x+dx,p.y-52,p.x+dx+4,p.y-54,p.x+4,p.y-66],'#666370');
+        poly([p.x,p.y-61,p.x+dx,p.y-49,p.x+dx,p.y-46,p.x,p.y-58],theme.rail);
         poly([p.x,p.y-8,p.x+dx,p.y+4,p.x+dx,p.y+6,p.x,p.y-6],'#912139');
-        if (i%2===1) poly([p.x+dx*.2,p.y-36,p.x+dx*.8,p.y-29,p.x+dx*.8,p.y-13,p.x+dx*.2,p.y-20],'#263448','#384c69');
+        if (i%2===1) {
+          poly([p.x+dx*.2,p.y-47,p.x+dx*.8,p.y-40,p.x+dx*.8,p.y-14,p.x+dx*.2,p.y-21],'#263448','#58708a');
+          for (const dy of [0,7,14]) poly([p.x+dx*.25,p.y-43+dy,p.x+dx*.75,p.y-37+dy,p.x+dx*.75,p.y-35+dy,p.x+dx*.25,p.y-41+dy],'#111b2a');
+        } else {
+          rect(p.x-2,p.y-61,4,60,'#4b4d5b'); rect(p.x-1,p.y-49,2,12,room.color);
+        }
       }
     }
     const sign = iso({x:room.x+5,y:room.y+0.5});
