@@ -471,7 +471,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - an open/close transition that respects `prefers-reduced-motion`.
 - [x] KB-09 **Library view,** per the design: the §13 filters, saved filters, bulk actions (archive, block, mark for
   research, move category, accept proposed), and the UI-16 sections with the `setParams` fix and its test.
-- [ ] KB-10 **Relationships view,** per the design.
+- [x] KB-10 **Relationships view,** per the design.
 
 ### Phase 4: research
 - [ ] KB-11 **Safe fetcher** (decision 10) and source storage:
@@ -627,6 +627,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-07 artboard II: link lines by type with pills (kept off cards, stacked per card pair), hit strokes and the "why linked" popover with accept/reject, the legend, the selection's lines highlighted, the Outline (subtree counts, filter, "+ New category", General knowledge, row → frame + first card), saved views per workspace (`/api/kb/views`), the Researching dock (`/api/kb/research/tasks`).
 - 2026-10-27 KB-08 details panel: a non-modal aside with every §4 field, the ladder, tagged evidence, connected cards with "Why linked" and "Link to…", sources with provenance, usage, history with Restore, inline edit and create, pin / mark for research / block / archive / reject / merge with their reversals (accept, unarchive, unreject, unblock, detach), a slide that respects reduced motion.
 - 2026-10-27 KB-09 Library view: the cards as a sortable table (title, stage, updated, verified, used) that pages on, every §13 filter in the URL, saved filter views, bulk accept / mark for research / block / move / archive sent per workspace, the details panel beside it; the UI-16 sections move in as tabs after Cards.
+- 2026-10-27 KB-10 Relationships view: a picker of connected cards (most connected first), then the card in the middle with its neighbours on a ring grouped by relationship and their own neighbours on a second ring; filters by type and AI suggestion, a line explains itself (accept/reject a suggestion there), arrow keys walk the neighbours, Enter recentres, the centre opens its details.
 
 ## Blocked
 
@@ -678,3 +679,9 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   only unreviewed cards, Archive only live ones, and a merged card is left out of every bulk action. The source filter
   reads `GET /api/kb/sources` (empty until KB-11). Agent, source, metric, tags and the two date ranges sit behind
   "More filters", shown on their own when one is set. No bulk unarchive: the details panel has it per card.
+- 2026-10-27 KB-10: `rings()` in layout.ts lays out unit rings (tested); the view maps them to px per ring, shrinking to
+  fit. A neighbour shows once, under its first relationship in type order; ring 2 holds up to three of each
+  neighbour's own neighbours. In this view the details panel opens from the centre card instead of on its own, because
+  with it open a two-ring map didn't fit at 1366 wide; closing it keeps the map centred. Past about 20 neighbours ring 1
+  will crowd: cap it with "+N more" if real workspaces get there. Each node's relationship and "why" are its
+  accessible description and show as a caption on focus or hover.

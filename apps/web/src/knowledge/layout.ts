@@ -1,6 +1,6 @@
-// The artboard's geometry: frames and card places in world units, the camera, culling and keyboard moves. Pure, so it's
-// tested without a browser.
-import type { KbCardBrief, KbPositions } from '@frontline/shared';
+// The artboard's geometry: frames and card places in world units, the camera, culling and keyboard moves, and the
+// Relationships rings. Pure, so it's tested without a browser.
+import { KB_LINK_TYPES, type KbCardBrief, type KbLink, type KbLinkType, type KbPositions } from '@frontline/shared';
 
 export interface Rect {
   x: number;
@@ -199,4 +199,58 @@ export function pillAt(e: ReturnType<typeof edge>, cards: Rect[]) {
   const on = (p: { x: number; y: number }) => cards.some((r) => p.x > r.x - 8 && p.x < r.x + r.w + 8 && p.y > r.y - 8 && p.y < r.y + r.h + 8);
   for (const t of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]) if (!on(e.at(t))) return e.at(t);
   return e.mid;
+}
+
+export interface RingNode {
+  id: string;
+  hop: 1 | 2;
+  /** Unit circle space: the centre at 0,0, ring n at radius n. */
+  x: number;
+  y: number;
+  /** The link that put it here: to the centre on ring 1, to `parent` on ring 2. */
+  link: KbLink;
+  /** `<type>:out` when the centre is the link's source, `<type>:in` when it's the target; ring 2 has its parent's. */
+  group: string;
+  parent?: string;
+}
+
+const ORDER = Object.keys(KB_LINK_TYPES) as KbLinkType[];
+const GAP = 0.6; // empty slots after each group, so groups read as arcs
+
+/**
+ * The Relationships view's rings: the centre's neighbours on ring 1, each group (how it relates to the centre) a
+ * contiguous arc clockwise from the top, groups in type order, outgoing before incoming; then up to `more` of each
+ * neighbour's own neighbours (by link order) on ring 2 beside it. Every card shows once.
+ * ponytail: past ~20 neighbours ring 1 crowds; cap it with "+N more" if real workspaces get there.
+ */
+export function rings(center: string, links: KbLink[], more = 3): { nodes: RingNode[] } {
+  const rank = (type: KbLinkType, out: boolean) => ORDER.indexOf(type) * 2 + (out ? 0 : 1);
+  const near = new Map<string, { link: KbLink; rank: number }>();
+  for (const l of links) {
+    const other = l.fromId === center ? l.toId : l.toId === center ? l.fromId : undefined;
+    if (!other || other === center) continue;
+    const r = rank(l.type, l.fromId === center);
+    if (!near.has(other) || r < near.get(other)!.rank) near.set(other, { link: l, rank: r });
+  }
+  const first = [...near].sort((a, b) => a[1].rank - b[1].rank); // stable: link order within a group
+  const groups = [...new Set(first.map(([, n]) => n.rank))];
+  const slots = first.length + groups.length * GAP;
+  const placed = new Set([center, ...near.keys()]);
+  const nodes: RingNode[] = [];
+  first.forEach(([id, { link, rank: r }], i) => {
+    const angle = -Math.PI / 2 + ((i + groups.indexOf(r) * GAP) / slots) * 2 * Math.PI;
+    const group = `${link.type}:${link.fromId === center ? 'out' : 'in'}`;
+    nodes.push({ id, hop: 1, x: Math.cos(angle), y: Math.sin(angle), link, group });
+    const kids: [string, KbLink][] = [];
+    for (const l of links) {
+      const other = l.fromId === id ? l.toId : l.toId === id ? l.fromId : undefined;
+      if (other && !placed.has(other) && kids.length < more) (kids.push([other, l]), placed.add(other));
+    }
+    const step = Math.min(0.45, ((2 * Math.PI) / slots) * (0.9 / Math.max(kids.length, 1))); // close beside the parent
+    kids.forEach(([kid, l], k) => {
+      const a = angle + (k - (kids.length - 1) / 2) * step;
+      nodes.push({ id: kid, hop: 2, x: 2 * Math.cos(a), y: 2 * Math.sin(a), link: l, group, parent: id });
+    });
+  });
+  return { nodes };
 }

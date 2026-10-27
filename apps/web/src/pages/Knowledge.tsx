@@ -2,7 +2,7 @@
 // layers agents read (role playbooks, platform and niche packs) and each store's memory.
 import { useDeferredValue, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Brain, Link2, Network, Pin, Plus, Radar, Search, Trash2 } from 'lucide-react';
+import { Brain, Link2, Pin, Plus, Radar, Search, Trash2 } from 'lucide-react';
 import type { KnowledgeDoc, KnowledgeKind, MemoryKind, StoreMemory } from '@frontline/shared';
 import {
   useAgents,
@@ -27,6 +27,7 @@ import { nicheName } from '../components/StoreForm';
 import { Badge, Button, Card, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Switch, Tabs, useFocusBack } from '../components/ui';
 import { Artboard } from '../knowledge/Artboard';
 import { CardLibrary } from '../knowledge/Library';
+import { Relationships } from '../knowledge/Relationships';
 import { VIEWS, viewOf, withParams, wsFrom, type KbView } from '../knowledge/url';
 import { ago } from '../lib/format';
 import { nicheKey } from '../lib/niche';
@@ -86,11 +87,7 @@ export function Knowledge() {
       ) : view === 'library' ? (
         <Library ws={ws} general={general} q={q} card={card} set={set} />
       ) : view === 'relationships' ? (
-        <Card>
-          <EmptyState icon={Network} title="No connections to show yet">
-            How cards support, contradict and build on each other shows here once the knowledge base links them.
-          </EmptyState>
-        </Card>
+        <Relationships ws={ws} general={general} q={q} card={card} set={set} />
       ) : (
         <Card>
           <EmptyState icon={Radar} title="No research yet">

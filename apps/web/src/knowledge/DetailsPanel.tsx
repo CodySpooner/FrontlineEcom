@@ -20,7 +20,7 @@ const KIND: Record<KbEvidenceKind, [string, string]> = {
   conflict: ['CONFLICT', 'bg-red/12 text-red'],
 };
 /** How a link reads from its target's side. */
-const BACK: Record<KbLinkType, string> = { supports: 'Supported by', contradicts: 'Contradicts', builds_upon: 'Built upon by', derived_from: 'Source of', validated_by: 'Validates', applied_to: 'Applies', related_to: 'Related To' };
+export const BACK: Record<KbLinkType, string> = { supports: 'Supported by', contradicts: 'Contradicts', builds_upon: 'Built upon by', derived_from: 'Source of', validated_by: 'Validates', applied_to: 'Applies', related_to: 'Related To' };
 const FETCH: Record<KbSourceBrief['status'], string> = { read: 'read', blocked_robots: 'blocked by robots.txt', blocked_domain: 'blocked domain', paywalled: 'paywalled', login: 'needs a login', unsupported: 'unsupported', too_large: 'too large', failed: 'failed' };
 const SOON = { task: "Agents don't read the knowledge base yet", research: "Research isn't switched on yet", promote: "Promotion isn't switched on yet" };
 const who = (actor: string) => (actor === 'app' ? 'The app' : memoryAuthor(actor));

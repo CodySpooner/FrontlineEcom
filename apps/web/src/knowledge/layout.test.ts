@@ -1,6 +1,6 @@
-import type { KbCardBrief } from '@frontline/shared';
+import type { KbCardBrief, KbLink, KbLinkType } from '@frontline/shared';
 import { describe, expect, it } from 'vitest';
-import { CARD, cull, edge, fit, HEAD, layout, nearest, PAD, panIntoView, pillAt, start, zoomAt, type Rect } from './layout';
+import { CARD, cull, edge, fit, HEAD, layout, nearest, PAD, panIntoView, pillAt, rings, start, zoomAt, type Rect } from './layout';
 
 const card = (id: string, path: string[], extra: Partial<KbCardBrief> = {}): KbCardBrief => ({
   id, storeId: 'peak', categoryId: path.join('/'), path, type: 'strategy', stage: 'hypothesis', status: 'active', title: id, summary: '', tags: [], authorId: 'owner', origin: 'owner',
@@ -158,5 +158,47 @@ describe('pill placement', () => {
     expect(p.y < between.y || p.y > between.y + between.h).toBe(true);
     expect(Math.abs(p.y - e.mid.y)).toBeLessThan(200);
     expect(pillAt(e, [{ x: -50, y: 0, w: 400, h: 2000 }])).toEqual(e.mid); // nowhere free: the middle
+  });
+});
+
+describe('the Relationships rings', () => {
+  const link = (id: string, fromId: string, toId: string, type: KbLinkType = 'supports'): KbLink => ({ id, storeId: 'peak', fromId, toId, type, why: 'because', status: 'confirmed', authorId: 'owner', createdAt: '' });
+  const r = (x: number, y: number) => Math.round(Math.hypot(x, y) * 1000) / 1000;
+
+  it('puts the neighbours on ring 1, grouped by how each relates to the centre, groups in type order, outgoing first', () => {
+    const { nodes } = rings('c', [link('1', 'c', 'x', 'related_to'), link('2', 'y', 'c'), link('3', 'c', 'z'), link('4', 'c', 'w', 'related_to'), link('5', 'c', 'v')]);
+    expect(nodes.map((n) => [n.id, n.group, n.hop])).toEqual([
+      ['z', 'supports:out', 1],
+      ['v', 'supports:out', 1],
+      ['y', 'supports:in', 1],
+      ['x', 'related_to:out', 1],
+      ['w', 'related_to:out', 1],
+    ]);
+    for (const n of nodes) expect(r(n.x, n.y)).toBe(1);
+    expect(nodes[0]).toMatchObject({ x: expect.closeTo(0, 6), y: -1 }); // the first sits at the top, the rest go clockwise
+    expect(nodes[1]!.x).toBeGreaterThan(0);
+    const step = (a: { x: number; y: number }, b: { x: number; y: number }) => (Math.atan2(b.y, b.x) - Math.atan2(a.y, a.x) + 2 * Math.PI) % (2 * Math.PI);
+    expect(step(nodes[1]!, nodes[2]!)).toBeGreaterThan(step(nodes[0]!, nodes[1]!) * 1.4); // a gap between groups
+  });
+
+  it('shows a neighbour once, by its first relationship in type order', () => {
+    const { nodes } = rings('c', [link('1', 'c', 'x', 'related_to'), link('2', 'x', 'c', 'supports')]);
+    expect(nodes).toEqual([expect.objectContaining({ id: 'x', group: 'supports:in', link: expect.objectContaining({ id: '2' }) })]);
+  });
+
+  it("puts up to `more` of each neighbour's own neighbours on ring 2 beside it, never the centre or a ring-1 card twice", () => {
+    const links = [link('1', 'c', 'a'), link('2', 'c', 'b', 'contradicts'), link('3', 'a', 'b'), link('4', 'a', 'p'), link('5', 'q', 'a'), link('6', 'a', 's'), link('7', 'a', 't'), link('8', 'b', 'p')];
+    const { nodes } = rings('c', links, 3);
+    expect(nodes.map((n) => `${n.id}${n.hop}${n.parent ?? ''}`)).toEqual(['a1', 'p2a', 'q2a', 's2a', 'b1']);
+    const a = nodes[0]!;
+    for (const n of nodes.filter((x) => x.hop === 2)) {
+      expect(r(n.x, n.y)).toBe(2);
+      expect(Math.abs(Math.atan2(n.y, n.x) - Math.atan2(a.y, a.x))).toBeLessThan(Math.PI / 2); // beside its parent
+    }
+    expect(nodes.find((n) => n.id === 'p')!.link.id).toBe('4');
+  });
+
+  it('is empty for a card without links', () => {
+    expect(rings('c', [link('1', 'a', 'b')]).nodes).toEqual([]);
   });
 });

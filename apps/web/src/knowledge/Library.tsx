@@ -1,6 +1,6 @@
 // The Library's card list (`?view=library`): the same cards as a dense, sortable table with the spec §13 filters, saved
 // filter views and bulk actions. Filters live in the URL under the cards API's own names. The details panel opens beside it.
-import { useLayoutEffect, useMemo, useRef, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { AGENT_ROLES, KB_CARD_TYPES, KB_STAGES, type KbCardBrief, type KbCardPatch } from '@frontline/shared';
 import { useKbBulk, useKbCards, useKbCategories, useKbSources } from '../api/client';
@@ -8,6 +8,7 @@ import { cx, ErrorState, LoadingState } from '../components/ui';
 import { ago } from '../lib/format';
 import { SavedViews } from './ArtboardPanels';
 import { categoryPaths, DetailsPanel, PANEL_W } from './DetailsPanel';
+import { useFill } from './fill';
 
 const FILTERS = ['category', 'type', 'stage', 'status', 'agent', 'source', 'metric', 'tag', 'createdFrom', 'createdTo', 'verifiedFrom', 'verifiedTo', 'sort', 'dir'] as const;
 type Filter = (typeof FILTERS)[number];
@@ -33,15 +34,7 @@ export function CardLibrary({ ws, general, q, card, set }: { ws: string; general
   const items = useMemo(() => list.data?.items ?? [], [list.data]);
   const chosen = items.filter((c) => picked.has(c.id));
 
-  // The list fills the window below the tabs, so the table scrolls and the panel stays put.
-  const box = useRef<HTMLDivElement>(null);
-  const [top, setTop] = useState(0);
-  useLayoutEffect(() => {
-    const measure = () => setTop(box.current!.getBoundingClientRect().top + window.scrollY);
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, []);
+  const fill = useFill<HTMLDivElement>();
   // The panel keeps the last card while it slides out.
   const [last, setLast] = useState(card);
   if (card && card !== last) setLast(card);
@@ -74,7 +67,7 @@ export function CardLibrary({ ws, general, q, card, set }: { ws: string; general
   const all = items.length > 0 && items.every((c) => picked.has(c.id));
 
   return (
-    <div ref={box} className="relative -mt-3.5 -mb-8 min-h-[480px] overflow-hidden" style={{ height: `calc(100dvh - ${top}px)` }}>
+    <div ref={fill.ref} style={fill.style} className="relative -mt-3.5 -mb-8 min-h-[480px] overflow-hidden">
       <div className="absolute top-4 bottom-4 left-0 flex flex-col gap-2.5 transition-[right] duration-200 motion-reduce:transition-none" style={{ right: card ? PANEL_W + 16 : 0 }}>
         <div className="flex flex-wrap items-center gap-1.5">
           <select aria-label="Category" value={f('category')} onChange={on('category')} className={control}>
