@@ -45,3 +45,11 @@ describe('niche pack request detail', () => {
     expect(screen.getByText('Studio teachers')).toBeTruthy();
   });
 });
+
+describe('connected tool request detail', () => {
+  it('lays the call out to read', async () => {
+    stubApi(() => []);
+    renderApp(<ApprovalExtras action={{ kind: 'tool_use', payload: { tool: 'mcp__shopify__productUpdate', input: { input: { title: 'Bowl' } } } }} storeId="clay" />);
+    expect((await screen.findByText(/"title": "Bowl"/)).tagName).toBe('PRE');
+  });
+});

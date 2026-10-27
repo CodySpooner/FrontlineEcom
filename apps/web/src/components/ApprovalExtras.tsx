@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { ExternalLink } from 'lucide-react';
 import type { ApprovalAction } from '@frontline/shared';
 import { useProducts } from '../api/client';
-import { addedProducts, draftLink, fileList, marginAt, nichePack, priceChange, themeChange } from '../lib/approvals';
+import { addedProducts, draftLink, fileList, marginAt, nichePack, priceChange, themeChange, toolInput } from '../lib/approvals';
 import { cents } from '../lib/format';
 import { Markdown } from './Markdown';
 import { useStoreSelection } from './StoreFilter';
@@ -40,6 +40,9 @@ export function ApprovalExtras({ action, storeId }: { action: ApprovalAction; st
         </div>
       </details>
     );
+  const input = toolInput(action);
+  if (input)
+    return <pre className="mt-1.5 max-h-48 overflow-auto rounded-md border border-line bg-bg-2 p-2 font-mono text-[11px] whitespace-pre-wrap break-all text-text-2">{input}</pre>;
   const draft = draftLink(action);
   if (draft)
     return (

@@ -432,6 +432,9 @@ Orca's browser against the reference before ticking it.
       every store in that niche loads), which the request card, the Dashboard board and the bell showed as one run-on
       paragraph of raw markdown. The reason now shows its own line, and "Read the pack" opens the pack formatted
       (headings, lists, tables), scrollable, as on the Knowledge page.
+- [x] UI-163 A "Use a connected tool" request (an agent's write through a store's MCP, e.g. Shopify productUpdate)
+      showed its input as its reason: up to 2,000 characters of one-line JSON. The input is now laid out (indented, in a
+      scrollable block) under the title, and the one-line copy is gone, so the owner can read the write they approve.
 
 ## Blocked
 
@@ -640,3 +643,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-161: one more case in `budgetFix`, so every FixLink gets it. usage test (red first). Orca: Ask AI on the Dashboard with the run POST answered by the fixture as that refusal (nothing reached the server): alert + "Redeploy it" → /agents/pawsome%3Amarket_analyst?tab=settings. Also filed: agents and core Inbox requests for `link`s on 12 failure notices the bell can't open
 - 2026-10-26 — UI-162: `nichePack(action)` and `shownReason(request)` in lib/approvals, the pack in ApprovalExtras via `Markdown` (its "# Niche" title dropped, as Knowledge does). Two tests (red first). Orca with a fixture pending request (read-only, only the details toggle clicked), checked through the DOM: reason "First pack for this niche, from 30 days of research.", pack open with h3 Audience / Buying triggers / Price norms and a 3-row table. Orca's viewport capture kept missing the board, so no screenshot of it
 - 2026-10-26 — Inbox (core, sync notice links): right, they spread `where` (with `link: '/integrations'`) into both notices and my scan only looked for a literal `link`; the request was wrong for sync.ts. The agents lane's 10 had none and got links in AGT-219. Nothing to change in the bell
+- 2026-10-26 — UI-163: `toolInput(action)` in lib/approvals; `shownReason` drops a reason that is that same input; the Dashboard drops the " · " after the kind when nothing follows. Two tests (red first). Orca with a fixture pending productUpdate request (read-only): line "Use a connected tool", 18-line block, 192px tall, scrolls

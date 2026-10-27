@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addedProducts, draftLink, expiredWhy, fileList, marginAt, nichePack, priceChange, shownReason, themeChange } from './approvals';
+import { addedProducts, draftLink, expiredWhy, fileList, marginAt, nichePack, priceChange, shownReason, themeChange, toolInput } from './approvals';
 
 const theme = (payload: unknown) => themeChange({ kind: 'store.publish_theme', payload });
 
@@ -60,6 +60,18 @@ describe('nichePack', () => {
     expect(nichePack({ kind: 'store.publish_page', payload: { markdown: md } })).toBeUndefined();
     expect(shownReason({ action: pack, reason: `First pack for this niche.\n\n${md}` })).toBe('First pack for this niche.');
     expect(shownReason({ action: { kind: 'store.publish_page', payload: {} }, reason: `Why\n\n${md}` })).toBe(`Why\n\n${md}`);
+  });
+});
+
+describe('toolInput', () => {
+  const input = { input: { id: 'gid://shopify/Product/1', title: 'Bowl' } };
+  const call = { kind: 'tool_use', payload: { tool: 'mcp__shopify__productUpdate', input } };
+  it("is a connected tool call's input, laid out to read; the reason (the same input in one line) then shows nothing", () => {
+    expect(toolInput(call)).toBe(JSON.stringify(input, null, 2));
+    expect(toolInput({ kind: 'tool_use', payload: {} })).toBeUndefined();
+    expect(toolInput({ kind: 'store.set_price', payload: { input } })).toBeUndefined();
+    expect(shownReason({ action: call, reason: JSON.stringify(input) })).toBe('');
+    expect(shownReason({ action: call, reason: 'Fix the title typo' })).toBe('Fix the title typo');
   });
 });
 

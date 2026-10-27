@@ -416,7 +416,12 @@ export function Requests() {
                   </div>
                   <div className="mt-0.5 text-[13px] font-semibold">{a.title}</div>
                   <div className="mt-0.5 text-xs text-muted">
-                    {APPROVAL_KINDS[a.action.kind] && <span className="text-text-2">{APPROVAL_KINDS[a.action.kind]!.label} · </span>}
+                    {APPROVAL_KINDS[a.action.kind] && (
+                      <span className="text-text-2">
+                        {APPROVAL_KINDS[a.action.kind]!.label}
+                        {shownReason(a) && ' · '}
+                      </span>
+                    )}
                     {shownReason(a)}
                     {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold whitespace-nowrap text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
                   </div>

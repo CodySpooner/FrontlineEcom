@@ -50,10 +50,21 @@ export function nichePack(action: ApprovalAction) {
   return typeof md === 'string' && md.trim() ? md : undefined;
 }
 
-/** A request's reason as shown: a niche pack's agents append the whole pack, which ApprovalExtras shows formatted instead. */
+/** A connected tool call's input (agents' claude-engine asks before an external write), laid out to read. */
+export function toolInput(action: ApprovalAction) {
+  const p = action.kind === 'tool_use' ? (action.payload as { tool?: unknown; input?: unknown } | undefined) : undefined;
+  return typeof p?.tool === 'string' && p.input !== undefined ? JSON.stringify(p.input, null, 2) : undefined;
+}
+
+/**
+ * A request's reason as shown. ApprovalExtras shows a niche pack (which agents append to the reason) and a tool call's
+ * input (which is the reason, in one line) laid out instead.
+ */
 export function shownReason(a: Pick<ApprovalRequest, 'action' | 'reason'>) {
   const md = nichePack(a.action);
-  return md && a.reason.endsWith(md) ? a.reason.slice(0, -md.length).trim() : a.reason;
+  if (md && a.reason.endsWith(md)) return a.reason.slice(0, -md.length).trim();
+  const input = toolInput(a.action);
+  return input && a.reason === JSON.stringify(JSON.parse(input)) ? '' : a.reason;
 }
 
 /** Where to review the draft behind a `store.publish_page` request (Store Builder opens on it). */
