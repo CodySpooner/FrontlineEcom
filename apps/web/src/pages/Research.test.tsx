@@ -92,3 +92,22 @@ describe('a custom-niche store', () => {
     expect(JSON.parse(String(post[1]!.body)).task).toContain('Find 5 new winning Yoga mats products');
   });
 });
+
+describe('the sample research catalog', () => {
+  it('is labelled once a real store is connected, so its made-up numbers are not read as finds', async () => {
+    stubApi((url) => (url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify')] : []));
+    renderApp(<ProductDetails p={product} />);
+    expect(await screen.findByText(/made-up demand and competition/)).toBeTruthy();
+    cleanup();
+    renderApp(<ProductDetails p={{ ...product, id: 'find-1' }} />);
+    await screen.findByRole('option', { name: 'Peak Fit' });
+    expect(screen.queryByText(/made-up demand and competition/)).toBeNull();
+  });
+
+  it('is not labelled in demo mode, where every store and number is sample', async () => {
+    stubApi((url) => (url.startsWith('/api/stores') ? [{ ...store('shop1', 'Peak Fit', 'shopify'), connected: false }] : []));
+    renderApp(<ProductDetails p={product} />);
+    await screen.findByRole('option', { name: 'Peak Fit' });
+    expect(screen.queryByText(/made-up demand and competition/)).toBeNull();
+  });
+});

@@ -159,6 +159,10 @@ function Results({ tab, niche, q, onOpen, saved, onClear }: { tab: ResearchTab; 
   );
 }
 
+/** Core seeds a demo catalog on every install, made-up trend and competition included; the Product Hunter's finds are
+ *  `find-` (the agents' research_feed tells them apart the same way). Said only once a real store is connected. */
+const useSample = (p: ResearchProduct) => useStoreSelection().stores.some((s) => s.connected) && !p.id.startsWith('find-');
+
 const Grid = ({ className, children }: { className?: string; children: ReactNode }) => (
   <div className={cx('grid grid-cols-1 gap-3.5 transition-opacity min-[560px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1280px]:grid-cols-4', className)}>{children}</div>
 );
@@ -166,6 +170,7 @@ const Grid = ({ className, children }: { className?: string; children: ReactNode
 function ProductCard({ p, onOpen, saved }: { p: ResearchProduct; onOpen: () => void; saved: Saved }) {
   const Icon = NICHE_ICON[p.niche];
   const on = saved.has(p.id);
+  const sample = useSample(p);
   return (
     <article className="card flex flex-col overflow-hidden">
       <div className="relative grid h-[150px] place-items-center border-b border-line bg-[radial-gradient(circle_at_50%_45%,rgb(255_42_58/.16),transparent_70%)]">
@@ -185,6 +190,7 @@ function ProductCard({ p, onOpen, saved }: { p: ResearchProduct; onOpen: () => v
         <h3 className="text-[14px] leading-snug font-semibold">{p.title}</h3>
         <p className="mt-0.5 text-xs text-muted">
           {p.category} · {SOURCE[p.source]}
+          {sample && ' · Sample data'}
         </p>
         <div className="mt-2.5 flex items-baseline gap-2">
           <b className="font-display text-lg tabular-nums">{cents(p.price)}</b>
@@ -273,6 +279,7 @@ export function ProductDetails({ p }: { p: ResearchProduct }) {
   const add = useAddToStore();
   // An approved request would do nothing on a store the app can't write to.
   const manual = byHand(stores.find((s) => s.id === storeId), PRODUCT_WRITE_PLATFORMS);
+  const sample = useSample(p);
 
   const newList = (e: FormEvent) => {
     e.preventDefault();
@@ -292,6 +299,9 @@ export function ProductDetails({ p }: { p: ResearchProduct }) {
         </p>
         <Badge tone="red">AI Score {p.score}</Badge>
       </div>
+      {sample && (
+        <p className="-mt-2 text-xs text-text-2">Sample data: made-up demand and competition from the demo catalog, not a find for your stores. AI Research brings real ones.</p>
+      )}
       <dl className="grid grid-cols-3 gap-3 text-[13px]">
         <Fact label="Cost" value={cents(p.cost)} />
         <Fact label="Sell at" value={cents(p.price)} />

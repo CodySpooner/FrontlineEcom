@@ -354,6 +354,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-138 Product Research's niche filter lists each custom-niche store's niche in its own words ("Yoga mats & props"),
       showing just that niche's finds (`niche=other:<slug>`), and AI Research briefs the Product Hunter with those words
       instead of the slug. "Other" still lists every custom niche's finds.
+- [x] UI-139 (re AGT-185) On a live install Product Research listed the seeded demo catalog next to real finds, made-up
+      demand and competition included. Once any store is connected, those rows (not `find-`) say "Sample data" on the
+      card, and the details explain it before "Add to store". Demo mode is all sample, so nothing is labelled there.
 
 ## Blocked
 
@@ -537,3 +540,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-136: a `backed` state per call site gives the remounted Deny button `autoFocus`. New Dashboard and Chat tests (red on the old code: focus on body). Orca: Deny → Back on "Pause Spark Ads · UGC" left focus on BODY before, on "Deny: Pause …" after (no request was denied). Also found while verifying UI-135: after a ship's rebase the dev Vite can serve stale modules; restarted it clean
 - 2026-10-26 — UI-137: `useFocusBack(open)` returns a ref that's focused when `open` goes true → false; `Button` now takes a ref (`ComponentProps<'button'>`). Wired on Knowledge's Edit and Restore original, a memory row's Edit, and Orders' Mark resolved. Three new tests (red on the old code). Orca: Knowledge Edit → Cancel leaves focus on Edit (nothing saved); the dev DB has no flagged order issues to try live. Dialog forms (store, connect) already get focus back from the native <dialog>
 - 2026-10-26 — UI-138 (Inbox, from core): `lib/niche.ts` mirrors the agents' `nicheSlug` (with a test pinning its rules); Research adds an option per custom-niche store. New Research test (red on the old code). Orca, with a read-only patched store list: the option reads "Yoga mats & props" and the grid asks `/api/research?niche=other%3Ayoga-mats-props` (empty state; AI Research not clicked)
+- 2026-10-26 — UI-139: `useSample(p)` in Research (any connected store and an id not starting `find-`, as the agents' research_feed tells them apart). Two tests (labelled when live, not for a find; not labelled in demo mode). Orca with a read-only patched store list (Pawsome connected): card "Health & Beauty · TikTok · Sample data", details note shown. FYI left in core's Inbox
