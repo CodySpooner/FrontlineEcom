@@ -34,6 +34,7 @@ import type {
   IntegrationKind,
   KbCard,
   KbCardBrief,
+  KbPositions,
   KbWorkspaceCounts,
   KnowledgeDoc,
   KnowledgeKind,
@@ -239,12 +240,30 @@ export const useKnowledgeDoc = (kind: KnowledgeKind, key: string) =>
 export const useKbWorkspaces = () => useQuery({ queryKey: ['kb', 'workspaces'], queryFn: () => api<KbWorkspaceCounts>('/api/kb/workspaces') });
 
 /** A workspace's cards ('general' or a store id; `general` adds General's to a store's). */
-export const useKbCards = (ws: string, q: { general?: boolean; q?: string }) =>
+export const useKbCards = (ws: string, q: { general?: boolean; q?: string; limit?: number }) =>
   useQuery({
     queryKey: ['kb', 'cards', ws, q],
-    queryFn: () => api<Page<KbCardBrief>>(`/api/kb/cards?${new URLSearchParams({ ws, ...(q.general && { general: '1' }), ...(q.q && { q: q.q }) })}`),
+    queryFn: () => api<Page<KbCardBrief>>(`/api/kb/cards?${new URLSearchParams({ ws, ...(q.general && { general: '1' }), ...(q.q && { q: q.q }), ...(q.limit && { limit: String(q.limit) }) })}`),
     placeholderData: keepPreviousData,
   });
+
+/** Where the owner dragged cards on a workspace's artboard. */
+export const useKbPositions = (ws: string) => useQuery({ queryKey: ['kb', 'positions', ws], queryFn: () => api<KbPositions>(`/api/kb/positions?ws=${encodeURIComponent(ws)}`) });
+
+/** Saves dragged cards' places: they move at once, and go back if the save fails. */
+export function useSaveKbPositions(ws: string) {
+  const qc = useQueryClient();
+  const key = ['kb', 'positions', ws];
+  return useMutation({
+    mutationFn: (p: KbPositions) => api<void>(`/api/kb/positions?ws=${encodeURIComponent(ws)}`, json('PUT', p)),
+    onMutate: (p) => {
+      const old = qc.getQueryData<KbPositions>(key);
+      qc.setQueryData<KbPositions>(key, { ...old, ...p });
+      return old;
+    },
+    onError: (_e, _p, old) => qc.setQueryData(key, old),
+  });
+}
 
 /** One card from any workspace (a `?card=` link). */
 export const useKbCard = (id: string | undefined) => useQuery({ queryKey: ['kb', 'card', id], queryFn: () => api<KbCard>(`/api/kb/cards/${encodeURIComponent(id!)}?ws=all`), enabled: !!id });

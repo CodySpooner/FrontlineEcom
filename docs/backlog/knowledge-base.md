@@ -444,7 +444,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - In `Knowledge.test.tsx`, only the start URL of the two tests that open bare `/knowledge` (`:98`, `:136`) changes,
     to `/knowledge?tab=playbook`, and Notes records why. Every other assertion stays as it is.
   - New tests: the legacy `tab`/`doc` URLs, `/` while typing in a textarea, and Esc with AskPalette open.
-- [ ] KB-06 **Artboard I:**
+- [x] KB-06 **Artboard I:**
   - canvas sizing per the design;
   - camera: pan, wheel zoom about the cursor, Fit that accounts for the panels;
   - frames per category path, with auto-layout, collapse and expand;
@@ -623,6 +623,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-03 `/api/kb/cards` (§13 filters, paging, sort, `ws=all` reads) and `/api/kb/categories` (any depth, per workspace): create, edit, the §14 controls and merge, each a revision; 404 on another workspace's id.
 - 2026-10-27 KB-04 evidence, links (owner-confirmed, suggested accept/reject), the deterministic suggester on every create (word overlap, category, shared sources, possible contradictions → conflict), the decision-11 ladder as revisions (owner stage kept via migration 46 `stage_by_owner`), restore revision, detach merged evidence.
 - 2026-10-27 KB-05 page frame: toolbar (workspace with niche + card count, Include General, search, research actions shown off until research lands), one `?view=` switcher, `?ws=`/`?card=`/legacy `tab`/`doc` URLs, `/` and Esc guards, loading/error/empty states; `GET /api/kb/workspaces`.
+- 2026-10-27 KB-06 artboard: full-bleed canvas sized to the window, camera (pan, wheel zoom about the cursor, Fit clear of the panels), category frames (auto-layout, collapse), the design's card, drag and Alt+Arrow saved per workspace (`/api/kb/positions`), click/Shift/box selection, minimap and zoom bar, the canvas keyboard model, culling.
 
 ## Blocked
 
@@ -647,3 +648,9 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   Library while moving between its sections and docs"): the legacy URLs made it reachable already. The artboard shows
   a plain clickable list of titles until KB-06 replaces it; "From source" and "New research" are disabled with a
   title until KB-14/KB-15.
+- 2026-10-27 KB-06: dragged positions are relative to the card's frame, and rows are packed by the frames' grid sizes,
+  so dragging a card out wide pushes later frames along instead of re-wrapping the board under the pointer. The board
+  opens fitted, or at 75% from the top-left when fitting would go below that (readability). "Needs refresh" is 90
+  days since last verified (or created) until KB-23's per-category freshness. Frame "Research more" comes with the
+  research launch points (KB-15). Shift-drag box-selects; a plain drag on the background pans. `.agent/cdp-drive.mjs`
+  drives real pointer, wheel and key input in headless Chrome for checks jsdom can't do.

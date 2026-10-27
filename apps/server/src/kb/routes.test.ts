@@ -33,6 +33,24 @@ describe('workspaces', () => {
   });
 });
 
+describe('artboard positions', () => {
+  test("each workspace keeps its own places, a General card included; other stores' cards and bad numbers are refused", async () => {
+    const own = await create('pawsome', 'Rescue stories pull clicks');
+    const general = await create('general', 'Hooks decide the first 3 seconds');
+    const other = await create('glow', 'Glow secret');
+    await ok('PUT', '/api/kb/positions?ws=pawsome', { [own.id]: { x: 40, y: 60 }, [general.id]: { x: 300, y: 44 } }, 204);
+    await ok('PUT', '/api/kb/positions?ws=pawsome', { [own.id]: { x: 48, y: 60 } }, 204);
+    await ok('PUT', '/api/kb/positions?ws=general', { [general.id]: { x: 16, y: 44 } }, 204);
+    expect(await ok('GET', '/api/kb/positions?ws=pawsome')).toEqual({ [own.id]: { x: 48, y: 60 }, [general.id]: { x: 300, y: 44 } });
+    expect(await ok('GET', '/api/kb/positions?ws=general')).toEqual({ [general.id]: { x: 16, y: 44 } });
+    expect((await req('PUT', '/api/kb/positions?ws=pawsome', { [other.id]: { x: 1, y: 1 } })).status).toBe(404);
+    expect((await req('PUT', '/api/kb/positions?ws=general', { [own.id]: { x: 1, y: 1 } })).status).toBe(404);
+    expect((await req('PUT', '/api/kb/positions?ws=pawsome', { [own.id]: { x: 'left', y: 1 } })).status).toBe(400);
+    expect((await req('PUT', '/api/kb/positions?ws=all', {})).status).toBe(400);
+    expect(await ok('GET', '/api/kb/positions?ws=pawsome')).toEqual({ [own.id]: { x: 48, y: 60 }, [general.id]: { x: 300, y: 44 } });
+  });
+});
+
 describe('cards', () => {
   test("the owner's card is User-Provided and active, filed under a path made as needed, with a first revision", async () => {
     const c = await create('pawsome', 'Rescue stories pull clicks', { category: ['advertising', 'Creative Strategy', 'Video Hooks'], summary: 'Dog owners stop for rescue arcs', tags: ['tiktok', ' hooks '] });

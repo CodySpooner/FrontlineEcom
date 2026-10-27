@@ -10,7 +10,6 @@ import {
   useDraftNichePack,
   useForgetMemory,
   useKbCard,
-  useKbCards,
   useKbWorkspaces,
   useKnowledge,
   useKnowledgeDoc,
@@ -26,6 +25,7 @@ import { SharedLearnings } from '../components/NicheLearnings';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { nicheName } from '../components/StoreForm';
 import { Badge, Button, Card, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Switch, Tabs, useFocusBack } from '../components/ui';
+import { Artboard } from '../knowledge/Artboard';
 import { VIEWS, viewOf, withParams, wsFrom, type KbView } from '../knowledge/url';
 import { ago } from '../lib/format';
 import { nicheKey } from '../lib/niche';
@@ -81,7 +81,7 @@ export function Knowledge() {
         {view !== 'artboard' && <div className="ml-auto">{switcher}</div>}
       </Toolbar>
       {view === 'artboard' ? (
-        <ArtboardView ws={ws} general={general} q={q} card={card} set={set} switcher={switcher} />
+        <Artboard key={ws} ws={ws} general={general} q={q} card={card} onOpen={(id) => set({ card: id })} switcher={switcher} />
       ) : view === 'library' ? (
         <Library set={set} />
       ) : view === 'relationships' ? (
@@ -145,44 +145,6 @@ function Toolbar({ ws, view, general, q, set, search, children }: { ws: string; 
       </Button>
       {children}
     </div>
-  );
-}
-
-function ArtboardView({ ws, general, q, card, set, switcher }: { ws: string; general: boolean; q: string; card?: string; set: SetParams; switcher: ReactNode }) {
-  const { name } = useStoreSelection();
-  const needle = useDeferredValue(q.trim());
-  const cards = useKbCards(ws, { general, q: needle });
-  const items = cards.data?.items ?? [];
-  return (
-    <section aria-label="Artboard" className="card relative min-h-[420px] overflow-hidden pt-16">
-      <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2">{switcher}</div>
-      {cards.isPending ? (
-        <LoadingState rows={4} className="p-4" />
-      ) : cards.isError ? (
-        <ErrorState message="Couldn't load the knowledge base." onRetry={() => cards.refetch()} />
-      ) : !items.length ? (
-        <EmptyState icon={Brain} title={needle ? 'Nothing matches' : `No knowledge in ${ws === 'general' ? 'General' : name(ws)} yet`}>
-          {needle ? 'Try another word, or clear the search.' : 'Cards show here as you and your agents research, test and learn what works.'}
-        </EmptyState>
-      ) : (
-        // ponytail: a plain list until the canvas (KB-06) replaces it.
-        <ul className="flex flex-wrap gap-2 p-4">
-          {items.map((c) => (
-            <li key={c.id}>
-              <button
-                type="button"
-                data-kb-card={c.id}
-                aria-pressed={c.id === card}
-                onClick={() => set({ card: c.id })}
-                className={cx('cursor-pointer rounded-lg border bg-bg-2 px-3 py-2 text-left text-[13px] font-semibold transition', c.id === card ? 'border-red' : 'border-line hover:border-line-3')}
-              >
-                {c.title}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
   );
 }
 

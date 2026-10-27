@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { AskPalette } from '../components/AskPalette';
 import { renderApp, reply, stubApi } from '../test-utils';
 import { Knowledge } from './Knowledge';
 
+// jsdom has no ResizeObserver; the artboard only uses it to track its size.
+beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }));
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -71,7 +73,7 @@ describe('Knowledge Base › page frame', () => {
     await vi.waitFor(() => expect(ws.value).toBe('peak'));
     expect(await screen.findByRole('option', { name: 'Peak Fit · Fitness · 1 card' })).toBeTruthy();
     expect(screen.getByRole('option', { name: 'General · 3 cards' })).toBeTruthy();
-    await vi.waitFor(() => expect(fetch.mock.calls.map(([url]) => url)).toContain('/api/kb/cards?ws=peak&general=1'));
+    await vi.waitFor(() => expect(fetch.mock.calls.map(([url]) => url)).toContain('/api/kb/cards?ws=peak&general=1&limit=1000'));
     fireEvent.click(screen.getByRole('switch', { name: 'Include General knowledge' }));
     expect(where()).toBe('/knowledge?general=0');
     fireEvent.change(ws, { target: { value: 'general' } });
@@ -120,7 +122,7 @@ describe('Knowledge Base › page frame', () => {
       </>,
       '/knowledge?ws=general&card=c1',
     );
-    const card = await screen.findByRole('button', { name: 'Hooks decide the first 3 seconds' });
+    const card = await screen.findByRole('button', { name: /Hooks decide the first 3 seconds/ });
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
     fireEvent.keyDown(document.body, { key: 'Escape' });
     expect(where()).toBe('/knowledge?ws=general&card=c1');

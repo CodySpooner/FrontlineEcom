@@ -1494,6 +1494,12 @@ export interface KbCardPatch extends Partial<KbCardInput> {
   reason?: string;
 }
 
+/**
+ * GET /api/kb/positions?ws= → where the owner dragged cards on that workspace's artboard, by card id, relative to the
+ * card's frame. PUT (the same shape, some cards) saves them → 204. A General card has its own place in each store.
+ */
+export type KbPositions = Record<string, { x: number; y: number }>;
+
 /** GET /api/kb/workspaces → visible cards (proposed + active) per workspace, keyed 'general' or a store id; missing = 0. */
 export type KbWorkspaceCounts = Record<string, number>;
 

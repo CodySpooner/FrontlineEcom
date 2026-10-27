@@ -159,6 +159,27 @@ export function kbRoutes(db: Db) {
         ),
       ),
     )
+    .get('/api/kb/positions', (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      return c.json(Object.fromEntries(db.prepare('SELECT card_id, x, y FROM kb_positions WHERE store_id IS ?').all(ws).map((r) => [r.card_id, { x: r.x, y: r.y }])));
+    })
+    .put('/api/kb/positions', async (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      const b = await c.req.json().catch(() => undefined);
+      if (!isObj(b) || Object.keys(b).length > 1000) return c.json({ error: 'body must map up to 1000 card ids to {x, y}' }, 400);
+      const at = Object.entries(b);
+      if (!at.every(([, p]) => isObj(p) && finite(p.x) && finite(p.y))) return c.json({ error: 'each position needs numeric x and y' }, 400);
+      if (!at.every(([id]) => kbRow(db, 'kb_cards', id, ws, ws !== null))) return c.json({ error: 'card not found' }, 404);
+      tx(db, () => {
+        for (const [id, p] of at as [string, { x: number; y: number }][]) {
+          db.prepare(`DELETE FROM kb_positions WHERE store_id IS ? AND card_id = ?`).run(ws, id);
+          db.prepare('INSERT INTO kb_positions (store_id, card_id, x, y) VALUES (?, ?, ?, ?)').run(ws, id, p.x, p.y);
+        }
+      });
+      return c.body(null, 204);
+    })
     .get('/api/kb/categories', (c) => {
       const ws = wsOf(db, c.req.query('ws'), true);
       if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
