@@ -4,7 +4,7 @@ import type { AnalyticsSummary, Integration, Order, Page, Product, Store } from 
 import { createApp } from '../app';
 import { openDb } from '../db';
 import { saveIntegration } from '../integrations';
-import { rebuildRevenue } from './common';
+import { rebuildRevenue, switchToReal } from './common';
 import { seedDemo } from '../demo';
 import { listActions } from '../actions';
 import { createProducts, deleteTheme, duplicateTheme, fulfillmentOf, funnelDays, listThemes, publishPage, publishProductPage, publishTheme, readThemeFiles, setProductPrice, shopHost, syncShopify, upsertThemeFiles , type NewProduct } from './shopify';
@@ -63,6 +63,23 @@ const setup = async () => {
   await app.request('/api/integrations', { method: 'PUT', body: JSON.stringify({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'https://Glow-Haus.myshopify.com/', accessToken: TOKEN } }), headers: { 'content-type': 'application/json' } });
   return { db, app };
 };
+
+test("Shopify next to a store's own platform dates its orders on the store's days, and an unknown shop zone doesn't stop the sync", async () => {
+  const { db } = await setup();
+  switchToReal(db, 'glow');
+  db.prepare("UPDATE stores SET platform = 'woocommerce', currency = 'EUR', timezone = 'America/Chicago' WHERE id = 'glow'").run();
+  db.prepare("INSERT INTO integrations (id, kind, store_id, status, settings_json, encrypted_credentials, updated_at, synced_at) VALUES ('woocommerce:glow', 'woocommerce', 'glow', 'connected', '{}', '', '2026-10-26T00:00:00Z', '2026-10-26T00:00:00Z')").run();
+  await syncShopify(db, key, 'glow', fakeShopify([order('#1001', '2026-10-25T23:30:00Z', '44.00')]).fetchFn, NOW);
+  // 23:30 UTC: the 26th in Berlin (the shop), still the 25th in Chicago (the store).
+  expect(db.prepare("SELECT local_date FROM orders WHERE store_id = 'glow' AND id = '#1001'").get()?.local_date).toBe('2026-10-25');
+
+  const lone = (await setup()).db;
+  const fake = fakeShopify([order('#1001', '2026-10-25T23:30:00Z', '44.00')]);
+  const fetchFn = (async (url: string, init: RequestInit) =>
+    String(init.body).includes('shop {') ? Response.json({ data: { shop: { name: 'Glow Haus', currencyCode: 'EUR', ianaTimezone: 'America/Nowhere' } } }) : fake.fetchFn(url, init)) as typeof fetch;
+  await syncShopify(lone, key, 'glow', fetchFn, NOW);
+  expect(lone.prepare("SELECT status FROM integrations WHERE id = 'shopify:glow'").get()?.status).toBe('connected');
+});
 
 test('shopHost normalizes and only allows myshopify.com hosts', () => {
   expect(shopHost(' https://Glow-Haus.myshopify.com/admin ')).toBe('glow-haus.myshopify.com');

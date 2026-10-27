@@ -3,6 +3,7 @@ import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
+import { switchToReal } from './common';
 import { publishPage, publishProductPage } from './shopify';
 import { createWooProducts, publishWooPage, publishWooProductPage, setWooProductPrice, syncWooCommerce, wooSite, wpZone } from './woocommerce';
 
@@ -115,6 +116,24 @@ test("orders land on the shop's own day and the store takes the shop's currency"
   // 00:30 in Berlin is still the 25th in UTC (and in America/*): the shop's day wins, and the store's "today" follows it.
   expect(db.prepare("SELECT local_date AS day FROM orders WHERE store_id = 'pawsome'").all()).toEqual([{ day: '2026-10-26' }]);
   expect(db.prepare("SELECT currency, timezone FROM stores WHERE id = 'pawsome'").get()).toEqual({ currency: 'EUR', timezone: 'Europe/Berlin' });
+});
+
+test("a Woo site next to a store's own platform dates its orders on the store's days, not the site's", async () => {
+  const db = setup();
+  switchToReal(db, 'pawsome');
+  db.prepare("UPDATE stores SET platform = 'shopify', currency = 'EUR', timezone = 'America/Chicago' WHERE id = 'pawsome'").run();
+  db.prepare("INSERT INTO integrations (id, kind, store_id, status, settings_json, encrypted_credentials, updated_at, synced_at) VALUES ('shopify:pawsome', 'shopify', 'pawsome', 'connected', '{}', '', '2026-10-26T00:00:00Z', '2026-10-26T00:00:00Z')").run();
+  const fetchFn = (async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path.endsWith('/wp-json/')) return Response.json({ gmt_offset: 2, timezone_string: 'Europe/Berlin' });
+    return path.endsWith('/orders')
+      ? Response.json([order('2001', 'processing', '40.00', true, { date_created: '2026-10-26T00:30:00', date_created_gmt: '2026-10-25T22:30:00' })], { headers: { 'x-wp-totalpages': '1' } })
+      : Response.json([], { headers: { 'x-wp-totalpages': '1' } });
+  }) as typeof fetch;
+  await syncWooCommerce(db, key, 'pawsome', fetchFn, NOW);
+  // 00:30 in Berlin (the site) is 17:30 on the 25th in Chicago (the store, whose own Shopify has synced).
+  expect(db.prepare("SELECT local_date FROM orders WHERE store_id = 'pawsome' AND id = 'woo-2001'").get()?.local_date).toBe('2026-10-25');
+  expect(db.prepare("SELECT timezone FROM stores WHERE id = 'pawsome'").get()?.timezone).toBe('America/Chicago');
 });
 
 test("with Woo's Cost of Goods Sold on, orders, best sellers and products carry its costs", async () => {

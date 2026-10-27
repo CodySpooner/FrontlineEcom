@@ -226,6 +226,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       switchToReal(db, storeId);
       if (base) takeCurrency(db, storeId, 'woocommerce', base);
       if (zone) takeTimezone(db, storeId, 'woocommerce', zone);
+      const storeZone = String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone);
       const prod = db.prepare(
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
@@ -249,7 +250,8 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         const rate = lockedRate(o) ?? historic.get(o.currency)?.(o.date_created.slice(0, 10)) ?? rates.get(o.currency);
         if (!o.date_paid_gmt || !rate) continue;
         const created = gmt(o.date_created_gmt);
-        const day = o.date_created.slice(0, 10);
+        // The site's day, unless the store keeps another platform's zone (takeTimezone): then the store's.
+        const day = zone && zone !== storeZone ? localDate(created, storeZone) : o.date_created.slice(0, 10);
         days.add(day);
         const refunded = o.status === 'refunded' || o.status === 'cancelled' || o.status === 'trash';
         const total = rate * Math.max(0, Number(o.total) + (o.refunds ?? []).reduce((a, r) => a + Number(r.total), 0)); // net of partial refunds

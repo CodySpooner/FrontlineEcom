@@ -233,7 +233,6 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const today = localDate(now);
     const catalog = !cursor || !catalogPassDue(db, id, today) ? undefined
       : await all((after) => q<{ products: { nodes: { id: string }[]; pageInfo: PageInfo } }>(PRODUCT_IDS_Q, { after }).then((d) => d.products)).catch(() => undefined);
-    const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: shop.ianaTimezone });
     // A page's resume point never passes the sync start, so a product edited while orders page in is fetched again.
     const start = cursorAt(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
@@ -260,6 +259,9 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       if (catalog) archiveMissing(db, id, storeId, '[0-9]*', catalog.map((n) => tail(n.id)), today);
     });
     view = syncView(db, id); // its own currency switch
+    // Orders go on the store's days: the shop's zone, or the store's own platform's when Shopify is a second one (or
+    // the shop's zone is one this machine doesn't know).
+    const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 
     const ord = db.prepare(
       `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
