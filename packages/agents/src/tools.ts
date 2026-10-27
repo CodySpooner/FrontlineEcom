@@ -1017,7 +1017,7 @@ export const APP_TOOLS: AppTool[] = [
     input: {
       productId: z.string(),
       newPrice: z.number().positive(),
-      compareAt: z.number().positive().optional().describe('new compare-at price; omit to keep the current one'),
+      compareAt: z.number().positive().optional().describe('new compare-at ("was") price, at most the current price; omit to keep the current one'),
       evidence: z.string().min(10).max(400).describe('the numbers and window, e.g. "converts 3.1% at $29.99 vs competitors at $34-39, margin 62%"'),
     },
     run: async ({ productId, newPrice, compareAt, evidence }, ctx) => {
@@ -1037,6 +1037,11 @@ export const APP_TOOLS: AppTool[] = [
       if (compareAt !== undefined && compareAt <= to) return 'compareAt must be above the new price.';
       const sale = NO_COMPARE_AT[ctx.store.platform];
       if (compareAt !== undefined && ctx.store.connected && sale) return `Not sent: ${sale} Propose the price alone.`;
+      // A "was" price the store never charged is a discount that isn't one (FTC 16 CFR 233; TikTok and the EU want a real
+      // recent price). ponytail: "charged" is the current price (or the compare-at it already shows); no older history.
+      if (compareAt !== undefined && compareAt > from && compareAt !== Number(p.compare_at)) {
+        return `Not sent: compareAt is the "was" price, and ${String(p.title)} sells for ${$(from)} now: ${$(compareAt)} would be a discount from a price the store never charged. Use at most ${$(from)}, or omit it.`;
+      }
       // Core's TikTok writer refuses a product that isn't live (draft, under review, deactivated).
       if (ctx.store.connected && ctx.store.platform === 'tiktok_shop' && p.status !== 'active') return `Not sent: TikTok Shop only reprices live products, and ${String(p.title)} is ${String(p.status)}.`;
       // Overlapping tests on one product can't be judged apart.

@@ -53,6 +53,15 @@ test('a price test is checked, approved and applied to a demo store', async () =
   expect(db.prepare('SELECT product_id, from_price, to_price, changed_on FROM price_tests').get()).toEqual({ product_id: id, from_price: from, to_price: to, changed_on: localDate() });
   expect(await run('glow', [price(id, from)])).toEqual([`Not sent: a price test on this product has been running since ${localDate()}; it is judged after 14 days of sales.`]);
 
+  // A cut can show the price it was; a higher "was" price than the store charged can't be shown (the one it shows already can).
+  const cut = Math.round(to * 0.8 * 100) / 100;
+  db.prepare('DELETE FROM price_tests').run();
+  expect(await run('glow', [price(id, cut, { compareAt: to + 5 })])).toEqual([
+    `Not sent: compareAt is the "was" price, and ${String(p.title)} sells for $${to} now: $${to + 5} would be a discount from a price the store never charged. Use at most $${to}, or omit it.`,
+  ]);
+  db.prepare(`UPDATE products SET compare_at = ? WHERE store_id = 'glow' AND id = ?`).run(to + 5, id);
+  expect((await run('glow', [price(id, cut, { compareAt: to + 5 })]))[0]).toMatch(/^Approved by the owner/);
+
   db.prepare(`UPDATE stores SET currency = 'EUR' WHERE id = 'glow'`).run(); // the owner reads amounts in the store's currency
   expect(await run('glow', [price(id, cost)])).toEqual([`Not sent: ${cost} EUR is at or below the unit cost (${cost} EUR).`]);
 });
