@@ -9,6 +9,9 @@ export const nicheSlug = (text: string) =>
     .replace(/^-|-$/g, '')
     .slice(0, 60);
 
+/** The niche a store's pack and shared learnings are filed under (the agents' nicheKey): `other:<slug>` for a custom one. */
+export const nicheKey = (s: Pick<Store, 'niche' | 'nicheDetail'>) => (s.niche === 'other' ? `other:${nicheSlug(s.nicheDetail ?? '')}` : s.niche);
+
 /** Each custom-niche store's niche: `other:<slug>` (how its research finds are filed) → the owner's own words. */
 export const customNiches = (stores: Store[]) =>
   new Map<string, string>(stores.flatMap((s) => (s.niche === 'other' && nicheSlug(s.nicheDetail ?? '') ? [[`other:${nicheSlug(s.nicheDetail!)}`, s.nicheDetail!.trim()] as const] : [])));

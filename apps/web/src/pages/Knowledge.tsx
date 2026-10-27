@@ -10,6 +10,7 @@ import { SharedLearnings } from '../components/NicheLearnings';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Badge, Button, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Tabs, useFocusBack } from '../components/ui';
 import { ago } from '../lib/format';
+import { nicheKey } from '../lib/niche';
 import { NAV } from '../nav';
 
 type Tab = KnowledgeKind | 'memory';
@@ -48,7 +49,7 @@ function Docs({ kind }: { kind: KnowledgeKind }) {
   const [params, setParams] = useSearchParams();
   const docs = (q.data ?? []).filter((d) => d.kind === kind);
   const sel = docs.find((d) => d.key === params.get('doc')) ?? docs[0];
-  const usedBy = (d: KnowledgeDoc) => (kind === 'playbook' ? [] : stores.filter((s) => (kind === 'platform' ? s.platform : s.niche) === d.key).map((s) => s.name));
+  const usedBy = (d: KnowledgeDoc) => (kind === 'playbook' ? [] : stores.filter((s) => (kind === 'platform' ? s.platform : nicheKey(s)) === d.key).map((s) => s.name));
   return (
     <div className="grid items-start gap-3.5 min-[1000px]:grid-cols-[280px_minmax(0,1fr)]">
       <Panel title={TABS.find((t) => t.value === kind)!.label} sub={ABOUT[kind]}>

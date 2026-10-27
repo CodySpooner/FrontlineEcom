@@ -21,6 +21,18 @@ describe('Knowledge Base › niche packs', () => {
     expect(screen.getByText('Shared with all Pet stores')).toBeTruthy();
     expect(fetch.mock.calls.map(([url]) => url)).toContain('/api/niche-learnings?niche=pet');
   });
+
+  it('names the stores that read a custom niche pack', async () => {
+    const doc = { kind: 'niche', key: 'other:yoga-mats', title: 'Yoga mats niche pack', chars: 20, custom: true };
+    stubApi((url) => {
+      if (url === '/api/knowledge') return [doc];
+      if (url === '/api/knowledge/niche/other%3Ayoga-mats') return { ...doc, markdown: '# Yoga mats' };
+      if (url === '/api/stores') return [{ id: 'zen', name: 'Zen Co', platform: 'shopify', niche: 'other', nicheDetail: 'Yoga Mats', color: '#ff2a3a', currency: 'USD', timezone: 'UTC' }];
+      if (url.startsWith('/api/niche-learnings')) return [];
+    });
+    renderApp(<Knowledge />, '/knowledge?tab=niche');
+    expect(await screen.findByText('Used by Zen Co')).toBeTruthy();
+  });
 });
 
 describe('Knowledge Base › store memory', () => {

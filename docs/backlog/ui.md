@@ -438,8 +438,14 @@ Orca's browser against the reference before ticking it.
 - [x] UI-164 A "Generate ad creatives" request (it spends Higgsfield credits) showed the visual brief cut at
       400 characters inside its reason and never showed the ad copy that goes with the render. The reason now stops at the
       credits, and under it the copy (with its CTA) and the whole brief, so the owner sees the ad they pay for.
+- [x] UI-165 Knowledge › Niche packs never said which stores read a custom pack: "Used by" compared the store's niche
+      (`other`) with the pack's key (`other:<slug>`). It now uses the same key the agents file the pack under, so a custom
+      pack names its stores (and Fitness no longer claims a store that moved to a custom niche).
 
 ## Blocked
+- [ ] UI-166 Knowledge › Niche packs: a store in a custom niche with no pack gets "Ask its Market Analyst to draft one",
+      which opens the run. Waits on the agents lane's niche-pack route (requested in its Inbox): only a store's first real
+      sync drafts a pack, once, and a chat ask doesn't carry the template or the save_niche_pack payload.
 
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
@@ -648,3 +654,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — Inbox (core, sync notice links): right, they spread `where` (with `link: '/integrations'`) into both notices and my scan only looked for a literal `link`; the request was wrong for sync.ts. The agents lane's 10 had none and got links in AGT-219. Nothing to change in the bell
 - 2026-10-26 — UI-163: `toolInput(action)` in lib/approvals; `shownReason` drops a reason that is that same input; the Dashboard drops the " · " after the kind when nothing follows. Two tests (red first). Orca with a fixture pending productUpdate request (read-only): line "Use a connected tool", 18-line block, 192px tall, scrolls
 - 2026-10-26 — UI-164: `adBrief(action)` in lib/approvals, `shownReason` stops at " Brief: ", the copy and brief as a small `dl` in ApprovalExtras. Two tests (red first). Orca with a fixture pending video request (read-only): line "Generate ad creatives · 20 generation credits (0/100 used today).", copy with CTA, whole brief (the reason had 400 characters), no overflow
+- 2026-10-26 — UI-165: `nicheKey(store)` in lib/niche (the agents' rule, beside the existing `nicheSlug` mirror), used by Knowledge's Used by. Two tests (red first). Orca with a GET-only fixture (Peak Fit in a custom "Yoga Mats" niche, a matching custom pack): "Yoga mats / Custom / Used by Peak Fit", Fitness shows no store
