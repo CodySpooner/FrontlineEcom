@@ -372,6 +372,8 @@ Orca's browser against the reference before ticking it.
       dropped keyboard focus to the page both when they opened and on Keep. They now use UI-143's `ConfirmDelete`
       (rules and competitors also say what they ask: "Delete this rule?", "Stop tracking this shop?"); Disconnect,
       which swaps the whole dialog footer, focuses Keep and hands focus back in place.
+- [x] UI-145 Same as UI-142 for request cards in a waiting list (the notifications drawer, an agent's page): deciding
+      one dropped keyboard focus. Focus now moves on to the next open request beside it.
 
 ## Blocked
 
@@ -561,3 +563,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-142: `act` focuses the next undecided row's Approve (`data-approve`) before the verdict swaps the buttons out. New test (red on the old code). Orca, with the approve POST answered by a fetch patch (DB untouched, all three demo requests still pending): focus went from "Pause Spark Ads · UGC" to "Raise daily budget 20%" and stayed when the row dropped. Chat request cards keep their verdict in place, so they're left as they are
 - 2026-10-26 — UI-143: `ConfirmDelete` in components/ui (children render the trigger, `useFocusBack` returns focus); the five hand-rolled confirms elsewhere are left as they are. New ui.test and Knowledge test (red on the old code). Orca on Creative: Delete → "Delete this creative?" with focus on Keep, Keep → focus back on Delete (nothing deleted). The dev DB has no store memories to try live
 - 2026-10-26 — UI-144: four confirms moved onto `ConfirmDelete`; Integrations keeps its footer but keys it (React reused the Cancel button as Keep, so autoFocus never fired) and uses `useFocusBack`. New Integrations test (red on the old code). Orca, Keep only: Automation "Delete this rule?" and Competitors "Stop tracking this shop?" focus Keep and return to the trigger; Disconnect on a read-only patched CJ integration the same
+- 2026-10-26 — UI-145: `ApprovalCard`'s `act` focuses the next sibling card's Approve (`data-approve`, the one before after the last) before its own buttons disable. New Chat test (red on the old code). Orca, in the notifications drawer with the approve POST answered by a fetch patch: focus went from "Pause Spark Ads · UGC" to "Raise daily budget 20%"; all three demo requests still pending in the DB

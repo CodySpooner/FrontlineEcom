@@ -95,3 +95,19 @@ describe('backing out of a deny on a request card', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Deny: Pause UGC' }));
   });
 });
+
+describe('deciding a card in a waiting list', () => {
+  it('moves focus on to the next card still open, as the decided one drops out', async () => {
+    const asks = ['A', 'B'].map((t, i) => ({ id: `a${i + 1}`, storeId: 'peak', agentId: 'peak:ad_strategist', title: `Pause ${t}`, reason: 'ROAS 0.8', status: 'pending', createdAt: '2026-10-26T08:00:00Z', action: { kind: 'ads.pause_campaign', payload: {} } }) as ApprovalRequest);
+    stubApi((url, init) => (init?.method === 'POST' ? { ...asks[0], status: 'approved' } : url.startsWith('/api/approvals?status=pending') ? asks : []));
+    renderApp(
+      <section>
+        {asks.map((a) => (
+          <ApprovalCard key={a.id} a={a} />
+        ))}
+      </section>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve: Pause A' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Approve: Pause B' }));
+  });
+});

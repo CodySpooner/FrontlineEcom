@@ -251,9 +251,16 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
   const [denying, setDenying] = useState(false);
   // Backing out of the reason field unmounts it: focus returns to Deny, not the top of the page.
   const [backed, setBacked] = useState(false);
-  const act = (v: 'approve' | 'deny', note?: string) => decide.mutateAsync({ id: a.id, verdict: v, note }).then(() => setVerdict(v), () => {});
+  const card = useRef<HTMLDivElement>(null);
+  const act = (v: 'approve' | 'deny', note?: string) => {
+    // A decided card drops out of a waiting list (notifications, the agent page): focus moves on to the next open
+    // request beside it, not the top of the page.
+    const others = [...(card.current?.parentElement?.querySelectorAll<HTMLButtonElement>('[data-approve]') ?? [])].filter((b) => !card.current!.contains(b));
+    (others.find((b) => card.current!.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ?? others.at(-1))?.focus();
+    return decide.mutateAsync({ id: a.id, verdict: v, note }).then(() => setVerdict(v), () => {});
+  };
   return (
-    <div className="rounded-lg border border-red/40 bg-red-soft/40 p-3">
+    <div ref={card} className="rounded-lg border border-red/40 bg-red-soft/40 p-3">
       <div className="font-display text-[11px] font-bold tracking-[.12em] text-red uppercase">{who ?? (open ? 'Needs your approval' : 'Request')}{APPROVAL_KINDS[a.action.kind] && ` · ${APPROVAL_KINDS[a.action.kind]!.label}`}</div>
       <div className="mt-1 text-[13px] font-semibold">{a.title}</div>
       <div className="mt-0.5 text-xs text-muted">
@@ -266,7 +273,7 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
           <DenyReason title={a.title} disabled={decide.isPending} onDeny={(note) => act('deny', note)} onBack={() => (setDenying(false), setBacked(true))} />
         ) : open ? (
           <>
-            <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => act('approve')} aria-label={`Approve: ${a.title}`}>
+            <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => act('approve')} aria-label={`Approve: ${a.title}`} data-approve={a.id}>
               Approve
             </Button>
             <Button size="sm" disabled={decide.isPending} onClick={() => setDenying(true)} aria-label={`Deny: ${a.title}`} autoFocus={backed}>
