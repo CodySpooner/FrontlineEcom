@@ -384,6 +384,10 @@ Orca's browser against the reference before ticking it.
 - [x] UI-148 (re AGT-198) Competitor Intel's empty state said only the owner adds rivals. Going live drops the demo
       competitors, and the Market Analyst now finds 3–5 itself when it has none to compare against, so the empty state
       says so next to the add form.
+- [x] UI-149 (re AGT-200) Nothing collects a real competitor's ads, yet Competitor Intel promised "Ads show up here once
+      the squad spots them advertising" and listed "0 active ads" on every added rival. The empty state now says the app
+      can't read ad libraries yet and links to Meta's Ad Library search for that rival; rows show the ad count only when
+      there is one.
 
 ## Blocked
 
@@ -577,3 +581,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-146: `anotherShop` in lib/shop.ts mirrors core's SHOP_KEYS/bare (FYI left in core's Inbox). lib test + Integrations test (red on the old code). Orca with a read-only patched Shopify connection on Pawsome: typing volt-lab.myshopify.com over pawsome-gear.myshopify.com shows the warning above Save (Save not pressed)
 - 2026-10-26 — UI-147: no hand-rolled confirm is left without focus handling (grep `setConfirm`: Integrations and Knowledge, both handled in place). Two new tests (red on the old code). Orca on Settings, Keep only: Delete → focus on Keep → back on Delete
 - 2026-10-26 — UI-148: copy only. `Competitor` has no author field, so rows can't credit the agent (not asked for). Orca with the competitor list patched empty (read-only): the new copy sits above "Track a competitor"
+- 2026-10-26 — UI-149: `adLibrary(name)` builds the Meta Ad Library keyword search. New Competitors test (red on the old code). Orca with ad snapshots and counts patched empty (read-only): "No ads collected" + "Search Meta's Ad Library" (q=Wag+%26+Wander), rows read "3 products tracked". FYI in core's Inbox

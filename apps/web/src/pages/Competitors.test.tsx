@@ -35,3 +35,21 @@ describe('price moves', () => {
     expect(await screen.findByText('£32.00')).toBeTruthy();
   });
 });
+
+describe("a rival's ads", () => {
+  it("say the app can't collect them yet and link to Meta's Ad Library, without claiming 0 active ads", async () => {
+    stubApi((url) =>
+      url === '/api/stores'
+        ? [{ id: 'eu', name: 'Euro Shop', platform: 'shopify', niche: 'home', color: '#ff2a3a', currency: 'EUR', timezone: 'UTC' }]
+        : url === '/api/competitors'
+          ? [{ id: 'c1', storeId: 'eu', name: 'Wag & Wander', url: 'https://wagwander.com', createdAt: '2026-10-26T08:00:00Z', productsTracked: 12, activeAds: 0 }]
+          : url.startsWith('/api/competitors/c1/snapshots')
+            ? []
+            : undefined,
+    );
+    renderApp(<Competitors />, '/competitors');
+    expect(await screen.findByText(/can't read ad libraries yet/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Meta's Ad Library/ }).getAttribute('href')).toContain('q=Wag+%26+Wander');
+    expect(screen.getByText('12 products tracked')).toBeTruthy();
+  });
+});

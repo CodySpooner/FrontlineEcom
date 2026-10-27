@@ -7,11 +7,13 @@ import { useCompetitorActions, useCompetitors, usePriceChanges, useRuns, useSnap
 import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, RUN_STATUS } from '../components/ui';
+import { Badge, Button, buttonClass, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, RUN_STATUS } from '../components/ui';
 import { ago, cents, fmtDay } from '../lib/format';
 import { NAV } from '../nav';
 
 const NETWORK = { meta: 'Meta', tiktok: 'TikTok', google: 'Google' };
+const adLibrary = (q: string) =>
+  `https://www.facebook.com/ads/library/?${new URLSearchParams({ active_status: 'active', ad_type: 'all', country: 'ALL', q, search_type: 'keyword_unordered' })}`;
 const DAY = 86_400_000;
 const host = (url: string) => url.replace(/^https?:\/\//, '').replace(/\/$/, '');
 
@@ -76,7 +78,8 @@ function CompetitorRow({ c, on, onPick }: { c: Competitor; on: boolean; onPick: 
           <span className="text-xs text-muted">{name(c.storeId)}</span>
         </span>
         <span className="mt-0.5 block text-xs text-text-2 tabular-nums">
-          {c.productsTracked} products tracked · {c.activeAds} active ad{c.activeAds === 1 ? '' : 's'}
+          {c.productsTracked} products tracked
+          {c.activeAds > 0 && ` · ${c.activeAds} active ad${c.activeAds === 1 ? '' : 's'}`}
         </span>
         {c.notes && <span className="mt-1 block text-xs text-muted">{c.notes}</span>}
       </button>
@@ -163,8 +166,17 @@ function Ads({ c }: { c?: Competitor }) {
       ) : q.isError ? (
         <ErrorState message="Couldn't load their ads." onRetry={() => q.refetch()} />
       ) : !ads.length ? (
-        <EmptyState icon={Megaphone} title="No ads seen yet">
-          Ads show up here once the squad spots {c.name} advertising.
+        // AGT-200: nothing collects a real rival's ads (only the demo seed has them), so don't promise they'll appear.
+        <EmptyState
+          icon={Megaphone}
+          title="No ads collected"
+          action={
+            <a href={adLibrary(c.name)} target="_blank" rel="noreferrer noopener" className={buttonClass()}>
+              Search Meta's Ad Library
+            </a>
+          }
+        >
+          The app can't read ad libraries yet: only the demo competitors come with ads.
         </EmptyState>
       ) : (
         <ul className="grid gap-3 min-[700px]:grid-cols-2">
