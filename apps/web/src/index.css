@@ -65,11 +65,7 @@
 }
 
 @utility hero-bg {
-  background:
-    radial-gradient(380px 210px at 66% 42%, rgb(255 42 58 / 0.42), transparent 70%),
-    radial-gradient(700px 260px at 25% -30%, rgb(255 42 58 / 0.16), transparent 70%),
-    repeating-linear-gradient(115deg, rgb(255 255 255 / 0.028) 0 2px, transparent 2px 24px),
-    linear-gradient(180deg, #14070a, #0a0a0c);
+  background: #08080a;
 }
 
 html {

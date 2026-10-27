@@ -74,6 +74,8 @@ silhouette you can tell apart at 32 px. Keep each one's current look as the anch
 
 ## Done
 
+- 2026-10-27 IMG-04: Hero/nav now load per-section local WebP art, including agent detail; removed skyline/scenes and gradient art. Browser checks at 900/1280/1920/2560 confirm loaded images, unchanged header height, pointer-events none, drag/no-drag CSS. All header screenshots saved; pnpm check green.
+
 - 2026-10-27 IMG-03: Twelve distinct generated WebP headers total 496 KB; all exact prompts recorded. Reviewed header galleries at 1280/1920 in browser and loaded art in Orca; pnpm check green. Agent detail will share AI Agents; Ecosystem uses no Hero.
 
 - 2026-10-27 IMG-02: Generated and optimized Command Center and Ad Strategist; exact prompts recorded in public/art/PROMPTS.md. Previewed at 1280/1920 (.agent/style-frame-*); 25 KB header, 67 KB portrait; pnpm check green. when
@@ -95,7 +97,7 @@ and ignore a watchdog nudge if `.agent/STOP` is already there.
 - [x] IMG-02 Style frame: generate the Command Center header and one portrait (Ad Strategist) first; tune until they
   match the art direction, then record the final prompts in `PROMPTS.md` as the template for the rest.
 - [x] IMG-03 Header images for every section in the list, same template.
-- [ ] IMG-04 Wire headers: `Hero` shows the page's image (replace `HeroArt` / `Scene` / the SVG skyline with an image
+- [x] IMG-04 Wire headers: `Hero` shows the page's image (replace `HeroArt` / `Scene` / the SVG skyline with an image
   key per page in `nav.ts`), text readable, right side and drag region intact, no layout shift, 900–2560 px.
 - [ ] IMG-05 The other seven portraits, same template.
 - [ ] IMG-06 Wire portraits: `Portrait` renders the image at every size, rank frames and paused look kept, unused SVG
@@ -103,6 +105,8 @@ and ignore a watchdog nudge if `.agent/STOP` is already there.
 - [ ] IMG-07 Acceptance pass ("Done when" above), fix what it finds, then STOP.
 
 ## Done
+
+- 2026-10-27 IMG-04: Hero/nav now load per-section local WebP art, including agent detail; removed skyline/scenes and gradient art. Browser checks at 900/1280/1920/2560 confirm loaded images, unchanged header height, pointer-events none, drag/no-drag CSS. All header screenshots saved; pnpm check green.
 
 - 2026-10-27 IMG-03: Twelve distinct generated WebP headers total 496 KB; all exact prompts recorded. Reviewed header galleries at 1280/1920 in browser and loaded art in Orca; pnpm check green. Agent detail will share AI Agents; Ecosystem uses no Hero.
 

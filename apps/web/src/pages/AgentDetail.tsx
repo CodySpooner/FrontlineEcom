@@ -54,7 +54,7 @@ export function AgentDetail() {
   if (!agent || !role) {
     return (
       <>
-        <Hero title="Agent not found" subtitle="It may belong to a store that was removed." icon={nav.icon} />
+        <Hero title="Agent not found" subtitle="It may belong to a store that was removed." icon={nav.icon} art={nav.art} />
         <EmptyState title="No agent here" action={<Link to="/agents" className={buttonClass('primary')}>Back to AI Agents</Link>} />
       </>
     );
@@ -63,7 +63,7 @@ export function AgentDetail() {
   const st = AGENT_STATUS[agent.status];
   return (
     <>
-      <Hero title={role.name} subtitle={`${name(agent.storeId)} · Level ${agent.level}`} icon={nav.icon} art="lone" />
+      <Hero title={role.name} subtitle={`${name(agent.storeId)} · Level ${agent.level}`} icon={nav.icon} art={nav.art} />
       <div className="mb-4 flex flex-wrap items-center gap-4">
         <Link to={`/agents?store=${agent.storeId}`} className="flex items-center gap-1.5 text-[13px] text-muted transition hover:text-white">
           <ArrowLeft className="size-4" />
