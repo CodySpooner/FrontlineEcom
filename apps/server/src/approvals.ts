@@ -67,6 +67,17 @@ export function expireRequests(db: Db, storeId: string, kinds: string[], why: st
   }
 }
 
+/** Broadcasts the requests a restored backup closed (openDb), once: call it when the server's handlers listen. */
+export function announceRestoreClosed(db: Db) {
+  const r = db.prepare("SELECT value_json FROM settings WHERE key = 'restore_closed'").get();
+  if (!r) return;
+  db.prepare("DELETE FROM settings WHERE key = 'restore_closed'").run();
+  for (const id of JSON.parse(String(r.value_json)) as string[]) {
+    const a = getApproval(db, id);
+    if (a) publish({ type: 'approval', approval: a });
+  }
+}
+
 /** The in-process hook the agents engine uses to ask the owner and wait for the answer. */
 export const approvalsHook = (db: Db): ApprovalsHook => ({
   create(input) {

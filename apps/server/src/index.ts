@@ -1,4 +1,5 @@
 import { startServer } from './app';
+import { announceRestoreClosed } from './approvals';
 import { startScheduler } from './automations';
 import { startBackupLoop } from './backups';
 import { startDigestLoop } from './digest';
@@ -37,4 +38,5 @@ startOutcomeLoop(db);
 startServer(db, Number(process.env.API_PORT ?? 8787), (port) => {
   console.log(`Frontline API on http://127.0.0.1:${port}`);
   log('info', 'started', { port, dataDir: dataDir() });
+  announceRestoreClosed(db);
 }, process.env.FRONTLINE_WEB_DIR);

@@ -557,12 +557,15 @@ export function openDb(file = ':memory:'): Db {
     }),
   );
   // A real store's requests pending in the backup may have been carried out since (a page published, products added):
-  // asked again, not run twice. `[Expired: …]` isn't the owner's no. ponytail: a theme draft's copy stays in Shopify.
+  // asked again, not run twice. `[Expired: …]` isn't the owner's no. They're announced once the server's handlers listen
+  // (announceRestoreClosed), so a closed theme draft's copy is deleted like any denied one's.
   if (restored) {
+    const ids = JSON.stringify(db.prepare(`SELECT id FROM approvals WHERE status = 'pending' AND store_id IN (SELECT id FROM stores WHERE demo = 0)`).all().map((r) => String(r.id)));
     db.prepare(
       `UPDATE approvals SET status = 'denied', decided_at = ?, reason = reason || ' [Expired: the data was restored from a backup.]'
-       WHERE status = 'pending' AND store_id IN (SELECT id FROM stores WHERE demo = 0)`,
-    ).run(new Date().toISOString());
+       WHERE id IN (SELECT value FROM json_each(?))`,
+    ).run(new Date().toISOString(), ids);
+    db.prepare("INSERT INTO settings (key, value_json) VALUES ('restore_closed', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json").run(ids);
   }
   return db;
 }

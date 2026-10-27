@@ -5,7 +5,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { expect, test, vi } from 'vitest';
 import type { Backup } from '@frontline/shared';
 import { backupNow, backupRoutes, listBackups, stageRestore, startBackupLoop } from './backups';
+import { announceRestoreClosed } from './approvals';
 import { switchToReal } from './connectors/common';
+import { subscribe } from './live';
 import { openDb } from './db';
 import { seedDemo } from './demo';
 
@@ -77,6 +79,13 @@ test("a restored backup closes a real store's pending requests: they may have be
   const db = openDb(file);
   expect(db.prepare("SELECT status, reason FROM approvals WHERE id = 'a1'").get()).toMatchObject({ status: 'denied', reason: expect.stringMatching(/ \[Expired: [^\]]*backup[^\]]*\]$/) });
   expect(pending(db, 'pawsome')).toBe(demo); // a demo store writes nothing live
+  // Announced once the server listens, so denial handlers run (a theme draft's copy is deleted); once.
+  const heard: string[] = [];
+  const off = subscribe((m) => void (m.type === 'approval' && heard.push(`${m.approval.id}:${m.approval.status}`)));
+  announceRestoreClosed(db);
+  announceRestoreClosed(db);
+  off();
+  expect(heard).toEqual(['a1:denied']);
   db.prepare("UPDATE approvals SET status = 'pending' WHERE id = 'a1'").run();
   db.close();
   expect(pending(openDb(file), 'glow')).toBe(1); // only a restore closes them
