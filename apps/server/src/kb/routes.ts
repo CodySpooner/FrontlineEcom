@@ -1,7 +1,17 @@
 import { Hono } from 'hono';
 import {
+  addEvidence,
   cardsUnder,
   createCard,
+  createLink,
+  decideLink,
+  deleteEvidence,
+  detachMerged,
+  linked,
+  listEvidence,
+  listLinks,
+  listRevisions,
+  restoreRevision,
   createCategory,
   ensureCategoryPath,
   getCard,
@@ -13,7 +23,7 @@ import {
   updateCard,
   updateCategory,
 } from '@frontline/agents';
-import { AGENT_ROLES, KB_CARD_TYPES, KB_STAGES, type KbCardPatch, type KbCardQuery, type KbCardStatus, type KbWorkspace } from '@frontline/shared';
+import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbWorkspace } from '@frontline/shared';
 import { tx, type Db } from '../db';
 
 // Knowledge Base routes (knowledge-base lane). Every by-id route names its workspace (?ws=) and 404s on another's id.
@@ -88,6 +98,23 @@ function categoryFor(db: Db, ws: KbWorkspace, b: Obj): string | { id: string } |
   if (typeof b.categoryId === 'string') return kbRow(db, 'kb_categories', b.categoryId, ws) ? { id: b.categoryId } : 'categoryId must be a category of this workspace';
   if (Array.isArray(b.category)) return { id: ensureCategoryPath(db, ws, b.category as string[]) };
   return undefined;
+}
+
+const EVIDENCE_KINDS = ['measured', 'research', 'observed', 'conflict'];
+const finite = (v: unknown) => typeof v === 'number' && Number.isFinite(v);
+
+/** An evidence body, or what's wrong with it. The source is checked by the caller. */
+function parseEvidence(b: Obj): string | KbEvidenceInput {
+  if (!EVIDENCE_KINDS.includes(String(b.kind))) return `kind must be one of ${EVIDENCE_KINDS.join(', ')}`;
+  if (!text(b.text, 3, 1000)) return 'text must be 3-1000 characters';
+  if (b.sourceId !== undefined && typeof b.sourceId !== 'string') return 'sourceId must be a source id';
+  if (b.metric !== undefined && !text(b.metric, 1, 40)) return 'metric must be 1-40 characters';
+  for (const k of ['value', 'baseline'] as const) if (b[k] !== undefined && !finite(b[k])) return `${k} must be a number`;
+  for (const k of ['windowFrom', 'windowTo'] as const) if (b[k] !== undefined && !isDate(b[k])) return `${k} must be YYYY-MM-DD`;
+  if (b.sampleSize !== undefined && !(Number.isInteger(b.sampleSize) && (b.sampleSize as number) >= 0)) return 'sampleSize must be a whole number';
+  if (b.testRef !== undefined && !text(b.testRef, 1, 120)) return 'testRef must be 1-120 characters';
+  const pick = ['sourceId', 'metric', 'value', 'baseline', 'windowFrom', 'windowTo', 'sampleSize', 'testRef'].filter((k) => b[k] !== undefined);
+  return { kind: b.kind as KbEvidenceInput['kind'], text: String(b.text).trim(), ...Object.fromEntries(pick.map((k) => [k, typeof b[k] === 'string' ? (b[k] as string).trim() : b[k]])) };
 }
 
 function parseQuery(q: Record<string, string>): string | KbCardQuery {
@@ -194,7 +221,7 @@ export function kbRoutes(db: Db) {
         const made = tx(db, () => {
           const cat = categoryFor(db, ws, b);
           if (typeof cat !== 'object') return cat ?? 'category (a path) or categoryId is required';
-          return createCard(db, ws, { ...card, title: card.title!, categoryId: cat.id, type, stage, status: 'active', authorId: 'owner', origin: 'owner' });
+          return createCard(db, ws, { ...card, title: card.title!, categoryId: cat.id, type, stage, status: 'active', authorId: 'owner', origin: 'owner', stageByOwner: card.stage !== undefined });
         });
         return typeof made === 'string' ? c.json({ error: made }, 400) : c.json(made, 201);
       } catch (e) {
@@ -242,6 +269,94 @@ export function kbRoutes(db: Db) {
       const from = kbRow(db, 'kb_cards', b.from, ws);
       if (!keep || !from) return c.json({ error: 'card not found' }, 404);
       if (keep.status === 'merged' || from.status === 'merged') return c.json({ error: 'that card was already merged' }, 409);
-      return c.json(mergeCards(db, id, b.from, 'owner'));
+      return c.json(tx(db, () => mergeCards(db, id, b.from as string, 'owner')));
+    })
+    .post('/api/kb/cards/:id/detach', async (c) => {
+      const id = c.req.param('id');
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      if (!kbRow(db, 'kb_cards', id, ws)) return c.json({ error: 'card not found' }, 404);
+      const b = await c.req.json().catch(() => undefined);
+      if (!isObj(b) || typeof b.from !== 'string') return c.json({ error: 'from must be the id of the merged card' }, 400);
+      const back = tx(db, () => detachMerged(db, id, b.from as string, 'owner'));
+      return back ? c.json(back) : c.json({ error: 'no card of that id was merged into this one' }, 404);
+    })
+    .get('/api/kb/cards/:id/revisions', (c) => {
+      const ws = wsOf(db, c.req.query('ws'), true);
+      if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
+      const id = c.req.param('id');
+      return kbRow(db, 'kb_cards', id, ws, c.req.query('general') === '1') ? c.json(listRevisions(db, id)) : c.json({ error: 'card not found' }, 404);
+    })
+    .post('/api/kb/cards/:id/revisions/:rev/restore', (c) => {
+      const id = c.req.param('id');
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      if (!kbRow(db, 'kb_cards', id, ws)) return c.json({ error: 'card not found' }, 404);
+      try {
+        const card = tx(db, () => restoreRevision(db, id, Number(c.req.param('rev')), 'owner'));
+        return card ? c.json(card) : c.json({ error: 'revision not found' }, 404);
+      } catch (e) {
+        if (unique(e)) return c.json({ error: 'another card in this workspace has that title now' }, 409);
+        throw e;
+      }
+    })
+    .get('/api/kb/cards/:id/evidence', (c) => {
+      const ws = wsOf(db, c.req.query('ws'), true);
+      if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
+      const id = c.req.param('id');
+      return kbRow(db, 'kb_cards', id, ws, c.req.query('general') === '1') ? c.json(listEvidence(db, id)) : c.json({ error: 'card not found' }, 404);
+    })
+    .post('/api/kb/cards/:id/evidence', async (c) => {
+      const id = c.req.param('id');
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      if (!kbRow(db, 'kb_cards', id, ws)) return c.json({ error: 'card not found' }, 404);
+      const b = await c.req.json().catch(() => undefined);
+      const e = isObj(b) ? parseEvidence(b) : 'body must be a JSON object';
+      if (typeof e === 'string') return c.json({ error: e }, 400);
+      if (e.sourceId && !kbRow(db, 'kb_sources', e.sourceId, ws)) return c.json({ error: 'sourceId must be a source of this workspace' }, 400);
+      return c.json(tx(db, () => addEvidence(db, id, { ...e, authorId: 'owner' })), 201);
+    })
+    .delete('/api/kb/evidence/:id', (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      const cardId = db.prepare('SELECT card_id FROM kb_evidence WHERE id = ?').get(c.req.param('id'))?.card_id;
+      if (typeof cardId !== 'string' || !kbRow(db, 'kb_cards', cardId, ws)) return c.json({ error: 'evidence not found' }, 404);
+      return c.json(tx(db, () => deleteEvidence(db, c.req.param('id'))));
+    })
+    .get('/api/kb/links', (c) => {
+      const ws = wsOf(db, c.req.query('ws'), true);
+      if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
+      return c.json(listLinks(db, ws, c.req.query('general') === '1', c.req.query('card') || undefined));
+    })
+    .post('/api/kb/links', async (c) => {
+      const b = await c.req.json().catch(() => undefined);
+      if (!isObj(b)) return c.json({ error: 'body must be a JSON object' }, 400);
+      const ws = wsOf(db, b.ws);
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      if (typeof b.from !== 'string' || typeof b.to !== 'string') return c.json({ error: 'from and to must be card ids' }, 400);
+      if (b.from === b.to) return c.json({ error: 'a card cannot be linked to itself' }, 400);
+      if (typeof b.type !== 'string' || !(b.type in KB_LINK_TYPES)) return c.json({ error: `type must be one of ${Object.keys(KB_LINK_TYPES).join(', ')}` }, 400);
+      if (!text(b.why, 3, 600)) return c.json({ error: 'why must be 3-600 characters' }, 400);
+      if (!kbRow(db, 'kb_cards', b.from, ws, ws !== null) || !kbRow(db, 'kb_cards', b.to, ws, ws !== null)) return c.json({ error: 'card not found' }, 404);
+      const type = b.type as keyof typeof KB_LINK_TYPES;
+      if (linked(db, b.from, b.to, type)) return c.json({ error: 'those cards already have that link' }, 409);
+      return c.json(tx(db, () => createLink(db, ws, { from: b.from as string, to: b.to as string, type, why: String(b.why).trim(), authorId: 'owner', status: 'confirmed' })), 201);
+    })
+    .patch('/api/kb/links/:id', async (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      if (!kbRow(db, 'kb_links', c.req.param('id'), ws)) return c.json({ error: 'link not found' }, 404);
+      const b = await c.req.json().catch(() => undefined);
+      if (!isObj(b) || (b.status !== 'confirmed' && b.status !== 'rejected')) return c.json({ error: 'status must be confirmed or rejected' }, 400);
+      return c.json(tx(db, () => decideLink(db, c.req.param('id'), b.status as 'confirmed' | 'rejected')));
+    })
+    .delete('/api/kb/links/:id', (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      if (!kbRow(db, 'kb_links', c.req.param('id'), ws)) return c.json({ error: 'link not found' }, 404);
+      db.prepare('DELETE FROM kb_links WHERE id = ?').run(c.req.param('id'));
+      return c.body(null, 204);
     });
 }
+

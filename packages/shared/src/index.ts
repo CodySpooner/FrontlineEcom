@@ -1500,3 +1500,109 @@ export interface KbCategoryInput {
   parentId?: string | null;
   position?: number;
 }
+
+/** The source behind a piece of evidence, as the card shows it. */
+export interface KbSourceBrief {
+  id: string;
+  url?: string;
+  title: string;
+  status: KbSourceStatus;
+  reliability: KbSourceReliability;
+  fetchedAt?: string;
+}
+
+/**
+ * GET /api/kb/cards/:id/evidence?ws=[&general=1] → KbEvidence[] (oldest first). POST /api/kb/cards/:id/evidence?ws=
+ * (KbEvidenceInput) → 201 KbCard, its stage re-weighed; DELETE /api/kb/evidence/:id?ws= → KbCard.
+ */
+export interface KbEvidence {
+  id: string;
+  cardId: string;
+  kind: KbEvidenceKind;
+  text: string;
+  source?: KbSourceBrief;
+  /** The performance reading it came from (KB-19). */
+  observationId?: string;
+  metric?: string;
+  value?: number;
+  baseline?: number;
+  windowFrom?: string;
+  windowTo?: string;
+  sampleSize?: number;
+  /** The test it came from; Validated needs two different ones. */
+  testRef?: string;
+  /** The card it came with in a merge: POST /api/kb/cards/:id/detach {from} gives it back. */
+  mergedFrom?: string;
+  authorId: string;
+  runId?: string;
+  taskId?: string;
+  createdAt: string;
+}
+
+/** text 3-1000; sourceId a source of the workspace; windows YYYY-MM-DD; sampleSize a whole number. */
+export interface KbEvidenceInput {
+  kind: KbEvidenceKind;
+  text: string;
+  sourceId?: string;
+  metric?: string;
+  value?: number;
+  baseline?: number;
+  windowFrom?: string;
+  windowTo?: string;
+  sampleSize?: number;
+  testRef?: string;
+}
+
+/**
+ * GET /api/kb/links?ws=[&general=1][&card=] → KbLink[] (rejected ones left out). POST /api/kb/links {ws, from, to, type, why}
+ * → 201 (the owner's, confirmed); PATCH /api/kb/links/:id?ws= {status: 'confirmed'|'rejected'}; DELETE → 204. A link between
+ * a store card and a General one belongs to the store.
+ */
+export interface KbLink {
+  id: string;
+  storeId: string | null;
+  fromId: string;
+  toId: string;
+  type: KbLinkType;
+  /** Why the cards are linked, shown when the line is clicked. */
+  why: string;
+  status: KbLinkStatus;
+  score?: number;
+  /** 'owner', 'app' (the suggester) or an agent id. */
+  authorId: string;
+  createdAt: string;
+  decidedAt?: string;
+}
+
+export interface KbLinkInput {
+  from: string;
+  to: string;
+  type: KbLinkType;
+  why: string;
+}
+
+/** GET /api/kb/cards/:id/revisions?ws=[&general=1] → KbRevision[] newest first; POST .../revisions/:rev/restore?ws= → KbCard. */
+export interface KbRevision {
+  id: number;
+  cardId: string;
+  actor: string;
+  reason: string;
+  createdAt: string;
+  /** The card as it was after this change. */
+  snapshot: Pick<KbCard, 'title' | 'summary' | 'body' | 'relevance' | 'application' | 'appliesTo' | 'limits' | 'tags' | 'categoryId' | 'type' | 'stage' | 'status'>;
+}
+
+/** Evidence against a card, or two cards that disagree. Kept until the owner decides; never forced into one conclusion. */
+export interface KbConflict {
+  id: string;
+  storeId: string | null;
+  cardId: string;
+  otherCardId?: string;
+  evidenceId?: string;
+  note: string;
+  status: 'open' | 'resolved' | 'kept_both';
+  /** Found by this research task: such conflicts don't start research again. */
+  taskId?: string;
+  createdAt: string;
+  resolvedAt?: string;
+}

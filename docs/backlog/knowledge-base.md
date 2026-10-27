@@ -423,7 +423,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - hand-written validators in the house style;
   - a 404 on another workspace's id.
   - Tests.
-- [ ] KB-04 **Evidence, relationships and the ladder:**
+- [x] KB-04 **Evidence, relationships and the ladder:**
   - add evidence (with source, metric, window, sample size);
   - owner "Link to…" (type plus explanation, confirmed);
   - suggested links with accept or reject;
@@ -621,6 +621,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-01 audit: decisions checked against the code, baseline 992 tests green, before shots in `.agent/before/`.
 - 2026-10-27 KB-02 data model: shared KB types, migrations 44 (kb_* tables, FTS on `seq`, coalesce keys, 16 General categories) and 45 (`agent_runs.mode`), `kbScope`/`kbRow`, go-live purge in `startFresh`.
 - 2026-10-27 KB-03 `/api/kb/cards` (§13 filters, paging, sort, `ws=all` reads) and `/api/kb/categories` (any depth, per workspace): create, edit, the §14 controls and merge, each a revision; 404 on another workspace's id.
+- 2026-10-27 KB-04 evidence, links (owner-confirmed, suggested accept/reject), the deterministic suggester on every create (word overlap, category, shared sources, possible contradictions → conflict), the decision-11 ladder as revisions (owner stage kept via migration 46 `stage_by_owner`), restore revision, detach merged evidence.
 
 ## Blocked
 

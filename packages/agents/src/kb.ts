@@ -15,6 +15,7 @@ import {
   type KbWorkspace,
   type Page,
 } from '@frontline/shared';
+import { suggestLinks } from './kb-links';
 
 // The knowledge base domain (knowledge-base lane). Rows live in the kb_* tables (migration 44 in apps/server/src/db.ts).
 
@@ -250,7 +251,7 @@ export function getCard(db: DatabaseSync, id: string, ws: KbWorkspace | 'all' = 
 }
 
 /** Records the card as it is now, with why it changed. Every move and edit is one. */
-function revise(db: DatabaseSync, id: string, actor: string, reason: string, at: string) {
+export function revise(db: DatabaseSync, id: string, actor: string, reason: string, at: string) {
   const { seq: _, ...snapshot } = db.prepare('SELECT * FROM kb_cards WHERE id = ?').get(id)!;
   db.prepare('INSERT INTO kb_revisions (card_id, actor, reason, snapshot_json, created_at) VALUES (?, ?, ?, ?, ?)').run(id, actor, reason, JSON.stringify(snapshot), at);
 }
@@ -272,6 +273,8 @@ export interface NewKbCard {
   origin: KbOrigin;
   runId?: string;
   taskId?: string;
+  /** The owner chose the stage: the app's ladder leaves it there. */
+  stageByOwner?: boolean;
 }
 
 /** Saves a card in `ws` (its category must be there too) with its first revision. Throws on a title already used there. */
@@ -280,12 +283,13 @@ export function createCard(db: DatabaseSync, ws: KbWorkspace, c: NewKbCard, now 
   const at = now.toISOString();
   db.prepare(
     `INSERT INTO kb_cards (id, store_id, category_id, type, stage, status, title, summary, body, relevance, application, applies_to, limits, tags,
-       author_id, origin, run_id, task_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       author_id, origin, run_id, task_id, stage_by_owner, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     id, ws, c.categoryId, c.type, c.stage, c.status, c.title, c.summary ?? '', c.body ?? '', c.relevance ?? '', c.application ?? '', c.appliesTo ?? '', c.limits ?? '',
-    JSON.stringify(c.tags ?? []), c.authorId, c.origin, c.runId ?? null, c.taskId ?? null, at, at,
+    JSON.stringify(c.tags ?? []), c.authorId, c.origin, c.runId ?? null, c.taskId ?? null, c.stageByOwner ? 1 : 0, at, at,
   );
   revise(db, id, c.authorId, 'Created', at);
+  suggestLinks(db, id, now);
   return getCard(db, id)!;
 }
 
@@ -315,6 +319,7 @@ export function updateCard(db: DatabaseSync, id: string, patch: Omit<KbCardPatch
     edited.push('type');
   }
   if (stage !== r.stage) (sets.stage = stage), edited.push('stage');
+  if (patch.stage !== undefined && actor === 'owner') sets.stage_by_owner = 1;
   if (edited.length) said.push(`Edited ${edited.join(', ')}`);
   if (patch.pinned !== undefined && patch.pinned !== !!r.pinned) (sets.pinned = patch.pinned ? 1 : 0), said.push(patch.pinned ? 'Pinned' : 'Unpinned');
   if (patch.researchMarked !== undefined && patch.researchMarked !== !!r.research_marked)
@@ -333,18 +338,4 @@ export function updateCard(db: DatabaseSync, id: string, patch: Omit<KbCardPatch
   db.prepare(`UPDATE kb_cards SET ${Object.keys(sets).map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...Object.values(sets), id);
   revise(db, id, actor, said.join('; ') + (patch.reason ? `: ${patch.reason}` : ''), at);
   return getCard(db, id)!;
-}
-
-/** Merges `fromId` into `keepId` (same workspace): its evidence and tags move over, marked so they can be detached again. */
-export function mergeCards(db: DatabaseSync, keepId: string, fromId: string, actor: string, now = new Date()): KbCard {
-  const at = now.toISOString();
-  const keep = db.prepare('SELECT title, tags FROM kb_cards WHERE id = ?').get(keepId)!;
-  const from = db.prepare('SELECT title, tags FROM kb_cards WHERE id = ?').get(fromId)!;
-  const tags = [...new Map([...json<string[]>(keep.tags, []), ...json<string[]>(from.tags, [])].map((t) => [t.toLowerCase(), t])).values()];
-  db.prepare('UPDATE kb_evidence SET card_id = ?, merged_from = coalesce(merged_from, ?) WHERE card_id = ?').run(keepId, fromId, fromId);
-  db.prepare('UPDATE kb_cards SET tags = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(tags), at, keepId);
-  db.prepare(`UPDATE kb_cards SET status = 'merged', merged_into = ?, updated_at = ? WHERE id = ?`).run(keepId, at, fromId);
-  revise(db, keepId, actor, `Merged in "${from.title}"`, at);
-  revise(db, fromId, actor, `Merged into "${keep.title}"`, at);
-  return getCard(db, keepId)!;
 }

@@ -781,6 +781,9 @@ export const MIGRATIONS = [
   /* 45 (kb: KB-02 a run's mode; 'research' runs are a research task's stages) */ `
   ALTER TABLE agent_runs ADD COLUMN mode TEXT;
   `,
+  /* 46 (kb: KB-04 the owner set this card's stage: the app's ladder leaves it there) */ `
+  ALTER TABLE kb_cards ADD COLUMN stage_by_owner INTEGER NOT NULL DEFAULT 0;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
