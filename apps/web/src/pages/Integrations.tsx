@@ -230,7 +230,7 @@ export function Connection({ store, i, onOpen }: { store?: Store; i?: Integratio
           {i ? 'Manage' : 'Connect'}
         </Button>
       </div>
-      {i?.status === 'error' && i.error && <p className="mt-1 truncate pl-4 text-xs text-red">{i.error}</p>}
+      {i?.status === 'error' && i.error && <p className="mt-1 pl-4 text-xs break-words text-red">{i.error}</p>}
       {i?.notice && <p className="mt-1 pl-4 text-xs text-muted">{i.notice}</p>}
       {sync.isError && (
         <p role="alert" className="mt-1 pl-4 text-xs text-red">

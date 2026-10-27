@@ -485,6 +485,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-179 Tracking a competitor refused a shop's domain as owners type it ("rivalshop.com"): the Website field was a
       browser URL field, so it wouldn't submit without https:// and said only "Please enter a URL". It takes the bare
       domain now and adds https:// itself (a typed http:// or https:// address is kept).
+- [x] UI-180 A connection whose sync failed cut its reason to one line on Integrations ("Shopify rejected the access
+      token (401 Unauthorized): the app was…"), the line the owner reads to fix it; it wraps now, like the notice under
+      it. A niche or platform pack's "Used by" list, cut with several stores, keeps the whole list on hover.
 
 ## Blocked
 
@@ -711,3 +714,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-177: addedProducts drops a compareAt at or under the price. Test red first. Orca with a fake pending request (GET fixture, writes blocked): "Fake Jade Roller $24.00 · was $39.00 · 79% margin", "Fake Clay Mask $24.00 · 79% margin". Same session, no change needed: no page overflows at 900 or 1920 px
 - 2026-10-26 — UI-178: Analytics' local pct moved to lib/format (test red first). Orca: the tile reads "2.7×"; Analytics shows "−0.1%", "8.2% of previous"
 - 2026-10-26 — UI-179: inputMode=url text field, scheme added on submit. Test red first (jsdom's URL validation blocked the submit, as the browser did). Orca, with the POST answered by a client patch (nothing sent, every other write blocked): "fakerivalpets.com" went out as https://fakerivalpets.com and the form cleared
+- 2026-10-26 — UI-180: from a pass over every truncate without a title (the rest are short labels or open in full on click). Layout only, so no new test; the touched suites pass. Orca with a fake failing Shopify connection (GET fixture, writes blocked): its 160-character error reads whole on two lines. Same session, no change needed: the web calls every server route; recent shared fields (sample finds, byPlatform) are shown. Asked core to accept admin.shopify.com/store/<name> as a shop domain

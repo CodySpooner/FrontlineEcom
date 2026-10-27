@@ -74,7 +74,7 @@ function Docs({ kind }: { kind: KnowledgeKind }) {
                       <b className="text-[13px] font-semibold">{short(d)}</b>
                       {d.custom ? <Badge>Custom</Badge> : d.edited && <Badge>Edited</Badge>}
                     </span>
-                    {used.length > 0 && <span className="mt-0.5 block truncate text-xs text-muted">Used by {used.join(', ')}</span>}
+                    {used.length > 0 && <span className="mt-0.5 block truncate text-xs text-muted" title={`Used by ${used.join(', ')}`}>Used by {used.join(', ')}</span>}
                   </button>
                 </li>
               );
