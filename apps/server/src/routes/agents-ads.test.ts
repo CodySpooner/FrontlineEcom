@@ -188,6 +188,15 @@ test('an approved budget change and pause are applied to the demo ad account', a
   expect(budget('pawsome-c2').status).toBe('active');
 });
 
+test('a long campaign name is cut in the request title, never the budgets', async () => {
+  db.prepare(`UPDATE campaigns SET name = ? WHERE id = 'pawsome-c1'`).run('[CBO] Summer Sale | Broad | US | Advantage+ Shopping | 2026-06 | Lookalike 1%');
+  const from = budget('pawsome-c1').daily_budget;
+  const [request] = (await run([propose({ campaignId: 'pawsome-c1', change: 'budget', newDailyBudget: from + 10 })])).requests;
+  expect(request!.title.startsWith('Raise [CBO] Summer Sale')).toBe(true);
+  expect(request!.title.endsWith(`… budget $${from} → $${from + 10}/day`)).toBe(true);
+  expect(request!.title.length).toBe(80);
+});
+
 test('an unanswered budget request lets the run finish after 10 minutes and is still applied when approved later', async () => {
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
   try {

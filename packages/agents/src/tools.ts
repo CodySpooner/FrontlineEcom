@@ -144,6 +144,12 @@ export function smsSegments(text: string) {
   return n <= one ? 1 : Math.ceil(n / each);
 }
 
+/** A request title in 80 characters: a long product or campaign name is cut, never the amounts after it (the card's headline). */
+function titled(head: string, name: string, tail = '') {
+  const room = 80 - head.length - tail.length;
+  return `${head}${name.length > room ? `${name.slice(0, room - 1)}…` : name}${tail}`;
+}
+
 /** Loopback, private, link-local and this-network IPv4, and names only a local network resolves. */
 const PRIVATE_HOST = /^(127|10|0|192\.168|169\.254|172\.(1[6-9]|2\d|3[01]))\.[\d.]+$|\.(local|localhost|internal|lan|home|arpa)$/i;
 
@@ -1056,7 +1062,9 @@ export const APP_TOOLS: AppTool[] = [
         ctx.decide!(replace, 'deny');
       }
       const { approved, message } = await requestApproval(ctx, {
-        title: (change === 'pause' ? `Pause ${c.name}` : `${to > from ? 'Raise' : 'Lower'} ${c.name} budget ${cash(from, ctx.store.currency)} → ${cash(to, ctx.store.currency)}/day`).slice(0, 80),
+        title: change === 'pause'
+          ? titled('Pause ', String(c.name))
+          : titled(`${to > from ? 'Raise' : 'Lower'} `, String(c.name), ` budget ${cash(from, ctx.store.currency)} → ${cash(to, ctx.store.currency)}/day`),
         reason: evidence,
         autopilot: true,
         action: change === 'pause'
@@ -1113,7 +1121,8 @@ export const APP_TOOLS: AppTool[] = [
         .get(ctx.store.id, productId);
       if (pending) return 'Not sent: a price change for this product is already waiting for the owner.';
       const { approved, message } = await requestApproval(ctx, {
-        title: `Price ${String(p.title)} ${$(from)} → ${$(to)}`.slice(0, 80),
+        // The "was" price goes live with it (a sale badge): the owner sees it before saying yes.
+        title: titled('Price ', String(p.title), ` ${$(from)} → ${$(to)}${compareAt ? ` with "was ${$(r2(compareAt))}"` : ''}`),
         reason: costed ? evidence : `${evidence} No unit cost is set for this product, so the app can't check the new price covers it, and its profit is judged before product cost.`,
         action: { kind: 'store.set_price', payload: { productId, title: String(p.title), from, to, ...(compareAt ? { compareAt: r2(compareAt) } : {}) } },
       });

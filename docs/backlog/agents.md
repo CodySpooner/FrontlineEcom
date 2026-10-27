@@ -374,11 +374,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-233 HTML comments in a prompt layer are left out of the prompt, as the Knowledge view hides them (UI-170): a custom niche's pack drafted from the template with its `<!-- -->` guidance left in carried ~150 words of it into every run of every store in the niche. The drafting task also says to leave them out.
 - [x] AGT-234 An agent restating the owner's no word for word (the denial is in its prompt) leaves it alone, as a measured result already was: the merge swapped in the agent's evidence and confidence under the "owner's no" label, a way for injected web content to speak as the owner in every later prompt.
 - [x] AGT-235 `track_competitor` refuses a shop address on the owner's computer or network (localhost, 127/10/172.16-31/192.168/169.254, IPv6 literals, dotless or .local/.lan/.internal names): the app fetches a tracked shop now and daily from that computer, so a page the agent read could have it probe the router or the app's own API.
+- [x] AGT-236 A price or ad budget request's title keeps its amounts: a long product or campaign name is cut instead (the 80-character cut took the prices off a 76-character dropshipping title, and the new budget off a long campaign name, so the owner could approve with no amount shown). A price request that sets a "was" price says so in the title: it went live as a sale badge the owner never saw (from the money/approval review).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-236: `titled(head, name, tail)` in tools.ts for `propose_price_change` and `propose_ad_change`; the price title adds `with "was $X"` when `compareAt` is set.
 - 2026-10-26 — AGT-235: `PRIVATE_HOST` + dotless/IPv6-literal check in `track_competitor`, before anything is fetched (the WHATWG URL parser normalizes IPv4 in any notation).
 - 2026-10-26 — AGT-234: `writeMemory`'s app-label guard covers `denied` with `outcome`.
 - 2026-10-26 — AGT-233: `assemblePrompt` strips `<!-- -->` from the fixed layers; `draftNichePackTask` says the template's comments are guidance.

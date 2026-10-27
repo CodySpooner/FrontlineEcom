@@ -67,6 +67,18 @@ test('a price test is checked, approved and applied to a demo store', async () =
   expect(await run('glow', [price(id, cost)])).toEqual([`Not sent: ${cost} EUR is at or below the unit cost (${cost} EUR).`]);
 });
 
+test('the request title keeps both prices and the "was" price it sets, cutting a long product name instead', async () => {
+  const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'glow' AND cost IS NOT NULL ORDER BY price DESC LIMIT 1`).get()!;
+  const [id, from] = [String(p.id), Number(p.price)];
+  db.prepare(`UPDATE products SET title = ?, compare_at = 0 WHERE store_id = 'glow' AND id = ?`).run('Premium Orthopedic Memory Foam Dog Bed with Removable Washable Cover - Large', id);
+  const to = Math.round(from * 0.9 * 100) / 100;
+  const [out] = await run('glow', [price(id, to, { compareAt: from })]);
+  const title = /^Approved by the owner: (.*)\. It will be applied/.exec(out!)![1]!;
+  expect(title.startsWith('Price Premium Orthopedic')).toBe(true);
+  expect(title.endsWith(`… $${from} → $${to} with "was $${from}"`)).toBe(true);
+  expect(title.length).toBe(80);
+});
+
 test("a product sold on TikTok Shop, Amazon, an Etsy shop or a second site next to the store isn't repriced through the store's platform", async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run(); // Shopify
   const add = db.prepare(`INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', ?, 'Jade Roller', 20, 5, 9, 'active')`);
