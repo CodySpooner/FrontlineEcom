@@ -180,7 +180,7 @@ test('publishThemeChange publishes the approved copy', async () => {
   expect(db.prepare(`SELECT count(*) AS n FROM notifications WHERE title LIKE 'Couldn''t publish%'`).get()?.n).toBe(0);
 });
 
-test("a published theme change is judged on store conversion, 14 days before vs after, once, without Amazon's orders", async () => {
+test("a published theme change is judged on store conversion, 14 days before vs after, once, without other channels' orders", async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'glow'`).run();
   db.prepare(`INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('a1', 'glow', 'glow:store_developer', 'run-t', 'Publish theme change: Sticky ATC', 'r', ?, 'approved', ?)`).run(
     JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9', name: 'Frontline: Sticky ATC' } }),
@@ -203,6 +203,11 @@ test("a published theme change is judged on store conversion, 14 days before vs 
   db.prepare(`UPDATE daily_metrics SET orders = orders + 5 WHERE store_id = 'glow' AND date BETWEEN ? AND ?`).run(addDays(day, 1), addDays(day, 14));
   for (let d = 1; d <= 14; d++) for (let k = 0; k < 5; k++) {
     db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, ?, 20, 'paid', 'delivered', ?)`).run(`tt-${d}-${k}`, `${addDays(day, d)}T12:00:00Z`, addDays(day, d));
+  }
+  // So do an Etsy shop and a WooCommerce site (CORE-108): 3 orders a day after.
+  db.prepare(`UPDATE daily_metrics SET orders = orders + 3 WHERE store_id = 'glow' AND date BETWEEN ? AND ?`).run(addDays(day, 1), addDays(day, 14));
+  for (let d = 1; d <= 14; d++) for (const id of [`etsy-${d}-a`, `etsy-${d}-b`, `woo-${d}`]) {
+    db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, ?, 20, 'paid', 'delivered', ?)`).run(id, `${addDays(day, d)}T12:00:00Z`, addDays(day, d));
   }
   const xp = getAgent(db, 'glow:store_developer')!.xp;
   checkThemeOutcomes(db);
