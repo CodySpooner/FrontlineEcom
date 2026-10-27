@@ -131,17 +131,42 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
       }
     }});
   }
-  for (const [i,d] of DESKS.entries()) {
+  for (const d of DESKS) {
     const p = iso(d);
     props.push({depth:p.y+16,draw:()=> {
       diamond(p.x,p.y+14,28,14,'#13141b');
-      box(p.x,p.y+8,27,13,18,theme.desk,'#383641','#242330');
+      box(p.x,p.y+8,30,15,20,theme.desk,'#383641','#242330');
       poly([p.x-26,p.y-1,p.x,p.y+12,p.x+26,p.y-1,p.x+26,p.y+1,p.x,p.y+14,p.x-26,p.y+1],d.color);
-      screen(p.x,p.y-16,d.color,i);
-      rect(p.x-9,p.y+2,15,4,'#a1a5b3'); rect(p.x+11,p.y+1,4,3,'#d4d5da');
-      rect(p.x-19,p.y-6,4,6,'#efebdd');rect(p.x-18,p.y-7,2,1,'#b58765');
+      const technical = d.department === 'development' || d.department === 'integrations' || d.department === 'analytics';
+      const creative = d.department === 'creative' || d.department === 'advertising';
+      const documents = d.department === 'copywriting' || d.department === 'retention' || d.department === 'executive';
+      if (technical) {
+        screen(p.x-15,p.y-16,d.color,1,25,28); screen(p.x+15,p.y-20,d.color,2,25,28);
+        box(p.x+23,p.y+7,5,3,12,'#444b60'); rect(p.x+21,p.y-1,2,4,d.color);
+      } else {
+        screen(p.x,p.y-18,d.color,documents ? 1:2,creative ? 48:40,creative ? 31:28);
+        if (d.department === 'retention') {
+          rect(p.x-11,p.y-38,22,13,'#d2e0ed'); poly([p.x-10,p.y-37,p.x,p.y-30,p.x+10,p.y-37],d.color);
+        }
+        if (creative) {
+          rect(p.x-9,p.y-3,17,8,'#202b3e'); rect(p.x-7,p.y-2,13,5,d.color);
+          rect(p.x+13,p.y-6,2,10,'#e0dce7');
+        }
+        if (d.department === 'research' || d.department === 'operations') {
+          box(p.x+21,p.y+2,7,4,9,'#d0a574','#97714d','#634c3b'); rect(p.x+20,p.y-4,3,6,'#eed8ac');
+        }
+        if (documents) {
+          rect(p.x+13,p.y-4,9,6,'#536487'); rect(p.x+14,p.y-5,8,4,'#e1d6ba'); rect(p.x+16,p.y-5,2,4,d.color);
+        }
+      }
+      rect(p.x-10,p.y+4,18,5,'#242c3e');
+      for (let row=0;row<2;row++) for(let key=0;key<6;key++) rect(p.x-9+key*2.5,p.y+5+row*2,2,1,row ? '#b1bdc9':d.color);
+      rect(p.x+12,p.y+4,5,4,'#d4d5da');rect(p.x+14,p.y+4,1,2,d.color);
+      rect(p.x-24,p.y-7,6,8,'#efebdd');rect(p.x-23,p.y-8,4,2,'#714c3c');rect(p.x-18,p.y-5,2,3,'#bab7b1');
       const chair = iso({x:d.x,y:d.y+1});
-      box(chair.x,chair.y+11,10,5,9,'#414654');rect(chair.x-8,chair.y-7,16,15,'#171c2b');rect(chair.x-6,chair.y-5,12,7,'#5c5266');
+      box(chair.x,chair.y+11,10,5,9,'#414654');rect(chair.x-8,chair.y-11,16,19,'#171c2b');rect(chair.x-6,chair.y-9,12,7,'#5c5266');
+      rect(chair.x-6,chair.y-9,2,12,d.color);rect(chair.x+4,chair.y-9,2,12,d.color);
+      rect(chair.x-12,chair.y+5,5,3,'#697086');rect(chair.x+7,chair.y+5,5,3,'#697086');
     }});
   }
   const hub = iso(MEETING);

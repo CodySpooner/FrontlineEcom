@@ -85,6 +85,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-26 ECO-34: Department-specific dual/ultrawide monitors, document/product/envelope screens, tablets, parcels, books, keyboards, mugs and outlined chairs. Click targets cover enlarged screens. Desktop close-ups, monitor-to-profile click and Orca verified (.agent/eco-34-*.png); pnpm check 980 tests, 58-59 FPS.
 - 2026-10-26 ECO-33: Raised room edges and lit thresholds, material floor inlays, taller vented walls and reinforced foundation. Cached map geometry preserves all routes. Desktop fit/close-up and Orca live six-worker scene verified (.agent/eco-33-*.png); pnpm check 980 tests, 58 FPS.
 - 2026-10-26 ECO-32: Replaced bare room names with colored command placards, concise purpose labels and real deployed-seat counts (including offline seats, excluding archives). Positioned rear/front signs to keep the plaza, props and ticker clear; signs stay above ambient sprites. 976 tests pass after one unrelated UpdatePrompt timing rerun; desktop/Orca live and Demo captures .agent/eco-32-*.png, 58 FPS.
 - 2026-10-26 ECO-31: Added cinematic entry, frame-independent gentle camera easing, Hub shortcut and collapsible SVG minimap with live viewport and eleven named native focus buttons. Reduced/low-power mode skips camera motion. Keyboard Enter focus, Hub and reset checked in browser; Orca before/after captures .agent/eco-31-*.png. 975 tests pass; 57-58 FPS.
@@ -213,7 +214,7 @@ Seed list (reorder or extend as you see fit):
 
 - [x] ECO-32 Department command placards: framed, colored signs with real deployed-seat counts and concise department purpose, readable at fit zoom without hiding props.
 - [x] ECO-33 Architectural detail: raised room thresholds, floor materials, wall vents, columns and stronger foundation depth to ground the city office.
-- [ ] ECO-34 Workstation identity: larger monitor banks and desktop props matched to each department; preserve all clickable desks and worker clearance.
+- [x] ECO-34 Workstation identity: larger monitor banks and desktop props matched to each department; preserve all clickable desks and worker clearance.
 - [ ] ECO-35 Worker inspection polish: an unobtrusive hover/focus spotlight and compact live identity card that makes characters easier to find in the expanded office.
 
 Visual review: owner reference plus [Game Dev Story official screenshots](https://kairosoft.net/game/appli/gamedev.html) and [City Game Studio official gallery](https://www.city-game-studio.com/). Keep their readable furniture silhouettes, clear circulation and room detail; use original art only.

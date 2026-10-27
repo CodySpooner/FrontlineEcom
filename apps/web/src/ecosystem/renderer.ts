@@ -41,7 +41,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     const p=iso(d);
     const light = new Graphics().rect(-12,-32,24,2).fill(d.color);
     light.position.set(p.x,p.y); lights.addChild(light);
-    const hit = new Graphics().rect(-30,-44,60,72).fill({color:0xffffff,alpha:0.001});
+    const hit = new Graphics().rect(-34,-53,68,81).fill({color:0xffffff,alpha:0.001});
     hit.position.set(p.x,p.y); hit.eventMode='static'; hit.cursor='pointer';
     hit.on('pointertap',()=>{ if(dragged) return; selection.clear().poly([p.x,p.y-12,p.x+31,p.y+4,p.x,p.y+20,p.x-31,p.y+4]).stroke({color:0xffffff,width:2});selectDesk(d.id); });
     world.addChild(hit); light.alpha=.45+(i%4)*.12;
