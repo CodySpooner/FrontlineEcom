@@ -185,8 +185,8 @@ test('an approved product page replaces the listing title and a plain-text descr
 });
 
 test('HTML to Etsy plain text: paragraphs, breaks, list bullets, entities', () => {
-  expect(htmlToText('<h2>Why</h2><p>Soft &amp; warm<br>Machine-wash</p><ul>\n<li>Cotton</li>\n<li>Wool</li>\n</ul><p>It&#39;s 5&nbsp;&lt; 6 &#x2014; <b>yes</b> &hellip; &ldquo;Cozy&rdquo; &mdash; it&rsquo;s &zzz; &constructor;</p>')).toBe(
-    "Why\n\nSoft & warm\nMachine-wash\n\n• Cotton\n• Wool\n\nIt's 5 < 6 \u2014 yes \u2026 \u201cCozy\u201d \u2014 it\u2019s &zzz; &constructor;",
+  expect(htmlToText('<h2>Why</h2><p>Soft &amp; warm<br>Machine-wash</p><ul>\n<li>Cotton</li>\n<li>Wool</li>\n</ul><p>It&#39;s 5&nbsp;&lt; 6 &#x2014; <b>yes</b> &hellip; &ldquo;Cozy&rdquo; &mdash; it&rsquo;s &zzz; &constructor; &#9999999;&#x110000;</p>')).toBe(
+    "Why\n\nSoft & warm\nMachine-wash\n\n• Cotton\n• Wool\n\nIt's 5 < 6 \u2014 yes \u2026 \u201cCozy\u201d \u2014 it\u2019s &zzz; &constructor; \ufffd\ufffd",
   );
 });
 

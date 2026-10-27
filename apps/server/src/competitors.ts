@@ -115,7 +115,7 @@ async function get(url: string, fetchFn: Fetch): Promise<Response> {
   }
 }
 const decodeHtml = (s: string) =>
-  s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+  s.replace(/&#(\d+);/g, (_, n) => (Number(n) <= 0x10ffff ? String.fromCodePoint(Number(n)) : '\ufffd')).replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
 /** A Shopify storefront's public `/products.json` (1,000 products at most): each product's lowest variant price. */
 async function shopifyCatalog(origin: string, fetchFn: Fetch): Promise<Priced[] | undefined> {

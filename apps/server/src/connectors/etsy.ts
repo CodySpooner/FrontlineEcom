@@ -192,13 +192,14 @@ export function htmlToText(html: string) {
     amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', hellip: '\u2026', mdash: '\u2014', ndash: '\u2013', lsquo: '\u2018', rsquo: '\u2019',
     ldquo: '\u201c', rdquo: '\u201d', copy: '\u00a9', reg: '\u00ae', trade: '\u2122', deg: '\u00b0', times: '\u00d7', euro: '\u20ac', pound: '\u00a3',
   }));
+  const char = (c: number) => (c <= 0x10ffff ? String.fromCodePoint(c) : '\ufffd'); // past Unicode: the replacement character, as browsers show it
   return html
     .replace(/>\s*\n\s*</g, '><') // source formatting between tags
     .replace(/<\s*br\b[^>]*>|<\/\s*li\s*>/gi, '\n')
     .replace(/<\/\s*(p|div|h[1-6]|ul|ol|blockquote)\s*>/gi, '\n\n')
     .replace(/<\s*li\b[^>]*>/gi, '• ')
     .replace(/<[^>]*>/g, '')
-    .replace(/&(?:#(\d+)|#x([\da-f]+)|([a-z]+));/gi, (m, d, h, n) => (d ? String.fromCodePoint(Number(d)) : h ? String.fromCodePoint(parseInt(h, 16)) : named.get(n.toLowerCase()) ?? m))
+    .replace(/&(?:#(\d+)|#x([\da-f]+)|([a-z]+));/gi, (m, d, h, n) => (d ? char(Number(d)) : h ? char(parseInt(h, 16)) : named.get(n.toLowerCase()) ?? m))
     .replace(/[ \t]+\n/g, '\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();

@@ -156,14 +156,14 @@ test("a WooCommerce competitor's prices come from its public Store API (minor un
     return Response.json([
       { name: 'Jade Roller &amp; Gua Sha', prices: { price: '1999', regular_price: '2999', currency_minor_unit: 2, currency_code: 'GBP' } },
       { name: 'Free Sample', prices: { price: '0', regular_price: '0', currency_minor_unit: 2 } },
-      { name: 'Face Mist', prices: { price: '1450', regular_price: '1450', currency_minor_unit: 2, currency_code: 'GBP' } },
+      { name: 'Face Mist &#9999999;', prices: { price: '1450', regular_price: '1450', currency_minor_unit: 2, currency_code: 'GBP' } },
     ]);
   }) as typeof fetch;
   expect(await watchCompetitorPrices(db, 'woo', 'https://woo-rival.com/shop', fetchFn, new Date('2026-10-25T09:00:00Z'))).toBe(2);
   expect(urls).toEqual(['https://woo-rival.com/products.json?limit=250&page=1', 'https://woo-rival.com/wp-json/wc/store/v1/products?per_page=100&page=1']);
   expect(db.prepare("SELECT data_json FROM competitor_snapshots WHERE competitor_id = 'woo' ORDER BY rowid").all().map((r) => JSON.parse(String(r.data_json)))).toEqual([
     { product: 'Jade Roller & Gua Sha', price: 19.99, compareAt: 29.99, currency: 'GBP' },
-    { product: 'Face Mist', price: 14.5, currency: 'GBP' },
+    { product: 'Face Mist \ufffd', price: 14.5, currency: 'GBP' },
   ]);
 });
 
