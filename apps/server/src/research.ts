@@ -30,6 +30,7 @@ const toProduct = (r: Row): ResearchProduct => {
     category: String(r.category),
     niche: r.niche as Niche,
     ...(r.niche_detail ? { nicheDetail: String(r.niche_detail) } : {}),
+    ...(String(r.id).startsWith('find-') ? {} : { sample: true as const }), // seedResearch's rows; finds are the agents'
     ...(r.image ? { image: String(r.image) } : {}),
     source: r.source as ResearchSource,
     ...p,
@@ -67,6 +68,7 @@ export function researchRoutes(db: Db) {
       if (tab && !RESEARCH_TABS.includes(tab)) return c.json({ error: `tab must be one of ${RESEARCH_TABS.join(', ')}` }, 400);
       const [niche, nicheDetail] = c.req.query('niche')?.split(':', 2) ?? []; // other:<slug> = one custom niche's
       const q = c.req.query('q')?.trim().toLowerCase();
+      const noSamples = c.req.query('sample') === '0';
       const offset = Math.max(0, Math.floor(Number(c.req.query('offset')) || 0));
       const limit = Math.min(200, Math.max(1, Math.floor(Number(c.req.query('limit')) || 50)));
       // ponytail: scores are computed in JS over the whole table; move scoring into SQL if the dataset passes ~10k rows
@@ -75,7 +77,7 @@ export function researchRoutes(db: Db) {
         .prepare('SELECT * FROM research_products ORDER BY id')
         .all()
         .map(toProduct)
-        .filter((p) => t.keep(p) && (!niche || p.niche === niche) && (!nicheDetail || p.nicheDetail === nicheDetail) && (!q || `${p.title} ${p.category}`.toLowerCase().includes(q)))
+        .filter((p) => t.keep(p) && (!niche || p.niche === niche) && (!nicheDetail || p.nicheDetail === nicheDetail) && !(noSamples && p.sample) && (!q || `${p.title} ${p.category}`.toLowerCase().includes(q)))
         .sort(t.by);
       return c.json({ items: all.slice(offset, offset + limit), total: all.length, offset, limit });
     })
@@ -133,7 +135,8 @@ export function researchRoutes(db: Db) {
         storeId: store.id,
         agentId: `${store.id}:product_hunter`,
         title: `Add "${p.title}" to ${store.name}`,
-        reason: `AI score ${p.score}, ${Math.round(p.margin)}% margin, demand +${p.trend}% in 30 days${rate ? '' : `. Prices are in USD (no ${store.currency} rate yet): adjust them before publishing`}`,
+        // A live store gets no made-up demand quoted as if it were measured.
+        reason: `${p.sample && store.connected ? 'From the sample catalog: its score, margin and demand are made up, so check the product and price first' : `AI score ${p.score}, ${Math.round(p.margin)}% margin, demand +${p.trend}% in 30 days`}${rate ? '' : `. Prices are in USD (no ${store.currency} rate yet): adjust them before publishing`}`,
         action: { kind: 'store.add_products', payload: { products: [{ researchProductId: p.id, title: p.title, price: money(p.price), compareAt: money(p.compareAt), cost: money(p.cost) }] } },
       });
       return c.json(approval, 201);

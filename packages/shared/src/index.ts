@@ -981,6 +981,8 @@ export interface ResearchProduct {
   niche: Niche;
   /** With niche 'other': the custom niche's slug (nicheSlug of the store's nicheDetail), so each custom niche's finds stay its own. */
   nicheDetail?: string;
+  /** From the sample catalog every install starts with (made-up numbers), not an agent's find. `GET /api/research?sample=0` leaves these out. */
+  sample?: true;
   image?: string;
   source: ResearchSource;
   /** Supplier cost incl. shipping. */

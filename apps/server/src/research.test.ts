@@ -140,3 +140,23 @@ test("a custom niche's finds are its own: niche=other:<slug> gives that niche's,
   expect(await titles('?niche=other')).toEqual(['Glow Lure Set', 'Soy Candle Kit']);
   expect((await page(app, '?niche=other:candles')).items[0]!.nicheDetail).toBe('candles');
 });
+
+test("the sample catalog is marked, can be left out, and a live store's request doesn't quote its made-up numbers", async () => {
+  const db = openDb();
+  seedDemo(db);
+  seedResearch(db);
+  db.prepare("INSERT INTO research_products (id, title, category, niche, source, cost, price, compare_at, trend, competition, shipping_days) VALUES ('find-1', 'Real Find', 'Pet', 'pet', 'tiktok', 2, 10, 20, 50, 30, 8)").run();
+  const app = createApp(db);
+  const all = await page(app, '?limit=200');
+  expect(all.items.find((p) => p.id === 'find-1')!.sample).toBeUndefined();
+  expect(all.items.find((p) => p.id === 'pet-water-fountain')!.sample).toBe(true);
+  const real = await page(app, '?sample=0');
+  expect([real.total, real.items.map((p) => p.id)]).toEqual([1, ['find-1']]);
+
+  const add = async (id: string, storeId: string) => ((await (await app.request(`/api/research/${id}/add-to-store`, send('POST', { storeId }))).json()) as ApprovalRequest).reason;
+  expect(await add('pet-water-fountain', 'pawsome')).toMatch(/demand \+138%/); // a demo store: the sample is its world
+  db.prepare("UPDATE stores SET demo = 0, connected = 1 WHERE id = 'glow'").run();
+  const live = await add('pet-water-fountain', 'glow');
+  expect(live).not.toMatch(/demand \+/);
+  expect(live).toMatch(/sample catalog/);
+});
