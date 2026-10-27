@@ -525,6 +525,23 @@ Orca's browser against the reference before ticking it.
       every other example field, so next to a disabled Generate it read as a brief already written. They start with
       "e.g." now. Builder's empty Preview said "Pick a draft" though it only shows when there are none (the first draft
       is picked by itself); it now says what lands there.
+- [x] UI-192 Research cards showed demand growth as a bare green "+248%" right after the struck-through price, where it
+      read as a markup (what it meant was only in a hover title). An agent's find can also be falling, and that showed
+      "+-12%" in green, on the card and in its details. The card now shows a trend arrow and a signed figure, green only
+      when rising, with "demand" for screen readers. Details read "−12%".
+- [ ] UI-193 (design review) Short panels stretch to their row: the Dashboard's AI Agents panel has ~250px of empty card
+      next to a tall Agent Requests (Dashboard.tsx grid ~:55), Analytics' Funnel ~45% empty (Analytics.tsx ~:67, :71).
+      Decide per row: `items-start`, or fill the space (more agent cards, a taller funnel). Check the mockup's rows first.
+- [ ] UI-194 (design review) Integrations: 4 of 6 categories are full-width panels holding one card a third as wide
+      (~700px of empty page at 1440, Integrations.tsx ~:59, :78). Let single-provider categories share a row.
+- [ ] UI-195 (design review) Automation lists all 24 rules in one 2,500px column, three lines each (Automation.tsx ~:63,
+      RuleRow ~:95). Group by store under small headers, drop the per-row store label, fold the meta line into the
+      trigger line.
+- [ ] UI-196 (design review) AI Agents: an agent that needs you looks like the idle ones (small dot only) and its card has
+      no way to the waiting request. Mark it and link the request.
+- [ ] UI-197 (design review) Orders: 50 rows a page (~2,900px, Orders.tsx ~:28); the fulfillment chips and the payment
+      switch beside them show "picked" in two different looks (~:290-299). Also seen: Knowledge's playbooks name raw
+      tools (`search_memory`) to the owner (playbook text is the agents lane's; ask there).
 
 ## Blocked
 
@@ -763,3 +780,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-27 — UI-189: (design review) `describeTrigger` reads a monthly cron when `parseCron` doesn't; ordinal from `Intl.PluralRules` (ordinal). Test in lib/automation.test.ts (red first: 1st, 22nd, 13th, and day 32 stays raw). Headless Chrome: Automation shows 3 "Monthly on the 1st at 9:00 AM", 0 raw crons
 - 2026-10-27 — UI-190: (design review) `buttonClass('primary')` adds `disabled:` border/bg/text/shadow (pseudo-class specificity beats the base, so `cx`'s plain join is fine). Headless Chrome: Creative's Generate, Settings' Save and Save caps compute bg #1a1a1e, text #c4c4cc, no red glow; a screenshot shows Save caps matching Reset. CSS only, so no new test
 - 2026-10-27 — UI-191: (design review) copy only. Headless Chrome reads "e.g. Create a viral TikTok ad…" (Creative) and "e.g. Rewrite our best seller's product page…" (Builder). Builder and Creative tests pass. The review's other Creative point, a preview from another store than "For", is by design: the preview is the newest ad in the picked stores, labelled with its store, and its actions go to that store
+- 2026-10-27 — UI-192: (design review) a `demand()` signed formatter in Research for card and details, TrendingUp/TrendingDown icon, sr-only " demand". Two tests in Research.test.tsx (red first: no label, and "+-12%" in details). Headless Chrome: 30 cards, none wrapping at 1024 or 1440 (a spelled-out "demand" label wrapped on 16 cards at 1024, so it became an icon). The review's remaining findings are UI-193 to UI-197; its ad spend delta color matches the approved mockup (every KPI by sign), so it stays

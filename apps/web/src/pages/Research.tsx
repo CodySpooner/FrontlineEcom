@@ -1,7 +1,7 @@
 // UI-09 Product Research: browse scored products by tab, save them to lists, send winners to a store (as an approval).
 import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Baby, Bookmark, Cpu, Dumbbell, Lamp, Package, PawPrint, Search, Shirt, Sparkles, Tent, type LucideIcon } from 'lucide-react';
+import { Baby, Bookmark, Cpu, Dumbbell, Lamp, Package, PawPrint, Search, Shirt, Sparkles, Tent, TrendingDown, TrendingUp, type LucideIcon } from 'lucide-react';
 import { NICHES, PRODUCT_WRITE_PLATFORMS, type Niche, type ProductList, type ResearchProduct, type ResearchSource, type ResearchTab } from '@frontline/shared';
 import { useAddToStore, useListActions, useLists, useResearch, useStartRun, useSupplierSearch } from '../api/client';
 import { FixLink } from '../components/Chat';
@@ -201,11 +201,14 @@ function ProductCard({ p, onOpen, saved }: { p: ResearchProduct; onOpen: () => v
           {p.category} · {SOURCE[p.source]}
           {sample && ' · Sample data'}
         </p>
-        <div className="mt-2.5 flex items-baseline gap-2">
+        <div className="mt-2.5 flex flex-wrap items-baseline gap-x-2">
           <b className="font-display text-lg tabular-nums">{cents(p.price)}</b>
           {p.compareAt > p.price && <s className="text-xs text-muted tabular-nums">{cents(p.compareAt)}</s>}
-          <span className="ml-auto text-xs font-semibold text-good tabular-nums" title="Demand growth, last 30 days">
-            +{p.trend}%
+          {/* An arrow, not a bare "+248%" beside a struck-through price, where it reads as a markup. */}
+          <span className={cx('ml-auto inline-flex items-center gap-0.5 text-xs font-semibold whitespace-nowrap tabular-nums', p.trend > 0 ? 'text-good' : 'text-muted')} title="Demand growth, last 30 days">
+            {p.trend < 0 ? <TrendingDown className="size-3.5" aria-hidden="true" /> : <TrendingUp className="size-3.5" aria-hidden="true" />}
+            {demand(p.trend)}
+            <span className="sr-only"> demand</span>
           </span>
         </div>
         <p className="mt-0.5 text-xs text-muted">
@@ -320,7 +323,7 @@ export function ProductDetails({ p }: { p: ResearchProduct }) {
         <Fact label="Sell at" value={cents(p.price)} />
         {p.compareAt > p.price && <Fact label="Compare at" value={cents(p.compareAt)} />}
         <Fact label="Margin" value={`${Math.round(p.margin)}%`} />
-        <Fact label="Demand, 30 days" value={`+${p.trend}%`} />
+        <Fact label="Demand, 30 days" value={demand(p.trend)} />
         <Fact label="Ships in" value={`${p.shippingDays} days`} />
       </dl>
       <section>
@@ -462,6 +465,9 @@ function Suppliers({ p }: { p: ResearchProduct }) {
     </section>
   );
 }
+
+/** Demand growth, signed: an agent's find can be falling ("−12%"). */
+const demand = (t: number) => (t < 0 ? '−' : '+') + Math.abs(Math.round(t)) + '%';
 
 function Fact({ label, value }: { label: string; value: string }) {
   return (

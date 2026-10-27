@@ -159,3 +159,20 @@ describe('a find with no compare-at', () => {
     expect(screen.queryByText('Compare at')).toBeNull();
   });
 });
+
+describe('a product whose demand fell', () => {
+  const falling = { ...product, trend: -12 };
+
+  it('says so on its card, labelled, not "+-12%"', async () => {
+    stubApi((url) => (url.startsWith('/api/research?') ? { items: [falling], total: 1, offset: 0, limit: 30 } : []));
+    renderApp(<Research />);
+    await screen.findByRole('heading', { level: 3, name: product.title });
+    expect(screen.getByTitle('Demand growth, last 30 days').textContent).toBe('−12% demand');
+  });
+
+  it('says so in its details', async () => {
+    stubApi(() => []);
+    renderApp(<ProductDetails p={falling} />);
+    expect((await screen.findByText('Demand, 30 days')).nextElementSibling!.textContent).toBe('−12%');
+  });
+});
