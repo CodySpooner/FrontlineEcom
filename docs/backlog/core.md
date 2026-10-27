@@ -217,7 +217,7 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 ## Blocked
 
 ## Done
-- 2026-10-27 — CORE-121 (ui Inbox): `shopHost` maps `admin.shopify.com/store/<name>` to `<name>.myshopify.com`; the token still only ever goes to a myshopify.com host. Every reader of `shopDomain` goes through `shopHost`, so a saved admin address works everywhere.
+- 2026-10-26 — CORE-121 (ui Inbox): `shopHost` maps `admin.shopify.com/store/<name>` to `<name>.myshopify.com`; the token still only ever goes to a myshopify.com host. Every reader of `shopDomain` goes through `shopHost`, so a saved admin address works everywhere.
 - 2026-10-26 — CORE-120: `isPrivateHost` reads only the name, and localtest.me or 192.168.1.1.nip.io resolve to private addresses (also as a redirect hop, which picks any path). `publicFetch` (the watch's default fetch) resolves every request's host first and refuses one with an answer in a `node:net` BlockList of loopback, private, link-local and CGNAT (Tailscale) ranges. ponytail: fetch resolves again, so DNS rebinding could still slip past.
 - 2026-10-26 — CORE-119: `String.fromCodePoint` threw a RangeError on `&#9999999;`, failing a competitor's whole price check (`decodeHtml`) or an approved Etsy publish (`htmlToText`). Both now give U+FFFD past U+10FFFF, as browsers do.
 - 2026-10-26 — CORE-118: `htmlToText` (Etsy publish) decodes the common typographic named entities (quotes, dashes, ellipsis, (c)/(R)/TM, degree, times, euro, pound) besides the basic five; an unknown one still stays as typed. The table is a Map, so `&constructor;` can't reach Object.prototype.
