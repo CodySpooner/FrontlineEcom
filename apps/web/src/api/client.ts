@@ -175,6 +175,15 @@ export function useStartRun() {
   });
 }
 
+/** Asks a custom niche's Market Analyst to draft the niche's pack (agents' AGT-231); saving it is an approval. */
+export function useDraftNichePack() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (agentId: string) => api<AgentRun>(`/api/agents/${encodeURIComponent(agentId)}/niche-pack`, { method: 'POST' }),
+    onSuccess: (r) => qc.invalidateQueries({ queryKey: ['runs', r.agentId] }),
+  });
+}
+
 export const useCancelRun = () => useMutation({ mutationFn: (id: string) => api<AgentRun>(`/api/runs/${id}/cancel`, { method: 'POST' }) });
 
 export const useMemory = (storeId: string) => useQuery({ queryKey: ['memory', storeId], queryFn: () => api<StoreMemory[]>(`/api/stores/${storeId}/memory`), enabled: !!storeId });

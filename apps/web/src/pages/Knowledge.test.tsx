@@ -35,6 +35,35 @@ describe('Knowledge Base › niche packs', () => {
   });
 });
 
+describe('Knowledge Base › a custom niche with no pack', () => {
+  const zen = { id: 'zen', name: 'Zen Co', platform: 'shopify', niche: 'other', nicheDetail: 'Yoga Mats', color: '#ff2a3a', currency: 'USD', timezone: 'UTC', connected: true };
+  const api = (provider: 'claude' | 'demo') =>
+    stubApi((url, init) => {
+      if (init?.method === 'POST') return { id: 'r1', agentId: 'zen:market_analyst', status: 'running' };
+      if (url === '/api/knowledge') return [{ kind: 'niche', key: 'pet', title: 'Pet niche pack', chars: 20 }];
+      if (url.startsWith('/api/knowledge/')) return { kind: 'niche', key: 'pet', title: 'Pet niche pack', chars: 20, markdown: '# Pet' };
+      if (url === '/api/stores') return [zen];
+      if (url.startsWith('/api/agents')) return [{ id: 'zen:market_analyst', storeId: 'zen', role: 'market_analyst', enabled: true, engine: { provider } }];
+      if (url.startsWith('/api/niche-learnings')) return [];
+    });
+
+  it('asks its Market Analyst to draft one and opens the run', async () => {
+    const fetch = api('claude');
+    renderApp(<Knowledge />, '/knowledge?tab=niche');
+    expect(await screen.findByText(/has no pack yet/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask its Market Analyst to draft one' }));
+    await vi.waitFor(() => expect(screen.getByTestId('where').textContent).toMatch(/^\/agents\/zen(%3A|:)market_analyst\?run=r1$/));
+    expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url)).toEqual(['/api/agents/zen%3Amarket_analyst/niche-pack']);
+  });
+
+  it("on the demo engine, says when one gets drafted instead (a demo run would make one up)", async () => {
+    api('demo');
+    renderApp(<Knowledge />, '/knowledge?tab=niche');
+    expect(await screen.findByText(/drafts one once the store is connected/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Ask its Market Analyst/ })).toBeNull();
+  });
+});
+
 describe('Knowledge Base › store memory', () => {
   it("says that rewording the squad's memory makes it the owner's note", async () => {
     const mem = (id: string, agentId: string, text: string) => ({ id, storeId: 'peak', agentId, kind: 'learning', text, confidence: 0.6, tags: [], createdAt: '2026-10-26T08:00:00Z' });

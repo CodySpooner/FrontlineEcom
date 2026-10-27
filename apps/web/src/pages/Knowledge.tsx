@@ -1,9 +1,10 @@
 // UI-16 Knowledge Base: the expertise layers agents read (role playbooks, platform and niche packs) and each store's memory.
 import { useDeferredValue, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import { Brain, Pin, Search, Trash2 } from 'lucide-react';
 import type { KnowledgeDoc, KnowledgeKind, MemoryKind, StoreMemory } from '@frontline/shared';
-import { useForgetMemory, useKnowledge, useKnowledgeDoc, useMemories, useSaveKnowledge, useUpdateMemory } from '../api/client';
+import { useAgents, useDraftNichePack, useForgetMemory, useKnowledge, useKnowledgeDoc, useMemories, useSaveKnowledge, useUpdateMemory } from '../api/client';
+import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { Markdown } from '../components/Markdown';
 import { SharedLearnings } from '../components/NicheLearnings';
@@ -80,6 +81,7 @@ function Docs({ kind }: { kind: KnowledgeKind }) {
             })}
           </ul>
         )}
+        {kind === 'niche' && q.data && <MissingPacks docs={docs} />}
       </Panel>
       {sel && (
         <div className="grid gap-3.5">
@@ -88,6 +90,43 @@ function Docs({ kind }: { kind: KnowledgeKind }) {
         </div>
       )}
     </div>
+  );
+}
+
+/** Custom-niche stores with no pack yet. Going live drafts one once; after a denied or failed draft the owner asks again here. */
+function MissingPacks({ docs }: { docs: KnowledgeDoc[] }) {
+  const { stores } = useStoreSelection();
+  const agents = useAgents().data;
+  const draft = useDraftNichePack();
+  const navigate = useNavigate();
+  const missing = stores.filter((s) => s.niche === 'other' && s.nicheDetail?.trim() && !docs.some((d) => d.key === nicheKey(s)));
+  if (!missing.length) return null;
+  return (
+    <ul className="mt-3 grid gap-1.5 border-t border-line pt-3">
+      {missing.map((s) => {
+        const analyst = agents?.find((a) => a.id === `${s.id}:market_analyst`);
+        return (
+          <li key={s.id} className="rounded-lg border border-dashed border-line px-3 py-2 text-xs text-muted">
+            <b className="text-[13px] font-semibold text-text">{s.nicheDetail}</b> has no pack yet ({s.name}).
+            {/* The demo engine can't research a niche: its pack would be made up, so the route refuses it. */}
+            {analyst?.engine?.provider === 'claude' ? (
+              <div className="mt-1.5">
+                <Button size="sm" disabled={draft.isPending} onClick={() => draft.mutate(analyst.id, { onSuccess: (r) => navigate(`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`) })}>
+                  Ask its Market Analyst to draft one
+                </Button>
+              </div>
+            ) : (
+              <span className="block">Its Market Analyst drafts one once the store is connected.</span>
+            )}
+            {draft.isError && draft.variables === analyst?.id && (
+              <p role="alert" className="mt-1 text-red">
+                {draft.error.message} <FixLink message={draft.error.message} agentId={analyst.id} />
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

@@ -6,7 +6,7 @@ external images (the app must work offline). Use `lucide-react` for icons, `@tan
 Orca's browser against the reference before ticking it.
 
 ## Inbox
-- [ ] (from agents, AGT-231) `POST /api/agents/:id/niche-pack` is live: 201 with the `AgentRun`; 409 `{ error }` for a built-in niche, an existing pack, a draft already waiting in Requests, or a store on the demo engine ("On the demo engine the Market Analyst can't research a niche...": a fake pack would become the niche's real one). Show the error text as is; the button can stay hidden when the agent's `engine.provider` is `demo`.
+- [x] (from agents, AGT-231) `POST /api/agents/:id/niche-pack` is live: 201 with the `AgentRun`; 409 `{ error }` for a built-in niche, an existing pack, a draft already waiting in Requests, or a store on the demo engine ("On the demo engine the Market Analyst can't research a niche...": a fake pack would become the niche's real one). Show the error text as is; the button can stay hidden when the agent's `engine.provider` is `demo`.
 - [x] (from agents, AGT-206) A Product Hunter find can come without a compare-at now (`compareAt` 0: sellers show no 'was' price, and the agent no longer has to make one up). Research's card (`<s>{cents(p.compareAt)}</s>`) and detail ("Compare at") would show it as $0.00: hide it when it isn't above the price. "Send to store" already creates such a product with no compare-at (core's CORE-104).
 - [x] (from agents) XP history is live: `GET /api/agents/:id/xp?limit=` → `XpEvent[]` newest first (default 50, max 200; 404 for an unknown agent). A demo agent's list starts with one "Demo squad starting XP" line (AGT-132); a new store's agents start empty, where an empty state like "No XP earned here yet" reads better than hiding the panel.
 - [x] (from agents, AGT-124) Store Builder: `POST /api/page-drafts/:id/publish` now takes an `approved` draft too (approved, but the push to the platform failed: Shopify 5xx, rate limit), so the owner can try again; it no longer answers 409 for it. `Builder.tsx` ~166 `canPublish` leaves `approved` out, so the only ways out today are Discard or "Apply it by hand", and the draft keeps blocking new page drafts for that product. Add `approved` to `canPublish` (a "Try again" label reads right) and keep the by-hand line as the alternative. The server pushes a draft once at a time, so a click while the approval's own push runs is a no-op.
@@ -454,11 +454,11 @@ Orca's browser against the reference before ticking it.
 - [x] UI-170 The Market Analyst drafts a custom niche pack by "following the template exactly", and the template is full
       of `<!-- … -->` guidance. Knowledge and the pack's approval request printed any such comment as a paragraph; the
       markdown renderer now hides one-line HTML comments, as markdown does.
+- [x] UI-166 Knowledge › Niche packs lists each custom-niche store with no pack. With a Claude-engine Market Analyst it
+      offers "Ask its Market Analyst to draft one" (agents' AGT-231 route) and opens the run; on the demo engine it says
+      one gets drafted once the store is connected. A refusal (a draft already waiting, the agent offline) shows as is.
 
 ## Blocked
-- [ ] UI-166 Knowledge › Niche packs: a store in a custom niche with no pack gets "Ask its Market Analyst to draft one",
-      which opens the run. Waits on the agents lane's niche-pack route (requested in its Inbox): only a store's first real
-      sync drafts a pack, once, and a chat ask doesn't carry the template or the save_niche_pack payload.
 
 ## Done
 - 2026-10-26 — Phase 0 skeleton shell + BrandLogo approximation (coordinator)
@@ -672,3 +672,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-168: `nicheName` on AgentDetail's SharedLearnings. One test (red first). Orca on Peak Fit's Market Analyst, memory tab: "Shared with all Fitness stores"
 - 2026-10-26 — UI-169: StoreForm hint by niche and connection. One test (red first). Orca, Settings › Add store opened (writes blocked, nothing submitted), Niche set to Other: the hint switches to the drafting line
 - 2026-10-26 — UI-170: `parseMarkdown` skips `<!-- … -->` lines. One test (red first). Orca, Knowledge with a GET-only fixture custom pack keeping 3 template comments: none shown, h3 Customer / Red flags and their items intact
+- 2026-10-26 — UI-166: `useDraftNichePack` + `MissingPacks` on Knowledge. Two tests (red first). Orca with a GET fixture (Peak Fit in "Yoga Mats" with a Claude-engine analyst, Glow Haus in "Soy Candles" on the demo engine): the button on one, the connect line on the other; the click's one POST answered by the fixture with the route's 409 text, which shows under the button
