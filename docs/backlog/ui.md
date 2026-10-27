@@ -518,6 +518,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-189 Every store's monthly rule read "Cron 0 9 1 * *" in Automation and on the agent's page, the only schedule
       not in words. Monthly crons ("m h D * *") now read "Monthly on the 1st at 9:00 AM". Display only: the simple
       editor still covers day / weekdays / week, and a monthly rule stays in the custom field.
+- [x] UI-190 A disabled primary button (Generate before a brief, Save and Save caps before a change, an agent's Send)
+      was the red fill at half opacity, glow and all, and still read as the action to take. Disabled primaries are grey
+      now, like a disabled ghost button.
 
 ## Blocked
 
@@ -754,3 +757,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-27 — UI-187: (design review) AreaChart's polygon uses the solid polyline's points when `partial`. Test in AreaChart.test.tsx (red first: the fill held today's point). Headless Chrome at 11am: the shading stops at Oct 26 and the dashed segment drops to Oct 27 over the bare grid
 - 2026-10-27 — UI-188: (design review) the strip's `minmax(125px,1fr)` → 140px; a card needs ~137px (10 + 42 portrait + 9 + dot, gap and "Needs you" + 10). Measured in headless Chrome: before, +10px on all three "Needs you" cards at 1024; after, none at 1024/1280/1440/1920. CSS only, so no new test
 - 2026-10-27 — UI-189: (design review) `describeTrigger` reads a monthly cron when `parseCron` doesn't; ordinal from `Intl.PluralRules` (ordinal). Test in lib/automation.test.ts (red first: 1st, 22nd, 13th, and day 32 stays raw). Headless Chrome: Automation shows 3 "Monthly on the 1st at 9:00 AM", 0 raw crons
+- 2026-10-27 — UI-190: (design review) `buttonClass('primary')` adds `disabled:` border/bg/text/shadow (pseudo-class specificity beats the base, so `cx`'s plain join is fine). Headless Chrome: Creative's Generate, Settings' Save and Save caps compute bg #1a1a1e, text #c4c4cc, no red glow; a screenshot shows Save caps matching Reset. CSS only, so no new test
