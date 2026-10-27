@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { approvalsHook } from '../approvals';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { updateStore } from '../stores';
@@ -64,6 +65,36 @@ test("a store's currency changing re-syncs its ad accounts and Amazon from scrat
   expect(Object.values(cursors())).toEqual(Array(5).fill('2026-10-26'));
   setStoreCurrency(db, 'glow', currency === 'EUR' ? 'GBP' : 'EUR');
   expect(cursors()).toEqual({ shopify: '2026-10-26', meta_ads: null, google_ads: null, tiktok_ads: null, amazon: null });
+});
+
+test("a real store's currency changing closes requests priced in the old one and drops its budgets until the ad sync re-reads them", () => {
+  for (const change of ['sync', 'form'] as const) {
+    const db = openDb();
+    seedDemo(db, '2026-10-26');
+    switchToReal(db, 'glow');
+    db.prepare("UPDATE stores SET currency = 'JPY' WHERE id = 'glow'").run();
+    db.prepare("INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 'c1', 'glow', 'Prospecting', 'active', 12800)").run();
+    db.prepare("INSERT INTO integrations (id, kind, store_id, status, encrypted_credentials, updated_at, cursor) VALUES ('meta_ads:glow', 'meta_ads', 'glow', 'connected', '', '', '2026-10-26')").run();
+    const ask = (kind: string, payload: object) => approvalsHook(db).create({ storeId: 'glow', agentId: 'glow:ad_strategist', title: kind, reason: 'r', action: { kind, payload } }).id;
+    const budget = ask('ads.set_budget', { campaignId: 'c1', from: 12800, to: 16640 });
+    const price = ask('store.set_price', { productId: 'p1', from: 2000, to: 2200 });
+    const pause = ask('ads.pause_campaign', { campaignId: 'c1' });
+    if (change === 'sync') setStoreCurrency(db, 'glow', 'USD');
+    else updateStore(db, 'glow', { currency: 'USD' });
+    const status = (id: string) => db.prepare('SELECT status, reason FROM approvals WHERE id = ?').get(id)!;
+    expect([status(budget).status, status(price).status, status(pause).status], change).toEqual(['denied', 'denied', 'pending']);
+    expect(String(status(budget).reason)).toMatch(/\[Expired: [^\]]*currency[^\]]*\]$/); // closedByApp: not the owner's no
+    expect(db.prepare("SELECT daily_budget FROM campaigns WHERE id = 'c1'").get()?.daily_budget).toBe(0);
+    expect(db.prepare("SELECT cursor FROM integrations WHERE store_id = 'glow'").all().every((r) => r.cursor == null)).toBe(true);
+  }
+  // A demo store writes nothing live: its sample requests and budgets stay.
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  const pending = () => db.prepare("SELECT count(*) AS n FROM approvals WHERE store_id = 'glow' AND status = 'pending'").get()!.n;
+  const before = pending();
+  setStoreCurrency(db, 'glow', 'EUR');
+  expect(pending()).toBe(before);
+  expect(db.prepare("SELECT count(*) AS n FROM campaigns WHERE store_id = 'glow' AND daily_budget > 0").get()!.n).toBeGreaterThan(0);
 });
 
 test("a real store's new timezone re-dates its orders, rebuilds both calendars' days and has Amazon re-read its daily totals", () => {

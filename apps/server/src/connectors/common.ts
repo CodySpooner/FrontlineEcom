@@ -1,4 +1,5 @@
 import { INTEGRATION_KINDS, type AdNetwork, type IntegrationKind } from '@frontline/shared';
+import { expireRequests } from '../approvals';
 import type { Db } from '../db';
 import { convertRate, historicRate } from '../fx';
 
@@ -41,13 +42,19 @@ export function switchToReal(db: Db, storeId: string) {
 }
 
 /**
- * Sets a store's currency as its platform reports it. A change re-syncs the store's ad accounts and Amazon from scratch:
- * their history was converted into the old currency (e.g. an ad account that synced before the platform's first sync).
+ * Sets a store's currency (as its platform reports it, or from the store form). A change re-syncs the store's ad accounts
+ * and Amazon from scratch: their history was converted into the old currency (e.g. an ad account that synced before the
+ * platform's first sync).
  */
 export function setStoreCurrency(db: Db, storeId: string, currency: string) {
   if (!db.prepare('UPDATE stores SET currency = ? WHERE id = ? AND currency != ?').run(currency, storeId, currency).changes) return;
   db.prepare('UPDATE orders SET fx_rate = NULL WHERE store_id = ?').run(storeId); // they were into the old currency
   db.prepare("UPDATE integrations SET cursor = NULL WHERE store_id = ? AND kind IN ('meta_ads', 'google_ads', 'tiktok_ads', 'amazon')").run(storeId);
+  if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo !== 0) return;
+  // Budgets and asked amounts are in the old currency: approved, ¥12,800 → ¥16,640 a day would be written as $16,640.
+  // 0 (no daily budget) refuses budget changes until the ad sync re-reads them.
+  db.prepare('UPDATE campaigns SET daily_budget = 0 WHERE store_id = ?').run(storeId);
+  expireRequests(db, storeId, ['ads.set_budget', 'store.set_price', 'store.add_products'], "[Expired: the store's currency changed after it was asked.]");
 }
 
 /**

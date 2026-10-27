@@ -52,6 +52,21 @@ export function decide(db: Db, id: string, decision: ApprovalDecision, note?: st
   return a;
 }
 
+/**
+ * Closes a store's pending requests of `kinds` that can't be carried out as asked any more. `why` (`[Expired: …]`) ends
+ * the reason, so the squad doesn't take it as the owner's no.
+ */
+export function expireRequests(db: Db, storeId: string, kinds: string[], why: string) {
+  const ids = db
+    .prepare(`SELECT id FROM approvals WHERE store_id = ? AND status = 'pending' AND action_json ->> '$.kind' IN (SELECT value FROM json_each(?))`)
+    .all(storeId, JSON.stringify(kinds));
+  for (const r of ids) {
+    const id = String(r.id);
+    db.prepare('UPDATE approvals SET reason = reason || ? WHERE id = ?').run(` ${why}`, id);
+    decide(db, id, 'deny');
+  }
+}
+
 /** The in-process hook the agents engine uses to ask the owner and wait for the answer. */
 export const approvalsHook = (db: Db): ApprovalsHook => ({
   create(input) {
