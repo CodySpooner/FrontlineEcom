@@ -428,6 +428,10 @@ Orca's browser against the reference before ticking it.
 - [x] UI-161 Ask AI, AI Research, the briefs (Builder, Creative, Competitors, Orders) and flow starts can reach an agent
       the owner switched off; core refuses with "This agent is offline. Redeploy it first." and the owner had to find
       where. The refusal now carries "Redeploy it", linking to that agent's settings tab (its Deployed switch).
+- [x] UI-162 A "Save a niche pack" request carries the whole pack in its reason (what the owner approves is what
+      every store in that niche loads), which the request card, the Dashboard board and the bell showed as one run-on
+      paragraph of raw markdown. The reason now shows its own line, and "Read the pack" opens the pack formatted
+      (headings, lists, tables), scrollable, as on the Knowledge page.
 
 ## Blocked
 
@@ -634,3 +638,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-159: the draft doesn't record why its push failed (core's notification does), so every approved store page gets the caution. Builder test (red first); the old "Try again" test now uses a product page. Orca with a fixture draft (approved store page, Pawsome patched connected; read-only): "Publish again" + the caution
 - 2026-10-26 — UI-160: the outcome is judged from the status at click (approving a pending request answers before its push). Two Builder tests (red first). Orca with a fixture draft and the publish POST answered by the fixture (nothing reached the server): "Publish to Pawsome Gear" → alert with the caution, button "Publish again"
 - 2026-10-26 — UI-161: one more case in `budgetFix`, so every FixLink gets it. usage test (red first). Orca: Ask AI on the Dashboard with the run POST answered by the fixture as that refusal (nothing reached the server): alert + "Redeploy it" → /agents/pawsome%3Amarket_analyst?tab=settings. Also filed: agents and core Inbox requests for `link`s on 12 failure notices the bell can't open
+- 2026-10-26 — UI-162: `nichePack(action)` and `shownReason(request)` in lib/approvals, the pack in ApprovalExtras via `Markdown` (its "# Niche" title dropped, as Knowledge does). Two tests (red first). Orca with a fixture pending request (read-only, only the details toggle clicked), checked through the DOM: reason "First pack for this niche, from 30 days of research.", pack open with h3 Audience / Buying triggers / Price norms and a 3-row table. Orca's viewport capture kept missing the board, so no screenshot of it

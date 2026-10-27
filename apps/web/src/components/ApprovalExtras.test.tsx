@@ -35,3 +35,13 @@ describe('price request detail', () => {
     expect(screen.queryByText(/Margin/)).toBeNull();
   });
 });
+
+describe('niche pack request detail', () => {
+  it('shows the pack the owner is approving, formatted, behind Read the pack', async () => {
+    stubApi(() => []);
+    renderApp(<ApprovalExtras action={{ kind: 'save_niche_pack', payload: { slug: 'yoga-mats', markdown: '## Audience\n- Studio teachers' } }} storeId="zen" />);
+    expect((await screen.findByText('Read the pack')).closest('details')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Audience' })).toBeTruthy();
+    expect(screen.getByText('Studio teachers')).toBeTruthy();
+  });
+});

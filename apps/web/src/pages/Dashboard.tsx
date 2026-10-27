@@ -13,6 +13,7 @@ import { Hero } from '../components/Hero';
 import { DemoMixNote, StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
 import { noFeeEstimate } from '../lib/analytics';
+import { shownReason } from '../lib/approvals';
 import { PERIOD, RANGES, sparkPoints, weekly } from '../lib/chart';
 import { ago, cents, fitMoney, fmtDay, money, noBaseline, signedPct } from '../lib/format';
 import { importing } from '../lib/sync';
@@ -416,7 +417,7 @@ export function Requests() {
                   <div className="mt-0.5 text-[13px] font-semibold">{a.title}</div>
                   <div className="mt-0.5 text-xs text-muted">
                     {APPROVAL_KINDS[a.action.kind] && <span className="text-text-2">{APPROVAL_KINDS[a.action.kind]!.label} · </span>}
-                    {a.reason}
+                    {shownReason(a)}
                     {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold whitespace-nowrap text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
                   </div>
                   <ApprovalExtras action={a.action} storeId={a.storeId} />

@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { Brain, ChevronRight, MessageSquare, SendHorizontal, Wrench } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type AgentRunDetail, type ApprovalRequest } from '@frontline/shared';
 import { useApprovals, useCancelRun, useDecide, useRun, useStartRun } from '../api/client';
-import { expiredWhy } from '../lib/approvals';
+import { expiredWhy, shownReason } from '../lib/approvals';
 import { cents, money } from '../lib/format';
 import { isLive, toBlocks, toolName } from '../lib/transcript';
 import { budgetFix } from '../lib/usage';
@@ -275,7 +275,7 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
       <div className="font-display text-[11px] font-bold tracking-[.12em] text-red uppercase">{who ?? (open ? 'Needs your approval' : 'Request')}{APPROVAL_KINDS[a.action.kind] && ` · ${APPROVAL_KINDS[a.action.kind]!.label}`}</div>
       <div className="mt-1 text-[13px] font-semibold">{a.title}</div>
       <div className="mt-0.5 text-xs text-muted">
-        {a.reason}
+        {shownReason(a)}
         {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
       </div>
       <ApprovalExtras action={a.action} storeId={a.storeId} />

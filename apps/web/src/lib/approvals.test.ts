@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addedProducts, draftLink, expiredWhy, fileList, marginAt, priceChange, themeChange } from './approvals';
+import { addedProducts, draftLink, expiredWhy, fileList, marginAt, nichePack, priceChange, shownReason, themeChange } from './approvals';
 
 const theme = (payload: unknown) => themeChange({ kind: 'store.publish_theme', payload });
 
@@ -48,6 +48,18 @@ describe('marginAt', () => {
     expect(marginAt(20, 8)).toBe(60);
     // Etsy-like: 9.5% + 0.25 per order → 20 − 8 − 1.90 − 0.25 = 9.85.
     expect(marginAt(20, 8, { feePercent: 9.5, feePerOrder: 0.25 })).toBe(49);
+  });
+});
+
+describe('nichePack', () => {
+  const md = '# Yoga mats\n\n## Audience\n- Studio teachers';
+  const pack = { kind: 'save_niche_pack', payload: { markdown: md, slug: 'yoga-mats' } };
+  it("is the pack a save_niche_pack request would save, and the request's reason leaves it out (agents end it with the pack)", () => {
+    expect(nichePack(pack)).toBe(md);
+    expect(nichePack({ kind: 'save_niche_pack', payload: {} })).toBeUndefined();
+    expect(nichePack({ kind: 'store.publish_page', payload: { markdown: md } })).toBeUndefined();
+    expect(shownReason({ action: pack, reason: `First pack for this niche.\n\n${md}` })).toBe('First pack for this niche.');
+    expect(shownReason({ action: { kind: 'store.publish_page', payload: {} }, reason: `Why\n\n${md}` })).toBe(`Why\n\n${md}`);
   });
 });
 

@@ -3,8 +3,9 @@ import { Link } from 'react-router';
 import { ExternalLink } from 'lucide-react';
 import type { ApprovalAction } from '@frontline/shared';
 import { useProducts } from '../api/client';
-import { addedProducts, draftLink, fileList, marginAt, priceChange, themeChange } from '../lib/approvals';
+import { addedProducts, draftLink, fileList, marginAt, nichePack, priceChange, themeChange } from '../lib/approvals';
 import { cents } from '../lib/format';
+import { Markdown } from './Markdown';
 import { useStoreSelection } from './StoreFilter';
 
 const SHOWN = 5;
@@ -28,6 +29,17 @@ export function ApprovalExtras({ action, storeId }: { action: ApprovalAction; st
     );
   const price = priceChange(action);
   if (price && storeId) return <PriceMargin storeId={storeId} {...price} />;
+  const pack = nichePack(action);
+  if (pack)
+    return (
+      <details className="mt-1.5 text-xs">
+        <summary className="cursor-pointer font-semibold text-text hover:underline">Read the pack</summary>
+        <div className="mt-2 max-h-72 overflow-y-auto rounded-md border border-line bg-bg-2 p-3">
+          {/* Its "# Niche" title repeats the request's, as on the Knowledge page. */}
+          <Markdown text={pack.replace(/^# .*\r?\n/, '')} />
+        </div>
+      </details>
+    );
   const draft = draftLink(action);
   if (draft)
     return (

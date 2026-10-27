@@ -44,6 +44,18 @@ export function priceChange(action: ApprovalAction) {
 export const marginAt = (price: number, cost: number, fees?: Pick<Store, 'feePercent' | 'feePerOrder'>) =>
   Math.round(((price - cost - (price * (fees?.feePercent ?? 0)) / 100 - (fees?.feePerOrder ?? 0)) / price) * 100);
 
+/** The markdown a `save_niche_pack` request would save for every store in the niche. */
+export function nichePack(action: ApprovalAction) {
+  const md = action.kind === 'save_niche_pack' ? (action.payload as { markdown?: unknown } | undefined)?.markdown : undefined;
+  return typeof md === 'string' && md.trim() ? md : undefined;
+}
+
+/** A request's reason as shown: a niche pack's agents append the whole pack, which ApprovalExtras shows formatted instead. */
+export function shownReason(a: Pick<ApprovalRequest, 'action' | 'reason'>) {
+  const md = nichePack(a.action);
+  return md && a.reason.endsWith(md) ? a.reason.slice(0, -md.length).trim() : a.reason;
+}
+
 /** Where to review the draft behind a `store.publish_page` request (Store Builder opens on it). */
 export function draftLink(action: ApprovalAction) {
   const id = action.kind === 'store.publish_page' ? (action.payload as { draftId?: unknown } | undefined)?.draftId : undefined;
