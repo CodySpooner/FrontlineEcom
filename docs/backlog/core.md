@@ -206,10 +206,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-113 A store's own platform syncing in another currency drops what a second platform synced first in the old one.
 - [x] CORE-114 Requests a restored backup closed are announced, so a closed theme draft's copy is deleted.
 - [x] CORE-115 A TikTok Shop product edited on TikTok has its image read again, so a new main image shows.
+- [x] CORE-116 The competitor watch never fetches an address on this computer or its network, and the add route refuses one.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-116: AGT-235 made `track_competitor` refuse a local or private shop address, but the daily watch still fetched every saved one (an agent's from before it, or one posted to `/api/competitors`). `isPrivateHost` (shared, the agents' rule) now makes the watch skip those as it skips `.example`, and the add route answers 400. ponytail: a public shop that redirects to a private address is still read.
 - 2026-10-26 — Inbox (agents, AGT-223): `stillAsSynced`'s doc now says to keep "as last synced (changed outside the app)", which the agents match to show Not applied.
 - 2026-10-26 — CORE-115: a TikTok Shop product's image was read once (search results carry none), so a new main image never reached the app. An incremental sync now also reads Get Product again for the products its search returned (edited since the last sync), first among the 50 a sync. The test fake now filters products by `update_time_ge` as TikTok does.
 - 2026-10-26 — Inbox (ui, sync notice links): already there. `notifyChange` (sync.ts:25) spreads `where = { link: '/integrations', storeId }` into both notices, since CORE-27, and sync.test.ts asserts the link; every other core notice has one too (approvals and the digest `/`, backups `/settings`). Told ui to look at the bell's click.

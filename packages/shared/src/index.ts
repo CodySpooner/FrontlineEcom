@@ -1098,6 +1098,13 @@ export type NewNotification = Omit<AppNotification, 'id' | 'createdAt' | 'readAt
 // ---------------------------------------------------------------------------------------------------------------------
 // Competitor intel (core lane).
 
+/**
+ * A host on this computer or its network (localhost, private IPv4 ranges, IPv6 literals, dotless or .local-style names),
+ * as `new URL(...).hostname` gives it (any IPv4 notation comes out dotted): the app never fetches one as a competitor.
+ */
+export const isPrivateHost = (hostname: string) =>
+  !hostname.includes('.') || hostname.startsWith('[') || /^(127|10|0|192\.168|169\.254|172\.(1[6-9]|2\d|3[01]))\.[\d.]+$|\.(local|localhost|internal|lan|home|arpa)$/i.test(hostname);
+
 /** GET /api/competitors?stores= → Competitor[]; POST /api/competitors (CompetitorInput) → Competitor; DELETE /api/competitors/:id. */
 export interface Competitor {
   id: string;

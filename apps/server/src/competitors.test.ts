@@ -58,7 +58,8 @@ test('ads count as active when seen in the last 3 days', async () => {
 
 test('validation and 404s', async () => {
   const { app } = setup();
-  for (const body of [{ storeId: 'nope', name: 'X', url: 'https://x.example' }, { storeId: 'glow', name: '', url: 'https://x.example' }, { storeId: 'glow', name: 'X', url: 'javascript:alert(1)' }]) {
+  const local = ['http://localhost:8787', 'http://192.168.1.1', 'http://0x7f000001', 'http://[::1]', 'http://router', 'http://nas.local'].map((url) => ({ storeId: 'glow', name: 'X', url }));
+  for (const body of [{ storeId: 'nope', name: 'X', url: 'https://x.example' }, { storeId: 'glow', name: '', url: 'https://x.example' }, { storeId: 'glow', name: 'X', url: 'javascript:alert(1)' }, ...local]) {
     expect((await app.request('/api/competitors', send('POST', body))).status, JSON.stringify(body)).toBe(400);
   }
   const c = (await (await app.request('/api/competitors', send('POST', { storeId: 'glow', name: 'X', url: 'https://x.example', notes: 'Main rival' }))).json()) as Competitor;
@@ -101,13 +102,14 @@ test("a Shopify competitor's catalog becomes price snapshots, recorded again onl
   expect(await watchCompetitorPrices(db, 'rival', 'https://rival.com', html)).toBeUndefined();
 });
 
-test('the watch checks each real competitor once a day and never the demo .example ones', async () => {
+test('the watch checks each real competitor once a day and never the demo .example ones, nor one on this computer or network', async () => {
   vi.useFakeTimers({ now: new Date('2026-10-26T10:00:00') });
   try {
     const db = openDb();
     seedDemo(db, TODAY);
     seedCompetitors(db, TODAY);
     db.prepare("INSERT INTO competitors (id, store_id, name, url, created_at) VALUES ('rival', 'glow', 'Rival', 'https://rival.com', '2026-10-01T00:00:00Z')").run();
+    db.prepare("INSERT INTO competitors (id, store_id, name, url, created_at) VALUES ('lan', 'glow', 'Router', 'http://192.168.1.1', '2026-10-01T00:00:00Z')").run(); // saved before AGT-235
     const urls: string[] = [];
     const fetchFn = (async (url: string) => {
       urls.push(url);

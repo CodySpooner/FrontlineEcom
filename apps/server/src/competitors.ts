@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
-import type { AdSnapshotData, Competitor, CompetitorSnapshot, PriceChange, PriceSnapshotData } from '@frontline/shared';
+import { isPrivateHost, type AdSnapshotData, type Competitor, type CompetitorSnapshot, type PriceChange, type PriceSnapshotData } from '@frontline/shared';
 import { once, tx, type Db } from './db';
 import { addDays, localDate } from './dates';
 import { hash, mulberry32 } from './demo';
@@ -216,7 +216,9 @@ export async function watchCompetitorPrices(db: Db, competitorId: string, url: s
 
 /**
  * Checks every competitor's prices once a day (hourly ticks, one site at a time). The demo competitors live on the
- * reserved `.example` domain and are never fetched. Returns stop().
+ * reserved `.example` domain and are never fetched, nor is one on this computer or its network (a page an agent read
+ * could have it probe the router or the app's own API). Returns stop().
+ * ponytail: redirects are followed, so a public shop that redirects to a private address is still read once.
  */
 export function startCompetitorWatch(db: Db, key?: Buffer, fetchFn: Fetch = fetch, everyMs = 3_600_000) {
   let running = false;
@@ -228,7 +230,8 @@ export function startCompetitorWatch(db: Db, key?: Buffer, fetchFn: Fetch = fetc
       const done = JSON.parse(String(db.prepare("SELECT value_json FROM settings WHERE key = 'competitor_watch'").get()?.value_json ?? '{}')) as Record<string, string>;
       for (const c of db.prepare('SELECT id, url FROM competitors ORDER BY created_at').all()) {
         const [id, url] = [String(c.id), String(c.url)];
-        if (done[id] === today || new URL(url).hostname.endsWith('.example')) continue;
+        const host = new URL(url).hostname;
+        if (done[id] === today || host.endsWith('.example') || isPrivateHost(host)) continue;
         try {
           const changes = await watchCompetitorPrices(db, id, url, fetchFn, new Date(), key);
           log('info', 'competitor prices', { id, ...(changes === undefined ? { skipped: 'not a Shopify or WooCommerce store, or an Etsy shop with no Etsy store connected' } : { changes }) });
@@ -259,6 +262,7 @@ export function competitorRoutes(db: Db, pickStores: (q?: string) => string[]) {
       if (typeof b.storeId !== 'string' || !db.prepare('SELECT 1 FROM stores WHERE id = ?').get(b.storeId)) return c.json({ error: 'storeId must be an existing store' }, 400);
       if (!str(b.name, 80)) return c.json({ error: 'name must be 1-80 characters' }, 400);
       if (!httpUrl(b.url)) return c.json({ error: 'url must be an http(s) URL' }, 400);
+      if (isPrivateHost(new URL(b.url as string).hostname)) return c.json({ error: "url must be the shop's public web address, not one on this computer or network" }, 400);
       if (b.notes !== undefined && !str(b.notes, 2000)) return c.json({ error: 'notes must be 1-2000 characters' }, 400);
       const id = randomUUID();
       db.prepare('INSERT INTO competitors (id, store_id, name, url, notes, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, b.storeId, b.name.trim(), String(b.url), (b.notes as string | undefined)?.trim() ?? null, new Date().toISOString());
