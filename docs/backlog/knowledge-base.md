@@ -415,7 +415,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - Seed the 16 General categories once.
   - The scoping helper, with isolation tests.
   - The `startFresh` changes (decision 7).
-- [ ] KB-03 **Cards and categories API** (`/api/kb/...`):
+- [x] KB-03 **Cards and categories API** (`/api/kb/...`):
   - list (the §13 filters, paging, sort, `ws=all` for the owner only), get, create (owner = User-Provided);
   - edit (writes a revision), pin, archive and unarchive, reject and unreject, block and unblock from agents (all
     roles or chosen roles), merge (keeps both histories), mark for research, accept proposed;
@@ -620,6 +620,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 ## Done
 - 2026-10-27 KB-01 audit: decisions checked against the code, baseline 992 tests green, before shots in `.agent/before/`.
 - 2026-10-27 KB-02 data model: shared KB types, migrations 44 (kb_* tables, FTS on `seq`, coalesce keys, 16 General categories) and 45 (`agent_runs.mode`), `kbScope`/`kbRow`, go-live purge in `startFresh`.
+- 2026-10-27 KB-03 `/api/kb/cards` (§13 filters, paging, sort, `ws=all` reads) and `/api/kb/categories` (any depth, per workspace): create, edit, the §14 controls and merge, each a revision; 404 on another workspace's id.
 
 ## Blocked
 

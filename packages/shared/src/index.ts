@@ -1381,3 +1381,122 @@ export interface KbCategory {
   position: number;
   createdAt: string;
 }
+
+/** GET /api/kb/categories?ws=general|<storeId>[&general=1] → KbCategory[], each with its own visible card count (proposed + active). */
+export interface KbCategoryCount extends KbCategory {
+  cards: number;
+}
+
+/** Where a card came from. `agent` = an ordinary run; going live purges `agent` and `performance` cards of demo stores. */
+export type KbOrigin = 'owner' | 'research' | 'agent' | 'performance' | 'promotion';
+
+/** A card as lists and the artboard show it. GET /api/kb/cards/:id adds the long fields (KbCard). */
+export interface KbCardBrief {
+  id: string;
+  storeId: string | null;
+  categoryId: string;
+  /** Category names, root first: ['Advertising', 'Creative Strategy', 'Video Hooks']. */
+  path: string[];
+  type: KbCardType;
+  stage: KbStage;
+  status: KbCardStatus;
+  mergedInto?: string;
+  title: string;
+  summary: string;
+  tags: string[];
+  /** 'owner' or the agent's id (`<storeId>:<role>`). */
+  authorId: string;
+  origin: KbOrigin;
+  runId?: string;
+  taskId?: string;
+  pinned: boolean;
+  /** Roles that may not use it; ['*'] = every role. */
+  blockedRoles: string[];
+  researchMarked: boolean;
+  usedCount: number;
+  citedCount: number;
+  verifiedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** GET /api/kb/cards/:id?ws=general|<storeId>|all[&general=1] → KbCard; another workspace's id is a 404. */
+export interface KbCard extends KbCardBrief {
+  /** The detailed explanation. */
+  body: string;
+  /** Why it matters to the business. */
+  relevance: string;
+  /** How agents apply it. */
+  application: string;
+  /** Platforms, industries, audiences or circumstances it applies to. */
+  appliesTo: string;
+  /** Where it may not work. */
+  limits: string;
+}
+
+/**
+ * GET /api/kb/cards?ws=general|<storeId>|all → Page<KbCardBrief>. Filters (all optional): general=1 (a store's list plus
+ * General), q (keyword search), category (that category and everything under it), agent (author id or role), source,
+ * createdFrom/createdTo, verifiedFrom/verifiedTo (YYYY-MM-DD), stage, type, status (comma lists; status defaults to
+ * proposed,active), metric (has evidence on it), tag (comma list, any), sort=updated|created|title|stage|verified|used,
+ * dir=asc|desc, offset, limit (1-1000, default 200).
+ */
+export interface KbCardQuery {
+  q?: string;
+  general?: boolean;
+  category?: string;
+  agent?: string;
+  source?: string;
+  createdFrom?: string;
+  createdTo?: string;
+  verifiedFrom?: string;
+  verifiedTo?: string;
+  stage?: KbStage[];
+  type?: KbCardType[];
+  status?: KbCardStatus[];
+  metric?: string;
+  tag?: string[];
+  sort?: 'updated' | 'created' | 'title' | 'stage' | 'verified' | 'used';
+  dir?: 'asc' | 'desc';
+  offset?: number;
+  limit?: number;
+}
+
+/**
+ * POST /api/kb/cards {ws: 'general'|<storeId>, ...} → 201 KbCard (the owner's: User-Provided unless a type is given, active).
+ * The category is `categoryId` (in that workspace) or `category`, a path created as needed. Text fields: title 3-160,
+ * summary ≤600, the long ones ≤8000; tags ≤12 of 1-40 characters.
+ */
+export interface KbCardInput {
+  categoryId?: string;
+  category?: string[];
+  title: string;
+  summary?: string;
+  body?: string;
+  relevance?: string;
+  application?: string;
+  appliesTo?: string;
+  limits?: string;
+  tags?: string[];
+  type?: KbCardType;
+  stage?: KbStage;
+}
+
+/**
+ * PATCH /api/kb/cards/:id?ws=general|<storeId> → KbCard. Each call is one revision; `reason` is kept with it. `status`:
+ * 'active' accepts a proposed card or brings back an archived or rejected one. Merging is POST /api/kb/cards/:id/merge {from}.
+ */
+export interface KbCardPatch extends Partial<KbCardInput> {
+  pinned?: boolean;
+  blockedRoles?: string[];
+  researchMarked?: boolean;
+  status?: 'active' | 'archived' | 'rejected';
+  reason?: string;
+}
+
+/** POST /api/kb/categories {ws, name, parentId?} → 201; PATCH /api/kb/categories/:id?ws= {name?, parentId?, position?}; DELETE → 204, or 409 while it holds cards. */
+export interface KbCategoryInput {
+  name: string;
+  parentId?: string | null;
+  position?: number;
+}

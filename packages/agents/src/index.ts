@@ -35,4 +35,20 @@ export { savePageDraft, getPageDraft, listPageDrafts, markPublished, deletePageD
 export { closeAnsweredIssues, flagOrderIssue, listOrderIssues, setIssueStatus, type NewOrderIssue } from './issues';
 export { knowledgeIndex, knowledgeDoc, resetKnowledge, saveKnowledge } from './knowledge';
 export { deleteFlowDraft, listFlowDrafts, saveFlowDraft, type NewFlowDraft } from './flows';
-export { kbGoLive, kbRow, kbScope } from './kb';
+export {
+  cardsUnder,
+  createCard,
+  createCategory,
+  ensureCategoryPath,
+  getCard,
+  isUnder,
+  kbGoLive,
+  kbRow,
+  kbScope,
+  listCards,
+  listCategories,
+  mergeCards,
+  updateCard,
+  updateCategory,
+  type NewKbCard,
+} from './kb';

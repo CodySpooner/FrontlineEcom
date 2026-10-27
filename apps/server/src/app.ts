@@ -10,6 +10,7 @@ import { automationRoutes } from './automations';
 import { actionRoutes } from './actions';
 import { backupRoutes } from './backups';
 import { fxFor } from './fx';
+import { kbRoutes } from './kb/routes';
 import { log } from './log';
 import { oauthKinds, oauthRoutes } from './oauth';
 import { demoSupplierProducts, searchCj } from './connectors/cj';
@@ -176,6 +177,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .route('/', automationRoutes(db, (q) => pickStores(db, q)))
     .route('/', settingsRoutes(db))
     .route('/', agentRoutes(db))
+    .route('/', kbRoutes(db))
     .route('/', ecosystemRoutes(db));
 };
 
