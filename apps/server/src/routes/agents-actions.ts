@@ -78,6 +78,9 @@ export async function publishDraft(db: Db, d: PageDraft, push: PushPage) {
   if (d.productId) db.prepare(`UPDATE products SET title = ?, status = 'active' WHERE store_id = ? AND id = ? AND status = 'draft'`).run(d.title, store.id, d.productId);
 }
 
+/** Core's writers refuse a value changed on the platform since the sync (`stillAsSynced`): by hand would apply it anyway. */
+const changedOutside = (e: unknown) => /as last synced \(changed outside the app\)/.test(String(e));
+
 /** Writes an approved change to the store's ad account (core's connectors/ads.ts); throws a readable error. */
 export type WriteAd = (storeId: string, network: AdNetwork, campaignId: string, change: 'pause' | { dailyBudget: number }) => Promise<unknown>;
 
@@ -116,7 +119,12 @@ export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) 
       await write(store.id, network, p.campaignId, pause ? 'pause' : { dailyBudget: p.to as number });
     } catch (e) {
       skip();
-      notify(db, { kind: 'error', title: `Couldn't apply "${a.title}" on the ad account`, body: `${(e as Error).message}. Apply it by hand in the ad manager.`, storeId: store.id, link: '/analytics' });
+      notify(
+        db,
+        changedOutside(e)
+          ? { kind: 'info', title: `Not applied: "${a.title}"`, body: `${(e as Error).message}.`, storeId: store.id, link: `/agents/${a.agentId}` }
+          : { kind: 'error', title: `Couldn't apply "${a.title}" on the ad account`, body: `${(e as Error).message}. Apply it by hand in the ad manager.`, storeId: store.id, link: '/analytics' },
+      );
       return;
     }
   }
@@ -158,7 +166,12 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
       await setPrice(store.id, p.productId, { price: p.to, ...(compareAt !== undefined ? { compareAt } : {}) });
     } catch (e) {
       once(db, `not-applied:${a.id}`);
-      notify(db, { kind: 'error', title: `Couldn't change the price on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Change it by hand if you still want the test.`, storeId: store.id, link: '/analytics' });
+      notify(
+        db,
+        changedOutside(e)
+          ? { kind: 'info', title: `Not applied: "${a.title}"`, body: `${(e as Error).message}.`, storeId: store.id, link: `/agents/${a.agentId}` }
+          : { kind: 'error', title: `Couldn't change the price on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Change it by hand if you still want the test.`, storeId: store.id, link: '/analytics' },
+      );
       return;
     }
   } else {

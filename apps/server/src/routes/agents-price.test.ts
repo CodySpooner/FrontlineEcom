@@ -3,6 +3,7 @@ import type { AgentEvent, ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
+import { stillAsSynced } from '../connectors/common';
 import { addDays, localDate } from '../dates';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
@@ -303,6 +304,17 @@ test('a price approved over 2 weeks after it was asked on a live store is asked 
   );
   await applyPriceChange(db, approval('a-new', 13), async (...args) => void writes.push(args));
   expect(writes).toHaveLength(1);
+});
+
+test("a price the owner changed on the platform since the sync is not applied, and not sent to be done by hand", async () => {
+  db.prepare(`UPDATE stores SET connected = 1, platform = 'shopify' WHERE id = 'peak'`).run();
+  const p = db.prepare(`SELECT id, price FROM products WHERE store_id = 'peak' LIMIT 1`).get()!;
+  const approval = { id: 'a1', storeId: 'peak', agentId: 'peak:market_analyst', title: 'Test price', reason: 'r', status: 'approved', createdAt: new Date().toISOString(), action: { kind: 'store.set_price', payload: { productId: String(p.id), title: 'T', from: Number(p.price), to: Number(p.price) + 2 } } } as ApprovalRequest;
+  await applyPriceChange(db, approval, async () => stillAsSynced('Shopify', 'price', 35, Number(p.price))); // core's writer, raised to 35 in Shopify's admin
+  expect(db.prepare(`SELECT kind, title, body, link FROM notifications WHERE store_id = 'peak' AND (kind = 'error' OR title LIKE 'Not applied%')`).all()).toEqual([
+    { kind: 'info', title: 'Not applied: "Test price"', body: `Shopify: the price is 35 there now, not ${Number(p.price)} as last synced (changed outside the app); ask again after the next sync.`, link: '/agents/peak:market_analyst' },
+  ]);
+  expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
 });
 
 test('a price approved after the price moved is not applied and starts no test', async () => {

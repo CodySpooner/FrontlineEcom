@@ -355,11 +355,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-220 An approved or denied action that throws is written to api.log. It went to the console, which the desktop app doesn't keep, so a failed hook left no trace (the owner's log only ever shows starts).
 - [x] AGT-221 A run that fails to finish (its row or the finish hooks threw: lost XP, a notice never sent) is written to api.log through a new `onError` run-manager option; it went to the console only.
 - [x] AGT-222 An Etsy product page draft keeps to what Etsy takes. Core sends Etsy the plain text of the HTML, so a table ran together and images and links vanished while the Store Builder preview still showed them; and a title Etsy refuses (an emoji, two colons) only failed at publish. `draft_page` now refuses both up front.
+- [x] AGT-223 A price or budget change core refuses because the owner changed it on the platform since the sync (CORE-111/112's `stillAsSynced`) reads "Not applied" and opens the agent, instead of an error saying to make the change by hand, which would apply the stale change anyway (core's example: "20 → 22" on a price raised to 35 is a 37% cut).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-223: `changedOutside(e)` (core's `as last synced (changed outside the app)`) turns the price and ad write failure notices into "Not applied" with the agent's link; tests throw core's own `stillAsSynced`.
 - 2026-10-26 — AGT-222: `draft_page` on Etsy refuses `<table>`/`<img>`/`<a>` and titles outside Etsy's rule (`/[^\p{L}\p{Nd}\p{P}\p{Sm}\p{Zs}™©®]/u`, %, :, & and + once each; checked in Etsy's OpenAPI spec).
 - 2026-10-26 — AGT-221: `RunManagerOptions.onError`; the server's `runHooks` logs it (`run failed to finish`).
 - 2026-10-26 — AGT-220: `onDecision`'s catch logs through core's `log('error', …)` (kind, approval id, message).

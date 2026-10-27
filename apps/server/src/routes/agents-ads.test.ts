@@ -3,6 +3,7 @@ import type { AgentEvent, ApprovalDecision, ApprovalRequest } from '@frontline/s
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
+import { stillAsSynced } from '../connectors/common';
 import { addDays, localDate } from '../dates';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
@@ -385,6 +386,18 @@ test("a real store's ad change approved days after it was asked is not applied: 
   await applyAdChange(db, asked(2), async (...args) => void writes.push(args));
   expect(budget('pawsome-c1').daily_budget).toBe(72);
   expect(writes).toEqual([['pawsome', expect.any(String), 'pawsome-c1', { dailyBudget: 72 }]]); // only the fresh one reached the account
+});
+
+test("a budget the owner changed in the ad manager since the sync is not applied, and not sent to be done by hand", async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
+  db.prepare(`UPDATE campaigns SET daily_budget = 60 WHERE id = 'pawsome-c1'`).run();
+  const a = { id: 'm1', storeId: 'pawsome', agentId: 'pawsome:ad_strategist', title: 'Raise it', reason: 'r', status: 'approved', createdAt: new Date().toISOString(), action: { kind: 'ads.set_budget', payload: { campaignId: 'pawsome-c1', from: 60, to: 72 } } } as ApprovalRequest;
+  await applyAdChange(db, a, async () => stillAsSynced('Meta', 'daily budget', 90, 60)); // core's writer
+  expect(db.prepare(`SELECT kind, title, body, link FROM notifications WHERE store_id = 'pawsome' AND (kind = 'error' OR title LIKE 'Not applied%')`).all()).toEqual([
+    { kind: 'info', title: 'Not applied: "Raise it"', body: 'Meta: the daily budget is 90 there now, not 60 as last synced (changed outside the app); ask again after the next sync.', link: '/agents/pawsome:ad_strategist' },
+  ]);
+  expect(db.prepare(`SELECT 1 FROM done_once WHERE ref = 'not-applied:m1'`).get()).toBeTruthy();
+  expect(budget('pawsome-c1').daily_budget).toBe(60);
 });
 
 test('a late approval does not undo a budget the owner moved, nor pause a paused campaign, and is not scored', async () => {
