@@ -32,6 +32,9 @@ import type {
   Integration,
   IntegrationInput,
   IntegrationKind,
+  KbCard,
+  KbCardBrief,
+  KbWorkspaceCounts,
   KnowledgeDoc,
   KnowledgeKind,
   LiveMessage,
@@ -231,6 +234,20 @@ export function useUpdateMemory() {
 export const useKnowledge = () => useQuery({ queryKey: ['knowledge'], queryFn: () => api<KnowledgeDoc[]>('/api/knowledge') });
 export const useKnowledgeDoc = (kind: KnowledgeKind, key: string) =>
   useQuery({ queryKey: ['knowledge', kind, key], queryFn: () => api<KnowledgeDoc>(`/api/knowledge/${kind}/${encodeURIComponent(key)}`), enabled: !!key });
+
+/** Visible cards per knowledge workspace ('general' or a store id). */
+export const useKbWorkspaces = () => useQuery({ queryKey: ['kb', 'workspaces'], queryFn: () => api<KbWorkspaceCounts>('/api/kb/workspaces') });
+
+/** A workspace's cards ('general' or a store id; `general` adds General's to a store's). */
+export const useKbCards = (ws: string, q: { general?: boolean; q?: string }) =>
+  useQuery({
+    queryKey: ['kb', 'cards', ws, q],
+    queryFn: () => api<Page<KbCardBrief>>(`/api/kb/cards?${new URLSearchParams({ ws, ...(q.general && { general: '1' }), ...(q.q && { q: q.q }) })}`),
+    placeholderData: keepPreviousData,
+  });
+
+/** One card from any workspace (a `?card=` link). */
+export const useKbCard = (id: string | undefined) => useQuery({ queryKey: ['kb', 'card', id], queryFn: () => api<KbCard>(`/api/kb/cards/${encodeURIComponent(id!)}?ws=all`), enabled: !!id });
 
 /** Save the owner's version of a doc, or (markdown undefined) go back to the shipped one. */
 export function useSaveKnowledge() {

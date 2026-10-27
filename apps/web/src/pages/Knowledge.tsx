@@ -1,18 +1,190 @@
-// UI-16 Knowledge Base: the expertise layers agents read (role playbooks, platform and niche packs) and each store's memory.
-import { useDeferredValue, useState } from 'react';
+// The Knowledge Base (knowledge-base lane): the page frame and its views. The Library still hosts UI-16, the expertise
+// layers agents read (role playbooks, platform and niche packs) and each store's memory.
+import { useDeferredValue, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Brain, Pin, Search, Trash2 } from 'lucide-react';
+import { Brain, Link2, Network, Pin, Plus, Radar, Search, Trash2 } from 'lucide-react';
 import type { KnowledgeDoc, KnowledgeKind, MemoryKind, StoreMemory } from '@frontline/shared';
-import { useAgents, useApprovals, useDraftNichePack, useForgetMemory, useKnowledge, useKnowledgeDoc, useMemories, useSaveKnowledge, useUpdateMemory } from '../api/client';
+import {
+  useAgents,
+  useApprovals,
+  useDraftNichePack,
+  useForgetMemory,
+  useKbCard,
+  useKbCards,
+  useKbWorkspaces,
+  useKnowledge,
+  useKnowledgeDoc,
+  useMemories,
+  useSaveKnowledge,
+  useStores,
+  useUpdateMemory,
+} from '../api/client';
 import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { Markdown } from '../components/Markdown';
 import { SharedLearnings } from '../components/NicheLearnings';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Tabs, useFocusBack } from '../components/ui';
+import { nicheName } from '../components/StoreForm';
+import { Badge, Button, Card, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Switch, Tabs, useFocusBack } from '../components/ui';
+import { VIEWS, viewOf, withParams, wsFrom, type KbView } from '../knowledge/url';
 import { ago } from '../lib/format';
 import { nicheKey } from '../lib/niche';
 import { NAV } from '../nav';
+
+type SetParams = (changes: Record<string, string | undefined>) => void;
+
+/** Typing in a field: `/` is a character there, not "go to search". */
+const typing = (t: EventTarget | null) => t instanceof HTMLElement && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || !!t.closest('[contenteditable=""],[contenteditable="true"]'));
+
+export function Knowledge() {
+  const nav = NAV.find((n) => n.path === '/knowledge')!;
+  const [params, setParams] = useSearchParams();
+  const { ids: picked } = useStoreSelection();
+  const stores = useStores().data;
+  const view = viewOf(params);
+  const ws = wsFrom(params, view, stores?.map((s) => s.id), picked);
+  const general = ws !== 'general' && params.get('general') !== '0';
+  const q = params.get('q') ?? '';
+  const card = params.get('card') ?? undefined;
+  const set: SetParams = (changes) => setParams((p) => withParams(p, changes), { replace: true });
+  const search = useRef<HTMLInputElement>(null);
+
+  // A `?card=` link opens in the card's own workspace, unless the card already shows here (General inside a store).
+  const opened = useKbCard(card).data;
+  const home = opened && (opened.storeId ?? 'general');
+  useEffect(() => {
+    if (home && home !== ws && view !== 'research' && !(home === 'general' && general)) setParams((p) => withParams(p, { ws: home }), { replace: true });
+  }, [home, ws, view, general, setParams]);
+
+  // `/` goes to search; Esc closes the open card (inner layers such as popovers handle Esc first and preventDefault).
+  // Neither acts while a dialog (Ask AI, a form) is open. Ctrl/Cmd+K stays with Ask AI.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (document.querySelector('dialog[open]')) return;
+      if (e.key === '/' && !e.ctrlKey && !e.metaKey && !e.altKey && !typing(e.target)) {
+        e.preventDefault();
+        search.current?.focus();
+      } else if (e.key === 'Escape' && !e.defaultPrevented && card) {
+        setParams((p) => withParams(p, { card: undefined }), { replace: true });
+        [...document.querySelectorAll<HTMLElement>('[data-kb-card]')].find((el) => el.dataset.kbCard === card)?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [card, setParams]);
+
+  const switcher = <Segmented label="View" options={[...VIEWS]} value={view} onChange={(v: KbView) => set({ view: v === 'artboard' ? undefined : v, tab: undefined, doc: undefined })} />;
+  return (
+    <>
+      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
+      <Toolbar ws={ws} view={view} general={general} q={q} set={set} search={search}>
+        {view !== 'artboard' && <div className="ml-auto">{switcher}</div>}
+      </Toolbar>
+      {view === 'artboard' ? (
+        <ArtboardView ws={ws} general={general} q={q} card={card} set={set} switcher={switcher} />
+      ) : view === 'library' ? (
+        <Library set={set} />
+      ) : view === 'relationships' ? (
+        <Card>
+          <EmptyState icon={Network} title="No connections to show yet">
+            How cards support, contradict and build on each other shows here once the knowledge base links them.
+          </EmptyState>
+        </Card>
+      ) : (
+        <Card>
+          <EmptyState icon={Radar} title="No research yet">
+            Research tasks, new discoveries and knowledge gaps show here once agents start researching.
+          </EmptyState>
+        </Card>
+      )}
+    </>
+  );
+}
+
+/** Workspace, Include General, search and the research actions; `children` (the view switcher) sits at the right end. */
+function Toolbar({ ws, view, general, q, set, search, children }: { ws: string; view: KbView; general: boolean; q: string; set: SetParams; search: RefObject<HTMLInputElement | null>; children: ReactNode }) {
+  const stores = useStores().data ?? [];
+  const counts = useKbWorkspaces().data ?? {};
+  const cards = (key: string) => `${counts[key] ?? 0} card${counts[key] === 1 ? '' : 's'}`;
+  const store = stores.find((s) => s.id === ws);
+  return (
+    <div className="mb-3.5 flex flex-wrap items-center gap-2">
+      {/* The Research Center picks workspaces with its own chips. */}
+      {view !== 'research' && (
+        <>
+          <span className="relative flex items-center">
+            <i aria-hidden className="pointer-events-none absolute left-3 size-[7px] rounded-full" style={{ background: store?.color ?? 'var(--color-muted)' }} />
+            <select aria-label="Workspace" value={ws} onChange={(e) => set({ ws: e.target.value, card: undefined })} className={cx(inputClass, 'cursor-pointer pl-7')}>
+              <option value="general">General · {cards('general')}</option>
+              {stores.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} · {s.niche === 'other' && s.nicheDetail?.trim() ? s.nicheDetail.trim() : nicheName(s.niche)} · {cards(s.id)}
+                </option>
+              ))}
+            </select>
+          </span>
+          {store && (
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-line-2 bg-bg-2 px-3 py-[7px] text-[13px] text-text-2">
+              <Switch checked={general} onChange={(e) => set({ general: e.target.checked ? undefined : '0' })} />
+              Include General knowledge
+            </label>
+          )}
+        </>
+      )}
+      <label className="relative min-w-[180px] max-w-[320px] flex-1">
+        <span className="sr-only">Search knowledge</span>
+        <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
+        <input ref={search} type="search" value={q} onChange={(e) => set({ q: e.target.value || undefined })} placeholder="Search knowledge…" className={cx(inputClass, 'w-full pl-9')} />
+      </label>
+      {/* Research arrives with the research runner; until then these say so instead of doing nothing. */}
+      <Button disabled title="Research isn't switched on yet">
+        <Link2 aria-hidden className="size-4" /> From source
+      </Button>
+      <Button variant="primary" disabled title="Research isn't switched on yet">
+        <Plus aria-hidden className="size-4" /> New research
+      </Button>
+      {children}
+    </div>
+  );
+}
+
+function ArtboardView({ ws, general, q, card, set, switcher }: { ws: string; general: boolean; q: string; card?: string; set: SetParams; switcher: ReactNode }) {
+  const { name } = useStoreSelection();
+  const needle = useDeferredValue(q.trim());
+  const cards = useKbCards(ws, { general, q: needle });
+  const items = cards.data?.items ?? [];
+  return (
+    <section aria-label="Artboard" className="card relative min-h-[420px] overflow-hidden pt-16">
+      <div className="absolute top-3 left-1/2 z-10 -translate-x-1/2">{switcher}</div>
+      {cards.isPending ? (
+        <LoadingState rows={4} className="p-4" />
+      ) : cards.isError ? (
+        <ErrorState message="Couldn't load the knowledge base." onRetry={() => cards.refetch()} />
+      ) : !items.length ? (
+        <EmptyState icon={Brain} title={needle ? 'Nothing matches' : `No knowledge in ${ws === 'general' ? 'General' : name(ws)} yet`}>
+          {needle ? 'Try another word, or clear the search.' : 'Cards show here as you and your agents research, test and learn what works.'}
+        </EmptyState>
+      ) : (
+        // ponytail: a plain list until the canvas (KB-06) replaces it.
+        <ul className="flex flex-wrap gap-2 p-4">
+          {items.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                data-kb-card={c.id}
+                aria-pressed={c.id === card}
+                onClick={() => set({ card: c.id })}
+                className={cx('cursor-pointer rounded-lg border bg-bg-2 px-3 py-2 text-left text-[13px] font-semibold transition', c.id === card ? 'border-red' : 'border-line hover:border-line-3')}
+              >
+                {c.title}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 type Tab = KnowledgeKind | 'memory';
 const TABS: { value: Tab; label: string }[] = [
@@ -29,25 +201,23 @@ const ABOUT: Record<KnowledgeKind, string> = {
 const MAX = 50_000;
 const short = (d: KnowledgeDoc) => d.title.replace(/ (playbook|platform pack|niche pack)$/, '');
 
-export function Knowledge() {
-  const nav = NAV.find((n) => n.path === '/knowledge')!;
-  const [params, setParams] = useSearchParams();
+function Library({ set }: { set: SetParams }) {
+  const [params] = useSearchParams();
   const tab = (TABS.find((t) => t.value === params.get('tab'))?.value ?? 'playbook') as Tab;
   return (
     <>
-      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
       <div className="mb-3.5">
-        <Tabs label="Knowledge" tabs={TABS} value={tab} onChange={(t) => setParams(t === 'playbook' ? {} : { tab: t }, { replace: true })} />
+        <Tabs label="Knowledge" tabs={TABS} value={tab} onChange={(t) => set({ view: 'library', tab: t === 'playbook' ? undefined : t, doc: undefined })} />
       </div>
-      {tab === 'memory' ? <MemoryBrowser /> : <Docs key={tab} kind={tab} />}
+      {tab === 'memory' ? <MemoryBrowser /> : <Docs key={tab} kind={tab} set={set} />}
     </>
   );
 }
 
-function Docs({ kind }: { kind: KnowledgeKind }) {
+function Docs({ kind, set }: { kind: KnowledgeKind; set: SetParams }) {
   const q = useKnowledge();
   const { stores } = useStoreSelection();
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const docs = (q.data ?? []).filter((d) => d.kind === kind);
   const sel = docs.find((d) => d.key === params.get('doc')) ?? docs[0];
   const usedBy = (d: KnowledgeDoc) => (kind === 'playbook' ? [] : stores.filter((s) => (kind === 'platform' ? s.platform : nicheKey(s)) === d.key).map((s) => s.name));
@@ -67,7 +237,7 @@ function Docs({ kind }: { kind: KnowledgeKind }) {
                   <button
                     type="button"
                     aria-current={d.key === sel?.key}
-                    onClick={() => setParams({ ...(kind !== 'playbook' && { tab: kind }), doc: d.key }, { replace: true })}
+                    onClick={() => set({ view: 'library', tab: kind === 'playbook' ? undefined : kind, doc: d.key })}
                     className={cx('w-full cursor-pointer rounded-lg border px-3 py-2 text-left transition', d.key === sel?.key ? 'border-red/70 bg-red-soft' : 'border-line bg-bg-2 hover:border-line-3')}
                   >
                     <span className="flex items-center justify-between gap-2">

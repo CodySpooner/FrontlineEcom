@@ -23,6 +23,16 @@ const create = (ws: string, title: string, extra: Record<string, unknown> = {}) 
 const list = (qs: string) => ok<Page<KbCardBrief>>('GET', `/api/kb/cards?${qs}`).then((p) => p.items.map((c) => c.title));
 const revisions = (id: string) => db.prepare('SELECT actor, reason FROM kb_revisions WHERE card_id = ? ORDER BY id').all(id).map((r) => `${r.actor}: ${r.reason}`);
 
+describe('workspaces', () => {
+  test('counts the visible cards (proposed + active) in General and each store; empty ones are left out', async () => {
+    await create('general', 'Hooks decide the first 3 seconds');
+    await create('pawsome', 'Rescue stories pull clicks');
+    const gone = await create('pawsome', 'Old idea');
+    await ok('PATCH', `/api/kb/cards/${gone.id}?ws=pawsome`, { status: 'archived' });
+    expect(await ok('GET', '/api/kb/workspaces')).toEqual({ general: 1, pawsome: 1 });
+  });
+});
+
 describe('cards', () => {
   test("the owner's card is User-Provided and active, filed under a path made as needed, with a first revision", async () => {
     const c = await create('pawsome', 'Rescue stories pull clicks', { category: ['advertising', 'Creative Strategy', 'Video Hooks'], summary: 'Dog owners stop for rescue arcs', tags: ['tiktok', ' hooks '] });

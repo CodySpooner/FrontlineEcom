@@ -435,7 +435,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - Tests for every rule.
 
 ### Phase 2: visual redesign (design A + the page frame)
-- [ ] KB-05 **Page frame,** per "Page frame (all views)":
+- [x] KB-05 **Page frame,** per "Page frame (all views)":
   - the views, `?ws=` and `?card=`;
   - the Hero and the toolbar row;
   - the page-level view switcher;
@@ -622,6 +622,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-02 data model: shared KB types, migrations 44 (kb_* tables, FTS on `seq`, coalesce keys, 16 General categories) and 45 (`agent_runs.mode`), `kbScope`/`kbRow`, go-live purge in `startFresh`.
 - 2026-10-27 KB-03 `/api/kb/cards` (§13 filters, paging, sort, `ws=all` reads) and `/api/kb/categories` (any depth, per workspace): create, edit, the §14 controls and merge, each a revision; 404 on another workspace's id.
 - 2026-10-27 KB-04 evidence, links (owner-confirmed, suggested accept/reject), the deterministic suggester on every create (word overlap, category, shared sources, possible contradictions → conflict), the decision-11 ladder as revisions (owner stage kept via migration 46 `stage_by_owner`), restore revision, detach merged evidence.
+- 2026-10-27 KB-05 page frame: toolbar (workspace with niche + card count, Include General, search, research actions shown off until research lands), one `?view=` switcher, `?ws=`/`?card=`/legacy `tab`/`doc` URLs, `/` and Esc guards, loading/error/empty states; `GET /api/kb/workspaces`.
 
 ## Blocked
 
@@ -640,3 +641,9 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - Screenshots: Orca's built-in browser tiles any viewport wider than 800 px (its pane is ~800 px), so wide shots are
     taken with headless Chrome over CDP (`.agent/cdp-shot.mjs`: exact viewport, prints console errors per shot). Orca
     is still used at its native width. Before shots: `.agent/before/` (4 tabs at 1280x800 and 1920x1080).
+- 2026-10-27 KB-05: the two `Knowledge.test.tsx` tests that opened bare `/knowledge` (Edit focus-back, Restore original)
+  now start at `/knowledge?tab=playbook`, because bare `/knowledge` is the artboard now and those tests are about the
+  playbook editor. The UI-16 `setParams` merge (KB-09's "one change") landed in KB-05 with its test ("stays in the
+  Library while moving between its sections and docs"): the legacy URLs made it reachable already. The artboard shows
+  a plain clickable list of titles until KB-06 replaces it; "From source" and "New research" are disabled with a
+  title until KB-14/KB-15.

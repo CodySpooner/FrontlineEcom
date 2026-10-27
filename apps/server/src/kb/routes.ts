@@ -152,6 +152,13 @@ function parseQuery(q: Record<string, string>): string | KbCardQuery {
 
 export function kbRoutes(db: Db) {
   return new Hono()
+    .get('/api/kb/workspaces', (c) =>
+      c.json(
+        Object.fromEntries(
+          db.prepare(`SELECT coalesce(store_id, 'general') AS ws, count(*) AS n FROM kb_cards WHERE status IN ('proposed', 'active') GROUP BY store_id`).all().map((r) => [r.ws, Number(r.n)]),
+        ),
+      ),
+    )
     .get('/api/kb/categories', (c) => {
       const ws = wsOf(db, c.req.query('ws'), true);
       if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);

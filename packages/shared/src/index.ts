@@ -1494,6 +1494,9 @@ export interface KbCardPatch extends Partial<KbCardInput> {
   reason?: string;
 }
 
+/** GET /api/kb/workspaces → visible cards (proposed + active) per workspace, keyed 'general' or a store id; missing = 0. */
+export type KbWorkspaceCounts = Record<string, number>;
+
 /** POST /api/kb/categories {ws, name, parentId?} → 201; PATCH /api/kb/categories/:id?ws= {name?, parentId?, position?}; DELETE → 204, or 409 while it holds cards. */
 export interface KbCategoryInput {
   name: string;
