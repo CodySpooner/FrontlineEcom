@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { PageDraft, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { Builder } from './Builder';
@@ -48,6 +48,28 @@ describe('Builder › publishing a draft', () => {
     expect(await screen.findByRole('button', { name: 'Publish again' })).toBeTruthy();
     expect(screen.getByText(/may be live anyway: check Clay Co's pages before you publish it again, or it goes up twice/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+});
+
+describe('Builder › a publish the store didn\'t take', () => {
+  // The push failed: core notifies the owner and hands the draft back unchanged.
+  const unchanged = (d: PageDraft) => {
+    stubApi((url, init) => (init?.method === 'POST' ? d : url.startsWith('/api/stores') ? [store('shopify')] : url.startsWith('/api/page-drafts') ? [d] : []));
+    renderApp(<Builder />, '/builder');
+  };
+
+  it('says so, and that a store page may be live anyway, instead of looking like nothing happened', async () => {
+    unchanged(draft);
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish to Clay Co' }));
+    expect(await screen.findByText(/didn't go through \(the bell says why\)\. If it timed out, the page may be live anyway: check Clay Co's pages/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Publish again' })).toBeTruthy();
+  });
+
+  it('just points to the bell for a product page, an update that is safe to repeat', async () => {
+    unchanged({ ...draft, kind: 'product', productId: 'p1' });
+    fireEvent.click(await screen.findByRole('button', { name: 'Publish to Clay Co' }));
+    expect(await screen.findByText("It didn't go through: the bell says why.")).toBeTruthy();
+    expect(screen.queryByText(/may be live anyway/)).toBeNull();
   });
 });
 

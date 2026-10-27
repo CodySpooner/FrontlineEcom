@@ -177,8 +177,12 @@ function DraftView({ d }: { d: PageDraft }) {
   // The same gate as agents' publish_page: product pages reach more platforms than other pages.
   const manual = byHand(stores.find((s) => s.id === d.storeId), d.kind === 'product' && d.productId ? PRODUCT_PAGE_PLATFORMS : PRODUCT_WRITE_PLATFORMS);
   const error = publish.error ?? remove.error;
+  // A direct publish answers once its push is done, so still unpublished means it failed (core's notice says why). Not
+  // so after approving a request: that answers before the push.
+  const [unpushed, setUnpushed] = useState<string>();
+  const failed = unpushed === d.id && d.status !== 'published';
   // A store page is created, not updated: a push that timed out may have made it live (AGT-215), and again puts it up twice.
-  const twice = d.status === 'approved' && d.kind === 'page' && !manual;
+  const twice = d.kind === 'page' && !manual && (d.status === 'approved' || failed);
   return (
     <div className="grid gap-3.5">
       <Panel
@@ -212,7 +216,12 @@ function DraftView({ d }: { d: PageDraft }) {
                 The app can't publish this kind of page to {manual} yet. Copy it into {manual} by hand.
               </span>
             ) : (
-              <Button variant="primary" className="ml-auto" disabled={publish.isPending} onClick={() => publish.mutate(d.id)}>
+              <Button
+                variant="primary"
+                className="ml-auto"
+                disabled={publish.isPending}
+                onClick={() => publish.mutate(d.id, { onSuccess: (r) => setUnpushed(d.status !== 'pending' && r.status !== 'published' ? d.id : undefined) })}
+              >
                 {d.status === 'pending' ? 'Approve and publish' : twice ? 'Publish again' : d.status === 'approved' ? 'Try again' : `Publish to ${store}`}
               </Button>
             ))}
@@ -220,6 +229,13 @@ function DraftView({ d }: { d: PageDraft }) {
         {error && (
           <p role="alert" className="mt-2 text-xs text-red">
             {error.message}
+          </p>
+        )}
+        {failed && (
+          <p role="alert" className="mt-2 text-xs text-red">
+            {twice && d.status !== 'approved'
+              ? `It didn't go through (the bell says why). If it timed out, the page may be live anyway: check ${store}'s pages before you publish it again.`
+              : "It didn't go through: the bell says why."}
           </p>
         )}
       </Panel>

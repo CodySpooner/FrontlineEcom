@@ -420,6 +420,10 @@ Orca's browser against the reference before ticking it.
       created, not updated, so a push that timed out may already be live and a retry puts it up twice. An approved store
       page now reads "…didn't confirm it. It may be live anyway: check <store>'s pages before you publish it again, or
       it goes up twice." with "Publish again". Product pages (an update) keep "Try again"; by-hand stores are unchanged.
+- [x] UI-160 (re AGT-215, after UI-159) Publishing a draft straight from Store Builder to a connected store whose push
+      failed looked like nothing happened (core hands the draft back unchanged and only the bell says why), inviting the
+      second click that duplicates a store page that did go live. It now says "It didn't go through (the bell says
+      why)", plus the may-be-live caution and "Publish again" for a store page.
 
 ## Blocked
 
@@ -624,3 +628,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-157: one `roving()` helper in ui.tsx for both. Two ui tests (red first); whole web suite green. Orca on the Dashboard's Date range: 30D* → ArrowLeft 7D* (focused, tabIndex 0) → End 1Y* → Home, ArrowRight back to 30D*
 - 2026-10-26 — UI-158: matches the agents' message, as FixLink does for budgets. Chat test (red first). Orca on Pawsome's Copywriter with both run POSTs answered by the fixture (409, then a fake run; nothing reached the server): button inline after the message; click → second POST without resumeRunId, alert gone, box cleared, new thread shows the task
 - 2026-10-26 — UI-159: the draft doesn't record why its push failed (core's notification does), so every approved store page gets the caution. Builder test (red first); the old "Try again" test now uses a product page. Orca with a fixture draft (approved store page, Pawsome patched connected; read-only): "Publish again" + the caution
+- 2026-10-26 — UI-160: the outcome is judged from the status at click (approving a pending request answers before its push). Two Builder tests (red first). Orca with a fixture draft and the publish POST answered by the fixture (nothing reached the server): "Publish to Pawsome Gear" → alert with the caution, button "Publish again"
