@@ -8,6 +8,7 @@ import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot, useFocusBack } from '../components/ui';
 import { ago, fmtDay } from '../lib/format';
+import { anotherShop } from '../lib/shop';
 import { importing } from '../lib/sync';
 import { NAV } from '../nav';
 
@@ -253,6 +254,7 @@ export function ConnectForm({ kind, store, current, onDone }: { kind: Integratio
   const [landed, setLanded] = useState('');
   const [confirm, setConfirm] = useState(false);
   const disconnect = useFocusBack(confirm);
+  const otherShop = !!current && anotherShop(kind, current.settings, values);
   const viaConnect = canConnect && !manual;
   const fields = k.fields.filter((f) => !(viaConnect && f.oauth));
   const oneOf = ONE_OF[kind];
@@ -366,6 +368,12 @@ export function ConnectForm({ kind, store, current, onDone }: { kind: Integratio
         <button type="button" onClick={() => setManual((m) => !m)} className="w-fit cursor-pointer text-xs text-muted hover:text-white">
           {manual ? `Use Connect with ${k.name} instead` : 'Paste the tokens manually instead'}
         </button>
+      )}
+      {otherShop && (
+        <p role="status" className="rounded-lg border border-red/35 bg-red-soft p-2.5 text-xs text-red">
+          This is another shop: saving drops the old shop's orders, products and unit costs from {store?.name ?? 'this store'}, and the new one syncs
+          from scratch.
+        </p>
       )}
       {error && (
         <p role="alert" className="text-xs text-red">

@@ -146,3 +146,17 @@ describe('disconnecting', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Disconnect' }));
   });
 });
+
+describe('another shop', () => {
+  it("warns before a save that would drop the connected shop's data, not for the same shop written differently", async () => {
+    stubApi(() => undefined);
+    const shop: Integration = { ...saved, kind: 'shopify', storeId: 'glow', settings: { shopDomain: 'glow.myshopify.com' } };
+    const glow = { id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'UTC', color: '#f00', connected: true } as Store;
+    renderApp(<ConnectForm kind="shopify" store={glow} current={shop} onDone={() => {}} />);
+    const field = await screen.findByLabelText('Shop domain');
+    fireEvent.change(field, { target: { value: 'volt.myshopify.com' } });
+    expect(screen.getByText(/drops the old shop's orders, products and unit costs/)).toBeTruthy();
+    fireEvent.change(field, { target: { value: 'https://GLOW.myshopify.com/' } });
+    expect(screen.queryByText(/drops the old shop's orders/)).toBeNull();
+  });
+});
