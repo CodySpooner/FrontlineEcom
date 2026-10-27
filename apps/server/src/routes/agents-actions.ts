@@ -2,6 +2,7 @@ import { cash, closedByApp, getPageDraft, IDLE_CAMPAIGN_STATUSES, markPublished,
 import type { AdNetwork, ApprovalRequest, PageDraft } from '@frontline/shared';
 import type { Db } from '../db';
 import { publish, subscribe } from '../live';
+import { log } from '../log';
 import { getApproval } from '../approvals';
 import { notify } from '../settings';
 import { localDate } from '../dates';
@@ -26,7 +27,8 @@ export function onDecision(db: Db, status: 'approved' | 'denied', fn: (db: Db, a
       try {
         await fn(db, a);
       } catch (e) {
-        console.error(`${status} action ${a.action.kind} (${a.id}) failed:`, e);
+        // To api.log: the desktop app keeps no console, and the owner may have heard nothing.
+        log('error', `${status} action failed`, { kind: a.action.kind, approvalId: a.id, error: e instanceof Error ? e.message : String(e) });
       }
     });
   });

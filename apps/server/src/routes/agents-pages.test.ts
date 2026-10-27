@@ -1,11 +1,15 @@
 import { fakeEngine, getAgent, listPageDrafts, runAgent, savePageDraft, type FakeStep } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, PageDraft } from '@frontline/shared';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { decide, getApproval } from '../approvals';
 import { publish, subscribe } from '../live';
+import { initLog } from '../log';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
 import { onDecision, publishDraft } from './agents-actions';
@@ -144,6 +148,21 @@ test("a store page push that may have worked (a 5xx, a dropped connection) says 
     { title: 'Couldn\'t publish "About us" to Glow Haus', body: "Title has already been taken. It's waiting in Store Builder.", ...open },
     { title: `Couldn't publish "${product.title}" to Glow Haus`, body: "Shopify returned HTTP 502. It's waiting in Store Builder.", link: `/builder?draft=${product.id}` },
   ]);
+});
+
+test('an approved action that throws lands in api.log', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fe-log-'));
+  initLog(dir);
+  onDecision(db, 'approved', () => {
+    throw new Error('Shopify returned HTTP 500');
+  });
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('x1', 'glow', 'glow:store_developer', 't', 'r', '{"kind":"store.publish_page"}', 'pending', ?)`).run(new Date().toISOString());
+  decide(db, 'x1', 'approve');
+  await tick();
+  await tick();
+  expect(JSON.parse(readFileSync(join(dir, 'logs', 'api.log'), 'utf8').trim().split('\n').at(-1)!)).toMatchObject({
+    level: 'error', msg: 'approved action failed', kind: 'store.publish_page', approvalId: 'x1', error: 'Shopify returned HTTP 500',
+  });
 });
 
 test('an approved draft whose push failed is published again from the Store Builder, one push at a time', async () => {
