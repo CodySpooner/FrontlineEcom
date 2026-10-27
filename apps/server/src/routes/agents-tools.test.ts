@@ -286,8 +286,15 @@ describe('agent tools on demo data', () => {
       expect(note).toBe("(orders include TikTok Shop's (tiktok_orders): its shoppers aren't in sessions, so take them out for conversion.)");
       expect(header).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts,tiktok_orders');
       expect(rows.find((r) => r.startsWith(day))).toMatch(/,2$/);
+      // An Etsy shop's or a second site's orders too (core's funnel leaves them out the same way).
+      order.run('etsy-9', `${day}T15:00:00Z`, 'paid', day);
+      const [again] = results(await run(glow, [{ call: 'metrics_timeseries', input: { days: 7 } }, done]));
+      const [, shops, head, ...more] = again!.output.split('\n');
+      expect(shops).toBe("(orders include another shop's next to this one (other_shop_orders: an Etsy shop or a second site): its shoppers aren't in sessions, so take them out for conversion.)");
+      expect(head).toBe('date,revenue,ad_spend,cogs,fees,profit,orders,sessions,add_to_carts,checkouts,tiktok_orders,other_shop_orders');
+      expect(more.find((r) => r.startsWith(day))).toMatch(/,2,1$/);
     } finally {
-      db.prepare(`DELETE FROM orders WHERE store_id = 'glow' AND id LIKE 'tt-%'`).run();
+      db.prepare(`DELETE FROM orders WHERE store_id = 'glow' AND (id LIKE 'tt-%' OR id LIKE 'etsy-%')`).run();
     }
   });
 
