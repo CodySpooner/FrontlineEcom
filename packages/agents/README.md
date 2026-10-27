@@ -10,7 +10,8 @@ outcome checks.
 1. **Start** (`runs.ts` `createRunManager().start`): refused if the agent is offline, or if the store's AI budget for
    today (or the agent's own, `dailyBudgetUsd`) is spent. Queued runs share the machine: 3 at once, 2 per store, one per agent. A run waiting on the owner holds no slot.
 2. **Prompt** (`prompt.ts` `assemblePrompt`): role prompt and playbook (`playbooks/<role>.md`), then the platform pack
-   (`packs/platform/`), the niche pack (`packs/niche/`, or a drafted pack for a custom niche), owner-approved niche
+   (`packs/platform/`), the niche pack (`packs/niche/`, or a custom niche's pack: its Market Analyst drafts it when the store goes live, or when
+   the owner asks, `POST /api/agents/:id/niche-pack`, never on the demo engine; saving it is a request), owner-approved niche
    learnings, the store profile (on a live store, also what the app can change there), the top store memories for
    the task, the store's scheduled jobs (so a run doesn't hand off what one does anyway), open requests, and the date in the zone the store's data is dated in. The stable layers come first, so
    the prefix caches. The owner can edit any shipped layer in the Knowledge Base; edits live in
