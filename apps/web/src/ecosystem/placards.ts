@@ -1,6 +1,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 import type { OfficeSeat } from '@frontline/shared';
 import { DESKS, ROOMS, iso } from './world';
+import { annotationScale } from './camera';
 
 const PURPOSE = ['Strategy & coordination', 'Discover winning products', 'Create & scale campaigns', 'Images, video & UGC', 'Build & optimize stores', 'Data & insights', 'Words that convert', 'Fulfillment & support', 'Retention & growth', 'Apps & automation'];
 export const departmentCounts = (seats: OfficeSeat[]) => Object.fromEntries(ROOMS.map((r) => [r.id, seats.filter((s) => !s.archived && DESKS.find((d) => d.id === s.deskId)?.department === r.id).length]));
@@ -21,5 +22,5 @@ export function departmentPlacards() {
     const count = new Text({ text: '0', style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 32, fontWeight: '700', fill: room.color } }); count.anchor.set(.5); count.position.set(-136, -3); counts.set(room.id, count);
     sign.addChild(frame, label, purpose, count); root.addChild(sign);
   });
-  return { root, update: (seats: OfficeSeat[]) => { const values = departmentCounts(seats); for (const [id, text] of counts) text.text = String(values[id]); } };
+  return { root, zoom: (scale: number) => { for (const sign of root.children) sign.scale.set(annotationScale(scale,.8)); }, update: (seats: OfficeSeat[]) => { const values = departmentCounts(seats); for (const [id, text] of counts) text.text = String(values[id]); } };
 }

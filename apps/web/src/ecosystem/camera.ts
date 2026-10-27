@@ -1,6 +1,7 @@
 import { MAP_SIZE, type Tile } from './world';
 
 export interface Camera extends Tile { scale: number }
+export const annotationScale = (zoom: number, cap: number) => Math.min(1, cap / zoom);
 export const cameraBlend = (delta: number, still: boolean) => still ? 1 : 1 - Math.exp(-delta / 140);
 export function introCamera(camera: Camera, width: number, height: number, still: boolean): Camera {
   const wide = zoomAt(camera, .82, { x: width / 2, y: height / 2 });

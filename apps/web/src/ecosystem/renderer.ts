@@ -95,6 +95,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     }
     const smooth=cameraBlend(ticker.deltaMS, reduced.matches || lowPower || autoLow);
     world.x+=(camera.x-world.x)*smooth;world.y+=(camera.y-world.y)*smooth;world.scale.set(world.scale.x+(camera.scale-world.scale.x)*smooth);
+    placards.zoom(world.scale.x);
     workers.tick(Math.min(ticker.elapsedMS, 1000),reduced.matches || lowPower || autoLow,{x:-world.x/world.scale.x,y:-world.y/world.scale.x,width:host.clientWidth/world.scale.x,height:host.clientHeight/world.scale.x,scale:world.scale.x});
     objective.text = workers.meetingTitle() ? `TEAM KICKOFF\n${workers.meetingTitle()}` : '';
     const still = reduced.matches || lowPower || autoLow;

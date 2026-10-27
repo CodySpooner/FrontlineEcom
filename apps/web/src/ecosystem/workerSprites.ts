@@ -8,13 +8,14 @@ import { startVisit, visitFinished, type Handoff, type Visit } from './communica
 import { meetingFinished, type Meeting, type MeetingPlan } from './meetings';
 import { DEFAULT_DISPLAY, type DisplayOptions } from './display';
 import { idleMoment } from './ambient';
+import { annotationScale } from './camera';
 
 export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation; target?: Tile; status?: OfficeStatus; tool?: string; handoff?: Handoff; meeting?: MeetingPlan }
 
 export function workerSprites(world: Container, select: (deskId: string, agentId: string) => void) {
   const connections = new Graphics(); world.addChild(connections);
   const layer = new Container(); layer.sortableChildren = true; world.addChild(layer);
-  const workers = new Map<string, { data: OfficeWorker; root: Container; sprite: Sprite; spotlight: Graphics; name: Text; status: Graphics; bubble: Text; bubbleBack: Graphics; elapsed: number; direction: Direction; index: number }>();
+  const workers = new Map<string, { data: OfficeWorker; root: Container; sprite: Sprite; spotlight: Graphics; name: Text; status: Graphics; callout: Container; bubble: Text; bubbleBack: Graphics; elapsed: number; direction: Direction; index: number }>();
   let hovered: string | undefined, focused: string | undefined, focusRemaining = 0;
   const inspectedId = () => { const id = hovered ?? (focusRemaining > 0 ? focused : undefined); return id && workers.has(id) ? id : undefined; };
   let atlas: Texture | undefined;
@@ -43,19 +44,20 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
     active.forEach((data, index) => {
       let worker = workers.get(data.seat.agentId);
       if (!worker) {
-        const root = new Container(), sprite = new Sprite(), name = new Text({ text: data.name, style: { fontFamily: 'Inter, sans-serif', fontSize: 12, fill: '#f3ecf0', stroke: { color: '#0a0b13', width: 4 } } });
+        const root = new Container(), sprite = new Sprite(), name = new Text({ text: data.name, style: { fontFamily: 'Inter, sans-serif', fontSize: 12, fill: '#f3ecf0', stroke: { color: '#0a0b13', width: 4 }, wordWrap: true, wordWrapWidth: 150, breakWords: true, align: 'center' } });
         sprite.anchor.set(.5, 1); sprite.scale.set(1.25); name.anchor.set(.5, 0); name.y = 3;
         const status = new Graphics().circle(0, -82, 3).fill('#ffffff');
         const bubble = new Text({ text: '', style: { fontFamily: 'Inter, sans-serif', fontSize: 13, fill: '#f4d7ff', stroke: { color: '#181021', width: 5 }, wordWrap: true, wordWrapWidth: 180, align: 'center' } });
-        bubble.anchor.set(.5, 1); bubble.y = -95;
+        bubble.anchor.set(.5, 1); bubble.y = -7;
         const bubbleBack = new Graphics();
+        const callout = new Container(); callout.y = -88; callout.addChild(bubbleBack, bubble);
         const spotlight = new Graphics().ellipse(0, -3, 28, 12).fill({ color: '#bcefff', alpha: .16 }).stroke({ color: '#dbf5ff', width: 2 }).moveTo(-34, -5).lineTo(-34, 4).lineTo(-24, 4).moveTo(34, -5).lineTo(34, 4).lineTo(24, 4).stroke({ color: '#dbf5ff', width: 2 });
         spotlight.visible = false;
-        root.addChild(spotlight, sprite, name, status, bubbleBack, bubble); layer.addChild(root); sprite.eventMode = 'static'; sprite.cursor = 'pointer';
+        root.addChild(spotlight, sprite, name, status, callout); layer.addChild(root); sprite.eventMode = 'static'; sprite.cursor = 'pointer';
         sprite.on('pointerover', () => { hovered = data.seat.agentId; });
         sprite.on('pointerout', () => { if (hovered === data.seat.agentId) hovered = undefined; });
         sprite.on('pointertap', () => select(workers.get(data.seat.agentId)!.data.seat.deskId, data.seat.agentId));
-        worker = { data, root, sprite, spotlight, name, status, bubble, bubbleBack, elapsed: 0, direction: 2, index };
+        worker = { data, root, sprite, spotlight, name, status, callout, bubble, bubbleBack, elapsed: 0, direction: 2, index };
         workers.set(data.seat.agentId, worker);
         const occupied = new Set([...motions.values()].flatMap((m) => [tileKey(m.cell), ...(m.next ? [tileKey(m.next)] : [])]));
         const saved = data.seat.position;
@@ -101,13 +103,14 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
       const inMeeting = !!meeting?.plan.targets[worker.data.seat.agentId];
       const visit = inMeeting ? undefined : visits.get(worker.data.seat.agentId);
       const details = !view || view.scale >= .65;
+      worker.name.scale.set(annotationScale(view?.scale ?? 1,1.1)); worker.callout.scale.set(annotationScale(view?.scale ?? 1,.9));
       worker.name.visible = details && (display.names || display.workload); worker.status.visible = display.status; worker.bubble.visible = worker.bubbleBack.visible = display.bubbles && details;
       worker.name.text = [display.names ? worker.data.name : '', display.workload ? worker.data.tool ?? worker.data.status?.replaceAll('_', ' ') ?? 'idle' : ''].filter(Boolean).join('\n');
       const speech = visit ? `Handoff → ${workers.get(visit.event.toAgentId)?.data.name}\n${visit.event.summary.split('\n')[0]!.slice(0, 110)}` : worker.data.status === 'awaiting_approval' ? 'Awaiting owner approval' : worker.data.status === 'failed' ? 'Task blocked · inspect output' : '';
       if (worker.bubble.text !== speech) {
         worker.bubble.text = speech; worker.bubbleBack.clear();
         if (speech) { const w = worker.bubble.width + 16, h = worker.bubble.height + 14;
-          worker.bubbleBack.roundRect(-w / 2, -102 - h, w, h + 14, 5).fill({ color: '#1b1027', alpha: .95 }).stroke({ color: '#bc7be4', width: 1 }).poly([-5, -88, 0, -82, 5, -88]).fill('#bc7be4');
+          worker.bubbleBack.roundRect(-w / 2, -h, w, h, 5).fill({ color: '#1b1027', alpha: .95 }).stroke({ color: '#bc7be4', width: 1 }).poly([-5, 0, 0, 6, 5, 0]).fill('#bc7be4');
         }
       }
       if (motion.next) {

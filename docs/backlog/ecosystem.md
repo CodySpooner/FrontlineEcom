@@ -85,6 +85,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-27 ECO-39: Department signs, names and speech callouts cap their screen footprint at close zoom. Wrapped names and grouped bubble backgrounds preserve alignment; fit labels unchanged. Scale-bound regression test and fit/125%/244%/Orca screenshots (.agent/eco-39-*.png); pnpm check 983 tests, 58 FPS.
 - 2026-10-27 ECO-38 validation follow-up: Midnight exposed two existing demo-fixture assumptions. Tiny unblocking test-only edits permit an empty current partial day and explicitly prepare the unfulfilled order fixture; no production behavior changed. Full 982-test check passes after midnight.
 - 2026-10-26 ECO-38: Recessed neon circulation strips, illuminated junction diamonds and plaza corner inlays connect the expanded rooms. Cached floor art adds no moving effects or collisions. Desktop/Orca fit and hub screenshots (.agent/eco-38-*.png); pnpm check 982 tests, 58 FPS.
 - 2026-10-26 ECO-37: Ten original illuminated role emblems replace generic wall screens; decorative monitor bars replaced with document/product tiles. Lifted signs clear the new panels. Real seven-day orders chart retained. Fit/department and Orca screenshots (.agent/eco-37-*.png); pnpm check 982 tests, 58 FPS.
@@ -227,4 +228,4 @@ Visual review: owner reference plus [Game Dev Story official screenshots](https:
 - [x] ECO-36 Botanical lounge corners: lush planters, soft seating and coffee tables in spare room corners, with collision-safe paths to all thirty desks.
 - [x] ECO-37 Department wall art: original pixel role emblems and display panels that avoid decorative fake business charts.
 - [x] ECO-38 Neon circulation: lit corridor inlays and plaza guidance that connect the rooms visually without obstructing workers.
-- [ ] ECO-39 Zoom-aware labels: keep department signs and worker callouts readable while reducing close-up overlap.
+- [x] ECO-39 Zoom-aware labels: keep department signs and worker callouts readable while reducing close-up overlap.

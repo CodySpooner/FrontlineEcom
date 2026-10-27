@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { cameraBlend, cameraViewport, fitCamera, introCamera, zoomAt } from './camera';
+import { annotationScale, cameraBlend, cameraViewport, fitCamera, introCamera, zoomAt } from './camera';
 import { MAP_SIZE } from './world';
 
 test('fit contains the office and cursor zoom preserves its world point', () => {
@@ -11,6 +11,12 @@ test('fit contains the office and cursor zoom preserves its world point', () => 
   expect((point.y - zoomed.y) / zoomed.scale).toBeCloseTo((point.y - camera.y) / camera.scale);
   expect(zoomAt(camera, 100, point).scale).toBe(3);
   expect(zoomAt(camera, .001, point).scale).toBe(.1);
+});
+test('annotations keep their overview size and cap their screen footprint at close zoom', () => {
+  expect(annotationScale(.38, .8)).toBe(1);
+  for (const zoom of [.8,1.25,2,3]) expect(annotationScale(zoom,.8)*zoom).toBeCloseTo(.8);
+  expect(annotationScale(.1,1.1)).toBe(1);
+  expect(annotationScale(3,1.1)*3).toBeCloseTo(1.1);
 });
 test('cinematic entry and focus settle independently of frame rate and respect reduced motion', () => {
   const fit = fitCamera(1000, 600);
