@@ -24,9 +24,7 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
   const screen = (x: number, y: number, color: string, variant: number, w = 32, h = 24) => {
     rect(x-w/2-2,y-h-2,w+4,h+4,'#4f5365'); rect(x-w/2,y-h,w,h,'#080e1c'); rect(x-w/2+2,y-h+2,w-4,2,color);
     for (let i = 0; i < 6; i++) {
-      const height = 4 + (i * 7 + variant * 3) % Math.max(5,h-8);
-      if (variant % 3 === 0) rect(x-w/2+3+i*(w-6)/6,y-height-2,3,height,color);
-      else if (variant % 3 === 1) { rect(x-w/2+3,y-h+7+i*3,5+(i*7+variant)%Math.max(6,w-9),1,i%2 ? color : '#6386a4'); }
+      if (variant % 3 === 1) { rect(x-w/2+3,y-h+7+i*3,5+(i*7+variant)%Math.max(6,w-9),1,i%2 ? color : '#6386a4'); }
       else { rect(x-w/2+3+(i%3)*(w-7)/3,y-h+7+Math.floor(i/3)*7,(w-12)/3,5,i%2 ? '#344671' : color); }
     }
     rect(x-2,y+2,4,5,'#535762'); rect(x-8,y+7,16,2,'#292b38');
@@ -103,7 +101,48 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
       }
     }
     const sign = iso({x:room.x+5,y:room.y+0.5});
-    screen(sign.x,sign.y-7,room.color,ROOMS.indexOf(room),68,34);
+    c.save(); c.translate(sign.x,sign.y-12);
+    rect(-48,-65,96,65,'#485165'); rect(-45,-62,90,59,'#111c2b');
+    rect(-43,-60,86,2,room.color); rect(-43,-60,2,55,room.color);
+    rect(41,-60,2,55,room.color); rect(-43,-5,86,2,room.color);
+    const ink=room.color, pale='#d9e8ee';
+    if (room.id==='executive') {
+      poly([1,-56,-16,-34,-3,-34,-8,-19,16,-43,4,-43,10,-56],ink);
+    } else if (room.id==='research') {
+      poly([-16,-52,-5,-56,5,-52,9,-42,5,-32,-5,-28,-16,-32,-20,-42],ink);
+      poly([-13,-48,-5,-51,2,-48,5,-42,2,-36,-5,-33,-13,-36,-15,-42],'#111c2b');
+      poly([4,-33,9,-37,22,-24,17,-20],pale);
+    } else if (room.id==='advertising') {
+      poly([-19,-43,5,-43,20,-53,20,-25,5,-35,-19,-35],ink);
+      rect(-14,-35,6,13,pale); rect(-22,-43,4,8,pale); rect(25,-43,6,3,ink);
+    } else if (room.id==='creative') {
+      rect(-22,-49,33,26,ink); rect(-18,-45,25,18,'#111c2b');
+      poly([13,-43,25,-49,25,-23,13,-29],pale);
+      rect(-15,-55,8,5,pale); rect(-3,-55,8,5,pale); rect(-9,-40,8,8,ink);
+    } else if (room.id==='development') {
+      poly([-9,-53,-24,-39,-9,-25,-5,-29,-16,-39,-5,-49],ink);
+      poly([9,-53,24,-39,9,-25,5,-29,16,-39,5,-49],ink);
+      poly([2,-55,7,-55,-2,-23,-7,-23],pale);
+    } else if (room.id==='analytics') {
+      rect(-15,-56,30,35,ink); rect(-11,-52,22,8,'#111c2b');
+      for(let row=0;row<3;row++)for(let col=0;col<3;col++)rect(-10+col*8,-40+row*6,5,3,pale);
+    } else if (room.id==='copywriting') {
+      rect(-18,-54,26,32,pale); rect(-14,-49,17,2,'#4e6079');rect(-14,-43,13,2,'#4e6079');rect(-14,-37,10,2,'#4e6079');
+      poly([15,-53,22,-46,6,-27,-2,-22,0,-31],ink); poly([-2,-22,1,-31,6,-27],pale);
+    } else if (room.id==='operations') {
+      poly([0,-57,22,-46,22,-29,0,-18,-22,-29,-22,-46],ink);
+      poly([-19,-44,0,-34,19,-44,19,-32,0,-22,-19,-32],'#263549');
+      rect(-2,-34,4,15,pale); poly([-8,-52,13,-42,8,-39,-13,-49],pale);
+    } else if (room.id==='retention') {
+      rect(-24,-52,48,31,ink); rect(-20,-48,40,23,'#111c2b');
+      poly([-21,-48,0,-32,21,-48,17,-50,0,-37,-17,-50],pale);
+      rect(16,-28,12,9,ink);rect(20,-32,4,17,ink);
+    } else {
+      rect(-18,-41,36,3,ink);rect(-2,-52,4,30,ink);
+      for(const [x,y]of[[-22,-43],[-5,-57],[14,-43],[-5,-25]]) {rect(x!,y!,10,10,pale);rect(x!+2,y!+2,6,6,ink);}
+    }
+    c.fillStyle=pale; c.font='bold 9px monospace';c.textAlign='center';c.fillText(room.id.toUpperCase(),0,-9);
+    c.restore();
     const pp = iso({x:room.x+1,y:room.y+10}); props.push({depth:pp.y,draw:()=>plant(pp.x,pp.y+8)});
     const corner = iso({x:room.x+1,y:room.y+1});
     props.push({depth:corner.y,draw:()=> {

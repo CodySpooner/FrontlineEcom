@@ -9,7 +9,7 @@ export function departmentPlacards() {
   const root = new Container(), counts = new Map<string, Text>();
   ROOMS.forEach((room, i) => {
     const front = room.y >= 34;
-    const sign = new Container(), p = iso({ x: room.x + (front ? 13.5 : 6), y: room.y + (front ? 13.5 : 0) }); sign.position.set(p.x, p.y - (front ? 0 : 90));
+    const sign = new Container(), p = iso({ x: room.x + (front ? 13.5 : 6), y: room.y + (front ? 13.5 : 0) }); sign.position.set(p.x, p.y - (front ? 0 : 130));
     const frame = new Graphics().roundRect(-171, -34, 346, 74, 6).fill({ color: '#030710', alpha: .6 })
       .roundRect(-170, -38, 340, 72, 6).fill('#0e1522').stroke({ color: room.color, width: 2, alpha: .75 })
       .rect(-148, -38, 296, 2).fill(room.color).roundRect(-158, -26, 44, 46, 5).fill({ color: room.color, alpha: .18 })
