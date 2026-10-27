@@ -468,6 +468,25 @@ describe('agent tools on demo data', () => {
     }
   });
 
+  test('a live store with no fee estimate says profit leaves out fees', async () => {
+    const notes = async () => {
+      const [summary, review] = results(await run(input('glow', 'ad_strategist'), [{ call: 'store_summary', input: { range: 7 } }, { call: 'review_campaigns' }, done]));
+      return [(JSON.parse(summary!.output) as { feeNote?: string }).feeNote, review!.output.includes('\n(no fee estimate is set for this store, so margin leaves out')];
+    };
+    expect(await notes()).toEqual([undefined, false]); // a demo store's numbers are made up
+    db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
+    try {
+      expect(await notes()).toEqual([
+        'No fee estimate is set for this store, so profit, margin and health leave out payment and platform fees. Say so next to any profit figure; the owner sets it on the store in Settings.',
+        true,
+      ]);
+      db.prepare(`UPDATE stores SET fee_per_order = 0.3 WHERE id = 'glow'`).run();
+      expect(await notes()).toEqual([undefined, false]);
+    } finally {
+      db.prepare(`UPDATE stores SET connected = 0, fee_per_order = 0 WHERE id = 'glow'`).run(); // the db is shared by these tests
+    }
+  });
+
   test("a live store's research_feed leaves out the built-in sample catalog", async () => {
     db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
     try {

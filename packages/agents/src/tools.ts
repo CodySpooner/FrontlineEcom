@@ -131,6 +131,8 @@ const noStoreWrites = (store: Store, platforms = PRODUCT_WRITE_PLATFORMS) =>
  * (Shopify's empty "Cost per item"; Etsy and TikTok Shop send none): no floor to check. ponytail: the per-order fee is
  * counted per unit, so a multi-unit order's floor is a little high.
  */
+/** A live store with no fee estimate: no connector imports payment or platform fees, so profit leaves them out. */
+const noFees = (store: Store) => store.connected && !store.feePercent && !store.feePerOrder;
 const priceFloor = (store: Store, cost: number) => (cost > 0 ? r2((cost + (store.feePerOrder ?? 0)) / (1 - (store.feePercent ?? 0) / 100)) : undefined);
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
 export const cash = (n: number, currency: string) => (currency === 'USD' ? `$${n}` : `${n} ${currency}`);
@@ -173,7 +175,10 @@ export const APP_TOOLS: AppTool[] = [
       const profitNote = uncosted >= 0.1
         ? `${Math.round(uncosted * 100)}% of this window's product sales have no unit cost set, so profit, margin and health read high. Say so next to any profit figure; the owner enters costs in Analytics.`
         : undefined;
-      return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals), ...(profitNote && { profitNote }), ...(amazonChannel && { amazonChannel }), ...(tiktokShop && { tiktokShop }) });
+      const feeNote = noFees(ctx.store)
+        ? 'No fee estimate is set for this store, so profit, margin and health leave out payment and platform fees. Say so next to any profit figure; the owner sets it on the store in Settings.'
+        : undefined;
+      return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals), ...(profitNote && { profitNote }), ...(feeNote && { feeNote }), ...(amazonChannel && { amazonChannel }), ...(tiktokShop && { tiktokShop }) });
     },
   }),
   defineTool({
@@ -893,6 +898,9 @@ export const APP_TOOLS: AppTool[] = [
         `margin after cost, tax and fees ${r2(econ.margin * 100)}%, AOV ${r2(econ.aov)}, break-even ROAS ${r2(t.breakEven)}, target ROAS ${r2(t.target)}, max CPA ${r2(t.maxCpa)} (${econ.catalog ? 'no sales in 30 days: from the active products\' prices and unit costs' : '30 days'}); campaigns over ${days} days:`,
         uncosted >= 0.1
           ? `(${Math.round(uncosted * 100)}% of the last 30 days' product sales have no unit cost set, so margin reads high and break-even ROAS low: don't scale on these verdicts until the owner fills in costs (Shopify "Cost per item", else Products here). Products that truly cost nothing, like digital ones, are fine.)`
+          : '',
+        noFees(ctx.store)
+          ? "(no fee estimate is set for this store, so margin leaves out payment and platform fees and break-even ROAS reads low: allow for them before scaling; the owner sets the estimate on the store in Settings)"
           : '',
         idleNote(ctx, rows.length).trimEnd(),
         csv(
