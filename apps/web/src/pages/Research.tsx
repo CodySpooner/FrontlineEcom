@@ -183,7 +183,7 @@ function ProductCard({ p, onOpen, saved }: { p: ResearchProduct; onOpen: () => v
   return (
     <article className="card flex flex-col overflow-hidden">
       <div className="relative grid h-[150px] place-items-center border-b border-line bg-[radial-gradient(circle_at_50%_45%,rgb(255_42_58/.16),transparent_70%)]">
-        {p.image ? <img src={p.image} alt="" className="size-full object-cover" /> : <Icon aria-hidden className="size-14 text-text-2/60" strokeWidth={1.2} />}
+        {p.image ? <img src={p.image} alt="" loading="lazy" className="size-full object-cover" /> : <Icon aria-hidden className="size-14 text-text-2/60" strokeWidth={1.2} />}
         <span className="absolute top-2.5 left-2.5 rounded-md bg-red-fill px-2 py-0.5 text-[11px] font-bold text-white shadow-glow">AI Score {p.score}</span>
         <button
           type="button"

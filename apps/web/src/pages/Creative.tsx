@@ -207,7 +207,7 @@ const isVideo = (url: string) => /\.(mp4|webm|mov)(\?|$)/i.test(url);
 
 function Media({ c, className, controls }: { c: CreativeT; className?: string; controls?: boolean }) {
   if (!c.mediaUrl) return null;
-  return isVideo(c.mediaUrl) ? <video src={c.mediaUrl} controls={controls} muted playsInline className={className} /> : <img src={c.mediaUrl} alt={c.headline} className={className} />;
+  return isVideo(c.mediaUrl) ? <video src={c.mediaUrl} controls={controls} muted playsInline className={className} /> : <img src={c.mediaUrl} alt={c.headline} loading="lazy" className={className} />;
 }
 
 function Preview({ c, onAsk, busy }: { c: CreativeT; onAsk: (task: string) => void; busy: boolean }) {
