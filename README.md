@@ -29,7 +29,8 @@ pnpm check    # typecheck + tests
 - **Going live:** in Integrations, pick a store and connect its platform (Shopify, WooCommerce, Etsy, TikTok Shop,
   Amazon), its ad accounts (Meta, Google, TikTok) and GA4. An ad account feeds one store; moved to another, it takes
   its campaigns and their spend along. Each card lists its setup steps. The first sync replaces
-  that store's demo data with real data. After that, Shopify and WooCommerce refresh every 2 minutes and the rest
+  that store's demo data with real data. Disconnecting keeps the synced data, but connecting a different shop of the
+  same platform to the store later (even after a disconnect) drops the old shop's orders, products and revenue. After the first sync, Shopify and WooCommerce refresh every 2 minutes and the rest
   every 10. New paid orders, and refunds on orders from the last 30 days, show in the dashboard's live activity
   as each sync brings them. Once a day each store's whole catalog is read again, and products deleted on the platform show as
   archived. Agents on connected stores use your local Claude Code login.
