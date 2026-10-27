@@ -41,6 +41,12 @@ export function Chat({ agent, thread, onThread }: { agent: Agent; thread: string
       },
     );
   };
+  // A follow-up whose conversation can't resume (AGT-214: it ran on demo data, before the store went live): same task, new chat.
+  const stale = start.isError && /^That conversation (ran on demo data|cannot be continued)/.test(start.error.message);
+  const fresh = () => {
+    const t = start.variables!.task;
+    start.mutate({ agentId: agent.id, task: t }, { onSuccess: (r) => (task.trim() === t && setTask(''), onThread([r.id])) });
+  };
   const send = (e?: FormEvent) => {
     e?.preventDefault();
     ask(task.trim(), () => setTask(''));
@@ -98,6 +104,11 @@ export function Chat({ agent, thread, onThread }: { agent: Agent; thread: string
       {start.isError && (
         <p role="alert" className="mt-2 text-xs text-red">
           {start.error.message} <FixLink message={start.error.message} agentId={agent.id} />
+          {stale && (
+            <Button size="sm" className="ml-1" onClick={fresh}>
+              Send as a new chat
+            </Button>
+          )}
         </p>
       )}
     </Panel>

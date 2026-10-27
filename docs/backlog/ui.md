@@ -412,6 +412,10 @@ Orca's browser against the reference before ticking it.
 - [x] UI-157 Segmented (every range, metric and payment switch) and Tabs (store tabs, Research and Creative
       sections) announced radio groups and tab lists but behaved like loose buttons: each option a Tab stop, arrows dead.
       Both now keep one Tab stop on the choice, and arrows (wrapping), Home and End choose and focus another.
+- [x] UI-158 (re AGT-214) After a store goes live, an agent's chat opens on its latest run, often from the demo phase,
+      and a follow-up there is refused ("…ran on demo data, before the store went live: start a new one."). The
+      refusal now carries "Send as a new chat": the same task, no resume, as a fresh thread. Same for "That
+      conversation cannot be continued".
 
 ## Blocked
 
@@ -614,3 +618,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-155: attribute only. Also swept every page with all API GETs failing (client patch): each data panel ends on its "Couldn't load" state with Try again, cached data stays up, no crash. Orca: Creative's 10 gallery images all lazy and loaded
 - 2026-10-26 — UI-156: Shopify/Woo/Etsy/TikTok Shop take the currency via `takeCurrency`, Amazon via `setStoreCurrency`. Two StoreForm tests (red first). Orca with Pawsome patched connected (read-only), Edit opened, not saved: USD readOnly, hint "Shopify sets its currency."
 - 2026-10-26 — UI-157: one `roving()` helper in ui.tsx for both. Two ui tests (red first); whole web suite green. Orca on the Dashboard's Date range: 30D* → ArrowLeft 7D* (focused, tabIndex 0) → End 1Y* → Home, ArrowRight back to 30D*
+- 2026-10-26 — UI-158: matches the agents' message, as FixLink does for budgets. Chat test (red first). Orca on Pawsome's Copywriter with both run POSTs answered by the fixture (409, then a fake run; nothing reached the server): button inline after the message; click → second POST without resumeRunId, alert gone, box cleared, new thread shows the task

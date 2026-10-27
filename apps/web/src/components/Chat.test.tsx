@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Agent, AgentRunDetail, ApprovalRequest } from '@frontline/shared';
-import { renderApp, stubApi } from '../test-utils';
+import { renderApp, reply, stubApi } from '../test-utils';
 import { ApprovalCard, Chat } from './Chat';
 
 const agent = { id: 'peak:copywriter', storeId: 'peak', role: 'copywriter', enabled: true } as Agent;
@@ -109,5 +109,27 @@ describe('deciding a card in a waiting list', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Approve: Pause A' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Approve: Pause B' }));
+  });
+});
+
+describe('a conversation from before the store went live', () => {
+  it('sends the refused follow-up as a new chat in one click', async () => {
+    const fetch = stubApi((url, init) => {
+      if (init?.method === 'POST')
+        return JSON.parse(String(init.body)).resumeRunId
+          ? reply({ error: 'That conversation ran on demo data, before the store went live: start a new one.' }, 409)
+          : run('r2', 'queued');
+      if (url === '/api/runs/r1') return run('r1', 'done', { sessionId: 's1' });
+    });
+    const onThread = vi.fn();
+    renderApp(<Chat agent={agent} thread={['r1']} onThread={onThread} />);
+    await screen.findByText('Done');
+    fireEvent.change(screen.getByLabelText('Message Copywriter'), { target: { value: 'Headlines for the real catalog' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send as a new chat' }));
+    await vi.waitFor(() => expect(onThread).toHaveBeenCalledWith(['r2']));
+    const posts = fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([, init]) => JSON.parse(String(init!.body)));
+    expect(posts).toEqual([{ task: 'Headlines for the real catalog', resumeRunId: 'r1' }, { task: 'Headlines for the real catalog' }]);
   });
 });
