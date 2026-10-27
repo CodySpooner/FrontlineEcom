@@ -62,6 +62,9 @@ test('a store tracks 10 competitors at most; with none, list_competitors says wh
     'Not added: this store already tracks 10 competitors. Name this one in your answer so the owner can swap it in.',
   ]);
   db.prepare(`DELETE FROM competitors WHERE store_id = 'pawsome'`).run();
+  expect((await run([{ call: 'list_competitors' }]))[0]).toContain(
+    "\n# Recent ads (none recorded: the app doesn't read ad libraries, so this says nothing about whether they advertise)\n(none)",
+  );
   expect((await run([{ call: 'list_competitors' }]))[0]).toMatch(
     /^# Competitors \(none tracked yet: the Market Analyst adds them with track_competitor, the owner in Competitor Intel\)\n\(none\)\n/,
   );

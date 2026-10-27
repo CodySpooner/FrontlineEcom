@@ -328,11 +328,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-197 A flow step's delay is the wait after the previous step. The Flow Library shows each step as "Wait N hours" and flow builders chain waits, but nothing told the Email & SMS agent, and `list_flows` read delays as hours since the trigger: a 1 h / 24 h / 72 h series meant from the trigger would be set up to send its last email at 97 h.
 - [x] AGT-198 The Market Analyst can start tracking a competitor (`track_competitor`). Going live drops the demo competitors and only the owner could add real ones, so a live store's weekly price check compared against nobody until the owner thought to fill in Competitor Intel.
 - [x] AGT-199 (Inbox, core's CORE-102) A product's refunds on an order come off at most what it sold for there. A TikTok refund total also returns shipping, so `list_products` and the price/page outcome checks could take more off a product than it sold for (an outcome's profit too).
+- [x] AGT-200 `list_competitors` says an empty ads section means nothing recorded, not no ads. Only the demo rivals come with ad snapshots (nothing reads a real competitor's ad library), so for a live store's competitors it was always empty and read as "they don't advertise".
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-200: the empty "Recent ads" header says the app doesn't read ad libraries.
 - 2026-10-26 — AGT-199 (Inbox, CORE-102): `list_products` and `productSales` sum a product's refund lines per order and cap them at its line's revenue there, as core's Top products.
 - 2026-10-26 — AGT-198: `track_competitor` (Market Analyst) adds a shop (same host once, 10 per store), reads its catalog's prices at once with core's `watchCompetitorPrices` and drops it again when nothing is readable; the owner hears and can remove it. `list_competitors` with none tracked says who adds them; the playbook says when.
 - 2026-10-26 — AGT-197: `draft_flow`'s `delayHours` says it's the wait after the previous step (the playbook too); `list_flows`' `last_step_hours` sums the waits.

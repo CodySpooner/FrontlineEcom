@@ -387,7 +387,8 @@ export const APP_TOOLS: AppTool[] = [
         // A competitor shop prices in its own currency: 39 EUR next to this store's 39 USD isn't the same price.
         `# Price changes (newest first, in the competitor's currency; blank when its site didn't say. This store sells in ${ctx.store.currency}. A price that held isn't here: pass q for current prices)`,
         csv(priceChanges.map((p) => ({ competitor: name.get(p.competitorId) ?? p.competitorId, product: p.product, from: p.from, to: p.to, currency: p.currency ?? '', change_pct: r2(p.changePct), at: p.at.slice(0, 10) }))),
-        '# Recent ads',
+        // Only the demo rivals come with ads: nothing reads a real competitor's ad library yet.
+        `# Recent ads${ads.length ? '' : " (none recorded: the app doesn't read ad libraries, so this says nothing about whether they advertise)"}`,
         csv(ads.map((a) => ({ competitor: a.competitor, network: a.network, format: a.format, headline: a.headline, body: a.body, cta: a.cta ?? '', first_seen: a.firstSeen, last_seen: a.lastSeen }))),
         // A product's newest snapshot is its price now: the watcher writes one when it first sees it and on every change.
         ...(q
