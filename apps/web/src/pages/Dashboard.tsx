@@ -1,5 +1,5 @@
 // UI-04 Command Center — port of docs/reference/dashboard-mockup-v3.html. The store filter scopes every panel.
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useOutletContext } from 'react-router';
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight, Check, CreditCard, RotateCcw, ShoppingBag, ShoppingCart } from 'lucide-react';
@@ -358,10 +358,15 @@ export function Requests() {
   const [denying, setDenying] = useState<string>();
   // Backing out of a reason field unmounts it: focus returns to that request's Deny, not the top of the page.
   const [backed, setBacked] = useState<string>();
+  const ul = useRef<HTMLUListElement>(null);
   const list = (q.data ?? []).filter((a) => has(a.storeId));
   const waiting = list.filter((a) => !verdicts[a.id]).length;
 
   const act = (id: string, verdict: 'approve' | 'deny', note?: string) => {
+    // Deciding swaps the row's buttons for its verdict: focus moves on to the next request still waiting, not the top of the page.
+    const i = list.findIndex((a) => a.id === id);
+    const next = [...list.slice(i + 1), ...list.slice(0, i).reverse()].find((a) => !verdicts[a.id]);
+    [...(ul.current?.querySelectorAll<HTMLButtonElement>('[data-approve]') ?? [])].find((b) => b.dataset.approve === next?.id)?.focus();
     setFailed(undefined);
     setDenying(undefined);
     setVerdicts((v) => ({ ...v, [id]: verdict }));
@@ -386,7 +391,7 @@ export function Requests() {
           Your agents will check in here.
         </EmptyState>
       ) : (
-        <ul>
+        <ul ref={ul}>
           {list.map((a) => {
             const v = verdicts[a.id];
             const role = agents.find((g) => g.id === a.agentId)?.role;
@@ -415,7 +420,7 @@ export function Requests() {
                   <DenyReason title={a.title} onDeny={(note) => act(a.id, 'deny', note)} onBack={() => (setDenying(undefined), setBacked(a.id))} className="col-span-2" />
                 ) : (
                   <div className="flex gap-1.5">
-                    <Button size="sm" variant="primary" aria-label={`Approve: ${a.title}`} onClick={() => act(a.id, 'approve')}>
+                    <Button size="sm" variant="primary" aria-label={`Approve: ${a.title}`} onClick={() => act(a.id, 'approve')} data-approve={a.id}>
                       Approve
                     </Button>
                     <Button size="sm" aria-label={`Deny: ${a.title}`} onClick={() => setDenying(a.id)} autoFocus={backed === a.id}>

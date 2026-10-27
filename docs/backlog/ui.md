@@ -362,6 +362,9 @@ Orca's browser against the reference before ticking it.
       With a demo store still around the rows stay, labelled by core's `sample` flag (UI-139 used the `find-` id prefix).
 - [x] UI-141 A custom niche's research find said "· Other" in its details. It now names the niche in the store's own
       words ("Yoga mats & props"), from the same slug → words map the niche filter uses (`customNiches` in lib/niche).
+- [x] UI-142 Approving or denying on the Dashboard's Agent Requests swapped the row's buttons for its verdict and
+      dropped keyboard focus to the page, so working through several requests meant tabbing back from the top each
+      time. Focus now moves on to the next request still waiting (the one before, after the last).
 
 ## Blocked
 
@@ -548,3 +551,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-139: `useSample(p)` in Research (any connected store and an id not starting `find-`, as the agents' research_feed tells them apart). Two tests (labelled when live, not for a find; not labelled in demo mode). Orca with a read-only patched store list (Pawsome connected): card "Health & Beauty · TikTok · Sample data", details note shown. FYI left in core's Inbox
 - 2026-10-26 — UI-140: `useResearch(…, real)` adds `sample=0`; Results passes "every store connected"; My Lists still asks with samples so saved ones resolve. Two new tests plus UI-139's moved to `sample: true` (red on the old code). Orca with every store patched live (read-only): `/api/research?tab=trending&sample=0`, "No finds yet" shown
 - 2026-10-26 — UI-141: the map moved from Research() into `customNiches(stores)`; ProductDetails falls back to "Other" when no store has that niche any more. New test (red on the old code). Orca with a read-only patched store and row: "Health & Beauty · TikTok · Yoga mats & props"
+- 2026-10-26 — UI-142: `act` focuses the next undecided row's Approve (`data-approve`) before the verdict swaps the buttons out. New test (red on the old code). Orca, with the approve POST answered by a fetch patch (DB untouched, all three demo requests still pending): focus went from "Pause Spark Ads · UGC" to "Raise daily budget 20%" and stayed when the row dropped. Chat request cards keep their verdict in place, so they're left as they are

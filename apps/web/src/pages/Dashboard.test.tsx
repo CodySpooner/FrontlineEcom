@@ -153,3 +153,15 @@ describe('backing out of a deny', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: `Deny: ${approval.title}` }));
   });
 });
+
+describe('deciding a request from the keyboard', () => {
+  it('moves focus on to the next request still waiting, not back to the top of the page', async () => {
+    const asks = ['A', 'B', 'C'].map((t, i) => ({ ...approval, id: `a${i + 1}`, title: `Pause ${t}` }));
+    stubApi((url, init) => (init?.method === 'POST' ? { ...approval, status: 'approved' } : url.startsWith('/api/stores') ? [store] : url.startsWith('/api/approvals?status=pending') ? asks : []));
+    renderApp(<Requests />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve: Pause A' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Approve: Pause B' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Approve: Pause C' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Approve: Pause B' }));
+  });
+});
