@@ -14,7 +14,9 @@ export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Anima
 export function workerSprites(world: Container, select: (deskId: string, agentId: string) => void) {
   const connections = new Graphics(); world.addChild(connections);
   const layer = new Container(); layer.sortableChildren = true; world.addChild(layer);
-  const workers = new Map<string, { data: OfficeWorker; root: Container; sprite: Sprite; name: Text; status: Graphics; bubble: Text; bubbleBack: Graphics; elapsed: number; direction: Direction; index: number }>();
+  const workers = new Map<string, { data: OfficeWorker; root: Container; sprite: Sprite; spotlight: Graphics; name: Text; status: Graphics; bubble: Text; bubbleBack: Graphics; elapsed: number; direction: Direction; index: number }>();
+  let hovered: string | undefined, focused: string | undefined, focusRemaining = 0;
+  const inspectedId = () => { const id = hovered ?? (focusRemaining > 0 ? focused : undefined); return id && workers.has(id) ? id : undefined; };
   let atlas: Texture | undefined;
   let signature = '';
   const frames = new Map<string, Texture>();
@@ -47,9 +49,13 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
         const bubble = new Text({ text: '', style: { fontFamily: 'Inter, sans-serif', fontSize: 13, fill: '#f4d7ff', stroke: { color: '#181021', width: 5 }, wordWrap: true, wordWrapWidth: 180, align: 'center' } });
         bubble.anchor.set(.5, 1); bubble.y = -95;
         const bubbleBack = new Graphics();
-        root.addChild(sprite, name, status, bubbleBack, bubble); layer.addChild(root); sprite.eventMode = 'static'; sprite.cursor = 'pointer';
+        const spotlight = new Graphics().ellipse(0, -3, 28, 12).fill({ color: '#bcefff', alpha: .16 }).stroke({ color: '#dbf5ff', width: 2 }).moveTo(-34, -5).lineTo(-34, 4).lineTo(-24, 4).moveTo(34, -5).lineTo(34, 4).lineTo(24, 4).stroke({ color: '#dbf5ff', width: 2 });
+        spotlight.visible = false;
+        root.addChild(spotlight, sprite, name, status, bubbleBack, bubble); layer.addChild(root); sprite.eventMode = 'static'; sprite.cursor = 'pointer';
+        sprite.on('pointerover', () => { hovered = data.seat.agentId; });
+        sprite.on('pointerout', () => { if (hovered === data.seat.agentId) hovered = undefined; });
         sprite.on('pointertap', () => select(workers.get(data.seat.agentId)!.data.seat.deskId, data.seat.agentId));
-        worker = { data, root, sprite, name, status, bubble, bubbleBack, elapsed: 0, direction: 2, index };
+        worker = { data, root, sprite, spotlight, name, status, bubble, bubbleBack, elapsed: 0, direction: 2, index };
         workers.set(data.seat.agentId, worker);
         const occupied = new Set([...motions.values()].flatMap((m) => [tileKey(m.cell), ...(m.next ? [tileKey(m.next)] : [])]));
         const saved = data.seat.position;
@@ -74,6 +80,7 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
   }
   function tick(delta: number, reduced: boolean, view?: { x: number; y: number; width: number; height: number; scale: number }) {
     if (!atlas) return;
+    focusRemaining = Math.max(0, focusRemaining - delta);
     for (const id of advanceFrame(motions, delta)) positions.set(id, { ...motions.get(id)!.cell });
     if (meeting && meetingFinished(meeting, Object.keys(meeting.plan.targets).every((id) => !motions.has(id) || motions.get(id)!.arrived), delta)) {
       meeting = undefined;
@@ -89,6 +96,7 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
     }
     for (const worker of workers.values()) {
       worker.elapsed += delta;
+      worker.spotlight.visible = worker.data.seat.agentId === inspectedId();
       const motion = motions.get(worker.data.seat.agentId)!;
       const inMeeting = !!meeting?.plan.targets[worker.data.seat.agentId];
       const visit = inMeeting ? undefined : visits.get(worker.data.seat.agentId);
@@ -119,5 +127,5 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
     }
     connections.visible = display.connections;
   }
-  return { update, tick, setDisplay: (value: DisplayOptions) => { display = value; }, meetingTitle: () => meeting?.plan.title ?? '', position: (id: string) => motions.get(id)?.position, drainPositions: () => { const entries = [...positions]; positions.clear(); return entries; }, destroy: () => { for (const frame of frames.values()) frame.destroy(); atlas?.destroy(true); } };
+  return { update, tick, inspectedId, preview: (id?: string) => { hovered = id; }, focus: (id: string) => { focused = id; focusRemaining = 7000; }, setDisplay: (value: DisplayOptions) => { display = value; }, meetingTitle: () => meeting?.plan.title ?? '', position: (id: string) => motions.get(id)?.position, drainPositions: () => { const entries = [...positions]; positions.clear(); return entries; }, destroy: () => { for (const frame of frames.values()) frame.destroy(); atlas?.destroy(true); } };
 }

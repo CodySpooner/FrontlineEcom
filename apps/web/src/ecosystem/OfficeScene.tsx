@@ -6,6 +6,7 @@ import { AGENT_ROLES, type OfficeSeat } from '@frontline/shared';
 import { officeApi } from './api';
 import { hubReadout } from './hub';
 import { Minimap } from './Minimap';
+import { WorkerPortrait } from './WorkerPortrait';
 import type { OfficeWorker } from './workerSprites';
 import { workerActivity, type OfficeState } from './events';
 import { recentHandoff } from './communications';
@@ -53,6 +54,8 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
   },[]);
   const selected = DESKS.find((d)=>d.id===desk);
   const occupant = workers.find((w) => w.seat.deskId === desk);
+  const inspected = workers.find((w) => w.seat.agentId === performance?.inspectionId);
+  const inspectedDepartment = ROOMS.find((r) => r.id === DESKS.find((d) => d.id === inspected?.seat.deskId)?.department);
   return <>
     <span className="sr-only">Central hub today: {readout.revenue} revenue, {readout.orders} orders, {readout.tasks} active tasks. {readout.note}</span>
     <div className="eco-camera" aria-label="Office camera">
@@ -67,9 +70,13 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
     </div>
     <div ref={host} className="eco-canvas" data-frames={performance?.frames} data-elapsed-ms={performance?.elapsedMs} data-scale={performance?.scale} />
     <Minimap viewport={performance?.viewport} onFocus={(tile) => scene.current?.focus(tile)} />
+    {inspected && <div className="eco-worker-preview" id="eco-worker-preview" role="tooltip" style={{ borderColor: inspectedDepartment?.color }}>
+      <WorkerPortrait appearance={inspected.seat.appearance} name={inspected.name} agentId={inspected.seat.agentId} />
+      <div><small>{inspectedDepartment?.name}</small><strong>{inspected.name}</strong><span>{inspected.status?.replaceAll('_', ' ') ?? 'idle'}</span></div>
+    </div>}
     {performance && <small className="eco-fps">{Math.round(performance.scale * 100)}% · {Math.round(performance.fps)} FPS · {performance.mode}{performance.scale < .65 ? ' · Zoom in for worker labels' : ''}</small>}
     {error && <p role="alert" className="eco-scene-error">{error}</p>}
     <div className="eco-scene-note" role="status">{occupant ? `${occupant.name} · ${occupant.status?.replaceAll('_', ' ')}${occupant.tool ? ` · ${occupant.tool}` : ''}` : selected ? `${ROOMS.find((r)=>r.id===selected.department)!.name} · Workstation ${selected.id.split('-').at(-1)}` : 'HEADQUARTERS · Select a workstation to inspect it'}</div>
-    <details className="eco-desk-access"><summary>Workstation directory</summary><div>{DESKS.map((d)=><button key={d.id} onClick={()=>{choose(d.id);scene.current?.focus(d);}}>{d.id}</button>)}</div></details>
+    <details className="eco-desk-access"><summary>Workstation directory</summary><div>{DESKS.map((d)=><button key={d.id} aria-describedby={inspected?.seat.deskId === d.id ? 'eco-worker-preview' : undefined} onFocus={()=>scene.current?.previewWorker(workers.find((w)=>w.seat.deskId===d.id)?.seat.agentId)} onBlur={()=>scene.current?.previewWorker()} onClick={()=>{choose(d.id);scene.current?.focus(d);}}>{d.id}</button>)}</div></details>
   </>;
 }
