@@ -112,6 +112,11 @@ describe('addedProducts', () => {
   it('skips malformed entries and other kinds', () => {
     expect(add([{ title: 'No price' }, 'x', null, { title: 'Ok', price: 10, compareAt: '20', cost: 0 }])).toEqual([{ title: 'Ok', price: 10 }]);
     expect(add('nope')).toEqual([]);
+    // A "was" price at or under the price isn't a discount: not shown as one (like Research).
+    expect(add([{ title: 'Mug', price: 24, compareAt: 24 }, { title: 'Bowl', price: 24, compareAt: 19 }])).toEqual([
+      { title: 'Mug', price: 24 },
+      { title: 'Bowl', price: 24 },
+    ]);
     expect(addedProducts({ kind: 'store.set_price', payload: { products: [{ title: 'x', price: 1 }] } })).toBeUndefined();
   });
 });

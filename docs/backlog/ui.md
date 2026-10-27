@@ -476,6 +476,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-176 Analytics' Profit chart drew every losing day at $0: the axis always started at 0 and points were floored
       to it, so Peak Fit (18 of its last 30 days below zero) looked flat instead of bleeding. The axis now reaches below
       0 when the data does (round steps, "−$50" labels) and losing days are drawn under the $0 line.
+- [x] UI-177 An "Add products" request showed whatever "was" price the agent wrote, even one at or under the price
+      ("$24.00 · was $19.00"), which reads as a discount that isn't one. It now shows a "was" only above the price, like
+      Research. Asked agents to refuse such a request in the first place.
 
 ## Blocked
 
@@ -699,3 +702,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-174: one change in api() (every hook goes through it). New api/client.test.tsx, red first: unreachable, server words kept, wordless 500. Orca with every write rejected client-side (nothing sent): Settings' Open folder alert reads the new line
 - 2026-10-26 — UI-175: found by a terms pass over the UI copy (Deny/Reject, Delete/Remove, store/shop: the rest is consistent). Copy only, so no new test. Orca with a fake rejected draft (GET fixture, writes blocked): the list and the preview badge read "Denied". Same session, no change needed: an a11y sweep of 13 pages (names, labels, alt, heading order, duplicate ids) is clean; the Dashboard's cold load makes 14 API calls, each under 40 ms
 - 2026-10-26 — UI-176: niceTicks(v, lo) reaches a round step under lo (unchanged when lo ≥ 0, so revenue charts are as before); shortMoney signs negatives; AreaChart scales from the lowest tick. Tests red first: niceTicks, shortMoney, and a new AreaChart.test (a −$50 day is drawn under the $0 gridline). Orca, Peak Fit alone, Profit 30D (real demo data): axis −$100…$50, 17 of 29 solid points under $0, tooltip −$44
+- 2026-10-26 — UI-177: addedProducts drops a compareAt at or under the price. Test red first. Orca with a fake pending request (GET fixture, writes blocked): "Fake Jade Roller $24.00 · was $39.00 · 79% margin", "Fake Clay Mask $24.00 · 79% margin". Same session, no change needed: no page overflows at 900 or 1920 px

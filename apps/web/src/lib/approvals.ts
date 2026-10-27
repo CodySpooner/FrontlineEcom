@@ -28,7 +28,8 @@ export function addedProducts(action: ApprovalAction, fees?: Pick<Store, 'feePer
     if (typeof p?.title !== 'string' || !price) return [];
     const compareAt = num(p.compareAt);
     const cost = num(p.cost);
-    return [{ title: p.title, price, ...(compareAt && { compareAt }), ...(cost && { margin: marginAt(price, cost, fees) }) }];
+    // A "was" price at or under the price isn't a discount (agent-written payload): leave it out, like Research does.
+    return [{ title: p.title, price, ...(compareAt && compareAt > price && { compareAt }), ...(cost && { margin: marginAt(price, cost, fees) }) }];
   });
 }
 
