@@ -3,14 +3,15 @@
 import { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { Brain, ChevronDown, ChevronUp, Minus, Plus } from 'lucide-react';
 import { KB_CARD_TYPES, KB_LINK_TYPES, KB_STAGES, type KbLink, type KbStage, type KbViewState, type Store } from '@frontline/shared';
-import { useKbCards, useKbLinks, useKbPositions, useSaveKbPositions } from '../api/client';
+import { useKbCards, useKbLinks, useKbPositions, useKbTasks, useSaveKbPositions } from '../api/client';
 import { useStoreSelection } from '../components/StoreFilter';
 import { cx, EmptyState, ErrorState, LoadingState, memoryAuthor } from '../components/ui';
 import { ago } from '../lib/format';
 import { Dock, LinkPopover, Outline, SavedViews } from './ArtboardPanels';
+import { DetailsPanel, PANEL_W } from './DetailsPanel';
 import { bounds, CARD, cull, edge, fit, HEAD, layout, nearest, overlaps, PAD, panIntoView, pillAt, seen, start, zoomAt, type Camera, type Dir, type Frame, type Inset, type Placed, type Rect } from './layout';
 
-/** The area Fit and pan-into-view use: below the view switcher, right of the Outline column. The details panel widens it. */
+/** The area Fit and pan-into-view use: below the view switcher, right of the Outline column. The details panel and the dock add to it. */
 export const INSET: Inset = { top: 64, right: 16, bottom: 16, left: 16 + 196 + 16 };
 const STALE_DAYS = 90; // ponytail: one age for every card until per-category freshness (KB-23).
 const ARROWS: Record<string, Dir> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
@@ -25,7 +26,17 @@ type Drag =
 
 export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; general: boolean; q: string; card?: string; set: (changes: Record<string, string | undefined>) => void; switcher: ReactNode }) {
   const { stores } = useStoreSelection();
-  const onOpen = (id: string | undefined) => set({ card: id });
+  const [creating, setCreating] = useState(false); // the details panel writing a new card
+  const onOpen = (id: string | undefined) => {
+    setCreating(false);
+    set({ card: id });
+  };
+  // The panel keeps the last card while it slides out.
+  const [last, setLast] = useState(card);
+  if (card && card !== last) setLast(card);
+  const panel = creating || !!card;
+  const docked = !!useKbTasks(ws, true).data?.length; // the Researching dock is showing
+  const inset: Inset = { ...INSET, right: panel ? INSET.right + PANEL_W + 16 : INSET.right, bottom: docked ? INSET.bottom + 52 + 16 : INSET.bottom };
   const needle = useDeferredValue(q.trim());
   const cards = useKbCards(ws, { general, q: needle, limit: 1000 });
   const places = useKbPositions(ws);
@@ -61,7 +72,7 @@ export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; 
   const [cam, setCam] = useState<Camera>();
   const ready = !cards.isPending && !places.isPending;
   useEffect(() => {
-    if (!cam && ready && frames.length) setCam(start(bounds(frames), view, INSET));
+    if (!cam && ready && frames.length) setCam(start(bounds(frames), view, inset));
   }, [cam, ready, frames, view]);
   const camera = cam ?? { x: 0, y: 0, scale: 1 };
   useEffect(() => {
@@ -93,7 +104,7 @@ export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; 
     const p = byId.get(id)!;
     setFocused(id);
     pending.current = id;
-    setCam((c) => c && panIntoView(c, { x: p.x, y: p.y, ...CARD }, view, INSET));
+    setCam((c) => c && panIntoView(c, { x: p.x, y: p.y, ...CARD }, view, inset));
   };
   const toggle = (id: string) => {
     if (id === card) return onOpen(undefined);
@@ -123,8 +134,13 @@ export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; 
     setFocused(f.cards[0]!.card.id);
     pending.current = f.cards[0]!.card.id;
     // The frame's top-left part when it's bigger than the screen.
-    setCam((c) => c && panIntoView(c, { x: f.x, y: f.y, w: Math.min(f.w, (view.w - INSET.left - INSET.right - 48) / c.scale), h: Math.min(f.h, (view.h - INSET.top - INSET.bottom - 48) / c.scale) }, view, INSET));
+    setCam((c) => c && panIntoView(c, { x: f.x, y: f.y, w: Math.min(f.w, (view.w - inset.left - inset.right - 48) / c.scale), h: Math.min(f.h, (view.h - inset.top - inset.bottom - 48) / c.scale) }, view, inset));
   }, [goto, frames, view]);
+  // Opening a card shows it clear of the panel.
+  useEffect(() => {
+    const p = card && byId.get(card);
+    if (p) setCam((c) => c && panIntoView(c, { ...CARD, x: p.x, y: p.y }, view, inset));
+  }, [card, ready]); // eslint-disable-line react-hooks/exhaustive-deps -- only when a card opens, not on every layout
   const viewState = (): KbViewState => ({ q: q.trim() || undefined, general: ws === 'general' ? undefined : general, camera, collapsed: [...collapsed] });
   const applyView = (s: KbViewState) => {
     set({ q: s.q || undefined, general: s.general === false ? '0' : undefined });
@@ -132,7 +148,7 @@ export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; 
     setCollapsed(new Set(s.collapsed));
   };
   const zoomBy = (f: number) => setCam((c) => c && zoomAt(c, f, { x: view.w / 2, y: view.h / 2 }));
-  const fitAll = () => setCam(fit(bounds(frames), view, INSET));
+  const fitAll = () => setCam(fit(bounds(frames), view, inset));
 
   const [drag, setDrag] = useState<Drag>();
   const local = (e: PointerEvent) => {
@@ -326,7 +342,16 @@ export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; 
       ) : null}
       {/* The Outline runs down to the minimap, so neither covers the other. */}
       <div className="pointer-events-none absolute top-4 bottom-4 left-4 z-10 flex w-[196px] flex-col gap-3 [&>*]:pointer-events-auto">
-        <Outline ws={ws} frames={frames} current={current} onGo={goFrames}>
+        <Outline
+          ws={ws}
+          frames={frames}
+          current={current}
+          onGo={goFrames}
+          onNewCard={() => {
+            set({ card: undefined });
+            setCreating(true);
+          }}
+        >
           <SavedViews ws={ws} current={viewState} onApply={applyView} />
         </Outline>
         {ready && !cards.isError && items.length > 0 && (
@@ -349,13 +374,14 @@ export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; 
           </div>
         )}
       </div>
-      <Dock ws={ws} onOpen={() => set({ view: 'research' })} />
+      <Dock ws={ws} right={inset.right} onOpen={() => set({ view: 'research' })} />
+      <DetailsPanel ws={ws} general={general} id={creating ? 'new' : (card ?? last)} open={panel} onOpen={onOpen} onClose={() => (creating ? setCreating(false) : onOpen(undefined))} />
       {open && (
         <LinkPopover
           link={open.l}
           from={byId.get(open.l.fromId)!.card.title}
           to={byId.get(open.l.toId)!.card.title}
-          x={Math.max(INSET.left, Math.min(view.w - 304, open.p.x * camera.scale + camera.x - 144))}
+          x={Math.max(inset.left, Math.min(view.w - 304, open.p.x * camera.scale + camera.x - 144))}
           y={Math.max(16, Math.min(view.h - 220, open.p.y * camera.scale + camera.y + 16))}
           onClose={closePop}
         />

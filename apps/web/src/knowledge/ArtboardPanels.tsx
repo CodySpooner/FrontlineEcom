@@ -1,7 +1,7 @@
 // The artboard's floating panels (design A, `docs/reference/kb-atlas.html`): the Outline with saved views and the
 // line legend, the "why linked" popover and the Researching dock.
 import { useMemo, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react';
-import { BookmarkPlus, Plus, Trash2, X } from 'lucide-react';
+import { BookmarkPlus, FilePlus, FolderPlus, Trash2, X } from 'lucide-react';
 import { AGENT_ROLES, KB_LINK_TYPES, KB_TASK_STAGES, type KbLink, type KbViewState } from '@frontline/shared';
 import { useCreateKbCategory, useDecideKbLink, useDeleteKbView, useKbCategories, useKbTasks, useKbViews, useKbWorkspaces, useSaveKbView } from '../api/client';
 import { Button, cx } from '../components/ui';
@@ -11,7 +11,7 @@ const panel = 'rounded-xl border border-line-2 bg-[rgba(14,14,17,.92)] backdrop-
 const field = 'h-7 w-full min-w-0 rounded-[7px] border border-[#2a2a31] bg-[#0b0b0d] px-2.5 text-xs text-text placeholder:text-muted';
 const iconBtn = 'grid size-7 shrink-0 cursor-pointer place-items-center rounded-md border border-[#2a2a31] text-text-2 transition hover:text-white';
 /** Esc in a panel's field closes that field, not the open card (the page's Esc handler skips handled keys). */
-const escape = (close: () => void) => (e: KeyboardEvent) => {
+export const escape = (close: () => void) => (e: KeyboardEvent) => {
   if (e.key !== 'Escape') return;
   e.preventDefault();
   close();
@@ -92,7 +92,7 @@ export function SavedViews({ ws, current, onApply }: { ws: string; current: () =
  * The workspace's category tree with each row's card count (its whole subtree). A row opens and shows its frames;
  * `onGo` gets the row's key and the frame ids under it.
  */
-export function Outline({ ws, frames, current, onGo, children }: { ws: string; frames: Frame[]; current?: string; onGo: (key: string, frameIds: string[]) => void; children: ReactNode }) {
+export function Outline({ ws, frames, current, onGo, onNewCard, children }: { ws: string; frames: Frame[]; current?: string; onGo: (key: string, frameIds: string[]) => void; onNewCard: () => void; children: ReactNode }) {
   const cats = useKbCategories(ws);
   const counts = useKbWorkspaces();
   const create = useCreateKbCategory();
@@ -120,8 +120,11 @@ export function Outline({ ws, frames, current, onGo, children }: { ws: string; f
       <div className="flex shrink-0 items-center">
         <span className="font-display text-[11px] font-semibold tracking-[.12em] text-muted">OUTLINE</span>
         <span className="flex-1" />
-        <button type="button" aria-label="New category" aria-expanded={adding} onClick={() => setAdding((a) => !a)} className={cx(iconBtn, 'size-6')}>
-          <Plus className="size-3" />
+        <button type="button" aria-label="New card" title="New card" onClick={onNewCard} className={cx(iconBtn, 'mr-1 size-6')}>
+          <FilePlus className="size-3" />
+        </button>
+        <button type="button" aria-label="New category" title="New category" aria-expanded={adding} onClick={() => setAdding((a) => !a)} className={cx(iconBtn, 'size-6')}>
+          <FolderPlus className="size-3" />
         </button>
       </div>
       {adding && <NameForm label="Category name" busy={create.isPending} error={create.error?.message} onCancel={() => setAdding(false)} onSave={(name) => create.mutate({ ws, name }, { onSuccess: () => setAdding(false) })} />}
@@ -172,13 +175,13 @@ const Legend = ({ mark, children }: { mark: ReactNode; children: ReactNode }) =>
   </li>
 );
 
-/** Why two cards are linked (non-modal); a suggested link can be accepted or rejected here. */
-export function LinkPopover({ link, from, to, x, y, onClose }: { link: KbLink; from: string; to: string; x: number; y: number; onClose: () => void }) {
+/** Why two cards are linked (non-modal); a suggested link can be accepted or rejected here. Without x/y it sits inline. */
+export function LinkPopover({ link, from, to, x, y, onClose }: { link: KbLink; from: string; to: string; x?: number; y?: number; onClose: () => void }) {
   const decide = useDecideKbLink();
   const suggested = link.status === 'suggested';
   const answer = (status: 'confirmed' | 'rejected') => decide.mutate({ link, status }, { onSuccess: onClose });
   return (
-    <div role="dialog" aria-label="Why these cards are linked" onKeyDown={escape(onClose)} className={cx(panel, 'absolute z-20 grid w-72 gap-2 p-3 text-xs shadow-[0_18px_40px_-16px_rgba(0,0,0,.9)]')} style={{ left: x, top: y }}>
+    <div role="dialog" aria-label="Why these cards are linked" onKeyDown={escape(onClose)} className={cx(panel, 'grid gap-2 p-3 text-xs', x !== undefined && 'absolute z-20 w-72 shadow-[0_18px_40px_-16px_rgba(0,0,0,.9)]')} style={x !== undefined ? { left: x, top: y } : undefined}>
       <div className="flex items-center gap-2">
         <span className={cx('font-display text-[10.5px] font-semibold tracking-[.1em] uppercase', link.type === 'contradicts' ? 'text-red' : 'text-text-2')}>{KB_LINK_TYPES[link.type]}</span>
         {suggested && <span className="rounded border border-dashed border-line-3 px-1 text-[10px] text-muted">Suggested by AI</span>}
@@ -213,14 +216,14 @@ export function LinkPopover({ link, from, to, x, y, onClose }: { link: KbLink; f
 const progress = (stage: string) => ((KB_TASK_STAGES.indexOf(stage as (typeof KB_TASK_STAGES)[number]) + 1) / KB_TASK_STAGES.length) * 100;
 
 /** Live research of this workspace (hidden when there is none); a click opens the Research Center. */
-export function Dock({ ws, onOpen }: { ws: string; onOpen: () => void }) {
+export function Dock({ ws, right, onOpen }: { ws: string; right: number; onOpen: () => void }) {
   const tasks = useKbTasks(ws, true);
   const list = tasks.data ?? [];
   if (!list.length) return null;
   const running = list.filter((t) => t.status === 'running');
   const queued = list.length - running.length;
   return (
-    <div className="pointer-events-none absolute right-4 bottom-4 left-[228px] z-10 flex justify-center">
+    <div className="pointer-events-none absolute bottom-4 left-[228px] z-10 flex justify-center" style={{ right }}>
       <button type="button" onClick={onOpen} className={cx(panel, '@container pointer-events-auto flex h-[52px] w-full max-w-[560px] cursor-pointer items-center gap-3.5 pr-2 pl-3.5 text-left transition hover:border-line-3')}>
         <span className="flex shrink-0 items-center gap-[7px] font-display text-[10.5px] font-semibold tracking-[.12em] text-[#ffb4ba] uppercase">
           <i aria-hidden className="size-[7px] rounded-full bg-red shadow-[0_0_10px_rgba(255,42,58,.7)]" />

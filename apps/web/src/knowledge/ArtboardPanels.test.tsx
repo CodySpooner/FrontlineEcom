@@ -31,6 +31,8 @@ const board = (extra: (url: string, init?: RequestInit) => unknown = () => undef
     if (init?.method && init.method !== 'GET') return init.method === 'DELETE' || init.method === 'PUT' ? new Response(null, { status: 204 }) : {};
     if (url === '/api/stores') return [peak];
     if (url.startsWith('/api/kb/cards?')) return { items: cards, total: cards.length, offset: 0, limit: 1000 };
+    const one = url.match(/^\/api\/kb\/cards\/(\w+)\?ws=all$/);
+    if (one) return { ...cards.find((c) => c.id === one[1]), body: '', relevance: '', application: '', appliesTo: '', limits: '' };
     if (url.startsWith('/api/kb/links?')) return links;
     if (url.startsWith('/api/kb/categories?'))
       return [cat('peak-ads', 'Advertising', null, 0), cat('peak-hooks', 'Hooks', 'peak-ads', 2), cat('peak-seo', 'SEO', null, 1, 'peak', 9)];

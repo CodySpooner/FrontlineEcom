@@ -462,7 +462,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - the Outline per the design ("+ New category", pan-to-frame);
   - saved views (filters + viewport + layout) per workspace;
   - the live "Researching" dock with the placement rules.
-- [ ] KB-08 **Details panel** (a non-modal aside):
+- [x] KB-08 **Details panel** (a non-modal aside):
   - every card field from spec §4;
   - the ladder, the evidence list with tags, connected cards with "Why linked" and "Link to…";
   - sources with provenance (open, fetched date, status, reliability), usage count;
@@ -625,6 +625,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-05 page frame: toolbar (workspace with niche + card count, Include General, search, research actions shown off until research lands), one `?view=` switcher, `?ws=`/`?card=`/legacy `tab`/`doc` URLs, `/` and Esc guards, loading/error/empty states; `GET /api/kb/workspaces`.
 - 2026-10-27 KB-06 artboard: full-bleed canvas sized to the window, camera (pan, wheel zoom about the cursor, Fit clear of the panels), category frames (auto-layout, collapse), the design's card, drag and Alt+Arrow saved per workspace (`/api/kb/positions`), click/Shift/box selection, minimap and zoom bar, the canvas keyboard model, culling.
 - 2026-10-27 KB-07 artboard II: link lines by type with pills (kept off cards, stacked per card pair), hit strokes and the "why linked" popover with accept/reject, the legend, the selection's lines highlighted, the Outline (subtree counts, filter, "+ New category", General knowledge, row → frame + first card), saved views per workspace (`/api/kb/views`), the Researching dock (`/api/kb/research/tasks`).
+- 2026-10-27 KB-08 details panel: a non-modal aside with every §4 field, the ladder, tagged evidence, connected cards with "Why linked" and "Link to…", sources with provenance, usage, history with Restore, inline edit and create, pin / mark for research / block / archive / reject / merge with their reversals (accept, unarchive, unreject, unblock, detach), a slide that respects reduced motion.
 
 ## Blocked
 
@@ -663,3 +664,9 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   moves it. The Outline has no tree folding (the filter box covers long trees); on short windows the whole Outline
   scrolls with the tree kept at three rows. Saved views: the select is a picker (picking the same view again brings
   it back), and delete acts on the view last picked or saved.
+- 2026-10-27 KB-08: "Use in a task", "Research deeper" and "Promote to General" show disabled with a reason until
+  KB-17, KB-15 and KB-18 (approving promotions comes with KB-18). Blocking is all agents (`blockedRoles: ['*']`);
+  per-role blocking can come with KB-22's controls. Cards merged into a card are listed under "Merged in" with Detach,
+  read from `mergedInto`: a real-browser drive showed an evidence-less merge had no way back when Detach sat only on
+  evidence rows. A new card sends only the fields typed, because a stage set by hand stops the ladder moving it. History
+  shows the latest five. Fit and pan-into-view leave room for the open panel and for the dock while it shows.

@@ -35,8 +35,12 @@ import type {
   KbCard,
   KbCardBrief,
   KbCategory,
+  KbCardInput,
   KbCategoryCount,
+  KbEvidence,
   KbLink,
+  KbLinkInput,
+  KbRevision,
   KbPositions,
   KbTaskBrief,
   KbView,
@@ -246,10 +250,10 @@ export const useKnowledgeDoc = (kind: KnowledgeKind, key: string) =>
 export const useKbWorkspaces = () => useQuery({ queryKey: ['kb', 'workspaces'], queryFn: () => api<KbWorkspaceCounts>('/api/kb/workspaces') });
 
 /** A workspace's cards ('general' or a store id; `general` adds General's to a store's). */
-export const useKbCards = (ws: string, q: { general?: boolean; q?: string; limit?: number }) =>
+export const useKbCards = (ws: string, q: { general?: boolean; q?: string; status?: string; limit?: number }) =>
   useQuery({
     queryKey: ['kb', 'cards', ws, q],
-    queryFn: () => api<Page<KbCardBrief>>(`/api/kb/cards?${new URLSearchParams({ ws, ...(q.general && { general: '1' }), ...(q.q && { q: q.q }), ...(q.limit && { limit: String(q.limit) }) })}`),
+    queryFn: () => api<Page<KbCardBrief>>(`/api/kb/cards?${new URLSearchParams({ ws, ...(q.general && { general: '1' }), ...(q.q && { q: q.q }), ...(q.status && { status: q.status }), ...(q.limit && { limit: String(q.limit) }) })}`),
     placeholderData: keepPreviousData,
   });
 
@@ -284,6 +288,39 @@ export function useDecideKbLink() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ link, status }: { link: KbLink; status: 'confirmed' | 'rejected' }) => api<KbLink>(`/api/kb/links/${encodeURIComponent(link.id)}?${wsq(link.storeId ?? 'general')}`, json('PATCH', { status })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
+
+/** The owner's own link between two cards; `ws` is the store when either card is a store's. */
+export function useCreateKbLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: KbLinkInput & { ws: string }) => api<KbLink>('/api/kb/links', json('POST', b)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
+
+const cardUrl = (c: { id: string; storeId: string | null }, path = '') => `/api/kb/cards/${encodeURIComponent(c.id)}${path}?${wsq(c.storeId ?? 'general')}`;
+/** A card's evidence (oldest first), read in the card's own workspace. */
+export const useKbEvidence = (c: { id: string; storeId: string | null } | undefined) => useQuery({ queryKey: ['kb', 'evidence', c?.id], queryFn: () => api<KbEvidence[]>(cardUrl(c!, '/evidence')), enabled: !!c });
+/** A card's revisions, newest first. */
+export const useKbRevisions = (c: { id: string; storeId: string | null } | undefined) => useQuery({ queryKey: ['kb', 'revisions', c?.id], queryFn: () => api<KbRevision[]>(cardUrl(c!, '/revisions')), enabled: !!c });
+
+/** The owner's writes on a card, in its own workspace: no `path` patches it; '/merge', '/detach' and '/revisions/<id>/restore' post. */
+export function useKbCardWrite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ card, path, body }: { card: { id: string; storeId: string | null }; path?: string; body?: unknown }) => api<KbCard>(cardUrl(card, path), json(path ? 'POST' : 'PATCH', body)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
+
+/** A card the owner writes by hand (active, User-Provided unless a type is given). */
+export function useCreateKbCard() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: Partial<KbCardInput> & { ws: string; title: string }) => api<KbCard>('/api/kb/cards', json('POST', b)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
   });
 }
