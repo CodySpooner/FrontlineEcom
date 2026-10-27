@@ -815,6 +815,14 @@ export const APP_TOOLS: AppTool[] = [
       if (bad) return `Not saved: ${bad} in a storefront page. Use headings, paragraphs, lists, tables, images and http(s) links only.`;
       // Themes show titles as they are, and the platform refuses one with a tag at publish (core's hasTag).
       if ([d.title, d.seoTitle].some((t) => t && /<[a-z!/?]/i.test(t))) return 'Not saved: the title and SEO title are plain text; no HTML tags.';
+      if (kind === 'product' && ctx.store.platform === 'etsy') {
+        // Core sends Etsy the text of the HTML (htmlToText): a table runs together, images and links vanish.
+        if (/<(table|img|a)\b/i.test(d.html)) return 'Not saved: an Etsy description is plain text (the app sends the text of the HTML), so tables, images and links would be lost. Use headings, paragraphs and lists only.';
+        // Etsy's listing title rule (its OpenAPI spec): anything else is refused at publish.
+        if (/[^\p{L}\p{Nd}\p{P}\p{Sm}\p{Zs}™©®]/u.test(d.title) || ['%', ':', '&', '+'].some((c) => d.title.split(c).length > 2)) {
+          return 'Not saved: Etsy titles take only letters, numbers, punctuation, math symbols, spaces and ™ © ®, with %, :, & and + at most once each.';
+        }
+      }
       const gone = productId && productGone(ctx, productId);
       if (gone) return gone;
       // One page per product at a time: overlapping page changes can't be judged apart (14 days of sales after publishing).

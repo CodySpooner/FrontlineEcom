@@ -106,6 +106,23 @@ test("publishing a draft the owner turned down doesn't say the no again (it woul
   expect(said).toEqual([]);
 });
 
+test("an Etsy product page keeps to what Etsy takes: plain-text structure and its title rule", async () => {
+  db.prepare(`UPDATE stores SET platform = 'etsy' WHERE id = 'glow'`).run();
+  expect(
+    await run(() => [
+      draft({ html: '<p>Cool skin.</p><table><tr><td>Steel</td><td>Yes</td></tr></table>' }),
+      draft({ title: 'Ice Roller: Depuff: 60 Seconds' }),
+      draft({ title: 'Ice Roller 🧊 Depuff' }),
+      draft({ title: 'Ice Roller: Depuff & Calm in 60 Seconds' }),
+    ]),
+  ).toEqual([
+    'Not saved: an Etsy description is plain text (the app sends the text of the HTML), so tables, images and links would be lost. Use headings, paragraphs and lists only.',
+    'Not saved: Etsy titles take only letters, numbers, punctuation, math symbols, spaces and ™ © ®, with %, :, & and + at most once each.',
+    'Not saved: Etsy titles take only letters, numbers, punctuation, math symbols, spaces and ™ © ®, with %, :, & and + at most once each.',
+    expect.stringMatching(/^Saved draft /),
+  ]);
+});
+
 test('connected stores get it on the platform; a platform error tells the owner; bad input is refused', async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
   const out = await run(() => [draft({ productId: 'nope' }), draft({ productId: undefined }), draft({ kind: 'page', productId: undefined, title: 'About us' })]);
