@@ -140,6 +140,16 @@ test('search_suppliers gives supplier prices: demo listings without CJ, none for
   expect(out[1]).toBe('No supplier listings for "zzz-nothing".');
 });
 
+test("a live store without CJ gets no demo supplier prices", async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
+  const input: RunInput = { agent: getAgent(db, 'glow:product_hunter')!, store: getStore(db, 'glow')!, task: 't', env: toolEnv(db) };
+  const out: string[] = [];
+  for await (const e of runAgent(input, fakeEngine(() => [{ call: 'search_suppliers', input: { q: 'roller' } }]))) if (e.type === 'tool_result') out.push(e.output);
+  expect(out).toEqual([
+    "CJ Dropshipping isn't connected, so there's no real supplier price (the demo listings are left out for a live store). Ask the owner to connect it in Integrations, or take a real cost from a supplier's own page if you can browse.",
+  ]);
+});
+
 test('a store selling in another currency is told research and supplier prices are USD, with the rate', async () => {
   db.prepare(`UPDATE stores SET currency = 'EUR' WHERE id = 'glow'`).run();
   db.prepare(`INSERT INTO settings (key, value_json) VALUES ('fx', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json`).run(

@@ -313,11 +313,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-183 A price test approved over 2 weeks after it was asked on a live store is asked again, not applied. Ad changes expire after 4 days; a price test went live on whatever evidence it was asked with, however old (competitor prices, conversion), as long as the price itself hadn't moved.
 - [x] AGT-184 A custom-niche store's research finds are its own. Core now keeps a find's custom niche (`niche_detail`, its Inbox reply to AGT-182): finds record it, a repeat matches on it, and `research_feed` filters on `other:<slug>` instead of noting the mix.
 - [x] AGT-185 A live store's `research_feed` leaves out the built-in sample catalog. Core seeds a demo research dataset for every install, with made-up trend and competition, and a live store's Product Hunter read it as the market ("demand +248% in 30 days") and could ask to add one on that.
+- [x] AGT-186 A live store without CJ gets no demo supplier prices. `search_suppliers` fell back to demo listings built from the sample research catalog, so a live store's find or product could be costed on made-up prices (a header said so, easy to miss).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-186: on a connected store, `search_suppliers` returns no demo listings and says to connect CJ or take a cost from a supplier's page; demo stores keep them.
 - 2026-10-26 — AGT-185: for a connected store `research_feed` lists only recorded finds (`find-` ids), reading up to 200 rows so the sample ones don't crowd them out; with none it says to find, cost and record products.
 - 2026-10-26 — AGT-178 follow-up: budgets are whole amounts, so 30% of one under $4/day rounded to no raise at all; a raise of $1 always goes.
 - 2026-10-26 — AGT-184 (Inbox, core's AGT-182 reply): `record_product_find` passes the custom niche's slug, `recordFind` writes `niche_detail` and matches it in the repeat lookup, `research_feed` asks for `nicheKey` (`other:<slug>`); AGT-182's note is gone.

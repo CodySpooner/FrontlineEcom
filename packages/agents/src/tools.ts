@@ -409,6 +409,10 @@ export const APP_TOOLS: AppTool[] = [
       if (!ctx.searchSuppliers) return 'Supplier search is not available.';
       const rows = await ctx.searchSuppliers(q, limit ?? 10);
       if (!rows.length) return `No supplier listings for "${q}".`;
+      // Demo listings are made from the sample research catalog: a live store's cost must not come from them.
+      if (rows[0]!.demo && ctx.store.connected) {
+        return "CJ Dropshipping isn't connected, so there's no real supplier price (the demo listings are left out for a live store). Ask the owner to connect it in Integrations, or take a real cost from a supplier's own page if you can browse.";
+      }
       const table = csv(rows.map((p) => ({ sku: p.sku, title: p.title, price_usd: p.price, listed_by_sellers: p.listed })));
       return `${rows[0]!.demo ? '# Demo supplier data (CJ is not connected)\n' : ''}${await usdNote(ctx)}${table}`;
     },
