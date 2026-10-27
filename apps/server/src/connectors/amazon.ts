@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { once, tx, type Db } from '../db';
 import { addDays, localDate, midnight } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adRate, archiveMissing, backfillRate, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal, syncView } from './common';
+import { adRate, archiveMissing, backfillRate, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal, syncView, stillAsSynced, syncedPrice } from './common';
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
@@ -400,6 +400,7 @@ interface Offer {
   marketplace_id?: string;
   audience?: string;
   currency?: string;
+  our_price?: Scheduled;
   discounted_price?: Scheduled;
   minimum_seller_allowed_price?: Scheduled;
   maximum_seller_allowed_price?: Scheduled;
@@ -418,6 +419,7 @@ export async function setAmazonListingPrice(db: Db, key: Buffer, storeId: string
   const creds = getCredentials(db, key, 'amazon', storeId);
   if (!creds) throw new Error('Amazon is not connected for this store');
   const sku = productId.slice(4);
+  const synced = syncedPrice(db, storeId, productId);
   await logAction(db, storeId, 'price_change', productId, { price }, async () => {
     const { host, marketplace, token } = await amazonAuth(creds, fetchFn);
     const url = `https://${host}/listings/2021-08-01/items/${encodeURIComponent(creds.sellerId!.trim())}/${encodeURIComponent(sku)}`;
@@ -436,6 +438,7 @@ export async function setAmazonListingPrice(db: Db, key: Buffer, storeId: string
     // A running sale is what buyers pay, so a new regular price wouldn't show; min/max outside the price deactivates the offer.
     const sale = first(offer.discounted_price);
     if (sale?.value_with_tax != null && (!sale.end_at || Date.parse(sale.end_at) > now.getTime())) throw new Error(`Amazon: listing ${sku} has a sale price running or scheduled; change it in Seller Central`);
+    stillAsSynced('Amazon', `price of ${sku}`, Number(first(offer.our_price)?.value_with_tax), synced);
     const [min, max] = [first(offer.minimum_seller_allowed_price)?.value_with_tax, first(offer.maximum_seller_allowed_price)?.value_with_tax];
     if ((min != null && price < min) || (max != null && price > max)) throw new Error(`Amazon: ${price} is outside the ${min ?? 0}–${max ?? '∞'} price range set for listing ${sku} in Seller Central`);
     const res = await call<{ status?: string; issues?: { message: string; severity: string }[] }>(

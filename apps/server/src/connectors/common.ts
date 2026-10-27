@@ -58,6 +58,19 @@ export function setStoreCurrency(db: Db, storeId: string, currency: string) {
 }
 
 /**
+ * Refuses an approved change to a value that moved on the platform since the last sync (changed in its own admin): the
+ * change was sized and capped on the synced one, so "20 → 22" on a price raised to 35 there since is a 37% cut. An
+ * unreadable live value doesn't refuse.
+ */
+export function stillAsSynced(platform: string, what: string, live: number, synced: unknown) {
+  if (synced == null || !Number.isFinite(live) || Math.abs(live - Number(synced)) <= Number(synced) * 0.01) return;
+  throw new Error(`${platform}: the ${what} is ${live} there now, not ${Number(synced)} as last synced (changed outside the app); ask again after the next sync`);
+}
+
+/** The local (synced) price of a store's product, for stillAsSynced. */
+export const syncedPrice = (db: Db, storeId: string, productId: string) => db.prepare('SELECT price FROM products WHERE store_id = ? AND id = ?').get(storeId, productId)?.price;
+
+/**
  * What other writes can change while a sync awaits its reads: the integration's settings (another shop or account) and
  * cursor (reset by that and by a currency switch), and the store's currency. A sync that finds it changed when it comes to
  * write writes nothing (its reads are of the old account, or priced into the old currency); the next one reads afresh.

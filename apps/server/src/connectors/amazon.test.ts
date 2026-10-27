@@ -219,6 +219,7 @@ test('an approved Amazon price change merges our_price into the consumer offer a
     expect(u.pathname).toBe('/listings/2021-08-01/items/A1SELLER/MAT%2F1');
     if (init?.method === 'PATCH') {
       patches.push(JSON.parse(String(init.body)));
+      offer = { ...offer, our_price: JSON.parse(String(init.body)).patches[0].value[0].our_price }; // read back as written
       return Response.json({ sku: 'MAT/1', status: 'ACCEPTED', submissionId: 's1', issues: [] });
     }
     expect(u.searchParams.get('includedData')).toBe('summaries,attributes');
@@ -240,6 +241,10 @@ test('an approved Amazon price change merges our_price into the consumer offer a
   await expect(setAmazonListingPrice(db, key, 'peak', 'amz-MAT/1', { price: 26, compareAt: 35 }, fetchFn, NOW)).rejects.toThrow('no compare-at');
   expect(patches).toHaveLength(1);
   expect(db.prepare("SELECT price FROM products WHERE id = 'amz-MAT/1'").get()?.price).toBe(27.5);
+  // Repriced to 35 in Seller Central since the last sync: a change sized on 27.50 isn't the one approved.
+  offer = { ...offer, discounted_price: undefined, our_price: [{ schedule: [{ value_with_tax: 35 }] }] };
+  await expect(setAmazonListingPrice(db, key, 'peak', 'amz-MAT/1', { price: 30 }, fetchFn, NOW)).rejects.toThrow('Amazon: the price of MAT/1 is 35 there now, not 27.5 as last synced');
+  expect(patches).toHaveLength(1);
 });
 
 test('an Amazon price change the API rejects says why', async () => {

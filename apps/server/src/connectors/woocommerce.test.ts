@@ -246,6 +246,8 @@ function fakeWooWrites(status = 200) {
     if (status !== 200) return Response.json({ code: 'woocommerce_rest_cannot_create', message: 'Sorry, you are not allowed to create resources.' }, { status });
     if (method === 'GET') return Response.json(products[path.split('/')[1]!]);
     writes.push({ method, path, body: JSON.parse(String(init.body)) });
+    const id = path.split('/')[1];
+    if (method === 'PUT' && id && products[id]) Object.assign(products[id], JSON.parse(String(init.body))); // read back as written
     return Response.json({ id: 500 + writes.length });
   }) as typeof fetch;
   return { fetchFn, writes };
@@ -266,7 +268,9 @@ test('approved products become Woo drafts (sale price over regular for a compare
 
 test('a Woo price change keeps, sets or clears the compare-at as asked, and leaves variable products alone', async () => {
   const db = setup();
-  for (const id of ['woo-41', 'woo-42']) db.prepare("INSERT INTO products (store_id, id, title, price, compare_at, cost, inventory, status) VALUES ('pawsome', ?, 'p', 30, 40, 0, 1, 'active')").run(id);
+  const add = db.prepare("INSERT INTO products (store_id, id, title, price, compare_at, cost, inventory, status) VALUES ('pawsome', ?, 'p', ?, ?, 0, 1, 'active')");
+  add.run('woo-41', 30, 40); // as synced from the fake's products
+  add.run('woo-42', 25, null);
   const { fetchFn, writes } = fakeWooWrites();
   const row = (id: string) => db.prepare("SELECT price, compare_at FROM products WHERE store_id = 'pawsome' AND id = ?").get(id);
 
@@ -284,6 +288,10 @@ test('a Woo price change keeps, sets or clears the compare-at as asked, and leav
   expect(row('woo-42')).toEqual({ price: 22, compare_at: 35 });
   await expect(setWooProductPrice(db, key, 'pawsome', 'woo-43', { price: 10 }, fetchFn)).rejects.toThrow('is a variable product');
   await expect(setWooProductPrice(db, key, 'pawsome', '8001', { price: 10 }, fetchFn)).rejects.toThrow('not a WooCommerce product');
+  // Synced at 30, but 22 in WooCommerce now: a change sized on 30 isn't the one approved.
+  db.prepare("UPDATE products SET price = 30 WHERE store_id = 'pawsome' AND id = 'woo-42'").run();
+  await expect(setWooProductPrice(db, key, 'pawsome', 'woo-42', { price: 33 }, fetchFn)).rejects.toThrow('WooCommerce: the price of woo-42 is 22 there now, not 30 as last synced');
+  expect(writes).toHaveLength(4);
 });
 
 test("an approved product page replaces the Woo product's title and description", async () => {

@@ -4,7 +4,7 @@ import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import type { ProductPage } from './shopify';
 import { localDate } from '../dates';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, switchToReal, syncView } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, switchToReal, syncView, stillAsSynced, syncedPrice } from './common';
 
 // Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r, and
 // listings_w for approved listing changes: setEtsyListingPrice, publishEtsyProductPage).
@@ -224,10 +224,12 @@ export async function setEtsyListingPrice(db: Db, key: Buffer, storeId: string, 
   const url = `${API}/listings/${listingIdOf(productId)}/inventory`;
   const creds = getCredentials(db, key, 'etsy', storeId);
   if (!creds) throw new Error('Etsy is not connected for this store');
+  const synced = syncedPrice(db, storeId, productId);
   await logAction(db, storeId, 'price_change', productId, { price }, async () => {
     const { headers } = await etsyAuth(db, key, `etsy:${storeId}`, creds, fetchFn, now);
     const inv = await etsyEdit<Inventory>(fetchFn, url, { headers });
     if (inv.price_on_property?.length) throw new Error(`Etsy: listing ${productId} is priced per variation; change its prices in Shop Manager`);
+    stillAsSynced('Etsy', `price of ${productId}`, money(inv.products.find((p) => !p.is_deleted)?.offerings.find((o) => !o.is_deleted)?.price) || NaN, synced); // none: unread
     // The PUT replaces the whole inventory: every product goes back as read, minus the read-only ids, at the new price.
     const body = {
       products: inv.products.filter((p) => !p.is_deleted).map((p) => ({

@@ -163,6 +163,10 @@ test('an approved Etsy price goes back with the whole inventory as read; per-var
   expect(db.prepare("SELECT action, error IS NULL AS ok FROM action_log WHERE store_id = 'pawsome' ORDER BY rowid").all()).toEqual([
     { action: 'price_change', ok: 1 }, { action: 'price_change', ok: 0 }, { action: 'price_change', ok: 0 },
   ]);
+  // Synced at 24.50, but 20 on Etsy now (changed in Shop Manager): a change sized on 24.50 isn't the one approved.
+  inventory = { ...inventory, price_on_property: [] };
+  await expect(setEtsyListingPrice(db, key, 'pawsome', 'etsy-555', { price: 26 }, fetchFn, NOW)).rejects.toThrow('Etsy: the price of etsy-555 is 20 there now, not 24.5 as last synced');
+  expect(puts).toHaveLength(1);
 });
 
 test('an approved product page replaces the listing title and a plain-text description', async () => {

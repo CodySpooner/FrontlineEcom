@@ -4,7 +4,7 @@ import { addDays, localDate } from '../dates';
 import { tx, type Db } from '../db';
 import { convertRate, historicRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, takeTimezone, switchToReal, syncView, hasTag } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, takeTimezone, switchToReal, syncView, hasTag, stillAsSynced, syncedPrice } from './common';
 import { checkNewProducts, type NewProduct, type ProductPage } from './shopify';
 
 // WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
@@ -314,6 +314,7 @@ export async function setWooProductPrice(db: Db, key: Buffer, storeId: string, p
   if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be more than 0');
   if (compareAt != null && !(Number.isFinite(compareAt) && compareAt > 0)) throw new Error('Compare-at price must be more than 0');
   const wooId = wooIdOf(productId);
+  const synced = syncedPrice(db, storeId, productId);
   const shown = await logAction(db, storeId, 'price_change', productId, { price, ...(compareAt !== undefined ? { compareAt } : {}) }, async () => {
     const cur = await wooCall<{ type: string; regular_price: string; sale_price: string; date_on_sale_from?: string | null; date_on_sale_to?: string | null }>(
       db, key, storeId, 'GET', `products/${wooId}`, undefined, fetchFn);
@@ -323,6 +324,7 @@ export async function setWooProductPrice(db: Db, key: Buffer, storeId: string, p
     if (cur.date_on_sale_from || cur.date_on_sale_to) {
       throw new Error(`WooCommerce: product ${productId} has a scheduled sale (${cur.date_on_sale_from?.slice(0, 10) ?? '…'} to ${cur.date_on_sale_to?.slice(0, 10) ?? '…'}); change its price in WooCommerce`);
     }
+    stillAsSynced('WooCommerce', `price of ${productId}`, Number(cur.sale_price || cur.regular_price), synced);
     const was = compareAt === undefined ? (cur.sale_price ? Number(cur.regular_price) : 0) : (compareAt ?? 0);
     await wooCall(db, key, storeId, 'PUT', `products/${wooId}`, was > price ? { regular_price: String(was), sale_price: String(price) } : { regular_price: String(price), sale_price: '' }, fetchFn);
     return was > price ? was : null;

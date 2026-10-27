@@ -217,12 +217,14 @@ test('setProductPrice reprices every variant and the local product', async () =>
   const { db } = await setup();
   db.prepare("INSERT INTO products (store_id, id, title, price, compare_at, cost, inventory, status) VALUES ('glow', '111', 'Mask', 49, 79, 0, 0, 'active')").run();
   const calls: { query: string; variables: Record<string, unknown> }[] = [];
+  let live: string | undefined; // the price in Shopify's admin; as synced unless set
   const fetchFn = (async (_url: string, init: RequestInit) => {
     const body = JSON.parse(String(init.body));
     calls.push(body);
     if (body.query.includes('variants(first')) {
-      const xl = body.variables.id.endsWith('/777') ? '25.00' : '49.00';
-      return Response.json({ data: { product: body.variables.id.endsWith('/404') ? null : { variants: { nodes: [{ id: 'gid://shopify/ProductVariant/1', price: '49.00' }, { id: 'gid://shopify/ProductVariant/2', price: xl }], pageInfo: { hasNextPage: body.variables.id.endsWith('/999') } } } } });
+      const now = live ?? Number(local()?.price).toFixed(2);
+      const xl = body.variables.id.endsWith('/777') ? '25.00' : now;
+      return Response.json({ data: { product: body.variables.id.endsWith('/404') ? null : { variants: { nodes: [{ id: 'gid://shopify/ProductVariant/1', price: now }, { id: 'gid://shopify/ProductVariant/2', price: xl }], pageInfo: { hasNextPage: body.variables.id.endsWith('/999') } } } } });
     }
     const bad = body.variables.variants[0].price === '1.00';
     return Response.json({ data: { productVariantsBulkUpdate: { userErrors: bad ? [{ message: 'Price is too low' }] : [] } } });
@@ -257,6 +259,13 @@ test('setProductPrice reprices every variant and the local product', async () =>
     ['price_change', '111', { price: 44 }, true],
   ]);
   await expect(setProductPrice(db, key, 'peak', '111', { price: 10 }, fetchFn)).rejects.toThrow('not connected');
+  // Raised to 35 in Shopify since the last sync: "39.50 → 40" approved on the synced price would be another change there.
+  live = '35.00';
+  calls.length = 0;
+  await expect(setProductPrice(db, key, 'glow', '111', { price: 40 }, fetchFn)).rejects.toThrow('Shopify: the price of 111 is 35 there now, not 39.5 as last synced');
+  expect(calls.some((c) => c.query.includes('productVariantsBulkUpdate'))).toBe(false);
+  live = '39.70'; // within 1%: a rounding difference, not a change
+  await setProductPrice(db, key, 'glow', '111', { price: 40 }, fetchFn);
 });
 
 test('a Dev Dashboard app connects with client credentials; the 24 h token is cached and renewed', async () => {

@@ -3,7 +3,7 @@ import { logAction } from '../actions';
 import { once, tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, takeTimezone, switchToReal, syncView, hasTag } from './common';
+import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, takeTimezone, switchToReal, syncView, hasTag, stillAsSynced, syncedPrice } from './common';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -443,17 +443,19 @@ export async function publishProductPage(db: Db, key: Buffer, storeId: string, p
 export async function setProductPrice(db: Db, key: Buffer, storeId: string, productId: string, { price, compareAt }: { price: number; compareAt?: number | null }, fetchFn: Fetch = fetch) {
   if (!Number.isFinite(price) || price <= 0) throw new Error('Price must be more than 0');
   if (compareAt != null && !(Number.isFinite(compareAt) && compareAt > 0)) throw new Error('Compare-at price must be more than 0');
-  await logAction(db, storeId, 'price_change', productId, { price, ...(compareAt !== undefined ? { compareAt } : {}) }, () => repriceVariants(admin(db, key, storeId, fetchFn), productId, price, compareAt));
+  const synced = syncedPrice(db, storeId, productId);
+  await logAction(db, storeId, 'price_change', productId, { price, ...(compareAt !== undefined ? { compareAt } : {}) }, () => repriceVariants(admin(db, key, storeId, fetchFn), productId, price, compareAt, synced));
   db.prepare('UPDATE products SET price = ?, compare_at = CASE WHEN ? THEN ? ELSE compare_at END WHERE store_id = ? AND id = ?').run(price, compareAt !== undefined ? 1 : 0, compareAt ?? null, storeId, productId);
 }
 
-async function repriceVariants(q: ReturnType<typeof admin>, productId: string, price: number, compareAt: number | null | undefined) {
+async function repriceVariants(q: ReturnType<typeof admin>, productId: string, price: number, compareAt: number | null | undefined, synced: unknown) {
   const productGid = `gid://shopify/Product/${productId}`;
   const { product } = await q<{ product: { variants: { nodes: { id: string; price: string }[]; pageInfo: { hasNextPage: boolean } } } | null }>(VARIANT_IDS_Q, { id: productGid });
   if (!product?.variants.nodes.length) throw new Error(`Shopify: product ${productId} not found`);
   if (product.variants.pageInfo.hasNextPage) throw new Error(`Shopify: product ${productId} has over 250 variants; change its price in Shopify`);
   // One price for all would flatten e.g. S $20 / XL $25.
   if (new Set(product.variants.nodes.map((v) => Number(v.price))).size > 1) throw new Error(`Shopify: product ${productId}'s variants have different prices; change them in Shopify`);
+  stillAsSynced('Shopify', `price of ${productId}`, Number(product.variants.nodes[0]!.price), synced);
   const change = { price: price.toFixed(2), ...(compareAt !== undefined ? { compareAtPrice: compareAt === null ? null : compareAt.toFixed(2) } : {}) };
   const variants = product.variants.nodes.map((v) => ({ id: v.id, ...change }));
   const { productVariantsBulkUpdate: u } = await q<{ productVariantsBulkUpdate: { userErrors: { message: string }[] } }>(VARIANT_M, { productId: productGid, variants });

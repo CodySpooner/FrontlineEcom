@@ -4,7 +4,7 @@ import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { logAction } from '../actions';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange } from './common';
+import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange, stillAsSynced, syncedPrice } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -380,12 +380,15 @@ export async function setTikTokProductPrice(db: Db, key: Buffer, storeId: string
   const creds = getCredentials(db, key, 'tiktok_shop', storeId);
   if (!creds) throw new Error('TikTok Shop is not connected for this store');
   const path = `/product/202309/products/${productId.slice(3)}`;
+  const synced = syncedPrice(db, storeId, productId);
   await logAction(db, storeId, 'price_change', productId, { price }, async () => {
     const { api, shop } = await shopClient(db, key, `tiktok_shop:${storeId}`, creds, fetchFn, now);
-    const p = await api<{ status?: string; skus?: { id: string; price?: { currency?: string } }[] }>('GET', path, { shop_cipher: shop.cipher });
+    const p = await api<{ status?: string; skus?: { id: string; price?: { currency?: string; sale_price?: string; tax_exclusive_price?: string } }[] }>('GET', path, { shop_cipher: shop.cipher });
     if (p.status !== 'ACTIVATE') throw new Error(`TikTok Shop only reprices live products; ${productId} is ${p.status ?? 'not live'}`);
     // One price for all would flatten e.g. a 1-pack and a 3-pack. Whole price objects are compared: any difference refuses.
     if (new Set((p.skus ?? []).map((k) => JSON.stringify(k.price ?? null))).size > 1) throw new Error(`TikTok Shop: ${productId}'s SKUs have different prices; change them in Seller Center`);
+    const live = p.skus?.[0]?.price;
+    stillAsSynced('TikTok Shop', `price of ${productId}`, Number(live?.sale_price ?? live?.tax_exclusive_price), synced); // as the sync reads it
     const currency = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency);
     const skus = (p.skus ?? []).map((k) => ({ id: k.id, price: { amount: price.toFixed(2), currency: k.price?.currency ?? currency } }));
     await api('POST', `${path}/prices/update`, { shop_cipher: shop.cipher }, { skus });

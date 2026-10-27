@@ -298,6 +298,8 @@ test('TikTok Shop price change sets every SKU of a live product, logged; drafts 
   await expect(setTikTokProductPrice(db, key, 'glow', 'tt-17303', { price: 22 }, fetchFn, NOW)).rejects.toThrow("tt-17303's SKUs have different prices; change them in Seller Center");
   await expect(setTikTokProductPrice(db, key, 'glow', 'tt-17301', { price: 22, compareAt: 30 }, fetchFn, NOW)).rejects.toThrow('compare-at');
   await expect(setTikTokProductPrice(db, key, 'glow', '17301', { price: 22 }, fetchFn, NOW)).rejects.toThrow('not a TikTok Shop product');
+  // The fake still sells it at 24.90: as if changed in Seller Center since the last sync (22), so "22 → 23" isn't that change.
+  await expect(setTikTokProductPrice(db, key, 'glow', 'tt-17301', { price: 23 }, fetchFn, NOW)).rejects.toThrow('TikTok Shop: the price of tt-17301 is 24.9 there now, not 22 as last synced');
   expect(calls.filter((c) => c.url.pathname.endsWith('/prices/update'))).toHaveLength(1);
 });
 
