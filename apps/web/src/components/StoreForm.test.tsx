@@ -64,3 +64,20 @@ describe('feeEstimate', () => {
     expect(feeEstimate({})).toBeUndefined();
   });
 });
+
+describe('store form currency', () => {
+  const shop = { id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', currency: 'USD', timezone: 'UTC', color: '#ff2a3a', connected: true } as Store;
+
+  it("is the platform's on a connected store: read-only, so a change can't close its waiting requests", () => {
+    stubApi(() => undefined);
+    renderApp(<StoreForm store={shop} onDone={() => {}} />);
+    expect((screen.getByLabelText('Currency') as HTMLInputElement).readOnly).toBe(true);
+    expect(screen.getByText(/Shopify sets it/)).toBeTruthy();
+  });
+
+  it('stays editable on a demo store', () => {
+    stubApi(() => undefined);
+    renderApp(<StoreForm store={{ ...shop, connected: false }} onDone={() => {}} />);
+    expect((screen.getByLabelText('Currency') as HTMLInputElement).readOnly).toBe(false);
+  });
+});

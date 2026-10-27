@@ -406,6 +406,9 @@ Orca's browser against the reference before ticking it.
       its Research card or "Compare at $0.00" in its details: both show it only when it's above the price.
 - [x] UI-155 Research's product cards (up to 30 remote images per page once real finds carry them) and the Creative
       Studio gallery load their images lazily, like Store Analytics' thumbnails already did.
+- [x] UI-156 (re CORE-109) A connected store's currency is read-only in the store form ("Shopify sets its currency."):
+      every platform's sync sets it back, and since CORE-109 a change closes the store's waiting ad, price and product
+      requests and zeroes its campaign budgets until the next ad sync. Demo stores stay editable.
 
 ## Blocked
 
@@ -606,3 +609,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-153: helper and its test moved to lib/analytics (pages are lazy chunks). Orca with Pawsome patched live and fee-less (read-only): hidden on Revenue, shown on Profit under the total, link to /settings
 - 2026-10-26 — UI-154: two Research tests (red first). Approval cards already drop a 0 compare-at (lib/approvals). Orca with the first find patched to compareAt 0 (read-only): card "$14.32 | +248%", details Cost/Sell at/Margin/Demand/Ships in
 - 2026-10-26 — UI-155: attribute only. Also swept every page with all API GETs failing (client patch): each data panel ends on its "Couldn't load" state with Try again, cached data stays up, no crash. Orca: Creative's 10 gallery images all lazy and loaded
+- 2026-10-26 — UI-156: Shopify/Woo/Etsy/TikTok Shop take the currency via `takeCurrency`, Amazon via `setStoreCurrency`. Two StoreForm tests (red first). Orca with Pawsome patched connected (read-only), Edit opened, not saved: USD readOnly, hint "Shopify sets its currency."

@@ -75,13 +75,25 @@ export function StoreForm({ store, onDone }: { store?: Store; onDone: (saved?: S
       <p className="-mt-2 text-xs text-muted">The squad reads its niche pack and tunes research, ads and copy to it. The more specific, the better.</p>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Currency">
-          <input value={currency} onChange={(e) => setCurrency(e.target.value)} required pattern="[A-Za-z]{3}" maxLength={3} placeholder="USD" className={cx(inputClass, 'uppercase')} />
+          {/* A connected store's sync sets it, and a change closes its waiting ad, price and product requests (CORE-109). */}
+          <input
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            readOnly={store?.connected}
+            required
+            pattern="[A-Za-z]{3}"
+            maxLength={3}
+            placeholder="USD"
+            className={cx(inputClass, 'uppercase', store?.connected && 'text-text-2')}
+          />
         </Field>
         <Field label="Color">
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className={cx(inputClass, 'h-[38px] w-full cursor-pointer p-1')} />
         </Field>
       </div>
-      <p className="-mt-2 text-xs text-muted">Once connected, the store takes the currency its platform reports.</p>
+      <p className="-mt-2 text-xs text-muted">
+        {store?.connected ? `${PLATFORM_NAME[store.platform]} sets its currency.` : 'Once connected, the store takes the currency its platform reports.'}
+      </p>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Fees, % of revenue">
           <input type="number" value={feePercent} onChange={(e) => setFeePercent(e.target.value)} min={0} max={50} step={0.01} placeholder={`e.g. ${FEE_HINT[platform][0]}`} className={inputClass} />
