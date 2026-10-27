@@ -84,7 +84,7 @@ export function AgentDetail() {
               {agent.engine?.provider === 'demo' && <Badge>Demo engine</Badge>}
               {agent.engine?.provider === 'claude' && <Badge>{agent.engine.model ? `Claude ${modelName(agent.engine.model)}` : 'Claude'}</Badge>}
             </div>
-            <p className="mt-1 max-w-xl truncate text-xs text-muted">{role.blurb}</p>
+            <p className="mt-1 max-w-xl text-xs text-muted">{role.blurb}</p>
           </div>
         </div>
         <div className="w-full max-w-60">

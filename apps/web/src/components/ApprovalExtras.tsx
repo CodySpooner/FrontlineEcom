@@ -18,10 +18,16 @@ export function ApprovalExtras({ action, storeId }: { action: ApprovalAction; st
     return (
       <ul className="mt-1.5 grid gap-0.5 text-xs text-muted">
         {added.slice(0, SHOWN).map((p, i) => (
-          <li key={i} className="truncate">
-            <span className="font-semibold text-text-2">{p.title}</span> · {cents(p.price, cur || undefined)}
-            {p.compareAt && ` · was ${cents(p.compareAt, cur || undefined)}`}
-            {p.margin !== undefined && ` · ${p.margin}% margin`}
+          // In a narrow card the numbers wrap under the name: never cut, and the name only past a whole line.
+          <li key={i} className="flex flex-wrap gap-x-1.5">
+            <span className="min-w-0 truncate font-semibold text-text-2" title={p.title}>
+              {p.title}
+            </span>
+            <span>
+              {cents(p.price, cur || undefined)}
+              {p.compareAt && ` · was ${cents(p.compareAt, cur || undefined)}`}
+              {p.margin !== undefined && ` · ${p.margin}% margin`}
+            </span>
           </li>
         ))}
         {added.length > SHOWN && <li>+{added.length - SHOWN} more</li>}

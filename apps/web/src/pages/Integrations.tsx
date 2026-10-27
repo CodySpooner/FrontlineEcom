@@ -161,7 +161,7 @@ export function ClaudeCard() {
             <>
               <div className="flex items-center gap-2 text-[13px]">
                 <StatusDot tone={q.data.signedIn ? 'good' : q.data.error ? 'idle' : 'red'} />
-                <span className="min-w-0 flex-1 truncate">
+                <span className="min-w-0 flex-1 break-words">
                   {q.data.signedIn ? (q.data.email ? `Signed in as ${q.data.email}` : 'Signed in') : 'Not signed in'}
                   {q.data.subscription && <span className="text-xs text-muted"> · {q.data.subscription}</span>}
                 </span>

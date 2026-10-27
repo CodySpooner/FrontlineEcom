@@ -463,6 +463,10 @@ Orca's browser against the reference before ticking it.
 - [x] UI-172 A custom niche whose pack draft already waits for approval still offered "Ask its Market Analyst to draft
       one" (and the route's own waiting check misses real requests: reported to agents). The row now says a draft is
       waiting and links to Requests instead, matched by the requesting store's niche.
+- [x] UI-173 At desktop widths (checked at 1024 and 1440, where every page fits) three lines were cut with no way to
+      read them: an "Add products" request's products lost their margin ("79% marg…") in the Dashboard's narrow request
+      column, an agent's role description, and the Claude login line. The products now put their numbers under the name
+      when the column is narrow (never cut), and the other two wrap.
 
 ## Blocked
 
@@ -682,3 +686,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-166 follow-up: the missing-pack rows use the pack list's card style (solid border, bg-2) instead of the app's only dashed border
 - 2026-10-26 — UI-171: useLive invalidates `['knowledge']` (the index and open docs) when a run ends. One test (red first). Orca: the served client has it and Knowledge renders; a live run message needs a real run, so the unit test carries the wiring
 - 2026-10-26 — UI-172: MissingPacks reads the pending approvals. One test (red first). Orca with a GET fixture (Peak Fit in "Yoga Mats", a pending save_niche_pack from it): "A draft is waiting for your approval. Review it in Requests" → /, no button
+- 2026-10-26 — UI-173: found with a sweep of 15 views in same-origin iframes at 1024 and 1440 px in my own Chrome tab (writes blocked): no page overflows; truncated text without a title was the three above. After: no cut text left on those views at either width (the products' names keep a title); at 1440 the margins sit under each name, at 1024 on the same line. Layout only, so no new test; the touched suites pass. Same session: a WCAG AA contrast sweep of 13 pages found only a disabled cap's label (exempt)
