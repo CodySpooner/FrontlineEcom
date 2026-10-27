@@ -30,9 +30,10 @@ export function writeMemory(db: DatabaseSync, m: NewMemory, now = new Date()): S
   const text = m.text.trim();
   const same = db.prepare('SELECT * FROM store_memory WHERE store_id = ? AND lower(text) = lower(?)').get(m.storeId, text);
   if (same?.agent_id === 'owner' && m.agentId !== 'owner') return toMemory(same); // the owner's note stays theirs, evidence and all
-  // A measured result stays the app's: an agent restating it word for word mustn't swap in its own evidence or confidence
-  // under the "measured" label (agents can't tag `outcome`, agentTags).
-  if (same && parseTags(same.tags).includes('outcome') && !m.tags?.includes('outcome') && m.agentId !== 'owner') return toMemory(same);
+  // A measured result or the owner's no stays the app's: an agent restating it word for word (it's in the prompt) mustn't
+  // swap in its own evidence or confidence under the "measured" or "owner's no" label (agents can't tag those, agentTags).
+  const appLabelled = (tags: string[] | undefined) => !!tags?.some((t) => t === 'outcome' || t === 'denied');
+  if (same && appLabelled(parseTags(same.tags)) && !appLabelled(m.tags) && m.agentId !== 'owner') return toMemory(same);
   // The owner writing what the squad wrote makes it the owner's note: kept at go-live and past the cap, not judged by outcomes.
   if (same && m.agentId === 'owner') db.prepare(`UPDATE store_memory SET agent_id = 'owner', run_id = NULL, kind = ? WHERE id = ?`).run(m.kind, String(same.id));
   if (same) {
