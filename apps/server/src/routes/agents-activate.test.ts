@@ -93,7 +93,7 @@ test('a demo run still going when the store goes live asks nothing more: its num
   await m.idle();
   expect(asked().map((a) => a.status)).toEqual(['denied']);
   expect(m.get(run.id)!.transcript!.filter((e) => e.type === 'tool_result').map((e) => e.type === 'tool_result' && e.output.slice(0, 40)).slice(0, 3)).toEqual([
-    expect.stringMatching(/^Denied/), 'Not sent: the store went live during thi', 'Not sent: the store went live during thi',
+    expect.stringMatching(/^Denied/), 'Stopped: the store went live during this', 'Stopped: the store went live during this',
   ]);
 });
 

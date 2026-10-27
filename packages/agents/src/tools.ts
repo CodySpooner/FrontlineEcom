@@ -1101,7 +1101,6 @@ export const APP_TOOLS: AppTool[] = [
       tags: z.array(z.string()).max(6).optional(),
     },
     run: async (args, ctx) => {
-      if (wentLive(ctx)) return "Not saved: the store went live during this run, so the demo numbers behind it are gone.";
       const memory = writeMemory(ctx.db, { ...args, tags: agentTags(args.tags), storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}) });
       ctx.emit({ type: 'memory_written', memory });
       return 'Saved.';
@@ -1335,6 +1334,9 @@ function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
 
 /** Validates args against the tool schema (defaults applied) and runs it. Errors come back as text for the model. */
 export async function callTool(tool: AppTool, args: unknown, ctx: ToolContext): Promise<{ output: string; isError: boolean }> {
+  // Going live wiped what this run read and what came of it (startFresh): a draft, creative, issue or learning saved now
+  // would put demo numbers back, and a read would mix real ones into a demo answer.
+  if (wentLive(ctx)) return { output: 'Stopped: the store went live during this run, so the demo numbers behind it are gone. Do nothing more; the owner can ask again on real data.', isError: true };
   const parsed = z.object(tool.input).safeParse(args ?? {});
   if (!parsed.success) return { output: `Invalid input: ${parsed.error.message}`, isError: true };
   try {

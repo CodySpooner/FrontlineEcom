@@ -101,11 +101,19 @@ test('a demo run that ends after the store went live learns nothing from its num
   const out: string[] = [];
   const demo = { ...getStore(db, 'glow')!, connected: false }; // as a run that started before the sync sees it
   const save: FakeStep = { call: 'write_memory', input: { kind: 'learning', text: 'Serums convert at 4% here', confidence: 0.7 } };
-  for await (const e of runAgent({ agent: getAgent(db, 'glow:copywriter')!, store: demo, task: 't', env: toolEnv(db) }, fakeEngine(() => [save]))) {
-    if (e.type === 'tool_result') out.push(e.output);
+  // A flow saved now would count as done for the monthly flow check, written off the demo catalog.
+  const flow: FakeStep = {
+    call: 'draft_flow',
+    input: { name: 'Welcome series', trigger: 'Signed up, no order yet', messages: [{ delayHours: 0, channel: 'email', subject: 'Hi', body: 'Welcome to the demo serums' }], notes: '412 demo signups a month' },
+  };
+  for (const [role, step] of [['copywriter', save], ['email_sms', flow], ['copywriter', { call: 'store_summary' }]] as const) {
+    for await (const e of runAgent({ agent: getAgent(db, `glow:${role}`)!, store: demo, task: 't', env: toolEnv(db) }, fakeEngine(() => [step]))) {
+      if (e.type === 'tool_result') out.push(e.output);
+    }
   }
-  expect(out).toEqual(['Not saved: the store went live during this run, so the demo numbers behind it are gone.']);
+  expect(out).toEqual(Array(3).fill('Stopped: the store went live during this run, so the demo numbers behind it are gone. Do nothing more; the owner can ask again on real data.'));
   expect(listMemory(db, 'glow').some((x) => x.text === 'Serums convert at 4% here')).toBe(false);
+  expect(db.prepare(`SELECT count(*) AS n FROM flow_drafts WHERE store_id = 'glow'`).get()?.n).toBe(0);
 });
 
 test('get() returns the transcript so far while a run waits for approval', async () => {
