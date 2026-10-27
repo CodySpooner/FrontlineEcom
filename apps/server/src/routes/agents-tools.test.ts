@@ -386,7 +386,7 @@ describe('agent tools on demo data', () => {
       const [cmp] = results(await run(input('glow', 'market_analyst'), [{ call: 'compare_stores', input: { range: 7 } }, done]));
       const [period, , ...rows] = cmp!.output.split('\n');
       const demo = listStores(db).filter((s) => !['glow', 'peak'].includes(s.id)).map((s) => s.name);
-      expect(period!.split('; left out, demo data: ')[1]!.split(', ').sort()).toEqual(demo.sort());
+      expect(period!.split('; left out, demo data: ')[1]!.split(';')[0]!.split(', ').sort()).toEqual(demo.sort());
       expect(rows.map((r) => r.split(',')[0]).sort()).toEqual(['Glow Haus (this store)', 'Peak Fit']);
     } finally {
       db.prepare(`UPDATE stores SET connected = 0 WHERE id IN ('glow', 'peak')`).run();
@@ -480,6 +480,8 @@ describe('agent tools on demo data', () => {
         'No fee estimate is set for this store, so profit, margin and health leave out payment and platform fees. Say so next to any profit figure; the owner sets it on the store in Settings.',
         true,
       ]);
+      const [stores] = results(await run(input('glow', 'market_analyst'), [{ call: 'compare_stores', input: { range: 7 } }, done]));
+      expect(stores!.output.split('\n')[0]).toMatch(/; profit leaves out fees \(no fee estimate set\): Glow Haus$/);
       db.prepare(`UPDATE stores SET fee_per_order = 0.3 WHERE id = 'glow'`).run();
       expect(await notes()).toEqual([undefined, false]);
     } finally {

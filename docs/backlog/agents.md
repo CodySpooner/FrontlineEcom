@@ -333,11 +333,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-202 `review_campaigns` gives no verdicts when there's no break-even to judge against. With no sales in 30 days and no active product with a unit cost (a fresh shop with "Cost per item" empty, or ads synced before the shop's orders), margin read 0, break-even Infinity and max CPA 0: every campaign that spent anything came out "pause" and the daily review could propose pausing them all.
 - [x] AGT-203 `track_competitor` tells one Etsy shop from another. It took a shop to be its host, and every Etsy shop is on etsy.com, so after one Etsy competitor any other was "Already tracked: etsy.com". An Etsy shop it can't read now says why (a connected Etsy store's key, a shop-page address).
 - [x] AGT-204 Going live clears the demo phase's creatives. The seeded library and what the Creative Studio and Copywriter made on demo data stayed "ready to launch" in `list_creatives`, for products the live store doesn't sell. Paid Higgsfield renders stay.
+- [x] AGT-205 `compare_stores` names the live stores with no fee estimate. Their profit leaves out payment and platform fees, so next to a store that nets them they ranked above what they earn (AGT-201 told only the store's own summary).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-205: `compare_stores`' header adds "profit leaves out fees (no fee estimate set): …".
 - 2026-10-26 — AGT-204: `startFresh` deletes a store's demo renders and agent copy (not `higgsfield` ones) and counts them in the go-live notice.
 - 2026-10-26 — AGT-203: `track_competitor` keys an Etsy competitor by `etsy.com/shop/<name>`, any other by host; the unreadable-Etsy message names what core's Etsy reader needs.
 - 2026-10-26 — AGT-202: `review_campaigns` says there's no break-even yet (and why, and what the owner can fill in) instead of judging campaigns against margin 0. Found by a tool sweep on a fresh live store.

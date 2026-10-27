@@ -189,7 +189,7 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ range }, ctx) => {
       const p = ctx.portfolio?.(range);
       if (!p) return 'Not available in this run.';
-      const stores = new Map(ctx.db.prepare('SELECT id, name, platform, niche, currency, connected FROM stores').all().map((s) => [String(s.id), s]));
+      const stores = new Map(ctx.db.prepare('SELECT id, name, platform, niche, currency, connected, fee_percent, fee_per_order FROM stores').all().map((s) => [String(s.id), s]));
       const name = (id: string) => String(stores.get(id)?.name ?? id);
       // A live store next to demo stores' sample numbers would be ranked against made-up sales (core's digest drops them too).
       const demo = (id: string) => ctx.store.connected && !Number(stores.get(id)?.connected);
@@ -211,8 +211,12 @@ export const APP_TOOLS: AppTool[] = [
         .sort((a, b) => b.revenue - a.revenue);
       // Sales with no unit cost count their whole price as profit: such a store ranks above what it earns.
       const high = p.byStore.filter((s) => !left(s.storeId) && !demo(s.storeId) && uncostedShare(ctx.db, s.storeId, p.from) >= 0.1).map((s) => name(s.storeId));
+      // So does a live store with no fee estimate (as store_summary's feeNote), next to one that nets its fees.
+      const feeless = p.byStore.map((s) => stores.get(s.storeId)).filter((s) => s && Number(s.connected) && !Number(s.fee_percent) && !Number(s.fee_per_order) && !left(String(s.id)))
+        .map((s) => String(s!.name));
       const note = (skipped.length ? `; left out, no exchange rate yet: ${skipped.join(', ')}` : '') + (sample.length ? `; left out, demo data: ${sample.join(', ')}` : '')
-        + (high.length ? `; profit reads high (10%+ of sales have no unit cost set): ${high.join(', ')}` : '');
+        + (high.length ? `; profit reads high (10%+ of sales have no unit cost set): ${high.join(', ')}` : '')
+        + (feeless.length ? `; profit leaves out fees (no fee estimate set): ${feeless.join(', ')}` : '');
       return `${p.from} to ${p.to}, amounts in ${p.currency ?? 'USD'}${note}\n${csv(rows)}`;
     },
   }),
