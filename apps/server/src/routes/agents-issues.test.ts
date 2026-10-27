@@ -119,7 +119,7 @@ test('list_order_issues shows the open queue first, then resolutions the owner w
 test('list_orders with stale lists only late orders, oldest first, however many newer orders there are', async () => {
   const [late, slow, fresh] = db.prepare(`SELECT id FROM orders WHERE store_id = 'peak' ORDER BY created_at DESC LIMIT 3`).all().map((r) => String(r.id));
   const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
-  db.prepare(`UPDATE orders SET fulfillment_status = 'delivered' WHERE store_id = 'peak'`).run();
+  db.prepare(`UPDATE orders SET fulfillment_status = 'delivered', status = 'paid' WHERE store_id = 'peak'`).run(); // the seed refunds some, by date
   const set = db.prepare(`UPDATE orders SET created_at = ?, local_date = ?, fulfillment_status = ? WHERE store_id = 'peak' AND id = ?`);
   set.run(ago(5), ago(5).slice(0, 10), 'unfulfilled', late!);
   set.run(ago(20), ago(20).slice(0, 10), 'in_transit', slow!);
