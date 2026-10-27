@@ -1,5 +1,5 @@
-import { addNicheLearning, ADS_JOB, createMission, DEFAULT_JOBS, getMission, listFlowDrafts, listMemory, listNicheLearnings, listRuns, once, saveCreative, saveFlowDraft, updateMemory, writeMemory } from '@frontline/agents';
-import type { Store } from '@frontline/shared';
+import { addNicheLearning, ADS_JOB, createMission, DEFAULT_JOBS, getMission, listFlowDrafts, listMemory, listNicheLearnings, listRuns, once, saveCreative, saveFlowDraft, saveNichePack, updateMemory, writeMemory } from '@frontline/agents';
+import type { AgentRun, Store } from '@frontline/shared';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -43,6 +43,34 @@ test('a store deleted and created again under the same name gets its jobs, and t
   await app.request('/api/agents');
   expect(jobsOn(again.id)).toBe(DEFAULT_JOBS.length - 1);
   await runManager(db).idle();
+});
+
+test("the owner can ask a custom niche's Market Analyst for its pack again; not on the demo engine, nor while one waits or exists", async () => {
+  const store = (await (
+    await app.request('/api/stores', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'Ink & Nib', platform: 'shopify', niche: 'other', nicheDetail: 'Vintage fountain pens' }),
+    })
+  ).json()) as Store;
+  const ask = (agentId = `${store.id}:market_analyst`) => app.request(`/api/agents/${encodeURIComponent(agentId)}/niche-pack`, { method: 'POST' });
+  const error = async (agentId?: string) => ((await (await ask(agentId)).json()) as { error: string }).error;
+  expect(await error()).toBe("On the demo engine the Market Analyst can't research a niche, and its pack would be made up. Connect the store first.");
+  // What the agent says it runs on; the app's run manager was made with the demo engine and stays on it.
+  vi.stubEnv('FRONTLINE_AGENT_ENGINE', 'claude');
+  expect((await ask(`${store.id}:copywriter`)).status).toBe(404);
+  expect(await error('glow:market_analyst')).toBe("Glow Haus's niche has a built-in pack; edit it in Knowledge.");
+  const res = await ask();
+  expect(res.status).toBe(201);
+  expect(((await res.json()) as AgentRun).task.split('\n')[0]).toBe(
+    'Draft a niche pack for "Vintage fountain pens" so the whole squad of Ink & Nib works like seasoned operators of this niche.',
+  );
+  await runManager(db).idle();
+  db.prepare(
+    `INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('np', ?, ?, NULL, 'Save the pack', 'r', ?, 'pending', ?)`,
+  ).run(store.id, `${store.id}:market_analyst`, JSON.stringify({ kind: 'save_niche_pack', payload: { slug: 'vintage-fountain-pens', markdown: '# Pens' } }), new Date().toISOString());
+  expect(await error()).toBe('A draft of the "Vintage fountain pens" pack is waiting for your approval in Requests.');
+  saveNichePack('vintage-fountain-pens', '# Vintage fountain pens\n- Nibs: verify');
+  expect(await error()).toBe('The "Vintage fountain pens" pack exists; edit it in Knowledge.');
 });
 
 test("a store's first real sync switches its squad's jobs on once, and a custom niche gets its pack drafted", async () => {

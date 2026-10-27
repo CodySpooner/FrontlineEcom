@@ -40,6 +40,7 @@ import {
   listXpEvents,
   addNicheLearning,
   nicheKey,
+  nicheSlug,
   listRuns,
   getRun,
   runGist,
@@ -535,6 +536,24 @@ export function agentRoutes(db: Db) {
         return c.json({ error: 'Expected { task: string (1–4000 chars), resumeRunId?: string }' }, 400);
       }
       const run = runs.start(c.req.param('id'), body.task.trim(), body.resumeRunId);
+      return typeof run === 'string' ? c.json({ error: run }, 409) : c.json(run, 201);
+    })
+    // Knowledge › Niche packs: the owner asks a custom niche's Market Analyst for its pack. Going live asks once, so a
+    // denied or failed draft was never offered again. Not on the demo engine: its made-up pack would be the niche's for good.
+    .post('/api/agents/:id/niche-pack', (c) => {
+      const agent = getAgent(db, c.req.param('id'));
+      const store = agent?.role === 'market_analyst' ? getStore(db, agent.storeId) : undefined;
+      if (!agent || !store) return c.json({ error: 'Market Analyst not found' }, 404);
+      if (store.niche !== 'other' || !store.nicheDetail) return c.json({ error: `${store.name}'s niche has a built-in pack; edit it in Knowledge.` }, 409);
+      if (customNichePack(store.nicheDetail)) return c.json({ error: `The "${store.nicheDetail}" pack exists; edit it in Knowledge.` }, 409);
+      if (agent.engine?.provider !== 'claude') {
+        return c.json({ error: "On the demo engine the Market Analyst can't research a niche, and its pack would be made up. Connect the store first." }, 409);
+      }
+      const pending = db
+        .prepare(`SELECT 1 FROM approvals WHERE status = 'pending' AND json_extract(action_json, '$.kind') = 'save_niche_pack' AND json_extract(action_json, '$.payload.slug') = ?`)
+        .get(nicheSlug(store.nicheDetail));
+      if (pending) return c.json({ error: `A draft of the "${store.nicheDetail}" pack is waiting for your approval in Requests.` }, 409);
+      const run = runs.start(agent.id, draftNichePackTask(store));
       return typeof run === 'string' ? c.json({ error: run }, 409) : c.json(run, 201);
     })
     .get('/api/claude-account', async (c) => {
