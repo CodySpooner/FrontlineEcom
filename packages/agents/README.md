@@ -19,7 +19,9 @@ outcome checks.
    login (`claudeAccount` / `GET /api/claude-account` says whether it's signed in, without spending usage) with model `FRONTLINE_AGENT_MODEL` (default `claude-opus-5-5`). Demo stores use `fake-engine.ts`, which costs
    nothing. `FRONTLINE_AGENT_ENGINE=claude|fake` forces one engine for every store, and tests always use fake.
 4. **Tools** (`tools.ts`): each role has an allowlist (`roles.ts`). Read tools return CSV or JSON from the store's rows.
-   Lists have row limits, and the date windows use the store's own dates.
+   Lists have row limits, and the date windows use the store's own dates. Once the store goes live or its currency
+   changes during a run, every further tool call is refused (what the run read no longer holds). An Etsy product page
+   draft keeps to plain-text structure and Etsy's title rule, since Etsy gets the text of the HTML.
 5. **Asking** (`request_approval` and the purpose-built `propose_*` / `publish_page` / `create_creative` tools):
    every spend, publish or live-store change becomes an approval, and the run pauses until the owner decides.
    Autopilot only takes kinds the owner switched on, and only for amounts the tool computed itself. A model-written
@@ -32,8 +34,10 @@ outcome checks.
    so is one asked on demo data but approved after the store's first real sync. A theme copy whose request was never
    sent, or whose duplicate call failed after Shopify made it, is deleted. A store page whose push may have worked (a
    5xx, a dropped connection) tells the owner to check the store before publishing again, since that page is created, not
-   updated. Every failure notice links to where the owner acts, and a failed action or run finish goes to `api.log`.
-7. **Learning** (`memory.ts`): a run that used tools reflects once and writes up to 5 memories (a store keeps its
+   updated. A price or budget the owner changed on the platform since the sync (core's `stillAsSynced` refuses it)
+   reads "Not applied", not "do it by hand". Every failure notice links to where the owner acts, and a failed action or
+   run finish goes to `api.log`.
+7. **Learning** (`memory.ts`): a run that used tools reflects once (its JSON is found even after prose holding a `[`) and writes up to 5 memories (a store keeps its
    300 strongest agent facts and learnings; pins, preferences and the owner's notes always stay; a run on demo data that
    ends after the store went live learns nothing). Each run recalls the pins and the owner's notes and no's, plus the
    12 others that score best on relevance × recency × confidence; rewording a squad memory makes it the owner's. Outcome checks
