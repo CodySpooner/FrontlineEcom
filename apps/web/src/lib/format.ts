@@ -16,10 +16,11 @@ export const fitMoney = (n: number, currency = 'USD') =>
 
 const symbol = (currency: string) => fmt(currency).formatToParts(0).find((p) => p.type === 'currency')?.value ?? '';
 
-/** Axis labels: $850, $4.5K, $1.2M */
+/** Axis labels: $850, $4.5K, $1.2M, −$50 */
 export const shortMoney = (v: number, currency = 'USD') => {
-  const s = symbol(currency);
-  return v >= 1e6 ? `${s}${+(v / 1e6).toFixed(1)}M` : v >= 1000 ? `${s}${+(v / 1000).toFixed(1)}K` : `${s}${Math.round(v)}`;
+  const s = (v < 0 ? '−' : '') + symbol(currency);
+  const a = Math.abs(v);
+  return a >= 1e6 ? `${s}${+(a / 1e6).toFixed(1)}M` : a >= 1000 ? `${s}${+(a / 1000).toFixed(1)}K` : `${s}${Math.round(a)}`;
 };
 
 /** "+18.4%" / "−8.1%"; anything that rounds to 0.0 reads "+0.0%", never "−0.0%". */

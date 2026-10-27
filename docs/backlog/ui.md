@@ -473,6 +473,9 @@ Orca's browser against the reference before ticking it.
       moment." / "The app's server couldn't do that (error 500). …". The server's own messages are unchanged.
 - [x] UI-175 A page draft the owner turned down with Deny was labelled "Rejected" in Store Builder, the only place the
       app used that word for it; it reads "Denied" now, like every other request.
+- [x] UI-176 Analytics' Profit chart drew every losing day at $0: the axis always started at 0 and points were floored
+      to it, so Peak Fit (18 of its last 30 days below zero) looked flat instead of bleeding. The axis now reaches below
+      0 when the data does (round steps, "−$50" labels) and losing days are drawn under the $0 line.
 
 ## Blocked
 
@@ -695,3 +698,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-173: found with a sweep of 15 views in same-origin iframes at 1024 and 1440 px in my own Chrome tab (writes blocked): no page overflows; truncated text without a title was the three above. After: no cut text left on those views at either width (the products' names keep a title); at 1440 the margins sit under each name, at 1024 on the same line. Layout only, so no new test; the touched suites pass. Same session: a WCAG AA contrast sweep of 13 pages found only a disabled cap's label (exempt)
 - 2026-10-26 — UI-174: one change in api() (every hook goes through it). New api/client.test.tsx, red first: unreachable, server words kept, wordless 500. Orca with every write rejected client-side (nothing sent): Settings' Open folder alert reads the new line
 - 2026-10-26 — UI-175: found by a terms pass over the UI copy (Deny/Reject, Delete/Remove, store/shop: the rest is consistent). Copy only, so no new test. Orca with a fake rejected draft (GET fixture, writes blocked): the list and the preview badge read "Denied". Same session, no change needed: an a11y sweep of 13 pages (names, labels, alt, heading order, duplicate ids) is clean; the Dashboard's cold load makes 14 API calls, each under 40 ms
+- 2026-10-26 — UI-176: niceTicks(v, lo) reaches a round step under lo (unchanged when lo ≥ 0, so revenue charts are as before); shortMoney signs negatives; AreaChart scales from the lowest tick. Tests red first: niceTicks, shortMoney, and a new AreaChart.test (a −$50 day is drawn under the $0 gridline). Orca, Peak Fit alone, Profit 30D (real demo data): axis −$100…$50, 17 of 29 solid points under $0, tooltip −$44

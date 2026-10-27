@@ -16,6 +16,12 @@ describe('chart helpers', () => {
       expect(t.at(-1)).toBeGreaterThanOrEqual(v);
     }
   });
+  it('reaches below 0 when the data does (a losing day of profit)', () => {
+    expect(niceTicks(165, -63)).toEqual([-100, 0, 100, 200]);
+    expect(niceTicks(2640, -400)).toEqual([-1000, 0, 1000, 2000, 3000]);
+    expect(niceTicks(0, -63)).toEqual([-80, -60, -40, -20, 0]);
+    expect(niceTicks(2640, 50)).toEqual([0, 1000, 2000, 3000]);
+  });
   it('buckets a year into weeks that end on the last day', () => {
     const pts = Array.from({ length: 365 }, (_, i) => ({ date: `d${i}`, value: 1 }));
     const w = weekly(pts);

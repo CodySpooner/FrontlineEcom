@@ -9,13 +9,19 @@ export const RANGES: { value: AnalyticsRange; label: string }[] = [
 ];
 export const PERIOD: Record<AnalyticsRange, string> = { 7: 'last 7 days', 30: 'last 30 days', 90: 'last 90 days', 365: 'last 12 months' };
 
-/** Axis ticks from 0 to just past `v`: 3–5 equal steps of 1, 2 or 5 × 10^n, so every label is exact ($1K, $2K, $3K). */
-export function niceTicks(v: number) {
-  if (!(v > 0)) return [0, 1];
-  for (let p = 10 ** Math.floor(Math.log10(v / 5)); ; p *= 10) {
+/**
+ * Axis ticks from 0 (or just past `lo` when the data dips under it, like a losing day of profit) to just past `v`:
+ * at most 5 equal steps of 1, 2 or 5 × 10^n, so every label is exact ($1K, $2K, $3K).
+ */
+export function niceTicks(v: number, lo = 0) {
+  const hi = Math.max(0, v);
+  lo = Math.min(0, lo);
+  if (!(hi - lo > 0)) return [0, 1];
+  for (let p = 10 ** Math.floor(Math.log10((hi - lo) / 5)); ; p *= 10) {
     for (const m of [1, 2, 5]) {
-      const k = Math.ceil(v / (m * p));
-      if (k <= 5) return Array.from({ length: k + 1 }, (_, i) => +(i * m * p).toPrecision(12));
+      const a = Math.floor(lo / (m * p));
+      const b = Math.ceil(hi / (m * p));
+      if (b - a <= 5) return Array.from({ length: b - a + 1 }, (_, i) => +((a + i) * m * p).toPrecision(12));
     }
   }
 }

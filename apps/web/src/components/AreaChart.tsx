@@ -28,10 +28,12 @@ export function AreaChart({ points, weekly, partial, label, currency }: { points
 
   const n = points.length;
   if (n < 2) return null;
-  const ticks = niceTicks(Math.max(...points.map((p) => p.value)) * 1.1);
+  const vals = points.map((p) => p.value);
+  const ticks = niceTicks(Math.max(...vals) * 1.1, Math.min(...vals) * 1.1);
+  const lo = ticks[0]!;
   const max = ticks.at(-1)!;
   const x = (j: number) => PL + (j / (n - 1)) * (W - PL - PR);
-  const y = (v: number) => PT + (1 - Math.max(0, v) / max) * (H - PT - PB);
+  const y = (v: number) => PT + (1 - (v - lo) / (max - lo)) * (H - PT - PB);
   const xy = points.map((p, j) => `${x(j).toFixed(1)},${y(p.value).toFixed(1)}`);
   const line = xy.join(' ');
   const i = Math.min(n - 1, Math.max(0, hover ?? n - 3));
