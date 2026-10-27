@@ -136,6 +136,7 @@ describe('links', () => {
     const link = await ok<KbLink>('POST', '/api/kb/links', { ws: 'pawsome', from: a.id, to: g.id, type: 'applied_to', why: 'Our rescue hook applies the 3-second rule' }, 201);
     expect(link).toMatchObject({ storeId: 'pawsome', status: 'confirmed', authorId: 'owner', type: 'applied_to' });
     expect((await req('POST', '/api/kb/links', { ws: 'pawsome', from: a.id, to: g.id, type: 'applied_to', why: 'again' })).status).toBe(409);
+    expect((await req('POST', '/api/kb/links', { ws: 'pawsome', from: a.id, to: g.id, type: 'hasOwnProperty', why: 'x' })).status).toBe(400);
     expect((await req('POST', '/api/kb/links', { ws: 'pawsome', from: a.id, to: other.id, type: 'supports', why: 'same idea' })).status).toBe(404);
     expect((await req('POST', '/api/kb/links', { ws: 'general', from: g.id, to: a.id, type: 'supports', why: 'same idea' })).status).toBe(404);
     expect((await req('POST', '/api/kb/links', { ws: 'pawsome', from: a.id, to: a.id, type: 'supports', why: 'same idea' })).status).toBe(400);

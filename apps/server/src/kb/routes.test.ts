@@ -128,6 +128,8 @@ describe('cards', () => {
     await bad({ title: 'ab' }, /title/);
     await bad({ type: 'rumour' }, /type/);
     await bad({ stage: 'certain' }, /stage/);
+    await bad({ type: 'toString' }, /type/); // not an inherited key either
+    await bad({ stage: 'constructor' }, /stage/);
     await bad({ type: 'validated_insight' }, /Validated Insight/);
     await bad({ tags: ['x'.repeat(41)] }, /tags/);
     await bad({ category: [] }, /category/);

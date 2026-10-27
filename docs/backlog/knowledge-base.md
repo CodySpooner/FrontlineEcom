@@ -474,7 +474,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - [x] KB-10 **Relationships view,** per the design.
 
 ### Phase 4: research
-- [ ] KB-11 **Safe fetcher** (decision 10) and source storage:
+- [x] KB-11 **Safe fetcher** (decision 10) and source storage:
   - content hash for dedupe, title, published date, fetched date, status;
   - reliability, rated by deterministic rules (domain class: platform docs, research or academic, established
     publication, vendor blog, forum, unknown) and adjustable by the owner;
@@ -628,6 +628,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-08 details panel: a non-modal aside with every §4 field, the ladder, tagged evidence, connected cards with "Why linked" and "Link to…", sources with provenance, usage, history with Restore, inline edit and create, pin / mark for research / block / archive / reject / merge with their reversals (accept, unarchive, unreject, unblock, detach), a slide that respects reduced motion.
 - 2026-10-27 KB-09 Library view: the cards as a sortable table (title, stage, updated, verified, used) that pages on, every §13 filter in the URL, saved filter views, bulk accept / mark for research / block / move / archive sent per workspace, the details panel beside it; the UI-16 sections move in as tabs after Cards.
 - 2026-10-27 KB-10 Relationships view: a picker of connected cards (most connected first), then the card in the middle with its neighbours on a ring grouped by relationship and their own neighbours on a second ring; filters by type and AI suggestion, a line explains itself (accept/reject a suggestion there), arrow keys walk the neighbours, Enter recentres, the centre opens its details.
+- 2026-10-27 KB-11 Safe fetcher and source storage: `apps/server/src/kb/fetcher.ts` reads public pages and documents (HTML, PDF, markdown, text, CSV) with each hop's host checked and the connection pinned to the checked address, robots.txt obeyed, a per-site gap, size, time and type caps, paywall/login detection and blocked domains; `kb-sources.ts` stores them with a content hash, excerpt and a domain-class rating the owner can change (PATCH /api/kb/sources/:id), and hands agents only fenced, quoted text.
 
 ## Blocked
 
@@ -685,3 +686,18 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   with it open a two-ring map didn't fit at 1366 wide; closing it keeps the map centred. Past about 20 neighbours ring 1
   will crowd: cap it with "+N more" if real workspaces get there. Each node's relationship and "why" are its
   accessible description and show as a caption on focus or hover.
+- 2026-10-27 KB-11: PDF text comes from **unpdf 1.8.1** (MIT, no dependencies, pdf.js's serverless build), pinned
+  exact; 1.9.x was under two weeks old. It's imported only when a PDF arrives, so it doesn't slow startup. The fetcher
+  reuses competitors.ts's `LOCAL` list (now exported; it's core's file, a one-word change). Its DNS answer is checked
+  once per host per fetch, and `pinned()` hands that address to node's `lookup`, so TLS still checks the name. Fetches
+  are refused when any answer is local, IP literals included. Nothing is wired to a route yet. KB-13's `fetch_source`
+  should build **one** `createFetcher()` per server, because the robots.txt cache (a day) and the per-site gap (1 s)
+  live in it, and should pass the workspace's blocked domains; KB-22 adds trusted domains. The Accept header lists
+  markdown, so sites that serve it (help.shopify.com does) send markdown, and its first `#` heading becomes the
+  title. Paywall and login detection are markers, not a model: `isAccessibleForFree: false`, a paywall class or id,
+  "subscribe to continue reading", and a password box on a page with under 1,000 characters of text. Reliability
+  rules are a host list per class plus `.edu`/`.ac.xx`, a `blog.` host or `/blog` path (vendor), and
+  `community.`/`forum.` (forum). Extend the lists when real sources show up as unknown. A source that wasn't read keeps
+  no text, and `sourceForAgent()` says it wasn't read. Read text goes out between nonce markers with every line
+  quoted, Unicode line breaks included. Also fixed: enum checks in the KB routes used `in`, which let `toString`
+  through as a card type or stage; they're `Object.hasOwn` now.

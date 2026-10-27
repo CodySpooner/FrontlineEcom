@@ -1549,6 +1549,19 @@ export interface KbCategoryInput {
   position?: number;
 }
 
+/**
+ * A source in full. PATCH /api/kb/sources/:id?ws= {reliability} → KbSource: the owner's rating, kept when the source is
+ * fetched again. `excerpt` is the start of the readable text ('' when it wasn't read; `error` says why).
+ */
+export interface KbSource extends KbSourceBrief {
+  kind: 'url' | 'text' | 'document';
+  publishedAt?: string;
+  excerpt: string;
+  error?: string;
+  reliabilityByOwner: boolean;
+  createdAt: string;
+}
+
 /** The source behind a piece of evidence, as the card shows it. */
 /** GET /api/kb/sources?ws=<general|storeId>[&general=1] → KbSourceBrief[] by title: the Library's source filter. */
 export interface KbSourceBrief {

@@ -70,3 +70,4 @@ export {
   suggestLinks,
   type NewKbEvidence,
 } from './kb-links';
+export { reliabilityOf, saveSource, setSourceReliability, sourceForAgent, type NewKbSource } from './kb-sources';

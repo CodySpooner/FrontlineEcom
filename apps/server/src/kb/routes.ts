@@ -13,6 +13,7 @@ import {
   listLinks,
   listRevisions,
   restoreRevision,
+  setSourceReliability,
   createCategory,
   ensureCategoryPath,
   getCard,
@@ -25,7 +26,7 @@ import {
   updateCard,
   updateCategory,
 } from '@frontline/agents';
-import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbTaskBrief, type KbView, type KbWorkspace } from '@frontline/shared';
+import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbSourceReliability, type KbTaskBrief, type KbView, type KbWorkspace } from '@frontline/shared';
 import { tx, type Db } from '../db';
 
 // Knowledge Base routes (knowledge-base lane). Every by-id route names its workspace (?ws=) and 404s on another's id.
@@ -82,11 +83,11 @@ function parseCard(b: Obj, partial: boolean): string | KbCardPatch {
     out.tags = [...new Map(b.tags.map((t: string) => [t.trim().toLowerCase(), t.trim()])).values()];
   }
   if (b.type !== undefined) {
-    if (typeof b.type !== 'string' || !(b.type in KB_CARD_TYPES)) return `type must be one of ${Object.keys(KB_CARD_TYPES).join(', ')}`;
+    if (typeof b.type !== 'string' || !Object.hasOwn(KB_CARD_TYPES, b.type)) return `type must be one of ${Object.keys(KB_CARD_TYPES).join(', ')}`;
     out.type = b.type as keyof typeof KB_CARD_TYPES;
   }
   if (b.stage !== undefined) {
-    if (typeof b.stage !== 'string' || !(b.stage in KB_STAGES)) return `stage must be one of ${Object.keys(KB_STAGES).join(', ')}`;
+    if (typeof b.stage !== 'string' || !Object.hasOwn(KB_STAGES, b.stage)) return `stage must be one of ${Object.keys(KB_STAGES).join(', ')}`;
     out.stage = b.stage as keyof typeof KB_STAGES;
   }
   if (b.category !== undefined && (!Array.isArray(b.category) || !b.category.length || b.category.length > 6 || !b.category.every((n) => text(n, 1, 60))))
@@ -136,9 +137,9 @@ function parseEvidence(b: Obj): string | KbEvidenceInput {
 function parseQuery(q: Record<string, string>): string | KbCardQuery {
   const out: KbCardQuery = { general: q.general === '1' };
   const stage = csv(q.stage);
-  if (stage?.some((s) => !(s in KB_STAGES))) return `stage must list ${Object.keys(KB_STAGES).join(', ')}`;
+  if (stage?.some((s) => !Object.hasOwn(KB_STAGES, s))) return `stage must list ${Object.keys(KB_STAGES).join(', ')}`;
   const type = csv(q.type);
-  if (type?.some((t) => !(t in KB_CARD_TYPES))) return `type must list ${Object.keys(KB_CARD_TYPES).join(', ')}`;
+  if (type?.some((t) => !Object.hasOwn(KB_CARD_TYPES, t))) return `type must list ${Object.keys(KB_CARD_TYPES).join(', ')}`;
   const status = csv(q.status);
   if (status?.some((s) => !['proposed', 'active', 'archived', 'rejected', 'merged'].includes(s))) return 'status must list proposed, active, archived, rejected, merged';
   for (const k of ['createdFrom', 'createdTo', 'verifiedFrom', 'verifiedTo'] as const) {
@@ -202,6 +203,14 @@ export function kbRoutes(db: Db) {
       const s = kbScope(ws, c.req.query('general') === '1');
       const rows = db.prepare(`SELECT id, url, title, status, reliability, fetched_at FROM kb_sources WHERE ${s.sql} ORDER BY lower(title), id`).all(...s.params);
       return c.json(rows.map((r): KbSourceBrief => ({ id: String(r.id), ...(r.url ? { url: String(r.url) } : {}), title: String(r.title), status: r.status as KbSourceBrief['status'], reliability: r.reliability as KbSourceBrief['reliability'], ...(r.fetched_at ? { fetchedAt: String(r.fetched_at) } : {}) })));
+    })
+    .patch('/api/kb/sources/:id', async (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      const b = await c.req.json().catch(() => undefined);
+      if (!isObj(b) || !Object.hasOwn(KB_SOURCE_RELIABILITY, String(b.reliability))) return c.json({ error: `reliability must be one of ${Object.keys(KB_SOURCE_RELIABILITY).join(', ')}` }, 400);
+      if (!kbRow(db, 'kb_sources', c.req.param('id'), ws)) return c.json({ error: 'source not found' }, 404);
+      return c.json(setSourceReliability(db, c.req.param('id'), b.reliability as KbSourceReliability));
     })
     .get('/api/kb/views', (c) => {
       const ws = wsOf(db, c.req.query('ws'));
@@ -449,7 +458,7 @@ export function kbRoutes(db: Db) {
       if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
       if (typeof b.from !== 'string' || typeof b.to !== 'string') return c.json({ error: 'from and to must be card ids' }, 400);
       if (b.from === b.to) return c.json({ error: 'a card cannot be linked to itself' }, 400);
-      if (typeof b.type !== 'string' || !(b.type in KB_LINK_TYPES)) return c.json({ error: `type must be one of ${Object.keys(KB_LINK_TYPES).join(', ')}` }, 400);
+      if (typeof b.type !== 'string' || !Object.hasOwn(KB_LINK_TYPES, b.type)) return c.json({ error: `type must be one of ${Object.keys(KB_LINK_TYPES).join(', ')}` }, 400);
       if (!text(b.why, 3, 600)) return c.json({ error: 'why must be 3-600 characters' }, 400);
       if (!kbRow(db, 'kb_cards', b.from, ws, ws !== null) || !kbRow(db, 'kb_cards', b.to, ws, ws !== null)) return c.json({ error: 'card not found' }, 404);
       const type = b.type as keyof typeof KB_LINK_TYPES;

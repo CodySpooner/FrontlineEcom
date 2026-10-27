@@ -96,7 +96,7 @@ type Fetch = typeof fetch;
 
 // This computer or its network as a DNS answer gives it: loopback, private, link-local and CGNAT (Tailscale) IPv4 (the
 // IPv4 rules also match IPv4-mapped IPv6); IPv6 loopback, unique-local and link-local.
-const LOCAL = new BlockList();
+export const LOCAL = new BlockList();
 for (const [a, bits] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.168.0.0', 16]] as const) LOCAL.addSubnet(a, bits, 'ipv4');
 for (const [a, bits] of [['::', 127], ['fc00::', 7], ['fe80::', 10]] as const) LOCAL.addSubnet(a, bits, 'ipv6');
 
