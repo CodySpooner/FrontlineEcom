@@ -72,7 +72,9 @@ silhouette you can tell apart at 32 px. Keep each one's current look as the anch
 - Keep `Portrait`'s API (`role`, `rank`, `className`), the rank frames (`FRAME`) and the paused look (`opacity-40
   grayscale` from Agents.tsx). Remove SVG symbols that nothing uses afterwards.
 
-## Done when
+## Done
+
+- 2026-10-27 IMG-02: Generated and optimized Command Center and Ad Strategist; exact prompts recorded in public/art/PROMPTS.md. Previewed at 1280/1920 (.agent/style-frame-*); 25 KB header, 67 KB portrait; pnpm check green. when
 
 `pnpm check` green; every page in the list above and every place `Portrait` is used checked in a browser at 1280 and
 1920 px wide, with before/after screenshots saved in `.agent/` (git-ignored); no console errors; the header drag region
@@ -88,7 +90,7 @@ and ignore a watchdog nudge if `.agent/STOP` is already there.
 ## Items
 - [x] IMG-01 Inspect: `Hero.tsx`, `Art.tsx`, `nav.ts`, `index.css` (`hero-bg`), every `Hero` / `Portrait` call, both
   screenshots, DESIGN.md §3. Screenshot today's headers and the AI Agents page as "before".
-- [ ] IMG-02 Style frame: generate the Command Center header and one portrait (Ad Strategist) first; tune until they
+- [x] IMG-02 Style frame: generate the Command Center header and one portrait (Ad Strategist) first; tune until they
   match the art direction, then record the final prompts in `PROMPTS.md` as the template for the rest.
 - [ ] IMG-03 Header images for every section in the list, same template.
 - [ ] IMG-04 Wire headers: `Hero` shows the page's image (replace `HeroArt` / `Scene` / the SVG skyline with an image
@@ -99,6 +101,8 @@ and ignore a watchdog nudge if `.agent/STOP` is already there.
 - [ ] IMG-07 Acceptance pass ("Done when" above), fix what it finds, then STOP.
 
 ## Done
+
+- 2026-10-27 IMG-02: Generated and optimized Command Center and Ad Strategist; exact prompts recorded in public/art/PROMPTS.md. Previewed at 1280/1920 (.agent/style-frame-*); 25 KB header, 67 KB portrait; pnpm check green.
 
 - 2026-10-27 IMG-01: Inspected both marked-up references, design/build rules and all Hero/Portrait callers; saved before captures of all 15 routes at 1280/1920 in `.agent/`. Browser errors: none; `pnpm check`: 149 files / 992 tests. Ecosystem has its own header (no Hero); leave that lane's pixel art intact. Scope: Hero/nav/hero-bg, Art, AgentDetail's art prop, and Shell's obsolete SvgDefs mount; rank frames and paused styling stay.
 

@@ -1,0 +1,22 @@
+# Frontline generated art
+
+Generated with the built-in image_gen tool on 2026-10-27. No external image URLs are used at runtime. Optimized to WebP with Pillow (RGB, quality 82, method 6); headers retain the generated 2048×683 framing, portraits are 768×768 square masters. Keep the image proportions; use object-cover on a right-anchored header image with a maximum display width so very wide windows do not crop away the face.
+
+## Style frame
+
+### Command Center: initial generation
+
+Use case: stylized-concept. Asset type: desktop dashboard cinematic header artwork. Create a very wide 3:1 landscape master, 1536x512 or wider. Frontline Ecom style: clean premium cinematic digital illustration, semi-realistic painterly edges, not a photograph, not pixel art, not vector. Restrained near-black charcoal (#08080a to #131316), deep red #c3121f and soft #ff2a3a rim lighting, tiny warm white highlights only. Subject: a solitary hooded armored commander leaning over a compact glowing red strategic table, confident and watchful, two small glowing red eyes visible under the hood; one unified focal silhouette. Composition critical: most of the image is nearly empty dark charcoal. Put the complete small commander and tabletop at x=76%, between y=35% and y=70%, occupying only 22% of image width and 35% of image height, for a very shallow banner crop. Left 50% completely quiet black; top-right corner also quiet black for controls. Subtle hazy crimson halo behind subject, abstract faint distant headquarters depth, no skyline clutter. It must still read when center-cropped vertically to a 10:1 strip. Broad simple material planes, matte armor and cloth, elegant minimal atmosphere. No text, no letters, no logos, no watermark, no UI or interface frame.
+
+### Command Center: selected refinement
+
+Reference: the initial Command Center image (same hooded commander, palette, painting style). The tool returned a 3:1 image even when asked for a shallow strip. Selected output: `headers/command-center.webp`.
+
+Use case: stylized-concept. Asset type: extremely wide short desktop application banner, aspect ratio 8:1, target 3072x384 pixels. Generate a panoramic shallow strip, NOT a standard landscape picture. Use the reference only for painting style, palette, and hooded commander identity. Change composition to fit a very short banner: one small hooded armored commander and compact glowing tactical table on the right, face and table both completely visible within the middle 60% of image height, centered at x=76%, y=52%. The subject should occupy only 18% of total image width. Left 50% completely empty near-black charcoal. Top-right 20% quiet black, no tall architecture. One restrained crimson halo behind the figure, no clutter, no symbols or banners behind him. Clean premium cinematic digital illustration, semi-realistic painterly planes, matte charcoal armor and cloth, restrained red #ff2a3a / #c3121f rim light, small glowing red eyes, tiny white highlights. Dark #08080a–#131316 background. No text, no logos, no watermark, no UI. Critical: keep the entire recognizable subject in the shallow strip, with space above head and below table.
+
+### Ad Strategist: selected generation
+
+Output: `agents/ad-strategist.webp`.
+
+Use case: stylized-concept. Asset type: square 1024x1024 character portrait for a dark ecommerce command-center app. Frontline Ecom style: premium cinematic digital illustration, semi-realistic with confident painterly planes, not photography, not pixel art or flat vector. Dark charcoal (#08080a–#131316) matte armor and black backdrop, restrained #c3121f / #ff2a3a soft red rim lighting, small warm white highlights only. One character, head and shoulders, eye-level camera, centered face with eyes at y=40%; head including helmet occupies x=28–72% and y=15–55%, shoulders below, ample dark margin. Face must read at 32px and in a horizontal card crop. Subject: Ad Strategist, a charismatic seasoned war-room general with angular black horned helm, face open and visible, short dark beard, confident slight smirk and glowing red eyes. Leaning forward with one gauntlet resting on a compact glowing red targeting tablet held near his chest, experienced and calculating, visibly human personality. Two compact swept horns provide the recognisable silhouette. Broad clean shapes, expressive face, natural anatomy, subtle material detail, no busy background. One focal subject, no extra figures. No text, no letters, no logos, no watermark, no frame, no UI baked into the image.
+
