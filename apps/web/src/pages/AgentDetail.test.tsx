@@ -51,6 +51,13 @@ describe('niche learnings', () => {
     expect(screen.getByText('Shared with all K-beauty skincare stores')).toBeTruthy();
     expect(fetch.mock.calls.map(([url]) => url)).toContain('/api/niche-learnings?store=dew');
   });
+
+  it('names a built-in niche as the Knowledge page does', async () => {
+    const store = { id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', currency: 'USD' } as Store;
+    stubApi((url) => (url.startsWith('/api/stores') ? [store] : []));
+    renderApp(<NicheLearnings storeId="peak" />);
+    expect(await screen.findByText('Shared with all Fitness stores')).toBeTruthy();
+  });
 });
 
 describe('agent header', () => {

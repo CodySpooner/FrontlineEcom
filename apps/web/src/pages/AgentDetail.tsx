@@ -11,6 +11,7 @@ import { FlowLibrary } from '../components/FlowLibrary';
 import { SharedLearnings } from '../components/NicheLearnings';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
+import { nicheName } from '../components/StoreForm';
 import { AGENT_STATUS, Badge, Button, buttonClass, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
 import { describeTrigger, when } from '../lib/automation';
 import { ago, cents, modelName, money } from '../lib/format';
@@ -220,7 +221,7 @@ function History({ agentId, onOpen }: { agentId: string; onOpen: (runId: string)
 export function NicheLearnings({ storeId }: { storeId: string }) {
   const store = useStores().data?.find((s) => s.id === storeId);
   if (!store) return null;
-  return <SharedLearnings by={{ store: storeId }} niche={store.niche === 'other' ? store.nicheDetail || 'your niche' : store.niche} />;
+  return <SharedLearnings by={{ store: storeId }} niche={store.niche === 'other' ? store.nicheDetail || 'your niche' : nicheName(store.niche)} />;
 }
 
 function Memory({ agent }: { agent: Agent }) {
