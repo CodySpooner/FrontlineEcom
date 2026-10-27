@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 
 import { Link } from 'react-router';
 import { Brain, ChevronRight, MessageSquare, SendHorizontal, Wrench } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type AgentRunDetail, type ApprovalRequest } from '@frontline/shared';
-import { useApprovals, useCancelRun, useDecide, useRun, useStartRun } from '../api/client';
+import { useApprovals, useCancelRun, useDecide, useKbCard, useRun, useStartRun } from '../api/client';
 import { expiredWhy, shownReason } from '../lib/approvals';
 import { cents, money } from '../lib/format';
 import { isLive, toBlocks, toolName } from '../lib/transcript';
@@ -138,7 +138,7 @@ export function Transcript({ run, role, onRetry }: { run: AgentRunDetail; role: 
           {blocks.map((b, i) =>
             b.kind === 'text' ? (
               <p key={i} className="text-[13px] leading-relaxed whitespace-pre-wrap text-text">
-                {b.text}
+                <Cited text={b.text} />
               </p>
             ) : b.kind === 'tool' ? (
               <details key={i} className="group rounded-lg border border-line bg-bg-2 text-xs">
@@ -260,6 +260,25 @@ function Outcome({ id }: { id: string }) {
 
 /** A request raised mid-run. Decided ones (here or on the dashboard) drop their buttons. */
 /** `who` (e.g. "Ad Strategist · Pawsome Gear") replaces the generic heading where the store isn't obvious. */
+/** An answer with each [kb:<id>] it cites as a link to that knowledge card (KB-17), named by the card's title. */
+function Cited({ text }: { text: string }) {
+  return text.split(/(\[kb:[\w-]+\])/).map((part, i) => {
+    const id = /^\[kb:([\w-]+)\]$/.exec(part)?.[1];
+    return id ? <KbCite key={i} id={id} raw={part} /> : part;
+  });
+}
+
+/** One cited card. Until it loads, and for an id that isn't a card (its 404 is retried a while), it stays as the agent wrote it. */
+function KbCite({ id, raw }: { id: string; raw: string }) {
+  const card = useKbCard(id).data;
+  if (!card) return raw;
+  return (
+    <Link to={`/knowledge?card=${encodeURIComponent(id)}`} className="text-red underline-offset-2 hover:underline">
+      {card.title}
+    </Link>
+  );
+}
+
 export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
   const pending = useApprovals().data;
   const decide = useDecide();

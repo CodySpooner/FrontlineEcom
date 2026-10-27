@@ -529,7 +529,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - Stop / Retry / Refine.
 
 ### Phase 5: agents share the knowledge
-- [ ] KB-17 **Retrieval in real tasks** (decision 12):
+- [x] KB-17 **Retrieval in real tasks** (decision 12):
   - the prompt section and the tool;
   - role boosts;
   - retrieval and citation event logging;
@@ -634,6 +634,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-14 Research from source: the "From source" toolbar button opens a full form, and the bar sits along the bottom of the Research Center. The owner pastes links or text, or attaches or drops a document (a PDF, text, markdown, .vtt/.srt transcript, CSV or HTML, up to 10 MB). They pick an agent and file to its store or General, optionally to one of its categories, with what to look for and a budget. The dialog then follows the task: each source as it's read, links still waiting, findings, Stop or Retry, and, at the end, the report with the new cards to accept or reject and the cards it added evidence to. The "Research done/failed" notification opens the task (`?task=`).
 - 2026-10-27 KB-15 New research: the owner writes a request and picks the agent, where the findings go, a depth (Quick reads up to 3 sources, Standard 5, Deep 8, each with a suggested budget) and the budget. "Review the plan" then shows what will happen: the agent plans from what the knowledge base already holds, searches and reads up to N public sources, files proposed cards there for review, and writes a report, spending at most $X. Nothing is spent until Start research. "Research this" opens it prefilled from a card's details, an artboard frame (filed to that category), a campaign row in Analytics, and a finished Chat answer.
 - 2026-10-27 KB-16 Research Center: workspace chips (All workspaces, General, each store), six tiles linking to their Library filter or the widget below, the knowledge map (each root category's cards stacked by stage, linking to its frame on the artboard, plus "+ Custom category"), latest discoveries (cards that earned Validated this week and conflicts waiting for a call, with Compare evidence and Keep both) and a preview of the newest one's frame, and the research column: Active / Queue / Done / Sources, running tasks with their stage bar, reads, blocks, findings, matches and spend (Stop, Open task), agents' research recommendations to approve, and knowledge gaps. A task opens as a drawer: where it files, the execution log, the report, and Stop / Retry / Refine. Three columns at 1440 px, two below, one on a phone. No view scrolls sideways at 390 px anymore.
+- 2026-10-27 KB-17 Retrieval in real tasks: every agent task now starts with a "Relevant knowledge" section, the store's accepted cards that match the task and then General's, hypotheses labelled unproven, never another store's, unreviewed, archived or blocked ones. It fits in what the store's memory leaves of the prompt. search_knowledge ranks the same way (any of the words, then stage, recency, the role's areas, use, reliable sources and confirmed links). Each time a card goes into a prompt, a search or a citation, it's logged and counted once per run, and a `[kb:id]` in an answer shows in Chat as a link to the card, named by its title.
 
 ## Blocked
 
@@ -786,3 +787,19 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   a mixed set loses to the named one. The Research Center uses only `min-[…px]`. Also found: the closed details
   panel waited off the artboard's right edge and widened the page by 340 px at every size. The artboard wrapper is now
   `overflow-x-clip`, and the view switcher sits in its own scroller (the KB-14 note).
+- 2026-10-27 KB-17: `packages/agents/src/kb-retrieve.ts`. `retrieveKnowledge(db, {ws, role, query, limit})` is an FTS5
+  OR-query of the task's words (3+ letters, a stop list, 24 at most, each quoted so nothing reads as syntax), ranked by
+  `-bm25(title 4, summary 2, body 1, tags 2)` × stage (1 / 1.15 / 1.3 / 1.5) × 1.1 if touched in 30 days × 1.3 in the
+  role's areas × (1 + 0.03 per use, a citation counting 2, capped at 10) × 1.1 with research evidence from a read
+  reliable source (the ladder's rule). Cards confirmed as linked to the 3 best come along at half that score; then the
+  store's own first. Role areas are a ponytail regex over category names until KB-22 lets the owner set them. The prompt
+  gets 8 cards for the run's task (none for research stages, which have their own prompt), placed after memory and
+  before jobs. It fits what memory left, so the 1500-token floor stays memory's (a test checks both). `kb_retrievals`
+  logs 'prompt' only for cards that fit, 'search' for each search_knowledge result, and 'cited' for each `[kb:id]` in
+  the finished answer that's a card the store may see. `used_count`/`cited_count` rise once per run per card. Left out:
+  type, stage, category and tag filters on search_knowledge, and the embeddings layer (decision 12, optional). In Chat,
+  a citation stays as written until its card loads. The client retries a 404 for ~7 s, so an unknown id never shows a
+  placeholder. Mutation sweep: 37 of 37 meaningful killed. Two equivalents were left: the join of transcript text (the
+  transcript already merges deltas), and a matched card keeping its own score over half a linked card's. Seen once:
+  the ui lane's `UpdatePrompt.test.tsx` "re-shows itself above a dialog" failed under full-suite load and passed alone
+  3/3 and on the rerun.

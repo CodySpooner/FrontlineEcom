@@ -1,4 +1,4 @@
-import { AGENT_ROLES, type Agent, type AgentRole, type Niche, type Platform, type Store, type StoreMemory } from '@frontline/shared';
+import { AGENT_ROLES, type Agent, type AgentRole, type KbCardBrief, type Niche, type Platform, type Store, type StoreMemory } from '@frontline/shared';
 import { describe, expect, test } from 'vitest';
 import { assemblePrompt, estimateTokens, nichePack, platformPack, playbook, ROLES, saveNichePack, SQUAD_RULES } from './index';
 
@@ -117,5 +117,24 @@ describe('assemblePrompt', () => {
     expect(prompt).toContain("- The owner turned down TikTok ads (preference, owner's no,");
     expect(prompt).toContain('memory number 1 ');
     expect(prompt).not.toContain('memory number 50 ');
+  });
+
+  test('knowledge takes only what memory leaves: the prompt keeps to its 8000-token budget, and memory to its floor', () => {
+    const kb = (n: number): KbCardBrief => ({
+      id: `k${n}`, storeId: n % 2 ? 'glow' : null, categoryId: 'c', path: ['Advertising'], type: 'strategy', stage: 'supported', status: 'active', title: `Card ${n}`, summary: 'y'.repeat(800), tags: [],
+      authorId: 'owner', origin: 'owner', pinned: false, blockedRoles: [], researchMarked: false, usedCount: 0, citedCount: 0, createdAt: '2026-10-01', updatedAt: '2026-10-01',
+    });
+    const knowledge = Array.from({ length: 60 }, (_, i) => kb(i + 1));
+    const memories = Array.from({ length: 12 }, (_, i) => memory(i + 1, `memory number ${i + 1} ${'x'.repeat(200)}`));
+    const prompt = assemblePrompt({ agent: agentOf(glow, 'copywriter'), store: glow, memories, knowledge, today: '2026-10-26' });
+    for (let n = 1; n <= 12; n++) expect(prompt).toContain(`memory number ${n} `);
+    expect(prompt).toContain('[kb:k1] Card 1 (Research-Supported)');
+    expect(prompt).not.toContain('[kb:k59]');
+    expect(estimateTokens(prompt)).toBeLessThanOrEqual(8000 + 60);
+    // Fixed layers over the budget: the floor is memory's, and knowledge gets none of it.
+    const many = Array.from({ length: 50 }, (_, i) => memory(i + 1, `memory number ${i + 1} ${'x'.repeat(200)}`));
+    const tight = assemblePrompt({ agent: agentOf(glow, 'copywriter'), store: glow, memories: many, knowledge, budget: 10, today: '2026-10-26' });
+    expect(tight).toContain('memory number 1 ');
+    expect(tight).not.toContain('# Relevant knowledge');
   });
 });

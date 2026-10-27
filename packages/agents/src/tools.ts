@@ -8,9 +8,10 @@ import { addNicheLearning, listNicheLearnings, nicheKey, nicheSlug, saveNichePac
 import { getPageDraft, listPageDrafts, savePageDraft, unsafeHtml } from './pages';
 import { listFlowDrafts, saveFlowDraft } from './flows';
 import { flagOrderIssue, listOrderIssues } from './issues';
-import { createCard, ensureCategoryPath, getCard, kbRow, listCards } from './kb';
+import { createCard, ensureCategoryPath, getCard, kbRow } from './kb';
 import { addEvidence, agentCardError, createLink, sameCard } from './kb-links';
 import type { FetchedSource } from './kb-research';
+import { logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
 import { saveSource, sourceForAgent } from './kb-sources';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 import { runGist } from './runs';
@@ -1238,7 +1239,7 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'search_knowledge',
     description:
-      "Search the owner's knowledge base: accepted cards for this store and their General knowledge (what holds across their stores), newest first. Use a few keywords: a card matches when it has all of them. Cite a card you use as [kb:<id>]. A Hypothesis is unproven: say so when you lean on one.",
+      "Search the owner's knowledge base: accepted cards for this store, then their General knowledge (what holds across their stores), best match first. Keyword search: a card matches on any of your words, and stage, your role's areas and use rank it. Cite a card you use as [kb:<id>]. A Hypothesis is unproven: say so when you lean on one.",
     input: {
       query: z.string().trim().min(2).max(200).describe('a few keywords, e.g. "tiktok hooks"'),
       limit: z.number().int().min(1).max(20).default(8),
@@ -1246,10 +1247,8 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ query, limit }, ctx) => {
       const task = researchTask(ctx);
       const ws = task ? task.ws : ctx.store.id; // a General task's is null
-      // ponytail: the newest keyword matches; KB-17 ranks by relevance, stage, role and use.
-      const cards = listCards(ctx.db, ws, { q: query, general: ws !== null, status: ['active'], limit: 100 })
-        .items.filter((c) => !c.blockedRoles.includes(ctx.agent.role))
-        .slice(0, limit);
+      const cards = retrieveKnowledge(ctx.db, { ws, role: ctx.agent.role, query, limit });
+      logKnowledgeUse(ctx.db, cards.map((c) => c.id), { storeId: ctx.store.id, agentId: ctx.agent.id, runId: ctx.runId, kind: 'search' });
       return csv(cards.map((c) => ({ id: c.id, title: c.title, stage: c.stage === 'hypothesis' ? 'Hypothesis (unproven)' : KB_STAGES[c.stage], type: c.type, where: c.storeId ? 'this store' : 'General', summary: c.summary.slice(0, 300) })));
     },
   }),

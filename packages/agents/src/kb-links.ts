@@ -23,7 +23,7 @@ type Row = Record<string, unknown>;
 const opt = (v: unknown) => (v == null ? undefined : String(v));
 const num = (v: unknown) => (v == null ? undefined : Number(v));
 const STAGES = Object.keys(KB_STAGES) as KbStage[];
-const RELIABLE = new Set<string>(['platform_docs', 'research', 'publication'] satisfies KbSourceReliability[]);
+export const RELIABLE = new Set<string>(['platform_docs', 'research', 'publication'] satisfies KbSourceReliability[]);
 const host = (url: unknown) => {
   try {
     return new URL(String(url)).hostname.replace(/^www\./, '');

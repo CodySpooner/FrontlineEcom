@@ -57,6 +57,21 @@ describe('chat retry', () => {
   });
 });
 
+describe('knowledge citations', () => {
+  it('turns [kb:<id>] in an answer into a link to that card, named by its title; an id with no card stays as written', async () => {
+    const answer = 'Lead with the problem [kb:c1], as [kb:c1] says. [kb:gone] is not a card.';
+    stubApi((url) => {
+      if (url === '/api/runs/r1') return run('r1', 'done', { transcript: [{ type: 'text_delta', text: answer.slice(0, 30) }, { type: 'text_delta', text: answer.slice(30) }] });
+      if (url === '/api/kb/cards/c1?ws=all') return { id: 'c1', storeId: 'peak', title: 'Problem-first hooks win' };
+      if (url === '/api/kb/cards/gone?ws=all') return new Response(JSON.stringify({ error: 'card not found' }), { status: 404 });
+    });
+    renderApp(<Chat agent={agent} thread={['r1']} onThread={() => {}} />);
+    const links = await screen.findAllByRole('link', { name: 'Problem-first hooks win' });
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/knowledge?card=c1', '/knowledge?card=c1']);
+    await vi.waitFor(() => expect(links[0]!.closest('p')!.textContent).toBe('Lead with the problem Problem-first hooks win, as Problem-first hooks win says. [kb:gone] is not a card.'));
+  });
+});
+
 describe('a run a daily AI budget stopped', () => {
   it("links to the setting that lifts it", async () => {
     const error = "Stopped: today's budget for this agent ($0.3) is used up. Raise it in its settings.";

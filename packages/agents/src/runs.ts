@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type Store } from '@frontline/shared';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { researchContext } from './kb-research';
+import { citedCards, logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
 import { once, parseLearnings, REFLECTION_PROMPT, searchMemory, writeMemory } from './memory';
 import { listNicheLearnings, nicheKey } from './niche';
 import { assemblePrompt } from './prompt';
@@ -242,13 +243,17 @@ export function createRunManager(opts: RunManagerOptions) {
       }
       else if (agent && store) {
         const resume = db.prepare('SELECT resume FROM agent_runs WHERE id = ?').get(run.id)?.resume;
+        // A research stage has its own prompt and searches the knowledge base itself.
+        const knowledge = research ? [] : retrieveKnowledge(db, { ws: store.id, role: agent.role, query: run.task, limit: 8 });
+        const systemPrompt =
+          research?.systemPrompt ??
+          assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id), knowledge });
+        logKnowledgeUse(db, knowledge.filter((c) => systemPrompt.includes(`[kb:${c.id}]`)).map((c) => c.id), { storeId: store.id, agentId: agent.id, runId: run.id, kind: 'prompt' });
         const input: RunInput = {
           agent,
           store,
           task: run.task,
-          systemPrompt:
-            research?.systemPrompt ??
-            assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id) }),
+          systemPrompt,
           ...(research ? { mode: 'research' as const } : {}),
           signal,
           env: { ...env, runId: run.id },
@@ -279,6 +284,9 @@ export function createRunManager(opts: RunManagerOptions) {
     if (overCap && end.type === 'error') end = { type: 'error', message: overOwn ? ownUsedUp(own!, true) : `Stopped: today's AI budget for this store ($${cap}) is used up. Raise it in Settings.` };
     emit(end);
 
+    // The knowledge cards the answer cites as [kb:<id>] (the transcript already joined streamed pieces).
+    const said = transcript.flatMap((e) => (e.type === 'text_delta' ? [e.text] : [])).join('');
+    logKnowledgeUse(db, citedCards(db, said, run.storeId), { storeId: run.storeId, agentId: run.agentId, runId: run.id, kind: 'cited' });
     const status: RunStatus = end.type === 'done' ? 'done' : signal.aborted && !overCap ? 'cancelled' : 'error';
     ended = true;
     const reported = end.type === 'done' ? end.usage : (end.type === 'error' && end.usage) || { inputTokens: 0, outputTokens: 0, costUsd: 0 };
