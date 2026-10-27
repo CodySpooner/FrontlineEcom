@@ -326,6 +326,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-193 follow-up: the old weekly price check text is in `FORMER_TASKS`, so live stores whose owner never edited the job get the new one.
 - 2026-10-26 — AGT-193: `list_competitors` takes `q` and adds each matching competitor product's newest snapshot (its price now, up to 30); the price-changes header says held prices need `q`; the weekly price check asks for it.
 - 2026-10-26 — AGT-192: `metrics_timeseries` heads its CSV with the uncosted share when it's 10%+; `compare_stores` names the stores whose profit reads high in its header line.
 - 2026-10-26 — AGT-191: `store_summary` adds a `profitNote` when 10%+ of the window's product sales have no unit cost (`uncostedShare`, as `review_campaigns`), saying profit, margin and health read high and where the owner enters costs.

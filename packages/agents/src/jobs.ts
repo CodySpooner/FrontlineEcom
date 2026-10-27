@@ -85,7 +85,7 @@ const FORMER_TASKS: Record<string, string[]> = {
   'Daily briefing': ['6e0cf79f6423'],
   'Daily product scan': ['fcd2db3f4ef9'],
   'Daily order check': ['4b257766a792', '68b5e9e81338'],
-  'Weekly price check': ['024e94fbffb1'],
+  'Weekly price check': ['024e94fbffb1', '7567a36fff1c'],
   'Weekly report': ['9f9632c36fba', '8f6e01cc2448', 'fa3ff3a95b54'],
 };
 const taskHash = (task: string) => createHash('sha256').update(task).digest('hex').slice(0, 12);
