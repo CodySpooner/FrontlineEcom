@@ -1,6 +1,6 @@
 // UI-01 design system: the small set of primitives every screen is built from.
-import { cloneElement, useEffect, useId, useRef } from 'react';
-import type { ButtonHTMLAttributes, ComponentProps, HTMLAttributes, InputHTMLAttributes, ReactElement, ReactNode, TableHTMLAttributes } from 'react';
+import { cloneElement, useEffect, useId, useRef, useState } from 'react';
+import type { ButtonHTMLAttributes, ComponentProps, HTMLAttributes, InputHTMLAttributes, ReactElement, ReactNode, Ref, TableHTMLAttributes } from 'react';
 import { Inbox, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 import { AGENT_ROLES, type AgentRole, type AgentStatus, type MemoryKind, type RunStatus, type StoreHealthStatus } from '@frontline/shared';
 import { usedShare } from '../lib/usage';
@@ -39,6 +39,26 @@ export function useFocusBack(open: boolean) {
     was.current = open;
   }, [open]);
   return ref;
+}
+
+/** Delete in two steps, as elsewhere in the app ("Delete this list?" Keep / Delete list). `children` renders the trigger;
+ *  focus lands on Keep, and Keep hands it back to the trigger. */
+export function ConfirmDelete({ question, confirm, busy, onConfirm, className, children }: { question: string; confirm: string; busy?: boolean; onConfirm: () => void; className?: string; children: (open: () => void, ref: Ref<HTMLButtonElement>) => ReactNode }) {
+  const [asking, setAsking] = useState(false);
+  const ref = useFocusBack(asking);
+  return asking ? (
+    <span className={cx('flex flex-wrap items-center gap-1.5', className)}>
+      <span className="text-xs text-text-2">{question}</span>
+      <Button size="sm" autoFocus onClick={() => setAsking(false)}>
+        Keep
+      </Button>
+      <Button size="sm" variant="primary" disabled={busy} onClick={onConfirm}>
+        {confirm}
+      </Button>
+    </span>
+  ) : (
+    children(() => setAsking(true), ref)
+  );
 }
 
 /** Button look, also used by router links that act as buttons. */

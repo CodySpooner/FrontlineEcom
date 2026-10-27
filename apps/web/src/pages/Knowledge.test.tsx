@@ -62,3 +62,19 @@ describe('Knowledge Base › closing an editor', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit' }));
   });
 });
+
+describe('Knowledge Base › forgetting a memory', () => {
+  it('asks first: nothing is deleted until the owner confirms', async () => {
+    const deletes = (fetch: ReturnType<typeof stubApi>) => fetch.mock.calls.filter(([, init]) => init?.method === 'DELETE').length;
+    const fetch = stubApi((url, init) => {
+      if (init?.method === 'DELETE') return {};
+      if (url === '/api/stores') return [{ id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', color: '#ff2a3a', currency: 'USD', timezone: 'UTC' }];
+      if (url === '/api/stores/peak/memory') return [{ id: 'm1', storeId: 'peak', agentId: 'owner', kind: 'learning', text: 'Never discount the bands', confidence: 0.6, tags: [], createdAt: '2026-10-26T08:00:00Z' }];
+    });
+    renderApp(<Knowledge />, '/knowledge?tab=memory');
+    fireEvent.click(await screen.findByRole('button', { name: 'Forget: Never discount the bands' }));
+    expect(deletes(fetch)).toBe(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Forget memory' }));
+    await vi.waitFor(() => expect(deletes(fetch)).toBe(1));
+  });
+});

@@ -365,6 +365,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-142 Approving or denying on the Dashboard's Agent Requests swapped the row's buttons for its verdict and
       dropped keyboard focus to the page, so working through several requests meant tabbing back from the top each
       time. Focus now moves on to the next request still waiting (the one before, after the last).
+- [x] UI-143 Deleting a creative (maybe a paid render), a saved product list or a squad memory (Knowledge and the
+      agent page) took one click, with no undo. They now ask first, like flows, rules, drafts and competitors already
+      do ("Delete this creative?" Keep / Delete creative), with focus on Keep and back on the trigger after it.
 
 ## Blocked
 
@@ -552,3 +555,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-140: `useResearch(…, real)` adds `sample=0`; Results passes "every store connected"; My Lists still asks with samples so saved ones resolve. Two new tests plus UI-139's moved to `sample: true` (red on the old code). Orca with every store patched live (read-only): `/api/research?tab=trending&sample=0`, "No finds yet" shown
 - 2026-10-26 — UI-141: the map moved from Research() into `customNiches(stores)`; ProductDetails falls back to "Other" when no store has that niche any more. New test (red on the old code). Orca with a read-only patched store and row: "Health & Beauty · TikTok · Yoga mats & props"
 - 2026-10-26 — UI-142: `act` focuses the next undecided row's Approve (`data-approve`) before the verdict swaps the buttons out. New test (red on the old code). Orca, with the approve POST answered by a fetch patch (DB untouched, all three demo requests still pending): focus went from "Pause Spark Ads · UGC" to "Raise daily budget 20%" and stayed when the row dropped. Chat request cards keep their verdict in place, so they're left as they are
+- 2026-10-26 — UI-143: `ConfirmDelete` in components/ui (children render the trigger, `useFocusBack` returns focus); the five hand-rolled confirms elsewhere are left as they are. New ui.test and Knowledge test (red on the old code). Orca on Creative: Delete → "Delete this creative?" with focus on Keep, Keep → focus back on Delete (nothing deleted). The dev DB has no store memories to try live

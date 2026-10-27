@@ -7,7 +7,7 @@ import { useAgents, useCaps, useClaudeAccount, useCreatives, useDeleteCreative, 
 import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, buttonClass, cx, EmptyState, ErrorState, LoadingState, Panel, StatusDot, Tabs } from '../components/ui';
+import { Badge, Button, buttonClass, ConfirmDelete, cx, EmptyState, ErrorState, LoadingState, Panel, StatusDot, Tabs } from '../components/ui';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -258,10 +258,14 @@ function Preview({ c, onAsk, busy }: { c: CreativeT; onAsk: (task: string) => vo
             {copied ? 'Copied' : 'Copy text'}
           </Button>
         )}
-        <Button size="sm" className="ml-auto" disabled={del.isPending} onClick={() => del.mutate(c.id)} aria-label={`Delete ${c.headline}`}>
-          <Trash2 className="size-3.5" />
-          Delete
-        </Button>
+        <ConfirmDelete question="Delete this creative?" confirm="Delete creative" busy={del.isPending} onConfirm={() => del.mutate(c.id)} className="ml-auto">
+          {(open, ref) => (
+            <Button ref={ref} size="sm" className="ml-auto" disabled={del.isPending} onClick={open} aria-label={`Delete ${c.headline}`}>
+              <Trash2 className="size-3.5" />
+              Delete
+            </Button>
+          )}
+        </ConfirmDelete>
       </div>
       {del.isError && (
         <p role="alert" className="text-xs text-red">

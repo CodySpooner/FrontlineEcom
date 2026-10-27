@@ -8,7 +8,7 @@ import { Hero } from '../components/Hero';
 import { Markdown } from '../components/Markdown';
 import { SharedLearnings } from '../components/NicheLearnings';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Badge, Button, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Tabs, useFocusBack } from '../components/ui';
+import { Badge, Button, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Tabs, useFocusBack } from '../components/ui';
 import { ago } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -278,15 +278,20 @@ function MemoryRow({ m }: { m: StoreMemory }) {
               Edit
             </button>
           )}
-          <button
-            type="button"
-            aria-label={`Forget: ${m.text}`}
-            disabled={forget.isPending}
-            onClick={() => forget.mutate(m.id)}
-            className="cursor-pointer rounded-md p-1.5 text-muted transition hover:bg-panel-2 hover:text-red"
-          >
-            <Trash2 className="size-4" />
-          </button>
+          <ConfirmDelete question="Forget this memory?" confirm="Forget memory" busy={forget.isPending} onConfirm={() => forget.mutate(m.id)}>
+            {(open, ref) => (
+              <button
+                ref={ref}
+                type="button"
+                aria-label={`Forget: ${m.text}`}
+                disabled={forget.isPending}
+                onClick={open}
+                className="cursor-pointer rounded-md p-1.5 text-muted transition hover:bg-panel-2 hover:text-red"
+              >
+                <Trash2 className="size-4" />
+              </button>
+            )}
+          </ConfirmDelete>
         </div>
       </div>
     </li>

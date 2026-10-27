@@ -11,7 +11,7 @@ import { FlowLibrary } from '../components/FlowLibrary';
 import { SharedLearnings } from '../components/NicheLearnings';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { AGENT_STATUS, Badge, Button, buttonClass, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, buttonClass, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
 import { describeTrigger, when } from '../lib/automation';
 import { ago, cents, modelName, money } from '../lib/format';
 import { NAV } from '../nav';
@@ -304,15 +304,20 @@ function Memory({ agent }: { agent: Agent }) {
                   <div className="mb-1 text-right text-[11px] text-muted tabular-nums">{Math.round(m.confidence * 100)}% sure</div>
                   <ProgressBar value={m.confidence} label="Confidence" />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => forget.mutate(m.id)}
-                  disabled={forget.isPending}
-                  aria-label={`Forget: ${m.text}`}
-                  className="cursor-pointer rounded-md p-1.5 text-muted transition hover:bg-panel-2 hover:text-red"
-                >
-                  <Trash2 className="size-4" />
-                </button>
+                <ConfirmDelete question="Forget this memory?" confirm="Forget memory" busy={forget.isPending} onConfirm={() => forget.mutate(m.id)}>
+                  {(open, ref) => (
+                    <button
+                      ref={ref}
+                      type="button"
+                      onClick={open}
+                      disabled={forget.isPending}
+                      aria-label={`Forget: ${m.text}`}
+                      className="cursor-pointer rounded-md p-1.5 text-muted transition hover:bg-panel-2 hover:text-red"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  )}
+                </ConfirmDelete>
               </li>
             ))}
           </ul>

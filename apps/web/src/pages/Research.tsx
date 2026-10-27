@@ -8,7 +8,7 @@ import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { byHand } from '../components/StoreForm';
-import { Badge, Button, cx, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Tabs } from '../components/ui';
+import { Badge, Button, ConfirmDelete, cx, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Tabs } from '../components/ui';
 import { cents } from '../lib/format';
 import { customNiches } from '../lib/niche';
 import { NAV } from '../nav';
@@ -243,9 +243,13 @@ function Lists({ onOpen, saved }: { onOpen: (p: ResearchProduct) => void; saved:
             title={l.name}
             sub={`${items.length} product${items.length === 1 ? '' : 's'}`}
             action={
-              <Button size="sm" disabled={remove.isPending} onClick={() => remove.mutate(l.id)} aria-label={`Delete list ${l.name}`}>
-                Delete list
-              </Button>
+              <ConfirmDelete question="Delete this list?" confirm="Delete list" busy={remove.isPending} onConfirm={() => remove.mutate(l.id)}>
+                {(open, ref) => (
+                  <Button ref={ref} size="sm" disabled={remove.isPending} onClick={open} aria-label={`Delete list ${l.name}`}>
+                    Delete list
+                  </Button>
+                )}
+              </ConfirmDelete>
             }
           >
             {items.length ? (
