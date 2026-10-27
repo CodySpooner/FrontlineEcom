@@ -380,6 +380,9 @@ Orca's browser against the reference before ticking it.
       written differently: case, https, www, trailing slash).
 - [x] UI-147 The last two confirms UI-144 missed: deleting a store in Settings now uses `ConfirmDelete` (focus on Keep,
       back on Delete after it), and Knowledge's "Restore original" puts focus on "Keep mine" when it asks.
+- [x] UI-148 (re AGT-198) Competitor Intel's empty state said only the owner adds rivals. Going live drops the demo
+      competitors, and the Market Analyst now finds 3–5 itself when it has none to compare against, so the empty state
+      says so next to the add form.
 
 ## Blocked
 
@@ -572,3 +575,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-145: `ApprovalCard`'s `act` focuses the next sibling card's Approve (`data-approve`, the one before after the last) before its own buttons disable. New Chat test (red on the old code). Orca, in the notifications drawer with the approve POST answered by a fetch patch: focus went from "Pause Spark Ads · UGC" to "Raise daily budget 20%"; all three demo requests still pending in the DB
 - 2026-10-26 — UI-146: `anotherShop` in lib/shop.ts mirrors core's SHOP_KEYS/bare (FYI left in core's Inbox). lib test + Integrations test (red on the old code). Orca with a read-only patched Shopify connection on Pawsome: typing volt-lab.myshopify.com over pawsome-gear.myshopify.com shows the warning above Save (Save not pressed)
 - 2026-10-26 — UI-147: no hand-rolled confirm is left without focus handling (grep `setConfirm`: Integrations and Knowledge, both handled in place). Two new tests (red on the old code). Orca on Settings, Keep only: Delete → focus on Keep → back on Delete
+- 2026-10-26 — UI-148: copy only. `Competitor` has no author field, so rows can't credit the agent (not asked for). Orca with the competitor list patched empty (read-only): the new copy sits above "Track a competitor"

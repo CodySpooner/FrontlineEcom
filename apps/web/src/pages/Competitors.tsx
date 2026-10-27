@@ -40,7 +40,8 @@ export function Competitors() {
               <>
                 {!list.length ? (
                   <EmptyState icon={Eye} title="No competitors tracked">
-                    Add a rival below and the squad starts watching their prices and ads.
+                    Add a rival below, or leave it to the Market Analyst: with none to compare against, it finds 3–5 itself. Either way the squad
+                    watches their prices and ads.
                   </EmptyState>
                 ) : (
                   <ul className="grid gap-2">
