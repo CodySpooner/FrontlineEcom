@@ -6,7 +6,7 @@ import { advanceFrame, nearestFree, startMotion, type Motion } from './pathfindi
 import type { OfficeStatus } from './events';
 import { startVisit, visitFinished, type Handoff, type Visit } from './communications';
 import { meetingFinished, type Meeting, type MeetingPlan } from './meetings';
-import { DEFAULT_DISPLAY, type DisplayOptions } from './display';
+import { DEFAULT_DISPLAY, statusColor, type DisplayOptions } from './display';
 import { idleMoment } from './ambient';
 import { annotationScale } from './camera';
 
@@ -67,7 +67,7 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
       if (worker.data.animation !== data.animation) worker.elapsed = 0;
       worker.data = data; worker.index = index; worker.name.text = data.name;
       worker.root.alpha = data.status === 'offline' ? .45 : 1;
-      worker.status.tint = data.status === 'failed' ? '#ff3953' : data.status === 'awaiting_approval' ? '#f4bc53' : data.status === 'running' || data.status === 'using_tool' ? '#3ddc84' : '#8993a9';
+      worker.status.tint = statusColor(data.status);
       motions.get(data.seat.agentId)!.target = meeting?.plan.targets[data.seat.agentId] ?? visits.get(data.seat.agentId)?.target ?? data.target ?? deskTile(data.seat.deskId);
     });
     const occupied = new Set([...active.map((w) => tileKey(deskTile(w.seat.deskId))), ...[...motions.values()].flatMap((m) => [tileKey(m.cell), ...(m.next ? [tileKey(m.next)] : [])]), ...[...visits.values()].map((v) => tileKey(v.target))]);

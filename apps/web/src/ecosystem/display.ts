@@ -9,3 +9,7 @@ export function parseDisplay(value: unknown): DisplayOptions {
 export function loadDisplay(): DisplayOptions {
   try { return parseDisplay(JSON.parse(localStorage.getItem('frontline.ecosystem.display') ?? 'null')); } catch { return { ...DEFAULT_DISPLAY }; }
 }
+import type { OfficeStatus } from './events';
+
+const STATUS_COLORS: Record<OfficeStatus,string> = { idle: '#e3b45c', queued: '#63b6ff', planning: '#3ddc84', running: '#3ddc84', using_tool: '#3ddc84', collaborating: '#ce7aff', awaiting_approval: '#f4bc53', completed: '#3ddc84', failed: '#ff2a3a', offline: '#566173' };
+export const statusColor = (status?: OfficeStatus) => STATUS_COLORS[status ?? 'offline'];

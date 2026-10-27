@@ -85,6 +85,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-27 00:30 VISUAL SPRINT SUMMARY: Completed ECO-24 through ECO-46 (23 slices): expanded 64x48 office, platform/owner holograms, lighting, ten showpieces, real hub data, ambient office/city life, original generated skyline, camera/minimap, architecture, furnished departments, worker previews, truthful status beacons and portrait activity. Before/after screenshots for every item are in .agent/; final full office is .agent/sprint-final.png, plus Midnight/Ember, mobile, reduced-motion and low-power captures. Final pnpm check: 149 files / 987 tests. Thirty-worker fullscreen measured 58.2 FPS; low power 29.5 FPS. Orca live six-worker scene has no alerts. Art totals 1,990,672 bytes with prompt/provenance in public/ecosystem/README.md. Original acceptance behaviors remain covered by the suite and browser selection/focus checks. No paid engine calls or writes to live stores. Deadline reached; finish/push ECO-46, log, then create .agent/STOP.
+- 2026-10-27 ECO-46: Occupied desks gain status beacons from actual worker state; character dots share the same tested palette. Empty desks stay unlit and the status display switch controls both layers. Desktop/Orca, three themes and thirty-worker standard/low-power checks (.agent/eco-46-*.png); pnpm check 987 tests, 58.2 / 29.5 FPS.
 - 2026-10-27 ECO-45: Live activity now carries the deployed worker's saved appearance and identity in a compact portrait row. Existing focus and receiving-task links remain intact. Appearance/identity binding test, browser feed-to-worker focus and Orca screenshots (.agent/eco-45-*.png); pnpm check 986 tests, 56-58 FPS.
 - 2026-10-27 ECO-44: Hub ticker now renders above crossing characters and caps its close-up size; original logo gains restrained projection brackets and emitter ring detail. Fit/hub/Orca screenshots (.agent/eco-44-*.png); pnpm check 986 tests, 58 FPS.
 - 2026-10-27 ECO-43: Labeled Demo rolls its seven-day display onto the local calendar day, preserving history and counting new orders only. Browser clock reproduced midnight em dashes before; after shows zero until the next event (.agent/eco-43-*.png). Midnight/long-gap tests; pnpm check 986 tests, 56-58 FPS. Live provider unchanged.
@@ -243,4 +245,4 @@ Visual review: owner reference plus [Game Dev Story official screenshots](https:
 
 - [x] ECO-44 Hub presentation: keep the live ticker clear above crossing workers and add restrained projector framing around the owner logo.
 - [x] ECO-45 Character-led activity feed: show each deployed worker's actual customized portrait beside its live events.
-- [ ] ECO-46 Workstation status lights: visible desk beacons reflect real worker states, with no invented task activity.
+- [x] ECO-46 Workstation status lights: visible desk beacons reflect real worker states, with no invented task activity.

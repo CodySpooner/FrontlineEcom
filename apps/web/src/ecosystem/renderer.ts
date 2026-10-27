@@ -3,7 +3,7 @@ import { DESKS, MEETING, iso, uniso, type Tile } from './world';
 import { paintOffice } from './worldArt';
 import { cameraBlend, cameraViewport, fitCamera, introCamera, zoomAt } from './camera';
 import { workerSprites } from './workerSprites';
-import type { DisplayOptions } from './display';
+import { statusColor, type DisplayOptions } from './display';
 import { OFFICE_THEMES, type OfficeThemeId } from './themes';
 import { createHologram, LOGO_URL } from './hologram';
 import { platformHolograms } from './platforms';
@@ -37,10 +37,13 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   // Let a second click focus the camera before opening the profile on a single click.
   const selectDesk = (id: string) => { clearTimeout(clickTimer); clickTimer = setTimeout(() => onDesk(id), 250); };
   const lights = new Container(); world.addChild(lights);
+  const beacons = new Map<string, Graphics>(); let showStatus = true;
   for (const [i,d] of DESKS.entries()) {
     const p=iso(d);
     const light = new Graphics().rect(-12,-32,24,2).fill(d.color);
     light.position.set(p.x,p.y); lights.addChild(light);
+    const beacon = new Graphics().poly([-36,18,0,36,36,18,0,0]).fill({ color: '#ffffff', alpha: .04 }).stroke({ color: '#ffffff', alpha: .85, width: 2 });
+    beacon.position.set(p.x,p.y); beacon.alpha=0; beacon.eventMode='none'; world.addChild(beacon); beacons.set(d.id,beacon);
     const hit = new Graphics().rect(-34,-53,68,81).fill({color:0xffffff,alpha:0.001});
     hit.position.set(p.x,p.y); hit.eventMode='static'; hit.cursor='pointer';
     hit.on('pointertap',()=>{ if(dragged) return; selection.clear().poly([p.x,p.y-12,p.x+31,p.y+4,p.x,p.y+20,p.x-31,p.y+4]).stroke({color:0xffffff,width:2});selectDesk(d.id); });
@@ -111,6 +114,6 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     if(still) return;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => ({ ...metrics, inspectionId: workers.inspectedId(), viewport: cameraViewport({ x: world.x, y: world.y, scale: world.scale.x }, host.clientWidth, host.clientHeight) }), previewWorker: workers.preview, focusWorker: (id: string) => { const p = workers.position(id); if (p) { workers.focus(id); focus(p); } }, setWorkers: (value: Parameters<typeof workers.update>[0]) => { workers.update(value); placards.update(value.map((w) => w.seat)); }, setBusiness: (value: Parameters<typeof platforms.update>[0], activeTasks?: number) => { platforms.update(value); showpieces.update(value); telemetry.update(value, activeTasks); }, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => ({ ...metrics, inspectionId: workers.inspectedId(), viewport: cameraViewport({ x: world.x, y: world.y, scale: world.scale.x }, host.clientWidth, host.clientHeight) }), previewWorker: workers.preview, focusWorker: (id: string) => { const p = workers.position(id); if (p) { workers.focus(id); focus(p); } }, setWorkers: (value: Parameters<typeof workers.update>[0]) => { workers.update(value); placards.update(value.map((w) => w.seat)); for (const [id,beacon] of beacons) { const worker=value.find((w)=>w.seat.deskId===id&&!w.seat.archived); beacon.tint=statusColor(worker?.status); beacon.alpha=worker ? worker.status === 'offline' ? .3 : .9 : 0; beacon.visible=showStatus&&!!worker; } }, setBusiness: (value: Parameters<typeof platforms.update>[0], activeTasks?: number) => { platforms.update(value); showpieces.update(value); telemetry.update(value, activeTasks); }, setDisplay: (value: DisplayOptions) => { showStatus=value.status; for (const beacon of beacons.values()) beacon.visible=showStatus&&beacon.alpha>0; labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;
