@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
+import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, uncostedShare, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
@@ -111,14 +111,15 @@ const ago = (days: number) => new Date(Date.now() - days * 86_400_000).toISOStri
  * PRODUCT_WRITE_PLATFORMS for products and other pages, PRODUCT_PAGE_PLATFORMS for product pages, PRICE_WRITE_PLATFORMS
  * for prices; `onStore` in apps/server/src/routes/agents.ts), so an approval would only fail. Undefined when it can.
  */
+const NEXT_TO: [string, Platform, string][] = [['tt-', 'tiktok_shop', 'TikTok Shop'], ['amz-', 'amazon', 'Amazon'], ['etsy-', 'etsy', 'Etsy'], ['woo-', 'woocommerce', 'WooCommerce']];
 /** Why a product can't take a price or page change: not in the store, or archived (core's daily catalog pass archives deleted ones). */
 const productGone = (ctx: ToolContext, productId: string) => {
   const status = ctx.db.prepare('SELECT status FROM products WHERE store_id = ? AND id = ?').get(ctx.store.id, productId)?.status;
   if (status === undefined) return `No product ${productId} in this store. Use list_products for ids.`;
   if (status === 'archived') return `Product ${productId} is archived (deleted or trashed on the platform). Pick an active product from list_products.`;
-  // A channel next to the store (core's `tt-`/`amz-` products): the app writes to the store's own platform only, where
-  // that product doesn't exist, so an approved change would fail.
-  const channel = productId.startsWith('tt-') && ctx.store.platform !== 'tiktok_shop' ? 'TikTok Shop' : productId.startsWith('amz-') && ctx.store.platform !== 'amazon' ? 'Amazon' : undefined;
+  // A channel or shop next to the store (core's `tt-`/`amz-`/`etsy-`/`woo-` products): the app writes to the store's own
+  // platform only, where that product doesn't exist, so an approved change would fail.
+  const channel = NEXT_TO.find(([prefix, platform]) => productId.startsWith(prefix) && ctx.store.platform !== platform)?.[2];
   if (channel) return `Product ${productId} sells on ${channel}, next to the store, and the app only changes the ${ctx.store.platform} store. Put the change in your answer for the owner to make on ${channel}.`;
 };
 

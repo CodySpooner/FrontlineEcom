@@ -66,14 +66,19 @@ test('a price test is checked, approved and applied to a demo store', async () =
   expect(await run('glow', [price(id, cost)])).toEqual([`Not sent: ${cost} EUR is at or below the unit cost (${cost} EUR).`]);
 });
 
-test("a product sold on TikTok Shop or Amazon next to the store isn't repriced through the store's platform", async () => {
+test("a product sold on TikTok Shop, Amazon, an Etsy shop or a second site next to the store isn't repriced through the store's platform", async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run(); // Shopify
-  db.prepare(`INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', 'tt-17', 'Jade Roller', 20, 5, 9, 'active'), ('glow', 'amz-JR1', 'Jade Roller', 22, 5, 9, 'active')`).run();
-  expect(await run('glow', [price('tt-17', 22), price('amz-JR1', 24)])).toEqual([
-    'Product tt-17 sells on TikTok Shop, next to the store, and the app only changes the shopify store. Put the change in your answer for the owner to make on TikTok Shop.',
-    'Product amz-JR1 sells on Amazon, next to the store, and the app only changes the shopify store. Put the change in your answer for the owner to make on Amazon.',
-  ]);
-  expect(db.prepare(`SELECT count(*) AS n FROM approvals WHERE json_extract(action_json, '$.payload.productId') IN ('tt-17', 'amz-JR1')`).get()?.n).toBe(0);
+  const add = db.prepare(`INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', ?, 'Jade Roller', 20, 5, 9, 'active')`);
+  for (const id of ['tt-17', 'amz-JR1', 'etsy-88', 'woo-12']) add.run(id);
+  expect(await run('glow', [price('tt-17', 22), price('amz-JR1', 22), price('etsy-88', 22), price('woo-12', 22)])).toEqual(
+    [['tt-17', 'TikTok Shop'], ['amz-JR1', 'Amazon'], ['etsy-88', 'Etsy'], ['woo-12', 'WooCommerce']].map(
+      ([id, on]) => `Product ${id} sells on ${on}, next to the store, and the app only changes the shopify store. Put the change in your answer for the owner to make on ${on}.`,
+    ),
+  );
+  expect(db.prepare(`SELECT count(*) AS n FROM approvals WHERE json_extract(action_json, '$.kind') = 'store.set_price'`).get()?.n).toBe(0);
+  // A WooCommerce store's own products are woo- too: those it changes.
+  db.prepare(`UPDATE stores SET platform = 'woocommerce' WHERE id = 'glow'`).run();
+  expect((await run('glow', [price('woo-12', 22)]))[0]).toMatch(/^Approved by the owner/);
 });
 
 test("a product with no unit cost set has no floor to check, and the owner is told so", async () => {
