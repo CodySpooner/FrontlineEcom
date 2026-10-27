@@ -11,14 +11,17 @@ import { officeLighting } from './lighting';
 import { departmentShowpieces } from './showpieces';
 import { hubTelemetry } from './hub';
 import { ambientOffice } from './ambient';
+import { CITY_URL, cityBackdrop } from './backdrop';
 
 export async function createOffice(host: HTMLElement, onDesk: (id: string) => void) {
-  const logoTexture = await Assets.load<Texture>(LOGO_URL); logoTexture.source.scaleMode = 'nearest';
+  const [logoTexture, cityTexture] = await Promise.all([Assets.load<Texture>(LOGO_URL), Assets.load<Texture>(CITY_URL)]);
+  logoTexture.source.scaleMode = cityTexture.source.scaleMode = 'nearest';
   const app = new Application();
   await app.init({ width: host.clientWidth, height: host.clientHeight, backgroundAlpha: 0, antialias: false, resolution: 1, preference: 'webgl' });
   host.appendChild(app.canvas);
   app.canvas.setAttribute('aria-label', 'Interactive isometric office with ten departments and thirty workstations');
   app.canvas.tabIndex = 0;
+  const backdrop = cityBackdrop(app.stage, cityTexture); backdrop.resize(host.clientWidth, host.clientHeight);
   const world = new Container(); app.stage.addChild(world);
   let mapTexture = Texture.from(paintOffice()); mapTexture.source.scaleMode = 'nearest';
   const map = new Sprite(mapTexture); world.addChild(map);
@@ -76,7 +79,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   };
   app.canvas.addEventListener('pointerdown',down);app.canvas.addEventListener('pointermove',move);app.canvas.addEventListener('pointerup',up);app.canvas.addEventListener('pointercancel',up);
   app.canvas.addEventListener('wheel',wheel,{passive:false});app.canvas.addEventListener('dblclick',double);app.canvas.addEventListener('keydown',key);
-  const resize = new ResizeObserver(()=>{app.renderer.resize(host.clientWidth,host.clientHeight);fit();}); resize.observe(host); fit();
+  const resize = new ResizeObserver(()=>{app.renderer.resize(host.clientWidth,host.clientHeight);backdrop.resize(host.clientWidth,host.clientHeight);fit();}); resize.observe(host); fit();
   let elapsed=0, frames=0, sampleFrames=0, sampleStart=performance.now(), slowSamples=0;
   const started = sampleStart;
   let metrics = { fps: 0, frames: 0, elapsedMs: 0, mode: 'Standard', scale: camera.scale };
@@ -104,6 +107,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     showpieces.tick(still);
     telemetry.tick(elapsed, still);
     ambient.tick(elapsed, still);
+    backdrop.tick(elapsed, still, { x: world.x, y: world.y });
     if(still) return;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
