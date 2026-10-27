@@ -3,7 +3,7 @@ import type { AgentEvent, ApprovalDecision, ApprovalRequest } from '@frontline/s
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
-import { stillAsSynced } from '../connectors/common';
+import { AD_ZONES, stateOf, stillAsSynced } from '../connectors/common';
 import { addDays, localDate } from '../dates';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
@@ -338,6 +338,20 @@ test("an ad change waits for its ad account's sync to cover the 3 days after, an
   checkAdOutcomes(db);
   expect(outcomes()).toEqual([]);
   db.prepare(`UPDATE integrations SET status = 'connected' WHERE id = 'meta_ads:peak'`).run();
+  checkAdOutcomes(db);
+  expect(outcomes().map((m) => m.text)).toEqual([expect.stringMatching(/^"Raise Broad" worked/)]);
+});
+
+test("an ad account in a zone behind the store's has synced past the window only once its own day is past it", () => {
+  db.prepare(`UPDATE stores SET demo = 0 WHERE id = 'peak'`).run(); // dated in its own zone, America/Chicago
+  approvedChange('behind', 'Raise Broad', 1.5);
+  const day = decided();
+  stateOf<string>(db, AD_ZONES).set('meta_ads:peak', 'Pacific/Honolulu'); // 4–5 hours behind Chicago
+  // 02:00 or 03:00 of the store's next day, but 22:00 of the window's last day in the account's zone.
+  db.prepare(`INSERT INTO integrations (id, kind, store_id, status, encrypted_credentials, updated_at, synced_at) VALUES ('meta_ads:peak', 'meta_ads', 'peak', 'connected', 'x', ?1, ?1)`).run(`${addDays(day, 4)}T08:00:00Z`);
+  checkAdOutcomes(db);
+  expect(outcomes()).toEqual([]);
+  db.prepare(`UPDATE integrations SET synced_at = ? WHERE id = 'meta_ads:peak'`).run(`${addDays(day, 4)}T12:00:00Z`); // 02:00 the next day there
   checkAdOutcomes(db);
   expect(outcomes().map((m) => m.text)).toEqual([expect.stringMatching(/^"Raise Broad" worked/)]);
 });

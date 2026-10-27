@@ -3,6 +3,7 @@ import { AGENT_ROLES, PRODUCT_WRITE_PLATFORMS, type MetricTotals, type Mission, 
 import { Hono } from 'hono';
 import { currentWindow, summarize } from '../analytics';
 import { approvalsHook } from '../approvals';
+import { adZone } from '../connectors/common';
 import { addDays, localDate, midnight } from '../dates';
 import { cachedRate, fxFor } from '../fx';
 import type { Db } from '../db';
@@ -44,13 +45,20 @@ const roughly15DaysAgo = (today?: string) => addDays(today ?? localDate(), -12);
  * Every sync feeding the store's numbers (its platform, ad accounts, GA4: the per-store integrations) has finished since
  * `end` was over in the store's zone, and none is failing. Each check judges once, so judging before the last days'
  * orders arrived (the app reopened after a weekend, a broken login) would be wrong for good. Demo stores have none.
+ * An ad account or GA4 property dates its days in its own zone (core's adZone), which can be behind the store's, and
+ * GA4 finishes a day ~48h after it (core re-reads its last 3 days each sync): its sync must be a day further on.
  * ponytail: Amazon's daily totals land a day or two late; only the ad check reads them.
  */
 const synced = (db: Db, storeId: string, end: string) =>
   db
-    .prepare('SELECT status, synced_at FROM integrations WHERE store_id = ?')
+    .prepare('SELECT id, kind, status, synced_at FROM integrations WHERE store_id = ?')
     .all(storeId)
-    .every((i) => i.status !== 'error' && i.synced_at != null && storeDay(db, storeId, String(i.synced_at)) > end);
+    .every((i) => {
+      if (i.status === 'error' || i.synced_at == null) return false;
+      const zone = adZone(db, String(i.id));
+      const day = zone ? localDate(new Date(String(i.synced_at)), zone) : storeDay(db, storeId, String(i.synced_at));
+      return day > (i.kind === 'ga4' ? addDays(end, 1) : end);
+    });
 const settled = (db: Db, storeId: string, day: string, today?: string) => day <= addDays(today ?? storeDay(db, storeId), -15) && synced(db, storeId, addDays(day, 14));
 
 const watched = new WeakSet<Db>();

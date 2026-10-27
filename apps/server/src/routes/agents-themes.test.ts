@@ -219,6 +219,25 @@ test("a published theme change is judged on store conversion, 14 days before vs 
   expect(getAgent(db, 'glow:store_developer')!.xp).toBeGreaterThan(xp);
 });
 
+test("a theme change waits for GA4 to finish its window's last day, ~48h after it", () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'glow'`).run();
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('a1', 'glow', 'glow:store_developer', NULL, 'Publish theme change: Sticky ATC', 'r', ?, 'approved', ?)`).run(
+    JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9' } }),
+    new Date().toISOString(),
+  );
+  const day = addDays(localDate(), -20);
+  once(db, 'theme-live:a1', new Date(`${day}T15:00:00Z`));
+  db.prepare(`UPDATE daily_metrics SET orders = 40, sessions = 1000 WHERE store_id = 'glow' AND date BETWEEN ? AND ?`).run(addDays(day, -14), addDays(day, 14));
+  const theme = () => listMemory(db, 'glow').filter((m) => m.tags.includes('theme'));
+  // Synced the day after the window: its last day's sessions may still be partial.
+  db.prepare(`INSERT INTO integrations (id, kind, store_id, status, encrypted_credentials, updated_at, synced_at) VALUES ('ga4:glow', 'ga4', 'glow', 'connected', 'x', ?1, ?1)`).run(`${addDays(day, 15)}T15:00:00Z`);
+  checkThemeOutcomes(db);
+  expect(theme()).toEqual([]);
+  db.prepare(`UPDATE integrations SET synced_at = ? WHERE id = 'ga4:glow'`).run(`${addDays(day, 16)}T15:00:00Z`);
+  checkThemeOutcomes(db);
+  expect(theme().map((m) => m.text)).toEqual([expect.stringMatching(/^The theme change "Sticky ATC" did not help: conversion 4\.00% → 4\.00%/)]);
+});
+
 test('a theme change on a store with a handful of orders is not judged on one order either way', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'glow'`).run();
   db.prepare(`INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('a1', 'glow', 'glow:store_developer', NULL, 'Publish theme change: Sticky ATC', 'r', ?, 'approved', ?)`).run(
