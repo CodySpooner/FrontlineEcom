@@ -210,7 +210,7 @@ export function fakeEngine(script: FakeScript = echoScript): Engine {
   return async function* (input) {
     const events = channel<AgentEvent>();
     const ctx = input.env && { ...input.env, store: input.store, agent: input.agent, emit: events.push, signal: input.signal };
-    const tools = toolsFor(input.agent.role);
+    const tools = input.mode === 'research' ? [] : toolsFor(input.agent.role);
     (async () => {
       let n = 0;
       for (const step of script(input)) {

@@ -22,6 +22,8 @@ export interface RunInput {
   onSpend?: (usd: number) => void;
   /** Told the conversation's id as soon as the engine has one, so a reply cancelled before its result can still be continued. */
   onSession?: (sessionId: string) => void;
+  /** A stage of a knowledge-base research task: web search and no app or store tools, research limits (KB-12). */
+  mode?: 'research';
 }
 
 /** Streams one agent run. Engines may throw or stop early; `runAgent` normalizes that. */
@@ -29,12 +31,13 @@ export type Engine = (input: RunInput) => AsyncIterable<AgentEvent>;
 
 /**
  * Connected stores run on the owner's Claude Code login; demo stores on the free fake engine, so exploring the demo
- * never spends Claude usage. `FRONTLINE_AGENT_ENGINE=claude|fake` forces one for every store (tests default to fake).
+ * never spends Claude usage. Research runs on Claude either way: the demo engine can't read the web, and the owner
+ * started it. `FRONTLINE_AGENT_ENGINE=claude|fake` forces one for every store (tests default to fake).
  */
 export function defaultEngine(claude: Engine = claudeEngine(), fake: Engine = fakeEngine()): Engine {
   const forced = forcedEngine();
   if (forced) return forced === 'claude' ? claude : fake;
-  return (input) => (input.store.connected ? claude : fake)(input);
+  return (input) => (input.store.connected || input.mode === 'research' ? claude : fake)(input);
 }
 
 const forcedEngine = () => process.env.FRONTLINE_AGENT_ENGINE ?? (process.env.VITEST ? 'fake' : undefined); // a test run outside the root config never reaches Claude

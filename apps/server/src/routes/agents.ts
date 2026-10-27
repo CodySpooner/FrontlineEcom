@@ -12,6 +12,8 @@ import {
   IDLE_CAMPAIGN_STATUSES,
   MISSION_TEMPLATES,
   advanceMissions,
+  advanceResearch,
+  getResearchTask,
   createMission,
   getMission,
   cancelMission,
@@ -66,6 +68,7 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { log } from '../log';
+import { createFetcher } from '../kb/fetcher';
 import { researchRoutes } from '../research';
 import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, EXPIRED_DEMO, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
@@ -286,7 +289,10 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent' | 
   },
   onRun: (run) => {
     publish({ type: 'run', run });
-    if (run.status === 'done' || run.status === 'error' || run.status === 'cancelled') advanceSquadMissions(db);
+    const ended = run.status === 'done' || run.status === 'error' || run.status === 'cancelled';
+    // A research stage reports as its task (advanceKbResearch): no XP or notification for each stage.
+    if (run.mode?.startsWith('research:')) return void (ended && advanceKbResearch(db));
+    if (ended) advanceSquadMissions(db);
     if (run.status === 'done') award(db, { ref: `run:${run.id}`, amount: XP.runDone, reason: `Completed: ${run.task.slice(0, 80)}`, storeId: run.storeId, agentId: run.agentId });
     const agent = getAgent(db, run.agentId);
     const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
@@ -416,6 +422,26 @@ function startFresh(db: Db, store: Store, runs: RunManager) {
 }
 
 /** Starts the mission steps that finished runs unblocked; the live feed sees every move, the owner hears when one ends. */
+// One fetcher for the app: its per-site gap and robots.txt cache only hold if every task shares it.
+const kbFetch = createFetcher();
+
+/** Moves knowledge-base research tasks on (kb-research.ts), streams them, and tells the owner how each one ended. */
+export function advanceKbResearch(db: Db) {
+  const runs = managers.get(db);
+  if (!runs) return; // as advanceSquadMissions: agentRoutes advances once the manager is ready
+  advanceResearch(db, { start: runs.start, fetch: kbFetch, engineAvailable: () => engineInfo(true).provider === 'claude' }).then(
+    (moved) => {
+      for (const t of moved) {
+        publish({ type: 'kb_task', task: t });
+        const about = { storeId: t.storeId ?? undefined, link: '/knowledge' };
+        if (t.status === 'done') notify(db, { kind: 'agent_done', title: `Research done: ${t.objective.slice(0, 80)}`, body: getResearchTask(db, t.id)?.report?.summary, ...about });
+        if (t.status === 'failed') notify(db, { kind: 'error', title: `Research failed: ${t.objective.slice(0, 80)}`, body: t.error, ...about });
+      }
+    },
+    (e) => log('error', 'kb research: advance failed', { error: e instanceof Error ? e.message : String(e) }),
+  );
+}
+
 function advanceSquadMissions(db: Db) {
   const runs = managers.get(db);
   if (!runs) return; // a restart retry ended while the manager was being built: agentRoutes advances once it's ready
@@ -493,9 +519,11 @@ export function agentRoutes(db: Db) {
   const runs = runManager(db);
   activateConnectedStores(db, runs);
   advanceSquadMissions(db); // runs that ended while the app was closed
+  advanceKbResearch(db);
   // A step turned down for budget can start once the owner raises the store's cap (core's caps route) or the day turns
   // over, neither of which ends a run. ponytail: a minute's poll over open missions; an event from the caps route if that lags.
-  setInterval(() => (activateConnectedStores(db, runs), advanceSquadMissions(db)), 60_000).unref();
+  // The same poll starts research retries once their wait is over (30 s and 60 s backoffs start up to a minute late).
+  setInterval(() => (activateConnectedStores(db, runs), advanceSquadMissions(db), advanceKbResearch(db)), 60_000).unref();
   // Default jobs that shipped after a store was made; a live store's owner hears about them (they use Claude usage).
   for (const store of listStores(db)) {
     // Only what runs: a job added off (its platform can't take the work) waits in Automation, using nothing.

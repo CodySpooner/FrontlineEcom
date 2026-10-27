@@ -13,6 +13,11 @@ const STOPPED: Partial<Record<string, string>> = {
   error_max_turns: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.',
   error_max_budget_usd: "Stopped: the run used its share of today's AI budget for this store. Raise it in Settings.",
 };
+const RESEARCH_TURNS = 30;
+const STOPPED_RESEARCH: Partial<Record<string, string>> = {
+  error_max_turns: `Stopped: this research step hit its ${RESEARCH_TURNS}-turn limit before finishing.`,
+  error_max_budget_usd: "Stopped: the research task's budget, or today's AI budget for this store, ran out.",
+};
 
 export interface ClaudeEngineOptions {
   /** Defaults to `FRONTLINE_AGENT_MODEL` or claude-opus-5-5. */
@@ -62,12 +67,14 @@ export const isAccountError = (message: string) => Object.values(ACCOUNT).includ
 export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
   const run = opts.query ?? query;
   return async function* (input) {
-    // Claude Code built-ins are capitalized (WebSearch); app tools come over the in-process MCP server.
-    const builtins = ROLES[input.agent.role].tools.filter((t) => /^[A-Z]/.test(t));
+    // Claude Code built-ins are capitalized (WebSearch); app tools come over the in-process MCP server. Research gets web
+    // search only: no WebFetch (pages are read by the app's guarded fetcher) and none of the store's tools.
+    const research = input.mode === 'research';
+    const builtins = research ? ['WebSearch'] : ROLES[input.agent.role].tools.filter((t) => /^[A-Z]/.test(t));
     const events = channel<AgentEvent>();
     const ctx = input.env && { ...input.env, store: input.store, agent: input.agent, emit: events.push, signal: input.signal };
-    const appTools = ctx ? toolsFor(input.agent.role) : [];
-    const connected = ctx?.externalMcp?.(input.store.id) ?? {};
+    const appTools = ctx && !research ? toolsFor(input.agent.role) : [];
+    const connected = (!research && ctx?.externalMcp?.(input.store.id)) || {};
     const externalMcp = Object.fromEntries((ROLES[input.agent.role].mcp ?? []).flatMap((k) => (connected[k] ? [[k, connected[k]]] : [])));
     const frontline = createSdkMcpServer({
       name: 'frontline',
@@ -117,8 +124,8 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
           return approved ? { behavior: 'allow', updatedInput: toolInput } : { behavior: 'deny', message };
         },
         abortController,
-        // Runaway guard: a run stops at 40 turns, or at what is left of the store's daily AI budget.
-        maxTurns: 40,
+        // Runaway guard: a run stops at 40 turns (a research step at 30), or at what it may spend.
+        maxTurns: research ? RESEARCH_TURNS : 40,
         ...(input.budgetUsd !== undefined ? { maxBudgetUsd: Math.max(0.01, input.budgetUsd) } : {}),
         ...(input.resume ? { resume: input.resume } : {}),
         ...opts.queryOptions?.(input),
@@ -135,7 +142,7 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
           spent.set(message.message.id, estimate(message.message.usage, model));
           input.onSpend?.([...spent.values()].reduce((a, b) => a + b, 0));
         }
-        for (const event of toAgentEvents(message)) events.push(own(event));
+        for (const event of toAgentEvents(message, input.mode)) events.push(own(event));
       }
     })().then(() => events.end(), events.end);
     yield* events.drain();
@@ -162,7 +169,7 @@ export const estimate = (
 };
 
 /** Maps one SDK message to our events. Subagent traffic (parent_tool_use_id set) is not surfaced. */
-export function toAgentEvents(message: SDKMessage): AgentEvent[] {
+export function toAgentEvents(message: SDKMessage, mode?: RunInput['mode']): AgentEvent[] {
   switch (message.type) {
     case 'stream_event': {
       const { event } = message;
@@ -191,7 +198,7 @@ export function toAgentEvents(message: SDKMessage): AgentEvent[] {
       // A run that stops early still spent money: errors carry it too, so the store's daily AI budget sees it.
       const usage = u && { inputTokens: u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens, outputTokens: u.output_tokens, costUsd: message.total_cost_usd };
       const failed = (text: string): AgentEvent[] => [{ type: 'error', message: text, ...(usage ? { usage } : {}), ...(message.session_id ? { sessionId: message.session_id } : {}) }];
-      if (message.subtype !== 'success') return failed(STOPPED[message.subtype] ?? (message.errors.join('; ') || message.subtype));
+      if (message.subtype !== 'success') return failed((mode === 'research' ? STOPPED_RESEARCH : STOPPED)[message.subtype] ?? (message.errors.join('; ') || message.subtype));
       if (message.is_error) return failed(message.result || 'Claude returned an error');
       return [{ type: 'done', sessionId: message.session_id, usage }];
     }

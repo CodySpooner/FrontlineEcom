@@ -42,8 +42,9 @@ export function agentCardError(c: { type: KbCardType; stage: KbStage }): string 
 
 /**
  * The stage a card's evidence earns. Research-Supported: 2+ read sources on different sites, or 1 read source rated
- * reliable. Experimentally Tested: a measured result. Validated: measured results from 2+ different tests. Each piece of
- * contradicting evidence cancels one of its own kind (measured or not), so evidence against moves a card down.
+ * reliable, unless the research that made it rated its evidence weak (2 of 5 or less) or contested. Experimentally
+ * Tested: a measured result. Validated: measured results from 2+ different tests. Each piece of contradicting evidence
+ * cancels one of its own kind (measured or not), so evidence against moves a card down.
  */
 export function earnedStage(db: DatabaseSync, cardId: string): { stage: KbStage; reason: string } {
   const rows = db
@@ -60,8 +61,14 @@ export function earnedStage(db: DatabaseSync, cardId: string): { stage: KbStage;
   const sites = new Set(read.map((r) => host(r.url) ?? String(r.content_hash ?? r.source_id))).size - readAgainst;
   if (tests >= 2) return { stage: 'validated', reason: `${tests} independent measured tests` };
   if (tests >= 1) return { stage: 'tested', reason: '1 measured test' };
+  const reliable = !readAgainst && read.some((r) => RELIABLE.has(String(r.reliability)));
+  // The evaluating stage's verdict on the finding that made this card (kb-research.ts); one merged in later doesn't count.
+  const weak = (sites >= 2 || reliable) && db.prepare(
+    `SELECT 1 FROM kb_findings WHERE card_id = ? AND status = 'stored' AND (json_extract(assessment_json, '$.evidence') <= 2 OR json_array_length(assessment_json, '$.contradictions') > 0)`,
+  ).get(cardId);
+  if (weak) return { stage: 'hypothesis', reason: 'the research rated its evidence weak or contested' };
   if (sites >= 2) return { stage: 'supported', reason: `${sites} independent read sources` };
-  if (!readAgainst && read.some((r) => RELIABLE.has(String(r.reliability)))) return { stage: 'supported', reason: 'a reliable read source' };
+  if (reliable) return { stage: 'supported', reason: 'a reliable read source' };
   return { stage: 'hypothesis', reason: 'not enough evidence yet' };
 }
 
@@ -246,6 +253,29 @@ const rootOf = (db: DatabaseSync, categoryId: string) =>
   opt(
     db.prepare('WITH RECURSIVE up(id, parent_id, name) AS (SELECT id, parent_id, name FROM kb_categories WHERE id = ? UNION ALL SELECT c.id, c.parent_id, c.name FROM kb_categories c JOIN up ON c.id = up.parent_id) SELECT lower(name) AS name FROM up WHERE parent_id IS NULL').get(categoryId)?.name,
   );
+
+/**
+ * The card in `ws` (its own workspace only) that already says this: one with the same title in any state, else a live
+ * one sharing 60%+ of the words of the title and summary. Research merges a finding into it instead of a duplicate.
+ */
+export function sameCard(db: DatabaseSync, ws: KbWorkspace, title: string, summary: string): { id: string; live: boolean } | undefined {
+  const s = kbScope(ws);
+  const exact = db.prepare(`SELECT id, status FROM kb_cards WHERE ${s.sql} AND lower(title) = lower(?)`).get(...s.params, title);
+  if (exact) return { id: String(exact.id), live: ['proposed', 'active'].includes(String(exact.status)) };
+  const mine = tokens(`${title} ${summary}`);
+  const terms = [...mine].slice(0, 24);
+  if (!terms.length) return undefined;
+  const best = db
+    .prepare(`SELECT k.* FROM kb_cards_fts JOIN kb_cards k ON k.seq = kb_cards_fts.rowid WHERE kb_cards_fts MATCH ? AND ${kbScope(ws, false, 'k.store_id').sql} AND k.status IN ('proposed', 'active') LIMIT 50`)
+    .all(terms.map((t) => `"${t.replace(/"/g, '')}"`).join(' OR '), ...s.params)
+    .map((k) => {
+      const theirs = tokens(`${k.title} ${k.summary}`);
+      const shared = [...mine].filter((w) => theirs.has(w)).length;
+      return { id: String(k.id), j: shared / (mine.size + theirs.size - shared || 1) };
+    })
+    .sort((a, b) => b.j - a.j)[0];
+  return best && best.j >= 0.6 ? { id: best.id, live: true } : undefined;
+}
 
 /**
  * Suggests up to 3 links for a card, deterministically: word overlap (found through the FTS index), the same category,

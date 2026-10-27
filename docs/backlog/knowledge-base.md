@@ -481,7 +481,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - the readable text kept in the DB, plus an excerpt.
   - Tests: private IPs, a redirect to a private host, DNS rebinding, oversize, wrong type, a robots.txt disallow, a
     blocked domain, a paywall or login page, and injection text that stays inert.
-- [ ] KB-12 **Research runner** (decision 8):
+- [x] KB-12 **Research runner** (decision 8):
   - stages: created → planning → discovering → retrieving → analyzing → evaluating → extracting → deduping → storing
     → linking → reporting → done / failed / cancelled;
   - each stage checkpoints into KB tables;
@@ -629,6 +629,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-09 Library view: the cards as a sortable table (title, stage, updated, verified, used) that pages on, every §13 filter in the URL, saved filter views, bulk accept / mark for research / block / move / archive sent per workspace, the details panel beside it; the UI-16 sections move in as tabs after Cards.
 - 2026-10-27 KB-10 Relationships view: a picker of connected cards (most connected first), then the card in the middle with its neighbours on a ring grouped by relationship and their own neighbours on a second ring; filters by type and AI suggestion, a line explains itself (accept/reject a suggestion there), arrow keys walk the neighbours, Enter recentres, the centre opens its details.
 - 2026-10-27 KB-11 Safe fetcher and source storage: `apps/server/src/kb/fetcher.ts` reads public pages and documents (HTML, PDF, markdown, text, CSV) with each hop's host checked and the connection pinned to the checked address, robots.txt obeyed, a per-site gap, size, time and type caps, paywall/login detection and blocked domains; `kb-sources.ts` stores them with a content hash, excerpt and a domain-class rating the owner can change (PATCH /api/kb/sources/:id), and hands agents only fenced, quoted text.
+- 2026-10-27 KB-12 Research runner: `packages/agents/src/kb-research.ts` walks a research task through the ten stages, checkpointing each in `kb_task_steps`. Planning, discovering, analyzing, evaluating, extracting and reporting are research-mode runs of the task's agent: web search only, no app or store tools, 30 turns, at most what the task has left, on Claude even for a demo store. Each answers with one JSON object, which is checked. Retrieving (through the KB-11 fetcher), deduping, storing and linking are code. A failure is retried after 30 s, then 60 s, then fails the task; a stage its agent can't take waits an hour. Cancel, Retry (from the stage that failed) and Refine (a new linked task) are in; a restart resumes from the last finished stage. Each finding's assessment holds a weak or contested card at Hypothesis. The report lists conclusions, open questions, limitations, applications, cards created and updated, unread sources, conflicts and errors. Tasks stream as `kb_task` messages and notify the owner when they end.
 
 ## Blocked
 
@@ -701,3 +702,27 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   no text, and `sourceForAgent()` says it wasn't read. Read text goes out between nonce markers with every line
   quoted, Unicode line breaks included. Also fixed: enum checks in the KB routes used `in`, which let `toString`
   through as a card type or stage; they're `Object.hasOwn` now.
+- 2026-10-27 KB-12: a stage's run carries `mode = 'research:<task id>'` on `agent_runs`. `execute()` builds the run's
+  input inside `start()`, before the runner could note the run id, so the run names its own task. A restart's retry
+  copies the mode, and `stepRun` follows the retry link, so the task adopts it. **Change to decision 8:** retrieving,
+  and a source task's discovering, are code rather than agent runs. That's cheaper, and every page goes through the
+  guarded fetcher (research mode has no WebFetch, only WebSearch, until KB-13's `fetch_source`). Stage outputs are
+  one JSON object in the final answer, checked with zod per stage (a finding citing a source number that wasn't read
+  is rejected), and kept in `kb_task_steps.output_json`. KB-13's `propose_card` / `add_evidence` can replace
+  extracting's JSON. Research runs on Claude even on a demo store, because the demo engine can't read the web. The
+  owner starts these tasks; **KB-22's autonomous research must not start one on a demo store unasked.** Retrieving
+  passes `blocked: []` for now; KB-13 or KB-22 should pass the workspace's blocked list. Pages are read one at a time
+  (a ponytail ceiling: one slow site holds up the pass). Backoff waits ride agentRoutes' existing 60 s poll, so a 30 s
+  retry can start up to a minute late. A stage earns no XP and sends no notification; the task notifies once when it
+  ends. Ladder: `earnedStage` keeps a card at Hypothesis while the finding that created it (`kb_findings` status
+  `stored`) was rated evidence 2 or less, or listed contradictions. A finding merged into an owner's card doesn't
+  demote that card. Dedupe matches the same title in any state (the unique index), else 60%+ word overlap of title
+  and summary with a live card (`sameCard` in kb-links.ts). Matching an archived or rejected card discards the
+  finding. The API: `createResearchTask`, `advanceResearch`, `getResearchTask` (detail with steps, log, sources,
+  findings, report), `cancelResearch`, `retryResearch`, `refineResearch`, plus server `advanceKbResearch(db)`.
+  Routes for them come with KB-14 to KB-16; the Researching dock's list route still uses routes.ts's `toTask`.
+  Real-engine smoke (the planning stage only; it ran twice, once more than the rule allows, to read its log):
+  Claude answered in a fenced JSON block that parsed, but wrote a 600+ character scope, and the stage was refused.
+  Text that runs long and lists that run over are now trimmed, not refused (tested); only empty or mistyped answers
+  fail. Discovering through reporting haven't met a real model yet. KB-14's first real task will show whether the
+  prompts need tuning.

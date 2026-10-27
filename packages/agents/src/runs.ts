@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type Store } from '@frontline/shared';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
+import { researchContext } from './kb-research';
 import { once, parseLearnings, REFLECTION_PROMPT, searchMemory, writeMemory } from './memory';
 import { listNicheLearnings, nicheKey } from './niche';
 import { assemblePrompt } from './prompt';
@@ -56,13 +57,16 @@ export function createRunManager(opts: RunManagerOptions) {
   }
 
   // In-flight runs die with the process; say so instead of leaving them "running" forever.
-  const interrupted = db.prepare(`SELECT id, agent_id, task, resume, parent_run_id, created_at FROM agent_runs WHERE status IN ('queued', 'running')`).all();
+  const interrupted = db.prepare(`SELECT id, agent_id, task, resume, parent_run_id, mode, created_at FROM agent_runs WHERE status IN ('queued', 'running')`).all();
   db.prepare(`UPDATE agent_runs SET status = 'error', error = ?, ended_at = ? WHERE status IN ('queued', 'running')`).run(INTERRUPTED, new Date().toISOString());
   expireApprovals(interrupted.map((r) => String(r.id)));
   trimOldTranscripts(db);
 
-  /** Queues a task. Returns an error message when the agent can't take it. */
-  function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string, retryOf?: string): AgentRun | string {
+  /**
+   * Queues a task. Returns an error message when the agent can't take it. `mode` 'research:<task id>' makes it a stage of a
+   * knowledge-base research task (kb-research.ts).
+   */
+  function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string, { retryOf, mode }: { retryOf?: string; mode?: string } = {}): AgentRun | string {
     const agent = getAgent(db, agentId);
     if (!agent) return 'Agent not found';
     if (!agent.enabled) return OFFLINE;
@@ -95,8 +99,8 @@ export function createRunManager(opts: RunManagerOptions) {
       if (queued) return getRun(db, String(queued.id))!;
     }
     const id = randomUUID();
-    db.prepare('INSERT INTO agent_runs (id, store_id, agent_id, task, resume, parent_run_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
-      id, agent.storeId, agentId, task, resume ?? null, parentRunId ?? null, new Date().toISOString(),
+    db.prepare('INSERT INTO agent_runs (id, store_id, agent_id, task, resume, parent_run_id, mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+      id, agent.storeId, agentId, task, resume ?? null, parentRunId ?? null, mode ?? null, new Date().toISOString(),
     );
     // A retry is linked before it can start: missions and assign_task follow `retry:<old>:<new>`.
     if (retryOf) once(db, `retried:${id}`) && once(db, `retry:${retryOf}:${id}`);
@@ -228,7 +232,11 @@ export function createRunManager(opts: RunManagerOptions) {
     try {
       const agent = getAgent(db, run.agentId);
       const store = opts.store(run.storeId);
-      if (budget !== undefined && budget < 0.01) {
+      // A research stage: its task's own prompt, and at most what the task has left.
+      const research = agent && store && run.mode?.startsWith('research:') ? researchContext(db, run.mode.slice('research:'.length), agent, store, run.id) : undefined;
+      if (research) budget = Math.min(budget ?? Infinity, research.left);
+      if (research && research.left < 0.01) end = { type: 'error', message: "Stopped: the research task's budget is used up." };
+      else if (budget !== undefined && budget < 0.01) {
         const ownGone = own !== undefined && costToday(db, run.storeId, run.agentId) >= own - 0.01;
         end = { type: 'error', message: ownGone ? ownUsedUp(own!) : `Today's AI budget for this store ($${env.caps?.(run.storeId).agentCostPerDay}) is used up. Raise it in Settings.` };
       }
@@ -238,7 +246,10 @@ export function createRunManager(opts: RunManagerOptions) {
           agent,
           store,
           task: run.task,
-          systemPrompt: assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id) }),
+          systemPrompt:
+            research?.systemPrompt ??
+            assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id) }),
+          ...(research ? { mode: 'research' as const } : {}),
           signal,
           env: { ...env, runId: run.id },
           ...(resume ? { resume: String(resume), sessionCostUsd: sessionCost(String(resume)) } : {}),
@@ -260,7 +271,7 @@ export function createRunManager(opts: RunManagerOptions) {
           if (end.type !== 'error' || !attempt.resume || !end.message.startsWith('No conversation found')) break;
         }
         // ponytail: only runs that looked at data (tool calls) reflect; a chat reply rarely teaches anything durable.
-        if (end.type === 'done' && toolCalls > 0 && !signal.aborted) end = await reflect(attempt, end, emit);
+        if (end.type === 'done' && toolCalls > 0 && !signal.aborted && !research) end = await reflect(attempt, end, emit); // research keeps what it learns as cards
       }
     } catch (err) {
       end = { type: 'error', message: err instanceof Error ? err.message : String(err) };
@@ -347,7 +358,7 @@ export function createRunManager(opts: RunManagerOptions) {
   // scheduler counts it as fired). Chat follow-ups are left for the owner to resend; a retry is never retried.
   for (const r of interrupted) {
     if (r.resume || Date.now() - Date.parse(String(r.created_at)) > 6 * 3_600_000 || !once(db, `retried:${r.id}`)) continue;
-    start(String(r.agent_id), String(r.task), undefined, r.parent_run_id ? String(r.parent_run_id) : undefined, String(r.id));
+    start(String(r.agent_id), String(r.task), undefined, r.parent_run_id ? String(r.parent_run_id) : undefined, { retryOf: String(r.id), ...(r.mode ? { mode: String(r.mode) } : {}) });
   }
 
   return { start, cancel, cancelStore, cancelAgent, get, idle };
@@ -438,7 +449,7 @@ export function listRuns(db: DatabaseSync, q: { agentId?: string; storeIds?: str
 
 function toRun(r: Record<string, unknown>): AgentRun {
   const opt = (k: string) => (r[k] == null ? undefined : String(r[k]));
-  const [sessionId, error, startedAt, endedAt, parentRunId] = ['session_id', 'error', 'started_at', 'ended_at', 'parent_run_id'].map(opt);
+  const [sessionId, error, startedAt, endedAt, parentRunId, mode] = ['session_id', 'error', 'started_at', 'ended_at', 'parent_run_id', 'mode'].map(opt);
   return {
     id: String(r.id),
     storeId: String(r.store_id),
@@ -452,5 +463,6 @@ function toRun(r: Record<string, unknown>): AgentRun {
     ...(startedAt ? { startedAt } : {}),
     ...(endedAt ? { endedAt } : {}),
     ...(parentRunId ? { parentRunId } : {}),
+    ...(mode ? { mode } : {}),
   };
 }

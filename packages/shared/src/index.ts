@@ -391,7 +391,9 @@ export type LiveMessage =
   /** XP was earned (toast); `levelUp` when it crossed a level (burst). No agentId = the commander. */
   | { type: 'xp'; xp: XpEvent; levelUp?: { level: number; rank: Rank } }
   /** A squad mission was created, started a step, got a step's deliverable or ended (agents lane). */
-  | { type: 'mission'; mission: SquadMission };
+  | { type: 'mission'; mission: SquadMission }
+  /** A knowledge-base research task started, moved a stage, waits to retry, or ended (knowledge-base lane). */
+  | { type: 'kb_task'; task: KbTaskBrief };
 
 /** Error body for any non-2xx API response. */
 export interface ApiError {
@@ -505,6 +507,8 @@ export interface AgentRun {
   endedAt?: string;
   /** Set when a squadmate assigned this task (`assign_task`): the run that assigned it. */
   parentRunId?: string;
+  /** `research:<kb task id>`: a stage of a knowledge-base research task (KB-12), which reports as the task. */
+  mode?: string;
 }
 
 export type KnowledgeKind = 'playbook' | 'platform' | 'niche';
@@ -1537,6 +1541,68 @@ export interface KbTaskBrief {
   stage: string;
   createdAt: string;
   startedAt?: string;
+  /** Why it failed. */
+  error?: string;
+}
+
+/** What the owner gave a research task: links and pasted text to read (a source task), and what to look for. */
+export interface KbResearchBrief {
+  urls?: string[];
+  text?: string;
+  lookFor?: string;
+}
+
+/** The evaluating stage's verdict on one finding, against spec §5's criteria: 1 (poor) to 5 (strong). */
+export interface KbAssessment {
+  reliability: number;
+  evidence: number;
+  relevance: number;
+  recency: number;
+  agreement: number;
+  usefulness: number;
+  novelty: number;
+  applicability: number;
+  /** Where sources disagree; a contested finding stays a Hypothesis. */
+  contradictions: string[];
+  keep: boolean;
+  why: string;
+}
+
+/** A research task's final report: the agent's conclusions, then what the app recorded. */
+export interface KbResearchReport {
+  summary: string;
+  conclusions: string[];
+  unresolved: string[];
+  limitations: string[];
+  /** Ways to apply it to the business. */
+  applications: string[];
+  created: { id: string; title: string }[];
+  updated: { id: string; title: string }[];
+  failedSources: { url: string; status: KbSourceStatus; error?: string }[];
+  conflicts: string[];
+  errors: string[];
+}
+
+/** A research task in full: its stages' attempts, the execution log, what it read and found, and the report. */
+export interface KbTaskDetail extends KbTaskBrief {
+  kind: 'source' | 'topic';
+  origin: 'owner' | 'agent' | 'autonomous';
+  brief: KbResearchBrief;
+  categoryId?: string;
+  /** Failed attempts at the current stage (3 fail the task). */
+  attempt: number;
+  /** When the next attempt may start (after a failure, or while its agent can't take it). */
+  nextTryAt?: string;
+  budgetUsd: number;
+  spentUsd: number;
+  /** The task this one refines. */
+  refinedFrom?: string;
+  endedAt?: string;
+  steps: { stage: string; attempt: number; runId?: string; status: 'running' | 'done' | 'failed'; startedAt: string; endedAt?: string }[];
+  log: { stage: string; level: 'info' | 'warn' | 'error'; message: string; at: string }[];
+  sources: KbSourceBrief[];
+  findings: { id: string; title: string; status: 'pending' | 'stored' | 'merged' | 'rejected' | 'discarded'; cardId?: string; assessment?: KbAssessment }[];
+  report?: KbResearchReport;
 }
 
 /** GET /api/kb/workspaces → visible cards (proposed + active) per workspace, keyed 'general' or a store id; missing = 0. */

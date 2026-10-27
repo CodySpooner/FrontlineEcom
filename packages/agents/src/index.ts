@@ -71,3 +71,15 @@ export {
   type NewKbEvidence,
 } from './kb-links';
 export { reliabilityOf, saveSource, setSourceReliability, sourceForAgent, type NewKbSource } from './kb-sources';
+export {
+  advanceResearch,
+  cancelResearch,
+  createResearchTask,
+  getResearchTask,
+  refineResearch,
+  retryResearch,
+  toKbTask,
+  type FetchedSource,
+  type NewKbTask,
+  type ResearchDeps,
+} from './kb-research';

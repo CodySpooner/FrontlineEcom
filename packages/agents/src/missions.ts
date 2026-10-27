@@ -214,7 +214,7 @@ export function cancelMission(db: DatabaseSync, id: string, cancelRun: (runId: s
 }
 
 /** A step's run, or the one that retried it after an app restart (`retry:<run>:<retry>` in done_once, from runs.ts). */
-function stepRun(db: DatabaseSync, id: string): { id: string; status: AgentRun['status']; refused?: string } | undefined {
+export function stepRun(db: DatabaseSync, id: string): { id: string; status: AgentRun['status']; refused?: string } | undefined {
   const r = db.prepare('SELECT id, status, error, cost_usd FROM agent_runs WHERE id = ?').get(id);
   if (!r) return undefined;
   const link = `retry:${id}:`;

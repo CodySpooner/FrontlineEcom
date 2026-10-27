@@ -31,6 +31,11 @@ describe('fake engine', () => {
     expect(events.at(-1)).toMatchObject({ type: 'done', sessionId: 'sess-1' });
   });
 
+  test('a research run has none of the app tools', async () => {
+    const events = await collect(runAgent({ ...input, mode: 'research', env: {} as ToolEnv }, fakeEngine(() => [{ call: 'store_summary' }])));
+    expect(events.find((e) => e.type === 'tool_result')).toMatchObject({ output: 'Tool store_summary is not available', isError: true });
+  });
+
   test('plays a custom script', async () => {
     const script: AgentEvent[] = [
       { type: 'tool_call', id: 't1', name: 'analytics_summary', input: { range: 7 } },
@@ -66,6 +71,8 @@ test('connected stores get Claude and demo stores the fake engine, unless the en
     expect(await pick(true)).toBe('fake'); // a test run without the root config still never reaches Claude
     delete process.env.VITEST;
     expect([await pick(true), await pick(false)]).toEqual(['claude', 'fake']);
+    // Research needs a real model even on a demo store: the demo engine can't read the web.
+    expect(text(await collect(defaultEngine(named('claude'), named('fake'))({ ...input, mode: 'research' })))).toBe('claude');
     process.env.FRONTLINE_AGENT_ENGINE = 'claude';
     expect(await pick(false)).toBe('claude');
   } finally {
@@ -124,7 +131,7 @@ const frames = [
 
 describe('Claude engine', () => {
   test('maps SDK frames to agent events', () => {
-    expect(frames.flatMap(toAgentEvents)).toEqual([
+    expect(frames.flatMap((m) => toAgentEvents(m))).toEqual([
       { type: 'text_delta', text: 'Revenue ' },
       { type: 'tool_call', id: 'tu1', name: 'analytics_summary', input: { range: 7 } },
       { type: 'tool_result', id: 'tu1', output: '{"revenue":1200}', isError: false },
@@ -217,6 +224,17 @@ describe('Claude engine', () => {
     expect(seen).toMatchObject({ maxTurns: 40, maxBudgetUsd: 1.25 });
     await collect(runAgent(input, engine));
     expect(seen?.maxBudgetUsd).toBeUndefined();
+  });
+
+  test('a research run searches the web with no app or store tools, gets 30 turns, and says why it stopped in research terms', async () => {
+    let seen: Options | undefined;
+    const engine = claudeEngine({ query: (params) => ((seen = params.options), (async function* () { yield* frames; })()) });
+    const env = { externalMcp: () => ({ meta_ads: { type: 'http', url: 'https://mcp.test' } }) } as unknown as ToolEnv;
+    await collect(runAgent({ ...input, agent: { ...agent, role: 'ad_strategist' }, mode: 'research', env, budgetUsd: 0.8 }, engine));
+    expect(seen).toMatchObject({ tools: ['WebSearch'], maxTurns: 30, maxBudgetUsd: 0.8 });
+    expect(seen!.mcpServers).toEqual({});
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }), 'research')).toEqual([{ type: 'error', message: 'Stopped: this research step hit its 30-turn limit before finishing.' }]);
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: [] }), 'research')).toEqual([{ type: 'error', message: "Stopped: the research task's budget, or today's AI budget for this store, ran out." }]);
   });
 
   // What Claude sees: every app tool's zod input must come out of the in-process MCP server as a valid object schema.
