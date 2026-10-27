@@ -281,7 +281,7 @@ function AgentsStrip() {
         </EmptyState>
       ) : (
         // One row only: cards that don't fit land in zero-height rows and are clipped (least urgent last, see the sort).
-        <ul className="grid grid-cols-[repeat(auto-fit,minmax(125px,1fr))] grid-rows-[auto] auto-rows-[0] gap-x-2.5 overflow-hidden">
+        <ul className="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] grid-rows-[auto] auto-rows-[0] gap-x-2.5 overflow-hidden">
           {shown.map((a) => {
             const st = AGENT_STATUS[a.status];
             const role = AGENT_ROLES[a.role].name;

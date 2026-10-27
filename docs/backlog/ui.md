@@ -512,6 +512,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-187 Revenue and Analytics charts dashed today's unfinished day, but still shaded the area down to it, so every
       morning the chart's right edge looked like a crash. The fill now ends at the last full day and only the dashed
       line reaches today.
+- [x] UI-188 The Command Center's agent strip squeezed five cards into 1024px: at 132px a card is narrower than its
+      portrait plus "Needs you", which ran into the card's border. Cards are at least 140px now (four at 1024, still
+      five from about 1280), and the most urgent stay first.
 
 ## Blocked
 
@@ -746,3 +749,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-27 — UI-185: `BELL = 40` in api/client is both the fetch limit and the cap on the live prepend. Test in api/live.test.tsx (red first: 41 after one live notification on a full list)
 - 2026-10-27 — UI-186: from a fresh design review (a subagent scored 13 full-page screenshots against the StyleSeed rubric; its other findings follow as UI-187+). A sweep for fields wider than their container on every page, in headless Chrome at 1024 and 1440 with writes blocked, found only these two (+29px). `min-w-0` on both; after: none at 1024, 1440 or 1920, and a screenshot shows both fields inside the panel. CSS only, so no new test
 - 2026-10-27 — UI-187: (design review) AreaChart's polygon uses the solid polyline's points when `partial`. Test in AreaChart.test.tsx (red first: the fill held today's point). Headless Chrome at 11am: the shading stops at Oct 26 and the dashed segment drops to Oct 27 over the bare grid
+- 2026-10-27 — UI-188: (design review) the strip's `minmax(125px,1fr)` → 140px; a card needs ~137px (10 + 42 portrait + 9 + dot, gap and "Needs you" + 10). Measured in headless Chrome: before, +10px on all three "Needs you" cards at 1024; after, none at 1024/1280/1440/1920. CSS only, so no new test
