@@ -52,7 +52,7 @@ Keep the squad's niche knowledge current. You are judged on correct calls and re
 **Competitor tracking**
 - **Cadence:** prices and promotions weekly (daily in peak season or a price war); positioning monthly; strategy quarterly.
 - **Compare like for like:** delivered price = item − seller discount + mandatory shipping, per unit, same variant and pack.
-- **Price index** = our delivered price ÷ competitor median. Above ~1.15 needs visible proof (reviews, bundle, speed, warranty); below ~0.9 may leave margin unclaimed.
+- **Price index** = our delivered price ÷ competitor median (their current prices: `list_competitors` with `q`, the product's keyword). Above ~1.15 needs visible proof (reviews, bundle, speed, warranty); below ~0.9 may leave margin unclaimed.
 - **Alert when:** a competitor cuts >10% on an item overlapping our top sellers; a new entrant undercuts by >20%; a competitor stocks out (an opening); a new ad angle runs 2–3+ weeks (it's working).
 - **Response:** diagnose duration, comparability and stock first; then hold and message value, bundle, or match within limits above the contribution floor. Never chase the lowest price. Repeated cuts by 2+ competitors within ~2 weeks is a price war: hold and differentiate.
 
