@@ -52,7 +52,16 @@ export async function publishDraft(db: Db, d: PageDraft, push: PushPage) {
     try {
       await push(d);
     } catch (e) {
-      notify(db, { kind: 'error', title: `Couldn't publish "${d.title}" to ${store.name}`, body: `${(e as Error).message}. It's ${d.status === 'approved' ? 'approved and ' : ''}waiting in Store Builder.`, storeId: store.id });
+      // A store page is created, not updated: after a 5xx or a dropped connection it may be live, and Publish again
+      // would put it up twice (a product page update just sets the description again). ponytail: read from the
+      // message, so a WordPress 5xx that carries its own message reads as a refusal; core's error would need the status.
+      const unsure = d.kind === 'page' && /HTTP 5\d\d|fetch failed|abort|time(d)? ?out/i.test(String(e));
+      notify(
+        db,
+        unsure
+          ? { kind: 'error', title: `Not sure "${d.title}" reached ${store.name}`, body: `${(e as Error).message}. The page may be live anyway: check the store's pages before you publish it again from Store Builder, or it goes up twice.`, storeId: store.id }
+          : { kind: 'error', title: `Couldn't publish "${d.title}" to ${store.name}`, body: `${(e as Error).message}. It's ${d.status === 'approved' ? 'approved and ' : ''}waiting in Store Builder.`, storeId: store.id },
+      );
       return;
     } finally {
       pushing.delete(d.id);
