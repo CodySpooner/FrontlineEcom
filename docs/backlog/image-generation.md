@@ -78,6 +78,10 @@ silhouette you can tell apart at 32 px. Keep each one's current look as the anch
 1920 px wide, with before/after screenshots saved in `.agent/` (git-ignored); no console errors; the header drag region
 and window buttons still work. Then create an empty `.agent/STOP` in this worktree and stop.
 
+This lane is finite. The owner: "they dont have to work continually just get it where all the images are fixed and
+then it can stop". Once IMG-01..07 are done, do not add new items (this overrides CLAUDE.md's "Backlog empty?" rule),
+and ignore a watchdog nudge if `.agent/STOP` is already there.
+
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 
