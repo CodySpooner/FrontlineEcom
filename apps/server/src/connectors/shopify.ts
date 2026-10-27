@@ -111,7 +111,7 @@ export function shopHost(domain: string) {
   const url = domain.trim().toLowerCase().replace(/^https?:\/\//, '');
   const admin = /^admin\.shopify\.com\/store\/([a-z0-9][a-z0-9-]*)(?:[/?#]|$)/.exec(url)?.[1];
   const host = admin ? `${admin}.myshopify.com` : url.replace(/\/.*$/, '');
-  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(host)) throw new Error('Shop domain must look like your-store.myshopify.com');
+  if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(host)) throw new Error('Shop domain must look like your-store.myshopify.com or admin.shopify.com/store/your-store');
   return host;
 }
 
