@@ -5,7 +5,7 @@ import type { ApprovalRequest, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
 import { DemoMixNote } from '../components/StoreFilter';
 import { Outlet, Route, Routes } from 'react-router';
-import { LiveActivity, Missions, noFeeEstimate, profitFormula, Requests } from './Dashboard';
+import { LiveActivity, Missions, profitFormula, Requests } from './Dashboard';
 
 const store = { id: 'pawsome', name: 'Pawsome Gear', currency: 'USD' } as Store;
 const approval: ApprovalRequest = {
@@ -163,13 +163,5 @@ describe('deciding a request from the keyboard', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Approve: Pause B' }));
     fireEvent.click(screen.getByRole('button', { name: 'Approve: Pause C' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Approve: Pause B' }));
-  });
-});
-
-describe('noFeeEstimate', () => {
-  it('names the live stores whose profit leaves out fees; demo stores and set estimates stay quiet', () => {
-    const s = (name: string, extra: Partial<Store>) => ({ id: name, name, platform: 'shopify', connected: false, ...extra }) as Store;
-    const picked = [s('Real Co', { connected: true }), s('Fee Co', { connected: true, feePercent: 2.9 }), s('Order Co', { connected: true, feePerOrder: 0.3 }), s('Demo Co', {})];
-    expect(noFeeEstimate(picked).map((x) => x.name)).toEqual(['Real Co']);
   });
 });

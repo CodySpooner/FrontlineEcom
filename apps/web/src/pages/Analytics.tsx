@@ -9,7 +9,7 @@ import { Hero } from '../components/Hero';
 import { DemoMixNote, StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { PLATFORM_NAME } from '../components/StoreForm';
 import { Badge, Button, ErrorState, inputClass, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
-import { breakEvenRoas, byNetwork, rate, roasTone, times } from '../lib/analytics';
+import { breakEvenRoas, byNetwork, noFeeEstimate, rate, roasTone, times } from '../lib/analytics';
 import { PERIOD, RANGES, weekly } from '../lib/chart';
 import { cents, fmtDay, money, noBaseline, signedPct } from '../lib/format';
 import { stockLeft } from '../lib/stock';
@@ -82,6 +82,8 @@ function Report({ s, ids, name, dim }: { s: AnalyticsSummary; ids: string[]; nam
 
 function Trend({ s, be }: { s: AnalyticsSummary; be: number }) {
   const [metric, setMetric] = useState<Metric>('revenue');
+  const { stores, has } = useStoreSelection();
+  const noFees = noFeeEstimate(stores.filter((x) => has(x.id)));
   const daily = s.series.map((d) => ({ date: d.date, value: d[metric] }));
   const d = s.deltas[metric];
   const fresh = noBaseline(s.previous[metric], s.totals[metric]);
@@ -98,6 +100,14 @@ function Trend({ s, be }: { s: AnalyticsSummary; be: number }) {
         <span className={cx('text-xs font-semibold tabular-nums', tone)}>{fresh ? 'New' : signedPct(d)}</span>
         <span className="text-xs text-muted">{fresh ? 'nothing in the previous period' : 'vs previous period'}</span>
       </p>
+      {metric === 'profit' && noFees.length > 0 && (
+        <p className="mb-2 text-xs text-muted">
+          Leaves out platform and payment fees for {noFees.map((x) => x.name).join(', ')}: no fee estimate.{' '}
+          <Link to="/settings" className="text-red hover:underline">
+            Set one in Settings
+          </Link>
+        </p>
+      )}
       <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} partial currency={s.currency} label={`${label}, ${PERIOD[s.range]}: ${money(s.totals[metric], s.currency)} total`} />
       <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-line pt-3 text-[13px] min-[620px]:grid-cols-4">
         <Stat label="ROAS" value={times(s.totals.roas, s.totals.adSpend)} />

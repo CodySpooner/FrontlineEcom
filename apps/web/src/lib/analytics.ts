@@ -1,4 +1,7 @@
-import type { AdNetwork, CampaignStats, MetricTotals } from '@frontline/shared';
+import type { AdNetwork, CampaignStats, MetricTotals, Store } from '@frontline/shared';
+
+/** Live stores with no fee estimate: no connector imports platform or payment fees, so their profit leaves them out (AGT-201). */
+export const noFeeEstimate = (stores: Store[]) => stores.filter((x) => x.connected && !x.feePercent && !x.feePerOrder);
 
 /** ROAS at which ad spend eats the whole gross margin: revenue / (revenue − cogs). Below it, ads lose money. */
 export function breakEvenRoas(t: MetricTotals) {

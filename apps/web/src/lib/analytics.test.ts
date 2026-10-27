@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { MetricTotals } from '@frontline/shared';
-import { breakEvenRoas, byNetwork, roasTone, times } from './analytics';
+import type { MetricTotals, Store } from '@frontline/shared';
+import { breakEvenRoas, byNetwork, noFeeEstimate, roasTone, times } from './analytics';
 
 const totals: MetricTotals = { revenue: 10_000, profit: 2_000, adSpend: 3_000, roas: 3.33, orders: 200, aov: 50 };
 
@@ -44,5 +44,13 @@ describe('times', () => {
     expect(times(0, 120)).toBe('0.00×');
     expect(times(0, 0)).toBe('–');
     expect(times(1.8)).toBe('1.80×'); // a break-even ROAS has no spend behind it
+  });
+});
+
+describe('noFeeEstimate', () => {
+  it('names the live stores whose profit leaves out fees; demo stores and set estimates stay quiet', () => {
+    const s = (name: string, extra: Partial<Store>) => ({ id: name, name, platform: 'shopify', connected: false, ...extra }) as Store;
+    const picked = [s('Real Co', { connected: true }), s('Fee Co', { connected: true, feePercent: 2.9 }), s('Order Co', { connected: true, feePerOrder: 0.3 }), s('Demo Co', {})];
+    expect(noFeeEstimate(picked).map((x) => x.name)).toEqual(['Real Co']);
   });
 });

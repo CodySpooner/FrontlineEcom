@@ -12,6 +12,7 @@ import { DenyReason } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { DemoMixNote, StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { AGENT_STATUS, Badge, Button, buttonClass, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Tooltip, cx } from '../components/ui';
+import { noFeeEstimate } from '../lib/analytics';
 import { PERIOD, RANGES, sparkPoints, weekly } from '../lib/chart';
 import { ago, cents, fitMoney, fmtDay, money, noBaseline, signedPct } from '../lib/format';
 import { importing } from '../lib/sync';
@@ -86,9 +87,6 @@ export function profitFormula(stores: Store[]) {
   const tax = stores.some((x) => x.connected && ['shopify', 'woocommerce', 'etsy', 'tiktok_shop'].includes(x.platform));
   return ['Revenue', 'cost of goods', fees && 'your fee estimate', tax && 'sales tax', 'ad spend'].filter(Boolean).join(' − ');
 }
-
-/** Live stores with no fee estimate: no connector imports platform or payment fees, so their profit leaves them out (AGT-201). */
-export const noFeeEstimate = (stores: Store[]) => stores.filter((x) => x.connected && !x.feePercent && !x.feePerOrder);
 
 function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
   // Products the platform has no cost for count their whole price as profit until the owner sets one.

@@ -399,6 +399,9 @@ Orca's browser against the reference before ticking it.
       fresh live store whose ads synced before its orders): break-even read Infinity, so every campaign went red under
       "every campaign loses money". With no sales, break-even is now unknown: ROAS stays neutral, the stat reads n/a
       and the footer says there's nothing to judge against yet. A real negative margin still turns them all red.
+- [x] UI-153 Store Analytics' Profit view now says when it leaves out fees too (UI-151 only covered the Dashboard):
+      "Leaves out platform and payment fees for <stores>: no fee estimate. Set one in Settings". `noFeeEstimate` moved
+      to lib/analytics so both pages share it.
 
 ## Blocked
 
@@ -596,3 +599,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-150: lib/shop.ts and its test removed; the Integrations "another shop" test still covers the rule end to end through the form. Orca: Integrations serves the shared import, both pages load
 - 2026-10-26 — UI-151: `noFeeEstimate(stores)` in Dashboard.tsx, tested (red first). "N costs missing" keeps the slot when both apply. Orca with Pawsome patched live and fee-less and costs filled (read-only): Profit reads "Profit | Fees left out", title names Pawsome Gear, href /settings
 - 2026-10-26 — UI-152: `breakEvenRoas` returns NaN with no revenue (roasTone leaves NaN neutral), tested red first. Orca with the summary patched to no sales (read-only): campaign ROAS cells text-good → text-text, Break-even ROAS n/a, footer "No sales this period..."
+- 2026-10-26 — UI-153: helper and its test moved to lib/analytics (pages are lazy chunks). Orca with Pawsome patched live and fee-less (read-only): hidden on Revenue, shown on Profit under the total, link to /settings
