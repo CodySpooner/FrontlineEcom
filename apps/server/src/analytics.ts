@@ -284,10 +284,12 @@ export function topProducts(db: Db, storeIds: string[], from: string, to: string
              FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
              JOIN w ON w.store_id = r.store_id AND o.local_date BETWEEN w.d_from AND w.d_to
              WHERE o.status = 'paid' AND r.product_id IS NOT NULL
-           )
-           SELECT l.store_id, l.product_id, p.title, p.image, p.inventory, p.inventory_tracked, p.status, sum(l.quantity) AS units, sum(l.revenue) AS revenue, sum(l.revenue - l.cost) AS profit
-           FROM lines l LEFT JOIN products p ON p.store_id = l.store_id AND p.id = l.product_id
-           GROUP BY l.store_id, l.product_id`,
+           ),
+           -- Summed before the product join: a lookup per product, not per line (1Y of a 110k-order store: 700 → 180 ms).
+           -- ponytail: an orders (store_id, local_date, status, id) index would halve it again, if it's ever needed.
+           sums AS (SELECT store_id, product_id, sum(quantity) AS units, sum(revenue) AS revenue, sum(revenue - cost) AS profit FROM lines GROUP BY store_id, product_id)
+           SELECT s.store_id, s.product_id, p.title, p.image, p.inventory, p.inventory_tracked, p.status, s.units, s.revenue, s.profit
+           FROM sums s LEFT JOIN products p ON p.store_id = s.store_id AND p.id = s.product_id`,
         )
         // No LIMIT here: stores in different currencies only rank correctly after conversion (below).
         .all(...ownDays(real, from, to, shift).flat())
