@@ -467,6 +467,10 @@ Orca's browser against the reference before ticking it.
       read them: an "Add products" request's products lost their margin ("79% marg…") in the Dashboard's narrow request
       column, an agent's role description, and the Claude login line. The products now put their numbers under the name
       when the column is narrow (never cut), and the other two wrap.
+- [x] UI-174 When the app's server is down or restarting, every button that writes (Approve, Save, Open folder, Run…)
+      showed the browser's "Failed to fetch", and a server error without its own words showed "POST /api/… failed (500)".
+      Both now say what happened in plain words: "Couldn't reach the app's server: it may be restarting. Try again in a
+      moment." / "The app's server couldn't do that (error 500). …". The server's own messages are unchanged.
 
 ## Blocked
 
@@ -687,3 +691,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-171: useLive invalidates `['knowledge']` (the index and open docs) when a run ends. One test (red first). Orca: the served client has it and Knowledge renders; a live run message needs a real run, so the unit test carries the wiring
 - 2026-10-26 — UI-172: MissingPacks reads the pending approvals. One test (red first). Orca with a GET fixture (Peak Fit in "Yoga Mats", a pending save_niche_pack from it): "A draft is waiting for your approval. Review it in Requests" → /, no button
 - 2026-10-26 — UI-173: found with a sweep of 15 views in same-origin iframes at 1024 and 1440 px in my own Chrome tab (writes blocked): no page overflows; truncated text without a title was the three above. After: no cut text left on those views at either width (the products' names keep a title); at 1440 the margins sit under each name, at 1024 on the same line. Layout only, so no new test; the touched suites pass. Same session: a WCAG AA contrast sweep of 13 pages found only a disabled cap's label (exempt)
+- 2026-10-26 — UI-174: one change in api() (every hook goes through it). New api/client.test.tsx, red first: unreachable, server words kept, wordless 500. Orca with every write rejected client-side (nothing sent): Settings' Open folder alert reads the new line

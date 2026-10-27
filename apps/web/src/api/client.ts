@@ -67,9 +67,12 @@ import { apiUp, waitForApi } from '../lib/restart';
 import { importing } from '../lib/sync';
 import { applyRunEvent, isLive } from '../lib/transcript';
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const r = await fetch(path, init);
+  // fetch rejects only when nothing answered: say that, not the browser's "Failed to fetch" (mutations show the message).
+  const r = await fetch(path, init).catch(() => {
+    throw new Error("Couldn't reach the app's server: it may be restarting. Try again in a moment.");
+  });
   if (r.status === 204) return undefined as T;
-  if (!r.ok) throw new Error(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? `${init?.method ?? 'GET'} ${path} failed (${r.status})`);
+  if (!r.ok) throw new Error(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? `The app's server couldn't do that (error ${r.status}). Try again in a moment.`);
   return (await r.json()) as T;
 }
 
