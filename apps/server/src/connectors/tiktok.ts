@@ -347,14 +347,17 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
 
     // Search results carry no images; Get Product does (main_images[].urls). Up to 50 a sync for products still without
     // one, and '' marks "looked, none" so a product with no gallery isn't asked again. A signed link (x-expires, seconds)
-    // is read again within a day of expiring.
-    // ponytail: otherwise read once per product, so a new main image on TikTok isn't picked up.
+    // is read again within a day of expiring, and a product edited since the last sync (a new main image), first.
     const setImage = db.prepare('UPDATE products SET image = ? WHERE store_id = ? AND id = ?');
     const expiring = (url: string) => Number(URL.canParse(url) && new URL(url).searchParams.get('x-expires')) < now.getTime() / 1000 + 86_400;
+    const edited = JSON.stringify(full ? [] : products.map((p) => `tt-${p.id}`));
     const unread = db
-      .prepare("SELECT id, image FROM products WHERE store_id = ? AND id GLOB 'tt-*' AND (image IS NULL OR image LIKE '%x-expires=%') AND status != 'archived' ORDER BY id")
-      .all(storeId)
-      .filter((r) => r.image == null || expiring(String(r.image)))
+      .prepare(
+        `SELECT id, image, id IN (SELECT value FROM json_each(?2)) AS edited FROM products WHERE store_id = ?1 AND id GLOB 'tt-*' AND status != 'archived'
+           AND (image IS NULL OR image LIKE '%x-expires=%' OR id IN (SELECT value FROM json_each(?2))) ORDER BY edited DESC, id`,
+      )
+      .all(storeId, edited)
+      .filter((r) => r.edited || r.image == null || expiring(String(r.image)))
       .slice(0, 50);
     for (const r of unread) {
       const d = await api<{ main_images?: { urls?: string[] }[] }>('GET', `/product/202309/products/${String(r.id).slice(3)}`, { shop_cipher: shop.cipher }).catch(() => undefined);

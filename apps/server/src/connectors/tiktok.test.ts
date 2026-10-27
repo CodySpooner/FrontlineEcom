@@ -90,8 +90,8 @@ const shopOrder = (id: string, status: string, total: string, extra: Record<stri
   id, status, create_time: T('2026-10-25T12:00:00Z'), update_time: T('2026-10-25T13:00:00Z'), payment: { total_amount: total }, ...extra,
 });
 
-/** Fake TikTok Shop: token refresh, shops, products (two pages), orders. Checks every signature. */
-function fakeShop(refreshError?: { code: number; message: string }, shops = [{ cipher: 'CIPHER', name: 'Glow Haus TT' }]) {
+/** Fake TikTok Shop: token refresh, shops, products (two pages, as update_time_ge filters them), orders. Checks every signature. */
+function fakeShop(refreshError?: { code: number; message: string }, shops = [{ cipher: 'CIPHER', name: 'Glow Haus TT' }], iceRollerEditedAt = T('2026-10-21T00:00:00Z')) {
   const calls: { url: URL; token: string | null; body: string }[] = [];
   const fetchFn = (async (url: string, init: RequestInit = {}) => {
     const u = new URL(url);
@@ -132,9 +132,11 @@ function fakeShop(refreshError?: { code: number; message: string }, shops = [{ c
       });
     }
     if (u.pathname === '/product/202309/products/search') {
+      const since = (JSON.parse(body || '{}') as { update_time_ge?: number }).update_time_ge ?? 0;
+      const changed = <P extends { update_time: number }>(products: P[]) => products.filter((p) => p.update_time >= since);
       return params.page_token
-        ? ok({ products: [{ id: '17302', title: 'Gua Sha', status: 'DRAFT', update_time: T('2026-10-20T00:00:00Z'), skus: [{ price: { sale_price: '19.00' }, inventory: [] }] }], next_page_token: '' })
-        : ok({ products: [{ id: '17301', title: 'Ice Roller', status: 'ACTIVATE', update_time: T('2026-10-21T00:00:00Z'), skus: [{ price: { sale_price: '24.90' }, inventory: [{ quantity: 7 }, { quantity: 3 }] }] }], next_page_token: 'p2' });
+        ? ok({ products: changed([{ id: '17302', title: 'Gua Sha', status: 'DRAFT', update_time: T('2026-10-20T00:00:00Z'), skus: [{ price: { sale_price: '19.00' }, inventory: [] }] }]), next_page_token: '' })
+        : ok({ products: changed([{ id: '17301', title: 'Ice Roller', status: 'ACTIVATE', update_time: iceRollerEditedAt, skus: [{ price: { sale_price: '24.90' }, inventory: [{ quantity: 7 }, { quantity: 3 }] }] }]), next_page_token: 'p2' });
     }
     return ok({
       orders: [
@@ -383,6 +385,16 @@ test("a TikTok product image whose signed link expires (x-expires) is read again
   expect(db.prepare("SELECT image FROM products WHERE store_id = 'glow' AND id = 'tt-17301'").get()).toEqual({ image: 'https://p16-oec.example/ice-roller.jpeg' });
   db.prepare("UPDATE products SET image = ? WHERE store_id = 'glow' AND id = 'tt-17301'").run(at(72));
   expect(await reads()).toEqual([]);
+});
+
+test('a TikTok product edited since the last sync has its image read again (a new main image), unchanged ones not', async () => {
+  const db = shopSetup();
+  await syncTikTokShop(db, key, 'glow', fakeShop().fetchFn, NOW);
+  db.prepare("UPDATE products SET image = 'https://p16-oec.example/old.jpeg' WHERE store_id = 'glow' AND id = 'tt-17301'").run();
+  const { fetchFn, calls } = fakeShop(undefined, undefined, Math.floor(NOW.getTime() / 1000));
+  await syncTikTokShop(db, key, 'glow', fetchFn, NOW);
+  expect(calls.filter((c) => /^\/product\/202309\/products\/\d+$/.test(c.url.pathname)).map((c) => c.url.pathname.split('/').pop())).toEqual(['17301']);
+  expect(db.prepare("SELECT image FROM products WHERE store_id = 'glow' AND id = 'tt-17301'").get()).toEqual({ image: 'https://p16-oec.example/ice-roller.jpeg' });
 });
 
 test("TikTok Shop calls are signed at the time they're sent, not the sync's start (TikTok refuses a stale timestamp mid-backfill)", async () => {

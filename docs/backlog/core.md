@@ -204,10 +204,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-112 (review 5, spend) The same for ad budgets: Meta, Google and TikTok read the live daily budget before writing.
 - [x] CORE-113 A store's own platform syncing in another currency drops what a second platform synced first in the old one.
 - [x] CORE-114 Requests a restored backup closed are announced, so a closed theme draft's copy is deleted.
+- [x] CORE-115 A TikTok Shop product edited on TikTok has its image read again, so a new main image shows.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-115: a TikTok Shop product's image was read once (search results carry none), so a new main image never reached the app. An incremental sync now also reads Get Product again for the products its search returned (edited since the last sync), first among the 50 a sync. The test fake now filters products by `update_time_ge` as TikTok does.
 - 2026-10-26 — Inbox (ui, sync notice links): already there. `notifyChange` (sync.ts:25) spreads `where = { link: '/integrations', storeId }` into both notices, since CORE-27, and sync.test.ts asserts the link; every other core notice has one too (approvals and the digest `/`, backups `/settings`). Told ui to look at the bell's click.
 - 2026-10-26 — CORE-114: CORE-110 closed a restored backup's pending requests as the database opened, before any handler listened, so a closed theme draft's copy stayed in the Shopify theme library (20 themes at most). `openDb` now remembers which it closed and `announceRestoreClosed`, called once the server listens, broadcasts them: the agents' denial handler deletes the copy as for any denied draft, and still doesn't take `[Expired: …]` as the owner's no.
 - 2026-10-26 — CORE-113: a second platform that syncs before the store's own (an Etsy shop in EUR connected to a Shopify store first) sets the store's currency; when the own platform's first sync then switched it (to USD), Etsy's orders stayed as euros counted as dollars, and only its later syncs stopped with "add it as a store of its own". That switch now drops what such a platform synced (`forgetPlatform`: orders, products, refunds, their revenue) and resets its cursor, so its sales don't add up unconverted. Same currency: nothing goes.
