@@ -132,3 +132,12 @@ describe('research on a live install', () => {
     expect(fetch.mock.calls.some(([u]) => String(u).includes('sample=0'))).toBe(false);
   });
 });
+
+describe("a custom niche's find", () => {
+  it("names its niche in the store's own words, not just Other", async () => {
+    const yoga = { ...store('zen', 'Zen Studio', 'shopify'), niche: 'other', nicheDetail: 'Yoga mats' } as Store;
+    stubApi((url) => (url.startsWith('/api/stores') ? [yoga] : []));
+    renderApp(<ProductDetails p={{ ...product, niche: 'other', nicheDetail: 'yoga-mats' }} />);
+    expect(await screen.findByText('Beauty · TikTok · Yoga mats')).toBeTruthy();
+  });
+});

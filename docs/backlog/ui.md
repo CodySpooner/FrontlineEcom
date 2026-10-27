@@ -360,6 +360,8 @@ Orca's browser against the reference before ticking it.
 - [x] UI-140 (Inbox, from core) With every store live, Product Research asks `sample=0`, so the made-up sample catalog
       is gone and an empty Trending tab says "No finds yet" (pointing at AI Research) instead of "No products match".
       With a demo store still around the rows stay, labelled by core's `sample` flag (UI-139 used the `find-` id prefix).
+- [x] UI-141 A custom niche's research find said "· Other" in its details. It now names the niche in the store's own
+      words ("Yoga mats & props"), from the same slug → words map the niche filter uses (`customNiches` in lib/niche).
 
 ## Blocked
 
@@ -545,3 +547,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-138 (Inbox, from core): `lib/niche.ts` mirrors the agents' `nicheSlug` (with a test pinning its rules); Research adds an option per custom-niche store. New Research test (red on the old code). Orca, with a read-only patched store list: the option reads "Yoga mats & props" and the grid asks `/api/research?niche=other%3Ayoga-mats-props` (empty state; AI Research not clicked)
 - 2026-10-26 — UI-139: `useSample(p)` in Research (any connected store and an id not starting `find-`, as the agents' research_feed tells them apart). Two tests (labelled when live, not for a find; not labelled in demo mode). Orca with a read-only patched store list (Pawsome connected): card "Health & Beauty · TikTok · Sample data", details note shown. FYI left in core's Inbox
 - 2026-10-26 — UI-140: `useResearch(…, real)` adds `sample=0`; Results passes "every store connected"; My Lists still asks with samples so saved ones resolve. Two new tests plus UI-139's moved to `sample: true` (red on the old code). Orca with every store patched live (read-only): `/api/research?tab=trending&sample=0`, "No finds yet" shown
+- 2026-10-26 — UI-141: the map moved from Research() into `customNiches(stores)`; ProductDetails falls back to "Other" when no store has that niche any more. New test (red on the old code). Orca with a read-only patched store and row: "Health & Beauty · TikTok · Yoga mats & props"

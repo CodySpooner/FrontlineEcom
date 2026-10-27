@@ -10,7 +10,7 @@ import { useStoreSelection } from '../components/StoreFilter';
 import { byHand } from '../components/StoreForm';
 import { Badge, Button, cx, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Tabs } from '../components/ui';
 import { cents } from '../lib/format';
-import { nicheSlug } from '../lib/niche';
+import { customNiches } from '../lib/niche';
 import { NAV } from '../nav';
 
 type Tab = ResearchTab | 'lists';
@@ -44,7 +44,7 @@ export function Research() {
   const [storeId, setStoreId] = useState('');
   const store = stores.find((s) => s.id === storeId) ?? stores.find((s) => s.id === ids[0]) ?? stores[0];
   // A custom-niche store narrows to its own finds (`other:<slug>` → its own words); "Other" still lists every custom niche's.
-  const custom = new Map<string, string>(stores.flatMap((s) => (s.niche === 'other' && nicheSlug(s.nicheDetail ?? '') ? [[`other:${nicheSlug(s.nicheDetail!)}`, s.nicheDetail!.trim()] as const] : [])));
+  const custom = customNiches(stores);
   const start = useStartRun();
   const navigate = useNavigate();
   const research = () =>
@@ -304,7 +304,7 @@ export function ProductDetails({ p }: { p: ResearchProduct }) {
     <div className="grid gap-5">
       <div className="flex items-start justify-between gap-3">
         <p className="text-xs text-muted">
-          {p.category} · {SOURCE[p.source]} · {cap(p.niche)}
+          {p.category} · {SOURCE[p.source]} · {(p.nicheDetail && customNiches(stores).get(`other:${p.nicheDetail}`)) || cap(p.niche)}
         </p>
         <Badge tone="red">AI Score {p.score}</Badge>
       </div>
