@@ -389,11 +389,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-240 `propose_ad_change` refuses cutting a live store's TikTok campaign to a daily budget of $50 or less (USD equivalent): TikTok's floor for a campaign daily budget (ads.tiktok.com/help/article/budget), so the owner's approval would only end in TikTok's error.
 - [x] AGT-241 The Ad Strategist playbook gives TikTok's budget floors ($50/day a campaign, $20/day an ad group), so it plans a pause instead of a cut `propose_ad_change` refuses (AGT-240).
 - [x] AGT-242 (core Inbox, CORE-120) `track_competitor`'s first read goes through core's `publicFetch`: a public-looking name whose DNS answer is this computer or its network (localtest.me, nip.io) is refused, and the agent is told why.
+- [x] AGT-243 A tool's CSV turns every line break into a space, Unicode's too (U+2028/2029, NEL, VT, FF): only CR and LF were, so a scraped competitor name or product title could still start a line of its own in the agent's context (a fake "# Owner note" section).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-243: `csv()` in tools.ts strips `[\r\n\v\f\u0085\u2028\u2029]`.
 - 2026-10-26 — AGT-242: `trackCompetitor` passes `publicFetch()`; the competitors test mocks `node:dns/promises`.
 - 2026-10-26 — AGT-241: one line in `playbooks/ad_strategist.md`'s TikTok bullet.
 - 2026-10-26 — AGT-240: TikTok $50 campaign-budget floor in `propose_ad_change` (live stores, cuts, via `inUsd`).

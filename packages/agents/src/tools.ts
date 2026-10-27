@@ -92,7 +92,8 @@ const defineTool = <Shape extends z.ZodRawShape>(t: AppTool<Shape>) => t as unkn
 function csv(rows: Record<string, unknown>[]): string {
   if (!rows.length) return '(none)';
   const cols = Object.keys(rows[0]!);
-  return [cols.join(','), ...rows.map((r) => cols.map((c) => String(r[c] ?? '').replaceAll(',', ';').replace(/[\r\n]+/g, ' ')).join(','))].join('\n');
+  // Every line break, Unicode's too: a scraped name can't start a line of its own (a fake "# Owner note" section).
+  return [cols.join(','), ...rows.map((r) => cols.map((c) => String(r[c] ?? '').replaceAll(',', ';').replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ')).join(','))].join('\n');
 }
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
