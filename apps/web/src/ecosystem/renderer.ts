@@ -54,7 +54,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   let lowPower = false, autoLow = false;
   app.ticker.maxFPS = 60;
   const workers = workerSprites(world, (desk, id) => { if (!dragged) { clickedWorker = id; selectDesk(desk); } });
-  world.addChild(labels);
+  world.addChild(labels, telemetry.display);
   const objective = new Text({ text: '', style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 19, fontWeight: '600', fill: '#ffd9e3', stroke: { color: '#100810', width: 6 }, wordWrap: true, wordWrapWidth: 300, align: 'center' } });
   objective.anchor.set(.5, 1); objective.position.set(hub.x, hub.y - 176); world.addChild(objective);
   let camera = fitCamera(host.clientWidth,host.clientHeight);
@@ -96,6 +96,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     const smooth=cameraBlend(ticker.deltaMS, reduced.matches || lowPower || autoLow);
     world.x+=(camera.x-world.x)*smooth;world.y+=(camera.y-world.y)*smooth;world.scale.set(world.scale.x+(camera.scale-world.scale.x)*smooth);
     placards.zoom(world.scale.x);
+    telemetry.zoom(world.scale.x);
     workers.tick(Math.min(ticker.elapsedMS, 1000),reduced.matches || lowPower || autoLow,{x:-world.x/world.scale.x,y:-world.y/world.scale.x,width:host.clientWidth/world.scale.x,height:host.clientHeight/world.scale.x,scale:world.scale.x});
     objective.text = workers.meetingTitle() ? `TEAM KICKOFF\n${workers.meetingTitle()}` : '';
     const still = reduced.matches || lowPower || autoLow;

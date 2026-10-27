@@ -14,11 +14,14 @@ export function createHologram(texture: Texture) {
   const root = new Container(), floating = new Container();
   const width = 280, height = width * texture.height / texture.width;
   const beam = new Graphics()
-    .poly([-43, 64, -140, 28, 140, 28, 43, 64]).fill({ color: '#ff365d', alpha: .1 })
+    .poly([-43, 64, -140, 28, 140, 28, 43, 64]).fill({ color: '#ff365d', alpha: .13 })
     .poly([-22, 64, -84, 28, 84, 28, 22, 64]).fill({ color: '#ffb6c6', alpha: .035 })
     .moveTo(-43, 64).lineTo(-140, 28).moveTo(43, 64).lineTo(140, 28).stroke({ color: '#ff4c6c', alpha: .3, width: 1 })
     .moveTo(-18, 64).lineTo(-80, 28).moveTo(18, 64).lineTo(80, 28).moveTo(0, 64).lineTo(0, 28).stroke({ color: '#ffd5e0', alpha: .16, width: 1 })
     .ellipse(0, 64, 43, 15).stroke({ color: '#ff7891', width: 2, alpha: .8 })
+    .ellipse(0, 70, 51, 18).stroke({ color: '#ff567b', width: 1, alpha: .4 })
+    .moveTo(-150,-36).lineTo(-162,-36).lineTo(-162,-22).moveTo(150,-36).lineTo(162,-36).lineTo(162,-22)
+    .moveTo(-150,36).lineTo(-162,36).lineTo(-162,22).moveTo(150,36).lineTo(162,36).lineTo(162,22).stroke({ color: '#ff7e9b', width: 2, alpha: .4 })
     .ellipse(0, 64, 27, 8).fill({ color: '#ffdae3', alpha: .09 });
   root.addChild(beam, floating);
   const mark = () => { const sprite = new Sprite(texture); sprite.anchor.set(.5); sprite.width = width; sprite.height = height; return sprite; };
