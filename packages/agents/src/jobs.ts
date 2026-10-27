@@ -46,7 +46,7 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
     role: 'market_analyst',
     cron: '0 9 * * 3',
     task:
-      "Weekly price check: list_products (price, cost, margin) against list_competitors' prices and recent price changes. If one product is clearly mispriced " +
+      "Weekly price check: list_products (price, cost, margin) against competitors' current prices (list_competitors with q, a keyword for the product) and their recent price changes. If one product is clearly mispriced " +
       'with the numbers to show it, propose one price test with propose_price_change; otherwise say prices hold and why, in 3 lines. ' +
       "If a competitor's recent ads show a new angle or offer worth testing, hand it to the Ad Strategist with assign_task.",
   },

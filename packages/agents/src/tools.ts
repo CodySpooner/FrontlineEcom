@@ -369,9 +369,11 @@ export const APP_TOOLS: AppTool[] = [
   }),
   defineTool({
     name: 'list_competitors',
-    description: "Tracked competitors of this store, their recent price changes, and the ads they are running (three CSV sections).",
-    input: {},
-    run: async (_, ctx) => {
+    description:
+      "Tracked competitors of this store, their recent price changes, and the ads they are running (three CSV sections). With q, a product keyword: " +
+      'their current prices for the products whose name contains it (a fourth section), held prices included.',
+    input: { q: z.string().min(2).max(80).optional().describe("a product keyword, e.g. 'harness': competitors' current prices for matching products") },
+    run: async ({ q }, ctx) => {
       if (!ctx.competitors) return 'Competitor tracking is not available.';
       const { competitors, priceChanges, ads } = ctx.competitors(ctx.store.id);
       const name = new Map(competitors.map((c) => [c.id, c.name]));
@@ -379,10 +381,27 @@ export const APP_TOOLS: AppTool[] = [
         '# Competitors',
         csv(competitors.map((c) => ({ name: c.name, url: c.url, products_tracked: c.productsTracked, active_ads: c.activeAds, notes: c.notes ?? '' }))),
         // A competitor shop prices in its own currency: 39 EUR next to this store's 39 USD isn't the same price.
-        `# Price changes (newest first, in the competitor's currency; blank when its site didn't say. This store sells in ${ctx.store.currency})`,
+        `# Price changes (newest first, in the competitor's currency; blank when its site didn't say. This store sells in ${ctx.store.currency}. A price that held isn't here: pass q for current prices)`,
         csv(priceChanges.map((p) => ({ competitor: name.get(p.competitorId) ?? p.competitorId, product: p.product, from: p.from, to: p.to, currency: p.currency ?? '', change_pct: r2(p.changePct), at: p.at.slice(0, 10) }))),
         '# Recent ads',
         csv(ads.map((a) => ({ competitor: a.competitor, network: a.network, format: a.format, headline: a.headline, body: a.body, cta: a.cta ?? '', first_seen: a.firstSeen, last_seen: a.lastSeen }))),
+        // A product's newest snapshot is its price now: the watcher writes one when it first sees it and on every change.
+        ...(q
+          ? [
+              `# Current prices for "${q}" (in the competitor's currency; since = when it was first seen at that price)`,
+              csv(
+                ctx.db
+                  .prepare(
+                    `SELECT c.name AS competitor, s.data_json ->> '$.product' AS product, s.data_json ->> '$.price' AS price, s.data_json ->> '$.compareAt' AS compare_at,
+                       s.data_json ->> '$.currency' AS currency, substr(max(s.captured_at), 1, 10) AS since
+                     FROM competitor_snapshots s JOIN competitors c ON c.id = s.competitor_id
+                     WHERE c.store_id = ? AND s.kind = 'price' AND instr(lower(s.data_json ->> '$.product'), lower(?)) > 0
+                     GROUP BY s.competitor_id, s.data_json ->> '$.product' ORDER BY competitor, product LIMIT 30`,
+                  )
+                  .all(ctx.store.id, q),
+              ),
+            ]
+          : []),
       ].join('\n');
     },
   }),

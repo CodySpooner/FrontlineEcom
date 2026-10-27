@@ -320,11 +320,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-190 Reflection learnings get `write_memory`'s limits. The tool caps text at 300 characters, evidence at 300 and tags at 6, but the after-run reflection saved whatever the model replied, so one paragraph-long "learning" rode along in every later prompt.
 - [x] AGT-191 `store_summary` says when profit reads high because sales have no unit cost. The dashboard warns the owner, `review_campaigns` warns the Ad Strategist, but the daily briefing's profit and "winning" health came from `store_summary` with no word of it (a TikTok Shop or Etsy store with no costs entered reads close to 100% uncosted).
 - [x] AGT-192 `metrics_timeseries` and `compare_stores` say when profit reads high for missing unit costs, as `store_summary` now does (AGT-191): the briefing reads the series too, and a store with no costs ranked above what it earns.
+- [x] AGT-193 `list_competitors` gives competitors' current prices by product keyword. It showed only price changes, so a competitor that held its price had no price at all, and the weekly price check ("against list_competitors' prices") compared the store with whoever happened to move lately.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-193: `list_competitors` takes `q` and adds each matching competitor product's newest snapshot (its price now, up to 30); the price-changes header says held prices need `q`; the weekly price check asks for it.
 - 2026-10-26 — AGT-192: `metrics_timeseries` heads its CSV with the uncosted share when it's 10%+; `compare_stores` names the stores whose profit reads high in its header line.
 - 2026-10-26 — AGT-191: `store_summary` adds a `profitNote` when 10%+ of the window's product sales have no unit cost (`uncostedShare`, as `review_campaigns`), saying profit, margin and health read high and where the owner enters costs.
 - 2026-10-26 — AGT-190: `parseLearnings` drops a text under 5 or over 300 characters and cuts evidence to 300 and tags to 6.

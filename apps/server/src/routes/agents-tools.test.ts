@@ -407,7 +407,25 @@ describe('agent tools on demo data', () => {
     const events = await run(input('pawsome', 'ad_strategist'), [{ call: 'list_competitors' }, done]);
     const out = results(events)[0]!.output;
     expect(out).toContain('# Competitors\nname,url,products_tracked,active_ads,notes\nWag & Wander,');
-    expect(out).toContain("# Price changes (newest first, in the competitor's currency; blank when its site didn't say. This store sells in USD)\ncompetitor,product,from,to,currency,change_pct,at");
+    expect(out).toContain("# Price changes (newest first, in the competitor's currency; blank when its site didn't say. This store sells in USD. A price that held isn't here: pass q for current prices)\ncompetitor,product,from,to,currency,change_pct,at");
+    expect(out).not.toContain('# Current prices');
+    // Current prices by keyword, one row per competitor product at its newest snapshot, held prices too.
+    db.prepare(`INSERT INTO competitor_snapshots (id, competitor_id, kind, captured_at, data_json) VALUES ('held', 'demo-trailpup', 'price', '2020-01-01T00:00:00Z', ?)`)
+      .run(JSON.stringify({ product: 'Trail Leash', price: 24.99 }));
+    try {
+      const now = results(await run(input('pawsome', 'ad_strategist'), [{ call: 'list_competitors', input: { q: 'HARNESS' } }, { call: 'list_competitors', input: { q: 'leash' } }, done]));
+      const section = (o: string) => o.slice(o.indexOf('# Current prices'));
+      const latest = (product: string) => db.prepare(`SELECT data_json ->> '$.price' AS p FROM competitor_snapshots WHERE data_json ->> '$.product' = ? ORDER BY captured_at DESC LIMIT 1`).get(product)!.p;
+      expect(section(now[0]!.output).split('\n')).toEqual([
+        `# Current prices for "HARNESS" (in the competitor's currency; since = when it was first seen at that price)`,
+        'competitor,product,price,compare_at,currency,since',
+        expect.stringMatching(new RegExp(`^TrailPup Co,Hiking Harness,${latest('Hiking Harness')},[\\d.]+,,\\d{4}-\\d\\d-\\d\\d$`)),
+        expect.stringMatching(new RegExp(`^Wag & Wander,Adventure Harness,${latest('Adventure Harness')},[\\d.]+,,\\d{4}-\\d\\d-\\d\\d$`)),
+      ]);
+      expect(section(now[1]!.output)).toContain('\nTrailPup Co,Trail Leash,24.99,,,2020-01-01'); // never changed: no price change, still a price
+    } finally {
+      db.prepare(`DELETE FROM competitor_snapshots WHERE id = 'held'`).run(); // the db is shared by these tests
+    }
     // A shop pricing in euros says so, next to this store's dollars.
     const eur = { competitorId: 'c1', storeId: 'pawsome', product: 'Dog bed', from: 39, to: 35, changePct: -10.256, at: '2026-10-25T08:00:00Z', currency: 'EUR' };
     const env = { ...toolEnv(db), competitors: () => ({ competitors: [], priceChanges: [eur], ads: [] }) };
