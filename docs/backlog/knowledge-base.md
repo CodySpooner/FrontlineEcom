@@ -1,0 +1,624 @@
+# Backlog — knowledge-base lane (Knowledge Base & Research Intelligence)
+
+Repo rules: `CLAUDE.md` (worker loop, hard rules). Owner's full spec, verbatim: `docs/features/knowledge-base.md`, which
+is the source of truth for *what*. This file is the *how* in this repo: the chosen design, the decisions already made,
+lane ownership and the items. Code survey of everything this feature touches: `docs/features/knowledge-base-codemap.md`.
+Read all three before KB-01. Three independent reviewers checked this file against the spec, the code and the mockups
+before the lane started. Their findings are already worked in.
+
+## What the owner asked for (verbatim, 2026-10-27)
+
+> make me 3 different designs show them to me and ill decide the direction we go then after i finalize a design
+> concept i want you to open a orca workspace called "Knowledge Base" and work on this task
+
+Three directions were shown on a design canvas: A "Atlas" (the canvas is the page), B "Intel Desk" (research
+operations first) and C "Proving Ground" (evidence board). The owner picked:
+
+> Yep let's go with "a" as the main view and "b" as the research center and let's just keep it at 1 Claude worker,
+> make a new workspace and Call it "Knowledge Base" and so we can stay organized and when working on the knowledge
+> base tool we can use this workspace if we have to come back to it
+
+## The design
+
+- `docs/reference/kb-atlas.png` is A, the main view. `docs/reference/kb-research-center.png` is B, the Research
+  Center.
+- `kb-atlas.html` and `kb-research-center.html` next to them are the same mockups as static HTML with inline styles.
+  Open them for colours, type and spacing.
+- Their fixed pixel sizes were drawn for 1440 px. Where the rules below differ, follow the rules.
+- Every number, card, store count and name in them is a placeholder. Never ship mock data.
+- C is not part of the build.
+
+### Page frame (all views)
+
+- **Header:** the page keeps the app's `Hero` with its generated Knowledge Base header art. The owner asked on
+  2026-10-27 for header art on every section, so it is not swapped for the mockup's slim bar. Pass props or children
+  to `Hero`; don't change `Hero.tsx`.
+- **Toolbar row** under the Hero, `flex-wrap`, containing:
+  - the workspace switcher (General, or one store with its niche and card count);
+  - "Include General knowledge" (store workspaces only);
+  - search, `flex-1 min-w-[180px] max-w-[320px]`. Its placeholder is "Search knowledge…", so it reads differently from
+    the Hero's own Ask AI field;
+  - "From source" and "New research".
+- **One page-level view switcher**, Artboard · Library · Relationships · Research Center, bound to `?view=`. Use the
+  house `Tabs` or `Segmented`, not the mockup's aria-pressed buttons.
+  - In the artboard view it floats top-centre on the canvas.
+  - In every other view it sits at the right end of the toolbar or chips row, as in B.
+- **URL state:**
+  - `?view=artboard|library|relationships|research`, default artboard.
+  - `?ws=general|<storeId>` (plus `all`, only in the research view). It defaults to the single store picked in the
+    global `StoreFilter` selection, else General.
+  - `?card=<id>` loads that card and switches `ws` to the card's workspace. So a `[kb:id]` link from any transcript
+    opens correctly.
+  - A legacy URL with `tab` or `doc` and no `view` opens the Library on that section (`?doc=` alone means a playbook).
+- **Keyboard guards:**
+  - `/` focuses search only when no modifier is held, the target isn't an input, textarea, select or contenteditable,
+    and no dialog is open. Call `preventDefault`.
+  - Esc closes the innermost layer first (popover, then the details panel). It is ignored when
+    `e.defaultPrevented` is set or a dialog is open, and it returns focus to the card.
+  - Never take Ctrl/Cmd+K: AskPalette owns it.
+
+### Main view: Atlas (A)
+
+- **Canvas size:**
+  - The canvas wrapper is `-mx-[22px] -mb-8`, so it bleeds past Shell's side padding and `pb-8`.
+  - Its height is `calc(100dvh - <measured top>)`. Measure with ResizeObserver or getBoundingClientRect; never
+    hard-code it, because the Hero's height varies.
+  - The page doesn't scroll in the artboard view.
+  - It must work at 1280×800, 1366×728 (laptop) and 1440×900 (the desktop default).
+- **Canvas:**
+  - A dot grid.
+  - Cards are grouped into frames, one per deepest category that holds cards, with the path written "A › B › C". The
+    frame header shows the path, card count, "Research more" and collapse. A frame of General cards carries a
+    "General" pill.
+- **Card** (232×132):
+  - the type label: grey, and green only for Validated Insight;
+  - a workspace dot and name (a store colour or "General");
+  - title, short summary, and one line of tags;
+  - the author agent's initials and role;
+  - a 4-step confidence meter: grey fill, all green at Validated. It carries an sr-only "Confidence: <stage>", not just
+    a `title`;
+  - when it was last verified, replaced by "needs refresh" when stale;
+  - a **dashed border whenever the stage is Hypothesis, whatever the type**;
+  - a darker fill for General cards (#111114 against #17171b);
+  - when selected, a red border and glow.
+- **Connections:**
+  - Lines are drawn per relationship type. "Contradicts" is red and dashed with a ≠ marker. AI-suggested, unconfirmed
+    links are dotted.
+  - Each line has endpoint dots, a wide transparent hit stroke, and a relationship-name pill `<button>` at its
+    midpoint. The pill shows for the selected card's lines, and for all lines at zoom ≥ ~60%.
+  - Clicking a line or pill opens a popover explaining why the cards are linked, with accept or reject for suggested
+    links.
+- **Outline** (left):
+  - It spans from top 16 to bottom (16 + minimap + 12), so it never covers the minimap. Don't copy the mockup's fixed
+    660 px.
+  - The tree (nested, with counts) scrolls inside it. The filter box and the line legend stay pinned.
+  - It has "+ New category", and "General knowledge N" with a note that it is shown inside this store where it
+    applies.
+  - Clicking a row (or Enter) pans to that frame, expands it and focuses its first card. The current row gets
+    `aria-current`.
+- **Minimap and zoom** (bottom-left): −, %, +, Fit.
+  - Fit, zoom-to-card and opening the details panel all use the area the Outline and the details panel don't cover.
+  - When the details panel opens, the selected card is panned into view.
+- **"Researching" dock** (bottom):
+  - It sits between the Outline's right edge and the details panel's left edge (or right:16 when the panel is closed),
+    max-width 560.
+  - It shows live tasks with stage and progress, and "+N queued". Tasks truncate, and below ~520 px only the first one
+    shows.
+  - Clicking it opens the Research Center.
+- **Details panel** (right, 340 px):
+  - A **non-modal** `<aside>` inside the canvas area, so you can keep selecting and panning. Not `Dialog`, which is
+    modal.
+  - It shows:
+    - type, title and path, and the 4-step ladder (Hypothesis → Supported → Tested → Validated);
+    - the explanation;
+    - evidence rows tagged MEASURED / RESEARCH / OBSERVED / CONFLICT;
+    - Applies to, Limits, How agents use it;
+    - connected cards, each with "Why linked" (the same popover), and "Link to…";
+    - sources with provenance, and how often agents used it;
+    - actions: Use in a task, Research deeper, Promote to General (store cards only), and the manual controls in
+      spec §14.
+- **Keyboard:**
+  - The canvas is one tab stop.
+  - With the background focused, arrows pan, +/− zoom and 0 fits.
+  - With a card focused:
+    - arrows move to the nearest card in that direction and pan it into view;
+    - Enter opens details;
+    - Space / Shift+Space toggle multi-select;
+    - Alt+Arrow nudges the selected card (the keyboard alternative to dragging).
+  - Focused and selected cards are never culled.
+
+### Research Center: Intel Desk (B), `?view=research`
+
+- **Workspace chips** (All workspaces, General, each store) replace the toolbar's switcher and toggle in this view.
+- **Six stat tiles:** cards, validated, hypotheses, researching now, needs refresh, conflicts.
+  - Each shows its real sub-line ("+N this week", "N ready to test", "waiting for your call").
+  - Each links to the matching Library filter or the artboard (e.g. `?view=library&stage=validated`).
+  - Conflicts gets a red border when above 0.
+- **Knowledge map:** each category gets a bar stacked by evidence level. Rows link to their frame. Below them,
+  "+ Custom category".
+- **Latest discoveries** ("this week", "View all"):
+  - Now validated, with evidence chips (Measured · N tests / N sources / N connections) and "Open on artboard"
+    (`?card=`).
+  - Conflict, with Compare evidence / Plan a test / Keep both.
+  - Promote to General?, with Approve / Review the edit / Keep in store.
+  - Refreshed.
+  - A small artboard preview with "Open artboard".
+- **Research Center column:**
+  - "Open" link, and Active / Queue / Done / Sources tabs.
+  - Task cards: the real pipeline stages as a segmented bar, sources read/blocked, findings, matches to existing
+    cards, spend against budget, and Stop / Open task.
+  - "Agents recommend", with Approve.
+  - Knowledge gaps: linked rows with a reason ("0 measured", "only hypotheses", "6 of 9 stale").
+  - The self-directed research budget line, with Controls.
+- **"Research from source" bar** along the bottom.
+- **Layout:** at 1440 px and wider, the three columns `280px minmax(0,1fr) 360px` and 6 tiles in a row. Below
+  1440 px:
+  - two columns (map and discoveries), with the Research Center column full-width under them;
+  - tiles 3×2.
+
+### Library and Relationships
+
+- **Library** (`?view=library`): the same cards as a dense, sortable list.
+  - The spec §13 filters: workspace, category, agent, source, created, last verified, confidence stage, type,
+    performance metric, tags, validation status.
+  - Saved filters, and bulk actions.
+  - It also hosts the existing UI-16 sections (Playbooks, Platform packs, Niche packs, Store memory) and a Campaigns
+    section (KB-21).
+  - The UI-16 code moves in with **one change**: its two `setParams` calls (`Knowledge.tsx:40`, `:70`) merge into the
+    current params and keep `view=library`. As written they replace the whole query and would throw the owner back to
+    the artboard. A test clicks Playbooks and then a doc, and the page stays in the Library.
+- **Relationships** (`?view=relationships`):
+  - The selected card in the middle and its neighbours, grouped by relationship type.
+  - Filters by type, click to explain, and arrow keys between neighbours.
+  - Lay it out in plain code, e.g. rings by hop distance. Don't add a graph library.
+
+## Decisions already made (coordinator's calls; change one only with a reason written under Notes)
+
+1. **Keep what exists.** Four kinds of memory stay separate, as the spec asks:
+   - The markdown layers are the agents' *procedures*: playbooks and platform/niche packs.
+   - `store_memory` is the squad's *working memory*: facts, preferences, outcome notes. Don't migrate or rename it:
+     its invariants, FTS triggers, raw-SQL users and tests are in the code map.
+   - `niche_learnings` stays as it is.
+   - Ad and store metrics are *performance history*.
+   - The new cards are the *knowledge base*.
+   Never tell the owner the model "retrained itself". Agents get better because they retrieve better knowledge.
+2. **Where the code lives:**
+   - **Domain layer in `packages/agents/src/kb*.ts`,** exported from `index.ts` the way `memory.ts` is. It holds
+     workspace scoping, card, evidence and link writes with the ladder and provenance rules, dedupe, retrieval and
+     usage logging. It has to be here: both the server routes and the agent tools and prompt use it, and
+     `packages/agents` can't import `apps/server`.
+   - **`apps/server/src/kb/**`** holds the HTTP routes, the safe fetcher (decision 9) and the research runner
+     (decision 7).
+   - **Agent tools** reach server-only code (the fetcher, starting research) through new optional `ToolEnv` hooks,
+     like `trackCompetitor` (`tools.ts:24-66`, `routes/agents.ts:180`).
+3. **Storage** uses the existing SQLite database:
+   - New tables are appended to `MIGRATIONS` (next is #44, each labelled `/* NN (kb: KB-xx) */`).
+   - An FTS5 index on cards follows the `store_memory_fts` pattern.
+   - Everything lives in the DB, including the extracted text of uploaded documents and fetched pages, so the
+     existing backups cover it. Don't keep KB files in the data dir.
+   - Spec §16 lists the models. The minimum is:
+     - a category tree: `parent_id`, any depth, per workspace. Spec §17 uses three-level paths such as
+       "Advertising › Creative Strategy › Video Hooks";
+     - cards (with tags and a lifecycle status, decision 10), card revisions, sources, evidence and links;
+     - layouts and saved views;
+     - research tasks, task steps and log, and research findings;
+     - retrieval events, performance observations and experiments;
+     - research controls.
+     Promotions and permissions reuse `approvals`.
+   - SQLite treats NULLs in a UNIQUE key as distinct. Per-workspace unique indexes therefore use
+     `coalesce(store_id,'')` (and `coalesce(parent_id,'')`), following `niche_learnings_text` (`db.ts:325`). A test
+     inserts the same General category and card twice.
+4. **Workspaces and isolation:**
+   - The workspace is `store_id`: NULL means General, and store rows use `ON DELETE CASCADE`.
+   - Every KB read and write goes through the one scoping helper, and every by-id route checks the row's workspace.
+     This is unlike `/api/memory/:id`, which doesn't. A wrong-workspace id gets a 404.
+   - A store workspace sees its own cards, plus General when asked. It never sees another store's.
+   - **Agent retrieval always includes General,** ranked below the store's own cards.
+   - Only owner-facing search and the Research Center may use "All workspaces".
+   - Tests prove all of this for every route, every tool and retrieval.
+5. **Routes:**
+   - Use fresh prefixes, `/api/kb/...` and `/api/kb/research/...`. `/api/knowledge/:kind/:key` and `/api/research/:id`
+     would shadow them.
+   - Keep the existing `/api/knowledge` endpoints working.
+6. **No fake knowledge:**
+   - Seed only the 16 General categories. No demo cards, no simulated research, no canned findings.
+   - **Never add research output to the fake engine's `echoScript`.**
+   - Empty states offer the real next step, such as "Research the basics for Pet".
+   - Visual checks may use a dev-only fixture DB or a test. Never ship one in the seed or a production view.
+7. **Demo stores:**
+   - Their ad numbers are random noise (`demoDay` ignores campaign status), so the KB never learns from demo or sample
+     data.
+   - **Owner-started research** runs on the real Claude engine even when the paying store is a demo store. It is web
+     research and isn't based on the store's fake data. If the real engine isn't available, the task fails and says
+     so.
+   - Scheduled or autonomous research never runs on the fake engine and never pretends to.
+   - Tests always use the fake engine.
+   - **When a demo store goes live** (extend `startFresh`):
+     - purge only what came from demo data: performance observations and lessons, evidence from the store's metrics,
+       and agent cards from non-research runs;
+     - keep owner cards and cards whose evidence is a read web source;
+     - cancel the workspace's open research tasks;
+     - count what was purged in the existing go-live notification.
+8. **Research runs on the existing agent machinery:**
+   - The research runner is a KB task-row state machine, built like `advanceMissions(db, start)`. It takes `start` (or
+     a RunManager) and an `engineAvailable()` predicate as parameters:
+     - production passes `runManager(db)` and a Claude check;
+     - tests pass `createRunManager({ engine: fakeEngine(script) })` with a scripted research engine.
+   - The agent stages (planning, discovering, retrieving, analyzing, evaluating, extracting, reporting) are ordinary
+     runs started through `start`, which brings queueing, slots, budgets, cancel and streaming.
+   - **Deterministic stages run as code, not agent runs:** deduping, storing and linking (suggestions).
+   - Put the task id in each run's task text, because `start()` de-duplicates identical text.
+   - Structured results go into KB tables, not transcripts, which are clipped to 4000 characters.
+   - **Run mode:**
+     - A nullable `agent_runs.mode` column (kb migration), set through a new `start()` option and copied by the
+       restart retry (`runs.ts:348-351`). `execute()` fills `RunInput.mode` from it.
+     - `mode = 'research'` routes owner-started runs to the Claude engine in `defaultEngine`, and skips `reflect()`.
+     - It overrides `maxTurns` and sets `budgetUsd` = min(the store share, what the task has left).
+     - It uses research-specific STOPPED messages; today's hard-code "40-turn limit" (`claude-engine.ts:13-14`).
+     - The runner adopts a restarted phase through the `retry:<old>:<new>` link (copy `missions.ts` `stepRun`) instead
+       of starting the phase again.
+   - **Research tools:**
+     - A `researchTools(role)` set, used by `claude-engine.ts`, `fake-engine.ts` and `canUseTool` when the mode is
+       research: the KB research tools plus WebSearch.
+     - It excludes built-in WebFetch (every fetch goes through the app's `fetch_source`, so it is recorded and
+       guarded), `write_memory` and `assign_task`.
+     - In normal mode the KB research tools are filtered out.
+     - Keep `toolsFor(role)` unchanged for `evals.test.ts`. List the research tools on one role (market_analyst) only so
+       the "used by some role" check passes.
+     - Put no research-tool names in SQUAD_RULES.
+   - **General-destination runs get a store-neutral system prompt** (`RunInput.systemPrompt`): the role, SQUAD_RULES
+     and General-only KB retrieval. No store memories, profile, niche pack, or waiting/scheduled lines. A test checks
+     that a General task's prompt holds none of the paying store's memories or cards.
+   - General research is paid by a store the owner picks (default: the first store).
+9. **No new agent role.** "Agent type" in the spec maps onto the existing 8 roles:
+   - **General:** Market Analyst, saving to General.
+   - **Specialized:** the role picked, e.g. Ad Strategist for advertising.
+   - **Business/Niche:** the store's own squad member, with the store's niche in context.
+   - Role → category boosts decide which knowledge each role gets first. Research mode gives every role WebSearch, so
+     roles without web tools can research too.
+10. **Safe fetching** gets one server module that every fetch goes through, including robots.txt and each redirect
+    hop:
+    - It uses `node:http`/`https` `request` with a `lookup` option that returns the already-vetted address. That
+      closes the DNS-rebinding gap noted at `competitors.ts:106`, and the hostname still goes out for SNI and the Host
+      header. Reuse `publicFetch`'s LOCAL BlockList, not `isPrivateHost` alone, which misses CGNAT.
+    - Manual redirects, max 5.
+    - Timeout, a byte cap while streaming, and a content-type allowlist.
+    - An honest User-Agent. robots.txt is obeyed.
+    - A per-host throttle.
+    - HTML becomes readable text. PDF, text, markdown and CSV documents become text; pick one small, maintained PDF
+      dependency and record it in Notes.
+    - Paywall and login pages are detected.
+    - Each source gets a status: `read | blocked_robots | blocked_domain | paywalled | login | unsupported | too_large
+      | failed`.
+    - A source that wasn't read is never summarized as if it was.
+    - Fetched text reaches agents only as sanitized, untrusted data, following `csv()` and `SQUAD_RULES`.
+    - The workspace's trusted and blocked domain lists (KB-22) are enforced here.
+11. **Card rules:**
+    - **Lifecycle status:** `proposed | active | archived | rejected | merged`.
+      - Research and agent writes start as `proposed`, unless the workspace turned review off (KB-22).
+      - Proposed cards show on the artboard marked "Unreviewed" and are **excluded from agent retrieval** until
+        accepted.
+    - **Stage** (the ladder) and **type** are separate fields, linked by these rules:
+      - Agents may create stage Hypothesis or Research-Supported only.
+      - Research-Supported needs **2+ independent read sources, or 1 source rated reliable** (decision 10, KB-11). One
+        weak source stays a Hypothesis.
+      - Experimentally Tested needs measured evidence.
+      - Validated needs measured evidence from 2+ independent tests, or the owner.
+      - Contradicting evidence moves a card down or flags a conflict.
+      - Agents may not set the type Validated Insight or User-Provided.
+      - The type Validated Insight requires stage Validated. Dropping below Validated changes the type back to its
+        previous type (or Research Finding).
+      - The card's look follows the stage, not the type.
+    - Every move and edit is a revision with its reason.
+    - Agent writes never overwrite or undo the owner's edits or reverts, mirroring the `memory.ts` provenance rules.
+    - Every automated decision can be reversed:
+      - restore a revision;
+      - detach merged evidence as its own card;
+      - unarchive, unreject and unblock.
+12. **Retrieval:**
+    - It combines:
+      - FTS5 bm25;
+      - metadata filters (workspace, category subtree, type, stage, status, freshness, blocked, tags);
+      - boosts for stage, recency, role→category, relationship proximity, usage and citation counts, and source
+        reliability.
+    - Agents get it two ways:
+      - a compact "Relevant knowledge" section in `assemblePrompt`, after the fixed layers so prompt caching survives.
+        Re-check the 8000-token budget and the 1500-token memory floor in `prompt.test.ts`;
+      - a `search_knowledge` tool that returns ids, available in normal mode to every role.
+    - Agents cite `[kb:<id>]`, and transcripts render that as a link to the card.
+    - Every retrieval and citation is logged and counted ("used 14 times").
+    - Hypotheses arrive labelled as unproven. Blocked, proposed and archived cards never arrive.
+    - **Embeddings are optional:** the app has no embedding provider today.
+      - Build keyword + metadata + relationship retrieval first.
+      - Add a semantic layer only behind a provider the owner configures.
+      - Without one, the UI says "keyword search" and nothing claims semantic search.
+13. **Performance learning** is honest about the data that exists:
+    - Ads are campaign-level only: spend, revenue, purchases, clicks and impressions per day. ROAS, CTR, CPC, CPM, CPA
+      and CVR can be derived from those. Creatives aren't linked to campaigns.
+    - So creative-level lessons such as "problem-first hooks" need ad-level sync and creative↔ad links first (KB-20).
+      Until then, the UI states what isn't enabled.
+    - The guards are deterministic, tested code:
+      - minimum spend, impressions, purchases and days;
+      - a settled attribution window (the 28–30 day re-pull);
+      - comparison with the store's own baseline;
+      - seasonality via `par()`;
+      - currency-safe ratios;
+      - confounds noted.
+    - Weak patterns stay Hypotheses. Only the explanation text comes from an agent.
+14. **Gamification and notifications:**
+    - KB writes emit their own event, not `memory_written`, so they award no memory XP.
+    - `runHooks.onRun` skips the per-run XP award and the "<Role> finished" notification for research-mode runs.
+    - The runner sends one notification per task (done, failed or cancelled) and awards XP at most once per task.
+    - Every new tool is in a role's allowlist, and every new approval kind has a label, as `evals.test.ts` requires.
+15. **UI building blocks:**
+    - Reuse `components/ui.tsx`: Panel, Card, Button, Tabs, Segmented, Badge, Dialog for true modals (From source, New
+      research, confirms), ConfirmDelete and the Loading/Error/EmptyState trio.
+    - Reuse the react-query hooks in `api/client.ts` and the single `useLive` socket. Add a branch for KB and research
+      messages; don't open a second socket.
+    - Copy, don't import, the 3-line `zoomAt` math and the input conventions from `src/ecosystem/camera.ts` and
+      `renderer.ts`. That code belongs to another lane, and importing it pulls in pixi.
+    - Keep the page lazy-loaded.
+
+## Lane
+
+- **Owns:**
+  - `apps/web/src/pages/Knowledge.tsx` and a new `apps/web/src/knowledge/**`, plus the KB entries in `api/client.ts`.
+    `nav.ts`: title and subtitle only; don't reorder NAV.
+  - `packages/agents/src/kb*.ts` plus the run-mode, tool and prompt changes (decisions 8, 12, 14).
+  - `apps/server/src/kb/**`, appended migrations, route mounting in `app.ts`, and the `startFresh` and `runHooks`
+    changes.
+  - Additive types in `packages/shared`.
+  - "Research this" entry points on the Dashboard, Analytics and Chat (KB-15).
+  - This file.
+- The other lanes are stopped (each has `.agent/STOP`), so cross-package edits are expected here.
+  - Keep each one surgical and covered by the existing tests.
+  - Leave `apps/web/src/ecosystem/**`, `apps/web/public/**`, `Hero.tsx` and `Art.tsx` alone.
+- Commits: `kb: KB-xx <what>`. Vault log: `Build Log/knowledge-base.md`.
+
+## Done when
+
+- Every item is ticked and `pnpm check` is green.
+- The owner's §17 workflow runs end to end as an automated test (fake engine), asserting the exact three-level
+  category paths.
+- **One** short real-engine smoke run: a directed research task on one public URL, saved to a store workspace,
+  followed by a later agent task that retrieves and cites it.
+- Each line of the spec §19 testing checklist has a test or a recorded check.
+- The Artboard, Library, Relationships and Research Center views are checked in Orca's browser at 1280×800, 1366×728,
+  1440×900 and 1920×1080 against the two references, with screenshots in `.agent/` and no console errors.
+- Then create an empty `.agent/STOP` in this worktree and stop.
+
+This lane is finite. When KB-01..KB-26 are done, don't add new items (this overrides CLAUDE.md's "Backlog empty?"
+rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog nudge if `.agent/STOP` exists.
+
+## Inbox
+<!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+
+## Items
+
+### Phase 1: audit
+- [ ] KB-01 **Audit and baseline.**
+  - Read the spec, this file and the code map. Confirm the decisions against the code.
+  - Screenshot today's `/knowledge` (all 4 tabs) at 1280 and 1920 as "before".
+  - Write a short Notes entry: where each new piece will live, and any decision you changed and why.
+
+### Phase 3 foundations (before the UI, so the UI is built on real data)
+- [ ] KB-02 **Data model:**
+  - Shared types:
+    - the 11 card types and the 4 stages;
+    - the lifecycle statuses;
+    - the 7 relationship types (Supports, Contradicts, Builds Upon, Derived From, Validated By, Applied To, Related
+      To);
+    - workspace, category tree and tags;
+    - evidence kinds (measured / research / observed / conflict);
+    - source status and source reliability.
+  - Migrations for the decision-3 tables, plus FTS, the `agent_runs.mode` column and the coalesce unique indexes.
+  - Seed the 16 General categories once.
+  - The scoping helper, with isolation tests.
+  - The `startFresh` changes (decision 7).
+- [ ] KB-03 **Cards and categories API** (`/api/kb/...`):
+  - list (the §13 filters, paging, sort, `ws=all` for the owner only), get, create (owner = User-Provided);
+  - edit (writes a revision), pin, archive and unarchive, reject and unreject, block and unblock from agents (all
+    roles or chosen roles), merge (keeps both histories), mark for research, accept proposed;
+  - category CRUD at any depth, per workspace;
+  - hand-written validators in the house style;
+  - a 404 on another workspace's id.
+  - Tests.
+- [ ] KB-04 **Evidence, relationships and the ladder:**
+  - add evidence (with source, metric, window, sample size);
+  - owner "Link to…" (type plus explanation, confirmed);
+  - suggested links with accept or reject;
+  - a deterministic suggester (FTS, category, shared sources) that runs on **every** card create, by hand, by
+    research or by performance, and saves suggested links and possible contradictions;
+  - the ladder and type rules (decision 11), each a revision;
+  - a contradiction creates a conflict record;
+  - restore a revision, and detach merged evidence.
+  - Tests for every rule.
+
+### Phase 2: visual redesign (design A + the page frame)
+- [ ] KB-05 **Page frame,** per "Page frame (all views)":
+  - the views, `?ws=` and `?card=`;
+  - the Hero and the toolbar row;
+  - the page-level view switcher;
+  - the keyboard guards;
+  - loading, error and empty states.
+  - In `Knowledge.test.tsx`, only the start URL of the two tests that open bare `/knowledge` (`:98`, `:136`) changes,
+    to `/knowledge?tab=playbook`, and Notes records why. Every other assertion stays as it is.
+  - New tests: the legacy `tab`/`doc` URLs, `/` while typing in a textarea, and Esc with AskPalette open.
+- [ ] KB-06 **Artboard I:**
+  - canvas sizing per the design;
+  - camera: pan, wheel zoom about the cursor, Fit that accounts for the panels;
+  - frames per category path, with auto-layout, collapse and expand;
+  - the card component exactly per the design rules;
+  - dragging a card persists its position per workspace;
+  - selection: click, shift-click, box-select;
+  - minimap and zoom toolbar;
+  - the canvas keyboard model;
+  - cards and edges outside the viewport aren't rendered (except focused or selected ones), so 1000 cards stay smooth.
+  - Tests for the camera math, the layout, the keyboard navigation and culling.
+- [ ] KB-07 **Artboard II:**
+  - lines per type with pills, hit strokes and the explanation popover;
+  - the legend;
+  - highlighting the selection's lines;
+  - the Outline per the design ("+ New category", pan-to-frame);
+  - saved views (filters + viewport + layout) per workspace;
+  - the live "Researching" dock with the placement rules.
+- [ ] KB-08 **Details panel** (a non-modal aside):
+  - every card field from spec §4;
+  - the ladder, the evidence list with tags, connected cards with "Why linked" and "Link to…";
+  - sources with provenance (open, fetched date, status, reliability), usage count;
+  - revision history with Restore;
+  - inline edit, and every manual control from spec §14, including the reversals;
+  - an open/close transition that respects `prefers-reduced-motion`.
+- [ ] KB-09 **Library view,** per the design: the §13 filters, saved filters, bulk actions (archive, block, mark for
+  research, move category, accept proposed), and the UI-16 sections with the `setParams` fix and its test.
+- [ ] KB-10 **Relationships view,** per the design.
+
+### Phase 4: research
+- [ ] KB-11 **Safe fetcher** (decision 10) and source storage:
+  - content hash for dedupe, title, published date, fetched date, status;
+  - reliability, rated by deterministic rules (domain class: platform docs, research or academic, established
+    publication, vendor blog, forum, unknown) and adjustable by the owner;
+  - the readable text kept in the DB, plus an excerpt.
+  - Tests: private IPs, a redirect to a private host, DNS rebinding, oversize, wrong type, a robots.txt disallow, a
+    blocked domain, a paywall or login page, and injection text that stays inert.
+- [ ] KB-12 **Research runner** (decision 8):
+  - stages: created → planning → discovering → retrieving → analyzing → evaluating → extracting → deduping → storing
+    → linking → reporting → done / failed / cancelled;
+  - each stage checkpoints into KB tables;
+  - the evaluating stage persists a per-finding assessment against the spec §5 criteria (source reliability, evidence
+    quality, relevance, recency, agreement across sources, usefulness, novelty, contradictions, applicability), and
+    the ladder rules use it;
+  - cancel;
+  - automatic retry with an attempt count and backoff;
+  - owner **Retry** (a new attempt from the last good stage) and **Refine** (edit the brief or scope, then re-run,
+    linked to the original);
+  - after a restart, resume from the last finished stage;
+  - a per-task budget, plus the store's daily cap;
+  - the reporting stage stores conclusions, unresolved questions, errors and limitations, conflicts found, and cards
+    created versus updated;
+  - live progress messages and the execution log.
+  - Fake-engine tests for every transition, cancel, restart, budget stop, Retry and Refine, and "every source failed"
+    (which reports failure and makes no cards).
+- [ ] KB-13 **KB agent tools:**
+  - research mode: `fetch_source` (through a ToolEnv hook to KB-11), `propose_card`, `add_evidence` and
+    `suggest_link`;
+  - normal mode, every role: `search_knowledge`, and `recommend_research`, which adds to the "Agents recommend" queue
+    for owner approval and gives agents a way to suggest research mid-task;
+  - dedupe on write: an exact match, or high FTS/Jaccard similarity, merges into the existing card as new evidence
+    instead of making a duplicate;
+  - `propose_card` rejects the forbidden types and stages;
+  - the provenance invariants;
+  - `evals.test.ts` green.
+- [ ] KB-14 **Research from source,** the API plus the B-style bar and a full dialog:
+  - URLs, pasted text, or an uploaded document (with a size cap);
+  - agent type (decision 9), destination workspace and category, what to look for, and budget;
+  - live per-source status;
+  - a findings review (accept or reject the proposed cards);
+  - the final report.
+- [ ] KB-15 **New research and launch points:**
+  - a free-text request with workspace, agent, depth (quick / standard / deep, mapped to source counts and budget)
+    and budget, using the same runner;
+  - a plan preview before it spends;
+  - "Research this" launch points on a knowledge card, a frame, the Dashboard store card, Analytics insights and
+    campaign rows, and in Chat, each opening this dialog prefilled.
+- [ ] KB-16 **Research Center view** (design B), every widget on real data, with the links and responsive rules from
+  the design:
+  - the task drawer shows objective, workspace, category, agent, status and stage, sources read and blocked (with
+    reasons), the execution log, conclusions, unresolved questions, errors and limitations, conflicts found, and the
+    cards created and updated (linked);
+  - Stop / Retry / Refine.
+
+### Phase 5: agents share the knowledge
+- [ ] KB-17 **Retrieval in real tasks** (decision 12):
+  - the prompt section and the tool;
+  - role boosts;
+  - retrieval and citation event logging;
+  - `[kb:id]` links in transcripts and chat;
+  - usage counts.
+  - Tests:
+    - a later task retrieves knowledge saved by an earlier one;
+    - a store's agent gets General cards below its own;
+    - it never gets another store's cards;
+    - blocked, proposed and archived cards never appear;
+    - hypotheses arrive labelled.
+- [ ] KB-18 **Promote to General:**
+  - requested by the owner or an agent;
+  - an agent drafts the generalized card with store specifics stripped, shown as a diff;
+  - approve / edit / reject through `approvals` (outlives the run: `OUTLIVE_RUN` + `onApproved`);
+  - the General card links back to its source with Derived From;
+  - cross-store suggestions come only from live stores (follow `promotionCandidates`).
+  - Tests.
+
+### Phase 6: learning from performance
+- [ ] KB-19 **Performance pipeline:**
+  - connected data → validation (skip demo and sample data; the guards in decision 13) → analysis (per campaign and
+    store funnel against the baseline, with uncertainty) → pattern → insight → evidence assessment → storage (a
+    Performance Lesson card, or evidence on an existing card that moves its ladder up or down, then the suggester from
+    KB-04) → retrieval;
+  - the existing approved-change outcome checks feed in as measured evidence;
+  - store-side analyzers too (spec §9: conversion, AOV, product sales and returns where the data exists), through one
+    reusable observation → insight path, not separate memories per agent;
+  - when nothing is connected, an integration-ready state that names what isn't enabled.
+  - Tests on every guard and on the math.
+- [ ] KB-20 **Ad-level and creative data:**
+  - extend the Meta / TikTok / Google syncs to ad level, in new tables (never double-count `rebuildAdSpend`);
+  - descriptive attributes on creatives (format, hook, angle, length, offer);
+  - link a creative to its ad when it's launched through the app.
+  - Tests against recorded API fixtures. With no connected account, nothing is claimed.
+- [ ] KB-21 **Experiments and the Campaigns library:**
+  - "Plan a test" from a hypothesis: metric, variants, window, minimum sample, linked campaigns and creatives;
+  - automatic evaluation once the data settles, with the result written as evidence;
+  - a searchable Campaigns section in the Library. Per campaign: workspace, platform, products, creatives, copy and
+    hooks, audiences, metrics, date range, result (worked / failed / inconclusive), related cards, insights and
+    recommendations for future tests. Fields the data doesn't link yet show "not linked" instead of being dropped.
+    Each lesson links to its evidence and its measurement window.
+
+### Phase 7: autonomous research and maintenance
+- [ ] KB-22 **Autonomous research control,** enforced on the server:
+  - on/off per workspace and per role;
+  - the categories each role is responsible for;
+  - schedules (an `automation_rules` research action);
+  - triggers (gap, stale card, contradiction, performance anomaly);
+  - budget per task and per day, and depth;
+  - approval required;
+  - the workspace's trusted and blocked domains (enforced by the KB-11 fetcher);
+  - "provisional findings need review" (decision 11);
+  - the "Agents recommend" queue with cost estimates (approve or dismiss).
+  - **Loop guards:**
+    - autonomous tasks never trigger autonomous tasks;
+    - a cooldown per card and trigger;
+    - an open or recent task on the same workspace and topic is reused rather than duplicated;
+    - conflicts that a research task itself created don't re-trigger research.
+  - Tests for each control and guard.
+- [ ] KB-23 **Maintenance job:**
+  - duplicate detection and merge suggestions;
+  - contradiction detection into conflicts;
+  - freshness per category, feeding "needs refresh" and refresh tasks;
+  - gap detection, feeding Knowledge gaps;
+  - a version-history UI with Restore;
+  - traceability from card to source and evidence;
+  - a data-retention setting (trim old logs and fetched text, keep the metadata).
+  - Tests.
+- [ ] KB-24 **Search and ask:**
+  - ranked results with highlights in the toolbar search, using the §13 filters and an owner-only "All workspaces"
+    scope;
+  - "Ask the knowledge base": a natural-language answer from an agent run over the owner's allowed scope. It groups
+    conclusions as Measured or Research, cites both cards and sources, and says plainly when the KB doesn't know;
+  - an entry in AskPalette;
+  - the optional semantic layer behind a configured provider (decision 12).
+
+### Phase 8: hardening and acceptance
+- [ ] KB-25 **Security and ops pass:**
+  - isolation tests on every KB route and tool;
+  - body-size and rate limits on the KB and research routes;
+  - an untrusted-content review;
+  - logging, with no secrets;
+  - KB data confirmed in backup and restore;
+  - indexes on the `node:sqlite` hot paths, so the API never stalls.
+- [ ] KB-26 **Acceptance** ("Done when" above). Fix what it finds, then STOP.
+
+## Done
+
+## Blocked
+
+## Notes
