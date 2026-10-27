@@ -2,7 +2,7 @@
 // layers agents read (role playbooks, platform and niche packs) and each store's memory.
 import { useDeferredValue, useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Brain, Link2, Pin, Plus, Radar, Search, Trash2 } from 'lucide-react';
+import { Brain, Link2, Pin, Plus, Search, Trash2 } from 'lucide-react';
 import type { KnowledgeDoc, KnowledgeKind, MemoryKind, StoreMemory } from '@frontline/shared';
 import {
   useAgents,
@@ -24,11 +24,12 @@ import { Markdown } from '../components/Markdown';
 import { SharedLearnings } from '../components/NicheLearnings';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { nicheName } from '../components/StoreForm';
-import { Badge, Button, Card, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Switch, Tabs, useFocusBack } from '../components/ui';
+import { Badge, Button, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Switch, Tabs, useFocusBack } from '../components/ui';
 import { Artboard } from '../knowledge/Artboard';
 import { CardLibrary } from '../knowledge/Library';
 import { Relationships } from '../knowledge/Relationships';
 import { ResearchDialog, SourceBar } from '../knowledge/Research';
+import { ResearchCenter } from '../knowledge/ResearchCenter';
 import { VIEWS, viewOf, withParams, wsFrom, type KbView } from '../knowledge/url';
 import { ago } from '../lib/format';
 import { nicheKey } from '../lib/niche';
@@ -85,23 +86,17 @@ export function Knowledge() {
     <>
       <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
       <Toolbar ws={ws} view={view} general={general} q={q} set={set} search={search} onResearch={setForm}>
-        {view !== 'artboard' && <div className="ml-auto">{switcher}</div>}
+        {/* Its own scroller: at phone width the four views are wider than the screen. */}
+        {view !== 'artboard' && <div className="ml-auto max-w-full overflow-x-auto [scrollbar-width:none]">{switcher}</div>}
       </Toolbar>
       {view === 'artboard' ? (
-        <Artboard key={ws} ws={ws} general={general} q={q} card={card} set={set} switcher={switcher} />
+        <Artboard key={ws} ws={ws} general={general} q={q} card={card} frame={params.get('frame') ?? undefined} set={set} switcher={switcher} />
       ) : view === 'library' ? (
         <Library ws={ws} general={general} q={q} card={card} set={set} />
       ) : view === 'relationships' ? (
         <Relationships ws={ws} general={general} q={q} card={card} set={set} />
       ) : (
-        <div className="grid gap-4">
-          <Card>
-            <EmptyState icon={Radar} title="No research yet">
-              Research tasks, new discoveries and knowledge gaps show here once agents start researching.
-            </EmptyState>
-          </Card>
-          <SourceBar ws={ws} onStarted={(id) => set({ task: id })} />
-        </div>
+        <ResearchCenter ws={ws} set={set} footer={<SourceBar ws={ws} onStarted={(id) => set({ task: id })} />} />
       )}
       <ResearchDialog
         ws={ws}

@@ -32,13 +32,16 @@ function open(path: string, detail: KbTaskDetail = task()) {
   const cards = { c1: card('c1', 'Open on the problem'), c2: card('c2', 'Rescue stories lift CTR'), c3: card('c3', 'Old hook card', 'active') };
   const fetch = stubApi((url, init) => {
     if (init?.method === 'POST' && url === '/api/kb/research/tasks') return { ...detail, status: 'queued' };
+    if (init?.method === 'POST' && url.endsWith('/refine')) return { ...detail, id: 't9', status: 'queued' };
     if (init?.method && init.method !== 'GET') return {};
     if (url === '/api/stores') return [paw];
     if (url === '/api/agents') return [agent('market_analyst'), agent('ad_strategist'), agent('copywriter', { enabled: false })];
     if (url === '/api/kb/workspaces') return {};
+    if (url.startsWith('/api/kb/overview?')) return { cards: 0, thisWeek: 0, validated: 0, hypotheses: 0, supported: 0, stale: 0, conflicts: 0, running: 0, queued: 0, researchers: 0, sources: 0, map: [], discoveries: [], gaps: [] };
     if (url.startsWith('/api/kb/categories?ws=pawsome')) return [{ id: 'pawsome-ads', storeId: 'pawsome', parentId: null, name: 'Advertising', position: 1, createdAt: now, cards: 0 }];
     if (url.startsWith('/api/kb/categories?ws=general')) return [{ id: 'general-ads', storeId: null, parentId: null, name: 'Ads', position: 1, createdAt: now, cards: 0 }];
     if (url === '/api/kb/research/tasks/t1') return detail;
+    if (url === '/api/kb/research/tasks/t9') return { ...detail, id: 't9', status: 'queued' };
     if (url.startsWith('/api/kb/cards?')) return { items: [cards.c1], total: 1, offset: 0, limit: 200 };
     if (url.startsWith('/api/kb/positions')) return {};
     const one = url.match(/^\/api\/kb\/cards\/(\w+)\?ws=all$/);
@@ -135,9 +138,9 @@ describe('Research from source', () => {
     expect(posts(fetch, '/api/kb/research/tasks')).toEqual([{ agentId: 'pawsome:market_analyst', ws: 'pawsome', categoryId: 'pawsome-ads', objective: 'TikTok hooks that work for anxious dogs', depth: 'quick', budgetUsd: 0.5 }]);
   });
 
-  it('"Research this" on a card or a frame opens New research on it, filed to its category, in the same view', async () => {
+  it('"Research deeper" on a card, or the research button on a frame, opens New research on it, filed to its category, in the same view', async () => {
     open('/knowledge?ws=pawsome&view=library&card=c1');
-    fireEvent.click(await screen.findByRole('button', { name: 'Research this' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Research deeper' }));
     expect(where()).toBe('/knowledge?ws=pawsome&view=library&card=c1&ask=Open+on+the+problem&cat=pawsome-ads');
     let dialog = await screen.findByRole('dialog', { name: 'New research' });
     expect(field(dialog, 'Research request').value).toBe('Open on the problem');
@@ -185,5 +188,30 @@ describe('Research from source', () => {
     await within(again).findByText('None of the sources could be read.');
     fireEvent.click(within(again).getByRole('button', { name: 'Retry' }));
     await vi.waitFor(() => expect(failed.mock.calls.some(([u, i]) => u === '/api/kb/research/tasks/t1/retry' && i?.method === 'POST')).toBe(true));
+  });
+
+  it('the task drawer: where it files, the execution log, and Refine as a new task', async () => {
+    const log = [{ stage: 'retrieving', level: 'warn' as const, message: 'c.test/paid is behind a paywall', at: now }];
+    const fetch = open('/knowledge?ws=pawsome&view=research&task=t1', task({ status: 'done', stage: 'reporting', categoryId: 'pawsome-ads', log }));
+    const drawer = await screen.findByRole('dialog', { name: 'Research task' });
+    expect(drawer.className).toContain('drawer');
+    expect(await within(drawer).findByText('Files to Pawsome Gear › Advertising')).toBeTruthy();
+    expect(within(drawer).getByText('Execution log (1)')).toBeTruthy();
+    expect(within(drawer).getByText('c.test/paid is behind a paywall')).toBeTruthy();
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Refine' }));
+    expect(field(drawer, 'Research request').value).toBe('hooks for anxious dogs');
+    expect(field(drawer, 'Budget (USD)').value).toBe('1');
+    fireEvent.change(field(drawer, 'Research request'), { target: { value: ' hooks for anxious cats ' } });
+    fireEvent.change(field(drawer, 'Budget (USD)'), { target: { value: '2' } });
+    fireEvent.click(within(drawer).getByRole('button', { name: 'Start refined research' }));
+    await vi.waitFor(() => expect(posts(fetch, '/api/kb/research/tasks/t1/refine')).toEqual([{ objective: 'hooks for anxious cats', budgetUsd: 2 }]));
+    await vi.waitFor(() => expect(where()).toContain('task=t9'));
+    cleanup();
+
+    // Only a finished task can be refined.
+    open('/knowledge?ws=pawsome&view=research&task=t1');
+    const going = await screen.findByRole('dialog', { name: 'Research task' });
+    await within(going).findByRole('button', { name: 'Stop' });
+    expect(within(going).queryByRole('button', { name: 'Refine' })).toBeNull();
   });
 });

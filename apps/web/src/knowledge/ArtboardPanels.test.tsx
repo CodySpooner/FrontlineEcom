@@ -99,6 +99,13 @@ describe('Knowledge artboard › Outline', () => {
     expect(ads.getAttribute('aria-current')).toBe('true');
   });
 
+  it('a ?frame= link (the Research Center map) opens that frame, focuses its first card, and leaves the URL', async () => {
+    board(undefined, '/knowledge?ws=peak&frame=peak-ads');
+    await vi.waitFor(() => expect((document.activeElement as HTMLElement | null)?.dataset.kbCard).toBe('a'));
+    await vi.waitFor(() => expect(where()).toBe('/knowledge?ws=peak'));
+    expect(within(screen.getByRole('navigation', { name: 'Outline' })).getByRole('button', { name: /^Advertising 2$/ }).getAttribute('aria-current')).toBe('true');
+  });
+
   it('adds a category', async () => {
     const fetch = board();
     fireEvent.click(await screen.findByRole('button', { name: 'New category' }));

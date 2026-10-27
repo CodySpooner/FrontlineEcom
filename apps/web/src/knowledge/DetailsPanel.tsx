@@ -24,7 +24,7 @@ const KIND: Record<KbEvidenceKind, [string, string]> = {
 /** How a link reads from its target's side. */
 export const BACK: Record<KbLinkType, string> = { supports: 'Supported by', contradicts: 'Contradicts', builds_upon: 'Built upon by', derived_from: 'Source of', validated_by: 'Validates', applied_to: 'Applies', related_to: 'Related To' };
 export const FETCH: Record<KbSourceBrief['status'], string> = { read: 'read', blocked_robots: 'blocked by robots.txt', blocked_domain: 'blocked domain', paywalled: 'paywalled', login: 'needs a login', unsupported: 'unsupported', too_large: 'too large', failed: 'failed' };
-const SOON = { task: "Agents don't read the knowledge base yet", research: "Research isn't switched on yet", promote: "Promotion isn't switched on yet" };
+const SOON = { task: "Agents don't read the knowledge base yet", promote: "Promotion isn't switched on yet" };
 const who = (actor: string) => (actor === 'app' ? 'The app' : memoryAuthor(actor));
 const small = 'h-7 cursor-pointer rounded-md border border-line-2 bg-panel-2 px-2.5 text-xs text-text-2 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
 const iconBtn = 'grid size-7 cursor-pointer place-items-center rounded-md text-muted transition hover:text-white';
@@ -262,9 +262,6 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
         </Section>
         <Section title="Manage">
           <div className="flex flex-wrap gap-1.5">
-            <button type="button" title="New research on it, filed to its category" onClick={() => setParams((p) => withParams(p, { ask: card.title, cat: card.categoryId }), { replace: true })} className={small}>
-              Research this
-            </button>
             <button type="button" aria-pressed={card.researchMarked} onClick={() => patch({ researchMarked: !card.researchMarked })} className={small}>
               {card.researchMarked ? 'Unmark for research' : 'Mark for research'}
             </button>
@@ -313,7 +310,7 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
         <Button size="sm" variant="primary" disabled title={SOON.task}>
           Use in a task
         </Button>
-        <Button size="sm" disabled title={SOON.research}>
+        <Button size="sm" title="New research on it, filed to its category" onClick={() => setParams((p) => withParams(p, { ask: card.title, cat: card.categoryId }), { replace: true })}>
           Research deeper
         </Button>
         {card.storeId !== null && (

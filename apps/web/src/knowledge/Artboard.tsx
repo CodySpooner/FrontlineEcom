@@ -3,7 +3,7 @@
 import { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { Brain, ChevronDown, ChevronUp, Minus, Plus, Radar } from 'lucide-react';
 import { KB_CARD_TYPES, KB_LINK_TYPES, KB_STAGES, type KbLink, type KbStage, type KbViewState, type Store } from '@frontline/shared';
-import { useKbCards, useKbLinks, useKbPositions, useKbTasks, useSaveKbPositions } from '../api/client';
+import { useKbCards, useKbCategories, useKbLinks, useKbPositions, useKbTasks, useSaveKbPositions } from '../api/client';
 import { useStoreSelection } from '../components/StoreFilter';
 import { cx, EmptyState, ErrorState, LoadingState, memoryAuthor } from '../components/ui';
 import { ago } from '../lib/format';
@@ -24,7 +24,7 @@ type Drag =
   | { kind: 'box'; sx: number; sy: number; ex: number; ey: number }
   | { kind: 'card'; id: string; ids: string[]; sx: number; sy: number; dx: number; dy: number; moved: boolean; shift: boolean };
 
-export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; general: boolean; q: string; card?: string; set: (changes: Record<string, string | undefined>) => void; switcher: ReactNode }) {
+export function Artboard({ ws, general, q, card, frame, set, switcher }: { ws: string; general: boolean; q: string; card?: string; frame?: string; set: (changes: Record<string, string | undefined>) => void; switcher: ReactNode }) {
   const { stores } = useStoreSelection();
   const [creating, setCreating] = useState(false); // the details panel writing a new card
   const onOpen = (id: string | undefined) => {
@@ -136,6 +136,15 @@ export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; 
     // The frame's top-left part when it's bigger than the screen.
     setCam((c) => c && panIntoView(c, { x: f.x, y: f.y, w: Math.min(f.w, (view.w - inset.left - inset.right - 48) / c.scale), h: Math.min(f.h, (view.h - inset.top - inset.bottom - 48) / c.scale) }, view, inset));
   }, [goto, frames, view]);
+  // A ?frame= link (the Research Center's map and gaps) opens that category's frames, as its Outline row does.
+  const cats = useKbCategories(ws).data;
+  useEffect(() => {
+    if (!frame || !cats || !frames.length) return;
+    const ids = new Set([frame]);
+    for (const c of cats) if (c.parentId && ids.has(c.parentId)) ids.add(c.id); // parent-first, so one pass finds them all
+    goFrames(frame, [...ids]);
+    set({ frame: undefined });
+  }, [frame, cats, frames.length]); // eslint-disable-line react-hooks/exhaustive-deps -- once, when the link and the layout are both in
   // Opening a card shows it clear of the panel.
   useEffect(() => {
     const p = card && byId.get(card);
@@ -254,7 +263,8 @@ export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; 
     box.current?.focus();
   };
   return (
-    <div className="relative -mx-[22px] -mb-8" style={{ height: `calc(100dvh - ${top}px)` }}>
+    // Clipped sideways: the closed details panel waits off the right edge and would widen the page.
+    <div className="relative -mx-[22px] -mb-8 overflow-x-clip" style={{ height: `calc(100dvh - ${top}px)` }}>
       <div
         ref={box}
         role="application"

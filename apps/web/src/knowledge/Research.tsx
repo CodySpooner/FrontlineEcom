@@ -252,9 +252,9 @@ export function ResearchDialog({ ws, open, mode, task, ask, categoryId, onStarte
   onOpenCard: (cardId: string) => void;
 }) {
   return (
-    <Dialog open={open} onClose={onClose} title={task ? 'Research task' : mode === 'topic' ? 'New research' : 'Research from source'}>
+    <Dialog open={open} onClose={onClose} side={task ? 'right' : 'center'} title={task ? 'Research task' : mode === 'topic' ? 'New research' : 'Research from source'}>
       {task ? (
-        <TaskView id={task} onOpenCard={onOpenCard} />
+        <TaskView key={task} id={task} onStarted={onStarted} onOpenCard={onOpenCard} />
       ) : !open ? null : mode === 'topic' ? (
         <TopicForm ws={ws} ask={ask} categoryId={categoryId} onStarted={onStarted} />
       ) : (
@@ -264,7 +264,7 @@ export function ResearchDialog({ ws, open, mode, task, ask, categoryId, onStarte
   );
 }
 
-const STAGE: Record<string, string> = {
+export const STAGE: Record<string, string> = {
   created: 'Queued', planning: 'Planning', discovering: 'Finding sources', retrieving: 'Reading sources', analyzing: 'Analyzing', evaluating: 'Weighing the evidence',
   extracting: 'Writing cards', deduping: 'Checking for duplicates', storing: 'Filing cards', linking: 'Linking cards', reporting: 'Writing the report',
 };
@@ -285,10 +285,12 @@ function Lines({ title, items }: { title: string; items: string[] }) {
   );
 }
 
-function TaskView({ id, onOpenCard }: { id: string; onOpenCard: (cardId: string) => void }) {
+function TaskView({ id, onStarted, onOpenCard }: { id: string; onStarted: (taskId: string) => void; onOpenCard: (cardId: string) => void }) {
   const q = useKbTask(id);
   const act = useKbTaskAction();
   const stores = useStores().data ?? [];
+  const cats = useKbCategories(q.data?.storeId ?? 'general').data ?? [];
+  const [refine, setRefine] = useState<{ objective: string; budget: string }>();
   if (q.isPending) return <LoadingState />;
   if (q.isError) return <ErrorState message={q.error.message} onRetry={() => q.refetch()} />;
   const t = q.data;
@@ -301,7 +303,8 @@ function TaskView({ id, onOpenCard }: { id: string; onOpenCard: (cardId: string)
     <div className="grid gap-4">
       <div className="grid gap-1">
         <h3 className="text-[15px] font-semibold text-white">{t.objective}</h3>
-        <p className="text-xs text-muted">{`${AGENT_ROLES[t.role].name} · ${name(t.payerId)}${t.storeId ? '' : ' → General'}`}</p>
+        <p className="text-xs text-muted">{`${AGENT_ROLES[t.role].name} · ${name(t.payerId)}`}</p>
+        <p className="text-xs text-muted">{['Files to ' + (t.storeId ? name(t.storeId) : 'General'), categoryPaths(cats).find((c) => c.id === t.categoryId)?.path].filter(Boolean).join(' › ')}</p>
         <div className="flex flex-wrap items-center gap-2 text-xs text-text-2">
           <Badge tone={t.status === 'done' ? 'good' : t.status === 'failed' ? 'red' : 'muted'}>{t.status === 'cancelled' ? 'stopped' : t.status}</Badge>
           {going && <span>{STAGE[t.stage] ?? t.stage}</span>}
@@ -377,11 +380,55 @@ function TaskView({ id, onOpenCard }: { id: string; onOpenCard: (cardId: string)
           )}
         </>
       )}
-      {(going || t.status === 'failed' || t.status === 'cancelled') && (
+      {t.log.length > 0 && (
+        <details className="text-[13px]">
+          <summary className="cursor-pointer font-display text-[11px] font-semibold tracking-[.12em] text-muted uppercase">{`Execution log (${t.log.length})`}</summary>
+          <ol className="mt-1.5 grid gap-1">
+            {t.log.map((l, i) => (
+              <li key={i} className={cx('flex gap-2', l.level === 'error' ? 'text-red' : l.level === 'warn' ? 'text-text' : 'text-text-2')}>
+                <span className="w-28 shrink-0 text-xs text-muted">{STAGE[l.stage] ?? l.stage}</span>
+                <span className="min-w-0 flex-1">{l.message}</span>
+              </li>
+            ))}
+          </ol>
+        </details>
+      )}
+      {refine ? (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            act.mutate({ id, action: 'refine', body: { objective: refine.objective.trim(), budgetUsd: Number(refine.budget) } }, { onSuccess: (r) => onStarted(r.id) });
+          }}
+          className="grid gap-3 border-t border-line pt-3"
+        >
+          <Field label="Research request">
+            <textarea rows={3} required minLength={3} maxLength={500} value={refine.objective} onChange={(e) => setRefine({ ...refine, objective: e.target.value })} className={cx(inputClass, 'w-full resize-y')} />
+          </Field>
+          <Field label="Budget (USD)">
+            <input type="number" min={0.1} max={20} step={0.05} required value={refine.budget} onChange={(e) => setRefine({ ...refine, budget: e.target.value })} className={cx(inputClass, 'w-full')} />
+          </Field>
+          {act.error && <p role="alert" className="text-xs text-red">{act.error.message}</p>}
+          <div className="flex justify-end gap-2">
+            <Button size="sm" onClick={() => setRefine(undefined)}>
+              Cancel
+            </Button>
+            <Button size="sm" type="submit" variant="primary" disabled={act.isPending}>
+              Start refined research
+            </Button>
+          </div>
+        </form>
+      ) : (
         <div className="flex justify-end gap-2">
-          <Button size="sm" disabled={act.isPending} onClick={() => act.mutate({ id, action: going ? 'cancel' : 'retry' })}>
-            {going ? 'Stop' : 'Retry'}
-          </Button>
+          {(going || t.status === 'failed' || t.status === 'cancelled') && (
+            <Button size="sm" disabled={act.isPending} onClick={() => act.mutate({ id, action: going ? 'cancel' : 'retry' })}>
+              {going ? 'Stop' : 'Retry'}
+            </Button>
+          )}
+          {!going && (
+            <Button size="sm" onClick={() => setRefine({ objective: t.objective, budget: String(t.budgetUsd) })}>
+              Refine
+            </Button>
+          )}
         </div>
       )}
     </div>

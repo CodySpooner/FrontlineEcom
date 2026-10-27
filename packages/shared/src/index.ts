@@ -1570,7 +1570,8 @@ export interface KbResearchBrief {
  * budget and files to General or that store (`ws`), never another. Sources are up to 8 links, pasted text (≤ 200,000
  * characters) or a document (a PDF, text, markdown, transcript, CSV or HTML file, in base64, ≤ 10 MB). With none, the
  * `objective` (New research) makes a topic task that searches the web, as far as `depth` says. GET
- * /api/kb/research/tasks/:id → KbTaskDetail; POST …/:id/cancel and …/:id/retry → KbTaskBrief, 409 when it can't.
+ * /api/kb/research/tasks/:id → KbTaskDetail; POST …/:id/cancel and …/:id/retry → KbTaskBrief, 409 when it can't. POST
+ * …/:id/refine {objective?, budgetUsd?} → 201 KbTaskBrief: a finished task again as a new one (`refinedFrom`).
  */
 export interface KbSourceResearchInput {
   agentId: string;
@@ -1767,4 +1768,37 @@ export interface KbConflict {
   taskId?: string;
   createdAt: string;
   resolvedAt?: string;
+}
+
+/** A Research Center discovery: a card that moved up to Validated this week, or a conflict waiting for the owner. */
+export type KbDiscovery =
+  | { kind: 'validated'; at: string; reason: string; card: KbCardBrief }
+  | { kind: 'conflict'; id: string; at: string; note: string; card: KbCardBrief; other?: KbCardBrief };
+
+/**
+ * GET /api/kb/overview?ws=general|<storeId>|all → the Research Center, from the visible cards (proposed + active).
+ * PATCH /api/kb/conflicts/:id?ws= {status: 'kept_both'} → 204: the owner keeps both sides.
+ */
+export interface KbOverview {
+  cards: number;
+  /** Made in the last 7 days. */
+  thisWeek: number;
+  validated: number;
+  hypotheses: number;
+  supported: number;
+  /** 90+ days since last verified (or made). */
+  stale: number;
+  /** Open conflicts. */
+  conflicts: number;
+  running: number;
+  queued: number;
+  /** Agents running research now. */
+  researchers: number;
+  sources: number;
+  /** Root categories, largest first, by stage. All workspaces adds up same-named ones (`ws` holds most of them). */
+  map: { ws: string; categoryId: string; name: string; stages: Record<KbStage, number> }[];
+  /** Newest first, at most 8. */
+  discoveries: KbDiscovery[];
+  /** Root categories with weak evidence, weakest first, at most 5: 'only hypotheses', 'N of M stale', '0 measured'. */
+  gaps: { ws: string; categoryId: string; name: string; reason: string }[];
 }

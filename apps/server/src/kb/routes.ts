@@ -12,6 +12,7 @@ import {
   detachMerged,
   getAgent,
   getResearchTask,
+  refineResearch,
   linked,
   listEvidence,
   listLinks,
@@ -38,6 +39,7 @@ import { tx, type Db } from '../db';
 import { publish } from '../live';
 import { advanceKbResearch, runManager } from '../routes/agents';
 import { readUpload } from './fetcher';
+import { kbOverview } from './overview';
 
 // Knowledge Base routes (knowledge-base lane). Every by-id route names its workspace (?ws=) and 404s on another's id.
 
@@ -244,9 +246,23 @@ export function kbRoutes(db: Db) {
       });
       return c.body(null, 204);
     })
-    .get('/api/kb/sources', (c) => {
+    .get('/api/kb/overview', (c) => {
+      const ws = wsOf(db, c.req.query('ws'), true);
+      if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
+      return c.json(kbOverview(db, ws));
+    })
+    .patch('/api/kb/conflicts/:id', async (c) => {
       const ws = wsOf(db, c.req.query('ws'));
       if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      if (!kbRow(db, 'kb_conflicts', c.req.param('id'), ws)) return c.json({ error: 'conflict not found' }, 404);
+      const b = await c.req.json().catch(() => null);
+      if (!isObj(b) || b.status !== 'kept_both') return c.json({ error: 'status must be kept_both' }, 400);
+      db.prepare('UPDATE kb_conflicts SET status = ?, resolved_at = ? WHERE id = ?').run(b.status, new Date().toISOString(), c.req.param('id'));
+      return c.body(null, 204);
+    })
+    .get('/api/kb/sources', (c) => {
+      const ws = wsOf(db, c.req.query('ws'), true);
+      if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
       const s = kbScope(ws, c.req.query('general') === '1');
       const rows = db.prepare(`SELECT id, url, title, status, reliability, fetched_at FROM kb_sources WHERE ${s.sql} ORDER BY lower(title), id`).all(...s.params);
       return c.json(rows.map((r): KbSourceBrief => ({ id: String(r.id), ...(r.url ? { url: String(r.url) } : {}), title: String(r.title), status: r.status as KbSourceBrief['status'], reliability: r.reliability as KbSourceBrief['reliability'], ...(r.fetched_at ? { fetchedAt: String(r.fetched_at) } : {}) })));
@@ -326,6 +342,18 @@ export function kbRoutes(db: Db) {
       publish({ type: 'kb_task', task: t });
       advanceKbResearch(db);
       return c.json(t);
+    })
+    .post('/api/kb/research/tasks/:id/refine', async (c) => {
+      const status = db.prepare('SELECT status FROM kb_tasks WHERE id = ?').get(c.req.param('id'))?.status;
+      if (!status) return c.json({ error: 'task not found' }, 404);
+      if (status === 'queued' || status === 'running') return c.json({ error: 'Only a finished task can be refined' }, 409);
+      const b = await c.req.json().catch(() => null);
+      if (!isObj(b)) return c.json({ error: 'body must be an object' }, 400);
+      if (b.objective !== undefined && !text(b.objective, 3, 500)) return c.json({ error: 'objective must be 3-500 characters' }, 400);
+      if (b.budgetUsd !== undefined && (typeof b.budgetUsd !== 'number' || !(b.budgetUsd >= 0.1 && b.budgetUsd <= 20))) return c.json({ error: 'budgetUsd must be between $0.10 and $20' }, 400);
+      const t = refineResearch(db, c.req.param('id'), { ...(b.objective !== undefined ? { objective: String(b.objective) } : {}), ...(b.budgetUsd !== undefined ? { budgetUsd: b.budgetUsd as number } : {}) })!;
+      advanceKbResearch(db);
+      return c.json(t, 201);
     })
     .get('/api/kb/categories', (c) => {
       const ws = wsOf(db, c.req.query('ws'), true);

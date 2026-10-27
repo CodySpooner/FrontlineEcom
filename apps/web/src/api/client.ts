@@ -40,6 +40,7 @@ import type {
   KbEvidence,
   KbLink,
   KbLinkInput,
+  KbOverview,
   KbRevision,
   KbPositions,
   KbSourceResearchInput,
@@ -376,6 +377,17 @@ export function useDeleteKbView() {
 }
 
 /** Research tasks of a workspace ('all' for every one); `open` = queued or running. Research stages are runs, so run messages refresh it. */
+export const useKbOverview = (ws: string) => useQuery({ queryKey: ['kb', 'overview', ws], queryFn: () => api<KbOverview>(`/api/kb/overview?${wsq(ws)}`) });
+
+/** The owner keeps both sides of a conflict. */
+export function useKeepBoth() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ws }: { id: string; ws: string }) => api<void>(`/api/kb/conflicts/${encodeURIComponent(id)}?${wsq(ws)}`, json('PATCH', { status: 'kept_both' })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
+
 export const useKbTasks = (ws: string, open = false) => useQuery({ queryKey: ['kb', 'tasks', ws, open], queryFn: () => api<KbTaskBrief[]>(`/api/kb/research/tasks?${wsq(ws)}${open ? '&open=1' : ''}`) });
 
 /** A task in full. Polled while it's going: a stage streams only when it ends, and the owner watches each source get read. */
@@ -396,11 +408,12 @@ export function useStartKbResearch() {
   });
 }
 
-/** Stop a task that's going, or Retry a stopped or failed one from where it ended. */
+/** Stop a task that's going, Retry a stopped or failed one from where it ended, or Refine a finished one as a new task. */
 export function useKbTaskAction() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, action }: { id: string; action: 'cancel' | 'retry' }) => api<KbTaskBrief>(`/api/kb/research/tasks/${encodeURIComponent(id)}/${action}`, json('POST', {})),
+    mutationFn: ({ id, action, body = {} }: { id: string; action: 'cancel' | 'retry' | 'refine'; body?: { objective?: string; budgetUsd?: number } }) =>
+      api<KbTaskBrief>(`/api/kb/research/tasks/${encodeURIComponent(id)}/${action}`, json('POST', body)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
   });
 }

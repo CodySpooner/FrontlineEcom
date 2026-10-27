@@ -521,7 +521,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - a plan preview before it spends;
   - "Research this" launch points on a knowledge card, a frame, the Dashboard store card, Analytics insights and
     campaign rows, and in Chat, each opening this dialog prefilled.
-- [ ] KB-16 **Research Center view** (design B), every widget on real data, with the links and responsive rules from
+- [x] KB-16 **Research Center view** (design B), every widget on real data, with the links and responsive rules from
   the design:
   - the task drawer shows objective, workspace, category, agent, status and stage, sources read and blocked (with
     reasons), the execution log, conclusions, unresolved questions, errors and limitations, conflicts found, and the
@@ -633,6 +633,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-13 KB agent tools: every role has `search_knowledge` and `recommend_research`. Search returns accepted cards of the agent's store and General, never another store's, unreviewed, archived or blocked ones, with hypotheses labelled. A recommendation is a `kb.research` approval; once the owner approves, the app starts the research, paid by that store. Research runs, whatever the role, get web search plus four tools. `fetch_source` reads through the KB-11 reader and keeps the page as a task source. `propose_card` files a proposed card that the ladder stages: forbidden types and stages are refused, and only read sources count. A card that already says it gains the evidence instead, and an archived or rejected one is left alone. `add_evidence` adds evidence for or against (against opens a conflict). `suggest_link` never suggests a pair the owner rejected. The task report now counts cards the tools made or updated.
 - 2026-10-27 KB-14 Research from source: the "From source" toolbar button opens a full form, and the bar sits along the bottom of the Research Center. The owner pastes links or text, or attaches or drops a document (a PDF, text, markdown, .vtt/.srt transcript, CSV or HTML, up to 10 MB). They pick an agent and file to its store or General, optionally to one of its categories, with what to look for and a budget. The dialog then follows the task: each source as it's read, links still waiting, findings, Stop or Retry, and, at the end, the report with the new cards to accept or reject and the cards it added evidence to. The "Research done/failed" notification opens the task (`?task=`).
 - 2026-10-27 KB-15 New research: the owner writes a request and picks the agent, where the findings go, a depth (Quick reads up to 3 sources, Standard 5, Deep 8, each with a suggested budget) and the budget. "Review the plan" then shows what will happen: the agent plans from what the knowledge base already holds, searches and reads up to N public sources, files proposed cards there for review, and writes a report, spending at most $X. Nothing is spent until Start research. "Research this" opens it prefilled from a card's details, an artboard frame (filed to that category), a campaign row in Analytics, and a finished Chat answer.
+- 2026-10-27 KB-16 Research Center: workspace chips (All workspaces, General, each store), six tiles linking to their Library filter or the widget below, the knowledge map (each root category's cards stacked by stage, linking to its frame on the artboard, plus "+ Custom category"), latest discoveries (cards that earned Validated this week and conflicts waiting for a call, with Compare evidence and Keep both) and a preview of the newest one's frame, and the research column: Active / Queue / Done / Sources, running tasks with their stage bar, reads, blocks, findings, matches and spend (Stop, Open task), agents' research recommendations to approve, and knowledge gaps. A task opens as a drawer: where it files, the execution log, the report, and Stop / Retry / Refine. Three columns at 1440 px, two below, one on a phone. No view scrolls sideways at 390 px anymore.
 
 ## Blocked
 
@@ -768,3 +769,20 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   Knowledge page a card or frame just sets `ask`/`cat` and stays in its view; closing the form drops them. The
   request is cut to 500 characters, the server's limit. Not done, because the hosts don't exist yet: the Dashboard has
   no store card and Analytics has no insights panel. Add `researchHref` links when they do.
+- 2026-10-27 KB-16: one call feeds the page, `GET /api/kb/overview?ws=` (`kb/overview.ts`), over visible cards. Rules,
+  until KB-23 replaces them: needs refresh = 90 days since verified (or made), as on the artboard; the Hypotheses tile's
+  "ready to test" counts Research-Supported cards (backed by research, not yet tested); a gap is a root category of one
+  workspace with only hypotheses, else half or more stale, else no measured evidence, weakest first, 5 at most. A
+  "Now validated" discovery is an app revision "Moved up to Validated" in the last 7 days on a card still Validated; open
+  conflicts show whatever their age. All workspaces adds up same-named roots on the map and links to the workspace
+  holding most of them. New routes: `PATCH /api/kb/conflicts/:id?ws= {status:'kept_both'}`, `POST
+  /api/kb/research/tasks/:id/refine {objective?, budgetUsd?}` (finished tasks only; `refineResearch` from KB-12), and
+  `GET /api/kb/sources?ws=all`. The artboard takes `?frame=<categoryId>` (opens that category's frames like its
+  Outline row, then drops the param). The card panel's "Research deeper" is switched on (it was still "isn't switched
+  on yet"); KB-15's separate "Research this" in Manage is gone. Left for their items: the "Promote to General?" (KB-18)
+  and "Refreshed" (KB-23) discoveries, "Plan a test" on a conflict (KB-21), the self-directed research budget line with
+  Controls (KB-22), and per-card evidence chips (Measured · N tests / N sources / N connections). A discovery shows the
+  stage's reason instead. Found: this Tailwind sorts arbitrary `min-[…px]:` variants before named `sm:`/`lg:` ones, so
+  a mixed set loses to the named one. The Research Center uses only `min-[…px]`. Also found: the closed details
+  panel waited off the artboard's right edge and widened the page by 340 px at every size. The artboard wrapper is now
+  `overflow-x-clip`, and the view switcher sits in its own scroller (the KB-14 note).

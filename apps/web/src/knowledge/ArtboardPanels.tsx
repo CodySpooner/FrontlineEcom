@@ -18,7 +18,7 @@ export const escape = (close: () => void) => (e: KeyboardEvent) => {
 };
 
 /** One-line text form for a name: Enter saves, Esc cancels. */
-function NameForm({ label, onSave, onCancel, busy, error }: { label: string; onSave: (name: string) => void; onCancel: () => void; busy: boolean; error?: string }) {
+export function NameForm({ label, onSave, onCancel, busy, error }: { label: string; onSave: (name: string) => void; onCancel: () => void; busy: boolean; error?: string }) {
   const [name, setName] = useState('');
   const submit = (e: FormEvent) => {
     e.preventDefault();
