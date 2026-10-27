@@ -172,14 +172,15 @@ export function parseLearnings(reply: string): Omit<NewMemory, 'storeId' | 'agen
   if (!Array.isArray(items)) return [];
   return items
     .filter((i): i is Record<string, unknown> => typeof i === 'object' && i !== null)
-    .filter((i) => typeof i.text === 'string' && i.text.trim().length > 0 && KINDS.includes(i.kind as MemoryKind))
+    // write_memory's limits: every prompt carries the squad's memories, so a paragraph-long one costs every run.
+    .filter((i) => typeof i.text === 'string' && i.text.trim().length >= 5 && i.text.trim().length <= 300 && KINDS.includes(i.kind as MemoryKind))
     .slice(0, 5)
     .map((i) => ({
       kind: i.kind as MemoryKind,
       text: (i.text as string).trim(),
-      ...(typeof i.evidence === 'string' && i.evidence ? { evidence: i.evidence } : {}),
+      ...(typeof i.evidence === 'string' && i.evidence ? { evidence: i.evidence.slice(0, 300) } : {}),
       confidence: clamp(typeof i.confidence === 'number' ? i.confidence : 0.5),
-      tags: agentTags(Array.isArray(i.tags) ? i.tags.filter((t): t is string => typeof t === 'string') : []),
+      tags: agentTags(Array.isArray(i.tags) ? i.tags.filter((t): t is string => typeof t === 'string') : []).slice(0, 6),
     }));
 }
 

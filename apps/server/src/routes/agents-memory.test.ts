@@ -134,6 +134,11 @@ describe('reflection', () => {
       { kind: 'learning', text: 'TikTok hooks under 2s double hold rate', evidence: 'hold 41% vs 19%', confidence: 1, tags: ['tiktok'] },
       { kind: 'preference', text: 'Owner caps tests at $50/day', confidence: 0.5, tags: [] },
     ]);
+    const long = JSON.stringify([
+      { kind: 'learning', text: 'x'.repeat(301) }, // a paragraph, not a learning
+      { kind: 'fact', text: 'Ships from Austin', evidence: 'e'.repeat(400), tags: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] },
+    ]);
+    expect(parseLearnings(long)).toEqual([{ kind: 'fact', text: 'Ships from Austin', evidence: 'e'.repeat(300), confidence: 0.5, tags: ['a', 'b', 'c', 'd', 'e', 'f'] }]);
     expect(parseLearnings('Nothing durable this time.')).toEqual([]);
     expect(parseLearnings('[{oops')).toEqual([]);
   });
