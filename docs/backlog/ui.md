@@ -424,6 +424,9 @@ Orca's browser against the reference before ticking it.
       failed looked like nothing happened (core hands the draft back unchanged and only the bell says why), inviting the
       second click that duplicates a store page that did go live. It now says "It didn't go through (the bell says
       why)", plus the may-be-live caution and "Publish again" for a store page.
+- [x] UI-161 Ask AI, AI Research, the briefs (Builder, Creative, Competitors, Orders) and flow starts can reach an agent
+      the owner switched off; core refuses with "This agent is offline. Redeploy it first." and the owner had to find
+      where. The refusal now carries "Redeploy it", linking to that agent's settings tab (its Deployed switch).
 
 ## Blocked
 
@@ -629,3 +632,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-158: matches the agents' message, as FixLink does for budgets. Chat test (red first). Orca on Pawsome's Copywriter with both run POSTs answered by the fixture (409, then a fake run; nothing reached the server): button inline after the message; click → second POST without resumeRunId, alert gone, box cleared, new thread shows the task
 - 2026-10-26 — UI-159: the draft doesn't record why its push failed (core's notification does), so every approved store page gets the caution. Builder test (red first); the old "Try again" test now uses a product page. Orca with a fixture draft (approved store page, Pawsome patched connected; read-only): "Publish again" + the caution
 - 2026-10-26 — UI-160: the outcome is judged from the status at click (approving a pending request answers before its push). Two Builder tests (red first). Orca with a fixture draft and the publish POST answered by the fixture (nothing reached the server): "Publish to Pawsome Gear" → alert with the caution, button "Publish again"
+- 2026-10-26 — UI-161: one more case in `budgetFix`, so every FixLink gets it. usage test (red first). Orca: Ask AI on the Dashboard with the run POST answered by the fixture as that refusal (nothing reached the server): alert + "Redeploy it" → /agents/pawsome%3Amarket_analyst?tab=settings. Also filed: agents and core Inbox requests for `link`s on 12 failure notices the bell can't open

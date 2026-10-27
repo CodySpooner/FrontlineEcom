@@ -7,4 +7,6 @@ export function budgetFix(message: string, agentId: string) {
   if (message.endsWith('Raise it in Settings.')) return { to: '/settings', label: "Raise the store's AI cap" };
   // claude-engine.ts ACCOUNT's words; Integrations' Claude card checks the login again.
   if (message.startsWith("Claude isn't signed in")) return { to: '/integrations', label: 'Check your Claude login' };
+  // agents' runs.start: the owner switched the agent off (its Deployed switch is on the settings tab).
+  if (message.startsWith('This agent is offline')) return { to: `/agents/${encodeURIComponent(agentId)}?tab=settings`, label: 'Redeploy it' };
 }

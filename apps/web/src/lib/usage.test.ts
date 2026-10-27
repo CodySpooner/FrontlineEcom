@@ -20,6 +20,8 @@ describe('budgetFix', () => {
       to: '/integrations',
       label: 'Check your Claude login',
     });
+    // Ask AI, AI Research and the briefs can reach an agent the owner switched off.
+    expect(budgetFix('This agent is offline. Redeploy it first.', 'glow:market_analyst')).toEqual({ to: '/agents/glow%3Amarket_analyst?tab=settings', label: 'Redeploy it' });
     expect(budgetFix('Run ended without a result', 'glow:copywriter')).toBeUndefined();
   });
 });
