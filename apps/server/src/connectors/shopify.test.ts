@@ -161,12 +161,13 @@ test('createProducts makes priced drafts in Shopify and shows them locally', asy
     return Response.json({ data: { productVariantsBulkUpdate: { userErrors: [] } } });
   }) as typeof fetch;
 
-  const created = await createProducts(db, key, 'glow', [{ title: 'Ice Roller', price: 24.9, compareAt: 39, cost: 6.5 }, { title: 'Gua Sha', price: 19 }], fetchFn);
+  const created = await createProducts(db, key, 'glow', [{ title: 'Ice Roller', price: 24.9, compareAt: 39, cost: 6.5 }, { title: 'Gua Sha', price: 19, compareAt: 0 }], fetchFn); // 0: none
   expect(created).toEqual([{ id: '901', title: 'Ice Roller' }, { id: '902', title: 'Gua Sha' }]);
   expect(calls[0]!.variables).toEqual({ product: { title: 'Ice Roller', status: 'DRAFT' } });
   expect(calls[1]!.variables).toEqual({ productId: 'gid://shopify/Product/901', variants: [{ id: 'gid://shopify/ProductVariant/801', price: '24.90', compareAtPrice: '39.00', inventoryItem: { cost: '6.50' } }] });
   expect(calls[3]!.variables.variants).toEqual([{ id: 'gid://shopify/ProductVariant/802', price: '19.00' }]);
   expect(db.prepare("SELECT title, price, compare_at, cost, status FROM products WHERE store_id = 'glow' AND id = '901'").get()).toEqual({ title: 'Ice Roller', price: 24.9, compare_at: 39, cost: 6.5, status: 'draft' });
+  expect(db.prepare("SELECT compare_at FROM products WHERE store_id = 'glow' AND id = '902'").get()?.compare_at).toBeNull();
 
   await expect(createProducts(db, key, 'glow', [{ title: 'Bad', price: 5 }], fetchFn)).rejects.toThrow('Shopify: Title is invalid');
   await expect(createProducts(db, key, 'peak', [{ title: 'X', price: 5 }], fetchFn)).rejects.toThrow('not connected');

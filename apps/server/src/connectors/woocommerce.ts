@@ -294,7 +294,7 @@ export async function createWooProducts(db: Db, key: Buffer, storeId: string, pr
         const body = { name: p.title, type: 'simple', status: 'draft', regular_price: String(sale ? p.compareAt : p.price), ...(sale ? { sale_price: String(p.price) } : {}) };
         return `woo-${(await wooCall<{ id: number }>(db, key, storeId, 'POST', 'products', body, fetchFn)).id}`;
       });
-      insert.run(storeId, id, p.title, p.price, p.compareAt ?? null, p.cost ?? 0);
+      insert.run(storeId, id, p.title, p.price, p.compareAt || null, p.cost ?? 0);
       created.push({ id, title: p.title });
     } catch (e) {
       if (!created.length) throw e;

@@ -364,7 +364,7 @@ export function checkNewProducts(products: NewProduct[]) {
     if (typeof p.title !== 'string' || !p.title.trim()) throw new Error(`${which}: a title is required`);
     if (hasTag(p.title)) throw new Error(`${which}: the title can't contain HTML`);
     if (!num(p.price, 0.01)) throw new Error(`${which}: the price must be a number above 0`);
-    if (p.compareAt != null && !num(p.compareAt, 0.01)) throw new Error(`${which}: the compare-at price must be a number above 0`);
+    if (p.compareAt && !num(p.compareAt, 0.01)) throw new Error(`${which}: the compare-at price must be a number above 0`); // 0: none
     if (p.cost != null && !num(p.cost, 0)) throw new Error(`${which}: the cost must be a number, 0 or more`);
   }
 }
@@ -404,7 +404,7 @@ export async function createProducts(db: Db, key: Buffer, storeId: string, produ
         check(u.userErrors);
         return tail(product.id);
       });
-      insert.run(storeId, id, p.title, p.price, p.compareAt ?? null, p.cost ?? 0);
+      insert.run(storeId, id, p.title, p.price, p.compareAt || null, p.cost ?? 0);
       created.push({ id, title: p.title });
     } catch (e) {
       const made = [...created.map((c) => c.title), ...(unpriced ? [`${p.title}, without its price: set it in Shopify rather than adding it again`] : [])];
