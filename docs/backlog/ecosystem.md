@@ -85,6 +85,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-26 ECO-31: Added cinematic entry, frame-independent gentle camera easing, Hub shortcut and collapsible SVG minimap with live viewport and eleven named native focus buttons. Reduced/low-power mode skips camera motion. Keyboard Enter focus, Hub and reset checked in browser; Orca before/after captures .agent/eco-31-*.png. 975 tests pass; 57-58 FPS.
 - 2026-10-26 ECO-30: Bundled original generated night-city pixel art (1.8 MB) with bounded camera parallax, exterior rain and a softly lit district sign. Rain/parallax freeze with motion disabled. Prompt/provenance in public/ecosystem/README.md. 966 tests pass; fullscreen 30-worker scene measured 58.2 FPS; .agent/eco-30-*.png captures fit/fullscreen/reduced/Orca.
 - 2026-10-26 ECO-29: Added a maintenance drone, perimeter cleaning bot, water cooler, floating dust and junction lighting. Only idle seated workers sip/stretch; offline/busy states stay truthful. Motion freezes in reduced/low-power mode; corridor route checks pass. 964 tests green, measured 58.2 FPS; before/after, closeup and reduced-motion screenshots .agent/eco-29-*.png.
 - 2026-10-26 ECO-28: Added orbital hub rings and a store ticker with current local-day revenue/orders, authoritative active tasks, currency and missing-FX caveats; accessible text mirrors the projection. Corrected evening Demo calendar dates and order-total updates. 961 tests pass; live browser values matched analytics (50 orders) and task stats (0), Demo render 58 FPS; .agent/eco-28-*.png.
@@ -206,4 +207,4 @@ Seed list (reorder or extend as you see fit):
 - [x] ECO-29 Living office: blinking racks, drones or cleaning bots, floor-grid pulses, particles, harmless worker idle
   life (coffee runs, stretching, chatting at a water cooler) that never pretends to be task activity.
 - [x] ECO-30 Backdrop: skyline windows, parallax city/rain or starfield behind the office, animated exterior signage.
-- [ ] ECO-31 Camera polish: cinematic intro fly-in, smoother focus transitions, a minimap.
+- [x] ECO-31 Camera polish: cinematic intro fly-in, smoother focus transitions, a minimap.

@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { fitCamera, zoomAt } from './camera';
+import { cameraBlend, cameraViewport, fitCamera, introCamera, zoomAt } from './camera';
 import { MAP_SIZE } from './world';
 
 test('fit contains the office and cursor zoom preserves its world point', () => {
@@ -11,4 +11,14 @@ test('fit contains the office and cursor zoom preserves its world point', () => 
   expect((point.y - zoomed.y) / zoomed.scale).toBeCloseTo((point.y - camera.y) / camera.scale);
   expect(zoomAt(camera, 100, point).scale).toBe(3);
   expect(zoomAt(camera, .001, point).scale).toBe(.1);
+});
+test('cinematic entry and focus settle independently of frame rate and respect reduced motion', () => {
+  const fit = fitCamera(1000, 600);
+  expect(introCamera(fit, 1000, 600, false).scale).toBeLessThan(fit.scale);
+  expect(introCamera(fit, 1000, 600, true)).toEqual(fit);
+  expect(1 - (1 - cameraBlend(20, false)) ** 5).toBeCloseTo(cameraBlend(100, false));
+  expect(cameraBlend(20, true)).toBe(1);
+  const view = cameraViewport(fit, 1000, 600);
+  expect(view.width).toBeCloseTo(MAP_SIZE.width); expect(view.height).toBeCloseTo(MAP_SIZE.height);
+  expect(cameraViewport({ scale: 1, x: -99999, y: -99999 }, 1000, 600)).toMatchObject({ width: 0, height: 0 });
 });

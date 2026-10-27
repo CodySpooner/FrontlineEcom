@@ -1,7 +1,7 @@
 import { Application, Assets, Container, Graphics, Sprite, Text, Texture } from 'pixi.js';
 import { DESKS, MEETING, ROOMS, iso, uniso, type Tile } from './world';
 import { paintOffice } from './worldArt';
-import { fitCamera, zoomAt } from './camera';
+import { cameraBlend, cameraViewport, fitCamera, introCamera, zoomAt } from './camera';
 import { workerSprites } from './workerSprites';
 import type { DisplayOptions } from './display';
 import { OFFICE_THEMES, type OfficeThemeId } from './themes';
@@ -61,7 +61,8 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   const objective = new Text({ text: '', style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 19, fontWeight: '600', fill: '#ffd9e3', stroke: { color: '#100810', width: 6 }, wordWrap: true, wordWrapWidth: 300, align: 'center' } });
   objective.anchor.set(.5, 1); objective.position.set(hub.x, hub.y - 176); world.addChild(objective);
   let camera = fitCamera(host.clientWidth,host.clientHeight);
-  world.scale.set(camera.scale); world.position.set(camera.x,camera.y);
+  const intro = introCamera(camera, host.clientWidth, host.clientHeight, reduced.matches);
+  world.scale.set(intro.scale); world.position.set(intro.x,intro.y);
   const fit = () => { camera = fitCamera(host.clientWidth,host.clientHeight); };
   const zoom = (factor:number, point:Tile={x:host.clientWidth/2,y:host.clientHeight/2}) => { camera = zoomAt(camera,factor,point); };
   const focus = (tile:Tile) => { const p=iso(tile);camera={scale:1.25,x:host.clientWidth/2-p.x*1.25,y:host.clientHeight/2-p.y*1.25}; };
@@ -95,7 +96,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
       metrics = { fps, frames, elapsedMs: now - started, mode: lowPower || autoLow ? 'Low power' : 'Standard', scale: world.scale.x };
       sampleStart = now; sampleFrames = 0;
     }
-    const smooth=reduced.matches?1:1-Math.exp(-ticker.deltaMS/65);
+    const smooth=cameraBlend(ticker.deltaMS, reduced.matches || lowPower || autoLow);
     world.x+=(camera.x-world.x)*smooth;world.y+=(camera.y-world.y)*smooth;world.scale.set(world.scale.x+(camera.scale-world.scale.x)*smooth);
     workers.tick(Math.min(ticker.elapsedMS, 1000),reduced.matches || lowPower || autoLow,{x:-world.x/world.scale.x,y:-world.y/world.scale.x,width:host.clientWidth/world.scale.x,height:host.clientHeight/world.scale.x,scale:world.scale.x});
     objective.text = workers.meetingTitle() ? `TEAM KICKOFF\n${workers.meetingTitle()}` : '';
@@ -111,6 +112,6 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     if(still) return;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setBusiness: (value: Parameters<typeof platforms.update>[0], activeTasks?: number) => { platforms.update(value); showpieces.update(value); telemetry.update(value, activeTasks); }, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => ({ ...metrics, viewport: cameraViewport({ x: world.x, y: world.y, scale: world.scale.x }, host.clientWidth, host.clientHeight) }), focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setBusiness: (value: Parameters<typeof platforms.update>[0], activeTasks?: number) => { platforms.update(value); showpieces.update(value); telemetry.update(value, activeTasks); }, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { DESKS, ROOMS } from './world';
+import { DESKS, MEETING, ROOMS } from './world';
 import { createOffice, type OfficeRenderer } from './renderer';
 import { Button } from '../components/ui';
 import { AGENT_ROLES, type OfficeSeat } from '@frontline/shared';
 import { officeApi } from './api';
 import { hubReadout } from './hub';
+import { Minimap } from './Minimap';
 import type { OfficeWorker } from './workerSprites';
 import { workerActivity, type OfficeState } from './events';
 import { recentHandoff } from './communications';
@@ -44,11 +45,11 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
     document.addEventListener('fullscreenchange',changed);
     // Persist settled tiles outside the rendering loop; motion never waits for a network request.
     const save = window.setInterval(() => {
-      if (renderer) setPerformance(renderer.performance());
       if (!persist) return;
       for (const [id, position] of renderer?.drainPositions() ?? []) officeApi(`/api/ecosystem/seats/${encodeURIComponent(id)}`, 'PATCH', { position }).catch(() => { if (!disposed) setError('Worker positions could not be saved.'); });
     }, 1000);
-    return ()=>{disposed=true;renderer?.destroy();scene.current=undefined;clearInterval(save);document.removeEventListener('fullscreenchange',changed);};
+    const view = window.setInterval(() => { if (renderer) setPerformance(renderer.performance()); }, 200);
+    return ()=>{disposed=true;renderer?.destroy();scene.current=undefined;clearInterval(save);clearInterval(view);document.removeEventListener('fullscreenchange',changed);};
   },[]);
   const selected = DESKS.find((d)=>d.id===desk);
   const occupant = workers.find((w) => w.seat.deskId === desk);
@@ -58,12 +59,14 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
       <Button size="sm" onClick={()=>scene.current?.zoom(.8)} aria-label="Zoom out">−</Button>
       <Button size="sm" onClick={()=>scene.current?.zoom(1.25)} aria-label="Zoom in">+</Button>
       <Button size="sm" onClick={()=>scene.current?.fit()}>Fit / Reset</Button>
+      <Button size="sm" onClick={()=>scene.current?.focus(MEETING)}>Hub</Button>
       <select aria-label="Jump to department" defaultValue="" onChange={(e)=>{const room=ROOMS.find((r)=>r.id===e.target.value);if(room)scene.current?.focus({x:room.x+6,y:room.y+6});}}>
         <option value="" disabled>Jump to department</option>{ROOMS.map((r)=><option value={r.id} key={r.id}>{r.name}</option>)}
       </select>
       <Button size="sm" onClick={()=>{const action=fullscreen?document.exitFullscreen():host.current!.parentElement!.requestFullscreen();action.catch(()=>setError('Fullscreen could not be opened.'));}}>{fullscreen?'Exit fullscreen':'Fullscreen'}</Button>
     </div>
     <div ref={host} className="eco-canvas" data-frames={performance?.frames} data-elapsed-ms={performance?.elapsedMs} data-scale={performance?.scale} />
+    <Minimap viewport={performance?.viewport} onFocus={(tile) => scene.current?.focus(tile)} />
     {performance && <small className="eco-fps">{Math.round(performance.scale * 100)}% · {Math.round(performance.fps)} FPS · {performance.mode}{performance.scale < .65 ? ' · Zoom in for worker labels' : ''}</small>}
     {error && <p role="alert" className="eco-scene-error">{error}</p>}
     <div className="eco-scene-note" role="status">{occupant ? `${occupant.name} · ${occupant.status?.replaceAll('_', ' ')}${occupant.tool ? ` · ${occupant.tool}` : ''}` : selected ? `${ROOMS.find((r)=>r.id===selected.department)!.name} · Workstation ${selected.id.split('-').at(-1)}` : 'HEADQUARTERS · Select a workstation to inspect it'}</div>
