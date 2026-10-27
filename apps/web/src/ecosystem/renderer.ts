@@ -10,6 +10,7 @@ import { platformHolograms } from './platforms';
 import { officeLighting } from './lighting';
 import { departmentShowpieces } from './showpieces';
 import { hubTelemetry } from './hub';
+import { ambientOffice } from './ambient';
 
 export async function createOffice(host: HTMLElement, onDesk: (id: string) => void) {
   const logoTexture = await Assets.load<Texture>(LOGO_URL); logoTexture.source.scaleMode = 'nearest';
@@ -49,6 +50,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   const telemetry = hubTelemetry(world);
   const hub=iso(MEETING), hologram = createHologram(logoTexture); hologram.root.position.set(hub.x,hub.y-98); world.addChild(hologram.root);
   const platforms = platformHolograms(world);
+  const ambient = ambientOffice(world);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let lowPower = false, autoLow = false;
   app.ticker.maxFPS = 60;
@@ -101,6 +103,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     lighting.tick(elapsed, still);
     showpieces.tick(still);
     telemetry.tick(elapsed, still);
+    ambient.tick(elapsed, still);
     if(still) return;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });

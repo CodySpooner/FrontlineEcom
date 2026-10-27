@@ -46,4 +46,5 @@ for (const room of ROOMS) {
 }
 for (let x = MEETING.x - 2; x <= MEETING.x + 1; x++) for (let y = MEETING.y - 2; y <= MEETING.y + 1; y++) BLOCKED.add(tileKey({ x, y }));
 for (const p of PLATFORM_PYLONS) BLOCKED.add(tileKey(p));
+BLOCKED.add(tileKey({ x: 17, y: 21 }));
 export const walkable = (p: Tile) => Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.y >= 0 && p.x < OFFICE_GRID.width && p.y < OFFICE_GRID.height && !BLOCKED.has(tileKey(p));

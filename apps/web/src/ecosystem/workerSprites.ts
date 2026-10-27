@@ -7,6 +7,7 @@ import type { OfficeStatus } from './events';
 import { startVisit, visitFinished, type Handoff, type Visit } from './communications';
 import { meetingFinished, type Meeting, type MeetingPlan } from './meetings';
 import { DEFAULT_DISPLAY, type DisplayOptions } from './display';
+import { idleMoment } from './ambient';
 
 export interface OfficeWorker { seat: OfficeSeat; name: string; animation: Animation; target?: Tile; status?: OfficeStatus; tool?: string; handoff?: Handoff; meeting?: MeetingPlan }
 
@@ -108,7 +109,9 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
       const pos = iso(motion.position); worker.root.position.set(pos.x, pos.y + 12); worker.root.zIndex = pos.y;
       worker.root.renderable = !view || (pos.x > view.x - 200 && pos.x < view.x + view.width + 200 && pos.y > view.y - 80 && pos.y < view.y + view.height + 200);
       const receiving = [...visits.values()].some((v) => v.event.toAgentId === worker.data.seat.agentId && v.atDesk > 0);
-      const p = frameAt(motion.next ? 'walk' : motion.arrived ? visit || receiving || inMeeting ? 'collaborate' : worker.data.animation : 'idle', reduced ? 0 : worker.elapsed, worker.direction, worker.index);
+      const animation = motion.next ? 'walk' : motion.arrived ? visit || receiving || inMeeting ? 'collaborate' : worker.data.animation : 'idle';
+      const elapsed = animation === 'sit' ? worker.data.status === 'idle' ? idleMoment(worker.elapsed, worker.index, reduced) * 230 : 0 : reduced ? 0 : worker.elapsed;
+      const p = frameAt(animation, elapsed, worker.direction, worker.index);
       const key = `${p.x},${p.y}`;
       let frame = frames.get(key);
       if (!frame) { frame = new Texture({ source: atlas.source, frame: new Rectangle(p.x, p.y, CELL.width, CELL.height) }); frames.set(key, frame); }

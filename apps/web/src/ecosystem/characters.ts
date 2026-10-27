@@ -114,13 +114,14 @@ function paintPerson(c: CanvasRenderingContext2D, raw: OfficeAppearance, state: 
   }
   r(14 - broad, 46, 21 + broad * 2, 3, ink); plate(23, 45, 6, 4, steel);
   if (look.gear === 'belt' || kind === 'engineer') { plate(13, 43, 7, 7, dark); plate(31, 43, 6, 8, '#6d8093'); lightbar(14, 44, 4); }
-  const raised = state === 'complete' || state === 'collaborate';
-  const armY = raised ? 22 - frame % 2 * 2 : state === 'work' ? 36 + frame % 2 : state === 'talk' ? 30 + frame % 2 : 33;
+  const raised = state === 'complete' || state === 'collaborate' || state === 'sit' && frame === 2;
+  const armY = raised ? 22 - frame % 2 * 2 : state === 'sit' && frame === 1 ? 26 : state === 'work' ? 36 + frame % 2 : state === 'talk' ? 30 + frame % 2 : 33;
   plate(9 - broad, raised ? armY : 31 + step, 7 + broad, raised ? 12 : 15, kind === 'android' ? steel : mid);
   plate(34 + broad, armY, mech ? 9 : 7, state === 'work' ? 10 : 14, look.gear === 'cyberarm' || synthetic ? steel : dark);
   if (look.gear === 'cyberarm' || synthetic) { lightbar(36 + broad, armY + 3, 3, 5); r(35 + broad, armY + 10, 5, 2, '#b9ccdf'); }
   r(10 - broad, raised ? armY - 2 : 44 + step, 5 + broad, 4, synthetic ? steel : skin);
   r(35 + broad, armY + 12, mech ? 6 : 5, 4, synthetic || look.gear === 'cyberarm' ? pale : skin);
+  if (state === 'sit' && frame === 1) { plate(35 + broad, 35, 7, 8, synthetic ? glow : '#e8e1cf'); r(41 + broad, 37, 3, 4, pale); if (!synthetic) { r(37 + broad, 29, 1, 4, '#b8c1ce'); r(39 + broad, 27, 1, 3, '#77869b'); } }
   if (kind === 'operator' || mech || kind === 'punk') { plate(7 - broad, 29, 11 + broad, 7, look.color); lightbar(9 - broad, 30, 6); plate(34, 28, 9 + broad, 8, mid); }
   if (state === 'think') { plate(32, 24, 7, 17, mid); r(30, 22, 7, 5, synthetic ? steel : skin); }
   if (state === 'work' || state === 'collaborate') { r(29, 39 + frame % 2, 15, 9, '#13374dbb'); lightbar(30, 39 + frame % 2, 13, 1); r(31, 42, 8 + frame % 3, 1, glow); r(32, 45, 6, 1, glow); }
