@@ -135,7 +135,11 @@ test("a store with no sales yet is judged on its catalog's margin, not as if eve
   expect(outputs[0]!.split('\n').find((r) => r.startsWith('meta,launch,'))!.split(',')[9]).toBe('learning');
   // No unit costs either: nothing to judge against, rather than "pause" for all of it.
   db.prepare(`UPDATE products SET cost = 0 WHERE store_id = 'pawsome'`).run();
-  expect((await run([{ call: 'review_campaigns' }])).outputs[0]).toMatch(/^No break-even ROAS to judge campaigns against: no sales in 30 days and no active product with both a price and a unit cost\./);
+  const none = (await run([{ call: 'review_campaigns' }])).outputs[0];
+  expect(none).toMatch(/^No break-even ROAS to judge campaigns against: no sales in 30 days and no active product with both a price and a unit cost\./);
+  expect(none).toContain(`ask the owner to enter unit costs (Analytics' Unit costs here, or Shopify's "Cost per item").`);
+  db.prepare(`UPDATE stores SET platform = 'tiktok_shop' WHERE id = 'pawsome'`).run(); // no Shopify field to point at
+  expect((await run([{ call: 'review_campaigns' }])).outputs[0]).toContain("ask the owner to enter unit costs (Analytics' Unit costs here). ");
 });
 
 test("an old account's paused campaigns with no spend are left out; one that is on but spends nothing stays", async () => {

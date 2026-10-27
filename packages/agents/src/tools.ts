@@ -134,6 +134,8 @@ const noStoreWrites = (store: Store, platforms = PRODUCT_WRITE_PLATFORMS) =>
  */
 /** A live store with no fee estimate: no connector imports payment or platform fees, so profit leaves them out. */
 const noFees = (store: Store) => store.connected && !store.feePercent && !store.feePerOrder;
+/** Where the owner enters unit costs: Analytics' Unit costs card, or on a Shopify store its own "Cost per item" (synced). */
+const costsWhere = (store: Store) => `Analytics' Unit costs here${store.platform === 'shopify' ? ', or Shopify\'s "Cost per item"' : ''}`;
 const priceFloor = (store: Store, cost: number) => (cost > 0 ? r2((cost + (store.feePerOrder ?? 0)) / (1 - (store.feePercent ?? 0) / 100)) : undefined);
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
 export const cash = (n: number, currency: string) => (currency === 'USD' ? `$${n}` : `${n} ${currency}`);
@@ -916,7 +918,7 @@ export const APP_TOOLS: AppTool[] = [
       // campaign that spent a cent as "pause", even ones the ad network credits with sales.
       if (!econ.aov) {
         return 'No break-even ROAS to judge campaigns against: no sales in 30 days and no active product with both a price and a unit cost. ' +
-          'Propose no cut or pause on these numbers; ask the owner to enter unit costs (Shopify "Cost per item", else Products here). Raw numbers: list_campaigns.';
+          `Propose no cut or pause on these numbers; ask the owner to enter unit costs (${costsWhere(ctx.store)}). Raw numbers: list_campaigns.`;
       }
       const t = thresholds(econ);
       const rows = campaignStats(ctx, days);
@@ -925,7 +927,7 @@ export const APP_TOOLS: AppTool[] = [
       return [
         `margin after cost, tax and fees ${r2(econ.margin * 100)}%, AOV ${r2(econ.aov)}, break-even ROAS ${r2(t.breakEven)}, target ROAS ${r2(t.target)}, max CPA ${r2(t.maxCpa)} (${econ.catalog ? 'no sales in 30 days: from the active products\' prices and unit costs' : '30 days'}); campaigns over ${days} days:`,
         uncosted >= 0.1
-          ? `(${Math.round(uncosted * 100)}% of the last 30 days' product sales have no unit cost set, so margin reads high and break-even ROAS low: don't scale on these verdicts until the owner fills in costs (Shopify "Cost per item", else Products here). Products that truly cost nothing, like digital ones, are fine.)`
+          ? `(${Math.round(uncosted * 100)}% of the last 30 days' product sales have no unit cost set, so margin reads high and break-even ROAS low: don't scale on these verdicts until the owner fills in costs (${costsWhere(ctx.store)}). Products that truly cost nothing, like digital ones, are fine.)`
           : '',
         noFees(ctx.store)
           ? "(no fee estimate is set for this store, so margin leaves out payment and platform fees and break-even ROAS reads low: allow for them before scaling; the owner sets the estimate on the store in Settings)"
