@@ -3,7 +3,7 @@ import { approvalsHook } from '../approvals';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { updateStore } from '../stores';
-import { forgetPlatform, rebuildRevenue, retrying, setStoreCurrency, switchToReal, takeTimezone } from './common';
+import { forgetPlatform, rebuildRevenue, retrying, setStoreCurrency, switchToReal, takeCurrency, takeTimezone } from './common';
 
 test('a rate-limited sync request waits Retry-After and asks again; it gives up after 5 tries', async () => {
   const statuses = [429, 429, 200];
@@ -65,6 +65,25 @@ test("a store's currency changing re-syncs its ad accounts and Amazon from scrat
   expect(Object.values(cursors())).toEqual(Array(5).fill('2026-10-26'));
   setStoreCurrency(db, 'glow', currency === 'EUR' ? 'GBP' : 'EUR');
   expect(cursors()).toEqual({ shopify: '2026-10-26', meta_ads: null, google_ads: null, tiktok_ads: null, amazon: null });
+});
+
+test("a store's own platform syncing in another currency drops what a second platform synced first in the old one", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  switchToReal(db, 'glow'); // a Shopify store
+  db.prepare("INSERT INTO integrations (id, kind, store_id, status, encrypted_credentials, updated_at, cursor, synced_at) VALUES ('etsy:glow', 'etsy', 'glow', 'connected', '', '', '2026-10-26', '2026-10-26T10:00:00Z')").run();
+  takeCurrency(db, 'glow', 'etsy', 'EUR'); // Shopify hasn't synced: the store takes Etsy's
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, '2026-10-26T12:00:00Z', 40, 'paid', 'fulfilled', '2026-10-26')");
+  order.run('etsy-1');
+  rebuildRevenue(db, 'glow', ['2026-10-26']);
+  const revenue = () => db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-26'").get()?.revenue;
+  takeCurrency(db, 'glow', 'shopify', 'EUR'); // same currency: Etsy's orders add up fine
+  expect(revenue()).toBe(40);
+  takeCurrency(db, 'glow', 'shopify', 'USD'); // Shopify's first sync, in dollars: Etsy's euros would count as dollars
+  expect(db.prepare("SELECT currency FROM stores WHERE id = 'glow'").get()?.currency).toBe('USD');
+  expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow' AND id GLOB 'etsy-*'").get()?.n).toBe(0);
+  expect(revenue()).toBe(0);
+  expect(db.prepare("SELECT cursor FROM integrations WHERE id = 'etsy:glow'").get()?.cursor).toBeNull(); // read afresh if it ever fits
 });
 
 test("a real store's currency changing closes requests priced in the old one and drops its budgets until the ad sync re-reads them", () => {

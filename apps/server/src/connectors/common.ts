@@ -1,4 +1,4 @@
-import { INTEGRATION_KINDS, type AdNetwork, type IntegrationKind } from '@frontline/shared';
+import { INTEGRATION_KINDS, PLATFORMS, type AdNetwork, type IntegrationKind } from '@frontline/shared';
 import { expireRequests } from '../approvals';
 import type { Db } from '../db';
 import { convertRate, historicRate } from '../fx';
@@ -13,7 +13,19 @@ export function takeCurrency(db: Db, storeId: string, kind: IntegrationKind, cur
   const store = db.prepare('SELECT name, platform, currency FROM stores WHERE id = ?').get(storeId);
   const own = String(store?.platform);
   const ownSynced = own !== kind && db.prepare('SELECT 1 FROM integrations WHERE id = ? AND synced_at IS NOT NULL').get(`${own}:${storeId}`);
-  if (!ownSynced) return setStoreCurrency(db, storeId, currency);
+  if (!ownSynced) {
+    setStoreCurrency(db, storeId, currency);
+    if (kind !== own || currency === store?.currency) return;
+    // The store's own platform, in another currency than a second platform that synced first set: that one's orders are
+    // in the old currency. They go rather than add up as the new one; its next sync says to make it a store of its own.
+    const first = db.prepare(`SELECT id, kind FROM integrations WHERE store_id = ? AND kind != ? AND synced_at IS NOT NULL AND kind IN (SELECT value FROM json_each(?))`)
+      .all(storeId, own, JSON.stringify(PLATFORMS));
+    for (const i of first) {
+      forgetPlatform(db, storeId, i.kind as IntegrationKind);
+      db.prepare('UPDATE integrations SET cursor = NULL WHERE id = ?').run(String(i.id));
+    }
+    return;
+  }
   if (currency === store!.currency) return;
   const name = (k: string) => INTEGRATION_KINDS[k as IntegrationKind].name;
   throw new Error(`${name(kind)} sells in ${currency}, but ${store!.name} is in ${store!.currency} (its ${name(own)} sells in that). Add the ${name(kind)} as a store of its own to see its sales.`);
