@@ -1,5 +1,6 @@
 import { createDefaultJobs, createSquad, DEFAULT_JOBS, enableDefaultJobs } from '@frontline/agents';
 import type { AutomationRule } from '@frontline/shared';
+import { createHash } from 'node:crypto';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { startScheduler } from '../automations';
@@ -22,6 +23,22 @@ test('every new squad gets the default jobs, off on demo stores', async () => {
   expect(glow.every((r) => !r.enabled && r.approval === 'auto' && r.maxRunsPerDay === 1)).toBe(true);
   createSquad(db, { id: 'glow' });
   expect(await rules('glow')).toHaveLength(DEFAULT_JOBS.length);
+});
+
+test("a job's task text doesn't change without its old text's hash in FORMER_TASKS", () => {
+  // Failing? Add the old hash below to FORMER_TASKS in packages/agents/src/jobs.ts (live stores' unedited jobs then move
+  // to the new text), and put the new one here.
+  const hash = (task: string) => createHash('sha256').update(task).digest('hex').slice(0, 12);
+  expect(Object.fromEntries(DEFAULT_JOBS.map((j) => [j.name, hash(j.task)]))).toEqual({
+    'Daily briefing': 'f385b8168ab7',
+    'Daily campaign review': '0638a66c5c0c',
+    'Daily product scan': '76b2727e6a46',
+    'Daily order check': 'b4f3008ae90f',
+    'Weekly price check': 'df5a9be0e3fd',
+    'Weekly page refresh': '5b0e4eeea0b6',
+    'Monthly flow check': 'c0b7ee3aa8ac',
+    'Weekly report': '0753e76d0b9d',
+  });
 });
 
 test("a job the owner never edited moves to the current task text; an edited one is left alone", async () => {
