@@ -177,6 +177,8 @@ function DraftView({ d }: { d: PageDraft }) {
   // The same gate as agents' publish_page: product pages reach more platforms than other pages.
   const manual = byHand(stores.find((s) => s.id === d.storeId), d.kind === 'product' && d.productId ? PRODUCT_PAGE_PLATFORMS : PRODUCT_WRITE_PLATFORMS);
   const error = publish.error ?? remove.error;
+  // A store page is created, not updated: a push that timed out may have made it live (AGT-215), and again puts it up twice.
+  const twice = d.status === 'approved' && d.kind === 'page' && !manual;
   return (
     <div className="grid gap-3.5">
       <Panel
@@ -197,7 +199,10 @@ function DraftView({ d }: { d: PageDraft }) {
           <span className="text-xs text-text-2">
             {d.status === 'published' && `Live on ${store}${d.publishedAt ? ` since ${ago(d.publishedAt)}` : ''}.`}
             {d.status === 'pending' && 'The Store Developer asked to publish this.'}
-            {d.status === 'approved' && `Approved, but it couldn't be pushed to ${store}. ${manual ? 'Apply it by hand.' : 'Try again, or apply it by hand.'}`}
+            {d.status === 'approved' &&
+              (twice
+                ? `Approved, but ${store} didn't confirm it. It may be live anyway: check ${store}'s pages before you publish it again, or it goes up twice.`
+                : `Approved, but it couldn't be pushed to ${store}. ${manual ? 'Apply it by hand.' : 'Try again, or apply it by hand.'}`)}
             {d.status === 'rejected' && 'You turned this down. You can still publish it.'}
             {d.status === 'draft' && 'Not published yet.'}
           </span>
@@ -208,7 +213,7 @@ function DraftView({ d }: { d: PageDraft }) {
               </span>
             ) : (
               <Button variant="primary" className="ml-auto" disabled={publish.isPending} onClick={() => publish.mutate(d.id)}>
-                {d.status === 'pending' ? 'Approve and publish' : d.status === 'approved' ? 'Try again' : `Publish to ${store}`}
+                {d.status === 'pending' ? 'Approve and publish' : twice ? 'Publish again' : d.status === 'approved' ? 'Try again' : `Publish to ${store}`}
               </Button>
             ))}
         </div>

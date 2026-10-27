@@ -416,6 +416,10 @@ Orca's browser against the reference before ticking it.
       and a follow-up there is refused ("…ran on demo data, before the store went live: start a new one."). The
       refusal now carries "Send as a new chat": the same task, no resume, as a fresh thread. Same for "That
       conversation cannot be continued".
+- [x] UI-159 (re AGT-215) Store Builder offered "Try again" on any approved draft whose push failed. A store page is
+      created, not updated, so a push that timed out may already be live and a retry puts it up twice. An approved store
+      page now reads "…didn't confirm it. It may be live anyway: check <store>'s pages before you publish it again, or
+      it goes up twice." with "Publish again". Product pages (an update) keep "Try again"; by-hand stores are unchanged.
 
 ## Blocked
 
@@ -619,3 +623,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-156: Shopify/Woo/Etsy/TikTok Shop take the currency via `takeCurrency`, Amazon via `setStoreCurrency`. Two StoreForm tests (red first). Orca with Pawsome patched connected (read-only), Edit opened, not saved: USD readOnly, hint "Shopify sets its currency."
 - 2026-10-26 — UI-157: one `roving()` helper in ui.tsx for both. Two ui tests (red first); whole web suite green. Orca on the Dashboard's Date range: 30D* → ArrowLeft 7D* (focused, tabIndex 0) → End 1Y* → Home, ArrowRight back to 30D*
 - 2026-10-26 — UI-158: matches the agents' message, as FixLink does for budgets. Chat test (red first). Orca on Pawsome's Copywriter with both run POSTs answered by the fixture (409, then a fake run; nothing reached the server): button inline after the message; click → second POST without resumeRunId, alert gone, box cleared, new thread shows the task
+- 2026-10-26 — UI-159: the draft doesn't record why its push failed (core's notification does), so every approved store page gets the caution. Builder test (red first); the old "Try again" test now uses a product page. Orca with a fixture draft (approved store page, Pawsome patched connected; read-only): "Publish again" + the caution

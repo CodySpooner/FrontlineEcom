@@ -37,10 +37,17 @@ describe('Builder › publishing a draft', () => {
     expect(screen.queryByRole('button', { name: 'Publish to Clay Co' })).toBeNull();
   });
 
-  it('lets an approved draft whose push failed be tried again, or applied by hand', async () => {
-    render('shopify', { ...draft, status: 'approved' });
+  it('lets an approved product page whose push failed be tried again (an update, safe to repeat), or applied by hand', async () => {
+    render('shopify', { ...draft, kind: 'product', productId: 'p1', status: 'approved' });
     expect(await screen.findByRole('button', { name: 'Try again' })).toBeTruthy();
     expect(screen.getByText(/couldn't be pushed to Clay Co\. Try again, or apply it by hand/)).toBeTruthy();
+  });
+
+  it("warns that an approved store page may be live already before it's published again (AGT-215)", async () => {
+    render('shopify', { ...draft, status: 'approved' });
+    expect(await screen.findByRole('button', { name: 'Publish again' })).toBeTruthy();
+    expect(screen.getByText(/may be live anyway: check Clay Co's pages before you publish it again, or it goes up twice/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 });
 
