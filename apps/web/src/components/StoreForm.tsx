@@ -72,7 +72,13 @@ export function StoreForm({ store, onDone }: { store?: Store; onDone: (saved?: S
           className={inputClass}
         />
       </Field>
-      <p className="-mt-2 text-xs text-muted">The squad reads its niche pack and tunes research, ads and copy to it. The more specific, the better.</p>
+      <p className="-mt-2 text-xs text-muted">
+        {/* A custom niche's pack is drafted on the store's first real sync (agents' routes/agents.ts). */}
+        {niche === 'other' && !store?.connected
+          ? 'Once the store is connected, its Market Analyst researches this niche and drafts its pack for you to approve.'
+          : 'The squad reads its niche pack and tunes research, ads and copy to it.'}{' '}
+        The more specific, the better.
+      </p>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Currency">
           {/* A connected store's sync sets it, and a change closes its waiting ad, price and product requests (CORE-109). */}

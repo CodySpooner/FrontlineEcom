@@ -81,3 +81,13 @@ describe('store form currency', () => {
     expect((screen.getByLabelText('Currency') as HTMLInputElement).readOnly).toBe(false);
   });
 });
+
+describe('store form niche hint', () => {
+  it("says a new custom niche's pack is drafted once the store is connected", () => {
+    stubApi(() => undefined);
+    renderApp(<StoreForm onDone={() => {}} />);
+    expect(screen.getByText(/The squad reads its niche pack/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Niche'), { target: { value: 'other' } });
+    expect(screen.getByText(/Once the store is connected, its Market Analyst researches this niche and drafts its pack for you to approve/)).toBeTruthy();
+  });
+});
