@@ -99,7 +99,9 @@ has something to show. A store's first real sync (core's `switchToReal`) wipes i
 - demo-order issues close;
 - product-page and flow drafts go;
 - demo renders and agent copy leave the creatives library (paid Higgsfield renders stay);
-- running missions are cancelled.
+- running missions are cancelled;
+- a run still going from before does nothing more: every tool call it makes says stop, and it learns nothing;
+- a chat from before can't be continued: the owner starts a new one.
 
 A live store's tools also leave demo stand-ins out: `research_feed` skips the sample catalog, `search_suppliers` gives
 no demo listings without CJ, `create_creative` makes no placeholder render without Higgsfield, `compare_stores` leaves
