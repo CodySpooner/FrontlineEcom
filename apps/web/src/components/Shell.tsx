@@ -3,7 +3,6 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { TriangleAlert } from 'lucide-react';
 import { useAgents, useClaudeAccount, useGoLiveRefresh, useHealth, useLive } from '../api/client';
 import { NAV, pageTitle } from '../nav';
-import { SvgDefs } from './Art';
 import { AskPalette } from './AskPalette';
 import { BrandLogo } from './BrandLogo';
 import { XpToasts } from './Gamification';
@@ -42,7 +41,6 @@ export function Shell() {
       >
         Skip to content
       </a>
-      <SvgDefs />
       <XpToasts />
       <AskPalette />
       <Onboarding />

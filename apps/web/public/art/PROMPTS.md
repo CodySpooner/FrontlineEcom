@@ -88,6 +88,13 @@ Email and SMS: a friendly fast male messenger-ninja with East Asian features, sh
 
 Operations: a big dependable dark-skinned quartermaster with broad shoulders, close-cropped hair and a heavy black GRILL HALF-MASK with strong vertical vents. Friendly glowing red eyes with smile creases, reassuring steady gaze. Arms crossed over heavy matte work armor, a blank clipboard tucked under one arm and the top edge of one shipping crate at the bottom. Robust simple square silhouette, warm personality, no hood or horns.
 
+
+### Operations crop refinement
+
+Reference: the original Operations square portrait. Replaced `agents/operations.webp` with the reframed result to keep the eyes in the shared card crop.
+
+Edit only the portrait composition. Keep the exact same Operations character, face, friendly eyes, dark skin, grill half-mask, armor, crossed arms, clipboard, illustration style, red rim lighting and square canvas. Shift/reframe the bust DOWN in the square: put the eyes at exactly 35% of total image height (currently about 22%), top of hair at 18%, mask bottom at 57%. Leave a quiet charcoal margin above the head, naturally crop more of the lower arms and crate at the bottom. Do not zoom in; keep the face width about one-third of the square. This must match the other squad portraits' centered eye line and keep both eyes visible in a horizontal 3:1 strip cropped at center 32%. No text, logos, borders, or extra objects.
+
 ## Style frame
 
 ### Command Center: initial generation
