@@ -87,10 +87,14 @@ export function profitFormula(stores: Store[]) {
   return ['Revenue', 'cost of goods', fees && 'your fee estimate', tax && 'sales tax', 'ad spend'].filter(Boolean).join(' − ');
 }
 
+/** Live stores with no fee estimate: no connector imports platform or payment fees, so their profit leaves them out (AGT-201). */
+export const noFeeEstimate = (stores: Store[]) => stores.filter((x) => x.connected && !x.feePercent && !x.feePerOrder);
+
 function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
   // Products the platform has no cost for count their whole price as profit until the owner sets one.
   const { ids, stores, has } = useStoreSelection();
   const atFullPrice = useMissingCosts(ids).data?.length ?? 0;
+  const noFees = noFeeEstimate(stores.filter((x) => has(x.id)));
   const grid = 'mb-3.5 grid grid-cols-2 gap-3 min-[620px]:grid-cols-3 min-[1280px]:grid-cols-5';
   if (q.isError)
     return (
@@ -124,10 +128,20 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
           </Tooltip>
         }
         extra={
-          atFullPrice > 0 && (
+          atFullPrice > 0 ? (
             <Link to="/analytics" title="These products count their whole price as profit. Set their unit costs in Store Analytics." className="text-red hover:underline">
               {atFullPrice} cost{atFullPrice > 1 ? 's' : ''} missing
             </Link>
+          ) : (
+            noFees.length > 0 && (
+              <Link
+                to="/settings"
+                title={`No fee estimate for ${noFees.map((x) => x.name).join(', ')}: profit leaves out platform and payment fees. Set one in Settings.`}
+                className="text-red hover:underline"
+              >
+                Fees left out
+              </Link>
+            )
           )
         }
         value={fitMoney(t.profit, s.currency)}

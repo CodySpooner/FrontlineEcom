@@ -391,6 +391,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-150 (Inbox, from core) The connect form's another-shop warning uses `anotherShop` from `@frontline/shared` (the
       server's own rule) and the web copy in lib/shop is gone. Competitor Intel's ads copy follows core's decision that
       real rivals' ads are never recorded: "Ads are recorded for demo competitors only" (no "yet").
+- [x] UI-151 (re AGT-201) A live store with no fee estimate has profit that leaves out platform and payment fees (no
+      connector imports them). The agents say so now; the Dashboard's Profit card did not. It shows "Fees left out"
+      (linking to Settings, naming the stores) when no product is missing a cost; demo stores stay quiet.
 
 ## Blocked
 
@@ -586,3 +589,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-148: copy only. `Competitor` has no author field, so rows can't credit the agent (not asked for). Orca with the competitor list patched empty (read-only): the new copy sits above "Track a competitor"
 - 2026-10-26 — UI-149: `adLibrary(name)` builds the Meta Ad Library keyword search. New Competitors test (red on the old code). Orca with ad snapshots and counts patched empty (read-only): "No ads collected" + "Search Meta's Ad Library" (q=Wag+%26+Wander), rows read "3 products tracked". FYI in core's Inbox
 - 2026-10-26 — UI-150: lib/shop.ts and its test removed; the Integrations "another shop" test still covers the rule end to end through the form. Orca: Integrations serves the shared import, both pages load
+- 2026-10-26 — UI-151: `noFeeEstimate(stores)` in Dashboard.tsx, tested (red first). "N costs missing" keeps the slot when both apply. Orca with Pawsome patched live and fee-less and costs filled (read-only): Profit reads "Profit | Fees left out", title names Pawsome Gear, href /settings
