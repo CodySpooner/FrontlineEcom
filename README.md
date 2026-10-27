@@ -50,7 +50,8 @@ pnpm check    # typecheck + tests
     Needs the Product Modify scope.
 - **Competitor prices:** once a day the app reads each competitor's public catalog and records price moves, in the
   competitor's own currency. It works for Shopify storefronts, WooCommerce stores and Etsy shops (an Etsy shop needs
-  one of your stores connected to Etsy, for its app key). Other sites get no price history.
+  one of your stores connected to Etsy, for its app key). Other sites get no price history. It never reads an address on
+  this computer or your network, even when a shop redirects there.
 - **Your data:** everything stays on this PC in `%APPDATA%\Frontline Ecom\data`. That folder holds the database,
   `logs\api.log`, and `backups\` (daily, newest 7 kept, plus a copy taken just before an update changes the data; all
   restorable from Settings). Restoring one closes the requests that were waiting in it, since they may have been
