@@ -318,11 +318,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-188 Going live clears the flow drafts from the demo phase. They were written about the demo catalog and sized on its numbers, stayed in the flow library, and the monthly flow check counted them as the store's flows: with all four there it only redrafts the oldest, so real-number drafts took four months to replace them.
 - [x] AGT-189 Going live cancels the store's running missions. Their later steps start from the finished steps' answers, read off demo numbers ("launch the Ice Facial Roller at $34.99"), and would act on the live store.
 - [x] AGT-190 Reflection learnings get `write_memory`'s limits. The tool caps text at 300 characters, evidence at 300 and tags at 6, but the after-run reflection saved whatever the model replied, so one paragraph-long "learning" rode along in every later prompt.
+- [x] AGT-191 `store_summary` says when profit reads high because sales have no unit cost. The dashboard warns the owner, `review_campaigns` warns the Ad Strategist, but the daily briefing's profit and "winning" health came from `store_summary` with no word of it (a TikTok Shop or Etsy store with no costs entered reads close to 100% uncosted).
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-191: `store_summary` adds a `profitNote` when 10%+ of the window's product sales have no unit cost (`uncostedShare`, as `review_campaigns`), saying profit, margin and health read high and where the owner enters costs.
 - 2026-10-26 — AGT-190: `parseLearnings` drops a text under 5 or over 300 characters and cuts evidence to 300 and tags to 6.
 - 2026-10-26 — AGT-185 follow-up: `research_feed` asks core for `sample=0` (its reply, 9468e994) instead of reading 200 rows and dropping non-`find-` ones.
 - 2026-10-26 — AGT-189: `startFresh` cancels the store's unended missions (their running steps stop, the live feed hears) and counts them in the "starts fresh" notice.

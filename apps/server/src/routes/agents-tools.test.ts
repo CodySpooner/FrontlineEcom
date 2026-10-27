@@ -119,6 +119,20 @@ test('store_summary names the TikTok Shop sales in its totals', async () => {
   }
 });
 
+test('store_summary says when profit reads high because sales have no unit cost', async () => {
+  const summary = async () => JSON.parse(results(await run(input('glow', 'market_analyst'), [{ call: 'store_summary', input: { range: 7 } }]))[0]!.output) as { to: string; profitNote?: string };
+  const plain = await summary();
+  expect(plain.profitNote).toBeUndefined();
+  db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', 'o-uncosted', ?, 100000, 'paid', 'delivered', ?)`).run(`${plain.to}T12:00:00Z`, plain.to);
+  db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('glow', 'o-uncosted', 'glow-p1', 1, 100000, 0)`).run();
+  try {
+    expect((await summary()).profitNote).toMatch(/^\d+% of this window's product sales have no unit cost set, so profit, margin and health read high\./);
+  } finally {
+    db.prepare(`DELETE FROM order_items WHERE store_id = 'glow' AND order_id = 'o-uncosted'`).run(); // the db is shared by these tests
+    db.prepare(`DELETE FROM orders WHERE store_id = 'glow' AND id = 'o-uncosted'`).run();
+  }
+});
+
 test('list_products shows a unit cost nobody set as "not set", with no margin, not a 97% margin', async () => {
   const p = db.prepare(`SELECT id, cost FROM products WHERE store_id = 'glow' ORDER BY price DESC LIMIT 1`).get()!;
   db.prepare(`UPDATE products SET cost = 0 WHERE store_id = 'glow' AND id = ?`).run(String(p.id));

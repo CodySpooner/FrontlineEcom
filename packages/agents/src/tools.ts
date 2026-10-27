@@ -166,7 +166,12 @@ export const APP_TOOLS: AppTool[] = [
       const tiktokShop = Number(tt?.orders)
         ? { revenue: Number(tt!.revenue), orders: Number(tt!.orders), note: "In the totals, with its own product costs. Its buyers shopped on TikTok Shop, not the site: take it out for the site's own AOV and conversion." }
         : undefined;
-      return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals), ...(amazonChannel && { amazonChannel }), ...(tiktokShop && { tiktokShop }) });
+      // Lines with no unit cost (never entered; TikTok Shop and Etsy carry none of their own) count their whole price as profit.
+      const uncosted = uncostedShare(ctx.db, ctx.store.id, s.from);
+      const profitNote = uncosted >= 0.1
+        ? `${Math.round(uncosted * 100)}% of this window's product sales have no unit cost set, so profit, margin and health read high. Say so next to any profit figure; the owner enters costs in Analytics.`
+        : undefined;
+      return JSON.stringify({ from: s.from, to: s.to, currency: ctx.store.currency, totals: s.totals, previous: s.previous, deltasPct: s.deltas, health: storeHealth(s.totals), ...(profitNote && { profitNote }), ...(amazonChannel && { amazonChannel }), ...(tiktokShop && { tiktokShop }) });
     },
   }),
   defineTool({
