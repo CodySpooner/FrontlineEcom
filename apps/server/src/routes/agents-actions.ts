@@ -59,8 +59,8 @@ export async function publishDraft(db: Db, d: PageDraft, push: PushPage) {
       notify(
         db,
         unsure
-          ? { kind: 'error', title: `Not sure "${d.title}" reached ${store.name}`, body: `${(e as Error).message}. The page may be live anyway: check the store's pages before you publish it again from Store Builder, or it goes up twice.`, storeId: store.id }
-          : { kind: 'error', title: `Couldn't publish "${d.title}" to ${store.name}`, body: `${(e as Error).message}. It's ${d.status === 'approved' ? 'approved and ' : ''}waiting in Store Builder.`, storeId: store.id },
+          ? { kind: 'error', title: `Not sure "${d.title}" reached ${store.name}`, body: `${(e as Error).message}. The page may be live anyway: check the store's pages before you publish it again from Store Builder, or it goes up twice.`, storeId: store.id, link: `/builder?draft=${d.id}` }
+          : { kind: 'error', title: `Couldn't publish "${d.title}" to ${store.name}`, body: `${(e as Error).message}. It's ${d.status === 'approved' ? 'approved and ' : ''}waiting in Store Builder.`, storeId: store.id, link: `/builder?draft=${d.id}` },
       );
       return;
     } finally {
@@ -102,11 +102,11 @@ export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) 
   // A real account's results move in days: a change asked on last week's numbers is asked again, not applied.
   const days = Math.floor((Date.parse(a.decidedAt ?? new Date().toISOString()) - Date.parse(a.createdAt)) / 86_400_000);
   if (store.connected && days > STALE_DAYS) {
-    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `It was asked ${days} days ago, on numbers that have moved since. Ask the Ad Strategist again for a fresh read.`, storeId: store.id });
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `It was asked ${days} days ago, on numbers that have moved since. Ask the Ad Strategist again for a fresh read.`, storeId: store.id, link: `/agents/${a.agentId}` });
     return skip();
   }
   if (!pause && typeof p.from === 'number' && c && moved(p.from, Number(c.daily_budget))) {
-    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The budget moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(c.daily_budget), store.currency)}). Ask the Ad Strategist again if it still makes sense.`, storeId: store.id });
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The budget moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(c.daily_budget), store.currency)}). Ask the Ad Strategist again if it still makes sense.`, storeId: store.id, link: `/agents/${a.agentId}` });
     return skip();
   }
   if (store.connected) {
@@ -114,7 +114,7 @@ export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) 
       await write(store.id, network, p.campaignId, pause ? 'pause' : { dailyBudget: p.to as number });
     } catch (e) {
       skip();
-      notify(db, { kind: 'error', title: `Couldn't apply "${a.title}" on the ad account`, body: `${(e as Error).message}. Apply it by hand in the ad manager.`, storeId: store.id });
+      notify(db, { kind: 'error', title: `Couldn't apply "${a.title}" on the ad account`, body: `${(e as Error).message}. Apply it by hand in the ad manager.`, storeId: store.id, link: '/analytics' });
       return;
     }
   }
@@ -141,13 +141,13 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
   const days = Math.floor((Date.parse(a.decidedAt ?? new Date().toISOString()) - Date.parse(a.createdAt)) / 86_400_000);
   if (store.connected && days > 14) {
     once(db, `not-applied:${a.id}`);
-    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `It was asked ${days} days ago, on prices that may have moved since. Ask the Market Analyst again for a fresh read.`, storeId: store.id });
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `It was asked ${days} days ago, on prices that may have moved since. Ask the Market Analyst again for a fresh read.`, storeId: store.id, link: `/agents/${a.agentId}` });
     return;
   }
   const now = db.prepare('SELECT price FROM products WHERE store_id = ? AND id = ?').get(store.id, p.productId)?.price;
   if (now != null && moved(p.from, Number(now))) {
     once(db, `not-applied:${a.id}`); // squad_log: approved, not shipped
-    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The price moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(now), store.currency)}). Ask the Market Analyst again if it still makes sense.`, storeId: store.id });
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The price moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(now), store.currency)}). Ask the Market Analyst again if it still makes sense.`, storeId: store.id, link: `/agents/${a.agentId}` });
     return;
   }
   const compareAt = typeof p.compareAt === 'number' ? p.compareAt : undefined;
@@ -156,7 +156,7 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
       await setPrice(store.id, p.productId, { price: p.to, ...(compareAt !== undefined ? { compareAt } : {}) });
     } catch (e) {
       once(db, `not-applied:${a.id}`);
-      notify(db, { kind: 'error', title: `Couldn't change the price on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Change it by hand if you still want the test.`, storeId: store.id });
+      notify(db, { kind: 'error', title: `Couldn't change the price on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Change it by hand if you still want the test.`, storeId: store.id, link: '/analytics' });
       return;
     }
   } else {
@@ -207,7 +207,7 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
     try {
       added = await createRemote(store.id, valid.map((p, i) => ({ title: titles[i]!, price: p.price, compareAt: p.compareAt, cost: p.cost })));
     } catch (e) {
-      notify(db, { kind: 'error', title: `Couldn't add products to ${store.name}`, body: `${(e as Error).message}. Approved: ${titles.join(', ')}. Add any not created yet by hand.`, storeId: store.id });
+      notify(db, { kind: 'error', title: `Couldn't add products to ${store.name}`, body: `${(e as Error).message}. Approved: ${titles.join(', ')}. Add any not created yet by hand.`, storeId: store.id, link: '/research' });
       return [];
     } finally {
       for (const k of claimed) adding.delete(k); // product_tests (written below, before any other await) answers from here on
@@ -285,7 +285,7 @@ export async function publishThemeChange(db: Db, a: ApprovalRequest, publish: (s
     once(db, `theme-live:${a.id}`); // when it went live: the outcome check measures from here
   } catch (e) {
     once(db, `not-applied:${a.id}`);
-    notify(db, { kind: 'error', title: `Couldn't publish the theme on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Publish "${String(p.name ?? p.themeId)}" by hand in Online Store > Themes.`, storeId: store.id });
+    notify(db, { kind: 'error', title: `Couldn't publish the theme on ${store.name}: ${a.title}`, body: `${(e as Error).message}. Publish "${String(p.name ?? p.themeId)}" by hand in Online Store > Themes.`, storeId: store.id, link: '/builder' });
   }
 }
 

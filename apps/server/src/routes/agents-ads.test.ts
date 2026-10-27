@@ -271,8 +271,8 @@ test('connected stores get it on the ad account; an ad account error tells the o
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
   await run([propose({ campaignId: 'pawsome-c3', change: 'pause' })]); // no ad credentials in tests
   expect(budget('pawsome-c3').status).toBe('active');
-  expect(db.prepare(`SELECT title, body FROM notifications WHERE kind = 'error'`).get()).toEqual({
-    title: `Couldn't apply "Pause Spark Ads · UGC" on the ad account`, body: expect.stringMatching(/not connected.*\. Apply it by hand in the ad manager\.$/),
+  expect(db.prepare(`SELECT title, body, link FROM notifications WHERE kind = 'error'`).get()).toEqual({
+    title: `Couldn't apply "Pause Spark Ads · UGC" on the ad account`, body: expect.stringMatching(/not connected.*\. Apply it by hand in the ad manager\.$/), link: '/analytics',
   });
 
   const writes: unknown[] = [];
@@ -397,8 +397,8 @@ test('a late approval does not undo a budget the owner moved, nor pause a paused
   await applyAdChange(db, approval('noop', 'ads.pause_campaign', { campaignId: 'pawsome-c2' }), write);
   await applyAdChange(db, approval('ok', 'ads.set_budget', { campaignId: 'pawsome-c1', from: 90.5, to: 100 }), write); // within 1%
   expect(budget('pawsome-c1').daily_budget).toBe(100);
-  expect(db.prepare(`SELECT title, body FROM notifications WHERE title LIKE 'Not applied%'`).all()).toEqual([
-    { title: 'Not applied: "Raise it"', body: 'The budget moved since this was asked ($60 → now $90). Ask the Ad Strategist again if it still makes sense.' },
+  expect(db.prepare(`SELECT title, body, link FROM notifications WHERE title LIKE 'Not applied%'`).all()).toEqual([
+    { title: 'Not applied: "Raise it"', body: 'The budget moved since this was asked ($60 → now $90). Ask the Ad Strategist again if it still makes sense.', link: '/agents/pawsome:ad_strategist' },
   ]);
   expect(db.prepare(`SELECT ref FROM done_once WHERE ref LIKE 'not-applied:%' ORDER BY ref`).all()).toEqual([{ ref: 'not-applied:late' }, { ref: 'not-applied:noop' }]);
 

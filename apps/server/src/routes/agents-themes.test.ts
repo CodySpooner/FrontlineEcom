@@ -186,7 +186,10 @@ test("a published theme change is judged on store conversion, 14 days before vs 
     JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9', name: 'Frontline: Sticky ATC' } }),
     new Date().toISOString(),
   );
-  await publishThemeChange(db, { id: 'a1', storeId: 'glow', title: 'Publish theme change: Sticky ATC', action: { kind: 'store.publish_theme', payload: { themeId: '9' } } } as ApprovalRequest, async () => {});
+  const sticky = { id: 'a1', storeId: 'glow', title: 'Publish theme change: Sticky ATC', action: { kind: 'store.publish_theme', payload: { themeId: '9' } } } as ApprovalRequest;
+  await publishThemeChange(db, { ...sticky, id: 'a0' }, async () => Promise.reject(new Error('Shopify returned HTTP 502')));
+  expect(db.prepare(`SELECT title, link FROM notifications WHERE kind = 'error'`).get()).toEqual({ title: "Couldn't publish the theme on Glow Haus: Publish theme change: Sticky ATC", link: '/builder' });
+  await publishThemeChange(db, sticky, async () => {});
   const day = addDays(localDate(), -20);
   db.prepare(`UPDATE done_once SET at = ? WHERE ref = 'theme-live:a1'`).run(`${day}T15:00:00Z`);
   const window = (from: number, to: number, orders: number, sessions: number) =>

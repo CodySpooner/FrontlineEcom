@@ -137,11 +137,12 @@ test("a store page push that may have worked (a 5xx, a dropped connection) says 
   await publishDraft(db, about, fail(new Error('Title has already been taken'))); // refused: nothing was made
   await publishDraft(db, product, fail(new Error('Shopify returned HTTP 502'))); // an update: publishing again is safe
   const check = ". The page may be live anyway: check the store's pages before you publish it again from Store Builder, or it goes up twice.";
-  expect(db.prepare(`SELECT title, body FROM notifications WHERE kind = 'error' AND store_id = 'glow' ORDER BY rowid`).all()).toEqual([
-    { title: 'Not sure "About us" reached Glow Haus', body: `Shopify returned HTTP 502${check}` },
-    { title: 'Not sure "About us" reached Glow Haus', body: `fetch failed${check}` },
-    { title: 'Couldn\'t publish "About us" to Glow Haus', body: "Title has already been taken. It's waiting in Store Builder." },
-    { title: `Couldn't publish "${product.title}" to Glow Haus`, body: "Shopify returned HTTP 502. It's waiting in Store Builder." },
+  const open = { link: `/builder?draft=${about.id}` }; // the bell opens the draft in Store Builder
+  expect(db.prepare(`SELECT title, body, link FROM notifications WHERE kind = 'error' AND store_id = 'glow' ORDER BY rowid`).all()).toEqual([
+    { title: 'Not sure "About us" reached Glow Haus', body: `Shopify returned HTTP 502${check}`, ...open },
+    { title: 'Not sure "About us" reached Glow Haus', body: `fetch failed${check}`, ...open },
+    { title: 'Couldn\'t publish "About us" to Glow Haus', body: "Title has already been taken. It's waiting in Store Builder.", ...open },
+    { title: `Couldn't publish "${product.title}" to Glow Haus`, body: "Shopify returned HTTP 502. It's waiting in Store Builder.", link: `/builder?draft=${product.id}` },
   ]);
 });
 

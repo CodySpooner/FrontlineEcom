@@ -310,7 +310,7 @@ export function runManager(db: Db): RunManager {
       if (db.prepare('SELECT 1 FROM stores WHERE id = ? AND connected = 1 AND demo = 0').get(a.storeId) && !db.prepare('SELECT 1 FROM done_once WHERE ref = ?').get(`activate:${a.storeId}`)) {
         activateConnectedStores(db, runManager(db));
         once(db, `not-applied:${a.id}`);
-        return notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: 'It was asked on the demo data, before the store went live. Ask the squad again for a read on the real numbers.', storeId: a.storeId });
+        return notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: 'It was asked on the demo data, before the store went live. Ask the squad again for a read on the real numbers.', storeId: a.storeId, link: `/agents/${a.agentId}` });
       }
       if (a.action.kind === 'store.add_products') {
         return addProducts(db, a, (agentId, task) => runManager(db).start(agentId, task), (storeId, products) =>

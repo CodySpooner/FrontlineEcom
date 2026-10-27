@@ -158,6 +158,7 @@ test("a demo request approved after the store's first sync, before the squad not
   decide(db, 'ask2', 'approve'); // the owner answers before any squad read
   await new Promise((r) => setTimeout(r, 20));
   expect(notes('glow')).toContain('Not applied: "Add Ice roller"');
+  expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Not applied: "Add Ice roller"'`).get()?.link).toBe('/agents/glow:product_hunter');
   expect(db.prepare(`SELECT title FROM notifications WHERE store_id = 'glow' AND kind = 'error'`).all()).toEqual([]); // nothing tried on Shopify
   expect(db.prepare(`SELECT count(*) AS n FROM product_tests WHERE approval_id = 'ask2'`).get()?.n).toBe(0);
   expect(db.prepare(`SELECT status FROM approvals WHERE id = 'ask3'`).get()?.status).toBe('denied'); // the squad caught up: the rest expired

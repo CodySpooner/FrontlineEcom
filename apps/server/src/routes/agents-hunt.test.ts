@@ -77,9 +77,10 @@ test('connected stores get platform drafts; a platform error tells the owner ins
   await post(`/api/approvals/${approval.id}/approve`);
   await tick();
   expect(product('peak', 'research-smart-jump-rope')).toBeUndefined();
-  expect(db.prepare(`SELECT title, body FROM notifications WHERE kind = 'error' AND store_id = 'peak'`).get()).toEqual({
+  expect(db.prepare(`SELECT title, body, link FROM notifications WHERE kind = 'error' AND store_id = 'peak'`).get()).toEqual({
     title: "Couldn't add products to Peak Fit",
     body: 'Shopify is not connected for this store. Approved: Smart Jump Rope. Add any not created yet by hand.',
+    link: '/research',
   });
 
   const created: unknown[] = [];

@@ -297,6 +297,7 @@ test('a price approved over 2 weeks after it was asked on a live store is asked 
   await applyPriceChange(db, approval('a-old', 15), async (...args) => void writes.push(args));
   expect(writes).toEqual([]);
   expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
+  expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Not applied: "Test price"'`).get()?.link).toBe('/agents/peak:market_analyst');
   expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Not applied: "Test price"'`).get()?.body).toBe(
     'It was asked 15 days ago, on prices that may have moved since. Ask the Market Analyst again for a fresh read.',
   );
