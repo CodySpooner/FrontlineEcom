@@ -522,6 +522,265 @@ export const MIGRATIONS = [
   /* 43 (core: a custom-niche store's find, filed under niche 'other', keeps that niche's slug) */ `
   ALTER TABLE research_products ADD COLUMN niche_detail TEXT;
   `,
+  /* 44 (kb: KB-02 the knowledge base. store_id NULL = General; per-workspace keys use coalesce, as NULLs never collide) */ `
+  CREATE TABLE kb_categories (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    parent_id TEXT REFERENCES kb_categories(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX kb_categories_name ON kb_categories (coalesce(store_id, ''), coalesce(parent_id, ''), lower(name));
+  INSERT INTO kb_categories (id, name, position, created_at) SELECT column1, column2, column3, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM (VALUES
+    ('general-advertising', 'Advertising', 1), ('general-marketing', 'Marketing', 2), ('general-creative', 'Creative Strategy', 3),
+    ('general-analytics', 'Analytics & Data', 4), ('general-product-research', 'Product Research', 5), ('general-cro', 'Conversion Optimization', 6),
+    ('general-psychology', 'Consumer Psychology', 7), ('general-branding', 'Branding', 8), ('general-seo', 'SEO', 9),
+    ('general-operations', 'E-Commerce Operations', 10), ('general-finance', 'Financial & Profitability Analysis', 11),
+    ('general-retention', 'Customer Retention', 12), ('general-competitors', 'Competitor Research', 13), ('general-pricing', 'Sales & Pricing', 14),
+    ('general-strategy', 'Business Strategy', 15), ('general-automation', 'Automation & AI Workflows', 16));
+  CREATE TABLE kb_cards (
+    seq INTEGER PRIMARY KEY, -- the FTS rowid: an implicit rowid may change in a VACUUM
+    id TEXT NOT NULL UNIQUE,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    category_id TEXT NOT NULL REFERENCES kb_categories(id),
+    type TEXT NOT NULL,
+    prev_type TEXT,
+    stage TEXT NOT NULL DEFAULT 'hypothesis',
+    status TEXT NOT NULL DEFAULT 'proposed',
+    merged_into TEXT REFERENCES kb_cards(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    body TEXT NOT NULL DEFAULT '',
+    relevance TEXT NOT NULL DEFAULT '',
+    application TEXT NOT NULL DEFAULT '',
+    applies_to TEXT NOT NULL DEFAULT '',
+    limits TEXT NOT NULL DEFAULT '',
+    tags TEXT NOT NULL DEFAULT '[]',
+    author_id TEXT NOT NULL,
+    origin TEXT NOT NULL, -- owner | research | agent | performance | promotion
+    run_id TEXT,
+    task_id TEXT,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    blocked_roles TEXT NOT NULL DEFAULT '[]', -- ["*"] = every role
+    research_marked INTEGER NOT NULL DEFAULT 0,
+    used_count INTEGER NOT NULL DEFAULT 0,
+    cited_count INTEGER NOT NULL DEFAULT 0,
+    verified_at TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX kb_cards_title ON kb_cards (coalesce(store_id, ''), lower(title));
+  CREATE INDEX kb_cards_by_store ON kb_cards (store_id, status, updated_at);
+  CREATE INDEX kb_cards_by_category ON kb_cards (category_id);
+  CREATE VIRTUAL TABLE kb_cards_fts USING fts5(title, summary, body, tags, content='kb_cards', content_rowid='seq', tokenize='porter unicode61');
+  CREATE TRIGGER kb_cards_ai AFTER INSERT ON kb_cards BEGIN
+    INSERT INTO kb_cards_fts (rowid, title, summary, body, tags) VALUES (new.seq, new.title, new.summary, new.body, new.tags);
+  END;
+  CREATE TRIGGER kb_cards_ad AFTER DELETE ON kb_cards BEGIN
+    INSERT INTO kb_cards_fts (kb_cards_fts, rowid, title, summary, body, tags) VALUES ('delete', old.seq, old.title, old.summary, old.body, old.tags);
+  END;
+  CREATE TRIGGER kb_cards_au AFTER UPDATE OF title, summary, body, tags ON kb_cards BEGIN
+    INSERT INTO kb_cards_fts (kb_cards_fts, rowid, title, summary, body, tags) VALUES ('delete', old.seq, old.title, old.summary, old.body, old.tags);
+    INSERT INTO kb_cards_fts (rowid, title, summary, body, tags) VALUES (new.seq, new.title, new.summary, new.body, new.tags);
+  END;
+  CREATE TABLE kb_revisions (
+    id INTEGER PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES kb_cards(id) ON DELETE CASCADE,
+    actor TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    snapshot_json TEXT NOT NULL, -- the card after this change; restoring one applies it as a new revision
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX kb_revisions_by_card ON kb_revisions (card_id, id);
+  CREATE TABLE kb_sources (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL, -- url | text | document
+    url TEXT,
+    title TEXT NOT NULL DEFAULT '',
+    published_at TEXT,
+    fetched_at TEXT,
+    status TEXT NOT NULL,
+    reliability TEXT NOT NULL DEFAULT 'unknown',
+    reliability_by_owner INTEGER NOT NULL DEFAULT 0,
+    content_hash TEXT,
+    text TEXT, -- the readable text, kept in the DB so backups hold it
+    excerpt TEXT NOT NULL DEFAULT '',
+    error TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX kb_sources_url ON kb_sources (coalesce(store_id, ''), url) WHERE url IS NOT NULL;
+  CREATE INDEX kb_sources_by_hash ON kb_sources (coalesce(store_id, ''), content_hash);
+  CREATE TABLE kb_observations (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    ref TEXT NOT NULL UNIQUE, -- what was measured over which window: recorded once
+    subject TEXT NOT NULL, -- e.g. campaign:meta:123, store, product:abc
+    metric TEXT NOT NULL,
+    value REAL NOT NULL,
+    baseline REAL,
+    window_from TEXT NOT NULL,
+    window_to TEXT NOT NULL,
+    sample_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE kb_evidence (
+    id TEXT PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES kb_cards(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    text TEXT NOT NULL,
+    source_id TEXT REFERENCES kb_sources(id) ON DELETE SET NULL,
+    observation_id TEXT REFERENCES kb_observations(id) ON DELETE CASCADE,
+    metric TEXT,
+    value REAL,
+    baseline REAL,
+    window_from TEXT,
+    window_to TEXT,
+    sample_size INTEGER,
+    test_ref TEXT, -- the test it came from: Validated needs two different ones
+    merged_from TEXT, -- the card it came with in a merge, so it can be detached again
+    author_id TEXT NOT NULL,
+    run_id TEXT,
+    task_id TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX kb_evidence_by_card ON kb_evidence (card_id);
+  CREATE TABLE kb_links (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE, -- a store card's link to a General one is the store's
+    from_id TEXT NOT NULL REFERENCES kb_cards(id) ON DELETE CASCADE,
+    to_id TEXT NOT NULL REFERENCES kb_cards(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    why TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'suggested',
+    score REAL,
+    author_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    decided_at TEXT
+  );
+  CREATE UNIQUE INDEX kb_links_pair ON kb_links (from_id, to_id, type);
+  CREATE INDEX kb_links_to ON kb_links (to_id);
+  CREATE TABLE kb_conflicts (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    card_id TEXT NOT NULL REFERENCES kb_cards(id) ON DELETE CASCADE,
+    other_card_id TEXT REFERENCES kb_cards(id) ON DELETE CASCADE,
+    evidence_id TEXT REFERENCES kb_evidence(id) ON DELETE CASCADE,
+    note TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open', -- open | resolved | kept_both
+    task_id TEXT, -- found by this research task: it doesn't start research again
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
+  );
+  CREATE INDEX kb_conflicts_by_card ON kb_conflicts (card_id);
+  CREATE TABLE kb_positions (
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE, -- the workspace whose artboard it is
+    card_id TEXT NOT NULL REFERENCES kb_cards(id) ON DELETE CASCADE,
+    x REAL NOT NULL,
+    y REAL NOT NULL
+  );
+  CREATE UNIQUE INDEX kb_positions_card ON kb_positions (coalesce(store_id, ''), card_id);
+  CREATE TABLE kb_views (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    state_json TEXT NOT NULL, -- filters, viewport, collapsed frames
+    created_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX kb_views_name ON kb_views (coalesce(store_id, ''), lower(name));
+  CREATE TABLE kb_tasks (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE, -- where the findings go
+    payer_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE, -- whose agent and AI budget run it
+    role TEXT NOT NULL,
+    kind TEXT NOT NULL, -- source | topic
+    origin TEXT NOT NULL, -- owner | agent | autonomous
+    objective TEXT NOT NULL,
+    brief_json TEXT NOT NULL DEFAULT '{}',
+    category_id TEXT REFERENCES kb_categories(id) ON DELETE SET NULL,
+    status TEXT NOT NULL DEFAULT 'queued', -- queued | running | done | failed | cancelled
+    stage TEXT NOT NULL DEFAULT 'created',
+    attempt INTEGER NOT NULL DEFAULT 0,
+    next_try_at TEXT,
+    budget_usd REAL NOT NULL,
+    spent_usd REAL NOT NULL DEFAULT 0,
+    refined_from TEXT REFERENCES kb_tasks(id) ON DELETE SET NULL,
+    report_json TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    ended_at TEXT
+  );
+  CREATE INDEX kb_tasks_by_status ON kb_tasks (status, created_at);
+  CREATE INDEX kb_tasks_by_store ON kb_tasks (store_id, created_at);
+  CREATE TABLE kb_task_steps (
+    task_id TEXT NOT NULL REFERENCES kb_tasks(id) ON DELETE CASCADE,
+    stage TEXT NOT NULL,
+    attempt INTEGER NOT NULL,
+    run_id TEXT,
+    status TEXT NOT NULL, -- running | done | failed
+    output_json TEXT,
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    PRIMARY KEY (task_id, stage, attempt)
+  );
+  CREATE TABLE kb_task_log (
+    id INTEGER PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES kb_tasks(id) ON DELETE CASCADE,
+    stage TEXT NOT NULL,
+    level TEXT NOT NULL, -- info | warn | error
+    message TEXT NOT NULL,
+    at TEXT NOT NULL
+  );
+  CREATE INDEX kb_task_log_by_task ON kb_task_log (task_id, id);
+  CREATE TABLE kb_task_sources (
+    task_id TEXT NOT NULL REFERENCES kb_tasks(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES kb_sources(id) ON DELETE CASCADE,
+    PRIMARY KEY (task_id, source_id)
+  );
+  CREATE TABLE kb_findings (
+    id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES kb_tasks(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    data_json TEXT NOT NULL, -- the proposed card: summary, body, type, category path, source ids
+    assessment_json TEXT, -- the evaluation per spec §5 criterion
+    status TEXT NOT NULL DEFAULT 'pending', -- pending | stored | merged | rejected | discarded
+    card_id TEXT REFERENCES kb_cards(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX kb_findings_by_task ON kb_findings (task_id);
+  CREATE TABLE kb_experiments (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    card_id TEXT NOT NULL REFERENCES kb_cards(id) ON DELETE CASCADE,
+    metric TEXT NOT NULL,
+    plan_json TEXT NOT NULL, -- variants, window, minimum sample, linked campaigns and creatives
+    status TEXT NOT NULL DEFAULT 'planned',
+    result_json TEXT,
+    created_at TEXT NOT NULL,
+    evaluated_at TEXT
+  );
+  CREATE TABLE kb_retrievals (
+    id INTEGER PRIMARY KEY,
+    card_id TEXT NOT NULL REFERENCES kb_cards(id) ON DELETE CASCADE,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE, -- the store whose agent used it
+    run_id TEXT,
+    agent_id TEXT NOT NULL,
+    kind TEXT NOT NULL, -- prompt | search | cited
+    at TEXT NOT NULL
+  );
+  CREATE INDEX kb_retrievals_by_card ON kb_retrievals (card_id, at);
+  CREATE TABLE kb_controls (
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    settings_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX kb_controls_ws ON kb_controls (coalesce(store_id, ''));
+  `,
+  /* 45 (kb: KB-02 a run's mode; 'research' runs are a research task's stages) */ `
+  ALTER TABLE agent_runs ADD COLUMN mode TEXT;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

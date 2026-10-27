@@ -1295,3 +1295,89 @@ export interface OfficeStats {
   handoffs: number;
   fullOffice: boolean;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Knowledge Base & Research Intelligence (knowledge-base lane, docs/backlog/knowledge-base.md).
+
+/** A knowledge workspace: one store's id, or `null` for General. `'all'` is the owner-only scope of search and the Research Center. */
+export type KbWorkspace = string | null;
+
+export const KB_CARD_TYPES = {
+  research_finding: 'Research Finding',
+  business_principle: 'Business Principle',
+  strategy: 'Strategy',
+  hypothesis: 'Hypothesis',
+  experiment: 'Experiment',
+  validated_insight: 'Validated Insight',
+  performance_lesson: 'Performance Lesson',
+  competitor_intel: 'Competitor Intelligence',
+  customer_insight: 'Customer Insight',
+  playbook: 'Process / Playbook',
+  user_provided: 'User-Provided Knowledge',
+} as const;
+export type KbCardType = keyof typeof KB_CARD_TYPES;
+
+/** The confidence ladder, lowest first: how well a claim is supported, not how sure an agent sounds. */
+export const KB_STAGES = { hypothesis: 'Hypothesis', supported: 'Research-Supported', tested: 'Experimentally Tested', validated: 'Validated' } as const;
+export type KbStage = keyof typeof KB_STAGES;
+
+/** Research and agent writes start `proposed` (shown "Unreviewed", never given to agents) until accepted. */
+export type KbCardStatus = 'proposed' | 'active' | 'archived' | 'rejected' | 'merged';
+
+export const KB_LINK_TYPES = {
+  supports: 'Supports',
+  contradicts: 'Contradicts',
+  builds_upon: 'Builds Upon',
+  derived_from: 'Derived From',
+  validated_by: 'Validated By',
+  applied_to: 'Applied To',
+  related_to: 'Related To',
+} as const;
+export type KbLinkType = keyof typeof KB_LINK_TYPES;
+/** `suggested` links are the app's guesses, drawn dotted until the owner accepts or rejects them. */
+export type KbLinkStatus = 'suggested' | 'confirmed' | 'rejected';
+
+/** MEASURED (the store's own numbers), RESEARCH (a read source), OBSERVED (a pattern seen, not tested), CONFLICT (evidence against). */
+export type KbEvidenceKind = 'measured' | 'research' | 'observed' | 'conflict';
+
+/** What happened when a source was fetched. Only `read` sources may back a finding. */
+export type KbSourceStatus = 'read' | 'blocked_robots' | 'blocked_domain' | 'paywalled' | 'login' | 'unsupported' | 'too_large' | 'failed';
+export const KB_SOURCE_RELIABILITY = {
+  platform_docs: 'Platform docs',
+  research: 'Research or academic',
+  publication: 'Established publication',
+  vendor: 'Vendor blog',
+  forum: 'Forum',
+  unknown: 'Unknown',
+} as const;
+export type KbSourceReliability = keyof typeof KB_SOURCE_RELIABILITY;
+
+/** The General categories seeded once (spec §3), in this order. Owners add their own, at any depth. */
+export const KB_GENERAL_CATEGORIES = [
+  'Advertising',
+  'Marketing',
+  'Creative Strategy',
+  'Analytics & Data',
+  'Product Research',
+  'Conversion Optimization',
+  'Consumer Psychology',
+  'Branding',
+  'SEO',
+  'E-Commerce Operations',
+  'Financial & Profitability Analysis',
+  'Customer Retention',
+  'Competitor Research',
+  'Sales & Pricing',
+  'Business Strategy',
+  'Automation & AI Workflows',
+] as const;
+
+/** A node of a workspace's category tree (any depth). Cards are drawn in one frame per category, path "A › B › C". */
+export interface KbCategory {
+  id: string;
+  storeId: string | null;
+  parentId: string | null;
+  name: string;
+  position: number;
+  createdAt: string;
+}

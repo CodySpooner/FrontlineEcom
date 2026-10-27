@@ -402,7 +402,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - Write a short Notes entry: where each new piece will live, and any decision you changed and why.
 
 ### Phase 3 foundations (before the UI, so the UI is built on real data)
-- [ ] KB-02 **Data model:**
+- [x] KB-02 **Data model:**
   - Shared types:
     - the 11 card types and the 4 stages;
     - the lifecycle statuses;
@@ -619,6 +619,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 
 ## Done
 - 2026-10-27 KB-01 audit: decisions checked against the code, baseline 992 tests green, before shots in `.agent/before/`.
+- 2026-10-27 KB-02 data model: shared KB types, migrations 44 (kb_* tables, FTS on `seq`, coalesce keys, 16 General categories) and 45 (`agent_runs.mode`), `kbScope`/`kbRow`, go-live purge in `startFresh`.
 
 ## Blocked
 
