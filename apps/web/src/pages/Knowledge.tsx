@@ -106,7 +106,7 @@ function MissingPacks({ docs }: { docs: KnowledgeDoc[] }) {
       {missing.map((s) => {
         const analyst = agents?.find((a) => a.id === `${s.id}:market_analyst`);
         return (
-          <li key={s.id} className="rounded-lg border border-dashed border-line px-3 py-2 text-xs text-muted">
+          <li key={s.id} className="rounded-lg border border-line bg-bg-2 px-3 py-2 text-xs text-muted">
             <b className="text-[13px] font-semibold text-text">{s.nicheDetail}</b> has no pack yet ({s.name}).
             {/* The demo engine can't research a niche: its pack would be made up, so the route refuses it. */}
             {analyst?.engine?.provider === 'claude' ? (
