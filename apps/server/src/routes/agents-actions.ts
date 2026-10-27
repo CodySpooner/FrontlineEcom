@@ -1,4 +1,4 @@
-import { cash, getPageDraft, IDLE_CAMPAIGN_STATUSES, markPublished, once, writeMemory } from '@frontline/agents';
+import { cash, closedByApp, getPageDraft, IDLE_CAMPAIGN_STATUSES, markPublished, once, writeMemory } from '@frontline/agents';
 import type { AdNetwork, ApprovalRequest, PageDraft } from '@frontline/shared';
 import type { Db } from '../db';
 import { publish, subscribe } from '../live';
@@ -283,7 +283,7 @@ export async function discardThemeCopy(db: Db, a: ApprovalRequest, del: (storeId
 export const EXPIRED_DEMO = '[Expired: asked on demo data before the store went live.]';
 
 export function rememberDenial(db: Db, a: ApprovalRequest) {
-  if (/\[Expired: [^\]]*\]$/.test(a.reason)) return; // closed by the app (run ended, demo data, replaced), not by the owner
+  if (closedByApp(a.reason)) return;
   writeMemory(db, {
     storeId: a.storeId, agentId: a.agentId, kind: 'preference', confidence: 0.6, tags: ['denied'],
     // The owner's reason, when given, is what the squad learns from: why, not just that.

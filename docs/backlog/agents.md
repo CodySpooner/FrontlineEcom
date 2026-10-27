@@ -323,11 +323,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-193 `list_competitors` gives competitors' current prices by product keyword. It showed only price changes, so a competitor that held its price had no price at all, and the weekly price check ("against list_competitors' prices") compared the store with whoever happened to move lately.
 - [x] AGT-194 A default job's task text can't change without its old hash in `FORMER_TASKS`. Forgetting it leaves every live store on the old text for good (AGT-193 nearly did); a test now pins each job's current hash and says what to do.
 - [x] AGT-195 `squad_log` tells a request the app closed from the owner's no. A request whose run ended first or that a fresh one replaced is closed as denied with an `[Expired: …]` note; the log said "denied", so the weekly report counted them as the owner turning the squad down.
+- [x] AGT-196 A page draft whose publish request the app closed is a plain draft, not "rejected". The Store Builder told the owner "You turned this down" for a request whose run had ended unanswered, and the Store Developer drafted the same page again as if the owner had said no.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-196: page drafts read their request's reason; `closedByApp` (memory.ts) is now the one check for the `[Expired: …]` marker, used by page drafts, `squad_log` and `rememberDenial`.
 - 2026-10-26 — AGT-195: `squad_log` reads the `[Expired: …]` suffix (as `rememberDenial` does) and says "expired (closed by the app)".
 - 2026-10-26 — AGT-194: agents-jobs test pins the hash of every default job's task; checked git history: every former text is already in `FORMER_TASKS`.
 - 2026-10-26 — AGT-193 follow-up: the old weekly price check text is in `FORMER_TASKS`, so live stores whose owner never edited the job get the new one.

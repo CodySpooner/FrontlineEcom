@@ -12,6 +12,7 @@ export {
   deleteMemory,
   adjustConfidence,
   judgeRun,
+  closedByApp,
   once,
   searchMemory,
   parseLearnings,

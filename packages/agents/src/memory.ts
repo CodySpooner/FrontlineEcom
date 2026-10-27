@@ -19,6 +19,9 @@ export interface NewMemory {
 const KINDS: MemoryKind[] = ['fact', 'learning', 'preference'];
 const clamp = (n: number) => Math.min(1, Math.max(0, n));
 
+/** A request the app closed as denied (its run ended, a fresh one replaced it, the store went live): not the owner's no. */
+export const closedByApp = (reason: string) => /\[Expired: [^\]]*\]$/.test(reason);
+
 /** Tags only the app sets: `outcome` (a measured result of an approved change) and `denied` (the owner's no). */
 export const agentTags = (tags: string[] = []) => tags.filter((t) => !['outcome', 'denied'].includes(t.trim().toLowerCase()));
 

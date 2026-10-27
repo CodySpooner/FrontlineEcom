@@ -3,7 +3,7 @@ import { AGENT_ROLES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRI
 import { z } from 'zod';
 import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, uncostedShare, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
-import { agentTags, searchMemory, writeMemory } from './memory';
+import { agentTags, closedByApp, searchMemory, writeMemory } from './memory';
 import { addNicheLearning, listNicheLearnings, nicheKey, saveNichePack } from './niche';
 import { getPageDraft, listPageDrafts, savePageDraft, unsafeHtml } from './pages';
 import { listFlowDrafts, saveFlowDraft } from './flows';
@@ -488,7 +488,7 @@ export const APP_TOOLS: AppTool[] = [
         .map((r) => ({
           date: String(r.created_at).slice(0, 10), agent: who(String(r.agent_id)), title: r.title,
           // The app closes some as denied (run ended, a fresh one replaced it): not the owner's no (rememberDenial skips them too).
-          decision: /\[Expired: [^\]]*\]$/.test(String(r.reason)) ? 'expired (closed by the app)' : `${r.auto ? 'auto-approved' : r.status}${r.skipped ? ' but not applied' : ''}`,
+          decision: closedByApp(String(r.reason)) ? 'expired (closed by the app)' : `${r.auto ? 'auto-approved' : r.status}${r.skipped ? ' but not applied' : ''}`,
         }));
       const runs = ctx.db
         .prepare(`SELECT created_at, agent_id, task, transcript_json FROM agent_runs WHERE store_id = ? AND status = 'done' AND created_at >= ? ORDER BY created_at DESC LIMIT 40`)

@@ -65,6 +65,17 @@ test('a product page is drafted, its publish request approved, and it goes live 
   expect((await run(() => [{ call: 'publish_page', input: { draftId: d!.id } }]))[0]).toBe('That draft is already published.');
 });
 
+test("a publish request the app closed leaves a plain draft, not one the owner turned down", async () => {
+  await run(() => [draft()]);
+  const [d] = listPageDrafts(db);
+  // Its run ended before the owner answered: runs.ts marks the request and closes it.
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('ask', 'glow', 'glow:store_developer', 'Publish page', ?, ?, 'pending', ?)`)
+    .run('New page [Expired: the agent run ended before a decision.]', JSON.stringify({ kind: 'store.publish_page', payload: { draftId: d!.id } }), new Date().toISOString());
+  decide(db, 'ask', 'deny');
+  expect(listPageDrafts(db)[0]).toMatchObject({ status: 'draft', approvalId: 'ask' });
+  expect((await run(() => [draft({ title: 'Again' })]))[0]).toMatch(/^Not saved: this product already has a page draft in Store Builder/); // ask to publish that one
+});
+
 test('denied requests leave the draft rejected; the owner can still publish it from the Store Builder', async () => {
   await run(() => [draft()]);
   const [d] = listPageDrafts(db);

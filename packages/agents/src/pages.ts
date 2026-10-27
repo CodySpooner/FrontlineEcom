@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { PageDraft, PageDraftStatus } from '@frontline/shared';
+import { closedByApp } from './memory';
 
 // Store Developer drafts for the Store Builder. Status is derived from the latest `store.publish_page` approval for
 // the draft, so it can't drift from the approvals table.
 
 export type NewPageDraft = Omit<PageDraft, 'id' | 'status' | 'approvalId' | 'createdAt' | 'publishedAt'>;
 
-const SELECT = `SELECT d.*, a.id AS approval_id, a.status AS approval_status FROM page_drafts d
+const SELECT = `SELECT d.*, a.id AS approval_id, a.status AS approval_status, a.reason AS approval_reason FROM page_drafts d
   LEFT JOIN approvals a ON a.id = (
     SELECT id FROM approvals WHERE json_extract(action_json, '$.kind') = 'store.publish_page' AND json_extract(action_json, '$.payload.draftId') = d.id
     ORDER BY created_at DESC, rowid DESC LIMIT 1)`;
@@ -119,7 +120,7 @@ function toDraft(r: Record<string, unknown>): PageDraft {
     ? 'published'
     : r.approval_status === 'pending' ? 'pending'
     : r.approval_status === 'approved' ? 'approved'
-    : r.approval_status === 'denied' ? 'rejected'
+    : r.approval_status === 'denied' && !closedByApp(String(r.approval_reason)) ? 'rejected' // expired: still a plain draft
     : 'draft';
   return {
     id: String(r.id),
