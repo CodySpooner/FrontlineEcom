@@ -72,6 +72,15 @@ test('add to store creates a pending approval for the store Product Hunter', asy
   expect((await app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'nope' }))).status).toBe(400);
 });
 
+test("add to store sends no compare-at for a find sellers show no 'was' price for (0, AGT-206)", async () => {
+  const db = openDb();
+  seedDemo(db);
+  seedResearch(db);
+  db.prepare("UPDATE research_products SET compare_at = 0 WHERE id = 'pet-water-fountain'").run();
+  const a = (await (await createApp(db).request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'pawsome' }))).json()) as ApprovalRequest;
+  expect((a.action.payload as { products: Record<string, unknown>[] }).products[0]).not.toHaveProperty('compareAt');
+});
+
 test("add to store refuses a connected store on a platform the app can't write to, without a request", async () => {
   const db = openDb();
   seedDemo(db);

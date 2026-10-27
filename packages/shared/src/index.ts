@@ -1000,6 +1000,7 @@ export interface ResearchProduct {
   cost: number;
   /** Suggested sell price. */
   price: number;
+  /** The 'was' price sellers show; 0 when they show none (an agent's find, AGT-206). */
   compareAt: number;
   /** (price - cost) / price × 100. */
   margin: number;

@@ -137,7 +137,7 @@ export function researchRoutes(db: Db) {
         title: `Add "${p.title}" to ${store.name}`,
         // A live store gets no made-up demand quoted as if it were measured.
         reason: `${p.sample && store.connected ? 'From the sample catalog: its score, margin and demand are made up, so check the product and price first' : `AI score ${p.score}, ${Math.round(p.margin)}% margin, demand +${p.trend}% in 30 days`}${rate ? '' : `. Prices are in USD (no ${store.currency} rate yet): adjust them before publishing`}`,
-        action: { kind: 'store.add_products', payload: { products: [{ researchProductId: p.id, title: p.title, price: money(p.price), compareAt: money(p.compareAt), cost: money(p.cost) }] } },
+        action: { kind: 'store.add_products', payload: { products: [{ researchProductId: p.id, title: p.title, price: money(p.price), ...(p.compareAt > p.price ? { compareAt: money(p.compareAt) } : {}), cost: money(p.cost) }] } },
       });
       return c.json(approval, 201);
     });
