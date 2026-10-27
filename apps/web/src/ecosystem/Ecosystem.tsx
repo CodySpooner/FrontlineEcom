@@ -57,7 +57,7 @@ export function Ecosystem() {
       <p className={`eco-connection ${demo ? 'eco-demo-banner' : ''}`} role="status"><StatusDot tone={office.connected && !office.error ? 'good' : 'idle'} />{demo ? 'DEMO MODE · All activity is simulated locally. No backend actions or model calls.' : office.error || (office.connected ? 'Connected to agent execution' : 'Reconnecting to agent execution…')}</p>
       <div className={`eco-workspace ${feed ? '' : 'eco-no-feed'}`}>
         <section className="eco-stage" aria-label={tab}>
-          {tab === 'Office View' ? <OfficeScene key={String(demo)} office={office.state} seats={seats.data ?? []} persist={!demo} onSelect={(id) => { setAssignInitially(false); setSelected(id); }} focus={focus} display={display} theme={theme} /> : <OfficeViews tab={tab} office={office.state} seats={seats.data ?? []} stats={stats.data} preview={demo} onSelect={(id) => { setAssignInitially(false); setSelected(id); }} />}
+          {tab === 'Office View' ? <OfficeScene key={String(demo)} office={office.state} seats={seats.data ?? []} persist={!demo} activeTasks={stats.data?.activeTasks} onSelect={(id) => { setAssignInitially(false); setSelected(id); }} focus={focus} display={display} theme={theme} /> : <OfficeViews tab={tab} office={office.state} seats={seats.data ?? []} stats={stats.data} preview={demo} onSelect={(id) => { setAssignInitially(false); setSelected(id); }} />}
         </section>
         {feed && <ActivityFeed office={office.state} seats={seats.data ?? []} onPreview={demo ? setSelected : undefined} onFocus={(id) => { setFocus({ id, at: Date.now() }); setTab('Office View'); }} />}
       </div>

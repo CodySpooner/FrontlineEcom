@@ -85,6 +85,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-26 ECO-28: Added orbital hub rings and a store ticker with current local-day revenue/orders, authoritative active tasks, currency and missing-FX caveats; accessible text mirrors the projection. Corrected evening Demo calendar dates and order-total updates. 961 tests pass; live browser values matched analytics (50 orders) and task stats (0), Demo render 58 FPS; .agent/eco-28-*.png.
 - 2026-10-26 ECO-27: Ten distinct department showpieces with reserved collision footprints: scanner, command bridge, uplink, green-screen rig, racks, real seven-day order wall, library, order conveyor, message relay and tool exchange. Parcels and cable packets come only from fresh order/tool events; missing analytics shows unavailable. 954 tests pass, measured 58.2 FPS, before/after and four room closeups in .agent/eco-27-*.png; verified in Orca.
 - 2026-10-26 ECO-26: Added additive neon pools beneath desks and pylons, monitor spill, doorway lights and a broad crimson hub glow using one 64px shared texture. Gentle colored-light drift freezes under reduced motion/low power. 951 tests pass; measured 58.0 FPS with 30 workers and ten pylons; .agent/eco-26-*.png before/after and Orca checks.
 - 2026-10-26 ECO-25: Added ten offline platform-logo hologram pylons around the plaza and Advertising. Existing store platforms glow brighter; deduplicated live order events pulse the matching projection, with isolated Demo orders and no motion in reduced/low-power mode. 946 tests pass; 30 workers plus pylons hold 58 FPS. Before/after, closeup and reduced-motion screenshots: .agent/eco-25-*.png.
@@ -198,7 +199,7 @@ Seed list (reorder or extend as you see fit):
 - [x] ECO-27 Department showpieces: a hero prop per room (e.g. Operations conveyor that moves a parcel on each real order,
   Analytics holo-chart wall from real numbers, Creative Studio camera rig + green screen, Integrations cables with
   data packets flowing on real tool calls).
-- [ ] ECO-28 Hub upgrades: orbiting rings and a ticker around the logo hologram with real store numbers (today's revenue,
+- [x] ECO-28 Hub upgrades: orbiting rings and a ticker around the logo hologram with real store numbers (today's revenue,
   orders, active tasks).
 - [ ] ECO-29 Living office: blinking racks, drones or cleaning bots, floor-grid pulses, particles, harmless worker idle
   life (coffee runs, stretching, chatting at a water cooler) that never pretends to be task activity.

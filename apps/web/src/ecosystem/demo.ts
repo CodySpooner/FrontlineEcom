@@ -6,12 +6,13 @@ import { DESKS, deskTile } from './world';
 const roles = Object.keys(AGENT_ROLES) as AgentRole[];
 export function createDemo(now = Date.now()) {
   const at = new Date(now).toISOString();
+  const calendarNow = now - new Date(now).getTimezoneOffset() * 60000;
   const agents: Agent[] = DESKS.map((_, i) => ({ id: `demo-${Math.floor(i / 8)}:${roles[i % 8]}`, storeId: `demo-${Math.floor(i / 8)}`, role: roles[i % 8]!, status: i % 10 === 7 ? 'offline' : 'idle', level: 1 + i, xp: i * 100, engine: { provider: 'demo' } }));
   const seats: OfficeSeat[] = agents.map((a, i) => ({ agentId: a.id, deskId: DESKS[i]!.id, displayName: `${AGENT_ROLES[a.role].name} ${Math.floor(i / 8) + 1}`, appearance: appearanceFor(a.id), position: i < 3 ? null : deskTile(DESKS[i]!.id), archived: false, updatedAt: at }));
   const runs: AgentRun[] = agents.flatMap((a, i) => [0, 7, 9].includes(i % 10) ? [] : [{ id: `demo-seed-${i}`, agentId: a.id, storeId: a.storeId, task: `Demo: ${AGENT_ROLES[a.role].blurb}`, status: i % 10 === 1 ? 'queued' : i % 10 === 5 ? 'done' : i % 10 === 6 ? 'error' : 'running', createdAt: at, endedAt: [5, 6].includes(i % 10) ? at : undefined, error: i % 10 === 6 ? 'Demo integration needs attention' : undefined, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } }]);
   let state = mergeOfficeSnapshot(emptyOffice(), agents, runs, []);
   state.stores = (['shopify', 'etsy', 'amazon', 'woocommerce'] as const).map((platform, i) => ({ id: `demo-${i}`, name: `Demo ${platform}`, platform, niche: 'other', currency: 'USD', timezone: 'UTC', color: '#ff2a3a', connected: false }));
-  state.analytics = { currency: 'USD', to: at.slice(0, 10), series: Array.from({ length: 7 }, (_, i) => { const orders = 24 + i * 3 + (i % 3) * 5; return { date: new Date(now - (6 - i) * 86400000).toISOString().slice(0, 10), orders, revenue: orders * 29, profit: 0, adSpend: 0, roas: 0, aov: 29 }; }) };
+  state.analytics = { currency: 'USD', to: new Date(calendarNow).toISOString().slice(0, 10), series: Array.from({ length: 7 }, (_, i) => { const orders = 24 + i * 3 + (i % 3) * 5; return { date: new Date(calendarNow - (6 - i) * 86400000).toISOString().slice(0, 10), orders, revenue: orders * 29, profit: 0, adSpend: 0, roas: 0, aov: 29 }; }) };
   for (const [i, a] of agents.entries()) {
     if ([3, 8].includes(i % 10)) state.tools[`demo-seed-${i}`] = { calls: { tool: i % 10 === 8 ? 'assign_task' : 'read_products' }, resolved: [] };
     if (i % 10 === 4) state = applyOfficeMessage(state, { type: 'approval', approval: { id: `demo-approval-${i}`, agentId: a.id, storeId: a.storeId, runId: `demo-seed-${i}`, title: 'Demo: review a proposed campaign', reason: 'Simulated review step', action: { kind: 'store.publish_page', payload: {} }, status: 'pending', createdAt: at } });
@@ -31,6 +32,7 @@ export function advanceDemo(state: OfficeState, tick: number, now = Date.now()):
   let run = state.runs[id];
   if (phase === 0) {
     state = applyOfficeMessage(state, { type: 'event', event: { id: `demo-order-${tick}`, storeId: agent.storeId, type: 'order', amount: 29, at } });
+    if (state.analytics) state = { ...state, analytics: { ...state.analytics, series: state.analytics.series.map((p) => p.date === state.analytics!.to ? { ...p, orders: p.orders + 1, revenue: p.revenue + 29 } : p) } };
     state = { ...state, agents: state.agents.map((a) => a.id === agent.id ? { ...a, status: 'idle' } : a) };
     run = { id, agentId: agent.id, storeId: agent.storeId, task: `Demo: prepare ${AGENT_ROLES[agent.role].name.toLowerCase()} findings`, status: 'queued', createdAt: at, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
   }

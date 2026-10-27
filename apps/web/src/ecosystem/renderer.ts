@@ -9,6 +9,7 @@ import { createHologram, LOGO_URL } from './hologram';
 import { platformHolograms } from './platforms';
 import { officeLighting } from './lighting';
 import { departmentShowpieces } from './showpieces';
+import { hubTelemetry } from './hub';
 
 export async function createOffice(host: HTMLElement, onDesk: (id: string) => void) {
   const logoTexture = await Assets.load<Texture>(LOGO_URL); logoTexture.source.scaleMode = 'nearest';
@@ -45,6 +46,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     hit.on('pointertap',()=>{ if(dragged) return; selection.clear().poly([p.x,p.y-12,p.x+31,p.y+4,p.x,p.y+20,p.x-31,p.y+4]).stroke({color:0xffffff,width:2});selectDesk(d.id); });
     world.addChild(hit); light.alpha=.45+(i%4)*.12;
   }
+  const telemetry = hubTelemetry(world);
   const hub=iso(MEETING), hologram = createHologram(logoTexture); hologram.root.position.set(hub.x,hub.y-98); world.addChild(hologram.root);
   const platforms = platformHolograms(world);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -98,9 +100,10 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     platforms.tick(elapsed, still);
     lighting.tick(elapsed, still);
     showpieces.tick(still);
+    telemetry.tick(elapsed, still);
     if(still) return;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setBusiness: (value: Parameters<typeof platforms.update>[0]) => { platforms.update(value); showpieces.update(value); }, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setBusiness: (value: Parameters<typeof platforms.update>[0], activeTasks?: number) => { platforms.update(value); showpieces.update(value); telemetry.update(value, activeTasks); }, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;
