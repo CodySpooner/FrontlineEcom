@@ -176,8 +176,11 @@ export function currentWindow(db: Db, storeIds: string[], range: AnalyticsRange,
   return { to, todayFraction, rows, shift };
 }
 
-/** A sales channel next to a store's own platform, and its order ids (Amazon's sales are its daily totals, channel_daily). */
-const CHANNELS = { tiktok_shop: 'tt-*', amazon: 'amz-*' } as const;
+/**
+ * A sales channel next to a store's own platform, and its order ids (Amazon's sales are its daily totals, channel_daily).
+ * ponytail: Shopify's ids have no prefix, so Shopify next to another platform stays in that platform's share.
+ */
+const CHANNELS = { tiktok_shop: 'tt-*', amazon: 'amz-*', etsy: 'etsy-*', woocommerce: 'woo-*' } as const;
 
 /**
  * Revenue and orders over [from, to] (each store's own days, as topProducts) per sales platform, biggest first, in the
@@ -188,10 +191,8 @@ export function platformSplit(db: Db, storeIds: string[], from: string, to: stri
   const { rate } = fxFor(db, storeIds);
   const platform = db.prepare('SELECT platform FROM stores WHERE id = ?');
   const totals = db.prepare('SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(orders), 0) AS orders FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?');
-  const sales = {
-    tiktok_shop: db.prepare("SELECT coalesce(sum(total), 0) AS revenue, count(*) AS orders FROM orders WHERE store_id = ? AND id GLOB 'tt-*' AND status = 'paid' AND local_date BETWEEN ? AND ?"),
-    amazon: db.prepare("SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(orders), 0) AS orders FROM channel_daily WHERE store_id = ? AND channel = 'amazon' AND date BETWEEN ? AND ?"),
-  };
+  const orderSales = db.prepare("SELECT coalesce(sum(total), 0) AS revenue, count(*) AS orders FROM orders WHERE store_id = ? AND id GLOB ? AND status = 'paid' AND local_date BETWEEN ? AND ?");
+  const amazonSales = db.prepare("SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(orders), 0) AS orders FROM channel_daily WHERE store_id = ? AND channel = 'amazon' AND date BETWEEN ? AND ?");
   const refunds = db.prepare(
     `SELECT coalesce(sum(r.amount + r.tax), 0) AS amount FROM orders o JOIN amazon_refunds r ON r.store_id = o.store_id AND r.order_id = o.id
      WHERE o.store_id = ? AND o.id GLOB ? AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?`,
@@ -209,7 +210,7 @@ export function platformSplit(db: Db, storeIds: string[], from: string, to: stri
     let [revenue, orders] = [Number(all.revenue), Number(all.orders)];
     for (const [p, ids] of Object.entries(CHANNELS) as [keyof typeof CHANNELS, string][]) {
       if (p === own) continue;
-      const c = sales[p].get(id, f, t)!;
+      const c = (p === 'amazon' ? amazonSales.get(id, f, t) : orderSales.get(id, ids, f, t))!;
       const r = Number(c.revenue) - Number(refunds.get(id, ids, f, t)!.amount);
       if (!r && !Number(c.orders)) continue;
       add(p, r * x, Number(c.orders));

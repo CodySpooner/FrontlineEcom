@@ -280,6 +280,22 @@ test("sales by platform split a channel next to the store's own platform (Amazon
   expect(s.byPlatform!.reduce((a, p) => a + p.orders, 0)).toBe(s.totals.orders);
 });
 
+test('an Etsy or WooCommerce shop next to a Shopify store is its own platform in the split, not Shopify', () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("DELETE FROM daily_metrics WHERE store_id = 'glow'").run();
+  db.prepare("INSERT INTO daily_metrics (store_id, date, revenue, cogs, orders) VALUES ('glow', '2026-10-26', 200, 0, 3)").run();
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, '2026-10-26T12:00:00Z', ?, 'paid', 'fulfilled', '2026-10-26')");
+  order.run('1001', 100);
+  order.run('etsy-55', 60);
+  order.run('woo-9', 40);
+  expect(platformSplit(db, ['glow'], '2026-10-20', '2026-10-26')).toEqual([
+    { platform: 'shopify', revenue: 100, orders: 1 },
+    { platform: 'etsy', revenue: 60, orders: 1 },
+    { platform: 'woocommerce', revenue: 40, orders: 1 },
+  ]);
+});
+
 test("a TikTok Shop's orders next to the site are a channel's too: out of the funnel and of the site's per-order fee", () => {
   const db = openDb();
   seedDemo(db, '2026-10-26');
