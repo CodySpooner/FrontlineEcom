@@ -38,6 +38,17 @@ describe('parseMarkdown', () => {
   });
 });
 
+describe('parseMarkdown comments', () => {
+  it("hides the pack template's guidance comments, which a drafted pack may keep", () => {
+    const md = '## Customer\n<!-- 3-6 core segments: who they are. -->\n- Studio teachers\n\n<!-- note -->\nKeep it short.';
+    expect(parseMarkdown(md)).toEqual([
+      { t: 'h', level: 2, text: 'Customer' },
+      { t: 'list', items: [{ depth: 0, marker: '', text: 'Studio teachers' }] },
+      { t: 'p', text: 'Keep it short.' },
+    ]);
+  });
+});
+
 describe('inline', () => {
   it('splits bold and code out of text', () => {
     expect(inline('Use `store_summary` for **7 and 30** days')).toEqual(['Use ', { code: 'store_summary' }, ' for ', { b: '7 and 30' }, ' days']);

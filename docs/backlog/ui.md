@@ -451,6 +451,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-169 The store form told the owner "The squad reads its niche pack" for a new custom niche too, which has no
       pack until the store's first real sync. With Other picked on a store not yet connected, it now says the Market
       Analyst researches the niche and drafts its pack for approval once the store is connected.
+- [x] UI-170 The Market Analyst drafts a custom niche pack by "following the template exactly", and the template is full
+      of `<!-- … -->` guidance. Knowledge and the pack's approval request printed any such comment as a paragraph; the
+      markdown renderer now hides one-line HTML comments, as markdown does.
 
 ## Blocked
 - [ ] UI-166 Knowledge › Niche packs: a store in a custom niche with no pack gets "Ask its Market Analyst to draft one",
@@ -668,3 +671,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-167: Squad step reads the knowledge index and `nicheKey`. One test updated, one added (red first). Orca: onboarding reopened (flag cleared, then restored), the one `POST /api/stores` answered by a client fixture that threw on any other write (server still has its 3 stores): "Yoga Mats has no niche pack yet, so Zen Co's squad starts from its playbooks…"
 - 2026-10-26 — UI-168: `nicheName` on AgentDetail's SharedLearnings. One test (red first). Orca on Peak Fit's Market Analyst, memory tab: "Shared with all Fitness stores"
 - 2026-10-26 — UI-169: StoreForm hint by niche and connection. One test (red first). Orca, Settings › Add store opened (writes blocked, nothing submitted), Niche set to Other: the hint switches to the drafting line
+- 2026-10-26 — UI-170: `parseMarkdown` skips `<!-- … -->` lines. One test (red first). Orca, Knowledge with a GET-only fixture custom pack keeping 3 template comments: none shown, h3 Customer / Red flags and their items intact

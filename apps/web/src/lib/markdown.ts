@@ -1,5 +1,5 @@
 // ponytail: only the markdown the knowledge packs use (#/## headings, -/1. lists one level deep, pipe tables,
-// **bold**, `code`). Reach for a real parser if docs start using links, fences or emphasis.
+// **bold**, `code`, one-line <!-- comments --> hidden). Reach for a real parser if docs start using links, fences or emphasis.
 
 export type ListItem = { depth: number; marker: string; text: string };
 export type Block =
@@ -18,6 +18,7 @@ export function parseMarkdown(md: string): Block[] {
     const prev = out[out.length - 1];
     const h = /^(#{1,3}) (.*)/.exec(line);
     const li = /^(\s*)([-*]|\d+\.) (.*)/.exec(raw);
+    if (/^<!--.*-->$/.test(line)) continue; // the niche pack template's guidance, which a drafted pack may keep
     if (!line) gap = true;
     else if (h) {
       const [, hashes = '', text = ''] = h;
