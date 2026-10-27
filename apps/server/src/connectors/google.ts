@@ -105,7 +105,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       } while (pageToken);
       return rows;
     };
-    const today = localDate(now);
+    const today = localDate(now, stateOf<string>(db, AD_ZONES).get(id)); // the account's day (its zone as last seen; the machine's at first)
     const cursor = cursorOf(db, id);
     const start = cursor ? addDays(cursor, -ADS_ATTRIBUTION_DAYS) : addDays(today, 1 - BACKFILL_DAYS);
     // Metrics first: a campaign created between the two queries then has a row for the join.
@@ -158,7 +158,7 @@ export async function syncGa4(db: Db, key: Buffer, storeId: string, fetchFn: Fet
   try {
     const property = googleId(creds.propertyId!, 'Property ID', '123456789');
     const token = await accessToken({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: serviceAccountJwt(creds.serviceAccountJson!, now) }, fetchFn, 'Google Analytics');
-    const today = localDate(now);
+    const today = localDate(now, stateOf<string>(db, AD_ZONES).get(id)); // the account's day (its zone as last seen; the machine's at first)
     const cursor = cursorOf(db, id);
     const start = cursor ? addDays(cursor, -GA4_SETTLE_DAYS) : addDays(today, 1 - BACKFILL_DAYS);
     const report = await call<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[]; metadata?: { timeZone?: string } }>(

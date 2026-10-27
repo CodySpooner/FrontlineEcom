@@ -182,10 +182,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-95 Top products ignored Amazon and TikTok Shop refund lines.
 - [x] CORE-96 Amazon looked up TikTok Shop refund lines' orders on Amazon, with mangled ids, and could stall on them.
 - [x] CORE-97 Reconnecting to another shop left the old shop's refund lines behind.
+- [x] CORE-98 Ad accounts and GA4 were read up to the computer's today, not the account's.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-98 (CORE-94's leftover): Meta, Google Ads, TikTok Ads and GA4 asked for days up to the computer's today, but they date days in the account's zone. An account ahead of the computer had its new day's spend missing until the computer's midnight, and one behind it was asked for a day it hadn't reached. Each now ends at the account's today, in the zone it reported on the last sync (`ad_timezones`), and at the computer's on its first.
 - 2026-10-26 — CORE-97 (noted by the same review): `forgetPlatform` (another shop or seller connected) dropped the old shop's orders, products and daily totals but kept its refund lines. Revenue ignored them (their orders were gone), but after an Amazon seller switch the old seller's `amz-` lines sent their order ids to the new seller's account for lookup. The lines of the forgotten platform's orders go too now.
 - 2026-10-26 — CORE-96: an Amazon store looks up the orders of refund lines it doesn't have, but the query took every line in `amazon_refunds`, TikTok Shop's too, and cut 4 characters off each id: `tt-576460752303423` went to Amazon as `76460752303423`. A 400 for the malformed id stopped the lookups at that id on every sync, so a real Amazon refund's order behind it was never fetched and that refund never counted. Only `amz-` lines are looked up now.
 - 2026-10-26 — CORE-95: Top products summed paid orders' line items but never took off refund lines (`amazon_refunds`: Amazon's and TikTok Shop's), so a TikTok order refunded in full still showed its product at full revenue and profit while store revenue and the platform split had dropped it (as CORE-63/80 for Shopify and Etsy). Each product's refund lines on paid orders in the window now come off its revenue and profit (a refund naming no product lands on none; units stay gross), as the agents' `list_products` does. 1Y on a 100k-order store with 20k refund lines: 170 → 265 ms.

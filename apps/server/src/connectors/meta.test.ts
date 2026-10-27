@@ -231,3 +231,13 @@ test('a budget change needs a campaign with a daily budget of its own (not a lif
   await expect(setCampaignBudget(db, key, 'pawsome', 'meta', '201', 80, writes.fetchFn)).rejects.toThrow(/no daily budget/);
   expect(writes.calls).toHaveLength(0);
 });
+
+test("an ad account ahead of the computer is asked for its own today (its zone as the last sync saw it)", async () => {
+  const { db } = setup();
+  await syncMeta(db, key, 'pawsome', fakeGraph([], undefined, 'USD', 'Pacific/Kiritimati').fetchFn, NOW);
+  const next = fakeGraph([], undefined, 'USD', 'Pacific/Kiritimati');
+  // 11:00 UTC: still the 26th on any machine up to UTC+12, already the 27th in Kiritimati (UTC+14).
+  await syncMeta(db, key, 'pawsome', next.fetchFn, new Date('2026-10-27T11:00:00Z'));
+  const ranges = next.calls.filter((c) => c.url.pathname.endsWith('/insights')).map((c) => JSON.parse(c.url.searchParams.get('time_range')!));
+  expect(ranges.at(-1).until).toBe('2026-10-28');
+});

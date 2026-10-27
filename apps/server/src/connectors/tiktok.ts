@@ -65,7 +65,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
     const advertiser = creds.advertiserId!.trim();
     if (!/^\d+$/.test(advertiser)) throw new Error('Advertiser ID must be the number shown in TikTok Ads Manager');
     const token = creds.accessToken!;
-    const today = localDate(now);
+    const today = localDate(now, stateOf<string>(db, AD_ZONES).get(id)); // the account's day (its zone as last seen; the machine's at first)
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const start = cursor ? addDays(cursor, -ATTRIBUTION_DAYS) : addDays(today, 1 - BACKFILL_DAYS);
 
