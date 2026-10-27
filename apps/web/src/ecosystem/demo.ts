@@ -28,11 +28,19 @@ function addDemoMeeting(state: OfficeState, id: string, at: string) {
 /** A local event source only: this module never calls the backend. */
 export function advanceDemo(state: OfficeState, tick: number, now = Date.now()): OfficeState {
   const at = new Date(now).toISOString(), index = Math.floor(tick / 6) % state.agents.length, agent = state.agents[index]!;
+  const calendarNow = now - new Date(now).getTimezoneOffset() * 60000, today = new Date(calendarNow).toISOString().slice(0, 10);
+  if (state.analytics && state.analytics.to !== today) {
+    const previous = state.analytics;
+    state = { ...state, analytics: { ...previous, to: today, series: Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(calendarNow - (6-i)*86400000).toISOString().slice(0,10);
+      return previous.series.find((p) => p.date === date) ?? { date, orders: 0, revenue: 0, profit: 0, adSpend: 0, roas: 0, aov: 0 };
+    }) } };
+  }
   const id = `demo-cycle-${Math.floor(tick / 6)}`, phase = tick % 6;
   let run = state.runs[id];
   if (phase === 0) {
     state = applyOfficeMessage(state, { type: 'event', event: { id: `demo-order-${tick}`, storeId: agent.storeId, type: 'order', amount: 29, at } });
-    if (state.analytics) state = { ...state, analytics: { ...state.analytics, series: state.analytics.series.map((p) => p.date === state.analytics!.to ? { ...p, orders: p.orders + 1, revenue: p.revenue + 29 } : p) } };
+    if (state.analytics) state = { ...state, analytics: { ...state.analytics, series: state.analytics.series.map((p) => p.date === state.analytics!.to ? { ...p, orders: p.orders + 1, revenue: p.revenue + 29, aov: 29 } : p) } };
     state = { ...state, agents: state.agents.map((a) => a.id === agent.id ? { ...a, status: 'idle' } : a) };
     run = { id, agentId: agent.id, storeId: agent.storeId, task: `Demo: prepare ${AGENT_ROLES[agent.role].name.toLowerCase()} findings`, status: 'queued', createdAt: at, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
   }
