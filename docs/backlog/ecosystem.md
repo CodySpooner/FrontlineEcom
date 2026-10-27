@@ -163,3 +163,40 @@ Verification limits: live integrations and paid Claude execution were deliberate
 ## When you're done
 Once every item above is ticked and the spec §17 acceptance pass holds, write the result under **Done**, push, then
 create an empty `.agent/STOP` file in your worktree (not in git) and stop.
+
+## Visual sprint — 2026-10-26 22:30 → 2026-10-27 00:30 (owner)
+
+Owner: keep improving the ecosystem, "not just backend stuff", keep adding visuals, "maybe adding holograms of certain
+store platform logos like shopify, ebay, etsy … but not just stopping there, i want it to make this ecosystem look
+super cool". Also: "expanding the ecosystem because right now it looks like everything is on top of each other".
+
+Rules for the sprint:
+- **Clock:** before starting each item run `Get-Date`. At or after 2026-10-27 00:30, or if `.agent/STOP` exists, finish
+  and push the item in hand, write a sprint summary under **Done**, create `.agent/STOP` and stop.
+- **Never run dry:** when the seed list below is done, compare the office with `docs/reference/ai-ecosystem-reference.webp`
+  and the best pixel-art management games, pick the most impressive visual gap, add it here as the next ECO item, build it.
+- Small slices: one item per commit, `pnpm check` green, before/after screenshots in `.agent/`, push, vault log line.
+- Decor can be ambient, but anything that looks like business data (orders, revenue, task activity) must come from real
+  data, or from the labeled Demo Mode provider. Never fake activity in the real provider.
+- Stay fast: re-measure FPS after heavy additions (30 workers, keep ~55–60 FPS); new motion respects reduced motion and
+  low power; bundled art stays offline and reasonable in size (a few MB total).
+- Platform logos only identify platforms: draw your own pixel-art renditions or bundle CC0 brand paths
+  (e.g. the `simple-icons` package) — no CDNs or hotlinks. Image generation is allowed.
+
+Seed list (reorder or extend as you see fit):
+- [ ] ECO-24 Expand the office: much more floor space, wider corridors and plazas between departments, rooms that no
+  longer crowd or overlap each other, labels/props/workers that don't stack on top of each other at fit zoom. Keep desk
+  ids; saved positions that no longer fit fall back to the nearest free tile; update `OFFICE_GRID`/world tests.
+- [ ] ECO-25 Platform hologram pylons: glowing holographic logos for Shopify, Amazon, eBay, Etsy, TikTok Shop,
+  WooCommerce, Walmart (plus Meta, Google and TikTok ads near Advertising) on projector pylons in the new plazas.
+  Platforms the owner's stores really use glow brighter and pulse on real order events from `/api/live`.
+- [ ] ECO-26 Lighting pass: neon light pools, glow sprites, screen glow, ambient color drift, light spill from the hub.
+- [ ] ECO-27 Department showpieces: a hero prop per room (e.g. Operations conveyor that moves a parcel on each real order,
+  Analytics holo-chart wall from real numbers, Creative Studio camera rig + green screen, Integrations cables with
+  data packets flowing on real tool calls).
+- [ ] ECO-28 Hub upgrades: orbiting rings and a ticker around the logo hologram with real store numbers (today's revenue,
+  orders, active tasks).
+- [ ] ECO-29 Living office: blinking racks, drones or cleaning bots, floor-grid pulses, particles, harmless worker idle
+  life (coffee runs, stretching, chatting at a water cooler) that never pretends to be task activity.
+- [ ] ECO-30 Backdrop: skyline windows, parallax city/rain or starfield behind the office, animated exterior signage.
+- [ ] ECO-31 Camera polish: cinematic intro fly-in, smoother focus transitions, a minimap.
