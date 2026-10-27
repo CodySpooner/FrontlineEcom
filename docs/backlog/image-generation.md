@@ -72,17 +72,7 @@ silhouette you can tell apart at 32 px. Keep each one's current look as the anch
 - Keep `Portrait`'s API (`role`, `rank`, `className`), the rank frames (`FRAME`) and the paused look (`opacity-40
   grayscale` from Agents.tsx). Remove SVG symbols that nothing uses afterwards.
 
-## Done
-
-- 2026-10-27 IMG-06: Portrait keeps its role/rank/className API and rank/paused frames; all eight images share a face-focused crop. Reframed Operations with imagegen to align its eyes. Removed unused SVG sprite and Shell mount; all callers checked at 1280/1920 with no browser errors, pnpm check green.
-
-- 2026-10-27 IMG-05: All eight 768px portraits generated with distinct expressions, silhouettes and role props; exact prompts recorded. Browser galleries checked at 1280/1920 with 32/42/48/96px and wide-card crops. Every portrait below 80 KB; pnpm check green.
-
-- 2026-10-27 IMG-04: Hero/nav now load per-section local WebP art, including agent detail; removed skyline/scenes and gradient art. Browser checks at 900/1280/1920/2560 confirm loaded images, unchanged header height, pointer-events none, drag/no-drag CSS. All header screenshots saved; pnpm check green.
-
-- 2026-10-27 IMG-03: Twelve distinct generated WebP headers total 496 KB; all exact prompts recorded. Reviewed header galleries at 1280/1920 in browser and loaded art in Orca; pnpm check green. Agent detail will share AI Agents; Ecosystem uses no Hero.
-
-- 2026-10-27 IMG-02: Generated and optimized Command Center and Ad Strategist; exact prompts recorded in public/art/PROMPTS.md. Previewed at 1280/1920 (.agent/style-frame-*); 25 KB header, 67 KB portrait; pnpm check green. when
+## Done when
 
 `pnpm check` green; every page in the list above and every place `Portrait` is used checked in a browser at 1280 and
 1920 px wide, with before/after screenshots saved in `.agent/` (git-ignored); no console errors; the header drag region
@@ -106,9 +96,11 @@ and ignore a watchdog nudge if `.agent/STOP` is already there.
 - [x] IMG-05 The other seven portraits, same template.
 - [x] IMG-06 Wire portraits: `Portrait` renders the image at every size, rank frames and paused look kept, unused SVG
   symbols removed.
-- [ ] IMG-07 Acceptance pass ("Done when" above), fix what it finds, then STOP.
+- [x] IMG-07 Acceptance pass ("Done when" above), fix what it finds, then STOP.
 
 ## Done
+
+- 2026-10-27 IMG-07: Acceptance passed: 12 headers and 8 portraits (1.04 MB), every route and Portrait context at 1280/1920 with before/after screenshots and zero console errors; 900–2560 header crops, all rank/paused frames, native window buttons and drag verified. Production assets match; pnpm check 149 files/992 tests green. Fixed missing favicon and duplicate Done entries. Finite lane complete; STOP follows push.
 
 - 2026-10-27 IMG-06: Portrait keeps its role/rank/className API and rank/paused frames; all eight images share a face-focused crop. Reframed Operations with imagegen to align its eyes. Removed unused SVG sprite and Shell mount; all callers checked at 1280/1920 with no browser errors, pnpm check green.
 
