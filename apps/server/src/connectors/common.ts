@@ -72,7 +72,7 @@ export function setStoreCurrency(db: Db, storeId: string, currency: string) {
 /**
  * Refuses an approved change to a value that moved on the platform since the last sync (changed in its own admin): the
  * change was sized and capped on the synced one, so "20 → 22" on a price raised to 35 there since is a 37% cut. An
- * unreadable live value doesn't refuse.
+ * unreadable live value doesn't refuse. Keep "as last synced (changed outside the app)": the agents read it as Not applied.
  */
 export function stillAsSynced(platform: string, what: string, live: number, synced: unknown) {
   if (synced == null || !Number.isFinite(live) || Math.abs(live - Number(synced)) <= Number(synced) * 0.01) return;
