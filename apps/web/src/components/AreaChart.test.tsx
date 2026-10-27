@@ -24,4 +24,17 @@ describe('AreaChart', () => {
     const dot = container.querySelector('circle')!.getAttribute('cy');
     expect(Number(dot)).toBeGreaterThan(Number(zero));
   });
+
+  it("doesn't shade today's unfinished day, only dashes its line", () => {
+    const points = [
+      { date: '2026-10-01', value: 100 },
+      { date: '2026-10-02', value: 120 },
+      { date: '2026-10-03', value: 30 },
+    ];
+    const { container } = render(<AreaChart points={points} partial label="Revenue" />);
+    const [a, b] = [...container.querySelectorAll('polyline')].map((l) => l.getAttribute('points')!.split(' '));
+    const fill = container.querySelector('polygon')!.getAttribute('points')!.split(' ');
+    expect(fill.slice(1, -1)).toEqual(a);
+    expect(fill.at(-1)!.split(',')[0]).toBe(b![0]!.split(',')[0]);
+  });
 });

@@ -101,7 +101,8 @@ export function AreaChart({ points, weekly, partial, label, currency }: { points
             );
           })}
         </g>
-        <polygon points={`${PL},${y(0)} ${line} ${W - PR},${y(0)}`} fill={`url(#area${uid})`} />
+        {/* Today's unfinished day isn't shaded: a half-day dip in the fill reads as a crash. */}
+        <polygon points={`${PL},${y(0)} ${partial ? xy.slice(0, -1).join(' ') : line} ${x(partial ? n - 2 : n - 1).toFixed(1)},${y(0)}`} fill={`url(#area${uid})`} />
         <polyline points={partial ? xy.slice(0, -1).join(' ') : line} fill="none" stroke="var(--color-red)" strokeWidth="2.2" strokeLinejoin="round" filter={`url(#glow${uid})`} />
         {partial && <polyline points={xy.slice(-2).join(' ')} fill="none" stroke="var(--color-red)" strokeWidth="2.2" strokeDasharray="4 4" strokeLinecap="round" />}
         <line x1={px} x2={px} y1={PT} y2={H - PB} stroke="rgba(255,255,255,.28)" />
