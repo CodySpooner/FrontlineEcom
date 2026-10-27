@@ -33,11 +33,19 @@ export function toCron(s: Schedule) {
 }
 
 const clock = (time: string) => new Date(`2000-01-01T${time}`).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+const SUFFIX: Record<string, string> = { one: 'st', two: 'nd', few: 'rd', other: 'th' };
+const ordinal = (n: number) => n + SUFFIX[new Intl.PluralRules('en-US', { type: 'ordinal' }).select(n)]!;
 
 export function describeTrigger(t: AutomationTrigger) {
   if (t.type === 'schedule') {
     const s = parseCron(t.cron);
-    if (!s) return `Cron ${t.cron}`;
+    if (!s) {
+      // Monthly ("m h D * *") has no editor, but reads as well as the rest.
+      const [, min = '', hour = '', day = ''] = /^(\d{1,2}) (\d{1,2}) (\d{1,2}) \* \*$/.exec(t.cron.trim()) ?? [];
+      return day && +min < 60 && +hour < 24 && +day >= 1 && +day <= 31
+        ? `Monthly on the ${ordinal(+day)} at ${clock(`${hour.padStart(2, '0')}:${min.padStart(2, '0')}`)}`
+        : `Cron ${t.cron}`;
+    }
     const at = clock(s.time);
     return s.every === 'day' ? `Every day at ${at}` : s.every === 'weekdays' ? `Weekdays at ${at}` : `Every ${WEEKDAYS[s.weekday]} at ${at}`;
   }

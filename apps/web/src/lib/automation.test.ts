@@ -25,6 +25,13 @@ describe('describeTrigger', () => {
     expect(describeTrigger({ type: 'schedule', cron: '*/15 * * * *' })).toBe('Cron */15 * * * *');
   });
 
+  it('says monthly schedules in words too', () => {
+    expect(describeTrigger({ type: 'schedule', cron: '0 9 1 * *' })).toBe('Monthly on the 1st at 9:00 AM');
+    expect(describeTrigger({ type: 'schedule', cron: '30 18 22 * *' })).toBe('Monthly on the 22nd at 6:30 PM');
+    expect(describeTrigger({ type: 'schedule', cron: '0 8 13 * *' })).toBe('Monthly on the 13th at 8:00 AM');
+    expect(describeTrigger({ type: 'schedule', cron: '0 8 32 * *' })).toBe('Cron 0 8 32 * *');
+  });
+
   it('says metric thresholds in words', () => {
     expect(describeTrigger({ type: 'metric', metric: 'roas', op: '<', value: 2, windowDays: 3 })).toBe('When ROAS drops below 2x over 3 days');
     expect(describeTrigger({ type: 'metric', metric: 'adSpend', op: '>', value: 500, windowDays: 1 })).toBe('When ad spend goes above $500 over 1 day');
