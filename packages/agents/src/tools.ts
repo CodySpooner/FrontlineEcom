@@ -135,6 +135,15 @@ const noStoreWrites = (store: Store, platforms = PRODUCT_WRITE_PLATFORMS) =>
 /** A live store with no fee estimate: no connector imports payment or platform fees, so profit leaves them out. */
 const noFees = (store: Store) => store.connected && !store.feePercent && !store.feePerOrder;
 /** Where the owner enters unit costs: Analytics' Unit costs card, or on a Shopify store its own "Cost per item" (synced). */
+// GSM-7, the default SMS alphabet (^{}\[~]|€ take two of its characters). Anything else, an emoji or a curly quote, sends
+// the whole text as UCS-2. ponytail: GSM-7's Greek capitals are left out, so a text with one counts as UCS-2 (errs high).
+const GSM7 = /^[@£$¥èéùìòÇ\nØø\rÅåÆæßÉ_ !"#¤%&'()*+,\-./0-9:;<=>?¡A-ZÄÖÑÜ§¿a-zäöñüà^{}\\[~\]|€]*$/;
+/** Billed SMS segments: 160 GSM-7 characters in one, 153 a segment once split; 70 and 67 for UCS-2 (UTF-16 units). */
+export function smsSegments(text: string) {
+  const [n, one, each] = GSM7.test(text) ? [text.length + (text.match(/[\^{}\\[~\]|€]/g)?.length ?? 0), 160, 153] : [text.length, 70, 67];
+  return n <= one ? 1 : Math.ceil(n / each);
+}
+
 const costsWhere = (store: Store) => `Analytics' Unit costs here${store.platform === 'shopify' ? ', or Shopify\'s "Cost per item"' : ''}`;
 const priceFloor = (store: Store, cost: number) => (cost > 0 ? r2((cost + (store.feePerOrder ?? 0)) / (1 - (store.feePercent ?? 0) / 100)) : undefined);
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
@@ -656,7 +665,11 @@ export const APP_TOOLS: AppTool[] = [
             channel: z.enum(['email', 'sms']),
             subject: z.string().max(80).optional(),
             preview: z.string().max(120).optional(),
-            body: z.string().min(10).max(4000).describe('email: content bullets or full copy; sms: the full text with opt-out ("Reply STOP to opt out"), 320 characters at most'),
+            body: z
+              .string()
+              .min(10)
+              .max(4000)
+              .describe('email: content bullets or full copy; sms: the full text with opt-out ("Reply STOP to opt out"), 2 segments at most: 306 characters, or 134 with any emoji or curly quote'),
             offer: z.string().max(120).optional(),
           }),
         )
@@ -666,11 +679,13 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async (f, ctx) => {
       if (f.messages.some((m) => m.channel === 'email' && !m.subject)) return 'Every email step needs a subject.';
-      // An SMS step is pasted into the owner's SMS tool as written: carriers and the TCPA want the opt-out in it, and each
-      // 153 characters past 160 is another billed segment.
+      // An SMS step is pasted into the owner's SMS tool as written: carriers and the TCPA want the opt-out in it, and every
+      // segment is billed (an emoji or curly quote cuts one from 160 characters to 70).
       const sms = f.messages.filter((m) => m.channel === 'sms');
       if (sms.some((m) => !/\bstop\b/i.test(m.body))) return 'Every SMS step needs its opt-out in the text, e.g. "Reply STOP to opt out" (carriers and the TCPA require it).';
-      if (sms.some((m) => m.body.length > 320)) return 'Keep each SMS step to 320 characters (2 segments): every segment past that is billed again.';
+      if (sms.some((m) => smsSegments(m.body) > 2)) {
+        return 'Keep each SMS step to 2 segments: 306 characters, or 134 with any emoji or curly quote (they switch the text to UCS-2). Every segment past that is billed again.';
+      }
       const flow = saveFlowDraft(ctx.db, { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), ...f });
       return `Saved "${flow.name}" (${flow.messages.length} steps) to the flow library. The owner sets it up in their email/SMS tool.`;
     },

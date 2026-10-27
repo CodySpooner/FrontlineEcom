@@ -1,4 +1,4 @@
-import { fakeEngine, getAgent, runAgent, type FakeStep } from '@frontline/agents';
+import { fakeEngine, getAgent, runAgent, smsSegments, type FakeStep } from '@frontline/agents';
 import type { AgentEvent, FlowDraft } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -57,11 +57,23 @@ test('Email & SMS saves flows to the library; a redraft replaces the old one', a
 
 test('an SMS step needs its opt-out and stays within 2 segments', async () => {
   const sms = (body: string) => flow({ messages: [{ delayHours: 24, channel: 'sms', body }] });
-  expect(await run([sms('Glow Haus: your cart is saved for 24h.'), sms(`Glow Haus: ${'so much to say. '.repeat(20)}Reply STOP to opt out.`), sms('Glow Haus: cart saved. Txt stop to end.')])).toEqual([
+  const text = (n: number, fill = 'a') => `Glow Haus: ${fill.repeat(n - 34)} Reply STOP to opt out.`; // n characters
+  const tooLong = 'Keep each SMS step to 2 segments: 306 characters, or 134 with any emoji or curly quote (they switch the text to UCS-2). Every segment past that is billed again.';
+  const saved = 'Saved "Checkout abandonment" (1 steps) to the flow library. The owner sets it up in their email/SMS tool.';
+  expect(await run([sms('Glow Haus: your cart is saved for 24h.'), sms(text(306)), sms(text(307)), sms(text(140, '’')), sms('Glow Haus: cart saved. Txt stop to end.')])).toEqual([
     'Every SMS step needs its opt-out in the text, e.g. "Reply STOP to opt out" (carriers and the TCPA require it).',
-    'Keep each SMS step to 320 characters (2 segments): every segment past that is billed again.',
-    'Saved "Checkout abandonment" (1 steps) to the flow library. The owner sets it up in their email/SMS tool.',
+    saved,
+    tooLong, // 3 segments of 153
+    tooLong, // a curly quote: 3 segments of 67
+    saved,
   ]);
+});
+
+test('SMS segments: 160 GSM-7 characters in one, 153 each once split, 70 and 67 with anything outside GSM-7', () => {
+  expect([160, 161, 306, 307].map((n) => smsSegments('a'.repeat(n)))).toEqual([1, 2, 2, 3]);
+  expect(smsSegments(`${'a'.repeat(159)}€`)).toBe(2); // € takes two GSM-7 characters
+  expect([70, 71, 134, 135].map((n) => smsSegments(`’${'a'.repeat(n - 1)}`))).toEqual([1, 2, 2, 3]);
+  expect(smsSegments(`🛒${'a'.repeat(68)}`)).toBe(1); // an emoji is two UTF-16 units: 70
 });
 
 test('list_flows shows what is already in the library', async () => {
