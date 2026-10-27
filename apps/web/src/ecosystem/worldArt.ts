@@ -114,7 +114,15 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
         poly([p.x,p.y-64,p.x+dx,p.y-52,p.x+dx+4,p.y-54,p.x+4,p.y-66],'#666370');
         poly([p.x,p.y-61,p.x+dx,p.y-49,p.x+dx,p.y-46,p.x,p.y-58],theme.rail);
         poly([p.x,p.y-8,p.x+dx,p.y+4,p.x+dx,p.y+6,p.x,p.y-6],'#912139');
-        if (i%2===1) {
+        if (i%4===1) {
+          c.save(); c.transform(dx/24,.5,0,1,p.x,p.y);
+          rect(2,-54,20,39,'#607b93'); rect(4,-52,16,35,'#18344e');
+          rect(4,-52,16,13,'#284b68');rect(5,-32,4,15,'#101c30');rect(10,-41,4,24,'#101c30');rect(15,-28,4,11,'#101c30');
+          for(const [x,y]of[[6,-28],[6,-22],[11,-37],[11,-30],[11,-23],[16,-24],[16,-19]]) rect(x!,y!,2,2,'#61b4c9');
+          c.globalAlpha=.25;poly([5,-51,8,-51,18,-23,15,-23],'#d4f7ff');c.globalAlpha=1;
+          rect(4,-18,16,2,'#8cd7e7');rect(11,-52,2,35,'#354f68');rect(4,-37,16,2,'#354f68');
+          c.restore();
+        } else if (i%2===1) {
           poly([p.x+dx*.2,p.y-47,p.x+dx*.8,p.y-40,p.x+dx*.8,p.y-14,p.x+dx*.2,p.y-21],'#263448','#58708a');
           for (const dy of [0,7,14]) poly([p.x+dx*.25,p.y-43+dy,p.x+dx*.75,p.y-37+dy,p.x+dx*.75,p.y-35+dy,p.x+dx*.25,p.y-41+dy],'#111b2a');
         } else {

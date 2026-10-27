@@ -85,6 +85,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-27 ECO-41: Original cool glass panels, pixel skyline silhouettes, reflections and illuminated sills alternate with wall vents. Cached art and collision layout unchanged. Fit/close-up/Orca screenshots (.agent/eco-41-*.png); pnpm check 984 tests, 58 FPS.
 - 2026-10-27 ECO-40: Four original distant pixel hover vehicles add city depth behind the office. Loop/bounds and reduced-motion freeze tests; desktop/fullscreen/reduced/Orca screenshots (.agent/eco-40-*.png). pnpm check 984 tests, measured 58.2 FPS with thirty workers in fullscreen.
 - 2026-10-27 ECO-39: Department signs, names and speech callouts cap their screen footprint at close zoom. Wrapped names and grouped bubble backgrounds preserve alignment; fit labels unchanged. Scale-bound regression test and fit/125%/244%/Orca screenshots (.agent/eco-39-*.png); pnpm check 983 tests, 58 FPS.
 - 2026-10-27 ECO-38 validation follow-up: Midnight exposed two existing demo-fixture assumptions. Tiny unblocking test-only edits permit an empty current partial day and explicitly prepare the unfulfilled order fixture; no production behavior changed. Full 982-test check passes after midnight.
@@ -232,6 +233,6 @@ Visual review: owner reference plus [Game Dev Story official screenshots](https:
 - [x] ECO-39 Zoom-aware labels: keep department signs and worker callouts readable while reducing close-up overlap.
 
 - [x] ECO-40 Distant city traffic: original pixel hover vehicles behind the office, bounded ambient motion that freezes in reduced-motion/low-power mode.
-- [ ] ECO-41 Glazed office windows: cool skyline reflections and illuminated glass among the wall vents to add depth and contrast.
+- [x] ECO-41 Glazed office windows: cool skyline reflections and illuminated glass among the wall vents to add depth and contrast.
 - [ ] ECO-42 Camera dock polish: compact glass controls, visible zoom readout and clear mobile spacing with keyboard-accessible actions.
 - [ ] ECO-43 Midnight display continuity: keep the labeled Demo hub ticker and seven-day display aligned with the local date across midnight.
