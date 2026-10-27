@@ -491,7 +491,8 @@ export const useRestoreBackup = () =>
 export const useActionLog = (storeIds: string[]) =>
   useQuery({ queryKey: ['actions', storeIds], queryFn: () => api<ActionLogEntry[]>(`/api/actions?stores=${storeIds.join(',')}&limit=50`) });
 
-export const useNotifications = () => useQuery({ queryKey: ['notifications'], queryFn: () => api<AppNotification[]>('/api/notifications?limit=40') });
+const BELL = 40;
+export const useNotifications = () => useQuery({ queryKey: ['notifications'], queryFn: () => api<AppNotification[]>(`/api/notifications?limit=${BELL}`) });
 
 export function useMarkRead() {
   const qc = useQueryClient();
@@ -560,7 +561,7 @@ export function useLive() {
         ['automation-runs', 'automations'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         qc.invalidateQueries({ queryKey: ['usage'] });
       }
-      if (m.type === 'notification') qc.setQueryData<AppNotification[]>(['notifications'], (old) => old && [m.notification, ...old]);
+      if (m.type === 'notification') qc.setQueryData<AppNotification[]>(['notifications'], (old) => old && [m.notification, ...old].slice(0, BELL));
       if (m.type === 'xp') {
         ['agents', 'achievements', 'xp'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         // XpToasts shows it.

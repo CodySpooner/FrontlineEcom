@@ -111,6 +111,21 @@ describe('useLive', () => {
   });
 });
 
+describe('useLive notifications', () => {
+  it('keeps the bell to the 40 newest, like a refetch, however long the app stays open', () => {
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const qc = new QueryClient();
+    const n = (i: number) => ({ id: `n${i}`, kind: 'run_done', title: `Run ${i}`, createdAt: '2026-10-26T08:00:00Z' });
+    qc.setQueryData(['notifications'], Array.from({ length: 40 }, (_, i) => n(i)));
+    renderHook(() => useLive(), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+
+    act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'notification', notification: n(40) }) }));
+    const list = qc.getQueryData<{ id: string }[]>(['notifications'])!;
+    expect(list).toHaveLength(40);
+    expect(list[0]!.id).toBe('n40');
+  });
+});
+
 describe('useGoLiveRefresh', () => {
   it("refetches everything once when a store's first sync lands (its demo data was swapped for real)", async () => {
     const shopify = { id: 'i1', kind: 'shopify', storeId: 's1', status: 'connected', fields: {}, createdAt: '2026-10-26T08:00:00Z' };

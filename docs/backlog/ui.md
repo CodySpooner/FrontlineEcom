@@ -503,6 +503,9 @@ Orca's browser against the reference before ticking it.
       switches looked the same (no knob), progress bars (missions, XP, caps, System Status) vanished, and the picked store
       chip, range, tab and the current page in the sidebar looked like the rest. A forced-colors block paints those in the
       theme's own Highlight colors, keyed on their ARIA state.
+- [x] UI-185 The bell's list grew without end while the app stayed open: each live notification was added to the 40
+      fetched, with no cap (the activity feed keeps 30). Then a refetch dropped the extras and the unread count went down
+      on its own. Live notifications now keep the 40 newest, the same limit the fetch uses.
 
 ## Blocked
 
@@ -734,3 +737,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-182: seen while checking ten stores with long names at 1024px (my own Chrome tab, GET fixture, writes blocked: no page overflows, no cut text without a title, the chips wrap). Layout only, so no new test. After: one line and 39px tall at 920, 1024 and 1440 (the hint shown only at 1440)
 - 2026-10-26 — UI-183: found by a sweep for rows whose controls differ in height at 1024px (my own Chrome tab, writes blocked), then the computed styles: the class list held py-2 and py-1, and the padding was 8px. CSS only, so no new test. After: deny reason 29/30px (Back), budget 29/30, Integrations select 31/30 (Connect), editor 12px, color swatch padding 4px, caps field 4px
 - 2026-10-26 — UI-184: checked in a headless Chrome (throwaway profile, local app, writes blocked in-page) with forced-colors emulated over CDP, before and after: Settings' switches (on: highlighted with the knob right; off: outlined, knob left), the sidebar's current page, mission/cap/status bars, "All stores" and "30D" picked. CSS only, so no new test; outside forced colors nothing changes
+- 2026-10-27 — UI-185: `BELL = 40` in api/client is both the fetch limit and the cap on the live prepend. Test in api/live.test.tsx (red first: 41 after one live notification on a full list)
