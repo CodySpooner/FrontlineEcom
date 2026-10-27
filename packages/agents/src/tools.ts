@@ -425,7 +425,13 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ tab, q, anyNiche, limit }, ctx) => {
       if (!ctx.research) return 'The research feed is not available.';
-      const items = await ctx.research({ tab, q, limit, ...(anyNiche ? {} : { niche: nicheKey(ctx.store) }) }); // other:<slug> for a custom niche
+      // The built-in catalog (core's seeded DEMO rows; finds are `find-`) has made-up trend and competition: a live store
+      // works from real finds only.
+      const live = ctx.store.connected;
+      const items = (await ctx.research({ tab, q, limit: live ? 200 : limit, ...(anyNiche ? {} : { niche: nicheKey(ctx.store) }) })) // other:<slug> for a custom niche
+        .filter((p) => !live || p.id.startsWith('find-'))
+        .slice(0, limit);
+      if (live && !items.length) return 'No finds yet (the built-in sample catalog is left out for a live store). Find products with WebSearch, cost them with search_suppliers and record them with record_product_find.';
       return (await usdNote(ctx)) + csv(
         items.map((p) => ({ id: p.id, title: p.title, category: p.category, source: p.source, cost: p.cost, price: p.price, compare_at: p.compareAt, margin_pct: p.margin, trend_pct: p.trend, competition: p.competition, shipping_days: p.shippingDays, score: p.score })),
       );

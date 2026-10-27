@@ -430,6 +430,22 @@ describe('agent tools on demo data', () => {
     }
   });
 
+  test("a live store's research_feed leaves out the built-in sample catalog", async () => {
+    db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
+    try {
+      const feed = async () => results(await run(input('glow', 'product_hunter'), [{ call: 'research_feed' }, done])).at(-1)!.output;
+      expect(await feed()).toBe('No finds yet (the built-in sample catalog is left out for a live store). Find products with WebSearch, cost them with search_suppliers and record them with record_product_find.');
+      await run(input('glow', 'product_hunter'), [
+        { call: 'record_product_find', input: { title: 'Gua Sha Stone', category: 'Beauty', source: 'tiktok', cost: 3, price: 19, compareAt: 29, trend: 35, competition: 40, shippingDays: 9 } },
+        done,
+      ]);
+      expect((await feed()).split('\n').slice(1).map((r) => r.split(',')[1])).toEqual(['Gua Sha Stone']);
+    } finally {
+      db.prepare(`UPDATE stores SET connected = 0 WHERE id = 'glow'`).run(); // the db is shared by these tests
+      db.prepare(`DELETE FROM research_products WHERE id LIKE 'find-%'`).run();
+    }
+  });
+
   test('write_memory saves a learning and streams memory_written', async () => {
     const events = await run(input('glow', 'copywriter'), [
       { call: 'write_memory', input: { kind: 'learning', text: 'Benefit-first headlines beat feature lists here', evidence: 'CTR 2.1% vs 1.3%', confidence: 0.7 } },
