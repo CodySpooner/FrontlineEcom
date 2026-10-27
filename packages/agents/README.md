@@ -30,7 +30,9 @@ outcome checks.
    when approved, even after the run ended. Writers are routed by platform (`onStore` in `routes/agents.ts`). A
    change approved on stale numbers (the price moved, or an ad change days late) is skipped and the owner is told, and
    so is one asked on demo data but approved after the store's first real sync. A theme copy whose request was never
-   sent is deleted.
+   sent, or whose duplicate call failed after Shopify made it, is deleted. A store page whose push may have worked (a
+   5xx, a dropped connection) tells the owner to check the store before publishing again, since that page is created, not
+   updated. Every failure notice links to where the owner acts, and a failed action or run finish goes to `api.log`.
 7. **Learning** (`memory.ts`): a run that used tools reflects once and writes up to 5 memories (a store keeps its
    300 strongest agent facts and learnings; pins, preferences and the owner's notes always stay; a run on demo data that
    ends after the store went live learns nothing). Each run recalls the pins and the owner's notes and no's, plus the
