@@ -37,9 +37,10 @@ describe('Knowledge Base › niche packs', () => {
 
 describe('Knowledge Base › a custom niche with no pack', () => {
   const zen = { id: 'zen', name: 'Zen Co', platform: 'shopify', niche: 'other', nicheDetail: 'Yoga Mats', color: '#ff2a3a', currency: 'USD', timezone: 'UTC', connected: true };
-  const api = (provider: 'claude' | 'demo') =>
+  const api = (provider: 'claude' | 'demo', pending: unknown[] = []) =>
     stubApi((url, init) => {
       if (init?.method === 'POST') return { id: 'r1', agentId: 'zen:market_analyst', status: 'running' };
+      if (url.startsWith('/api/approvals')) return pending;
       if (url === '/api/knowledge') return [{ kind: 'niche', key: 'pet', title: 'Pet niche pack', chars: 20 }];
       if (url.startsWith('/api/knowledge/')) return { kind: 'niche', key: 'pet', title: 'Pet niche pack', chars: 20, markdown: '# Pet' };
       if (url === '/api/stores') return [zen];
@@ -54,6 +55,14 @@ describe('Knowledge Base › a custom niche with no pack', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Ask its Market Analyst to draft one' }));
     await vi.waitFor(() => expect(screen.getByTestId('where').textContent).toMatch(/^\/agents\/zen(%3A|:)market_analyst\?run=r1$/));
     expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url)).toEqual(['/api/agents/zen%3Amarket_analyst/niche-pack']);
+  });
+
+  it('points at the draft already waiting instead of asking for another', async () => {
+    const draft = { id: 'a1', storeId: 'zen', agentId: 'zen:market_analyst', title: 'Save the Yoga Mats niche pack', reason: 'x', status: 'pending', createdAt: '2026-10-26T08:00:00Z', action: { kind: 'save_niche_pack', payload: { slug: 'Yoga Mats', markdown: '# Yoga Mats' } } };
+    api('claude', [draft]);
+    renderApp(<Knowledge />, '/knowledge?tab=niche');
+    expect((await screen.findByRole('link', { name: 'Review it in Requests' })).getAttribute('href')).toBe('/');
+    expect(screen.queryByRole('button', { name: /Ask its Market Analyst/ })).toBeNull();
   });
 
   it("on the demo engine, says when one gets drafted instead (a demo run would make one up)", async () => {

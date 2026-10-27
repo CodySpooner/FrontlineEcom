@@ -460,6 +460,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-171 An approved niche pack is saved by the run that asked, but nothing refreshed Knowledge: for up to 30 s it
       still said "no pack yet" and offered the draft button (which the route would refuse). The knowledge base now
       refreshes when a run ends, as the research feed does.
+- [x] UI-172 A custom niche whose pack draft already waits for approval still offered "Ask its Market Analyst to draft
+      one" (and the route's own waiting check misses real requests: reported to agents). The row now says a draft is
+      waiting and links to Requests instead, matched by the requesting store's niche.
 
 ## Blocked
 
@@ -678,3 +681,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-166: `useDraftNichePack` + `MissingPacks` on Knowledge. Two tests (red first). Orca with a GET fixture (Peak Fit in "Yoga Mats" with a Claude-engine analyst, Glow Haus in "Soy Candles" on the demo engine): the button on one, the connect line on the other; the click's one POST answered by the fixture with the route's 409 text, which shows under the button
 - 2026-10-26 — UI-166 follow-up: the missing-pack rows use the pack list's card style (solid border, bg-2) instead of the app's only dashed border
 - 2026-10-26 — UI-171: useLive invalidates `['knowledge']` (the index and open docs) when a run ends. One test (red first). Orca: the served client has it and Knowledge renders; a live run message needs a real run, so the unit test carries the wiring
+- 2026-10-26 — UI-172: MissingPacks reads the pending approvals. One test (red first). Orca with a GET fixture (Peak Fit in "Yoga Mats", a pending save_niche_pack from it): "A draft is waiting for your approval. Review it in Requests" → /, no button

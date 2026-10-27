@@ -1,9 +1,9 @@
 // UI-16 Knowledge Base: the expertise layers agents read (role playbooks, platform and niche packs) and each store's memory.
 import { useDeferredValue, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Brain, Pin, Search, Trash2 } from 'lucide-react';
 import type { KnowledgeDoc, KnowledgeKind, MemoryKind, StoreMemory } from '@frontline/shared';
-import { useAgents, useDraftNichePack, useForgetMemory, useKnowledge, useKnowledgeDoc, useMemories, useSaveKnowledge, useUpdateMemory } from '../api/client';
+import { useAgents, useApprovals, useDraftNichePack, useForgetMemory, useKnowledge, useKnowledgeDoc, useMemories, useSaveKnowledge, useUpdateMemory } from '../api/client';
 import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
 import { Markdown } from '../components/Markdown';
@@ -97,19 +97,32 @@ function Docs({ kind }: { kind: KnowledgeKind }) {
 function MissingPacks({ docs }: { docs: KnowledgeDoc[] }) {
   const { stores } = useStoreSelection();
   const agents = useAgents().data;
+  const pending = useApprovals().data;
   const draft = useDraftNichePack();
   const navigate = useNavigate();
   const missing = stores.filter((s) => s.niche === 'other' && s.nicheDetail?.trim() && !docs.some((d) => d.key === nicheKey(s)));
+  const nicheOf = (storeId: string) => {
+    const s = stores.find((x) => x.id === storeId);
+    return s && nicheKey(s);
+  };
   if (!missing.length) return null;
   return (
     <ul className="mt-3 grid gap-1.5 border-t border-line pt-3">
       {missing.map((s) => {
         const analyst = agents?.find((a) => a.id === `${s.id}:market_analyst`);
+        const waiting = pending?.some((a) => a.action.kind === 'save_niche_pack' && nicheOf(a.storeId) === nicheKey(s));
         return (
           <li key={s.id} className="rounded-lg border border-line bg-bg-2 px-3 py-2 text-xs text-muted">
             <b className="text-[13px] font-semibold text-text">{s.nicheDetail}</b> has no pack yet ({s.name}).
             {/* The demo engine can't research a niche: its pack would be made up, so the route refuses it. */}
-            {analyst?.engine?.provider === 'claude' ? (
+            {waiting ? (
+              <span className="block">
+                A draft is waiting for your approval.{' '}
+                <Link to="/" className="font-semibold text-text hover:underline">
+                  Review it in Requests
+                </Link>
+              </span>
+            ) : analyst?.engine?.provider === 'claude' ? (
               <div className="mt-1.5">
                 <Button size="sm" disabled={draft.isPending} onClick={() => draft.mutate(analyst.id, { onSuccess: (r) => navigate(`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`) })}>
                   Ask its Market Analyst to draft one
