@@ -92,6 +92,36 @@ body {
   }
 }
 
+/* Windows contrast themes (forced colors) drop background colors, and a background is all that marks the picked chip,
+   range, tab or page, a switch's knob and state, and a bar's fill: paint those in the theme's own highlight colors. */
+@media (forced-colors: active) {
+  [aria-pressed='true'], [role='radio'][aria-checked='true'], [role='tab'][aria-selected='true'], [aria-current='page'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+    color: HighlightText;
+  }
+  [role='switch'] + span::after {
+    forced-color-adjust: none;
+    background: CanvasText;
+  }
+  [role='switch']:checked + span {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+  }
+  [role='switch']:checked + span::after {
+    background: HighlightText;
+  }
+  [role='progressbar'] {
+    border: 1px solid CanvasText;
+  }
+  [role='progressbar'] > i {
+    forced-color-adjust: none;
+    background: Highlight;
+  }
+}
+
 /* Desktop app (frameless Electron, data-wco set by Shell): the hero is the title bar; keep its controls clickable and
    clear of the caption buttons, whose width is 100vw minus the end of the title-bar area. */
 :root[data-wco] .titlebar {

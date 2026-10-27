@@ -499,6 +499,10 @@ Orca's browser against the reference before ticking it.
       beside 30px buttons (also an agent's budget and Integrations' "Also sells on…" row), the pack editor wasn't 12px and
       the store color swatch was squeezed. Those overrides use `!` now (as `text-right!` already does) and match the
       buttons beside them; `inputClass` says so.
+- [x] UI-184 Under a Windows contrast theme (forced colors) the app hid every state it marks with a fill: on and off
+      switches looked the same (no knob), progress bars (missions, XP, caps, System Status) vanished, and the picked store
+      chip, range, tab and the current page in the sidebar looked like the rest. A forced-colors block paints those in the
+      theme's own Highlight colors, keyed on their ARIA state.
 
 ## Blocked
 
@@ -729,3 +733,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-181: Dialog remembers where the mouse went down. Test red first (press in a field, click lands on the dialog: no close; press and click on it: close). My own Chrome tab, real mouse, writes blocked: dragging from the Ask AI field onto the backdrop leaves it open; a backdrop click closes it
 - 2026-10-26 — UI-182: seen while checking ten stores with long names at 1024px (my own Chrome tab, GET fixture, writes blocked: no page overflows, no cut text without a title, the chips wrap). Layout only, so no new test. After: one line and 39px tall at 920, 1024 and 1440 (the hint shown only at 1440)
 - 2026-10-26 — UI-183: found by a sweep for rows whose controls differ in height at 1024px (my own Chrome tab, writes blocked), then the computed styles: the class list held py-2 and py-1, and the padding was 8px. CSS only, so no new test. After: deny reason 29/30px (Back), budget 29/30, Integrations select 31/30 (Connect), editor 12px, color swatch padding 4px, caps field 4px
+- 2026-10-26 — UI-184: checked in a headless Chrome (throwaway profile, local app, writes blocked in-page) with forced-colors emulated over CDP, before and after: Settings' switches (on: highlighted with the knob right; off: outlined, knob left), the sidebar's current page, mission/cap/status bars, "All stores" and "30D" picked. CSS only, so no new test; outside forced colors nothing changes
