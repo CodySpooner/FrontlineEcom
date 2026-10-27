@@ -128,6 +128,23 @@ test('the watch checks each real competitor once a day and never the demo .examp
   }
 });
 
+test('a shop that redirects to an address on this computer or network is not followed there; a public redirect is', async () => {
+  const db = openDb();
+  seedDemo(db, TODAY);
+  db.prepare("INSERT INTO competitors (id, store_id, name, url, created_at) VALUES ('c', 'glow', 'C', 'https://evil.com', '2026-10-01T00:00:00Z')").run();
+  const urls: string[] = [];
+  // Follows redirects as fetch does, unless told 'manual'.
+  const fetchFn = (async function f(url: string, init?: RequestInit): Promise<Response> {
+    urls.push(url);
+    const to = url.startsWith('https://evil.com/') ? 'http://127.0.0.1:8787/api/settings' : url.startsWith('https://old-rival.com/') ? url.replace('old-rival.com', 'rival.com') : undefined;
+    if (to) return init?.redirect === 'manual' ? new Response(null, { status: 302, headers: { location: to } }) : f(to, init);
+    return Response.json(url.includes('/products.json') ? { products: [{ title: 'LED Mask', variants: [{ price: '89.00' }] }] } : {});
+  }) as typeof fetch;
+  await expect(watchCompetitorPrices(db, 'c', 'https://evil.com', fetchFn)).rejects.toThrow(/127\.0\.0\.1/);
+  expect(urls.filter((u) => u.includes('127.0.0.1'))).toEqual([]);
+  expect(await watchCompetitorPrices(db, 'c', 'https://old-rival.com', fetchFn)).toBe(1);
+});
+
 test("a WooCommerce competitor's prices come from its public Store API (minor units, HTML-escaped names)", async () => {
   const db = openDb();
   seedDemo(db, TODAY);

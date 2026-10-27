@@ -104,7 +104,16 @@ type Priced = Omit<PriceSnapshotData, 'product'> & { product?: string };
 /** `{ currency }` when `c` is an ISO currency code, else nothing. */
 const iso = (c: unknown): { currency?: string } => (typeof c === 'string' && /^[A-Z]{3}$/.test(c) ? { currency: c } : {});
 
-const get = (url: string, fetchFn: Fetch) => fetchFn(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(20_000) });
+/** Follows a shop's redirects (5 at most) itself, so it can't send the watch to an address on this computer or network. */
+async function get(url: string, fetchFn: Fetch): Promise<Response> {
+  for (let hops = 0; ; hops++) {
+    const res = await fetchFn(url, { headers: { accept: 'application/json' }, redirect: 'manual', signal: AbortSignal.timeout(20_000) });
+    const to = res.status >= 300 && res.status < 400 ? res.headers.get('location') : null;
+    if (!to) return res;
+    url = new URL(to, url).href;
+    if (hops === 5 || isPrivateHost(new URL(url).hostname)) throw new Error(`redirected to ${new URL(url).host}: not followed`);
+  }
+}
 const decodeHtml = (s: string) =>
   s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&quot;/g, '"').replace(/&#039;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
@@ -218,7 +227,6 @@ export async function watchCompetitorPrices(db: Db, competitorId: string, url: s
  * Checks every competitor's prices once a day (hourly ticks, one site at a time). The demo competitors live on the
  * reserved `.example` domain and are never fetched, nor is one on this computer or its network (a page an agent read
  * could have it probe the router or the app's own API). Returns stop().
- * ponytail: redirects are followed, so a public shop that redirects to a private address is still read once.
  */
 export function startCompetitorWatch(db: Db, key?: Buffer, fetchFn: Fetch = fetch, everyMs = 3_600_000) {
   let running = false;
