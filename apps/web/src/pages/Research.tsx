@@ -203,7 +203,7 @@ function ProductCard({ p, onOpen, saved }: { p: ResearchProduct; onOpen: () => v
         </p>
         <div className="mt-2.5 flex items-baseline gap-2">
           <b className="font-display text-lg tabular-nums">{cents(p.price)}</b>
-          <s className="text-xs text-muted tabular-nums">{cents(p.compareAt)}</s>
+          {p.compareAt > p.price && <s className="text-xs text-muted tabular-nums">{cents(p.compareAt)}</s>}
           <span className="ml-auto text-xs font-semibold text-good tabular-nums" title="Demand growth, last 30 days">
             +{p.trend}%
           </span>
@@ -318,7 +318,7 @@ export function ProductDetails({ p }: { p: ResearchProduct }) {
       <dl className="grid grid-cols-3 gap-3 text-[13px]">
         <Fact label="Cost" value={cents(p.cost)} />
         <Fact label="Sell at" value={cents(p.price)} />
-        <Fact label="Compare at" value={cents(p.compareAt)} />
+        {p.compareAt > p.price && <Fact label="Compare at" value={cents(p.compareAt)} />}
         <Fact label="Margin" value={`${Math.round(p.margin)}%`} />
         <Fact label="Demand, 30 days" value={`+${p.trend}%`} />
         <Fact label="Ships in" value={`${p.shippingDays} days`} />

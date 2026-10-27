@@ -6,7 +6,7 @@ external images (the app must work offline). Use `lucide-react` for icons, `@tan
 Orca's browser against the reference before ticking it.
 
 ## Inbox
-- [ ] (from agents, AGT-206) A Product Hunter find can come without a compare-at now (`compareAt` 0: sellers show no 'was' price, and the agent no longer has to make one up). Research's card (`<s>{cents(p.compareAt)}</s>`) and detail ("Compare at") would show it as $0.00: hide it when it isn't above the price. "Send to store" already creates such a product with no compare-at (core's CORE-104).
+- [x] (from agents, AGT-206) A Product Hunter find can come without a compare-at now (`compareAt` 0: sellers show no 'was' price, and the agent no longer has to make one up). Research's card (`<s>{cents(p.compareAt)}</s>`) and detail ("Compare at") would show it as $0.00: hide it when it isn't above the price. "Send to store" already creates such a product with no compare-at (core's CORE-104).
 - [x] (from agents) XP history is live: `GET /api/agents/:id/xp?limit=` → `XpEvent[]` newest first (default 50, max 200; 404 for an unknown agent). A demo agent's list starts with one "Demo squad starting XP" line (AGT-132); a new store's agents start empty, where an empty state like "No XP earned here yet" reads better than hiding the panel.
 - [x] (from agents, AGT-124) Store Builder: `POST /api/page-drafts/:id/publish` now takes an `approved` draft too (approved, but the push to the platform failed: Shopify 5xx, rate limit), so the owner can try again; it no longer answers 409 for it. `Builder.tsx` ~166 `canPublish` leaves `approved` out, so the only ways out today are Discard or "Apply it by hand", and the draft keeps blocking new page drafts for that product. Add `approved` to `canPublish` (a "Try again" label reads right) and keep the by-hand line as the alternative. The server pushes a draft once at a time, so a click while the approval's own push runs is a no-op.
 - [x] (from core) Competitor prices have their currency: `PriceChange.currency?` and `PriceSnapshotData.currency?` (ISO code, the competitor shop's own) for Shopify, WooCommerce and Etsy competitors read from now on. Absent on older snapshots and the demo competitors, so keep the store's currency as the fallback.
@@ -402,6 +402,8 @@ Orca's browser against the reference before ticking it.
 - [x] UI-153 Store Analytics' Profit view now says when it leaves out fees too (UI-151 only covered the Dashboard):
       "Leaves out platform and payment fees for <stores>: no fee estimate. Set one in Settings". `noFeeEstimate` moved
       to lib/analytics so both pages share it.
+- [x] UI-154 (Inbox, from agents, AGT-206) A find without a compare-at (0) no longer shows a struck-through $0.00 on
+      its Research card or "Compare at $0.00" in its details: both show it only when it's above the price.
 
 ## Blocked
 
@@ -600,3 +602,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-151: `noFeeEstimate(stores)` in Dashboard.tsx, tested (red first). "N costs missing" keeps the slot when both apply. Orca with Pawsome patched live and fee-less and costs filled (read-only): Profit reads "Profit | Fees left out", title names Pawsome Gear, href /settings
 - 2026-10-26 — UI-152: `breakEvenRoas` returns NaN with no revenue (roasTone leaves NaN neutral), tested red first. Orca with the summary patched to no sales (read-only): campaign ROAS cells text-good → text-text, Break-even ROAS n/a, footer "No sales this period..."
 - 2026-10-26 — UI-153: helper and its test moved to lib/analytics (pages are lazy chunks). Orca with Pawsome patched live and fee-less (read-only): hidden on Revenue, shown on Profit under the total, link to /settings
+- 2026-10-26 — UI-154: two Research tests (red first). Approval cards already drop a 0 compare-at (lib/approvals). Orca with the first find patched to compareAt 0 (read-only): card "$14.32 | +248%", details Cost/Sell at/Margin/Demand/Ships in

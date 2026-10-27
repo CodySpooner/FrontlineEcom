@@ -141,3 +141,21 @@ describe("a custom niche's find", () => {
     expect(await screen.findByText('Beauty · TikTok · Yoga mats')).toBeTruthy();
   });
 });
+
+describe('a find with no compare-at', () => {
+  const plain = { ...product, compareAt: 0 };
+
+  it('shows no struck-through $0.00 on its card', async () => {
+    stubApi((url) => (url.startsWith('/api/research?') ? { items: [plain], total: 1, offset: 0, limit: 30 } : []));
+    renderApp(<Research />);
+    await screen.findByRole('heading', { level: 3, name: product.title });
+    expect(screen.queryByText('$0.00')).toBeNull();
+  });
+
+  it('leaves Compare at out of its details', async () => {
+    stubApi(() => []);
+    renderApp(<ProductDetails p={plain} />);
+    await screen.findByText('Sell at');
+    expect(screen.queryByText('Compare at')).toBeNull();
+  });
+});
