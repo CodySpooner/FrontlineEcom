@@ -48,7 +48,7 @@ export interface ToolEnv {
   /** Core's supplier catalog search (CJ Dropshipping; demo listings without credentials). */
   searchSuppliers?: (q: string, limit: number) => Promise<SupplierProduct[]>;
   /** Core's research feed (scored trending products). */
-  research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number }) => Promise<ResearchProduct[]>;
+  research?: (q: { tab?: ResearchTab; niche?: string; q?: string; limit: number; sample?: 0 }) => Promise<ResearchProduct[]>;
   /** Core's Shopify theme connector; throws a readable error for stores it can't reach (demo, other platforms). */
   themes?: {
     list: (storeId: string) => Promise<Theme[]>;
@@ -429,12 +429,9 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ tab, q, anyNiche, limit }, ctx) => {
       if (!ctx.research) return 'The research feed is not available.';
-      // The built-in catalog (core's seeded DEMO rows; finds are `find-`) has made-up trend and competition: a live store
-      // works from real finds only.
+      // The sample catalog every install starts with has made-up trend and competition: a live store works from real finds only.
       const live = ctx.store.connected;
-      const items = (await ctx.research({ tab, q, limit: live ? 200 : limit, ...(anyNiche ? {} : { niche: nicheKey(ctx.store) }) })) // other:<slug> for a custom niche
-        .filter((p) => !live || p.id.startsWith('find-'))
-        .slice(0, limit);
+      const items = await ctx.research({ tab, q, limit, ...(live ? { sample: 0 as const } : {}), ...(anyNiche ? {} : { niche: nicheKey(ctx.store) }) }); // other:<slug> for a custom niche
       if (live && !items.length) return 'No finds yet (the built-in sample catalog is left out for a live store). Find products with WebSearch, cost them with search_suppliers and record them with record_product_find.';
       return (await usdNote(ctx)) + csv(
         items.map((p) => ({ id: p.id, title: p.title, category: p.category, source: p.source, cost: p.cost, price: p.price, compare_at: p.compareAt, margin_pct: p.margin, trend_pct: p.trend, competition: p.competition, shipping_days: p.shippingDays, score: p.score })),

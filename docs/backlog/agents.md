@@ -322,6 +322,7 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-185 follow-up: `research_feed` asks core for `sample=0` (its reply, 9468e994) instead of reading 200 rows and dropping non-`find-` ones.
 - 2026-10-26 — AGT-189: `startFresh` cancels the store's unended missions (their running steps stop, the live feed hears) and counts them in the "starts fresh" notice.
 - 2026-10-26 — AGT-188: `startFresh` deletes the store's flow drafts and counts them in the "starts fresh" notice, as it does unpublished product page drafts.
 - 2026-10-26 — AGT-187: on a connected store with no Higgsfield integration, `create_creative` refuses media before asking and points to saving the copy; demo stores keep demo renders.
