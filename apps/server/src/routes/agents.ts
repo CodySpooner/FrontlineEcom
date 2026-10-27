@@ -388,10 +388,12 @@ function startFresh(db: Db, store: Store, runs: RunManager) {
     const mission = cancelMission(db, id, runs.cancel);
     if (mission) publish({ type: 'mission', mission });
   }
+  // "Ready to launch" ads and copy for the demo catalog, which the store doesn't sell. Paid Higgsfield renders stay.
+  const creatives = db.prepare(`DELETE FROM creatives WHERE store_id = ? AND source != 'higgsfield'`).run(store.id).changes;
   // What it shared with its niche came from the same demo numbers, and every store of the niche reads it (AGT-164).
   const shared = db.prepare('DELETE FROM niche_learnings WHERE store_id = ?').run(store.id).changes;
   const n = (k: number | bigint, what: string) => k && `${k} ${what}${Number(k) === 1 ? '' : 's'}`;
-  const parts = [n(memories, 'learning'), n(shared, 'niche learning'), n(pending.length, 'request'), n(issues, 'order issue'), n(flows, 'flow draft'), n(missions.length, 'running mission')].filter(Boolean);
+  const parts = [n(memories, 'learning'), n(shared, 'niche learning'), n(pending.length, 'request'), n(issues, 'order issue'), n(flows, 'flow draft'), n(creatives, 'creative'), n(missions.length, 'running mission')].filter(Boolean);
   if (parts.length) {
     notify(db, {
       kind: 'info', title: `${store.name}: the squad starts fresh on real numbers`, storeId: store.id, link: '/knowledge',
