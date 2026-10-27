@@ -133,6 +133,9 @@ test("a store with no sales yet is judged on its catalog's margin, not as if eve
   // Margin 60%, AOV 30: break-even 1.67, max CPA 18, so 15 spent with no sale is still learning, not "pause".
   expect(outputs[0]).toContain("margin after cost, tax and fees 60%, AOV 30, break-even ROAS 1.67, target ROAS 2.17, max CPA 18 (no sales in 30 days: from the active products' prices and unit costs)");
   expect(outputs[0]!.split('\n').find((r) => r.startsWith('meta,launch,'))!.split(',')[9]).toBe('learning');
+  // No unit costs either: nothing to judge against, rather than "pause" for all of it.
+  db.prepare(`UPDATE products SET cost = 0 WHERE store_id = 'pawsome'`).run();
+  expect((await run([{ call: 'review_campaigns' }])).outputs[0]).toMatch(/^No break-even ROAS to judge campaigns against: no sales in 30 days and no active product with both a price and a unit cost\./);
 });
 
 test("an old account's paused campaigns with no spend are left out; one that is on but spends nothing stays", async () => {

@@ -890,6 +890,12 @@ export const APP_TOOLS: AppTool[] = [
     input: { days: z.number().int().min(3).max(30).default(7) },
     run: async ({ days }, ctx) => {
       const econ = economics(ctx.db, ctx.store.id, since(30, ctx.store));
+      // No sales and no costed product (a launch with no unit costs, or ads synced before the shop): margin 0 read every
+      // campaign that spent a cent as "pause", even ones the ad network credits with sales.
+      if (!econ.aov) {
+        return 'No break-even ROAS to judge campaigns against: no sales in 30 days and no active product with both a price and a unit cost. ' +
+          'Propose no cut or pause on these numbers; ask the owner to enter unit costs (Shopify "Cost per item", else Products here). Raw numbers: list_campaigns.';
+      }
       const t = thresholds(econ);
       const rows = campaignStats(ctx, days);
       // Losing campaigns come out as "scale" when break-even ROAS reads low. ponytail: no per-product list.
