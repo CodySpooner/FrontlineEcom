@@ -482,6 +482,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-178 Numbers written two ways: the Dashboard's ROAS tile said "2.7x" while every other ROAS reads "1.72×", and
       Analytics' percentages used a hyphen ("-5.3%") beside money's true minus ("−$12") in the same row. The tile uses ×
       (one decimal, as in the mockup) and a shared `pct` writes "−5.3%", never "−0.0%".
+- [x] UI-179 Tracking a competitor refused a shop's domain as owners type it ("rivalshop.com"): the Website field was a
+      browser URL field, so it wouldn't submit without https:// and said only "Please enter a URL". It takes the bare
+      domain now and adds https:// itself (a typed http:// or https:// address is kept).
 
 ## Blocked
 
@@ -707,3 +710,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-176: niceTicks(v, lo) reaches a round step under lo (unchanged when lo ≥ 0, so revenue charts are as before); shortMoney signs negatives; AreaChart scales from the lowest tick. Tests red first: niceTicks, shortMoney, and a new AreaChart.test (a −$50 day is drawn under the $0 gridline). Orca, Peak Fit alone, Profit 30D (real demo data): axis −$100…$50, 17 of 29 solid points under $0, tooltip −$44
 - 2026-10-26 — UI-177: addedProducts drops a compareAt at or under the price. Test red first. Orca with a fake pending request (GET fixture, writes blocked): "Fake Jade Roller $24.00 · was $39.00 · 79% margin", "Fake Clay Mask $24.00 · 79% margin". Same session, no change needed: no page overflows at 900 or 1920 px
 - 2026-10-26 — UI-178: Analytics' local pct moved to lib/format (test red first). Orca: the tile reads "2.7×"; Analytics shows "−0.1%", "8.2% of previous"
+- 2026-10-26 — UI-179: inputMode=url text field, scheme added on submit. Test red first (jsdom's URL validation blocked the submit, as the browser did). Orca, with the POST answered by a client patch (nothing sent, every other write blocked): "fakerivalpets.com" went out as https://fakerivalpets.com and the form cleared

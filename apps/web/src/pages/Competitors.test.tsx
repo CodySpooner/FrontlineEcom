@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderApp, stubApi } from '../test-utils';
 import { Competitors } from './Competitors';
 
@@ -51,5 +51,19 @@ describe("a rival's ads", () => {
     expect(await screen.findByText(/Ads are recorded for demo competitors only/)).toBeTruthy();
     expect(screen.getByRole('link', { name: /Meta's Ad Library/ }).getAttribute('href')).toContain('q=Wag+%26+Wander');
     expect(screen.getByText('12 products tracked')).toBeTruthy();
+  });
+});
+
+describe('track a competitor', () => {
+  it('takes a bare domain, the way owners type it, and adds https://', async () => {
+    const fetch = stubApi((url) => (url.startsWith('/api/stores') ? [{ id: 'pawsome', name: 'Pawsome Gear', currency: 'USD' }] : []));
+    renderApp(<Competitors />);
+    fireEvent.change(await screen.findByLabelText('Name'), { target: { value: 'Rival Pets' } });
+    fireEvent.change(screen.getByLabelText('Website'), { target: { value: ' rivalpets.com/ ' } });
+    await screen.findByRole('option', { name: 'Pawsome Gear' });
+    fireEvent.click(screen.getByRole('button', { name: 'Start tracking' }));
+    await waitFor(() => expect(fetch.mock.calls.some(([u, i]) => u === '/api/competitors' && i?.method === 'POST')).toBe(true));
+    const [, init] = fetch.mock.calls.find(([u, i]) => u === '/api/competitors' && i?.method === 'POST')!;
+    expect(JSON.parse(String(init!.body))).toEqual({ storeId: 'pawsome', name: 'Rival Pets', url: 'https://rivalpets.com/' });
   });
 });

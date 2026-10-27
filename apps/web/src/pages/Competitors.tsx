@@ -109,7 +109,9 @@ function AddCompetitor() {
   const store = storeId || ids[0] || stores[0]?.id || '';
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    add.mutate({ storeId: store, name: name.trim(), url: url.trim() }, { onSuccess: () => (setName(''), setUrl('')) });
+    // Owners type a shop's domain ("rivalshop.com"): the watch needs its https:// address.
+    const site = /^https?:\/\//i.test(url.trim()) ? url.trim() : `https://${url.trim()}`;
+    add.mutate({ storeId: store, name: name.trim(), url: site }, { onSuccess: () => (setName(''), setUrl('')) });
   };
   return (
     <form onSubmit={submit} className="mt-4 grid gap-2 border-t border-line pt-4">
@@ -121,7 +123,7 @@ function AddCompetitor() {
         </label>
         <label className="grid gap-1 text-xs text-muted">
           Website
-          <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="https://…" className={cx(inputClass, 'text-text')} />
+          <input inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="e.g. wagwander.com" className={cx(inputClass, 'text-text')} />
         </label>
       </div>
       <p className="text-xs text-muted">Prices are checked daily for Shopify and WooCommerce stores, and for Etsy shops (etsy.com/shop/…) once you connect an Etsy store.</p>
