@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ago, cents, day, fitMoney, modelName, money, noBaseline, shortMoney, signedPct } from './format';
+import { ago, cents, day, fitMoney, modelName, money, noBaseline, pct, shortMoney, signedPct } from './format';
 
 describe('format', () => {
   it('formats money with a real minus sign for losses', () => {
@@ -28,6 +28,11 @@ describe('format', () => {
     expect(money(-5, 'GBP')).toBe('−£5');
     expect(cents(41.5, 'CAD')).toBe('CA$41.50');
     expect(shortMoney(4500, 'EUR')).toBe('€4.5K');
+  });
+  it('writes a share with a true minus, like money', () => {
+    expect(pct(41.62)).toBe('41.6%');
+    expect(pct(-5.27)).toBe('−5.3%');
+    expect(pct(-0.04)).toBe('0.0%');
   });
   it('signs deltas', () => {
     expect(signedPct(18.44)).toBe('+18.4%');

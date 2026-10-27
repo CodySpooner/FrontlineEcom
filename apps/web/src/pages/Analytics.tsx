@@ -11,7 +11,7 @@ import { PLATFORM_NAME } from '../components/StoreForm';
 import { Badge, Button, ErrorState, inputClass, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
 import { breakEvenRoas, byNetwork, noFeeEstimate, rate, roasTone, times } from '../lib/analytics';
 import { PERIOD, RANGES, weekly } from '../lib/chart';
-import { cents, fmtDay, money, noBaseline, signedPct } from '../lib/format';
+import { cents, fmtDay, money, noBaseline, pct, signedPct } from '../lib/format';
 import { stockLeft } from '../lib/stock';
 import { NAV } from '../nav';
 
@@ -23,7 +23,6 @@ const METRICS: { value: Metric; label: string }[] = [
 ];
 const NETWORK: Record<AdNetwork, string> = { meta: 'Meta', tiktok: 'TikTok', google: 'Google' };
 const TONE = { bad: 'text-red', ok: 'text-text', good: 'text-good' };
-const pct = (n: number) => `${n.toFixed(1)}%`;
 const num = (n: number) => n.toLocaleString('en-US');
 
 export function Analytics() {

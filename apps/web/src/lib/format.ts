@@ -23,6 +23,12 @@ export const shortMoney = (v: number, currency = 'USD') => {
   return a >= 1e6 ? `${s}${+(a / 1e6).toFixed(1)}M` : a >= 1000 ? `${s}${+(a / 1000).toFixed(1)}K` : `${s}${Math.round(a)}`;
 };
 
+/** "41.6%" / "−5.3%" (a losing product's margin); anything that rounds to 0.0 reads "0.0%". */
+export const pct = (n: number) => {
+  const r = Math.round(n * 10) / 10;
+  return (r < 0 ? '−' : '') + Math.abs(r).toFixed(1) + '%';
+};
+
 /** "+18.4%" / "−8.1%"; anything that rounds to 0.0 reads "+0.0%", never "−0.0%". */
 export const signedPct = (d: number) => {
   const r = Math.round(d * 10) / 10;

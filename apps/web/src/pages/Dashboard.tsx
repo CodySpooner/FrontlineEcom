@@ -150,7 +150,7 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
         series={series.map((p) => p.profit)}
       />
       <Kpi label="Ad Spend" value={fitMoney(t.adSpend, s.currency)} d={d.adSpend} fresh={fresh('adSpend')} series={series.map((p) => p.adSpend)} />
-      <Kpi label="ROAS" value={t.adSpend ? `${t.roas.toFixed(1)}x` : '–'} d={d.roas} fresh={fresh('roas')} series={series.map((p) => p.roas)} />
+      <Kpi label="ROAS" value={t.adSpend ? `${t.roas.toFixed(1)}×` : '–'} d={d.roas} fresh={fresh('roas')} series={series.map((p) => p.roas)} />
       <Kpi label="Total Orders" extra={`AOV ${cents(t.aov, s.currency)}`} value={t.orders.toLocaleString('en-US')} d={d.orders} fresh={fresh('orders')} series={series.map((p) => p.orders)} />
     </div>
   );
