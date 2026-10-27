@@ -9,6 +9,7 @@ import { Hero } from '../components/Hero';
 import { DemoMixNote, StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
 import { PLATFORM_NAME } from '../components/StoreForm';
 import { Badge, Button, ErrorState, inputClass, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
+import { researchHref } from '../knowledge/url';
 import { breakEvenRoas, byNetwork, noFeeEstimate, rate, roasTone, times } from '../lib/analytics';
 import { PERIOD, RANGES, weekly } from '../lib/chart';
 import { cents, fmtDay, money, noBaseline, pct, signedPct } from '../lib/format';
@@ -392,7 +393,7 @@ export function TopTable({ rows, name, cur, stock }: { rows: TopProduct[]; name?
 }
 
 /** Each campaign is judged against its own store's break-even (margins differ per store); `be` is the blended one. */
-function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number; beOf: (storeId: string) => number; name?: (id: string) => string; cur?: string }) {
+export function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number; beOf: (storeId: string) => number; name?: (id: string) => string; cur?: string }) {
   const cs = q.data ?? [];
   return (
     <Panel title="Campaigns" sub={`${cs.length} campaigns, biggest spend first`}>
@@ -426,6 +427,10 @@ function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number; beOf:
                     <div className="text-xs text-muted">
                       {NETWORK[c.network]}
                       {name && ` · ${name(c.storeId)}`}
+                      {' · '}
+                      <Link aria-label={`Research ${c.name}`} to={researchHref(c.storeId, `How to make the "${c.name}" ${NETWORK[c.network]} campaign more profitable`)} className="hover:text-white hover:underline">
+                        Research this
+                      </Link>
                     </div>
                   </td>
                   <td>{c.status === 'active' ? <span className="text-text-2">Active</span> : <Badge>{c.status === 'paused' ? 'Paused' : 'Archived'}</Badge>}</td>

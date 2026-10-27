@@ -1,7 +1,7 @@
 // The artboard (design A, `docs/reference/kb-atlas.png`): the workspace's cards in category frames on a pannable,
 // zoomable dot grid. Geometry lives in ./layout.
 import { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
-import { Brain, ChevronDown, ChevronUp, Minus, Plus } from 'lucide-react';
+import { Brain, ChevronDown, ChevronUp, Minus, Plus, Radar } from 'lucide-react';
 import { KB_CARD_TYPES, KB_LINK_TYPES, KB_STAGES, type KbLink, type KbStage, type KbViewState, type Store } from '@frontline/shared';
 import { useKbCards, useKbLinks, useKbPositions, useKbTasks, useSaveKbPositions } from '../api/client';
 import { useStoreSelection } from '../components/StoreFilter';
@@ -290,7 +290,7 @@ export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; 
             })}
           </svg>
           {shown.frames.map((f) => (
-            <FrameBox key={f.id} f={f} onToggle={() => setCollapsed((s) => (s.has(f.id) ? new Set([...s].filter((x) => x !== f.id)) : new Set([...s, f.id])))} />
+            <FrameBox key={f.id} f={f} onResearch={() => set({ ask: f.path.join(' › '), cat: f.id })} onToggle={() => setCollapsed((s) => (s.has(f.id) ? new Set([...s].filter((x) => x !== f.id)) : new Set([...s, f.id])))} />
           ))}
           {shown.cards.map((p) => {
             const xy = at(p);
@@ -398,7 +398,7 @@ const ZoomButton = ({ label, onClick, children }: { label: string; onClick: () =
   </button>
 );
 
-function FrameBox({ f, onToggle }: { f: Frame; onToggle: () => void }) {
+function FrameBox({ f, onResearch, onToggle }: { f: Frame; onResearch: () => void; onToggle: () => void }) {
   const name = f.path.at(-1)!;
   return (
     <section aria-label={f.path.join(', ')} className="absolute rounded-[14px] border border-[#222228] bg-[rgba(19,19,22,.55)]" style={{ left: f.x, top: f.y, width: f.w, height: f.h }}>
@@ -416,7 +416,18 @@ function FrameBox({ f, onToggle }: { f: Frame; onToggle: () => void }) {
           {f.count} card{f.count === 1 ? '' : 's'}
         </span>
         <span className="flex-1" />
-        {/* Off the tab order: the canvas is one tab stop, and the Outline opens and closes frames from the keyboard. */}
+        {/* Off the tab order: the canvas is one tab stop; the Outline opens and closes frames from the keyboard, and a card's
+            details panel has Research this. */}
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={`Research ${name}`}
+          title="Research this"
+          onClick={onResearch}
+          className="grid size-6 cursor-pointer place-items-center rounded-md border border-[#2a2a31] text-muted transition hover:text-white"
+        >
+          <Radar className="size-3.5" />
+        </button>
         <button
           type="button"
           tabIndex={-1}

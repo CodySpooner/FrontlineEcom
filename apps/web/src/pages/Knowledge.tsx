@@ -50,7 +50,9 @@ export function Knowledge() {
   const q = params.get('q') ?? '';
   const card = params.get('card') ?? undefined;
   const task = params.get('task') ?? undefined;
-  const [fromSource, setFromSource] = useState(false);
+  // "Research this" (a card, a frame, or a link from elsewhere) opens New research on `ask`, filed to category `cat`.
+  const ask = params.get('ask') ?? undefined;
+  const [form, setForm] = useState<'source' | 'topic'>();
   const set: SetParams = (changes) => setParams((p) => withParams(p, changes), { replace: true });
   const search = useRef<HTMLInputElement>(null);
 
@@ -82,7 +84,7 @@ export function Knowledge() {
   return (
     <>
       <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
-      <Toolbar ws={ws} view={view} general={general} q={q} set={set} search={search} onFromSource={() => setFromSource(true)}>
+      <Toolbar ws={ws} view={view} general={general} q={q} set={set} search={search} onResearch={setForm}>
         {view !== 'artboard' && <div className="ml-auto">{switcher}</div>}
       </Toolbar>
       {view === 'artboard' ? (
@@ -103,18 +105,21 @@ export function Knowledge() {
       )}
       <ResearchDialog
         ws={ws}
-        open={fromSource || !!task}
+        open={!!form || !!task || ask !== undefined}
+        mode={form ?? (ask !== undefined ? 'topic' : undefined)}
         task={task}
+        ask={ask}
+        categoryId={params.get('cat') ?? undefined}
         onStarted={(id) => {
-          setFromSource(false);
-          set({ task: id });
+          setForm(undefined);
+          set({ task: id, ask: undefined, cat: undefined });
         }}
         onClose={() => {
-          setFromSource(false);
-          set({ task: undefined });
+          setForm(undefined);
+          set({ task: undefined, ask: undefined, cat: undefined });
         }}
         onOpenCard={(id) => {
-          setFromSource(false);
+          setForm(undefined);
           set({ task: undefined, view: 'library', card: id });
         }}
       />
@@ -123,7 +128,7 @@ export function Knowledge() {
 }
 
 /** Workspace, Include General, search and the research actions; `children` (the view switcher) sits at the right end. */
-function Toolbar({ ws, view, general, q, set, search, onFromSource, children }: { ws: string; view: KbView; general: boolean; q: string; set: SetParams; search: RefObject<HTMLInputElement | null>; onFromSource: () => void; children: ReactNode }) {
+function Toolbar({ ws, view, general, q, set, search, onResearch, children }: { ws: string; view: KbView; general: boolean; q: string; set: SetParams; search: RefObject<HTMLInputElement | null>; onResearch: (form: 'source' | 'topic') => void; children: ReactNode }) {
   const stores = useStores().data ?? [];
   const counts = useKbWorkspaces().data ?? {};
   const cards = (key: string) => `${counts[key] ?? 0} card${counts[key] === 1 ? '' : 's'}`;
@@ -157,11 +162,10 @@ function Toolbar({ ws, view, general, q, set, search, onFromSource, children }: 
         <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
         <input ref={search} type="search" value={q} onChange={(e) => set({ q: e.target.value || undefined })} placeholder="Search knowledge…" className={cx(inputClass, 'w-full pl-9')} />
       </label>
-      <Button onClick={onFromSource}>
+      <Button onClick={() => onResearch('source')}>
         <Link2 aria-hidden className="size-4" /> From source
       </Button>
-      {/* New research comes with KB-15; until then it says so instead of doing nothing. */}
-      <Button variant="primary" disabled title="Research isn't switched on yet">
+      <Button variant="primary" onClick={() => onResearch('topic')}>
         <Plus aria-hidden className="size-4" /> New research
       </Button>
       {children}

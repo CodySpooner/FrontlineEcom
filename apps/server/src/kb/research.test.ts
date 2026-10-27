@@ -220,6 +220,19 @@ describe('the research runner', () => {
     ]);
   });
 
+  test("a quick task asks for and reads at most 3 sources; one with no depth (an agent's recommendation) up to 8", async () => {
+    const many = { sources: Array.from({ length: 5 }, (_, i) => ({ url: `https://${i}.test/hooks`, why: 'Relevant' })) };
+    const pages = Object.fromEntries(many.sources.map((s) => [s.url, { status: 'read', title: s.url, text: `Notes ${s.url}` }]));
+    const { seen, settle } = setup({ discovering: () => answer(many) }, pages);
+    const quick = createResearchTask(db, { ...TOPIC, brief: { depth: 'quick' } }, clock);
+    const any = createResearchTask(db, { ...TOPIC, objective: 'Bundles for dog gear' }, clock);
+    await settle();
+    expect(getResearchTask(db, quick.id)!.sources).toHaveLength(3);
+    expect(getResearchTask(db, any.id)!.sources).toHaveLength(5);
+    const asked = seen.filter((i) => stageOf(i.task) === 'discovering').map((i) => i.task.match(/pick up to (\d+)/)?.[1]);
+    expect(asked.sort()).toEqual(['3', '8']);
+  });
+
   test('a long-winded answer is trimmed to fit, not refused (a real planning run wrote a 600+ character scope)', async () => {
     const wordy = { scope: 'x'.repeat(2000), questions: Array.from({ length: 12 }, (_, i) => `Question ${i + 1}?`), queries: ['q'] };
     const { seen, settle } = setup({ planning: () => answer(wordy) });

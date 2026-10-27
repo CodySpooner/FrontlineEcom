@@ -138,8 +138,10 @@ describe('research from source', () => {
   });
 
   test("refuses what it can't research: no sources, bad links, too many, another store, a foreign category, a bad budget or an unreadable file", async () => {
-    expect(await refused({})).toBe('Give at least one link, some text or a document');
-    expect(await refused({ text: '   ' })).toBe('Give at least one link, some text or a document');
+    expect(await refused({})).toBe('Give a research request, or at least one link, some text or a document');
+    expect(await refused({ text: '   ' })).toBe('Give a research request, or at least one link, some text or a document');
+    expect(await refused({ objective: 'ab' })).toBe('objective must be 3-500 characters');
+    expect(await refused({ objective: 'TikTok hooks', depth: 'huge' })).toBe('depth must be quick, standard or deep');
     expect(await refused({ urls: ['ftp://a.test/x'] })).toBe('urls must be web addresses (http or https)');
     expect(await refused({ urls: Array.from({ length: 9 }, (_, i) => `https://a.test/${i}`) })).toBe('At most 8 links in one task');
     expect(await refused({ agentId: 'nope', urls: ['https://a.test/x'] })).toBe('agentId must be an agent');
@@ -150,6 +152,17 @@ describe('research from source', () => {
     expect(await refused({ document: { name: 'a.md' } })).toBe('document must be {name, data} with the file in base64');
     expect(db.prepare(`SELECT count(*) AS n FROM kb_tasks`).get()!.n).toBe(0);
     expect(db.prepare(`SELECT count(*) AS n FROM kb_sources`).get()!.n).toBe(0);
+  });
+
+  test('New research: a request with no sources is a topic task the agent researches on the web, as deep as asked', async () => {
+    const ads = ensureCategoryPath(db, null, ['Advertising']);
+    const t = await start({ agentId: 'pawsome:market_analyst', ws: 'general', objective: '  TikTok hooks that work for pet gear  ', depth: 'quick', categoryId: ads, budgetUsd: 0.5 });
+    expect(t).toMatchObject({ storeId: null, payerId: 'pawsome', role: 'market_analyst', objective: 'TikTok hooks that work for pet gear' });
+    expect(await ok<KbTaskDetail>('GET', `/api/kb/research/tasks/${t.id}`)).toMatchObject({ kind: 'topic', origin: 'owner', categoryId: ads, budgetUsd: 0.5, brief: { depth: 'quick' } });
+    // A request with links is still a source task, named by the request.
+    const s = await start({ objective: 'What this guide says about hooks', urls: ['https://a.test/hooks'] });
+    expect(s).toMatchObject({ objective: 'What this guide says about hooks' });
+    expect(await ok<KbTaskDetail>('GET', `/api/kb/research/tasks/${s.id}`)).toMatchObject({ kind: 'source', brief: { urls: ['https://a.test/hooks'] } });
   });
 
   test('a running task can be stopped, and a stopped or failed one retried; anything else is a 409', async () => {

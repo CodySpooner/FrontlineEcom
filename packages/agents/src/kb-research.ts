@@ -6,7 +6,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
-import { AGENT_ROLES, KB_TASK_STAGES, type Agent, type AgentRole, type KbResearchBrief, type KbResearchReport, type KbSourceBrief, type KbSourceStatus, type KbTaskBrief, type KbTaskDetail, type KbWorkspace, type Store } from '@frontline/shared';
+import { AGENT_ROLES, KB_RESEARCH_DEPTHS, KB_TASK_STAGES, type Agent, type AgentRole, type KbResearchBrief, type KbResearchReport, type KbSourceBrief, type KbSourceStatus, type KbTaskBrief, type KbTaskDetail, type KbWorkspace, type Store } from '@frontline/shared';
 import { createCard, ensureCategoryPath, kbScope } from './kb';
 import { addEvidence, sameCard, suggestLinks } from './kb-links';
 import { saveSource, sourceForAgent, type NewKbSource } from './kb-sources';
@@ -328,7 +328,7 @@ const CODE: Partial<Record<Stage, Code>> = {
     const read: string[] = [];
     const failed: Retrieved['failed'] = [];
     // ponytail: one source at a time, so a slow site holds up other tasks' passes too; fetch in parallel if that bites.
-    for (const url of [...new Set((out<Out['discovering']>(db, id, 'discovering').sources ?? []).map((s) => s.url))].slice(0, MAX_SOURCES)) {
+    for (const url of [...new Set((out<Out['discovering']>(db, id, 'discovering').sources ?? []).map((s) => s.url))].slice(0, sourcesFor(brief))) {
       if (taskRow(db, id)?.status !== 'running') break;
       const f = await deps.fetch(url, { blocked: [] });
       const s = keep({ kind: 'url', url: f.url, title: f.title ?? '', status: f.status, text: f.text, error: f.error, publishedAt: f.publishedAt, fetchedAt: now.toISOString() });
@@ -448,6 +448,9 @@ function report(db: DatabaseSync, id: string): KbResearchReport {
 
 // ---- what each agent stage is asked
 
+/** How many sources a task reads: its depth's, deep (all MAX_SOURCES) when it has none. */
+const sourcesFor = (brief: KbResearchBrief) => KB_RESEARCH_DEPTHS[brief.depth ?? 'deep'].sources;
+
 function taskText(db: DatabaseSync, t: Row, stage: keyof Out, attempt: number): string {
   const id = String(t.id);
   const ws = opt(t.store_id) ?? null;
@@ -472,7 +475,7 @@ function taskText(db: DatabaseSync, t: Row, stage: keyof Out, attempt: number): 
     discovering: () =>
       [
         `Plan: ${plan.scope ?? ''}\nQuestions:\n${(plan.questions ?? []).map((q) => `- ${q}`).join('\n')}\nSearches to try: ${(plan.queries ?? []).join('; ')}`,
-        `Search the web and pick up to ${MAX_SOURCES} public sources worth reading: platform documentation, research, established publications and practitioners with real numbers, over generic listicles. Skip paywalled and sign-in pages. Don't summarize them: the app reads them next.`,
+        `Search the web and pick up to ${sourcesFor(brief)} public sources worth reading: platform documentation, research, established publications and practitioners with real numbers, over generic listicles. Skip paywalled and sign-in pages. Don't summarize them: the app reads them next.`,
       ].join('\n\n'),
     analyzing: () =>
       [

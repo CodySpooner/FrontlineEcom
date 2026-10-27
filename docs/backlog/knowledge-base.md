@@ -515,7 +515,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - live per-source status;
   - a findings review (accept or reject the proposed cards);
   - the final report.
-- [ ] KB-15 **New research and launch points:**
+- [x] KB-15 **New research and launch points:**
   - a free-text request with workspace, agent, depth (quick / standard / deep, mapped to source counts and budget)
     and budget, using the same runner;
   - a plan preview before it spends;
@@ -632,6 +632,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-12 Research runner: `packages/agents/src/kb-research.ts` walks a research task through the ten stages, checkpointing each in `kb_task_steps`. Planning, discovering, analyzing, evaluating, extracting and reporting are research-mode runs of the task's agent: web search only, no app or store tools, 30 turns, at most what the task has left, on Claude even for a demo store. Each answers with one JSON object, which is checked. Retrieving (through the KB-11 fetcher), deduping, storing and linking are code. A failure is retried after 30 s, then 60 s, then fails the task; a stage its agent can't take waits an hour. Cancel, Retry (from the stage that failed) and Refine (a new linked task) are in; a restart resumes from the last finished stage. Each finding's assessment holds a weak or contested card at Hypothesis. The report lists conclusions, open questions, limitations, applications, cards created and updated, unread sources, conflicts and errors. Tasks stream as `kb_task` messages and notify the owner when they end.
 - 2026-10-27 KB-13 KB agent tools: every role has `search_knowledge` and `recommend_research`. Search returns accepted cards of the agent's store and General, never another store's, unreviewed, archived or blocked ones, with hypotheses labelled. A recommendation is a `kb.research` approval; once the owner approves, the app starts the research, paid by that store. Research runs, whatever the role, get web search plus four tools. `fetch_source` reads through the KB-11 reader and keeps the page as a task source. `propose_card` files a proposed card that the ladder stages: forbidden types and stages are refused, and only read sources count. A card that already says it gains the evidence instead, and an archived or rejected one is left alone. `add_evidence` adds evidence for or against (against opens a conflict). `suggest_link` never suggests a pair the owner rejected. The task report now counts cards the tools made or updated.
 - 2026-10-27 KB-14 Research from source: the "From source" toolbar button opens a full form, and the bar sits along the bottom of the Research Center. The owner pastes links or text, or attaches or drops a document (a PDF, text, markdown, .vtt/.srt transcript, CSV or HTML, up to 10 MB). They pick an agent and file to its store or General, optionally to one of its categories, with what to look for and a budget. The dialog then follows the task: each source as it's read, links still waiting, findings, Stop or Retry, and, at the end, the report with the new cards to accept or reject and the cards it added evidence to. The "Research done/failed" notification opens the task (`?task=`).
+- 2026-10-27 KB-15 New research: the owner writes a request and picks the agent, where the findings go, a depth (Quick reads up to 3 sources, Standard 5, Deep 8, each with a suggested budget) and the budget. "Review the plan" then shows what will happen: the agent plans from what the knowledge base already holds, searches and reads up to N public sources, files proposed cards there for review, and writes a report, spending at most $X. Nothing is spent until Start research. "Research this" opens it prefilled from a card's details, an artboard frame (filed to that category), a campaign row in Analytics, and a finished Chat answer.
 
 ## Blocked
 
@@ -757,3 +758,13 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   starts. Checked in the dev app at 1440 and 390 with a seeded finished task (no task run: the dev server is on real
   Claude). Found there, for KB-16: at 390 px the view switcher (Artboard … Research Center) is wider than the screen
   in every view, so the page scrolls sideways.
+- 2026-10-27 KB-15: New research uses the same `POST /api/kb/research/tasks`. With an `objective` and no sources it makes
+  a topic task; with sources, the objective just names a source task. Depth is `KB_RESEARCH_DEPTHS` in shared:
+  sources plus a suggested budget. It's kept in `brief.depth`, and the runner's discovering prompt and retrieving
+  both cap at that number. No depth reads 8, as before, so agents' recommendations are unchanged. The plan preview is
+  the app's plan, built from the form: no agent run before the owner says go. The agent's own plan (scope, questions,
+  searches) is the planning stage, the first thing that spends, and it is in the task's steps (KB-16's drawer).
+  Launch points use one URL, `researchHref(ws, ask, cat?)` → `/knowledge?view=research&ws=…&ask=…[&cat=…]`. On the
+  Knowledge page a card or frame just sets `ask`/`cat` and stays in its view; closing the form drops them. The
+  request is cut to 500 characters, the server's limit. Not done, because the hosts don't exist yet: the Dashboard has
+  no store card and Analytics has no insights panel. Add `researchHref` links when they do.

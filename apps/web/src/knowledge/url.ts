@@ -24,6 +24,9 @@ export function wsFrom(p: URLSearchParams, view: KbView, storeIds: string[] | un
   return picked.length === 1 ? picked[0]! : 'general';
 }
 
+/** "Research this" from anywhere in the app: the Knowledge page's New research, prefilled (the server takes 500 characters). */
+export const researchHref = (ws: string, ask: string, cat?: string) => `/knowledge?${new URLSearchParams({ view: 'research', ws, ask: ask.slice(0, 500), ...(cat ? { cat } : {}) })}`;
+
 /** The query with `changes` applied: a value sets its key, undefined removes it. Other keys stay. */
 export function withParams(p: URLSearchParams, changes: Record<string, string | undefined>) {
   const next = new URLSearchParams(p);

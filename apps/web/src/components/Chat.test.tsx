@@ -52,6 +52,8 @@ describe('chat retry', () => {
     renderApp(<Chat agent={agent} thread={['r1']} onThread={() => {}} />);
     expect(await screen.findByText('Done')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+    // It offers to research the question further instead (KB-15).
+    expect(screen.getByRole('link', { name: 'Research this' }).getAttribute('href')).toBe('/knowledge?view=research&ws=peak&ask=Draft+3+headlines');
   });
 });
 

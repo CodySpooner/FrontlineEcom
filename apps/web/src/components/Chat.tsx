@@ -8,6 +8,7 @@ import { expiredWhy, shownReason } from '../lib/approvals';
 import { cents, money } from '../lib/format';
 import { isLive, toBlocks, toolName } from '../lib/transcript';
 import { budgetFix } from '../lib/usage';
+import { researchHref } from '../knowledge/url';
 import { ApprovalExtras } from './ApprovalExtras';
 import { Portrait } from './Art';
 import { Badge, Button, cx, EmptyState, inputClass, LoadingState, Panel, StatusDot } from './ui';
@@ -182,7 +183,12 @@ export function Transcript({ run, role, onRetry }: { run: AgentRunDetail; role: 
                 )}
               </>
             ) : run.status === 'done' ? (
-              `Done${run.usage.costUsd ? ` · ${cents(run.usage.costUsd)}` : ''}`
+              <>
+                {`Done${run.usage.costUsd ? ` · ${cents(run.usage.costUsd)}` : ''}`}
+                <Link to={researchHref(run.storeId, run.task)} className="underline-offset-2 hover:text-white hover:underline">
+                  Research this
+                </Link>
+              </>
             ) : run.status === 'cancelled' ? (
               'Stopped'
             ) : (

@@ -1546,24 +1546,38 @@ export interface KbTaskBrief {
   error?: string;
 }
 
+/** How far New research goes: the most sources it reads, and the budget the form suggests for it. */
+export const KB_RESEARCH_DEPTHS = {
+  quick: { label: 'Quick', sources: 3, budgetUsd: 0.5 },
+  standard: { label: 'Standard', sources: 5, budgetUsd: 1.5 },
+  deep: { label: 'Deep', sources: 8, budgetUsd: 3 },
+} as const;
+export type KbResearchDepth = keyof typeof KB_RESEARCH_DEPTHS;
+
 /** What the owner gave a research task: links and pasted text to read (a source task), and what to look for. */
 export interface KbResearchBrief {
   urls?: string[];
   text?: string;
   lookFor?: string;
+  /** A topic task's depth (none = deep). */
+  depth?: KbResearchDepth;
   /** Uploaded documents: read and kept as sources when the task was made. */
   documentIds?: string[];
 }
 
 /**
- * POST /api/kb/research/tasks → 201 KbTaskBrief: Research From Source. The agent works on its store's AI budget and files
- * to General or that store (`ws`), never another. At least one of: up to 8 links, pasted text (≤ 200,000 characters), or
- * a document (a PDF, text, markdown, transcript, CSV or HTML file, in base64, ≤ 10 MB). GET /api/kb/research/tasks/:id →
- * KbTaskDetail; POST …/:id/cancel and …/:id/retry → KbTaskBrief, 409 when it can't.
+ * POST /api/kb/research/tasks → 201 KbTaskBrief: Research From Source, or New research. The agent works on its store's AI
+ * budget and files to General or that store (`ws`), never another. Sources are up to 8 links, pasted text (≤ 200,000
+ * characters) or a document (a PDF, text, markdown, transcript, CSV or HTML file, in base64, ≤ 10 MB). With none, the
+ * `objective` (New research) makes a topic task that searches the web, as far as `depth` says. GET
+ * /api/kb/research/tasks/:id → KbTaskDetail; POST …/:id/cancel and …/:id/retry → KbTaskBrief, 409 when it can't.
  */
 export interface KbSourceResearchInput {
   agentId: string;
   ws: string;
+  /** The research request; for a source task, it names the task (else `lookFor` or the sources do). */
+  objective?: string;
+  depth?: KbResearchDepth;
   urls?: string[];
   text?: string;
   document?: { name: string; data: string };

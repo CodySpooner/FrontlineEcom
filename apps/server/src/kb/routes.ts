@@ -33,7 +33,7 @@ import {
   updateCard,
   updateCategory,
 } from '@frontline/agents';
-import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbSourceReliability, type KbView, type KbWorkspace } from '@frontline/shared';
+import { AGENT_ROLES, KB_CARD_TYPES, KB_RESEARCH_DEPTHS, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbResearchDepth, type KbSourceReliability, type KbView, type KbWorkspace } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { publish } from '../live';
 import { advanceKbResearch, runManager } from '../routes/agents';
@@ -63,8 +63,11 @@ const toView = (r: Record<string, unknown>): KbView => ({ id: String(r.id), stor
 const isWebUrl = (u: unknown) => typeof u === 'string' && /^https?:\/\//i.test(u) && URL.canParse(u);
 const taskExists = (db: Db, id: string) => !!db.prepare('SELECT 1 FROM kb_tasks WHERE id = ?').get(id);
 
-/** Research From Source: what's wrong with the owner's request, or the task, made with its uploaded document kept as a source. */
-async function sourceTask(db: Db, b: Obj) {
+/**
+ * Research From Source, or New research (an objective and no sources): what's wrong with the owner's request, or the
+ * task, made with its uploaded document kept as a source.
+ */
+async function ownerTask(db: Db, b: Obj) {
   const agent = typeof b.agentId === 'string' ? getAgent(db, b.agentId) : undefined;
   if (!agent) return 'agentId must be an agent';
   const ws = wsOf(db, b.ws);
@@ -74,24 +77,31 @@ async function sourceTask(db: Db, b: Obj) {
   if (urls.length > 8) return 'At most 8 links in one task';
   if (b.text !== undefined && !text(b.text, 0, 200_000)) return 'text must be at most 200,000 characters';
   if (b.lookFor !== undefined && !text(b.lookFor, 0, 500)) return 'lookFor must be at most 500 characters';
+  if (b.objective !== undefined && !text(b.objective, 3, 500)) return 'objective must be 3-500 characters';
+  if (b.depth !== undefined && !Object.hasOwn(KB_RESEARCH_DEPTHS, String(b.depth))) return 'depth must be quick, standard or deep';
   if (b.categoryId !== undefined && !kbRow(db, 'kb_categories', String(b.categoryId), ws)) return 'categoryId must be a category of that workspace';
   if (typeof b.budgetUsd !== 'number' || !(b.budgetUsd >= 0.1 && b.budgetUsd <= 20)) return 'budgetUsd must be between $0.10 and $20';
   const doc = b.document;
   if (doc !== undefined && !(isObj(doc) && text(doc.name, 1, 200) && typeof doc.data === 'string')) return 'document must be {name, data} with the file in base64';
   const pasted = typeof b.text === 'string' ? b.text.trim() : '';
-  if (!urls.length && !pasted && !doc) return 'Give at least one link, some text or a document';
+  const objective = typeof b.objective === 'string' ? b.objective.trim() : '';
+  if (!urls.length && !pasted && !doc && !objective) return 'Give a research request, or at least one link, some text or a document';
   const name = doc && String(doc.name).trim();
   const read = name ? await readUpload(name, Buffer.from(String(doc.data), 'base64')) : undefined;
   if (read && read.status !== 'read') return `${name}: ${read.error}`;
   const lookFor = typeof b.lookFor === 'string' ? b.lookFor.trim() : '';
+  const topic = !urls.length && !pasted && !doc;
   const more = urls.length + (pasted ? 1 : 0) + (name ? 1 : 0) - 1;
-  const from = urls.length ? new URL(urls[0]).hostname : (name ?? 'pasted text');
+  const from = urls.length ? new URL(urls[0]).hostname : (name || 'pasted text');
   return tx(db, () => {
     const at = new Date().toISOString();
     const kept = read && saveSource(db, ws, { kind: 'document', title: read.title || name!, status: 'read', text: read.text, publishedAt: read.publishedAt, fetchedAt: at });
     const t = createResearchTask(db, {
-      ws, payerId: agent.storeId, role: agent.role, kind: 'source', origin: 'owner', objective: lookFor || `Research from ${from}${more ? ` and ${more} more` : ''}`,
-      brief: { ...(urls.length ? { urls } : {}), ...(pasted ? { text: pasted } : {}), ...(lookFor ? { lookFor } : {}), ...(kept ? { documentIds: [kept.id] } : {}) },
+      ws, payerId: agent.storeId, role: agent.role, kind: topic ? 'topic' : 'source', origin: 'owner', objective: objective || lookFor || `Research from ${from}${more ? ` and ${more} more` : ''}`,
+      brief: {
+        ...(urls.length ? { urls } : {}), ...(pasted ? { text: pasted } : {}), ...(lookFor ? { lookFor } : {}), ...(kept ? { documentIds: [kept.id] } : {}),
+        ...(topic && b.depth ? { depth: b.depth as KbResearchDepth } : {}),
+      },
       ...(b.categoryId !== undefined ? { categoryId: String(b.categoryId) } : {}), budgetUsd: b.budgetUsd as number,
     });
     if (kept) db.prepare('INSERT INTO kb_task_sources (task_id, source_id) VALUES (?, ?)').run(t.id, kept.id);
@@ -293,7 +303,7 @@ export function kbRoutes(db: Db) {
     .post('/api/kb/research/tasks', async (c) => {
       const b = await c.req.json().catch(() => null);
       if (!isObj(b)) return c.json({ error: 'body must be an object' }, 400);
-      const t = await sourceTask(db, b);
+      const t = await ownerTask(db, b);
       if (typeof t === 'string') return c.json({ error: t }, 400);
       advanceKbResearch(db);
       return c.json(t, 201);

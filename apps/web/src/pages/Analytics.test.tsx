@@ -1,15 +1,26 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
-import type { AnalyticsSummary, Product, Store } from '@frontline/shared';
+import type { AnalyticsSummary, CampaignStats, Product, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
-import { FunnelPanel, PlatformSplit, TopProducts, TopTable, UnitCosts } from './Analytics';
+import { Campaigns, FunnelPanel, PlatformSplit, TopProducts, TopTable, UnitCosts } from './Analytics';
 
 const product = (id: string, cost: number): Product => ({ id, storeId: 'etsy-shop', title: `Mug ${id}`, price: 24, cost, inventory: 10, status: 'active', margin: 0 });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+});
+
+describe('Campaigns', () => {
+  it('offers to research each campaign, for its own store', () => {
+    stubApi(() => []);
+    const c = { network: 'meta', id: 'c1', storeId: 'pawsome', name: 'Spring sale', status: 'active', dailyBudget: 20, spend: 100, revenue: 150, roas: 1.5, purchases: 3, clicks: 40, impressions: 2000 } as CampaignStats;
+    renderApp(<Campaigns q={{ data: [c], isPending: false, isError: false } as never} be={1} beOf={() => 1} />);
+    expect(screen.getByRole('link', { name: 'Research Spring sale' }).getAttribute('href')).toBe(
+      '/knowledge?view=research&ws=pawsome&ask=How+to+make+the+%22Spring+sale%22+Meta+campaign+more+profitable',
+    );
+  });
 });
 
 describe('Unit costs', () => {

@@ -5,6 +5,7 @@ import type { KbTaskDetail } from '@frontline/shared';
 import { Knowledge } from '../pages/Knowledge';
 import { renderApp, stubApi } from '../test-utils';
 import { splitSources } from './Research';
+import { researchHref } from './url';
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }));
 afterEach(() => {
@@ -38,6 +39,8 @@ function open(path: string, detail: KbTaskDetail = task()) {
     if (url.startsWith('/api/kb/categories?ws=pawsome')) return [{ id: 'pawsome-ads', storeId: 'pawsome', parentId: null, name: 'Advertising', position: 1, createdAt: now, cards: 0 }];
     if (url.startsWith('/api/kb/categories?ws=general')) return [{ id: 'general-ads', storeId: null, parentId: null, name: 'Ads', position: 1, createdAt: now, cards: 0 }];
     if (url === '/api/kb/research/tasks/t1') return detail;
+    if (url.startsWith('/api/kb/cards?')) return { items: [cards.c1], total: 1, offset: 0, limit: 200 };
+    if (url.startsWith('/api/kb/positions')) return {};
     const one = url.match(/^\/api\/kb\/cards\/(\w+)\?ws=all$/);
     if (one) return cards[one[1] as keyof typeof cards];
   });
@@ -46,6 +49,7 @@ function open(path: string, detail: KbTaskDetail = task()) {
 }
 const posts = (fetch: ReturnType<typeof stubApi>, url: string) => fetch.mock.calls.filter(([u, i]) => u === url && i?.method && i.method !== 'GET').map(([, i]) => JSON.parse(String(i!.body)));
 const where = () => screen.getByTestId('where').textContent;
+const field = (scope: HTMLElement, label: string) => within(scope).getByLabelText(label) as HTMLInputElement;
 
 describe('Research from source', () => {
   it('splits a paste into its links and, when there is more than links, the text to read', () => {
@@ -101,6 +105,57 @@ describe('Research from source', () => {
     await vi.waitFor(() => expect(posts(fetch, '/api/kb/research/tasks')).toEqual([{ agentId: 'pawsome:market_analyst', ws: 'general', text: 'Our notes: problem-first openings worked in May.', budgetUsd: 2.5 }]));
     await within(dialog).findByRole('list', { name: 'Sources' }); // the same dialog follows the task
     expect(where()).toBe('/knowledge?ws=pawsome&view=library&task=t1');
+  });
+
+  it('New research: a request, agent, destination and depth, then a plan to check before anything is spent', async () => {
+    const fetch = open('/knowledge?ws=pawsome&view=research');
+    fireEvent.click(await screen.findByRole('button', { name: 'New research' }));
+    const dialog = await screen.findByRole('dialog', { name: 'New research' });
+    expect(field(dialog, 'Budget (USD)').value).toBe('1.5'); // Standard
+    fireEvent.change(field(dialog, 'Research request'), { target: { value: ' TikTok hooks that work for anxious dogs ' } });
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Quick' }));
+    expect(field(dialog, 'Budget (USD)').value).toBe('0.5');
+    await vi.waitFor(() => expect((field(dialog, 'Save findings to') as unknown as HTMLSelectElement).options.length).toBe(4));
+    fireEvent.change(field(dialog, 'Save findings to'), { target: { value: 'pawsome|pawsome-ads' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Review the plan' }));
+    const plan = within(dialog).getByRole('list', { name: 'Plan' });
+    expect(within(plan).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
+      'Market Analyst (Pawsome Gear) plans it, starting from what your knowledge base already holds.',
+      'Searches the web and reads up to 3 public sources. Paywalled and sign-in pages are skipped and listed.',
+      'Weighs the evidence and files proposed cards to Pawsome Gear › Advertising for your review, linked to related cards.',
+      'Writes a report: conclusions, open questions and ways to use it.',
+    ]);
+    expect(within(dialog).getByText("Spends at most $0.50 of Pawsome Gear's AI budget. Nothing is spent until you start it.")).toBeTruthy();
+    expect(posts(fetch, '/api/kb/research/tasks')).toEqual([]);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Back' }));
+    expect(field(dialog, 'Research request').value).toBe(' TikTok hooks that work for anxious dogs ');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Review the plan' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Start research' }));
+    await vi.waitFor(() => expect(where()).toBe('/knowledge?ws=pawsome&view=research&task=t1'));
+    expect(posts(fetch, '/api/kb/research/tasks')).toEqual([{ agentId: 'pawsome:market_analyst', ws: 'pawsome', categoryId: 'pawsome-ads', objective: 'TikTok hooks that work for anxious dogs', depth: 'quick', budgetUsd: 0.5 }]);
+  });
+
+  it('"Research this" on a card or a frame opens New research on it, filed to its category, in the same view', async () => {
+    open('/knowledge?ws=pawsome&view=library&card=c1');
+    fireEvent.click(await screen.findByRole('button', { name: 'Research this' }));
+    expect(where()).toBe('/knowledge?ws=pawsome&view=library&card=c1&ask=Open+on+the+problem&cat=pawsome-ads');
+    let dialog = await screen.findByRole('dialog', { name: 'New research' });
+    expect(field(dialog, 'Research request').value).toBe('Open on the problem');
+    await vi.waitFor(() => expect(field(dialog, 'Save findings to').value).toBe('pawsome|pawsome-ads'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(where()).toBe('/knowledge?ws=pawsome&view=library&card=c1');
+    cleanup();
+
+    open('/knowledge?ws=pawsome');
+    fireEvent.click(await screen.findByRole('button', { name: 'Research Advertising' }));
+    expect(where()).toBe('/knowledge?ws=pawsome&ask=Advertising&cat=pawsome-ads');
+    dialog = await screen.findByRole('dialog', { name: 'New research' });
+    expect(field(dialog, 'Research request').value).toBe('Advertising');
+  });
+
+  it('a "Research this" link from elsewhere in the app names the workspace and keeps the request within 500 characters', () => {
+    expect(researchHref('pawsome', 'Why does "Spring sale" lose money?')).toBe('/knowledge?view=research&ws=pawsome&ask=Why+does+%22Spring+sale%22+lose+money%3F');
+    expect(researchHref('general', 'x'.repeat(600), 'c1')).toBe(`/knowledge?view=research&ws=general&ask=${'x'.repeat(500)}&cat=c1`);
   });
 
   it('a finished task shows its report, and the cards it proposed to accept or reject; a failed one can be retried', async () => {

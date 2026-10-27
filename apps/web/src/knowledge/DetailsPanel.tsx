@@ -2,6 +2,7 @@
 // usable beside it. Every field of spec §4, the evidence behind the stage, and the owner's controls from spec §14 with
 // their reversals.
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 import { Pencil, Pin, PinOff, X } from 'lucide-react';
 import { KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCard, type KbCardBrief, type KbCardType, type KbCategory, type KbEvidenceKind, type KbLinkType, type KbSourceBrief, type KbStage } from '@frontline/shared';
 import { useCreateKbCard, useCreateKbLink, useKbCard, useKbCardWrite, useKbCards, useKbCategories, useKbEvidence, useKbLinks, useKbRevisions } from '../api/client';
@@ -9,6 +10,7 @@ import { useStoreSelection } from '../components/StoreFilter';
 import { Button, cx, ErrorState, Field, inputClass, LoadingState, memoryAuthor } from '../components/ui';
 import { ago } from '../lib/format';
 import { escape, LinkPopover } from './ArtboardPanels';
+import { withParams } from './url';
 
 export const PANEL_W = 340;
 const STAGES = Object.keys(KB_STAGES) as KbStage[];
@@ -65,6 +67,7 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
   const board = useKbCards(ws, { general, limit: 1000 });
   // Cards merged into this one, whether or not any evidence came with them: each can be detached again.
   const merged = useKbCards(q.data ? (q.data.storeId ?? 'general') : ws, { status: 'merged', limit: 1000 });
+  const [, setParams] = useSearchParams();
   const write = useKbCardWrite();
   const [editing, setEditing] = useState(false);
   const [tool, setTool] = useState<'link' | 'merge'>();
@@ -259,6 +262,9 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
         </Section>
         <Section title="Manage">
           <div className="flex flex-wrap gap-1.5">
+            <button type="button" title="New research on it, filed to its category" onClick={() => setParams((p) => withParams(p, { ask: card.title, cat: card.categoryId }), { replace: true })} className={small}>
+              Research this
+            </button>
             <button type="button" aria-pressed={card.researchMarked} onClick={() => patch({ researchMarked: !card.researchMarked })} className={small}>
               {card.researchMarked ? 'Unmark for research' : 'Mark for research'}
             </button>

@@ -1,10 +1,11 @@
 // Research From Source (KB-14): the bar under the Research Center, the full form the toolbar opens, and a task as it
 // runs: each source as it's read, the findings, the report, and the cards it proposed for the owner to accept or reject.
+// New research (KB-15): a request the agent researches on the web, with a plan to check before anything is spent.
 import { useState, type DragEvent, type FormEvent, type ReactNode } from 'react';
 import { Paperclip, X } from 'lucide-react';
-import { AGENT_ROLES, KB_CARD_TYPES, KB_STAGES, type KbTaskDetail } from '@frontline/shared';
+import { AGENT_ROLES, KB_CARD_TYPES, KB_RESEARCH_DEPTHS, KB_STAGES, type KbResearchDepth, type KbTaskDetail } from '@frontline/shared';
 import { useAgents, useKbCard, useKbCardWrite, useKbCategories, useKbTask, useKbTaskAction, useStartKbResearch, useStores } from '../api/client';
-import { Badge, Button, buttonClass, cx, Dialog, ErrorState, Field, inputClass, LoadingState } from '../components/ui';
+import { Badge, Button, buttonClass, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Segmented } from '../components/ui';
 import { categoryPaths, FETCH } from './DetailsPanel';
 import { STATUS } from './Library';
 
@@ -26,23 +27,17 @@ const base64 = (f: File) =>
     r.readAsDataURL(f);
   });
 
-/** Links, text or a document, the agent, where its findings go and what to look for; `full` (the dialog) adds the budget. */
-function SourceForm({ ws, full, onStarted }: { ws: string; full?: boolean; onStarted: (taskId: string) => void }) {
+/** Who researches and where its findings go: an agent, and its own store or General (the server holds to that too). */
+function useTarget(ws: string, categoryId?: string) {
   const stores = useStores().data ?? [];
   const agents = (useAgents().data ?? []).filter((a) => a.enabled !== false);
-  const start = useStartKbResearch();
-  const [paste, setPaste] = useState('');
-  const [file, setFile] = useState<File>();
   const [agentId, setAgentId] = useState<string>();
   const [dest, setDest] = useState<string>();
-  const [lookFor, setLookFor] = useState('');
-  const [budget, setBudget] = useState('1');
   const home = ws === 'general' ? stores[0]?.id : ws;
   const agent = agents.find((a) => a.id === agentId) ?? agents.find((a) => a.storeId === home && a.role === 'market_analyst') ?? agents[0];
   const own = useKbCategories(agent?.storeId ?? 'general').data ?? [];
   const general = useKbCategories('general').data ?? [];
   const name = (id: string) => stores.find((s) => s.id === id)?.name ?? id;
-  // Findings go to the agent's own store or to General, never another store (the server says so too).
   const places = agent
     ? [
         { value: `${agent.storeId}|`, label: name(agent.storeId) },
@@ -51,7 +46,42 @@ function SourceForm({ ws, full, onStarted }: { ws: string; full?: boolean; onSta
         ...categoryPaths(general).map((c) => ({ value: `general|${c.id}`, label: `General › ${c.path}` })),
       ]
     : [];
-  const to = places.find((p) => p.value === dest)?.value ?? (ws === 'general' ? 'general|' : `${agent?.storeId}|`);
+  // Launched from a card or a frame, it files to that category; otherwise to the workspace in view.
+  const to =
+    places.find((p) => p.value === dest)?.value ?? places.find((p) => categoryId && p.value.endsWith(`|${categoryId}`))?.value ?? (ws === 'general' ? 'general|' : `${agent?.storeId}|`);
+  const [into, category] = to.split('|');
+  return { agents, agent, setAgentId, places, to, setDest, name, into: into!, categoryId: category || undefined, label: places.find((p) => p.value === to)?.label ?? '' };
+}
+
+function TargetFields({ t, field }: { t: ReturnType<typeof useTarget>; field: string }) {
+  return (
+    <>
+      <Field label="Agent">
+        <select value={t.agent?.id ?? ''} onChange={(e) => t.setAgentId(e.target.value)} className={field}>
+          {t.agents.map((a) => (
+            <option key={a.id} value={a.id}>{`${AGENT_ROLES[a.role].name} · ${t.name(a.storeId)}`}</option>
+          ))}
+        </select>
+      </Field>
+      <Field label="Save findings to">
+        <select value={t.to} onChange={(e) => t.setDest(e.target.value)} className={field}>
+          {t.places.map((p) => (
+            <option key={p.value} value={p.value}>{p.label}</option>
+          ))}
+        </select>
+      </Field>
+    </>
+  );
+}
+
+/** Links, text or a document, the agent, where its findings go and what to look for; `full` (the dialog) adds the budget. */
+function SourceForm({ ws, full, onStarted }: { ws: string; full?: boolean; onStarted: (taskId: string) => void }) {
+  const t = useTarget(ws);
+  const start = useStartKbResearch();
+  const [paste, setPaste] = useState('');
+  const [file, setFile] = useState<File>();
+  const [lookFor, setLookFor] = useState('');
+  const [budget, setBudget] = useState('1');
   const src = splitSources(paste);
   const reads = [src.urls.length && `${src.urls.length} link${src.urls.length === 1 ? '' : 's'}`, src.text && 'the pasted text', file?.name].filter(Boolean);
   const big = !!file && file.size > MAX_MB * 1_048_576;
@@ -63,11 +93,10 @@ function SourceForm({ ws, full, onStarted }: { ws: string; full?: boolean; onSta
   };
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const [into, categoryId] = to.split('|');
     const document = file && { name: file.name, data: await base64(file) };
     start.mutate(
       {
-        agentId: agent!.id, ws: into!, ...(categoryId ? { categoryId } : {}), ...(src.urls.length ? { urls: src.urls } : {}), ...(src.text ? { text: src.text } : {}),
+        agentId: t.agent!.id, ws: t.into, ...(t.categoryId ? { categoryId: t.categoryId } : {}), ...(src.urls.length ? { urls: src.urls } : {}), ...(src.text ? { text: src.text } : {}),
         ...(document ? { document } : {}), ...(lookFor.trim() ? { lookFor: lookFor.trim() } : {}), budgetUsd: Number(budget),
       },
       { onSuccess: (t) => onStarted(t.id) },
@@ -104,20 +133,7 @@ function SourceForm({ ws, full, onStarted }: { ws: string; full?: boolean; onSta
           <span>{big ? <span className="text-red">{`${file!.name} is over the ${MAX_MB} MB limit`}</span> : reads.length ? `Reads ${reads.join(' · ')}` : `A PDF, text, markdown, transcript, CSV or HTML file, up to ${MAX_MB} MB.`}</span>
         </div>
       </div>
-      <Field label="Agent">
-        <select value={agent?.id ?? ''} onChange={(e) => setAgentId(e.target.value)} className={field}>
-          {agents.map((a) => (
-            <option key={a.id} value={a.id}>{`${AGENT_ROLES[a.role].name} · ${name(a.storeId)}`}</option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Save findings to">
-        <select value={to} onChange={(e) => setDest(e.target.value)} className={field}>
-          {places.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
-          ))}
-        </select>
-      </Field>
+      <TargetFields t={t} field={field} />
       <Field label="What to look for (optional)">
         <input type="text" maxLength={500} value={lookFor} onChange={(e) => setLookFor(e.target.value)} placeholder="e.g. hooks that work for anxious dogs" className={field} />
       </Field>
@@ -127,7 +143,7 @@ function SourceForm({ ws, full, onStarted }: { ws: string; full?: boolean; onSta
         </Field>
       )}
       <div className={cx('grid gap-1.5', !full && 'md:pt-5')}>
-        <Button type="submit" variant="primary" disabled={!agent || !reads.length || big || start.isPending}>
+        <Button type="submit" variant="primary" disabled={!t.agent || !reads.length || big || start.isPending}>
           Start research
         </Button>
         {start.error && <p role="alert" className="text-xs text-red">{start.error.message}</p>}
@@ -151,11 +167,99 @@ export function SourceBar({ ws, onStarted }: { ws: string; onStarted: (taskId: s
   );
 }
 
-/** The full form, then (`task`) the task it started, or any task a link opens. */
-export function ResearchDialog({ ws, open, task, onStarted, onClose, onOpenCard }: { ws: string; open: boolean; task?: string; onStarted: (taskId: string) => void; onClose: () => void; onOpenCard: (cardId: string) => void }) {
+const DEPTHS = Object.entries(KB_RESEARCH_DEPTHS).map(([value, d]) => ({ value: value as KbResearchDepth, label: d.label }));
+
+/** New research: a request the agent researches on the web, as deep as asked. The plan shows before anything is spent. */
+function TopicForm({ ws, ask = '', categoryId, onStarted }: { ws: string; ask?: string; categoryId?: string; onStarted: (taskId: string) => void }) {
+  const t = useTarget(ws, categoryId);
+  const start = useStartKbResearch();
+  const [objective, setObjective] = useState(ask);
+  const [depth, setDepth] = useState<KbResearchDepth>('standard');
+  const [budget, setBudget] = useState(String(KB_RESEARCH_DEPTHS.standard.budgetUsd));
+  const [plan, setPlan] = useState(false);
+  const field = cx(inputClass, 'w-full');
+  if (plan && t.agent) {
+    const store = t.name(t.agent.storeId);
+    const go = () =>
+      start.mutate(
+        { agentId: t.agent!.id, ws: t.into, ...(t.categoryId ? { categoryId: t.categoryId } : {}), objective: objective.trim(), depth, budgetUsd: Number(budget) },
+        { onSuccess: (r) => onStarted(r.id) },
+      );
+    return (
+      <div className="grid gap-3">
+        <p className="text-[13px] font-medium text-white">{objective.trim()}</p>
+        <ol aria-label="Plan" className="list-decimal space-y-1 pl-5 text-[13px] text-text-2">
+          <li>{`${AGENT_ROLES[t.agent.role].name} (${store}) plans it, starting from what your knowledge base already holds.`}</li>
+          <li>{`Searches the web and reads up to ${KB_RESEARCH_DEPTHS[depth].sources} public sources. Paywalled and sign-in pages are skipped and listed.`}</li>
+          <li>{`Weighs the evidence and files proposed cards to ${t.label} for your review, linked to related cards.`}</li>
+          <li>Writes a report: conclusions, open questions and ways to use it.</li>
+        </ol>
+        <p className="text-xs text-muted">{`Spends at most $${Number(budget).toFixed(2)} of ${store}'s AI budget. Nothing is spent until you start it.`}</p>
+        {start.error && <p role="alert" className="text-xs text-red">{start.error.message}</p>}
+        <div className="flex justify-end gap-2">
+          <Button onClick={() => setPlan(false)}>Back</Button>
+          <Button variant="primary" disabled={start.isPending} onClick={go}>
+            Start research
+          </Button>
+        </div>
+      </div>
+    );
+  }
   return (
-    <Dialog open={open} onClose={onClose} title={task ? 'Research task' : 'Research from source'}>
-      {task ? <TaskView id={task} onOpenCard={onOpenCard} /> : open && <SourceForm ws={ws} full onStarted={onStarted} />}
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        setPlan(true);
+      }}
+      className="grid gap-3"
+    >
+      <Field label="Research request">
+        <textarea rows={3} required minLength={3} maxLength={500} value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="e.g. TikTok ad strategies that are working for dog travel gear" className={cx(field, 'resize-y')} />
+      </Field>
+      <TargetFields t={t} field={field} />
+      <div className="grid justify-items-start gap-1 text-xs text-muted">
+        Depth
+        <Segmented
+          label="Depth"
+          options={DEPTHS}
+          value={depth}
+          onChange={(d) => {
+            setDepth(d);
+            setBudget(String(KB_RESEARCH_DEPTHS[d].budgetUsd));
+          }}
+        />
+      </div>
+      <Field label="Budget (USD)">
+        <input type="number" min={0.1} max={20} step={0.05} required value={budget} onChange={(e) => setBudget(e.target.value)} className={field} />
+      </Field>
+      <Button type="submit" variant="primary" disabled={!t.agent || objective.trim().length < 3}>
+        Review the plan
+      </Button>
+    </form>
+  );
+}
+
+/** A form (From source, or New research with `ask` and `categoryId` prefilled), then the task it started, or any task a link opens. */
+export function ResearchDialog({ ws, open, mode, task, ask, categoryId, onStarted, onClose, onOpenCard }: {
+  ws: string;
+  open: boolean;
+  mode?: 'source' | 'topic';
+  task?: string;
+  ask?: string;
+  categoryId?: string;
+  onStarted: (taskId: string) => void;
+  onClose: () => void;
+  onOpenCard: (cardId: string) => void;
+}) {
+  return (
+    <Dialog open={open} onClose={onClose} title={task ? 'Research task' : mode === 'topic' ? 'New research' : 'Research from source'}>
+      {task ? (
+        <TaskView id={task} onOpenCard={onOpenCard} />
+      ) : !open ? null : mode === 'topic' ? (
+        <TopicForm ws={ws} ask={ask} categoryId={categoryId} onStarted={onStarted} />
+      ) : (
+        <SourceForm ws={ws} full onStarted={onStarted} />
+      )}
     </Dialog>
   );
 }
