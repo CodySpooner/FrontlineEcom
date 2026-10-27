@@ -56,13 +56,24 @@ export function toolInput(action: ApprovalAction) {
   return typeof p?.tool === 'string' && p.input !== undefined ? JSON.stringify(p.input, null, 2) : undefined;
 }
 
+/** The ad a `creative.generate` request would render: its visual brief and its copy. */
+export function adBrief(action: ApprovalAction) {
+  if (action.kind !== 'creative.generate') return undefined;
+  const p = (action.payload ?? {}) as { prompt?: unknown; primaryText?: unknown; cta?: unknown };
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v : undefined);
+  const ad = { brief: text(p.prompt), copy: text(p.primaryText), cta: text(p.cta) };
+  return ad.brief || ad.copy ? ad : undefined;
+}
+
 /**
- * A request's reason as shown. ApprovalExtras shows a niche pack (which agents append to the reason) and a tool call's
- * input (which is the reason, in one line) laid out instead.
+ * A request's reason as shown. ApprovalExtras shows a niche pack (which agents append to the reason), a tool call's
+ * input (which is the reason, in one line) and an ad's brief (which the reason cuts at 400 characters) in full instead.
  */
 export function shownReason(a: Pick<ApprovalRequest, 'action' | 'reason'>) {
   const md = nichePack(a.action);
   if (md && a.reason.endsWith(md)) return a.reason.slice(0, -md.length).trim();
+  const at = adBrief(a.action)?.brief ? a.reason.indexOf(' Brief: ') : -1;
+  if (at >= 0) return a.reason.slice(0, at);
   const input = toolInput(a.action);
   return input && a.reason === JSON.stringify(JSON.parse(input)) ? '' : a.reason;
 }

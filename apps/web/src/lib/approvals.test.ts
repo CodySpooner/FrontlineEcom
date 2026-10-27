@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addedProducts, draftLink, expiredWhy, fileList, marginAt, nichePack, priceChange, shownReason, themeChange, toolInput } from './approvals';
+import { adBrief, addedProducts, draftLink, expiredWhy, fileList, marginAt, nichePack, priceChange, shownReason, themeChange, toolInput } from './approvals';
 
 const theme = (payload: unknown) => themeChange({ kind: 'store.publish_theme', payload });
 
@@ -72,6 +72,19 @@ describe('toolInput', () => {
     expect(toolInput({ kind: 'store.set_price', payload: { input } })).toBeUndefined();
     expect(shownReason({ action: call, reason: JSON.stringify(input) })).toBe('');
     expect(shownReason({ action: call, reason: 'Fix the title typo' })).toBe('Fix the title typo');
+  });
+});
+
+describe('adBrief', () => {
+  const brief = 'Golden retriever shaking off water beside the bowl, slow motion. '.repeat(8);
+  const ad = { kind: 'creative.generate', payload: { kind: 'video', aspect: '9:16', prompt: brief, headline: 'Folds flat', primaryText: 'Hikes, done.', cta: 'Shop now', credits: 20 } };
+  it("is the ad a creative request would render, and the reason stops before its brief (agents cut it at 400 characters)", () => {
+    expect(adBrief(ad)).toEqual({ brief, copy: 'Hikes, done.', cta: 'Shop now' });
+    expect(adBrief({ kind: 'creative.generate', payload: { primaryText: 'Hi' } })).toEqual({ brief: undefined, copy: 'Hi', cta: undefined });
+    expect(adBrief({ kind: 'creative.generate', payload: {} })).toBeUndefined();
+    expect(adBrief({ kind: 'tool_use', payload: { prompt: brief } })).toBeUndefined();
+    const reason = `20 generation credits (0/100 used today). Brief: ${brief}`.slice(0, 400);
+    expect(shownReason({ action: ad, reason })).toBe('20 generation credits (0/100 used today).');
   });
 });
 

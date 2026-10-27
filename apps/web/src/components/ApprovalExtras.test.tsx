@@ -53,3 +53,13 @@ describe('connected tool request detail', () => {
     expect((await screen.findByText(/"title": "Bowl"/)).tagName).toBe('PRE');
   });
 });
+
+describe('creative request detail', () => {
+  it('shows the ad copy and the whole brief', async () => {
+    stubApi(() => []);
+    const brief = 'Slow motion shake-off. '.repeat(30);
+    renderApp(<ApprovalExtras action={{ kind: 'creative.generate', payload: { kind: 'video', prompt: brief, headline: 'Folds flat', primaryText: 'Hikes, done.', cta: 'Shop now', credits: 20 } }} storeId="clay" />);
+    expect((await screen.findByText(/Hikes, done/)).textContent).toBe('Hikes, done. · Shop now');
+    expect(screen.getByText(brief.trim())).toBeTruthy();
+  });
+});

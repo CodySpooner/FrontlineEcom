@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 import { ExternalLink } from 'lucide-react';
 import type { ApprovalAction } from '@frontline/shared';
 import { useProducts } from '../api/client';
-import { addedProducts, draftLink, fileList, marginAt, nichePack, priceChange, themeChange, toolInput } from '../lib/approvals';
+import { adBrief, addedProducts, draftLink, fileList, marginAt, nichePack, priceChange, themeChange, toolInput } from '../lib/approvals';
 import { cents } from '../lib/format';
 import { Markdown } from './Markdown';
 import { useStoreSelection } from './StoreFilter';
@@ -43,6 +43,27 @@ export function ApprovalExtras({ action, storeId }: { action: ApprovalAction; st
   const input = toolInput(action);
   if (input)
     return <pre className="mt-1.5 max-h-48 overflow-auto rounded-md border border-line bg-bg-2 p-2 font-mono text-[11px] whitespace-pre-wrap break-all text-text-2">{input}</pre>;
+  const ad = adBrief(action);
+  if (ad)
+    return (
+      <dl className="mt-1.5 grid gap-1 text-xs text-muted">
+        {ad.copy && (
+          <div className="whitespace-pre-line">
+            <dt className="inline font-semibold text-text-2">Copy: </dt>
+            <dd className="inline">
+              {ad.copy}
+              {ad.cta && ` · ${ad.cta}`}
+            </dd>
+          </div>
+        )}
+        {ad.brief && (
+          <div>
+            <dt className="inline font-semibold text-text-2">Brief: </dt>
+            <dd className="inline">{ad.brief}</dd>
+          </div>
+        )}
+      </dl>
+    );
   const draft = draftLink(action);
   if (draft)
     return (
