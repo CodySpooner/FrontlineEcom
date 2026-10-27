@@ -35,7 +35,9 @@ pnpm check    # typecheck + tests
   as each sync brings them. Once a day each store's whole catalog is read again, and products deleted on the platform show as
   archived. Agents on connected stores use your local Claude Code login.
 - **Safety:** agents ask before they spend, publish or change a live store or ad account. Requests wait on the
-  Dashboard unless you turned on autopilot for that action, with a cap.
+  Dashboard unless you turned on autopilot for that action, with a cap. An approved price or budget change isn't made
+  if that price or budget was changed in the platform since the last sync, or the store's currency changed since it was
+  asked: you're told why, and the agent asks again on the new numbers.
 - **What an approval changes:**
   - Shopify: new products, prices, product and store pages, and themes.
   - WooCommerce: new products, prices and product pages. Store pages also need a WordPress application password.
@@ -51,7 +53,8 @@ pnpm check    # typecheck + tests
   one of your stores connected to Etsy, for its app key). Other sites get no price history.
 - **Your data:** everything stays on this PC in `%APPDATA%\Frontline Ecom\data`. That folder holds the database,
   `logs\api.log`, and `backups\` (daily, newest 7 kept, plus a copy taken just before an update changes the data; all
-  restorable from Settings). Connector credentials are encrypted
+  restorable from Settings). Restoring one closes the requests that were waiting in it, since they may have been
+  carried out after it was taken. Connector credentials are encrypted
   with your Windows login and never leave the machine except to their own service.
 
 ### How the numbers are counted
@@ -83,8 +86,10 @@ pnpm check    # typecheck + tests
   totals (in the base currency from Settings) at the latest rate. Currencies the ECB doesn't publish (AED, SAR, TWD,
   VND, most of Latin America and Africa) take the daily rate from the open currency-api feed (fawazahmed0, CC0).
   A second platform on a store (say a TikTok Shop next to its Shopify) must sell in the store's currency, else its sync
-  stops and says so: add it as a store of its own. A TikTok Shop's orders there keep their own costs and the store's fee %,
-  but leave the funnel (its shoppers never visit the site) and the site's per-order fee. Amazon as a second channel is converted (each day at that day's rate),
+  stops and says so: add it as a store of its own. If it synced first and set another currency, its orders go when the
+  store's own platform syncs. A TikTok Shop's orders there keep their own costs and the store's fee %, but leave the
+  funnel (its shoppers never visit the site) and the site's per-order fee. An Etsy shop's or a second site's orders
+  leave the funnel too, and keep the per-order fee. Amazon as a second channel is converted (each day at that day's rate),
   and as its sales come without costs, profit estimates them: the store's own cost ratio over the last year plus Amazon's
   15% referral fee (instead of the store's fees; FBA fees aren't estimated). The funnel leaves its orders out.
   If the store's Shopify already imports its Amazon orders (Marketplace Connect), don't also connect Amazon to it: those
