@@ -26,6 +26,21 @@ describe('Ask AI palette', () => {
     expect(screen.getByTestId('where').textContent).toBe('/settings');
   });
 
+  it("opens with a question started elsewhere, such as a knowledge card's Use in a task, for that card's store only", async () => {
+    stubApi((url) => (url.startsWith('/api/stores') ? [{ id: 'glow', name: 'Glow Haus', currency: 'USD' }, ...stores] : []));
+    renderApp(<AskPalette />);
+    window.dispatchEvent(new CustomEvent('frontline:ask', { detail: { q: 'Use [kb:c1] to ', storeId: 'pawsome' } }));
+    const input = (await screen.findByRole('combobox')) as HTMLInputElement;
+    expect(input.value).toBe('Use [kb:c1] to ');
+    expect(await screen.findByText('Ask the Market Analyst · Pawsome Gear')).toBeTruthy();
+    expect(screen.queryByText('Ask the Market Analyst · Glow Haus')).toBeNull();
+    // A General card's: every store in view.
+    fireEvent.keyDown(input, { key: 'Escape' });
+    window.dispatchEvent(new CustomEvent('frontline:ask', { detail: { q: 'Use [kb:g1] to ' } }));
+    expect(await screen.findByText('Ask the Market Analyst · Glow Haus')).toBeTruthy();
+    expect(screen.getByText('Ask the Market Analyst · Pawsome Gear')).toBeTruthy();
+  });
+
   it("a question starts the selected store's Market Analyst and opens the chat", async () => {
     const fetch = stubApi((url, init) => {
       if (init?.method === 'POST') return { id: 'r1', agentId: 'pawsome:market_analyst', status: 'queued', transcript: [] };

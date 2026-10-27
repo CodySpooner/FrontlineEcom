@@ -156,6 +156,15 @@ describe('Research from source', () => {
     expect(field(dialog, 'Research request').value).toBe('Advertising');
   });
 
+  it('"Use in a task" opens Ask AI with the card named, for the owner to finish the question', async () => {
+    const asked = vi.fn();
+    window.addEventListener('frontline:ask', asked);
+    open('/knowledge?ws=pawsome&view=library&card=c1');
+    fireEvent.click(await screen.findByRole('button', { name: 'Use in a task' }));
+    window.removeEventListener('frontline:ask', asked);
+    expect(asked.mock.calls.map(([e]) => (e as CustomEvent).detail)).toEqual([{ q: 'Use [kb:c1] to ', storeId: 'pawsome' }]);
+  });
+
   it('a "Research this" link from elsewhere in the app names the workspace and keeps the request within 500 characters', () => {
     expect(researchHref('pawsome', 'Why does "Spring sale" lose money?')).toBe('/knowledge?view=research&ws=pawsome&ask=Why+does+%22Spring+sale%22+lose+money%3F');
     expect(researchHref('general', 'x'.repeat(600), 'c1')).toBe(`/knowledge?view=research&ws=general&ask=${'x'.repeat(500)}&cat=c1`);

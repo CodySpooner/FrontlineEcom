@@ -6,6 +6,7 @@ import { useSearchParams } from 'react-router';
 import { Pencil, Pin, PinOff, X } from 'lucide-react';
 import { KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCard, type KbCardBrief, type KbCardType, type KbCategory, type KbEvidenceKind, type KbLinkType, type KbSourceBrief, type KbStage } from '@frontline/shared';
 import { useCreateKbCard, useCreateKbLink, useKbCard, useKbCardWrite, useKbCards, useKbCategories, useKbEvidence, useKbLinks, useKbRevisions } from '../api/client';
+import type { AskStart } from '../components/AskPalette';
 import { useStoreSelection } from '../components/StoreFilter';
 import { Button, cx, ErrorState, Field, inputClass, LoadingState, memoryAuthor } from '../components/ui';
 import { ago } from '../lib/format';
@@ -24,7 +25,7 @@ const KIND: Record<KbEvidenceKind, [string, string]> = {
 /** How a link reads from its target's side. */
 export const BACK: Record<KbLinkType, string> = { supports: 'Supported by', contradicts: 'Contradicts', builds_upon: 'Built upon by', derived_from: 'Source of', validated_by: 'Validates', applied_to: 'Applies', related_to: 'Related To' };
 export const FETCH: Record<KbSourceBrief['status'], string> = { read: 'read', blocked_robots: 'blocked by robots.txt', blocked_domain: 'blocked domain', paywalled: 'paywalled', login: 'needs a login', unsupported: 'unsupported', too_large: 'too large', failed: 'failed' };
-const SOON = { task: "Agents don't read the knowledge base yet", promote: "Promotion isn't switched on yet" };
+const SOON = { promote: "Promotion isn't switched on yet" };
 const who = (actor: string) => (actor === 'app' ? 'The app' : memoryAuthor(actor));
 const small = 'h-7 cursor-pointer rounded-md border border-line-2 bg-panel-2 px-2.5 text-xs text-text-2 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
 const iconBtn = 'grid size-7 cursor-pointer place-items-center rounded-md text-muted transition hover:text-white';
@@ -307,7 +308,12 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
         </Section>
       </div>
       <div className="flex flex-wrap gap-1.5 border-t border-line px-[18px] py-3">
-        <Button size="sm" variant="primary" disabled title={SOON.task}>
+        <Button
+          size="sm"
+          variant="primary"
+          title="Ask an agent to use it: Ask AI opens with the card named"
+          onClick={() => window.dispatchEvent(new CustomEvent<AskStart>('frontline:ask', { detail: { q: `Use [kb:${card.id}] to `, ...(card.storeId ? { storeId: card.storeId } : {}) } }))}
+        >
           Use in a task
         </Button>
         <Button size="sm" title="New research on it, filed to its category" onClick={() => setParams((p) => withParams(p, { ask: card.title, cat: card.categoryId }), { replace: true })}>

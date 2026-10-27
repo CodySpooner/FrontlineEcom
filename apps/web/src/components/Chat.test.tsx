@@ -61,14 +61,16 @@ describe('knowledge citations', () => {
   it('turns [kb:<id>] in an answer into a link to that card, named by its title; an id with no card stays as written', async () => {
     const answer = 'Lead with the problem [kb:c1], as [kb:c1] says. [kb:gone] is not a card.';
     stubApi((url) => {
-      if (url === '/api/runs/r1') return run('r1', 'done', { transcript: [{ type: 'text_delta', text: answer.slice(0, 30) }, { type: 'text_delta', text: answer.slice(30) }] });
+      if (url === '/api/runs/r1') return run('r1', 'done', { task: 'Use [kb:c1] for 3 headlines', transcript: [{ type: 'text_delta', text: answer.slice(0, 30) }, { type: 'text_delta', text: answer.slice(30) }] });
       if (url === '/api/kb/cards/c1?ws=all') return { id: 'c1', storeId: 'peak', title: 'Problem-first hooks win' };
       if (url === '/api/kb/cards/gone?ws=all') return new Response(JSON.stringify({ error: 'card not found' }), { status: 404 });
     });
     renderApp(<Chat agent={agent} thread={['r1']} onThread={() => {}} />);
     const links = await screen.findAllByRole('link', { name: 'Problem-first hooks win' });
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/knowledge?card=c1', '/knowledge?card=c1']);
-    await vi.waitFor(() => expect(links[0]!.closest('p')!.textContent).toBe('Lead with the problem Problem-first hooks win, as Problem-first hooks win says. [kb:gone] is not a card.'));
+    // The owner's question names it too (Use in a task).
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/knowledge?card=c1', '/knowledge?card=c1', '/knowledge?card=c1']);
+    expect(links[0]!.closest('p')!.textContent).toBe('Use Problem-first hooks win for 3 headlines');
+    await vi.waitFor(() => expect(links[1]!.closest('p')!.textContent).toBe('Lead with the problem Problem-first hooks win, as Problem-first hooks win says. [kb:gone] is not a card.'));
   });
 });
 

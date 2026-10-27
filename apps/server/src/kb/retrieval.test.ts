@@ -139,6 +139,23 @@ describe('retrieval in real tasks', () => {
     expect(titles('pawsome', 'operations', 'bundles order value', 1)).toEqual(['Bundles win']);
   });
 
+  test('a card named as [kb:<id>] in the task comes first, sharing a word or not, if the agent may use it', async () => {
+    const named = card('pawsome', 'Shipping boxes cost less in bulk');
+    const general = card(null, 'Gift notes lift reviews');
+    const hooks = card('pawsome', 'Problem-first hooks win');
+    const gone = card('pawsome', 'Old idea', { status: 'archived' });
+    const blocked = card('pawsome', 'Secret margin', { blockedRoles: ['ad_strategist'] });
+    const other = card('glow', 'Glow secret');
+    expect(retrieveKnowledge(db, { ws: 'pawsome', role: 'ad_strategist', query: `Use [kb:${named.id}] for our hooks`, limit: 2 }).map((c) => c.title)).toEqual(['Shipping boxes cost less in bulk', 'Problem-first hooks win']);
+    // No other words needed; General ones too, after the store's own. Named twice, or matching too, it still comes once.
+    expect(titles('pawsome', 'ad_strategist', `[kb:${general.id}] [kb:${named.id}]`)).toEqual(['Shipping boxes cost less in bulk', 'Gift notes lift reviews']);
+    expect(titles('pawsome', 'ad_strategist', `[kb:${named.id}] [kb:${named.id}] shipping boxes`)).toEqual(['Shipping boxes cost less in bulk']);
+    expect(titles('pawsome', 'ad_strategist', `[kb:${gone.id}] [kb:${blocked.id}] [kb:${other.id}] [kb:made-up]`)).toEqual([]);
+    const { prompt } = await run('pawsome:ad_strategist', `Use [kb:${named.id}] to plan the week`);
+    expect(prompt).toContain(`- [kb:${named.id}] Shipping boxes cost less in bulk (Hypothesis, unproven)`);
+    expect(prompt).not.toContain(hooks.id);
+  });
+
   test("search_knowledge ranks the same way and logs what it returned; each card counts once per run however often it's retrieved", async () => {
     const a = card('pawsome', 'TikTok hooks for dog gear', { stage: 'supported' });
     const b = card(null, 'TikTok hooks in general', { stage: 'validated' }); // the better match, still after the store's own

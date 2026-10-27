@@ -32,13 +32,30 @@ export function ftsQuery(text: string): string | undefined {
 
 /**
  * The cards best matching `query` that `role` may use in `ws`: active ones, the store's and General's (General only for
- * null), none blocked for the role. At most `limit`, the store's own first, then General's, each best first.
+ * null), none blocked for the role. Cards the query names as [kb:<id>] (Use in a task) come before any match. At most
+ * `limit`, the store's own first, then General's, each best first.
  */
-export function retrieveKnowledge(db: DatabaseSync, q: { ws: KbWorkspace; role: AgentRole; query: string; limit: number }, now = new Date()): KbCard[] {
-  const match = ftsQuery(q.query);
+export function retrieveKnowledge(db: DatabaseSync, q: Query & { limit: number }, now = new Date()): KbCard[] {
+  const s = kbScope(q.ws, q.ws !== null, 'c.store_id');
+  const usable = usableBy(q.role);
+  const named = [...q.query.matchAll(/\[kb:([\w-]+)\]/g)]
+    .flatMap((m) => db.prepare(`SELECT c.id, c.blocked_roles FROM kb_cards c WHERE c.id = ? AND c.status = 'active' AND ${s.sql}`).all(m[1]!, ...s.params))
+    .filter(usable)
+    .map((r) => String(r.id));
+  const ranked = matches(db, q, now).filter((id) => !named.includes(id));
+  const cards = [...new Set(named)].concat(ranked).slice(0, q.limit).map((id) => getCard(db, id)!);
+  return [...cards.filter((c) => c.storeId !== null), ...cards.filter((c) => c.storeId === null)];
+}
+
+type Query = { ws: KbWorkspace; role: AgentRole; query: string };
+const usableBy = (role: AgentRole) => (r: Record<string, unknown>) => !(JSON.parse(String(r.blocked_roles)) as string[]).some((x) => x === '*' || x === role);
+
+/** The ids of the cards matching the query's words, best first. */
+function matches(db: DatabaseSync, q: Query, now: Date): string[] {
+  const match = ftsQuery(q.query.replace(/\[kb:[\w-]+\]/g, ' '));
   if (!match) return [];
   const s = kbScope(q.ws, q.ws !== null, 'c.store_id');
-  const usable = (r: Record<string, unknown>) => !(JSON.parse(String(r.blocked_roles)) as string[]).some((x) => x === '*' || x === q.role);
+  const usable = usableBy(q.role);
   const rows = db
     .prepare(
       `SELECT c.id, c.store_id, c.category_id, c.stage, c.updated_at, c.used_count, c.cited_count, c.blocked_roles, -bm25(kb_cards_fts, 4, 2, 1, 2) AS rel
@@ -85,11 +102,7 @@ export function retrieveKnowledge(db: DatabaseSync, q: { ws: KbWorkspace; role: 
       .filter(usable);
     for (const n of near) if (!score.has(String(n.id))) score.set(String(n.id), sc / 2);
   }
-  const cards = [...score]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, q.limit)
-    .map(([id]) => getCard(db, id)!);
-  return [...cards.filter((c) => c.storeId !== null), ...cards.filter((c) => c.storeId === null)];
+  return [...score].sort((a, b) => b[1] - a[1]).map(([id]) => id);
 }
 
 /** Logs that a run's agent got these cards (in its prompt, from a search) or cited them. Each counts once per run. */

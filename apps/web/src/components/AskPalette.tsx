@@ -9,9 +9,16 @@ import { FixLink } from './Chat';
 import { useStoreSelection } from './StoreFilter';
 import { cx, Dialog } from './ui';
 
-/** Mount once (Shell). Opens on Ctrl/Cmd+K or a `frontline:ask` event (the top bar's search box). */
+/** A `frontline:ask` event's detail: the question so far and, for a store's knowledge card, the only store to ask. */
+export type AskStart = { q: string; storeId?: string };
+
+/**
+ * Mount once (Shell). Opens on Ctrl/Cmd+K or a `frontline:ask` event (the top bar's search box), whose `detail`
+ * (AskStart) starts the question (a knowledge card's Use in a task).
+ */
 export function AskPalette() {
   const [open, setOpen] = useState(false);
+  const [start, setStart] = useState<AskStart>({ q: '' });
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
@@ -19,7 +26,10 @@ export function AskPalette() {
         setOpen((o) => !o);
       }
     };
-    const ask = () => setOpen(true);
+    const ask = (e: Event) => {
+      setStart((e as CustomEvent<AskStart | null>).detail ?? { q: '' });
+      setOpen(true);
+    };
     window.addEventListener('keydown', key);
     window.addEventListener('frontline:ask', ask);
     return () => {
@@ -29,20 +39,20 @@ export function AskPalette() {
   }, []);
   return (
     <Dialog open={open} onClose={() => setOpen(false)} title="Ask AI">
-      {open && <Palette onClose={() => setOpen(false)} />}
+      {open && <Palette start={start} onClose={() => setOpen(false)} />}
     </Dialog>
   );
 }
 
 type Item = { key: string; icon: LucideIcon; label: string; hint: string; run: () => void };
 
-function Palette({ onClose }: { onClose: () => void }) {
-  const [q, setQ] = useState('');
+function Palette({ start: begun, onClose }: { start: AskStart; onClose: () => void }) {
+  const [q, setQ] = useState(begun.q);
   const [active, setActive] = useState(0);
   const navigate = useNavigate();
   const { stores, has } = useStoreSelection();
   // One row per store in view (the first is Enter's default), so a question never lands on a store the owner didn't mean.
-  const inView = stores.filter((s) => has(s.id));
+  const inView = stores.filter((s) => (begun.storeId ? s.id === begun.storeId : has(s.id)));
   const start = useStartRun();
   const ask = q.trim();
   const go = (path: string) => {
