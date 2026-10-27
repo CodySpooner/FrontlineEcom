@@ -409,6 +409,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-156 (re CORE-109) A connected store's currency is read-only in the store form ("Shopify sets its currency."):
       every platform's sync sets it back, and since CORE-109 a change closes the store's waiting ad, price and product
       requests and zeroes its campaign budgets until the next ad sync. Demo stores stay editable.
+- [x] UI-157 Segmented (every range, metric and payment switch) and Tabs (store tabs, Research and Creative
+      sections) announced radio groups and tab lists but behaved like loose buttons: each option a Tab stop, arrows dead.
+      Both now keep one Tab stop on the choice, and arrows (wrapping), Home and End choose and focus another.
 
 ## Blocked
 
@@ -610,3 +613,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-154: two Research tests (red first). Approval cards already drop a 0 compare-at (lib/approvals). Orca with the first find patched to compareAt 0 (read-only): card "$14.32 | +248%", details Cost/Sell at/Margin/Demand/Ships in
 - 2026-10-26 — UI-155: attribute only. Also swept every page with all API GETs failing (client patch): each data panel ends on its "Couldn't load" state with Try again, cached data stays up, no crash. Orca: Creative's 10 gallery images all lazy and loaded
 - 2026-10-26 — UI-156: Shopify/Woo/Etsy/TikTok Shop take the currency via `takeCurrency`, Amazon via `setStoreCurrency`. Two StoreForm tests (red first). Orca with Pawsome patched connected (read-only), Edit opened, not saved: USD readOnly, hint "Shopify sets its currency."
+- 2026-10-26 — UI-157: one `roving()` helper in ui.tsx for both. Two ui tests (red first); whole web suite green. Orca on the Dashboard's Date range: 30D* → ArrowLeft 7D* (focused, tabIndex 0) → End 1Y* → Home, ArrowRight back to 30D*

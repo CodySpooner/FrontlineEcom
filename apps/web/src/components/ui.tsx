@@ -1,6 +1,6 @@
 // UI-01 design system: the small set of primitives every screen is built from.
 import { cloneElement, useEffect, useId, useRef, useState } from 'react';
-import type { ButtonHTMLAttributes, ComponentProps, HTMLAttributes, InputHTMLAttributes, ReactElement, ReactNode, Ref, TableHTMLAttributes } from 'react';
+import type { ButtonHTMLAttributes, ComponentProps, HTMLAttributes, InputHTMLAttributes, KeyboardEvent, ReactElement, ReactNode, Ref, TableHTMLAttributes } from 'react';
 import { Inbox, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 import { AGENT_ROLES, type AgentRole, type AgentStatus, type MemoryKind, type RunStatus, type StoreHealthStatus } from '@frontline/shared';
 import { usedShare } from '../lib/usage';
@@ -115,15 +115,36 @@ export function Switch(p: Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | '
   );
 }
 
+const STEP: Record<string, number> = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 };
+
+/**
+ * A radio group's or tab list's keyboard, as screen readers announce it: one Tab stop (the chosen option, `stop`), and
+ * arrows (wrapping), Home and End choose and focus another. Its buttons must be the container's only children.
+ */
+function roving<T>(values: T[], value: T, onChange: (v: T) => void) {
+  const at = Math.max(0, values.indexOf(value));
+  const onKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+    const n = values.length;
+    const to = e.key === 'Home' ? 0 : e.key === 'End' ? n - 1 : e.key in STEP ? (at + STEP[e.key]! + n) % n : -1;
+    if (to < 0) return;
+    e.preventDefault();
+    onChange(values[to]!);
+    (e.currentTarget.children[to] as HTMLElement | undefined)?.focus();
+  };
+  return { onKeyDown, stop: (i: number) => (i === at ? 0 : -1) };
+}
+
 export function Segmented<T extends string | number>({ label, options, value, onChange }: { label: string; options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+  const { onKeyDown, stop } = roving(options.map((o) => o.value), value, onChange);
   return (
-    <div role="radiogroup" aria-label={label} className="inline-flex gap-0.5 rounded-[10px] border border-line-2 bg-panel p-[3px]">
-      {options.map((o) => (
+    <div role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className="inline-flex gap-0.5 rounded-[10px] border border-line-2 bg-panel p-[3px]">
+      {options.map((o, i) => (
         <button
           key={o.value}
           type="button"
           role="radio"
           aria-checked={o.value === value}
+          tabIndex={stop(i)}
           onClick={() => onChange(o.value)}
           className={cx(
             'cursor-pointer rounded-[7px] px-3 py-1 font-display text-xs font-semibold transition duration-150',
@@ -139,14 +160,16 @@ export function Segmented<T extends string | number>({ label, options, value, on
 
 /** Underlined tab bar (store tabs, page sections). `color` adds an identity dot. */
 export function Tabs<T extends string>({ label, tabs, value, onChange }: { label: string; tabs: { value: T; label: string; color?: string }[]; value: T; onChange: (v: T) => void }) {
+  const { onKeyDown, stop } = roving(tabs.map((t) => t.value), value, onChange);
   return (
-    <div role="tablist" aria-label={label} className="flex gap-1 overflow-x-auto [scrollbar-width:none] shadow-[inset_0_-1px_0_var(--color-line)]">
-      {tabs.map((t) => (
+    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="flex gap-1 overflow-x-auto [scrollbar-width:none] shadow-[inset_0_-1px_0_var(--color-line)]">
+      {tabs.map((t, i) => (
         <button
           key={t.value}
           type="button"
           role="tab"
           aria-selected={t.value === value}
+          tabIndex={stop(i)}
           onClick={() => onChange(t.value)}
           className={cx(
             'flex shrink-0 cursor-pointer items-center gap-1.5 border-b-2 px-4 py-2.5 text-[13px] font-semibold transition duration-150',
