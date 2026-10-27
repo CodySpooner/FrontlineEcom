@@ -13,6 +13,18 @@ export const DESKS = ROOMS.flatMap((d) => Array.from({ length: d.desks }, (_, i)
 })));
 export const MEETING: Tile = { x: 31, y: 25 };
 export const ENTRANCE: Tile = { x: 31, y: 47 };
+export const PLATFORM_PYLONS = [
+  { id: 'shopify', name: 'SHOPIFY', color: '#95e65b', x: 21, y: 21 },
+  { id: 'amazon', name: 'AMAZON', color: '#ffb34b', x: 27, y: 16 },
+  { id: 'ebay', name: 'eBay', color: '#61adff', x: 37, y: 22 },
+  { id: 'etsy', name: 'ETSY', color: '#ff8553', x: 43, y: 21 },
+  { id: 'tiktok_shop', name: 'TIKTOK SHOP', color: '#68f4eb', x: 43, y: 28 },
+  { id: 'woocommerce', name: 'WOO', color: '#bd8aff', x: 35, y: 31 },
+  { id: 'walmart', name: 'WALMART', color: '#ffc85c', x: 25, y: 31 },
+  { id: 'meta_ads', name: 'META ADS', color: '#70b0ff', x: 47, y: 4 },
+  { id: 'google_ads', name: 'GOOGLE ADS', color: '#78d99a', x: 47, y: 8 },
+  { id: 'tiktok_ads', name: 'TIKTOK ADS', color: '#ff82b4', x: 47, y: 12 },
+] as const;
 export const MAP_SIZE = { width: (OFFICE_GRID.width + OFFICE_GRID.height) * 24 + 80, height: (OFFICE_GRID.width + OFFICE_GRID.height) * 12 + 160 };
 export const tileKey = ({ x, y }: Tile) => `${x},${y}`;
 export const iso = ({ x, y }: Tile) => ({ x: (x - y) * 24 + OFFICE_GRID.height * 24 + 40, y: (x + y) * 12 + 100 });
@@ -32,4 +44,5 @@ for (const room of ROOMS) {
   for (const x of [10, 11]) for (const y of [10, 11]) BLOCKED.add(tileKey({ x: room.x + x, y: room.y + y }));
 }
 for (let x = MEETING.x - 2; x <= MEETING.x + 1; x++) for (let y = MEETING.y - 2; y <= MEETING.y + 1; y++) BLOCKED.add(tileKey({ x, y }));
+for (const p of PLATFORM_PYLONS) BLOCKED.add(tileKey(p));
 export const walkable = (p: Tile) => Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.y >= 0 && p.x < OFFICE_GRID.width && p.y < OFFICE_GRID.height && !BLOCKED.has(tileKey(p));

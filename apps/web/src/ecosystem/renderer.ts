@@ -6,6 +6,7 @@ import { workerSprites } from './workerSprites';
 import type { DisplayOptions } from './display';
 import { OFFICE_THEMES, type OfficeThemeId } from './themes';
 import { createHologram, LOGO_URL } from './hologram';
+import { platformHolograms } from './platforms';
 
 export async function createOffice(host: HTMLElement, onDesk: (id: string) => void) {
   const logoTexture = await Assets.load<Texture>(LOGO_URL); logoTexture.source.scaleMode = 'nearest';
@@ -41,6 +42,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     world.addChild(hit); light.alpha=.45+(i%4)*.12;
   }
   const hub=iso(MEETING), hologram = createHologram(logoTexture); hologram.root.position.set(hub.x,hub.y-98); world.addChild(hologram.root);
+  const platforms = platformHolograms(world);
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   let lowPower = false, autoLow = false;
   app.ticker.maxFPS = 60;
@@ -89,9 +91,10 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     const still = reduced.matches || lowPower || autoLow;
     if (!still) elapsed+=ticker.deltaMS;
     hologram.tick(elapsed, still);
+    platforms.tick(elapsed, still);
     if(still) return;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setBusiness: platforms.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;

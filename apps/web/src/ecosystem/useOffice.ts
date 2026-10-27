@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Agent, AgentRun, AgentRunDetail, ApprovalRequest, LiveMessage, SquadMission } from '@frontline/shared';
+import type { Agent, AgentRun, AgentRunDetail, ApprovalRequest, LiveMessage, SquadMission, Store } from '@frontline/shared';
 import { officeApi } from './api';
 import { activeRun, applyOfficeMessage, emptyOffice, mergeOfficeSnapshot } from './events';
 
@@ -14,14 +14,15 @@ export function useOffice(enabled = true) {
     let socket: WebSocket | undefined;
     async function refresh() {
       try {
-        const [agents, runs, approvals, missions] = await Promise.all([
+        const [agents, runs, approvals, missions, stores] = await Promise.all([
           officeApi<Agent[]>('/api/agents'), officeApi<AgentRun[]>('/api/runs?limit=200'), officeApi<ApprovalRequest[]>('/api/approvals'),
           officeApi<SquadMission[]>('/api/squad-missions?limit=200'),
+          officeApi<Store[]>('/api/stores'),
         ]);
         const details = await Promise.all(runs.filter(activeRun).map((run) => officeApi<AgentRunDetail>(`/api/runs/${run.id}`)));
         if (!disposed) {
           setState((old) => {
-            let next = mergeOfficeSnapshot(old, agents, runs, approvals, missions);
+            let next = mergeOfficeSnapshot({ ...old, stores }, agents, runs, approvals, missions);
             for (const run of details) for (const event of run.transcript) next = applyOfficeMessage(next, { type: 'run_event', runId: run.id, agentId: run.agentId, storeId: run.storeId, event }, run.startedAt ?? run.createdAt);
             return next;
           });

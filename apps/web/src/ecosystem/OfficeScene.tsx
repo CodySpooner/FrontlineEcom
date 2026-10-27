@@ -23,19 +23,20 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
     const agent = office.agents.find((a) => a.id === seat.agentId);
     return { seat, name: seat.displayName || (agent ? AGENT_ROLES[agent.role].name : seat.agentId), ...workerActivity(office, seat.agentId), handoff: recentHandoff(office, seat.agentId), meeting };
   });
+  const latestOffice = useRef(office); latestOffice.current = office;
   const latestWorkers = useRef(workers); latestWorkers.current = workers;
   const select = useRef(onSelect); select.current = onSelect;
   const latestFocus = useRef(focus); latestFocus.current = focus;
   const latestDisplay = useRef(display); latestDisplay.current = display;
   const latestTheme = useRef(theme); latestTheme.current = theme;
   const choose = (deskId: string) => { setDesk(deskId); const worker = latestWorkers.current.find((w) => w.seat.deskId === deskId); if (worker) select.current(worker.seat.agentId); };
-  useEffect(() => { scene.current?.setWorkers(workers); }, [seats, office]);
+  useEffect(() => { scene.current?.setWorkers(workers); scene.current?.setBusiness(office); }, [seats, office]);
   useEffect(() => { if (focus) scene.current?.focusWorker(focus.id); }, [focus]);
   useEffect(() => { scene.current?.setDisplay(display); }, [display]);
   useEffect(() => { scene.current?.setTheme(theme); }, [theme]);
   useEffect(()=>{
     let disposed=false; let renderer:OfficeRenderer|undefined;
-    createOffice(host.current!,choose).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setTheme(latestTheme.current);r.setDisplay(latestDisplay.current);r.setWorkers(latestWorkers.current);if(latestFocus.current)r.focusWorker(latestFocus.current.id); } }).catch(()=>{if(!disposed)setError('The office scene could not start. Use the workstation directory or Agent List to manage workers.');});
+    createOffice(host.current!,choose).then((r)=>{ if(disposed) r.destroy(); else { scene.current=renderer=r;r.setTheme(latestTheme.current);r.setDisplay(latestDisplay.current);r.setWorkers(latestWorkers.current);r.setBusiness(latestOffice.current);if(latestFocus.current)r.focusWorker(latestFocus.current.id); } }).catch(()=>{if(!disposed)setError('The office scene could not start. Use the workstation directory or Agent List to manage workers.');});
     const changed=()=>setFullscreen(!!document.fullscreenElement);
     document.addEventListener('fullscreenchange',changed);
     // Persist settled tiles outside the rendering loop; motion never waits for a network request.

@@ -85,6 +85,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-26 ECO-25: Added ten offline platform-logo hologram pylons around the plaza and Advertising. Existing store platforms glow brighter; deduplicated live order events pulse the matching projection, with isolated Demo orders and no motion in reduced/low-power mode. 946 tests pass; 30 workers plus pylons hold 58 FPS. Before/after, closeup and reduced-motion screenshots: .agent/eco-25-*.png.
 - 2026-10-26 ECO-24: Expanded the office to 64x48 with 12-tile departments, four-tile avenues, separated desks and front-edge labels. Preserved all 30 desk IDs; invalid saved positions recover to the nearest free tile. Updated collision, meeting and API boundary checks. 939 tests pass; desktop 30-worker scene runs at 58 FPS; Orca and desktop before/after screenshots in .agent/eco-24-*.png.
 
 - 2026-10-26 ECO-23: Replaced the globe with the owner's actual logo, cropped to 1222x285 after clearing alpha <= 8 (190 KB, bundled locally). Red/white projection rays and emitter base, crisp layered glow, logo-shaped scanlines, gentle float/flicker and occasional slice drift; all projection transforms/opacity freeze under reduced motion or low power. Shifted HQ/objective labels clear of the logo. Browser verified transparent background (zero low-alpha noise), no page errors, 30-worker standard scene around 58 FPS and reduced/low-power rendering. Before/after and closeup captures .agent/eco-23-*.png; 136 files / 783 tests pass.
@@ -188,7 +189,7 @@ Seed list (reorder or extend as you see fit):
 - [x] ECO-24 Expand the office: much more floor space, wider corridors and plazas between departments, rooms that no
   longer crowd or overlap each other, labels/props/workers that don't stack on top of each other at fit zoom. Keep desk
   ids; saved positions that no longer fit fall back to the nearest free tile; update `OFFICE_GRID`/world tests.
-- [ ] ECO-25 Platform hologram pylons: glowing holographic logos for Shopify, Amazon, eBay, Etsy, TikTok Shop,
+- [x] ECO-25 Platform hologram pylons: glowing holographic logos for Shopify, Amazon, eBay, Etsy, TikTok Shop,
   WooCommerce, Walmart (plus Meta, Google and TikTok ads near Advertising) on projector pylons in the new plazas.
   Platforms the owner's stores really use glow brighter and pulse on real order events from `/api/live`.
 - [ ] ECO-26 Lighting pass: neon light pools, glow sprites, screen glow, ambient color drift, light spill from the hub.

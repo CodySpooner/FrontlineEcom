@@ -1,4 +1,4 @@
-import type { Agent, AgentRun, ApprovalRequest, LiveMessage, SquadMission } from '@frontline/shared';
+import type { Agent, AgentRun, ApprovalRequest, LiveMessage, SquadMission, Store, StoreEvent } from '@frontline/shared';
 import type { Animation } from './characters';
 
 export type OfficeStatus = 'idle' | 'queued' | 'planning' | 'running' | 'using_tool' | 'collaborating' | 'awaiting_approval' | 'completed' | 'failed' | 'offline';
@@ -21,8 +21,10 @@ export interface OfficeState {
   tools: Record<string, ToolActivity>;
   events: AgentOfficeEvent[];
   missions: Record<string, SquadMission>;
+  stores: Store[];
+  storeEvents: StoreEvent[];
 }
-export const emptyOffice = (): OfficeState => ({ agents: [], runs: {}, approvals: {}, tools: {}, events: [], missions: {} });
+export const emptyOffice = (): OfficeState => ({ agents: [], runs: {}, approvals: {}, tools: {}, events: [], missions: {}, stores: [], storeEvents: [] });
 export const activeRun = (run: AgentRun) => run.status === 'running' || run.status === 'queued';
 const ORDER = { queued: 0, running: 1, done: 2, error: 2, cancelled: 2 };
 const EVENT = { queued: 'task.queued', running: 'task.started', done: 'task.completed', error: 'task.failed', cancelled: 'task.cancelled' } as const;
@@ -53,6 +55,7 @@ function handoffs(state: OfficeState): OfficeState {
   return state;
 }
 export function applyOfficeMessage(state: OfficeState, message: LiveMessage, now = new Date().toISOString()): OfficeState {
+  if (message.type === 'event') return state.storeEvents.some((e) => e.id === message.event.id) ? state : { ...state, storeEvents: [message.event, ...state.storeEvents].slice(0, 100) };
   if (message.type === 'mission') return missionEvent(state, message.mission, now);
   if (message.type === 'run') return handoffs(runEvent(state, message.run));
   if (message.type === 'approval') return approvalEvent(state, message.approval);
