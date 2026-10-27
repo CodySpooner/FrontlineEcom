@@ -100,7 +100,8 @@ pnpm check    # typecheck + tests
 
 Three Claude Code agents build this in parallel, each in its own Orca worktree
 (`C:\Users\Xody2\orca\workspaces\FrontlineEcom\ui`, `\core`, `\agents`). A Codex agent builds the AI Ecosystem page in
-`\ecosystem` (spec: `docs/features/ai-ecosystem.md`) and stops by itself once that backlog is done. A Stop hook (`scripts/agent/keep-going.mjs`,
+`\ecosystem` (spec: `docs/features/ai-ecosystem.md`) and stops by itself once that backlog is done. Another Codex agent in
+`\image-generation` (Orca: "Image Generation") generates the page-header art and agent portraits (`docs/backlog/image-generation.md`) and also stops by itself. A Stop hook (`scripts/agent/keep-going.mjs`,
 enabled only in those worktrees' `.claude/settings.local.json`) keeps each one working, and `scripts/agent/watchdog.mjs`
 (running in the "Watchdog" terminal of the main FrontlineEcom workspace in Orca) nudges any that go idle and relaunches
 any that exit.

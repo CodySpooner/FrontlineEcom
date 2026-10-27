@@ -27,10 +27,11 @@ borrow agent-harness patterns from — see DESIGN.md "Reuse map"; keep their MIT
 
 | Lane | Owns |
 |------|------|
-| `ui` | `apps/web/**` (except `src/ecosystem/**`, `public/ecosystem/**`) |
+| `ui` | `apps/web/**` (except `src/ecosystem/**`, `public/ecosystem/**`, `public/art/**`, and the header/portrait art in `Hero.tsx`, `Art.tsx` while `image-generation` runs) |
 | `core` | `apps/server/**` (except `src/routes/agents*`, `src/routes/ecosystem*`), `packages/shared/**`, `apps/desktop/**`, root config |
 | `agents` | `packages/agents/**`, `apps/server/src/routes/agents*.ts` |
 | `ecosystem` (Codex) | the AI Ecosystem page: `apps/web/src/ecosystem/**`, `apps/web/public/ecosystem/**`, `apps/server/src/routes/ecosystem*.ts` — touch points in `docs/backlog/ecosystem.md` |
+| `image-generation` (Codex) | generated page-header art and agent portraits: `apps/web/public/art/**`, `Hero.tsx`, `Art.tsx` — touch points in `docs/backlog/image-generation.md` |
 
 Edit outside your lane only for a tiny unblocking change (an added export, mounting a route). Otherwise append a
 request to the other lane's backlog **Inbox** and stub the dependency behind a small interface so you can keep going.

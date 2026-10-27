@@ -11,7 +11,7 @@ import { join } from 'node:path';
 
 const MAIN = 'C:/dev/FrontlineEcom';
 const WORKSPACES = 'C:/Users/Xody2/orca/workspaces/FrontlineEcom';
-const LANES = { ui: 'claude', core: 'claude', agents: 'claude', ecosystem: 'codex' };
+const LANES = { ui: 'claude', core: 'claude', agents: 'claude', ecosystem: 'codex', 'image-generation': 'codex' };
 const EVERY_MS = 2 * 60_000;
 const IDLE_MS = { claude: 10 * 60_000, codex: 2 * 60_000 };
 const once = process.argv.includes('--once');
