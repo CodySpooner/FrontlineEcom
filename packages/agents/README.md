@@ -42,13 +42,16 @@ outcome checks.
    ends after the store went live learns nothing). Each run recalls the pins and the owner's notes and no's, plus the
    12 others that score best on relevance × recency × confidence; rewording a squad memory makes it the owner's. Outcome checks
    (`routes/agents-gamification.ts`, on dashboard reads and hourly) judge approved changes on real data later:
-   - ads: 3 days after vs 7 before (blended ROAS; a raise on its extra spend's ROAS, a pause or cut on the ROAS of the spend it took away, vs break-even)
+   - ads: 3 days after vs 7 before (blended ROAS; a raise on its extra spend's ROAS, a pause or cut on the ROAS of the spend it took away, vs break-even;
+     unclear when the store's spend moved the other way, and blended without a break-even)
    - products: their first 14 days on sale (from when first seen active; else from the day added); 10+ units with no unit cost is unclear
-   - prices and pages: 14 days before vs after, the before scaled by the rest of the store's sales (10+ units across both, else "can't be judged")
-   - themes: conversion 14 days before vs after (30+ orders across both)
+   - prices and pages: 14 days before vs after, the before scaled by the rest of the store's sales (10+ units across both, else "can't be judged";
+     not judged when a product the app added went on sale partway through the days before)
+   - themes: conversion 14 days before vs after (30+ orders across both; orders from other channels and shops left out)
 
    Windows are counted in the store's own days (a live store dates its data in its zone), and a change is judged only once
-   its last day there is over and every one of the store's integrations has synced since, none failing (each change is
+   its last day there is over and every one of the store's integrations has synced since, none failing (an ad account
+   or GA4 property by its own day, GA4 a day later as it finishes a day ~48h on) (each change is
    judged once). Prices and pages need sales before the change to compare with. Each judgement becomes a memory and moves the confidence of what that run learned. In the prompt every memory says
    who it's from (owner, owner's no, measured, squad); only the app sets the `outcome` and `denied` tags, and an agent
    can't rewrite an owner note. Learnings that 2+ live stores of
