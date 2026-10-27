@@ -25,7 +25,7 @@ import {
   updateCard,
   updateCategory,
 } from '@frontline/agents';
-import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbTaskBrief, type KbView, type KbWorkspace } from '@frontline/shared';
+import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbTaskBrief, type KbView, type KbWorkspace } from '@frontline/shared';
 import { tx, type Db } from '../db';
 
 // Knowledge Base routes (knowledge-base lane). Every by-id route names its workspace (?ws=) and 404s on another's id.
@@ -46,6 +46,8 @@ function wsOf(db: Db, v: unknown, all = false): KbWorkspace | 'all' | undefined 
   return typeof v === 'string' && db.prepare('SELECT 1 FROM stores WHERE id = ?').get(v) ? v : undefined;
 }
 const WS_ERROR = 'ws must be general or a store id';
+/** What one bulk action may change on many cards at once. */
+const BULK = ['status', 'blockedRoles', 'researchMarked', 'category'];
 const toView = (r: Record<string, unknown>): KbView => ({ id: String(r.id), storeId: (r.store_id as string | null) ?? null, name: String(r.name), state: JSON.parse(String(r.state_json)), createdAt: String(r.created_at) });
 const toTask = (r: Record<string, unknown>): KbTaskBrief => ({
   id: String(r.id),
@@ -194,6 +196,13 @@ export function kbRoutes(db: Db) {
       });
       return c.body(null, 204);
     })
+    .get('/api/kb/sources', (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      const s = kbScope(ws, c.req.query('general') === '1');
+      const rows = db.prepare(`SELECT id, url, title, status, reliability, fetched_at FROM kb_sources WHERE ${s.sql} ORDER BY lower(title), id`).all(...s.params);
+      return c.json(rows.map((r): KbSourceBrief => ({ id: String(r.id), ...(r.url ? { url: String(r.url) } : {}), title: String(r.title), status: r.status as KbSourceBrief['status'], reliability: r.reliability as KbSourceBrief['reliability'], ...(r.fetched_at ? { fetchedAt: String(r.fetched_at) } : {}) })));
+    })
     .get('/api/kb/views', (c) => {
       const ws = wsOf(db, c.req.query('ws'));
       if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
@@ -213,9 +222,10 @@ export function kbRoutes(db: Db) {
         (s.general !== undefined && typeof s.general !== 'boolean') ||
         (cam !== undefined && !(isObj(cam) && finite(cam.x) && finite(cam.y) && finite(cam.scale))) ||
         (s.collapsed !== undefined && !(Array.isArray(s.collapsed) && s.collapsed.length <= 500 && s.collapsed.every((x) => typeof x === 'string'))) ||
+        (s.filters !== undefined && !(isObj(s.filters) && Object.keys(s.filters).length <= 30 && Object.values(s.filters).every((x) => typeof x === 'string'))) ||
         JSON.stringify(s).length > 20_000
       )
-        return c.json({ error: 'state must hold q, general, camera {x, y, scale} and collapsed frame ids' }, 400);
+        return c.json({ error: 'state must hold q, general, camera {x, y, scale}, collapsed frame ids and filters (strings)' }, 400);
       const id = randomUUID();
       db.prepare('INSERT INTO kb_views (id, store_id, name, state_json, created_at) VALUES (?, ?, ?, ?, ?)').run(id, ws, String(b.name).trim(), JSON.stringify(s), new Date().toISOString());
       return c.json(toView(db.prepare('SELECT * FROM kb_views WHERE id = ?').get(id)!), 201);
@@ -310,6 +320,27 @@ export function kbRoutes(db: Db) {
         if (unique(e)) return c.json({ error: 'a card with that title is already in this workspace' }, 409);
         throw e;
       }
+    })
+    .post('/api/kb/cards/bulk', async (c) => {
+      const b = await c.req.json().catch(() => undefined);
+      if (!isObj(b)) return c.json({ error: 'body must be a JSON object' }, 400);
+      const ws = wsOf(db, b.ws);
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      if (!Array.isArray(b.ids) || !b.ids.length || b.ids.length > 1000 || !b.ids.every((id) => typeof id === 'string')) return c.json({ error: 'ids must list 1-1000 card ids' }, 400);
+      const ids = [...new Set(b.ids as string[])];
+      const p = b.patch;
+      if (!isObj(p) || !Object.keys(p).length || !Object.keys(p).every((k) => BULK.includes(k))) return c.json({ error: `patch may set ${BULK.join(', ')}` }, 400);
+      const patch = parseCard(p, true);
+      if (typeof patch === 'string') return c.json({ error: patch }, 400);
+      const rows = ids.map((id) => kbRow(db, 'kb_cards', id, ws));
+      if (!rows.every(Boolean)) return c.json({ error: 'card not found' }, 404);
+      if (patch.status && rows.some((r) => r!.status === 'merged')) return c.json({ error: 'a merged card is restored by detaching it' }, 409);
+      const done = tx(db, () => {
+        const cat = categoryFor(db, ws, p);
+        if (typeof cat === 'string') return cat;
+        for (const id of ids) updateCard(db, id, { ...patch, ...(cat ? { categoryId: cat.id } : {}) }, 'owner');
+      });
+      return typeof done === 'string' ? c.json({ error: done }, 400) : c.json({ updated: ids.length });
     })
     .get('/api/kb/cards/:id', (c) => {
       const ws = wsOf(db, c.req.query('ws'), true);

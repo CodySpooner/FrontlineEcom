@@ -45,6 +45,8 @@ import type {
   KbTaskBrief,
   KbView,
   KbViewState,
+  KbSourceBrief,
+  KbCardPatch,
   KbWorkspaceCounts,
   KnowledgeDoc,
   KnowledgeKind,
@@ -250,12 +252,28 @@ export const useKnowledgeDoc = (kind: KnowledgeKind, key: string) =>
 export const useKbWorkspaces = () => useQuery({ queryKey: ['kb', 'workspaces'], queryFn: () => api<KbWorkspaceCounts>('/api/kb/workspaces') });
 
 /** A workspace's cards ('general' or a store id; `general` adds General's to a store's). */
-export const useKbCards = (ws: string, q: { general?: boolean; q?: string; status?: string; limit?: number }) =>
+/** `q` holds KbCardQuery params: true is sent as 1; false, '' and undefined are left out. */
+export const useKbCards = (ws: string, q: Record<string, string | number | boolean | undefined>) =>
   useQuery({
     queryKey: ['kb', 'cards', ws, q],
-    queryFn: () => api<Page<KbCardBrief>>(`/api/kb/cards?${new URLSearchParams({ ws, ...(q.general && { general: '1' }), ...(q.q && { q: q.q }), ...(q.status && { status: q.status }), ...(q.limit && { limit: String(q.limit) }) })}`),
+    queryFn: () => api<Page<KbCardBrief>>(`/api/kb/cards?${new URLSearchParams([['ws', ws], ...Object.entries(q).flatMap(([k, v]) => (v === undefined || v === false || v === '' ? [] : [[k, v === true ? '1' : String(v)]]))])}`),
     placeholderData: keepPreviousData,
   });
+
+export const useKbSources = (ws: string, general: boolean) => useQuery({ queryKey: ['kb', 'sources', ws, general], queryFn: () => api<KbSourceBrief[]>(`/api/kb/sources?${wsq(ws)}${general ? '&general=1' : ''}`) });
+
+/** One change to many cards, sent per workspace: each card's write goes to its own. */
+export function useKbBulk() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cards, patch }: { cards: KbCardBrief[]; patch: Pick<KbCardPatch, 'status' | 'blockedRoles' | 'researchMarked' | 'category'> }) => {
+      const by = new Map<string, string[]>();
+      for (const c of cards) by.set(c.storeId ?? 'general', [...(by.get(c.storeId ?? 'general') ?? []), c.id]);
+      return Promise.all([...by].map(([ws, ids]) => api<{ updated: number }>('/api/kb/cards/bulk', json('POST', { ws, ids, patch }))));
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
 
 /** Where the owner dragged cards on a workspace's artboard. */
 export const useKbPositions = (ws: string) => useQuery({ queryKey: ['kb', 'positions', ws], queryFn: () => api<KbPositions>(`/api/kb/positions?ws=${encodeURIComponent(ws)}`) });

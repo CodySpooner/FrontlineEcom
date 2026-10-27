@@ -1506,6 +1506,8 @@ export interface KbViewState {
   general?: boolean;
   camera?: { x: number; y: number; scale: number };
   collapsed?: string[];
+  /** A Library view: its filter and sort query params (KbCardQuery names). An artboard view has none. */
+  filters?: Record<string, string>;
 }
 
 /** GET /api/kb/views?ws= → KbView[] newest first; POST /api/kb/views {ws, name, state} → 201; DELETE /api/kb/views/:id?ws= → 204. */
@@ -1548,6 +1550,7 @@ export interface KbCategoryInput {
 }
 
 /** The source behind a piece of evidence, as the card shows it. */
+/** GET /api/kb/sources?ws=<general|storeId>[&general=1] → KbSourceBrief[] by title: the Library's source filter. */
 export interface KbSourceBrief {
   id: string;
   url?: string;

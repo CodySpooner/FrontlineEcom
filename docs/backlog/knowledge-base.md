@@ -469,7 +469,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - revision history with Restore;
   - inline edit, and every manual control from spec §14, including the reversals;
   - an open/close transition that respects `prefers-reduced-motion`.
-- [ ] KB-09 **Library view,** per the design: the §13 filters, saved filters, bulk actions (archive, block, mark for
+- [x] KB-09 **Library view,** per the design: the §13 filters, saved filters, bulk actions (archive, block, mark for
   research, move category, accept proposed), and the UI-16 sections with the `setParams` fix and its test.
 - [ ] KB-10 **Relationships view,** per the design.
 
@@ -626,6 +626,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-06 artboard: full-bleed canvas sized to the window, camera (pan, wheel zoom about the cursor, Fit clear of the panels), category frames (auto-layout, collapse), the design's card, drag and Alt+Arrow saved per workspace (`/api/kb/positions`), click/Shift/box selection, minimap and zoom bar, the canvas keyboard model, culling.
 - 2026-10-27 KB-07 artboard II: link lines by type with pills (kept off cards, stacked per card pair), hit strokes and the "why linked" popover with accept/reject, the legend, the selection's lines highlighted, the Outline (subtree counts, filter, "+ New category", General knowledge, row → frame + first card), saved views per workspace (`/api/kb/views`), the Researching dock (`/api/kb/research/tasks`).
 - 2026-10-27 KB-08 details panel: a non-modal aside with every §4 field, the ladder, tagged evidence, connected cards with "Why linked" and "Link to…", sources with provenance, usage, history with Restore, inline edit and create, pin / mark for research / block / archive / reject / merge with their reversals (accept, unarchive, unreject, unblock, detach), a slide that respects reduced motion.
+- 2026-10-27 KB-09 Library view: the cards as a sortable table (title, stage, updated, verified, used) that pages on, every §13 filter in the URL, saved filter views, bulk accept / mark for research / block / move / archive sent per workspace, the details panel beside it; the UI-16 sections move in as tabs after Cards.
 
 ## Blocked
 
@@ -670,3 +671,10 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   read from `mergedInto`: a real-browser drive showed an evidence-less merge had no way back when Detach sat only on
   evidence rows. A new card sends only the fields typed, because a stage set by hand stops the ladder moving it. History
   shows the latest five. Fit and pan-into-view leave room for the open panel and for the dock while it shows.
+- 2026-10-27 KB-09: Cards is the Library's first tab; a legacy `?doc=` link (no `?tab=`) still opens Playbooks. Saved
+  filters are `kb_views` rows whose state has `filters` (KbCardQuery names); the artboard lists only the views without
+  them and the Library only the views with them. Bulk is `POST /api/kb/cards/bulk {ws, ids, patch}`, all or nothing,
+  limited to status, blockedRoles, researchMarked and category; the client sends one call per workspace. Accept touches
+  only unreviewed cards, Archive only live ones, and a merged card is left out of every bulk action. The source filter
+  reads `GET /api/kb/sources` (empty until KB-11). Agent, source, metric, tags and the two date ranges sit behind
+  "More filters", shown on their own when one is set. No bulk unarchive: the details panel has it per card.

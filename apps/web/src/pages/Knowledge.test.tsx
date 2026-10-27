@@ -50,10 +50,13 @@ describe('Knowledge Base › page frame', () => {
     kb([], docs);
     renderApp(<Knowledge />, '/knowledge?view=library&tab=memory');
     fireEvent.click(screen.getByRole('tab', { name: 'Playbooks' }));
-    expect(where()).toBe('/knowledge?view=library');
+    expect(where()).toBe('/knowledge?view=library&tab=playbook');
     fireEvent.click(await screen.findByRole('button', { name: 'Copywriter' }));
-    expect(where()).toBe('/knowledge?view=library&doc=copywriter');
+    expect(where()).toBe('/knowledge?view=library&tab=playbook&doc=copywriter');
+    expect(screen.getByRole('tab', { selected: true }).textContent).toBe('Playbooks');
     expect(view()).toBe('Library');
+    fireEvent.click(screen.getByRole('tab', { name: 'Cards' }));
+    expect(where()).toBe('/knowledge?view=library');
   });
 
   it('binds the view switcher to ?view=', () => {

@@ -3,7 +3,7 @@
 // their reversals.
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Pencil, Pin, PinOff, X } from 'lucide-react';
-import { KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCard, type KbCardBrief, type KbCardType, type KbEvidenceKind, type KbLinkType, type KbSourceBrief, type KbStage } from '@frontline/shared';
+import { KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCard, type KbCardBrief, type KbCardType, type KbCategory, type KbEvidenceKind, type KbLinkType, type KbSourceBrief, type KbStage } from '@frontline/shared';
 import { useCreateKbCard, useCreateKbLink, useKbCard, useKbCardWrite, useKbCards, useKbCategories, useKbEvidence, useKbLinks, useKbRevisions } from '../api/client';
 import { useStoreSelection } from '../components/StoreFilter';
 import { Button, cx, ErrorState, Field, inputClass, LoadingState, memoryAuthor } from '../components/ui';
@@ -406,6 +406,13 @@ function LinkForm({ ws, card, cards, onDone }: { ws: string; card: KbCard; cards
   );
 }
 
+/** Each category with its "A › B" path, in tree order. */
+export function categoryPaths(cats: KbCategory[]) {
+  const byId = new Map(cats.map((c) => [c.id, c]));
+  const path = (id: string | null): string[] => (id ? [...path(byId.get(id)?.parentId ?? null), byId.get(id)?.name ?? ''] : []);
+  return cats.map((c) => ({ id: c.id, path: path(c.id).join(' › ') }));
+}
+
 const TEXTS = [
   ['summary', 'Summary', 600],
   ['body', 'Explanation', 8000],
@@ -431,11 +438,7 @@ function CardForm({ ws, card, onDone, onCancel }: { ws: string; card?: KbCard; o
   } as Record<string, string>;
   const [f, setF] = useState(start);
   const [reason, setReason] = useState('');
-  const paths = useMemo(() => {
-    const byId = new Map((cats.data ?? []).map((c) => [c.id, c]));
-    const path = (id: string | null): string[] => (id ? [...path(byId.get(id)?.parentId ?? null), byId.get(id)?.name ?? ''] : []);
-    return (cats.data ?? []).map((c) => path(c.id).join(' › '));
-  }, [cats.data]);
+  const paths = useMemo(() => categoryPaths(cats.data ?? []).map((c) => c.path), [cats.data]);
   const set = (k: string) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const busy = write.isPending || create.isPending;
   const error = write.error ?? create.error;

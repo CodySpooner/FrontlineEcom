@@ -65,6 +65,30 @@ describe('saved artboard views', () => {
     await ok('DELETE', `/api/kb/views/${v.id}?ws=pawsome`, undefined, 204);
     expect(await ok('GET', '/api/kb/views?ws=pawsome')).toEqual([]);
   });
+
+  test("a Library view keeps its filters (strings only)", async () => {
+    const state = { q: '', general: true, filters: { stage: 'tested', sort: 'title', dir: 'asc' } };
+    expect(await ok<KbView>('POST', '/api/kb/views', { ws: 'pawsome', name: 'Tested', state }, 201)).toMatchObject({ state });
+    expect((await req('POST', '/api/kb/views', { ws: 'pawsome', name: 'Bad', state: { filters: { stage: 3 } } })).status).toBe(400);
+    expect((await req('POST', '/api/kb/views', { ws: 'pawsome', name: 'Bad', state: { filters: ['stage'] } })).status).toBe(400);
+  });
+});
+
+describe('sources', () => {
+  test("lists a workspace's sources by title, General's too when asked; never another store's", async () => {
+    const add = db.prepare(`INSERT INTO kb_sources (id, store_id, kind, url, title, status, reliability, fetched_at, created_at) VALUES (?, ?, 'url', ?, ?, 'read', 'platform_docs', '2026-10-01', '2026-10-01')`);
+    add.run('s1', 'pawsome', 'https://b.test', 'TikTok ads guide');
+    add.run('s2', 'pawsome', 'https://a.test', 'Meta ad library');
+    add.run('s3', null, 'https://c.test', 'Hook study');
+    add.run('s4', 'glow', 'https://d.test', 'Glow secret');
+    expect(await ok('GET', '/api/kb/sources?ws=pawsome')).toEqual([
+      { id: 's2', url: 'https://a.test', title: 'Meta ad library', status: 'read', reliability: 'platform_docs', fetchedAt: '2026-10-01' },
+      { id: 's1', url: 'https://b.test', title: 'TikTok ads guide', status: 'read', reliability: 'platform_docs', fetchedAt: '2026-10-01' },
+    ]);
+    expect((await ok<{ id: string }[]>('GET', '/api/kb/sources?ws=pawsome&general=1')).map((s) => s.id)).toEqual(['s3', 's2', 's1']);
+    expect((await ok<{ id: string }[]>('GET', '/api/kb/sources?ws=general')).map((s) => s.id)).toEqual(['s3']);
+    expect((await req('GET', '/api/kb/sources?ws=nope')).status).toBe(400);
+  });
 });
 
 describe('research tasks for the dock', () => {
@@ -179,6 +203,29 @@ describe('cards', () => {
       'owner: Restored',
       'owner: Edited type, stage',
     ]);
+  });
+
+  test('bulk: one change to many cards of a workspace at once, each with its revision; all or nothing', async () => {
+    const [x, y] = [await create('pawsome', 'Rescue stories pull clicks'), await create('pawsome', 'Bundles beat discounts')];
+    const g = await create('general', 'Hooks decide the first 3 seconds');
+    const bulk = (ws: string, ids: string[], patch: object) => req('POST', '/api/kb/cards/bulk', { ws, ids, patch });
+    expect(await ok('POST', '/api/kb/cards/bulk', { ws: 'pawsome', ids: [x.id, y.id], patch: { researchMarked: true } })).toEqual({ updated: 2 });
+    await ok('POST', '/api/kb/cards/bulk', { ws: 'pawsome', ids: [x.id, y.id], patch: { blockedRoles: ['*'], category: ['Advertising', 'Hooks'] } });
+    for (const id of [x.id, y.id]) expect(await ok<KbCard>('GET', `/api/kb/cards/${id}?ws=pawsome`)).toMatchObject({ researchMarked: true, blockedRoles: ['*'], path: ['Advertising', 'Hooks'] });
+    expect(revisions(x.id)).toHaveLength(3);
+    // A card of another workspace, a field bulk can't set, a bad value: nothing changes.
+    expect((await bulk('pawsome', [x.id, g.id], { status: 'archived' })).status).toBe(404);
+    expect((await bulk('pawsome', [x.id], { title: 'Same title' })).status).toBe(400);
+    expect((await bulk('pawsome', [x.id], { status: 'merged' })).status).toBe(400);
+    expect((await bulk('pawsome', [], { status: 'archived' })).status).toBe(400);
+    expect((await bulk('all', [x.id], { status: 'archived' })).status).toBe(400);
+    expect((await ok<KbCard>('GET', `/api/kb/cards/${x.id}?ws=pawsome`)).status).toBe('active');
+    await ok('POST', '/api/kb/cards/bulk', { ws: 'general', ids: [g.id], patch: { status: 'archived' } });
+    expect((await ok<KbCard>('GET', `/api/kb/cards/${g.id}?ws=general`)).status).toBe('archived');
+    // A merged card comes back by detaching, not by a status.
+    await ok('POST', `/api/kb/cards/${x.id}/merge?ws=pawsome`, { from: y.id });
+    expect((await bulk('pawsome', [x.id, y.id], { status: 'active' })).status).toBe(409);
+    expect((await ok<KbCard>('GET', `/api/kb/cards/${y.id}?ws=pawsome`)).status).toBe('merged');
   });
 
   test('accepting a proposed card makes it active', async () => {

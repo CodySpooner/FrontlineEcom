@@ -26,6 +26,7 @@ import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { nicheName } from '../components/StoreForm';
 import { Badge, Button, Card, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Switch, Tabs, useFocusBack } from '../components/ui';
 import { Artboard } from '../knowledge/Artboard';
+import { CardLibrary } from '../knowledge/Library';
 import { VIEWS, viewOf, withParams, wsFrom, type KbView } from '../knowledge/url';
 import { ago } from '../lib/format';
 import { nicheKey } from '../lib/niche';
@@ -83,7 +84,7 @@ export function Knowledge() {
       {view === 'artboard' ? (
         <Artboard key={ws} ws={ws} general={general} q={q} card={card} set={set} switcher={switcher} />
       ) : view === 'library' ? (
-        <Library set={set} />
+        <Library ws={ws} general={general} q={q} card={card} set={set} />
       ) : view === 'relationships' ? (
         <Card>
           <EmptyState icon={Network} title="No connections to show yet">
@@ -148,8 +149,9 @@ function Toolbar({ ws, view, general, q, set, search, children }: { ws: string; 
   );
 }
 
-type Tab = KnowledgeKind | 'memory';
+type Tab = 'cards' | KnowledgeKind | 'memory';
 const TABS: { value: Tab; label: string }[] = [
+  { value: 'cards', label: 'Cards' },
   { value: 'playbook', label: 'Playbooks' },
   { value: 'platform', label: 'Platform packs' },
   { value: 'niche', label: 'Niche packs' },
@@ -163,15 +165,16 @@ const ABOUT: Record<KnowledgeKind, string> = {
 const MAX = 50_000;
 const short = (d: KnowledgeDoc) => d.title.replace(/ (playbook|platform pack|niche pack)$/, '');
 
-function Library({ set }: { set: SetParams }) {
+/** The cards as a list, then the UI-16 sections. A legacy ?doc= link (no ?tab=) is a playbook. */
+function Library({ ws, general, q, card, set }: { ws: string; general: boolean; q: string; card?: string; set: SetParams }) {
   const [params] = useSearchParams();
-  const tab = (TABS.find((t) => t.value === params.get('tab'))?.value ?? 'playbook') as Tab;
+  const tab = TABS.find((t) => t.value === params.get('tab'))?.value ?? (params.has('doc') ? 'playbook' : 'cards');
   return (
     <>
       <div className="mb-3.5">
-        <Tabs label="Knowledge" tabs={TABS} value={tab} onChange={(t) => set({ view: 'library', tab: t === 'playbook' ? undefined : t, doc: undefined })} />
+        <Tabs label="Knowledge" tabs={TABS} value={tab} onChange={(t) => set({ view: 'library', tab: t === 'cards' ? undefined : t, doc: undefined })} />
       </div>
-      {tab === 'memory' ? <MemoryBrowser /> : <Docs key={tab} kind={tab} set={set} />}
+      {tab === 'cards' ? <CardLibrary ws={ws} general={general} q={q} card={card} set={set} /> : tab === 'memory' ? <MemoryBrowser /> : <Docs key={tab} kind={tab} set={set} />}
     </>
   );
 }
@@ -199,7 +202,7 @@ function Docs({ kind, set }: { kind: KnowledgeKind; set: SetParams }) {
                   <button
                     type="button"
                     aria-current={d.key === sel?.key}
-                    onClick={() => set({ view: 'library', tab: kind === 'playbook' ? undefined : kind, doc: d.key })}
+                    onClick={() => set({ view: 'library', doc: d.key })}
                     className={cx('w-full cursor-pointer rounded-lg border px-3 py-2 text-left transition', d.key === sel?.key ? 'border-red/70 bg-red-soft' : 'border-line bg-bg-2 hover:border-line-3')}
                   >
                     <span className="flex items-center justify-between gap-2">

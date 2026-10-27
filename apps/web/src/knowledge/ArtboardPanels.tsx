@@ -37,13 +37,14 @@ function NameForm({ label, onSave, onCancel, busy, error }: { label: string; onS
 }
 
 /** Saved views of this workspace: pick one to bring back its filters, camera and collapsed frames. */
-export function SavedViews({ ws, current, onApply }: { ws: string; current: () => KbViewState; onApply: (s: KbViewState) => void }) {
+/** The artboard's views, or with `library` the Library's (the ones holding filters). */
+export function SavedViews({ ws, library = false, current, onApply }: { ws: string; library?: boolean; current: () => KbViewState; onApply: (s: KbViewState) => void }) {
   const views = useKbViews(ws);
   const save = useSaveKbView();
   const del = useDeleteKbView();
   const [naming, setNaming] = useState(false);
   const [active, setActive] = useState<string>();
-  const list = views.data ?? [];
+  const list = (views.data ?? []).filter((v) => !!v.state.filters === library);
   const on = list.find((v) => v.id === active);
   return (
     <div className="grid shrink-0 gap-1.5">
