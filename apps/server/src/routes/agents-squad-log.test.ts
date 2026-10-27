@@ -48,6 +48,18 @@ test("a request the app didn't apply reads approved but not applied: approved is
   expect(log).toMatch(/^\d{4}-\d{2}-\d{2},Ad Strategist,Pause .+,approved but not applied$/m);
 });
 
+test("a request the app closed reads expired, not the owner's no", async () => {
+  const ask = db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'glow', 'glow:copywriter', ?, ?, '{"kind":"tool_use"}', 'pending', ?)`);
+  ask.run('gone', 'Ended hooks', 'r', new Date().toISOString());
+  ask.run('no', 'Turned-down hooks', 'r', new Date().toISOString());
+  db.prepare(`UPDATE approvals SET reason = reason || ' [Expired: the agent run ended before a decision.]' WHERE id = 'gone'`).run(); // as runs.ts does
+  decide(db, 'gone', 'deny');
+  decide(db, 'no', 'deny');
+  const [log] = await run('glow:market_analyst', [{ call: 'squad_log', input: { days: 7 } }]);
+  expect(log).toMatch(/^\d{4}-\d{2}-\d{2},Copywriter,Ended hooks,expired \(closed by the app\)$/m);
+  expect(log).toMatch(/^\d{4}-\d{2}-\d{2},Copywriter,Turned-down hooks,denied$/m);
+});
+
 test("a live store's log starts when it went live: demo-era work isn't its track record", async () => {
   const at = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
   const ask = (id: string, title: string, created: string) =>

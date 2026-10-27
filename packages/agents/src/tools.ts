@@ -480,12 +480,16 @@ export const APP_TOOLS: AppTool[] = [
       const who = (agentId: string) => AGENT_ROLES[agentId.split(':')[1] as AgentRole]?.name ?? agentId;
       const requests = ctx.db
         .prepare(
-          `SELECT created_at, agent_id, title, status, json_extract(action_json, '$.auto') AS auto, EXISTS (SELECT 1 FROM done_once WHERE ref = 'not-applied:' || approvals.id) AS skipped
+          `SELECT created_at, agent_id, title, status, reason, json_extract(action_json, '$.auto') AS auto, EXISTS (SELECT 1 FROM done_once WHERE ref = 'not-applied:' || approvals.id) AS skipped
            FROM approvals WHERE store_id = ? AND created_at >= ? ORDER BY created_at DESC LIMIT 50`,
         )
         .all(ctx.store.id, from)
         // Approved isn't shipped: the app skips a change whose numbers moved since, and a platform write can fail.
-        .map((r) => ({ date: String(r.created_at).slice(0, 10), agent: who(String(r.agent_id)), title: r.title, decision: `${r.auto ? 'auto-approved' : r.status}${r.skipped ? ' but not applied' : ''}` }));
+        .map((r) => ({
+          date: String(r.created_at).slice(0, 10), agent: who(String(r.agent_id)), title: r.title,
+          // The app closes some as denied (run ended, a fresh one replaced it): not the owner's no (rememberDenial skips them too).
+          decision: /\[Expired: [^\]]*\]$/.test(String(r.reason)) ? 'expired (closed by the app)' : `${r.auto ? 'auto-approved' : r.status}${r.skipped ? ' but not applied' : ''}`,
+        }));
       const runs = ctx.db
         .prepare(`SELECT created_at, agent_id, task, transcript_json FROM agent_runs WHERE store_id = ? AND status = 'done' AND created_at >= ? ORDER BY created_at DESC LIMIT 40`)
         .all(ctx.store.id, from)
