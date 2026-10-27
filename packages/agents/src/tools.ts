@@ -1019,6 +1019,14 @@ export const APP_TOOLS: AppTool[] = [
       if (change === 'budget' && !(from > 0)) return `Not sent: ${String(c.name)} has no daily budget of its own (a lifetime budget, or budgets on its ad sets), so it can't be changed from here. Pause it, or say what to change in the ad manager.`;
       const to = change === 'pause' ? 0 : Math.round(newDailyBudget!);
       if (change === 'budget' && to === from) return `Not sent: ${cash(to, ctx.store.currency)}/day is already its budget.`;
+      // TikTok refuses a campaign daily budget of $50 or less (ads.tiktok.com/help/article/budget): approved, it would
+      // only fail on the account. ponytail: no rate, no check (the owner hears TikTok's error).
+      if (change === 'budget' && to < from && c.network === 'tiktok' && ctx.store.connected) {
+        const usdTo = await inUsd(ctx, to);
+        if (usdTo !== undefined && usdTo <= 50) {
+          return `Not sent: TikTok refuses a campaign daily budget of $50 or less${ctx.store.currency === 'USD' ? '' : ` (${cash(to, ctx.store.currency)} is $${usdTo})`}. Propose more than that, or pause it.`;
+        }
+      }
       // A big jump restarts the network's learning phase and the winner with it (the playbook: 20-30% every 48-72 h).
       const most = Math.max(Math.floor(from * 1.3), from + 1); // whole amounts: a $3 budget can still go to $4
       if (to > most) {

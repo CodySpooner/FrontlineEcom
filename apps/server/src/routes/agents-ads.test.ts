@@ -386,6 +386,14 @@ test("on a live store, a request too old to be applied gives way to a fresh one,
   expect(listMemory(db, 'pawsome').filter((m) => m.tags.includes('denied'))).toHaveLength(1); // the fresh one the owner denied, not the expired one
 });
 
+test("a live store's TikTok campaign isn't cut to $50/day or less: TikTok refuses it", async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
+  db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('tiktok', 'tt1', 'pawsome', 'Spark ads', 'active', 64)`).run();
+  const { outputs, requests } = await run([propose({ campaignId: 'tt1', change: 'budget', newDailyBudget: 50 }), propose({ campaignId: 'tt1', change: 'budget', newDailyBudget: 51 })], 'deny');
+  expect(outputs[0]).toBe('Not sent: TikTok refuses a campaign daily budget of $50 or less. Propose more than that, or pause it.');
+  expect(requests.map((r) => r.title)).toEqual(['Lower Spark ads budget $64 → $51/day']);
+});
+
 test('an agent on "suggest" sends nothing, so it leaves a stale request in place instead of closing it', async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'pawsome'`).run();
   db.prepare(`UPDATE agents SET autonomy = 'suggest' WHERE id = 'pawsome:ad_strategist'`).run();
