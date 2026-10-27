@@ -102,7 +102,8 @@ test("the Store Builder's FAQ and promo ideas get store page drafts in demo, pro
 });
 
 test('demo Operations handed one order flags that order, as the Orders page saw it', async () => {
-  const o = db.prepare(`SELECT id FROM orders WHERE store_id = 'glow' AND fulfillment_status = 'unfulfilled' ORDER BY local_date DESC LIMIT 1`).get()!;
+  const o = db.prepare(`SELECT id FROM orders WHERE store_id = 'glow' ORDER BY local_date DESC LIMIT 1`).get()!;
+  db.prepare(`UPDATE orders SET fulfillment_status = 'unfulfilled' WHERE id = ?`).run(String(o.id));
   const hand = async (detail: string) => {
     const m = runManager(db);
     if (typeof m.start('glow:operations', `Order ${o.id} ($48.00, CJ): ${detail}. Find out why and fix it, or tell me what to do.`) === 'string') throw new Error('not started');

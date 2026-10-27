@@ -51,7 +51,8 @@ test('a new store starts in demo mode with analytics history', async () => {
   await app.request('/api/stores', send('POST', { name: 'Volt Lab', platform: 'shopify', niche: 'tech' }));
   const s = (await (await app.request('/api/analytics/summary?stores=volt-lab&range=7')).json()) as AnalyticsSummary;
   expect(s.totals.revenue).toBeGreaterThan(0);
-  expect(s.series.every((p) => p.orders > 0)).toBe(true);
+  expect(s.series.slice(0, -1).every((p) => p.orders > 0)).toBe(true);
+  expect(s.series.at(-1)!.orders).toBeGreaterThanOrEqual(0); // Today's partial day can be empty just after midnight.
 });
 
 test('invalid store bodies are rejected with a message', async () => {

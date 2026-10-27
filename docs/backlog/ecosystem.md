@@ -85,6 +85,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-27 ECO-38 validation follow-up: Midnight exposed two existing demo-fixture assumptions. Tiny unblocking test-only edits permit an empty current partial day and explicitly prepare the unfulfilled order fixture; no production behavior changed. Full 982-test check passes after midnight.
+- 2026-10-26 ECO-38: Recessed neon circulation strips, illuminated junction diamonds and plaza corner inlays connect the expanded rooms. Cached floor art adds no moving effects or collisions. Desktop/Orca fit and hub screenshots (.agent/eco-38-*.png); pnpm check 982 tests, 58 FPS.
 - 2026-10-26 ECO-37: Ten original illuminated role emblems replace generic wall screens; decorative monitor bars replaced with document/product tiles. Lifted signs clear the new panels. Real seven-day orders chart retained. Fit/department and Orca screenshots (.agent/eco-37-*.png); pnpm check 982 tests, 58 FPS.
 - 2026-10-26 ECO-36: Original planted corners, department-colored lounge seating, rugs and coffee tables. Furniture collision tiles preserve both doorways and all thirty routes; arrival simulation passes. Desktop/Orca fit and close-up screenshots (.agent/eco-36-*.png); pnpm check 982 tests, 58 FPS.
 - 2026-10-26 ECO-35: Worker hover/focus floor spotlight and compact live portrait/name/department/status card. Keyboard directory preview with described-by linkage; seven-second camera-focus expiry. Browser hover, blur/expiry, profile selection, mobile containment and Orca verified (.agent/eco-35-*.png). Keyboard/empty-desk regression test; pnpm check 982 tests, 58 FPS.
@@ -224,5 +226,5 @@ Visual review: owner reference plus [Game Dev Story official screenshots](https:
 
 - [x] ECO-36 Botanical lounge corners: lush planters, soft seating and coffee tables in spare room corners, with collision-safe paths to all thirty desks.
 - [x] ECO-37 Department wall art: original pixel role emblems and display panels that avoid decorative fake business charts.
-- [ ] ECO-38 Neon circulation: lit corridor inlays and plaza guidance that connect the rooms visually without obstructing workers.
+- [x] ECO-38 Neon circulation: lit corridor inlays and plaza guidance that connect the rooms visually without obstructing workers.
 - [ ] ECO-39 Zoom-aware labels: keep department signs and worker callouts readable while reducing close-up overlap.

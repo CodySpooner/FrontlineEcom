@@ -57,6 +57,28 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
     }
     if (!room && (x%16===15 || y%16===15)) { rect(p.x-4,p.y+10,8,2,'#713b51'); }
   }
+  // Recessed circulation lights are floor decoration, never simulated task traffic.
+  const lanes = [
+    [{x:15.5,y:1},{x:15.5,y:47}], [{x:47.5,y:1},{x:47.5,y:47}],
+    [{x:1,y:15.5},{x:63,y:15.5}], [{x:1,y:31.5},{x:63,y:31.5}],
+    [{x:31.5,y:1},{x:31.5,y:15.5}], [{x:31.5,y:31.5},{x:31.5,y:47}],
+  ];
+  for (const lane of lanes) {
+    const a=iso(lane[0]!), b=iso(lane[1]!);
+    for (const [width,alpha] of [[14,.08],[6,.2],[2,.9]]) {
+      c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.lineWidth=width!;c.strokeStyle=theme.rail;c.globalAlpha=alpha!;c.stroke();
+    }
+    c.globalAlpha=1;
+    for (const p of [a,b]) diamond(p.x,p.y-4,8,4,'#ffb7c8');
+  }
+  for (const x of [15.5,31.5,47.5]) for (const y of [15.5,31.5]) {
+    const p=iso({x,y});diamond(p.x,p.y-9,18,9,'#1c202c',theme.rail);diamond(p.x,p.y-3,6,3,'#ffcad5');
+  }
+  const plaza=[{x:22,y:18},{x:40,y:18},{x:40,y:30},{x:22,y:30}];
+  for (const p of plaza) {
+    const a=iso({x:p.x+(p.x===22?2:-2),y:p.y}), b=iso(p), d=iso({x:p.x,y:p.y+(p.y===18?2:-2)});
+    c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.lineTo(d.x,d.y);c.strokeStyle='#7d485d';c.lineWidth=3;c.stroke();
+  }
   // The front edges expose the headquarters' foundation and red power rails.
   for (const [a,b] of [[corners[1]!,corners[2]!],[corners[2]!,corners[3]!]] as const) {
     poly([a.x,a.y,b.x,b.y,b.x,b.y+50,a.x,a.y+50],'#191a23','#3d3645');
