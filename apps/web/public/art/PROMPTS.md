@@ -53,6 +53,41 @@ A thoughtful hooded archivist in black cloth, knowing glowing red eyes, with an 
 
 A black armored engineer's gauntlet adjusting one substantial matte-black precision control dial, with restrained red illumination around its rim. Compact sculptural mechanical object, no labels, numbers or interface; elegant physical machinery against deep charcoal.
 
+
+## Specialist portrait series
+
+Each request used the uncompressed Ad Strategist source as the reference. Exact request = common prompt below + ` Subject: ` + the corresponding subject. All are 768×768 WebP masters. Market Analyst uses WebP quality 78 to stay under 80 KB; the other portraits use quality 82.
+
+Create a new character portrait for the same Frontline Ecom squad. Use the reference portrait only for the cinematic painting style, camera, dark palette, material treatment and red rim lighting; replace the character completely with the subject below, do not copy the reference's horned helm unless specified. Square master 1024x1024 or larger, head-and-shoulders bust, eye-level camera. Centered expressive face, eyes near y=36%, head roughly x=28–72% and y=12–55%, shoulders and role prop below. Face must read at 32px and in a wide card crop around the face. Clean premium semi-realistic digital illustration with painterly planes, not a photo, not flat vector or pixel art. Matte black/charcoal armor and cloth (#08080a–#131316), restrained crimson #c3121f / #ff2a3a rim light, faintly glowing red eyes, tiny warm white highlights. Keep the backdrop almost black, broad simple silhouette and natural anatomy, one focal character. No text, letters, logos, watermarks, borders or UI. 
+
+### product-hunter
+
+Product Hunter: a sharp-eyed young female scout with short dark hair and a sleek black VISOR HELMET pushed up above her brow (not a hood), showing a delighted found-a-winner grin. A compact scanning lens held near one cheek, gloved hand at collar level, light agile armor. Clever, curious and observant. Strong horizontal visor silhouette.
+
+### store-developer
+
+Store Developer: a calm male builder-hacker with an angular black HOOD, a subtle headset microphone and warm composed expression, dark stubble, glowing red eyes. Hands gently frame a small glowing red storefront wireframe model near his chest. Quiet confidence, relaxed pose, cloth folds instead of spiky armor.
+
+### creative-studio
+
+Creative Studio: an energetic female artist with a wild SPIKY CREST of short black hair streaked vivid red, an amused mischievous smile, red eyes, black techwear with angular shoulder plates. Red light-paint on her fingerless gloves, one hand holding a camera at chest height and the other a glowing stylus near her cheek. Bold asymmetrical hair silhouette, human and expressive.
+
+### market-analyst
+
+Market Analyst: a cool mature female analyst with a compact black RAM HELM, curled horns at the temples, silver hair, one eyebrow raised in thoughtful skepticism. A single red HUD lens over one eye reflects tiny chart bars without labels. Hold a slim black analysis slate at the lower chest. Poised, precise, quietly confident, distinct curled-horn silhouette.
+
+### copywriter
+
+Copywriter: a mysterious dark-skinned androgynous wordsmith under a black HOOD, lower face covered by an elegant HALF-MASK. Knowing expressive glowing red eyes and a slightly raised eyebrow. One hand twirls a fine glowing red stylus-quill close to the cheek, the other holds a closed dark notebook at chest level. Soft fabric, light armor, subtle sly confidence, no horn shapes.
+
+### email-sms
+
+Email and SMS: a friendly fast male messenger-ninja with East Asian features, short dark hair, a vivid red NINJA HEADBAND with two short trailing ends, and a lively smile. One eye winking, other eye softly glowing red. A compact message drone with a simple envelope-shaped light hovers next to the shoulder, gloved hand offering a small dark message capsule. Agile light black armor, approachable and energetic.
+
+### operations
+
+Operations: a big dependable dark-skinned quartermaster with broad shoulders, close-cropped hair and a heavy black GRILL HALF-MASK with strong vertical vents. Friendly glowing red eyes with smile creases, reassuring steady gaze. Arms crossed over heavy matte work armor, a blank clipboard tucked under one arm and the top edge of one shipping crate at the bottom. Robust simple square silhouette, warm personality, no hood or horns.
+
 ## Style frame
 
 ### Command Center: initial generation

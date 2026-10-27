@@ -74,6 +74,8 @@ silhouette you can tell apart at 32 px. Keep each one's current look as the anch
 
 ## Done
 
+- 2026-10-27 IMG-05: All eight 768px portraits generated with distinct expressions, silhouettes and role props; exact prompts recorded. Browser galleries checked at 1280/1920 with 32/42/48/96px and wide-card crops. Every portrait below 80 KB; pnpm check green.
+
 - 2026-10-27 IMG-04: Hero/nav now load per-section local WebP art, including agent detail; removed skyline/scenes and gradient art. Browser checks at 900/1280/1920/2560 confirm loaded images, unchanged header height, pointer-events none, drag/no-drag CSS. All header screenshots saved; pnpm check green.
 
 - 2026-10-27 IMG-03: Twelve distinct generated WebP headers total 496 KB; all exact prompts recorded. Reviewed header galleries at 1280/1920 in browser and loaded art in Orca; pnpm check green. Agent detail will share AI Agents; Ecosystem uses no Hero.
@@ -99,12 +101,14 @@ and ignore a watchdog nudge if `.agent/STOP` is already there.
 - [x] IMG-03 Header images for every section in the list, same template.
 - [x] IMG-04 Wire headers: `Hero` shows the page's image (replace `HeroArt` / `Scene` / the SVG skyline with an image
   key per page in `nav.ts`), text readable, right side and drag region intact, no layout shift, 900–2560 px.
-- [ ] IMG-05 The other seven portraits, same template.
+- [x] IMG-05 The other seven portraits, same template.
 - [ ] IMG-06 Wire portraits: `Portrait` renders the image at every size, rank frames and paused look kept, unused SVG
   symbols removed.
 - [ ] IMG-07 Acceptance pass ("Done when" above), fix what it finds, then STOP.
 
 ## Done
+
+- 2026-10-27 IMG-05: All eight 768px portraits generated with distinct expressions, silhouettes and role props; exact prompts recorded. Browser galleries checked at 1280/1920 with 32/42/48/96px and wide-card crops. Every portrait below 80 KB; pnpm check green.
 
 - 2026-10-27 IMG-04: Hero/nav now load per-section local WebP art, including agent detail; removed skyline/scenes and gradient art. Browser checks at 900/1280/1920/2560 confirm loaded images, unchanged header height, pointer-events none, drag/no-drag CSS. All header screenshots saved; pnpm check green.
 
