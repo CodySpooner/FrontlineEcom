@@ -141,6 +141,10 @@ describe('reflection', () => {
     expect(parseLearnings(long)).toEqual([{ kind: 'fact', text: 'Ships from Austin', evidence: 'e'.repeat(300), confidence: 0.5, tags: ['a', 'b', 'c', 'd', 'e', 'f'] }]);
     expect(parseLearnings('Nothing durable this time.')).toEqual([]);
     expect(parseLearnings('[{oops')).toEqual([]);
+    // A bracket in the prose before the array: the array is still found.
+    expect(parseLearnings(`From [store_summary] (step [2]):\n[{"kind":"fact","text":"Ships from Austin","tags":["ops"]}]`)).toEqual([
+      { kind: 'fact', text: 'Ships from Austin', confidence: 0.5, tags: ['ops'] },
+    ]);
   });
 });
 

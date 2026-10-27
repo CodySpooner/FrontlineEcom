@@ -163,14 +163,15 @@ Skip anything already in "What the squad has learned", generic advice, and guess
 
 /** Parses the reflection reply. Tolerates prose or code fences around the array; drops invalid items. */
 export function parseLearnings(reply: string): Omit<NewMemory, 'storeId' | 'agentId'>[] {
-  const start = reply.indexOf('[');
   const end = reply.lastIndexOf(']');
-  if (start < 0 || end < start) return [];
   let items: unknown;
-  try {
-    items = JSON.parse(reply.slice(start, end + 1));
-  } catch {
-    return [];
+  // The array starts at the first [ that parses: prose before it can hold one too (a [link], "[2]").
+  for (let start = reply.indexOf('['); start >= 0 && start < end && items === undefined; start = reply.indexOf('[', start + 1)) {
+    try {
+      items = JSON.parse(reply.slice(start, end + 1));
+    } catch {
+      // not this one
+    }
   }
   if (!Array.isArray(items)) return [];
   return items
