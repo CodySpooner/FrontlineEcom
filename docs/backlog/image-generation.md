@@ -74,6 +74,8 @@ silhouette you can tell apart at 32 px. Keep each one's current look as the anch
 
 ## Done
 
+- 2026-10-27 IMG-03: Twelve distinct generated WebP headers total 496 KB; all exact prompts recorded. Reviewed header galleries at 1280/1920 in browser and loaded art in Orca; pnpm check green. Agent detail will share AI Agents; Ecosystem uses no Hero.
+
 - 2026-10-27 IMG-02: Generated and optimized Command Center and Ad Strategist; exact prompts recorded in public/art/PROMPTS.md. Previewed at 1280/1920 (.agent/style-frame-*); 25 KB header, 67 KB portrait; pnpm check green. when
 
 `pnpm check` green; every page in the list above and every place `Portrait` is used checked in a browser at 1280 and
@@ -92,7 +94,7 @@ and ignore a watchdog nudge if `.agent/STOP` is already there.
   screenshots, DESIGN.md §3. Screenshot today's headers and the AI Agents page as "before".
 - [x] IMG-02 Style frame: generate the Command Center header and one portrait (Ad Strategist) first; tune until they
   match the art direction, then record the final prompts in `PROMPTS.md` as the template for the rest.
-- [ ] IMG-03 Header images for every section in the list, same template.
+- [x] IMG-03 Header images for every section in the list, same template.
 - [ ] IMG-04 Wire headers: `Hero` shows the page's image (replace `HeroArt` / `Scene` / the SVG skyline with an image
   key per page in `nav.ts`), text readable, right side and drag region intact, no layout shift, 900–2560 px.
 - [ ] IMG-05 The other seven portraits, same template.
@@ -101,6 +103,8 @@ and ignore a watchdog nudge if `.agent/STOP` is already there.
 - [ ] IMG-07 Acceptance pass ("Done when" above), fix what it finds, then STOP.
 
 ## Done
+
+- 2026-10-27 IMG-03: Twelve distinct generated WebP headers total 496 KB; all exact prompts recorded. Reviewed header galleries at 1280/1920 in browser and loaded art in Orca; pnpm check green. Agent detail will share AI Agents; Ecosystem uses no Hero.
 
 - 2026-10-27 IMG-02: Generated and optimized Command Center and Ad Strategist; exact prompts recorded in public/art/PROMPTS.md. Previewed at 1280/1920 (.agent/style-frame-*); 25 KB header, 67 KB portrait; pnpm check green.
 
