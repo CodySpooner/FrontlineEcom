@@ -438,12 +438,22 @@ describe('agent tools on demo data', () => {
   });
 
   test('research_feed lists scored candidates in the store niche', async () => {
-    const events = await run(input('glow', 'product_hunter'), [{ call: 'research_feed', input: { tab: 'high_margin', limit: 5 } }, done]);
-    const [feed] = results(events);
-    const [header, ...rows] = feed!.output.split(/\n/);
-    expect(header).toBe('id,title,category,source,cost,price,compare_at,margin_pct,trend_pct,competition,shipping_days,score');
+    const feed = async () => results(await run(input('glow', 'product_hunter'), [{ call: 'research_feed', input: { tab: 'high_margin', limit: 5 } }, done]))[0]!.output;
+    const [header, ...rows] = (await feed()).split(/\n/);
+    expect(header).toBe('id,title,category,source,cost,price,compare_at,margin_pct,trend_pct,competition,shipping_days,score,saved_by_owner');
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => Number(r.split(',')[7]) >= 70)).toBe(true);
+    // The owner's shortlists show on the rows they saved.
+    const id = rows[0]!.split(',')[0]!;
+    for (const [list, name] of [['l1', 'Q4 ideas'], ['l2', 'Gifts, under $30']] as const) {
+      db.prepare(`INSERT INTO product_lists (id, name, created_at) VALUES (?, ?, ?)`).run(list, name, `2026-10-0${list.slice(1)}T00:00:00Z`);
+      db.prepare(`INSERT INTO product_list_items (list_id, product_id, added_at) VALUES (?, ?, '2026-10-05T00:00:00Z')`).run(list, id);
+    }
+    try {
+      expect((await feed()).split('\n').find((r) => r.startsWith(`${id},`))).toMatch(/,Q4 ideas; Gifts; under \$30$/);
+    } finally {
+      db.prepare(`DELETE FROM product_lists WHERE id IN ('l1', 'l2')`).run();
+    }
   });
 
   test("a custom-niche store's finds are its own: its feed doesn't show another custom niche's", async () => {

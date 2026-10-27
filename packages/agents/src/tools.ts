@@ -482,7 +482,8 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'research_feed',
     description:
-      'Trending product candidates with cost, price (USD), margin %, 30-day demand trend %, competition (0-100, lower is better), shipping days and AI score (CSV, best first). Defaults to the store niche.',
+      'Trending product candidates with cost, price (USD), margin %, 30-day demand trend %, competition (0-100, lower is better), shipping days and AI score (CSV, best first). Defaults to the store niche. ' +
+      "saved_by_owner: the owner's Research lists it's in (their shortlist: weigh it).",
     input: {
       tab: z.enum(RESEARCH_TABS as [ResearchTab, ...ResearchTab[]]).optional(),
       q: z.string().optional().describe('search title/category'),
@@ -495,8 +496,13 @@ export const APP_TOOLS: AppTool[] = [
       const live = ctx.store.connected;
       const items = await ctx.research({ tab, q, limit, ...(live ? { sample: 0 as const } : {}), ...(anyNiche ? {} : { niche: nicheKey(ctx.store) }) }); // other:<slug> for a custom niche
       if (live && !items.length) return 'No finds yet (the built-in sample catalog is left out for a live store). Find products with WebSearch, cost them with search_suppliers and record them with record_product_find.';
+      const saved = new Map<string, string[]>();
+      for (const r of ctx.db.prepare('SELECT i.product_id, l.name FROM product_list_items i JOIN product_lists l ON l.id = i.list_id ORDER BY l.created_at').all()) {
+        saved.set(String(r.product_id), [...(saved.get(String(r.product_id)) ?? []), String(r.name)]);
+      }
       return (await usdNote(ctx)) + csv(
-        items.map((p) => ({ id: p.id, title: p.title, category: p.category, source: p.source, cost: p.cost, price: p.price, compare_at: p.compareAt, margin_pct: p.margin, trend_pct: p.trend, competition: p.competition, shipping_days: p.shippingDays, score: p.score })),
+        // compare_at 0: sellers show no 'was' price (record_product_find).
+        items.map((p) => ({ id: p.id, title: p.title, category: p.category, source: p.source, cost: p.cost, price: p.price, compare_at: p.compareAt || '', margin_pct: p.margin, trend_pct: p.trend, competition: p.competition, shipping_days: p.shippingDays, score: p.score, saved_by_owner: (saved.get(p.id) ?? []).join('; ') })),
       );
     },
   }),

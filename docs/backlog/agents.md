@@ -336,11 +336,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-205 `compare_stores` names the live stores with no fee estimate. Their profit leaves out payment and platform fees, so next to a store that nets them they ranked above what they earn (AGT-201 told only the store's own summary).
 - [x] AGT-206 `record_product_find` no longer makes the agent invent a compare-at. It was required, so a find with no 'was' price got one made up, and "Send to store" makes it the live product's strikethrough price: a fake former price (FTC, the EU's 30-day prior-price rule). Optional now, and refused unless above the price.
 - [x] AGT-207 `propose_price_change` refuses a compare-at above any price the store charged. Any compare-at above the new price went to the owner, so a raise could come with a made-up "was" price (a fake discount: FTC 16 CFR 233, TikTok's and the EU's 30-day rule). Now at most the current price, or the compare-at the product already shows.
+- [x] AGT-208 `research_feed` shows which finds the owner saved to their Research lists (`saved_by_owner`): the owner's shortlist is the clearest taste signal the Product Hunter has, and it couldn't see it. A find with no compare-at (0 since AGT-206) shows it blank, not as 0.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-208: `research_feed` gains `saved_by_owner` (list names) and leaves a 0 compare-at blank.
 - 2026-10-26 — AGT-207: `propose_price_change`'s `compareAt` must be at most the current price (or the product's current compare-at); the niche packs already said so, now the tool does.
 - 2026-10-26 — AGT-206: `record_product_find`'s `compareAt` is optional (stored as 0 = none) and must be above the price; ui asked to hide a 0 compare-at in Research.
 - 2026-10-26 — AGT-205: `compare_stores`' header adds "profit leaves out fees (no fee estimate set): …".
