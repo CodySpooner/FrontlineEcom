@@ -166,7 +166,7 @@ export function checkProductOutcomes(db: Db, today?: string) {
     )
     .all(roughly15DaysAgo(today));
   for (const t of tests) {
-    const start = t.live_at ? [String(t.added_on), storeDay(db, String(t.store_id), String(t.live_at))].sort().at(-1)! : String(t.added_on);
+    const start = onSaleSince(db, String(t.store_id), String(t.added_on), t.live_at);
     if (!settled(db, String(t.store_id), start, today)) continue;
     const end = addDays(start, 13); // its first 14 days, the first one included
     const { units, revenue, profit, uncosted } = productSales(db, String(t.store_id), String(t.product_id), start, end);
@@ -194,6 +194,19 @@ export function checkProductOutcomes(db: Db, today?: string) {
     if (won) award(db, { ref: `product-win:${t.approval_id}:${t.product_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" sold ${units} units in 14 days` });
     db.prepare('UPDATE product_tests SET judged_at = ? WHERE store_id = ? AND product_id = ?').run(new Date().toISOString(), storeId, String(t.product_id));
   }
+}
+
+/** The day a product the app added went on sale: when first seen active (product-live), not before it was added. */
+const onSaleSince = (db: Db, storeId: string, addedOn: string, liveAt: unknown) =>
+  liveAt ? [addedOn, storeDay(db, storeId, String(liveAt))].sort().at(-1)! : addedOn;
+
+/**
+ * A product the app added went on sale after `day`: the 14 days before a change on it from then hold only part of its
+ * sales, no baseline for 14 days after. ponytail: one added outside the app has no such date and is judged as it sold.
+ */
+function newSince(db: Db, storeId: string, productId: string, day: string) {
+  const t = db.prepare(`SELECT added_on, (SELECT at FROM done_once WHERE ref = 'product-live:' || ?1 || ':' || ?2) AS live_at FROM product_tests WHERE store_id = ?1 AND product_id = ?2`).get(storeId, productId);
+  return !!t && onSaleSince(db, storeId, String(t.added_on), t.live_at) > day;
 }
 
 /**
@@ -263,7 +276,8 @@ export function checkPriceOutcomes(db: Db, today?: string) {
     const before = productSales(db, storeId, productId, addDays(day, -14), addDays(day, -1));
     const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
     db.prepare('UPDATE price_tests SET judged_at = ? WHERE approval_id = ?').run(new Date().toISOString(), String(t.approval_id));
-    if (!before.units) continue; // no sales before (new, or not selling): no baseline, so nothing to compare
+    // No sales before (new, or not selling), or on sale for only part of those days: no baseline, so nothing to compare.
+    if (!before.units || newSince(db, storeId, productId, addDays(day, -14))) continue;
     const few = before.units + after.units < MIN_UNITS;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${t.currency}`;
     const season = par(db, storeId, productId, day, before, money);
@@ -305,7 +319,8 @@ export function checkPageOutcomes(db: Db, today?: string) {
     if (!settled(db, storeId, day, today) || !once(db, `page-outcome:${d.id}`)) continue;
     const before = productSales(db, storeId, productId, addDays(day, -14), addDays(day, -1));
     const after = productSales(db, storeId, productId, addDays(day, 1), addDays(day, 14));
-    if (!before.units) continue; // a new product's page (it had no sales before) has no baseline: its product test judges the sales
+    // A new product's page (no sales before, or on sale for only part of those days) has no baseline: its product test judges the sales.
+    if (!before.units || newSince(db, storeId, productId, addDays(day, -14))) continue;
     const few = before.units + after.units < MIN_UNITS;
     const money = (n: number) => `${Math.round(n).toLocaleString('en-US')} ${d.currency}`;
     const season = par(db, storeId, productId, day, before, money);

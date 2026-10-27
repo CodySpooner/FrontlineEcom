@@ -33,6 +33,25 @@ test("a page for a product that hadn't sold before has no baseline: no verdict, 
   expect(getAgent(db, 'peak:store_developer')!.xp).toBe(before);
 });
 
+test('a page or price change on a product the app put on sale within the 14 days before has no full baseline: no verdict, no win', async () => {
+  db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
+  once(db, 'activate:peak', new Date('2020-01-01'));
+  const day = addDays(localDate(), -20);
+  // Added by the app 6 days before and put on sale 4 days before (its product test judges those first sales).
+  db.prepare(`INSERT INTO product_tests (store_id, product_id, approval_id, agent_id, title, added_on) VALUES ('peak', 'peak-p1', 'a-add', 'peak:product_hunter', 'Jump Rope', ?)`).run(addDays(day, -6));
+  once(db, 'product-live:peak:peak-p1', new Date(`${addDays(day, -4)}T15:00:00Z`));
+  const draft = savePageDraft(db, { storeId: 'peak', agentId: 'peak:store_developer', kind: 'product', productId: 'peak-p1', title: 'Jump Rope', html: '<p>New copy</p>', notes: 'Benefit-first rewrite' });
+  db.prepare('UPDATE page_drafts SET published_at = ? WHERE id = ?').run(`${day}T15:00:00Z`, draft.id);
+  db.prepare(`INSERT INTO price_tests (approval_id, store_id, product_id, agent_id, title, from_price, to_price, changed_on) VALUES ('a-price', 'peak', 'peak-p1', 'peak:market_analyst', 'Jump Rope', 20, 20, ?)`).run(day);
+  for (let d = -4; d <= -1; d++) sell(2, addDays(day, d)); // 2 a day since it went on sale
+  for (let d = 1; d <= 14; d++) sell(2, addDays(day, d)); // the same 2 a day after: nothing changed
+  const xp = () => getAgent(db, 'peak:store_developer')!.xp + getAgent(db, 'peak:market_analyst')!.xp;
+  const before = xp();
+  await app.request('/api/achievements');
+  expect(listMemory(db, 'peak').filter((m) => m.tags.includes('page') || m.tags.includes('pricing'))).toEqual([]);
+  expect(xp()).toBe(before);
+});
+
 test('a page on a product that sells a few units is not judged on one order either way', async () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
   once(db, 'activate:peak', new Date('2020-01-01'));
