@@ -8,7 +8,7 @@ import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
-import { discardThemeCopy, draftThemeCopy, onDecision, publishThemeChange } from './agents-actions';
+import { discardRestoredThemeCopies, discardThemeCopy, draftThemeCopy, onDecision, publishThemeChange } from './agents-actions';
 import { checkThemeOutcomes } from './agents-gamification';
 
 let db: Db;
@@ -250,6 +250,22 @@ test('a theme change is judged on the days with traffic reported, not orders fro
   expect(listMemory(db, 'glow').filter((m) => m.tags.includes('theme')).map((m) => m.text)).toEqual([
     'The theme change "Sticky ATC" worked: conversion 2.00% → 2.50% (14 days before vs after, 7,000 → 14,000 sessions).',
   ]);
+});
+
+test("a theme draft a restored backup closed gets its copy deleted at startup, once", async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
+  const ask = db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES (?, 'glow', 'glow:store_developer', 't', ?, ?, 'denied', ?)`);
+  const restored = 'r [Expired: the data was restored from a backup.]';
+  ask.run('d1', restored, JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '9', name: 'Frontline: x' } }), new Date().toISOString());
+  ask.run('d2', restored, JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '7', name: "The owner's summer theme" } }), new Date().toISOString());
+  ask.run('d3', 'r', JSON.stringify({ kind: 'store.publish_theme', payload: { themeId: '8', name: 'Frontline: y' } }), new Date().toISOString()); // the owner's no: its hook ran
+  once(db, 'theme-copy:glow:9');
+  once(db, 'theme-copy:glow:8');
+  const deleted: string[] = [];
+  const del = async (storeId: string, themeId: string) => deleted.push(`${storeId} ${themeId}`);
+  await discardRestoredThemeCopies(db, del);
+  await discardRestoredThemeCopies(db, del); // the next start: already tried
+  expect(deleted).toEqual(['glow 9']);
 });
 
 test("a denied theme draft's copy is deleted; a theme the app didn't make never is", async () => {

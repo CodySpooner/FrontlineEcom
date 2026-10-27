@@ -65,7 +65,7 @@ import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { log } from '../log';
 import { researchRoutes } from '../research';
-import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, EXPIRED_DEMO, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
+import { addProducts, applyAdChange, applyPriceChange, discardRestoredThemeCopies, discardThemeCopy, draftThemeCopy, EXPIRED_DEMO, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { issueRoutes } from './agents-issues';
@@ -480,6 +480,7 @@ export function agentRoutes(db: Db) {
   const runs = runManager(db);
   activateConnectedStores(db, runs);
   advanceSquadMissions(db); // runs that ended while the app was closed
+  void discardRestoredThemeCopies(db, (storeId, themeId) => onLiveShopify(db, storeId, () => deleteTheme(db, loadKey(dataDir()), storeId, themeId)));
   // A step turned down for budget can start once the owner raises the store's cap (core's caps route) or the day turns
   // over, neither of which ends a run. ponytail: a minute's poll over open missions; an event from the caps route if that lags.
   setInterval(() => (activateConnectedStores(db, runs), advanceSquadMissions(db)), 60_000).unref();

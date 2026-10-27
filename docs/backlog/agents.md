@@ -347,11 +347,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-215 A store page whose push may have worked (a 5xx, a timeout, a dropped connection) doesn't invite a second Publish as if nothing happened: the notice says it may be live and to check the store's pages first, or it goes up twice. Refusals and product pages (an update, safe to repeat) keep the old notice. From core's safety review 5.
 - [x] AGT-216 A theme copy whose duplicate call failed after Shopify made it (a 5xx, a dropped connection) is deleted. Its id never came back, so nothing removed it, and the agent's next try made another: copies piled up toward Shopify's 20-theme library limit.
 - [x] AGT-217 A run that started on demo data does nothing more once its store goes live. Only its requests and learnings were refused; it could still save a flow draft (which the monthly flow check then counts as done), a creative or an order issue off the demo numbers right after go-live cleared them, or read real numbers into a demo answer.
+- [x] AGT-218 A theme draft a restored backup closed gets its copy deleted. Core closes those requests as the database opens (CORE-110), before any denial hook runs, so the copy stayed in Shopify's 20-theme library. Startup now deletes it, one try per request.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-218: `discardRestoredThemeCopies` at startup runs `discardThemeCopy` for denied `store.publish_theme` requests with core's restore suffix on connected stores (`theme-discard:` once marker).
 - 2026-10-26 — AGT-217: the went-live guard moves from `write_memory` into `callTool`, so every app tool of such a run says stop (`requestApproval` keeps its own for external tools).
 - 2026-10-26 — AGT-216: `draftThemeCopy` lists the themes again when `duplicate` throws and removes a new one with the copy's name (one that existed before stays).
 - 2026-10-26 — AGT-215: `publishDraft` tells an unsure store-page push (HTTP 5xx, fetch failed, abort/timeout) apart from a refusal and asks the owner to check the store before publishing again (core's review 5 Inbox item).

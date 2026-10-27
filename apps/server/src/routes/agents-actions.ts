@@ -296,6 +296,23 @@ export async function discardThemeCopy(db: Db, a: ApprovalRequest, del: (storeId
   if (typeof themeId === 'string' && db.prepare('SELECT 1 FROM done_once WHERE ref = ?').get(`theme-copy:${a.storeId}:${themeId}`)) await del(a.storeId, themeId);
 }
 
+/**
+ * Theme drafts a restored backup closed (core's db.ts, as the database opens: no denial hook runs) leave their copy in
+ * Shopify's 20-theme library. Startup deletes it, one try per request (it may since have gone live or been deleted).
+ */
+export async function discardRestoredThemeCopies(db: Db, del: (storeId: string, themeId: string) => Promise<unknown>) {
+  const closed = db
+    .prepare(
+      `SELECT a.id FROM approvals a JOIN stores s ON s.id = a.store_id AND s.connected = 1 WHERE a.status = 'denied'
+         AND json_extract(a.action_json, '$.kind') = 'store.publish_theme' AND a.reason LIKE '%[Expired: the data was restored from a backup.]'`,
+    )
+    .all();
+  for (const { id } of closed) {
+    if (!once(db, `theme-discard:${String(id)}`)) continue;
+    await discardThemeCopy(db, getApproval(db, String(id))!, del).catch((e: unknown) => console.error(`Theme copy of ${String(id)} not deleted:`, e));
+  }
+}
+
 /** The owner's no becomes a store memory, so the squad doesn't pitch it again without new evidence. An expired request isn't a no. */
 /** Appended to requests closed because the store went live: asked on simulated numbers, not turned down by the owner. */
 export const EXPIRED_DEMO = '[Expired: asked on demo data before the store went live.]';
