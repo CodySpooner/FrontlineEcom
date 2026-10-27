@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { lookup } from 'node:dns/promises';
+import { BlockList } from 'node:net';
 import { Hono } from 'hono';
 import { isPrivateHost, type AdSnapshotData, type Competitor, type CompetitorSnapshot, type PriceChange, type PriceSnapshotData } from '@frontline/shared';
 import { once, tx, type Db } from './db';
@@ -91,6 +93,24 @@ export function priceChanges(db: Db, storeIds: string[], limit: number): PriceCh
 }
 
 type Fetch = typeof fetch;
+
+// This computer or its network as a DNS answer gives it: loopback, private, link-local and CGNAT (Tailscale) IPv4 (the
+// IPv4 rules also match IPv4-mapped IPv6); IPv6 loopback, unique-local and link-local.
+const LOCAL = new BlockList();
+for (const [a, bits] of [['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12], ['192.168.0.0', 16]] as const) LOCAL.addSubnet(a, bits, 'ipv4');
+for (const [a, bits] of [['::', 127], ['fc00::', 7], ['fe80::', 10]] as const) LOCAL.addSubnet(a, bits, 'ipv6');
+
+/**
+ * The watch's fetch: refuses a host whose DNS answer is on this computer or its network (a public-looking name such as
+ * localtest.me points at 127.0.0.1). A name that doesn't resolve is left to fetch's own error.
+ * ponytail: fetch resolves the name again, so a DNS-rebinding host could still slip past.
+ */
+export const publicFetch = (resolve = (host: string) => lookup(host, { all: true })): Fetch => async (input, init) => {
+  const host = new URL(String(input)).hostname.replace(/^\[(.*)\]$/, '$1');
+  const answers = await resolve(host).catch(() => []);
+  if (answers.some((a) => LOCAL.check(a.address, a.family === 6 ? 'ipv6' : 'ipv4'))) throw new Error(`${host} points at this computer or its network: not read`);
+  return fetch(input, init);
+};
 interface StorefrontProduct {
   title?: string;
   variants?: { price: string; compare_at_price: string | null }[];
@@ -196,7 +216,7 @@ async function etsyCatalog(db: Db, key: Buffer | undefined, url: URL, fetchFn: F
  * each product whose lowest price or its compare-at changed since the last one. Returns how many it recorded, or
  * undefined when the site is neither.
  */
-export async function watchCompetitorPrices(db: Db, competitorId: string, url: string, fetchFn: Fetch = fetch, now = new Date(), key?: Buffer) {
+export async function watchCompetitorPrices(db: Db, competitorId: string, url: string, fetchFn: Fetch = publicFetch(), now = new Date(), key?: Buffer) {
   const u = new URL(url);
   const products = /(^|\.)etsy\.com$/.test(u.hostname) ? await etsyCatalog(db, key, u, fetchFn)
     : ((await shopifyCatalog(u.origin, fetchFn)) ?? (await wooCatalog(u.origin, fetchFn)));
@@ -228,7 +248,7 @@ export async function watchCompetitorPrices(db: Db, competitorId: string, url: s
  * reserved `.example` domain and are never fetched, nor is one on this computer or its network (a page an agent read
  * could have it probe the router or the app's own API). Returns stop().
  */
-export function startCompetitorWatch(db: Db, key?: Buffer, fetchFn: Fetch = fetch, everyMs = 3_600_000) {
+export function startCompetitorWatch(db: Db, key?: Buffer, fetchFn: Fetch = publicFetch(), everyMs = 3_600_000) {
   let running = false;
   const check = async () => {
     if (running) return;

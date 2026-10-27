@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { expect, test, vi } from 'vitest';
 import type { Competitor, CompetitorSnapshot, PriceChange } from '@frontline/shared';
 import { createApp } from './app';
-import { addSnapshot, priceChanges, seedCompetitors, startCompetitorWatch, watchCompetitorPrices } from './competitors';
+import { addSnapshot, priceChanges, publicFetch, seedCompetitors, startCompetitorWatch, watchCompetitorPrices } from './competitors';
 import { openDb } from './db';
 import { seedDemo } from './demo';
 import { saveIntegration } from './integrations';
@@ -143,6 +143,29 @@ test('a shop that redirects to an address on this computer or network is not fol
   await expect(watchCompetitorPrices(db, 'c', 'https://evil.com', fetchFn)).rejects.toThrow(/127\.0\.0\.1/);
   expect(urls.filter((u) => u.includes('127.0.0.1'))).toEqual([]);
   expect(await watchCompetitorPrices(db, 'c', 'https://old-rival.com', fetchFn)).toBe(1);
+});
+
+test("the watch's fetch refuses a public-looking name that points at this computer or its network", async () => {
+  const fetched: string[] = [];
+  vi.stubGlobal('fetch', async (url: string) => (fetched.push(url), Response.json({})));
+  try {
+    const answers: Record<string, { address: string; family: number }[]> = {
+      'localtest.me': [{ address: '127.0.0.1', family: 4 }],
+      'lan.nip.io': [{ address: '93.184.216.34', family: 4 }, { address: '192.168.1.1', family: 4 }],
+      'v6.test': [{ address: '::1', family: 6 }],
+      'mapped.test': [{ address: '::ffff:127.0.0.1', family: 6 }],
+      'tailnet.test': [{ address: '100.101.102.103', family: 4 }],
+      'shop.com': [{ address: '93.184.216.34', family: 4 }, { address: '2606:2800:220:1::1', family: 6 }],
+    };
+    const f = publicFetch(async (h) => answers[h] ?? Promise.reject(new Error('ENOTFOUND')));
+    for (const h of ['localtest.me', 'lan.nip.io', 'v6.test', 'mapped.test', 'tailnet.test']) await expect(f(`http://${h}/products.json`), h).rejects.toThrow(/this computer or its network/);
+    expect(fetched).toEqual([]);
+    await f('https://shop.com/products.json');
+    await f('https://unresolved.example/products.json'); // fetch reports its own error
+    expect(fetched).toEqual(['https://shop.com/products.json', 'https://unresolved.example/products.json']);
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
 
 test("a WooCommerce competitor's prices come from its public Store API (minor units, HTML-escaped names)", async () => {

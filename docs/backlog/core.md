@@ -210,10 +210,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-117 A competitor shop that redirects can't send the price watch to an address on this computer or its network.
 - [x] CORE-118 An approved Etsy page's description shows typographic entities (&hellip; &rsquo; &mdash; ...) as the characters, not as typed.
 - [x] CORE-119 A numeric HTML entity past Unicode (a competitor's product name, an agent's page draft) no longer throws and fails the whole check or publish.
+- [x] CORE-120 The competitor watch refuses a public-looking name whose DNS answer is on this computer or its network (localtest.me, *.nip.io).
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-120: `isPrivateHost` reads only the name, and localtest.me or 192.168.1.1.nip.io resolve to private addresses (also as a redirect hop, which picks any path). `publicFetch` (the watch's default fetch) resolves every request's host first and refuses one with an answer in a `node:net` BlockList of loopback, private, link-local and CGNAT (Tailscale) ranges. ponytail: fetch resolves again, so DNS rebinding could still slip past.
 - 2026-10-26 — CORE-119: `String.fromCodePoint` threw a RangeError on `&#9999999;`, failing a competitor's whole price check (`decodeHtml`) or an approved Etsy publish (`htmlToText`). Both now give U+FFFD past U+10FFFF, as browsers do.
 - 2026-10-26 — CORE-118: `htmlToText` (Etsy publish) decodes the common typographic named entities (quotes, dashes, ellipsis, (c)/(R)/TM, degree, times, euro, pound) besides the basic five; an unknown one still stays as typed. The table is a Map, so `&constructor;` can't reach Object.prototype.
 - 2026-10-26 — CORE-117: closes CORE-116's ponytail. The watch's shop reads (`get` in competitors.ts) follow redirects themselves (`redirect: 'manual'`, 5 hops), and a hop to an `isPrivateHost` address throws (logged as a failed check) instead of being fetched. A public redirect (old domain, http to https) still works.
