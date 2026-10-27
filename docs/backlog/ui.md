@@ -506,6 +506,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-185 The bell's list grew without end while the app stayed open: each live notification was added to the 40
       fetched, with no cap (the activity feed keeps 30). Then a refetch dropped the extras and the unread count went down
       on its own. Live notifications now keep the 40 newest, the same limit the fetch uses.
+- [x] UI-186 Competitors' "Track a competitor" form ran past its panel at 1440px: in the 340px side column, the Name and
+      Website fields kept their built-in ~197px width, so Name ran under the Website label and Website stuck out 32px.
+      Both fields can shrink to their column now.
 
 ## Blocked
 
@@ -738,3 +741,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-183: found by a sweep for rows whose controls differ in height at 1024px (my own Chrome tab, writes blocked), then the computed styles: the class list held py-2 and py-1, and the padding was 8px. CSS only, so no new test. After: deny reason 29/30px (Back), budget 29/30, Integrations select 31/30 (Connect), editor 12px, color swatch padding 4px, caps field 4px
 - 2026-10-26 — UI-184: checked in a headless Chrome (throwaway profile, local app, writes blocked in-page) with forced-colors emulated over CDP, before and after: Settings' switches (on: highlighted with the knob right; off: outlined, knob left), the sidebar's current page, mission/cap/status bars, "All stores" and "30D" picked. CSS only, so no new test; outside forced colors nothing changes
 - 2026-10-27 — UI-185: `BELL = 40` in api/client is both the fetch limit and the cap on the live prepend. Test in api/live.test.tsx (red first: 41 after one live notification on a full list)
+- 2026-10-27 — UI-186: from a fresh design review (a subagent scored 13 full-page screenshots against the StyleSeed rubric; its other findings follow as UI-187+). A sweep for fields wider than their container on every page, in headless Chrome at 1024 and 1440 with writes blocked, found only these two (+29px). `min-w-0` on both; after: none at 1024, 1440 or 1920, and a screenshot shows both fields inside the panel. CSS only, so no new test

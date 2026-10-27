@@ -119,11 +119,11 @@ function AddCompetitor() {
       <div className="grid gap-2 min-[620px]:grid-cols-2">
         <label className="grid gap-1 text-xs text-muted">
           Name
-          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} placeholder="e.g. Wag & Wander" className={cx(inputClass, 'text-text')} />
+          <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} placeholder="e.g. Wag & Wander" className={cx(inputClass, 'min-w-0 text-text')} />
         </label>
         <label className="grid gap-1 text-xs text-muted">
           Website
-          <input inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="e.g. wagwander.com" className={cx(inputClass, 'text-text')} />
+          <input inputMode="url" value={url} onChange={(e) => setUrl(e.target.value)} required placeholder="e.g. wagwander.com" className={cx(inputClass, 'min-w-0 text-text')} />
         </label>
       </div>
       <p className="text-xs text-muted">Prices are checked daily for Shopify and WooCommerce stores, and for Etsy shops (etsy.com/shop/…) once you connect an Etsy store.</p>
