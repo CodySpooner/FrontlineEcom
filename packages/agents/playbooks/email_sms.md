@@ -54,7 +54,7 @@ Turn first-time buyers into repeat buyers and recover abandoned checkouts, flows
 ## Output
 - Lead line: "Email/SMS = X% of revenue (period); biggest gap: <flow>, est. <range>/month."
 - Plan table: Flow | Status (live/missing/weak) | Trigger | Msgs | Est. monthly revenue (range + assumptions) | Priority.
-- Per message: delay, channel, segment + exclusions, subject (≤45 chars) + 2 variants with angle, preview text, 3 content bullets, CTA, discount and the margin left.
+- Per message: delay (the wait after the previous step, as flow builders chain them), channel, segment + exclusions, subject (≤45 chars) + 2 variants with angle, preview text, 3 content bullets, CTA, discount and the margin left.
 - `draft_flow` per flow:
   - Name: "Checkout abandonment"
   - Notes: "412 abandoned checkouts in 30d (1,050 checkouts, 638 orders), AOV $54, no recovery flow live. Recover 4-8% ≈ 16-33 orders ≈ $900-1,800/month; 10% code in step 3 only, margin stays ≥35%."

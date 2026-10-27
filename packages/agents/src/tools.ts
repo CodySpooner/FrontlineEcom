@@ -580,7 +580,7 @@ export const APP_TOOLS: AppTool[] = [
       csv(
         listFlowDrafts(ctx.db, { storeIds: [ctx.store.id] }).map((f) => ({
           name: f.name, drafted: f.createdAt.slice(0, 10), trigger: f.trigger, steps: f.messages.length,
-          channels: [...new Set(f.messages.map((m) => m.channel))].join('+'), last_step_hours: Math.max(...f.messages.map((m) => m.delayHours)),
+          channels: [...new Set(f.messages.map((m) => m.channel))].join('+'), last_step_hours: f.messages.reduce((h, m) => h + m.delayHours, 0), // after the trigger
         })),
       ),
   }),
@@ -594,7 +594,8 @@ export const APP_TOOLS: AppTool[] = [
       messages: z
         .array(
           z.object({
-            delayHours: z.number().min(0).max(24 * 120),
+            // The Flow Library shows each step as "Wait N hours", and flow builders (Klaviyo, Shopify Flow) chain waits.
+            delayHours: z.number().min(0).max(24 * 120).describe('hours to wait after the previous step (the first step: after the trigger), not since the trigger'),
             channel: z.enum(['email', 'sms']),
             subject: z.string().max(80).optional(),
             preview: z.string().max(120).optional(),

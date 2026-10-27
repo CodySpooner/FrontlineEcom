@@ -70,7 +70,7 @@ test('list_flows shows what is already in the library', async () => {
   const [header, ...rows] = list!.split('\n');
   expect(header).toBe('name,drafted,trigger,steps,channels,last_step_hours');
   expect(rows.map((r) => [r.split(',')[0], r.split(',').slice(-3).join(',')])).toEqual([
-    ['Welcome series', '2,email+sms,24'],
-    ['Checkout abandonment', '2,email+sms,24'],
+    ['Welcome series', '2,email+sms,25'], // waits chain: 1 h, then 24 h after that
+    ['Checkout abandonment', '2,email+sms,25'],
   ]);
 });
