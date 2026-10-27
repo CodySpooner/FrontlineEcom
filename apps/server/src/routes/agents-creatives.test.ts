@@ -65,6 +65,17 @@ test('media asks first, then saves a demo render with its credits', async () => 
   expect(listCreatives(db, { storeIds: ['glow'] })).toHaveLength(1);
 });
 
+test('a live store without Higgsfield gets no placeholder render for its credits', async () => {
+  db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'glow'`).run();
+  const { outputs, requests } = await run('glow:creative_studio', [ad('image'), ad('copy', { prompt: undefined })]);
+  expect(outputs[0]).toBe(
+    'Not generated: Higgsfield isn\'t connected, so the app could only make a placeholder, not an ad you can run. Save the copy with kind "copy" and put the visual brief in your answer; the owner connects Higgsfield in Integrations.',
+  );
+  expect(outputs[1]).toMatch(/^Saved ad copy to the library/);
+  expect(requests).toEqual([]);
+  expect(creditsToday(db, 'glow')).toBe(0);
+});
+
 test("the store's daily credit cap stops generation before asking", async () => {
   updateCaps(db, 'glow', { higgsfieldCreditsPerDay: 30 });
   await run('glow:creative_studio', [ad('video')]);

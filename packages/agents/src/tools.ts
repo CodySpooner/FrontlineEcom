@@ -502,6 +502,10 @@ export const APP_TOOLS: AppTool[] = [
       const base = { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), kind, headline, primaryText, ...(cta ? { cta } : {}) };
       if (kind === 'copy') return `Saved ad copy to the library (${saveCreative(ctx.db, { ...base, credits: 0, source: 'agent' }).id}).`;
       if (!prompt) return 'Not generated: media needs a prompt (the visual brief).';
+      // Without Higgsfield the render is a demo picture: on a live store that's credits for an ad nobody can run.
+      if (ctx.store.connected && !ctx.db.prepare(`SELECT 1 FROM integrations WHERE kind = 'higgsfield'`).get()) {
+        return "Not generated: Higgsfield isn't connected, so the app could only make a placeholder, not an ad you can run. Save the copy with kind \"copy\" and put the visual brief in your answer; the owner connects Higgsfield in Integrations.";
+      }
       const credits = CREDITS[kind];
       const used = creditsToday(ctx.db, ctx.store.id);
       const asked = creditsAsked(ctx.db, ctx.store.id);
