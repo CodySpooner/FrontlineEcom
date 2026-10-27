@@ -115,6 +115,11 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
   // per-order fee. ponytail: the store's fee % still applies to them, for TikTok's own commission.
   // `+o.id` keeps SQLite on the day index: on the id index a 1Y view of a 100k-order store took 5 s instead of 35 ms.
   const tiktokOrders = `iif(s.platform = 'tiktok_shop', 0, (SELECT count(*) FROM orders o WHERE o.store_id = d.store_id AND o.local_date = d.date AND o.status = 'paid' AND +o.id GLOB 'tt-*'))`;
+  // An Etsy shop or another site next to the store's own platform: out of its funnel (their shoppers aren't in its
+  // sessions), but they pay a per-order fee much like the site's. ponytail: Shopify's orders (no prefix) next to
+  // another platform stay in its funnel, as in platformSplit.
+  const shopOrders = `(SELECT count(*) FROM orders o WHERE o.store_id = d.store_id AND o.local_date = d.date AND o.status = 'paid'
+    AND (+o.id GLOB 'etsy-*' OR +o.id GLOB 'woo-*') AND NOT +o.id GLOB iif(s.platform = 'etsy', 'etsy-*', iif(s.platform = 'woocommerce', 'woo-*', '')))`;
   const ratios = new Map<string, number>();
   const ratio = (storeId: string) => {
     if (!ratios.has(storeId)) {
@@ -128,13 +133,14 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
   return (db
     .prepare(
       `SELECT d.store_id AS storeId, d.date, d.revenue, d.ad_spend AS adSpend, d.cogs, s.fee_percent AS feePercent, s.fee_per_order AS feePerOrder,
-         d.orders, d.sessions, d.add_to_carts AS addToCarts, d.checkouts, ${channel('orders')} + ${tiktokOrders} AS channelOrders, ${channel('revenue')} AS channelRevenue
+         d.orders, d.sessions, d.add_to_carts AS addToCarts, d.checkouts, ${channel('orders')} + ${tiktokOrders} AS channelOrders, ${shopOrders} AS shopOrders, ${channel('revenue')} AS channelRevenue
        FROM daily_metrics d JOIN stores s ON s.id = d.store_id
        WHERE d.store_id IN (${storeIds.map(() => '?').join(',')}) AND d.date BETWEEN ? AND ?`,
     )
-    .all(...storeIds, addDays(to, 1 - 2 * range - pad), addDays(to, pad)) as unknown as (MetricRow & { feePercent: number; feePerOrder: number; channelRevenue: number })[])
-    .map(({ feePercent, feePerOrder, channelRevenue, ...r }) => ({
+    .all(...storeIds, addDays(to, 1 - 2 * range - pad), addDays(to, pad)) as unknown as (MetricRow & { feePercent: number; feePerOrder: number; channelRevenue: number; shopOrders: number })[])
+    .map(({ feePercent, feePerOrder, channelRevenue, shopOrders, ...r }) => ({
       ...r,
+      channelOrders: r.channelOrders! + shopOrders,
       cogs: r.cogs + ((r.revenue - channelRevenue) * feePercent) / 100 + (r.orders - r.channelOrders!) * feePerOrder
         + (channelRevenue ? channelRevenue * (ratio(r.storeId) + AMAZON_REFERRAL) : 0),
     }))

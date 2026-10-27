@@ -309,6 +309,21 @@ test("a TikTok Shop's orders next to the site are a channel's too: out of the fu
   expect([day('glow'), day('peak')]).toEqual([2, 0]);
 });
 
+test("an Etsy shop's or another site's orders next to the store's own platform are out of its funnel, not of its per-order fee", () => {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  db.prepare("UPDATE stores SET platform = 'woocommerce' WHERE id = 'pawsome'").run();
+  db.prepare("UPDATE stores SET fee_per_order = 0.3 WHERE id = 'glow'").run();
+  const order = db.prepare("INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES (?, ?, '2026-10-26T12:00:00Z', 20, 'paid', 'fulfilled', '2026-10-26')");
+  for (const id of ['etsy-1', 'woo-2', '1001']) order.run('glow', id); // Shopify site: Etsy's and Woo's are a channel's
+  for (const id of ['woo-3', 'etsy-4']) order.run('pawsome', id); // a Woo store's own orders aren't
+  const day = (id: string) => loadRows(db, [id], 7, '2026-10-26').find((r) => r.date === '2026-10-26')!;
+  expect([day('glow').channelOrders, day('pawsome').channelOrders]).toEqual([2, 1]);
+  const fees = (id: string) => db.prepare('SELECT d.cogs, d.orders, s.fee_per_order AS f FROM daily_metrics d JOIN stores s ON s.id = d.store_id WHERE d.store_id = ? AND d.date = ?').get(id, '2026-10-26')!;
+  const g = fees('glow');
+  expect(day('glow').cogs).toBeGreaterThanOrEqual(Number(g.cogs) + Number(g.orders) * Number(g.f) - 0.01); // every order pays it
+});
+
 test("top products take off the refund lines (TikTok Shop, Amazon) of the product's paid orders, as store revenue does", () => {
   const db = openDb();
   seedDemo(db, '2026-10-26');
