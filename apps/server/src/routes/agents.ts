@@ -457,15 +457,16 @@ function activateConnectedStores(db: Db, runs: RunManager) {
     }
     // Stores live before those rules get them once: a job with nothing to work on there is switched off, unless the owner
     // set it in Automation (then nothing switches it back on, so it stays as they left it).
-    if (once(db, `job-gates:${store.id}`)) {
+    // -2: the monthly flow check's gate came later.
+    if (once(db, `job-gates-2:${store.id}`)) {
       const why = (j: (typeof DEFAULT_JOBS)[number]) =>
         j.name === ADS_JOB && !ads ? 'no running ad campaigns; it switches back on once an ad account has one'
-        : j.platforms && !j.platforms.includes(store.platform) ? `the app can't publish ${store.platform} product pages`
+        : j.platforms && !j.platforms.includes(store.platform) ? (j.elsewhere?.(store.platform) ?? '')
         : '';
       const off = DEFAULT_JOBS.filter((j) => why(j) && db.prepare(`UPDATE automation_rules SET enabled = 0 WHERE store_id = ? AND name = ? AND enabled = 1
         AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'rule-edited:' || automation_rules.id)`).run(store.id, j.name).changes);
       if (off.some((j) => j.name === ADS_JOB)) once(db, `ads-job-wait:${store.id}`);
-      if (off.length) notify(db, { kind: 'info', title: `${store.name}: ${off.map((j) => j.name.toLowerCase()).join(' and ')} switched off`, body: `${off.map((j) => `${j.name}: ${why(j)}.`).join(' ')} You can switch jobs back on in Automation.`, storeId: store.id, link: '/automation' });
+      if (off.length) notify(db, { kind: 'info', title: `${store.name}: ${new Intl.ListFormat('en').format(off.map((j) => j.name.toLowerCase()))} switched off`, body: `${off.map((j) => `${j.name}: ${why(j)}.`).join(' ')} You can switch jobs back on in Automation.`, storeId: store.id, link: '/automation' });
     }
   }
 }
@@ -484,7 +485,8 @@ export function agentRoutes(db: Db) {
   setInterval(() => (activateConnectedStores(db, runs), advanceSquadMissions(db)), 60_000).unref();
   // Default jobs that shipped after a store was made; a live store's owner hears about them (they use Claude usage).
   for (const store of listStores(db)) {
-    const added = createDefaultJobs(db, store.id);
+    // Only what runs: a job added off (its platform can't take the work) waits in Automation, using nothing.
+    const added = createDefaultJobs(db, store.id).filter((name) => db.prepare('SELECT enabled FROM automation_rules WHERE store_id = ? AND name = ?').get(store.id, name)?.enabled === 1);
     if (added.length && store.connected) {
       notify(db, { kind: 'info', title: `New scheduled work for ${store.name}`, body: `${added.join(', ')}. It runs on your Claude login; pause or change it in Automation.`, storeId: store.id, link: '/automation' });
     }

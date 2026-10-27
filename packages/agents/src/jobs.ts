@@ -5,8 +5,8 @@ import { once } from './memory';
 
 // Default scheduled work for a squad, as rows in core's `automation_rules` (apps/server/src/automations.ts runs them).
 
-/** `platforms`: the job switches on at go-live only there (it ends in a change the app can't make elsewhere). */
-export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: string; platforms?: readonly Platform[] }[] = [
+/** `platforms`: the job switches on at go-live only there (it ends in work that can't be done elsewhere); `elsewhere` says why. */
+export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: string; platforms?: readonly Platform[]; elsewhere?: (p: Platform) => string }[] = [
   {
     name: 'Daily briefing',
     role: 'market_analyst',
@@ -55,6 +55,7 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
     role: 'store_developer',
     cron: '0 9 * * 4',
     platforms: PRODUCT_PAGE_PLATFORMS,
+    elsewhere: (p) => `the app can't publish ${p} product pages`,
     task:
       'Weekly page refresh: list_products and take the best seller (most revenue_30d) that draft_page accepts. Draft one improved product page for it with draft_page: ' +
       'benefit-first headline, the objections buyers raise, proof, shipping and returns. Then ask to publish it with publish_page.',
@@ -66,6 +67,9 @@ export const DEFAULT_JOBS: { name: string; role: AgentRole; cron: string; task: 
     task:
       'Monthly flow check: list_flows against the four core flows (welcome, checkout abandonment, post-purchase, win-back). Draft the first missing one with draft_flow, ' +
       'sized from store_summary and metrics_timeseries; if all four exist, redraft the oldest with what search_memory and the last 30 days say. One flow per run.',
+    // A marketplace owns its buyers (the platform packs): no list to mail, no checkout to recover.
+    platforms: ['shopify', 'woocommerce'],
+    elsewhere: (p) => `${p} doesn't let sellers email or text its buyers`,
   },
   {
     name: 'Weekly report',

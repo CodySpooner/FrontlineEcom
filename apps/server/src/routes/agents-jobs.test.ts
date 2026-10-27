@@ -62,7 +62,8 @@ test('connected stores start with the jobs on', async () => {
   db.prepare(`DELETE FROM done_once WHERE ref LIKE 'default-job:peak:%'`).run();
   expect(createDefaultJobs(db, 'peak')).toEqual(DEFAULT_JOBS.map((j) => j.name));
   const peak = await rules('peak');
-  expect(peak.filter((r) => !r.enabled).map((r) => r.name)).toEqual(['Weekly page refresh']); // the app can't publish TikTok Shop pages
+  // The app can't publish TikTok Shop pages, and TikTok owns its buyers (no list to mail).
+  expect(peak.filter((r) => !r.enabled).map((r) => r.name).sort()).toEqual(['Monthly flow check', 'Weekly page refresh']);
   expect(peak.filter((r) => r.enabled).every((r) => r.nextRunAt)).toBe(true);
 });
 
@@ -84,15 +85,16 @@ test('a job the owner edited in Automation keeps their on/off when the store goe
 test('stores made before a job shipped get it on the next start; a job the owner deleted stays deleted', async () => {
   db.prepare(`UPDATE stores SET connected = 1 WHERE id = 'peak'`).run();
   agentRoutes(db); // activation: the jobs are on
-  // A store from before 'Monthly flow check' shipped: no rule and no ledger entry. 'Daily briefing' the owner deleted.
-  db.prepare(`DELETE FROM automation_rules WHERE store_id = 'peak' AND name IN ('Monthly flow check', 'Daily briefing')`).run();
-  db.prepare(`DELETE FROM done_once WHERE ref = 'default-job:peak:Monthly flow check'`).run();
+  // A store from before 'Weekly report' and 'Monthly flow check' shipped: no rules and no ledger entries. 'Daily briefing' the owner deleted.
+  db.prepare(`DELETE FROM automation_rules WHERE store_id = 'peak' AND name IN ('Weekly report', 'Monthly flow check', 'Daily briefing')`).run();
+  db.prepare(`DELETE FROM done_once WHERE ref IN ('default-job:peak:Weekly report', 'default-job:peak:Monthly flow check')`).run();
   agentRoutes(db);
   const peak = await rules('peak');
   expect(peak.map((r) => r.name).sort()).toEqual(DEFAULT_JOBS.map((j) => j.name).filter((n) => n !== 'Daily briefing').sort());
-  expect(peak.find((r) => r.name === 'Monthly flow check')?.enabled).toBe(true);
+  expect(peak.find((r) => r.name === 'Weekly report')?.enabled).toBe(true);
+  expect(peak.find((r) => r.name === 'Monthly flow check')?.enabled).toBe(false); // TikTok Shop: added, but off
   expect(db.prepare(`SELECT body FROM notifications WHERE title = 'New scheduled work for Peak Fit'`).all()).toEqual([
-    { body: 'Monthly flow check. It runs on your Claude login; pause or change it in Automation.' },
+    { body: 'Weekly report. It runs on your Claude login; pause or change it in Automation.' },
   ]);
   agentRoutes(db);
   expect(await rules('peak')).toHaveLength(DEFAULT_JOBS.length - 1);

@@ -104,6 +104,7 @@ test("a live TikTok Shop store doesn't get the weekly page refresh: its drafts c
   await app.request('/api/agents');
   const on = db.prepare('SELECT name FROM automation_rules WHERE store_id = ? AND enabled = 1').all(store.id).map((r) => r.name);
   expect(on).not.toContain('Weekly page refresh');
+  expect(on).not.toContain('Monthly flow check'); // TikTok owns its buyers: no list to mail
   expect(on).toContain('Weekly price check'); // its findings still go to the owner, to apply by hand
   expect(db.prepare('SELECT enabled FROM automation_rules WHERE store_id = ? AND name = ?').get(store.id, 'Weekly page refresh')?.enabled).toBe(0); // still there to switch on
   await runManager(db).idle();
@@ -114,19 +115,22 @@ test('a store that went live before the job rules gets them once: jobs with noth
   const store = (await res.json()) as Store;
   switchToReal(db, store.id);
   once(db, `activate:${store.id}`); // went live on an older build: every job on, no gates
-  db.prepare(`DELETE FROM done_once WHERE ref IN (?, ?)`).run(`job-gates:${store.id}`, `ads-job-wait:${store.id}`);
+  db.prepare(`DELETE FROM done_once WHERE ref IN (?, ?)`).run(`job-gates-2:${store.id}`, `ads-job-wait:${store.id}`);
   db.prepare('UPDATE automation_rules SET enabled = 1 WHERE store_id = ?').run(store.id);
   await app.request('/api/agents');
   const on = () => db.prepare('SELECT name FROM automation_rules WHERE store_id = ? AND enabled = 1').all(store.id).map((r) => String(r.name));
   expect(on()).not.toContain('Weekly page refresh');
   expect(on()).not.toContain(ADS_JOB);
-  expect(on()).toHaveLength(DEFAULT_JOBS.length - 2);
-  expect(notes(store.id)).toEqual([`Tok: ${ADS_JOB.toLowerCase()} and weekly page refresh switched off`]);
+  expect(on()).toHaveLength(DEFAULT_JOBS.length - 3);
+  expect(notes(store.id)).toEqual([`Tok: ${ADS_JOB.toLowerCase()}, weekly page refresh, and monthly flow check switched off`]);
+  expect(String(db.prepare(`SELECT body FROM notifications WHERE store_id = ? AND title LIKE '%switched off'`).get(store.id)?.body)).toContain(
+    "Weekly page refresh: the app can't publish tiktok_shop product pages. Monthly flow check: tiktok_shop doesn't let sellers email or text its buyers.",
+  );
   // Once: the owner switches the page refresh back on and it stays on; campaigns bring the review back.
   db.prepare('UPDATE automation_rules SET enabled = 1 WHERE store_id = ? AND name = ?').run(store.id, 'Weekly page refresh');
   db.prepare(`INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('tiktok', 't1', ?, 'Spark', 'active', 30)`).run(store.id);
   await app.request('/api/agents');
-  expect(on()).toHaveLength(DEFAULT_JOBS.length);
+  expect(on()).toHaveLength(DEFAULT_JOBS.length - 1);
   await runManager(db).idle();
 });
 
