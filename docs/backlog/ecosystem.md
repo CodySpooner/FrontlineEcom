@@ -85,6 +85,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-27 ECO-45: Live activity now carries the deployed worker's saved appearance and identity in a compact portrait row. Existing focus and receiving-task links remain intact. Appearance/identity binding test, browser feed-to-worker focus and Orca screenshots (.agent/eco-45-*.png); pnpm check 986 tests, 56-58 FPS.
 - 2026-10-27 ECO-44: Hub ticker now renders above crossing characters and caps its close-up size; original logo gains restrained projection brackets and emitter ring detail. Fit/hub/Orca screenshots (.agent/eco-44-*.png); pnpm check 986 tests, 58 FPS.
 - 2026-10-27 ECO-43: Labeled Demo rolls its seven-day display onto the local calendar day, preserving history and counting new orders only. Browser clock reproduced midnight em dashes before; after shows zero until the next event (.agent/eco-43-*.png). Midnight/long-gap tests; pnpm check 986 tests, 56-58 FPS. Live provider unchanged.
 - 2026-10-27 ECO-42: Glass camera dock with grouped zoom controls/readout, icon cues and preserved accessible button names. Mobile controls wrap above the directory. Browser Hub/zoom/reset and 390px bounds/overlap assertions; desktop/mobile/Orca screenshots (.agent/eco-42-*.png). pnpm check 984 tests, 56-58 FPS.
@@ -241,5 +242,5 @@ Visual review: owner reference plus [Game Dev Story official screenshots](https:
 - [x] ECO-43 Midnight display continuity: keep the labeled Demo hub ticker and seven-day display aligned with the local date across midnight.
 
 - [x] ECO-44 Hub presentation: keep the live ticker clear above crossing workers and add restrained projector framing around the owner logo.
-- [ ] ECO-45 Character-led activity feed: show each deployed worker's actual customized portrait beside its live events.
+- [x] ECO-45 Character-led activity feed: show each deployed worker's actual customized portrait beside its live events.
 - [ ] ECO-46 Workstation status lights: visible desk beacons reflect real worker states, with no invented task activity.
