@@ -18,7 +18,7 @@ const STATUS: Record<PageDraftStatus, { label: string; tone: 'red' | 'good' | 'm
   pending: { label: 'Waiting for you', tone: 'red' },
   approved: { label: 'Approved', tone: 'muted' },
   published: { label: 'Published', tone: 'good' },
-  rejected: { label: 'Rejected', tone: 'muted' },
+  rejected: { label: 'Denied', tone: 'muted' },
 };
 const IDEAS = [
   "Rewrite our best seller's product page to lift conversion: benefits first, social proof, FAQ, clear CTA.",
