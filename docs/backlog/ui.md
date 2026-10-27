@@ -488,6 +488,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-180 A connection whose sync failed cut its reason to one line on Integrations ("Shopify rejected the access
       token (401 Unauthorized): the app was…"), the line the owner reads to fix it; it wraps now, like the notice under
       it. A niche or platform pack's "Used by" list, cut with several stores, keeps the whole list on hover.
+- [x] UI-181 Selecting a field's text in any dialog (connect an integration, edit a store, Ask AI) by dragging past its
+      edge closed the dialog and lost what was typed: releasing over the backdrop fires the click on the dialog itself.
+      A dialog now closes on a backdrop click only when the press began on the backdrop too.
 
 ## Blocked
 
@@ -715,3 +718,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-178: Analytics' local pct moved to lib/format (test red first). Orca: the tile reads "2.7×"; Analytics shows "−0.1%", "8.2% of previous"
 - 2026-10-26 — UI-179: inputMode=url text field, scheme added on submit. Test red first (jsdom's URL validation blocked the submit, as the browser did). Orca, with the POST answered by a client patch (nothing sent, every other write blocked): "fakerivalpets.com" went out as https://fakerivalpets.com and the form cleared
 - 2026-10-26 — UI-180: from a pass over every truncate without a title (the rest are short labels or open in full on click). Layout only, so no new test; the touched suites pass. Orca with a fake failing Shopify connection (GET fixture, writes blocked): its 160-character error reads whole on two lines. Same session, no change needed: the web calls every server route; recent shared fields (sample finds, byPlatform) are shown. Asked core to accept admin.shopify.com/store/<name> as a shop domain
+- 2026-10-26 — UI-181: Dialog remembers where the mouse went down. Test red first (press in a field, click lands on the dialog: no close; press and click on it: close). My own Chrome tab, real mouse, writes blocked: dragging from the Ask AI field onto the backdrop leaves it open; a backdrop click closes it

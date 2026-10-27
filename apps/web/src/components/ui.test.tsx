@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useState } from 'react';
-import { ConfirmDelete, Segmented, Tabs } from './ui';
+import { ConfirmDelete, Dialog, Segmented, Tabs } from './ui';
 
 afterEach(cleanup);
 
@@ -61,5 +61,27 @@ describe('Segmented and Tabs from the keyboard', () => {
     fireEvent.keyDown(screen.getByRole('tab', { name: '7D' }), { key: 'ArrowLeft' });
     expect(screen.getByRole('tab', { name: '90D' }).getAttribute('aria-selected')).toBe('true');
     expect(document.activeElement).toBe(screen.getByRole('tab', { name: '90D' }));
+  });
+});
+
+describe('Dialog', () => {
+  it("closes on a backdrop click, not when a drag that began in a field (selecting its text) ends outside", () => {
+    HTMLDialogElement.prototype.showModal ??= function (this: HTMLDialogElement) {
+      this.open = true;
+    };
+    const onClose = vi.fn();
+    render(
+      <Dialog open onClose={onClose} title="Connect Shopify">
+        <input aria-label="Access token" />
+      </Dialog>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Connect Shopify' });
+    // Pressed in the field, released over the backdrop: the browser's click lands on the dialog itself.
+    fireEvent.mouseDown(screen.getByLabelText('Access token'));
+    fireEvent.click(dialog);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.mouseDown(dialog);
+    fireEvent.click(dialog);
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

@@ -360,6 +360,7 @@ export function ErrorState({ message = "Couldn't load this.", onRetry }: { messa
 /** Modal (`side="center"`) or right-hand drawer (`side="right"`) on the native <dialog>: focus trap, Esc and backdrop for free. */
 export function Dialog({ open, onClose, title, side = 'center', children }: { open: boolean; onClose: () => void; title: string; side?: 'center' | 'right'; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const down = useRef<EventTarget>(null);
   useEffect(() => {
     const d = ref.current;
     if (open && !d?.open) d?.showModal();
@@ -373,7 +374,9 @@ export function Dialog({ open, onClose, title, side = 'center', children }: { op
         e.preventDefault();
         onClose();
       }}
-      onClick={(e) => e.target === ref.current && onClose()}
+      // A click on the backdrop closes it; a drag that began inside (selecting a field's text) and ended there doesn't.
+      onMouseDown={(e) => (down.current = e.target)}
+      onClick={(e) => e.target === ref.current && down.current === ref.current && onClose()}
       aria-label={title}
       className={cx(
         'card p-0 text-text backdrop:bg-black/60 backdrop:backdrop-blur-sm',
