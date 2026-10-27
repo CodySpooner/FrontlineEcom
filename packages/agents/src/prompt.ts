@@ -62,7 +62,11 @@ export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [
       ? [`# Learned across ${store.niche === 'other' ? store.nicheDetail : store.niche} stores (owner-approved)`, ...nicheLearnings.map((l) => `- ${l.text}${l.evidence ? ` Evidence: ${l.evidence}.` : ''}`)].join('\n')
       : '',
     storeProfile(store),
-  ].filter(Boolean);
+  ]
+    // HTML comments (the pack template's guidance, notes in an owner's edit) don't show in the Knowledge view: agents don't
+    // read them either, so a pack drafted with the template's left in doesn't carry them into every run.
+    .map((layer) => layer.replace(/[ \t]*<!--[\s\S]*?-->[ \t]*\n?/g, ''))
+    .filter(Boolean);
   // The zone the store's data is dated in, as the tools' windows: a connected shop's own, demo data's this machine's.
   const zone = store.connected ? store.timezone : Intl.DateTimeFormat().resolvedOptions().timeZone;
   const date = `Today is ${today ?? new Date().toLocaleDateString('en-CA', { timeZone: zone })} (${zone}).`;

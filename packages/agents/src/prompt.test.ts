@@ -1,6 +1,6 @@
 import { AGENT_ROLES, type Agent, type AgentRole, type Niche, type Platform, type Store, type StoreMemory } from '@frontline/shared';
 import { describe, expect, test } from 'vitest';
-import { assemblePrompt, estimateTokens, nichePack, platformPack, playbook, ROLES, SQUAD_RULES } from './index';
+import { assemblePrompt, estimateTokens, nichePack, platformPack, playbook, ROLES, saveNichePack, SQUAD_RULES } from './index';
 
 const PLATFORMS: Platform[] = ['shopify', 'tiktok_shop', 'etsy', 'amazon', 'woocommerce', 'walmart'];
 const NICHES: Niche[] = ['beauty', 'pet', 'tech', 'fitness', 'home', 'fashion', 'kids', 'outdoor'];
@@ -88,6 +88,13 @@ describe('assemblePrompt', () => {
     expect(prompt).toContain(platformPack('amazon'));
     expect(prompt).toContain('niche other: vintage fountain pens');
     for (const n of NICHES) expect(prompt).not.toContain(nichePack(n));
+  });
+
+  test("a custom niche's pack reaches the prompt without the template's guidance comments", () => {
+    saveNichePack('bonsai-tools', '# Bonsai tools niche pack\n\n## Customer\n<!-- 3-6 core segments -->\n- Hobbyists, 35-65\n\n## Red flags\n  <!-- Products to avoid. -->  \n- Uncertified carbon steel\n');
+    const prompt = assemblePrompt({ agent: agentOf(odd, 'product_hunter'), store: { ...odd, nicheDetail: 'Bonsai tools' }, today: '2026-10-27' });
+    expect(prompt).toContain('# Bonsai tools niche pack\n\n## Customer\n- Hobbyists, 35-65\n\n## Red flags\n- Uncertified carbon steel');
+    expect(prompt).not.toContain('<!--');
   });
 
   test('drops the lowest-ranked memories to fit the budget, never the fixed layers', () => {

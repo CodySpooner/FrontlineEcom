@@ -46,7 +46,7 @@ export function draftNichePackTask(store: Store): string {
   const niche = store.nicheDetail ?? store.niche;
   return `Draft a niche pack for "${niche}" so the whole squad of ${store.name} works like seasoned operators of this niche.
 Research it first (WebSearch/WebFetch): customers, regulations and claim rules, seasonality, price norms, suppliers.
-Follow this template exactly, 500-800 words, terse bullets, numbers as typical ranges, rules you are unsure of marked "verify":
+Follow this template exactly (its <!-- --> comments are guidance: leave them out), 500-800 words, terse bullets, numbers as typical ranges, rules you are unsure of marked "verify":
 
 ${template()}
 
