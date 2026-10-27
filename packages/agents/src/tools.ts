@@ -36,6 +36,8 @@ export interface ToolEnv {
   toUsd?: (amount: number, currency: string) => Promise<number | undefined>;
   /** Core's competitor tracking for a store: who, their recent price moves, and ads seen lately. */
   competitors?: (storeId: string) => { competitors: Competitor[]; priceChanges: PriceChange[]; ads: (AdSnapshotData & { competitor: string })[] };
+  /** Adds a competitor shop to a store's tracking and reads its prices now; what happened, in a line. */
+  trackCompetitor?: (storeId: string, c: { name: string; url: string; notes: string }) => Promise<string>;
   /** Official MCP servers the store has connected (never in demo mode: no credentials, no servers). */
   externalMcp?: (storeId: string) => Partial<Record<ExternalMcpKind, ExternalMcp>>;
   /** Adds a product found on the web to core's research feed; returns it with its AI score. */
@@ -378,7 +380,8 @@ export const APP_TOOLS: AppTool[] = [
       const { competitors, priceChanges, ads } = ctx.competitors(ctx.store.id);
       const name = new Map(competitors.map((c) => [c.id, c.name]));
       return [
-        '# Competitors',
+        // A live store starts with none: going live drops the demo ones.
+        `# Competitors${competitors.length ? '' : ' (none tracked yet: the Market Analyst adds them with track_competitor, the owner in Competitor Intel)'}`,
         csv(competitors.map((c) => ({ name: c.name, url: c.url, products_tracked: c.productsTracked, active_ads: c.activeAds, notes: c.notes ?? '' }))),
         // A competitor shop prices in its own currency: 39 EUR next to this store's 39 USD isn't the same price.
         `# Price changes (newest first, in the competitor's currency; blank when its site didn't say. This store sells in ${ctx.store.currency}. A price that held isn't here: pass q for current prices)`,
@@ -403,6 +406,22 @@ export const APP_TOOLS: AppTool[] = [
             ]
           : []),
       ].join('\n');
+    },
+  }),
+  defineTool({
+    name: 'track_competitor',
+    description:
+      "Start tracking a competitor shop for this store (find it with WebSearch first): the app reads its public catalog's prices now and daily, for " +
+      'list_competitors and the Competitor Intel screen. It reads Shopify, WooCommerce and Etsy shops. 10 per store.',
+    input: {
+      name: z.string().min(1).max(80),
+      url: z.string().url().describe("the shop's home page, e.g. https://example.com"),
+      why: z.string().min(10).max(300).describe('what makes it a competitor: same products, price band, audience'),
+    },
+    run: async ({ name, url, why }, ctx) => {
+      if (!ctx.trackCompetitor) return 'Competitor tracking is not available.';
+      if (!/^https?:$/.test(new URL(url).protocol)) return 'Not added: give the shop as an http(s) address.';
+      return ctx.trackCompetitor(ctx.store.id, { name, url, notes: `${AGENT_ROLES[ctx.agent.role].name}: ${why}` });
     },
   }),
   defineTool({

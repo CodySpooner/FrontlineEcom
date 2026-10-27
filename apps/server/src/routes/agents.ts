@@ -59,7 +59,7 @@ import { Hono } from 'hono';
 import { currentWindow, summarize } from '../analytics';
 import { convertRate, fxFor } from '../fx';
 import { approvalsHook, decide } from '../approvals';
-import { listCompetitors, priceChanges } from '../competitors';
+import { listCompetitors, priceChanges, watchCompetitorPrices } from '../competitors';
 import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
@@ -176,6 +176,24 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
       .all(storeId)
       .map((r) => ({ competitor: String(r.name), ...(JSON.parse(String(r.data_json)) as AdSnapshotData) })),
   }),
+  trackCompetitor: async (storeId, { name, url, notes }) => {
+    const host = (u: string) => new URL(u).hostname.replace(/^www\./, '');
+    const tracked = db.prepare('SELECT url FROM competitors WHERE store_id = ?').all(storeId).map((r) => host(String(r.url)));
+    if (tracked.includes(host(url))) return `Already tracked: ${host(url)}.`;
+    // ponytail: 10 a store keeps the daily watch light; the owner removes one in Competitor Intel to make room.
+    if (tracked.length >= 10) return 'Not added: this store already tracks 10 competitors. Name this one in your answer so the owner can swap it in.';
+    const id = randomUUID();
+    db.prepare('INSERT INTO competitors (id, store_id, name, url, notes, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, storeId, name.trim(), url, notes, new Date().toISOString());
+    // Read now: a site with no readable catalog would sit in the list with no prices, ever.
+    const etsyKey = /(^|\.)etsy\.com$/.test(host(url)) ? loadKey(dataDir()) : undefined;
+    const added = await watchCompetitorPrices(db, id, url, fetch, new Date(), etsyKey).catch(() => undefined);
+    if (added === undefined) {
+      db.prepare('DELETE FROM competitors WHERE id = ?').run(id);
+      return `Not added: no product prices could be read at ${host(url)} (the app reads Shopify, WooCommerce and Etsy shops). Name it in your answer instead.`;
+    }
+    notify(db, { kind: 'info', title: `Now tracking ${name.trim()}`, body: `${notes} Remove it in Competitor Intel if it isn't one.`, storeId, link: '/competitors' });
+    return `Tracking ${name.trim()} (${host(url)}): ${added} product price${added === 1 ? '' : 's'} read. list_competitors with q compares them.`;
+  },
   recordFind: async (find) => {
     // The daily scan finds the same products again: a repeat refreshes the earlier find instead of piling up copies.
     const prior = db

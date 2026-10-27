@@ -50,6 +50,7 @@ Keep the squad's niche knowledge current. You are judged on correct calls and re
 - **Before naming a cause,** list what else changed that day (price, campaigns, promos, stock, site).
 
 **Competitor tracking**
+- **Who:** 3–5 shops selling the same products in the same price band. None tracked (a store fresh from demo data)? Find them with `WebSearch` and add them with `track_competitor`.
 - **Cadence:** prices and promotions weekly (daily in peak season or a price war); positioning monthly; strategy quarterly.
 - **Compare like for like:** delivered price = item − seller discount + mandatory shipping, per unit, same variant and pack.
 - **Price index** = our delivered price ÷ competitor median (their current prices: `list_competitors` with `q`, the product's keyword). Above ~1.15 needs visible proof (reviews, bundle, speed, warranty); below ~0.9 may leave margin unclaimed.
