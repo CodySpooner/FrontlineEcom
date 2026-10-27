@@ -526,12 +526,14 @@ export const MIGRATIONS = [
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
 export function openDb(file = ':memory:'): Db {
+  let restored = false;
   if (file !== ':memory:') {
     mkdirSync(dirname(file), { recursive: true });
     // A restore staged by POST /api/backups/:name/restore replaces the database before it opens.
     if (existsSync(`${file}.restore`)) {
       for (const f of [file, `${file}-wal`, `${file}-shm`]) rmSync(f, { force: true });
       renameSync(`${file}.restore`, file);
+      restored = true;
     }
     rmSync(`${file}.restore.part`, { force: true }); // a restore the app quit during: never staged
   }
@@ -554,6 +556,14 @@ export function openDb(file = ':memory:'): Db {
       db.exec(`PRAGMA user_version = ${version + i + 1}`);
     }),
   );
+  // A real store's requests pending in the backup may have been carried out since (a page published, products added):
+  // asked again, not run twice. `[Expired: …]` isn't the owner's no. ponytail: a theme draft's copy stays in Shopify.
+  if (restored) {
+    db.prepare(
+      `UPDATE approvals SET status = 'denied', decided_at = ?, reason = reason || ' [Expired: the data was restored from a backup.]'
+       WHERE status = 'pending' AND store_id IN (SELECT id FROM stores WHERE demo = 0)`,
+    ).run(new Date().toISOString());
+  }
   return db;
 }
 

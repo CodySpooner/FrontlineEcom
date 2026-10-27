@@ -5,6 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { expect, test, vi } from 'vitest';
 import type { Backup } from '@frontline/shared';
 import { backupNow, backupRoutes, listBackups, stageRestore, startBackupLoop } from './backups';
+import { switchToReal } from './connectors/common';
 import { openDb } from './db';
 import { seedDemo } from './demo';
 
@@ -59,6 +60,26 @@ test('a staged restore replaces the database when it next opens', () => {
   const reopened = openDb(file);
   expect(reopened.prepare("SELECT value_json FROM settings WHERE key = 'who'").get()).toEqual({ value_json: '"backup"' });
   expect(existsSync(`${file}.restore`)).toBe(false);
+});
+
+test("a restored backup closes a real store's pending requests: they may have been carried out since it was taken", () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontline-restore-'));
+  const file = join(dir, 'frontline.db');
+  const snap = openDb(join(dir, 'snap.db'));
+  seedDemo(snap);
+  switchToReal(snap, 'glow');
+  snap.prepare("INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at) VALUES ('a1', 'glow', 'glow:copywriter', 'Publish the About page', 'r', '{\"kind\":\"store.publish_page\"}', 'pending', '2026-10-26')").run();
+  const pending = (db: DatabaseSync, store: string) => Number(db.prepare("SELECT count(*) AS n FROM approvals WHERE store_id = ? AND status = 'pending'").get(store)!.n);
+  const demo = pending(snap, 'pawsome');
+  expect(demo).toBeGreaterThan(0);
+  snap.close();
+  copyFileSync(join(dir, 'snap.db'), `${file}.restore`);
+  const db = openDb(file);
+  expect(db.prepare("SELECT status, reason FROM approvals WHERE id = 'a1'").get()).toMatchObject({ status: 'denied', reason: expect.stringMatching(/ \[Expired: [^\]]*backup[^\]]*\]$/) });
+  expect(pending(db, 'pawsome')).toBe(demo); // a demo store writes nothing live
+  db.prepare("UPDATE approvals SET status = 'pending' WHERE id = 'a1'").run();
+  db.close();
+  expect(pending(openDb(file), 'glow')).toBe(1); // only a restore closes them
 });
 
 test('restore: checks the snapshot, keeps an undo backup, stages it and asks for a restart', async () => {
