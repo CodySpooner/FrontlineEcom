@@ -170,3 +170,33 @@ export function nearest(from: Rect, cards: (Rect & { id: string })[], dir: Dir):
   }
   return best?.id;
 }
+
+/**
+ * A connection line between two cards: side to side when they're apart, else top to bottom, as an S-curve from the
+ * facing edges. `mid` is where the relationship pill sits.
+ */
+export function edge(a: Rect, b: Rect) {
+  const apart = b.x >= a.x + a.w || b.x + b.w <= a.x;
+  const right = b.x > a.x;
+  const below = b.y > a.y;
+  const from = apart ? { x: right ? a.x + a.w : a.x, y: a.y + a.h / 2 } : { x: a.x + a.w / 2, y: below ? a.y + a.h : a.y };
+  const to = apart ? { x: right ? b.x : b.x + b.w, y: b.y + b.h / 2 } : { x: b.x + b.w / 2, y: below ? b.y : b.y + b.h };
+  const mid = { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 };
+  const c1 = apart ? { x: mid.x, y: from.y } : { x: from.x, y: mid.y };
+  const c2 = apart ? { x: mid.x, y: to.y } : { x: to.x, y: mid.y };
+  const d = `M ${from.x} ${from.y} C ${c1.x} ${c1.y}, ${c2.x} ${c2.y}, ${to.x} ${to.y}`;
+  /** The point `t` (0..1) along the curve. */
+  const at = (t: number) => {
+    const u = 1 - t;
+    const k = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t] as const;
+    return { x: k[0] * from.x + k[1] * c1.x + k[2] * c2.x + k[3] * to.x, y: k[0] * from.y + k[1] * c1.y + k[2] * c2.y + k[3] * to.y };
+  };
+  return { from, to, mid, d, at };
+}
+
+/** Where a line's pill goes: its middle, or the nearest point along it that isn't on one of `cards`. */
+export function pillAt(e: ReturnType<typeof edge>, cards: Rect[]) {
+  const on = (p: { x: number; y: number }) => cards.some((r) => p.x > r.x - 8 && p.x < r.x + r.w + 8 && p.y > r.y - 8 && p.y < r.y + r.h + 8);
+  for (const t of [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8]) if (!on(e.at(t))) return e.at(t);
+  return e.mid;
+}

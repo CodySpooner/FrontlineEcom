@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import {
   addEvidence,
@@ -17,13 +18,14 @@ import {
   getCard,
   isUnder,
   kbRow,
+  kbScope,
   listCards,
   listCategories,
   mergeCards,
   updateCard,
   updateCategory,
 } from '@frontline/agents';
-import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbWorkspace } from '@frontline/shared';
+import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbTaskBrief, type KbView, type KbWorkspace } from '@frontline/shared';
 import { tx, type Db } from '../db';
 
 // Knowledge Base routes (knowledge-base lane). Every by-id route names its workspace (?ws=) and 404s on another's id.
@@ -44,6 +46,18 @@ function wsOf(db: Db, v: unknown, all = false): KbWorkspace | 'all' | undefined 
   return typeof v === 'string' && db.prepare('SELECT 1 FROM stores WHERE id = ?').get(v) ? v : undefined;
 }
 const WS_ERROR = 'ws must be general or a store id';
+const toView = (r: Record<string, unknown>): KbView => ({ id: String(r.id), storeId: (r.store_id as string | null) ?? null, name: String(r.name), state: JSON.parse(String(r.state_json)), createdAt: String(r.created_at) });
+const toTask = (r: Record<string, unknown>): KbTaskBrief => ({
+  id: String(r.id),
+  storeId: (r.store_id as string | null) ?? null,
+  payerId: String(r.payer_id),
+  role: r.role as KbTaskBrief['role'],
+  objective: String(r.objective),
+  status: r.status as KbTaskBrief['status'],
+  stage: String(r.stage),
+  createdAt: String(r.created_at),
+  ...(r.started_at ? { startedAt: String(r.started_at) } : {}),
+});
 
 /** The card fields of a body, trimmed, or what's wrong with them. The category is checked by the caller. */
 function parseCard(b: Obj, partial: boolean): string | KbCardPatch {
@@ -179,6 +193,46 @@ export function kbRoutes(db: Db) {
         }
       });
       return c.body(null, 204);
+    })
+    .get('/api/kb/views', (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      return c.json(db.prepare('SELECT * FROM kb_views WHERE store_id IS ? ORDER BY created_at DESC, rowid DESC').all(ws).map(toView));
+    })
+    .post('/api/kb/views', async (c) => {
+      const b = await c.req.json().catch(() => undefined);
+      if (!isObj(b)) return c.json({ error: 'body must be a JSON object' }, 400);
+      const ws = wsOf(db, b.ws);
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      if (!text(b.name, 1, 60)) return c.json({ error: 'name must be 1-60 characters' }, 400);
+      const s = b.state;
+      const cam = isObj(s) ? s.camera : undefined;
+      if (
+        !isObj(s) ||
+        (s.q !== undefined && typeof s.q !== 'string') ||
+        (s.general !== undefined && typeof s.general !== 'boolean') ||
+        (cam !== undefined && !(isObj(cam) && finite(cam.x) && finite(cam.y) && finite(cam.scale))) ||
+        (s.collapsed !== undefined && !(Array.isArray(s.collapsed) && s.collapsed.length <= 500 && s.collapsed.every((x) => typeof x === 'string'))) ||
+        JSON.stringify(s).length > 20_000
+      )
+        return c.json({ error: 'state must hold q, general, camera {x, y, scale} and collapsed frame ids' }, 400);
+      const id = randomUUID();
+      db.prepare('INSERT INTO kb_views (id, store_id, name, state_json, created_at) VALUES (?, ?, ?, ?, ?)').run(id, ws, String(b.name).trim(), JSON.stringify(s), new Date().toISOString());
+      return c.json(toView(db.prepare('SELECT * FROM kb_views WHERE id = ?').get(id)!), 201);
+    })
+    .delete('/api/kb/views/:id', (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      if (!kbRow(db, 'kb_views', c.req.param('id'), ws)) return c.json({ error: 'view not found' }, 404);
+      db.prepare('DELETE FROM kb_views WHERE id = ?').run(c.req.param('id'));
+      return c.body(null, 204);
+    })
+    .get('/api/kb/research/tasks', (c) => {
+      const ws = wsOf(db, c.req.query('ws'), true);
+      if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
+      const s = kbScope(ws);
+      const open = c.req.query('open') === '1' ? ` AND status IN ('queued', 'running')` : '';
+      return c.json(db.prepare(`SELECT * FROM kb_tasks WHERE ${s.sql}${open} ORDER BY created_at DESC, rowid DESC LIMIT 200`).all(...s.params).map(toTask));
     })
     .get('/api/kb/categories', (c) => {
       const ws = wsOf(db, c.req.query('ws'), true);

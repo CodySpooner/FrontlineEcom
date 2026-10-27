@@ -455,7 +455,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - the canvas keyboard model;
   - cards and edges outside the viewport aren't rendered (except focused or selected ones), so 1000 cards stay smooth.
   - Tests for the camera math, the layout, the keyboard navigation and culling.
-- [ ] KB-07 **Artboard II:**
+- [x] KB-07 **Artboard II:**
   - lines per type with pills, hit strokes and the explanation popover;
   - the legend;
   - highlighting the selection's lines;
@@ -624,6 +624,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-04 evidence, links (owner-confirmed, suggested accept/reject), the deterministic suggester on every create (word overlap, category, shared sources, possible contradictions → conflict), the decision-11 ladder as revisions (owner stage kept via migration 46 `stage_by_owner`), restore revision, detach merged evidence.
 - 2026-10-27 KB-05 page frame: toolbar (workspace with niche + card count, Include General, search, research actions shown off until research lands), one `?view=` switcher, `?ws=`/`?card=`/legacy `tab`/`doc` URLs, `/` and Esc guards, loading/error/empty states; `GET /api/kb/workspaces`.
 - 2026-10-27 KB-06 artboard: full-bleed canvas sized to the window, camera (pan, wheel zoom about the cursor, Fit clear of the panels), category frames (auto-layout, collapse), the design's card, drag and Alt+Arrow saved per workspace (`/api/kb/positions`), click/Shift/box selection, minimap and zoom bar, the canvas keyboard model, culling.
+- 2026-10-27 KB-07 artboard II: link lines by type with pills (kept off cards, stacked per card pair), hit strokes and the "why linked" popover with accept/reject, the legend, the selection's lines highlighted, the Outline (subtree counts, filter, "+ New category", General knowledge, row → frame + first card), saved views per workspace (`/api/kb/views`), the Researching dock (`/api/kb/research/tasks`).
 
 ## Blocked
 
@@ -654,3 +655,11 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   days since last verified (or created) until KB-23's per-category freshness. Frame "Research more" comes with the
   research launch points (KB-15). Shift-drag box-selects; a plain drag on the background pans. `.agent/cdp-drive.mjs`
   drives real pointer, wheel and key input in headless Chrome for checks jsdom can't do.
+- 2026-10-27 KB-07: line colours follow `kb-atlas.html`: one grey for the supporting kinds, red dashed for Contradicts
+  (≠ marker when its pill is hidden), dotted for suggested; the pill names the exact type. Pills are off the tab order
+  like the frame buttons; keyboard access to a card's links is the details panel's connected cards (KB-08). The dock
+  shows the stage name; the "reading 6 of 9" progress comes with the runner (KB-12), which should also invalidate
+  `['kb', 'tasks']` on stage changes (run messages already do). The dock keeps right:16 until the details panel (KB-08)
+  moves it. The Outline has no tree folding (the filter box covers long trees); on short windows the whole Outline
+  scrolls with the tree kept at three rows. Saved views: the select is a picker (picking the same view again brings
+  it back), and delete acts on the view last picked or saved.

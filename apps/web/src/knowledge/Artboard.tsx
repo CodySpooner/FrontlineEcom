@@ -2,27 +2,30 @@
 // zoomable dot grid. Geometry lives in ./layout.
 import { memo, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { Brain, ChevronDown, ChevronUp, Minus, Plus } from 'lucide-react';
-import { KB_CARD_TYPES, KB_STAGES, type KbStage, type Store } from '@frontline/shared';
-import { useKbCards, useKbPositions, useSaveKbPositions } from '../api/client';
+import { KB_CARD_TYPES, KB_LINK_TYPES, KB_STAGES, type KbLink, type KbStage, type KbViewState, type Store } from '@frontline/shared';
+import { useKbCards, useKbLinks, useKbPositions, useSaveKbPositions } from '../api/client';
 import { useStoreSelection } from '../components/StoreFilter';
 import { cx, EmptyState, ErrorState, LoadingState, memoryAuthor } from '../components/ui';
 import { ago } from '../lib/format';
-import { bounds, CARD, cull, fit, HEAD, layout, nearest, PAD, panIntoView, seen, start, zoomAt, type Camera, type Dir, type Frame, type Inset, type Placed } from './layout';
+import { Dock, LinkPopover, Outline, SavedViews } from './ArtboardPanels';
+import { bounds, CARD, cull, edge, fit, HEAD, layout, nearest, overlaps, PAD, panIntoView, pillAt, seen, start, zoomAt, type Camera, type Dir, type Frame, type Inset, type Placed, type Rect } from './layout';
 
-/** The area Fit and pan-into-view use: below the view switcher, right of the minimap column (the Outline's, KB-07). The details panel widens it. */
+/** The area Fit and pan-into-view use: below the view switcher, right of the Outline column. The details panel widens it. */
 export const INSET: Inset = { top: 64, right: 16, bottom: 16, left: 16 + 196 + 16 };
 const STALE_DAYS = 90; // ponytail: one age for every card until per-category freshness (KB-23).
 const ARROWS: Record<string, Dir> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
 const STEP = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] } as const;
 const STAGES = Object.keys(KB_STAGES) as KbStage[];
+const PILLS = 0.6; // every line's pill shows from this zoom; below it only the selection's
 
 type Drag =
   | { kind: 'pan'; sx: number; sy: number; cam: Camera; moved: boolean }
   | { kind: 'box'; sx: number; sy: number; ex: number; ey: number }
   | { kind: 'card'; id: string; ids: string[]; sx: number; sy: number; dx: number; dy: number; moved: boolean; shift: boolean };
 
-export function Artboard({ ws, general, q, card, onOpen, switcher }: { ws: string; general: boolean; q: string; card?: string; onOpen: (id: string | undefined) => void; switcher: ReactNode }) {
+export function Artboard({ ws, general, q, card, set, switcher }: { ws: string; general: boolean; q: string; card?: string; set: (changes: Record<string, string | undefined>) => void; switcher: ReactNode }) {
   const { stores } = useStoreSelection();
+  const onOpen = (id: string | undefined) => set({ card: id });
   const needle = useDeferredValue(q.trim());
   const cards = useKbCards(ws, { general, q: needle, limit: 1000 });
   const places = useKbPositions(ws);
@@ -30,6 +33,8 @@ export function Artboard({ ws, general, q, card, onOpen, switcher }: { ws: strin
   const [collapsed, setCollapsed] = useState(() => new Set<string>());
   const frames = useMemo(() => layout(cards.data?.items ?? [], places.data ?? {}, collapsed), [cards.data, places.data, collapsed]);
   const byId = useMemo(() => new Map(frames.flatMap((f) => f.cards.map((p) => [p.card.id, p] as const))), [frames]);
+  const links = useKbLinks(ws, general);
+  const [pop, setPop] = useState<string>(); // the link whose "why" is open
 
   // The canvas fills the window below the toolbar (and past Shell's padding), so the page itself doesn't scroll.
   const box = useRef<HTMLDivElement>(null);
@@ -102,6 +107,30 @@ export function Artboard({ ws, general, q, card, onOpen, switcher }: { ws: strin
   const place = (ids: string[], dx: number, dy: number) =>
     save.mutate(Object.fromEntries(ids.map((id) => [id, { x: Math.max(PAD, Math.round(byId.get(id)!.rx + dx)), y: Math.max(HEAD, Math.round(byId.get(id)!.ry + dy)) }])));
   const moving = (id: string) => (selected.has(id) ? [...selected].filter((x) => byId.has(x)) : [id]);
+  // An Outline row opens its frames; once they're laid out, show the first one and focus its first card.
+  const [current, setCurrent] = useState<string>();
+  const [goto, setGoto] = useState<string[]>();
+  const goFrames = (key: string, ids: string[]) => {
+    setCurrent(key);
+    setCollapsed((s) => new Set([...s].filter((x) => !ids.includes(x))));
+    setGoto(ids);
+  };
+  useEffect(() => {
+    if (!goto) return;
+    setGoto(undefined);
+    const f = frames.find((x) => goto.includes(x.id) && x.cards.length);
+    if (!f) return;
+    setFocused(f.cards[0]!.card.id);
+    pending.current = f.cards[0]!.card.id;
+    // The frame's top-left part when it's bigger than the screen.
+    setCam((c) => c && panIntoView(c, { x: f.x, y: f.y, w: Math.min(f.w, (view.w - INSET.left - INSET.right - 48) / c.scale), h: Math.min(f.h, (view.h - INSET.top - INSET.bottom - 48) / c.scale) }, view, INSET));
+  }, [goto, frames, view]);
+  const viewState = (): KbViewState => ({ q: q.trim() || undefined, general: ws === 'general' ? undefined : general, camera, collapsed: [...collapsed] });
+  const applyView = (s: KbViewState) => {
+    set({ q: s.q || undefined, general: s.general === false ? '0' : undefined });
+    if (s.camera) setCam(s.camera);
+    setCollapsed(new Set(s.collapsed));
+  };
   const zoomBy = (f: number) => setCam((c) => c && zoomAt(c, f, { x: view.w / 2, y: view.h / 2 }));
   const fitAll = () => setCam(fit(bounds(frames), view, INSET));
 
@@ -111,6 +140,7 @@ export function Artboard({ ws, general, q, card, onOpen, switcher }: { ws: strin
     return { x: e.clientX - r.left, y: e.clientY - r.top };
   };
   const down = (e: PointerEvent<HTMLDivElement>) => {
+    setPop(undefined);
     if (e.button !== 0 || (e.target as Element).closest('button, [data-kb-ui]')) return;
     const el = (e.target as Element).closest<HTMLElement>('[data-kb-card]');
     e.currentTarget.setPointerCapture?.(e.pointerId);
@@ -182,6 +212,31 @@ export function Artboard({ ws, general, q, card, onOpen, switcher }: { ws: strin
 
   const at = (p: Placed) => (drag?.kind === 'card' && drag.moved && drag.ids.includes(p.card.id) ? { x: p.x + drag.dx, y: p.y + drag.dy } : p);
   const items = cards.data?.items ?? [];
+  // Lines between cards on the board, skipping ones nowhere near the screen; the selection's lines always show.
+  const rect = (p: Placed): Rect => ({ ...CARD, x: at(p).x, y: at(p).y });
+  const near = seen(camera, view);
+  const wide = { x: near.x - CARD.w, y: near.y - CARD.w, w: near.w + 2 * CARD.w, h: near.h + 2 * CARD.w };
+  const touches = (l: KbLink) => selected.has(l.fromId) || selected.has(l.toId);
+  const spots = shown.cards.map(rect); // pills keep off these
+  const pairs = new Map<string, number>(); // links already drawn between the same two cards: their pills stack
+  const edges = (links.data ?? []).flatMap((l) => {
+    const a = byId.get(l.fromId);
+    const b = byId.get(l.toId);
+    if (!a || !b) return [];
+    const e = edge(rect(a), rect(b));
+    const span = { x: Math.min(e.from.x, e.to.x), y: Math.min(e.from.y, e.to.y), w: Math.abs(e.to.x - e.from.x) + 1, h: Math.abs(e.to.y - e.from.y) + 1 };
+    const pill = touches(l) || camera.scale >= PILLS;
+    const pair = [l.fromId, l.toId].sort().join();
+    const k = pairs.get(pair) ?? 0;
+    pairs.set(pair, k + 1);
+    const p = pill || l.type === 'contradicts' ? pillAt(e, spots) : e.mid;
+    return touches(l) || overlaps(span, wide) ? [{ l, e, pill, hot: touches(l), dim: selected.size > 0 && !touches(l), p: { x: p.x, y: p.y + k * 24 } }] : [];
+  });
+  const open = edges.find((x) => x.l.id === pop);
+  const closePop = () => {
+    setPop(undefined);
+    box.current?.focus();
+  };
   return (
     <div className="relative -mx-[22px] -mb-8" style={{ height: `calc(100dvh - ${top}px)` }}>
       <div
@@ -199,6 +254,25 @@ export function Artboard({ ws, general, q, card, onOpen, switcher }: { ws: strin
         style={{ backgroundImage: 'radial-gradient(circle, var(--color-grid) 1px, transparent 1.3px)', backgroundSize: `${22 * camera.scale}px ${22 * camera.scale}px`, backgroundPosition: `${camera.x}px ${camera.y}px` }}
       >
         <div className="absolute top-0 left-0 origin-top-left" style={{ transform: `translate(${camera.x}px, ${camera.y}px) scale(${camera.scale})` }}>
+          <svg aria-hidden width="1" height="1" className="pointer-events-none absolute top-0 left-0 overflow-visible">
+            {edges.map(({ l, e, pill, hot, dim, p }) => {
+              const bad = l.type === 'contradicts';
+              const ink = bad ? 'var(--color-red)' : l.status === 'suggested' ? '#6b6b75' : '#d4d4da';
+              return (
+                <g key={l.id} opacity={dim ? 0.3 : 1}>
+                  <path data-kb-link={l.id} d={e.d} fill="none" stroke={ink} strokeOpacity={bad && !hot ? 0.75 : 1} strokeWidth={hot ? 2 : 1.4} strokeDasharray={l.status === 'suggested' ? '1.5 4' : bad ? '5 4' : undefined} strokeLinecap="round" />
+                  <path data-kb-ui d={e.d} fill="none" stroke="transparent" strokeWidth={14} className="cursor-pointer" style={{ pointerEvents: 'stroke' }} onClick={() => setPop(l.id)} />
+                  <circle cx={e.to.x} cy={e.to.y} r={3} fill={ink} />
+                  {bad && !pill && (
+                    <g transform={`translate(${p.x} ${p.y})`}>
+                      <circle r={8} fill="var(--color-bg)" stroke="var(--color-red)" strokeWidth={1.2} />
+                      <path d="M-4 -2h8M-4 2h8M2 -5l-4 10" stroke="var(--color-red)" strokeWidth={1.2} strokeLinecap="round" />
+                    </g>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
           {shown.frames.map((f) => (
             <FrameBox key={f.id} f={f} onToggle={() => setCollapsed((s) => (s.has(f.id) ? new Set([...s].filter((x) => x !== f.id)) : new Set([...s, f.id])))} />
           ))}
@@ -206,6 +280,29 @@ export function Artboard({ ws, general, q, card, onOpen, switcher }: { ws: strin
             const xy = at(p);
             return <CardView key={p.card.id} p={p} x={xy.x} y={xy.y} selected={selected.has(p.card.id)} tabStop={focused === p.card.id} store={stores.find((s) => s.id === p.card.storeId)} onFocus={setFocused} />;
           })}
+          {/* Pills name each line; off the tab order like the frame buttons (the details panel lists a card's links). */}
+          {edges
+            .filter((x) => x.pill)
+            .map(({ l, dim, p }) => (
+              <button
+                key={l.id}
+                type="button"
+                tabIndex={-1}
+                aria-label={`${l.status === 'suggested' ? 'Suggested: ' : ''}${KB_LINK_TYPES[l.type]}`}
+                onClick={() => setPop(l.id)}
+                className={cx(
+                  'absolute h-5 -translate-x-1/2 -translate-y-1/2 cursor-pointer rounded-full border bg-panel px-2 text-[10.5px] whitespace-nowrap text-text transition hover:border-text-2',
+                  l.type === 'contradicts' ? 'border-red/60' : 'border-line-3',
+                  l.status === 'suggested' && 'border-dashed text-text-2',
+                  pop === l.id && 'border-red',
+                  dim && 'opacity-30',
+                )}
+                style={{ left: p.x, top: p.y }}
+              >
+                {l.type === 'contradicts' && <span aria-hidden className="text-red">≠ </span>}
+                {KB_LINK_TYPES[l.type]}
+              </button>
+            ))}
         </div>
         {drag?.kind === 'box' && (
           <div className="pointer-events-none absolute border border-red/70 bg-red/10" style={{ left: Math.min(drag.sx, drag.ex), top: Math.min(drag.sy, drag.ey), width: Math.abs(drag.ex - drag.sx), height: Math.abs(drag.ey - drag.sy) }} />
@@ -226,24 +323,42 @@ export function Artboard({ ws, general, q, card, onOpen, switcher }: { ws: strin
             {needle ? 'Try another word, or clear the search.' : 'Cards show here as you and your agents research, test and learn what works.'}
           </EmptyState>
         </Overlay>
-      ) : (
-        <div data-kb-ui className="absolute bottom-4 left-4 z-10 grid w-[196px] gap-2">
-          <Minimap frames={frames} cam={camera} view={view} onJump={(x, y) => setCam((c) => c && { ...c, x: view.w / 2 - x * c.scale, y: view.h / 2 - y * c.scale })} />
-          <div className="glass flex items-center justify-between rounded-[10px] p-1">
-            <ZoomButton label="Zoom out" onClick={() => zoomBy(1 / 1.2)}>
-              <Minus className="size-3.5" />
-            </ZoomButton>
-            <output data-testid="zoom" aria-label="Zoom" className="text-xs text-text-2 tabular-nums">
-              {Math.round(camera.scale * 100)}%
-            </output>
-            <ZoomButton label="Zoom in" onClick={() => zoomBy(1.2)}>
-              <Plus className="size-3.5" />
-            </ZoomButton>
-            <button type="button" onClick={fitAll} className="cursor-pointer rounded-md px-2 py-1 text-xs font-semibold text-text-2 transition hover:bg-panel-2 hover:text-white">
-              Fit
-            </button>
+      ) : null}
+      {/* The Outline runs down to the minimap, so neither covers the other. */}
+      <div className="pointer-events-none absolute top-4 bottom-4 left-4 z-10 flex w-[196px] flex-col gap-3 [&>*]:pointer-events-auto">
+        <Outline ws={ws} frames={frames} current={current} onGo={goFrames}>
+          <SavedViews ws={ws} current={viewState} onApply={applyView} />
+        </Outline>
+        {ready && !cards.isError && items.length > 0 && (
+          <div data-kb-ui className="grid shrink-0 gap-2">
+            <Minimap frames={frames} cam={camera} view={view} onJump={(x, y) => setCam((c) => c && { ...c, x: view.w / 2 - x * c.scale, y: view.h / 2 - y * c.scale })} />
+            <div className="glass flex items-center justify-between rounded-[10px] p-1">
+              <ZoomButton label="Zoom out" onClick={() => zoomBy(1 / 1.2)}>
+                <Minus className="size-3.5" />
+              </ZoomButton>
+              <output data-testid="zoom" aria-label="Zoom" className="text-xs text-text-2 tabular-nums">
+                {Math.round(camera.scale * 100)}%
+              </output>
+              <ZoomButton label="Zoom in" onClick={() => zoomBy(1.2)}>
+                <Plus className="size-3.5" />
+              </ZoomButton>
+              <button type="button" onClick={fitAll} className="cursor-pointer rounded-md px-2 py-1 text-xs font-semibold text-text-2 transition hover:bg-panel-2 hover:text-white">
+                Fit
+              </button>
+            </div>
           </div>
-        </div>
+        )}
+      </div>
+      <Dock ws={ws} onOpen={() => set({ view: 'research' })} />
+      {open && (
+        <LinkPopover
+          link={open.l}
+          from={byId.get(open.l.fromId)!.card.title}
+          to={byId.get(open.l.toId)!.card.title}
+          x={Math.max(INSET.left, Math.min(view.w - 304, open.p.x * camera.scale + camera.x - 144))}
+          y={Math.max(16, Math.min(view.h - 220, open.p.y * camera.scale + camera.y + 16))}
+          onClose={closePop}
+        />
       )}
     </div>
   );
@@ -362,7 +477,7 @@ function Minimap({ frames, cam, view, onJump }: { frames: Frame[]; cam: Camera; 
         const pt = new DOMPoint(e.clientX, e.clientY).matrixTransform(m.inverse());
         onJump(pt.x, pt.y);
       }}
-      className="glass h-[110px] w-full cursor-pointer rounded-[10px]"
+      className="glass h-[110px] w-full cursor-pointer rounded-[10px] [@media(max-height:820px)]:h-[76px]"
     >
       {frames.map((f) => (
         <rect key={f.id} x={f.x} y={f.y} width={f.w} height={f.h} rx={14} className="fill-panel-2 stroke-line-2" strokeWidth={pad / 4} />

@@ -1,6 +1,6 @@
 import type { KbCardBrief } from '@frontline/shared';
 import { describe, expect, it } from 'vitest';
-import { CARD, cull, fit, HEAD, layout, nearest, PAD, panIntoView, start, zoomAt, type Rect } from './layout';
+import { CARD, cull, edge, fit, HEAD, layout, nearest, PAD, panIntoView, pillAt, start, zoomAt, type Rect } from './layout';
 
 const card = (id: string, path: string[], extra: Partial<KbCardBrief> = {}): KbCardBrief => ({
   id, storeId: 'peak', categoryId: path.join('/'), path, type: 'strategy', stage: 'hypothesis', status: 'active', title: id, summary: '', tags: [], authorId: 'owner', origin: 'owner',
@@ -125,5 +125,38 @@ describe('keyboard navigation between cards', () => {
   it('stays put when nothing lies that way', () => {
     expect(nearest(cards[0]!, cards, 'left')).toBeUndefined();
     expect(nearest(cards[0]!, cards, 'up')).toBeUndefined();
+  });
+});
+
+describe('connection lines', () => {
+  const a = { x: 0, y: 0, w: CARD.w, h: CARD.h };
+  it('runs side to side between cards apart, from the facing edges, with the pill at the middle', () => {
+    const e = edge(a, { x: 400, y: 200, w: CARD.w, h: CARD.h });
+    expect([e.from, e.to]).toEqual([
+      { x: CARD.w, y: CARD.h / 2 },
+      { x: 400, y: 200 + CARD.h / 2 },
+    ]);
+    expect(e.mid).toEqual({ x: (CARD.w + 400) / 2, y: (CARD.h / 2 + 200 + CARD.h / 2) / 2 });
+    expect(e.d.startsWith(`M ${CARD.w} ${CARD.h / 2} C`)).toBe(true);
+    expect(edge({ x: 400, y: 200, w: CARD.w, h: CARD.h }, a).from).toEqual({ x: 400, y: 200 + CARD.h / 2 });
+  });
+  it('runs top to bottom between stacked cards', () => {
+    const e = edge(a, { x: 20, y: 300, w: CARD.w, h: CARD.h });
+    expect([e.from, e.to]).toEqual([
+      { x: CARD.w / 2, y: CARD.h },
+      { x: 20 + CARD.w / 2, y: 300 },
+    ]);
+  });
+});
+
+describe('pill placement', () => {
+  it("sits at the line's middle, or the nearest point along it that isn't on a card", () => {
+    const e = edge({ x: 0, y: 0, w: CARD.w, h: CARD.h }, { x: 0, y: 600, w: CARD.w, h: CARD.h });
+    expect(pillAt(e, [])).toEqual(e.mid);
+    const between = { x: 0, y: 300, w: CARD.w, h: CARD.h }; // a card right over the middle
+    const p = pillAt(e, [between]);
+    expect(p.y < between.y || p.y > between.y + between.h).toBe(true);
+    expect(Math.abs(p.y - e.mid.y)).toBeLessThan(200);
+    expect(pillAt(e, [{ x: -50, y: 0, w: 400, h: 2000 }])).toEqual(e.mid); // nowhere free: the middle
   });
 });

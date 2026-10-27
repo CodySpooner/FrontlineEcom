@@ -1,4 +1,4 @@
-import type { KbCard, KbCardBrief, KbCategoryCount, Page } from '@frontline/shared';
+import type { KbCard, KbCardBrief, KbCategoryCount, KbTaskBrief, KbView, Page } from '@frontline/shared';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
@@ -48,6 +48,39 @@ describe('artboard positions', () => {
     expect((await req('PUT', '/api/kb/positions?ws=pawsome', { [own.id]: { x: 'left', y: 1 } })).status).toBe(400);
     expect((await req('PUT', '/api/kb/positions?ws=all', {})).status).toBe(400);
     expect(await ok('GET', '/api/kb/positions?ws=pawsome')).toEqual({ [own.id]: { x: 48, y: 60 }, [general.id]: { x: 300, y: 44 } });
+  });
+});
+
+describe('saved artboard views', () => {
+  test('save, list and delete per workspace; another workspace never sees them', async () => {
+    const state = { q: 'hooks', general: false, camera: { x: -40, y: 10, scale: 0.8 }, collapsed: ['p-ads'] };
+    const v = await ok<KbView>('POST', '/api/kb/views', { ws: 'pawsome', name: ' Hooks only ', state }, 201);
+    expect(v).toMatchObject({ storeId: 'pawsome', name: 'Hooks only', state });
+    expect((await ok<KbView[]>('GET', '/api/kb/views?ws=pawsome')).map((x) => x.name)).toEqual(['Hooks only']);
+    expect(await ok('GET', '/api/kb/views?ws=glow')).toEqual([]);
+    expect(await ok('GET', '/api/kb/views?ws=general')).toEqual([]);
+    expect((await req('POST', '/api/kb/views', { ws: 'pawsome', name: '', state })).status).toBe(400);
+    expect((await req('POST', '/api/kb/views', { ws: 'pawsome', name: 'x', state: { camera: { x: 'far' } } })).status).toBe(400);
+    expect((await req('DELETE', `/api/kb/views/${v.id}?ws=glow`)).status).toBe(404);
+    await ok('DELETE', `/api/kb/views/${v.id}?ws=pawsome`, undefined, 204);
+    expect(await ok('GET', '/api/kb/views?ws=pawsome')).toEqual([]);
+  });
+});
+
+describe('research tasks for the dock', () => {
+  test('lists the open tasks of a workspace (or all), newest first', async () => {
+    const task = (id: string, storeId: string | null, status: string, at: string) =>
+      db.prepare(`INSERT INTO kb_tasks (id, store_id, payer_id, role, kind, origin, objective, status, stage, budget_usd, created_at) VALUES (?, ?, 'pawsome', 'market_analyst', 'topic', 'owner', ?, ?, 'discovering', 1, ?)`).run(id, storeId, `Objective ${id}`, status, at);
+    task('t1', 'pawsome', 'running', '2026-10-27T10:00:00Z');
+    task('t2', 'pawsome', 'queued', '2026-10-27T11:00:00Z');
+    task('t3', 'pawsome', 'done', '2026-10-27T12:00:00Z');
+    task('t4', null, 'running', '2026-10-27T09:00:00Z');
+    task('t5', 'glow', 'running', '2026-10-27T09:30:00Z');
+    expect((await ok<KbTaskBrief[]>('GET', '/api/kb/research/tasks?ws=pawsome&open=1')).map((t) => t.id)).toEqual(['t2', 't1']);
+    expect((await ok<KbTaskBrief[]>('GET', '/api/kb/research/tasks?ws=pawsome')).map((t) => t.id)).toEqual(['t3', 't2', 't1']);
+    expect((await ok<KbTaskBrief[]>('GET', '/api/kb/research/tasks?ws=general&open=1')).map((t) => t.id)).toEqual(['t4']);
+    expect((await ok<KbTaskBrief[]>('GET', '/api/kb/research/tasks?ws=all&open=1')).map((t) => t.id)).toEqual(['t2', 't1', 't5', 't4']);
+    expect((await ok<KbTaskBrief[]>('GET', '/api/kb/research/tasks?ws=pawsome&open=1'))[0]).toMatchObject({ storeId: 'pawsome', payerId: 'pawsome', role: 'market_analyst', objective: 'Objective t2', status: 'queued', stage: 'discovering' });
   });
 });
 

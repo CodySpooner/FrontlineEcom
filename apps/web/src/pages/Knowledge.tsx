@@ -81,7 +81,7 @@ export function Knowledge() {
         {view !== 'artboard' && <div className="ml-auto">{switcher}</div>}
       </Toolbar>
       {view === 'artboard' ? (
-        <Artboard key={ws} ws={ws} general={general} q={q} card={card} onOpen={(id) => set({ card: id })} switcher={switcher} />
+        <Artboard key={ws} ws={ws} general={general} q={q} card={card} set={set} switcher={switcher} />
       ) : view === 'library' ? (
         <Library set={set} />
       ) : view === 'relationships' ? (

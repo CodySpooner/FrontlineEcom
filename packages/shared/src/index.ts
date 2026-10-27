@@ -1500,6 +1500,43 @@ export interface KbCardPatch extends Partial<KbCardInput> {
  */
 export type KbPositions = Record<string, { x: number; y: number }>;
 
+/** What a saved artboard view brings back: the filters, the camera and which frames are collapsed. */
+export interface KbViewState {
+  q?: string;
+  general?: boolean;
+  camera?: { x: number; y: number; scale: number };
+  collapsed?: string[];
+}
+
+/** GET /api/kb/views?ws= → KbView[] newest first; POST /api/kb/views {ws, name, state} → 201; DELETE /api/kb/views/:id?ws= → 204. */
+export interface KbView {
+  id: string;
+  storeId: string | null;
+  name: string;
+  state: KbViewState;
+  createdAt: string;
+}
+
+/** A research task's stages in order: agent runs, then the app's own dedupe, store and link steps, then the report. */
+export const KB_TASK_STAGES = ['planning', 'discovering', 'retrieving', 'analyzing', 'evaluating', 'extracting', 'deduping', 'storing', 'linking', 'reporting'] as const;
+export type KbTaskStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+
+/** GET /api/kb/research/tasks?ws=<general|storeId|all>[&open=1] → KbTaskBrief[] newest first; open = queued or running. */
+export interface KbTaskBrief {
+  id: string;
+  /** Where the findings go (null = General). */
+  storeId: string | null;
+  /** Whose agent and AI budget run it. */
+  payerId: string;
+  role: AgentRole;
+  objective: string;
+  status: KbTaskStatus;
+  /** One of KB_TASK_STAGES, or 'created' before the first. */
+  stage: string;
+  createdAt: string;
+  startedAt?: string;
+}
+
 /** GET /api/kb/workspaces → visible cards (proposed + active) per workspace, keyed 'general' or a store id; missing = 0. */
 export type KbWorkspaceCounts = Record<string, number>;
 

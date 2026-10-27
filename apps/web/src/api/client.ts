@@ -34,7 +34,13 @@ import type {
   IntegrationKind,
   KbCard,
   KbCardBrief,
+  KbCategory,
+  KbCategoryCount,
+  KbLink,
   KbPositions,
+  KbTaskBrief,
+  KbView,
+  KbViewState,
   KbWorkspaceCounts,
   KnowledgeDoc,
   KnowledgeKind,
@@ -267,6 +273,53 @@ export function useSaveKbPositions(ws: string) {
 
 /** One card from any workspace (a `?card=` link). */
 export const useKbCard = (id: string | undefined) => useQuery({ queryKey: ['kb', 'card', id], queryFn: () => api<KbCard>(`/api/kb/cards/${encodeURIComponent(id!)}?ws=all`), enabled: !!id });
+
+const wsq = (ws: string) => `ws=${encodeURIComponent(ws)}`;
+
+/** A workspace's links (rejected ones left out); `general` adds the General cards' own. */
+export const useKbLinks = (ws: string, general: boolean) => useQuery({ queryKey: ['kb', 'links', ws, general], queryFn: () => api<KbLink[]>(`/api/kb/links?${wsq(ws)}${general ? '&general=1' : ''}`) });
+
+/** Accept or reject a link, in the link's own workspace. */
+export function useDecideKbLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ link, status }: { link: KbLink; status: 'confirmed' | 'rejected' }) => api<KbLink>(`/api/kb/links/${encodeURIComponent(link.id)}?${wsq(link.storeId ?? 'general')}`, json('PATCH', { status })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
+
+/** A workspace's category tree in outline order, each with its own card count. */
+export const useKbCategories = (ws: string) => useQuery({ queryKey: ['kb', 'categories', ws], queryFn: () => api<KbCategoryCount[]>(`/api/kb/categories?${wsq(ws)}`) });
+
+export function useCreateKbCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: { ws: string; name: string; parentId?: string }) => api<KbCategory>('/api/kb/categories', json('POST', b)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb', 'categories'] }),
+  });
+}
+
+/** Saved artboard views of a workspace. */
+export const useKbViews = (ws: string) => useQuery({ queryKey: ['kb', 'views', ws], queryFn: () => api<KbView[]>(`/api/kb/views?${wsq(ws)}`) });
+
+export function useSaveKbView() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: { ws: string; name: string; state: KbViewState }) => api<KbView>('/api/kb/views', json('POST', b)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb', 'views'] }),
+  });
+}
+
+export function useDeleteKbView() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: KbView) => api<void>(`/api/kb/views/${encodeURIComponent(v.id)}?${wsq(v.storeId ?? 'general')}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb', 'views'] }),
+  });
+}
+
+/** Research tasks of a workspace ('all' for every one); `open` = queued or running. Research stages are runs, so run messages refresh it. */
+export const useKbTasks = (ws: string, open = false) => useQuery({ queryKey: ['kb', 'tasks', ws, open], queryFn: () => api<KbTaskBrief[]>(`/api/kb/research/tasks?${wsq(ws)}${open ? '&open=1' : ''}`) });
 
 /** Save the owner's version of a doc, or (markdown undefined) go back to the shipped one. */
 export function useSaveKnowledge() {
@@ -579,6 +632,7 @@ export function useLive() {
         if (isLive(m.run)) qc.setQueryData<AgentRunDetail>(['run', m.run.id], (d) => d && { ...d, ...m.run });
         else qc.invalidateQueries({ queryKey: ['run', m.run.id] });
         qc.invalidateQueries({ queryKey: ['runs', m.run.agentId] });
+        qc.invalidateQueries({ queryKey: ['kb', 'tasks'] });
         qc.invalidateQueries({ queryKey: ['agents'] });
         qc.invalidateQueries({ queryKey: ['memory', m.run.storeId] });
         qc.invalidateQueries({ queryKey: ['creatives'] });
