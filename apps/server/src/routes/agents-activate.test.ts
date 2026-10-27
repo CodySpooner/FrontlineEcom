@@ -164,6 +164,22 @@ test("a demo request approved after the store's first sync, before the squad not
   await runManager(db).idle();
 });
 
+test("a chat from the demo phase isn't continued on the live store: its context holds the demo numbers", async () => {
+  await app.request('/api/agents');
+  const runs = runManager(db);
+  const chat = runs.start('glow:market_analyst', 'How did we do last week?');
+  if (typeof chat === 'string') throw new Error(chat);
+  await runs.idle();
+  switchToReal(db, 'glow');
+  await app.request('/api/agents');
+  expect(runs.start('glow:market_analyst', 'And this week?', chat.id)).toBe('That conversation ran on demo data, before the store went live: start a new one.');
+  const fresh = runs.start('glow:market_analyst', 'How are we doing?');
+  if (typeof fresh === 'string') throw new Error(fresh);
+  await runs.idle();
+  expect(typeof runs.start('glow:market_analyst', 'And this week?', fresh.id)).toBe('object'); // a live chat goes on
+  await runs.idle();
+});
+
 test("going live clears what the agents learned from simulated numbers, not the owner's notes, pins or preferences", async () => {
   await app.request('/api/agents');
   // Demo-phase leftovers: a request asked on simulated numbers, an issue on a demo order, a draft for a demo product.

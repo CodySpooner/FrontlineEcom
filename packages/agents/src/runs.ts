@@ -68,6 +68,9 @@ export function createRunManager(opts: RunManagerOptions) {
     if (resumeRunId) {
       const prev = getRun(db, resumeRunId);
       if (prev?.agentId !== agentId || !prev.sessionId) return 'That conversation cannot be continued';
+      // Its session holds what the tools said then: on a store since gone live, the demo numbers, read as the store's.
+      const live = db.prepare('SELECT at FROM done_once WHERE ref = ?').get(`activate:${agent.storeId}`)?.at;
+      if (live && prev.createdAt < String(live)) return 'That conversation ran on demo data, before the store went live: start a new one.';
       resume = prev.sessionId;
     }
     const cap = env.caps?.(agent.storeId).agentCostPerDay;

@@ -343,11 +343,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-211 `list_products` says which products sell on a channel or shop next to the store (`sells_on`). Their price and page changes are refused (the app changes the store's own products only), but nothing in the catalog said which they were.
 - [x] AGT-212 The monthly flow check runs only on stores with their own site (Shopify, WooCommerce). On Amazon, Etsy, TikTok Shop and Walmart the platform owns the buyers (no marketing email or SMS to them, no checkout to recover), yet it drafted a welcome or abandonment flow there every month. Stores already live get it switched off once, unless the owner set it.
 - [x] AGT-213 `review_campaigns` sends the owner to the right place for unit costs. Both of its cost notes said Shopify's "Cost per item", else "Products here", on every platform; costs are entered in Analytics' Unit costs card (Shopify's field only exists on a Shopify store).
+- [x] AGT-214 A chat from the demo phase can't be continued once the store is live. Continuing resumes the agent's session, whose context holds what its tools said then: the demo numbers, which it would quote as the store's. The owner is asked to start a new conversation.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-214: `runs.start` refuses a `resumeRunId` created before the store's `activate:` marker.
 - 2026-10-26 — AGT-213: `costsWhere(store)` names Analytics' Unit costs, plus Shopify's "Cost per item" on a Shopify store, in both `review_campaigns` notes. Found by a sweep on fresh live Amazon/Walmart/Woo/TikTok stores.
 - 2026-10-26 — AGT-212: the flow job gets `platforms` and each gated job its own `elsewhere` reason; the gate marker moves to `job-gates-2:` so live stores get it once; the notice lists jobs as a proper list.
 - 2026-10-26 — AGT-211: `list_products` adds `sells_on` (TikTok Shop / Amazon / Etsy / WooCommerce) when the store has such products.
