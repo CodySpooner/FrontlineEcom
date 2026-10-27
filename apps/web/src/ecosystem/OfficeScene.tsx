@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Crosshair, Maximize, Minimize, Minus, Plus, Scan } from 'lucide-react';
 import { DESKS, MEETING, ROOMS } from './world';
 import { createOffice, type OfficeRenderer } from './renderer';
 import { Button } from '../components/ui';
@@ -59,14 +60,17 @@ export function OfficeScene({ office, onSelect, focus, display, seats, persist =
   return <>
     <span className="sr-only">Central hub today: {readout.revenue} revenue, {readout.orders} orders, {readout.tasks} active tasks. {readout.note}</span>
     <div className="eco-camera" aria-label="Office camera">
-      <Button size="sm" onClick={()=>scene.current?.zoom(.8)} aria-label="Zoom out">−</Button>
-      <Button size="sm" onClick={()=>scene.current?.zoom(1.25)} aria-label="Zoom in">+</Button>
-      <Button size="sm" onClick={()=>scene.current?.fit()}>Fit / Reset</Button>
-      <Button size="sm" onClick={()=>scene.current?.focus(MEETING)}>Hub</Button>
+      <div className="eco-zoom-controls">
+        <Button size="sm" onClick={()=>scene.current?.zoom(.8)} aria-label="Zoom out" title="Zoom out (-)"><Minus size={13} aria-hidden /></Button>
+        <span aria-label="Zoom level">{performance ? `${Math.round(performance.scale*100)}%` : '—'}</span>
+        <Button size="sm" onClick={()=>scene.current?.zoom(1.25)} aria-label="Zoom in" title="Zoom in (+)"><Plus size={13} aria-hidden /></Button>
+      </div>
+      <Button size="sm" onClick={()=>scene.current?.fit()} aria-label="Fit / Reset" title="Fit entire office (0)"><Scan size={13} aria-hidden /><span className="eco-camera-label">Fit / Reset</span></Button>
+      <Button size="sm" onClick={()=>scene.current?.focus(MEETING)} aria-label="Hub" title="Focus central hub"><Crosshair size={13} aria-hidden /><span className="eco-camera-label">Hub</span></Button>
       <select aria-label="Jump to department" defaultValue="" onChange={(e)=>{const room=ROOMS.find((r)=>r.id===e.target.value);if(room)scene.current?.focus({x:room.x+6,y:room.y+6});}}>
         <option value="" disabled>Jump to department</option>{ROOMS.map((r)=><option value={r.id} key={r.id}>{r.name}</option>)}
       </select>
-      <Button size="sm" onClick={()=>{const action=fullscreen?document.exitFullscreen():host.current!.parentElement!.requestFullscreen();action.catch(()=>setError('Fullscreen could not be opened.'));}}>{fullscreen?'Exit fullscreen':'Fullscreen'}</Button>
+      <Button size="sm" aria-label={fullscreen?'Exit fullscreen':'Fullscreen'} title={fullscreen?'Exit fullscreen':'Fullscreen'} onClick={()=>{const action=fullscreen?document.exitFullscreen():host.current!.parentElement!.requestFullscreen();action.catch(()=>setError('Fullscreen could not be opened.'));}}>{fullscreen?<Minimize size={13} aria-hidden />:<Maximize size={13} aria-hidden />}<span className="eco-camera-label">{fullscreen?'Exit fullscreen':'Fullscreen'}</span></Button>
     </div>
     <div ref={host} className="eco-canvas" data-frames={performance?.frames} data-elapsed-ms={performance?.elapsedMs} data-scale={performance?.scale} />
     <Minimap viewport={performance?.viewport} onFocus={(tile) => scene.current?.focus(tile)} />

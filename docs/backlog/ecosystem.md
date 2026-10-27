@@ -85,6 +85,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-27 ECO-42: Glass camera dock with grouped zoom controls/readout, icon cues and preserved accessible button names. Mobile controls wrap above the directory. Browser Hub/zoom/reset and 390px bounds/overlap assertions; desktop/mobile/Orca screenshots (.agent/eco-42-*.png). pnpm check 984 tests, 56-58 FPS.
 - 2026-10-27 ECO-41: Original cool glass panels, pixel skyline silhouettes, reflections and illuminated sills alternate with wall vents. Cached art and collision layout unchanged. Fit/close-up/Orca screenshots (.agent/eco-41-*.png); pnpm check 984 tests, 58 FPS.
 - 2026-10-27 ECO-40: Four original distant pixel hover vehicles add city depth behind the office. Loop/bounds and reduced-motion freeze tests; desktop/fullscreen/reduced/Orca screenshots (.agent/eco-40-*.png). pnpm check 984 tests, measured 58.2 FPS with thirty workers in fullscreen.
 - 2026-10-27 ECO-39: Department signs, names and speech callouts cap their screen footprint at close zoom. Wrapped names and grouped bubble backgrounds preserve alignment; fit labels unchanged. Scale-bound regression test and fit/125%/244%/Orca screenshots (.agent/eco-39-*.png); pnpm check 983 tests, 58 FPS.
@@ -234,5 +235,5 @@ Visual review: owner reference plus [Game Dev Story official screenshots](https:
 
 - [x] ECO-40 Distant city traffic: original pixel hover vehicles behind the office, bounded ambient motion that freezes in reduced-motion/low-power mode.
 - [x] ECO-41 Glazed office windows: cool skyline reflections and illuminated glass among the wall vents to add depth and contrast.
-- [ ] ECO-42 Camera dock polish: compact glass controls, visible zoom readout and clear mobile spacing with keyboard-accessible actions.
+- [x] ECO-42 Camera dock polish: compact glass controls, visible zoom readout and clear mobile spacing with keyboard-accessible actions.
 - [ ] ECO-43 Midnight display continuity: keep the labeled Demo hub ticker and seven-day display aligned with the local date across midnight.
