@@ -232,6 +232,13 @@ test('a budget change needs a campaign with a daily budget of its own (not a lif
   expect(writes.calls).toHaveLength(0);
 });
 
+test("an ad account zone this machine doesn't know dates by the machine's day instead of failing every sync", async () => {
+  const { db, app } = setup();
+  await syncMeta(db, key, 'pawsome', fakeGraph([], undefined, 'USD', 'America/Nowhere').fetchFn, NOW);
+  await syncMeta(db, key, 'pawsome', fakeGraph([], undefined, 'USD', 'America/Nowhere').fetchFn, NOW);
+  expect(((await (await app.request('/api/integrations?stores=pawsome')).json()) as Integration[])[0]).toMatchObject({ status: 'connected' });
+});
+
 test("an ad account ahead of the computer is asked for its own today (its zone as the last sync saw it)", async () => {
   const { db } = setup();
   await syncMeta(db, key, 'pawsome', fakeGraph([], undefined, 'USD', 'Pacific/Kiritimati').fetchFn, NOW);

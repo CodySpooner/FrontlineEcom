@@ -101,6 +101,8 @@ test("a second platform's timezone doesn't take over from the store's own platfo
   takeTimezone(db, 'glow', 'shopify', 'America/Chicago');
   takeTimezone(db, 'glow', 'woocommerce', 'UTC');
   expect(zone()).toBe('America/Chicago');
+  takeTimezone(db, 'glow', 'shopify', 'America/Nowhere'); // a zone this machine doesn't know: kept as it was
+  expect(zone()).toBe('America/Chicago');
 });
 
 test("forgetting a platform's old shop drops its refund lines too; other platforms' stay", () => {

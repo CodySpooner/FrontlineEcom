@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { AD_ZONES, archiveUnlisted, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
+import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -87,7 +87,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
   try {
     const act = adAccount(creds.adAccountId!);
     const token = creds.accessToken!;
-    const today = localDate(now, stateOf<string>(db, AD_ZONES).get(id)); // the account's day (its zone as last seen; the machine's at first)
+    const today = localDate(now, adZone(db, id)); // the account's day (its zone as last seen; the machine's at first)
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const start = cursor ? addDays(cursor, -ATTRIBUTION_DAYS) : addDays(today, 1 - BACKFILL_DAYS);
 

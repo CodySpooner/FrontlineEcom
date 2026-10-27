@@ -23,6 +23,7 @@ export function takeCurrency(db: Db, storeId: string, kind: IntegrationKind, cur
  * takeCurrency): a second platform's zone would re-date the orders back and forth, a sync of each at a time.
  */
 export function takeTimezone(db: Db, storeId: string, kind: IntegrationKind, zone: string) {
+  if (!knownZone(zone)) return;
   const own = String(db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform);
   if (own !== kind && db.prepare('SELECT 1 FROM integrations WHERE id = ? AND synced_at IS NOT NULL').get(`${own}:${storeId}`)) return;
   setStoreTimezone(db, storeId, zone);
@@ -275,6 +276,19 @@ export const stateOf = <T>(db: Db, key: string) => {
 
 /** Settings row: the timezone each ad account or GA4 property reports its days in (integration id → IANA name). */
 export const AD_ZONES = 'ad_timezones';
+
+/** The zone if this machine knows it, else undefined (the machine's own): a day in an unknown zone throws, every sync. */
+export function knownZone(zone?: string) {
+  try {
+    if (zone) new Intl.DateTimeFormat('en', { timeZone: zone });
+    return zone;
+  } catch {
+    return undefined;
+  }
+}
+
+/** An ad account's or GA4 property's zone as its last sync saw it (undefined at first, or unknown here). */
+export const adZone = (db: Db, id: string) => knownZone(stateOf<string>(db, AD_ZONES).get(id));
 
 /** A tag in text a storefront shows as is (titles): `<b`, `</`, `<!--`, `<?`. A lone "<" ("under <5 cm") isn't one. */
 export const hasTag = (s: string) => /<[a-z!/?]/i.test(s);
