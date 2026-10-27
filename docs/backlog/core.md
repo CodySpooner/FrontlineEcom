@@ -208,10 +208,12 @@ with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 - [x] CORE-115 A TikTok Shop product edited on TikTok has its image read again, so a new main image shows.
 - [x] CORE-116 The competitor watch never fetches an address on this computer or its network, and the add route refuses one.
 - [x] CORE-117 A competitor shop that redirects can't send the price watch to an address on this computer or its network.
+- [x] CORE-118 An approved Etsy page's description shows typographic entities (&hellip; &rsquo; &mdash; ...) as the characters, not as typed.
 
 ## Blocked
 
 ## Done
+- 2026-10-26 — CORE-118: `htmlToText` (Etsy publish) decodes the common typographic named entities (quotes, dashes, ellipsis, (c)/(R)/TM, degree, times, euro, pound) besides the basic five; an unknown one still stays as typed. The table is a Map, so `&constructor;` can't reach Object.prototype.
 - 2026-10-26 — CORE-117: closes CORE-116's ponytail. The watch's shop reads (`get` in competitors.ts) follow redirects themselves (`redirect: 'manual'`, 5 hops), and a hop to an `isPrivateHost` address throws (logged as a failed check) instead of being fetched. A public redirect (old domain, http to https) still works.
 - 2026-10-26 — CORE-116: AGT-235 made `track_competitor` refuse a local or private shop address, but the daily watch still fetched every saved one (an agent's from before it, or one posted to `/api/competitors`). `isPrivateHost` (shared, the agents' rule) now makes the watch skip those as it skips `.example`, and the add route answers 400. ponytail: a public shop that redirects to a private address is still read.
 - 2026-10-26 — Inbox (agents, AGT-223): `stillAsSynced`'s doc now says to keep "as last synced (changed outside the app)", which the agents match to show Not applied.
