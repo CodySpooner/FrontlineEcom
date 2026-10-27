@@ -15,20 +15,24 @@ outcome checks.
    learnings, the store profile (on a live store, also what the app can change there), the top store memories for
    the task, the store's scheduled jobs (so a run doesn't hand off what one does anyway), open requests, and the date in the zone the store's data is dated in. The stable layers come first, so
    the prefix caches. The owner can edit any shipped layer in the Knowledge Base; edits live in
-   `<FRONTLINE_DATA_DIR>/knowledge/`.
+   `<FRONTLINE_DATA_DIR>/knowledge/`. HTML comments in a layer (the pack template's guidance) stay out of the prompt, as
+   Knowledge hides them.
 3. **Engine** (`engine.ts` `defaultEngine`): connected stores use `claude-engine.ts`, on the owner's local Claude Code
    login (`claudeAccount` / `GET /api/claude-account` says whether it's signed in, without spending usage) with model `FRONTLINE_AGENT_MODEL` (default `claude-opus-5-5`). Demo stores use `fake-engine.ts`, which costs
    nothing. `FRONTLINE_AGENT_ENGINE=claude|fake` forces one engine for every store, and tests always use fake.
 4. **Tools** (`tools.ts`): each role has an allowlist (`roles.ts`). Read tools return CSV or JSON from the store's rows.
    Lists have row limits, and the date windows use the store's own dates. Once the store goes live or its currency
    changes during a run, every further tool call is refused (what the run read no longer holds). An Etsy product page
-   draft keeps to plain-text structure and Etsy's title rule, since Etsy gets the text of the HTML.
+   draft keeps to plain-text structure and Etsy's title rule, since Etsy gets the text of the HTML. An SMS step in a flow
+   is held to 2 billed segments (`smsSegments`). `track_competitor` refuses an address on this computer or its network
+   (shared `isPrivateHost`): the app fetches it daily.
 5. **Asking** (`request_approval` and the purpose-built `propose_*` / `publish_page` / `create_creative` tools):
    every spend, publish or live-store change becomes an approval, and the run pauses until the owner decides.
    Autopilot only takes kinds the owner switched on, and only for amounts the tool computed itself. A model-written
    amount never counts, and the per-kind daily caps still apply. Requests the app can't carry out on the store's
    platform are refused before they're asked (`noStoreWrites`, using shared `PRODUCT_WRITE_PLATFORMS`,
-   `PRICE_WRITE_PLATFORMS` and `PRODUCT_PAGE_PLATFORMS`).
+   `PRICE_WRITE_PLATFORMS` and `PRODUCT_PAGE_PLATFORMS`). A request's title keeps its amounts (a long product or
+   campaign name is cut instead), and a price request that sets a "was" price says so there.
 6. **Carrying it out** (`apps/server/src/routes/agents-actions.ts`): `OUTLIVE_RUN` kinds are applied by the server
    when approved, even after the run ended. Writers are routed by platform (`onStore` in `routes/agents.ts`). A
    change approved on stale numbers (the price moved, or an ad change days late) is skipped and the owner is told, and
