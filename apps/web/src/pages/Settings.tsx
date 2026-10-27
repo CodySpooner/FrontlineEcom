@@ -4,7 +4,7 @@ import { APPROVAL_KINDS, type Store, type StoreCaps } from '@frontline/shared';
 import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings, useUsage } from '../api/client';
 import { Hero } from '../components/Hero';
 import { feeEstimate, nicheName, PLATFORM_NAME, StoreForm } from '../components/StoreForm';
-import { Badge, Button, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../components/ui';
+import { Badge, Button, ConfirmDelete, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../components/ui';
 import { cents, money } from '../lib/format';
 import { NAV } from '../nav';
 
@@ -62,7 +62,6 @@ function Stores() {
 
 function StoreRow({ s, onEdit }: { s: Store; onEdit: () => void }) {
   const { remove } = useStoreActions();
-  const [confirm, setConfirm] = useState(false);
   return (
     <li className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
       <i aria-hidden className="size-3 shrink-0 rounded-full" style={{ background: s.color }} />
@@ -78,26 +77,18 @@ function StoreRow({ s, onEdit }: { s: Store; onEdit: () => void }) {
           </p>
         )}
       </div>
-      {confirm ? (
-        <span className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-text-2">Delete {s.name}? This can't be undone.</span>
-          <Button size="sm" onClick={() => setConfirm(false)}>
-            Keep
-          </Button>
-          <Button size="sm" variant="primary" disabled={remove.isPending} onClick={() => remove.mutate(s.id)}>
-            Delete store
-          </Button>
-        </span>
-      ) : (
-        <span className="flex gap-3 text-xs">
-          <button type="button" onClick={onEdit} className="cursor-pointer text-text-2 hover:text-white">
-            Edit
-          </button>
-          <button type="button" onClick={() => setConfirm(true)} className="cursor-pointer text-muted hover:text-red">
-            Delete
-          </button>
-        </span>
-      )}
+      <span className="flex flex-wrap items-center gap-3 text-xs">
+        <button type="button" onClick={onEdit} className="cursor-pointer text-text-2 hover:text-white">
+          Edit
+        </button>
+        <ConfirmDelete question={`Delete ${s.name}? This can't be undone.`} confirm="Delete store" busy={remove.isPending} onConfirm={() => remove.mutate(s.id)}>
+          {(open, ref) => (
+            <button ref={ref} type="button" onClick={open} className="cursor-pointer text-muted hover:text-red">
+              Delete
+            </button>
+          )}
+        </ConfirmDelete>
+      </span>
     </li>
   );
 }

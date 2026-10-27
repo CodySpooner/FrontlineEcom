@@ -84,3 +84,18 @@ describe('Caps with no stores', () => {
     expect(await screen.findByText('Caps are set per store: add a store above, then set its limits here.')).toBeTruthy();
   });
 });
+
+describe('deleting a store', () => {
+  it('asks with focus on Keep, and Keep hands focus back to Delete', async () => {
+    const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, sound: false, notifications: { approvals: true, agentDone: true, errors: true, digest: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
+    const store = { id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', color: '#ff2a3a', currency: 'USD', timezone: 'UTC', connected: false };
+    stubApi((url) => (url === '/api/stores' ? [store] : url === '/api/settings' ? settings : undefined));
+    renderApp(<Settings />, '/settings');
+    await screen.findByText('Peak Fit');
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    expect(screen.getByText("Delete Peak Fit? This can't be undone.")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete' }));
+  });
+});

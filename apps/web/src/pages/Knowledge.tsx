@@ -103,7 +103,7 @@ function DocView({ d }: { d: KnowledgeDoc }) {
       {d.edited &&
         (confirm ? (
           <>
-            <Button size="sm" onClick={() => setConfirm(false)}>
+            <Button size="sm" autoFocus onClick={() => setConfirm(false)}>
               Keep mine
             </Button>
             <Button size="sm" variant="primary" disabled={save.isPending} onClick={() => save.mutate({ kind: d.kind, key: d.key }, { onSuccess: () => setConfirm(false) })}>

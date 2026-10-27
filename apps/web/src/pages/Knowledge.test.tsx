@@ -78,3 +78,13 @@ describe('Knowledge Base › forgetting a memory', () => {
     await vi.waitFor(() => expect(deletes(fetch)).toBe(1));
   });
 });
+
+describe('Knowledge Base › restoring an edited playbook', () => {
+  it('asks with focus on Keep mine', async () => {
+    const doc = { kind: 'playbook', key: 'ad_strategist', title: 'Ad Strategist playbook', chars: 9, edited: true, markdown: '# Mine' };
+    stubApi((url) => (url === '/api/knowledge' ? [doc] : url.startsWith('/api/knowledge/') ? doc : undefined));
+    renderApp(<Knowledge />, '/knowledge');
+    fireEvent.click(await screen.findByRole('button', { name: 'Restore original' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep mine' }));
+  });
+});

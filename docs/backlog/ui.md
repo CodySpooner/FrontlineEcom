@@ -378,6 +378,8 @@ Orca's browser against the reference before ticking it.
       Etsy shop, TikTok shop, Amazon seller/marketplace) deletes the old shop's synced orders, products and unit costs,
       with no word in the form. It now says so above Save while the field names another shop (not for the same shop
       written differently: case, https, www, trailing slash).
+- [x] UI-147 The last two confirms UI-144 missed: deleting a store in Settings now uses `ConfirmDelete` (focus on Keep,
+      back on Delete after it), and Knowledge's "Restore original" puts focus on "Keep mine" when it asks.
 
 ## Blocked
 
@@ -569,3 +571,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-144: four confirms moved onto `ConfirmDelete`; Integrations keeps its footer but keys it (React reused the Cancel button as Keep, so autoFocus never fired) and uses `useFocusBack`. New Integrations test (red on the old code). Orca, Keep only: Automation "Delete this rule?" and Competitors "Stop tracking this shop?" focus Keep and return to the trigger; Disconnect on a read-only patched CJ integration the same
 - 2026-10-26 — UI-145: `ApprovalCard`'s `act` focuses the next sibling card's Approve (`data-approve`, the one before after the last) before its own buttons disable. New Chat test (red on the old code). Orca, in the notifications drawer with the approve POST answered by a fetch patch: focus went from "Pause Spark Ads · UGC" to "Raise daily budget 20%"; all three demo requests still pending in the DB
 - 2026-10-26 — UI-146: `anotherShop` in lib/shop.ts mirrors core's SHOP_KEYS/bare (FYI left in core's Inbox). lib test + Integrations test (red on the old code). Orca with a read-only patched Shopify connection on Pawsome: typing volt-lab.myshopify.com over pawsome-gear.myshopify.com shows the warning above Save (Save not pressed)
+- 2026-10-26 — UI-147: no hand-rolled confirm is left without focus handling (grep `setConfirm`: Integrations and Knowledge, both handled in place). Two new tests (red on the old code). Orca on Settings, Keep only: Delete → focus on Keep → back on Delete
