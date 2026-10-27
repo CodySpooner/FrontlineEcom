@@ -97,16 +97,21 @@ export function checkAdOutcomes(db: Db, today?: string) {
     // that paid back. ponytail: per-day averages, store-wide; whatever else moved revenue in those days counts too.
     const [extra, more] = [a.spend / 3 - b.spend / 7, a.revenue / 3 - b.revenue / 7];
     // Not when many sales have no unit cost: break-even reads low there, so a losing raise would pass and a fair cut fail.
-    const costed = uncostedShare(db, String(r.store_id), addDays(day, -30)) < 0.1;
+    // Nor with no break-even at all (no sales or costed product, or no margin left after costs): every raise would fail
+    // and every cut pass.
+    const breakEven = thresholds(economics(db, String(r.store_id), addDays(day, -30))).breakEven;
+    const costed = Number.isFinite(breakEven) && uncostedShare(db, String(r.store_id), addDays(day, -30)) < 0.1;
     const budget = r.kind === 'ads.set_budget';
-    const raise = budget && Number(r.bto) > Number(r.bfrom) && extra > 0 && costed;
-    const cut = (!budget || Number(r.bto) < Number(r.bfrom)) && extra < 0 && costed;
+    const [up, down] = [budget && Number(r.bto) > Number(r.bfrom), !budget || Number(r.bto) < Number(r.bfrom)];
+    // The store's spend went the other way (a bigger change against it the same days): its own effect can't be told apart.
+    const against = (up && extra < 0) || (down && extra > 0);
+    const raise = up && extra > 0 && costed;
+    const cut = down && extra < 0 && costed;
     if (!b.spend || (!a.spend && !cut)) continue;
     if (!once(db, `ads-outcome:${r.id}`)) continue; // judged once: an outcome the owner deleted stays deleted
     const [before, after] = [b.revenue / b.spend, a.revenue / a.spend];
-    const breakEven = raise || cut ? thresholds(economics(db, String(r.store_id), addDays(day, -30))).breakEven : 0;
     const marginal = more / extra; // a cut's: the revenue that went per unit of spend that went
-    const worked = raise ? marginal >= breakEven : cut ? marginal < breakEven : after > before;
+    const worked = against ? undefined : raise ? marginal >= breakEven : cut ? marginal < breakEven : after > before;
     const money = (n: number) => `${n < 0 ? '-' : '+'}${Math.round(Math.abs(n)).toLocaleString('en-US')} ${String(r.currency)}/day`;
     const vs = `${marginal.toFixed(2)} vs break-even ${breakEven.toFixed(2)}`;
     const roas = raise
@@ -114,13 +119,21 @@ export function checkAdOutcomes(db: Db, today?: string) {
       : cut
         ? `${money(extra)} ad spend went with ${money(more)} revenue (ROAS of the spend cut ${vs})`
         : `blended ROAS ${before.toFixed(2)} → ${after.toFixed(2)}`;
-    recordOutcome(db, `ads:${r.id}`, worked, {
-      storeId: String(r.store_id), agentId: String(r.agent_id), kind: 'learning', confidence: worked ? 0.7 : 0.6, tags: ['outcome', 'ads'],
-      text: `"${r.title}" ${worked ? 'worked' : 'did not help'}: ${roas} in the 3 days after.`,
-      evidence: `7 days before vs 3 days after ${day} (request ${r.id})`,
-    });
+    recordOutcome(
+      db,
+      `ads:${r.id}`,
+      worked,
+      {
+        storeId: String(r.store_id), agentId: String(r.agent_id), kind: 'learning', confidence: worked === undefined ? 0.5 : worked ? 0.7 : 0.6, tags: ['outcome', 'ads'],
+        text: against
+          ? `"${r.title}" can't be judged: the store's ad spend moved ${money(extra)} in the 3 days after, not this change's way, so other changes outweigh it (blended ROAS ${before.toFixed(2)} → ${after.toFixed(2)}).`
+          : `"${r.title}" ${worked ? 'worked' : 'did not help'}: ${roas} in the 3 days after.`,
+        evidence: `7 days before vs 3 days after ${day} (request ${r.id})`,
+      },
+      'next to bigger ad changes',
+    );
     // Once per run and day: its other changes that day are judged on the same store-wide ROAS, not new evidence.
-    if (r.run_id) judgeRun(db, `ads:${r.run_id}:${day}`, String(r.run_id), worked);
+    if (r.run_id && worked !== undefined) judgeRun(db, `ads:${r.run_id}:${day}`, String(r.run_id), worked);
     if (!worked) continue;
     award(db, {
       ref: `win:${r.id}`, amount: XP.win, storeId: String(r.store_id), agentId: String(r.agent_id),

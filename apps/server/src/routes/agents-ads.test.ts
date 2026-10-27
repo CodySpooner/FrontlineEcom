@@ -517,6 +517,41 @@ test('a pause or cut is judged on what the spend it took away was bringing vs br
   expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(xp + 50);
 });
 
+test('an ad change on a store with no margin left after costs is judged on blended ROAS, not against a break-even of Infinity', () => {
+  const day = decided();
+  db.prepare(`UPDATE stores SET fee_percent = 0, fee_per_order = 0 WHERE id = 'peak'`).run();
+  db.prepare(`UPDATE daily_metrics SET revenue = 1000, cogs = 1100, ad_spend = 250 WHERE store_id = 'peak' AND date >= ?`).run(addDays(day, -30)); // costs over revenue: no ROAS breaks even
+  db.prepare(`UPDATE daily_metrics SET revenue = 1600, cogs = 1700, ad_spend = 500 WHERE store_id = 'peak' AND date BETWEEN ? AND ?`).run(addDays(day, 1), addDays(day, 3));
+  db.prepare(
+    `INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at, decided_at) VALUES ('r1', 'peak', 'peak:ad_strategist', NULL, 'Raise Broad budget $250 → $500/day', 'r', ?, 'approved', ?, ?)`,
+  ).run(JSON.stringify({ kind: 'ads.set_budget', payload: { from: 250, to: 500 } }), `${day}T09:00:00Z`, `${day}T12:00:00Z`);
+  checkAdOutcomes(db);
+  expect(outcomes().map((m) => m.text)).toEqual(['"Raise Broad budget $250 → $500/day" did not help: blended ROAS 4.00 → 3.20 in the 3 days after.']);
+});
+
+test("a raise approved the same days as a bigger cut can't be judged on the store's spend, which went the other way", () => {
+  const day = decided();
+  db.prepare(`UPDATE stores SET fee_percent = 0, fee_per_order = 0 WHERE id = 'peak'`).run();
+  db.prepare(`UPDATE daily_metrics SET revenue = 2000, cogs = 800, ad_spend = 500 WHERE store_id = 'peak' AND date >= ?`).run(addDays(day, -30)); // break-even 1.67
+  db.prepare(`UPDATE daily_metrics SET revenue = 1900, cogs = 760, ad_spend = 300 WHERE store_id = 'peak' AND date BETWEEN ? AND ?`).run(addDays(day, 1), addDays(day, 3));
+  const change = (id: string, title: string, payload: object) =>
+    db.prepare(
+      `INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at, decided_at) VALUES (?, 'peak', 'peak:ad_strategist', NULL, ?, 'r', ?, 'approved', ?, ?)`,
+    ).run(id, title, JSON.stringify({ kind: 'ads.set_budget', payload }), `${day}T09:00:00Z`, `${day}T12:00:00Z`);
+  change('cut', 'Lower Loser $300 → $50/day', { from: 300, to: 50 });
+  change('raise', 'Raise Winner $100 → $130/day', { from: 100, to: 130 });
+  const xp = getAgent(db, 'peak:ad_strategist')!.xp;
+  checkAdOutcomes(db);
+  expect(outcomes().map((m) => m.text).sort()).toEqual([
+    '"Lower Loser $300 → $50/day" worked: -200 USD/day ad spend went with -100 USD/day revenue (ROAS of the spend cut 0.50 vs break-even 1.67) in the 3 days after.',
+    "\"Raise Winner $100 → $130/day\" can't be judged: the store's ad spend moved -200 USD/day in the 3 days after, not this change's way, so other changes outweigh it (blended ROAS 4.00 → 6.33).",
+  ]);
+  expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(xp + 50); // the cut's win only
+  expect(db.prepare(`SELECT title FROM notifications WHERE store_id = 'peak' AND title LIKE 'Ad Strategist: result unclear%'`).all()).toEqual([
+    { title: 'Ad Strategist: result unclear next to bigger ad changes' },
+  ]);
+});
+
 test('a change that did not help is remembered too, without XP', async () => {
   approvedChange('a-flop', 'Raise Prospecting · Broad budget $50 → $80/day', 0.3);
   const before = getAgent(db, 'peak:ad_strategist')!.xp;
