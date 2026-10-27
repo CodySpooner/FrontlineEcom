@@ -55,6 +55,17 @@ test('the Market Analyst starts tracking a competitor shop and reads its prices 
   );
 });
 
+test('a shop address on this computer or its network is refused before the app fetches it', async () => {
+  const fetched: string[] = [];
+  vi.stubGlobal('fetch', async (url: string) => (fetched.push(url), new Response('not found', { status: 404 })));
+  const urls = ['http://localhost:4000', 'http://2130706433/', 'http://[::1]/', 'http://192.168.1.1/admin', 'http://172.20.0.5', 'http://10.0.0.2', 'http://169.254.169.254/latest', 'http://router/', 'https://nas.local/'];
+  expect(await run(urls.map((u, i) => track(`Shop ${i}`, u)))).toEqual(
+    urls.map(() => "Not added: give the shop's public web address (the app reads it from this computer every day, so never a local or private one)."),
+  );
+  expect(fetched).toEqual([]);
+  expect(await run([track('Rival', 'https://10.example.com')])).not.toEqual([expect.stringMatching(/public web address/)]); // a public name
+});
+
 test('every Etsy shop is on etsy.com: one is told from another by its shop', async () => {
   db.prepare(`INSERT INTO competitors (id, store_id, name, url, notes, created_at) VALUES ('e1', 'pawsome', 'Pup Knits', 'https://www.etsy.com/shop/PupKnits', NULL, '2026-10-01T00:00:00Z')`).run();
   expect(await run([track('Pup Knits', 'https://www.etsy.com/de/shop/pupknits?ref=x'), track('Bark Goods', 'https://www.etsy.com/shop/BarkGoods')])).toEqual([

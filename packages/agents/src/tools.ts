@@ -144,6 +144,9 @@ export function smsSegments(text: string) {
   return n <= one ? 1 : Math.ceil(n / each);
 }
 
+/** Loopback, private, link-local and this-network IPv4, and names only a local network resolves. */
+const PRIVATE_HOST = /^(127|10|0|192\.168|169\.254|172\.(1[6-9]|2\d|3[01]))\.[\d.]+$|\.(local|localhost|internal|lan|home|arpa)$/i;
+
 const costsWhere = (store: Store) => `Analytics' Unit costs here${store.platform === 'shopify' ? ', or Shopify\'s "Cost per item"' : ''}`;
 const priceFloor = (store: Store, cost: number) => (cost > 0 ? r2((cost + (store.feePerOrder ?? 0)) / (1 - (store.feePercent ?? 0) / 100)) : undefined);
 /** An amount in the store's currency, as the owner reads it on a request: $40 for USD stores, 40 EUR otherwise. */
@@ -451,7 +454,13 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async ({ name, url, why }, ctx) => {
       if (!ctx.trackCompetitor) return 'Competitor tracking is not available.';
-      if (!/^https?:$/.test(new URL(url).protocol)) return 'Not added: give the shop as an http(s) address.';
+      const { protocol, hostname } = new URL(url); // IPv4 in any notation comes back dotted (2130706433 → 127.0.0.1)
+      if (!/^https?:$/.test(protocol)) return 'Not added: give the shop as an http(s) address.';
+      // The app fetches it from the owner's computer now and daily: never that computer or its network, which a page the
+      // agent read could ask for. ponytail: a public name that resolves to a private address isn't caught.
+      if (!hostname.includes('.') || hostname.startsWith('[') || PRIVATE_HOST.test(hostname)) {
+        return "Not added: give the shop's public web address (the app reads it from this computer every day, so never a local or private one).";
+      }
       return ctx.trackCompetitor(ctx.store.id, { name, url, notes: `${AGENT_ROLES[ctx.agent.role].name}: ${why}` });
     },
   }),
