@@ -83,6 +83,11 @@ test("Shopify next to a store's own platform dates its orders on the store's day
 
 test('shopHost normalizes and only allows myshopify.com hosts', () => {
   expect(shopHost(' https://Glow-Haus.myshopify.com/admin ')).toBe('glow-haus.myshopify.com');
+  // The address the Shopify admin shows today names the shop too.
+  expect(shopHost('https://admin.shopify.com/store/glow-haus')).toBe('glow-haus.myshopify.com');
+  expect(shopHost('admin.shopify.com/store/Glow-Haus/products?x=1')).toBe('glow-haus.myshopify.com');
+  expect(() => shopHost('https://admin.shopify.com/settings')).toThrow('myshopify.com');
+  expect(() => shopHost('https://evil.com/store/glow-haus')).toThrow('myshopify.com');
   expect(() => shopHost('evil.com')).toThrow('myshopify.com');
   expect(() => shopHost('glow.myshopify.com.evil.com')).toThrow();
 });

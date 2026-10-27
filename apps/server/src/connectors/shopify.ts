@@ -103,9 +103,14 @@ const VARIANT_IDS_Q = `query ($id: ID!) { product(id: $id) { variants(first: 250
 const PAGE_CREATE_M = `mutation ($page: PageCreateInput!) {
   pageCreate(page: $page) { page { id handle } userErrors { message } } }`;
 
-/** "https://Glow.myshopify.com/" → "glow.myshopify.com"; anything that isn't a myshopify.com host is rejected so the token only goes to Shopify. */
+/**
+ * "https://Glow.myshopify.com/" or the admin's "admin.shopify.com/store/glow" → "glow.myshopify.com"; anything that isn't
+ * a myshopify.com host is rejected so the token only goes to Shopify.
+ */
 export function shopHost(domain: string) {
-  const host = domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  const url = domain.trim().toLowerCase().replace(/^https?:\/\//, '');
+  const admin = /^admin\.shopify\.com\/store\/([a-z0-9][a-z0-9-]*)(?:[/?#]|$)/.exec(url)?.[1];
+  const host = admin ? `${admin}.myshopify.com` : url.replace(/\/.*$/, '');
   if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(host)) throw new Error('Shop domain must look like your-store.myshopify.com');
   return host;
 }
