@@ -1,5 +1,5 @@
 import { OFFICE_GRID } from '@frontline/shared';
-import { DESKS, MAP_SIZE, MEETING, ROOMS, iso } from './world';
+import { DESKS, MAP_SIZE, MEETING, ROOMS, ROOM_SIZE, iso } from './world';
 import { DEPARTMENT_DECOR, OFFICE_THEMES, type OfficeTheme } from './themes';
 
 /** Original pixel art, cached once as a map texture. No external assets or requests. */
@@ -43,9 +43,9 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
   const corners = [iso({x:0,y:0}),iso({x:OFFICE_GRID.width,y:0}),iso({x:OFFICE_GRID.width,y:OFFICE_GRID.height}),iso({x:0,y:OFFICE_GRID.height})];
   poly(corners.flatMap((p) => [p.x,p.y+24]),'#030309');
   for (let y = 0; y < OFFICE_GRID.height; y++) for (let x = 0; x < OFFICE_GRID.width; x++) {
-    const p = iso({x,y}); const room = ROOMS.find((r) => x >= r.x && x < r.x+8 && y >= r.y && y < r.y+8);
+    const p = iso({x,y}); const room = ROOMS.find((r) => x >= r.x && x < r.x+ROOM_SIZE && y >= r.y && y < r.y+ROOM_SIZE);
     diamond(p.x,p.y,24,12,room ? theme.floor[(x+y)%2]! : (x+y)%2 ? '#1d202a' : '#22252e','#3c3b45');
-    if (!room && (x%9===8 || y%9===8)) { rect(p.x-3,p.y+10,6,2,'#57303b'); }
+    if (!room && (x%16===15 || y%16===15)) { rect(p.x-4,p.y+10,8,2,'#713b51'); }
   }
   // The front edges expose the headquarters' foundation and red power rails.
   for (const [a,b] of [[corners[1]!,corners[2]!],[corners[2]!,corners[3]!]] as const) {
@@ -54,7 +54,7 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
   }
   const props: { depth: number; draw: () => void }[] = [];
   for (const room of ROOMS) {
-    for (let i = 0; i < 8; i++) if (i !== 4) {
+    for (let i = 0; i < ROOM_SIZE; i++) if (i !== 6 && i !== 7) {
       for (const side of [0,1]) {
         const p = iso({x:room.x+(side ? 0:i),y:room.y+(side ? i:0)});
         const dx = side ? -24:24;
@@ -64,10 +64,10 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
         if (i%2===1) poly([p.x+dx*.2,p.y-36,p.x+dx*.8,p.y-29,p.x+dx*.8,p.y-13,p.x+dx*.2,p.y-20],'#263448','#384c69');
       }
     }
-    const sign = iso({x:room.x+3.5,y:room.y+0.5});
+    const sign = iso({x:room.x+5,y:room.y+0.5});
     screen(sign.x,sign.y-7,room.color,ROOMS.indexOf(room),68,34);
-    const pp = iso({x:room.x+7,y:room.y+1}); props.push({depth:pp.y,draw:()=>plant(pp.x,pp.y+8)});
-    const decor = iso({x:room.x+6.5,y:room.y+6.5});
+    const pp = iso({x:room.x+11,y:room.y+1}); props.push({depth:pp.y,draw:()=>plant(pp.x,pp.y+8)});
+    const decor = iso({x:room.x+10.5,y:room.y+10.5});
     props.push({depth:decor.y,draw:()=> {
       const kind = DEPARTMENT_DECOR[room.id];
       if (kind==='crates') {

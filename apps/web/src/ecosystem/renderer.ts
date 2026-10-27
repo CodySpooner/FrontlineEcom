@@ -21,9 +21,9 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   const setTheme = (value: OfficeThemeId) => { if (theme === value) return; theme = value; const old = mapTexture; mapTexture = Texture.from(paintOffice(OFFICE_THEMES[value])); mapTexture.source.scaleMode = 'nearest'; map.texture = mapTexture; old.destroy(true); };
   const labels = new Container(); world.addChild(labels);
   for (const room of ROOMS) {
-    const p = iso({x:room.x+4,y:room.y+7});
-    const label = new Text({ text: room.name.toUpperCase(), style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 22, fontWeight: '600', fill: '#e6e6ec', stroke: {color:'#08080c',width:5} } });
-    label.anchor.set(.5); label.position.set(p.x,p.y+(room.id === 'executive' ? -32 : 20)); labels.addChild(label);
+    const p = iso({x:room.x+12.5,y:room.y+12.5});
+    const label = new Text({ text: room.name.toUpperCase(), style: { fontFamily: 'Chakra Petch, sans-serif', fontSize: 26, fontWeight: '600', fill: '#e6e6ec', stroke: {color:'#08080c',width:5} } });
+    label.anchor.set(.5); label.position.set(p.x,p.y); labels.addChild(label);
   }
   const selection = new Graphics(); world.addChild(selection);
   let dragged = false;

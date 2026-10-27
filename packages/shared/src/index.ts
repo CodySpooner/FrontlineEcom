@@ -1250,7 +1250,7 @@ export const OFFICE_DEPARTMENTS = [
 ] as const;
 export type OfficeDepartment = (typeof OFFICE_DEPARTMENTS)[number]['id'];
 export const OFFICE_DESKS = OFFICE_DEPARTMENTS.flatMap((d) => Array.from({ length: d.desks }, (_, i) => ({ id: `${d.id}-${i + 1}`, department: d.id })));
-export const OFFICE_GRID = { width: 36, height: 27 };
+export const OFFICE_GRID = { width: 64, height: 48 };
 export const OFFICE_ARCHETYPES = ['operator', 'netrunner', 'android', 'mech', 'executive', 'punk', 'pilot', 'engineer'] as const;
 export const OFFICE_GEAR = ['cyberarm', 'reactor', 'cape', 'antenna', 'belt'] as const;
 export interface OfficeAppearance {

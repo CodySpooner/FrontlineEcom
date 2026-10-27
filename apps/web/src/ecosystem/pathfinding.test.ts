@@ -11,7 +11,7 @@ test('A* reaches every workstation without crossing furniture or reserved tiles'
     expect(findPath(ENTRANCE, goal, new Set([tileKey(goal)]))).toEqual([]);
   }
   expect(findPath({ x: -1, y: 0 }, ENTRANCE)).toEqual([]);
-  expect(findPath(ENTRANCE, { x: 0, y: 0 })).toEqual([]);
+  expect(findPath(ENTRANCE, DESKS[0]!)).toEqual([]);
   expect(findPath(ENTRANCE, ENTRANCE)).toEqual([]);
 });
 

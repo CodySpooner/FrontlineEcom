@@ -2,16 +2,17 @@ import { OFFICE_DEPARTMENTS, OFFICE_GRID, type OfficeDepartment } from '@frontli
 
 export interface Tile { x: number; y: number }
 const ORIGINS: Record<OfficeDepartment, Tile> = {
-  executive: { x: 9, y: 0 }, research: { x: 0, y: 0 }, advertising: { x: 18, y: 0 }, creative: { x: 27, y: 0 },
-  development: { x: 0, y: 9 }, analytics: { x: 27, y: 9 }, copywriting: { x: 0, y: 18 }, operations: { x: 9, y: 18 }, retention: { x: 18, y: 18 }, integrations: { x: 27, y: 18 },
+  executive: { x: 18, y: 2 }, research: { x: 2, y: 2 }, advertising: { x: 34, y: 2 }, creative: { x: 50, y: 2 },
+  development: { x: 2, y: 18 }, analytics: { x: 50, y: 18 }, copywriting: { x: 2, y: 34 }, operations: { x: 18, y: 34 }, retention: { x: 34, y: 34 }, integrations: { x: 50, y: 34 },
 };
+export const ROOM_SIZE = 12;
 const COLORS = ['#ff4657', '#47d9ba', '#7895ff', '#c878ed', '#4bcb91', '#54c8ed', '#edb962', '#db9763', '#68b8e8', '#7590b5'];
 export const ROOMS = OFFICE_DEPARTMENTS.map((d, i) => ({ ...d, ...ORIGINS[d.id], color: COLORS[i]! }));
 export const DESKS = ROOMS.flatMap((d) => Array.from({ length: d.desks }, (_, i) => ({
-  id: `${d.id}-${i + 1}`, department: d.id, color: d.color, x: d.x + 2 + (i % 2) * 3, y: d.y + 2 + Math.floor(i / 2) * 3,
+  id: `${d.id}-${i + 1}`, department: d.id, color: d.color, x: d.x + 3 + (i % 2) * 5, y: d.y + 4 + Math.floor(i / 2) * 4,
 })));
-export const MEETING: Tile = { x: 17, y: 13 };
-export const ENTRANCE: Tile = { x: 17, y: 26 };
+export const MEETING: Tile = { x: 31, y: 25 };
+export const ENTRANCE: Tile = { x: 31, y: 47 };
 export const MAP_SIZE = { width: (OFFICE_GRID.width + OFFICE_GRID.height) * 24 + 80, height: (OFFICE_GRID.width + OFFICE_GRID.height) * 12 + 160 };
 export const tileKey = ({ x, y }: Tile) => `${x},${y}`;
 export const iso = ({ x, y }: Tile) => ({ x: (x - y) * 24 + OFFICE_GRID.height * 24 + 40, y: (x + y) * 12 + 100 });
@@ -23,12 +24,12 @@ export const uniso = ({ x, y }: Tile): Tile => {
 export const deskTile = (id: string): Tile => { const d = DESKS.find((d) => d.id === id)!; return { x: d.x, y: d.y + 1 }; };
 export const BLOCKED = new Set(DESKS.map(tileKey));
 for (const room of ROOMS) {
-  for (let i = 0; i < 8; i++) if (i !== 4) {
+  for (let i = 0; i < ROOM_SIZE; i++) if (i !== 6 && i !== 7) {
     BLOCKED.add(tileKey({ x: room.x + i, y: room.y }));
     BLOCKED.add(tileKey({ x: room.x, y: room.y + i }));
   }
-  BLOCKED.add(tileKey({ x: room.x + 7, y: room.y + 1 }));
-  for (const x of [6, 7]) for (const y of [6, 7]) BLOCKED.add(tileKey({ x: room.x + x, y: room.y + y }));
+  BLOCKED.add(tileKey({ x: room.x + 11, y: room.y + 1 }));
+  for (const x of [10, 11]) for (const y of [10, 11]) BLOCKED.add(tileKey({ x: room.x + x, y: room.y + y }));
 }
-for (let x = 15; x <= 18; x++) for (let y = 11; y <= 14; y++) BLOCKED.add(tileKey({ x, y }));
+for (let x = MEETING.x - 2; x <= MEETING.x + 1; x++) for (let y = MEETING.y - 2; y <= MEETING.y + 1; y++) BLOCKED.add(tileKey({ x, y }));
 export const walkable = (p: Tile) => Number.isInteger(p.x) && Number.isInteger(p.y) && p.x >= 0 && p.y >= 0 && p.x < OFFICE_GRID.width && p.y < OFFICE_GRID.height && !BLOCKED.has(tileKey(p));

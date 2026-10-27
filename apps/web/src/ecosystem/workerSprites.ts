@@ -52,7 +52,7 @@ export function workerSprites(world: Container, select: (deskId: string, agentId
         workers.set(data.seat.agentId, worker);
         const occupied = new Set([...motions.values()].flatMap((m) => [tileKey(m.cell), ...(m.next ? [tileKey(m.next)] : [])]));
         const saved = data.seat.position;
-        const start = saved && walkable(saved) && !occupied.has(tileKey(saved)) ? saved : nearestFree(ENTRANCE, occupied)!;
+        const start = saved && walkable(saved) && !occupied.has(tileKey(saved)) ? saved : nearestFree(saved ?? ENTRANCE, occupied)!;
         motions.set(data.seat.agentId, startMotion(start, data.target ?? deskTile(data.seat.deskId)));
       }
       if (worker.data.animation !== data.animation) worker.elapsed = 0;

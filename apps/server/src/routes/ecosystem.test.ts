@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createSquad } from '@frontline/agents';
-import { OFFICE_DESKS, type OfficeSeat, type OfficeStats } from '@frontline/shared';
+import { OFFICE_DESKS, OFFICE_GRID, type OfficeSeat, type OfficeStats } from '@frontline/shared';
 import { afterEach, beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
@@ -55,7 +55,7 @@ test('validates untrusted inputs and refuses unknown desks and agents', async ()
   for (const body of [null, [], {}, { agentId: 'one:copywriter', deskId: 'research-99' }, { agentId: 'one:copywriter', deskId: 'research-1', appearance: {} }]) expect((await send('POST', '', body)).status).toBe(400);
   expect((await deploy('missing')).status).toBe(404);
   await deploy();
-  for (const body of [null, {}, { archived: false }, { deskId: null }, { position: { x: 36, y: 0 } }, { position: { x: 0.5, y: 1 } }, { displayName: 'x'.repeat(61) }, { appearance: { color: 'url(evil)' } }]) expect((await send('PATCH', '/one:copywriter', body)).status).toBe(400);
+  for (const body of [null, {}, { archived: false }, { deskId: null }, { position: { x: OFFICE_GRID.width, y: 0 } }, { position: { x: 0.5, y: 1 } }, { displayName: 'x'.repeat(61) }, { appearance: { color: 'url(evil)' } }]) expect((await send('PATCH', '/one:copywriter', body)).status).toBe(400);
   expect((await send('DELETE', '/missing')).status).toBe(404);
   const legacy = { color: '#4488ff', outfit: 'jacket', accessory: 'none', hair: 0, skin: 0 };
   for (const extra of [{ archetype: 'unknown' }, { gear: 'weapon' }, { accent: '#fff' }, { variant: -1 }, { variant: 8 }, { variant: 1.5 }]) expect((await send('PATCH', '/one:copywriter', { appearance: { ...legacy, ...extra } })).status).toBe(400);
