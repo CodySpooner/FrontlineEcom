@@ -267,7 +267,9 @@ const agentSessions = () => {
   return { cwd };
 };
 
-export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent'> => ({
+export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent' | 'onError'> => ({
+  // To api.log: the desktop app keeps no console.
+  onError: (run, e) => log('error', 'run failed to finish', { runId: run.id, agentId: run.agentId, error: e instanceof Error ? e.message : String(e) }),
   onEvent: (run, event) => {
     publish({ type: 'run_event', runId: run.id, agentId: run.agentId, storeId: run.storeId, event });
     if (event.type === 'memory_written') {

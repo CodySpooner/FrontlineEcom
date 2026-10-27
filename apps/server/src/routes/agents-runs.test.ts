@@ -1,11 +1,15 @@
 import { costToday, createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, runAgent, updateAgent, type Engine, type FakeStep, type RunManagerOptions } from '@frontline/agents';
 import type { AgentEvent, AgentRun, LiveMessage } from '@frontline/shared';
+import { mkdtempSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { subscribe } from '../live';
+import { initLog } from '../log';
 import { updateCaps } from '../settings';
 import { getStore } from '../stores';
 import { runHooks, runManager, toolEnv } from './agents';
@@ -18,6 +22,27 @@ beforeEach(() => {
 });
 
 const manager = (o: Partial<RunManagerOptions> = {}) => createRunManager({ db, env: toolEnv(db), store: (id) => getStore(db, id), ...o });
+
+test('a run that fails to finish is reported to onError, which the server writes to api.log', async () => {
+  const failed: string[] = [];
+  const m = manager({
+    engine: fakeEngine(() => []),
+    onRun: (r) => {
+      if (r.status !== 'queued' && r.status !== 'running') throw new Error('notify failed'); // the finished run's hooks
+    },
+    onError: (r, e) => failed.push(`${r.id} ${(e as Error).message}`),
+  });
+  const run = m.start('glow:copywriter', 't');
+  if (typeof run === 'string') throw new Error(run);
+  await m.idle();
+  expect(failed).toEqual([`${run.id} notify failed`]);
+  const dir = mkdtempSync(join(tmpdir(), 'fe-log-'));
+  initLog(dir);
+  runHooks(db).onError!(run, new Error('notify failed'));
+  expect(JSON.parse(readFileSync(join(dir, 'logs', 'api.log'), 'utf8').trim().split('\n').at(-1)!)).toMatchObject({
+    level: 'error', msg: 'run failed to finish', runId: run.id, agentId: 'glow:copywriter', error: 'notify failed',
+  });
+});
 
 test('tool outputs of runs older than 90 days are trimmed at startup; the text, tool calls and recent runs stay whole', () => {
   const transcript = JSON.stringify([

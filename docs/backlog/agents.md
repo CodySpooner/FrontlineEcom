@@ -353,11 +353,13 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 
 - [x] AGT-219 The agents' failure and "Not applied" notices carry a link, so the bell opens where the owner acts: the draft in Store Builder, Store Builder for a theme, Analytics for ad and price writes, Research for products, and the agent's page when the notice says to ask it again. From ui's Inbox.
 - [x] AGT-220 An approved or denied action that throws is written to api.log. It went to the console, which the desktop app doesn't keep, so a failed hook left no trace (the owner's log only ever shows starts).
+- [x] AGT-221 A run that fails to finish (its row or the finish hooks threw: lost XP, a notice never sent) is written to api.log through a new `onError` run-manager option; it went to the console only.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+- 2026-10-26 — AGT-221: `RunManagerOptions.onError`; the server's `runHooks` logs it (`run failed to finish`).
 - 2026-10-26 — AGT-220: `onDecision`'s catch logs through core's `log('error', …)` (kind, approval id, message).
 - 2026-10-26 — AGT-219: links on `publishDraft`, ad/price/products/theme failures and every "Not applied" notice (ui's Inbox request).
 - 2026-10-26 — AGT-218 reverted: CORE-114 covers it through the denial hook (`discardThemeCopy`).

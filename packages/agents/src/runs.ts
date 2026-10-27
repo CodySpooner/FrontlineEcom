@@ -22,6 +22,8 @@ export interface RunManagerOptions {
   /** Queued, started, finished. */
   onRun?: (run: AgentRun) => void;
   onEvent?: (run: AgentRun, event: AgentEvent) => void;
+  /** A run that failed to finish (its row or the hooks above threw); the console when unset. */
+  onError?: (run: AgentRun, error: unknown) => void;
 }
 
 export type RunManager = ReturnType<typeof createRunManager>;
@@ -155,7 +157,7 @@ export function createRunManager(opts: RunManagerOptions) {
       const abort = new AbortController();
       const transcript: AgentEvent[] = [];
       const done = execute(run, abort, transcript, budget)
-        .catch((e) => console.error(`Run ${run.id} failed to finish:`, e))
+        .catch((e) => (opts.onError ? opts.onError(run, e) : console.error(`Run ${run.id} failed to finish:`, e)))
         .finally(() => {
           active.delete(run.id);
           pump();
