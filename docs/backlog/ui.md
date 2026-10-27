@@ -457,6 +457,9 @@ Orca's browser against the reference before ticking it.
 - [x] UI-166 Knowledge › Niche packs lists each custom-niche store with no pack. With a Claude-engine Market Analyst it
       offers "Ask its Market Analyst to draft one" (agents' AGT-231 route) and opens the run; on the demo engine it says
       one gets drafted once the store is connected. A refusal (a draft already waiting, the agent offline) shows as is.
+- [x] UI-171 An approved niche pack is saved by the run that asked, but nothing refreshed Knowledge: for up to 30 s it
+      still said "no pack yet" and offered the draft button (which the route would refuse). The knowledge base now
+      refreshes when a run ends, as the research feed does.
 
 ## Blocked
 
@@ -674,3 +677,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-26 — UI-170: `parseMarkdown` skips `<!-- … -->` lines. One test (red first). Orca, Knowledge with a GET-only fixture custom pack keeping 3 template comments: none shown, h3 Customer / Red flags and their items intact
 - 2026-10-26 — UI-166: `useDraftNichePack` + `MissingPacks` on Knowledge. Two tests (red first). Orca with a GET fixture (Peak Fit in "Yoga Mats" with a Claude-engine analyst, Glow Haus in "Soy Candles" on the demo engine): the button on one, the connect line on the other; the click's one POST answered by the fixture with the route's 409 text, which shows under the button
 - 2026-10-26 — UI-166 follow-up: the missing-pack rows use the pack list's card style (solid border, bg-2) instead of the app's only dashed border
+- 2026-10-26 — UI-171: useLive invalidates `['knowledge']` (the index and open docs) when a run ends. One test (red first). Orca: the served client has it and Knowledge renders; a live run message needs a real run, so the unit test carries the wiring

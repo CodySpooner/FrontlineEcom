@@ -547,6 +547,8 @@ export function useLive() {
         qc.invalidateQueries({ queryKey: ['page-drafts'] });
         // Product Hunter (AI Research, the daily scan) adds its finds to the research feed.
         if (!isLive(m.run)) qc.invalidateQueries({ queryKey: ['research'] });
+        // A custom niche's Market Analyst saves its pack, once approved, before its run ends.
+        if (!isLive(m.run)) qc.invalidateQueries({ queryKey: ['knowledge'] });
       }
       if (m.type === 'approval' || m.type === 'run' || m.type === 'xp') {
         qc.invalidateQueries({ queryKey: ['missions'] });

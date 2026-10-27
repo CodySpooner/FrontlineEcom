@@ -96,6 +96,19 @@ describe('useLive', () => {
     act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'run', run: { ...run, status: 'done', endedAt: '2026-10-26T08:01:00Z' } }) }));
     expect(refetch).toHaveBeenCalledWith({ queryKey: ['research'] });
   });
+
+  it("refreshes the knowledge base when a run ends (an approved niche pack is saved by the run that asked)", () => {
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const qc = new QueryClient();
+    const refetch = vi.spyOn(qc, 'invalidateQueries');
+    renderHook(() => useLive(), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+    const run = { id: 'r1', agentId: 'zen:market_analyst', storeId: 'zen', task: 'Draft a niche pack', startedAt: '2026-10-26T08:00:00Z' };
+
+    act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'run', run: { ...run, status: 'running' } }) }));
+    expect(refetch).not.toHaveBeenCalledWith({ queryKey: ['knowledge'] });
+    act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify({ type: 'run', run: { ...run, status: 'done', endedAt: '2026-10-26T08:05:00Z' } }) }));
+    expect(refetch).toHaveBeenCalledWith({ queryKey: ['knowledge'] });
+  });
 });
 
 describe('useGoLiveRefresh', () => {
