@@ -396,7 +396,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 ## Items
 
 ### Phase 1: audit
-- [ ] KB-01 **Audit and baseline.**
+- [x] KB-01 **Audit and baseline.**
   - Read the spec, this file and the code map. Confirm the decisions against the code.
   - Screenshot today's `/knowledge` (all 4 tabs) at 1280 and 1920 as "before".
   - Write a short Notes entry: where each new piece will live, and any decision you changed and why.
@@ -618,7 +618,22 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - [ ] KB-26 **Acceptance** ("Done when" above). Fix what it finds, then STOP.
 
 ## Done
+- 2026-10-27 KB-01 audit: decisions checked against the code, baseline 992 tests green, before shots in `.agent/before/`.
 
 ## Blocked
 
 ## Notes
+- 2026-10-27 KB-01 audit (at 9a641929). Decisions 1-15 hold against the code: the next migration is #44 (`db.ts:522`
+  is #43); `start(agentId, task, resumeRunId?, parentRunId?, retryOf?)` and its identical-task dedupe (`runs.ts:65`,
+  `:87`); the hard-coded "40-turn limit" and `maxTurns: 40` (`claude-engine.ts:13`, `:121`); `defaultEngine` picks by
+  `store.connected` and VITEST forces fake (`engine.ts:34-40`). Baseline `pnpm check`: 149 files, 992 tests, green. No
+  decision changed.
+  - Where things go: shared types in a `// ---- knowledge-base lane` section at the end of `packages/shared/src/index.ts`;
+    migrations #44+ in `db.ts`; `packages/agents/src/kb.ts` (scoping helper, categories, cards, revisions, ladder),
+    `kb-links.ts` (evidence, links, suggester), `kb-retrieval.ts` (search, prompt section, usage log), KB tools in
+    `kb-tools.ts` spread into `APP_TOOLS`; `apps/server/src/kb/` for routes, the safe fetcher, the research runner, the
+    performance pipeline and maintenance; `pages/Knowledge.tsx` stays the page frame and the views live in
+    `apps/web/src/knowledge/`.
+  - Screenshots: Orca's built-in browser tiles any viewport wider than 800 px (its pane is ~800 px), so wide shots are
+    taken with headless Chrome over CDP (`.agent/cdp-shot.mjs`: exact viewport, prints console errors per shot). Orca
+    is still used at its native width. Before shots: `.agent/before/` (4 tabs at 1280x800 and 1920x1080).
