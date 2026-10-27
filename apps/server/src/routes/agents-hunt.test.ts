@@ -129,6 +129,15 @@ test('record_product_find puts a web find in the feed with its AI score', async 
   expect(again.find((e) => e.type === 'tool_result')).toMatchObject({ output: expect.stringMatching(new RegExp(`^Already in the research feed as ${feed.items[0]!.id}; refreshed its numbers: AI score`)) });
   const now = (await (await app.request('/api/research?q=collapsible')).json()) as { items: ResearchProduct[] };
   expect(now.items.filter((p) => p.id.startsWith('find-')).map((p) => [p.id, p.trend])).toEqual([[feed.items[0]!.id, 120]]);
+
+  // No 'was' price shown anywhere: none is made up (it would be the product's strikethrough price), and one under the price is refused.
+  const { compareAt: _, ...plain } = find;
+  const out: string[] = [];
+  const steps: FakeStep[] = [{ call: 'record_product_find', input: { ...plain, title: 'Lick Mat' } }, { call: 'record_product_find', input: { ...find, title: 'Snuffle Mat', compareAt: 9.99 } }];
+  for await (const e of runAgent(input, fakeEngine(() => steps))) if (e.type === 'tool_result') out.push(e.output);
+  expect(out[0]).toMatch(/^Added to the research feed as find-\w+: AI score \d+/);
+  expect(out[1]).toBe("Not added: compareAt must be above the price; omit it when sellers show no 'was' price.");
+  expect(db.prepare(`SELECT title, compare_at FROM research_products WHERE title IN ('Lick Mat', 'Snuffle Mat')`).all()).toEqual([{ title: 'Lick Mat', compare_at: 0 }]);
 });
 
 test('search_suppliers gives supplier prices: demo listings without CJ, none for an unknown product', async () => {

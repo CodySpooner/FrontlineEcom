@@ -445,7 +445,8 @@ export const APP_TOOLS: AppTool[] = [
       source: z.enum(['tiktok', 'shopify', 'amazon', 'aliexpress']).describe('where you saw it selling'),
       cost: z.number().positive().describe('supplier cost incl. shipping, USD'),
       price: z.number().positive().describe('suggested sell price, USD'),
-      compareAt: z.number().positive().describe('USD'),
+      // "Send to store" makes it the product's strikethrough price: a required one got made up (a fake former price).
+      compareAt: z.number().positive().optional().describe("the 'was' price sellers actually show, USD; omit when they show none"),
       trend: z.number().describe('demand growth over the last 30 days, %'),
       competition: z.number().min(0).max(100).describe('0-100, lower = fewer competing sellers/ads'),
       shippingDays: z.number().int().min(1).max(60),
@@ -453,9 +454,11 @@ export const APP_TOOLS: AppTool[] = [
     },
     run: async (find, ctx) => {
       if (!ctx.recordFind) return 'The research feed is not available.';
+      if (find.compareAt !== undefined && find.compareAt <= find.price) return "Not added: compareAt must be above the price; omit it when sellers show no 'was' price.";
       // A custom niche's finds carry its slug, so each custom niche's feed is its own (core's niche_detail).
       const nicheDetail = nicheKey(ctx.store).split(':')[1];
-      const p = await ctx.recordFind({ ...find, niche: ctx.store.niche, ...(nicheDetail ? { nicheDetail } : {}) });
+      // 0 is none: the feed's column takes a number, and core creates a product with compare-at 0 without one (CORE-104).
+      const p = await ctx.recordFind({ ...find, compareAt: find.compareAt ?? 0, niche: ctx.store.niche, ...(nicheDetail ? { nicheDetail } : {}) });
       return `${p.repeat ? `Already in the research feed as ${p.id}; refreshed its numbers` : `Added to the research feed as ${p.id}`}: AI score ${p.score} (margin ${p.scoreParts.margin}, trend ${p.scoreParts.trend}, competition ${p.scoreParts.competition}, shipping ${p.scoreParts.shipping}), margin ${p.margin}%.`;
     },
   }),

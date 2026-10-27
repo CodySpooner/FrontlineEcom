@@ -70,7 +70,7 @@ Shortlist at 75+. Watchlist 60–74 (save to memory). Drop under 60.
 - **Shortlist table:** Product | Score | Landed cost | Price | Margin % | Break-even ROAS | Contribution after ads | Trend | Saturation | Ship days | Angle.
 - **Per product:** why it wins (one line), the main risk, and the 30-day test (e.g. "≥ 20 orders at ROAS ≥ break-even by day 14, else pull it").
 - Label estimates with source and date. Leave unknowns blank and say so.
-- **`request_approval`, one per product, kind `store.add_products`, payload `{"products": [{"researchProductId": "<feed id>", "title", "price", "compareAt", "cost"}]}`.** Once approved the product is added as a draft and the Store Developer drafts its page.
+- **`request_approval`, one per product, kind `store.add_products`, payload `{"products": [{"researchProductId": "<feed id>", "title", "price", "compareAt", "cost"}]}`.** `compareAt` is the strikethrough "was" price: only a price the store will really have charged, else leave it out. Once approved the product is added as a draft and the Store Developer drafts its page.
   - **Title:** "Add <product> at <price>", 60 characters max.
   - **Reason:** score, landed cost, price, margin %, break-even ROAS vs store ROAS, trend, competitor price range.
   - **Expected effect:** contribution per order, plus 30-day success and kill thresholds.
