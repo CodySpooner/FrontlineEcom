@@ -105,6 +105,25 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
     const sign = iso({x:room.x+5,y:room.y+0.5});
     screen(sign.x,sign.y-7,room.color,ROOMS.indexOf(room),68,34);
     const pp = iso({x:room.x+1,y:room.y+10}); props.push({depth:pp.y,draw:()=>plant(pp.x,pp.y+8)});
+    const corner = iso({x:room.x+1,y:room.y+1});
+    props.push({depth:corner.y,draw:()=> {
+      box(corner.x,corner.y+7,16,8,17,'#4e5260','#292e3b','#181d2a');
+      plant(corner.x-5,corner.y-3); plant(corner.x+6,corner.y+3);
+      rect(corner.x-10,corner.y+5,20,2,room.color);
+    }});
+    const lounge = iso({x:room.x+5.5,y:room.y+10});
+    props.push({depth:lounge.y+12,draw:()=> {
+      diamond(lounge.x,lounge.y-5,49,24,'#202432',room.color);
+      box(lounge.x,lounge.y-4,34,16,14,'#454958','#222734','#151a27');
+      poly([lounge.x-34,lounge.y-2,lounge.x,lounge.y+14,lounge.x,lounge.y-7,lounge.x-34,lounge.y-23],'#4e586b','#7b8395');
+      poly([lounge.x-32,lounge.y-19,lounge.x-2,lounge.y-5,lounge.x-2,lounge.y+4,lounge.x-32,lounge.y-10],room.color);
+      box(lounge.x-18,lounge.y+1,14,7,7,'#687184','#3b4354','#2b3447');
+      box(lounge.x+5,lounge.y+12,14,7,7,'#687184','#3b4354','#2b3447');
+      box(lounge.x-34,lounge.y-2,5,9,13,'#555f73'); box(lounge.x+21,lounge.y+24,5,9,13,'#555f73');
+      const table=iso({x:room.x+7,y:room.y+10});
+      box(table.x,table.y+3,12,6,12,'#ac8d73','#5d4f48','#342e30');
+      rect(table.x-3,table.y-5,5,4,'#eee7d5'); rect(table.x-2,table.y-6,3,1,'#79543c');
+    }});
     const decor = iso({x:room.x+10.5,y:room.y+10.5});
     props.push({depth:decor.y,draw:()=> {
       const kind = DEPARTMENT_DECOR[room.id];

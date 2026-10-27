@@ -10,6 +10,11 @@ test('all thirty shared desks have unique, walkable seats in ten rooms', () => {
   for (const d of DESKS) { expect(walkable(d)).toBe(false); expect(walkable(deskTile(d.id))).toBe(true); }
   expect(walkable(ENTRANCE)).toBe(true);
   for (const room of ROOMS) for (const x of [10, 11]) for (const y of [10, 11]) expect(walkable({ x: room.x + x, y: room.y + y })).toBe(false);
+  for (const room of ROOMS) {
+    expect(walkable({ x: room.x+1, y: room.y+1 })).toBe(false);
+    for (const x of [5,6,7]) expect(walkable({ x: room.x+x, y: room.y+10 })).toBe(false);
+    for (const x of [6,7]) expect(walkable({ x: room.x+x, y: room.y })).toBe(true);
+  }
   expect(walkable({ x: -1, y: 0 })).toBe(false);
 });
 test('expanded departments leave four-tile corridors and displaced saves use a nearby free tile', () => {

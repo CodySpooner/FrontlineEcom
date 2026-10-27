@@ -85,6 +85,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-26 ECO-36: Original planted corners, department-colored lounge seating, rugs and coffee tables. Furniture collision tiles preserve both doorways and all thirty routes; arrival simulation passes. Desktop/Orca fit and close-up screenshots (.agent/eco-36-*.png); pnpm check 982 tests, 58 FPS.
 - 2026-10-26 ECO-35: Worker hover/focus floor spotlight and compact live portrait/name/department/status card. Keyboard directory preview with described-by linkage; seven-second camera-focus expiry. Browser hover, blur/expiry, profile selection, mobile containment and Orca verified (.agent/eco-35-*.png). Keyboard/empty-desk regression test; pnpm check 982 tests, 58 FPS.
 - 2026-10-26 ECO-34: Department-specific dual/ultrawide monitors, document/product/envelope screens, tablets, parcels, books, keyboards, mugs and outlined chairs. Click targets cover enlarged screens. Desktop close-ups, monitor-to-profile click and Orca verified (.agent/eco-34-*.png); pnpm check 980 tests, 58-59 FPS.
 - 2026-10-26 ECO-33: Raised room edges and lit thresholds, material floor inlays, taller vented walls and reinforced foundation. Cached map geometry preserves all routes. Desktop fit/close-up and Orca live six-worker scene verified (.agent/eco-33-*.png); pnpm check 980 tests, 58 FPS.
@@ -219,3 +220,8 @@ Seed list (reorder or extend as you see fit):
 - [x] ECO-35 Worker inspection polish: an unobtrusive hover/focus spotlight and compact live identity card that makes characters easier to find in the expanded office.
 
 Visual review: owner reference plus [Game Dev Story official screenshots](https://kairosoft.net/game/appli/gamedev.html) and [City Game Studio official gallery](https://www.city-game-studio.com/). Keep their readable furniture silhouettes, clear circulation and room detail; use original art only.
+
+- [x] ECO-36 Botanical lounge corners: lush planters, soft seating and coffee tables in spare room corners, with collision-safe paths to all thirty desks.
+- [ ] ECO-37 Department wall art: original pixel role emblems and display panels that avoid decorative fake business charts.
+- [ ] ECO-38 Neon circulation: lit corridor inlays and plaza guidance that connect the rooms visually without obstructing workers.
+- [ ] ECO-39 Zoom-aware labels: keep department signs and worker callouts readable while reducing close-up overlap.
