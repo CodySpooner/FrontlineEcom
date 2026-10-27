@@ -2,13 +2,12 @@
 // Secrets go in and never come back out: the API only says which secret fields are set.
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import { INTEGRATION_KINDS, type Integration, type IntegrationCategory, type IntegrationKind, type OAuthStart, type Store } from '@frontline/shared';
+import { anotherShop, INTEGRATION_KINDS, type Integration, type IntegrationCategory, type IntegrationKind, type OAuthStart, type Store } from '@frontline/shared';
 import { useClaudeAccount, useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds, useStores, useSyncIntegration } from '../api/client';
 import { Hero } from '../components/Hero';
 import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot, useFocusBack } from '../components/ui';
 import { ago, fmtDay } from '../lib/format';
-import { anotherShop } from '../lib/shop';
 import { importing } from '../lib/sync';
 import { NAV } from '../nav';
 

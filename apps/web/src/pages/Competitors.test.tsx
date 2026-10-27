@@ -37,7 +37,7 @@ describe('price moves', () => {
 });
 
 describe("a rival's ads", () => {
-  it("say the app can't collect them yet and link to Meta's Ad Library, without claiming 0 active ads", async () => {
+  it("say only demo competitors have recorded ads and link to Meta's Ad Library, without claiming 0 active ads", async () => {
     stubApi((url) =>
       url === '/api/stores'
         ? [{ id: 'eu', name: 'Euro Shop', platform: 'shopify', niche: 'home', color: '#ff2a3a', currency: 'EUR', timezone: 'UTC' }]
@@ -48,7 +48,7 @@ describe("a rival's ads", () => {
             : undefined,
     );
     renderApp(<Competitors />, '/competitors');
-    expect(await screen.findByText(/can't read ad libraries yet/)).toBeTruthy();
+    expect(await screen.findByText(/Ads are recorded for demo competitors only/)).toBeTruthy();
     expect(screen.getByRole('link', { name: /Meta's Ad Library/ }).getAttribute('href')).toContain('q=Wag+%26+Wander');
     expect(screen.getByText('12 products tracked')).toBeTruthy();
   });

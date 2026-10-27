@@ -166,7 +166,7 @@ function Ads({ c }: { c?: Competitor }) {
       ) : q.isError ? (
         <ErrorState message="Couldn't load their ads." onRetry={() => q.refetch()} />
       ) : !ads.length ? (
-        // AGT-200: nothing collects a real rival's ads (only the demo seed has them), so don't promise they'll appear.
+        // AGT-200: core records no real rival's ads (Meta's and TikTok's ad library APIs only cover EU/UK ads), so don't promise any.
         <EmptyState
           icon={Megaphone}
           title="No ads collected"
@@ -176,7 +176,7 @@ function Ads({ c }: { c?: Competitor }) {
             </a>
           }
         >
-          The app can't read ad libraries yet: only the demo competitors come with ads.
+          Ads are recorded for demo competitors only. Look this one up in Meta's public library.
         </EmptyState>
       ) : (
         <ul className="grid gap-3 min-[700px]:grid-cols-2">
