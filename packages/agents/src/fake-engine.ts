@@ -2,7 +2,7 @@ import { AGENT_ROLES, type AgentEvent } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
 import { REFLECTION_PROMPT } from './memory';
 import type { ToolName } from './roles';
-import { callTool, cash, channel, toolsFor } from './tools';
+import { callTool, cash, channel, runTools } from './tools';
 
 /** An event to emit, or a real call to one of the role's tools (needs `env`). */
 export type FakeStep = AgentEvent | { call: ToolName; input?: Record<string, unknown> };
@@ -210,7 +210,7 @@ export function fakeEngine(script: FakeScript = echoScript): Engine {
   return async function* (input) {
     const events = channel<AgentEvent>();
     const ctx = input.env && { ...input.env, store: input.store, agent: input.agent, emit: events.push, signal: input.signal };
-    const tools = input.mode === 'research' ? [] : toolsFor(input.agent.role);
+    const tools = runTools(input.agent.role, input.mode);
     (async () => {
       let n = 0;
       for (const step of script(input)) {

@@ -13,6 +13,7 @@ import {
   MISSION_TEMPLATES,
   advanceMissions,
   advanceResearch,
+  createResearchTask,
   getResearchTask,
   createMission,
   getMission,
@@ -55,7 +56,7 @@ import {
   type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
-import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentUpdate, type ClaudeAccount, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
+import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentRole, type AgentUpdate, type ClaudeAccount, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -152,6 +153,7 @@ const setPrice =
 
 export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): ToolEnv => ({
   db,
+  kbFetch: (url, opts) => kbFetch(url, opts),
   approvals: approvalsHook(db),
   decide: (id, decision) => decide(db, id, decision),
   caps: (storeId) => getCaps(db, storeId),
@@ -347,6 +349,16 @@ export function runManager(db: Db): RunManager {
         if (typeof p.niche === 'string' && typeof p.text === 'string') {
           return addNicheLearning(db, { niche: p.niche, text: p.text, ...(typeof p.evidence === 'string' ? { evidence: p.evidence } : {}), storeId: a.storeId });
         }
+      }
+      if (a.action.kind === 'kb.research') {
+        // An agent's recommend_research: the store that asked pays, and the findings go to it or to General, never elsewhere.
+        const p = (a.action.payload ?? {}) as { ws?: unknown; role?: unknown; objective?: unknown; brief?: { lookFor?: unknown }; budgetUsd?: unknown };
+        if (typeof p.objective !== 'string' || typeof p.role !== 'string' || !Object.hasOwn(AGENT_ROLES, p.role) || typeof p.budgetUsd !== 'number') return;
+        createResearchTask(db, {
+          ws: p.ws === null ? null : a.storeId, payerId: a.storeId, role: p.role as AgentRole, kind: 'topic', origin: 'agent', objective: p.objective,
+          brief: typeof p.brief?.lookFor === 'string' ? { lookFor: p.brief.lookFor } : {}, budgetUsd: Math.min(5, Math.max(0.25, p.budgetUsd)),
+        });
+        return advanceKbResearch(db);
       }
     });
   }

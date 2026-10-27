@@ -139,6 +139,23 @@ describe('the research runner', () => {
     expect(db.prepare('SELECT category_id FROM kb_cards WHERE task_id = ? AND store_id IS NULL').all(t.id)).toEqual([{ category_id: inbox }, { category_id: inbox }]);
   });
 
+  test('a card a stage files itself (propose_card) is in the report, and the same card drafted later merges into it', async () => {
+    const proposal = { title: 'Open TikTok ads on the problem', summary: 'Problem-first hooks hold viewers past 3 seconds', type: 'strategy', path: ['Advertising'], evidence: 'Held 3-second views 40% longer.' };
+    const { settle } = setup({
+      analyzing: () => {
+        const a = String(db.prepare(`SELECT id FROM kb_sources WHERE url = 'https://a.test/hooks'`).get()!.id);
+        return [{ call: 'propose_card', input: { ...proposal, sources: [a] } }, ...answer(OUT.analyzing)];
+      },
+    });
+    const t = createResearchTask(db, TOPIC, clock);
+    await settle();
+    const d = getResearchTask(db, t.id)!;
+    const filed = db.prepare('SELECT id, title FROM kb_cards WHERE task_id = ? ORDER BY rowid').all(t.id);
+    expect(filed.map((c) => c.title)).toEqual(['Open TikTok ads on the problem', 'Rescue stories lift CTR']);
+    expect(d.findings.map((f) => [f.title, f.status, f.cardId])).toEqual([['Open TikTok ads on the problem', 'merged', filed[0]!.id], ['Rescue stories lift CTR', 'stored', filed[1]!.id]]);
+    expect(d.report).toMatchObject({ created: filed, updated: [] });
+  });
+
   test('a finding the knowledge base already holds adds its evidence to that card; one the owner archived is not proposed again', async () => {
     const cat = ensureCategoryPath(db, 'pawsome', ['Advertising']);
     const near = createCard(db, 'pawsome', { categoryId: cat, title: 'TikTok ads: open on the problem', summary: 'Problem-first hooks keep viewers past 3 seconds', type: 'strategy', stage: 'hypothesis', status: 'active', authorId: 'owner', origin: 'owner' });

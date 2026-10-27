@@ -62,7 +62,6 @@ const OUTPUT = {
 };
 type Out = { [K in keyof typeof OUTPUT]: z.infer<(typeof OUTPUT)[K]> };
 type Retrieved = { read: string[]; failed: KbResearchReport['failedSources'] };
-type Stored = { created: string[]; updated: string[] };
 /** What extracting proposed, as kept on a finding: the card, the claim it rests on, and the sources (ids). */
 type FindingData = Omit<Out['extracting']['cards'][number], 'finding'> & { claim?: string; detail?: string; sources: string[] };
 
@@ -400,30 +399,42 @@ const CODE: Partial<Record<Stage, Code>> = {
       else created.push(cardId);
     }
     log(db, id, 'storing', 'info', `${n(created.length, 'new card')}, ${updated.size} updated`, now);
-    return { out: { created, updated: [...updated] } satisfies Stored };
+    return { out: { created, updated: [...updated] } };
   },
 
   /** Suggests links between what it stored and the rest of the knowledge base (again, now every new card is in). */
   linking(db, t, _deps, now) {
     const id = String(t.id);
-    const s = out<Stored>(db, id, 'storing');
+    const s = touched(db, id);
     let links = 0;
-    for (const cardId of [...(s.created ?? []), ...(s.updated ?? [])]) links += suggestLinks(db, cardId, now).length;
+    for (const c of [...s.created, ...s.updated]) links += suggestLinks(db, c.id, now).length;
     log(db, id, 'linking', 'info', `${n(links, 'link')} suggested`, now);
     return { out: { links } };
   },
 };
 
+/**
+ * The cards a task made and the ones it added evidence to, in that order, whether the storing stage or a stage's own
+ * propose_card / add_evidence (tools.ts) did it.
+ */
+function touched(db: DatabaseSync, id: string): Pick<KbResearchReport, 'created' | 'updated'> {
+  const card = (r: Row) => ({ id: String(r.id), title: String(r.title) });
+  return {
+    created: db.prepare('SELECT id, title FROM kb_cards WHERE task_id = ? ORDER BY rowid').all(id).map(card),
+    updated: db
+      .prepare('SELECT c.id, c.title FROM kb_evidence e JOIN kb_cards c ON c.id = e.card_id WHERE e.task_id = ? AND c.task_id IS NOT ? GROUP BY c.id ORDER BY min(e.rowid)')
+      .all(id, id)
+      .map(card),
+  };
+}
+
 /** The report: the agent's, plus what the app recorded on the way. */
 function report(db: DatabaseSync, id: string): KbResearchReport {
   const said = out<Out['reporting']>(db, id, 'reporting');
-  const s = out<Stored>(db, id, 'storing');
-  const card = (cardId: string) => ({ id: cardId, title: String(db.prepare('SELECT title FROM kb_cards WHERE id = ?').get(cardId)?.title ?? '') });
   return {
     ...EMPTY,
     ...said,
-    created: (s.created ?? []).map(card),
-    updated: (s.updated ?? []).map(card),
+    ...touched(db, id),
     failedSources: out<Retrieved>(db, id, 'retrieving').failed ?? [],
     conflicts: (out<Out['analyzing']>(db, id, 'analyzing').contradictions ?? []).map((c) => c.text),
     errors: db.prepare(`SELECT message FROM kb_task_log WHERE task_id = ? AND level = 'error' ORDER BY id`).all(id).map((r) => String(r.message)),
@@ -480,8 +491,8 @@ function taskText(db: DatabaseSync, t: Row, stage: keyof Out, attempt: number): 
       ].join('\n\n');
     },
     reporting: () => {
-      const s = out<Stored>(db, id, 'storing');
-      const titles = (ids: string[] = []) => ids.map((cardId) => `- ${db.prepare('SELECT title FROM kb_cards WHERE id = ?').get(cardId)?.title}`).join('\n') || '(none)';
+      const s = touched(db, id);
+      const titles = (cards: { title: string }[]) => cards.map((c) => `- ${c.title}`).join('\n') || '(none)';
       const failedSources = out<Retrieved>(db, id, 'retrieving').failed ?? [];
       return [
         `Read:\n${sources.map((x) => x.head).join('\n') || '(nothing)'}`,

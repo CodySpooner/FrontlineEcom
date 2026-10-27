@@ -6,7 +6,7 @@ import type { AgentEvent, ClaudeAccount } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
 import { assemblePrompt } from './prompt';
 import { ROLES } from './roles';
-import { callTool, channel, requestApproval, toolsFor } from './tools';
+import { callTool, channel, requestApproval, runTools } from './tools';
 
 /** Why the SDK stopped a run early, in the owner's words (the run's error notification). */
 const STOPPED: Partial<Record<string, string>> = {
@@ -68,12 +68,12 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
   const run = opts.query ?? query;
   return async function* (input) {
     // Claude Code built-ins are capitalized (WebSearch); app tools come over the in-process MCP server. Research gets web
-    // search only: no WebFetch (pages are read by the app's guarded fetcher) and none of the store's tools.
+    // search and the research tools: no WebFetch (pages go through fetch_source's guarded reader) and none of the store's.
     const research = input.mode === 'research';
     const builtins = research ? ['WebSearch'] : ROLES[input.agent.role].tools.filter((t) => /^[A-Z]/.test(t));
     const events = channel<AgentEvent>();
     const ctx = input.env && { ...input.env, store: input.store, agent: input.agent, emit: events.push, signal: input.signal };
-    const appTools = ctx && !research ? toolsFor(input.agent.role) : [];
+    const appTools = ctx ? runTools(input.agent.role, input.mode) : [];
     const connected = (!research && ctx?.externalMcp?.(input.store.id)) || {};
     const externalMcp = Object.fromEntries((ROLES[input.agent.role].mcp ?? []).flatMap((k) => (connected[k] ? [[k, connected[k]]] : [])));
     const frontline = createSdkMcpServer({

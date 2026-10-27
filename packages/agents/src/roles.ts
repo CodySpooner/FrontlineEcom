@@ -33,6 +33,12 @@ export type ToolName =
   | 'write_memory'
   | 'request_approval'
   | 'create_creative'
+  | 'search_knowledge'
+  | 'recommend_research'
+  | 'fetch_source'
+  | 'propose_card'
+  | 'add_evidence'
+  | 'suggest_link'
   | 'WebSearch'
   | 'WebFetch';
 
@@ -58,7 +64,7 @@ export const SQUAD_RULES = `You are one of eight specialist AI agents in this st
 - When you learn something durable about this store (what works, what doesn't, the owner's preferences), save it with write_memory: one sentence, the evidence, your confidence.
 - Be concise. Lead with the answer. Money with currency, rates as %, and always the period you looked at.`;
 
-const BASE: ToolName[] = ['store_summary', 'search_memory', 'write_memory', 'request_approval', 'assign_task'];
+const BASE: ToolName[] = ['store_summary', 'search_memory', 'write_memory', 'request_approval', 'assign_task', 'search_knowledge', 'recommend_research'];
 
 export const ROLES: Record<AgentRole, RoleSpec> = {
   ad_strategist: {
@@ -86,7 +92,7 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
   market_analyst: {
     prompt: `You are the store's analyst and the owner's first stop for questions. You answer from the store's real data (sales, ads, products, orders) and the market (competitors, trends, the niche), and you say what it means and what to do next. Lead with the answer and the number, then the evidence. Flag anomalies (sudden drops, spikes, margin erosion) without being asked. You keep the squad's understanding of the niche current: save what you learn.`,
     kpi: 'accuracy of your calls and how many of your recommendations get acted on',
-    tools: [...BASE, 'metrics_timeseries', 'list_products', 'list_orders', 'list_campaigns', 'list_competitors', 'track_competitor', 'research_feed', 'promote_niche_learning', 'propose_price_change', 'squad_log', 'compare_stores', 'WebSearch', 'WebFetch'],
+    tools: [...BASE, 'metrics_timeseries', 'list_products', 'list_orders', 'list_campaigns', 'list_competitors', 'track_competitor', 'research_feed', 'promote_niche_learning', 'propose_price_change', 'squad_log', 'compare_stores', 'fetch_source', 'propose_card', 'add_evidence', 'suggest_link', 'WebSearch', 'WebFetch'],
     mcp: ['meta_ads'],
   },
   copywriter: {

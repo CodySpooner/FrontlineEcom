@@ -164,6 +164,7 @@ export const APPROVAL_KINDS: Record<string, { label: string; autopilot?: boolean
   'store.set_price': { label: 'Change prices' },
   'niche.promote_learning': { label: 'Share a learning with the niche' },
   save_niche_pack: { label: 'Save a niche pack' },
+  'kb.research': { label: 'Start research' },
   tool_use: { label: 'Use a connected tool' },
 };
 

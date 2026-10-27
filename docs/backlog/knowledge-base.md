@@ -499,7 +499,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - live progress messages and the execution log.
   - Fake-engine tests for every transition, cancel, restart, budget stop, Retry and Refine, and "every source failed"
     (which reports failure and makes no cards).
-- [ ] KB-13 **KB agent tools:**
+- [x] KB-13 **KB agent tools:**
   - research mode: `fetch_source` (through a ToolEnv hook to KB-11), `propose_card`, `add_evidence` and
     `suggest_link`;
   - normal mode, every role: `search_knowledge`, and `recommend_research`, which adds to the "Agents recommend" queue
@@ -630,6 +630,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-10 Relationships view: a picker of connected cards (most connected first), then the card in the middle with its neighbours on a ring grouped by relationship and their own neighbours on a second ring; filters by type and AI suggestion, a line explains itself (accept/reject a suggestion there), arrow keys walk the neighbours, Enter recentres, the centre opens its details.
 - 2026-10-27 KB-11 Safe fetcher and source storage: `apps/server/src/kb/fetcher.ts` reads public pages and documents (HTML, PDF, markdown, text, CSV) with each hop's host checked and the connection pinned to the checked address, robots.txt obeyed, a per-site gap, size, time and type caps, paywall/login detection and blocked domains; `kb-sources.ts` stores them with a content hash, excerpt and a domain-class rating the owner can change (PATCH /api/kb/sources/:id), and hands agents only fenced, quoted text.
 - 2026-10-27 KB-12 Research runner: `packages/agents/src/kb-research.ts` walks a research task through the ten stages, checkpointing each in `kb_task_steps`. Planning, discovering, analyzing, evaluating, extracting and reporting are research-mode runs of the task's agent: web search only, no app or store tools, 30 turns, at most what the task has left, on Claude even for a demo store. Each answers with one JSON object, which is checked. Retrieving (through the KB-11 fetcher), deduping, storing and linking are code. A failure is retried after 30 s, then 60 s, then fails the task; a stage its agent can't take waits an hour. Cancel, Retry (from the stage that failed) and Refine (a new linked task) are in; a restart resumes from the last finished stage. Each finding's assessment holds a weak or contested card at Hypothesis. The report lists conclusions, open questions, limitations, applications, cards created and updated, unread sources, conflicts and errors. Tasks stream as `kb_task` messages and notify the owner when they end.
+- 2026-10-27 KB-13 KB agent tools: every role has `search_knowledge` and `recommend_research`. Search returns accepted cards of the agent's store and General, never another store's, unreviewed, archived or blocked ones, with hypotheses labelled. A recommendation is a `kb.research` approval; once the owner approves, the app starts the research, paid by that store. Research runs, whatever the role, get web search plus four tools. `fetch_source` reads through the KB-11 reader and keeps the page as a task source. `propose_card` files a proposed card that the ladder stages: forbidden types and stages are refused, and only read sources count. A card that already says it gains the evidence instead, and an archived or rejected one is left alone. `add_evidence` adds evidence for or against (against opens a conflict). `suggest_link` never suggests a pair the owner rejected. The task report now counts cards the tools made or updated.
 
 ## Blocked
 
@@ -726,3 +727,19 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   Text that runs long and lists that run over are now trimmed, not refused (tested); only empty or mistyped answers
   fail. Discovering through reporting haven't met a real model yet. KB-14's first real task will show whether the
   prompts need tuning.
+- 2026-10-27 KB-13: the tools live in `APP_TOOLS` in tools.ts, beside the others. A separate kb-tools.ts would import
+  tools.ts while tools.ts imports it. `runTools(role, mode)` picks a run's tools: research mode gets `RESEARCH_TOOLS`
+  whatever the role; otherwise the role's own list without the research-only ones. Both engines use it.
+  `toolsFor` is unchanged for evals: the research tools are listed on market_analyst only, and BASE gives every role
+  search_knowledge and recommend_research. A research tool finds its task through `ctx.runId` and `agent_runs.mode`.
+  `search_knowledge` is a keyword match (every word), newest first, over active cards; KB-17 ranks, boosts and logs
+  use. `recommend_research` goes through the approvals system: kind `kb.research`, in `OUTLIVE_RUN`, so the request
+  outlives the run and the agent doesn't wait for it. The pending ones are the Research Center's "Agents recommend"
+  queue: KB-16 shows them, KB-22 adds cost estimates and dismiss. It isn't sent twice: not while the same objective
+  waits for the store, nor while a task of it is queued, running or done (a failed one may be asked again). On
+  approval, agentRoutes' `onApproved` starts it. The findings go to that store or to General, never elsewhere, and
+  the budget is clamped to $0.25–5. `fetch_source` passes no blocked domains yet (KB-22). The report's
+  created/updated lists now come from the cards and evidence carrying the task id, so cards made by tools count.
+  Provenance: an agent never edits a card's fields. It can only add evidence or suggest links, and the ladder keeps
+  a stage the owner set. Found while testing: a General task's workspace is `null`, so `?? ctx.store.id` would have
+  searched the paying store's cards. The code tests `task ?` instead.

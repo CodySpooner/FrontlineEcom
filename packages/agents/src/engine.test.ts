@@ -31,7 +31,7 @@ describe('fake engine', () => {
     expect(events.at(-1)).toMatchObject({ type: 'done', sessionId: 'sess-1' });
   });
 
-  test('a research run has none of the app tools', async () => {
+  test('a research run has only the research tools', async () => {
     const events = await collect(runAgent({ ...input, mode: 'research', env: {} as ToolEnv }, fakeEngine(() => [{ call: 'store_summary' }])));
     expect(events.find((e) => e.type === 'tool_result')).toMatchObject({ output: 'Tool store_summary is not available', isError: true });
   });
@@ -226,21 +226,22 @@ describe('Claude engine', () => {
     expect(seen?.maxBudgetUsd).toBeUndefined();
   });
 
-  test('a research run searches the web with no app or store tools, gets 30 turns, and says why it stopped in research terms', async () => {
+  test('a research run searches the web with the research tools only, gets 30 turns, and says why it stopped in research terms', async () => {
     let seen: Options | undefined;
     const engine = claudeEngine({ query: (params) => ((seen = params.options), (async function* () { yield* frames; })()) });
     const env = { externalMcp: () => ({ meta_ads: { type: 'http', url: 'https://mcp.test' } }) } as unknown as ToolEnv;
     await collect(runAgent({ ...input, agent: { ...agent, role: 'ad_strategist' }, mode: 'research', env, budgetUsd: 0.8 }, engine));
     expect(seen).toMatchObject({ tools: ['WebSearch'], maxTurns: 30, maxBudgetUsd: 0.8 });
-    expect(seen!.mcpServers).toEqual({});
+    expect(Object.keys(seen!.mcpServers!)).toEqual(['frontline']); // the research tools, and none of the store's servers
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }), 'research')).toEqual([{ type: 'error', message: 'Stopped: this research step hit its 30-turn limit before finishing.' }]);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: [] }), 'research')).toEqual([{ type: 'error', message: "Stopped: the research task's budget, or today's AI budget for this store, ran out." }]);
   });
 
   // What Claude sees: every app tool's zod input must come out of the in-process MCP server as a valid object schema.
-  test('serves every app tool over MCP with an object input schema', async () => {
+  test('serves every app tool over MCP (the research ones in research runs) with an object input schema', async () => {
     const listed = new Set<string>();
-    for (const role of Object.keys(ROLES) as AgentRole[]) {
+    const runs = [...(Object.keys(ROLES) as AgentRole[]).map((role) => ({ role, mode: undefined })), { role: 'market_analyst' as AgentRole, mode: 'research' as const }];
+    for (const { role, mode } of runs) {
       let options: Options | undefined;
       const engine = claudeEngine({
         query: (params) => {
@@ -250,7 +251,7 @@ describe('Claude engine', () => {
           })();
         },
       });
-      await collect(runAgent({ ...input, agent: { ...agent, role }, env: {} as ToolEnv }, engine));
+      await collect(runAgent({ ...input, agent: { ...agent, role }, mode, env: {} as ToolEnv }, engine));
       const server = (options?.mcpServers?.frontline as McpSdkServerConfigWithInstance).instance;
       const client = new Client({ name: 'test', version: '1.0.0' });
       const [a, b] = InMemoryTransport.createLinkedPair();
