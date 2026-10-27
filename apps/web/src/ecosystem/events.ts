@@ -1,4 +1,4 @@
-import type { Agent, AgentRun, ApprovalRequest, LiveMessage, SquadMission, Store, StoreEvent } from '@frontline/shared';
+import type { Agent, AgentRun, AnalyticsSummary, ApprovalRequest, LiveMessage, SquadMission, Store, StoreEvent } from '@frontline/shared';
 import type { Animation } from './characters';
 
 export type OfficeStatus = 'idle' | 'queued' | 'planning' | 'running' | 'using_tool' | 'collaborating' | 'awaiting_approval' | 'completed' | 'failed' | 'offline';
@@ -23,6 +23,7 @@ export interface OfficeState {
   missions: Record<string, SquadMission>;
   stores: Store[];
   storeEvents: StoreEvent[];
+  analytics?: Pick<AnalyticsSummary, 'series' | 'currency' | 'to' | 'unconverted'>;
 }
 export const emptyOffice = (): OfficeState => ({ agents: [], runs: {}, approvals: {}, tools: {}, events: [], missions: {}, stores: [], storeEvents: [] });
 export const activeRun = (run: AgentRun) => run.status === 'running' || run.status === 'queued';

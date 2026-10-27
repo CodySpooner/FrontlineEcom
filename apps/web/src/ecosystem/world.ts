@@ -40,7 +40,8 @@ for (const room of ROOMS) {
     BLOCKED.add(tileKey({ x: room.x + i, y: room.y }));
     BLOCKED.add(tileKey({ x: room.x, y: room.y + i }));
   }
-  BLOCKED.add(tileKey({ x: room.x + 11, y: room.y + 1 }));
+  BLOCKED.add(tileKey({ x: room.x + 1, y: room.y + 10 }));
+  for (const x of [9, 10, 11]) for (const y of [1, 2, 3]) BLOCKED.add(tileKey({ x: room.x + x, y: room.y + y }));
   for (const x of [10, 11]) for (const y of [10, 11]) BLOCKED.add(tileKey({ x: room.x + x, y: room.y + y }));
 }
 for (let x = MEETING.x - 2; x <= MEETING.x + 1; x++) for (let y = MEETING.y - 2; y <= MEETING.y + 1; y++) BLOCKED.add(tileKey({ x, y }));

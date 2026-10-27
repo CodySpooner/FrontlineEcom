@@ -8,6 +8,7 @@ import { OFFICE_THEMES, type OfficeThemeId } from './themes';
 import { createHologram, LOGO_URL } from './hologram';
 import { platformHolograms } from './platforms';
 import { officeLighting } from './lighting';
+import { departmentShowpieces } from './showpieces';
 
 export async function createOffice(host: HTMLElement, onDesk: (id: string) => void) {
   const logoTexture = await Assets.load<Texture>(LOGO_URL); logoTexture.source.scaleMode = 'nearest';
@@ -20,6 +21,7 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   let mapTexture = Texture.from(paintOffice()); mapTexture.source.scaleMode = 'nearest';
   const map = new Sprite(mapTexture); world.addChild(map);
   const lighting = officeLighting(world);
+  const showpieces = departmentShowpieces(world);
   let theme: OfficeThemeId = 'frontline';
   const setTheme = (value: OfficeThemeId) => { if (theme === value) return; theme = value; const old = mapTexture; mapTexture = Texture.from(paintOffice(OFFICE_THEMES[value])); mapTexture.source.scaleMode = 'nearest'; map.texture = mapTexture; old.destroy(true); };
   const labels = new Container(); world.addChild(labels);
@@ -95,9 +97,10 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
     hologram.tick(elapsed, still);
     platforms.tick(elapsed, still);
     lighting.tick(elapsed, still);
+    showpieces.tick(still);
     if(still) return;
     lights.children.forEach((light,i)=>{light.alpha=.45+.3*Math.sin(elapsed/1400+i);});
   });
-  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setBusiness: platforms.update, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
+  return { app, world, labels, fit, zoom, focus, setTheme, performance: () => metrics, focusWorker: (id: string) => { const p = workers.position(id); if (p) focus(p); }, setWorkers: workers.update, setBusiness: (value: Parameters<typeof platforms.update>[0]) => { platforms.update(value); showpieces.update(value); }, setDisplay: (value: DisplayOptions) => { labels.visible = value.departments; objective.visible = value.bubbles; lowPower = value.lowPower; autoLow = false; app.ticker.maxFPS = lowPower ? 30 : 60; workers.setDisplay(value); }, drainPositions: workers.drainPositions, destroy:()=>{ clearTimeout(clickTimer);resize.disconnect();document.removeEventListener('visibilitychange',visibility);app.destroy(true,{children:true});hologram.destroy();platforms.destroy();lighting.destroy();workers.destroy();mapTexture.destroy(true); } };
 }
 export type OfficeRenderer = Awaited<ReturnType<typeof createOffice>>;

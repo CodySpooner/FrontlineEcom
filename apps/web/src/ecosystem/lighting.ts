@@ -17,6 +17,7 @@ export function officeLighting(world: Container) {
   };
   for (const desk of DESKS) { const p = iso(desk); pool(p.x, p.y + 10, 160, 76, desk.color, .25); pool(p.x, p.y - 30, 80, 52, desk.color, .2); }
   for (const room of ROOMS) {
+    const hero = iso({ x: room.x + 10, y: room.y + 2 }); pool(hero.x, hero.y - 20, 200, 150, room.color, .22);
     const p = iso({ x: room.x + 5, y: room.y + .5 }); pool(p.x, p.y - 10, 260, 120, room.color, .3);
     const light = new Graphics().poly([p.x - 34, p.y - 38, p.x + 34, p.y - 38, p.x + 90, p.y + 42, p.x - 90, p.y + 42]).fill({ color: room.color, alpha: .035 }); layer.addChild(light);
     const doorway = iso({ x: room.x + 6.5, y: room.y }); pool(doorway.x, doorway.y, 150, 60, '#ff476d', .23);

@@ -66,7 +66,7 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
     }
     const sign = iso({x:room.x+5,y:room.y+0.5});
     screen(sign.x,sign.y-7,room.color,ROOMS.indexOf(room),68,34);
-    const pp = iso({x:room.x+11,y:room.y+1}); props.push({depth:pp.y,draw:()=>plant(pp.x,pp.y+8)});
+    const pp = iso({x:room.x+1,y:room.y+10}); props.push({depth:pp.y,draw:()=>plant(pp.x,pp.y+8)});
     const decor = iso({x:room.x+10.5,y:room.y+10.5});
     props.push({depth:decor.y,draw:()=> {
       const kind = DEPARTMENT_DECOR[room.id];

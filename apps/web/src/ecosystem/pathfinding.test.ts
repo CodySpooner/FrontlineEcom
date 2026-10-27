@@ -28,12 +28,13 @@ test('thirty workers reach distinct desks without occupying or reserving the sam
 });
 
 test('throttled frames catch up in collision-safe steps and cap long pauses', () => {
-  const create = () => new Map([['a', startMotion(ENTRANCE, { x: 17, y: 22 })], ['b', startMotion({ x: 18, y: 26 }, { x: 17, y: 25 })]]);
+  const create = () => new Map([['a', startMotion(ENTRANCE, { x: ENTRANCE.x, y: ENTRANCE.y - 5 })], ['b', startMotion({ x: ENTRANCE.x + 1, y: ENTRANCE.y }, { x: ENTRANCE.x + 1, y: ENTRANCE.y - 4 })]]);
   const smooth = create(), throttled = create(), paused = create();
   const arrivals = new Set<string>();
   for (let i = 0; i < 20; i++) advanceMotion(smooth, .05).forEach((id) => arrivals.add(id));
   expect(advanceFrame(throttled, 1000)).toEqual([...arrivals]);
   advanceFrame(paused, 60_000);
+  expect(smooth.get('a')!.position.y).toBeLessThan(ENTRANCE.y);
   for (const id of ['a', 'b']) {
     expect(throttled.get(id)!.position.x).toBeCloseTo(smooth.get(id)!.position.x);
     expect(throttled.get(id)!.position.y).toBeCloseTo(smooth.get(id)!.position.y);

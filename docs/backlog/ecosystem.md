@@ -85,6 +85,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-26 ECO-27: Ten distinct department showpieces with reserved collision footprints: scanner, command bridge, uplink, green-screen rig, racks, real seven-day order wall, library, order conveyor, message relay and tool exchange. Parcels and cable packets come only from fresh order/tool events; missing analytics shows unavailable. 954 tests pass, measured 58.2 FPS, before/after and four room closeups in .agent/eco-27-*.png; verified in Orca.
 - 2026-10-26 ECO-26: Added additive neon pools beneath desks and pylons, monitor spill, doorway lights and a broad crimson hub glow using one 64px shared texture. Gentle colored-light drift freezes under reduced motion/low power. 951 tests pass; measured 58.0 FPS with 30 workers and ten pylons; .agent/eco-26-*.png before/after and Orca checks.
 - 2026-10-26 ECO-25: Added ten offline platform-logo hologram pylons around the plaza and Advertising. Existing store platforms glow brighter; deduplicated live order events pulse the matching projection, with isolated Demo orders and no motion in reduced/low-power mode. 946 tests pass; 30 workers plus pylons hold 58 FPS. Before/after, closeup and reduced-motion screenshots: .agent/eco-25-*.png.
 - 2026-10-26 ECO-24: Expanded the office to 64x48 with 12-tile departments, four-tile avenues, separated desks and front-edge labels. Preserved all 30 desk IDs; invalid saved positions recover to the nearest free tile. Updated collision, meeting and API boundary checks. 939 tests pass; desktop 30-worker scene runs at 58 FPS; Orca and desktop before/after screenshots in .agent/eco-24-*.png.
@@ -194,7 +195,7 @@ Seed list (reorder or extend as you see fit):
   WooCommerce, Walmart (plus Meta, Google and TikTok ads near Advertising) on projector pylons in the new plazas.
   Platforms the owner's stores really use glow brighter and pulse on real order events from `/api/live`.
 - [x] ECO-26 Lighting pass: neon light pools, glow sprites, screen glow, ambient color drift, light spill from the hub.
-- [ ] ECO-27 Department showpieces: a hero prop per room (e.g. Operations conveyor that moves a parcel on each real order,
+- [x] ECO-27 Department showpieces: a hero prop per room (e.g. Operations conveyor that moves a parcel on each real order,
   Analytics holo-chart wall from real numbers, Creative Studio camera rig + green screen, Integrations cables with
   data packets flowing on real tool calls).
 - [ ] ECO-28 Hub upgrades: orbiting rings and a ticker around the logo hologram with real store numbers (today's revenue,
