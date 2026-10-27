@@ -220,6 +220,9 @@ describe('agent tools on demo data', () => {
     try {
       const [out] = results(await run(input('glow', 'market_analyst'), [{ call: 'list_products', input: { limit: 500 } }, done]));
       expect(out!.output.split('\n').find((l) => l.startsWith(`${id},`))).toMatch(/,2,30$/);
+      refund.run('r-shipping', 'o-refunds-paid', 40, id); // 70 refunded on a 60 line: the rest was shipping
+      const [again] = results(await run(input('glow', 'market_analyst'), [{ call: 'list_products', input: { limit: 500 } }, done]));
+      expect(again!.output.split('\n').find((l) => l.startsWith(`${id},`))).toMatch(/,2,0$/);
     } finally {
       db.prepare(`DELETE FROM amazon_refunds WHERE store_id = 'glow'`).run();
       db.prepare(`DELETE FROM order_items WHERE store_id = 'glow' AND order_id LIKE 'o-refunds-%'`).run();

@@ -285,9 +285,10 @@ export const APP_TOOLS: AppTool[] = [
                  FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
                  WHERE i.store_id = ? AND o.status = 'paid' AND o.local_date >= ?
                  -- core's refund lines, off their order's day as on the dashboard (a TikTok refund on a mixed order names no product, so it lands on none). ponytail: units stay gross (a refund line has no quantity).
-                 UNION ALL SELECT r.product_id, 0, -r.amount
+                 -- A product's refunds on an order come off at most what it sold for there: TikTok's also return shipping (core's CORE-102).
+                 UNION ALL SELECT r.product_id, 0, -min(sum(r.amount), (SELECT coalesce(sum(i.revenue), 0) FROM order_items i WHERE i.store_id = r.store_id AND i.order_id = r.order_id AND i.product_id = r.product_id))
                  FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
-                 WHERE r.store_id = ? AND o.status = 'paid' AND o.local_date >= ?
+                 WHERE r.store_id = ? AND o.status = 'paid' AND o.local_date >= ? GROUP BY r.order_id, r.product_id
                ) GROUP BY product_id
              ) s ON s.product_id = p.id
              WHERE p.store_id = ? ${status ? 'AND p.status = ?' : "AND p.status != 'archived'"} ORDER BY revenue_${days}d DESC, p.title LIMIT ?`,

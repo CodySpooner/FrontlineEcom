@@ -199,8 +199,10 @@ const productSales = (db: Db, storeId: string, productId: string, from: string, 
        FROM (
          SELECT i.order_id, i.quantity AS units, i.revenue, i.cost FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
          WHERE i.store_id = ?1 AND i.product_id = ?2 AND o.status = 'paid' AND o.local_date BETWEEN ?3 AND ?4
-         UNION ALL SELECT NULL, 0, -r.amount, 0 FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
-         WHERE r.store_id = ?1 AND r.product_id = ?2 AND o.status = 'paid' AND o.local_date BETWEEN ?3 AND ?4
+         -- At most what it sold for on the order: a TikTok refund total also returns shipping (core's CORE-102).
+         UNION ALL SELECT NULL, 0, -min(sum(r.amount), (SELECT coalesce(sum(i.revenue), 0) FROM order_items i WHERE i.store_id = r.store_id AND i.order_id = r.order_id AND i.product_id = r.product_id)), 0
+         FROM amazon_refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
+         WHERE r.store_id = ?1 AND r.product_id = ?2 AND o.status = 'paid' AND o.local_date BETWEEN ?3 AND ?4 GROUP BY r.order_id
        )`,
     )
     .get(storeId, productId, from, to)!;

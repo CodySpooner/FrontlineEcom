@@ -136,7 +136,7 @@ test("on a real store a price test is judged on profit after the store's fee %, 
   db.prepare(`UPDATE orders SET status = 'refunded' WHERE store_id = 'peak' AND id = ?`).run(`o-${addDays(day, 5)}-8`);
   sell(1, addDays(day, 6), 25);
   const refund = db.prepare(`INSERT INTO amazon_refunds (store_id, id, order_id, amount, product_id) VALUES ('peak', ?, ?, ?, ?)`);
-  refund.run('r1', `o-${addDays(day, 5)}-0`, 25, '77');
+  refund.run('r1', `o-${addDays(day, 5)}-0`, 30, '77'); // with its 5 shipping: only the 25 the sock sold for comes off
   refund.run('r2', `o-${addDays(day, 5)}-1`, 25, '78');
   refund.run('r3', `o-${addDays(day, 5)}-8`, 25, '77');
   refund.run('r4', 'o-elsewhere', 25, '77');
