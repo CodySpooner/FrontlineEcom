@@ -60,7 +60,7 @@ import { Hono } from 'hono';
 import { currentWindow, summarize } from '../analytics';
 import { convertRate, fxFor } from '../fx';
 import { approvalsHook, decide } from '../approvals';
-import { listCompetitors, priceChanges, watchCompetitorPrices } from '../competitors';
+import { listCompetitors, priceChanges, publicFetch, watchCompetitorPrices } from '../competitors';
 import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
@@ -193,9 +193,14 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
     db.prepare('INSERT INTO competitors (id, store_id, name, url, notes, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(id, storeId, name.trim(), url, notes, new Date().toISOString());
     // Read now: a site with no readable catalog would sit in the list with no prices, ever.
     const etsy = /(^|\.)etsy\.com$/.test(new URL(url).hostname);
-    const added = await watchCompetitorPrices(db, id, url, fetch, new Date(), etsy ? loadKey(dataDir()) : undefined).catch(() => undefined);
+    // publicFetch (CORE-120): a public-looking name whose DNS answer is this computer or its network isn't read either.
+    let local = false;
+    const added = await watchCompetitorPrices(db, id, url, publicFetch(), new Date(), etsy ? loadKey(dataDir()) : undefined).catch((e: unknown) => {
+      local = /points at this computer/.test(String(e));
+    });
     if (added === undefined) {
       db.prepare('DELETE FROM competitors WHERE id = ?').run(id);
+      if (local) return `Not added: ${site(url)} points at this computer or its network, so the app won't read it. Give the shop's public web address.`;
       const why = etsy
         ? "an Etsy shop is read with a connected Etsy store's app key, and the address must be its shop page (etsy.com/shop/<name>)"
         : 'the app reads Shopify, WooCommerce and Etsy shops';

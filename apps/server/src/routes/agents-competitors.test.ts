@@ -8,6 +8,11 @@ import { seedDemo } from '../demo';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
 
+// No real DNS in tests: one name answers with a loopback address; the rest don't resolve, which core's publicFetch lets through.
+vi.mock('node:dns/promises', () => ({
+  lookup: async (host: string) => (host === 'rival.localtest.me' ? [{ address: '127.0.0.1', family: 4 }] : Promise.reject(new Error('ENOTFOUND'))),
+}));
+
 let db: Db;
 beforeEach(() => {
   db = openDb();
@@ -64,6 +69,16 @@ test('a shop address on this computer or its network is refused before the app f
   );
   expect(fetched).toEqual([]);
   expect(await run([track('Rival', 'https://10.example.com')])).not.toEqual([expect.stringMatching(/public web address/)]); // a public name
+});
+
+test("a public-looking name whose DNS answer is this computer isn't read or tracked", async () => {
+  const fetched: string[] = [];
+  vi.stubGlobal('fetch', async (url: string) => (fetched.push(url), Response.json({ products: [{ title: 'Trail Harness', variants: [{ price: '39.00', compare_at_price: null }] }] })));
+  expect(await run([track('Loop', 'https://rival.localtest.me')])).toEqual([
+    "Not added: rival.localtest.me points at this computer or its network, so the app won't read it. Give the shop's public web address.",
+  ]);
+  expect(fetched).toEqual([]);
+  expect(db.prepare(`SELECT 1 FROM competitors WHERE name = 'Loop'`).get()).toBeUndefined();
 });
 
 test('every Etsy shop is on etsy.com: one is told from another by its shop', async () => {
