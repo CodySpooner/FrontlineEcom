@@ -10,6 +10,7 @@ import { useStoreSelection } from '../components/StoreFilter';
 import { byHand } from '../components/StoreForm';
 import { Badge, Button, cx, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Tabs } from '../components/ui';
 import { cents } from '../lib/format';
+import { nicheSlug } from '../lib/niche';
 import { NAV } from '../nav';
 
 type Tab = ResearchTab | 'lists';
@@ -42,12 +43,14 @@ export function Research() {
   // Research isn't per store, so the page has no store filter: with several stores, say whose Product Hunter runs.
   const [storeId, setStoreId] = useState('');
   const store = stores.find((s) => s.id === storeId) ?? stores.find((s) => s.id === ids[0]) ?? stores[0];
+  // A custom-niche store narrows to its own finds (`other:<slug>` → its own words); "Other" still lists every custom niche's.
+  const custom = new Map<string, string>(stores.flatMap((s) => (s.niche === 'other' && nicheSlug(s.nicheDetail ?? '') ? [[`other:${nicheSlug(s.nicheDetail!)}`, s.nicheDetail!.trim()] as const] : [])));
   const start = useStartRun();
   const navigate = useNavigate();
   const research = () =>
     store &&
     start.mutate(
-      { agentId: `${store.id}:product_hunter`, task: `Find 5 new winning ${niche ? `${niche} ` : ''}products for this store, with margin, trend and competition for each.` },
+      { agentId: `${store.id}:product_hunter`, task: `Find 5 new winning ${niche ? `${custom.get(niche) ?? niche} ` : ''}products for this store, with margin, trend and competition for each.` },
       { onSuccess: (r) => navigate(`/agents/${encodeURIComponent(r.agentId)}`) },
     );
 
@@ -75,6 +78,11 @@ export function Research() {
               {NICHES.map((n) => (
                 <option key={n} value={n}>
                   {cap(n)}
+                </option>
+              ))}
+              {[...custom].map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
                 </option>
               ))}
             </select>

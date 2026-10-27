@@ -72,3 +72,23 @@ describe('research results', () => {
     expect(screen.getByRole('heading', { level: 3, name: product.title })).toBeTruthy();
   });
 });
+
+describe('a custom-niche store', () => {
+  it("can narrow research to its own niche's finds, and AI Research briefs it in plain words", async () => {
+    const yoga = { ...store('zen', 'Zen Studio', 'shopify'), niche: 'other', nicheDetail: 'Yoga mats' } as Store;
+    const fetch = stubApi((url, init) => {
+      if (init?.method === 'POST') return { id: 'r1', agentId: 'zen:product_hunter', status: 'queued', transcript: [] };
+      if (url.startsWith('/api/stores')) return [yoga];
+      if (url.startsWith('/api/research?')) return { items: [], total: 0, offset: 0, limit: 30 };
+      return [];
+    });
+    renderApp(<Research />);
+    await screen.findByRole('option', { name: 'Yoga mats' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Niche' }), { target: { value: 'other:yoga-mats' } });
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('niche=other%3Ayoga-mats'), undefined));
+    fireEvent.click(screen.getByRole('button', { name: 'AI Research' }));
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/agents/zen%3Aproduct_hunter/runs', expect.objectContaining({ method: 'POST' })));
+    const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')!;
+    expect(JSON.parse(String(post[1]!.body)).task).toContain('Find 5 new winning Yoga mats products');
+  });
+});
