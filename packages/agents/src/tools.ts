@@ -202,7 +202,10 @@ export const APP_TOOLS: AppTool[] = [
           };
         })
         .sort((a, b) => b.revenue - a.revenue);
-      const note = (skipped.length ? `; left out, no exchange rate yet: ${skipped.join(', ')}` : '') + (sample.length ? `; left out, demo data: ${sample.join(', ')}` : '');
+      // Sales with no unit cost count their whole price as profit: such a store ranks above what it earns.
+      const high = p.byStore.filter((s) => !left(s.storeId) && !demo(s.storeId) && uncostedShare(ctx.db, s.storeId, p.from) >= 0.1).map((s) => name(s.storeId));
+      const note = (skipped.length ? `; left out, no exchange rate yet: ${skipped.join(', ')}` : '') + (sample.length ? `; left out, demo data: ${sample.join(', ')}` : '')
+        + (high.length ? `; profit reads high (10%+ of sales have no unit cost set): ${high.join(', ')}` : '');
       return `${p.from} to ${p.to}, amounts in ${p.currency ?? 'USD'}${note}\n${csv(rows)}`;
     },
   }),
@@ -251,7 +254,9 @@ export const APP_TOOLS: AppTool[] = [
         ? "(revenue and orders include Amazon's sales as a channel (amazon_revenue, amazon_orders): its shoppers aren't in sessions, its product costs aren't in cogs, and the store's ads mostly drive its own site, so take them out for conversion, margin and MER.)\n"
         : '';
       const tt = tiktok ? "(orders include TikTok Shop's (tiktok_orders): its shoppers aren't in sessions, so take them out for conversion.)\n" : '';
-      return note + (late ? `(sessions start on ${rows[first]!.date}: work out conversion from that day on; earlier orders have no traffic data.)\n` : '') + split + tt + csv(rows);
+      const uncosted = uncostedShare(ctx.db, ctx.store.id, since(days, ctx.store)); // as store_summary's profitNote
+      const costs = uncosted >= 0.1 ? `(${Math.round(uncosted * 100)}% of these days' product sales have no unit cost set, so cogs reads low and profit high.)\n` : '';
+      return note + costs + (late ? `(sessions start on ${rows[first]!.date}: work out conversion from that day on; earlier orders have no traffic data.)\n` : '') + split + tt + csv(rows);
     },
   }),
   defineTool({

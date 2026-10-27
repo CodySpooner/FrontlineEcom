@@ -127,6 +127,9 @@ test('store_summary says when profit reads high because sales have no unit cost'
   db.prepare(`INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES ('glow', 'o-uncosted', 'glow-p1', 1, 100000, 0)`).run();
   try {
     expect((await summary()).profitNote).toMatch(/^\d+% of this window's product sales have no unit cost set, so profit, margin and health read high\./);
+    const [series, stores] = results(await run(input('glow', 'market_analyst'), [{ call: 'metrics_timeseries', input: { days: 7 } }, { call: 'compare_stores', input: { range: 7 } }]));
+    expect(series!.output).toMatch(/^\(\d+% of these days' product sales have no unit cost set, so cogs reads low and profit high\.\)\n/);
+    expect(stores!.output.split('\n')[0]).toMatch(/; profit reads high \(10%\+ of sales have no unit cost set\): Glow Haus$/);
   } finally {
     db.prepare(`DELETE FROM order_items WHERE store_id = 'glow' AND order_id = 'o-uncosted'`).run(); // the db is shared by these tests
     db.prepare(`DELETE FROM orders WHERE store_id = 'glow' AND id = 'o-uncosted'`).run();
