@@ -521,6 +521,10 @@ Orca's browser against the reference before ticking it.
 - [x] UI-190 A disabled primary button (Generate before a brief, Save and Save caps before a change, an agent's Send)
       was the red fill at half opacity, glow and all, and still read as the action to take. Disabled primaries are grey
       now, like a disabled ghost button.
+- [x] UI-191 Creative's and Builder's brief boxes showed a whole example brief as the placeholder, with no "e.g." unlike
+      every other example field, so next to a disabled Generate it read as a brief already written. They start with
+      "e.g." now. Builder's empty Preview said "Pick a draft" though it only shows when there are none (the first draft
+      is picked by itself); it now says what lands there.
 
 ## Blocked
 
@@ -758,3 +762,4 @@ Orca's browser against the reference before ticking it.
 - 2026-10-27 — UI-188: (design review) the strip's `minmax(125px,1fr)` → 140px; a card needs ~137px (10 + 42 portrait + 9 + dot, gap and "Needs you" + 10). Measured in headless Chrome: before, +10px on all three "Needs you" cards at 1024; after, none at 1024/1280/1440/1920. CSS only, so no new test
 - 2026-10-27 — UI-189: (design review) `describeTrigger` reads a monthly cron when `parseCron` doesn't; ordinal from `Intl.PluralRules` (ordinal). Test in lib/automation.test.ts (red first: 1st, 22nd, 13th, and day 32 stays raw). Headless Chrome: Automation shows 3 "Monthly on the 1st at 9:00 AM", 0 raw crons
 - 2026-10-27 — UI-190: (design review) `buttonClass('primary')` adds `disabled:` border/bg/text/shadow (pseudo-class specificity beats the base, so `cx`'s plain join is fine). Headless Chrome: Creative's Generate, Settings' Save and Save caps compute bg #1a1a1e, text #c4c4cc, no red glow; a screenshot shows Save caps matching Reset. CSS only, so no new test
+- 2026-10-27 — UI-191: (design review) copy only. Headless Chrome reads "e.g. Create a viral TikTok ad…" (Creative) and "e.g. Rewrite our best seller's product page…" (Builder). Builder and Creative tests pass. The review's other Creative point, a preview from another store than "For", is by design: the preview is the newest ad in the picked stores, labelled with its store, and its actions go to that store

@@ -88,7 +88,7 @@ export function Creative() {
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 maxLength={900}
-                placeholder={tab.placeholder}
+                placeholder={`e.g. ${tab.placeholder}`}
                 className="block w-full resize-y bg-transparent px-3 py-2.5 text-[13px] leading-relaxed placeholder:text-muted focus:outline-none"
               />
               <div className="flex items-center justify-between gap-2 border-t border-line px-2 py-1.5">

@@ -68,7 +68,7 @@ export function Builder() {
         ) : (
           <Panel title="Preview">
             <EmptyState icon={LayoutTemplate} title="Nothing to preview">
-              Pick a draft to see the page, its search snippet and what changed.
+              A draft's page, its search snippet and what changed show here.
             </EmptyState>
           </Panel>
         )}
@@ -113,7 +113,7 @@ function Brief() {
           </p>
         )}
         <Field label="What should it build?">
-          <textarea value={task} onChange={(e) => setTask(e.target.value)} required rows={3} placeholder={IDEAS[0]} className={cx(inputClass, 'resize-y')} />
+          <textarea value={task} onChange={(e) => setTask(e.target.value)} required rows={3} placeholder={`e.g. ${IDEAS[0]}`} className={cx(inputClass, 'resize-y')} />
         </Field>
         <div className="flex flex-wrap gap-1.5">
           {['Product page', 'FAQ page', 'Promo landing page'].map((label, i) => (
