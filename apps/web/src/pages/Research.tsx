@@ -136,9 +136,18 @@ function useSaved() {
 type Saved = ReturnType<typeof useSaved>;
 
 function Results({ tab, niche, q, onOpen, saved, onClear }: { tab: ResearchTab; niche: string; q: string; onOpen: (p: ResearchProduct) => void; saved: Saved; onClear: () => void }) {
-  const r = useResearch(tab, niche, q);
+  const { stores } = useStoreSelection();
+  // Every store live: the sample catalog is only noise next to the Product Hunter's finds (with a demo store left, it stays, labelled).
+  const r = useResearch(tab, niche, q, stores.length > 0 && stores.every((s) => s.connected));
   if (r.isPending) return <LoadingState rows={4} />;
   if (r.isError) return <ErrorState message="Couldn't load research." onRetry={() => r.refetch()} />;
+  if (!r.data.items.length && tab === 'trending' && !niche && !q) {
+    return (
+      <EmptyState icon={Search} title="No finds yet">
+        Ask the Product Hunter with AI Research: what it finds for your stores lands here.
+      </EmptyState>
+    );
+  }
   if (!r.data.items.length) {
     return (
       <EmptyState icon={Search} title="No products match" action={<Button onClick={onClear}>Clear filters</Button>}>
@@ -159,9 +168,9 @@ function Results({ tab, niche, q, onOpen, saved, onClear }: { tab: ResearchTab; 
   );
 }
 
-/** Core seeds a demo catalog on every install, made-up trend and competition included; the Product Hunter's finds are
- *  `find-` (the agents' research_feed tells them apart the same way). Said only once a real store is connected. */
-const useSample = (p: ResearchProduct) => useStoreSelection().stores.some((s) => s.connected) && !p.id.startsWith('find-');
+/** A row from the sample catalog every install starts with (made-up trend and competition), not an agent's find.
+ *  Said only once a real store is connected: in demo mode it's all sample. */
+const useSample = (p: ResearchProduct) => useStoreSelection().stores.some((s) => s.connected) && !!p.sample;
 
 const Grid = ({ className, children }: { className?: string; children: ReactNode }) => (
   <div className={cx('grid grid-cols-1 gap-3.5 transition-opacity min-[560px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1280px]:grid-cols-4', className)}>{children}</div>

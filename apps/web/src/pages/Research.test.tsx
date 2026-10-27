@@ -96,18 +96,39 @@ describe('a custom-niche store', () => {
 describe('the sample research catalog', () => {
   it('is labelled once a real store is connected, so its made-up numbers are not read as finds', async () => {
     stubApi((url) => (url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify')] : []));
-    renderApp(<ProductDetails p={product} />);
+    renderApp(<ProductDetails p={{ ...product, sample: true }} />);
     expect(await screen.findByText(/made-up demand and competition/)).toBeTruthy();
     cleanup();
-    renderApp(<ProductDetails p={{ ...product, id: 'find-1' }} />);
+    renderApp(<ProductDetails p={product} />);
     await screen.findByRole('option', { name: 'Peak Fit' });
     expect(screen.queryByText(/made-up demand and competition/)).toBeNull();
   });
 
   it('is not labelled in demo mode, where every store and number is sample', async () => {
     stubApi((url) => (url.startsWith('/api/stores') ? [{ ...store('shop1', 'Peak Fit', 'shopify'), connected: false }] : []));
-    renderApp(<ProductDetails p={product} />);
+    renderApp(<ProductDetails p={{ ...product, sample: true }} />);
     await screen.findByRole('option', { name: 'Peak Fit' });
     expect(screen.queryByText(/made-up demand and competition/)).toBeNull();
+  });
+});
+
+describe('research on a live install', () => {
+  const page = { items: [], total: 0, offset: 0, limit: 200 };
+
+  it('leaves the sample catalog out once every store is live, and says the finds are still to come', async () => {
+    const fetch = stubApi((url) => (url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify')] : url.startsWith('/api/research?') ? page : []));
+    renderApp(<Research />);
+    expect(await screen.findByText('No finds yet')).toBeTruthy();
+    expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/research\?.*sample=0/), undefined);
+  });
+
+  it('keeps it while a demo store is still around', async () => {
+    const fetch = stubApi((url) =>
+      url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify'), { ...store('demo', 'Glow Haus', 'shopify'), connected: false }] : url.startsWith('/api/research?') ? page : [],
+    );
+    renderApp(<Research />);
+    await screen.findByRole('option', { name: 'Glow Haus' });
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/research\?/), undefined));
+    expect(fetch.mock.calls.some(([u]) => String(u).includes('sample=0'))).toBe(false);
   });
 });

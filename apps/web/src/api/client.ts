@@ -244,10 +244,11 @@ export function useSaveCaps(storeId: string) {
 }
 
 /** Up to 200 products for a research tab (none = best AI score first), filtered by niche and search. */
-export const useResearch = (tab: ResearchTab | undefined, niche: string, q: string) =>
+/** `real`: leave out the sample catalog (made-up numbers every install starts with). */
+export const useResearch = (tab: ResearchTab | undefined, niche: string, q: string, real = false) =>
   useQuery({
-    queryKey: ['research', tab, niche, q],
-    queryFn: () => api<Page<ResearchProduct>>(`/api/research?${new URLSearchParams({ ...(tab && { tab }), ...(niche && { niche }), ...(q && { q }), limit: '200' })}`),
+    queryKey: ['research', tab, niche, q, real],
+    queryFn: () => api<Page<ResearchProduct>>(`/api/research?${new URLSearchParams({ ...(tab && { tab }), ...(niche && { niche }), ...(q && { q }), ...(real && { sample: '0' }), limit: '200' })}`),
     placeholderData: keepPreviousData,
   });
 
