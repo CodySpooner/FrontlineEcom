@@ -55,6 +55,14 @@ test('the Market Analyst starts tracking a competitor shop and reads its prices 
   );
 });
 
+test('every Etsy shop is on etsy.com: one is told from another by its shop', async () => {
+  db.prepare(`INSERT INTO competitors (id, store_id, name, url, notes, created_at) VALUES ('e1', 'pawsome', 'Pup Knits', 'https://www.etsy.com/shop/PupKnits', NULL, '2026-10-01T00:00:00Z')`).run();
+  expect(await run([track('Pup Knits', 'https://www.etsy.com/de/shop/pupknits?ref=x'), track('Bark Goods', 'https://www.etsy.com/shop/BarkGoods')])).toEqual([
+    'Already tracked: etsy.com/shop/pupknits.',
+    "Not added: no product prices could be read at etsy.com/shop/barkgoods (an Etsy shop is read with a connected Etsy store's app key, and the address must be its shop page (etsy.com/shop/<name>)). Name it in your answer instead.",
+  ]);
+});
+
 test('a store tracks 10 competitors at most; with none, list_competitors says who adds them', async () => {
   const add = db.prepare(`INSERT INTO competitors (id, store_id, name, url, notes, created_at) VALUES (?, 'pawsome', ?, ?, NULL, '2026-10-01T00:00:00Z')`);
   for (let i = 0; i < 8; i++) add.run(`c${i}`, `Shop ${i}`, `https://shop${i}.example.com`); // next to its 2 demo ones
