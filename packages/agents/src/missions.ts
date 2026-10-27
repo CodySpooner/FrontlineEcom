@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, type AgentRole, type AgentRun, type NewSquadMission, type SquadMission, type SquadMissionStep } from '@frontline/shared';
-import { finalText, getRun, INTERRUPTED, runGist } from './runs';
+import { finalText, getRun, INTERRUPTED, runGist, turnedDown } from './runs';
 
 // A squad mission is a plan over ordinary agent runs, not a second task system: only the plan, each step's run id and
 // its one-line deliverable are stored; every status is read off the runs.
@@ -180,7 +180,10 @@ function advanceOnce(db: DatabaseSync, start: Start): SquadMission[] {
           : `First step of the mission "${mission.title}".`
       }${next.length ? `\nYour final answer goes on to ${and.format(next)}: end with what they need, and don't assign_task their part.` : ''}`;
       const run = start(`${mission.storeId}:${step.role}`, task, undefined, deps[0]?.runId);
-      if (typeof run === 'string') s.note = run;
+      if (typeof run === 'string') {
+        s.note = run;
+        delete s.runId; // a run turned down before it did anything
+      }
       else {
         s.runId = run.id;
         delete s.note;
@@ -211,28 +214,31 @@ export function cancelMission(db: DatabaseSync, id: string, cancelRun: (runId: s
 }
 
 /** A step's run, or the one that retried it after an app restart (`retry:<run>:<retry>` in done_once, from runs.ts). */
-function stepRun(db: DatabaseSync, id: string): { id: string; status: AgentRun['status'] } | undefined {
-  const r = db.prepare('SELECT id, status, error FROM agent_runs WHERE id = ?').get(id);
+function stepRun(db: DatabaseSync, id: string): { id: string; status: AgentRun['status']; refused?: string } | undefined {
+  const r = db.prepare('SELECT id, status, error, cost_usd FROM agent_runs WHERE id = ?').get(id);
   if (!r) return undefined;
   const link = `retry:${id}:`;
   const retry = r.status === 'error' && r.error === INTERRUPTED
     ? db.prepare("SELECT substr(ref, ?) AS id FROM done_once WHERE ref > ? AND ref < ? || '~'").get(link.length + 1, link, link) // ids sort below '~'
     : undefined;
-  return retry ? stepRun(db, String(retry.id)) : { id: String(r.id), status: r.status as AgentRun['status'] };
+  return retry ? stepRun(db, String(retry.id)) : { id: String(r.id), status: r.status as AgentRun['status'], ...(turnedDown(r) ? { refused: String(r.error) } : {}) };
 }
 
 function toMission(db: DatabaseSync, r: Record<string, unknown>): SquadMission {
   const steps: SquadMissionStep[] = [];
   const stored = JSON.parse(String(r.steps_json)) as Stored[];
   for (const s of stored) {
-    const run = s.runId ? stepRun(db, s.runId) : undefined;
+    const found = s.runId ? stepRun(db, s.runId) : undefined;
+    // Turned down before it did anything (budget spent while it was queued, agent taken offline): it waits, with why.
+    const run = found?.refused ? undefined : found;
+    const note = found?.refused ?? (s.runId ? undefined : s.note);
     const stuck = s.dependsOn.some((d) => ['error', 'cancelled', 'blocked'].includes(steps.find((x) => x.id === d)!.status));
     steps.push({
       id: s.id, role: s.role, task: s.task, dependsOn: s.dependsOn,
-      status: s.runId ? (run?.status ?? 'cancelled') : s.cancelled ? 'cancelled' : stuck ? 'blocked' : 'waiting',
+      status: s.runId && !found?.refused ? (run?.status ?? 'cancelled') : s.cancelled ? 'cancelled' : stuck ? 'blocked' : 'waiting',
       ...(run ? { runId: run.id } : {}),
       ...(s.deliverable && run?.status === 'done' ? { deliverable: s.deliverable } : {}),
-      ...(s.note && !s.runId && !s.cancelled ? { note: s.note } : {}),
+      ...(note && !s.cancelled ? { note } : {}),
     });
   }
   const all = steps.map((s) => s.status);

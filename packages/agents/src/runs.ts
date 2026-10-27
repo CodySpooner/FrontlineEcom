@@ -65,7 +65,7 @@ export function createRunManager(opts: RunManagerOptions) {
   function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string, retryOf?: string): AgentRun | string {
     const agent = getAgent(db, agentId);
     if (!agent) return 'Agent not found';
-    if (!agent.enabled) return 'This agent is offline. Redeploy it first.';
+    if (!agent.enabled) return OFFLINE;
     let resume: string | undefined;
     if (resumeRunId) {
       const prev = getRun(db, resumeRunId);
@@ -75,13 +75,23 @@ export function createRunManager(opts: RunManagerOptions) {
       if (live && prev.createdAt < String(live)) return 'That conversation ran on demo data, before the store went live: start a new one.';
       resume = prev.sessionId;
     }
+    // Under a cent left is used up, as the queue counts it (execute): a run taken here and turned down there would come
+    // back as a mission step and be turned down again, forever.
     const cap = env.caps?.(agent.storeId).agentCostPerDay;
-    if (cap !== undefined && costToday(db, agent.storeId) >= cap) return `Today's AI budget for this store ($${cap}) is used up. Raise it in Settings.`;
-    if (agent.dailyBudgetUsd !== undefined && costToday(db, agent.storeId, agentId) >= agent.dailyBudgetUsd) return ownUsedUp(agent.dailyBudgetUsd);
+    if (cap !== undefined && Math.min(cap / perStore, cap - costToday(db, agent.storeId)) < 0.01) return `Today's AI budget for this store ($${cap}) is used up. Raise it in Settings.`;
+    if (agent.dailyBudgetUsd !== undefined && agent.dailyBudgetUsd - costToday(db, agent.storeId, agentId) < 0.01) return ownUsedUp(agent.dailyBudgetUsd);
     // A job that fires again while its last copy still waits in the queue (the agent is busy, e.g. on a request the owner
     // hasn't answered) doesn't stack another: the queued one does it.
-    if (!resumeRunId && !parentRunId) {
-      const queued = db.prepare(`SELECT id FROM agent_runs WHERE agent_id = ? AND status = 'queued' AND task = ? AND resume IS NULL AND parent_run_id IS NULL`).get(agentId, task);
+    // Never a restart's retry (each is linked to the run it retries) or a mission's step (two missions with the same
+    // first step would share one run, and calling one off would strand the other).
+    if (!resumeRunId && !parentRunId && !retryOf) {
+      const queued = db
+        .prepare(
+          `SELECT id FROM agent_runs WHERE agent_id = ? AND status = 'queued' AND task = ? AND resume IS NULL AND parent_run_id IS NULL AND id NOT IN (
+             SELECT json_extract(s.value, '$.runId') FROM squad_missions m, json_each(iif(json_valid(m.steps_json), m.steps_json, '[]')) s
+             WHERE m.ended_at IS NULL AND json_extract(s.value, '$.runId') IS NOT NULL)`,
+        )
+        .get(agentId, task);
       if (queued) return getRun(db, String(queued.id))!;
     }
     const id = randomUUID();
@@ -96,11 +106,11 @@ export function createRunManager(opts: RunManagerOptions) {
     return run;
   }
 
-  /** Cancels a queued or running run. */
-  function cancel(id: string): AgentRun | undefined {
+  /** Cancels a queued or running run; `why` goes on one that never started. */
+  function cancel(id: string, why?: string): AgentRun | undefined {
     const run = getRun(db, id);
     if (run?.status === 'queued') {
-      db.prepare(`UPDATE agent_runs SET status = 'cancelled', ended_at = ? WHERE id = ?`).run(new Date().toISOString(), id);
+      db.prepare(`UPDATE agent_runs SET status = 'cancelled', error = ?, ended_at = ? WHERE id = ?`).run(why ?? null, new Date().toISOString(), id);
       opts.onRun?.(getRun(db, id)!);
     }
     active.get(id)?.abort.abort(); // the run flips to 'cancelled' once the engine stops
@@ -115,7 +125,7 @@ export function createRunManager(opts: RunManagerOptions) {
 
   /** Stops an agent's queued and running work when the owner takes it offline. */
   const cancelAgent = (agentId: string) => {
-    for (const r of db.prepare(`SELECT id FROM agent_runs WHERE agent_id = ? AND status IN ('queued', 'running')`).all(agentId)) cancel(String(r.id));
+    for (const r of db.prepare(`SELECT id FROM agent_runs WHERE agent_id = ? AND status IN ('queued', 'running')`).all(agentId)) cancel(String(r.id), OFFLINE);
   };
 
   /** The run with its transcript so far while it is still running. */
@@ -380,6 +390,14 @@ const ownUsedUp = (usd: number, stopped = false) => `${stopped ? "Stopped: today
 
 /** The error of a run that was in flight when the app stopped (one from the last 6 hours runs again, as a new run). */
 export const INTERRUPTED = 'Interrupted by an app restart';
+const OFFLINE = 'This agent is offline. Redeploy it first.';
+
+/**
+ * A run that ended without doing anything because its agent couldn't take it then: the budget was used up by the time
+ * it left the queue, or the agent was taken offline while it waited. A mission step tries again (missions.ts).
+ */
+export const turnedDown = (r: Record<string, unknown>) =>
+  !Number(r.cost_usd) && ((r.status === 'error' && /^Today's (AI )?budget .* is used up/.test(String(r.error))) || (r.status === 'cancelled' && r.error === OFFLINE));
 
 /** The agent's final answer: the text after its last tool step. */
 export function finalText(transcript: AgentEvent[]): string {

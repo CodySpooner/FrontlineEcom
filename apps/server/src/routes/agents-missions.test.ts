@@ -96,7 +96,7 @@ test('after an app restart each step follows the retry of its own run, even when
   expect(copy.task).toMatch(/\n- Market Analyst: .+/);
 });
 
-test('a step whose run fails before it starts (budget under a cent) fails once and blocks the mission once', async () => {
+test("a step whose agent has under a cent left waits with a note: no run is started that couldn't spend", async () => {
   await send('PATCH', '/api/agents/glow:market_analyst', { dailyBudgetUsd: 0.005 });
   await send('PATCH', '/api/agents/glow:email_sms', { enabled: false }); // a parallel step turned down in the same pass
   const m = await create({
@@ -107,10 +107,10 @@ test('a step whose run fails before it starts (budget under a cent) fails once a
       { id: 'flow', role: 'email_sms', task: 'Draft the launch email flow now.' },
     ],
   });
-  expect([m.status, ...m.steps.map((s) => s.status)]).toEqual(['blocked', 'error', 'blocked', 'waiting']);
-  // Stuck, not "waiting": the turned-down step won't be tried again.
-  expect(db.prepare(`SELECT count(*) AS n FROM agent_runs WHERE agent_id = 'glow:market_analyst'`).get()?.n).toBe(1);
-  expect(notes()).toEqual([{ title: 'Mission stuck: Broke launch', body: "The Market Analyst's step failed, so the steps that need it didn't start." }]);
+  expect([m.status, ...m.steps.map((s) => s.status), m.steps[0]!.note]).toEqual(['running', 'waiting', 'waiting', 'waiting', 'Today\'s budget for this agent ($0.005) is used up. Raise it in its settings.']);
+  // start() turns it down as the queue would: taken there and refused, the step would come back and loop.
+  expect(db.prepare(`SELECT count(*) AS n FROM agent_runs WHERE agent_id = 'glow:market_analyst'`).get()?.n).toBe(0);
+  expect(notes().map((n) => n.title)).toEqual(['Mission waiting: Broke launch', 'Mission waiting: Broke launch']);
 });
 
 test("a step turned down for the store's AI budget starts once the owner raises the cap, though no run ends", async () => {
@@ -129,6 +129,60 @@ test("a step turned down for the store's AI budget starts once the owner raises 
   } finally {
     vi.useRealTimers();
   }
+});
+
+test('a step whose budget ran out while it was queued waits, and starts once the owner raises the cap', async () => {
+  await send('PUT', '/api/caps/glow', { agentCostPerDay: 1 });
+  runManager(db).start('glow:market_analyst', 'Something else first.'); // the step queues behind it
+  const created = await create({ title: 'Budget queue', steps: [{ id: 'numbers', role: 'market_analyst', task: 'Pull the numbers for the plan.' }] });
+  expect(created.steps[0]!.status).toBe('queued');
+  const now = new Date().toISOString(); // another agent spends the rest of today's budget meanwhile
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at, ended_at) VALUES ('spent', 'glow', 'glow:ad_strategist', 't', 'done', 1, ?, ?)`).run(now, now);
+  await runManager(db).idle();
+  const waiting = await get<SquadMission>(`/api/squad-missions/${created.id}`);
+  expect([waiting.status, waiting.steps[0]!.status, waiting.steps[0]!.note]).toEqual(['running', 'waiting', "Today's AI budget for this store ($1) is used up. Raise it in Settings."]);
+  await send('PUT', '/api/caps/glow', { agentCostPerDay: 50 });
+  await send('PATCH', '/api/agents/glow:copywriter', { autonomy: 'ask' }); // any pass over the missions, like the minute tick
+  expect((await settle(created.id)).status).toBe('done');
+});
+
+test('a queued step whose agent the owner takes offline waits, and starts when the agent is back', async () => {
+  runManager(db).start('glow:market_analyst', 'Something else first.');
+  const created = await create({ title: 'Offline queue', steps: [{ id: 'numbers', role: 'market_analyst', task: 'Pull the numbers for the plan.' }] });
+  await send('PATCH', '/api/agents/glow:market_analyst', { enabled: false });
+  const waiting = await get<SquadMission>(`/api/squad-missions/${created.id}`);
+  expect([waiting.status, waiting.steps[0]!.status, waiting.steps[0]!.note]).toEqual(['running', 'waiting', 'This agent is offline. Redeploy it first.']);
+  await send('PATCH', '/api/agents/glow:market_analyst', { enabled: true });
+  expect((await settle(created.id)).status).toBe('done');
+});
+
+test('two missions with the same first step get a run each: calling one off leaves the other going', async () => {
+  runManager(db).start('glow:market_analyst', 'Something else first.'); // their first steps queue behind it
+  const plan = { title: 'Twin plan', steps: [{ id: 'numbers', role: 'market_analyst' as const, task: 'Pull the numbers for the twin plan.' }] };
+  const [a, b] = [await create(plan), await create(plan)];
+  expect(b.steps[0]!.runId).not.toBe(a.steps[0]!.runId);
+  await send('POST', `/api/squad-missions/${a.id}/cancel`);
+  expect((await settle(b.id)).status).toBe('done');
+  expect(notes().map((n) => n.title)).toEqual(['Mission done: Twin plan']);
+});
+
+test('after a restart two cut-off steps with the same brief are retried as two linked runs, though the queue is full', async () => {
+  db = openDb();
+  seedDemo(db);
+  const at = (i: number) => new Date(Date.now() - 60_000 + i * 1000).toISOString();
+  const add = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at) VALUES (?, 'glow', ?, ?, 'running', ?)`);
+  add.run('other-1', 'glow:copywriter', 'Copy job.', at(0)); // retried first: they take the store's two slots
+  add.run('other-2', 'glow:operations', 'Ops job.', at(1));
+  for (const [i, id] of ['m1', 'm2'].entries()) {
+    add.run(`cut-${id}`, 'glow:market_analyst', 'Pull the numbers.', at(2 + i));
+    const steps = [
+      { id: 'numbers', role: 'market_analyst', task: 'Pull the numbers.', dependsOn: [], runId: `cut-${id}` },
+      { id: 'copy', role: 'copywriter', task: 'Write the ad copy from the numbers.', dependsOn: ['numbers'] },
+    ];
+    db.prepare(`INSERT INTO squad_missions (id, store_id, title, steps_json, created_at) VALUES (?, 'glow', 'Restarted', ?, ?)`).run(id, JSON.stringify(steps), at(2 + i));
+  }
+  app = createApp(db);
+  expect([(await settle('m1')).status, (await settle('m2')).status]).toEqual(['done', 'done']);
 });
 
 test('a damaged mission row is skipped by run ends and app start alike', async () => {

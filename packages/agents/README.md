@@ -69,7 +69,7 @@ It starts as the child run of the first of those steps, and their final answers 
 the first 500 and the last 1,500: the result, and what the step was asked to end with for the next ones). Only the plan, the
 run ids and the one-line deliverables are stored; every status is read off the runs. After an app restart a step follows
 the run that retried it. A failed or cancelled step blocks the steps after it. A step its agent turns down (offline, or
-today's budget is spent) waits with a note, and the owner is told once. It starts when that agent is changed, another
+today's budget is spent, even after it was queued: `turnedDown`) waits with a note, and the owner is told once. It starts when that agent is changed, another
 run ends, or within a minute of the cap being raised or the day turning over. The owner also hears when a mission is done or stuck.
 The owner can call a mission off (`POST /api/squad-missions/:id/cancel`): steps not done are cancelled and it ends as
 `cancelled`, without a "stuck" note. `MISSION_TEMPLATES` holds "Launch a new
