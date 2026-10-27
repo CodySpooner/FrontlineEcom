@@ -280,16 +280,14 @@ export const APP_TOOLS: AppTool[] = [
   defineTool({
     name: 'list_products',
     description:
-      'The store catalog, best sellers first: price, compare-at, unit cost ("not set" when nobody entered one; margin then blank), margin % (after unit cost and the fee estimate set for the store: its % plus its per-order fee, as if one unit per order), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last `days` days (default 30), revenue net of Amazon refunds (CSV).',
+      'The store catalog, best sellers first (sells_on: a channel or shop next to the store, whose products the app can\'t change): price, compare-at, unit cost ("not set" when nobody entered one; margin then blank), margin % (after unit cost and the fee estimate set for the store: its % plus its per-order fee, as if one unit per order), inventory ("not tracked" when the platform does not count its stock, e.g. dropshipped: not sold out), status, and units / revenue from paid orders in the last `days` days (default 30), revenue net of Amazon refunds (CSV).',
     input: {
       status: z.enum(['active', 'draft', 'archived']).optional().describe('default: active and draft (archived = deleted or trashed on the platform)'),
       days: z.number().int().min(1).max(90).default(30).describe('sales window, e.g. 7 for the week'),
       limit: z.number().int().min(1).max(500).default(100),
     },
-    run: async ({ status, days, limit }, ctx) =>
-      amazonUnsplit(ctx, days) +
-      csv(
-        ctx.db
+    run: async ({ status, days, limit }, ctx) => {
+      const rows = ctx.db
           .prepare(
             `SELECT p.id, p.title, p.price, p.compare_at, iif(p.cost > 0, p.cost, 'not set') AS cost,
                iif(p.cost > 0, round(100.0 * (p.price * (1 - (SELECT fee_percent FROM stores WHERE id = p.store_id) / 100.0) - (SELECT fee_per_order FROM stores WHERE id = p.store_id) - p.cost) / nullif(p.price, 0), 1), NULL) AS margin_pct,
@@ -309,8 +307,12 @@ export const APP_TOOLS: AppTool[] = [
              ) s ON s.product_id = p.id
              WHERE p.store_id = ? ${status ? 'AND p.status = ?' : "AND p.status != 'archived'"} ORDER BY revenue_${days}d DESC, p.title LIMIT ?`,
           )
-          .all(...([ctx.store.id, since(days, ctx.store), ctx.store.id, since(days, ctx.store), ctx.store.id, ...(status ? [status] : []), limit] as string[])),
-      ),
+          .all(...([ctx.store.id, since(days, ctx.store), ctx.store.id, since(days, ctx.store), ctx.store.id, ...(status ? [status] : []), limit] as string[]));
+      // A product of a channel or shop next to the store: the app changes only the store's own (productGone).
+      const on = (id: unknown) => NEXT_TO.find(([prefix, platform]) => String(id).startsWith(prefix) && ctx.store.platform !== platform)?.[2] ?? '';
+      const next = rows.some((r) => on(r.id));
+      return amazonUnsplit(ctx, days) + csv(next ? rows.map((r) => ({ ...r, sells_on: on(r.id) })) : rows);
+    },
   }),
   defineTool({
     name: 'list_orders',

@@ -204,6 +204,20 @@ describe('agent tools on demo data', () => {
     expect(events.at(-1)).toEqual(done);
   });
 
+  test('list_products says which products sell on a channel or shop next to the store', async () => {
+    const list = async () => results(await run(input('glow', 'market_analyst'), [{ call: 'list_products', input: { limit: 500 } }, done]))[0]!.output.split('\n');
+    expect((await list())[0]).not.toContain('sells_on'); // a store selling only on its own platform
+    db.prepare(`INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', 'etsy-88', 'Jade Roller', 20, 5, 9, 'active')`).run();
+    try {
+      const [header, ...rows] = await list();
+      expect(header).toMatch(/,sells_on$/);
+      expect(rows.find((r) => r.startsWith('etsy-88,'))).toMatch(/,Etsy$/);
+      expect(rows.find((r) => r.startsWith('glow-'))).toMatch(/,$/);
+    } finally {
+      db.prepare(`DELETE FROM products WHERE store_id = 'glow' AND id = 'etsy-88'`).run();
+    }
+  });
+
   test("list_products revenue is net of Amazon refunds on the product's paid orders", async () => {
     const id = String(db.prepare(`SELECT id FROM products WHERE store_id = 'glow' AND status = 'active' LIMIT 1`).get()?.id);
     const day = addDays(localDate(), -2);
