@@ -106,7 +106,7 @@ Files: `packages/agents/src/codex.ts`, `fake-codex.ts`, `codex.test.ts`, `packag
 the Codex CLI: read your own `exec --json` event shapes, `features list` and resume flags instead of guessing. Bugs
 found in runs, teams or product-research code go to that lane's Inbox.
 
-- [ ] CH-12 A failed or refused call to one of the app's own tools vanishes (`codex.ts` ~219
+- [x] CH-12 A failed or refused call to one of the app's own tools vanishes (`codex.ts` ~219
   `if (it.server === 'frontline') return [];`). Make it a visible tool error; fixes limitation 1 in
   `docs/features/ai-agents-report.md`.
 - [ ] CH-13 `featuresChanged` (~80-83) only checks the known-off list, so a new on-by-default feature in an untested
@@ -161,6 +161,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-12: two failing regressions proved CLI-side refusals and failed MCP results disappeared. Failed frontline calls now emit tool errors; successful calls remain endpoint-owned. Checked the 0.163.0 exec_events.rs contract and installed resume help. pnpm check green (233 files / 1,727 tests, 4 workers).
 
 - 2026-10-28 CH-11 / AGT-245: confirmed all four account mappings already shipped; new adjacent tests cover immediate errors, isAccountError classification, nested-frame isolation, and result usage/session preservation. No SDK calls/options changed; 27 focused tests and pnpm check green (233 files / 1,725 tests, 4 workers).
 

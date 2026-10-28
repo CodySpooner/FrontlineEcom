@@ -216,7 +216,7 @@ export function codexEvents(input: Pick<RunInput, 'onSession' | 'onRuntime'>) {
         said = false;
         return [{ type: 'tool_call', id, name: 'WebSearch', input: { query: it.query } }, { type: 'tool_result', id, output: 'Searched the web.', isError: false }];
       case 'mcp_tool_call': {
-        if (it.server === 'frontline') return [];
+        if (it.server === 'frontline' && it.status !== 'failed') return [];
         said = false;
         const result = it.result as { content?: { type: string; text?: string }[] } | undefined;
         const error = (it.error as { message?: string } | undefined)?.message;

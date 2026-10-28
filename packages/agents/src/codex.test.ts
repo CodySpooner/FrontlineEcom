@@ -26,6 +26,19 @@ const answering = () =>
   });
 
 describe('codex exec --json events', () => {
+  test.each([
+    { result: null, error: { message: 'Tool call refused: approval required' } },
+    { result: { content: [{ type: 'text', text: 'Unknown tool: read_theme_files' }] }, error: null },
+  ])('a failed frontline call remains visible even when the endpoint never handled it: %j', (failure) => {
+    const map = codexEvents({});
+    const item = { id: 'failed-tool', type: 'mcp_tool_call', server: 'frontline', tool: 'read_theme_files', arguments: {}, status: 'failed', ...failure };
+    expect(map.line(JSON.stringify({ type: 'item.completed', item }))).toEqual([
+      { type: 'tool_call', id: 'failed-tool', name: 'mcp__frontline__read_theme_files', input: {} },
+      { type: 'tool_result', id: 'failed-tool', output: failure.error?.message ?? failure.result!.content[0]!.text, isError: true },
+    ]);
+    expect(map.line(JSON.stringify({ type: 'item.completed', item: { ...item, status: 'completed', error: null } }))).toEqual([]);
+  });
+
   test('a turn (recorded up to Stop, then from source): the thread is the session, app tool calls come from the endpoint, a reroute is said and recorded, the answer and tokens arrive', () => {
     const onSession = vi.fn();
     const onRuntime = vi.fn();
