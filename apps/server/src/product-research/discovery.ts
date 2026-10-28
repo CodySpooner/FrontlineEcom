@@ -159,7 +159,7 @@ export function discover(db: Db, query: DiscoveryQuery, now = new Date()): PrDis
   const offset = Math.max(Number.parseInt(query.cursor ?? '0', 10) || 0, 0);
   const rows = db
     .prepare(
-      `SELECT p.id, p.title, p.category, p.image_ref, f.cost_ship_minor, f.cost_ship_offer_id, f.fulfillment_status, f.fulfillment_checked_at, f.demand_class,
+      `SELECT p.id, p.title, p.category, f.cost_ship_minor, f.cost_ship_offer_id, f.fulfillment_status, f.fulfillment_checked_at, f.demand_class,
          f.demand_peak_month, f.demand_set_id, f.demand_sets, f.first_seen_at, f.evidence_at, f.rule_flags
          ${store ? ', e.stage, e.fit, e.fit_reasons_json, e.flags_json, e.flag_dismissals_json' : ''}
        ${from} WHERE ${all} AND ${VIEW[query.view].sql} ORDER BY ${ORDER[query.sort]}, p.id LIMIT ? OFFSET ?`,
@@ -298,7 +298,11 @@ function card(db: Db, r: Record<string, unknown>, ctx: { store: Store | null; sh
   return {
     id,
     title: String(r.title),
-    imageRef: str(r.image_ref),
+    imageListing: str(
+      db
+        .prepare(`SELECT id FROM pr_listings WHERE product_id = ? AND image_ref IS NOT NULL AND origin != 'legacy_sample' ${store ? 'AND (store_id IS NULL OR store_id = ?)' : ''} ORDER BY store_id IS NOT NULL, first_seen_at LIMIT 1`)
+        .get(id, ...(store ? [store.id] : []))?.id,
+    ),
     category: str(r.category),
     source: { id: String(l.source), label, host: origin === 'owner_link' || origin === 'agent_find' ? host : null, origin },
     fixture: origin === 'fixture',

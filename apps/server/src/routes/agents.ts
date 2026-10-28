@@ -71,7 +71,7 @@ import { localDate } from '../dates';
 import { dataDir, type Db } from '../db';
 import { log } from '../log';
 import { askKnowledge } from '../kb/ask';
-import { createFetcher } from '../kb/fetcher';
+import { kbFetch } from '../kb/fetch-instance';
 import { researchRoutes } from '../research';
 import { mirrorFind } from '../product-research/legacy';
 import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, EXPIRED_DEMO, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
@@ -445,8 +445,6 @@ function startFresh(db: Db, store: Store, runs: RunManager) {
 }
 
 /** Starts the mission steps that finished runs unblocked; the live feed sees every move, the owner hears when one ends. */
-// One fetcher for the app: its per-site gap and robots.txt cache only hold if every task shares it.
-const kbFetch = createFetcher();
 
 /** Moves knowledge-base research tasks on (kb-research.ts), streams them, and tells the owner how each one ended. */
 export function advanceKbResearch(db: Db) {

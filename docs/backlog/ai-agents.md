@@ -1210,6 +1210,10 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 - [x] (from product-research, FYI, done) T6 shipped in PR-03: `recordFind` in `routes/agents.ts` calls `mirrorFind`
   after its INSERT, and `ToolEnv.recordFind` in `packages/agents/src/tools.ts` now also receives the run id
   (`ctx.runId`). A demo-engine run's find is not mirrored.
+- [x] (from product-research, FYI, done) T2 shipped in PR-10: the shared fetcher moved to `kb/fetch-instance.ts`
+  (`export const kbFetch`); `routes/agents.ts` imports it instead of creating it, behaviour unchanged. The fetcher
+  also has an opt-in `image` mode (T3) that product research's image cache uses. Agent WebFetch through it is still
+  the open request above.
 
 ## Items
 

@@ -31,13 +31,19 @@ export interface Fetched {
   text?: string;
   /** Why it wasn't read. */
   error?: string;
+  /** Image mode only: the image, and the type its first bytes show (never the server's word for it). */
+  bytes?: Uint8Array;
+  imageType?: ImageType;
 }
+export type ImageType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
 const AGENT = 'FrontlineEcomBot';
 const HEADERS = {
   'user-agent': `${AGENT}/1.0 (research for a store owner's knowledge base; obeys robots.txt)`,
   accept: 'text/html,application/xhtml+xml,application/pdf,text/plain,text/markdown,text/csv;q=0.9',
 };
+const IMAGE_HEADERS = { ...HEADERS, accept: 'image/png,image/jpeg,image/webp,image/gif;q=0.9' };
+const IMAGE_MAX = 5 * 1_048_576;
 const HTML = ['text/html', 'application/xhtml+xml'];
 const TEXT = ['text/plain', 'text/markdown', 'text/x-markdown', 'text/csv'];
 const DAY = 86_400_000;
@@ -62,6 +68,26 @@ async function readBody(reply: Reply, max: number) {
     chunks.push(c);
   }
   return Buffer.concat(chunks);
+}
+
+/** The image type from its magic bytes: png, jpeg, webp or gif. Never SVG (it can carry script). */
+export function sniffImage(b: Uint8Array): ImageType | null {
+  const at = (i: number, ...v: number[]) => v.every((x, j) => b[i + j] === x);
+  if (at(0, 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return 'image/png';
+  if (at(0, 0xff, 0xd8, 0xff)) return 'image/jpeg';
+  if (at(0, 0x52, 0x49, 0x46, 0x46) && at(8, 0x57, 0x45, 0x42, 0x50)) return 'image/webp';
+  if (at(0, 0x47, 0x49, 0x46, 0x38) && (b[4] === 0x37 || b[4] === 0x39) && b[5] === 0x61) return 'image/gif';
+  return null;
+}
+
+/** Image mode's reply: at most 5 MB, and only when the bytes are one of the four image types. */
+async function image(url: URL, reply: Reply): Promise<Fetched> {
+  const at = url.href;
+  if (reply.status < 200 || reply.status >= 300) return { url: at, status: 'failed', error: `The site answered HTTP ${reply.status}` };
+  const bytes = await readBody(reply, IMAGE_MAX);
+  if (!bytes) return { url: at, status: 'too_large', error: 'The image is over the 5 MB limit' };
+  const imageType = sniffImage(bytes);
+  return imageType ? { url: at, status: 'read', bytes, imageType } : { url: at, status: 'unsupported', error: "That isn't a png, jpeg, webp or gif image" };
 }
 
 /** Whether robots.txt lets this tool read `path` (path and query): its own group, else `*`; the longest rule wins, Allow on a tie. */
@@ -266,7 +292,8 @@ export function createFetcher({
     return answers.find((a) => a.family === 4) ?? answers[0]!;
   }
 
-  return async function get(input: string, { blocked = [] as string[] } = {}): Promise<Fetched> {
+  // `image`: off by default; reads one png, jpeg, webp or gif (product research's image cache) instead of a document.
+  return async function get(input: string, { blocked = [] as string[], image: asImage = false } = {}): Promise<Fetched> {
     let url: URL;
     try {
       url = new URL(input);
@@ -275,7 +302,7 @@ export function createFetcher({
     }
     // One DNS answer per host per fetch: robots.txt and the page use the same checked address.
     const hosts = new Map<string, Promise<Addr>>();
-    const ask = async (u: URL) => {
+    const ask = async (u: URL, headers: Record<string, string> = HEADERS) => {
       const host = u.hostname.replace(/^\[(.*)\]$/, '$1').toLowerCase();
       if (!hosts.has(host)) hosts.set(host, vet(host));
       const to = await hosts.get(host)!;
@@ -284,7 +311,7 @@ export function createFetcher({
       next.set(host, at + gapMs);
       if (at > Date.now()) await new Promise((ok) => setTimeout(ok, at - Date.now()));
       next.set(host, Math.max(next.get(host)!, Date.now() + gapMs));
-      return transport(u, to, HEADERS, timeoutMs);
+      return transport(u, to, headers, timeoutMs);
     };
     /** The site's robots.txt ('' when it has none), or null when it can't say (5xx, 429): then nothing is read. */
     const rules = async (u: URL) => {
@@ -316,10 +343,10 @@ export function createFetcher({
         if (bad) return { url: url.href, status: 'blocked_domain', error: `${bad} is on this workspace's blocked list` };
         const txt = await rules(url);
         if (txt === null || !robotsAllows(txt, url.pathname + url.search)) return { url: url.href, status: 'blocked_robots', error: "The site's robots.txt asks tools not to read this page" };
-        const reply = await ask(url);
+        const reply = await ask(url, asImage ? IMAGE_HEADERS : HEADERS);
         try {
           const to = reply.status >= 300 && reply.status < 400 ? reply.headers.location : undefined;
-          if (!to) return await document(url, reply, maxBytes);
+          if (!to) return asImage ? await image(url, reply) : await document(url, reply, maxBytes);
           if (hop === 5) return { url: url.href, status: 'failed', error: 'Too many redirects (more than 5)' };
           url = new URL(to, url);
         } finally {

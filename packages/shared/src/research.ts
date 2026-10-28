@@ -178,7 +178,8 @@ export interface PrFacet {
 export interface PrCard {
   id: string;
   title: string;
-  imageRef: string | null;
+  /** The listing whose cached image the card shows (`GET /api/pr/listings/:id/image`); null: the neutral icon. */
+  imageListing: string | null;
   /** null: "Category unknown" (kept in store scope, decision 5). */
   category: string | null;
   /** The listing the card names ("<source> · <category>", "Your link · <host>"). */
@@ -225,4 +226,23 @@ export interface PrDiscovery {
   shipTos: string[];
   /** The ECB rates' date the costs were converted with, when any conversion happened. */
   fxDate: string | null;
+}
+
+/** One source in the strip and the health view (decision 4), from its adapter and `pr_sources`. */
+export interface PrSourceState {
+  id: string;
+  name: string;
+  answers: ('discovery' | 'demand' | 'fulfillment')[];
+  access: PrAccess;
+  /** What the owner does to connect it, or why it can't be. */
+  connect: string;
+  /** `pr_sources.status` (ok, error, stopped), null before its first run. */
+  status: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  errorKind: PrErrorKind | null;
+  /** Products in the scope this source has real data for (fixture rows never count). */
+  products: number;
+  /** Dev fixture rows from this source in the scope: the strip says "test fixtures (not connected)". */
+  fixtures: number;
 }

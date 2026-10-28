@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node --watch --import tsx src/index.ts",
     "start": "tsx src/index.ts",
+    "pr:fixtures": "node --import tsx src/product-research/dev-fixtures-cli.ts",
     "typecheck": "tsc -p ."
   },
   "dependencies": {

@@ -96,7 +96,9 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       await next();
       // Never inside another site's frame: a hidden frame of the app (same origin, so the check above passes) could get
       // the owner to click Approve. The app's own previews are srcdoc frames, which this doesn't touch.
-      c.res.headers.set('Content-Security-Policy', "frame-ancestors 'none'");
+      // A route's own policy (the image proxy's default-src 'none') stays; framing is refused either way.
+      const csp = c.res.headers.get('Content-Security-Policy');
+      c.res.headers.set('Content-Security-Policy', csp ? `${csp}; frame-ancestors 'none'` : "frame-ancestors 'none'");
       c.res.headers.set('X-Frame-Options', 'DENY');
     })
     .use('/api/kb/*', guard)
@@ -216,7 +218,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       return c.json(topProducts(db, storeIds, addDays(to, 1 - range), to, limit, shift));
     })
     .route('/', researchRoutes(db))
-    .route('/', prRoutes(db))
+    .route('/', prRoutes(db, key))
     .route('/', competitorRoutes(db, (q) => pickStores(db, q)))
     .route('/', automationRoutes(db, (q) => pickStores(db, q)))
     .route('/', settingsRoutes(db))

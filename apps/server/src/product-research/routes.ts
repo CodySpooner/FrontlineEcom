@@ -5,13 +5,19 @@ import { discover, parseDiscovery } from './discovery';
 import { evaluateStore } from './evaluate';
 import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
 import { importFeed } from './feed';
+import { cachedImage, listingImageRef, queueImage } from './images';
 import { getProfile, saveProfile } from './profile';
 import { scopeOf, storeOf } from './scope';
+import { sourceStates } from './sources';
 import { importTrends, linkSet, signalSet } from './trends';
 
 /** Product Research's API (`/api/pr/*`, behind the KB guard: change and body limits). `?store=` sets the scope. */
-export function prRoutes(db: Db) {
+export function prRoutes(db: Db, key: () => Buffer) {
   return new Hono()
+    .get('/api/pr/sources', (c) => {
+      const s = scopeOf(c, db);
+      return s instanceof Response ? s : c.json(sourceStates(db, key(), s.store?.id ?? null));
+    })
     // Discovery (decision 14): the scope's full matching set filtered, sorted and counted in SQL, a page at a time.
     .get('/api/pr/products', (c) => {
       const s = scopeOf(c, db);
@@ -20,6 +26,20 @@ export function prRoutes(db: Db) {
       if ('error' in q) return c.json(q, 400);
       const r = discover(db, { ...q, store: s.store });
       return 'error' in r ? c.json(r, 400) : c.json(r);
+    })
+    // Decision 12: only the cache for the listing's stored image_ref, never a URL from the client. A miss is a 404 (the
+    // card shows its icon) and queues one fetch.
+    .get('/api/pr/listings/:id/image', (c) => {
+      const s = scopeOf(c, db);
+      if (s instanceof Response) return s;
+      const ref = listingImageRef(db, c.req.param('id'), s.store?.id ?? null);
+      if (ref === undefined) return c.json({ error: 'listing not found' }, 404);
+      const hit = ref ? cachedImage(ref) : null;
+      if (!hit) {
+        if (ref) queueImage(ref);
+        return c.json({ error: 'no cached image' }, 404);
+      }
+      return c.body(new Uint8Array(hit.bytes), 200, { 'content-type': hit.type, 'x-content-type-options': 'nosniff', 'content-security-policy': "default-src 'none'", 'cache-control': 'private, max-age=86400' });
     })
     .get('/api/pr/profile', (c) => {
       const store = storeOf(c, db);

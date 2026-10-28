@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { describe, expect, test } from 'vitest';
-import { createFetcher, pinned, readable, readUpload, robotsAllows, type Transport } from './fetcher';
+import { createFetcher, pinned, readable, readUpload, robotsAllows, sniffImage, type Transport } from './fetcher';
 
 const PUBLIC = '93.184.216.34';
 type Page = { status?: number; type?: string; body?: string | Uint8Array; headers?: Record<string, string> };
@@ -298,3 +298,33 @@ function pdf(text: string, title: string) {
   out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
   return new TextEncoder().encode(out);
 }
+
+describe('image mode (product research, off by default)', () => {
+  const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]);
+  const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>';
+  test('reads a png, jpeg, webp or gif by its bytes, never SVG, at most 5 MB; robots.txt and redirects still apply', async () => {
+    const w = web({
+      'https://cdn.example.com/a.png': { type: 'text/plain', body: PNG }, // the type comes from the bytes, not the header
+      'https://cdn.example.com/b.svg': { type: 'image/svg+xml', body: SVG },
+      'https://cdn.example.com/e.png': { type: 'image/png', body: PNG },
+      'https://cdn.example.com/c.jpg': { type: 'image/jpeg', body: new Uint8Array(5 * 1_048_576 + 1).fill(0xff) },
+      'https://cdn.example.com/old.png': { status: 301, headers: { location: '/a.png' } },
+      'https://cdn.example.com/robots.txt': { type: 'text/plain', body: 'User-agent: *\nDisallow: /private/' },
+    });
+    const get = fetcher(w);
+    const png = await get('https://cdn.example.com/a.png', { image: true });
+    expect(png).toMatchObject({ status: 'read', imageType: 'image/png' });
+    expect([...png.bytes!]).toEqual([...PNG]);
+    expect(w.calls.find((c) => c.url.endsWith('a.png'))?.headers.accept).toMatch(/^image\/png/);
+    expect(await get('https://cdn.example.com/b.svg', { image: true })).toMatchObject({ status: 'unsupported' });
+    expect(await get('https://cdn.example.com/c.jpg', { image: true })).toMatchObject({ status: 'too_large' });
+    expect(await get('https://cdn.example.com/old.png', { image: true })).toMatchObject({ status: 'read', url: 'https://cdn.example.com/a.png' });
+    expect(await get('https://cdn.example.com/private/d.png', { image: true })).toMatchObject({ status: 'blocked_robots' });
+    // Without the option a png is not a document.
+    expect(await get('https://cdn.example.com/e.png')).toMatchObject({ status: 'unsupported' });
+  });
+  test('the magic bytes of each type', () => {
+    const b = (...v: number[]) => new Uint8Array([...v, 0, 0, 0, 0, 0, 0, 0, 0]);
+    expect([b(0xff, 0xd8, 0xff), b(0x52, 0x49, 0x46, 0x46, 1, 2, 3, 4, 0x57, 0x45, 0x42, 0x50), b(0x47, 0x49, 0x46, 0x38, 0x39, 0x61), b(0x3c, 0x73, 0x76, 0x67)].map(sniffImage)).toEqual(['image/jpeg', 'image/webp', 'image/gif', null]);
+  });
+});
