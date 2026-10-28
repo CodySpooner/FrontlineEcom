@@ -1203,10 +1203,14 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 - [x] (from product-research) A `product` ConversationContext kind, so a conversation opened from Product Research
   shows "Opened from <product>" (product-research decision 15). Done 2026-10-28: `{ kind: 'product', id, name }`.
-- [ ] (from product-research) Agent WebFetch through the shared `kbFetch` instance (`routes/agents.ts`), so agents
+- [x] (from product-research) Agent WebFetch through the shared `kbFetch` instance (`routes/agents.ts`), so agents
   get the same SSRF, redirect, size and robots rules as product previews (product-research decision 12). Taken in
-  AA-23 (its untrusted-content review covers web reads).
-- [ ] (from product-research) Include `/api/pr/*` in AA-23's security sweep (guarded since PR-02). Taken in AA-23.
+  AA-23 (its untrusted-content review covers web reads). Done 2026-10-28: `WebFetch` is an app tool in `tools.ts`
+  over `ctx.kbFetch` (the store's blocked domains, the page fenced as data); the Claude engine no longer offers its own.
+- [x] (from product-research) Include `/api/pr/*` in AA-23's security sweep (guarded since PR-02). Taken in AA-23.
+  Done 2026-10-28: the by-id routes (listing image, notes, store products, signal links) answer another store 404 and
+  change nothing. One fix in your `trends.ts`: `signalSet` now returns undefined for another store's private set
+  (an order history or note), so `/api/pr/signals/:id/links` 404s instead of a 400 that confirmed the id.
 - [x] (from product-research, FYI, done) T6 shipped in PR-03: `recordFind` in `routes/agents.ts` calls `mirrorFind`
   after its INSERT, and `ToolEnv.recordFind` in `packages/agents/src/tools.ts` now also receives the run id
   (`ctx.runId`). A demo-engine run's find is not mirrored.
@@ -1587,7 +1591,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - reduced motion;
   - screen-reader names for every icon button and status;
   - the smaller-window rules.
-- [ ] AA-23 **Security pass** (decision 13):
+- [x] AA-23 **Security pass** (decision 13):
   - re-run the isolation sweep and the secrets test, check that the sweep table covers every route in decision 13,
     and check that every new start route sits behind the guard;
   - an untrusted-content review of everything that reaches a prompt (KB, web, attachments, handoffs, owner notes, recap);
@@ -1768,6 +1772,15 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   store colour (2.18:1), now near-black or white by luminance. Window widths 1920, 1440, 1366, 1280, 1024×680 and 900
   keep the pane rules with no sideways scroll and long titles truncated; both drawers open with Enter, take focus,
   close with Escape and hand focus back. Reduced motion was already global. 5 web tests.
+- 2026-10-28 AA-23 Security pass: the isolation sweep now covers every by-id route in decision 13 (findings,
+  knowledge, tools, config change, custom-role archive, question answer, save finding) plus Product Research's; the
+  answer route gave another store's question a 409 and now 404s, and another store's private signal set 404s too.
+  Team notes count as starts in the guard. The secrets test now also GETs every API route that doesn't spawn, open a
+  socket or reach the network, for the store holding a Meta token and for All stores; the built web bundle holds
+  field names only, no keys. Untrusted text no longer reaches a prompt bare: an ended session's recap, the expired-
+  history fallback and a Product Research listing's title are fenced, and agent WebFetch goes through the app's
+  reader (`kbFetch`: private addresses, redirects, size, robots, blocked sites) with the page fenced. A team step
+  that proposes an ad change asks the owner like any run; a participant narrowed off the tool can't reach it.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
@@ -1905,6 +1918,18 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-23, 2026-10-28) For AA-24 and later:
+  - **WebFetch is an app tool now** (`tools.ts`, served over the frontline MCP server as `mcp__frontline__WebFetch`;
+    Codex gets it through its MCP endpoint too). The Claude engine filters the built-in out, so the old `privateUrl`
+    check in `canUseTool` went with it: the shared reader refuses private addresses itself. Its input is a full
+    http(s) URL; a bare `host:port` is an invalid input.
+  - **What reaches a prompt, reviewed:** owner messages and notes are the owner's words; KB cards (KB_UNTRUSTED),
+    attachments, team contributions and syntheses, tool results and web pages are fenced or labelled as data; the
+    recap (`conversationPreface`) fences the earlier work itself, so teams use it as is instead of wrapping it again.
+  - **The secrets sweep** reads `app.routes`: a new GET route is swept automatically unless it matches the SKIP list
+    (live, runtimes, Claude sign-in, OAuth, backups, media and images, supplier search).
+  - **Outside the lane:** `UpdatePrompt.test.tsx` (ui, stopped) waits for the popover call; it failed two full runs in
+    a row under load. `trends.ts` (product-research) got the one-line store check above.
 - (AA-22, 2026-10-28) For AA-23 and later:
   - **The audit scripts** are in `.agent/` (not in git): `aa22-audit.mjs` (contrast, names, focus, sideways scroll;
     `AUDIT_OPEN` clicks buttons first), `aa22-sizes.mjs` (pane widths per window size) and `aa22-drawers.mjs` (a

@@ -112,7 +112,7 @@ test('a pre-go-live run is left out of the Change-runtime recap; a conversation 
   insert.run('live-1', 'Live-era question', opened.conversation.id, opened.conversation.configId, '2026-03-01T00:00:00Z', JSON.stringify([{ type: 'text_delta', text: 'Live answer.' }]));
   expect((await change(opened.conversation.id, { runtime: 'claude' })).status).toBe(200);
   const preface = conversationPreface(db, opened.conversation.id)!;
-  expect(preface).toContain('The owner asked: Live-era question\nYou answered: Live answer.');
+  expect(preface).toContain('> The owner asked: Live-era question\n> You answered: Live answer.');
   expect(preface).not.toContain('The owner asked: Demo-era question'); // the title stays
 });
 

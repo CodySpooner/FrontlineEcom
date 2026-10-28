@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { UpdatePrompt } from './UpdatePrompt';
 
 // jsdom hides [popover] elements but has no showPopover to open them: show them as an opened popover would be.
@@ -60,7 +60,7 @@ describe('update prompt', () => {
       desktop('0.2.0');
       render(<UpdatePrompt />);
       await screen.findByText('0.2.0');
-      expect(shown).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(shown).toHaveBeenCalledTimes(1)); // the effect can land after the text under load
       const dialog = document.body.appendChild(document.createElement('dialog'));
       dialog.dispatchEvent(Object.assign(new Event('toggle'), { newState: 'open' }));
       expect(shown).toHaveBeenCalledTimes(2);

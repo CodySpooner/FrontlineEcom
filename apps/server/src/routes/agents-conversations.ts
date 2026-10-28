@@ -199,7 +199,8 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       const b = (await c.req.json().catch(() => null)) as { text?: unknown } | null;
       if (!isText(b?.text, 1, 4000)) return c.json({ error: 'An answer is 1 to 4,000 characters.' }, 400);
       const a = getApproval(db, c.req.param('id'));
-      if (!a || a.storeId !== c.req.query('store') || a.status !== 'pending' || a.action.kind !== 'question') return c.json({ error: 'That question is no longer waiting for an answer.' }, 409);
+      if (!a || a.storeId !== c.req.query('store')) return missing(c, 'Question'); // another store's is a 404 (decision 13)
+      if (a.status !== 'pending' || a.action.kind !== 'question') return c.json({ error: 'That question is no longer waiting for an answer.' }, 409);
       const answered = decide(db, a.id, 'approve', b.text.trim());
       return answered && answered !== 'decided' ? c.json(answered) : c.json({ error: 'That question is no longer waiting for an answer.' }, 409);
     })

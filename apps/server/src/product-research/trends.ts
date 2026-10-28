@@ -84,7 +84,7 @@ export function suggestProducts(db: Db, term: string, store: string | null): str
 /** One set as the API shows it, with only the links to products the scope may see. */
 export function signalSet(db: Db, id: string, store: string | null): PrSignalSet | undefined {
   const r = db.prepare('SELECT s.*, (SELECT count(*) FROM pr_signal_points WHERE signal_id = s.id) AS n FROM pr_signals s WHERE id = ?').get(id);
-  if (!r) return undefined;
+  if (!r || (store !== null && r.store_id != null && r.store_id !== store)) return undefined; // another store's order history or note
   const d = demandOf(db, { id, granularity: r.granularity });
   const v = visible(store, 'l.store_id');
   const links = db

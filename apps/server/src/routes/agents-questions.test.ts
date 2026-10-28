@@ -39,7 +39,7 @@ test('a suggest seat asks: the conversation reads Needs reply, the notice links 
   expect(q).toMatchObject({ status: 'pending', title: 'Lead with the serum or the LED mask?', conversationId: c.id, action: { kind: 'question' } });
   expect(await (await app.request(`/api/conversations/${c.id}?store=glow`)).json()).toMatchObject({ state: 'waiting_for_input' });
   expect(db.prepare(`SELECT link FROM notifications WHERE title = ?`).get(q.title)).toEqual({ link: `/agents/c/${c.id}?store=glow` });
-  expect((await answer(q.id, 'peak', 'The mask')).status).toBe(409); // another store's
+  expect((await answer(q.id, 'peak', 'The mask')).status).toBe(404); // another store's (decision 13)
   expect((await answer(q.id, 'glow', '  ')).status).toBe(400);
   const r = await answer(q.id, 'glow', ' The LED mask ');
   expect(await r.json()).toMatchObject({ status: 'approved', decisionNote: 'The LED mask', conversationId: c.id });
@@ -68,7 +68,7 @@ test("request_approval can't ask a question or save a finding, a run outside a c
   const budget = approvalsHook(db).create({ storeId: 'glow', agentId: 'glow:ad_strategist', title: 'Raise Spring by $20/day', reason: 'ROAS 3.1', action: { kind: 'ads.set_budget', payload: {} } });
   expect((await answer(budget.id, 'glow', 'Yes')).status).toBe(409);
   expect(getApproval(db, budget.id)).toMatchObject({ status: 'pending' });
-  expect((await answer('nope', 'glow', 'Yes')).status).toBe(409);
+  expect((await answer('nope', 'glow', 'Yes')).status).toBe(404);
 });
 
 test('a question still waiting when its run is stopped is closed, unanswered', async () => {

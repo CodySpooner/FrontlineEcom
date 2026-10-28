@@ -49,9 +49,9 @@ const sameHost = (origin: string, url: string) => URL.canParse(origin) && new UR
 const MB = 1_048_576;
 /**
  * Requests that start agent runs: knowledge-base research (new, retried, refined), Ask the knowledge base, a
- * conversation's create, send, retry and resume, and a team's start and a step's resume.
+ * conversation's create, send, retry and resume, and a team's start, note to the lead and a step's resume.
  */
-const STARTS = /^\/api\/(kb\/(ask|research\/tasks(\/[^/]+\/(retry|refine))?)|conversations(\/[^/]+\/(messages|runs\/[^/]+\/(retry|resume)))?|teams(\/[^/]+\/steps\/[^/]+\/resume)?)$/;
+const STARTS = /^\/api\/(kb\/(ask|research\/tasks(\/[^/]+\/(retry|refine))?)|conversations(\/[^/]+\/(messages|runs\/[^/]+\/(retry|resume)))?|teams(\/[^/]+\/(notes|steps\/[^/]+\/resume))?)$/;
 /** Bodies that may carry a document or attachments (10 MB in base64), or a Product Research import. */
 const LARGE = /^\/api\/(kb\/research\/tasks|conversations(\/[^/]+\/messages)?|pr\/imports\/(trends|feed))$/;
 

@@ -7,7 +7,7 @@ import { APP_TOOLS, assemblePrompt, BUILTIN_TYPES, CHECKS_LAST, contractOf, cont
 // playbook, a role prompt, the squad rules, a scheduled job or a mission template is edited without updating the role's tool list.
 
 const ROLE_IDS = Object.keys(AGENT_ROLES) as AgentRole[];
-const SDK_TOOLS = ['WebSearch', 'WebFetch'];
+const SDK_TOOLS = ['WebSearch']; // WebFetch is an app tool (AA-23)
 const KNOWN = new Set<string>([...APP_TOOLS.map((t) => t.name), ...SDK_TOOLS]);
 const mentioned = (text: string) => new Set((text.match(/\b(?:[a-z]+(?:_[a-z]+)+|Web(?:Search|Fetch))\b/g) ?? []).filter((w) => KNOWN.has(w)));
 

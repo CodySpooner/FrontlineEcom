@@ -472,7 +472,7 @@ export function createRunManager(opts: RunManagerOptions) {
     if (!prev) return input;
     // ponytail: only the last exchange; walk the `resume` chain if longer chats need more.
     const said = (JSON.parse(String(prev.transcript_json ?? '[]')) as AgentEvent[]).flatMap((e) => (e.type === 'text_delta' ? [e.text] : [])).join('\n').slice(-3000);
-    return { ...input, task: `Earlier in this chat (its full history has expired) you were asked: ${prev.task}\nYou answered: ${said}\n\nNow: ${input.task}` };
+    return { ...input, task: `Earlier in this chat (its full history has expired):\n${untrustedBlock('the last exchange in this chat', `You were asked: ${prev.task}\nYou answered: ${said}`)}\n\nNow: ${input.task}` };
   }
 
   /** Asks the agent, in the same session, what it learned, and saves that as store memory. Never fails the run. */

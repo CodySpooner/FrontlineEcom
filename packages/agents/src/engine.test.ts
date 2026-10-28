@@ -222,7 +222,7 @@ describe('Claude engine', () => {
       resume: 'abc',
       includePartialMessages: true,
       settingSources: [],
-      tools: ['WebSearch', 'WebFetch'],
+      tools: ['WebSearch'], // WebFetch comes over the app's MCP server (AA-23)
       skills: [],
       strictMcpConfig: true, // the owner's claude.ai connectors stay out of agent runs
       maxTurns: 3,

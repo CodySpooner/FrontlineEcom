@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { conversationState, runState, type AgentRun, type AgentRunDetail, type Conversation, type ConversationContext, type ConversationCounts, type ConversationPage, type CreativeKind, type CursorPage, type ConversationFinding, type KbCardStatus, type KbStage, type KnowledgeUse, type RunDeliverable, type Store } from '@frontline/shared';
 import { saveConfig, type AgentType, type ConfigDraft } from './configs';
 import { ftsQuery } from './kb-retrieve';
+import { untrustedBlock } from './kb-sources';
 import { finalText, getRun } from './runs';
 import { teamRecord } from './teams';
 
@@ -182,8 +183,9 @@ export function recap(db: DatabaseSync, storeId: string, runIds: string[], title
   // This store's cards and General ones only: a card id from elsewhere names nothing here.
   const ids = [...new Set(runs.flatMap((r) => [...finalText(r.transcript).matchAll(/\[kb:([\w-]+)\]/g)].map((m) => m[1]!)))].slice(0, 10);
   const cards = ids.flatMap((id) => db.prepare('SELECT id, title FROM kb_cards WHERE id = ? AND (store_id = ? OR store_id IS NULL)').all(id, storeId)).map((k) => `[kb:${k.id}] ${k.title}`);
+  // Earlier answers can quote web pages, reviews or files: they come back as data, like a team's contributions.
   return (
-    `${title ? `This continues "${title}". ` : ''}Earlier work, from a session that has ended:\n\n${objective}${text.trim()}` +
+    `${title ? `This continues "${title}". ` : ''}Earlier work, from a session that has ended:\n\n${untrustedBlock('the earlier work in this conversation', `${objective}${text.trim()}`)}` +
     (cards.length ? `\n\nKnowledge cards cited: ${cards.join('; ')}.` : '')
   );
 }
@@ -214,8 +216,9 @@ function openedFrom(db: DatabaseSync, storeId: string, context?: ConversationCon
   if (context?.kind === 'product') {
     // The record from Product Research, not what the page passed.
     const p = db.prepare('SELECT title, category FROM pr_products WHERE id = ?').get(context.id);
-    if (!p) return `The owner opened this from the Product Research product "${context.name}" (id ${context.id}), which is no longer there.`;
-    return `The owner opened this from the Product Research product "${p.title}" (id ${context.id}${p.category ? `, ${p.category}` : ''}). Check what you need with your tools before you act.`;
+    // A product's title and category come from a supplier's listing: data, fenced.
+    if (!p) return `The owner opened this from a Product Research product (id ${context.id}) that is no longer there. Its name, as the page showed it:\n${untrustedBlock("the product's name", context.name, 300)}`;
+    return `The owner opened this from a Product Research product (id ${context.id}). Check what you need with your tools before you act. Its title and category, from a supplier's listing:\n${untrustedBlock("the product's listing", `${p.title}${p.category ? `\n${p.category}` : ''}`, 600)}`;
   }
   if (context?.kind === 'campaign') {
     // The record from the store's own data, not what the module passed.
