@@ -52,6 +52,7 @@ test('the cache keeps only real images and drops the least recently served past 
   await fetchImage('https://x/1.png', ok, 30);
   await new Promise((r) => setTimeout(r, 20));
   await fetchImage('https://x/2.png', ok, 30);
+  await new Promise((r) => setTimeout(r, 20)); // the touch is whole milliseconds; 2's write time isn't, so leave a gap
   cachedImage('https://x/1.png'); // served: now the newest
   await new Promise((r) => setTimeout(r, 20));
   await fetchImage('https://x/3.png', ok, 30); // 36 bytes > 30: the least recently served (2) goes
