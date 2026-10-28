@@ -49,7 +49,7 @@ export interface ToolEnv {
   externalMcp?: (storeId: string) => Partial<Record<ExternalMcpKind, ExternalMcp>>;
   /** Adds a product found on the web to core's research feed; returns it with its AI score. */
   /** `repeat`: the niche's feed already had this find (same title), so its numbers were refreshed instead. */
-  recordFind?: (find: Omit<ResearchProduct, 'id' | 'margin' | 'score' | 'scoreParts'>) => Promise<ResearchProduct & { repeat?: boolean }>;
+  recordFind?: (find: Omit<ResearchProduct, 'id' | 'margin' | 'score' | 'scoreParts'>, runId?: string) => Promise<ResearchProduct & { repeat?: boolean }>;
   /** Renders media on Higgsfield and returns a local URL for it; undefined when Higgsfield isn't connected (demo render). */
   generateMedia?: (req: { kind: Exclude<CreativeKind, 'copy'>; aspect: AspectRatio; prompt: string }, signal?: AbortSignal) => Promise<string | undefined>;
   /** Queues a run for a squadmate (the app's run manager); returns the run or why it can't start. */
@@ -500,7 +500,7 @@ export const APP_TOOLS: AppTool[] = [
       // A custom niche's finds carry its slug, so each custom niche's feed is its own (core's niche_detail).
       const nicheDetail = nicheKey(ctx.store).split(':')[1];
       // 0 is none: the feed's column takes a number, and core creates a product with compare-at 0 without one (CORE-104).
-      const p = await ctx.recordFind({ ...find, compareAt: find.compareAt ?? 0, niche: ctx.store.niche, ...(nicheDetail ? { nicheDetail } : {}) });
+      const p = await ctx.recordFind({ ...find, compareAt: find.compareAt ?? 0, niche: ctx.store.niche, ...(nicheDetail ? { nicheDetail } : {}) }, ctx.runId); // the run: Product Research mirrors its find (T6)
       return `${p.repeat ? `Already in the research feed as ${p.id}; refreshed its numbers` : `Added to the research feed as ${p.id}`}: AI score ${p.score} (margin ${p.scoreParts.margin}, trend ${p.scoreParts.trend}, competition ${p.scoreParts.competition}, shipping ${p.scoreParts.shipping}), margin ${p.margin}%.`;
     },
   }),

@@ -61,6 +61,22 @@ const getList = (db: Db, id: string): ProductList | undefined => {
   return { id: String(r.id), name: String(r.name), productIds: items.map((i) => String(i.product_id)), createdAt: String(r.created_at) };
 };
 
+/**
+ * Product Research (decision 2): watching a listing that stands for a legacy research row keeps that row in the owner's
+ * "Saved" list (created if missing), and un-watching it takes it out, so the agents' research_feed still sees what the
+ * owner saved (`saved_by_owner`).
+ */
+export function mirrorSaved(db: Db, productId: string, saved: boolean) {
+  if (!getProduct(db, productId)) return;
+  let list = db.prepare("SELECT id FROM product_lists WHERE name = 'Saved' ORDER BY created_at, rowid LIMIT 1").get()?.id as string | undefined;
+  if (saved) {
+    if (!list) db.prepare('INSERT INTO product_lists (id, name, created_at) VALUES (?, ?, ?)').run((list = randomUUID()), 'Saved', new Date().toISOString());
+    db.prepare('INSERT OR IGNORE INTO product_list_items (list_id, product_id, added_at) VALUES (?, ?, ?)').run(list, productId, new Date().toISOString());
+  } else if (list) {
+    db.prepare('DELETE FROM product_list_items WHERE list_id = ? AND product_id = ?').run(list, productId);
+  }
+}
+
 export function researchRoutes(db: Db) {
   return new Hono()
     .get('/api/research', (c) => {

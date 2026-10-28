@@ -9,6 +9,7 @@ import { dataDir, dbFile, openDb } from './db';
 import { seedCreatives, seedDemo } from './demo';
 import { startDemoEmitter } from './live';
 import { seedResearch } from './research';
+import { importLegacy } from './product-research/legacy';
 import { autoDeps, scheduledResearch } from './kb/autonomy';
 import { startKbPerformanceLoop } from './kb/performance';
 import { startKbPromotionLoop } from './kb/promote';
@@ -27,6 +28,7 @@ const db = openDb(dbFile());
 seedDemo(db);
 seedCreatives(db);
 seedResearch(db);
+importLegacy(db); // product-research: the owner's lists and the agents' finds, once
 seedCompetitors(db);
 startDemoEmitter(db);
 const key = loadKey(dataDir());

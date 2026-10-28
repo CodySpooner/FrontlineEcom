@@ -688,7 +688,7 @@ STOP.
   `PRAGMA foreign_key_check`), the shared `Pr*` types in `packages/shared/src/research.ts`, the store-scoping helper
   every route uses (store rows, NULL-store rows, private rows), and the `/api/pr/*` mount with its guard (T7, mount
   part). Write the migration for everything decision 3 lists; later items add their own appended migrations.
-- [ ] PR-03 **Existing data** (decision 2): the one-time import of lists, saved items and agent finds (`once`), legacy
+- [x] PR-03 **Existing data** (decision 2): the one-time import of lists, saved items and agent finds (`once`), legacy
   ids kept; `seedResearch` and `research_products` untouched; T6; the Watch ↔ "Saved" mirror; `/api/research*` still
   answering. Tests: an upgraded database keeps every list item; a re-run of boot doesn't re-add an un-watched item; a
   sample row never appears in discovery, counts or sorts; a demo-engine find is not mirrored.
@@ -716,7 +716,8 @@ STOP.
 - [ ] PR-09 **Discovery API:** server-side search, filters (spec §7's, as the design's chips list them), sorts (nulls
   last), cursor paging, tab counts, facet values and "unknown included" handling, store scope (included categories) vs
   All stores, private rows. SQL only over `pr_product_facts` and `pr_evaluations`; an index for every filter and sort
-  the page uses; a test with 10,000 products.
+  the page uses; a test with 10,000 products. Also PR-03's test: a sample row never appears in discovery, counts or
+  sorts.
 - [ ] PR-10 **Page frame, product grid, image proxy and dev fixtures** (The design: page frame and product card;
   decisions 12, 14): replace the page, keep `/research` and its nav entry (looked up by path), toolbar, profile line,
   filter chips, tabs, source strip, grid and cards, URL and storage state, the distinct states, the image proxy, and
@@ -823,6 +824,10 @@ STOP.
   calls; per-store profiles, evaluations, history, tasks, reports, economics, comparisons, briefs, outcomes, watches,
   alerts), its upgrade test from a version-50 database (lists kept, keys, `foreign_key_check`, store delete), the
   shared `Pr*` types, `scopeOf`/`storeOf`/`visible` store scoping and the `/api/pr/*` guard (413 test).
+- 2026-10-28 PR-03 existing data: `importLegacy` (once) turns every list item into an all-stores watch in its named
+  list, every agent find into a shared `agent_find` listing with no offers, signals or facts, and only a saved sample
+  row into a `legacy_sample` listing; legacy ids kept, `seedResearch` and `research_products` untouched. T6 mirrors a
+  real-engine find (`mirrorFind`); Watch ↔ "Saved" mirror (`setWatch`/`mirrorSaved`); `/api/research*` still answers.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -850,6 +855,11 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-03, decision 2 as built.** Legacy finds are imported as **shared** listings (store NULL): they were never
+  per store, and T6 refreshes the shared one when it exists, else makes a private listing for the run's store. A
+  "demo-engine find" is a run whose `agent_runs.runtime` is not `claude` or `codex` (the fake engine records none).
+  The test that a sample row never appears in discovery, counts or sorts needs the discovery API, so it lands with
+  PR-09; PR-03 tests that only a saved sample enters the catalog.
 - **PR-02, decision 3 as built.** `pr_listings` is unique on (source, source_ref, store) so two stores can each paste
   the same link privately; `pr_watches` is unique on (store, list name, target), so one product can sit in two named
   lists; both use `ifnull(store_id, '')` so the all-stores rows are unique too. Added `pr_stage_history.kind` (stage

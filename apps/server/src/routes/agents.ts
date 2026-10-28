@@ -73,6 +73,7 @@ import { log } from '../log';
 import { askKnowledge } from '../kb/ask';
 import { createFetcher } from '../kb/fetcher';
 import { researchRoutes } from '../research';
+import { mirrorFind } from '../product-research/legacy';
 import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, EXPIRED_DEMO, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
@@ -219,7 +220,7 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
     notify(db, { kind: 'info', title: `Now tracking ${name.trim()}`, body: `${notes} Remove it in Competitor Intel if it isn't one.`, storeId, link: '/competitors' });
     return `Tracking ${name.trim()} (${site(url)}): ${added} product price${added === 1 ? '' : 's'} read. list_competitors with q compares them.`;
   },
-  recordFind: async (find) => {
+  recordFind: async (find, runId) => {
     // The daily scan finds the same products again: a repeat refreshes the earlier find instead of piling up copies.
     const prior = db
       .prepare(`SELECT id FROM research_products WHERE niche = ? AND niche_detail IS ? AND id LIKE 'find-%' AND lower(title) = lower(?)`)
@@ -230,6 +231,7 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
        ON CONFLICT (id) DO UPDATE SET category = excluded.category, image = coalesce(excluded.image, image), source = excluded.source, cost = excluded.cost, price = excluded.price,
          compare_at = excluded.compare_at, trend = excluded.trend, competition = excluded.competition, shipping_days = excluded.shipping_days`,
     ).run(id, find.title, find.category, find.niche, find.nicheDetail ?? null, find.image ?? null, find.source, find.cost, find.price, find.compareAt, find.trend, find.competition, find.shippingDays);
+    mirrorFind(db, id, runId); // product-research T6: a listing of the run's store, no numbers
     return { ...((await (await researchRoutes(db).request(`/api/research/${id}`)).json()) as ResearchProduct), ...(prior ? { repeat: true } : {}) };
   },
   searchSuppliers: async (q, limit) => (await searchCj(db, loadKey(dataDir()), q, limit)) ?? demoSupplierProducts(db, q, limit),
