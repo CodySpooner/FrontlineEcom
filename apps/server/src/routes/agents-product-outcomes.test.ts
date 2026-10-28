@@ -50,7 +50,7 @@ test('products added on a real store are judged on their first 14 days of sales'
     '"Grip Socks" did not take off: 2 units, 40 USD revenue, 23 USD profit in its first 14 days.',
     '"Smart Jump Rope" sold: 12 units, 240 USD revenue, 138 USD profit in its first 14 days.',
   ]);
-  expect(db.prepare(`SELECT count(*) AS n FROM notifications WHERE title = 'Measured win: Product Hunter'`).get()?.n).toBe(1); // the rope, once
+  expect(db.prepare(`SELECT count(*) AS n FROM notifications WHERE title = 'Measured win: Product Researcher'`).get()?.n).toBe(1); // the rope, once
 });
 
 test("a product sold with no unit cost isn't called a win on revenue alone", async () => {
@@ -68,7 +68,7 @@ test("a product sold with no unit cost isn't called a win on revenue alone", asy
     '"Yoga Strap" did not take off: 3 units, 60 USD revenue, 60 USD profit in its first 14 days.', // too few sold, whatever the cost
   ]);
   expect(db.prepare(`SELECT 1 FROM notifications WHERE title LIKE 'Measured win:%'`).get()).toBeUndefined();
-  expect(db.prepare(`SELECT title FROM notifications WHERE body LIKE '"Ankle Weights"%'`).get()?.title).toBe('Product Hunter: result unclear without unit costs');
+  expect(db.prepare(`SELECT title FROM notifications WHERE body LIKE '"Ankle Weights"%'`).get()?.title).toBe('Product Researcher: result unclear without unit costs');
 });
 
 test('a product the owner put on sale days after it was added is judged on its first 14 days on sale', async () => {

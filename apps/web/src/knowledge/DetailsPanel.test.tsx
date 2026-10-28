@@ -214,7 +214,7 @@ describe('Knowledge › promote to General', () => {
     });
     let p = await panel();
     click('Promote to General', p);
-    expect(await within(p).findByText('Market Analyst is drafting a General version. It comes back here for your call.')).toBeTruthy();
+    expect(await within(p).findByText('Analytics Specialist is drafting a General version. It comes back here for your call.')).toBeTruthy();
     expect(within(p).getByRole('link', { name: 'Watch' }).getAttribute('href')).toBe('/agents/peak%3Amarket_analyst?run=r1');
     expect(within(p).getByRole('button', { name: 'Promote to General' })).toHaveProperty('disabled', true);
     cleanup();

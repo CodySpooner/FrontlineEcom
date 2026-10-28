@@ -69,7 +69,7 @@ function Palette({ start: begun, onClose }: { start: AskStart; onClose: () => vo
       key: `ask:${store.id}:market_analyst`,
       icon: Sparkles,
       label: ask,
-      hint: `Ask the Market Analyst · ${store.name}`,
+      hint: `Ask the Analytics Specialist · ${store.name}`,
       run: () => {
         kb.reset();
         start.mutate({ agentId: `${store.id}:market_analyst`, task: ask }, { onSuccess: (r) => go(`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`) });

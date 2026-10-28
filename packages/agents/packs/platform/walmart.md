@@ -49,7 +49,7 @@
 - Copywriter: shorter titles than Amazon (~50–90 chars); adapt Amazon copy: cut keyword stuffing, keep 5+ crisp features, remove any Amazon reference.
 - Ad Strategist: start auto campaigns at modest bids, move converting terms to manual exact, cut non-converting; price and 2-day tag matter before ads.
 - Operations: hit valid tracking ~99% and on-time ≥95%; use WFS for top SKUs to win 2-day tags; keep stock synced to avoid cancellations.
-- Market Analyst: monitor Listing Quality score, Buy Box ownership, price competitiveness vs other retailers weekly.
-- Product Hunter: favor everyday-value goods with GTINs and margin at Walmart-competitive prices; avoid categories needing approval unless ready.
-- Creative Studio: white-background main, 4+ secondaries (lifestyle, scale, infographic), short video; reuse Amazon assets where compliant.
+- Analytics Specialist: monitor Listing Quality score, Buy Box ownership, price competitiveness vs other retailers weekly.
+- Product Researcher: favor everyday-value goods with GTINs and margin at Walmart-competitive prices; avoid categories needing approval unless ready.
+- Creative Strategist: white-background main, 4+ secondaries (lifestyle, scale, infographic), short video; reuse Amazon assets where compliant.
 - Email & SMS: no contact with Walmart buyers; grow owned lists from DTC channels only.

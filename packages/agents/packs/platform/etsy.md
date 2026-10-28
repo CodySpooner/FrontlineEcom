@@ -44,9 +44,9 @@
 
 ## Playbook notes by role
 - Copywriter: short clear title, 13 non-redundant long-tail tags, every attribute filled. Buyer language ("gift for her", "personalized") beats jargon.
-- Creative Studio: thumbnail decides CTR. Bright styled lifestyle shot, product filling the frame, consistent shop look; show scale and personalization options.
+- Creative Strategist: thumbnail decides CTR. Bright styled lifestyle shot, product filling the frame, consistent shop look; show scale and personalization options.
 - Ad Strategist: price in the ~15% Offsite Ads fee; judge Etsy Ads per listing after ~2–4 weeks; keep spend on proven converters.
-- Product Hunter: favor personalization, gift occasions, niche designs. POD must clear Creativity Standards and IP checks.
+- Product Researcher: favor personalization, gift occasions, niche designs. POD must clear Creativity Standards and IP checks.
 - Operations: protect Star Seller: reply under 24 h, ship on time with tracking, pad processing time in Q4.
 - Email & SMS: buyers aren't the store's list; use Etsy targeted offers. Collect opt-ins only on an owned site.
-- Market Analyst: track Etsy Stats per listing: views → favorites → orders; conversion ~1–3% typical.
+- Analytics Specialist: track Etsy Stats per listing: views → favorites → orders; conversion ~1–3% typical.

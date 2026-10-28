@@ -296,11 +296,11 @@ function MissingPacks({ docs }: { docs: KnowledgeDoc[] }) {
             ) : analyst?.engine?.provider === 'claude' ? (
               <div className="mt-1.5">
                 <Button size="sm" disabled={draft.isPending} onClick={() => draft.mutate(analyst.id, { onSuccess: (r) => navigate(`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`) })}>
-                  Ask its Market Analyst to draft one
+                  Ask its Analytics Specialist to draft one
                 </Button>
               </div>
             ) : (
-              <span className="block">Its Market Analyst drafts one once the store is connected.</span>
+              <span className="block">Its Analytics Specialist drafts one once the store is connected.</span>
             )}
             {draft.isError && draft.variables === analyst?.id && (
               <p role="alert" className="mt-1 text-red">
@@ -349,7 +349,7 @@ function DocView({ d }: { d: KnowledgeDoc }) {
   return (
     <Panel
       title={d.title}
-      sub={d.edited ? 'Your edited version. Agents use it from their next run.' : d.custom ? 'Drafted by the Market Analyst for your custom niche.' : 'Agents read this before every task.'}
+      sub={d.edited ? 'Your edited version. Agents use it from their next run.' : d.custom ? 'Drafted by the Analytics Specialist for your custom niche.' : 'Agents read this before every task.'}
       action={actions}
     >
       {q.isPending ? (

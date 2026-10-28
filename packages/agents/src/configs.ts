@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, INTEGRATION_KINDS, type AgentConfig, type AgentRole, type AgentTypeInfo, type IntegrationKind, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
+import { AGENT_ROLES, INTEGRATION_KINDS, type AgentConfig, type AgentPreset, type AgentRole, type AgentTypeInfo, type CustomRole, type IntegrationKind, type RoleContract, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
 import { engineInfo } from './engine';
-import { BUILTIN_TYPES } from './roles';
+import { BUILTIN_TYPES, contractOf, ROLES } from './roles';
 import { defaultTools } from './tools';
 
 // Configured agents live in `agent_configs` (migration #50): written once, never edited in place (decision 3).
@@ -50,15 +50,90 @@ export function resolveType(db: DatabaseSync, storeId: string, type: string): Ag
   return { role, customRoleId: type, tools: narrowed ? defaultTools(role).filter((t) => narrowed.includes(t)) : defaultTools(role) };
 }
 
+const toCustomRole = (r: Record<string, unknown>): CustomRole => ({
+  id: String(r.id),
+  ...(r.store_id == null ? {} : { storeId: String(r.store_id) }),
+  baseRole: r.base_role as AgentRole,
+  name: String(r.name),
+  description: String(r.description),
+  instructions: String(r.instructions),
+  ...(r.tools_json == null ? {} : { tools: JSON.parse(String(r.tools_json)) }),
+  createdAt: String(r.created_at),
+  ...(r.archived_at == null ? {} : { archivedAt: String(r.archived_at) }),
+});
+
+/**
+ * A config's custom role, for its prompt and its name: a `builtin:` type, or one the owner made (archived included: a
+ * conversation started with it keeps it).
+ */
+export function customRole(db: DatabaseSync, id: string): Pick<CustomRole, 'id' | 'name' | 'description' | 'instructions'> | undefined {
+  const builtin = Object.hasOwn(BUILTIN_TYPES, id) ? BUILTIN_TYPES[id]! : undefined;
+  if (builtin) return { id, name: builtin.name, description: builtin.description, instructions: '' };
+  const r = db.prepare('SELECT * FROM agent_custom_roles WHERE id = ?').get(id);
+  return r ? toCustomRole(r) : undefined;
+}
+
+/** A type's contract: a role's or built-in type's own; a custom role's base contract with its narrowed tools and instructions. */
+function typeContract(id: string, custom?: CustomRole): RoleContract {
+  if (!custom) return contractOf(Object.hasOwn(BUILTIN_TYPES, id) ? BUILTIN_TYPES[id]! : ROLES[id as AgentRole]);
+  const base = contractOf(ROLES[custom.baseRole]);
+  return { ...base, tools: custom.tools ? base.tools.filter((t) => custom.tools!.includes(t)) : base.tools, ...(custom.instructions ? { instructions: custom.instructions } : {}) };
+}
+
 /** Every type the store can use, in list order: the roles, the built-in types, then its custom roles by name. */
 export function agentTypes(db: DatabaseSync, storeId: string): AgentTypeInfo[] {
-  const roles = Object.entries(AGENT_ROLES).map(([id, r]) => ({ id, name: r.name, description: r.blurb, baseRole: id as AgentRole }));
-  const builtins = Object.entries(BUILTIN_TYPES).map(([id, t]) => ({ id, name: t.name, description: t.description, baseRole: t.baseRole }));
+  const roles = Object.entries(AGENT_ROLES).map(([id, r]) => ({ id, name: r.name, description: r.blurb, baseRole: id as AgentRole, contract: typeContract(id) }));
+  const builtins = Object.entries(BUILTIN_TYPES).map(([id, t]) => ({ id, name: t.name, description: t.description, baseRole: t.baseRole, contract: typeContract(id) }));
   const custom = db
-    .prepare('SELECT id, name, description, base_role FROM agent_custom_roles WHERE (store_id = ? OR store_id IS NULL) AND archived_at IS NULL ORDER BY name COLLATE NOCASE')
+    .prepare('SELECT * FROM agent_custom_roles WHERE (store_id = ? OR store_id IS NULL) AND archived_at IS NULL ORDER BY name COLLATE NOCASE')
     .all(storeId)
-    .flatMap((r) => (Object.hasOwn(AGENT_ROLES, String(r.base_role)) ? [{ id: String(r.id), name: String(r.name), description: String(r.description), baseRole: r.base_role as AgentRole }] : []));
+    .flatMap((r) => (Object.hasOwn(AGENT_ROLES, String(r.base_role)) ? [toCustomRole(r)] : []))
+    .map((c) => ({ id: c.id, name: c.name, description: c.description, baseRole: c.baseRole, contract: typeContract(c.id, c) }));
   return [...roles, ...builtins, ...custom];
+}
+
+export type CustomRoleDraft = Omit<CustomRole, 'id' | 'storeId' | 'createdAt' | 'archivedAt'> & { allStores: boolean };
+
+/**
+ * Checks a custom role the owner made (decision 2): a name, a description and instructions on a role, whose tools it can
+ * narrow, never add to. A failure names the form's field.
+ */
+export function validateCustomRole(input: unknown): CustomRoleDraft | { field: string; error: string } {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) return { field: 'name', error: 'Expected a custom role.' };
+  const { name, description = '', instructions = '', baseRole, tools, allStores = false } = input as Record<string, unknown>;
+  const text = (v: unknown, max: number): v is string => typeof v === 'string' && v.trim().length <= max;
+  if (!text(name, 60) || !name.trim()) return { field: 'name', error: 'Name it, in 60 characters or fewer.' };
+  if (!text(description, 200)) return { field: 'description', error: 'The description fits in 200 characters.' };
+  if (!text(instructions, 4000)) return { field: 'instructions', error: 'The instructions fit in 4,000 characters.' };
+  if (typeof baseRole !== 'string' || !Object.hasOwn(AGENT_ROLES, baseRole)) return { field: 'baseRole', error: 'Pick the agent type it builds on.' };
+  const allowed: string[] = defaultTools(baseRole as AgentRole);
+  if (tools !== undefined && (!Array.isArray(tools) || tools.some((t) => typeof t !== 'string'))) return { field: 'tools', error: 'tools must be a list of tool names.' };
+  const picked = tools === undefined ? undefined : [...new Set(tools as string[])];
+  const extra = picked?.find((t) => !allowed.includes(t));
+  if (extra) return { field: 'tools', error: `A custom role can only narrow the ${AGENT_ROLES[baseRole as AgentRole].name}'s tools: "${extra}" isn't one of them.` };
+  if (picked && !picked.length) return { field: 'tools', error: 'Keep at least one tool.' };
+  if (typeof allStores !== 'boolean') return { field: 'allStores', error: 'allStores must be true or false.' };
+  return { name: name.trim(), description: description.trim(), instructions: instructions.trim(), baseRole: baseRole as AgentRole, ...(picked && picked.length < allowed.length ? { tools: picked } : {}), allStores };
+}
+
+export function createCustomRole(db: DatabaseSync, storeId: string, role: CustomRoleDraft): CustomRole {
+  const id = randomUUID();
+  db.prepare('INSERT INTO agent_custom_roles (id, store_id, base_role, name, description, instructions, tools_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+    id, role.allStores ? null : storeId, role.baseRole, role.name, role.description, role.instructions, role.tools ? JSON.stringify(role.tools) : null, new Date().toISOString(),
+  );
+  return toCustomRole(db.prepare('SELECT * FROM agent_custom_roles WHERE id = ?').get(id)!);
+}
+
+/** A custom role this store may see (its own or an all-stores one), archived or not; undefined is a 404. */
+export function getCustomRole(db: DatabaseSync, storeId: string, id: string): CustomRole | undefined {
+  const r = db.prepare('SELECT * FROM agent_custom_roles WHERE id = ? AND (store_id = ? OR store_id IS NULL)').get(id, storeId);
+  return r ? toCustomRole(r) : undefined;
+}
+
+/** Archives or restores a custom role: its conversations keep it; the list and Deploy stop offering it. */
+export function archiveCustomRole(db: DatabaseSync, id: string, archived: boolean): CustomRole {
+  db.prepare('UPDATE agent_custom_roles SET archived_at = ? WHERE id = ?').run(archived ? new Date().toISOString() : null, id);
+  return toCustomRole(db.prepare('SELECT * FROM agent_custom_roles WHERE id = ?').get(id)!);
 }
 
 // The Details panel's tool groups (AA-09): a tool goes in the first group it matches.
@@ -137,6 +212,68 @@ export function validateConfig(store: Store, type: AgentType, input: unknown = {
     knowledge: [...new Set(knowledge as AgentConfig['knowledge'])],
     permissions: { ...(budgetUsd != null ? { budgetUsd } : {}), ...(stopAfterMin != null ? { stopAfterMin } : {}), saveFindings },
   };
+}
+
+const toPreset = (r: Record<string, unknown>): AgentPreset => ({
+  id: String(r.id),
+  ...(r.store_id == null ? {} : { storeId: String(r.store_id) }),
+  name: String(r.name),
+  config: JSON.parse(String(r.config_json)),
+  createdAt: String(r.created_at),
+});
+
+/**
+ * A type's presets for the Deploy dialog (decision 2): its built-in Default first, then the owner's saved ones for it
+ * (for a role, its custom roles' too). The Default holds the seat default's tools, knowledge and limits under the type's
+ * usual task, and never a runtime, model or effort. A custom role starts from its base type's. Undefined is a 404.
+ */
+export function listPresets(db: DatabaseSync, storeId: string, typeId: string): AgentPreset[] | undefined {
+  const type = resolveType(db, storeId, typeId);
+  if (!type) return undefined;
+  const builtin: AgentPreset = {
+    id: `default:${typeId}`,
+    name: (Object.hasOwn(BUILTIN_TYPES, typeId) ? BUILTIN_TYPES[typeId]! : ROLES[type.role]).task,
+    builtin: true,
+    createdAt: '', // defined in code, never stored
+    config: { role: type.role, ...(type.customRoleId ? { customRoleId: type.customRoleId } : {}), tools: type.tools.filter((t) => t !== 'compare_stores'), knowledge: ['store', 'general'], permissions: { saveFindings: 'off' } },
+  };
+  const saved = db
+    .prepare('SELECT * FROM agent_presets WHERE store_id = ? OR store_id IS NULL ORDER BY name COLLATE NOCASE')
+    .all(storeId)
+    .map(toPreset)
+    .filter((p) => (type.customRoleId ? p.config.customRoleId === typeId : p.config.role === type.role));
+  return [builtin, ...saved];
+}
+
+/**
+ * Saves the Deploy dialog's choices as a preset, checked as a deploy is (unknown keys dropped). It keeps a runtime, model
+ * or effort only when one was chosen, so an all-stores preset still fits a store that runs on something else.
+ */
+export function savePreset(db: DatabaseSync, store: Store, input: unknown): AgentPreset | { status: 400 | 404; error: string; field?: string } {
+  const b = (typeof input === 'object' && input !== null && !Array.isArray(input) ? input : {}) as Record<string, unknown>;
+  const { name, type: typeId, config = {}, objective, allStores = false } = b;
+  if (typeof name !== 'string' || !name.trim() || name.trim().length > 60) return { status: 400, field: 'name', error: 'Name the preset, in 60 characters or fewer.' };
+  if (objective !== undefined && (typeof objective !== 'string' || objective.length > 2000)) return { status: 400, field: 'objective', error: 'The objective template fits in 2,000 characters.' };
+  if (typeof allStores !== 'boolean') return { status: 400, field: 'allStores', error: 'allStores must be true or false.' };
+  const type = typeof typeId === 'string' ? resolveType(db, store.id, typeId) : undefined;
+  if (!type) return { status: 404, error: 'Agent type not found' };
+  const draft = validateConfig(store, type, config);
+  if ('error' in draft) return { status: 400, ...draft };
+  const chosen = config as Record<string, unknown>;
+  const preset: AgentPreset['config'] = {
+    role: type.role,
+    ...(draft.customRoleId ? { customRoleId: draft.customRoleId } : {}),
+    ...(chosen.runtime !== undefined ? { runtime: draft.runtime } : {}),
+    ...(chosen.model !== undefined && draft.model ? { model: draft.model } : {}),
+    ...(draft.effort ? { effort: draft.effort } : {}),
+    tools: draft.tools,
+    knowledge: draft.knowledge,
+    permissions: draft.permissions,
+    ...(objective?.trim() ? { objective: objective.trim() } : {}),
+  };
+  const id = randomUUID();
+  db.prepare('INSERT INTO agent_presets (id, store_id, name, config_json, created_at) VALUES (?, ?, ?, ?, ?)').run(id, allStores ? null : store.id, name.trim(), JSON.stringify(preset), new Date().toISOString());
+  return toPreset(db.prepare('SELECT * FROM agent_presets WHERE id = ?').get(id)!);
 }
 
 export function saveConfig(db: DatabaseSync, store: Store, type: AgentType, draft: ConfigDraft): AgentConfig {

@@ -61,7 +61,7 @@ test('saved lists: create, add, remove, delete', async () => {
   expect((await app.request(`/api/research/lists/${list.id}/items/mini-projector`, send('PUT'))).status).toBe(404);
 });
 
-test('add to store creates a pending approval for the store Product Hunter', async () => {
+test('add to store creates a pending approval for the store Product Researcher', async () => {
   const app = setup();
   const res = await app.request('/api/research/pet-water-fountain/add-to-store', send('POST', { storeId: 'pawsome' }));
   expect(res.status).toBe(201);

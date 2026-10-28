@@ -27,7 +27,7 @@ test('the Knowledge Base lists every layer the agents read, custom niche packs i
   expect([count('playbook'), count('platform'), count('niche')]).toEqual([8, 6, 9]);
   expect(index.every((d) => d.markdown === undefined && d.chars > 0 && d.title)).toBe(true);
   expect(index.find((d) => d.key === 'other:vintage-fountain-pens')).toEqual({ kind: 'niche', key: 'other:vintage-fountain-pens', title: 'Vintage fountain pens', custom: true, chars: 55 });
-  expect(index.find((d) => d.kind === 'playbook' && d.key === 'product_hunter')?.title).toBe('Product Hunter playbook');
+  expect(index.find((d) => d.kind === 'playbook' && d.key === 'product_hunter')?.title).toBe('Product Researcher playbook');
 
   expect(await get<KnowledgeDoc>('/api/knowledge/playbook/ad_strategist')).toMatchObject({ markdown: playbook('ad_strategist') });
   expect((await get<KnowledgeDoc>('/api/knowledge/niche/other:vintage-fountain-pens')).markdown).toContain('provenance');

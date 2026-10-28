@@ -527,7 +527,7 @@ describe('agent tools on demo data', () => {
       expect(await feed()).toBe('No finds yet (the built-in sample catalog is left out for a live store). Find products with WebSearch, cost them with search_suppliers and record them with record_product_find.');
       // The Market Analyst reads the feed but can't record finds.
       expect(results(await run(input('glow', 'market_analyst'), [{ call: 'research_feed' }, done])).at(-1)!.output).toBe(
-        "No finds yet (the built-in sample catalog is left out for a live store). Finding and recording products is the Product Hunter's job: hand it over with assign_task, or say so in your answer.",
+        "No finds yet (the built-in sample catalog is left out for a live store). Finding and recording products is the Product Researcher's job: hand it over with assign_task, or say so in your answer.",
       );
       await run(input('glow', 'product_hunter'), [
         { call: 'record_product_find', input: { title: 'Gua Sha Stone', category: 'Beauty', source: 'tiktok', cost: 3, price: 19, compareAt: 29, trend: 35, competition: 40, shippingDays: 9 } },

@@ -39,7 +39,7 @@ async function run(steps: FakeStep[]) {
 }
 const track = (name: string, url: string): FakeStep => ({ call: 'track_competitor', input: { name, url, why: 'Sells the same harnesses at $35-45' } });
 
-test('the Market Analyst starts tracking a competitor shop and reads its prices at once', async () => {
+test('the Analytics Specialist starts tracking a competitor shop and reads its prices at once', async () => {
   const out = await run([
     track('Rival', 'https://rival.example.com'),
     track('Rival again', 'https://www.rival.example.com/collections/all'),
@@ -53,10 +53,10 @@ test('the Market Analyst starts tracking a competitor shop and reads its prices 
   ]);
   expect(out[3]).toContain('\nRival,Trail Harness,39,,USD,');
   expect(db.prepare(`SELECT name, notes FROM competitors WHERE store_id = 'pawsome' AND name IN ('Rival', 'A blog')`).all()).toEqual([
-    { name: 'Rival', notes: 'Market Analyst: Sells the same harnesses at $35-45' },
+    { name: 'Rival', notes: 'Analytics Specialist: Sells the same harnesses at $35-45' },
   ]);
   expect(db.prepare(`SELECT body FROM notifications WHERE store_id = 'pawsome' AND title = 'Now tracking Rival'`).get()?.body).toBe(
-    "Market Analyst: Sells the same harnesses at $35-45 Remove it in Competitor Intel if it isn't one.",
+    "Analytics Specialist: Sells the same harnesses at $35-45 Remove it in Competitor Intel if it isn't one.",
   );
 });
 
@@ -108,6 +108,6 @@ test('a store tracks 10 competitors at most; with none, list_competitors says wh
     "\n# Recent ads (none recorded: the app doesn't read ad libraries, so this says nothing about whether they advertise)\n(none)",
   );
   expect((await run([{ call: 'list_competitors' }]))[0]).toMatch(
-    /^# Competitors \(none tracked yet: the Market Analyst adds them with track_competitor, the owner in Competitor Intel\)\n\(none\)\n/,
+    /^# Competitors \(none tracked yet: the Analytics Specialist adds them with track_competitor, the owner in Competitor Intel\)\n\(none\)\n/,
   );
 });

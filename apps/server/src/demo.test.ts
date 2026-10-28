@@ -182,7 +182,7 @@ test('demo stores and competitors are seeded once: deleted ones stay deleted aft
   expect([count(db, 'SELECT count(*) AS n FROM stores'), count(db, 'SELECT count(*) AS n FROM competitors')]).toEqual([0, 0]);
 });
 
-test("each demo store's Creative Studio starts with two images, a video and a copy, none billed today", () => {
+test("each demo store's Creative Strategist starts with two images, a video and a copy, none billed today", () => {
   const db = openDb();
   seedDemo(db, TODAY);
   seedCreatives(db);

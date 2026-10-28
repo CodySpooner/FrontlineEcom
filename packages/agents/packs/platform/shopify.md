@@ -47,5 +47,5 @@
 - Copywriter: product title = what it is + key differentiator; description leads with outcome, then specs, then guarantee.
 - Email & SMS: the list is the asset; capture with a popup offer. SMS needs express written consent (TCPA) and quiet hours.
 - Operations: track quantity, block overselling except planned preorders, sync stock across channels, upload tracking fast.
-- Product Hunter: want ~3x+ markup over landed cost to absorb CAC; check supplier ship speed and payment restrictions first.
-- Market Analyst: baseline conversion ~1.5–3%; report sessions → add-to-cart → checkout → purchase by device and channel.
+- Product Researcher: want ~3x+ markup over landed cost to absorb CAC; check supplier ship speed and payment restrictions first.
+- Analytics Specialist: baseline conversion ~1.5–3%; report sessions → add-to-cart → checkout → purchase by device and channel.

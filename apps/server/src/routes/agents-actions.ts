@@ -151,13 +151,13 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
   const days = Math.floor((Date.parse(a.decidedAt ?? new Date().toISOString()) - Date.parse(a.createdAt)) / 86_400_000);
   if (store.connected && days > 14) {
     once(db, `not-applied:${a.id}`);
-    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `It was asked ${days} days ago, on prices that may have moved since. Ask the Market Analyst again for a fresh read.`, storeId: store.id, link: `/agents/${a.agentId}` });
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `It was asked ${days} days ago, on prices that may have moved since. Ask the Analytics Specialist again for a fresh read.`, storeId: store.id, link: `/agents/${a.agentId}` });
     return;
   }
   const now = db.prepare('SELECT price FROM products WHERE store_id = ? AND id = ?').get(store.id, p.productId)?.price;
   if (now != null && moved(p.from, Number(now))) {
     once(db, `not-applied:${a.id}`); // squad_log: approved, not shipped
-    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The price moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(now), store.currency)}). Ask the Market Analyst again if it still makes sense.`, storeId: store.id, link: `/agents/${a.agentId}` });
+    notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The price moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(now), store.currency)}). Ask the Analytics Specialist again if it still makes sense.`, storeId: store.id, link: `/agents/${a.agentId}` });
     return;
   }
   const compareAt = typeof p.compareAt === 'number' ? p.compareAt : undefined;

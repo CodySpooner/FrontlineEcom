@@ -266,7 +266,7 @@ describe('schedules', () => {
     const id = (r.body as { id: string }).id;
     expect(scheduledResearch(db, id, 'scheduled (0 9 * * 1)', deps())).toEqual({ status: 'skipped', detail: 'Self-directed research is off for Peak Fit' });
     await on();
-    expect(scheduledResearch(db, id, 'scheduled (0 9 * * 1)', deps())).toEqual({ status: 'skipped', detail: "The Market Analyst doesn't research on its own in Peak Fit" });
+    expect(scheduledResearch(db, id, 'scheduled (0 9 * * 1)', deps())).toEqual({ status: 'skipped', detail: "The Analytics Specialist doesn't research on its own in Peak Fit" });
     await controls({ roles: { market_analyst: [] } });
     const ran = scheduledResearch(db, id, 'scheduled (0 9 * * 1)', deps());
     expect(ran).toEqual({ status: 'started', detail: 'Research queued: What is new in home fitness this week?' });

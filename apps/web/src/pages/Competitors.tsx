@@ -42,7 +42,7 @@ export function Competitors() {
               <>
                 {!list.length ? (
                   <EmptyState icon={Eye} title="No competitors tracked">
-                    Add a rival below, or leave it to the Market Analyst: with none to compare against, it finds 3–5 itself. Either way the squad
+                    Add a rival below, or leave it to the Analytics Specialist: with none to compare against, it finds 3–5 itself. Either way the squad
                     watches their prices and ads.
                   </EmptyState>
                 ) : (
@@ -283,7 +283,7 @@ function Briefs({ c }: { c: Competitor }) {
       task: `Brief me on our competitor ${c.name} (${c.url}): what they changed on price and ads lately, what seems to be working for them, and 2-3 moves we should make. Use list_competitors.`,
     });
   return (
-    <Panel title="Analyst Briefs" sub={`${name(c.storeId)}'s Market Analyst`}>
+    <Panel title="Analyst Briefs" sub={`${name(c.storeId)}'s Analytics Specialist`}>
       <Button variant="primary" className="w-full" disabled={start.isPending} onClick={brief}>
         <Sparkles className="size-4" />
         Brief me on {c.name}

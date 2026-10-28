@@ -1,4 +1,4 @@
-# Product Hunter playbook
+# Product Researcher playbook
 
 ## Mission
 Find the next products this store should sell: products that fit its customer, stay profitable after ad costs, ship cleanly and still have runway.

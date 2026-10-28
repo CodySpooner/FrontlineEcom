@@ -24,17 +24,17 @@ export const MISSION_TEMPLATES: Omit<NewSquadMission, 'storeId'>[] = [
       },
       {
         id: 'validate', role: 'market_analyst', dependsOn: ['hunt'],
-        task: "Check the Product Hunter's pick against list_competitors and the store's own numbers: price point, margin after fees, who already sells it. " +
+        task: "Check the Product Researcher's pick against list_competitors and the store's own numbers: price point, margin after fees, who already sells it. " +
           'Hand on: go or no-go, the launch price and the one angle to lead with.',
       },
       {
         id: 'copy', role: 'copywriter', dependsOn: ['validate'],
-        task: "Write the launch copy with the Market Analyst's angle: a title, a benefit-first description, the 3 objections buyers raise answered, and 3 ad headlines. " +
+        task: "Write the launch copy with the Analytics Specialist's angle: a title, a benefit-first description, the 3 objections buyers raise answered, and 3 ad headlines. " +
           'Save the ad copy with create_creative. Hand on: the copy.',
       },
       {
         id: 'creative', role: 'creative_studio', dependsOn: ['validate'],
-        task: "Make the launch ad with the Market Analyst's angle: one 9:16 video ad, saved with create_creative. Hand on: what you made and its hook.",
+        task: "Make the launch ad with the Analytics Specialist's angle: one 9:16 video ad, saved with create_creative. Hand on: what you made and its hook.",
       },
       {
         id: 'page', role: 'store_developer', dependsOn: ['copy'],
@@ -43,7 +43,7 @@ export const MISSION_TEMPLATES: Omit<NewSquadMission, 'storeId'>[] = [
       },
       {
         id: 'ads', role: 'ad_strategist', dependsOn: ['creative', 'page'],
-        task: "Plan the launch campaign with the Creative Studio's ad: audience, daily budget and the break-even ROAS from review_campaigns, in your answer for the owner " +
+        task: "Plan the launch campaign with the Creative Strategist's ad: audience, daily budget and the break-even ROAS from review_campaigns, in your answer for the owner " +
           '(campaigns are set up by hand). If a running campaign should make room, propose that with propose_ad_change. Hand on: the plan.',
       },
     ],
@@ -59,7 +59,7 @@ export const MISSION_TEMPLATES: Omit<NewSquadMission, 'storeId'>[] = [
       },
       {
         id: 'page', role: 'copywriter', dependsOn: ['diagnose'],
-        task: "Rewrite the product's page around the cause the Market Analyst found: draft_page with a benefit-first headline and the buyers' objections answered, " +
+        task: "Rewrite the product's page around the cause the Analytics Specialist found: draft_page with a benefit-first headline and the buyers' objections answered, " +
           'then ask to publish it with publish_page. Hand on: what changed and why.',
       },
       {

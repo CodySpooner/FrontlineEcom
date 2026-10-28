@@ -1,7 +1,7 @@
 export { runAgent, defaultEngine, engineInfo, type Engine, type RunInput } from './engine';
 export { fakeEngine, echoScript, type FakeScript, type FakeStep } from './fake-engine';
 export { agentModel, claudeAccount, claudeEngine, estimate, isAccountError, isReadOnly, movesSpend, toAgentEvents, type ClaudeEngineOptions } from './claude-engine';
-export { BUILTIN_TYPES, ROLES, SQUAD_RULES, type RoleSpec, type ToolName } from './roles';
+export { BUILTIN_TYPES, CHECKS_LAST, contractOf, contractText, ROLES, SQUAD_RULES, WORKFLOW_FIRST, type RoleSpec, type ToolName } from './roles';
 export { createSquad, ensureSquads, listAgents, getAgent, updateAgent, agentId, costToday, DEFAULT_AUTONOMY } from './squads';
 export { assemblePrompt, playbook, platformPack, nichePack, estimateTokens, oneLine, type PromptInput } from './prompt';
 export {
@@ -23,7 +23,7 @@ export {
 } from './memory';
 export { APP_TOOLS, OUTLIVE_RUN, RESEARCH_TOOLS, allows, budgetAddedToday, cash, defaultTools, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
-export { agentTypes, getConfig, resolveType, saveConfig, seatDefault, toolGroups, validateConfig, type AgentType, type ConfigDraft } from './configs';
+export { agentTypes, archiveCustomRole, createCustomRole, customRole, getConfig, getCustomRole, listPresets, resolveType, saveConfig, savePreset, seatDefault, toolGroups, validateConfig, validateCustomRole, type AgentType, type ConfigDraft } from './configs';
 export { conversationCounts, conversationPreface, conversationThread, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
 export { createRunManager, getRun, hasEffects, listRuns, runGist, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';

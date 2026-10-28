@@ -57,7 +57,7 @@ const OUT: Record<string, unknown> = {
       { finding: 4, title: 'Owners buy so their dog rides calm and safe', summary: 'Safety and calm, not style, move dog owners to buy travel gear', type: 'customer_insight', path: MOTIVES },
     ],
   },
-  reporting: { summary: 'Lead with the dog, target past buyers, sell calm and safety.', conclusions: ['Reaction hooks win'], unresolved: ['Does it hold for cats?'], limitations: ['Three sources'], applications: ['Brief the Creative Studio'] },
+  reporting: { summary: 'Lead with the dog, target past buyers, sell calm and safety.', conclusions: ['Reaction hooks win'], unresolved: ['Does it hold for cats?'], limitations: ['Three sources'], applications: ['Brief the Creative Strategist'] },
 };
 const PAGES: Record<string, object> = {
   'https://ads.test/pet-hooks': { status: 'read', title: 'Pet ad hooks: 120 ads compared', text: "Problem-first hooks held viewers. Opening on the dog's reaction lifted CTR to 1.9% from 1.2%." },
@@ -74,7 +74,7 @@ function campaign(id: string, name: string, roas: number) {
   for (const p of PERIODS) for (let i = 0; i < 28; i++) day.run(id, addDays(p.from, i), 100 * roas, i % 7 < 2 ? 3 : 2); // 64 purchases a period
 }
 
-test("§17: research to cards under the exact paths, linked, used by the Creative Studio, launched only with approval, and the store's results fed back", async () => {
+test("§17: research to cards under the exact paths, linked, used by the Creative Strategist, launched only with approval, and the store's results fed back", async () => {
   // Before: what the owner already knows. The store's Ad Strategist is its advertising research agent.
   const known = createCard(db, 'pawsome', { categoryId: ensureCategoryPath(db, 'pawsome', VIDEO), title: 'Problem-first hooks hold viewers past 3 seconds', summary: 'Open on the problem the gear solves', type: 'strategy', stage: 'hypothesis', status: 'active', authorId: 'owner', origin: 'owner' });
   const general = createCard(db, null, { categoryId: ensureCategoryPath(db, null, ['Advertising']), title: 'Pain beats gain in video hooks', summary: 'Loss-framed openings hold viewers better', type: 'business_principle', stage: 'supported', status: 'active', authorId: 'owner', origin: 'owner' });

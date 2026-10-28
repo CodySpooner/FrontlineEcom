@@ -84,7 +84,7 @@ describe('useLive', () => {
     expect(qc.getQueryData(['events', ['peak']])).toEqual([]);
   });
 
-  it("refreshes the research feed when a run ends (Product Hunter's finds land there)", () => {
+  it("refreshes the research feed when a run ends (Product Researcher's finds land there)", () => {
     vi.stubGlobal('WebSocket', FakeSocket);
     const qc = new QueryClient();
     const refetch = vi.spyOn(qc, 'invalidateQueries');

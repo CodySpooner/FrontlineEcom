@@ -426,7 +426,7 @@ export const APP_TOOLS: AppTool[] = [
       const name = new Map(competitors.map((c) => [c.id, c.name]));
       return [
         // A live store starts with none: going live drops the demo ones.
-        `# Competitors${competitors.length ? '' : ' (none tracked yet: the Market Analyst adds them with track_competitor, the owner in Competitor Intel)'}`,
+        `# Competitors${competitors.length ? '' : ' (none tracked yet: the Analytics Specialist adds them with track_competitor, the owner in Competitor Intel)'}`,
         csv(competitors.map((c) => ({ name: c.name, url: c.url, products_tracked: c.productsTracked, active_ads: c.activeAds, notes: c.notes ?? '' }))),
         // A competitor shop prices in its own currency: 39 EUR next to this store's 39 USD isn't the same price.
         `# Price changes (newest first, in the competitor's currency; blank when its site didn't say. This store sells in ${ctx.store.currency}. A price that held isn't here: pass q for current prices)`,
@@ -591,7 +591,7 @@ export const APP_TOOLS: AppTool[] = [
   }),
   defineTool({
     name: 'list_creatives',
-    description: "The store's creatives library, newest first: ads and copy the Creative Studio and Copywriter saved, ready to launch (CSV).",
+    description: "The store's creatives library, newest first: ads and copy the Creative Strategist and Copywriter saved, ready to launch (CSV).",
     input: { kind: z.enum(['image', 'video', 'ugc', 'copy']).optional(), limit: z.number().int().min(1).max(100).default(20) },
     run: async ({ kind, limit }, ctx) =>
       csv(

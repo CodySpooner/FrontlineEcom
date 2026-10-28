@@ -1,10 +1,10 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Lock } from 'lucide-react';
-import { AGENT_ROLES, INTERRUPTED, type AgentRole, type AgentRunDetail, type ConversationDetail, type Store, type ToolGroup } from '@frontline/shared';
+import { AGENT_ROLES, INTEGRATION_KINDS, INTERRUPTED, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
 import { useAgents, useAgentTypes, useCaps, useClaudeAccount, useConversation, useConversationTools, useThread } from '../api/client';
 import { FixLink } from '../components/Chat';
-import { cx, ProgressBar, RUN_STATUS } from '../components/ui';
+import { cx, Dialog, ProgressBar, RUN_STATUS } from '../components/ui';
 import { cents, modelName } from '../lib/format';
 import { isLive } from '../lib/transcript';
 import { took } from './activity';
@@ -66,6 +66,48 @@ export function Details({ store, conversationId, end }: { store: Store; conversa
   );
 }
 
+export const toolLabel = (tool: string) => INTEGRATION_KINDS[tool as IntegrationKind]?.name ?? tool.replaceAll('_', ' ');
+
+/** "Role instructions and checks": the type's contract, which its prompt is built from (decision 2). */
+export function ContractDialog({ type, open, onClose }: { type: AgentTypeInfo; open: boolean; onClose: () => void }) {
+  const c = type.contract;
+  const part = (title: string, body: ReactNode) => (
+    <section className="grid gap-1.5">
+      <h3 className="text-[11px] font-semibold tracking-[.07em] text-muted uppercase">{title}</h3>
+      {body}
+    </section>
+  );
+  const items = (list: string[], ordered = false) => {
+    const List = ordered ? 'ol' : 'ul';
+    return (
+      <List className={cx('grid gap-1 pl-4 text-[13px] text-text-2', ordered ? 'list-decimal' : 'list-disc')}>
+        {list.map((s) => (
+          <li key={s}>{s}</li>
+        ))}
+      </List>
+    );
+  };
+  return (
+    <Dialog open={open} onClose={onClose} title={`${type.name}: role instructions and checks`}>
+      <div className="grid gap-4 text-[13px] text-text-2">
+        {part('Responsibility', <p>{c.responsibility}</p>)}
+        {part('Measured on', <p>{c.kpi}</p>)}
+        {part('Workflow', items(c.workflow, true))}
+        {part(
+          'Tools and knowledge',
+          <>
+            <p>{c.tools.map(toolLabel).join(', ')}</p>
+            <p>Knowledge areas: {c.knowledge.join(', ')}</p>
+          </>,
+        )}
+        {part('Outputs', items(c.outputs))}
+        {part('Quality checks', items(c.checks))}
+        {c.instructions && part('Your instructions', <p className="whitespace-pre-wrap">{c.instructions}</p>)}
+      </div>
+    </Dialog>
+  );
+}
+
 function DetailsTab({ store, c }: { store: Store; c: ConversationDetail }) {
   const role = c.agentId.split(':')[1] as AgentRole;
   const type = useAgentTypes(store.id).data?.find((t) => t.id === c.type);
@@ -79,11 +121,20 @@ function DetailsTab({ store, c }: { store: Store; c: ConversationDetail }) {
   const rules = autopilotRules(seat?.autonomy, caps, c.config.tools);
   const { budgetUsd, stopAfterMin } = c.config.permissions;
   const compares = c.config.tools.includes('compare_stores');
+  const [contract, setContract] = useState(false);
   return (
     <>
       <Section title="Agent">
         <div className="text-sm font-semibold">{type?.name ?? AGENT_ROLES[role]?.name ?? 'Agent'}</div>
         <p className="text-[12.5px] text-text-2">{type?.description ?? AGENT_ROLES[role]?.blurb}</p>
+        {type && (
+          <>
+            <button type="button" onClick={() => setContract(true)} className="cursor-pointer self-start text-[12.5px] text-[#ff6b76] hover:underline">
+              Role instructions and checks
+            </button>
+            {contract && <ContractDialog type={type} open onClose={() => setContract(false)} />}
+          </>
+        )}
       </Section>
       <Section title="Runtime">
         <div className="text-[12.5px] text-text-2">

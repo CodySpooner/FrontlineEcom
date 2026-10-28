@@ -1,4 +1,7 @@
-import { agentTypes, conversationCounts, conversationThread, createConversation, discardConversation, getConfig, getConversation, getRun, toolGroups, listConversations, recap, resolveType, updateConversation, validateConfig, type RunManager } from '@frontline/agents';
+import {
+  agentTypes, archiveCustomRole, conversationCounts, conversationThread, createConversation, createCustomRole, discardConversation, getConfig, getConversation, getCustomRole, getRun, toolGroups, listConversations, listPresets,
+  recap, resolveType, savePreset, updateConversation, validateConfig, validateCustomRole, type RunManager,
+} from '@frontline/agents';
 import { INTERRUPTED, type AgentRun, type Conversation, type ConversationContext, type CreateConversationInput, type SendMessageInput, type Store } from '@frontline/shared';
 import { Hono, type Context } from 'hono';
 import type { Db } from '../db';
@@ -98,6 +101,31 @@ export function conversationRoutes(db: Db, runs: RunManager) {
     .get('/api/agent-types', (c) => {
       const store = c.req.query('store');
       return store && getStore(db, store) ? c.json(agentTypes(db, store)) : missing(c, 'Store');
+    })
+    // Custom roles and presets (decision 2): a store's own or every store's; another store's is a 404 (decision 13).
+    .post('/api/custom-roles', async (c) => {
+      const store = getStore(db, c.req.query('store') ?? '');
+      if (!store) return missing(c, 'Store');
+      const role = validateCustomRole(await c.req.json().catch(() => null));
+      return 'error' in role ? c.json(role, 400) : c.json(createCustomRole(db, store.id, role), 201);
+    })
+    .patch('/api/custom-roles/:id', async (c) => {
+      const role = getCustomRole(db, c.req.query('store') ?? '', c.req.param('id'));
+      if (!role) return missing(c, 'Custom role');
+      const b = (await c.req.json().catch(() => null)) as { archived?: unknown } | null;
+      if (typeof b?.archived !== 'boolean') return c.json({ error: 'Expected { archived: boolean }' }, 400);
+      return c.json(archiveCustomRole(db, role.id, b.archived));
+    })
+    .get('/api/presets', (c) => {
+      const store = getStore(db, c.req.query('store') ?? '');
+      const presets = store && listPresets(db, store.id, c.req.query('type') ?? '');
+      return presets ? c.json(presets) : missing(c, store ? 'Agent type' : 'Store');
+    })
+    .post('/api/presets', async (c) => {
+      const store = getStore(db, c.req.query('store') ?? '');
+      if (!store) return missing(c, 'Store');
+      const saved = savePreset(db, store, await c.req.json().catch(() => null));
+      return 'status' in saved ? c.json({ error: saved.error, ...(saved.field ? { field: saved.field } : {}) }, saved.status) : c.json(saved, 201);
     })
     .get('/api/conversations/:id', (c) => {
       const conversation = mine(c);

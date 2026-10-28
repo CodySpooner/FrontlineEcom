@@ -181,7 +181,7 @@ test("on a real store a price test is judged on profit after the store's fee %, 
   const texts = listMemory(db, 'peak').filter((m) => m.tags.includes('pricing')).map((m) => m.text);
   expect(texts).toEqual(['Pricing "Grip Socks" $20 → $25 worked: profit 100 USD → 106 USD, 10 → 9 units (14 days before vs after).']);
   expect(listMemory(db, 'peak').find((m) => m.text === 'Grip Socks are underpriced vs rivals')?.confidence).toBe(0.7);
-  expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Measured win: Market Analyst'`).all()).toEqual([{ body: texts[0] }]);
+  expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Measured win: Analytics Specialist'`).all()).toEqual([{ body: texts[0] }]);
 });
 
 test("a price test on a product with no unit cost isn't called a win: its profit is before product cost", async () => {
@@ -200,7 +200,7 @@ test("a price test on a product with no unit cost isn't called a win: its profit
   checkPriceOutcomes(db);
   const text = "Pricing \"Grip Socks\" $25 → $20 can't be judged: no unit cost is set, so profit before product cost went 100 USD → 120 USD, 4 → 6 units (14 days before vs after).";
   expect(listMemory(db, 'peak').filter((m) => m.tags.includes('pricing')).map((m) => [m.text, m.confidence])).toEqual([[text, 0.5]]);
-  expect(db.prepare(`SELECT title, body FROM notifications WHERE body = ?`).all(text)).toEqual([{ title: 'Market Analyst: result unclear without unit costs', body: text }]);
+  expect(db.prepare(`SELECT title, body FROM notifications WHERE body = ?`).all(text)).toEqual([{ title: 'Analytics Specialist: result unclear without unit costs', body: text }]);
 });
 
 test("a price test is judged against the store's season: more profit while every product sold more isn't a win", () => {
@@ -302,7 +302,7 @@ test('a price approved over 2 weeks after it was asked on a live store is asked 
   expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
   expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Not applied: "Test price"'`).get()?.link).toBe('/agents/peak:market_analyst');
   expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Not applied: "Test price"'`).get()?.body).toBe(
-    'It was asked 15 days ago, on prices that may have moved since. Ask the Market Analyst again for a fresh read.',
+    'It was asked 15 days ago, on prices that may have moved since. Ask the Analytics Specialist again for a fresh read.',
   );
   await applyPriceChange(db, approval('a-new', 13), async (...args) => void writes.push(args));
   expect(writes).toHaveLength(1);
@@ -327,5 +327,5 @@ test('a price approved after the price moved is not applied and starts no test',
   expect(db.prepare('SELECT price FROM products WHERE id = ?').get(id)?.price).toBe(22);
   expect(db.prepare('SELECT count(*) AS n FROM price_tests').get()?.n).toBe(0);
   expect(db.prepare(`SELECT 1 AS y FROM done_once WHERE ref = 'not-applied:a1'`).get()).toEqual({ y: 1 }); // squad_log says so
-  expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Not applied: "Test $24"'`).get()?.body).toBe('The price moved since this was asked ($20 → now $22). Ask the Market Analyst again if it still makes sense.');
+  expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Not applied: "Test $24"'`).get()?.body).toBe('The price moved since this was asked ($20 → now $22). Ask the Analytics Specialist again if it still makes sense.');
 });

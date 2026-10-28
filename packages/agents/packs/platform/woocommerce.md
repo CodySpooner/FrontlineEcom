@@ -45,5 +45,5 @@
 - Copywriter: fill SEO title, meta, and focus keyword per product and category; long descriptions plus FAQs win long-tail search.
 - Email & SMS: full data ownership. Add opt-in checkbox at checkout; SMS needs express written consent; fix DNS auth before scaling.
 - Operations: order status drives emails (Processing → Completed); set and publish own handling time; sync stock with any marketplace connector.
-- Market Analyst: use WooCommerce Analytics plus order attribution (source per order) and GA4 ecommerce events; reconcile against gateway payouts.
-- Product Hunter: no marketplace traffic to borrow; products need a content or ad angle and margin to cover CAC.
+- Analytics Specialist: use WooCommerce Analytics plus order attribution (source per order) and GA4 ecommerce events; reconcile against gateway payouts.
+- Product Researcher: no marketplace traffic to borrow; products need a content or ad angle and margin to cover CAC.

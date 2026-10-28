@@ -209,8 +209,8 @@ describe('Research Center', () => {
     // This workspace's research recommendations only, with what they'd cost; Approve starts the research, Dismiss drops it.
     const rec = within(rc).getByRole('list', { name: 'Agents recommend' });
     expect(within(rec).getAllByRole('listitem').map((x) => x.textContent)).toEqual([
-      'Why do bundles convert?Market Analyst · Pawsome Gear · up to $0.60ApproveDismiss',
-      'Pricing for a pets store: which of its findings hold up?On its own: Knowledge gap: everything in Pricing is a HypothesisMarket Analyst · Pawsome Gear · about $0.42, up to $0.60ApproveDismiss',
+      'Why do bundles convert?Analytics Specialist · Pawsome Gear · up to $0.60ApproveDismiss',
+      'Pricing for a pets store: which of its findings hold up?On its own: Knowledge gap: everything in Pricing is a HypothesisAnalytics Specialist · Pawsome Gear · about $0.42, up to $0.60ApproveDismiss',
     ]);
     fireEvent.click(within(rec).getAllByRole('button', { name: 'Approve' })[0]!);
     await vi.waitFor(() => expect(fetch.mock.calls.some(([u, i]) => u === '/api/approvals/a1/approve' && i?.method === 'POST')).toBe(true));

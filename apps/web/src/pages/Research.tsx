@@ -99,7 +99,7 @@ export function Research() {
               </select>
             </label>
           )}
-          <Button variant="primary" className={cx(stores.length < 2 && 'ml-auto')} disabled={!store || start.isPending} onClick={research} title={store && `Ask ${store.name}'s Product Hunter to find new winners`}>
+          <Button variant="primary" className={cx(stores.length < 2 && 'ml-auto')} disabled={!store || start.isPending} onClick={research} title={store && `Ask ${store.name}'s Product Researcher to find new winners`}>
             <Sparkles className="size-4" />
             AI Research
           </Button>
@@ -144,7 +144,7 @@ function Results({ tab, niche, q, onOpen, saved, onClear }: { tab: ResearchTab; 
   if (!r.data.items.length && tab === 'trending' && !niche && !q) {
     return (
       <EmptyState icon={Search} title="No finds yet">
-        Ask the Product Hunter with AI Research: what it finds for your stores lands here.
+        Ask the Product Researcher with AI Research: what it finds for your stores lands here.
       </EmptyState>
     );
   }
@@ -375,7 +375,7 @@ export function ProductDetails({ p }: { p: ResearchProduct }) {
             {/* Core hands back the request already pending for this product (the owner's or an agent's) instead of a second. */}
             {Date.parse(add.data.createdAt) < add.submittedAt - 5_000
               ? `${stores.find((s) => s.id === storeId)?.name} already has a request waiting for this product.`
-              : `Sent to ${stores.find((s) => s.id === storeId)?.name}'s Product Hunter.`}{' '}
+              : `Sent to ${stores.find((s) => s.id === storeId)?.name}'s Product Researcher.`}{' '}
             <Link to="/" className="text-red hover:underline">
               Approve it on the Dashboard
             </Link>

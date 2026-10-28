@@ -52,10 +52,10 @@ export type AgentRole =
 
 export const AGENT_ROLES: Record<AgentRole, { name: string; blurb: string }> = {
   ad_strategist: { name: 'Ad Strategist', blurb: 'Creates, manages and optimizes ad campaigns across Meta, TikTok, Google.' },
-  product_hunter: { name: 'Product Hunter', blurb: 'Finds winning products from trend data, competitor analysis and market research.' },
+  product_hunter: { name: 'Product Researcher', blurb: 'Finds winning products from trend data, competitor analysis and market research.' },
   store_developer: { name: 'Store Developer', blurb: 'Builds and optimizes the storefront: theme, pages, CRO and custom features.' },
-  creative_studio: { name: 'Creative Studio', blurb: 'Generates high-converting ads with Higgsfield AI: image, video and UGC.' },
-  market_analyst: { name: 'Market Analyst', blurb: 'Analyzes competitors, market trends and niche opportunities.' },
+  creative_studio: { name: 'Creative Strategist', blurb: 'Generates high-converting ads with Higgsfield AI: image, video and UGC.' },
+  market_analyst: { name: 'Analytics Specialist', blurb: 'Analyzes competitors, market trends and niche opportunities.' },
   copywriter: { name: 'Copywriter', blurb: 'Writes ad copy, product descriptions and landing pages that convert.' },
   email_sms: { name: 'Email & SMS', blurb: 'Creates automated email and SMS flows, campaigns and retention strategies.' },
   operations: { name: 'Operations', blurb: 'Handles orders, fulfillment, suppliers, customer service and automation.' },
@@ -849,6 +849,32 @@ export interface AgentTypeInfo {
   name: string;
   description: string;
   baseRole: AgentRole;
+  /** What its prompt is built from, shown under "Role instructions and checks". */
+  contract: RoleContract;
+}
+
+/** A type's contract (decision 2). Every type's workflow opens and its checks end with the same steps. */
+export interface RoleContract {
+  responsibility: string;
+  kpi: string;
+  workflow: string[];
+  /** The tools the type may be given (a deploy can switch drafts off). */
+  tools: string[];
+  knowledge: string[];
+  outputs: string[];
+  checks: string[];
+  /** A custom role's own instructions, on top of its base role's contract. */
+  instructions?: string;
+}
+
+/** POST /api/custom-roles?store= body → 201 CustomRole. `tools` narrows the base role's; `allStores` saves it for every store. */
+export interface CreateCustomRoleInput {
+  name: string;
+  description?: string;
+  instructions?: string;
+  baseRole: AgentRole;
+  tools?: string[];
+  allStores?: boolean;
 }
 
 export interface SendMessageInput {

@@ -94,7 +94,7 @@ describe('promote to General', () => {
     expect(db.prepare('SELECT count(*) AS n FROM kb_cards WHERE store_id IS NULL').get()).toEqual({ n: 1 });
   });
 
-  test("the owner's Promote to General starts the card's own agent (else the Market Analyst) drafting; the demo engine drafts without the store's name", async () => {
+  test("the owner's Promote to General starts the card's own agent (else the Analytics Specialist) drafting; the demo engine drafts without the store's name", async () => {
     const c = card('pawsome', 'Car hooks win at Pawsome Gear', { summary: 'At Pawsome Gear, open on the car-anxious dog', authorId: 'pawsome:copywriter' });
     const res = await req(`/api/kb/cards/${c.id}/promote?ws=pawsome`, { method: 'POST' });
     expect(res.status).toBe(202);
@@ -118,7 +118,7 @@ describe('promote to General', () => {
     decide(db, String(promotions()[2]!.id), 'deny');
   });
 
-  test("the drafter is an agent of the card's own store that wrote it, else the Market Analyst", () => {
+  test("the drafter is an agent of the card's own store that wrote it, else the Analytics Specialist", () => {
     expect(drafter({ storeId: 'pawsome', authorId: 'pawsome:copywriter' })).toBe('pawsome:copywriter');
     for (const authorId of ['owner', 'glow:copywriter', 'pawsome:intern', 'research']) expect(drafter({ storeId: 'pawsome', authorId })).toBe('pawsome:market_analyst');
   });

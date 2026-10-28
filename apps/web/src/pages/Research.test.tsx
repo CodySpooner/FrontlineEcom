@@ -32,7 +32,7 @@ describe('ProductDetails › Add to a store', () => {
 
     fireEvent.change(pick, { target: { value: 'shop1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Request to add' }));
-    await screen.findByText(/Sent to Peak Fit's Product Hunter/);
+    await screen.findByText(/Sent to Peak Fit's Product Researcher/);
     const [, init] = fetch.mock.calls.find(([u]) => String(u).includes('add-to-store'))!;
     expect(JSON.parse(String(init?.body))).toEqual({ storeId: 'shop1' });
   });
@@ -49,7 +49,7 @@ describe('ProductDetails › Add to a store', () => {
 });
 
 describe('AI Research', () => {
-  it("asks the Product Hunter of the store the owner picks, not silently the first one", async () => {
+  it("asks the Product Researcher of the store the owner picks, not silently the first one", async () => {
     const fetch = stubApi((url, init) => {
       if (init?.method === 'POST') return { id: 'r1', agentId: 'glow:product_hunter', status: 'queued', transcript: [] };
       if (url.startsWith('/api/stores')) return [store('paws', 'Pawsome Gear', 'shopify'), store('glow', 'Glow Haus', 'shopify')];

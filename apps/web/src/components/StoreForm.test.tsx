@@ -88,6 +88,6 @@ describe('store form niche hint', () => {
     renderApp(<StoreForm onDone={() => {}} />);
     expect(screen.getByText(/The squad reads its niche pack/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Niche'), { target: { value: 'other' } });
-    expect(screen.getByText(/Once the store is connected, its Market Analyst researches this niche and drafts its pack for you to approve/)).toBeTruthy();
+    expect(screen.getByText(/Once the store is connected, its Analytics Specialist researches this niche and drafts its pack for you to approve/)).toBeTruthy();
   });
 });

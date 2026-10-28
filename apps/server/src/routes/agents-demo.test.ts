@@ -45,7 +45,7 @@ test('demo runs do one real, non-blocking piece of each role’s work', async ()
   expect(db.prepare('SELECT count(*) AS n FROM approvals WHERE run_id IS NOT NULL').get()?.n).toBe(0); // demo runs never wait on the owner
 });
 
-test('a demo Creative Studio run asks before rendering, like a real one; approved, the render lands in the library', async () => {
+test('a demo Creative Strategist run asks before rendering, like a real one; approved, the render lands in the library', async () => {
   const m = runManager(db);
   const run = m.start('glow:creative_studio', 'Make a 9:16 UGC avatar video ad and save it to the creatives library. Brief: A creator unboxes it in a car.');
   if (typeof run === 'string') throw new Error(run);

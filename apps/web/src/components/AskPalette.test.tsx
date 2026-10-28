@@ -20,7 +20,7 @@ describe('Ask AI palette', () => {
     const input = await screen.findByRole('combobox');
     fireEvent.change(input, { target: { value: 'sett' } });
     // First the "ask" rows (the Market Analyst, the knowledge base), then the Settings page.
-    await screen.findByText('Ask the Market Analyst · Pawsome Gear');
+    await screen.findByText('Ask the Analytics Specialist · Pawsome Gear');
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
@@ -33,16 +33,16 @@ describe('Ask AI palette', () => {
     window.dispatchEvent(new CustomEvent('frontline:ask', { detail: { q: 'Use [kb:c1] to ', storeId: 'pawsome' } }));
     const input = (await screen.findByRole('combobox')) as HTMLInputElement;
     expect(input.value).toBe('Use [kb:c1] to ');
-    expect(await screen.findByText('Ask the Market Analyst · Pawsome Gear')).toBeTruthy();
-    expect(screen.queryByText('Ask the Market Analyst · Glow Haus')).toBeNull();
+    expect(await screen.findByText('Ask the Analytics Specialist · Pawsome Gear')).toBeTruthy();
+    expect(screen.queryByText('Ask the Analytics Specialist · Glow Haus')).toBeNull();
     // A General card's: every store in view.
     fireEvent.keyDown(input, { key: 'Escape' });
     window.dispatchEvent(new CustomEvent('frontline:ask', { detail: { q: 'Use [kb:g1] to ' } }));
-    expect(await screen.findByText('Ask the Market Analyst · Glow Haus')).toBeTruthy();
-    expect(screen.getByText('Ask the Market Analyst · Pawsome Gear')).toBeTruthy();
+    expect(await screen.findByText('Ask the Analytics Specialist · Glow Haus')).toBeTruthy();
+    expect(screen.getByText('Ask the Analytics Specialist · Pawsome Gear')).toBeTruthy();
   });
 
-  it("a question starts the selected store's Market Analyst and opens the chat", async () => {
+  it("a question starts the selected store's Analytics Specialist and opens the chat", async () => {
     const fetch = stubApi((url, init) => {
       if (init?.method === 'POST') return { id: 'r1', agentId: 'pawsome:market_analyst', status: 'queued', transcript: [] };
       if (url.startsWith('/api/stores')) return stores;
@@ -51,7 +51,7 @@ describe('Ask AI palette', () => {
     window.dispatchEvent(new Event('frontline:ask'));
     const input = await screen.findByRole('combobox');
     fireEvent.change(input, { target: { value: 'Why is profit down?' } });
-    await screen.findByText('Ask the Market Analyst · Pawsome Gear');
+    await screen.findByText('Ask the Analytics Specialist · Pawsome Gear');
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/agents/pawsome%3Amarket_analyst?run=r1'));
     expect(fetch).toHaveBeenCalledWith(
@@ -60,7 +60,7 @@ describe('Ask AI palette', () => {
     );
   });
 
-  it("asks the knowledge base: the store's Market Analyst answers from its cards, in its chat", async () => {
+  it("asks the knowledge base: the store's Analytics Specialist answers from its cards, in its chat", async () => {
     const fetch = stubApi((url, init) => {
       if (url === '/api/kb/ask') return { measured: [], research: [], unproven: [], run: { id: 'r9', agentId: 'pawsome:market_analyst', status: 'queued', transcript: [] } };
       if (url.startsWith('/api/stores')) return stores;
@@ -86,7 +86,7 @@ describe('Ask AI palette', () => {
     expect(screen.getByTestId('where').textContent).toBe('/knowledge?view=research&ws=pawsome&ask=Live+shopping%3F');
   });
 
-  it('with several stores in view, offers each Market Analyst, so the question goes where the owner picks', async () => {
+  it('with several stores in view, offers each Analytics Specialist, so the question goes where the owner picks', async () => {
     const fetch = stubApi((url, init) => {
       if (init?.method === 'POST') return { id: 'r2', agentId: 'glow:market_analyst', status: 'queued', transcript: [] };
       if (url.startsWith('/api/stores')) return [...stores, { id: 'glow', name: 'Glow Haus', currency: 'USD' }];
@@ -95,14 +95,14 @@ describe('Ask AI palette', () => {
     window.dispatchEvent(new Event('frontline:ask'));
     const input = await screen.findByRole('combobox');
     fireEvent.change(input, { target: { value: 'Which ads should I pause?' } });
-    await screen.findByText('Ask the Market Analyst · Glow Haus');
-    expect(screen.getByText('Ask the Market Analyst · Pawsome Gear')).toBeTruthy();
+    await screen.findByText('Ask the Analytics Specialist · Glow Haus');
+    expect(screen.getByText('Ask the Analytics Specialist · Pawsome Gear')).toBeTruthy();
     fireEvent.keyDown(input, { key: 'ArrowDown' });
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/agents/glow%3Amarket_analyst/runs', expect.objectContaining({ method: 'POST' })));
   });
 
-  it("with several stores in view, the knowledge base is also asked across all workspaces, the first store's Market Analyst answering", async () => {
+  it("with several stores in view, the knowledge base is also asked across all workspaces, the first store's Analytics Specialist answering", async () => {
     const fetch = stubApi((url) => {
       if (url === '/api/kb/ask') return reply({ error: "Today's budget for this agent ($0.3) is used up. Raise it in its settings." }, 409);
       if (url.startsWith('/api/stores')) return [...stores, { id: 'glow', name: 'Glow Haus', currency: 'USD' }];
@@ -126,7 +126,7 @@ describe('Ask AI palette', () => {
     window.dispatchEvent(new Event('frontline:ask'));
     const input = await screen.findByRole('combobox');
     fireEvent.change(input, { target: { value: 'Why is profit down?' } });
-    await screen.findByText('Ask the Market Analyst · Pawsome Gear');
+    await screen.findByText('Ask the Analytics Specialist · Pawsome Gear');
     fireEvent.keyDown(input, { key: 'Enter' });
     fireEvent.click(await screen.findByRole('link', { name: "Raise the agent's budget" }));
     expect(screen.getByTestId('where').textContent).toBe('/agents/pawsome%3Amarket_analyst?tab=settings');

@@ -72,7 +72,7 @@ test('a cancelled step blocks the steps that need it, and the owner hears the mi
   await send('POST', `/api/runs/${created.steps[0]!.runId}/cancel`);
   const m = await settle(created.id);
   expect([m.status, ...m.steps.map((s) => s.status)]).toEqual(['blocked', 'cancelled', 'blocked']);
-  expect(notes()).toEqual([{ title: 'Mission stuck: Bundle test', body: "The Market Analyst's step was cancelled, so the steps that need it didn't start." }]);
+  expect(notes()).toEqual([{ title: 'Mission stuck: Bundle test', body: "The Analytics Specialist's step was cancelled, so the steps that need it didn't start." }]);
 });
 
 test('after an app restart each step follows the retry of its own run, even when two missions gave the same brief', async () => {
@@ -93,7 +93,7 @@ test('after an app restart each step follows the retry of its own run, even when
   expect(new Set([a.steps[0]!.runId, b.steps[0]!.runId, 'cut-m1', 'cut-m2']).size).toBe(4);
   const copy = await get<AgentRun>(`/api/runs/${a.steps[1]!.runId}`);
   expect(copy.parentRunId).toBe(a.steps[0]!.runId);
-  expect(copy.task).toMatch(/\n- Market Analyst: .+/);
+  expect(copy.task).toMatch(/\n- Analytics Specialist: .+/);
 });
 
 test("a step whose agent has under a cent left waits with a note: no run is started that couldn't spend", async () => {
@@ -190,7 +190,7 @@ test('a damaged mission row is skipped by run ends and app start alike', async (
   expect(() => createApp(db)).not.toThrow();
   runManager(db).start('glow:market_analyst', 'Pull the numbers please.');
   await runManager(db).idle();
-  expect(db.prepare(`SELECT title FROM notifications WHERE title = 'Market Analyst finished'`).all()).toHaveLength(1);
+  expect(db.prepare(`SELECT title FROM notifications WHERE title = 'Analytics Specialist finished'`).all()).toHaveLength(1);
 });
 
 test('a step its agent turned down starts when the owner brings the agent back', async () => {
@@ -252,7 +252,7 @@ test('a long answer reaches the next step with both ends: its result up front an
   await create({ title: 'Anything', steps: [{ id: 'a', role: 'operations', task: 'Check the stuck orders.' }] }); // advances every open mission
   const copy = (await get<SquadMission>('/api/squad-missions/m-long')).steps[1]!;
   const { task } = await get<AgentRun>(`/api/runs/${copy.runId}`);
-  expect(task).toContain('- Market Analyst: Bundles beat singles.\n');
+  expect(task).toContain('- Analytics Specialist: Bundles beat singles.\n');
   expect(task).toContain('For the Copywriter: lead with the 2-pack at $39.');
   expect(task.length).toBeLessThan(answer.length);
   await runManager(db).idle();

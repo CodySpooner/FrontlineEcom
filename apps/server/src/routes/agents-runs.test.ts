@@ -543,7 +543,7 @@ test("the store's open requests are in the prompt, so nobody asks twice", async 
   const m = manager({ engine: async function* (input) { prompt = input.systemPrompt ?? ''; yield { type: 'done', sessionId: 's', usage }; } });
   ok(m.start('pawsome:product_hunter', 'Daily product scan'));
   await m.idle();
-  expect(prompt).toContain("# Waiting for the owner\nAlready asked in this store; don't ask for these again:\n- Add 2 products (Product Hunter, 2026-10-24)\n\nToday is");
+  expect(prompt).toContain("# Waiting for the owner\nAlready asked in this store; don't ask for these again:\n- Add 2 products (Product Researcher, 2026-10-24)\n\nToday is");
 });
 
 test('a follow-up and a reflection are told what their session already cost; a run that stops early is charged', async () => {

@@ -125,7 +125,7 @@ test("request_approval refuses kinds the app carries out, so a hand-made one can
   // Operations has none of those tools: it's pointed to the squadmate who has each, not to a tool it can't call.
   expect(outputs(events)).toEqual([
     "Not sent: ads.set_budget requests come from propose_ad_change, the Ad Strategist's tool, not yours. Hand it over with assign_task (with the numbers), or put the recommendation in your answer.",
-    "Not sent: store.set_price requests come from propose_price_change, the Market Analyst's tool, not yours. Hand it over with assign_task (with the numbers), or put the recommendation in your answer.",
+    "Not sent: store.set_price requests come from propose_price_change, the Analytics Specialist's tool, not yours. Hand it over with assign_task (with the numbers), or put the recommendation in your answer.",
     "Not sent: store.publish_theme requests come from draft_theme_change, the Store Developer's tool, not yours. Hand it over with assign_task (with the numbers), or put the recommendation in your answer.",
   ]);
   expect(outputs(await run(input('pawsome:ad_strategist'), [forged('ads.set_budget', { campaignId: 'pawsome-c1', to: 5000 })]))).toEqual([

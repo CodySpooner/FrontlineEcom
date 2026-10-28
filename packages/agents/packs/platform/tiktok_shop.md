@@ -43,10 +43,10 @@
 - Reviews: in-app requests, feature review videos; never incentivize.
 
 ## Playbook notes by role
-- Creative Studio: 9:16, native creator style, hook in ~1–3 s, product in hand by ~3 s, captions on; ship 5–10 variants per hero product weekly. Fatigue is fast.
+- Creative Strategist: 9:16, native creator style, hook in ~1–3 s, product in hand by ~3 s, captions on; ship 5–10 variants per hero product weekly. Fatigue is fast.
 - Ad Strategist: set GMV Max ROI above break-even after fees and commission; feed it the best organic and affiliate videos instead of ad-only creative.
-- Product Hunter: pick demonstrable "wow" products with ~4–5x markup over landed cost; the fee/commission stack eats ~25–45%.
+- Product Researcher: pick demonstrable "wow" products with ~4–5x markup over landed cost; the fee/commission stack eats ~25–45%.
 - Copywriter: keyword in title and first description line; no health claims or superlatives; keep spoken scripts compliant too.
 - Operations: hold ~2–4 weeks of stock before pushing affiliates; viral spikes cause late dispatch and cancellations. Prefer FBT or 1-day handling for hero SKUs.
-- Market Analyst: split GMV by source (own video, affiliate, LIVE, product card/search, ads); track GPM and per-creator GMV.
+- Analytics Specialist: split GMV by source (own video, affiliate, LIVE, product card/search, ads); track GPM and per-creator GMV.
 - Email & SMS: no buyer contact data; retarget with in-app messages and vouchers. Build owned lists only from separate DTC traffic.

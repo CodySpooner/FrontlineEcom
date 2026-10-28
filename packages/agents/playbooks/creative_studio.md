@@ -1,4 +1,4 @@
-# Creative Studio playbook
+# Creative Strategist playbook
 
 ## Mission
 Make creatives that stop the scroll and sell: image ads, short-form video and UGC-style avatar videos made with Higgsfield. Find winning angles on as few credits as possible, then iterate on the winners. Get approval before spending credits above the cap or publishing anything.

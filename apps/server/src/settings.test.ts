@@ -48,7 +48,7 @@ test('caps default per store, merge autopilot per action kind, validate', async 
 test('notifications: approvals raise one, prefs silence a kind, mark read', async () => {
   const { db, app } = setup();
   approvalsHook(db).create({ storeId: 'glow', agentId: 'glow:copywriter', title: 'Publish 3 product descriptions', reason: 'SEO score +18', action: { kind: 'store.update_products', payload: {} } });
-  notify(db, { kind: 'agent_done', title: 'Market Analyst finished the weekly brief', storeId: 'glow' });
+  notify(db, { kind: 'agent_done', title: 'Analytics Specialist finished the weekly brief', storeId: 'glow' });
   await app.request('/api/settings', send('PATCH', { notifications: { errors: false } }));
   expect(notify(db, { kind: 'error', title: 'Shopify sync failed' })).toBeUndefined();
 

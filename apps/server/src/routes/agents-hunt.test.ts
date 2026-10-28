@@ -34,7 +34,7 @@ test('approving "add to store" from the research screen adds a draft and has the
   await runManager(db).idle();
 });
 
-test("a Product Hunter's own request goes through the same path; denied ones add nothing", async () => {
+test("a Product Researcher's own request goes through the same path; denied ones add nothing", async () => {
   const agent = getAgent(db, 'pawsome:product_hunter')!;
   const input: RunInput = { agent, store: getStore(db, 'pawsome')!, task: 't', env: toolEnv(db) };
   const ask = (title: string): FakeStep => ({

@@ -60,6 +60,13 @@ function api({ autonomy = 'ask', tools = ['store_summary', 'list_campaigns', 'pr
     if (u.pathname === '/api/caps') return [{ storeId: 'glow', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 10, autopilot: { 'ads.set_budget': { enabled: true, maxUsdPerDay: 50 } } }];
     if (u.pathname === '/api/claude-account') return { signedIn: true, checkedAt: '2026-10-28T10:00:00Z' };
     if (u.pathname === '/api/runs') return [run('r9', 'done', { conversationId: undefined, task: 'Weekly ad check' })];
+    if (u.pathname === '/api/agent-types')
+      return [
+        {
+          id: 'ad_strategist', name: 'Ad Strategist', description: 'Runs paid acquisition.', baseRole: 'ad_strategist',
+          contract: { responsibility: 'You run paid acquisition.', kpi: 'blended ROAS', workflow: ['Establish the objective.', 'Read the campaigns.'], tools: ['review_campaigns', 'meta_ads'], knowledge: ['advertising'], outputs: ['Moves.'], checks: ['List the questions still open.'] },
+        },
+      ];
     return undefined;
   });
 }
@@ -89,6 +96,16 @@ test('Details: runtime, tools with access and connection state, the approval lin
   api({ autonomy: 'autopilot', tools: ['store_summary'] });
   renderApp(<Details store={store} conversationId="c1" />);
   expect(await screen.findByText('Spending always asks you first.')).toBeTruthy();
+});
+
+test("'Role instructions and checks' opens the type's contract", async () => {
+  api();
+  renderApp(<Details store={store} conversationId="c1" />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Role instructions and checks' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Ad Strategist: role instructions and checks' });
+  expect(within(dialog).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Establish the objective.', 'Read the campaigns.', 'Moves.', 'List the questions still open.']);
+  expect(within(dialog).getByText('review campaigns, Meta Ads')).toBeTruthy();
+  expect(within(dialog).getByText('Knowledge areas: advertising')).toBeTruthy();
 });
 
 test('Activity lists the runs newest first with runtime, cost, duration and the error', async () => {

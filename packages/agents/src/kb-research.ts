@@ -13,7 +13,7 @@ import { saveSource, sourceForAgent, type NewKbSource } from './kb-sources';
 import { searchMemory } from './memory';
 import { stepRun } from './missions';
 import { assemblePrompt } from './prompt';
-import { ROLES, SQUAD_RULES } from './roles';
+import { contractOf, contractText, ROLES, SQUAD_RULES } from './roles';
 import { finalText, getRun, INTERRUPTED, type RunManager } from './runs';
 
 type Stage = (typeof KB_TASK_STAGES)[number];
@@ -147,7 +147,7 @@ export function researchContext(db: DatabaseSync, taskId: string, agent: Agent, 
     t.store_id == null
       ? [
           `You are the ${AGENT_ROLES[agent.role].name} of the owner's squad, researching for their General knowledge base: what holds across all their stores, not one store's. No store's own data or notes are part of this.`,
-          ROLES[agent.role].prompt,
+          contractText(contractOf(ROLES[agent.role])),
           SQUAD_RULES,
         ].join('\n\n')
       : assemblePrompt({ agent, store, memories: searchMemory(db, store.id, String(t.objective), 12) });

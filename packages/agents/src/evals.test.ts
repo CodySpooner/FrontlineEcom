@@ -1,7 +1,7 @@
-import { AGENT_ROLES, APPROVAL_KINDS, type AgentRole } from '@frontline/shared';
+import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type Store } from '@frontline/shared';
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
-import { APP_TOOLS, DEFAULT_JOBS, MISSION_TEMPLATES, playbook, ROLES, SQUAD_RULES, toolsFor } from './index';
+import { APP_TOOLS, assemblePrompt, BUILTIN_TYPES, CHECKS_LAST, contractOf, contractText, DEFAULT_JOBS, MISSION_TEMPLATES, playbook, ROLES, SQUAD_RULES, toolsFor, validateCustomRole, WORKFLOW_FIRST } from './index';
 
 // Evals: the text an agent is given must only ask for tools that agent actually has. Catches drift whenever a
 // playbook, a role prompt, the squad rules, a scheduled job or a mission template is edited without updating the role's tool list.
@@ -25,8 +25,38 @@ test('every role tool exists, and app tools are all wired', () => {
 test.each(ROLE_IDS)('%s is only told to use tools it has', (role) => {
   expect(mentioned(playbook(role)).size, 'playbook names its tools').toBeGreaterThan(2);
   const jobs = [...DEFAULT_JOBS, ...MISSION_TEMPLATES.flatMap((m) => m.steps)].filter((j) => j.role === role).map((j) => j.task);
-  const missing = [...mentioned([playbook(role), ROLES[role].prompt, SQUAD_RULES, ...jobs].join('\n'))].filter((t) => !ROLES[role].tools.includes(t as never));
+  const missing = [...mentioned([playbook(role), contractText(contractOf(ROLES[role])), SQUAD_RULES, ...jobs].join('\n'))].filter((t) => !ROLES[role].tools.includes(t as never));
   expect(missing).toEqual([]);
+});
+
+// Role contracts (decision 2): a type's prompt is built from its contract, whose workflow opens and whose checks end
+// with the shared steps. Built-in types get their own contract and none of their base role's text.
+const glow = { id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'UTC', color: '#fff', connected: false } as Store;
+const seat = (role: AgentRole): Agent => ({ id: `glow:${role}`, storeId: 'glow', role, status: 'idle' });
+const BUILTIN_IDS = Object.keys(BUILTIN_TYPES);
+
+test.each([...ROLE_IDS, ...BUILTIN_IDS])("%s's prompt holds its contract, with the shared workflow step and quality checks", (id) => {
+  const builtin = BUILTIN_TYPES[id];
+  const spec = builtin ?? ROLES[id as AgentRole];
+  const prompt = assemblePrompt({ agent: seat(builtin?.baseRole ?? (id as AgentRole)), store: glow, ...(builtin ? { customRole: { id, name: builtin.name, description: builtin.description, instructions: '' } } : {}) });
+  const contract = contractOf(spec);
+  expect(prompt).toContain(contractText(contract));
+  for (const step of [WORKFLOW_FIRST, ...CHECKS_LAST]) expect(prompt).toContain(step);
+  expect(contract.outputs.length && contract.knowledge.length && spec.workflow.length && spec.checks.length).toBeGreaterThan(0);
+  expect(prompt).toContain('[measured]');
+  if (!builtin) return;
+  expect(prompt).toContain(`You are the ${builtin.name} of Glow Haus`);
+  for (const base of [ROLES.market_analyst.prompt, ROLES.market_analyst.kpi, playbook('market_analyst')]) expect(prompt).not.toContain(base);
+  expect([...mentioned(contractText(contract))].filter((t) => !builtin.tools.includes(t as never))).toEqual([]);
+});
+
+test("a custom role narrows its base role's tools and adds its instructions to the base contract, never a tool", () => {
+  expect(validateCustomRole({ name: 'Voice', baseRole: 'copywriter', tools: ['list_products', 'propose_ad_change'] })).toEqual({ field: 'tools', error: expect.stringContaining('"propose_ad_change"') });
+  expect(validateCustomRole({ name: 'Voice', baseRole: 'copywriter', tools: ['list_products', 'compare_stores'] })).toMatchObject({ field: 'tools' });
+  expect(validateCustomRole({ name: 'Voice', baseRole: 'copywriter', tools: ['list_products', 'list_products'] })).toMatchObject({ tools: ['list_products'] });
+  const prompt = assemblePrompt({ agent: seat('copywriter'), store: glow, customRole: { id: 'c1', name: 'Brand Voice', description: 'Keeps every line on brand.', instructions: 'Never use exclamation marks.' } });
+  expect(prompt).toContain('You are the Brand Voice of Glow Haus');
+  for (const part of [contractText(contractOf(ROLES.copywriter)), playbook('copywriter'), '# Your role: Brand Voice', 'Never use exclamation marks.']) expect(prompt).toContain(part);
 });
 
 test('every app tool is used by some role', () => {

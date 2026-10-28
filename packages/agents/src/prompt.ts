@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { AGENT_ROLES, KB_STAGES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, type Agent, type AgentRole, type KbCardBrief, type Niche, type NicheLearning, type Platform, type Store, type StoreMemory } from '@frontline/shared';
+import { AGENT_ROLES, KB_STAGES, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, type Agent, type AgentRole, type CustomRole, type KbCardBrief, type Niche, type NicheLearning, type Platform, type Store, type StoreMemory } from '@frontline/shared';
 import { customNichePack } from './niche';
-import { ROLES, SQUAD_RULES } from './roles';
+import { BUILTIN_TYPES, contractOf, contractText, ROLES, SQUAD_RULES } from './roles';
 
 const root = new URL('../', import.meta.url);
 
@@ -46,20 +46,27 @@ export interface PromptInput {
   budget?: number;
   /** YYYY-MM-DD in the store's timezone. Defaults to now. */
   today?: string;
+  /** The run config's custom role (decision 2): a `builtin:` type or one the owner made on this seat's role. */
+  customRole?: Pick<CustomRole, 'id' | 'name' | 'description' | 'instructions'>;
+  /** The run config's tools: the contract doesn't name the ones it switched off. */
+  tools?: string[];
 }
 
 /**
  * Expertise layers: role + playbook → platform pack → niche pack → store profile → store memory.
  * Stable layers come first and volatile ones (memories, date) last, so the prompt prefix stays cacheable.
  */
-export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [], waiting = [], scheduled = [], knowledge = [], budget = 8000, today }: PromptInput): string {
-  const role = ROLES[agent.role];
+export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [], waiting = [], scheduled = [], knowledge = [], budget = 8000, today, customRole, tools }: PromptInput): string {
+  // A built-in type has its own contract and no playbook; a custom role is its base role plus the owner's instructions.
+  const builtin = customRole && Object.hasOwn(BUILTIN_TYPES, customRole.id) ? BUILTIN_TYPES[customRole.id] : undefined;
   const fixed = [
-    `You are the ${AGENT_ROLES[agent.role].name} of ${store.name}, a ${store.niche} store on ${store.platform}.`,
-    role.prompt,
-    `You are measured on ${role.kpi}.`,
+    `You are the ${customRole?.name ?? AGENT_ROLES[agent.role].name} of ${store.name}, a ${store.niche} store on ${store.platform}.`,
+    contractText(contractOf(builtin ?? ROLES[agent.role]), tools),
     SQUAD_RULES,
-    playbook(agent.role),
+    builtin ? '' : playbook(agent.role),
+    customRole && !builtin
+      ? [`# Your role: ${customRole.name}`, `The owner made this role on top of the ${AGENT_ROLES[agent.role].name}.`, customRole.description, customRole.instructions].filter(Boolean).join('\n')
+      : '',
     platformPack(store.platform),
     nichePack(store.niche) || customNichePack(store.nicheDetail),
     nicheLearnings.length

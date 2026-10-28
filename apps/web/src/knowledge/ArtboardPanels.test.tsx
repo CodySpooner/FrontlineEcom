@@ -140,7 +140,7 @@ describe('Knowledge artboard › Researching dock', () => {
     board((url) => (url.startsWith('/api/kb/research/tasks') ? [task('t1', 'running', 'retrieving'), task('t2', 'running', 'planning'), task('t3', 'queued', 'created'), task('t4', 'queued', 'created')] : undefined));
     const dock = await screen.findByRole('button', { name: /Researching/ });
     expect(within(dock).getByText('Why t1 works')).toBeTruthy();
-    expect(within(dock).getByText('Market Analyst · retrieving')).toBeTruthy();
+    expect(within(dock).getByText('Analytics Specialist · retrieving')).toBeTruthy();
     expect(within(dock).getByText('+2 queued')).toBeTruthy();
     fireEvent.click(dock);
     expect(where()).toBe('/knowledge?ws=peak&view=research');

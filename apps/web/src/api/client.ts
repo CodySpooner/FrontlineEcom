@@ -10,6 +10,8 @@ import type {
   Conversation,
   ConversationCounts,
   ConversationDetail,
+  CreateCustomRoleInput,
+  CustomRole,
   ToolGroup,
   ConversationPage,
   CreateConversationInput,
@@ -102,7 +104,11 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error("Couldn't reach the app's server: it may be restarting. Try again in a moment.");
   });
   if (r.status === 204) return undefined as T;
-  if (!r.ok) throw new Error(((await r.json().catch(() => null)) as { error?: string } | null)?.error ?? `The app's server couldn't do that (error ${r.status}). Try again in a moment.`);
+  if (!r.ok) {
+    // A form's refusal names its field (validateConfig, validateCustomRole): the form shows it there.
+    const body = (await r.json().catch(() => null)) as { error?: string; field?: string } | null;
+    throw Object.assign(new Error(body?.error ?? `The app's server couldn't do that (error ${r.status}). Try again in a moment.`), body?.field ? { field: body.field } : {});
+  }
   return (await r.json()) as T;
 }
 
@@ -234,6 +240,15 @@ export const useConversationTools = (storeId: string, id: string) =>
   useQuery({ queryKey: ['conversation-tools', id], queryFn: () => api<ToolGroup[]>(`/api/conversations/${id}/tools?store=${storeId}`), enabled: !!id });
 
 export const useAgentTypes = (storeId: string) => useQuery({ queryKey: ['agent-types', storeId], queryFn: () => api<AgentTypeInfo[]>(`/api/agent-types?store=${storeId}`), enabled: !!storeId });
+
+/** Makes a custom role (decision 2). Every store's types refresh: it may be for all of them. */
+export function useCreateCustomRole(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateCustomRoleInput) => api<CustomRole>(`/api/custom-roles?store=${storeId}`, json('POST', input)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['agent-types'] }),
+  });
+}
 
 /** A 404 (deleted, or another store's) shows at once instead of after three retries. */
 export const useConversation = (storeId: string, id: string) =>

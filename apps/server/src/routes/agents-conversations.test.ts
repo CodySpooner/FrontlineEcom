@@ -1,5 +1,5 @@
 import { defaultTools, getConfig, getRun, recap } from '@frontline/agents';
-import { AGENT_ROLES, type AgentRun, type AgentRunDetail, type Conversation, type ConversationPage, type CursorPage } from '@frontline/shared';
+import { AGENT_ROLES, type AgentPreset, type AgentRun, type AgentRunDetail, type AgentTypeInfo, type Conversation, type ConversationPage, type CursorPage, type CustomRole } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -244,4 +244,66 @@ test('rename, pin, archive, search and reopen keep the messages, the type, the s
     [run.id, 'Draft the spring hero line'],
     [second.id, 'Shorter, please'],
   ]);
+});
+
+test("a custom role narrows its base role's tools, runs on its seat with its own name and instructions, and stays the store's", async () => {
+  const make = async (body: object, store = 'glow') => {
+    const r = await send('POST', `/api/custom-roles?store=${store}`, body);
+    return { status: r.status, ...((await r.json()) as CustomRole & { field?: string }) };
+  };
+  expect((await make({ name: 'Voice', baseRole: 'copywriter', tools: ['list_products', 'propose_ad_change'] })).field).toBe('tools');
+  expect((await make({ name: ' ', baseRole: 'copywriter' })).field).toBe('name');
+  expect((await make({ name: 'Voice', baseRole: 'builtin:general_researcher' })).field).toBe('baseRole');
+  const voice = await make({ name: 'Brand Voice', description: 'Keeps every line on brand.', instructions: 'Never use exclamation marks.', baseRole: 'copywriter', tools: ['list_products', 'search_memory', 'write_memory'] });
+  expect(voice).toMatchObject({ status: 201, storeId: 'glow', baseRole: 'copywriter', name: 'Brand Voice', tools: ['list_products', 'search_memory', 'write_memory'] });
+  const types = async (store: string) => (await (await send('GET', `/api/agent-types?store=${store}`)).json()) as AgentTypeInfo[];
+  expect((await types('glow')).find((t) => t.id === voice.id)?.contract).toMatchObject({ tools: ['search_memory', 'write_memory', 'list_products'], instructions: 'Never use exclamation marks.' });
+  // Another store can't open, archive or list it (decision 13).
+  expect((await open({ type: voice.id }, 'peak')).status).toBe(404);
+  expect((await send('PATCH', `/api/custom-roles/${voice.id}?store=peak`, { archived: true })).status).toBe(404);
+  expect((await types('peak')).map((t) => t.id)).not.toContain(voice.id);
+
+  const { conversation, run } = await open({ type: voice.id, message: 'A hero line for the LED mask' });
+  expect(conversation).toMatchObject({ agentId: 'glow:copywriter', type: voice.id });
+  expect(getConfig(db, conversation.configId)!.tools).toEqual(['search_memory', 'write_memory', 'list_products']);
+  expect(db.prepare(`SELECT title FROM notifications WHERE title LIKE '%finished' ORDER BY rowid DESC`).get()?.title).toBe('Brand Voice finished');
+  expect(getRun(db, run.id)!.status).toBe('done');
+
+  // Archived: no longer offered, while its conversation keeps it.
+  expect(await (await send('PATCH', `/api/custom-roles/${voice.id}?store=glow`, { archived: true })).json()).toMatchObject({ archivedAt: expect.any(String) });
+  expect((await types('glow')).map((t) => t.id)).not.toContain(voice.id);
+  expect((await open({ type: voice.id })).status).toBe(404);
+  expect(((await (await send('POST', `/api/conversations/${conversation.id}/messages?store=glow`, { clientRequestId: randomUUID(), message: 'Shorter' })).json()) as AgentRun).status).toBe('queued');
+  // One for every store.
+  const shared = await make({ name: 'Launch Copy', baseRole: 'copywriter', allStores: true });
+  expect(shared.storeId).toBeUndefined();
+  expect((await types('peak')).map((t) => t.id)).toContain(shared.id);
+});
+
+test("presets: each type's Default first, then the owner's saved ones for it, checked as a deploy is", async () => {
+  const presets = async (type: string, store = 'glow') => {
+    const r = await send('GET', `/api/presets?store=${store}&type=${encodeURIComponent(type)}`);
+    return r.status === 200 ? ((await r.json()) as AgentPreset[]) : r.status;
+  };
+  expect(await presets('ad_strategist')).toEqual([
+    { id: 'default:ad_strategist', name: 'Campaign planning', builtin: true, createdAt: '', config: { role: 'ad_strategist', tools: defaultTools('ad_strategist'), knowledge: ['store', 'general'], permissions: { saveFindings: 'off' } } },
+  ]);
+  expect(await presets('builtin:general_researcher')).toMatchObject([{ name: 'Web research', config: { role: 'market_analyst', customRoleId: 'builtin:general_researcher', tools: ['store_summary', 'search_memory', 'write_memory', 'search_knowledge', 'WebSearch', 'WebFetch'] } }]);
+  expect(await presets('nope')).toBe(404);
+
+  const save = async (body: object, store = 'glow') => {
+    const r = await send('POST', `/api/presets?store=${store}`, body);
+    return { status: r.status, ...((await r.json()) as AgentPreset & { field?: string }) };
+  };
+  expect((await save({ name: 'Too much', type: 'copywriter', config: { tools: ['propose_ad_change'] } })).field).toBe('tools');
+  expect((await save({ name: '', type: 'copywriter' })).field).toBe('name');
+  expect((await save({ name: 'X', type: 'nope' })).status).toBe(404);
+  const tight = await save({ name: 'Tight budget', type: 'ad_strategist', objective: 'Cut wasted spend on {product}', config: { tools: ['store_summary', 'review_campaigns'], permissions: { stopAfterMin: 15 }, colour: 'red' } });
+  expect(tight).toMatchObject({ status: 201, storeId: 'glow', name: 'Tight budget', config: { role: 'ad_strategist', tools: ['store_summary', 'review_campaigns'], knowledge: ['store', 'general'], permissions: { stopAfterMin: 15, saveFindings: 'off' }, objective: 'Cut wasted spend on {product}' } });
+  expect(tight.config).not.toHaveProperty('runtime'); // none chosen
+  expect(tight.config).not.toHaveProperty('colour');
+  await save({ name: 'Everywhere', type: 'ad_strategist', allStores: true });
+  expect(((await presets('ad_strategist')) as AgentPreset[]).map((p) => p.name)).toEqual(['Campaign planning', 'Everywhere', 'Tight budget']);
+  expect(((await presets('ad_strategist', 'peak')) as AgentPreset[]).map((p) => p.name)).toEqual(['Campaign planning', 'Everywhere']);
+  expect(((await presets('copywriter')) as AgentPreset[]).map((p) => p.name)).toEqual(['Copywriting']);
 });

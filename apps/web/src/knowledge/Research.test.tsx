@@ -70,7 +70,7 @@ describe('Research from source', () => {
     expect(within(bar).getByText('Reads 2 links · notes.md')).toBeTruthy();
     // Only enabled agents; findings go to the agent's store (with its categories) or General.
     const agents = within(bar).getByLabelText('Agent') as HTMLSelectElement;
-    await vi.waitFor(() => expect([...agents.options].map((o) => o.text)).toEqual(['Market Analyst · Pawsome Gear', 'Ad Strategist · Pawsome Gear']));
+    await vi.waitFor(() => expect([...agents.options].map((o) => o.text)).toEqual(['Analytics Specialist · Pawsome Gear', 'Ad Strategist · Pawsome Gear']));
     fireEvent.change(agents, { target: { value: 'pawsome:ad_strategist' } });
     const to = within(bar).getByLabelText('Save findings to') as HTMLSelectElement;
     await vi.waitFor(() => expect([...to.options].map((o) => o.text)).toEqual(['Pawsome Gear', 'Pawsome Gear › Advertising', 'General', 'General › Ads']));
@@ -123,7 +123,7 @@ describe('Research from source', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Review the plan' }));
     const plan = within(dialog).getByRole('list', { name: 'Plan' });
     expect(within(plan).getAllByRole('listitem').map((li) => li.textContent)).toEqual([
-      'Market Analyst (Pawsome Gear) plans it, starting from what your knowledge base already holds.',
+      'Analytics Specialist (Pawsome Gear) plans it, starting from what your knowledge base already holds.',
       'Searches the web and reads up to 3 public sources. Paywalled and sign-in pages are skipped and listed.',
       'Weighs the evidence and files proposed cards to Pawsome Gear › Advertising for your review, linked to related cards.',
       'Writes a report: conclusions, open questions and ways to use it.',

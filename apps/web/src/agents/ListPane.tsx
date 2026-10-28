@@ -278,7 +278,7 @@ function MoreTypes({ types }: { types: AgentTypeInfo[] }) {
 }
 
 /** A type header's menu: its seat's settings. ponytail: New conversation joins it with AA-14. */
-function TypeMenu({ type }: { type: AgentTypeInfo }) {
+function TypeMenu({ type }: { type: Pick<AgentTypeInfo, 'id' | 'name' | 'baseRole'> }) {
   const settings = useAgentSettings();
   const id = `type-${type.id.replace(/\W/g, '-')}`;
   return (

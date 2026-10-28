@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, hasEffects, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
-import { getConfig } from './configs';
+import { customRole, getConfig } from './configs';
 import { conversationPreface } from './conversations';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { researchContext } from './kb-research';
@@ -312,7 +312,11 @@ export function createRunManager(opts: RunManagerOptions) {
         const knowledge = research ? [] : retrieveKnowledge(db, { ws: store.id, role: agent.role, query: run.task, limit: 8 });
         const systemPrompt =
           research?.systemPrompt ??
-          assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id), knowledge });
+          assemblePrompt({
+            agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id), knowledge,
+            ...(config ? { tools: config.tools } : {}),
+            ...(config?.customRoleId ? { customRole: customRole(db, config.customRoleId) } : {}),
+          });
         logKnowledgeUse(db, knowledge.filter((c) => systemPrompt.includes(`[kb:${c.id}]`)).map((c) => c.id), { storeId: store.id, agentId: agent.id, runId: run.id, kind: 'prompt' });
         // A conversation's turn in a fresh session starts from what it continues or was opened from.
         const preface = !resume && run.conversationId ? conversationPreface(db, run.conversationId) : undefined;

@@ -96,7 +96,7 @@ function Squad({ store, onDone }: { store: Store; onDone: (to?: string) => void 
     <div className="grid gap-4">
       <p className="text-[13px] text-text-2">
         {noPack
-          ? `${detail} has no niche pack yet, so ${store.name}'s squad starts from its playbooks. Once you connect the store, its Market Analyst drafts one for you to approve.`
+          ? `${detail} has no niche pack yet, so ${store.name}'s squad starts from its playbooks. Once you connect the store, its Analytics Specialist drafts one for you to approve.`
           : store.niche === 'other'
             ? `${store.name}'s squad is reading the ${detail} niche pack.`
             : `${store.name}'s squad is reading the ${nicheName(store.niche)} niche pack${detail ? ` and knows you focus on ${detail}` : ''}.`}{' '}

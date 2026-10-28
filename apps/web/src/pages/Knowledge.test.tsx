@@ -188,11 +188,11 @@ describe('Knowledge Base › a custom niche with no pack', () => {
       if (url.startsWith('/api/niche-learnings')) return [];
     });
 
-  it('asks its Market Analyst to draft one and opens the run', async () => {
+  it('asks its Analytics Specialist to draft one and opens the run', async () => {
     const fetch = api('claude');
     renderApp(<Knowledge />, '/knowledge?tab=niche');
     expect(await screen.findByText(/has no pack yet/)).toBeTruthy();
-    fireEvent.click(await screen.findByRole('button', { name: 'Ask its Market Analyst to draft one' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ask its Analytics Specialist to draft one' }));
     await vi.waitFor(() => expect(screen.getByTestId('where').textContent).toMatch(/^\/agents\/zen(%3A|:)market_analyst\?run=r1$/));
     expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url]) => url)).toEqual(['/api/agents/zen%3Amarket_analyst/niche-pack']);
   });
@@ -202,14 +202,14 @@ describe('Knowledge Base › a custom niche with no pack', () => {
     api('claude', [draft]);
     renderApp(<Knowledge />, '/knowledge?tab=niche');
     expect((await screen.findByRole('link', { name: 'Review it in Requests' })).getAttribute('href')).toBe('/');
-    expect(screen.queryByRole('button', { name: /Ask its Market Analyst/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Ask its Analytics Specialist/ })).toBeNull();
   });
 
   it("on the demo engine, says when one gets drafted instead (a demo run would make one up)", async () => {
     api('demo');
     renderApp(<Knowledge />, '/knowledge?tab=niche');
     expect(await screen.findByText(/drafts one once the store is connected/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Ask its Market Analyst/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Ask its Analytics Specialist/ })).toBeNull();
   });
 });
 

@@ -1355,7 +1355,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - search, pin, archive and reopen;
   - long titles;
   - jsdom tests plus one browser pass.
-- [ ] AA-11 **Agent types** (decision 2):
+- [x] AA-11 **Agent types** (decision 2):
   - the display names and the rename sweep (decision 2);
   - the two code-defined types, with full contracts;
   - role contracts and "Role instructions and checks";
@@ -1648,6 +1648,13 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   and unarchive keep the messages, type, store, config and id; a jsdom test that switching stores keeps the draft and
   sends nothing; full titles as tooltips on truncated rows; browser pass at 1024 and 1920 with a 170-character title and
   two Creative Studio conversations waiting at once.
+- 2026-10-28 AA-11 agent types: the rename sweep (Product Researcher, Creative Strategist, Analytics Specialist) across
+  owner- and agent-facing strings and tests; a five-part contract on every role and both built-in types, built into
+  every prompt (the shared first step and checks, the evidence-tag rule included); built-in types prompted from their
+  own contract with no base playbook; custom roles (API, form, base contract plus the owner's instructions, tools
+  narrowed only); Default and saved presets; "Role instructions and checks" in Details; the run notification names the
+  config's type; evals for every type's contract, custom-role narrowing, and flows keyed by role plus the two built-in
+  types; 9 new tests; checked in headless Chrome.
 
 ## Blocked
 
@@ -1781,6 +1788,28 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-11, 2026-10-28) For AA-12 and later:
+  - Contracts: `RoleSpec` gained `workflow`, `knowledge`, `outputs`, `checks` and `task` (the Default preset's name);
+    `contractOf(spec)` adds `WORKFLOW_FIRST` before and `CHECKS_LAST` after (check against the request, the
+    [measured]/[research]/[hypothesis] rule, open questions, no claimed action that didn't happen), and lists the MCP
+    servers with the tools. `contractText(contract, configTools?)` is the prompt layer; it replaces the bare role prompt
+    in assemblePrompt and in kb-research's General prompt. SQUAD_RULES is unchanged: the shared steps live in the
+    contract, which every prompt carries.
+  - assemblePrompt takes `customRole` and `tools` (runs.ts passes the config's). A `builtin:` id uses that type's
+    own contract, name and no playbook; a saved custom role keeps the base contract and playbook and adds a
+    "# Your role: <name>" layer with its description and instructions. `customRole(db, id)` resolves either, archived
+    roles included, so their conversations keep working.
+  - Routes (agents-conversations.ts): `POST /api/custom-roles?store=` (validateCustomRole: name ≤ 60, description ≤
+    200, instructions ≤ 4,000, a role as base, tools a subset of `defaultTools(base)`, `allStores`),
+    `PATCH /api/custom-roles/:id?store=` `{ archived }`, `GET /api/presets?store=&type=` (Default first, then saved:
+    for a role, its custom roles' too) and `POST /api/presets?store=` `{ name, type, config, objective?, allStores? }`
+    (validateConfig; unknown keys dropped; runtime/model kept only when chosen). No preset delete: the spec has none.
+    "Validated when applied": the dialog fills its fields from the preset and the create route checks them.
+  - `AgentTypeInfo.contract` feeds `ContractDialog` (exported from Details.tsx) and `CustomRoleForm`
+    (`agents/CustomRoleForm.tsx`, `onCreated(role)`), which AA-14's "+ Custom role" tile mounts. The web `api()`
+    errors now carry the server's `field`, for AA-14's field-level errors.
+  - The rename sweep left comments, nav.ts's "Creative Studio" page title, the ecosystem room name, playbook file names
+    and the developer docs (packages/agents/README.md, public/art/PROMPTS.md) unchanged.
 - (AA-10, 2026-10-28) Several conversations of one type running at once within the store limit is covered by
   agents-runs.test.ts ("an agent's conversations run side by side"; perStore 2, a third waits) and seen in the browser
   (two Creative Studio conversations awaiting approval together; approval waits hold no slot). Long titles: one line

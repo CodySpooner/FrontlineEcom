@@ -45,7 +45,7 @@ test('a store deleted and created again under the same name gets its jobs, and t
   await runManager(db).idle();
 });
 
-test("the owner can ask a custom niche's Market Analyst for its pack again; not on the demo engine, nor while one waits or exists", async () => {
+test("the owner can ask a custom niche's Analytics Specialist for its pack again; not on the demo engine, nor while one waits or exists", async () => {
   const store = (await (
     await app.request('/api/stores', {
       method: 'POST', headers: { 'content-type': 'application/json' },
@@ -54,7 +54,7 @@ test("the owner can ask a custom niche's Market Analyst for its pack again; not 
   ).json()) as Store;
   const ask = (agentId = `${store.id}:market_analyst`) => app.request(`/api/agents/${encodeURIComponent(agentId)}/niche-pack`, { method: 'POST' });
   const error = async (agentId?: string) => ((await (await ask(agentId)).json()) as { error: string }).error;
-  expect(await error()).toBe("On the demo engine the Market Analyst can't research a niche, and its pack would be made up. Connect the store first.");
+  expect(await error()).toBe("On the demo engine the Analytics Specialist can't research a niche, and its pack would be made up. Connect the store first.");
   // What the agent says it runs on; the app's run manager was made with the demo engine and stays on it.
   vi.stubEnv('FRONTLINE_AGENT_ENGINE', 'claude');
   expect((await ask(`${store.id}:copywriter`)).status).toBe(404);

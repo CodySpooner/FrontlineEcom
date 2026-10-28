@@ -35,7 +35,7 @@ test('an agent hands a task to a squadmate, who cannot pass it on', async () => 
   expect(outputs(analyst)[0]).toMatch(/^Assigned to the Copywriter \(run [\w-]+, queued\)\.$/);
 
   const [child] = listRuns(db, { agentId: 'glow:copywriter' });
-  expect(child).toMatchObject({ parentRunId: analyst.id, status: 'done', task: 'Rewrite the LED mask hero headline; CTR 0.8% vs 1.4% store avg\n\n(Assigned by the Market Analyst.)' });
+  expect(child).toMatchObject({ parentRunId: analyst.id, status: 'done', task: 'Rewrite the LED mask hero headline; CTR 0.8% vs 1.4% store avg\n\n(Assigned by the Analytics Specialist.)' });
   expect(outputs(child!)).toEqual(['This task was assigned to you, so it cannot be passed on. Do it, or say what is blocking it.']);
   expect(listRuns(db, { agentId: 'glow:store_developer' })).toEqual([]);
 });

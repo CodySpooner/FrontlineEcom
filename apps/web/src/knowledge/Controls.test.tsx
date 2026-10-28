@@ -111,7 +111,7 @@ describe('ResearchControls', () => {
     const { sent } = render();
     fireEvent.click(await screen.findByRole('button', { name: 'Controls' }));
     const list = await screen.findByRole('list', { name: 'Scheduled research' });
-    expect([...list.children].map((li) => li.textContent)).toEqual(["Every Monday at 9:00: What's new in pet travel? · Market AnalystRemove"]);
+    expect([...list.children].map((li) => li.textContent)).toEqual(["Every Monday at 9:00: What's new in pet travel? · Analytics SpecialistRemove"]);
     fireEvent.click(within(list).getByRole('button', { name: 'Remove' }));
     const add = screen.getByRole('group', { name: 'Add a schedule' });
     fireEvent.change(within(add).getByLabelText('Topic'), { target: { value: ' Calming sprays: what changed? ' } });

@@ -30,7 +30,9 @@ import {
   deleteMemory,
   deleteNicheLearning,
   ensureSquads,
+  customRole,
   getAgent,
+  getConfig,
   getPageDraft,
   kbGoLive,
   knowledgeDoc,
@@ -293,7 +295,8 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent' | 
     if (run.mode?.startsWith('research:')) return void (ended && advanceKbResearch(db));
     if (ended) advanceSquadMissions(db);
     const agent = getAgent(db, run.agentId);
-    const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
+    const custom = run.configId ? getConfig(db, run.configId)?.customRoleId : undefined;
+    const name = (custom && customRole(db, custom)?.name) || (agent ? AGENT_ROLES[agent.role].name : 'Agent');
     const link = `/agents/${run.agentId}`;
     if (run.status === 'done') notify(db, { kind: 'agent_done', title: `${name} finished`, body: runGist(getRun(db, run.id)?.transcript ?? []) ?? run.task, storeId: run.storeId, link });
     // An account problem fails every queued and scheduled run alike: the owner hears it once a day, not once per run.
@@ -605,7 +608,7 @@ export function agentRoutes(db: Db) {
       if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
       if (!isText(b!.question, 3, 500)) return c.json({ error: 'question must be 3-500 characters' }, 400);
       const payer = ws !== null && ws !== 'all' ? ws : b!.payerId;
-      if (typeof payer !== 'string' || !getStore(db, payer)) return c.json({ error: 'payerId must be a store: whose Market Analyst answers' }, 400);
+      if (typeof payer !== 'string' || !getStore(db, payer)) return c.json({ error: 'payerId must be a store: whose Analytics Specialist answers' }, 400);
       const { answer, task } = askKnowledge(db, ws, (b!.question as string).trim());
       if (!task) return c.json(answer);
       const run = runs.start(`${payer}:market_analyst`, task);
@@ -616,11 +619,11 @@ export function agentRoutes(db: Db) {
     .post('/api/agents/:id/niche-pack', (c) => {
       const agent = getAgent(db, c.req.param('id'));
       const store = agent?.role === 'market_analyst' ? getStore(db, agent.storeId) : undefined;
-      if (!agent || !store) return c.json({ error: 'Market Analyst not found' }, 404);
+      if (!agent || !store) return c.json({ error: 'Analytics Specialist not found' }, 404);
       if (store.niche !== 'other' || !store.nicheDetail) return c.json({ error: `${store.name}'s niche has a built-in pack; edit it in Knowledge.` }, 409);
       if (customNichePack(store.nicheDetail)) return c.json({ error: `The "${store.nicheDetail}" pack exists; edit it in Knowledge.` }, 409);
       if (agent.engine?.provider !== 'claude') {
-        return c.json({ error: "On the demo engine the Market Analyst can't research a niche, and its pack would be made up. Connect the store first." }, 409);
+        return c.json({ error: "On the demo engine the Analytics Specialist can't research a niche, and its pack would be made up. Connect the store first." }, 409);
       }
       const pending = db
         // Requests before AGT-238 carry the niche as typed, not slugged.

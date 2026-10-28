@@ -44,7 +44,7 @@ describe('Ask the knowledge base', () => {
     expect(runs()).toEqual([]);
   });
 
-  test("the store's and General's cards by what backs them, answered by the store's Market Analyst from them only", async () => {
+  test("the store's and General's cards by what backs them, answered by the store's Analytics Specialist from them only", async () => {
     const measured = card('pawsome', 'Problem-first hooks win', { summary: 'Hooks on the problem hold viewers' });
     addEvidence(db, measured.id, { kind: 'measured', text: 'ROAS 2.6 vs 1.5 over 28 days', metric: 'roas', value: 2.6, authorId: 'app' });
     const src = saveSource(db, 'pawsome', { kind: 'url', url: 'https://example.com/hooks', title: 'Hook study 2026', status: 'read', text: 'Hooks matter.', fetchedAt: new Date().toISOString() });
@@ -79,7 +79,7 @@ describe('Ask the knowledge base', () => {
     card('pawsome', 'Hooks for pets');
     card('glow', 'Hooks for skincare');
     card(null, 'Hooks in general');
-    expect(await send('POST', '/api/kb/ask', { ws: 'all', question: 'Which hooks work?' })).toEqual({ status: 400, body: { error: 'payerId must be a store: whose Market Analyst answers' } });
+    expect(await send('POST', '/api/kb/ask', { ws: 'all', question: 'Which hooks work?' })).toEqual({ status: 400, body: { error: 'payerId must be a store: whose Analytics Specialist answers' } });
     const all = (await send('POST', '/api/kb/ask', { ws: 'all', question: 'Which hooks work?', payerId: 'glow' })).body as KbAskAnswer;
     expect(titles(all.research.concat(all.measured, all.unproven)).sort()).toEqual(['Hooks for pets', 'Hooks for skincare', 'Hooks in general']);
     expect(all.run).toMatchObject({ agentId: 'glow:market_analyst' });
@@ -98,6 +98,6 @@ describe('Ask the knowledge base', () => {
   test('needs a question and a workspace', async () => {
     expect(await send('POST', '/api/kb/ask', { ws: 'pawsome', question: 'hi' })).toEqual({ status: 400, body: { error: 'question must be 3-500 characters' } });
     expect(await send('POST', '/api/kb/ask', { ws: 'nope', question: 'Which hooks work?' })).toEqual({ status: 400, body: { error: 'ws must be general, all or a store id' } });
-    expect(await send('POST', '/api/kb/ask', { ws: 'general', question: 'Which hooks work?', payerId: 'nope' })).toEqual({ status: 400, body: { error: 'payerId must be a store: whose Market Analyst answers' } });
+    expect(await send('POST', '/api/kb/ask', { ws: 'general', question: 'Which hooks work?', payerId: 'nope' })).toEqual({ status: 400, body: { error: 'payerId must be a store: whose Analytics Specialist answers' } });
   });
 });

@@ -75,7 +75,7 @@ export function StoreForm({ store, onDone }: { store?: Store; onDone: (saved?: S
       <p className="-mt-2 text-xs text-muted">
         {/* A custom niche's pack is drafted on the store's first real sync (agents' routes/agents.ts). */}
         {niche === 'other' && !store?.connected
-          ? 'Once the store is connected, its Market Analyst researches this niche and drafts its pack for you to approve.'
+          ? 'Once the store is connected, its Analytics Specialist researches this niche and drafts its pack for you to approve.'
           : 'The squad reads its niche pack and tunes research, ads and copy to it.'}{' '}
         The more specific, the better.
       </p>
