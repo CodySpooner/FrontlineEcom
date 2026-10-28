@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Lock } from 'lucide-react';
-import { AGENT_ROLES, INTEGRATION_KINDS, INTERRUPTED, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
+import { AGENT_ROLES, EFFORT_LABEL, INTEGRATION_KINDS, INTERRUPTED, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
 import { useAgents, useAgentTypes, useCaps, useClaudeAccount, useConversation, useConversationTools, useThread } from '../api/client';
 import { FixLink } from '../components/Chat';
 import { cx, Dialog, ProgressBar, RUN_STATUS } from '../components/ui';
@@ -9,6 +9,7 @@ import { cents, modelName } from '../lib/format';
 import { isLive } from '../lib/transcript';
 import { took } from './activity';
 import { runtimeLabel, spendLabel } from './Conversation';
+import { useChangeRuntime } from './Deploy';
 import { useStored } from './layout';
 import { approvalLines, autopilotRules } from './settings';
 
@@ -21,10 +22,10 @@ const TABS = [
   { value: 'activity', label: 'Activity' },
 ] as const;
 type Tab = (typeof TABS)[number]['value'];
-const ACCESS: Record<ToolGroup['access'], string> = { read: 'Read', approval: 'Drafts need approval', on: 'On' };
+export const ACCESS: Record<ToolGroup['access'], string> = { read: 'Read', approval: 'Drafts need approval', on: 'On' };
 
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
-  <section className="flex flex-col gap-1.5 border-b border-[#1d1d22] px-4 py-3.5">
+  <section className="relative flex flex-col gap-1.5 border-b border-[#1d1d22] px-4 py-3.5">
     <h3 className="text-[11px] font-semibold tracking-[.07em] text-muted uppercase">{title}</h3>
     {children}
   </section>
@@ -122,6 +123,7 @@ function DetailsTab({ store, c }: { store: Store; c: ConversationDetail }) {
   const { budgetUsd, stopAfterMin } = c.config.permissions;
   const compares = c.config.tools.includes('compare_stores');
   const [contract, setContract] = useState(false);
+  const change = useChangeRuntime();
   return (
     <>
       <Section title="Agent">
@@ -137,10 +139,13 @@ function DetailsTab({ store, c }: { store: Store; c: ConversationDetail }) {
         )}
       </Section>
       <Section title="Runtime">
+        <button type="button" onClick={change.open} className="absolute top-3 right-4 cursor-pointer text-xs text-[#ff6b76] hover:underline">
+          Change…
+        </button>
         <div className="text-[12.5px] text-text-2">
           {c.config.runtime === 'demo' ? 'Demo (free)' : c.config.runtime === 'claude' ? `Claude · ${claude ? (claude.signedIn ? 'signed in' : 'not signed in') : 'checking…'}` : 'Codex'}
         </div>
-        {c.config.model && <div className="text-[12.5px] text-text-2">{[modelName(c.config.model), c.config.effort && `${c.config.effort[0]!.toUpperCase()}${c.config.effort.slice(1)} effort`].filter(Boolean).join(' · ')}</div>}
+        {c.config.model && <div className="text-[12.5px] text-text-2">{[modelName(c.config.model), c.config.effort && `${EFFORT_LABEL[c.config.effort] ?? c.config.effort} effort`].filter(Boolean).join(' · ')}</div>}
         {first && runtimeLabel(first) !== runtimeLabel(c.config) && <p className="text-xs text-muted">Started on {runtimeLabel(first)}: the history stays here, and the new session started from a summary.</p>}
       </Section>
       <Section title="Store scope">

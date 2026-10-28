@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { AlertTriangle, ArrowUp, Check, ChevronRight, Ellipsis, LoaderCircle, Pencil, Square, X } from 'lucide-react';
-import { AGENT_ROLES, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationContext, type ConversationState, type KbStage, type RunDeliverable, type RuntimeId, type Store } from '@frontline/shared';
+import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Ellipsis, LoaderCircle, Pencil, Square, X } from 'lucide-react';
+import { AGENT_ROLES, EFFORT_LABEL, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationContext, type ConversationState, type KbStage, type RunDeliverable, type RuntimeId, type Store } from '@frontline/shared';
 import { useAgentTypes, useCreateConversation, useKbCard, useRetryRun, useRun, useSendMessage, useStopConversation, useThread, useUpdateConversation } from '../api/client';
 import { ApprovalCard, FixLink, ToolBlock } from '../components/Chat';
 import { Button, cx, ErrorState, LoadingState, RUN_STATUS } from '../components/ui';
@@ -10,6 +10,7 @@ import { isLive, toBlocks, toolName, type Block } from '../lib/transcript';
 import { activitySteps, activitySummary, type Step } from './activity';
 import { renderReply } from './markdown';
 import { MenuItem, Popover } from './Popover';
+import { useChangeRuntime } from './Deploy';
 import { useAgentSettings } from './settings';
 import { StateDot } from './StateDot';
 import { agentsUrl } from './urls';
@@ -38,7 +39,7 @@ const otherStores = (r: AgentRunDetail) => r.task.includes('The cards come from 
 export function runtimeLabel(r: { runtime?: RuntimeId; model?: string; effort?: string }) {
   if (!r.runtime) return undefined;
   if (r.runtime === 'demo') return 'Demo (free)';
-  return [r.runtime === 'claude' ? 'Claude' : 'Codex', r.model && modelName(r.model), r.effort && r.effort[0]!.toUpperCase() + r.effort.slice(1)].filter(Boolean).join(' · ');
+  return [r.runtime === 'claude' ? 'Claude' : 'Codex', r.model && modelName(r.model), r.effort && (EFFORT_LABEL[r.effort] ?? r.effort)].filter(Boolean).join(' · ');
 }
 
 /** "This run $0.42 of $3.00", "This run $0.42 · No limit", or tokens for Codex (decision 9). */
@@ -69,6 +70,7 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
   // Pages come newest first; each page is oldest first.
   const runs = [...(thread.data?.pages ?? [])].reverse().flatMap((p) => p.items);
   const name = useTypeName(store.id, c.type);
+  const change = useChangeRuntime();
   const latest = runs.filter((r) => !runs.some((x) => x.retryOf === r.id)).at(-1);
   const last = useRun(latest?.id ?? '').data ?? latest;
   const live = c.state === 'running' || c.state === 'queued' || c.state === 'awaiting_approval' || c.state === 'waiting_for_input';
@@ -95,7 +97,12 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
           <i aria-hidden className="size-2 rounded-sm" style={{ background: store.color }} />
           {store.name}
         </span>
-        {runtimeLabel(config) && <span className={chip}>{runtimeLabel(config)}</span>}
+        {runtimeLabel(config) && (
+          <button type="button" aria-label={`${runtimeLabel(config)}: change runtime or model`} onClick={change.open} className={cx(chip, 'cursor-pointer hover:border-line-2 hover:text-white')}>
+            {runtimeLabel(config)}
+            <ChevronDown aria-hidden className="size-3" />
+          </button>
+        )}
         {last && last.status !== 'queued' && <span className={chip}>{spendLabel(last, config.permissions.budgetUsd)}</span>}
         {c.context && <ContextChip store={store} context={c.context} />}
       </div>
@@ -132,6 +139,7 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
 function Header({ store, conversation: c, live, buttons }: { store: Store; conversation: ConversationRecord; live: boolean; buttons: ReactNode }) {
   const update = useUpdateConversation(store.id);
   const settings = useAgentSettings();
+  const change = useChangeRuntime();
   const stop = useStopConversation(store.id, c.id);
   const [renaming, setRenaming] = useState(false);
   const rename = (title?: string) => {
@@ -182,7 +190,7 @@ function Header({ store, conversation: c, live, buttons }: { store: Store; conve
       <button type="button" aria-label="Conversation actions" popoverTarget="conversation-menu" className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-lg text-muted hover:bg-panel-2 hover:text-white">
         <Ellipsis className="size-4" />
       </button>
-      <Popover id="conversation-menu" label="Conversation actions" align="end" className="w-40">
+      <Popover id="conversation-menu" label="Conversation actions" align="end" className="w-52">
         <MenuItem popover="conversation-menu" onClick={() => setRenaming(true)}>
           Rename
         </MenuItem>
@@ -191,6 +199,9 @@ function Header({ store, conversation: c, live, buttons }: { store: Store; conve
         </MenuItem>
         <MenuItem popover="conversation-menu" onClick={() => update.mutate({ id: c.id, archived: !c.archivedAt })}>
           {c.archivedAt ? 'Unarchive' : 'Archive'}
+        </MenuItem>
+        <MenuItem popover="conversation-menu" onClick={change.open}>
+          Change runtime or model…
         </MenuItem>
         <MenuItem popover="conversation-menu" onClick={() => settings.open(c.agentId.split(':')[1] as AgentRole)}>
           Agent settings

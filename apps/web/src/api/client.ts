@@ -6,6 +6,7 @@ import type {
   Agent,
   AgentRun,
   AgentRunDetail,
+  AgentPreset,
   AgentTypeInfo,
   Conversation,
   ConversationCounts,
@@ -14,6 +15,8 @@ import type {
   CreateCustomRoleInput,
   CustomRole,
   ToolGroup,
+  RuntimeCapabilities,
+  RuntimeId,
   ConversationPage,
   CreateConversationInput,
   CursorPage,
@@ -243,6 +246,34 @@ export const useConversationTools = (storeId: string, id: string) =>
   useQuery({ queryKey: ['conversation-tools', id], queryFn: () => api<ToolGroup[]>(`/api/conversations/${id}/tools?store=${storeId}`), enabled: !!id });
 
 export const useAgentTypes = (storeId: string) => useQuery({ queryKey: ['agent-types', storeId], queryFn: () => api<AgentTypeInfo[]>(`/api/agent-types?store=${storeId}`), enabled: !!storeId });
+
+/** What each runtime can run here (decision 9): checked without a model turn, kept 5 minutes by the server too. */
+export const useRuntimes = () => useQuery({ queryKey: ['runtimes'], queryFn: () => api<RuntimeCapabilities[]>('/api/runtimes'), staleTime: 5 * 60_000 });
+
+/** A type's tools for Deploy, with each group's integration state. */
+export const useTypeTools = (storeId: string, type: string) =>
+  useQuery({ queryKey: ['tool-groups', storeId, type], queryFn: () => api<ToolGroup[]>(`/api/tool-groups?store=${storeId}&type=${encodeURIComponent(type)}`), enabled: !!storeId && !!type });
+
+/** A type's presets: its built-in Default first, then the owner's saved ones. */
+export const usePresets = (storeId: string, type: string) =>
+  useQuery({ queryKey: ['presets', storeId, type], queryFn: () => api<AgentPreset[]>(`/api/presets?store=${storeId}&type=${encodeURIComponent(type)}`), enabled: !!storeId && !!type });
+
+export function useSavePreset(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { name: string; type: string; config: object; objective?: string; allStores?: boolean }) => api<AgentPreset>(`/api/presets?store=${storeId}`, json('POST', input)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['presets'] }),
+  });
+}
+
+/** "Change runtime or model…" (decision 10): a new config; the next turn starts a new session from a recap. */
+export function useChangeConfig(storeId: string, conversationId: string) {
+  const done = useConversationDone(storeId);
+  return useMutation({
+    mutationFn: (input: { runtime: RuntimeId; model?: string; effort?: string }) => api<ConversationDetail>(`/api/conversations/${conversationId}/config?store=${storeId}`, json('POST', input)),
+    onSuccess: () => done(conversationId),
+  });
+}
 
 /** Makes a custom role (decision 2). Every store's types refresh: it may be for all of them. */
 export function useCreateCustomRole(storeId: string) {

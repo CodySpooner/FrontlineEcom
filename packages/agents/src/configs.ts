@@ -148,7 +148,7 @@ const GROUPS: [id: string, name: string, access: ToolGroup['access'], match: Reg
 ];
 
 /** The config's tools in groups, in GROUPS order; an integration in the tools is its MCP server (reads run, writes ask). */
-export function toolGroups(db: DatabaseSync, config: AgentConfig): ToolGroup[] {
+export function toolGroups(db: DatabaseSync, config: Pick<AgentConfig, 'storeId' | 'tools'>): ToolGroup[] {
   const live = new Set(db.prepare(`SELECT kind FROM integrations WHERE status = 'connected' AND (store_id = ? OR store_id IS NULL)`).all(config.storeId).map((r) => String(r.kind)));
   const groups: ToolGroup[] = [];
   for (const tool of config.tools) {

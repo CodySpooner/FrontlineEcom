@@ -1389,7 +1389,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - `actual_model` and `effort_applied` recorded, with the activity line on any mismatch;
   - the Fable and usage-credit messages;
   - the model_not_found text no longer pointing at an env var.
-- [ ] AA-14 **Deploy dialog** (A), wired to real data:
+- [x] AA-14 **Deploy dialog** (A), wired to real data:
   - the Deploy agent and New conversation controls (New conversation opens Deploy with the type preselected,
     decision 9);
   - every field, except attachments (AA-17) and "Save findings to knowledge" (AA-18), which render from those items;
@@ -1668,6 +1668,15 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   down) in the conversation, legacy run and preset routes; effort always explicit; `actual_model` and
   `effort_applied` recorded with a "Ran at…"/"Ran on…" activity line on a mismatch; Fable usage-credit text;
   model_not_found text; 6 new tests; discovery checked on this machine (12 models, no model turn).
+- 2026-10-28 AA-14 Deploy dialog: `Deploy` (`apps/web/src/agents/Deploy.tsx`, `?deploy=<type>`) from the list's Deploy
+  agent button, a type's "New conversation" and the folded types' rows; store, presets (Default first, apply and save,
+  a custom-role preset selects the role), type tiles and "+ Custom role", runtime/model/effort from `GET
+  /api/runtimes` with the caption and warnings, suggested title, objective, tools and knowledge, locked approval rows
+  (autopilot kind and cap from the seat, the store rule and the effective tools), draft switches, budget, Stop after,
+  refusals on their field; "Change runtime or model…" (`?change=runtime`, from the ⋯ menu, the runtime chip and
+  Details) writes a new config through `POST /api/conversations/:id/config`, and the next turn starts a new session
+  from the decision 10 recap (pre-go-live runs left out); `GET /api/tool-groups`; the house Dialog gains width,
+  subtitle, headerExtra and footer; 11 new tests; checked in headless Chrome at 1440 and 1024×680.
 
 ## Blocked
 
@@ -1801,6 +1810,32 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-14, 2026-10-28) For AA-14b and later:
+  - **Dialog** (ui.tsx): `width`, `subtitle`, `headerExtra`, `footer`. With a footer the dialog is a flex column capped
+    at the viewport and only the body scrolls (`open:flex`, so a closed dialog stays hidden). `Segmented` takes
+    `quiet` (the board's grey selection, full width), ReactNode labels and a per-option `title`.
+  - **Opening:** `useDeploy()` (`?deploy=`, a type id preselects; empty opens on the first type) and
+    `useChangeRuntime()` (`?change=runtime`) in Deploy.tsx. Workspace mounts Deploy in Panes and ChangeRuntime in
+    ConversationView. Create team (AA-20) can follow the same pattern.
+  - **Runtime choice:** `useRuntimeChoice(store, start)` resolves against `GET /api/runtimes`: a live store never shows
+    Demo; an unlisted model falls back to the login's default; an effort the model lacks falls back to its default;
+    a model with no efforts sends none. `RuntimeFields` renders runtime, model (label in the select, description
+    under it), effort, the source caption and the Fable and demo-store warnings. AA-15 adds the Codex option there.
+  - **Deploy payload:** `tools` only when a draft is off or compare is on (else the type's); `knowledge` always;
+    `permissions` holds only the budget (Claude) and Stop after. The draft switches are `DRAFTS` in Deploy.tsx;
+    "Compare with my other stores" shows for `market_analyst` only. The footer's menu is a single "Save as preset"
+    text button (a one-item menu at the screen's bottom edge had no room to open).
+  - **Change runtime:** `POST /api/conversations/:id/config?store=` `{ runtime, model?, effort? }` → the conversation
+    with its new config; 409 while a reply is going and when the conversation has no run since go-live; 400 with a
+    field otherwise. Tools, knowledge and limits carry over; a budget carries over only to Claude.
+    `setConversationConfig` points the conversation at the new config. start()'s DEMO_SESSION check now looks at the
+    current config only, so a switched conversation keeps going.
+  - **Recap:** `conversationPreface(db, conversationId, before?)` = what it was opened from + `recap` of its own
+    finished turns before `before`. `recap` adds the objective when the first exchange fell outside the budget and
+    the cited cards (`[kb:id]` in final answers, this store and General only). The run manager uses it on every
+    fresh session of a conversation and on the expired-session retry (`recapped(attempt, preface)`); open questions
+    come in through the final answers (every type's checks end by listing them).
+  - `runtimeLabel` and Details use `EFFORT_LABEL` ("Extra high"). `ACCESS` and `DemoPill` are exported for reuse.
 - (AA-13, 2026-10-28) For AA-14 and later:
   - **Registry** `RUNTIME_REGISTRY` (version 2026-10-28): the pricing, effort and model-config pages were fetched
     today; the models overview is codemap item 21's fetch of the same day. Default efforts are Claude Code's (the SDK

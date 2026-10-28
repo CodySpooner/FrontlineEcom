@@ -282,6 +282,19 @@ describe('Claude engine', () => {
     expect(spent.map((n) => n.toFixed(3))).toEqual(['0.004', '0.014', '0.038']); // m1 counted once, at its final count
   });
 
+  test("a draft switched off in Deploy is missing from a Claude run's tools", async () => {
+    let options: Options | undefined;
+    const engine = claudeEngine({ query: (params) => ((options = params.options), (async function* () { yield* frames; })()) });
+    const config = { tools: ROLES.copywriter.tools.filter((t) => t !== 'draft_page') } as unknown as AgentConfig;
+    await collect(runAgent({ ...input, agent: { ...agent, role: 'copywriter' }, env: {} as ToolEnv, config }, engine));
+    const client = new Client({ name: 'test', version: '1.0.0' });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await Promise.all([(options!.mcpServers!.frontline as McpSdkServerConfigWithInstance).instance.connect(a), client.connect(b)]);
+    const names = (await client.listTools()).tools.map((t) => t.name);
+    expect(names).toContain('create_creative');
+    expect(names).not.toContain('draft_page');
+  });
+
   test('caps every run at 40 turns and at what is left of the daily AI budget', async () => {
     let seen: Options | undefined;
     const engine = claudeEngine({

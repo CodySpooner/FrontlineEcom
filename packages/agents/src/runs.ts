@@ -83,7 +83,8 @@ export function createRunManager(opts: RunManagerOptions) {
     const config = conversation ? String(conversation.config_id) : configId;
     // A session holds what the tools said then: on a store since gone live, the demo numbers, read as the store's.
     const live = db.prepare('SELECT at FROM done_once WHERE ref = ?').get(`activate:${agent.storeId}`)?.at;
-    if (live && conversationId && db.prepare('SELECT 1 FROM agent_runs WHERE conversation_id = ? AND created_at < ?').get(conversationId, String(live))) return DEMO_SESSION;
+    // A new config ("Change runtime or model…") starts a new session from a recap that leaves those runs out.
+    if (live && conversationId && db.prepare('SELECT 1 FROM agent_runs WHERE conversation_id = ? AND config_id IS ? AND created_at < ?').get(conversationId, config ?? null, String(live))) return DEMO_SESSION;
     let resume: string | undefined;
     if (resumeRunId) {
       const prev = getRun(db, resumeRunId);
@@ -319,7 +320,7 @@ export function createRunManager(opts: RunManagerOptions) {
           });
         logKnowledgeUse(db, knowledge.filter((c) => systemPrompt.includes(`[kb:${c.id}]`)).map((c) => c.id), { storeId: store.id, agentId: agent.id, runId: run.id, kind: 'prompt' });
         // A conversation's turn in a fresh session starts from what it continues or was opened from.
-        const preface = !resume && run.conversationId ? conversationPreface(db, run.conversationId) : undefined;
+        const preface = !resume && run.conversationId ? conversationPreface(db, run.conversationId, run.id) : undefined;
         const input: RunInput = {
           agent,
           store,
@@ -352,7 +353,7 @@ export function createRunManager(opts: RunManagerOptions) {
           }
           // Claude Code keeps sessions 30 days, per folder: a follow-up whose session is gone goes on from a recap.
           if (end.type === 'error' && attempt.resume && end.message.startsWith('No conversation found')) {
-            attempt = recapped(attempt);
+            attempt = recapped(attempt, run.conversationId && conversationPreface(db, run.conversationId, run.id));
             continue;
           }
           // A busy or failing service is tried again, twice at most, unless the attempt already changed something.
@@ -427,7 +428,9 @@ export function createRunManager(opts: RunManagerOptions) {
   }
 
   /** A fresh session for a follow-up whose session is gone, with the last exchange as context. */
-  function recapped({ resume, sessionCostUsd: _, ...input }: RunInput): RunInput {
+  /** A conversation's turn goes on from the conversation's recap (decision 10); a chat follow-up from its last exchange. */
+  function recapped({ resume, sessionCostUsd: _, ...input }: RunInput, preface?: string): RunInput {
+    if (preface) return { ...input, task: `${preface}\n\nNow: ${input.task}` };
     const prev = db.prepare('SELECT task, transcript_json FROM agent_runs WHERE session_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 1').get(resume!);
     if (!prev) return input;
     // ponytail: only the last exchange; walk the `resume` chain if longer chats need more.

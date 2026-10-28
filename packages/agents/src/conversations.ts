@@ -120,6 +120,11 @@ export function conversationThread(db: DatabaseSync, id: string, { before, limit
 }
 
 /** Rename, pin, archive. A team's conversation renames its team too, so the Ecosystem panel matches. */
+/** "Change runtime or model…" (decision 10): the conversation moves to a new config; its next turn starts a new session. */
+export function setConversationConfig(db: DatabaseSync, id: string, configId: string) {
+  db.prepare('UPDATE conversations SET config_id = ?, updated_at = ? WHERE id = ?').run(configId, new Date().toISOString(), id);
+}
+
 export function updateConversation(db: DatabaseSync, id: string, patch: { title?: string; pinned?: boolean; archived?: boolean }): Conversation | undefined {
   if (!getConversation(db, id)) return undefined;
   const at = new Date().toISOString();
@@ -155,35 +160,55 @@ export function touchConversation(db: DatabaseSync, run: AgentRun) {
 }
 
 /**
- * What a new session needs of earlier runs (decisions 4 and 10): the title and each exchange, owner message and final
- * answer, newest kept within the budget. Runs from before the store went live hold demo numbers and are left out;
- * undefined when nothing is left.
+ * What a new session needs of earlier runs (decisions 4 and 10): the title, the objective (the first message), each
+ * exchange (owner message and final answer, which ends with the agent's open questions), newest kept within the budget,
+ * and the knowledge cards cited. Runs from before the store went live hold demo numbers and are left out; undefined
+ * when nothing is left.
  */
-// ponytail: exchanges only; the cards cited and open questions join when "Change runtime or model" needs them (AA-14b).
 export function recap(db: DatabaseSync, storeId: string, runIds: string[], title?: string): string | undefined {
   const live = db.prepare('SELECT at FROM done_once WHERE ref = ?').get(`activate:${storeId}`)?.at;
   const runs = runIds.flatMap((id) => getRun(db, id) ?? []).filter((r) => r.storeId === storeId && (!live || r.createdAt >= String(live)));
   if (!runs.length) return undefined;
   let text = '';
-  for (const r of runs.reverse()) {
+  let kept = 0;
+  for (const r of [...runs].reverse()) {
     const exchange = `The owner asked: ${r.task.slice(0, 2000)}\nYou answered: ${finalText(r.transcript).slice(0, 3000) || '(no answer)'}`;
     if (text && text.length + exchange.length > 6000) break;
     text = `${exchange}\n\n${text}`;
+    kept++;
   }
-  return `${title ? `This continues "${title}". ` : ''}Earlier work, from a session that has ended:\n\n${text.trim()}`;
+  const objective = kept < runs.length ? `The objective, from the first message: ${runs[0]!.task.slice(0, 1000)}\n\n` : '';
+  // This store's cards and General ones only: a card id from elsewhere names nothing here.
+  const ids = [...new Set(runs.flatMap((r) => [...finalText(r.transcript).matchAll(/\[kb:([\w-]+)\]/g)].map((m) => m[1]!)))].slice(0, 10);
+  const cards = ids.flatMap((id) => db.prepare('SELECT id, title FROM kb_cards WHERE id = ? AND (store_id = ? OR store_id IS NULL)').all(id, storeId)).map((k) => `[kb:${k.id}] ${k.title}`);
+  return (
+    `${title ? `This continues "${title}". ` : ''}Earlier work, from a session that has ended:\n\n${objective}${text.trim()}` +
+    (cards.length ? `\n\nKnowledge cards cited: ${cards.join('; ')}.` : '')
+  );
 }
 
 /**
- * What a conversation's first turn in a fresh session starts from: the run it continues (a recap), or the module record
- * it was opened from, which the agent reads with its own tools rather than from a pasted copy (decision 14).
+ * What a conversation's turn in a fresh session starts from (decisions 4, 10 and 14): what it was opened from (the run it
+ * continues, as a recap, or the module record, which the agent reads with its own tools rather than from a pasted copy),
+ * then a recap of its own earlier turns that finished, before `before`: after "Change runtime or model…" or an expired
+ * session.
  */
-export function conversationPreface(db: DatabaseSync, conversationId: string): string | undefined {
-  const c = db.prepare('SELECT store_id, context_json FROM conversations WHERE id = ?').get(conversationId);
-  const context = c?.context_json ? (JSON.parse(String(c.context_json)) as ConversationContext) : undefined;
-  if (context?.kind === 'run') return recap(db, String(c!.store_id), [context.id]);
+export function conversationPreface(db: DatabaseSync, conversationId: string, before?: string): string | undefined {
+  const c = db.prepare('SELECT store_id, title, context_json FROM conversations WHERE id = ?').get(conversationId);
+  if (!c) return undefined;
+  const earlier = db
+    .prepare(`SELECT id FROM agent_runs WHERE conversation_id = ? AND status = 'done' AND rowid < coalesce((SELECT rowid FROM agent_runs WHERE id = ?), 9e18) ORDER BY rowid`)
+    .all(conversationId, before ?? null)
+    .map((r) => String(r.id));
+  const parts = [openedFrom(db, String(c.store_id), c.context_json ? (JSON.parse(String(c.context_json)) as ConversationContext) : undefined), earlier.length ? recap(db, String(c.store_id), earlier, String(c.title)) : undefined];
+  return parts.filter(Boolean).join('\n\n') || undefined;
+}
+
+function openedFrom(db: DatabaseSync, storeId: string, context?: ConversationContext): string | undefined {
+  if (context?.kind === 'run') return recap(db, storeId, [context.id]);
   if (context?.kind === 'campaign') {
     // The record from the store's own data, not what the module passed.
-    const camp = db.prepare('SELECT c.name, c.status, c.daily_budget, s.currency FROM campaigns c JOIN stores s ON s.id = c.store_id WHERE c.store_id = ? AND c.network = ? AND c.id = ?').get(String(c!.store_id), context.network, context.id);
+    const camp = db.prepare('SELECT c.name, c.status, c.daily_budget, s.currency FROM campaigns c JOIN stores s ON s.id = c.store_id WHERE c.store_id = ? AND c.network = ? AND c.id = ?').get(storeId, context.network, context.id);
     if (!camp) return `The owner opened this from the ${context.network} campaign "${context.name}" (id ${context.id}), which is no longer in the store's data.`;
     const t = db.prepare(`SELECT sum(spend) AS spend, sum(revenue) AS revenue, sum(purchases) AS purchases FROM campaign_daily WHERE network = ? AND campaign_id = ? AND date >= date('now', '-30 days')`).get(context.network, context.id);
     const money = (n: unknown) => `${Number(n ?? 0).toFixed(2)} ${camp.currency}`;

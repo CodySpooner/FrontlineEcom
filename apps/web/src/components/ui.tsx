@@ -138,22 +138,25 @@ function roving<T>(values: T[], value: T, onChange: (v: T) => void) {
   return { onKeyDown, stop: (i: number) => (i === at ? 0 : -1) };
 }
 
-export function Segmented<T extends string | number>({ label, options, value, onChange }: { label: string; options: { value: T; label: string }[]; value: T; onChange: (v: T) => void }) {
+/** `quiet`: full width, grey selection (the AI Agents dialogs); `title` explains an option. */
+export function Segmented<T extends string | number>({ label, options, value, onChange, quiet }: { label: string; options: { value: T; label: ReactNode; title?: string }[]; value: T; onChange: (v: T) => void; quiet?: boolean }) {
   const { onKeyDown, stop } = roving(options.map((o) => o.value), value, onChange);
   return (
-    <div role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className="inline-flex gap-0.5 rounded-[10px] border border-line-2 bg-panel p-[3px]">
+    <div role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className={quiet ? 'flex gap-0.5 rounded-[9px] border border-[#26262c] bg-[#0c0c0f] p-[3px]' : 'inline-flex gap-0.5 rounded-[10px] border border-line-2 bg-panel p-[3px]'}>
       {options.map((o, i) => (
         <button
           key={o.value}
           type="button"
           role="radio"
           aria-checked={o.value === value}
+          title={o.title}
           tabIndex={stop(i)}
           onClick={() => onChange(o.value)}
-          className={cx(
-            'cursor-pointer rounded-[7px] px-3 py-1 font-display text-xs font-semibold transition duration-150',
-            o.value === value ? 'bg-red-fill text-white shadow-glow' : 'text-muted hover:text-white',
-          )}
+          className={
+            quiet
+              ? cx('flex h-7 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md text-[12.5px] whitespace-nowrap', o.value === value ? 'bg-[#232329] text-white' : 'text-[#a9a9b2] hover:text-white')
+              : cx('cursor-pointer rounded-[7px] px-3 py-1 font-display text-xs font-semibold transition duration-150', o.value === value ? 'bg-red-fill text-white shadow-glow' : 'text-muted hover:text-white')
+          }
         >
           {o.label}
         </button>
@@ -351,7 +354,31 @@ export function ErrorState({ message = "Couldn't load this.", onRetry }: { messa
 }
 
 /** Modal (`side="center"`) or a drawer (`side="right"` or `"left"`) on the native <dialog>: focus trap, Esc and backdrop for free. */
-export function Dialog({ open, onClose, title, side = 'center', children }: { open: boolean; onClose: () => void; title: string; side?: 'center' | 'right' | 'left'; children: ReactNode }) {
+/**
+ * `width` (px), `subtitle` and `headerExtra` (left of Close) for the larger dialogs; with a `footer` the header and footer
+ * stay put and only the body scrolls.
+ */
+export function Dialog({
+  open,
+  onClose,
+  title,
+  side = 'center',
+  width,
+  subtitle,
+  headerExtra,
+  footer,
+  children,
+}: {
+  open: boolean;
+  onClose: () => void;
+  title: string;
+  side?: 'center' | 'right' | 'left';
+  width?: number;
+  subtitle?: string;
+  headerExtra?: ReactNode;
+  footer?: ReactNode;
+  children: ReactNode;
+}) {
   const ref = useRef<HTMLDialogElement>(null);
   const down = useRef<EventTarget>(null);
   useEffect(() => {
@@ -371,8 +398,10 @@ export function Dialog({ open, onClose, title, side = 'center', children }: { op
       onMouseDown={(e) => (down.current = e.target)}
       onClick={(e) => e.target === ref.current && down.current === ref.current && onClose()}
       aria-label={title}
+      style={width ? { width: `min(${width}px, calc(100vw - 32px))` } : undefined}
       className={cx(
         'card p-0 text-text backdrop:bg-black/60 backdrop:backdrop-blur-sm',
+        footer ? 'max-h-[calc(100dvh-32px)] flex-col overflow-hidden open:flex' : undefined,
         side === 'right'
           ? 'drawer my-0 mr-0 ml-auto h-dvh max-h-none w-[min(440px,100vw)] rounded-none rounded-l-xl'
           : side === 'left'
@@ -381,12 +410,23 @@ export function Dialog({ open, onClose, title, side = 'center', children }: { op
       )}
     >
       <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
-        <h2 className="font-display text-base font-semibold">{title}</h2>
-        <button type="button" onClick={onClose} aria-label="Close" className="cursor-pointer rounded-md p-1 text-muted transition hover:bg-panel-2 hover:text-white">
-          <X className="size-4" />
-        </button>
+        {subtitle ? (
+          <div className="min-w-0">
+            <h2 className="font-display text-base font-semibold">{title}</h2>
+            <p className="text-[12.5px] text-muted">{subtitle}</p>
+          </div>
+        ) : (
+          <h2 className="font-display text-base font-semibold">{title}</h2>
+        )}
+        <span className="flex shrink-0 items-center gap-2.5">
+          {headerExtra}
+          <button type="button" onClick={onClose} aria-label="Close" className="cursor-pointer rounded-md p-1 text-muted transition hover:bg-panel-2 hover:text-white">
+            <X className="size-4" />
+          </button>
+        </span>
       </header>
-      <div className="p-5">{children}</div>
+      <div className={footer ? 'min-h-0 flex-1 overflow-y-auto px-5 py-4' : 'p-5'}>{children}</div>
+      {footer && <footer className="border-t border-line px-5 py-3.5">{footer}</footer>}
     </dialog>
   );
 }

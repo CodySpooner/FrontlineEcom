@@ -1,6 +1,6 @@
 import {
   agentTypes, archiveCustomRole, conversationCounts, conversationThread, createConversation, createCustomRole, discardConversation, getConfig, getConversation, getCustomRole, getRun, toolGroups, listConversations, listPresets,
-  recap, resolveType, savePreset, updateConversation, validateConfig, validateCustomRole, type RunManager,
+  recap, resolveType, saveConfig, savePreset, setConversationConfig, updateConversation, validateConfig, validateCustomRole, type RunManager,
 } from '@frontline/agents';
 import { INTERRUPTED, type AgentRun, type Conversation, type ConversationContext, type CreateConversationInput, type RuntimeCapabilities, type SendMessageInput, type Store } from '@frontline/shared';
 import { Hono, type Context } from 'hono';
@@ -131,6 +131,36 @@ export function conversationRoutes(db: Db, runs: RunManager) {
     .get('/api/conversations/:id', (c) => {
       const conversation = mine(c);
       return conversation ? c.json({ ...conversation, config: getConfig(db, conversation.configId) }) : missing(c);
+    })
+    // A type's tools for Deploy, with what each needs connected (the conversation's own are below).
+    .get('/api/tool-groups', (c) => {
+      const store = getStore(db, c.req.query('store') ?? '');
+      const type = store && resolveType(db, store.id, c.req.query('type') ?? '');
+      return type ? c.json(toolGroups(db, { storeId: store.id, tools: type.tools })) : missing(c, 'Agent type');
+    })
+    // "Change runtime or model…" (decision 10): a new config with the same tools, knowledge and limits; the next turn
+    // starts a new session from the conversation's recap, and the thread shows the handoff.
+    .post('/api/conversations/:id/config', async (c) => {
+      const conversation = mine(c);
+      const store = conversation && getStore(db, conversation.storeId);
+      const type = conversation && resolveType(db, conversation.storeId, conversation.type);
+      if (!conversation || !store || !type) return missing(c);
+      const b = (await c.req.json().catch(() => null)) as { runtime?: unknown; model?: unknown; effort?: unknown } | null;
+      if (!b || typeof b !== 'object' || b.runtime === undefined) return c.json({ error: 'Expected { runtime, model?, effort? }' }, 400);
+      if (['running', 'queued', 'awaiting_approval', 'waiting_for_input'].includes(conversation.state)) return c.json({ error: 'Wait for the reply to finish, or stop it, before changing the runtime or model.' }, 409);
+      const live = db.prepare('SELECT at FROM done_once WHERE ref = ?').get(`activate:${store.id}`)?.at;
+      if (live && !db.prepare('SELECT 1 FROM agent_runs WHERE conversation_id = ? AND created_at >= ?').get(conversation.id, String(live))) {
+        return c.json({ error: 'That conversation ran on demo data, before the store went live: start a new one.' }, 409);
+      }
+      const old = getConfig(db, conversation.configId)!;
+      const { budgetUsd, ...limits } = old.permissions;
+      // Only Claude bills dollars: a budget doesn't move to another runtime (decision 9).
+      const input = { runtime: b.runtime, model: b.model, effort: b.effort, tools: old.tools, knowledge: old.knowledge, permissions: b.runtime === 'claude' && budgetUsd ? { ...limits, budgetUsd } : limits };
+      const draft = validateConfig(store, type, input, await runtimes());
+      if ('field' in draft) return c.json({ error: draft.error, field: draft.field }, 400);
+      setConversationConfig(db, conversation.id, saveConfig(db, store, type, draft).id);
+      const changed = getConversation(db, conversation.id)!;
+      return c.json({ ...changed, config: getConfig(db, changed.configId) });
     })
     .get('/api/conversations/:id/tools', (c) => {
       const conversation = mine(c);

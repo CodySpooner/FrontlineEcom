@@ -8,6 +8,7 @@ import { useStoreSelection } from '../components/StoreFilter';
 import { buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState } from '../components/ui';
 import { NAV } from '../nav';
 import { Conversation, ReadOnlyRun } from './Conversation';
+import { ChangeRuntime, DemoPill, Deploy, useChangeRuntime, useDeploy } from './Deploy';
 import { Details } from './Details';
 import { useFill } from './fill';
 import { clampPanes, lastOpened, PANES, usePaneState } from './layout';
@@ -49,7 +50,7 @@ export function Workspace() {
   return (
     <>
       <Hero compact title={NAV[1]!.title} icon={NAV[1]!.icon}>
-        {store && !store.connected && <span className="rounded-full border border-dashed border-[#f2b84b]/55 px-2 py-0.5 text-[10px] font-semibold tracking-[.08em] whitespace-nowrap text-[#f2b84b] uppercase">Demo data</span>}
+        {store && !store.connected && <DemoPill />}
       </Hero>
       {body}
     </>
@@ -77,6 +78,7 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
   const { mode, left, right } = clampPanes(workspace, prefs, prefs.rightOpen);
   const [drawer, setDrawer] = useState<'list' | 'details'>();
   const search = useRef<HTMLInputElement>(null);
+  const deploy = useDeploy();
   const online = useOutletContext<boolean | undefined>() ?? true;
   useEffect(() => setDrawer(undefined), [conversationId, mode]);
   useEffect(() => {
@@ -145,6 +147,7 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
         </Dialog>
       )}
       <SettingsDrawer storeId={store.id} />
+      {deploy.type !== null && <Deploy store={store} type={deploy.type} onClose={deploy.close} />}
     </div>
   );
 }
@@ -215,6 +218,7 @@ function Start({ store, buttons }: { store: Store; buttons: ReactNode }) {
 
 function ConversationView({ store, id, buttons }: { store: Store; id: string; buttons: ReactNode }) {
   const c = useConversation(store.id, id);
+  const change = useChangeRuntime();
   const missing = c.isError && /not found$/.test(c.error.message);
   useEffect(() => {
     if (missing && lastOpened.get(store.id) === id) lastOpened.set(store.id, undefined);
@@ -222,7 +226,12 @@ function ConversationView({ store, id, buttons }: { store: Store; id: string; bu
   if (c.isPending) return <LoadingState rows={4} className="p-6" />;
   if (missing) return <NotFound what="conversation" store={store} />;
   if (c.isError) return <ErrorState message="Couldn't load this conversation." onRetry={() => c.refetch()} />;
-  return <Conversation store={store} conversation={c.data} config={c.data.config} buttons={buttons} />;
+  return (
+    <>
+      <Conversation store={store} conversation={c.data} config={c.data.config} buttons={buttons} />
+      {change.shown && <ChangeRuntime store={store} conversation={c.data} onClose={change.close} />}
+    </>
+  );
 }
 
 /** `?run=`: a run in a conversation opens there; one with none reads here (decision 4). Scope comes from the run. */

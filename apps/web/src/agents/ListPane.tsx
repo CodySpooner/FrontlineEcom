@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { Link } from 'react-router';
-import { Archive, ArrowLeft, ChevronDown, ChevronRight, ChevronsUpDown, Ellipsis, Pin, Search, Users, type LucideIcon } from 'lucide-react';
+import { Archive, ArrowLeft, ChevronDown, ChevronRight, ChevronsUpDown, Ellipsis, Pin, Plus, Search, Users, type LucideIcon } from 'lucide-react';
 import type { AgentTypeInfo, Conversation, ConversationState, Store } from '@frontline/shared';
 import { useAgentTypes, useConversationCounts, useConversations, useStores, useUpdateConversation } from '../api/client';
 import { PLATFORM_NAME } from '../components/StoreForm';
-import { cx, ErrorState, LoadingState, RUN_STATUS } from '../components/ui';
+import { Button, cx, ErrorState, LoadingState, RUN_STATUS } from '../components/ui';
+import { useDeploy } from './Deploy';
 import { useStored } from './layout';
 import { hidePopover, MenuItem, Popover, rove } from './Popover';
 import { useAgentSettings } from './settings';
@@ -37,6 +38,7 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
   const archivedTotal = useConversations(store.id, { view: 'archived' }).data?.pages[0]?.total ?? 0;
   const types = useAgentTypes(store.id).data ?? [];
   const update = useUpdateConversation(store.id);
+  const deploy = useDeploy();
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const byType = list.data?.pages[0]?.byType ?? {};
   const teams = items.filter((c) => c.teamId).sort((a, b) => Number(ACTIVE.has(b.state)) - Number(ACTIVE.has(a.state)));
@@ -75,6 +77,9 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
     <nav aria-label="Conversations" className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col gap-2.5 px-3.5 pt-3.5 pb-2.5">
         <StoreSwitcher store={store} />
+        <Button variant="primary" size="sm" className="w-full" onClick={() => deploy.open()}>
+          <Plus aria-hidden className="size-3.5" /> Deploy agent
+        </Button>
         <label className="flex h-8 items-center gap-2 rounded-lg border border-[#26262c] bg-bg-2 px-2.5 text-muted focus-within:border-red/60">
           <Search aria-hidden className="size-4 shrink-0" strokeWidth={1.8} />
           <input ref={search} type="search" aria-label="Search conversations" placeholder="Search this store's conversations" value={q} onChange={(e) => setQ(e.target.value)} className="w-full min-w-0 bg-transparent text-[12.5px] text-text outline-none placeholder:text-muted" />
@@ -257,10 +262,10 @@ function Row({
   );
 }
 
-/** Types with no conversations in the list's range, folded into one row. */
-// ponytail: names only; AA-14 adds each type's "New conversation".
+/** Types with no conversations in the list's range, folded into one row; each starts a new conversation. */
 function MoreTypes({ types }: { types: AgentTypeInfo[] }) {
   const [shown, setShown] = useState(false);
+  const deploy = useDeploy();
   return (
     <div>
       <button type="button" aria-expanded={shown} onClick={() => setShown(!shown)} className="flex w-full cursor-pointer items-center gap-[7px] px-2.5 pt-[9px] pb-[3px] text-left text-[12.5px] font-medium text-muted hover:text-text-2">
@@ -269,17 +274,26 @@ function MoreTypes({ types }: { types: AgentTypeInfo[] }) {
       </button>
       {shown &&
         types.map((t) => (
-          <div key={t.id} title={t.description} className="truncate py-1 pr-2.5 pl-[30px] text-[12.5px] text-muted">
-            {t.name}
-          </div>
+          <button
+            key={t.id}
+            type="button"
+            title={t.description}
+            aria-label={`New conversation with ${t.name}`}
+            onClick={() => deploy.open(t.id)}
+            className="group/new flex w-full cursor-pointer items-center gap-2 rounded-[7px] py-1 pr-2.5 pl-[30px] text-left text-[12.5px] text-muted hover:bg-[#141418] hover:text-text-2"
+          >
+            <span className="min-w-0 flex-1 truncate">{t.name}</span>
+            <Plus aria-hidden className="size-3.5 opacity-0 group-hover/new:opacity-100 group-focus-visible/new:opacity-100" />
+          </button>
         ))}
     </div>
   );
 }
 
-/** A type header's menu: its seat's settings. ponytail: New conversation joins it with AA-14. */
+/** A type header's menu: a new conversation with it, and its seat's settings. */
 function TypeMenu({ type }: { type: Pick<AgentTypeInfo, 'id' | 'name' | 'baseRole'> }) {
   const settings = useAgentSettings();
+  const deploy = useDeploy();
   const id = `type-${type.id.replace(/\W/g, '-')}`;
   return (
     <>
@@ -292,6 +306,9 @@ function TypeMenu({ type }: { type: Pick<AgentTypeInfo, 'id' | 'name' | 'baseRol
         <Ellipsis className="size-4" />
       </button>
       <Popover id={id} label={`Actions for ${type.name}`} align="end" className="w-40">
+        <MenuItem popover={id} onClick={() => deploy.open(type.id)}>
+          New conversation
+        </MenuItem>
         <MenuItem popover={id} onClick={() => settings.open(type.baseRole)}>
           Agent settings
         </MenuItem>
