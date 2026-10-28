@@ -347,3 +347,48 @@ export interface PrHistoryRow {
   by: string;
   at: string;
 }
+
+/**
+ * A pasted product link's preview (decision 12). `read` and `redirected` carry what the page showed; `existing` is a
+ * listing the store already has (no fetch); every other outcome says what it is and offers to enter details by hand.
+ */
+export type PrPreviewOutcome = 'read' | 'existing' | 'redirected' | 'unavailable' | 'ambiguous' | 'robots' | 'login' | 'paywall' | 'unsupported' | 'too_large' | 'failed';
+export interface PrPreviewProduct {
+  name: string;
+  sku: string | null;
+  /** The page's price (minor units), never verified. */
+  price: { amount: number; currency: string } | null;
+}
+export interface PrPreview {
+  outcome: PrPreviewOutcome;
+  /** The outcome in words: "Read from the public page", "Redirected to shop.example/p/2", "The page asks to sign in". */
+  message: string;
+  /** Exactly as pasted; `canonicalUrl` drops the fragment and tracking parameters (the duplicate check's key). */
+  url: string;
+  canonicalUrl: string;
+  finalUrl: string | null;
+  host: string;
+  retrievedAt: string | null;
+  /** The store's private `owner_link` listing (or the existing one), and the listing whose cached image to show. */
+  listingId: string | null;
+  productId: string | null;
+  imageListing: string | null;
+  title: string | null;
+  price: PrPreviewProduct['price'];
+  sku: string | null;
+  brand: string | null;
+  variants: string[];
+  /** What the page didn't show: "Shipping not shown on the page", … */
+  missing: string[];
+  /** `ambiguous` with several Product blocks: the owner picks one or enters the details. */
+  candidates: PrPreviewProduct[];
+}
+/** What the owner corrected or added to a preview: kept as owner-provided, never as what the page said (spec §8). */
+export interface PrOwnerDetails {
+  title?: string;
+  price?: { amount: number; currency: string };
+  variants?: string[];
+  notes?: string;
+}
+/** One preview field with where it came from. */
+export type PrPreviewField<T> = { value: T; origin: 'page' | 'owner' } | null;

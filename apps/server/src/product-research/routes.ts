@@ -10,6 +10,7 @@ import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
 import { importFeed } from './feed';
 import { runDue, stoppedReason, syncNow } from './jobs';
 import { cachedImage, listingImageRef, queueImage } from './images';
+import { checkUrl, preview } from './preview';
 import { getProfile, saveProfile } from './profile';
 import { scopeOf, storeOf } from './scope';
 import { ADAPTERS, sourceHealth, sourceStates } from './sources';
@@ -147,6 +148,15 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if (!Number.isFinite(observed.getTime()) || observed.getTime() > Date.now() + 86_400_000) return c.json({ error: 'observedAt must be the date you looked' }, 400);
       const id = addNote(db, store.id, c.req.param('id'), { platform: String(body!.platform), url: body!.url, note: body!.note.trim(), observedAt: observed.toISOString() });
       return c.json({ id }, 201);
+    })
+    // A pasted link's preview (decision 12): read once through the shared safe fetcher, kept as the store's own listing.
+    .post('/api/pr/preview', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      const body = (await c.req.json().catch(() => undefined)) as { url?: unknown } | undefined;
+      const u = checkUrl(body?.url);
+      if ('error' in u) return c.json({ error: u.error }, 400);
+      return c.json(await preview(db, store, u));
     })
     .post('/api/pr/products/:id/stage', async (c) => {
       const store = storeOf(c, db);

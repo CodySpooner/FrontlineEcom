@@ -739,7 +739,7 @@ STOP.
   as such.
 
 ### Store/agent submission
-- [ ] PR-14 **Product link preview** (decision 12): validation, the shared fetcher (T2) with product metadata and image
+- [x] PR-14 **Product link preview** (decision 12): validation, the shared fetcher (T2) with product metadata and image
   modes (T3), every outcome, owner corrections and notes, duplicate check against existing listings by canonical URL,
   the `fence()` helper. Tests with a fake transport: private address, redirect to a private address, too large,
   robots-blocked, login page, 404, JSON-LD product, og-only page, several Product blocks, redirect to another path,
@@ -902,6 +902,15 @@ STOP.
   note form on Demand, and owner-entered offers labelled "Owner-provided". Confirming a query-level set shipped with
   PR-12. Checked in the dev app on fixtures with the forms opened, not submitted; the writes are tested on the server
   and against stubs. 5 tests.
+- 2026-10-28 PR-14 product link preview: `POST /api/pr/preview?store=` checks the link (http(s), 2,048 characters, no
+  credentials), keys it by a canonical URL (no fragment or tracking parameters) and reuses a listing the store already
+  has without fetching. Otherwise it reads the page once through the shared `kbFetch` in the fetcher's new product mode
+  (T3: meta tags and JSON-LD parsed as data, the HTTP status on a non-2xx answer). Outcomes: read, existing,
+  redirected, unavailable (404/410, Discontinued), ambiguous (several Product blocks with candidates, or none), robots,
+  login, paywall, unsupported, too large, failed (403/429 worded as "refuses to be read by tools"). A read page becomes
+  the store's private `owner_link` listing (page price kept as the page's, never an offer), its image cached through
+  the fetcher. `ownerDetails` / `previewFields` check owner corrections and tag each field page or owner; `fence()`.
+  Tests: 8 with a fake web through the real fetcher. Live: 5 public previews, see Notes (2 read, 3 refused with 429).
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -933,6 +942,24 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-14 live check (decision 16), 2026-10-28 15:12 UTC**, dev server with the fake agent engine, store pawsome, 5
+  previews through `kbFetch` (each is robots.txt, the page, its redirects and at most one image; requests weren't
+  counted one by one, about 15 to 20 in all). Cost $0, no sign-in, nothing bypassed:
+  - allbirds.com product page, and the same site over http with a utm parameter: robots allowed, the page answered
+    HTTP 429 both times. brooklinen.com product page: HTTP 429. Shopify storefronts refuse this honest bot
+    user-agent; the preview now words 403/429 as "refuses to be read by tools: enter the details by hand", and never
+    retries or poses as a browser.
+  - adafruit.com/product/3405: read (title, $19.95 page price, SKU 3405, shipping not shown). Its JSON-LD image URL
+    has a double slash and the CDN answered 404, so no image was cached (neutral icon); the page's data, not a bug.
+  - sparkfun.com/products/15096: redirected to its new path, read (title, $10.50, SKU DEV-15096), image cached.
+  - The two read pages are `owner_link` listings private to pawsome in this worktree's dev database (real public
+    data, not fixtures). The mocked tests above are separate evidence: they cover every outcome; the live run only
+    shows read, redirected and refused on real sites.
+- **PR-14 as built.** The preview needs a store (`?store=`): a read page becomes that store's private listing so its
+  image can be served through the listing image route, and the dialog (PR-16) previews for the store it targets. The
+  canonical URL keeps the scheme and `www.` as they are. The ai-agents Inbox request in decision 12 (agent WebFetch
+  through `kbFetch`) was already done by AA-23. Owner corrections are checked and tagged here and stored with the
+  task (`pr_tasks.preview_json`, PR-15), never on the shared listing.
 - **PR-13 as built.** Every owner stage move needs a reason (500 characters), not only Rejected: decision 5 keeps
   "who and why" for each change. "In a store's pipeline" (`n stores evaluating`, the panel's store list, Assign's 409)
   now counts only `kind = 'stage'` History rows, so a watch, a note or a flag dismissal doesn't put a product there.

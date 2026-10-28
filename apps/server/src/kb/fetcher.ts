@@ -34,6 +34,14 @@ export interface Fetched {
   /** Image mode only: the image, and the type its first bytes show (never the server's word for it). */
   bytes?: Uint8Array;
   imageType?: ImageType;
+  /** Product mode only: the answer's HTTP status when it wasn't 2xx, and an HTML page's product metadata. */
+  httpStatus?: number;
+  product?: ProductMeta;
+}
+/** A page's meta tags (lower-cased names) and its JSON-LD blocks, parsed as data: nothing on the page is run. */
+export interface ProductMeta {
+  meta: Record<string, string>;
+  jsonLd: unknown[];
 }
 export type ImageType = 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif';
 
@@ -178,8 +186,7 @@ function walk(html: string) {
   return text.trim();
 }
 
-/** A page's title, published date and readable text: the article, else the main content, else the body. */
-export function readable(html: string) {
+function metaTags(html: string) {
   const meta: Record<string, string> = {};
   for (const [tag] of html.matchAll(/<meta\b[^>]*>/gi)) {
     const attr = (n: string) => tag.match(new RegExp(`\\s${n}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i'))?.slice(2).find((v) => v !== undefined);
@@ -187,6 +194,25 @@ export function readable(html: string) {
     const content = attr('content');
     if (key && content !== undefined) meta[key.toLowerCase()] ??= decode(content).trim();
   }
+  return meta;
+}
+
+/** Product mode (product research's link preview): read before scripts are stripped; a block that isn't JSON is skipped. */
+export function productMeta(html: string): ProductMeta {
+  const jsonLd: unknown[] = [];
+  for (const m of html.matchAll(/<script\b[^>]*\btype\s*=\s*["']?application\/ld\+json["']?[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      jsonLd.push(JSON.parse(m[1]!));
+    } catch {
+      /* not JSON: skipped */
+    }
+  }
+  return { meta: metaTags(html), jsonLd };
+}
+
+/** A page's title, published date and readable text: the article, else the main content, else the body. */
+export function readable(html: string) {
+  const meta = metaTags(html);
   const title = clean(meta['og:title'] || meta['twitter:title'] || html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || '').slice(0, 300);
   const date = meta['article:published_time'] ?? meta['datepublished'] ?? meta['date'] ?? meta['pubdate'] ?? meta['dc.date'] ?? meta['dcterms.date'] ?? html.match(/"datePublished"\s*:\s*"([^"]+)"/)?.[1];
   const body = html.replace(RAW, ' ');
@@ -215,11 +241,12 @@ const charset = (type: string) => {
 };
 
 /** Turns an answer into text, or says why not. */
-async function document(url: URL, reply: Reply, maxBytes: number): Promise<Fetched> {
+async function document(url: URL, reply: Reply, maxBytes: number, asProduct = false): Promise<Fetched> {
   const at = url.href;
-  if (reply.status === 401 || reply.status === 407) return { url: at, status: 'login', error: 'The page asks to sign in' };
-  if (reply.status === 402) return { url: at, status: 'paywalled', error: 'The page is behind a paywall' };
-  if (reply.status < 200 || reply.status >= 300) return { url: at, status: 'failed', error: `The site answered HTTP ${reply.status}` };
+  const code = asProduct && (reply.status < 200 || reply.status >= 300) ? { httpStatus: reply.status } : {};
+  if (reply.status === 401 || reply.status === 407) return { url: at, status: 'login', error: 'The page asks to sign in', ...code };
+  if (reply.status === 402) return { url: at, status: 'paywalled', error: 'The page is behind a paywall', ...code };
+  if (reply.status < 200 || reply.status >= 300) return { url: at, status: 'failed', error: `The site answered HTTP ${reply.status}`, ...code };
   const type = reply.headers['content-type'] ?? '';
   const mime = type.split(';')[0]!.trim().toLowerCase();
   if (![...HTML, ...TEXT, 'application/pdf'].includes(mime)) return { url: at, status: 'unsupported', error: mime ? `${mime} isn't a document that can be read` : "The page didn't say what it is" };
@@ -236,7 +263,7 @@ async function document(url: URL, reply: Reply, maxBytes: number): Promise<Fetch
     return { url: at, status: 'paywalled', error: 'The page is behind a paywall' };
   if (/<input\b[^>]*type\s*=\s*["']?password/i.test(raw) && page.text.length < 1000) return { url: at, status: 'login', error: 'The page asks to sign in' };
   if (!page.text) return { url: at, status: 'failed', error: 'No readable text on the page' };
-  return { url: at, status: 'read', title: page.title || fileName(url), ...(page.publishedAt ? { publishedAt: page.publishedAt } : {}), text: page.text };
+  return { url: at, status: 'read', title: page.title || fileName(url), ...(page.publishedAt ? { publishedAt: page.publishedAt } : {}), text: page.text, ...(asProduct ? { product: productMeta(raw) } : {}) };
 }
 
 async function pdf(url: URL, bytes: Buffer): Promise<Fetched> {
@@ -293,7 +320,8 @@ export function createFetcher({
   }
 
   // `image`: off by default; reads one png, jpeg, webp or gif (product research's image cache) instead of a document.
-  return async function get(input: string, { blocked = [] as string[], image: asImage = false } = {}): Promise<Fetched> {
+  // `product`: off by default; a read HTML page also carries its meta tags and JSON-LD (product research's link preview).
+  return async function get(input: string, { blocked = [] as string[], image: asImage = false, product: asProduct = false } = {}): Promise<Fetched> {
     let url: URL;
     try {
       url = new URL(input);
@@ -346,7 +374,7 @@ export function createFetcher({
         const reply = await ask(url, asImage ? IMAGE_HEADERS : HEADERS);
         try {
           const to = reply.status >= 300 && reply.status < 400 ? reply.headers.location : undefined;
-          if (!to) return asImage ? await image(url, reply) : await document(url, reply, maxBytes);
+          if (!to) return asImage ? await image(url, reply) : await document(url, reply, maxBytes, asProduct);
           if (hop === 5) return { url: url.href, status: 'failed', error: 'Too many redirects (more than 5)' };
           url = new URL(to, url);
         } finally {
