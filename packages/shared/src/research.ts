@@ -49,6 +49,48 @@ export const PR_FULFILLMENT_LABEL: Record<PrFulfillment, string> = {
 
 /** Demand classes (decision 9), in precedence order. With no observation set the product is "Not checked yet". */
 export type PrDemandClass = 'insufficient_history' | 'seasonal' | 'isolated_spike' | 'recent_acceleration' | 'sustained' | 'no_clear_pattern';
+/** With no set, the UI says "Not checked yet". A seasonal set reads "Seasonal (peak <month>)". */
+export const PR_DEMAND_LABEL: Record<PrDemandClass, string> = {
+  insufficient_history: 'Insufficient history',
+  seasonal: 'Seasonal',
+  isolated_spike: 'Isolated spike',
+  recent_acceleration: 'Recent acceleration',
+  sustained: 'Sustained interest',
+  no_clear_pattern: 'No clear pattern',
+};
+export type PrGranularity = 'day' | 'week' | 'month';
+
+/** One observation set (a Trends series, an order history, a note) with its class (decision 9). */
+export interface PrSignalSet {
+  id: string;
+  /** `google_trends`, `orders`, … */
+  platform: string;
+  query: string | null;
+  region: string | null;
+  granularity: PrGranularity | null;
+  /** What a value measures, e.g. `interest_over_time`: relative interest 0–100 within this one export. */
+  metric: string;
+  scope: PrSignalScope;
+  origin: PrSignalOrigin;
+  periodStart: string | null;
+  periodEnd: string | null;
+  retrievedAt: string;
+  points: number;
+  demandClass: PrDemandClass | null;
+  /** 1–12, for a seasonal set. */
+  peakMonth: number | null;
+  momentum: number | null;
+  /** Products a query-level set is linked to; `confirmed` false = suggested by a query match, not yet confirmed. */
+  links: { productId: string; title: string; confirmed: boolean }[];
+}
+
+/** POST /api/pr/imports/trends: one set per term in the file. `duplicate`: the same file was imported before. */
+export interface PrTrendsImport {
+  fileId: string;
+  duplicate: boolean;
+  category: string | null;
+  sets: PrSignalSet[];
+}
 
 export type PrFit = 'strong' | 'medium' | 'weak' | 'unknown';
 

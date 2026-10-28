@@ -700,7 +700,7 @@ STOP.
   stock, freight, the shared rate lane with priorities, every call in `pr_calls`, token handling, error classification,
   "price not shown". Recorded-response fixtures and tests. The live check runs as soon as the owner's key appears
   (decision 16).
-- [ ] PR-06 **Google Trends CSV import and demand classes** (decisions 4 and 9): the upload route (in `LARGE`, T7),
+- [x] PR-06 **Google Trends CSV import and demand classes** (decisions 4 and 9): the upload route (in `LARGE`, T7),
   parser, storage with provenance, linking an import to products (query match, confirmed by the owner), the classifier
   and momentum, `pr_product_facts` demand columns, the Trends API adapter reporting Approval required. Tests on
   real-format fixtures, including "<1" values, daily, weekly and monthly exports, and a mislabelled file; a test per
@@ -729,7 +729,8 @@ STOP.
 
 ### Product details
 - [ ] PR-12 **Detail panel** (The design: detail panel): header, Stage select, Overview with the assessment, Demand with
-  the chart from stored points, Suppliers with offers and statuses, History, the agent-find estimates block, and the
+  the chart from stored points, "Import a Trends CSV" on Demand (`POST /api/pr/imports/trends` with `productId`), and
+  the query-level sets suggested for the product with Confirm / Not this product (`POST /api/pr/signals/:id/links`), Suppliers with offers and statuses, History, the agent-find estimates block, and the
   All stores panel with "Assign to a store…". Progressive loading per tab.
 - [ ] PR-13 **Owner edits:** stage changes with reason (history), notes, flag dismissal with reason, Watch toggle (with
   the "Saved" mirror), confirming a query-scope demand set, manual Creative Center notes, owner-provided fields tagged
@@ -839,6 +840,12 @@ STOP.
   freight quotes into `live` offer rows; "price not shown" is unknown, never 0; no stock or no method is recorded as
   such. 10 tests on doc-shaped fixtures (`sources/fixtures/cj-doc-examples.json`). **Not live-checked**: no CJ key yet
   (Blocked); the source stays Credentials required until a real call succeeds.
+- 2026-10-28 PR-06 Google Trends: a tolerant CSV parser (header row found, not assumed; `<term>: (<region>)`; "<1";
+  daily, weekly, monthly; refuses mislabelled, map, hourly and edited files with the reason), migration 52 (`pr_files`
+  keeps each upload as sent; `demand_peak_month`), `POST /api/pr/imports/trends` (in `LARGE`; one set per term; the
+  same file twice is one import), query-match link suggestions the owner confirms (`POST /api/pr/signals/:id/links`),
+  decision 9's classifier and momentum in one pure function, the demand part of Rank into `pr_product_facts`, and the
+  Trends CSV (Authorized import) and Trends API (Approval required) sources. 15 tests; 4 mutation checks.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -854,8 +861,8 @@ STOP.
   2026-10-28; the app's help text says the same. If API access was suspended after 30 days without orders, reactivate
   it at https://www.cjdropshipping.com/my.html#/authorize/APIStores. Needed for the live CJ check and PR-29.
 - **One Google Trends export (owner):** on trends.google.com, search the product term for the store's country over
-  the past 12 months (or 5 years for seasonality), then use the download (CSV) button. Upload it on the Research page
-  once PR-06 ships. It needs at least one product to link to (from the CJ key or a pasted link). Needed for PR-29.
+  the past 12 months (or 5 years for seasonality), then use the download (CSV) button on the "Interest over time"
+  chart. Upload it on the Research page once PR-12 ships (the import API is in since PR-06). It needs at least one product to link to (from the CJ key or a pasted link). Needed for PR-29.
 - **Supplier feed (owner, optional):** a CSV you're entitled to export from a supplier or feed tool, with product
   title, SKU, variant, unit cost, currency, shipping cost and destination (PR-07 lists the exact columns here). Upload
   it on the Research page once PR-07 ships.
@@ -866,6 +873,12 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-06, decision 9 as built.** A 0 counts as "<1" for Insufficient history (Google shows low-volume terms as 0).
+  A year's "top 10%" only takes points above that year's median, so a flat baseline's ties never make a month
+  seasonal. Momentum is null for an Insufficient history set and when the window before averages 0; it is rounded to
+  two places. A product's demand set is its newest product-level or confirmed set with enough history, else its newest
+  set. Rank writes one facts row per (store ship-to, store currency), `''` for a store with no ship-to yet. A Trends
+  upload is capped at 2 MB (exports are a few KB). The Trends upload UI lands with the detail panel (PR-12).
 - **PR-05, decision 4 as built.** The niche map (`product-research/profile.ts`) is CJ search keywords per niche, not
   CJ category ids: the ids need a live `/product/getCategory` call, so switch after the live check. Enrichment quotes
   the cheapest variant in stock, quantity 1, from at most two warehouse countries (the destination's own, then China),

@@ -1216,6 +1216,18 @@ export const MIGRATIONS = [
     UNIQUE (watch_id, dedupe_key)
   );
   `,
+  /* 52 (product-research: PR-06 the owner's uploaded files, kept as sent; a seasonal set's peak month) */ `
+  CREATE TABLE pr_files ( -- a Google Trends export or a supplier feed the owner uploaded; pr_signals.file_ref points here
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL, -- trends | feed
+    name TEXT NOT NULL,
+    sha256 TEXT NOT NULL,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (kind, sha256)
+  );
+  ALTER TABLE pr_product_facts ADD COLUMN demand_peak_month INTEGER; -- 1-12 when demand_class is seasonal
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

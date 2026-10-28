@@ -22,6 +22,7 @@ import { addDays } from './dates';
 import { deleteIntegration, health, listIntegrations, saveIntegration } from './integrations';
 import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
+import { prRoutes } from './product-research/routes';
 import { settingsRoutes } from './settings';
 import { agentRoutes, runManager } from './routes/agents';
 import { listeningOn } from './routes/agents-runtimes';
@@ -51,8 +52,8 @@ const MB = 1_048_576;
  * conversation's create, send, retry and resume, and a team's start and a step's resume.
  */
 const STARTS = /^\/api\/(kb\/(ask|research\/tasks(\/[^/]+\/(retry|refine))?)|conversations(\/[^/]+\/(messages|runs\/[^/]+\/(retry|resume)))?|teams(\/[^/]+\/steps\/[^/]+\/resume)?)$/;
-/** Bodies that may carry a document or attachments (10 MB in base64). */
-const LARGE = /^\/api\/(kb\/research\/tasks|conversations(\/[^/]+\/messages)?)$/;
+/** Bodies that may carry a document or attachments (10 MB in base64), or a Product Research import. */
+const LARGE = /^\/api\/(kb\/research\/tasks|conversations(\/[^/]+\/messages)?|pr\/imports\/trends)$/;
 
 /**
  * KB-25: the knowledge base and product research read no body over its size (research from an uploaded document
@@ -215,6 +216,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       return c.json(topProducts(db, storeIds, addDays(to, 1 - range), to, limit, shift));
     })
     .route('/', researchRoutes(db))
+    .route('/', prRoutes(db))
     .route('/', competitorRoutes(db, (q) => pickStores(db, q)))
     .route('/', automationRoutes(db, (q) => pickStores(db, q)))
     .route('/', settingsRoutes(db))

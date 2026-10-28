@@ -46,3 +46,9 @@ export function upsertListing(db: Db, l: NewListing): { id: string; productId: s
   ).run(id, productId, l.storeId ?? null, l.source, l.sourceRef, l.url ?? null, l.canonicalUrl ?? null, l.title, l.category ?? null, l.imageRef ?? null, l.origin, l.currency ?? null, l.region ?? null, at, at, l.retrievedAt ?? null, l.rawHash ?? null, transform);
   return { id, productId, created: true };
 }
+
+/** A product the scope may see: one of its listings is shared or the store's own. */
+export function productVisible(db: Db, productId: string, store: string | null): boolean {
+  const own = store === null ? '' : 'AND (store_id IS NULL OR store_id = ?)';
+  return !!db.prepare(`SELECT 1 FROM pr_listings WHERE product_id = ? ${own} LIMIT 1`).get(...(store === null ? [productId] : [productId, store]));
+}
