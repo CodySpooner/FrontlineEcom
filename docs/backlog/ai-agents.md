@@ -1205,7 +1205,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 ## Items
 
 ### Foundation
-- [ ] AA-01 **Audit, baseline and probes.**
+- [x] AA-01 **Audit, baseline and probes.**
   - Read the spec, this file, the code map and the three references. Confirm decisions 1–17 against the code at
     HEAD.
   - Baseline `pnpm check`. Create .agent/ and copy cdp-shot.mjs (exact-viewport screenshots, console errors per
@@ -1603,6 +1603,8 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   `.agent/STOP`.
 
 ## Done
+- 2026-10-28 AA-01 audit, baseline (`pnpm check` green: 177 files, 1342 tests), before screenshots in `.agent/before/`,
+  Claude probe, Codex spike and resume check; answers under Notes.
 
 ## Blocked
 
@@ -1628,3 +1630,81 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   human saw the text, and ordinary runs read pages through WebFetch, not the guarded fetch_source reader, so blocked
   domains and untrusted wrapping don't apply to it. The owner's own Save to Knowledge Base, and an Ask-me save the
   owner approved, follow the workspace's review setting.
+- (AA-01, 2026-10-28) Probe and spike answers. No model turn ran. Method: SDK types and runtime calls without a
+  prompt, the Codex CLI signed out in `.agent/codex-spike-home`, the generated app-server schema, and the Codex source
+  on GitHub (main).
+  - **Baseline** at a3c3b1d5: `pnpm check` green, 177 test files and 1342 tests in about 39 s.
+  - **Claude probe:** `initializationResult()` with the run isolation options (`settingSources: []`, the
+    agent-sessions cwd, no tools or MCP) answered in 0.9 s with 13 models on a Claude Max, first-party login.
+    - The first five rows are aliases with a `resolvedModel` id: default and opus → claude-opus-5-5, fable →
+      claude-fable-5-1, sonnet → claude-sonnet-5-5, haiku → claude-haiku-5-5. The legacy rows are full ids:
+      claude-haiku-4-5-20251001, claude-sonnet-5, claude-opus-5, claude-fable-5, claude-opus-4-8, claude-opus-4-7,
+      claude-opus-4-6 and claude-sonnet-4-6.
+    - `supportedEffortLevels` is filled on every row except Haiku 4.5, which has no effort fields. Opus 4.6 and Sonnet
+      4.6 stop at max without xhigh; the rest list low to max.
+    - Nothing gives a default effort, so it comes from the registry (decision 9). The `default` row marks the account's
+      default model.
+    - For AA-13: dedupe rows by `resolvedModel`, store that id, and label it with the alias row's `displayName`
+      ('Opus 5.5', not 'Default (recommended)').
+  - **Claude resume check:** SDK 0.3.310 has `systemPrompt: {type: 'custom', prompt, snapshot: false}` (sdk.d.ts
+    about 2423-2470), which renders the system prompt fresh on every request, resume included. The default, a bare
+    string as today, records the prompt on the first request and resends that record on every resume until
+    compaction. Decision 11 stays as written: keep the default and put the parts that change between runs in the user
+    turn. Per the SDK doc, `snapshot: false` changes the system prompt on every follow-up, which drops the cached
+    prefix and the model's earlier reasoning. Recording is still rolling out ("no effect where not enabled"), so
+    whether this account records can't be told without a turn. The user-turn block is correct either way; at worst a
+    card appears twice.
+  - **Codex spike** (codex-cli 0.163.0, `CODEX_HOME` = `.agent/codex-spike-home`, `FRONTLINE_SECRET_KEY` unset):
+    - `codex login status` prints "Not logged in" and exits 1.
+    - Signed out, `codex debug models` and `codex debug models --bundled` print the same bytes: 11 models with slug,
+      display_name, visibility (list or hide), default_reasoning_level, supported_reasoning_levels, tool_mode,
+      apply_patch_tool_type, shell_type and multi_agent_version. Nothing marks the default model.
+    - The app-server's `model/list` (initialize, then model/list over stdio) returns id, displayName, hidden,
+      isDefault, defaultReasoningEffort and supportedReasoningEfforts. It drops hidden models itself (8 shown, 11 with
+      includeHidden) and names the default (gpt-6.1-sol in the bundled catalog). **AA-15 reads the catalog through
+      `model/list`**, because it marks the default and the hidden models explicitly. Five of the eight listed models
+      offer ultra; the luna models stop at max and gpt-5.5 at xhigh. Signed out, `account/read` returns
+      account null with requiresOpenaiAuth true.
+    - `codex features list` with decision 9's twelve `-c features.<x>=false` flags: all twelve are present and read
+      false.
+    - **Paths outside the app's tools (preliminary; AA-15 settles them):**
+      - Every catalog model has tool_mode `code_mode_only`. In spec_plan.rs (apply_mcp_tool_exposure_policy,
+        is_hidden_by_code_mode_only), that hides MCP tools from direct calls: the model reaches them only through
+        the code-mode executor or tool search. register_code_mode_executors checks only the tool mode, not
+        `features.shell_tool`, so the executor exists in every run. The code-mode crate's lib.rs doesn't show what
+        its runtime (codex-code-mode-host.exe) can reach, or whether nested MCP calls still emit `mcp_tool_call`
+        items.
+      - apply_patch has no feature flag. It is registered when the model has an apply_patch_tool_type ('freeform'
+        on all 11), so only sandbox read-only with approval never stands between it and a write.
+      - Shell and exec need `features.shell_tool` (off) and a shell_type; unified_exec only picks the handler.
+        view_image is behind its flag (off). Web search follows the `web_search` config (disabled or live).
+      - So AA-15 must prove the code-mode runtime and apply_patch can't act outside the app's tools, or ship Codex
+        disabled (decision 9).
+    - `codex mcp list` with `-c mcp_servers.frontline.url=…`, `bearer_token_env_var="FRONTLINE_MCP_TOKEN"` and
+      `tool_timeout_sec=86400` lists the server enabled, with auth "Bearer token". It prints the variable's name,
+      never its value. `codex mcp get frontline` shows tool_timeout_sec 86400.
+    - **App-server schema** (`codex app-server generate-json-schema`, no turn): thread/start, turn/start,
+      item/agentMessage/delta, turn/interrupt and model/list all exist, plus a model/rerouted notification. So the
+      streaming follow-up under Notes is possible on 0.163.0's protocol. v1 still uses exec.
+    - **Instructions from a file:** `model_instructions_file`. The config reference says "Replacement for built-in
+      instructions instead of AGENTS.md", so it replaces Codex's base instructions. `developer_instructions` is
+      inline only, and no other key loads instructions from a file. AA-15 passes
+      `-c model_instructions_file=<per-run file>`.
+    - **Git check:** in a non-git folder, `codex exec --experimental-json -` exits 1 with "Not inside a trusted
+      directory and --skip-git-repo-check was not specified." before any turn. With the flag and signed out, it
+      emits thread.started and turn.started, then `error` events "Reconnecting... n/5 (unexpected status 401
+      Unauthorized: Missing bearer or basic authentication …)". No turn can run signed out. AA-15 maps that 401 to
+      "Set up Codex".
+  - **Where the new pieces live:**
+    - packages/shared: `runtime-registry.ts`, and the derived run state with the new types in `index.ts`.
+    - packages/agents: `claudeModels()` in claude-engine.ts; `config.ts` (validateConfig, the seat default, presets);
+      `conversations.ts`; `recap.ts`; `codex-cli.ts` (the spawn helper, status, discovery); `codex-engine.ts`; team
+      steps in missions.ts.
+    - apps/server: `routes/agents-conversations.ts`, `agents-teams.ts`, `agents-runtimes.ts` and
+      `agents-codex-mcp.ts`, mounted in app.ts.
+    - apps/web: `src/agents/**` (the workspace, panes, dialogs, URL helper, pane-width clamp, `fill.ts`, the
+      Markdown parser).
+  - **Decisions:** none changed. Confirmed at HEAD: the next migration is #50 (49 removes gamification); runs.ts:79
+    (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
+    tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
+    Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
