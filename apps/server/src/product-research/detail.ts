@@ -133,7 +133,10 @@ export const productHistory = (db: Db, id: string, store: string | null): PrHist
   db
     .prepare(`SELECT * FROM pr_stage_history WHERE product_id = ? ${store ? 'AND store_id = ?' : ''} ORDER BY at DESC, rowid DESC LIMIT 200`)
     .all(id, ...(store ? [store] : []))
-    .map((r) => ({ id: String(r.id), storeId: String(r.store_id), kind: String(r.kind), from: str(r.from_stage), to: str(r.to_stage), reason: str(r.reason), by: String(r.by), at: String(r.at) }));
+    .map((r) => {
+      const card = r.kind === 'stage' && r.by === 'owner' ? db.prepare(`SELECT ref_id FROM pr_outcomes WHERE kind = 'kb_card' AND store_id = ? AND product_id = ? AND context_json ->> '$.historyId' = ?`).get(String(r.store_id), id, String(r.id)) : undefined;
+      return { id: String(r.id), storeId: String(r.store_id), kind: String(r.kind), from: str(r.from_stage), to: str(r.to_stage), reason: str(r.reason), by: String(r.by), at: String(r.at), ...(card ? { cardId: String(card.ref_id) } : {}) };
+    });
 
 /** Decision 5's "Assign to a store…": the product enters that store's pipeline at Discovered, recorded in History. */
 export function assign(db: Db, id: string, storeId: string, now = new Date()): { error: string; status: 404 | 409 } | null {

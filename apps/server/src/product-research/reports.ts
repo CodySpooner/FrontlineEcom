@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { captureFinding } from '@frontline/agents';
 import { PR_RECOMMENDATION_LABEL, type PrReport, type PrReportBody } from '@frontline/shared';
 import type { Db } from '../db';
 
@@ -31,13 +32,29 @@ export function saveReport(db: Db, taskId: string, body: PrReportBody, run: { ru
       if (row.bad) return `Not saved: ${ref} is test fixture or demo data, not evidence. Leave it out or say what is unknown.`;
     }
   }
-  const runtime = db.prepare('SELECT runtime FROM agent_runs WHERE id = ?').get(run.runId)?.runtime ?? null;
+  const r = db.prepare('SELECT runtime, agent_id FROM agent_runs WHERE id = ?').get(run.runId);
+  const runtime = r?.runtime ?? null;
   db.prepare(
     `INSERT INTO pr_reports (id, store_id, task_id, product_id, run_id, runtime, engine, recommendation, report_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(randomUUID(), run.storeId, taskId, String(t.product_id), run.runId, runtime as string | null, run.scripted ? 'scripted' : 'model', body.recommendation, JSON.stringify(body), now.toISOString());
+  if (!run.scripted && runtime !== 'demo') captureFindings(db, run.storeId, body, { agentId: String(r?.agent_id ?? `${run.storeId}:product_hunter`), runId: run.runId }, now);
   return run.scripted
     ? 'Report saved as a demo: Product Research shows it as a scripted example, not research.'
     : `Report saved (${PR_RECOMMENDATION_LABEL[body.recommendation]}); the owner sees it on the product's Research tab.`;
+}
+
+/**
+ * PR-23: a model report's sourced claims (research or measured, with a web link) go to the store's Knowledge Base as
+ * findings through `captureFinding`: deduped against the store and General, unreviewed (never given to agents until the
+ * owner accepts one), at most 5 a report. A demo report never gets here. Recommendations stay in the report.
+ */
+function captureFindings(db: Db, storeId: string, body: PrReportBody, by: { agentId: string; runId: string }, now: Date) {
+  const clip = (s: string, max: number) => (s.length <= max ? s : `${s.slice(0, max - 1).trimEnd()}…`);
+  const sourced = body.evidence.filter((e): e is typeof e & { kind: 'research' | 'measured' } => (e.kind === 'research' || e.kind === 'measured') && /https?:\/\//.test(e.source)).slice(0, 5);
+  for (const e of sourced) {
+    const urls = e.source.match(/https?:\/\/\S+/g) ?? [];
+    captureFinding(db, storeId, { title: clip(e.claim, 120), summary: e.claim, tag: e.kind, sources: urls }, { ...by, unreviewed: true }, now);
+  }
 }
 
 /** Every report on the product in the store, newest first: a new one never hides an older one. */

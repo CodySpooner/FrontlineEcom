@@ -81,6 +81,8 @@ export const useLinkExperiment = (id: string, store: string) => usePrWrite<{ kin
 export const useUnlink = (id: string, store: string) => usePrWrite<{ refId: string }, PrLinks>((b) => `/api/pr/products/${enc(id)}/links/${enc(b.refId)}?${scope(store)}`, 'DELETE');
 export const useBrief = (id: string, store: string) => useQuery({ queryKey: ['pr', 'brief', store, id], queryFn: () => api<PrBrief>(`/api/pr/products/${enc(id)}/brief?${scope(store)}`) });
 export const useSaveBrief = (id: string, store: string) => usePrWrite<{ fields: Record<PrBriefField, string> }, PrBrief>(() => `/api/pr/products/${enc(id)}/brief?${scope(store)}`, 'PUT');
+/** PR-23: an owner's stage decision (a History row) saved as a card in the store's Knowledge Base. */
+export const useSaveDecision = (id: string, store: string) => usePrWrite<{ historyId: string }, { cardId: string }>((b) => `/api/pr/products/${enc(id)}/history/${enc(b.historyId)}/knowledge?${scope(store)}`);
 export const useDraftProduct = (id: string, store: string) => usePrWrite<void, ApprovalRequest>(() => `/api/pr/products/${enc(id)}/draft-product?${scope(store)}`);
 
 /** Research a Product (decision 6): the store's eligible agents with their state, the link preview, and Start. */

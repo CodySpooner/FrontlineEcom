@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { econInputs, PR_BRIEF_FIELDS, PRODUCT_WRITE_PLATFORMS, type PrBrief, type PrBriefField, type PrLinks, type Store } from '@frontline/shared';
+import { createCard, ensureCategoryPath } from '@frontline/agents';
+import { econInputs, PR_BRIEF_FIELDS, PR_STAGE_LABEL, PRODUCT_WRITE_PLATFORMS, type PrBrief, type PrBriefField, type PrLinks, type PrStage, type Store } from '@frontline/shared';
 import { approvalsHook, getApproval } from '../approvals';
 import type { Db } from '../db';
 import { productEconomics, baseEconomics } from './economics';
@@ -106,6 +107,42 @@ export function saveBrief(db: Db, store: Store, id: string, fields: Record<PrBri
   if (row) db.prepare('UPDATE pr_briefs SET fields_json = ?, updated_at = ? WHERE id = ?').run(JSON.stringify(fields), at, String(row.id));
   else db.prepare('INSERT INTO pr_briefs (id, store_id, product_id, fields_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)').run(randomUUID(), store.id, id, JSON.stringify(fields), at, at);
   return getBrief(db, store, id);
+}
+
+/**
+ * PR-23: the owner saves a stage decision (a History row) as a card in the store's Knowledge Base, under "Product
+ * decisions": the owner's own (User-Provided Knowledge, active), at the Hypothesis stage because a decision is not a
+ * measured result. Findings from reports go to "Findings" through captureFinding instead, so the two stay apart. Saving
+ * the same row twice returns its card.
+ */
+export function saveDecision(db: Db, store: Store, id: string, historyId: string, now = new Date()): { cardId: string; created: boolean } | { error: string; status: 404 | 409 } {
+  const h = db.prepare(`SELECT from_stage, to_stage, reason, at FROM pr_stage_history WHERE id = ? AND store_id = ? AND product_id = ? AND kind = 'stage' AND by = 'owner'`).get(historyId, store.id, id);
+  if (!h || !h.to_stage) return { error: "Only the owner's own stage decisions can be saved.", status: 404 };
+  const saved = db.prepare(`SELECT ref_id FROM pr_outcomes WHERE store_id = ? AND product_id = ? AND kind = 'kb_card' AND context_json ->> '$.historyId' = ?`).get(store.id, id, historyId);
+  if (saved && db.prepare(`SELECT 1 FROM kb_cards WHERE id = ? AND status IN ('proposed', 'active')`).get(String(saved.ref_id))) return { cardId: String(saved.ref_id), created: false };
+  const product = String(db.prepare('SELECT title FROM pr_products WHERE id = ?').get(id)?.title ?? 'A product');
+  const to = PR_STAGE_LABEL[String(h.to_stage) as PrStage] ?? String(h.to_stage);
+  // Card titles are unique in a store: one decision card per product, stage and day.
+  const title = `${product}: ${to} (${date(String(h.at))})`;
+  const summary = `${store.name} moved "${product}" to ${to}${h.reason ? `: ${String(h.reason)}` : ''}.`;
+  const same = db.prepare('SELECT id, status FROM kb_cards WHERE store_id = ? AND lower(title) = lower(?)').get(store.id, title);
+  if (same && !['proposed', 'active'].includes(String(same.status))) return { error: 'You archived or rejected a card that says this; restore it in the Knowledge Base instead.', status: 409 };
+  const cardId =
+    (same && String(same.id)) ??
+    createCard(
+      db,
+      store.id,
+      {
+        categoryId: ensureCategoryPath(db, store.id, ['Product decisions']), title, summary,
+        body: `A decision in Product Research${h.from_stage ? `, from ${PR_STAGE_LABEL[String(h.from_stage) as PrStage] ?? String(h.from_stage)}` : ''}. It records what was decided and why, not a measured result.`,
+        tags: ['product-research', 'decision'], type: 'user_provided', stage: 'hypothesis', status: 'active', authorId: 'owner', origin: 'owner',
+      },
+      now,
+    ).id;
+  db.prepare(`INSERT OR IGNORE INTO pr_outcomes (id, store_id, product_id, kind, ref_id, context_json, created_at) VALUES (?, ?, ?, 'kb_card', ?, ?, ?)`).run(
+    randomUUID(), store.id, id, cardId, JSON.stringify({ historyId }), now.toISOString(),
+  );
+  return { cardId, created: !same };
 }
 
 /**

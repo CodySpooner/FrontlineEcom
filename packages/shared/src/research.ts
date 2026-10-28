@@ -358,6 +358,8 @@ export interface PrHistoryRow {
   /** "owner", or the research task id. */
   by: string;
   at: string;
+  /** PR-23: the Knowledge Base card an owner's stage decision was saved as. */
+  cardId?: string;
 }
 
 /**

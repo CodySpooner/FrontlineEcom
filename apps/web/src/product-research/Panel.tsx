@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { Link } from 'react-router';
 import { ExternalLink, Eye, Package, X } from 'lucide-react';
 import {
   PR_COMPARE_MAX,
@@ -20,7 +21,7 @@ import {
 } from '@frontline/shared';
 import { AreaChart } from '../components/AreaChart';
 import { Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Tabs } from '../components/ui';
-import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useLinkStoreProduct, useMatches, useProductDetail, useProductTab, useAddWatch, useLinkExperiment, useLinks, useSaveNotes, useSetOwner, useUnlink, useUnwatch, useWatch, useWatches } from './api';
+import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useLinkStoreProduct, useMatches, useProductDetail, useProductTab, useAddWatch, useLinkExperiment, useLinks, useSaveDecision, useSaveNotes, useSetOwner, useUnlink, useUnwatch, useWatch, useWatches } from './api';
 import { Pill, TONE } from './Card';
 import { BriefDialog } from './Brief';
 import { EconomicsTab, incomplete } from './EconomicsTab';
@@ -746,6 +747,7 @@ function Suppliers({ id, store }: { id: string; store: Store | null }) {
 
 function History({ id, scope, stores }: { id: string; scope: string | null; stores: Store[] }) {
   const tab = useProductTab<PrHistoryRow[]>(id, scope, 'history', true);
+  const save = useSaveDecision(id, scope ?? '');
   if (tab.isPending) return <LoadingState rows={4} />;
   if (tab.isError) return <ErrorState message={tab.error.message} onRetry={() => void tab.refetch()} />;
   if (!tab.data.length) return <p className="text-xs text-muted">Nothing has happened to this product here yet: stage changes, watches, flag dismissals and merges show up here.</p>;
@@ -759,8 +761,27 @@ function History({ id, scope, stores }: { id: string; scope: string | null; stor
             <span className="shrink-0 text-muted">{day(h.at)}</span>
           </div>
           <p className="text-muted">{[h.reason, h.by === 'owner' ? 'by you' : `by research task ${h.by}`, !scope ? (stores.find((s) => s.id === h.storeId)?.name ?? h.storeId) : null].filter(Boolean).join(' · ')}</p>
+          {/* PR-23: the owner's own stage decisions can be kept in the store's Knowledge Base, apart from agent findings. */}
+          {scope && h.kind === 'stage' && h.by === 'owner' && h.to && (
+            <div className="mt-1">
+              {h.cardId ? (
+                <Link to={`/knowledge?card=${encodeURIComponent(h.cardId)}`} className="text-red hover:underline">
+                  In the Knowledge Base
+                </Link>
+              ) : (
+                <Button size="sm" variant="ghost" disabled={save.isPending} onClick={() => save.mutate({ historyId: h.id })}>
+                  Save decision to Knowledge Base
+                </Button>
+              )}
+            </div>
+          )}
         </li>
       ))}
+      {save.error && (
+        <li role="alert" className="text-red">
+          {save.error.message}
+        </li>
+      )}
     </ol>
   );
 }

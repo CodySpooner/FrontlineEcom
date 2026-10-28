@@ -535,6 +535,22 @@ describe('Detail panel', () => {
     expect((within(research).getByRole('textbox', { name: 'Instructions' }) as HTMLTextAreaElement).value).toMatch(/^Draft a test brief for this product/);
   });
 
+  it("History: the owner's stage decisions save to the Knowledge Base (once, then linked); a task's move doesn't", async () => {
+    const rows: PrHistoryRow[] = [
+      { id: 'h3', storeId: 'paws', kind: 'stage', from: 'researching', to: 'rejected', reason: 'Leaks', by: 'owner', at: '2026-10-28T12:00:00Z' },
+      { id: 'h2', storeId: 'paws', kind: 'stage', from: 'discovered', to: 'researching', reason: 'A research task started', by: 't1', at: '2026-10-28T11:00:00Z' },
+      { id: 'h1', storeId: 'paws', kind: 'stage', from: null, to: 'discovered', reason: 'Assigned from All stores', by: 'owner', at: '2026-10-27T00:00:00Z', cardId: 'k1' },
+    ];
+    const f = panelApi(detail(), (url) => (url.includes('/history?') ? rows : url.includes('/knowledge?') ? { cardId: 'k2' } : undefined));
+    renderApp(<Research />, '/research?store=paws&product=p1&tab=history');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    const saves = await within(panel).findAllByRole('button', { name: 'Save decision to Knowledge Base' });
+    expect(saves).toHaveLength(1); // h3 only: h2 is the task's, h1 is saved already
+    expect(within(panel).getByRole('link', { name: 'In the Knowledge Base' }).getAttribute('href')).toBe('/knowledge?card=k1');
+    fireEvent.click(saves[0]!);
+    await waitFor(() => expect(f.mock.calls.some(([u, i]) => String(u) === '/api/pr/products/p1/history/h3/knowledge?store=paws' && i?.method === 'POST')).toBe(true));
+  });
+
   it('Watchlist: each watch with its last successful check, partial coverage and alerts; watch a niche, set preferences, check now; watch an offer', async () => {
     const watch = (o: Partial<PrWatch>): PrWatch => ({
       id: 'w1', storeId: 'paws', kind: 'product', targetId: 'p1', label: 'Silicone grooming brush', productId: 'p1', prefs: { priceChangePct: 10, stockOut: true, newEvidence: true, shippingChange: true },

@@ -19,7 +19,7 @@ import { addWatch, checkWatch, listWatches, ownWatch, parsePrefs } from './alert
 import { runDue, stoppedReason, syncNow } from './jobs';
 import { cachedImage, listingImageRef, queueImage } from './images';
 import { checkUrl, ownerDetails, preview } from './preview';
-import { getBrief, linkExperiment, parseBrief, productLinks, requestDraftProduct, saveBrief, setOwner } from './pipeline';
+import { getBrief, linkExperiment, parseBrief, productLinks, requestDraftProduct, saveBrief, saveDecision, setOwner } from './pipeline';
 import { getProfile, saveProfile } from './profile';
 import { productReports } from './reports';
 import { setWatch } from './watches';
@@ -279,6 +279,14 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
       const fields = parseBrief(await c.req.json().catch(() => undefined));
       return typeof fields === 'string' ? c.json({ error: fields }, 400) : c.json(saveBrief(db, store, c.req.param('id'), fields));
+    })
+    // PR-23: an owner's stage decision (a History row) saved as a card in the store's Knowledge Base.
+    .post('/api/pr/products/:id/history/:hid/knowledge', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const r = saveDecision(db, store, c.req.param('id'), c.req.param('hid'));
+      return 'error' in r ? c.json({ error: r.error }, r.status) : c.json({ cardId: r.cardId }, r.created ? 201 : 200);
     })
     .post('/api/pr/products/:id/draft-product', (c) => {
       const store = storeOf(c, db);

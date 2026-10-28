@@ -788,7 +788,7 @@ STOP.
   product" through the existing `store.add_products` approval (T9). Nothing is published or bought.
 
 ### Knowledge feedback
-- [ ] PR-23 **Knowledge Base:** prove the research run's retrieval is store plus General only and focused (test). Once
+- [x] PR-23 **Knowledge Base:** prove the research run's retrieval is store plus General only and focused (test). Once
   AA-18 has shipped, findings are saved through `captureFinding` (deduped, unreviewed) and the owner can save a stage
   decision as a store-scoped card; until then this part sits under Blocked "waits for ai-agents AA-18". General
   findings and store decisions stay separate. Demo-engine reports never feed the KB.
@@ -1010,6 +1010,13 @@ STOP.
   `store.add_products` approval request at the base selling price (T9: `prProductId`, so the draft links back as a
   `store_product` outcome); one request per product, none once it is in the store. API: `PUT …/owner`,
   `GET/POST …/links`, `DELETE …/links/:ref`, `GET/PUT …/brief`, `POST …/draft-product`. Tests: 3 API, 1 page.
+- 2026-10-28 PR-23 Knowledge Base: a test proves a research run's knowledge is the store's and General's active cards
+  only, matched to the product and at most 8 (another store's, unreviewed and off-topic cards never reach it; AA-17's
+  `retrieveKnowledge`, no retriever of ours). A model report's sourced claims (research or measured, with a web link;
+  at most 5) go to the store's KB through `captureFinding` as unreviewed findings, deduped against the store and
+  General; a demo report, a hypothesis and an app-only reference feed nothing. History's "Save decision to Knowledge
+  Base" keeps an owner's stage decision as the owner's own card under "Product decisions" (User-Provided, Hypothesis
+  stage), once, then links to it. API: `POST …/history/:hid/knowledge`. Tests: 3 API, 1 page.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1041,6 +1048,14 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-23 as built.** Findings and decisions stay apart by category, type and author: findings are agent Hypothesis
+  cards in "Findings" (status proposed, so no agent reads one until the owner accepts it), decisions are the owner's
+  User-Provided cards in "Product decisions" (active, Hypothesis stage: a decision is not a measured result). A
+  decision card's title is "<product>: <stage> (<date>)" because KB titles are unique per store; saving the same
+  History row again returns its card (a `pr_outcomes` row of kind `kb_card` keeps the History id). Only claims with a
+  web link count as sourced: an app reference like `[listing:…]` is a fact of this app, not a source the KB can keep.
+  The recommendation itself never becomes a card. Dev-app check: the dev DB has no owner stage decisions and making
+  one would add an append-only History row to demo data, so the History button is covered by the page test only.
 - **PR-22 as built.** Stages and execution states were already apart (the stage is the header's select and History;
   a task's queued/running/failed state is the Research tab's and the card footer's); this adds the owner fields around
   them. The owner is free text (there is no team or user model). Linked experiments are the store's `kb_experiments`
