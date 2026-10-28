@@ -55,7 +55,8 @@ export function Shell() {
             <NavLink
               key={n.path}
               to={n.path}
-              end
+              // AI Agents stays lit on its conversation and team URLs.
+              end={n.path === '/'}
               title={n.label}
               className={({ isActive }) =>
                 cx(
@@ -72,8 +73,8 @@ export function Shell() {
         <SystemStatus online={online} />
       </aside>
       <main id="main" tabIndex={-1} className="min-w-0 px-[22px] pb-8 outline-none">
-        {/* Keyed by path: moving to another page clears a caught error. */}
-        <PageBoundary key={pathname}>
+        {/* Keyed by page: moving to another page clears a caught error, and AI Agents stays mounted between its URLs. */}
+        <PageBoundary key={pathname.split('/')[1]}>
           <Suspense fallback={<LoadingState rows={6} />}>
             {/* Pages read whether the live connection is up (Dashboard's "Live" badge). */}
             <Outlet context={online} />

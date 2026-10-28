@@ -1,0 +1,129 @@
+// @vitest-environment jsdom
+import { afterEach, expect, test, vi } from 'vitest';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { Route, Routes } from 'react-router';
+import type { Conversation, Store } from '@frontline/shared';
+import { App } from '../App';
+import { renderApp, reply, stubApi } from '../test-utils';
+import { Workspace } from './Workspace';
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  localStorage.clear();
+});
+
+const store = (id: string, name: string, connected = false) => ({ id, name, platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'UTC', color: '#c2461c', connected }) as Store;
+const conversation = (id: string, title: string, state: Conversation['state'] = 'completed'): Conversation => ({
+  id,
+  storeId: 'glow',
+  configId: `cfg-${id}`,
+  agentId: 'glow:copywriter',
+  type: 'copywriter',
+  title,
+  pinned: false,
+  createdAt: '2026-10-24T10:00:00Z',
+  updatedAt: '2026-10-24T10:00:00Z',
+  lastActivityAt: '2026-10-24T10:00:00Z',
+  state,
+});
+const CONVERSATIONS = [conversation('c1', 'Spring hero line', 'running'), conversation('c2', 'FAQ rewrite')];
+
+/** glow has c1 and c2; asking for them with another store is the server's 404 (decision 13). */
+function api(stores = [store('glow', 'Glow Botanics'), store('peak', 'Peak Gear', true)]) {
+  return stubApi((url) => {
+    const u = new URL(url, 'http://x');
+    const asked = u.searchParams.get('store');
+    if (u.pathname === '/api/stores') return stores;
+    if (u.pathname === '/api/health') return { connectors: [] };
+    if (u.pathname === '/api/conversations') return { items: asked === 'glow' ? CONVERSATIONS : [], total: asked === 'glow' ? 2 : 0 };
+    const [, id, thread] = /^\/api\/conversations\/([^/]+)(\/thread)?$/.exec(u.pathname) ?? [];
+    const found = CONVERSATIONS.find((c) => c.id === id);
+    if (id && (!found || asked !== found.storeId)) return reply({ error: 'Conversation not found' }, 404);
+    if (found) return thread ? { items: [], total: 0 } : found;
+    return undefined;
+  });
+}
+const renderAt = (path: string) =>
+  renderApp(
+    <Routes>
+      {['/agents/c/:id', '/agents/t/:id', '/agents/w'].map((p) => (
+        <Route key={p} path={p} element={<Workspace />} />
+      ))}
+    </Routes>,
+    path,
+  );
+
+test('a conversation URL reopens that conversation, with the demo marker for a demo store', async () => {
+  api();
+  renderAt('/agents/c/c1?store=glow');
+  expect(await screen.findByRole('heading', { name: 'Spring hero line' })).toBeTruthy();
+  expect(screen.getByText('Demo data')).toBeTruthy();
+  expect((await screen.findByRole('link', { name: /FAQ rewrite/ })).getAttribute('href')).toBe('/agents/c/c2?store=glow');
+  expect(screen.getByRole('link', { name: /Spring hero line/ }).getAttribute('aria-current')).toBe('page');
+  expect(screen.getByRole('link', { name: /Spring hero line/ }).textContent).toContain('Running');
+});
+
+test('another store, an unknown store and an unknown conversation each show the not-found state', async () => {
+  api();
+  renderAt('/agents/c/c1?store=peak');
+  expect(await screen.findByText('Conversation not found')).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Back to Peak Gear' }).getAttribute('href')).toBe('/agents/w?store=peak');
+  expect(screen.queryByText('Demo data')).toBeNull(); // Peak is live
+  cleanup();
+  renderAt('/agents/w?store=gone');
+  expect(await screen.findByText('Store not found')).toBeTruthy();
+  cleanup();
+  renderAt('/agents/t/t1?store=glow');
+  expect(await screen.findByText('Team not found')).toBeTruthy();
+});
+
+test('with no store named it opens the first store; a store reopens the conversation last opened there', async () => {
+  api();
+  renderAt('/agents/w');
+  expect(await screen.findByText("Glow Botanics's agents")).toBeTruthy();
+  expect(screen.getByTestId('where').textContent).toBe('/agents/w?store=glow');
+  fireEvent.click(await screen.findByRole('link', { name: /FAQ rewrite/ }));
+  expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
+  cleanup();
+  renderAt('/agents/w?store=glow');
+  expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
+  expect(screen.getByTestId('where').textContent).toBe('/agents/c/c2?store=glow');
+});
+
+test('no stores: the workspace says how to add one', async () => {
+  api([]);
+  renderAt('/agents/w');
+  expect(await screen.findByText('No stores yet')).toBeTruthy();
+});
+
+test('/ focuses the list search unless typing; ↑/↓ move through the list', async () => {
+  api();
+  renderAt('/agents/w?store=glow');
+  const list = within(await screen.findByRole('navigation', { name: 'Conversations' }));
+  const first = await list.findByRole('link', { name: /Spring hero line/ });
+  const second = list.getByRole('link', { name: /FAQ rewrite/ });
+  const search = screen.getByRole('searchbox', { name: 'Search conversations' });
+  fireEvent.keyDown(document.body, { key: '/' });
+  expect(document.activeElement).toBe(search);
+  fireEvent.keyDown(search, { key: '/' }); // typing a slash in the field stays there
+  expect(document.activeElement).toBe(search);
+  fireEvent.keyDown(document.body, { key: '/', ctrlKey: true });
+  expect([first.tabIndex, second.tabIndex]).toEqual([0, -1]); // one tab stop
+  first.focus();
+  fireEvent.keyDown(first, { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(second);
+  fireEvent.keyDown(document.activeElement!, { key: 'ArrowUp' });
+  expect(document.activeElement).toBe(first);
+});
+
+test('through the real Shell: moving between conversations keeps the workspace mounted and AI Agents lit', async () => {
+  api();
+  renderApp(<App />, '/agents/c/c1?store=glow');
+  expect(await screen.findByRole('heading', { name: 'Spring hero line' })).toBeTruthy();
+  const list = screen.getByRole('navigation', { name: 'Conversations' });
+  fireEvent.click(screen.getByRole('link', { name: /FAQ rewrite/ }));
+  expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
+  expect(screen.getByRole('navigation', { name: 'Conversations' })).toBe(list);
+  expect(screen.getByRole('link', { name: 'AI Agents' }).getAttribute('aria-current')).toBe('page');
+});

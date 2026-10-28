@@ -350,8 +350,8 @@ export function ErrorState({ message = "Couldn't load this.", onRetry }: { messa
   );
 }
 
-/** Modal (`side="center"`) or right-hand drawer (`side="right"`) on the native <dialog>: focus trap, Esc and backdrop for free. */
-export function Dialog({ open, onClose, title, side = 'center', children }: { open: boolean; onClose: () => void; title: string; side?: 'center' | 'right'; children: ReactNode }) {
+/** Modal (`side="center"`) or a drawer (`side="right"` or `"left"`) on the native <dialog>: focus trap, Esc and backdrop for free. */
+export function Dialog({ open, onClose, title, side = 'center', children }: { open: boolean; onClose: () => void; title: string; side?: 'center' | 'right' | 'left'; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const down = useRef<EventTarget>(null);
   useEffect(() => {
@@ -373,7 +373,11 @@ export function Dialog({ open, onClose, title, side = 'center', children }: { op
       aria-label={title}
       className={cx(
         'card p-0 text-text backdrop:bg-black/60 backdrop:backdrop-blur-sm',
-        side === 'right' ? 'drawer my-0 mr-0 ml-auto h-dvh max-h-none w-[min(440px,100vw)] rounded-none rounded-l-xl' : 'm-auto w-[min(520px,calc(100vw-32px))]',
+        side === 'right'
+          ? 'drawer my-0 mr-0 ml-auto h-dvh max-h-none w-[min(440px,100vw)] rounded-none rounded-l-xl'
+          : side === 'left'
+            ? 'drawer my-0 mr-auto ml-0 h-dvh max-h-none w-[min(320px,100vw)] rounded-none rounded-r-xl'
+            : 'm-auto w-[min(520px,calc(100vw-32px))]',
       )}
     >
       <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">

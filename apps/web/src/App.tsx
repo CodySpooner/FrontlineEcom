@@ -17,6 +17,7 @@ const Creative = page(() => import('./pages/Creative'), 'Creative');
 const DevGallery = page(() => import('./pages/DevGallery'), 'DevGallery');
 const Ecosystem = page(() => import('./ecosystem/Ecosystem'), 'Ecosystem'); // keeps pixi.js (~330 kB) out of the main bundle
 const Integrations = page(() => import('./pages/Integrations'), 'Integrations');
+const Workspace = page(() => import('./agents/Workspace'), 'Workspace');
 const Knowledge = page(() => import('./pages/Knowledge'), 'Knowledge');
 const Orders = page(() => import('./pages/Orders'), 'Orders');
 const Research = page(() => import('./pages/Research'), 'Research');
@@ -33,6 +34,10 @@ export function App() {
           <Route key={n.path} path={n.path} element={n.path === '/ecosystem' ? <Ecosystem /> : PAGES[n.path] ?? <Placeholder nav={n} />} />
         ))}
         <Route path="/agents/:id" element={<AgentDetail />} />
+        {/* The new workspace, built beside the old pages until AA-14b: one element, so it stays mounted between them. */}
+        {['/agents/c/:id', '/agents/t/:id', '/agents/w'].map((path) => (
+          <Route key={path} path={path} element={<Workspace />} />
+        ))}
         {import.meta.env.DEV && <Route path="/dev/ui" element={<DevGallery />} />}
         <Route path="*" element={<Placeholder />} />
       </Route>

@@ -1295,7 +1295,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     - the secrets test (decision 13) covers the conversation and thread payloads.
 
 ### Approved interface
-- [ ] AA-06 **Page frame and routing:**
+- [x] AA-06 **Page frame and routing:**
   - Hero `compact`;
   - the three-pane layout with drag widths, persisted state and breakpoints;
   - the URL scheme and the one URL helper, with tests for the new forms (the legacy aliases switch over in AA-14b).
@@ -1622,6 +1622,11 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   rename/pin/archive; `validateConfig` and the seat default; the legacy run route opens a conversation; the recap
   and first-turn preface; kbGuard and STARTS on the new routes; client hooks; 8 API tests plus the scope sweep and
   secrets test extended.
+- 2026-10-28 AA-06 page frame: Hero `compact` with the Demo data pill, the three panes with drag widths (pure
+  `clampPanes`, tested), persisted widths and panel state, breakpoints on the workspace's own width, `agentsUrl`,
+  `/agents/c|t/:id` and `/agents/w`, `/` and ↑/↓, the loading, error, no-stores, not-found, empty and reconnecting
+  states, Shell's PageBoundary keyed by page and NavLink `end` only for '/'; 8 tests; checked in headless Chrome at
+  1440, 1024 and 700.
 
 ## Blocked
 
@@ -1755,6 +1760,23 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-06, 2026-10-28) For AA-07 to AA-09:
+  - The workspace is `apps/web/src/agents/`: `Workspace.tsx` (page, panes, states), `layout.ts` (`clampPanes`,
+    `paneMode`, `usePaneState` in `fe.agents.panes`, `lastOpened` in `fe.agents.last`), `urls.ts` (`agentsUrl`),
+    `fill.ts` (useFill plus the width the breakpoints read), `StateDot.tsx` (the board's dots, keyed by
+    ConversationState).
+  - The panes' contents are interim and marked `ponytail:`: a flat list with search and the store as a static card
+    (AA-07), the title and the runs drawn by the old Chat `Transcript` (AA-08), Details with the agent and store
+    scope (AA-09). `tab` and collapsed groups join `usePaneState` with the items that use them.
+  - `/agents/w?store=` with a remembered conversation for that store redirects to it, as AA-09's test needs; the empty
+    state shows when none is remembered. A 404 clears the memory.
+  - `/agents/t/:id` shows "Team not found" until AA-19 creates teams.
+  - Not built yet: the per-conversation scroll Map (spec "Navigation state"), for AA-08's thread and AA-09's test.
+  - Client: `useConversation` doesn't retry a 404, `useThread` seeds each `['run', id]` (live via the socket), and a
+    run event with a conversationId refreshes that conversation, its thread and the store's list.
+  - `Dialog` gains `side="left"` (opt-in) for the list drawer below 720 px. Hero's controls moved into a local
+    `HeroControls`, unchanged for every other page (checked on Analytics).
+  - Headless Chrome (CDP): Esc needs `{ code: 'Escape', windowsVirtualKeyCode: 27 }` to close a dialog.
 - (AA-05, 2026-10-28) For AA-06 and later:
   - **Where it went** (AA-04's map said `config.ts` and `recap.ts`): `validateConfig`, `seatDefault`, `resolveType` and
     `saveConfig` are in the existing `packages/agents/src/configs.ts`; `recap` and `conversationPreface` are in

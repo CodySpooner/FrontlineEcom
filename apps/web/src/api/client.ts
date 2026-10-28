@@ -216,20 +216,34 @@ export const useConversations = (storeId: string, filter: ConversationFilter = {
     initialPageParam: '',
     getNextPageParam: (last) => last.next,
     enabled: !!storeId,
+    // Typing in search keeps the last results up until the new ones land.
+    placeholderData: keepPreviousData,
   });
 
+/** A 404 (deleted, or another store's) shows at once instead of after three retries. */
 export const useConversation = (storeId: string, id: string) =>
-  useQuery({ queryKey: ['conversation', id], queryFn: () => api<Conversation>(`/api/conversations/${id}?store=${storeId}`), enabled: !!storeId && !!id });
+  useQuery({
+    queryKey: ['conversation', id],
+    queryFn: () => api<Conversation>(`/api/conversations/${id}?store=${storeId}`),
+    enabled: !!storeId && !!id,
+    retry: (n, e) => n < 3 && !/not found$/.test(e.message),
+  });
 
-/** A conversation's runs, oldest first; fetchNextPage loads the page before the oldest shown. */
-export const useThread = (storeId: string, id: string) =>
-  useInfiniteQuery({
+/** A conversation's runs, oldest first; fetchNextPage loads the page before the oldest shown. Seeds each ['run', id]. */
+export function useThread(storeId: string, id: string) {
+  const qc = useQueryClient();
+  return useInfiniteQuery({
     queryKey: ['thread', id],
-    queryFn: ({ pageParam }) => api<CursorPage<AgentRunDetail>>(`/api/conversations/${id}/thread?store=${storeId}${pageParam ? `&before=${pageParam}` : ''}`),
+    queryFn: async ({ pageParam }) => {
+      const page = await api<CursorPage<AgentRunDetail>>(`/api/conversations/${id}/thread?store=${storeId}${pageParam ? `&before=${pageParam}` : ''}`);
+      for (const run of page.items) qc.setQueryData<AgentRunDetail>(['run', run.id], (old) => old ?? run);
+      return page;
+    },
     initialPageParam: '',
     getNextPageParam: (last) => last.next,
     enabled: !!storeId && !!id,
   });
+}
 
 /** After any change to a conversation: its row, its thread and the store's lists. */
 function useConversationDone(storeId: string) {
@@ -885,6 +899,7 @@ export function useLive() {
         if (isLive(m.run)) qc.setQueryData<AgentRunDetail>(['run', m.run.id], (d) => d && { ...d, ...m.run });
         else qc.invalidateQueries({ queryKey: ['run', m.run.id] });
         qc.invalidateQueries({ queryKey: ['runs', m.run.agentId] });
+        if (m.run.conversationId) for (const key of [['conversations', m.run.storeId], ['conversation', m.run.conversationId], ['thread', m.run.conversationId]]) qc.invalidateQueries({ queryKey: key });
         qc.invalidateQueries({ queryKey: ['kb', 'tasks'] });
         qc.invalidateQueries({ queryKey: ['agents'] });
         qc.invalidateQueries({ queryKey: ['memory', m.run.storeId] });
