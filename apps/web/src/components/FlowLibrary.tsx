@@ -60,13 +60,13 @@ export function FlowLibrary({ agent, onOpen }: { agent: Agent; onOpen: (runId: s
           ))}
         </ul>
       </Panel>
-      <FlowView key={flow.id} flow={flow} onOpen={onOpen} />
+      <FlowView key={flow.id} flow={flow} storeId={agent.storeId} onOpen={onOpen} />
     </div>
   );
 }
 
-function FlowView({ flow, onOpen }: { flow: FlowDraft; onOpen: (runId: string) => void }) {
-  const del = useDeleteFlowDraft();
+function FlowView({ flow, storeId, onOpen }: { flow: FlowDraft; storeId: string; onOpen: (runId: string) => void }) {
+  const del = useDeleteFlowDraft(storeId);
   return (
     <Panel
       title={flow.name}

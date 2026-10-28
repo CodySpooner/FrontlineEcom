@@ -1,4 +1,4 @@
-import type { Agent, AgentEvent, Store } from '@frontline/shared';
+import type { Agent, AgentConfig, AgentEvent, Store } from '@frontline/shared';
 import { agentModel, claudeEngine } from './claude-engine';
 import { fakeEngine } from './fake-engine';
 import type { ToolEnv } from './tools';
@@ -24,6 +24,8 @@ export interface RunInput {
   onSession?: (sessionId: string) => void;
   /** A stage of a knowledge-base research task: web search and no app or store tools, research limits (KB-12). */
   mode?: 'research';
+  /** What the run's conversation or team participant is configured with; none: the role's tools. */
+  config?: AgentConfig;
 }
 
 /** Streams one agent run. Engines may throw or stop early; `runAgent` normalizes that. */

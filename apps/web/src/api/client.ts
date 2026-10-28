@@ -685,9 +685,13 @@ export function useDeleteCreative() {
 
 export const useFlowDrafts = (storeId: string) => useQuery({ queryKey: ['flow-drafts', storeId], queryFn: () => api<FlowDraft[]>(`/api/flow-drafts?stores=${storeId}`) });
 
-export function useDeleteFlowDraft() {
+/** `storeId`: the drawer's store; the server refuses a draft of another (decision 13). */
+export function useDeleteFlowDraft(storeId?: string) {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (id: string) => api<void>(`/api/flow-drafts/${id}`, { method: 'DELETE' }), onSuccess: () => qc.invalidateQueries({ queryKey: ['flow-drafts'] }) });
+  return useMutation({
+    mutationFn: (id: string) => api<void>(`/api/flow-drafts/${id}${storeId ? `?store=${storeId}` : ''}`, { method: 'DELETE' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['flow-drafts'] }),
+  });
 }
 
 export const usePageDrafts = (storeIds: string[]) =>

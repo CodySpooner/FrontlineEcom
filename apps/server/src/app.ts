@@ -24,6 +24,7 @@ import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
 import { settingsRoutes } from './settings';
 import { agentRoutes, runManager } from './routes/agents';
+import { wrongStore } from './routes/agents-scope';
 import { ecosystemRoutes } from './routes/ecosystem';
 import { loadKey } from './secrets';
 import { createStore, deleteStore, getStore, listStores, parseStoreInput, updateStore } from './stores';
@@ -139,6 +140,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       const decision = c.req.param('decision') as ApprovalDecision;
       const note = decision === 'deny' ? ((await json(c.req.raw)) as { note?: unknown } | undefined)?.note : undefined;
       if (note !== undefined && (typeof note !== 'string' || !note.trim() || note.trim().length > 300)) return c.json({ error: 'note must be 1 to 300 characters' }, 400);
+      if (wrongStore(c, db, 'approvals', c.req.param('id'))) return c.json({ error: 'approval not found' }, 404);
       const a = decide(db, c.req.param('id'), decision, note?.trim());
       if (!a) return c.json({ error: 'approval not found' }, 404);
       return a === 'decided' ? c.json({ error: 'approval already decided' }, 409) : c.json(a);

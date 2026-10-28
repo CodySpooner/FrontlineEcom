@@ -72,6 +72,7 @@ import { researchRoutes } from '../research';
 import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, EXPIRED_DEMO, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
+import { wrongStore } from './agents-scope';
 import { issueRoutes } from './agents-issues';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
@@ -558,9 +559,10 @@ export function agentRoutes(db: Db) {
     })
     .get('/api/agents/:id', (c) => {
       const agent = getAgent(db, c.req.param('id'));
-      return agent ? c.json(agent) : c.json({ error: 'Agent not found' }, 404);
+      return agent && !wrongStore(c, db, 'agents', agent.id) ? c.json(agent) : c.json({ error: 'Agent not found' }, 404);
     })
     .patch('/api/agents/:id', async (c) => {
+      if (wrongStore(c, db, 'agents', c.req.param('id'))) return c.json({ error: 'Agent not found' }, 404);
       const body = (await c.req.json().catch(() => null)) as AgentUpdate | null;
       if (
         !body ||
@@ -625,7 +627,7 @@ export function agentRoutes(db: Db) {
     .get('/api/squad-missions', (c) => c.json(listMissions(db, c.req.query('stores')?.split(',').filter(Boolean), limit(c.req.query('limit')))))
     .get('/api/squad-missions/:id', (c) => {
       const mission = getMission(db, c.req.param('id'));
-      return mission ? c.json(mission) : c.json({ error: 'Mission not found' }, 404);
+      return mission && !wrongStore(c, db, 'squad_missions', mission.id) ? c.json(mission) : c.json({ error: 'Mission not found' }, 404);
     })
     .post('/api/squad-missions', async (c) => {
       const input = parseMission(await c.req.json().catch(() => null));
@@ -636,7 +638,7 @@ export function agentRoutes(db: Db) {
       return c.json(getMission(db, id), 201);
     })
     .post('/api/squad-missions/:id/cancel', (c) => {
-      if (!getMission(db, c.req.param('id'))) return c.json({ error: 'Mission not found' }, 404);
+      if (!getMission(db, c.req.param('id')) || wrongStore(c, db, 'squad_missions', c.req.param('id'))) return c.json({ error: 'Mission not found' }, 404);
       const mission = cancelMission(db, c.req.param('id'), runs.cancel);
       if (!mission) return c.json({ error: 'This mission has already ended.' }, 409);
       publish({ type: 'mission', mission });
@@ -647,9 +649,10 @@ export function agentRoutes(db: Db) {
     )
     .get('/api/runs/:id', (c) => {
       const run = runs.get(c.req.param('id'));
-      return run ? c.json(run) : c.json({ error: 'Run not found' }, 404);
+      return run && !wrongStore(c, db, 'agent_runs', run.id) ? c.json(run) : c.json({ error: 'Run not found' }, 404);
     })
     .post('/api/runs/:id/cancel', (c) => {
+      if (wrongStore(c, db, 'agent_runs', c.req.param('id'))) return c.json({ error: 'Run not found' }, 404);
       const run = runs.cancel(c.req.param('id'));
       return run ? c.json(run) : c.json({ error: 'Run not found' }, 404);
     })
@@ -668,12 +671,13 @@ export function agentRoutes(db: Db) {
       return c.json(writeMemory(db, { confidence: 0.8, ...rest, kind, text, storeId, agentId: 'owner' }), 201);
     })
     .patch('/api/memory/:id', async (c) => {
+      if (wrongStore(c, db, 'store_memory', c.req.param('id'))) return c.json({ error: 'Memory not found' }, 404);
       const input = parseMemoryInput(await c.req.json().catch(() => null), true);
       if (typeof input === 'string') return c.json({ error: input }, 400);
       const memory = updateMemory(db, c.req.param('id'), input);
       return memory ? c.json(memory) : c.json({ error: 'Memory not found' }, 404);
     })
-    .delete('/api/memory/:id', (c) => (deleteMemory(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Memory not found' }, 404)))
+    .delete('/api/memory/:id', (c) => (!wrongStore(c, db, 'store_memory', c.req.param('id')) && deleteMemory(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'Memory not found' }, 404)))
     .get('/api/knowledge', (c) => c.json(knowledgeIndex()))
     .get('/api/knowledge/:kind/:key', (c) => {
       const d = knowledgeDoc(c.req.param('kind'), c.req.param('key'));

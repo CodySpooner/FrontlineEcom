@@ -56,7 +56,7 @@ test("a run retried after a restart doesn't hand out again what it assigned befo
 
 test("a conversation turn the owner resumes after a restart doesn't hand out again what it assigned before", async () => {
   const now = new Date().toISOString();
-  db.prepare(`INSERT INTO agent_configs (id, store_id, agent_id, runtime, tools_json, knowledge_json, permissions_json, created_at) VALUES ('cfg', 'glow', 'glow:market_analyst', 'demo', '[]', '["store"]', '{"saveFindings":"off"}', ?)`).run(now);
+  db.prepare(`INSERT INTO agent_configs (id, store_id, agent_id, runtime, tools_json, knowledge_json, permissions_json, created_at) VALUES ('cfg', 'glow', 'glow:market_analyst', 'demo', '["assign_task"]', '["store"]', '{"saveFindings":"off"}', ?)`).run(now);
   db.prepare(`INSERT INTO conversations (id, store_id, config_id, title, created_at, updated_at, last_activity_at) VALUES ('chat', 'glow', 'cfg', 'Briefing', ?, ?, ?)`).run(now, now, now);
   const add = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, parent_run_id, conversation_id, config_id, created_at) VALUES (?, 'glow', ?, ?, ?, ?, ?, ?, ?)`);
   add.run('p', 'glow:market_analyst', 'Plan the week', 'running', null, 'chat', 'cfg', now); // cut off by the restart

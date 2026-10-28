@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, isPrivateHost, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardType, type KbLinkType, type KbStage, type KbWorkspace, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
+import { AGENT_ROLES, isPrivateHost, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardType, type KbLinkType, type KbStage, type KbWorkspace, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentConfig, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, uncostedShare, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
@@ -1607,9 +1607,20 @@ export const toolsFor = (role: Agent['role']) => APP_TOOLS.filter((t) => ROLES[r
 
 /** A research run's app tools, whatever its role: reading and filing knowledge, nothing that acts on a store (decision 8). */
 export const RESEARCH_TOOLS: ToolName[] = ['fetch_source', 'propose_card', 'add_evidence', 'suggest_link', 'search_knowledge'];
-/** The app tools a run gets: in research mode the research set, otherwise the role's own without the research-only ones. */
-export const runTools = (role: Agent['role'], mode?: 'research') =>
-  mode === 'research' ? APP_TOOLS.filter((t) => RESEARCH_TOOLS.includes(t.name)) : toolsFor(role).filter((t) => t.name === 'search_knowledge' || !RESEARCH_TOOLS.includes(t.name));
+/**
+ * The app tools a run gets: in research mode the research set, otherwise the role's own without the research-only ones,
+ * narrowed to its config's tools when it has one (decision 13). Runs without a config keep the role's.
+ */
+export const runTools = (role: Agent['role'], mode?: 'research', config?: Pick<AgentConfig, 'tools'>) =>
+  mode === 'research'
+    ? APP_TOOLS.filter((t) => RESEARCH_TOOLS.includes(t.name))
+    : toolsFor(role).filter((t) => (t.name === 'search_knowledge' || !RESEARCH_TOOLS.includes(t.name)) && allows(config, t.name));
+
+/** Whether a run on this config may use one of its role's tools, Claude built-ins and external servers (meta_ads) included. */
+export const allows = (config: Pick<AgentConfig, 'tools'> | undefined, name: string) => !config || config.tools.includes(name);
+
+/** A seat's default config tools: the role's tools and external servers, without compare_stores (opt-in, decision 13). */
+export const defaultTools = (role: AgentRole) => [...ROLES[role].tools, ...(ROLES[role].mcp ?? [])].filter((t) => t !== 'compare_stores');
 
 function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) return promise;

@@ -1259,7 +1259,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     old one;
   - `agents-runs.test.ts` extended for every rule, including: Stop after aborts at the deadline but not while the run
     waits on an approval.
-- [ ] AA-04 **Store isolation and guards** (decision 13):
+- [x] AA-04 **Store isolation and guards** (decision 13):
   - the optional store check on the listed existing routes, and the store param in the drawer's flow-draft delete;
   - one table-driven sweep. New routes return 404 for another store's id. The listed existing routes return 404 when
     `?store=` names another store. Tools and retrieval refuse another store's ids. AA-05, AA-09 (tools), AA-11 (custom
@@ -1613,6 +1613,10 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   Stop after (paused while waiting on the owner), every SDK error code mapped with a `code` on the event, two automatic
   retries for rate_limit/overloaded/server_error, no restart re-run for conversation or team runs, `fake-<runId>`
   sessions; 10 new tests.
+- 2026-10-28 AA-04 store isolation: optional `?store=` 404 on the listed by-id routes (`wrongStore`), the drawer's
+  flow delete sends its store, `runTools(role, mode, config?)` with compare_stores opt-in and the config narrowing
+  built-ins and external servers too, WebFetch refused for private hosts, the route/tool/retrieval sweep and the
+  secrets-never-leak test (`agents-scope.test.ts`).
 
 ## Blocked
 
@@ -1722,6 +1726,17 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     transcript. "Changed something" is judged by tool name (`hasEffects`, exported for the attempt UI).
   - Only one test pinned the old fake session id: engine.test.ts calls the engine without a runId and keeps
     `fake-<agent id>`.
+- (AA-04, 2026-10-28) For AA-05 and later:
+  - A config's `tools` holds app tool names, Claude built-in names (WebSearch, WebFetch) and the role's external
+    server keys (`meta_ads`). `defaultTools(role)` is the seat default: all of them except compare_stores.
+    `runTools(role, mode, config)` and `allows(config, name)` (built-ins, external servers) narrow to it; a run with
+    no config keeps the role's tools, compare_stores included. The run manager loads the run's config (`getConfig`,
+    new `configs.ts`) and hands it to the engine as `RunInput.config`.
+  - New routes add rows to `ROUTES` in `agents-scope.test.ts`; `wrongStore(c, db, table, id)` is the by-id check.
+  - WebFetch is refused for loopback, private and `.local`-style hosts, also when the URL has no scheme. A missing
+    URL is left to WebFetch's own validation.
+  - Tools already took ids within `ctx.store` only. Demo stores share order numbers (ids are unique per store), so a
+    cross-store id test needs an id the other store lacks.
   - **Where the new pieces live:**
     - packages/shared: `runtime-registry.ts`, and the derived run state with the new types in `index.ts`.
     - packages/agents: `claudeModels()` in claude-engine.ts; `config.ts` (validateConfig, the seat default, presets);

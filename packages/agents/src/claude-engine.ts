@@ -2,11 +2,11 @@
 // canUseTool, per-run mcpServers), minus Effect. Ideas ported from pingdotgg/t3code:
 // MIT License, Copyright (c) 2026 T3 Tools Inc.
 import { createSdkMcpServer, query, tool, type Options, type SDKAssistantMessageError, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { AgentEvent, ClaudeAccount } from '@frontline/shared';
+import { isPrivateHost, type AgentEvent, type ClaudeAccount } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
 import { assemblePrompt } from './prompt';
 import { ROLES } from './roles';
-import { callTool, channel, requestApproval, runTools } from './tools';
+import { allows, callTool, channel, requestApproval, runTools } from './tools';
 
 /** Why the SDK stopped a run early, in the owner's words (the run's error notification). */
 const STOPPED: Partial<Record<string, string>> = {
@@ -81,12 +81,12 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     // Claude Code built-ins are capitalized (WebSearch); app tools come over the in-process MCP server. Research gets web
     // search and the research tools: no WebFetch (pages go through fetch_source's guarded reader) and none of the store's.
     const research = input.mode === 'research';
-    const builtins = research ? ['WebSearch'] : ROLES[input.agent.role].tools.filter((t) => /^[A-Z]/.test(t));
+    const builtins = research ? ['WebSearch'] : ROLES[input.agent.role].tools.filter((t) => /^[A-Z]/.test(t) && allows(input.config, t));
     const events = channel<AgentEvent>();
     const ctx = input.env && { ...input.env, store: input.store, agent: input.agent, emit: events.push, signal: input.signal };
-    const appTools = ctx ? runTools(input.agent.role, input.mode) : [];
+    const appTools = ctx ? runTools(input.agent.role, input.mode, input.config) : [];
     const connected = (!research && ctx?.externalMcp?.(input.store.id)) || {};
-    const externalMcp = Object.fromEntries((ROLES[input.agent.role].mcp ?? []).flatMap((k) => (connected[k] ? [[k, connected[k]]] : [])));
+    const externalMcp = Object.fromEntries((ROLES[input.agent.role].mcp ?? []).flatMap((k) => (connected[k] && allows(input.config, k) ? [[k, connected[k]]] : [])));
     const frontline = createSdkMcpServer({
       name: 'frontline',
       version: '1.0.0',
@@ -118,6 +118,8 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
         // built-ins and app tools run (app tools gate their own side effects through request_approval), external reads
         // run, and anything else (e.g. a write tool on a connected store's MCP) goes to the owner.
         canUseTool: async (toolName, toolInput) => {
+          // The app's own API (and anything else on this machine or network) isn't the web: another store's data is there.
+          if (toolName === 'WebFetch' && privateUrl(toolInput.url)) return { behavior: 'deny', message: 'Not allowed: WebFetch reads public web pages, not addresses on this computer or network.' };
           if ((builtins as string[]).includes(toolName) || toolName.startsWith('mcp__frontline__')) return { behavior: 'allow', updatedInput: toolInput };
           if (!ctx) return { behavior: 'deny', message: 'Tool not available in this run.' };
           if (isReadOnly(toolName)) return { behavior: 'allow', updatedInput: toolInput };
@@ -229,6 +231,18 @@ function resultText(content: unknown): string {
   if (typeof content === 'string') return content;
   if (!Array.isArray(content)) return '';
   return content.map((b: { type?: string; text?: string }) => (b.type === 'text' ? b.text : `[${b.type}]`)).join('\n');
+}
+
+function privateUrl(url: unknown) {
+  if (typeof url !== 'string') return false; // WebFetch refuses it itself
+  // With no scheme ("127.0.0.1:8847/api", "localhost:5173") WebFetch adds one: so does the check.
+  for (const u of [url, `http://${url}`]) {
+    try {
+      const host = new URL(u).hostname;
+      if (host) return isPrivateHost(host);
+    } catch {}
+  }
+  return false; // nothing WebFetch could open
 }
 
 // ponytail: external tools are judged by name (their read-only annotations don't reach canUseTool). Anything that

@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, INTERRUPTED, type AgentEvent, type AgentPermissions, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
+import { AGENT_ROLES, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
 import { isReadOnly } from './claude-engine';
+import { getConfig } from './configs';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { researchContext } from './kb-research';
 import { citedCards, logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
@@ -195,7 +196,7 @@ export function createRunManager(opts: RunManagerOptions) {
       // A config's budget for one run only narrows that, never widens it.
       const own = getAgent(db, run.agentId)?.dailyBudgetUsd;
       const seat = own === undefined ? undefined : Math.max(0, own - costToday(db, run.storeId, run.agentId)) / (working().filter((a) => a.agentId === run.agentId).length + 1);
-      const caps = [share, seat, limits(run.configId)?.budgetUsd].filter((n) => n !== undefined);
+      const caps = [share, seat, run.configId && getConfig(db, run.configId)?.permissions.budgetUsd].filter((n) => typeof n === 'number');
       const budget = caps.length ? Math.min(...caps) : undefined;
       const abort = new AbortController();
       const transcript: AgentEvent[] = [];
@@ -218,12 +219,6 @@ export function createRunManager(opts: RunManagerOptions) {
     return !run.teamId && [...active.values()].some((a) => a.agentId === run.agentId && !a.conversationId && !a.teamId);
   }
 
-  /** The config's own limits: a budget for one run, Stop after. */
-  function limits(configId?: string) {
-    const row = configId ? db.prepare('SELECT permissions_json FROM agent_configs WHERE id = ?').get(configId) : undefined;
-    return row && (JSON.parse(String(row.permissions_json)) as AgentPermissions);
-  }
-
   /** A conversation's turn goes on in the session of its latest earlier turn on the same config (a runtime change starts a new one). */
   const resumeFor = (run: AgentRun) =>
     db.prepare(`SELECT session_id FROM agent_runs WHERE conversation_id = ? AND config_id IS ? AND session_id IS NOT NULL AND rowid < (SELECT rowid FROM agent_runs WHERE id = ?) ORDER BY rowid DESC`)
@@ -234,7 +229,8 @@ export function createRunManager(opts: RunManagerOptions) {
     db.prepare(`UPDATE agent_runs SET status = 'running', started_at = ? WHERE id = ?`).run(new Date().toISOString(), queued.id);
     const run = getRun(db, queued.id)!;
     opts.onRun?.(run);
-    const { budgetUsd: runBudget, stopAfterMin } = limits(run.configId) ?? {};
+    const config = run.configId ? getConfig(db, run.configId) : undefined;
+    const { budgetUsd: runBudget, stopAfterMin } = config?.permissions ?? {};
     // Stop after N minutes of work: the clock stops while the run waits on the owner.
     let overTime = false;
     let left = stopAfterMin === undefined ? Infinity : stopAfterMin * 60_000;
@@ -324,6 +320,7 @@ export function createRunManager(opts: RunManagerOptions) {
           task: run.task,
           systemPrompt,
           ...(research ? { mode: 'research' as const } : {}),
+          ...(config ? { config } : {}),
           signal,
           env: { ...env, runId: run.id },
           ...(resume ? { resume: String(resume), sessionCostUsd: sessionCost(String(resume)) } : {}),
