@@ -51,13 +51,17 @@ export function stoppedReason(db: Db, adapter: Pick<PrAdapter, 'id' | 'credentia
  * "Sync now" (PR-11): today's planned queries as jobs, now. The owner asking clears a schema stop (they've looked);
  * an auth stop still waits for new credentials and a quota stop for 00:00 UTC. One sync per source at a time.
  */
-export function syncNow(db: Db, a: PrAdapter, key: Buffer, now = new Date()): { error: string } | { jobs: number } {
+export async function syncNow(db: Db, a: PrAdapter, key: Buffer, now = new Date()): Promise<{ error: string } | { jobs: number }> {
   if (!a.plan || !a.page) return { error: `${a.name} has nothing to sync.` };
   if (!a.ready?.(db, key)) return { error: `${a.name} isn't set up yet. ${a.connect}` };
-  if (db.prepare(`SELECT 1 FROM pr_jobs WHERE source = ? AND status IN ('queued', 'running')`).get(a.id)) return { error: `${a.name} is already syncing.` };
+  if (db.prepare(`SELECT 1 FROM pr_jobs WHERE source = ? AND status = 'running'`).get(a.id)) return { error: `${a.name} is already syncing.` };
   if (sourceRow(db, a.id)?.error_kind === 'schema') db.prepare(`UPDATE pr_sources SET status = 'degraded', updated_at = ? WHERE id = ?`).run(now.toISOString(), a.id);
   const stop = stoppedReason(db, a, now);
   if (stop) return { error: stop };
+  // A job waiting to retry goes now instead of a new plan: the owner asked, and the dev app has no timer to run it.
+  const waiting = Number(db.prepare(`UPDATE pr_jobs SET next_attempt_at = NULL WHERE source = ? AND status = 'queued'`).run(a.id).changes);
+  if (waiting) return { jobs: waiting };
+  await prepare(db, a, key, now);
   const plans = a.plan(db).filter((p) => p.queries.length);
   if (!plans.length) return { error: "No queries to run: no store has a niche, an included category or a saved keyword that maps to this source." };
   for (const p of plans) enqueue(db, { kind: 'ingest', source: a.id, storeId: p.storeId, queries: p.queries }, now);
@@ -174,11 +178,16 @@ export async function runDue(db: Db, adapters: PrAdapter[], deps: RunDeps) {
   }
 }
 
+/** What a plan reads, refreshed first; a failure is logged and the plan uses what it has. */
+const prepare = (db: Db, a: PrAdapter, key: Buffer, now: Date) =>
+  a.prepare?.(db, key, now).catch((e) => log('error', 'product research plan refresh failed', { source: a.id, error: e instanceof Error ? e.message : String(e) }));
+
 /** Once a UTC day per scheduled source: its planned queries as jobs. A source that isn't set up or is stopped plans nothing. */
-export function planToday(db: Db, adapters: PrAdapter[], key: Buffer, now = new Date()) {
+export async function planToday(db: Db, adapters: PrAdapter[], key: Buffer, now = new Date()) {
   for (const a of adapters) {
     if (!a.plan || !a.page || a.refreshHours === undefined || !a.ready?.(db, key) || stoppedReason(db, a, now)) continue;
     if (!once(db, `pr:plan:${a.id}:${day(now)}`)) continue;
+    await prepare(db, a, key, now);
     for (const p of a.plan(db)) if (p.queries.length) enqueue(db, { kind: 'ingest', source: a.id, storeId: p.storeId, queries: p.queries }, now);
   }
 }
@@ -195,7 +204,7 @@ export function startPrJobs(db: Db, key: Buffer, adapters: PrAdapter[], onStored
     if (running) return;
     running = true;
     try {
-      planToday(db, adapters, key);
+      await planToday(db, adapters, key);
       refreshAllOrders(db);
       if (once(db, `pr:decay:${day(new Date())}`)) decayPass(db);
       await runDue(db, adapters, { key, onStored: onStored ?? ((ids) => new Set(ids).forEach((id) => refreshProduct(db, id))) });

@@ -144,6 +144,18 @@ test("CJ leaves demo stores out: a real order whose number a demo store also has
   ]);
 });
 
+test('CJ with only demo stores (none of their orders can match) checks the key and lists no orders; the token is cached after that', async () => {
+  const db = setup();
+  db.prepare('UPDATE stores SET demo = 1').run();
+  const { fetchFn, calls } = fakeCj({ SHIPPED: [cjOrder('3001', 'SHIPPED', 'CJPKL1')] });
+  await syncCj(db, key, 'null', fetchFn, NOW, 0);
+  await syncCj(db, key, 'null', fetchFn, NOW, 0);
+  expect(calls.map((c) => c.url.pathname.split('/').pop())).toEqual(['getAccessToken']);
+  expect(db.prepare("SELECT status, synced_at FROM integrations WHERE id = 'cj:global'").get()).toEqual({ status: 'connected', synced_at: NOW.toISOString() });
+  await syncCj(db, key, 'null', fakeCj({}, false).fetchFn, new Date(NOW.getTime() + 14 * 86_400_000), 0); // the token is due: a bad key still shows
+  expect(db.prepare("SELECT status FROM integrations WHERE id = 'cj:global'").get()).toEqual({ status: 'error' });
+});
+
 test("CJ's tracking number replaces the platform's link only when it's another parcel: a stale carrier link isn't kept", async () => {
   const db = setup();
   const link = db.prepare("UPDATE orders SET tracking = ?, tracking_url = ? WHERE store_id = 'glow' AND id = ?");

@@ -186,10 +186,15 @@ test('caps: 5 pages per query a day, 500 ingestion calls a day, and 200 CJ calls
 test("planning runs once a day per ready source; the timer is off in the dev app unless PR_INGEST=1", async () => {
   const db = setup();
   const a = fake({ dog: [items(1)] });
-  planToday(db, [a], key, T0);
-  planToday(db, [a], key, new Date(T0.getTime() + 3_600_000));
+  const prepared: string[] = [];
+  const b = { ...a, prepare: async (_db: Db, _key: Buffer, now: Date) => void prepared.push(now.toISOString()) };
+  await planToday(db, [b], key, T0);
+  await planToday(db, [b], key, new Date(T0.getTime() + 3_600_000));
   expect(db.prepare('SELECT count(*) AS n FROM pr_jobs').get()?.n).toBe(1);
-  planToday(db, [{ ...a, id: 'off', ready: () => false }], key, T0);
+  expect(prepared).toEqual([T0.toISOString()]); // refreshed before the day's one plan
+  await planToday(db, [{ ...a, id: 'failing', prepare: async () => Promise.reject(new SourceError('server', 'down')) }], key, T0);
+  expect(db.prepare(`SELECT count(*) AS n FROM pr_jobs WHERE source = 'failing'`).get()?.n).toBe(1); // a failed refresh plans with what it has
+  await planToday(db, [{ ...a, id: 'off', ready: () => false }], key, T0);
   expect(db.prepare(`SELECT count(*) AS n FROM pr_jobs WHERE source = 'off'`).get()?.n).toBe(0);
 
   vi.stubEnv('FRONTLINE_WEB_DIR', '');
@@ -200,20 +205,25 @@ test("planning runs once a day per ready source; the timer is off in the dev app
   spy.mockRestore();
 });
 
-test('Sync now queues today\'s plan once, clears a schema stop the owner asked past, and refuses what still blocks it', async () => {
+test('Sync now queues today\'s plan once, resumes a waiting job, clears a schema stop the owner asked past, and refuses what still blocks it', async () => {
   const db = openDb();
   const a = { ...fake({ dog: [items(2)] }), plan: () => [{ storeId: null, queries: ['dog'] }] };
-  expect(syncNow(db, { ...a, ready: () => false }, key, T0)).toMatchObject({ error: expect.stringMatching(/isn't set up yet/) });
-  expect(syncNow(db, { ...a, plan: () => [{ storeId: null, queries: [] }] }, key, T0)).toMatchObject({ error: expect.stringMatching(/^No queries/) });
-  expect(syncNow(db, a, key, T0)).toEqual({ jobs: 1 });
-  expect(syncNow(db, a, key, T0)).toEqual({ error: 'Fake is already syncing.' });
+  expect(await syncNow(db, { ...a, ready: () => false }, key, T0)).toMatchObject({ error: expect.stringMatching(/isn't set up yet/) });
+  expect(await syncNow(db, { ...a, plan: () => [{ storeId: null, queries: [] }] }, key, T0)).toMatchObject({ error: expect.stringMatching(/^No queries/) });
+  expect(await syncNow(db, a, key, T0)).toEqual({ jobs: 1 });
+  db.prepare(`UPDATE pr_jobs SET next_attempt_at = ? WHERE source = 'fake'`).run(new Date(T0.getTime() + 600_000).toISOString()); // waiting to retry
+  expect(await syncNow(db, a, key, T0)).toEqual({ jobs: 1 }); // that job goes now: the dev app has no timer to run it
+  expect(db.prepare(`SELECT count(*) AS n FROM pr_jobs WHERE next_attempt_at IS NULL`).get()?.n).toBe(1); // and no second job
+  db.prepare(`UPDATE pr_jobs SET status = 'running'`).run();
+  expect(await syncNow(db, a, key, T0)).toEqual({ error: 'Fake is already syncing.' });
+  db.prepare(`UPDATE pr_jobs SET status = 'queued'`).run();
   await runDue(db, [a], { key, now: () => T0 });
   expect(a.calls).toEqual(['dog#1']);
 
   markSource(db, 'fake', { ok: false, kind: 'schema', error: 'Required field "title" missing' }, T0);
-  expect(syncNow(db, a, key, T0)).toEqual({ jobs: 1 }); // asking again clears the schema stop
+  expect(await syncNow(db, a, key, T0)).toEqual({ jobs: 1 }); // asking again clears the schema stop
   await runDue(db, [a], { key, now: () => T0 });
   markSource(db, 'fake', { ok: false, kind: 'auth', error: 'refused' }, T0);
-  expect(syncNow(db, a, key, T0)).toEqual({ error: 'The credentials were refused: enter them again in Integrations.' });
-  expect(syncNow(db, { ...a, page: undefined }, key, T0)).toEqual({ error: 'Fake has nothing to sync.' });
+  expect(await syncNow(db, a, key, T0)).toEqual({ error: 'The credentials were refused: enter them again in Integrations.' });
+  expect(await syncNow(db, { ...a, page: undefined }, key, T0)).toEqual({ error: 'Fake has nothing to sync.' });
 });

@@ -72,7 +72,7 @@ test('discovery: a job pages through CJ for each query and stores listings with 
   const job = enqueue(db, { kind: 'ingest', source: 'cj', storeId: 'pawsome', queries: ['pet grooming'] }, NOW);
   expect(await runJob(db, job, cjAdapter, { key, now: () => NOW })).toBe('done');
   expect(calls.map((c) => c.path)).toEqual(['/authentication/getAccessToken', '/product/listV2']);
-  expect(Object.fromEntries(calls[1]!.url.searchParams)).toEqual({ keyWord: 'pet grooming', page: '1', size: '20' });
+  expect(Object.fromEntries(calls[1]!.url.searchParams)).toEqual({ keyWord: 'pet grooming', page: '1', size: '20', features: 'enable_category' }); // CJ names categories only when asked
   expect(calls[1]!.token).toBe('doc-token');
   const rows = db.prepare(`SELECT source, source_ref, origin, title, category, image_ref, currency, store_id, transform_json FROM pr_listings ORDER BY source_ref`).all();
   expect(rows.map((r) => [r.source, r.source_ref, r.origin, r.title, r.category, r.currency, r.store_id])).toEqual([
@@ -93,6 +93,36 @@ test('discovery: a job pages through CJ for each query and stores listings with 
     { storeId: 'barkbox', queries: ['lick mat'] }, // the pet queries are already planned
     { storeId: 'glow', queries: ['crystal healing'] }, // a custom niche searches the owner's words
   ]);
+});
+
+test("planning browses the niche's CJ categories once the tree is fetched (at most weekly); a category query pages by its id", async () => {
+  const db = setup();
+  const tree = {
+    code: 200,
+    result: true,
+    message: 'Success',
+    data: [
+      { categoryFirstId: 'f1', categoryFirstName: 'Pet Supplies', categoryFirstList: [{ categorySecondId: 's1', categorySecondName: 'Pet Groomings', categorySecondList: [] }, { categorySecondId: 's2', categorySecondName: 'Pet Toys', categorySecondList: [] }] },
+      { categoryFirstId: 'f2', categoryFirstName: 'Health, Beauty & Hair', categoryFirstList: [{ categorySecondId: 's3', categorySecondName: 'Makeup', categorySecondList: [] }] },
+    ],
+  };
+  const { fetchFn, calls } = fakeCj({ '/product/getCategory': { body: tree } });
+  withFetch(fetchFn);
+  db.exec(`INSERT INTO stores (id, name, platform, niche, niche_detail, currency) VALUES ('glow', 'Glow', 'shopify', 'other', 'Crystal Healing', 'GBP')`);
+  db.exec(`INSERT INTO pr_store_profiles (store_id, keywords_json, updated_at) VALUES ('pawsome', '["Lick Mat", "Pet Grooming"]', '${NOW.toISOString()}')`);
+  await cjAdapter.prepare!(db, key, NOW);
+  await cjAdapter.prepare!(db, key, new Date(NOW.getTime() + 86_400_000)); // a day later: the cached tree
+  expect(calls.map((c) => c.path)).toEqual(['/authentication/getAccessToken', '/product/getCategory']);
+  expect(cjAdapter.plan!(db)).toEqual([
+    // The niche's phrases give way to its categories; the owner's own keyword stays a search.
+    { storeId: 'pawsome', queries: ['category:s1 Pet Supplies > Pet Groomings', 'category:s2 Pet Supplies > Pet Toys', 'lick mat'] },
+    { storeId: 'glow', queries: ['crystal healing'] }, // no category has the owner's words: searched
+  ]);
+  const job = enqueue(db, { kind: 'ingest', source: 'cj', storeId: 'pawsome', queries: ['category:s1 Pet Supplies > Pet Groomings'] }, NOW);
+  expect(await runJob(db, job, cjAdapter, { key, now: () => NOW })).toBe('done');
+  expect(Object.fromEntries(calls.at(-1)!.url.searchParams)).toEqual({ categoryId: 's1', page: '1', size: '20', features: 'enable_category' });
+  await cjAdapter.prepare!(db, key, new Date(NOW.getTime() + 8 * 86_400_000)); // a week on: fetched again
+  expect(calls.filter((c) => c.path === '/product/getCategory')).toHaveLength(2);
 });
 
 test('a refused key stops CJ with no retry, and the integration screen still shows the sync error', async () => {

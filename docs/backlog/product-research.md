@@ -1070,6 +1070,17 @@ STOP.
   `docs/reference/product-research-final/`, and DESIGN.md's Product Research section and data model. One fix found
   in the screenshots: report risks that end in a full stop were joined as ".;" in Compare and the Overview (now
   `joinItems`, tested). `pnpm check` (228 files, 1,686 tests) and `pnpm build` are green. `.agent/STOP` is created.
+- 2026-10-28 PR-29 live CJ check (after STOP): 45 of 200 CJ calls. 69 real CJ listings were stored with their
+  provenance, and 6 have verified US fulfillment (Notes). Fixed:
+  - the order sync's calls every 10 minutes when no store is real;
+  - a 20 s timeout, shorter than CJ's 25 s answers;
+  - missing category names;
+  - niche discovery by keyword, when CJ's keyword search returns nothing (it now browses CJ's categories, with the
+    tree cached weekly);
+  - Sync now refusing while a job waited;
+  - the watched eye.
+
+  Real ingestion is met; Demand on real data stays partial. `pnpm check` (228 files, 1,688 tests) is green.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1080,13 +1091,6 @@ STOP.
   use" while another lane's dev server holds it, and takes the API down with it. Leave it running while you enter
   things. The lane has stopped (`.agent/STOP`), so after entering them delete `.agent/STOP` and ask the worker to "run
   PR-29, then update the report".
-- **CJdropshipping API key (owner, free):** in CJ (cjdropshipping.com, signed in), open **Apps** in the left
-  navigation → Install App → under Others, install **API** (installing it doesn't create a key) → **My CJ →
-  Authorization → API** (https://www.cjdropshipping.com/my.html#/authorize/API) → **Add API**, Type **API Key**,
-  Confirm → copy the key from the **API Key & MCP Token** column. In the dev app, Integrations → CJ Dropshipping: paste
-  it in **API key**; **Account email** is optional (CJ's API needs only the key). Checked against CJ's API-key page on
-  2026-10-28; the app's help text says the same. If API access was suspended after 30 days without orders, reactivate
-  it at https://www.cjdropshipping.com/my.html#/authorize/APIStores. Needed for the live CJ check and PR-29.
 - **One Google Trends export (owner):** on trends.google.com, search the product term for the store's country over
   the past 12 months (or 5 years for seasonality), then use the download (CSV) button on the "Interest over time"
   chart. Upload it on the Research page once PR-12 ships (the import API is in since PR-06). It needs at least one product to link to (from the CJ key or a pasted link). Needed for PR-29.
@@ -1104,6 +1108,51 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-29 live CJ check, 2026-10-28 21:46–22:05 UTC** (after STOP). The owner's key is in `cj:global`. The owner's dev
+  app runs on 5243/8857 with the real engine, so no research run and no Ask a specialist. The research run and the link
+  previews spent their caps and were not repeated.
+  - **Calls:** 45 of decision 16's 200, counted by `pr_calls`: token 1, order sync 3, ingestion 35 (one timed out),
+    watch 3 and owner 3. At 22:03, CJ reported 880 of its 50,000 daily points used. Its `remaining` stayed at 50,000
+    (points refill every minute), and that is what Source health shows.
+  - **Order sync, 21:46:** on start, the owner's app made a token call and 3 order-list calls. It would have repeated
+    the order list every 10 minutes and on every restart, though no store here is real, so no order could match.
+    **Fixed:** with no real store, the sync only checks the key, whose token is cached (`connectors/cj.test.ts`).
+    Checked live: the restart at 21:59 made no call.
+  - **Keyword search, 21:51–21:58:** the first job (`pet grooming`, `cat toys`) got no answer within 20 s. Nine
+    one-call probes then found:
+    - `listV2` by keyword returns 0 products for every keyword tried. That covers "pet grooming" in both encodings and
+      CJ's documented "hoodie", with and without `features`. CJ echoes `keyWord: null`, and it answered in 1.7–17.1 s.
+    - With no keyword, the same call returned 6,000 records in 4.6 s.
+    - `getCategory` returns the 3-level tree in 0.6 s. A third-level category gave 19 products in 4.6 s, and the
+      second-level Pet Groomings gave 76 in 25.1 s.
+    - One `getCategory` answer was lost: the probe saved only short bodies, so the tree cost a second call.
+  - **Fixed from those:**
+    - The timeout is 60 s.
+    - The adapter asks for `features=enable_category`, so listings carry CJ's category names.
+    - A store's niche is browsed as CJ's second-level categories whose name has a niche word. The tree is fetched at
+      most weekly, by the adapter's new `prepare` step before planning. The owner's own keywords stay keyword searches,
+      which find nothing while CJ's keyword search returns nothing (`sources/cj.test.ts`, `jobs.test.ts`).
+    - Sync now refused with "already syncing" while a job waited to retry, and the dev app has nothing that runs a
+      waiting job. It now resumes that job (`jobs.test.ts`).
+  - **Through the app's code, 22:01:19–22:02:20:**
+    - `prepare` made 1 call. The plan: Pawsome Gear 11 categories, Glow Haus 7, Peak Fit 3.
+    - One job ran Pawsome's Pet Drinking & Feeding and Pet Groomings: 5 list calls, 69 listings in 7 third-level
+      categories. Each listing carries CJ's SPU, list price, listed count and warehouse stock.
+    - Pet Groomings' page 2 came back empty after 37 s. Asked once at 22:03, the same page held 20 products (13.5 s):
+      CJ's paging answers vary between calls. The next day's plan pages it again, so no code change.
+    - Enrichment to the US for 6 listings: 18 calls, 3 each, giving 150 live offer rows over 14 variants. 6 products
+      have verified US fulfillment: cost + ship $5.34–$28.07, delivery 6–11 days, all shipped from China.
+  - **Through the owner's API, 22:04–22:05:**
+    - Watch on Pet Nail Clippers, then Check now: 3 `watch` calls. The check succeeded with no alert (nothing changed),
+      and its state holds cost + ship $6.75 and stock 13,972.
+    - Search CJdropshipping for alternatives: 3 `owner` calls in 10.7 s, 0 found. It uses keyword search, so it stays
+      a limitation while CJ's keyword search returns nothing.
+  - **Mapping:** a niche word can take a stray category. Pet's "fish" matches Sports > Fishing (a `ponytail:` comment
+    in `sources/cj.ts`).
+  - **Screenshots:** 13–18 in `docs/reference/product-research-final/`, from the owner's app, viewing only. Product
+    images come from CJ's CDN through the image cache: these are not API calls and are not counted. One fix came from
+    them: a watched card's filled eye read as a red dot. It is now an outline eye on a red-tinted tile.
+  - **Left behind:** the first keyword job is stopped ("Replaced: …"), and `pr_sources.cj` is ok.
 - **PR-30 acceptance: the "Done when" map** (PR-31's report cites it). The server tests are under
   `apps/server/src/product-research/`.
   - **Checks:** `pnpm check` and `pnpm build` are green. The repo has no linter, so linting doesn't apply.

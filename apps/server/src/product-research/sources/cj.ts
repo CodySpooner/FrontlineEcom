@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { CjError, cjFreight, cjInventory, cjListPage, cjProduct, usdCents, type CjDeps, type CjListItem, type CjStock } from '../../connectors/cj';
+import { cjCategories, CjError, cjFreight, cjInventory, cjListPage, cjProduct, usdCents, type CjDeps, type CjListItem, type CjStock } from '../../connectors/cj';
 import { tx, type Db } from '../../db';
 import { getCredentials } from '../../integrations';
 import { log } from '../../log';
@@ -8,10 +8,18 @@ import { CAPS, refusal } from '../caps';
 import { refreshProduct } from '../evaluate';
 import { markSource } from '../jobs';
 import { upsertListing } from '../catalog';
-import { discoveryQueries, shipTo } from '../profile';
+import { categoryMatches, discoveryQueries, NICHE_QUERIES, nicheWords, shipTo } from '../profile';
 import type { PrAdapter } from './adapter';
 
 const SUPPLIER = 'CJdropshipping';
+/** A planned query for one of CJ's categories: `category:<id> <path>` (the path is for people reading the job). */
+const CATEGORY = 'category:';
+/** CJ's second-level categories as last fetched, in settings: `{ at, list: [{ id, name, path }] }`. */
+const TREE = 'pr:cj:categories';
+const WEEK = 7 * 86_400_000;
+
+const cachedCategories = (db: Db): { id: string; name: string; path: string }[] =>
+  (JSON.parse(String(db.prepare('SELECT value_json FROM settings WHERE key = ?').get(TREE)?.value_json ?? '{"list":[]}')) as { list: { id: string; name: string; path: string }[] }).list;
 
 /** "2-5" → [2, 5], "7" → [7, 7]; anything else unknown. CJ's docs give no unit: shown as CJ's estimate. */
 export function agingRange(v: unknown): [number, number] | null {
@@ -34,7 +42,8 @@ export const cjAdapter: PrAdapter<CjListItem> = {
   credentialsAt: (db) => db.prepare(`SELECT updated_at FROM integrations WHERE id = 'cj:global'`).get()?.updated_at as string | undefined,
   required: ['id', 'nameEn'],
   page: async ({ db, key, query, page, purpose }) => {
-    const r = await cjListPage(db, key, { keyWord: query, page, size: CAPS.cj.pageSize }, { purpose });
+    const by = query.startsWith(CATEGORY) ? { categoryId: query.slice(CATEGORY.length).split(' ')[0]! } : { keyWord: query };
+    const r = await cjListPage(db, key, { ...by, page, size: CAPS.cj.pageSize }, { purpose });
     return { items: r.items, more: r.more };
   },
   ingest: (db, item, at) =>
@@ -61,12 +70,28 @@ export const cjAdapter: PrAdapter<CjListItem> = {
       },
       at,
     }).productId,
-  // The catalog is shared, so a query two stores share is searched once.
+  // A store's niche is browsed as CJ's categories whose name has a niche word (CJ's keyword search returned nothing for
+  // any keyword at the 2026-10-28 live check, even its documented "hoodie"); the owner's own keywords and categories stay
+  // searches. Before the tree is fetched, the niche's phrases are searched. The catalog is shared, so a query two stores
+  // share runs once. ponytail: niche words can catch a stray category (pet's "fish" takes Sports > Fishing).
   plan: (db) => {
+    const tree = cachedCategories(db);
     const seen = new Set<string>();
     return listStores(db)
-      .map((s) => ({ storeId: s.id, queries: discoveryQueries(db, s).filter((q) => !seen.has(q) && !!seen.add(q)) }))
+      .map((s) => {
+        const cats = tree.filter((c) => categoryMatches(nicheWords(s), c.name)).map((c) => `${CATEGORY}${c.id} ${c.path}`);
+        const phrases: string[] = s.niche === 'other' ? [s.nicheDetail?.trim().toLowerCase() ?? ''] : NICHE_QUERIES[s.niche];
+        const queries = cats.length ? [...cats, ...discoveryQueries(db, s).filter((q) => !phrases.includes(q))] : discoveryQueries(db, s);
+        return { storeId: s.id, queries: queries.filter((q) => !seen.has(q) && !!seen.add(q)) };
+      })
       .filter((p) => p.queries.length > 0);
+  },
+  // One call a week at most: the tree changes rarely.
+  prepare: async (db, key, now) => {
+    const at = db.prepare(`SELECT json_extract(value_json, '$.at') AS at FROM settings WHERE key = ?`).get(TREE)?.at;
+    if (at && now.getTime() - Date.parse(String(at)) < WEEK) return;
+    const list = await cjCategories(db, key, { purpose: 'ingestion', now });
+    db.prepare('INSERT INTO settings (key, value_json) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json').run(TREE, JSON.stringify({ at: now.toISOString(), list }));
   },
   enrich: (db, key) => enrichPass(db, key),
 };

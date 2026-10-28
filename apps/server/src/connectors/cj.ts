@@ -74,8 +74,9 @@ const redact = (ctx: CjCtx, init: RequestInit, text: string) =>
   [ctx.apiKey?.trim(), (init.headers as Record<string, string> | undefined)?.['CJ-Access-Token']].reduce<string>((t, s) => (s ? t.split(s).join('[redacted]') : t), text);
 
 /**
- * One CJ call: checks the caps, waits its turn, times out after 20 s, and records itself in pr_calls. Success is CJ's
- * documented rule: HTTP 200 and a code of 200 or 0, or no code at all. Throws CjError with the failure's class.
+ * One CJ call: checks the caps, waits its turn, times out after 60 s (the live check saw listV2 take 25 s), and records
+ * itself in pr_calls. Success is CJ's documented rule: HTTP 200 and a code of 200 or 0, or no code at all. Throws
+ * CjError with the failure's class.
  */
 async function call<T>(ctx: CjCtx, path: string, init: RequestInit): Promise<T> {
   const refused = refusal(ctx.db, 'cj', ctx.purpose);
@@ -83,11 +84,11 @@ async function call<T>(ctx: CjCtx, path: string, init: RequestInit): Promise<T> 
   await turn(ctx.purpose, ctx.gapMs);
   let res: Response;
   try {
-    res = await ctx.fetchFn(`${API}${path}`, { ...init, signal: AbortSignal.timeout(20_000) });
+    res = await ctx.fetchFn(`${API}${path}`, { ...init, signal: AbortSignal.timeout(60_000) });
   } catch (e) {
     recordCall(ctx.db, 'cj', ctx.purpose, false);
     const timeout = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
-    throw new CjError(timeout ? 'timeout' : 'server', timeout ? 'no answer within 20 s' : redact(ctx, init, e instanceof Error ? e.message : String(e)));
+    throw new CjError(timeout ? 'timeout' : 'server', timeout ? 'no answer within 60 s' : redact(ctx, init, e instanceof Error ? e.message : String(e)));
   }
   const body = (await res.json().catch(() => ({}))) as Partial<CjResponse<T>>;
   const ok = res.ok && (body.code === undefined || body.code === 200 || body.code === 0);
@@ -138,7 +139,10 @@ export async function syncCj(db: Db, key: Buffer, _storeId: string, fetchFn: Fet
   try {
     const ctx: CjCtx = { db, fetchFn, gapMs, purpose: 'order_sync', apiKey: creds.apiKey };
     const orders: CjOrder[] = [];
-    for (const status of STATUSES) {
+    // Only a real store's orders can match (demo stores are left out below). With none, checking the key is enough,
+    // and its token is cached, so a sync every 10 minutes makes no call (decision 16 counts every CJ call).
+    if (!db.prepare('SELECT 1 FROM stores WHERE demo = 0').get()) await accessToken(ctx, key, creds, now);
+    else for (const status of STATUSES) {
       for (let page = 1; ; page++) {
         const q = new URLSearchParams({ pageNum: String(page), pageSize: String(PAGE_SIZE), status, paymentDateFrom: utc(new Date(now.getTime() - WINDOW_DAYS * 86_400_000)), paymentDateTo: utc(now) });
         const data = await withToken(ctx, key, creds, now, (token) => call<{ total: number; list: CjOrder[] | null }>(ctx, `/shopping/order/list?${q}`, { headers: { 'CJ-Access-Token': token } }));
@@ -246,12 +250,23 @@ async function cj<T>(db: Db, key: Buffer, d: CjDeps, path: string, init: Request
   return withToken(ctx, key, creds, d.now ?? new Date(), (token) => call<T>(ctx, path, { ...init, headers: { ...(init.headers as Record<string, string>), 'CJ-Access-Token': token } }));
 }
 
-/** One page of CJ's catalog for a keyword (`listV2`, at most 100 a page). `more` is false on the last page. */
-export async function cjListPage(db: Db, key: Buffer, q: { keyWord: string; page: number; size: number }, d: CjDeps) {
-  const params = new URLSearchParams({ keyWord: q.keyWord, page: String(q.page), size: String(Math.min(q.size, 100)) });
+/**
+ * One page of CJ's catalog for a keyword or a category (`listV2`, at most 100 a page). `more` is false on the last page.
+ * CJ sends the category names only when asked (`features=enable_category`).
+ */
+export async function cjListPage(db: Db, key: Buffer, q: ({ keyWord: string } | { categoryId: string }) & { page: number; size: number }, d: CjDeps) {
+  const by: Record<string, string> = 'keyWord' in q ? { keyWord: q.keyWord } : { categoryId: q.categoryId };
+  const params = new URLSearchParams({ ...by, page: String(q.page), size: String(Math.min(q.size, 100)), features: 'enable_category' });
   const data = await cj<{ totalRecords?: number; content?: { productList?: CjListItem[] }[] }>(db, key, d, `/product/listV2?${params}`);
   const items = (data.content ?? []).flatMap((c) => c.productList ?? []);
   return { items, total: Number(data.totalRecords ?? items.length), more: items.length > 0 && q.page * q.size < Number(data.totalRecords ?? 0) };
+}
+
+/** CJ's second-level categories (`getCategory`, one call for the whole tree), each with its "First > Second" path. */
+export async function cjCategories(db: Db, key: Buffer, d: CjDeps) {
+  type Tree = { categoryFirstName: string; categoryFirstList?: { categorySecondId: string; categorySecondName: string }[] }[];
+  const tree = await cj<Tree>(db, key, d, '/product/getCategory');
+  return tree.flatMap((f) => (f.categoryFirstList ?? []).map((s) => ({ id: String(s.categorySecondId), name: s.categorySecondName, path: `${f.categoryFirstName} > ${s.categorySecondName}` })));
 }
 
 export const cjProduct = (db: Db, key: Buffer, pid: string, d: CjDeps) => cj<CjDetail>(db, key, d, `/product/query?${new URLSearchParams({ pid })}`);

@@ -42,10 +42,10 @@ export function prRoutes(db: Db, key: () => Buffer) {
       return s instanceof Response ? s : c.json(sourceHealth(db, key(), s.store?.id ?? null));
     })
     // Sync now: queues today's planned queries and runs them in the background, one job at a time, then enriches.
-    .post('/api/pr/sources/:id/sync', (c) => {
+    .post('/api/pr/sources/:id/sync', async (c) => {
       const a = ADAPTERS.find((x) => x.id === c.req.param('id'));
       if (!a) return c.json({ error: 'unknown source' }, 404);
-      const r = syncNow(db, a, key());
+      const r = await syncNow(db, a, key());
       if ('error' in r) return c.json(r, 409);
       void (async () => {
         const deps = { key: key(), onStored: (ids: string[]) => new Set(ids).forEach((id) => refreshProduct(db, id)) };

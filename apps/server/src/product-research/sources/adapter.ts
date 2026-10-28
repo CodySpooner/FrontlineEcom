@@ -52,4 +52,6 @@ export interface PrAdapter<Item extends object = object> {
   enrich?(db: Db, key: Buffer): Promise<void>;
   /** The queries scheduled ingestion runs today (a store's niche categories and saved keywords). */
   plan?(db: Db): { storeId: string | null; queries: string[] }[];
+  /** Before planning: refresh what `plan` reads (CJ's category tree). Throws SourceError; the plan then uses what it has. */
+  prepare?(db: Db, key: Buffer, now: Date): Promise<void>;
 }

@@ -41,9 +41,13 @@ function WatchEye({ c, scope }: { c: PrCard; scope: string | null }) {
       disabled={watch.isPending}
       onClick={(e) => (e.stopPropagation(), watch.mutate({ on: !c.watched }))}
       onKeyDown={(e) => e.stopPropagation()}
-      className={cx('absolute top-[7px] right-[7px] grid size-[30px] cursor-pointer place-items-center rounded-lg border border-line-2 bg-[rgb(8_8_10/.7)] hover:text-text', c.watched ? 'text-red' : 'text-text-2')}
+      className={cx(
+        'absolute top-[7px] right-[7px] grid size-[30px] cursor-pointer place-items-center rounded-lg border hover:text-text',
+        // Watching: a red outline on a dark red backing (readable on a photo). A filled eye fills its pupil too: a red dot.
+        c.watched ? 'border-red/70 bg-[rgb(48_8_12/.85)] text-red' : 'border-line-2 bg-[rgb(8_8_10/.7)] text-text-2',
+      )}
     >
-      <Eye aria-hidden className="size-3.5" strokeWidth={c.watched ? 2.6 : 2} fill={c.watched ? 'currentColor' : 'none'} />
+      <Eye aria-hidden className="size-3.5" strokeWidth={c.watched ? 2.6 : 2} />
     </button>
   );
 }

@@ -6,33 +6,31 @@ Lane `product-research`, 2026-10-28.
   (`docs/reference/product-research-workspace.html`).
 - **Backlog:** `docs/backlog/product-research.md` holds the decisions, every item's Done line and Notes, and the
   "Done when" map. Sources are in `docs/features/product-research-sources.md`.
-- **Commits:** 35 on `main`, from 152f8e91 (lane setup) to 79b30c9d (PR-30), plus the PR-31 commit that adds this
-  report.
+- **Commits:** 38 on `main`, from 152f8e91 (lane setup) to the live CJ check after PR-31. That count includes the
+  coordinator's start-step fix 69247e90.
 
 ## Status: not complete
 
-Two lines of the completion checklist aren't met, and both wait on the owner:
+One line of the completion checklist isn't met, and it waits on the owner:
 
-- **Real ingestion: Blocked.** No source has returned live data. The dev database has no CJ key, no imported Google
-  Trends file and no imported supplier feed, and `pr_calls` (every metered call) is 0. The CJ adapter, the Trends CSV
-  import and the feed import are built and tested against recorded responses and fixture files only. Any one of these
-  unblocks it:
-  - the owner pastes a CJ API key in Integrations;
-  - the owner uploads a Google Trends CSV;
-  - the owner uploads a supplier feed.
-
-  The exact steps are under **Blocked** in the backlog.
 - **Demand evidence on real data: partial.** Every demand label's rule, and "catalog presence is never demand", are
   tested. In one test, 10,000 catalog products put 0 under "With demand evidence". None of it has run on a real
-  observation set yet. It needs the owner's Trends CSV, or a connected non-demo store's orders.
+  observation set yet. It needs the owner's Trends CSV, or a connected non-demo store's orders. CJ's listed counts are
+  "popularity among CJ sellers" and never count as demand. A Trends CSV can now be linked to a real CJ product. The
+  exact steps are under **Blocked** in the backlog.
+
+**Real ingestion is met** since the live CJ check (2026-10-28, 22:01 UTC). CJ returned 69 real products. They are
+stored and shown with their source, retrieval and check times, currency (USD), ship-from and destination, and 6 have
+verified fulfillment to the US (screenshots 13–18).
 
 Every other line is met. The PR-30 Notes in the backlog map each one to its tests or a recorded check.
 
-- **Checks:** `pnpm check` passes (228 test files, 1,686 tests, run at PR-31) and so does `pnpm build`. The repo has
-  no linter, so linting doesn't apply; it wasn't run and isn't claimed.
-- **Live runs:** two kinds ran against real services (details under "Workflows run live"):
+- **Checks:** `pnpm check` passes (228 test files, 1,688 tests, run at the live CJ check), and `pnpm build` passed at
+  PR-31. The repo has no linter, so linting doesn't apply; it wasn't run and isn't claimed.
+- **Live runs:** three kinds ran against real services (details under "Workflows run live"):
   - five pasted-link previews (PR-14);
-  - one real Claude research run (PR-29), on a demo store.
+  - one real Claude research run (PR-29), on a demo store;
+  - the live CJ check (PR-29, after STOP): 45 CJ calls.
 
   Everything else ran on the scripted agent engine, recorded responses and fixtures. Those are reported apart from the
   live runs.
@@ -113,7 +111,7 @@ Every other line is met. The PR-30 Notes in the backlog map each one to its test
 
 | Source | In the app | Verified live? |
 |---|---|---|
-| CJdropshipping API | Built: discovery and fulfillment, rate lane, quotas, error classes | No. Waits for the owner's free API key. Tested on recorded responses |
+| CJdropshipping API | Built: discovery through the store's niche categories, fulfillment, rate lane, quotas, error classes | Yes, 2026-10-28 (below): 69 products, 6 verified to the US. Keyword search returned nothing |
 | Google Trends CSV export | Built: the owner uploads the file and links a query to a product | No. Waits for an export. Tested on fixture files |
 | Google Trends API (alpha) | Status only: "Approval required" | No. Google hasn't granted access |
 | The stores' own orders | Built: weekly units for a linked research product | No. Every store here is a demo store, and demo orders never count |
@@ -145,9 +143,29 @@ Not built, for the reasons in the sources doc:
   - **What it found:** the tool's 60-character limit wasn't stated in the tool's description, and the Research tab
     numbered a long run's last 6 steps from 1. Both are fixed and tested.
 
+- **Live CJ check (PR-29, after STOP), 2026-10-28 21:46–22:05 UTC:** 45 CJ calls of decision 16's 200, by purpose:
+  token 1, order sync 3, ingestion 35 (one timed out), watch 3, owner 3. CJ reported 880 of 50,000 daily points used.
+  - **Discovery:** one job browsed two of Pawsome Gear's CJ categories (Pet Drinking & Feeding, Pet Groomings) and
+    stored 69 products, each with CJ's category, SPU, list price, listed count and warehouse stock.
+  - **Fulfillment:** 6 of them were checked to the US: 150 offer rows over 14 variants. All 6 are verified, at a
+    cost + ship of $5.34–$28.07 and 6–11 days' delivery, all from China.
+  - **Watch and alternatives:** a watch on Pet Nail Clippers was checked live (3 calls, no change, no alert). The
+    alternative-supplier search made its 3 calls and found nothing.
+  - **What it found, fixed and tested:**
+    - the order sync spent calls every 10 minutes when no store is real;
+    - the 20 s timeout was shorter than CJ's 25 s answers;
+    - listings had no category names;
+    - CJ's keyword search returns nothing, even for its documented example, so niche discovery now browses CJ's
+      categories;
+    - Sync now refused while a job waited to retry;
+    - a watched card's eye read as a red dot.
+
+    Times and results are in the backlog's Notes.
+
 ## Test results
 
-- **`pnpm check`:** typecheck and every test, 228 test files and 1,686 tests, all passing. **`pnpm build`:** passes.
+- **`pnpm check`:** typecheck and every test, 228 test files and 1,688 tests, all passing (the live CJ check).
+  **`pnpm build`:** passes (PR-31).
   **Linting:** the repo has no linter, so it doesn't apply.
 - **Where the evidence is:** each "Done when" line names its test files in the backlog's PR-30 Notes. The server
   tests are in `apps/server/src/product-research/`, the page tests in `apps/web/src/pages/Research.test.tsx`, and the
@@ -164,8 +182,10 @@ Not built, for the reasons in the sources doc:
 
 ## Screenshots
 
-These are in `docs/reference/product-research-final/`, taken at 1440×900 on the fake-engine dev server. Every
-product and offer in them is **fixture data** (the "Test fixture" label), except as noted.
+These are in `docs/reference/product-research-final/`, at 1440×900. Shots 01–12 were taken on the fake-engine dev
+server, and every product and offer in them is **fixture data** (the "Test fixture" label), except as noted. Shots 13–18
+come from the owner's dev app after the live CJ check (viewing only). Their CJ products are **live data**; the cards
+labelled "Test fixture" beside them are not.
 
 | File | What it shows |
 |---|---|
@@ -181,12 +201,25 @@ product and offer in them is **fixture data** (the "Test fixture" label), except
 | `10-all-stores.png` | All stores, including two pasted-link products (PR-14, live pages) |
 | `11-workspace-1024x680.png` | The workspace at 1024×680. Fixture data |
 | `12-all-stores-panel.png` | The panel in All stores. Fixture data |
+| `13-live-cj-workspace.png` | Pawsome Gear's CJ products, sorted by lowest verified cost + ship: real CJ products with verified fulfillment to the US and its conditions. Live data |
+| `14-live-cj-suppliers.png` | Suppliers for Pet Nail Clippers: CJ's offers by method, each "Live from the supplier" with unit cost, shipping, delivery and stock. Live data |
+| `15-live-cj-overview.png` | Its Overview: fulfillment verified; demand none and economics incomplete, because there is no demand set and no selling price yet. Live data |
+| `16-live-cj-economics.png` | Its Economics: incomplete, with the missing inputs named. Live data |
+| `17-live-cj-source-health.png` | Source health: CJ "Verified live integration", today's calls by purpose, 69 products with real data |
+| `18-live-cj-watchlist.png` | The Watchlist with the watched CJ product and its last successful live check. Live data |
 
 ## Limitations
 
 - **Single-user local app.** There are no user accounts. The only protection is the local Host/Origin guard.
-- **No source is verified live except pasted links.** CJ, Trends, the supplier feed and store orders are tested on
-  recorded responses and fixtures only (see Status).
+- **Only CJ and pasted links are verified live.** Trends, the supplier feed and store orders are tested on fixtures
+  only (see Status).
+- **CJ's keyword search returns nothing.** At the live check every keyword got 0 products, CJ's documented example
+  included. Niche discovery browses CJ's categories instead. The owner's own keywords and "Search CJdropshipping" for
+  alternative suppliers still use keyword search, so they find nothing until CJ answers keywords again.
+- **CJ answers slowly and unevenly.** Answers took up to 37 s, so the timeout is 60 s. One page came back empty and,
+  a minute later, held 20 products. The next day's run pages it again.
+- **Niches map to CJ categories by name.** A niche word can take a stray category: the pet niche's "fish" matches
+  Sports > Fishing.
 - **The one real run was on a demo store.** Its report correctly treats the store's data as simulated, so it shows the
   agent and tools working, not a real product decision.
 - **Many shop pages refuse previews.** Shopify storefronts (allbirds.com, brooklinen.com) refuse tool reads with HTTP
@@ -199,9 +232,8 @@ product and offer in them is **fixture data** (the "Test fixture" label), except
 ## What the owner does next
 
 The Blocked section of the backlog gives each of these step by step:
-- paste the free CJ API key in Integrations;
-- upload one Google Trends CSV;
+- upload one Google Trends CSV and link it to a real CJ product;
 - optionally, upload a supplier feed and apply for the Trends API alpha.
 
-Then delete `.agent/STOP` and ask for "run PR-29, then update the report". That reruns the live checks on real data
-and turns the two lines above to done or partial with evidence.
+Then delete `.agent/STOP` and ask for "run PR-29, then update the report". That checks the import on real data and
+turns the line above to done, or keeps it partial with evidence.

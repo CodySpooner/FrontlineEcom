@@ -90,8 +90,9 @@ profile chip's dropdown, which the owner removed on 2026-10-28.
    - **Research a Product:** link, store, eligible agent and instructions make one durable task tied to an AI Agents
      conversation and run; the agent saves its report through `save_research_report`. Compare, watchlists with
      alerts, and the test brief's draft products (through an approval) complete the loop.
-   - **Sources:** CJdropshipping (API key), Google Trends CSV, supplier feed CSV, the stores' own orders, Creative
-     Center notes and pasted links through the safe fetcher. Every route is store-scoped.
+   - **Sources:** CJdropshipping (API key; a niche is browsed as CJ's categories), Google Trends CSV, supplier feed
+     CSV, the stores' own orders, Creative Center notes and pasted links through the safe fetcher. Every route is
+     store-scoped.
 5. **Ad Creation / Creative Studio** — tabs Generate Ads / UGC Avatars / Video to Video / Image Studio / Ad Variations /
    Ad Copy; Create Your Ad prompt + Enhance with AI + aspect ratio; **Generate with Higgsfield AI** (shows credit cost);
    integration badges (Higgsfield, Claude, Codex); preview player; Generated Ads gallery; Edit / Variations / Captions /
