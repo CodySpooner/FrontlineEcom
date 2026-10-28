@@ -78,7 +78,7 @@ export function Research() {
   const setTray = (ids: string[]) => store && setTrays({ ...trays, [store.id]: ids });
   const [editProfile, setEditProfile] = useState(false);
   const [health, setHealth] = useState(false);
-  const [researching, setResearching] = useState<{ product?: { id: string; title: string } } | null>(null);
+  const [researching, setResearching] = useState<{ product?: { id: string; title: string }; template?: string } | null>(null);
 
   // `/` focuses search; Esc closes the open product and returns focus to its card (a dialog handles its own Esc).
   const search = useRef<HTMLInputElement>(null);
@@ -309,7 +309,7 @@ export function Research() {
             setTab={(t) => (set('tab', t === 'overview' ? null : t), setLastTab(t))}
             onClose={closePanel}
             onAssigned={(id) => pickScope(id, true)}
-            onResearch={(p) => setResearching({ product: p })}
+            onResearch={(p, template) => setResearching({ product: p, ...(template ? { template } : {}) })}
             compare={{ on: tray.includes(product), full: tray.length >= PR_COMPARE_MAX, toggle: () => setTray(tray.includes(product) ? tray.filter((x) => x !== product) : [...tray, product]) }}
           />
         )}
@@ -319,6 +319,7 @@ export function Research() {
           stores={stores}
           store={store?.id ?? null}
           {...(researching.product ? { product: researching.product } : {})}
+          {...(researching.template ? { template: researching.template } : {})}
           onClose={() => setResearching(null)}
           // The task's store and product: its card footer and panel show where it is.
           onStarted={(t) => (setResearching(null), pickScope(t.storeId, true), set('product', t.productId), set('tab', 'research'))}

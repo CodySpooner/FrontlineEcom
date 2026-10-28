@@ -184,6 +184,8 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
 
 interface AddProduct {
   researchProductId?: string;
+  /** Product Research's product (PR-22, T9): the store product it becomes links back to it. */
+  prProductId?: string;
   title: string;
   price: number;
   compareAt?: number;
@@ -194,7 +196,7 @@ interface AddProduct {
 const adding = new Set<string>();
 
 /** Creates draft products on the store's platform (core's Shopify `createProducts`); throws a readable error. */
-export type CreateProducts = (storeId: string, products: Omit<AddProduct, 'researchProductId'>[]) => Promise<{ id: string; title: string }[]>;
+export type CreateProducts = (storeId: string, products: Omit<AddProduct, 'researchProductId' | 'prProductId'>[]) => Promise<{ id: string; title: string }[]>;
 
 /**
  * `store.add_products` (from the research screen or the Product Hunter): demo stores get the products as local drafts,
@@ -242,6 +244,14 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
   // Remembered so the product can be judged on its first 14 days of sales (checkProductOutcomes).
   const test = db.prepare('INSERT OR IGNORE INTO product_tests (store_id, product_id, approval_id, agent_id, title, added_on) VALUES (?, ?, ?, ?, ?, ?)');
   for (const p of added) test.run(store.id, p.id, a.id, a.agentId, p.title, localDate(new Date(), storeZone(db, store.id)));
+  // T9: a draft made from Product Research links back to its research product (the PR-07 store_product link).
+  const link = db.prepare(
+    `INSERT OR IGNORE INTO pr_outcomes (id, store_id, product_id, kind, ref_id, created_at) SELECT ?, ?, id, 'store_product', ?, ? FROM pr_products WHERE id = ?`,
+  );
+  for (const p of added) {
+    const pr = valid.find((v) => v.title.trim().toLowerCase() === p.title.trim().toLowerCase())?.prProductId;
+    if (pr) link.run(crypto.randomUUID(), store.id, p.id, new Date().toISOString(), pr);
+  }
   startRun(
     `${store.id}:store_developer`,
     `New draft product(s) just added to ${store.name}: ${added.map((p) => `${p.title} (productId ${p.id})`).join(', ')}. For each, write the product page ` +

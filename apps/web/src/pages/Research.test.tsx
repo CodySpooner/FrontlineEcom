@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrMatches, PrWatch, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
+import type { PrBrief, PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrLinks, PrMatches, PrWatch, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { discoveryQuery } from '../product-research/Filters';
 import { sourceItem } from '../product-research/format';
@@ -279,6 +279,11 @@ describe('Detail panel', () => {
       returnRatePct: { value: 0, tag: 'assumption', note: 'No returns' }, refundPct: { value: 100, tag: 'assumption', note: 'Full refund on a return' }, returnCost: unknown(), otherCosts: unknown(), adCost: unknown(),
     },
   };
+  const brief: PrBrief = {
+    fields: { targetCustomer: 'Dog owners who hike', offerHypothesis: '', creativeConcepts: '- No more fur on the sofa.', measurementPlan: '', budgetAssumptions: '', decisionCriteria: '' },
+    from: { targetCustomer: 'Research profile', creativeConcepts: 'Proposal: report of Oct 28, 2026' },
+    updatedAt: null,
+  };
   const matches: PrMatches = {
     listings: [{ id: 'l1', title: 'Silicone grooming brush', supplier: 'CJdropshipping', mergedFrom: null }, { id: 'l9', title: 'Grooming brush', supplier: 'Acme', mergedFrom: 'p9' }],
     candidates: [
@@ -305,6 +310,10 @@ describe('Detail panel', () => {
       if (url.includes('/reports?')) return reports;
       if (url.includes('/economics?')) return econ;
       if (url.includes('/matches')) return matches;
+      if (url.includes('/links')) return { links: [{ kind: 'store_product', refId: 's1', label: 'Grooming Brush (draft)', at: '2026-10-28T10:00:00Z' }], experiments: [{ id: 'e1', label: 'Brush hooks: ctr (planned)' }] } satisfies PrLinks;
+      if (url.includes('/brief?')) return brief;
+      if (url.includes('/draft-product?')) return { id: 'ap1', title: 'Add "Silicone grooming brush" to Pawsome Gear as a draft' };
+      if (url.includes('/owner?')) return { owner: 'Cody' };
       if (url.includes('/store-products?')) return { ruledOut: true };
       if (url.includes('/retry?')) return { ...tasks[1], status: 'queued' };
       if (url.startsWith('/api/pr/tasks?')) return tasks;
@@ -492,6 +501,38 @@ describe('Detail panel', () => {
     expect(JSON.parse(String(f.mock.calls.find(([, i]) => i?.method === 'POST')![1]!.body))).toEqual({ name: 'Grooming picks', productIds: ['p1', 'p2'], figures: { discountPct: 0, adCost: 800 } });
     expect(await within(dialog).findByRole('button', { name: 'Save changes' })).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: 'Delete Grooming picks' })).toBeTruthy();
+  });
+
+  it('Overview: owner and links; Draft test brief prefilled from stored data, saved, a draft product requested, or drafted with an agent', async () => {
+    const f = panelApi(detail({ owner: null }));
+    const sent = (part: string, method: string) => JSON.parse(String(f.mock.calls.find(([u, i]) => String(u).includes(part) && i?.method === method)?.[1]?.body ?? 'null'));
+    renderApp(<Research />, '/research?store=paws&product=p1');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    const owner = await within(panel).findByRole('textbox', { name: 'Owner' });
+    fireEvent.change(owner, { target: { value: ' Cody ' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save owner' }));
+    await waitFor(() => expect(bodyOf(f, '/owner?')).toEqual({ owner: 'Cody' }));
+    expect((await within(panel).findByRole('list', { name: 'Linked' })).textContent).toContain('Store product: Grooming Brush (draft)');
+    fireEvent.change(within(panel).getByRole('combobox', { name: 'Link an experiment' }), { target: { value: 'e1' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Link' }));
+    await waitFor(() => expect(sent('/links?', 'POST')).toEqual({ kind: 'experiment', refId: 'e1' }));
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Draft test brief' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Test brief' });
+    expect(await within(dialog).findByDisplayValue('Dog owners who hike')).toBeTruthy();
+    expect(within(dialog).getByText('Research profile')).toBeTruthy();
+    expect(within(dialog).getByText('Proposal: report of Oct 28, 2026')).toBeTruthy();
+    expect((within(dialog).getByRole('textbox', { name: 'Offer hypothesis' }) as HTMLTextAreaElement).value).toBe(''); // nothing stored: empty
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Decision criteria' }), { target: { value: 'Stop at $40 without a sale' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save brief' }));
+    await waitFor(() => expect(sent('/brief?', 'PUT')).toEqual({ fields: { ...brief.fields, decisionCriteria: 'Stop at $40 without a sale' } }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Prepare draft product' }));
+    expect((await within(dialog).findByRole('status')).textContent).toBe('Approval requested: Add "Silicone grooming brush" to Pawsome Gear as a draft. Approve it from the bell to make the draft.');
+
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Draft with an agent' }));
+    const research = await screen.findByRole('dialog', { name: 'Research a Product' });
+    expect(within(research).getByRole('button', { name: 'Test brief' }).getAttribute('aria-pressed')).toBe('true');
+    expect((within(research).getByRole('textbox', { name: 'Instructions' }) as HTMLTextAreaElement).value).toMatch(/^Draft a test brief for this product/);
   });
 
   it('Watchlist: each watch with its last successful check, partial coverage and alerts; watch a niche, set preferences, check now; watch an offer', async () => {

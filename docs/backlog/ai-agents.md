@@ -1222,6 +1222,10 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   (`export const kbFetch`); `routes/agents.ts` imports it instead of creating it, behaviour unchanged. The fetcher
   also has an opt-in `image` mode (T3) that product research's image cache uses. Agent WebFetch through it is still
   the open request above.
+- [x] (from product-research, FYI, done) T9 shipped in PR-22: `AddProduct` in `routes/agents-actions.ts` has an
+  optional `prProductId` (left out of `CreateProducts`); after the drafts are made, `addProducts` writes a
+  `pr_outcomes` `store_product` row for each one whose payload names a research product (matched by title). Other
+  requests behave as before; covered by `product-research/pipeline.test.ts`.
 
 ## Items
 

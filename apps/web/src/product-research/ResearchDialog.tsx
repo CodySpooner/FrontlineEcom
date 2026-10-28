@@ -34,6 +34,11 @@ export const TEMPLATES = [
     label: 'Ad angles (proposals)',
     text: 'Propose advertising angles for this product: the audience, the problem it solves, three hooks and the creative each would need. These are proposals to test, not predictions.',
   },
+  {
+    id: 'test_brief',
+    label: 'Test brief',
+    text: "Draft a test brief for this product in the selected store: the target customer, an offer hypothesis, creative concepts, a measurement plan, budget assumptions from the store's economics, and decision criteria (when to stop, when to continue). Label what you propose as proposals and say what is unknown. Don't launch or spend anything.",
+  },
 ];
 const INSTRUCTIONS_MAX = 6_000;
 const STEPS = ['Product link', 'Store', 'Agent', 'Instructions'] as const;
@@ -83,12 +88,28 @@ const link = 'cursor-pointer text-[#ff6b76] hover:underline';
 const section = 'scroll-mt-4';
 
 /** `store`: the page's store scope (null: All stores). `product`: the product it was opened from. */
-export function ResearchDialog({ stores, store: scope, product, onClose, onStarted }: { stores: Store[]; store: string | null; product?: { id: string; title: string }; onClose: () => void; onStarted: (t: PrTask) => void }) {
+export function ResearchDialog({
+  stores,
+  store: scope,
+  product,
+  template,
+  onClose,
+  onStarted,
+}: {
+  stores: Store[];
+  store: string | null;
+  product?: { id: string; title: string };
+  /** Opened with a template picked (the test brief's "Draft with an agent"). */
+  template?: string;
+  onClose: () => void;
+  onStarted: (t: PrTask) => void;
+}) {
   const [draft, setDraft] = useStored<Draft>('fe.research.draft', fresh(scope ?? stores[0]?.id ?? ''));
   const update = (d: Partial<Draft>) => setDraft((x) => ({ ...x, ...d }));
   useEffect(() => {
-    if (product) setDraft((x) => ({ ...x, product, link: '', preview: null, editing: false, ...(scope ? { storeId: scope } : {}) }));
-  }, [product?.id]); // eslint-disable-line react-hooks/exhaustive-deps -- only when it opens on another product
+    const t = TEMPLATES.find((x) => x.id === template);
+    if (product) setDraft((x) => ({ ...x, product, link: '', preview: null, editing: false, ...(scope ? { storeId: scope } : {}), ...(t ? { template: t.id, instructions: t.text } : {}) }));
+  }, [product?.id, template]); // eslint-disable-line react-hooks/exhaustive-deps -- only when it opens on another product or template
   const store = stores.find((s) => s.id === draft.storeId) ?? stores.find((s) => s.id === scope) ?? stores[0];
   const storeId = store?.id ?? '';
   const rows = usePrAgents(storeId).data;

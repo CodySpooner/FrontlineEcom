@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ConversationConfigInput, PrAgentRow, PrComparison, PrComparisonInput, PrDiscovery, PrEconomics, PrEconOverrides, PrMatchAction, PrMatches, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask, PrWatch, PrWatchPrefs } from '@frontline/shared';
+import type { ApprovalRequest, ConversationConfigInput, PrAgentRow, PrBrief, PrBriefField, PrLinks, PrComparison, PrComparisonInput, PrDiscovery, PrEconomics, PrEconOverrides, PrMatchAction, PrMatches, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask, PrWatch, PrWatchPrefs } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -73,6 +73,15 @@ export const useSaveNotes = (id: string, store: string) => usePrWrite<{ notes: s
 export const useDismissFlag = (id: string, store: string) => usePrWrite<{ flag: string; reason: string }>((b) => `/api/pr/products/${enc(id)}/flags/${enc(b.flag)}/dismiss?${scope(store)}`);
 export const useAddNote = (id: string, store: string) => usePrWrite<{ platform: 'tiktok_creative_center'; url: string; note: string; observedAt: string }>(() => `/api/pr/products/${enc(id)}/notes?${scope(store)}`);
 export const useWatch = (id: string, store: string | null) => usePrWrite<{ on: boolean }>(() => `/api/pr/products/${enc(id)}/watch?${scope(store)}`, 'PUT');
+
+/** The pipeline's owner fields (PR-22), store scope: owner, linked outcomes, the test brief, the draft product request. */
+export const useSetOwner = (id: string, store: string) => usePrWrite<{ owner: string }>(() => `/api/pr/products/${enc(id)}/owner?${scope(store)}`, 'PUT');
+export const useLinks = (id: string, store: string) => useQuery({ queryKey: ['pr', 'links', store, id], queryFn: () => api<PrLinks>(`/api/pr/products/${enc(id)}/links?${scope(store)}`) });
+export const useLinkExperiment = (id: string, store: string) => usePrWrite<{ kind: 'experiment'; refId: string }, PrLinks>(() => `/api/pr/products/${enc(id)}/links?${scope(store)}`);
+export const useUnlink = (id: string, store: string) => usePrWrite<{ refId: string }, PrLinks>((b) => `/api/pr/products/${enc(id)}/links/${enc(b.refId)}?${scope(store)}`, 'DELETE');
+export const useBrief = (id: string, store: string) => useQuery({ queryKey: ['pr', 'brief', store, id], queryFn: () => api<PrBrief>(`/api/pr/products/${enc(id)}/brief?${scope(store)}`) });
+export const useSaveBrief = (id: string, store: string) => usePrWrite<{ fields: Record<PrBriefField, string> }, PrBrief>(() => `/api/pr/products/${enc(id)}/brief?${scope(store)}`, 'PUT');
+export const useDraftProduct = (id: string, store: string) => usePrWrite<void, ApprovalRequest>(() => `/api/pr/products/${enc(id)}/draft-product?${scope(store)}`);
 
 /** Research a Product (decision 6): the store's eligible agents with their state, the link preview, and Start. */
 export const usePrAgents = (store: string) => useQuery({ queryKey: ['pr', 'agents', store], queryFn: () => api<PrAgentRow[]>(`/api/pr/agents?${scope(store)}`), enabled: !!store });

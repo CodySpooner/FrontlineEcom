@@ -26,7 +26,7 @@ export function productDetail(db: Db, id: string, store: Store | null, shipTo: s
     .prepare(`SELECT id, url FROM pr_listings WHERE product_id = ? AND origin != 'legacy_sample' ${store ? 'AND (store_id IS NULL OR store_id = ?)' : ''} ORDER BY store_id IS NOT NULL, first_seen_at LIMIT 1`)
     .get(id, ...(store ? [store.id] : []))!;
   const url = str(l.url);
-  const e = store ? db.prepare('SELECT fit, fit_reasons_json, flags_json, flag_dismissals_json, notes FROM pr_evaluations WHERE store_id = ? AND product_id = ?').get(store.id, id) : undefined;
+  const e = store ? db.prepare('SELECT fit, fit_reasons_json, flags_json, flag_dismissals_json, notes, owner FROM pr_evaluations WHERE store_id = ? AND product_id = ?').get(store.id, id) : undefined;
   let flags: PrFlag[] | null = null;
   if (store && e?.flags_json != null) {
     const dismissed = JSON.parse(String(e.flag_dismissals_json ?? '{}')) as Record<string, unknown>;
@@ -64,6 +64,7 @@ export function productDetail(db: Db, id: string, store: Store | null, shipTo: s
       report: reported.report,
     },
     notes: str(e?.notes),
+    owner: str(e?.owner),
     agentEstimates: estimates ? ((JSON.parse(String(estimates.transform_json ?? '{}')) as { estimates?: Record<string, unknown> }).estimates ?? null) : null,
     stores,
   };

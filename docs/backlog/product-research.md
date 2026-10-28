@@ -780,7 +780,7 @@ STOP.
   watch-check cap, results stored, one alert per change (dedupe key), notifications with a deep link, an owner toggle
   for research alerts in Settings (additive shared field, honoured by `notify()`; test that alerts are stored but not
   notified when off), last successful check and degraded coverage shown.
-- [ ] PR-22 **Pipeline and test brief:** stages from spec §10 kept apart from execution states, owners, notes, decision
+- [x] PR-22 **Pipeline and test brief:** stages from spec §10 kept apart from execution states, owners, notes, decision
   reasons, linked experiments; the test brief as an owner-editable form (target customer, offer hypothesis, creative
   concepts, measurement plan, budget assumptions, decision criteria), prefilled only from stored data (the latest
   non-demo report's proposals labelled "Proposal", the base economics scenario, the profile's audience); empty fields
@@ -1001,6 +1001,15 @@ STOP.
   check, partial coverage, the last error, the newest alerts, Alert on preferences, Check now and Stop watching. API:
   `GET/POST /api/pr/watches`, `PUT/DELETE /api/pr/watches/:id`, `POST /api/pr/watches/:id/check`. Tests: 3 API
   (fake timers), 1 page.
+- 2026-10-28 PR-22 Pipeline and test brief: Overview's Owner and links (who handles it in the store, kept in History;
+  the store products it became and linked Knowledge Base experiments, with Link and Unlink in History). Draft test
+  brief opens the owner form (target customer, offer hypothesis, creative concepts, measurement plan, budget
+  assumptions, decision criteria), prefilled only from stored data with each source labelled (Research profile; a
+  model report's proposals as "Proposal: report of <date>"; Base economics); a field with nothing stored is empty.
+  Draft with an agent opens Research a Product with the new "Test brief" template. Prepare draft product makes a
+  `store.add_products` approval request at the base selling price (T9: `prProductId`, so the draft links back as a
+  `store_product` outcome); one request per product, none once it is in the store. API: `PUT …/owner`,
+  `GET/POST …/links`, `DELETE …/links/:ref`, `GET/PUT …/brief`, `POST …/draft-product`. Tests: 3 API, 1 page.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1032,6 +1041,17 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-22 as built.** Stages and execution states were already apart (the stage is the header's select and History;
+  a task's queued/running/failed state is the Research tab's and the card footer's); this adds the owner fields around
+  them. The owner is free text (there is no team or user model). Linked experiments are the store's `kb_experiments`
+  rows (read-only use of the KB lane's table), stored as `pr_outcomes` kind `experiment`. One brief per store and
+  product (`pr_briefs`, updated in place). Once saved, the brief is the owner's and no longer shows prefill labels.
+  The draft product needs a base selling price; supplier cost goes along when known. Approving it runs the existing
+  `addProducts` (demo store: a local draft; Shopify or WooCommerce: a draft on the platform) and nothing else is
+  published. Touch points: T9 in `routes/agents-actions.ts` (noted in the ai-agents Inbox). Dev-app check 13:20
+  local on Pawsome Gear, read-only (nothing saved or requested): the demo product has no audience, model report or
+  complete economics, so every brief field is empty and unlabelled, as it should be; Owner and links says nothing is
+  linked. Screenshots `.agent/shots/pr22-*.png`.
 - **PR-21 as built.** A scope changes only its own list: a store adds, edits and removes its watches; the all-stores
   list (store_id NULL) shows in every store but is changed in All stores, where only shared rows can be watched. The
   first check records a starting point and never alerts. A check that falls back to stored data (CJ not connected, or

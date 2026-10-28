@@ -303,6 +303,8 @@ export interface PrProductDetail {
   };
   /** Store scope: the owner's notes on the product in this store (owner-provided, never evidence). */
   notes: string | null;
+  /** Store scope: who handles it in the pipeline (the owner's text). */
+  owner?: string | null;
   /** An agent find's own numbers (decision 2): shown collapsed as "Agent's estimates (not evidence)", never used. */
   agentEstimates: Record<string, unknown> | null;
   /** All stores: the stores with this product in their pipeline, and its stage there. */
@@ -675,4 +677,29 @@ export interface PrWatch {
   coverage: string | null;
   /** The newest alerts, at most 5. */
   alerts: PrAlert[];
+}
+
+/** PR-22: the test brief, an owner form. A field the owner hasn't written is prefilled only from stored data, or empty. */
+export const PR_BRIEF_FIELDS = ['targetCustomer', 'offerHypothesis', 'creativeConcepts', 'measurementPlan', 'budgetAssumptions', 'decisionCriteria'] as const;
+export type PrBriefField = (typeof PR_BRIEF_FIELDS)[number];
+export const PR_BRIEF_LABEL: Record<PrBriefField, string> = {
+  targetCustomer: 'Target customer',
+  offerHypothesis: 'Offer hypothesis',
+  creativeConcepts: 'Creative concepts',
+  measurementPlan: 'Measurement plan',
+  budgetAssumptions: 'Budget assumptions',
+  decisionCriteria: 'Decision criteria',
+};
+/** GET/PUT /api/pr/products/:id/brief?store= (store scope). */
+export interface PrBrief {
+  fields: Record<PrBriefField, string>;
+  /** Where a prefilled field came from, e.g. "Proposal: report of Oct 28, 2026" (absent: the owner's text, or empty). */
+  from: Partial<Record<PrBriefField, string>>;
+  /** null: not saved yet (the fields are the prefill). */
+  updatedAt: string | null;
+}
+/** GET /api/pr/products/:id/links?store=: what the product led to in the store, and the store's experiments to link. */
+export interface PrLinks {
+  links: { kind: 'store_product' | 'experiment'; refId: string; label: string; at: string }[];
+  experiments: { id: string; label: string }[];
 }

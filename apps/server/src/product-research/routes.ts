@@ -19,6 +19,7 @@ import { addWatch, checkWatch, listWatches, ownWatch, parsePrefs } from './alert
 import { runDue, stoppedReason, syncNow } from './jobs';
 import { cachedImage, listingImageRef, queueImage } from './images';
 import { checkUrl, ownerDetails, preview } from './preview';
+import { getBrief, linkExperiment, parseBrief, productLinks, requestDraftProduct, saveBrief, setOwner } from './pipeline';
 import { getProfile, saveProfile } from './profile';
 import { productReports } from './reports';
 import { setWatch } from './watches';
@@ -234,6 +235,57 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if (!PR_MATCH_ACTIONS.includes(action)) return c.json({ error: `action must be one of ${PR_MATCH_ACTIONS.join(', ')}` }, 400);
       const err = decideMatch(db, store, c.req.param('id'), c.req.param('listing'), action);
       return err ? c.json({ error: err.error }, err.status) : c.json(productMatches(db, key(), store, c.req.param('id')));
+    })
+    // The pipeline's owner fields (PR-22), store scope: who handles it, what it led to, the test brief, the draft handoff.
+    .put('/api/pr/products/:id/owner', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const body = (await c.req.json().catch(() => undefined)) as { owner?: unknown } | undefined;
+      if (typeof body?.owner !== 'string' || body.owner.length > 80) return c.json({ error: 'owner must be text (up to 80 characters)' }, 400);
+      setOwner(db, store, c.req.param('id'), body.owner.trim());
+      return c.json({ owner: body.owner.trim() || null });
+    })
+    .get('/api/pr/products/:id/links', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      return c.json(productLinks(db, store, c.req.param('id')));
+    })
+    .post('/api/pr/products/:id/links', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const body = (await c.req.json().catch(() => undefined)) as { kind?: unknown; refId?: unknown } | undefined;
+      if (body?.kind !== 'experiment' || typeof body.refId !== 'string') return c.json({ error: 'kind must be experiment, with refId' }, 400);
+      const err = linkExperiment(db, store, c.req.param('id'), body.refId, true);
+      return err ? c.json({ error: err.error }, err.status) : c.json(productLinks(db, store, c.req.param('id')), 201);
+    })
+    .delete('/api/pr/products/:id/links/:ref', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      const err = linkExperiment(db, store, c.req.param('id'), c.req.param('ref'), false);
+      return err ? c.json({ error: err.error }, err.status) : c.json(productLinks(db, store, c.req.param('id')));
+    })
+    .get('/api/pr/products/:id/brief', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      return c.json(getBrief(db, store, c.req.param('id')));
+    })
+    .put('/api/pr/products/:id/brief', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const fields = parseBrief(await c.req.json().catch(() => undefined));
+      return typeof fields === 'string' ? c.json({ error: fields }, 400) : c.json(saveBrief(db, store, c.req.param('id'), fields));
+    })
+    .post('/api/pr/products/:id/draft-product', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const r = requestDraftProduct(db, store, c.req.param('id'));
+      return 'error' in r ? c.json({ error: r.error }, r.status) : c.json(r.approval, r.created ? 201 : 200);
     })
     // Watchlists and alerts (PR-21): a store's list and the owner's all-stores list; each scope changes only its own.
     .get('/api/pr/watches', (c) => {

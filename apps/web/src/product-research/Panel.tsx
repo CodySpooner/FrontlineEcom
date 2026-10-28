@@ -20,8 +20,9 @@ import {
 } from '@frontline/shared';
 import { AreaChart } from '../components/AreaChart';
 import { Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Tabs } from '../components/ui';
-import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useLinkStoreProduct, useMatches, useProductDetail, useProductTab, useAddWatch, useSaveNotes, useUnwatch, useWatch, useWatches } from './api';
+import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useLinkStoreProduct, useMatches, useProductDetail, useProductTab, useAddWatch, useLinkExperiment, useLinks, useSaveNotes, useSetOwner, useUnlink, useUnwatch, useWatch, useWatches } from './api';
 import { Pill, TONE } from './Card';
+import { BriefDialog } from './Brief';
 import { EconomicsTab, incomplete } from './EconomicsTab';
 import { Alternatives } from './Matches';
 import { ResearchTab } from './ResearchTab';
@@ -32,7 +33,7 @@ export type PanelTab = (typeof PANEL_TABS)[number];
 const TAB_LABEL: Record<PanelTab, string> = { overview: 'Overview', demand: 'Demand', suppliers: 'Suppliers', economics: 'Economics', research: 'Research', history: 'History' };
 const PLATFORM: Record<string, string> = { google_trends: 'Google Trends', orders: 'Your orders', tiktok_creative_center: 'TikTok Creative Center' };
 const METRIC: Record<string, string> = { interest_over_time: 'Interest over time', units_sold: 'Paid units per week' };
-const KIND: Record<string, string> = { stage: 'Stage', watch: 'Watch', flag: 'Flag dismissed', merge: 'Merged', separate: 'Separated', offer: 'Offer', evidence: 'Evidence' };
+const KIND: Record<string, string> = { stage: 'Stage', watch: 'Watch', flag: 'Flag dismissed', merge: 'Merged', separate: 'Separated', offer: 'Offer', evidence: 'Evidence', owner: 'Owner', experiment: 'Experiment' };
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -76,14 +77,15 @@ export function DetailPanel({
   setTab: (t: PanelTab) => void;
   onClose: () => void;
   onAssigned: (storeId: string) => void;
-  /** Opens Research a Product with this product filled in (store scope). */
-  onResearch: (product: { id: string; title: string }) => void;
+  /** Opens Research a Product with this product filled in (store scope), optionally with a template picked. */
+  onResearch: (product: { id: string; title: string }, template?: string) => void;
   /** Store scope: whether it is in the comparison tray, and adds or removes it. */
   compare?: { on: boolean; full: boolean; toggle: () => void };
 }) {
   const scope = store?.id ?? null;
   const detail = useProductDetail(id, scope, shipTo);
   const d = detail.data;
+  const [brief, setBrief] = useState(false);
   return (
     <>
       <div aria-hidden onClick={onClose} className="fixed inset-0 z-30 bg-black/60 min-[1100px]:hidden" />
@@ -118,7 +120,15 @@ export function DetailPanel({
                 </Button>
               )}
               <WatchButton id={id} scope={scope} watched={d!.card.watched} />
+              {store && (
+                <Button size="sm" onClick={() => setBrief(true)}>
+                  Draft test brief
+                </Button>
+              )}
             </div>
+            {store && brief && (
+              <BriefDialog id={id} title={d!.card.title} store={store} onClose={() => setBrief(false)} onDraftWithAgent={() => (setBrief(false), onResearch({ id, title: d!.card.title }, 'test_brief'))} />
+            )}
           </>
         )}
       </aside>
@@ -281,6 +291,65 @@ function Notes({ id, store, notes }: { id: string; store: Store; notes: string |
   );
 }
 
+/** The pipeline's owner fields (PR-22): who handles it in this store, and what it led to. */
+function Pipeline({ id, store, owner }: { id: string; store: Store; owner: string | null }) {
+  const [text, setText] = useState(owner ?? '');
+  const [pick, setPick] = useState('');
+  const save = useSetOwner(id, store.id);
+  const links = useLinks(id, store.id);
+  const link = useLinkExperiment(id, store.id);
+  const unlink = useUnlink(id, store.id);
+  const linked = links.data?.links ?? [];
+  const free = links.data?.experiments.filter((e) => !linked.some((l) => l.kind === 'experiment' && l.refId === e.id)) ?? [];
+  const error = save.error ?? link.error ?? unlink.error;
+  return (
+    <Section title="Owner and links">
+      <div className="flex gap-2">
+        <input aria-label="Owner" value={text} maxLength={80} onChange={(e) => setText(e.target.value)} placeholder="Who handles it" className={cx(inputClass, 'min-w-0 flex-1 py-1.5 text-xs')} />
+        <Button size="sm" disabled={text.trim() === (owner ?? '') || save.isPending} onClick={() => save.mutate({ owner: text.trim() })}>
+          Save owner
+        </Button>
+      </div>
+      {linked.length ? (
+        <ul aria-label="Linked" className="mt-2 grid gap-1">
+          {linked.map((l) => (
+            <li key={`${l.kind}:${l.refId}`} className="flex items-center justify-between gap-2 text-text-2">
+              <span>{`${l.kind === 'store_product' ? 'Store product' : 'Experiment'}: ${l.label}`}</span>
+              {l.kind === 'experiment' && (
+                <Button size="sm" variant="ghost" aria-label={`Unlink ${l.label}`} disabled={unlink.isPending} onClick={() => unlink.mutate({ refId: l.refId })}>
+                  Unlink
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-2 text-muted">Nothing linked yet: a draft product made from the test brief, or a Knowledge Base experiment.</p>
+      )}
+      {free.length > 0 && (
+        <div className="mt-1.5 flex gap-2">
+          <select aria-label="Link an experiment" value={pick} onChange={(e) => setPick(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1.5 text-xs')}>
+            <option value="">Link an experiment…</option>
+            {free.map((e) => (
+              <option key={e.id} value={e.id}>
+                {e.label}
+              </option>
+            ))}
+          </select>
+          <Button size="sm" disabled={!pick || link.isPending} onClick={() => link.mutate({ kind: 'experiment', refId: pick }, { onSuccess: () => setPick('') })}>
+            Link
+          </Button>
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="mt-1 text-red">
+          {error.message}
+        </p>
+      )}
+    </Section>
+  );
+}
+
 /** The panel's Watch action: the store's list, or in All stores the owner's all-stores list. */
 function WatchButton({ id, scope, watched }: { id: string; scope: string | null; watched: boolean }) {
   const watch = useWatch(id, scope);
@@ -358,6 +427,7 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
         </p>
         {conditions && <p className="text-muted">{conditions}</p>}
       </Section>
+      {store && <Pipeline id={c.id} store={store} owner={d.owner ?? null} />}
       {store && <Notes id={c.id} store={store} notes={d.notes} />}
       {!store && <Assign id={c.id} stores={stores} evaluating={d.stores} onAssigned={onAssigned} />}
       {d.agentEstimates && (
