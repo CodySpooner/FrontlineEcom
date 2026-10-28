@@ -42,6 +42,7 @@ import { getApproval } from '../approvals';
 import { tx, type Db } from '../db';
 import { publish } from '../live';
 import { advanceKbResearch, runManager } from '../routes/agents';
+import { controlsState, parseControls, saveControls } from './autonomy';
 import { listCampaigns, listExperiments, parseExperiment, planExperiment } from './experiments';
 import { readUpload } from './fetcher';
 import { kbOverview } from './overview';
@@ -314,6 +315,19 @@ export function kbRoutes(db: Db) {
       if (!kbRow(db, 'kb_views', c.req.param('id'), ws)) return c.json({ error: 'view not found' }, 404);
       db.prepare('DELETE FROM kb_views WHERE id = ?').run(c.req.param('id'));
       return c.body(null, 204);
+    })
+    // Research controls (KB-22): per workspace, enforced by the research runner and kb/autonomy.ts.
+    .get('/api/kb/controls', (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      return ws === undefined ? c.json({ error: WS_ERROR }, 400) : c.json(controlsState(db, ws));
+    })
+    .put('/api/kb/controls', async (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined) return c.json({ error: WS_ERROR }, 400);
+      const next = parseControls(db, ws, await c.req.json().catch(() => null));
+      if (typeof next === 'string') return c.json({ error: next }, 400);
+      saveControls(db, ws, next);
+      return c.json(controlsState(db, ws));
     })
     .get('/api/kb/research/tasks', (c) => {
       const ws = wsOf(db, c.req.query('ws'), true);

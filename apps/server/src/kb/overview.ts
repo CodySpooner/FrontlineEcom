@@ -7,7 +7,7 @@ import { performanceStatus } from './performance';
 // The Research Center's numbers (KB-16), from the visible cards (proposed + active) of one workspace, or all of them.
 
 const DAY = 86_400_000;
-const STALE_DAYS = 90; // ponytail: one age for every card, as on the artboard, until per-category freshness (KB-23).
+export const STALE_DAYS = 90; // ponytail: one age for every card, as on the artboard, until per-category freshness (KB-23).
 const VISIBLE = `status IN ('proposed', 'active')`;
 const GAPS = ['only hypotheses', 'stale', '0 measured'];
 

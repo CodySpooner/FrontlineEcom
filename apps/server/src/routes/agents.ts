@@ -57,7 +57,7 @@ import {
   type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
-import { AGENT_ROLES, AUTONOMY_LEVELS, type AdSnapshotData, type AgentRole, type AgentUpdate, type ClaudeAccount, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
+import { AGENT_ROLES, AUTONOMY_LEVELS, KB_RESEARCH_DEPTHS, type AdSnapshotData, type KbResearchBrief, type AgentRole, type AgentUpdate, type ClaudeAccount, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -357,12 +357,15 @@ export function runManager(db: Db): RunManager {
         return promoteToGeneral(db, a.storeId, { cardId: p.cardId, title: p.title, summary: p.summary, ...(typeof p.body === 'string' ? { body: p.body } : {}) }, a.agentId);
       }
       if (a.action.kind === 'kb.research') {
-        // An agent's recommend_research: the store that asked pays, and the findings go to it or to General, never elsewhere.
-        const p = (a.action.payload ?? {}) as { ws?: unknown; role?: unknown; objective?: unknown; brief?: { lookFor?: unknown }; budgetUsd?: unknown };
+        // An agent's recommend_research, or self-directed research waiting for approval (KB-22): the store that asked pays,
+        // and the findings go to it or to General, never elsewhere.
+        const p = (a.action.payload ?? {}) as { ws?: unknown; role?: unknown; objective?: unknown; brief?: KbResearchBrief; budgetUsd?: unknown; origin?: unknown };
         if (typeof p.objective !== 'string' || typeof p.role !== 'string' || !Object.hasOwn(AGENT_ROLES, p.role) || typeof p.budgetUsd !== 'number') return;
+        const { lookFor, depth, trigger } = p.brief ?? {};
         createResearchTask(db, {
-          ws: p.ws === null ? null : a.storeId, payerId: a.storeId, role: p.role as AgentRole, kind: 'topic', origin: 'agent', objective: p.objective,
-          brief: typeof p.brief?.lookFor === 'string' ? { lookFor: p.brief.lookFor } : {}, budgetUsd: Math.min(5, Math.max(0.25, p.budgetUsd)),
+          ws: p.ws === null ? null : a.storeId, payerId: a.storeId, role: p.role as AgentRole, kind: 'topic', origin: p.origin === 'autonomous' ? 'autonomous' : 'agent', objective: p.objective,
+          brief: { ...(typeof lookFor === 'string' ? { lookFor } : {}), ...(depth && Object.hasOwn(KB_RESEARCH_DEPTHS, depth) ? { depth } : {}), ...(trigger ? { trigger } : {}) },
+          budgetUsd: Math.min(5, Math.max(0.25, p.budgetUsd)),
         });
         return advanceKbResearch(db);
       }

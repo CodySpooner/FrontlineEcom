@@ -33,6 +33,8 @@ import type {
   IntegrationInput,
   IntegrationKind,
   KbCampaign,
+  KbControls,
+  KbControlsState,
   KbCard,
   KbCardBrief,
   KbCategory,
@@ -333,6 +335,16 @@ export const useKbEvidence = (c: { id: string; storeId: string | null } | undefi
 export const useKbExperiments = (c: { id: string; storeId: string | null } | undefined) => useQuery({ queryKey: ['kb', 'experiments', c?.id], queryFn: () => api<KbExperiment[]>(cardUrl(c!, '/experiments')), enabled: !!c });
 /** A store's (or every store's) campaigns: the Library's Campaigns section, and what a test can compare. */
 export const useKbCampaigns = (ws: string | undefined) => useQuery({ queryKey: ['kb', 'campaigns', ws], queryFn: () => api<KbCampaign[]>(`/api/kb/campaigns?${wsq(ws!)}`), enabled: !!ws });
+
+/** A workspace's research controls (KB-22), with what self-directed research reserved in the last 24 hours. */
+export const useKbControls = (ws: string | undefined) => useQuery({ queryKey: ['kb', 'controls', ws], queryFn: () => api<KbControlsState>(`/api/kb/controls?${wsq(ws!)}`), enabled: !!ws });
+export function useSaveKbControls() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ ws, ...c }: Partial<KbControls> & { ws: string }) => api<KbControlsState>(`/api/kb/controls?${wsq(ws)}`, json('PUT', c)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
 
 /** Plans a test of a card (`plan`), or cancels a planned one (`cancel`: its id). */
 export function useKbTestWrite() {

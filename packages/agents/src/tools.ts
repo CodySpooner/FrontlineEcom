@@ -8,9 +8,9 @@ import { addNicheLearning, listNicheLearnings, nicheKey, nicheSlug, saveNichePac
 import { getPageDraft, listPageDrafts, savePageDraft, unsafeHtml } from './pages';
 import { listFlowDrafts, saveFlowDraft } from './flows';
 import { flagOrderIssue, listOrderIssues } from './issues';
-import { createCard, ensureCategoryPath, getCard, kbRow } from './kb';
+import { createCard, ensureCategoryPath, getCard, kbControls, kbRow } from './kb';
 import { addEvidence, agentCardError, createLink, sameCard } from './kb-links';
-import type { FetchedSource } from './kb-research';
+import { estimateResearch, type FetchedSource } from './kb-research';
 import { promotedAs, promotionPending } from './kb-promote';
 import { logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
 import { saveSource, sourceForAgent } from './kb-sources';
@@ -1280,10 +1280,11 @@ export const APP_TOOLS: AppTool[] = [
       if (ctx.db.prepare(`SELECT 1 FROM kb_tasks WHERE payer_id = ? AND lower(objective) = ? AND status IN ('queued', 'running', 'done')`).get(...same)) {
         return 'Already researched, or under way: search_knowledge has what it found.';
       }
+      const estimateUsd = estimateResearch(ctx.db, ctx.store.id);
       const { approved, message } = await requestApproval(ctx, {
         title: titled('Research: ', objective),
         reason: `${why} Up to $${budgetUsd.toFixed(2)} of AI usage.`,
-        action: { kind: 'kb.research', payload: { ws: general ? null : ctx.store.id, role: ctx.agent.role, objective, brief: lookFor ? { lookFor } : {}, budgetUsd } },
+        action: { kind: 'kb.research', payload: { ws: general ? null : ctx.store.id, role: ctx.agent.role, objective, brief: lookFor ? { lookFor } : {}, budgetUsd, ...(estimateUsd !== undefined ? { estimateUsd } : {}) } },
       });
       // The app starts it on approval (agentRoutes' onApproved), so it starts once whether or not this run still waits.
       return approved ? `${message}. It's queued and runs on its own; its cards come to the owner for review.` : message;
@@ -1325,8 +1326,7 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ url }, ctx) => {
       const task = researchTask(ctx);
       if (!task || !ctx.kbFetch) return 'Reading sources is only available in research.';
-      // ponytail: no blocked domains yet; KB-22 passes the workspace's list.
-      const f = await ctx.kbFetch(url, { blocked: [] });
+      const f = await ctx.kbFetch(url, { blocked: kbControls(ctx.db, task.ws).blockedDomains });
       const s = saveSource(ctx.db, task.ws, { kind: 'url', url: f.url, title: f.title ?? '', status: f.status, text: f.text, error: f.error, publishedAt: f.publishedAt, fetchedAt: new Date().toISOString() });
       ctx.db.prepare('INSERT OR IGNORE INTO kb_task_sources (task_id, source_id) VALUES (?, ?)').run(task.id, s.id);
       return `Source ${s.id}: "${s.title || s.url}" (${KB_SOURCE_RELIABILITY[s.reliability]})\n${sourceForAgent(ctx.db, s.id)}`;
@@ -1358,18 +1358,19 @@ export const APP_TOOLS: AppTool[] = [
       const same = sameCard(ctx.db, task.ws, c.title, c.summary);
       if (same && !same.live) return `Not filed: the owner archived or rejected a card that says this ("${getCard(ctx.db, same.id)?.title}"). Leave it.`;
       const by = { authorId: ctx.agent.id, taskId: task.id, ...(ctx.runId ? { runId: ctx.runId } : {}) };
+      const review = kbControls(ctx.db, task.ws).review;
       const cardId =
         same?.id ??
         createCard(ctx.db, task.ws, {
           categoryId: task.categoryId ?? ensureCategoryPath(ctx.db, task.ws, c.path), title: c.title, summary: c.summary, body: c.body, application: c.application, tags: c.tags,
-          type: c.type, stage: 'hypothesis', status: 'proposed', origin: 'research', ...by,
+          type: c.type, stage: 'hypothesis', status: review ? 'proposed' : 'active', origin: 'research', ...by,
         }).id;
       // An existing card only gains evidence: the owner's words and choices stay as they are.
       for (const sourceId of c.sources) addEvidence(ctx.db, cardId, { kind: 'research', text: c.evidence, sourceId, ...by });
       const now = getCard(ctx.db, cardId)!;
       return same
         ? `Already in the knowledge base: added your evidence to "${now.title}" (${now.id}), now ${KB_STAGES[now.stage]}.`
-        : `Filed "${now.title}" (${now.id}) for the owner's review, at ${KB_STAGES[now.stage]}.`;
+        : `Filed "${now.title}" (${now.id})${review ? " for the owner's review" : ", accepted (this workspace doesn't review research)"}, at ${KB_STAGES[now.stage]}.`;
     },
   }),
   defineTool({

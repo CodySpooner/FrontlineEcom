@@ -45,9 +45,9 @@ const running: KbTaskDetail = {
   ],
   findings: [{ id: 'f1', title: 'A', status: 'pending' }, { id: 'f2', title: 'B', status: 'stored' }, { id: 'f3', title: 'C', status: 'merged', cardId: 'c1' }],
 };
-const recommend = (id: string, ws: string | null, objective: string, kind = 'kb.research') => ({
-  id, storeId: ws ?? 'pawsome', agentId: 'pawsome:market_analyst', title: `Research: ${objective}`, reason: 'Up to $0.60 of AI usage.', status: 'pending', createdAt: now,
-  action: { kind, payload: { ws, role: 'market_analyst', objective, brief: {}, budgetUsd: 0.6 } },
+const recommend = (id: string, ws: string | null, objective: string, kind = 'kb.research', more: object = {}, reason = 'Up to $0.60 of AI usage.') => ({
+  id, storeId: ws ?? 'pawsome', agentId: 'pawsome:market_analyst', title: `Research: ${objective}`, reason, status: 'pending', createdAt: now,
+  action: { kind, payload: { ws, role: 'market_analyst', objective, brief: {}, budgetUsd: 0.6, ...more } },
 });
 
 function open(path = '/knowledge?ws=pawsome&view=research') {
@@ -61,7 +61,13 @@ function open(path = '/knowledge?ws=pawsome&view=research') {
     if (url.startsWith('/api/kb/research/tasks?')) return [running, t('t2', 'Bundles for travel', 'queued', 'created'), t('t3', 'Crate sizes', 'done'), t('t4', 'Calming sprays', 'failed', 'retrieving')];
     if (url === '/api/kb/research/tasks/t1') return running;
     if (url.startsWith('/api/kb/sources?')) return [{ id: 's1', url: 'https://a.test/1', title: 'Hook study', status: 'read', reliability: 'research' }, { id: 's3', url: 'https://c.test/3', title: 'Paid report', status: 'paywalled', reliability: 'unknown' }];
-    if (url.startsWith('/api/approvals?')) return [recommend('a1', 'pawsome', 'Why do bundles convert?'), recommend('a2', null, 'General pricing rules'), recommend('a3', 'pawsome', 'Pause ads', 'ads.pause')];
+    if (url.startsWith('/api/approvals?'))
+      return [
+        recommend('a1', 'pawsome', 'Why do bundles convert?'),
+        recommend('a2', null, 'General pricing rules'),
+        recommend('a3', 'pawsome', 'Pause ads', 'ads.pause'),
+        recommend('a4', 'pawsome', 'Pricing for a pets store: which of its findings hold up?', 'kb.research', { origin: 'autonomous', estimateUsd: 0.42 }, 'Knowledge gap: everything in Pricing is a Hypothesis. Up to $0.60 of AI usage.'),
+      ];
     if (url.startsWith('/api/kb/cards?')) return { items: [brief('c1', 'Problem-first hooks win'), brief('c4', 'Open on the reaction')], total: 2, offset: 0, limit: 5 };
   });
   renderApp(<Knowledge />, path);
@@ -174,10 +180,17 @@ describe('Research Center', () => {
     expect(await within(rc).findByText('Hook study')).toBeTruthy();
     expect(within(within(rc).getByText('Paid report').closest('li')!).getByText('paywalled')).toBeTruthy();
 
-    // This workspace's research recommendations only; Approve starts the research.
+    // This workspace's research recommendations only, with what they'd cost; Approve starts the research, Dismiss drops it.
     const rec = within(rc).getByRole('list', { name: 'Agents recommend' });
-    expect(within(rec).getAllByRole('listitem').map((x) => x.textContent)).toEqual(['Why do bundles convert?Market Analyst · Pawsome Gear · up to $0.60Approve']);
-    fireEvent.click(within(rec).getByRole('button', { name: 'Approve' }));
+    expect(within(rec).getAllByRole('listitem').map((x) => x.textContent)).toEqual([
+      'Why do bundles convert?Market Analyst · Pawsome Gear · up to $0.60ApproveDismiss',
+      'Pricing for a pets store: which of its findings hold up?On its own: Knowledge gap: everything in Pricing is a HypothesisMarket Analyst · Pawsome Gear · about $0.42, up to $0.60ApproveDismiss',
+    ]);
+    fireEvent.click(within(rec).getAllByRole('button', { name: 'Approve' })[0]!);
     await vi.waitFor(() => expect(fetch.mock.calls.some(([u, i]) => u === '/api/approvals/a1/approve' && i?.method === 'POST')).toBe(true));
+    fireEvent.click(within(rec).getAllByRole('button', { name: 'Dismiss' })[1]!);
+    await vi.waitFor(() => expect(fetch.mock.calls.some(([u, i]) => u === '/api/approvals/a4/deny' && i?.method === 'POST')).toBe(true));
+    // The self-directed research line, with its controls.
+    expect(within(rc).getByRole('heading', { name: 'Self-directed research' })).toBeTruthy();
   });
 });

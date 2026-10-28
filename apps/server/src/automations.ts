@@ -14,6 +14,8 @@ type Fields = Omit<AutomationRule, 'id' | 'createdAt' | 'lastFiredAt' | 'nextRun
 
 /** Starts an agent run (the agents lane's run manager). Returns the run, or an error message. */
 export type RunTask = (agentId: string, task: string) => { id: string } | string;
+/** Starts a rule's research (kb/autonomy.ts scheduledResearch): what to log on its run. */
+export type StartResearch = (ruleId: string, reason: string) => { status: 'started' | 'skipped'; detail: string };
 
 const METRICS: (keyof MetricTotals)[] = ['revenue', 'profit', 'adSpend', 'roas', 'orders', 'aov'];
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -88,11 +90,13 @@ export function parseRule(db: Db, body: unknown, base?: Fields): string | Fields
   } else return 'trigger.type must be schedule or metric';
 
   const a = b.action;
-  if (!isObj(a) || a.type !== 'agent_task') return "action must be { type: 'agent_task', agentId, task }";
+  if (!isObj(a) || (a.type !== 'agent_task' && a.type !== 'kb_research')) return "action must be { type: 'agent_task', agentId, task }";
   if (typeof a.agentId !== 'string' || !db.prepare('SELECT 1 FROM agents WHERE id = ? AND store_id = ?').get(a.agentId, b.storeId)) return "action.agentId must be one of this store's agents";
+  // Research (KB-22) is a topic, and the store's research controls decide whether it waits for approval.
+  if (a.type === 'kb_research' && !(typeof a.task === 'string' && a.task.trim().length >= 3 && a.task.trim().length <= 500)) return 'action.task must be 3-500 characters for research';
   if (typeof a.task !== 'string' || !a.task.trim() || a.task.length > 4000) return 'action.task must be 1-4000 characters';
 
-  return { storeId: b.storeId, name: b.name.trim(), enabled: b.enabled, trigger, action: { type: 'agent_task', agentId: a.agentId, task: a.task.trim() }, approval: b.approval, maxRunsPerDay: b.maxRunsPerDay, cooldownHours: b.cooldownHours };
+  return { storeId: b.storeId, name: b.name.trim(), enabled: b.enabled, trigger, action: { type: a.type, agentId: a.agentId, task: a.task.trim() }, approval: b.approval, maxRunsPerDay: b.maxRunsPerDay, cooldownHours: b.cooldownHours };
 }
 
 /**
@@ -120,7 +124,7 @@ const LABEL: Record<keyof MetricTotals, string> = { revenue: 'Revenue', profit: 
  * Checks rules every `everyMs`: schedule rules fire once if their cron matched since the last check (catching up a missed
  * fire after a restart, up to 24h back); metric rules are evaluated every `metricEveryMs` and respect their cooldown.
  */
-export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, metricEveryMs = 15 * 60_000, now = () => new Date() } = {}) {
+export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, metricEveryMs = 15 * 60_000, now = () => new Date(), research }: { everyMs?: number; metricEveryMs?: number; now?: () => Date; research?: StartResearch } = {}) {
   const hook = approvalsHook(db);
   const setRun = db.prepare('UPDATE automation_runs SET status = ?, detail = coalesce(?, detail), run_id = ? WHERE id = ?');
 
@@ -155,6 +159,10 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
     const today = Number(db.prepare("SELECT count(*) AS n FROM automation_runs WHERE rule_id = ? AND fired_at >= ? AND status IN ('started', 'awaiting_approval')").get(rule.id, dayStart)?.n);
     if (today >= rule.maxRunsPerDay) return log('skipped', `${reason}; daily cap of ${rule.maxRunsPerDay} reached`);
 
+    if (rule.action.type === 'kb_research') {
+      const r = research?.(rule.id, reason) ?? { status: 'skipped', detail: "Research isn't available here" };
+      return log(r.status, r.detail);
+    }
     const task = `${rule.action.task}\n\n(Automation "${rule.name}": ${reason}.)`;
     if (rule.approval === 'auto') {
       log('started', reason);

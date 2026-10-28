@@ -8,6 +8,7 @@ import { useApprovals, useCreateKbCategory, useDecide, useKbCards, useKbOverview
 import { Badge, Button, cx, ErrorState, LoadingState, Tabs } from '../components/ui';
 import { ago } from '../lib/format';
 import { NameForm } from './ArtboardPanels';
+import { ResearchControls } from './Controls';
 import { FETCH } from './DetailsPanel';
 import { STAGE } from './Research';
 
@@ -289,8 +290,10 @@ function Column({ ws, o, name, set }: { ws: string; o: KbOverview; name: (ws: st
   const meta = (t: { role: AgentRole; storeId: string | null }) => `${AGENT_ROLES[t.role].name} · ${name(t.storeId ?? 'general')}`;
   const recommended = approvals.flatMap((a) => {
     if (a.action.kind !== 'kb.research') return [];
-    const p = a.action.payload as { ws: string | null; role: AgentRole; objective: string; budgetUsd: number };
-    return ws === 'all' || (p.ws ?? 'general') === ws ? [{ id: a.id, ...p }] : [];
+    const p = a.action.payload as { ws: string | null; role: AgentRole; objective: string; budgetUsd: number; estimateUsd?: number; origin?: string };
+    // Self-directed research (KB-22) says what started it; the cost line already has the budget.
+    const why = p.origin === 'autonomous' ? a.reason.replace(/\.? Up to \$[\d.]+ of AI usage\.$/, '') : undefined;
+    return ws === 'all' || (p.ws ?? 'general') === ws ? [{ id: a.id, ...p, why }] : [];
   });
   const row = (t: KbTaskBrief, badge?: ReactNode) => (
     <li key={t.id} className="flex items-start gap-2 rounded-lg border border-line px-3 py-2">
@@ -348,10 +351,14 @@ function Column({ ws, o, name, set }: { ws: string; o: KbOverview; name: (ws: st
             <li key={r.id} className="flex items-center gap-2 rounded-lg border border-line px-3 py-2">
               <div className="min-w-0 flex-1">
                 <p className="text-[13px] text-text">{r.objective}</p>
-                <p className="text-xs text-muted">{`${AGENT_ROLES[r.role].name} · ${name(r.ws ?? 'general')} · up to $${r.budgetUsd.toFixed(2)}`}</p>
+                {r.why && <p className="text-xs text-text-2">{`On its own: ${r.why}`}</p>}
+                <p className="text-xs text-muted">{`${AGENT_ROLES[r.role].name} · ${name(r.ws ?? 'general')} · ${r.estimateUsd !== undefined ? `about $${r.estimateUsd.toFixed(2)}, ` : ''}up to $${r.budgetUsd.toFixed(2)}`}</p>
               </div>
               <Button size="sm" disabled={decide.isPending} onClick={() => decide.mutate({ id: r.id, verdict: 'approve' })}>
                 Approve
+              </Button>
+              <Button size="sm" variant="ghost" disabled={decide.isPending} onClick={() => decide.mutate({ id: r.id, verdict: 'deny' })}>
+                Dismiss
               </Button>
             </li>
           ))}
@@ -406,6 +413,9 @@ function Column({ ws, o, name, set }: { ws: string; o: KbOverview; name: (ws: st
           ))}
         </ul>
       )}
+
+      <H3>Self-directed research</H3>
+      <ResearchControls ws={ws} />
     </section>
   );
 }

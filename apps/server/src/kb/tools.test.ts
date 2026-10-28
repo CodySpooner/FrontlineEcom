@@ -182,4 +182,25 @@ describe('KB agent tools', () => {
     updateAgent(db, 'pawsome:market_analyst', { autonomy: 'suggest' });
     expect(await call('recommend_research', { ...ask, objective: 'Another question entirely?' }, context().ctx)).toMatch(/^Not sent: your autonomy is "suggest"/);
   });
+
+describe("the workspace's research controls (KB-22)", () => {
+  const controls = (ws: KbWorkspace, settings: object) =>
+    db.prepare(`INSERT INTO kb_controls (store_id, settings_json, updated_at) VALUES (?, ?, ?)`).run(ws, JSON.stringify(settings), new Date().toISOString());
+
+  test("fetch_source passes the workspace's blocked domains to the safe reader", async () => {
+    controls('pawsome', { blockedDomains: ['reddit.com'] });
+    const { ctx } = context('pawsome', { ws: 'pawsome' });
+    const kbFetch = vi.fn(async (url: string) => ({ url, status: 'blocked_domain', error: "reddit.com is on this workspace's blocked list" }) as FetchedSource);
+    expect(await call('fetch_source', { url: 'https://www.reddit.com/r/dogs' }, { ...ctx, kbFetch })).toMatch(/was not read \(blocked_domain\)/);
+    expect(kbFetch).toHaveBeenCalledWith('https://www.reddit.com/r/dogs', { blocked: ['reddit.com'] });
+  });
+
+  test('with review off, propose_card files an accepted card', async () => {
+    controls('pawsome', { review: false });
+    const { ctx } = context('pawsome', { ws: 'pawsome' });
+    const out = await call('propose_card', { ...PROPOSAL, sources: [read('pawsome', 'https://a.test/hooks')] }, ctx);
+    expect(out).toMatch(/^Filed "Open TikTok ads on the problem" \([0-9a-f-]{36}\), accepted \(this workspace doesn't review research\), at Hypothesis\.$/);
+    expect(getCard(db, out.match(/\(([0-9a-f-]{36})\)/)![1]!)!.status).toBe('active');
+  });
+});
 });

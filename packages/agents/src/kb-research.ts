@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { z } from 'zod';
 import { AGENT_ROLES, KB_RESEARCH_DEPTHS, KB_TASK_STAGES, type Agent, type AgentRole, type KbResearchBrief, type KbResearchReport, type KbSourceBrief, type KbSourceStatus, type KbTaskBrief, type KbTaskDetail, type KbWorkspace, type Store } from '@frontline/shared';
-import { createCard, ensureCategoryPath, kbScope } from './kb';
+import { createCard, ensureCategoryPath, kbControls, kbScope } from './kb';
 import { addEvidence, sameCard, suggestLinks } from './kb-links';
 import { saveSource, sourceForAgent, type NewKbSource } from './kb-sources';
 import { searchMemory } from './memory';
@@ -89,6 +89,8 @@ export interface NewKbTask {
   categoryId?: string;
   budgetUsd: number;
   refinedFrom?: string;
+  /** Self-directed research (KB-22): what started it, for its log. */
+  why?: string;
 }
 /** What the app's fetcher (apps/server kb/fetcher.ts) gives back for one link. */
 export type FetchedSource = Pick<NewKbSource, 'status' | 'text' | 'error' | 'publishedAt'> & { url: string; title?: string };
@@ -127,8 +129,14 @@ export function createResearchTask(db: DatabaseSync, t: NewKbTask, now = new Dat
   db.prepare(
     `INSERT INTO kb_tasks (id, store_id, payer_id, role, kind, origin, objective, brief_json, category_id, budget_usd, refined_from, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(id, t.ws, t.payerId, t.role, t.kind, t.origin, t.objective.trim(), JSON.stringify(t.brief ?? {}), t.categoryId ?? null, t.budgetUsd, t.refinedFrom ?? null, now.toISOString());
-  log(db, id, 'created', 'info', t.refinedFrom ? 'Queued, refining an earlier task' : 'Queued', now);
+  log(db, id, 'created', 'info', t.why ? `Queued on its own (${t.why})` : t.refinedFrom ? 'Queued, refining an earlier task' : 'Queued', now);
   return toKbTask(taskRow(db, id)!);
+}
+
+/** What a store's research has cost: the average of its last 10 finished tasks; none before the first. */
+export function estimateResearch(db: DatabaseSync, payerId: string): number | undefined {
+  const spent = db.prepare(`SELECT spent_usd FROM kb_tasks WHERE payer_id = ? AND status = 'done' ORDER BY ended_at DESC, rowid DESC LIMIT 10`).all(payerId).map((r) => Number(r.spent_usd));
+  return spent.length ? Math.round((spent.reduce((a, b) => a + b, 0) / spent.length) * 100) / 100 : undefined;
 }
 
 /** What a research stage's run gets in runs.ts: a store-neutral prompt for General, and what the task has left. */
@@ -325,12 +333,13 @@ const CODE: Partial<Record<Stage, Code>> = {
       db.prepare('INSERT OR IGNORE INTO kb_task_sources (task_id, source_id) VALUES (?, ?)').run(id, source.id);
       return source;
     };
+    const { blockedDomains } = kbControls(db, ws);
     const read: string[] = [];
     const failed: Retrieved['failed'] = [];
     // ponytail: one source at a time, so a slow site holds up other tasks' passes too; fetch in parallel if that bites.
     for (const url of [...new Set((out<Out['discovering']>(db, id, 'discovering').sources ?? []).map((s) => s.url))].slice(0, sourcesFor(brief))) {
       if (taskRow(db, id)?.status !== 'running') break;
-      const f = await deps.fetch(url, { blocked: [] });
+      const f = await deps.fetch(url, { blocked: blockedDomains });
       const s = keep({ kind: 'url', url: f.url, title: f.title ?? '', status: f.status, text: f.text, error: f.error, publishedAt: f.publishedAt, fetchedAt: now.toISOString() });
       if (s.status === 'read') {
         read.push(s.id);
@@ -382,6 +391,7 @@ const CODE: Partial<Record<Stage, Code>> = {
     const id = String(t.id);
     const ws = opt(t.store_id) ?? null;
     const authorId = `${t.payer_id}:${t.role}`;
+    const status = kbControls(db, ws).review ? 'proposed' : 'active';
     const runId = opt(db.prepare(`SELECT run_id FROM kb_task_steps WHERE task_id = ? AND stage = 'extracting' AND status = 'done' ORDER BY attempt DESC LIMIT 1`).get(id)?.run_id);
     const created: string[] = [];
     const updated = new Set<string>();
@@ -394,7 +404,7 @@ const CODE: Partial<Record<Stage, Code>> = {
         same ??
         createCard(db, ws, {
           categoryId: opt(t.category_id) ?? ensureCategoryPath(db, ws, d.path), title: d.title, summary: d.summary, body: d.body, application: d.application, tags: d.tags,
-          type: d.type, stage: 'hypothesis', status: 'proposed', authorId, origin: 'research', taskId: id, ...(runId ? { runId } : {}),
+          type: d.type, stage: 'hypothesis', status, authorId, origin: 'research', taskId: id, ...(runId ? { runId } : {}),
         }, now).id;
       // Linked first: the ladder reads the finding's evaluation as the evidence lands.
       db.prepare('UPDATE kb_findings SET status = ?, card_id = ? WHERE id = ?').run(same ? 'merged' : 'stored', cardId, String(f.id));
@@ -472,11 +482,15 @@ function taskText(db: DatabaseSync, t: Row, stage: keyof Out, attempt: number): 
         known.length ? `The knowledge base already holds (build on it, don't research it again):\n${known.join('\n')}` : 'The knowledge base holds nothing on this yet.',
       ].join('\n\n');
     },
-    discovering: () =>
-      [
+    discovering: () => {
+      const { trustedDomains, blockedDomains } = kbControls(db, ws);
+      return [
         `Plan: ${plan.scope ?? ''}\nQuestions:\n${(plan.questions ?? []).map((q) => `- ${q}`).join('\n')}\nSearches to try: ${(plan.queries ?? []).join('; ')}`,
         `Search the web and pick up to ${sourcesFor(brief)} public sources worth reading: platform documentation, research, established publications and practitioners with real numbers, over generic listicles. Skip paywalled and sign-in pages. Don't summarize them: the app reads them next.`,
-      ].join('\n\n'),
+        trustedDomains.length ? `The owner trusts these sites: prefer them when they cover it: ${trustedDomains.join(', ')}.` : '',
+        blockedDomains.length ? `Never pick pages on these sites (the owner blocked them): ${blockedDomains.join(', ')}.` : '',
+      ].filter(Boolean).join('\n\n');
+    },
     analyzing: () =>
       [
         `Questions to answer:\n${(plan.questions ?? []).map((q) => `- ${q}`).join('\n') || `- ${t.objective}`}`,

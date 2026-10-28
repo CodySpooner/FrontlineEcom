@@ -421,4 +421,21 @@ describe('the research runner', () => {
       { kind: 'error', title: `Research failed: ${TOPIC.objective}`, body: expect.stringMatching(/^Research needs Claude/), store_id: 'pawsome', link: `/knowledge?view=research&task=${t.id}` },
     ]);
   });
+
+describe("the workspace's research controls (KB-22)", () => {
+  test('discovery prefers the trusted domains and skips the blocked ones, which the reader refuses too; with review off, cards start accepted', async () => {
+    db.prepare(`INSERT INTO kb_controls (store_id, settings_json, updated_at) VALUES ('pawsome', ?, ?)`).run(
+      JSON.stringify({ review: false, trustedDomains: ['ads.tiktok.com', 'a.test'], blockedDomains: ['c.test'] }), clock.toISOString(),
+    );
+    const fetch = vi.fn(async (url: string, _opts: { blocked: string[] }) => ({ url, status: 'failed', error: 'Not found', ...PAGES[url] }) as never);
+    const { seen, settle } = setup({}, PAGES, { fetch });
+    const t = createResearchTask(db, TOPIC, clock);
+    await settle();
+    const discovering = seen.find((i) => stageOf(i.task) === 'discovering')!.task;
+    expect(discovering).toContain('The owner trusts these sites: prefer them when they cover it: ads.tiktok.com, a.test.');
+    expect(discovering).toContain('Never pick pages on these sites (the owner blocked them): c.test.');
+    expect(fetch.mock.calls.map(([, o]) => o)).toEqual([{ blocked: ['c.test'] }, { blocked: ['c.test'] }, { blocked: ['c.test'] }]);
+    expect(db.prepare('SELECT DISTINCT status FROM kb_cards WHERE task_id = ?').all(t.id)).toEqual([{ status: 'active' }]);
+  });
+});
 });

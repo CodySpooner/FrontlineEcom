@@ -10,6 +10,7 @@ import {
   type KbCardType,
   type KbCategory,
   type KbCategoryCount,
+  type KbControls,
   type KbOrigin,
   type KbStage,
   type KbWorkspace,
@@ -37,6 +38,18 @@ export function kbScope(ws: KbWorkspace | 'all', general = false, col = 'store_i
   if (ws === 'all') return { sql: '1 = 1', params: [] };
   if (ws === null) return { sql: `${col} IS NULL`, params: [] };
   return { sql: general ? `(${col} = ? OR ${col} IS NULL)` : `${col} = ?`, params: [ws] };
+}
+
+/** A workspace's research controls before the owner changes any (KB-22). */
+export const KB_CONTROLS: KbControls = {
+  autonomous: false, roles: {}, triggers: ['conflict', 'anomaly', 'gap', 'stale'], taskBudgetUsd: 1, dailyBudgetUsd: 3, depth: 'standard', approval: true, review: true,
+  trustedDomains: [], blockedDomains: [],
+};
+
+/** A workspace's research controls: what the owner set, over the defaults. */
+export function kbControls(db: DatabaseSync, ws: KbWorkspace): KbControls {
+  const r = db.prepare(`SELECT settings_json FROM kb_controls WHERE coalesce(store_id, '') = ?`).get(ws ?? '');
+  return { ...KB_CONTROLS, ...(r ? (JSON.parse(String(r.settings_json)) as Partial<KbControls>) : {}) };
 }
 
 type KbTable = 'kb_cards' | 'kb_categories' | 'kb_sources' | 'kb_links' | 'kb_conflicts' | 'kb_tasks' | 'kb_views';

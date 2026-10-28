@@ -1197,7 +1197,8 @@ export type AutomationTrigger =
   | { type: 'metric'; metric: keyof MetricTotals; op: '<' | '>'; value: number; windowDays: number };
 
 export interface AutomationAction {
-  type: 'agent_task';
+  /** `kb_research`: the agent researches `task` (3-500 characters), under its workspace's research controls (KB-22). */
+  type: 'agent_task' | 'kb_research';
   /** `<storeId>:<role>`, must belong to the rule's store. */
   agentId: string;
   task: string;
@@ -1573,6 +1574,8 @@ export interface KbResearchBrief {
   depth?: KbResearchDepth;
   /** Uploaded documents: read and kept as sources when the task was made. */
   documentIds?: string[];
+  /** What started self-directed research (KB-22): a trigger and its card, category or automation rule. */
+  trigger?: { kind: KbTrigger | 'schedule'; subject: string };
 }
 
 /**
@@ -1869,6 +1872,40 @@ export interface KbCampaign {
 }
 
 /** What a store's performance learning (KB-19) reads from, and what it can't yet: in KbOverview.performance. */
+/** What starts self-directed research (KB-22), in the order a pass looks at them. */
+export const KB_TRIGGERS = {
+  conflict: 'Contradictions',
+  anomaly: 'Performance anomalies',
+  gap: 'Knowledge gaps',
+  stale: 'Stale cards',
+} as const;
+export type KbTrigger = keyof typeof KB_TRIGGERS;
+
+/** A workspace's research controls (KB-22). General has no self-directed research: it runs on a store's agents. */
+export interface KbControls {
+  /** Self-directed research: off unless the owner turns it on. */
+  autonomous: boolean;
+  /** The roles that may research on their own, each with the top-level categories it answers for (none: its usual areas). */
+  roles: Partial<Record<AgentRole, string[]>>;
+  triggers: KbTrigger[];
+  taskBudgetUsd: number;
+  /** What self-directed research may reserve in 24 hours: each task's budget, recommendations waiting included. */
+  dailyBudgetUsd: number;
+  depth: KbResearchDepth;
+  /** Each self-directed task waits in "Agents recommend" for the owner's approval. */
+  approval: boolean;
+  /** Research findings start Unreviewed (decision 11); off, they start accepted. */
+  review: boolean;
+  /** Sites discovery prefers. */
+  trustedDomains: string[];
+  /** Sites never read (a domain blocks its subdomains). */
+  blockedDomains: string[];
+}
+/** GET /api/kb/controls?ws= (general or a store): the controls, and what self-directed research reserved in the last 24 hours. PUT takes any of KbControls' fields. */
+export interface KbControlsState extends KbControls {
+  reservedUsd: number;
+}
+
 export interface KbPerformance {
   storeId: string;
   /** Demo numbers are never learned from. */

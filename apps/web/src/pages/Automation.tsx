@@ -259,7 +259,7 @@ function RuleEditor({ rule, onDone }: { rule?: AutomationRule; onDone: () => voi
         storeId,
         name: name.trim(),
         trigger: kind === 'schedule' ? { type: 'schedule', cron: cron.trim() } : metric,
-        action: { type: 'agent_task', agentId: `${storeId}:${role}`, task: task.trim() },
+        action: { type: rule?.action.type ?? 'agent_task', agentId: `${storeId}:${role}`, task: task.trim() }, // a research rule (KB-22) stays one
         approval,
         maxRunsPerDay,
         cooldownHours,

@@ -12,7 +12,7 @@ const STOP = new Set(
 );
 const STAGE: Record<KbStage, number> = { hypothesis: 1, supported: 1.15, tested: 1.3, validated: 1.5 };
 const DAY = 86_400_000;
-// ponytail: the categories each role works in, by name, until the owner sets them per role (KB-22).
+// ponytail: the categories each role works in, by name. The owner's research controls can name others (KB-22); retrieval keeps these.
 const AREAS: Record<AgentRole, RegExp> = {
   ad_strategist: /advert|\bads?\b|campaign|media|tiktok|meta|google/,
   product_hunter: /product|sourcing|supplier|trend|niche/,
@@ -23,6 +23,9 @@ const AREAS: Record<AgentRole, RegExp> = {
   email_sms: /email|sms|retention|flow|loyalty/,
   operations: /operation|fulfil|shipping|inventory|order|return|customer service/,
 };
+
+/** Whether a category (by name) is one of the role's usual areas: who answers for it when the owner set none (KB-22). */
+export const kbRoleArea = (role: AgentRole, name: string) => AREAS[role].test(name.toLowerCase());
 
 /** A task's words as an FTS5 query: any of them, quoted (so no word is read as syntax), common ones left out. */
 export function ftsQuery(text: string): string | undefined {

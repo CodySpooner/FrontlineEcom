@@ -574,7 +574,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
     Each lesson links to its evidence and its measurement window.
 
 ### Phase 7: autonomous research and maintenance
-- [ ] KB-22 **Autonomous research control,** enforced on the server:
+- [x] KB-22 **Autonomous research control,** enforced on the server:
   - on/off per workspace and per role;
   - the categories each role is responsible for;
   - schedules (an `automation_rules` research action);
@@ -640,6 +640,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-19 Performance pipeline: every hour, each real store's settled 28-day periods are read against a baseline: each campaign against the store's other campaigns on its network (ROAS, click-through rate), the store against its own 12 weeks before (conversion rate, order value, refund rate), and each product against its 4 weeks before, adjusted for the store's trend (unit sales). A difference outside the noise becomes a Performance Lesson with a 95% range, or evidence on the lesson it made before. It counts as measured when nothing else differed; otherwise it's a Hypothesis that names what did. A measured reading the other way moves the lesson down and opens a conflict. Approved changes' outcomes are now evidence on the store cards their run cited. The Research Center says what each store learns from and what isn't enabled. Demo stores learn nothing from demo numbers.
 - 2026-10-27 KB-20 Ad-level and creative data: Meta, Google and TikTok Ads now also sync each ad's days, with its ad set or ad group and its text, alongside the campaign totals; the store's ad spend still comes from the campaigns only. An ad whose text holds a library creative's primary text is linked to that creative. Agents describe a creative's format, hook, angle, length and offer, and the Creative Studio preview shows them. Performance learning now reads each ad against the other ads in its ad set (measured), and each creative trait against the store's other library ads with a different one (always a Hypothesis). The Research Center says when ad results and creative traits are on.
 - 2026-10-27 KB-21 Experiments and the Campaigns library: a card's panel has a Tests section. "Plan a test" picks a metric (ROAS, click-through or conversion rate), an A and a B side made of the store's campaigns and library creatives, a window and a minimum sample on each side. Once the window's attribution has settled (30 days) and the store's ad accounts have synced past it, the app reads the two sides and writes the result on the card as evidence: worked (measured, so it climbs the ladder), failed (a conflict) or inconclusive. Demo stores can't be tested. The Library has a searchable Campaigns tab: each campaign's platform, dates, spend, ROAS, CTR and latest result, and opened, its creatives, copy and hooks, ad sets, metrics, the cards learned from it with their measurement window, and its Hypotheses as recommended tests. Products and audiences say "not linked". The Research Center's conflicts have "Plan a test".
+- 2026-10-27 KB-22 Autonomous research control: each workspace has research controls in the Research Center ("Self-directed research", Controls): whether its agents research on their own (off until the owner turns it on), which roles and the top-level categories each answers for, the triggers (contradictions, performance anomalies, knowledge gaps, stale cards), a budget per task and per day, depth, whether each task waits for approval, whether findings wait for review, and the sites to prefer or never read. Research can also run on a schedule (an automation with a research action). Every hour each store with it on starts at most one task, or one recommendation in "Agents recommend", which now shows what research like it has cost and has Dismiss. The server enforces all of it: never on the demo engine; what self-directed research made never starts more; a card and trigger wait 14 days; a topic open or researched in the last day isn't done again; contradictions research found don't start research.
 
 ## Blocked
 
@@ -906,3 +907,27 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   test plan (planning is the owner's form; an agent tool can come with KB-22's autonomy controls). Mutation sweep: 41
   of 41 killed after 7 new tests. The worktree's dev DB had run an earlier draft of migration 47 without
   `ads.group_id` (never shipped); the column was added by hand there.
+- 2026-10-27 KB-22: controls are migration 44's `kb_controls` (one row per workspace, settings_json over
+  `KB_CONTROLS` in packages/agents/src/kb.ts; `kbControls(db, ws)`), `GET|PUT /api/kb/controls?ws=` (General or a
+  store; PUT merges, every field checked, General refuses `autonomous`: it has no agents or AI budget of its own).
+  `apps/server/src/kb/autonomy.ts`: `begin()` is the one gate, for the hourly pass (`autonomousResearch`, in the KB
+  loop beside performance and tests) and for automations (`scheduledResearch`, `startScheduler`'s new `research`
+  option; `AutomationAction.type` gained `'kb_research'`, task = the topic, 3-500 characters). In order: the store has
+  it on, the role is on, Claude is there (decision 7: never the demo engine), no open task, pending recommendation or
+  task done in the last 24 h with the same objective, no task or recommendation (any outcome, dismissed included) for
+  the same trigger and subject in 14 days (schedules skip this one: they repeat), and the last 24 h's reserved budget
+  (self-directed tasks' budgets plus waiting recommendations) leaves room for one more task. Then a task
+  (origin 'autonomous', the workspace's depth and task budget, brief.trigger, log "Queued on its own (why)") or, with
+  approval on, a `kb.research` approval whose payload says origin 'autonomous' and carries `estimateUsd` (the average
+  of the store's last 10 finished tasks; `recommend_research` now adds it too); onApproved keeps the origin, depth and
+  trigger. Triggers, one task per store per pass, in KB_TRIGGERS order: open contradictions no research found
+  (`kb_conflicts.task_id` NULL), performance lessons updated in the last 14 days, "only hypotheses" gaps from the
+  overview (a gap whose category holds a self-directed task's card is left: it made it), and cards unchecked for 90
+  days (not performance lessons, not self-directed research's own). Who answers: the first role, in AGENT_ROLES order,
+  that is on and was given the category, or was given none and has it among its usual areas (`kbRoleArea`, the
+  retrieval AREAS by name). Blocked domains reach the KB-11 fetcher from the runner's retrieving stage and from
+  fetch_source; trusted and blocked sites are told to the discovering stage; with review off the storing stage and
+  propose_card file cards as active. Touch point outside the lane: the Automation page's rule editor kept rewriting
+  a rule's action as an agent task on save; it now keeps the rule's type (tested). Mutation sweep: 41 of 42 killed
+  after 6 new tests; the one left was a shortcut the gate already covers, so it was removed. Left out: General
+  self-directed research (no paying store), and per-category freshness (KB-23 owns staleness).

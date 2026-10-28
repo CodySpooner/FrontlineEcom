@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import type { ApprovalRequest, AutomationRule, AutomationRun } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { DemoJobsNote } from '../components/DemoJobsNote';
-import { RunLog } from './Automation';
+import { Automation, RunLog } from './Automation';
 
 afterEach(() => {
   cleanup();
@@ -50,4 +50,20 @@ describe('demo stores note', () => {
     expect(await screen.findByText(/Peak Fit is a demo store: its squad's jobs switch on when you connect it/)).toBeTruthy();
     expect(screen.queryByText(/Glow Haus/)).toBeNull();
   });
+
+describe('the rule editor', () => {
+  it('keeps a research rule (KB-22) a research rule when it saves', async () => {
+    const research = { ...rule, trigger: { type: 'schedule', cron: '0 9 * * 1' }, action: { type: 'kb_research', agentId: 'peak:market_analyst', task: 'What is new in home fitness?' }, approval: 'auto', maxRunsPerDay: 1, cooldownHours: 24 } as AutomationRule;
+    const fetch = stubApi((url, init) => {
+      if (init?.method === 'PATCH') return research;
+      if (url === '/api/automations') return [research];
+      if (url.startsWith('/api/stores')) return [{ id: 'peak', name: 'Peak Fit', currency: 'USD' }];
+    });
+    renderApp(<Automation />, '/automation');
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Save rule' }));
+    await vi.waitFor(() => expect(fetch.mock.calls.find(([, i]) => i?.method === 'PATCH')?.[1]?.body).toBeTruthy());
+    expect(JSON.parse(String(fetch.mock.calls.find(([, i]) => i?.method === 'PATCH')![1]!.body)).action).toEqual({ type: 'kb_research', agentId: 'peak:market_analyst', task: 'What is new in home fitness?' });
+  });
+});
 });
