@@ -70,6 +70,7 @@ import { localDate } from '../dates';
 import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { log } from '../log';
+import { askKnowledge } from '../kb/ask';
 import { createFetcher } from '../kb/fetcher';
 import { researchRoutes } from '../research';
 import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, EXPIRED_DEMO, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
@@ -596,6 +597,19 @@ export function agentRoutes(db: Db) {
       }
       const run = runs.start(c.req.param('id'), body.task.trim(), body.resumeRunId);
       return typeof run === 'string' ? c.json({ error: run }, 409) : c.json(run, 201);
+    })
+    // Knowledge › Ask the knowledge base (KB-24): with cards matching the question, a Market Analyst answers from them only.
+    .post('/api/kb/ask', async (c) => {
+      const b = (await c.req.json().catch(() => null)) as { ws?: unknown; question?: unknown; payerId?: unknown } | null;
+      const ws = b?.ws === 'all' ? 'all' : b?.ws === 'general' ? null : typeof b?.ws === 'string' && getStore(db, b.ws) ? b.ws : undefined;
+      if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
+      if (!isText(b!.question, 3, 500)) return c.json({ error: 'question must be 3-500 characters' }, 400);
+      const payer = ws !== null && ws !== 'all' ? ws : b!.payerId;
+      if (typeof payer !== 'string' || !getStore(db, payer)) return c.json({ error: 'payerId must be a store: whose Market Analyst answers' }, 400);
+      const { answer, task } = askKnowledge(db, ws, (b!.question as string).trim());
+      if (!task) return c.json(answer);
+      const run = runs.start(`${payer}:market_analyst`, task);
+      return typeof run === 'string' ? c.json({ error: run }, 409) : c.json({ ...answer, run });
     })
     // Knowledge › Niche packs: the owner asks a custom niche's Market Analyst for its pack. Going live asks once, so a
     // denied or failed draft was never offered again. Not on the demo engine: its made-up pack would be the niche's for good.

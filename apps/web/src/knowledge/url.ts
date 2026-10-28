@@ -15,12 +15,12 @@ export function viewOf(p: URLSearchParams): KbView {
 }
 
 /**
- * The workspace: 'general', a store id, or 'all' (Research Center only). ?ws= when it names one, else the single store
+ * The workspace: 'general', a store id, or 'all' (the Research Center, and the Library to search them all). ?ws= when it names one, else the single store
  * picked in the global store filter, else General. While the stores load (`storeIds` undefined) the link is trusted.
  */
 export function wsFrom(p: URLSearchParams, view: KbView, storeIds: string[] | undefined, picked: string[]): string {
   const ws = p.get('ws');
-  if (ws === 'general' || (ws === 'all' && view === 'research') || (ws && ws !== 'all' && (!storeIds || storeIds.includes(ws)))) return ws;
+  if (ws === 'general' || (ws === 'all' && (view === 'research' || view === 'library')) || (ws && ws !== 'all' && (!storeIds || storeIds.includes(ws)))) return ws;
   return picked.length === 1 ? picked[0]! : 'general';
 }
 

@@ -32,6 +32,7 @@ import type {
   Integration,
   IntegrationInput,
   IntegrationKind,
+  KbAskAnswer,
   KbCampaign,
   KbControls,
   KbControlsState,
@@ -200,6 +201,15 @@ export function useStartRun() {
       qc.setQueryData<AgentRunDetail>(['run', r.id], (old) => old ?? r);
       qc.invalidateQueries({ queryKey: ['runs', r.agentId] });
     },
+  });
+}
+
+/** Asks the knowledge base (KB-24): the matching cards and, with any, the Market Analyst's run that answers from them. */
+export function useAskKb() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (b: { ws: string; question: string; payerId?: string }) => api<KbAskAnswer>('/api/kb/ask', json('POST', b)),
+    onSuccess: (a) => a.run && qc.invalidateQueries({ queryKey: ['runs', a.run.agentId] }),
   });
 }
 

@@ -219,6 +219,7 @@ function toBrief(r: Row, path: (id: string) => string[], fresh: (categoryId: str
     citedCount: Number(r.cited_count),
     ...(r.verified_at ? { verifiedAt: String(r.verified_at) } : {}),
     refreshBy: new Date(Date.parse(String(r.verified_at ?? r.created_at)) + fresh(String(r.category_id)) * 86_400_000).toISOString(),
+    ...(r.hit ? { highlight: String(r.hit) } : {}),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
@@ -269,13 +270,18 @@ export function listCards(db: DatabaseSync, ws: KbWorkspace | 'all', q: KbCardQu
   if (q.verifiedTo) add('substr(verified_at, 1, 10) <= ?', q.verifiedTo);
   if (q.tag?.length) add(`EXISTS (SELECT 1 FROM json_each(tags) WHERE lower(value) IN (${q.tag.map(() => '?').join(', ')}))`, ...q.tag.map((t) => t.toLowerCase()));
   const match = q.q ? ftsQuery(q.q) : '';
-  if (match) add('seq IN (SELECT rowid FROM kb_cards_fts WHERE kb_cards_fts MATCH ?)', match);
   const offset = Math.max(0, q.offset ?? 0);
   const limit = Math.min(1000, Math.max(1, q.limit ?? 200));
   const dir = q.dir === 'asc' ? 'ASC' : 'DESC';
-  const from = `FROM kb_cards WHERE ${where.join(' AND ')}`;
-  const total = Number(db.prepare(`SELECT count(*) AS n ${from}`).get(...params)?.n);
-  const rows = db.prepare(`SELECT * ${from} ORDER BY ${SORTS[q.sort ?? 'updated']} ${dir}, seq ${dir} LIMIT ? OFFSET ?`).all(...params, limit, offset);
+  // A search ranks (bm25, title weighted as retrieval does) and marks its best passage (KB-24).
+  const hits = `JOIN (SELECT rowid AS hit_seq, bm25(kb_cards_fts, 4, 2, 1, 2) AS hit_rank, snippet(kb_cards_fts, -1, char(2), char(3), '…', 16) AS hit
+    FROM kb_cards_fts WHERE kb_cards_fts MATCH ?) h ON h.hit_seq = kb_cards.seq`;
+  const from = `FROM kb_cards ${match ? hits : ''} WHERE ${where.join(' AND ')}`;
+  const all = match ? [match, ...params] : params;
+  const sort = q.sort ?? (match ? 'relevance' : 'updated');
+  const order = sort === 'relevance' ? (match ? 'h.hit_rank ASC, seq DESC' : `updated_at DESC, seq DESC`) : `${SORTS[sort]} ${dir}, seq ${dir}`;
+  const total = Number(db.prepare(`SELECT count(*) AS n ${from}`).get(...all)?.n);
+  const rows = db.prepare(`SELECT kb_cards.*${match ? ', h.hit' : ''} ${from} ORDER BY ${order} LIMIT ? OFFSET ?`).all(...all, limit, offset);
   const path = pathsOf(db, ws);
   const fresh = freshness(db);
   return { items: rows.map((r) => toBrief(r, path, fresh)), total, offset, limit };

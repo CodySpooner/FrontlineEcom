@@ -3,7 +3,7 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { AGENT_ROLES, KB_CARD_TYPES, KB_STAGES, type KbCardBrief, type KbCardPatch } from '@frontline/shared';
-import { useKbBulk, useKbCards, useKbCategories, useKbSources } from '../api/client';
+import { useKbBulk, useKbCards, useKbCategories, useKbSources, useStores } from '../api/client';
 import { cx, ErrorState, LoadingState } from '../components/ui';
 import { ago } from '../lib/format';
 import { SavedViews } from './ArtboardPanels';
@@ -27,6 +27,7 @@ export function CardLibrary({ ws, general, q, card, set }: { ws: string; general
   const list = useKbCards(ws, { general, q, ...filters, limit });
   const paths = categoryPaths(useKbCategories(ws).data ?? []);
   const sources = useKbSources(ws, general).data ?? [];
+  const stores = useStores().data ?? [];
   const bulk = useKbBulk();
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [moving, setMoving] = useState(false);
@@ -41,7 +42,8 @@ export function CardLibrary({ ws, general, q, card, set }: { ws: string; general
 
   const f = (k: Filter) => filters[k] ?? '';
   const on = (k: Filter) => (e: { target: { value: string } }) => set({ [k]: e.target.value || undefined });
-  const sort = filters.sort ?? 'updated';
+  // A search comes best match first until a column is picked (KB-24).
+  const sort = filters.sort ?? (q.trim() ? 'relevance' : 'updated');
   const dir = filters.dir ?? 'desc';
   const head = (k: string, label: string, className?: string) => (
     <th aria-sort={sort === k ? (dir === 'asc' ? 'ascending' : 'descending') : undefined} className={cx(th, className)}>
@@ -111,14 +113,17 @@ export function CardLibrary({ ws, general, q, card, set }: { ws: string; general
             </button>
           )}
           <span className="flex-1" />
-          <div className="w-[200px]">
-            <SavedViews
-              ws={ws}
-              library
-              current={() => ({ q, general, filters })}
-              onApply={(s) => set({ ...Object.fromEntries(FILTERS.map((k) => [k, s.filters?.[k]])), q: s.q || undefined, general: s.general === false ? '0' : undefined })}
-            />
-          </div>
+          {/* A saved view belongs to one workspace. */}
+          {ws !== 'all' && (
+            <div className="w-[200px]">
+              <SavedViews
+                ws={ws}
+                library
+                current={() => ({ q, general, filters })}
+                onApply={(s) => set({ ...Object.fromEntries(FILTERS.map((k) => [k, s.filters?.[k]])), q: s.q || undefined, general: s.general === false ? '0' : undefined })}
+              />
+            </div>
+          )}
         </div>
         {(more || extra > 0) && (
           <div className="flex flex-wrap items-center gap-1.5">
@@ -234,10 +239,12 @@ export function CardLibrary({ ws, general, q, card, set }: { ws: string; general
                     </td>
                     <td className="max-w-0 min-w-[240px] px-2.5 py-2">
                       <button type="button" data-kb-card={c.id} onClick={() => set({ card: c.id })} className="block max-w-full cursor-pointer truncate text-left text-[13px] font-medium text-text hover:underline">
-                        {c.title}
+                        {c.highlight && bare(c.highlight) === c.title ? marked(c.highlight) : c.title}
                       </button>
+                      {c.highlight && bare(c.highlight) !== c.title && <p className="mt-0.5 truncate text-[11px] text-text-2">{marked(c.highlight)}</p>}
                       <span className="mt-0.5 flex items-center gap-1.5 text-[11px] text-muted">
                         {c.storeId === null && ws !== 'general' && <span className="rounded bg-line px-1.5 text-[10px] text-text-2">General</span>}
+                        {c.storeId && ws === 'all' && <span className="shrink-0 rounded bg-line px-1.5 text-[10px] text-text-2">{stores.find((s) => s.id === c.storeId)?.name ?? c.storeId}</span>}
                         {c.status !== 'active' && <span className={cx('rounded px-1.5 text-[10px]', c.status === 'proposed' ? 'bg-red/12 text-red' : 'bg-line text-text-2')}>{STATUS[c.status]}</span>}
                         <span className="truncate">{c.path.join(' › ')}</span>
                       </span>
@@ -275,3 +282,7 @@ export function CardLibrary({ ws, general, q, card, set }: { ws: string; general
     </div>
   );
 }
+
+// A search hit's best passage: its matching words come between \u0002 and \u0003. When that's the title, the title is marked.
+const bare = (hit: string) => hit.replace(/[\u0002\u0003]/g, '');
+const marked = (hit: string) => hit.split(/[\u0002\u0003]/).map((part, i) => (i % 2 ? <mark key={i} className="rounded-sm bg-red/20 px-px text-inherit">{part}</mark> : part));

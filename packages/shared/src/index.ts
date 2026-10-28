@@ -1438,6 +1438,8 @@ export interface KbCardBrief {
   verifiedAt?: string;
   /** When it needs checking again: last checked (or made) plus its category's refresh age (KB-23). */
   refreshBy?: string;
+  /** With a search (`q`): the best matching passage, each matching word between \u0002 and \u0003 (KB-24). */
+  highlight?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -1478,10 +1480,29 @@ export interface KbCardQuery {
   status?: KbCardStatus[];
   metric?: string;
   tag?: string[];
-  sort?: 'updated' | 'created' | 'title' | 'stage' | 'verified' | 'used';
+  /** With `q`, the best match first unless a sort is chosen (`relevance`; without `q` it's `updated`). */
+  sort?: 'updated' | 'created' | 'title' | 'stage' | 'verified' | 'used' | 'relevance';
   dir?: 'asc' | 'desc';
   offset?: number;
   limit?: number;
+}
+
+/** One card an answer may use, with the sources behind it (KB-24). */
+export interface KbAskCard {
+  card: KbCardBrief;
+  sources: KbSourceBrief[];
+}
+/**
+ * POST /api/kb/ask {ws: general|all|<storeId>, question (3-500), payerId?} → KbAskAnswer (KB-24). The cards matching the
+ * question in the owner's scope, by what backs them: the stores' own numbers, read sources, or nothing yet. With any,
+ * `run` is the answer: `payerId`'s Market Analyst (a store workspace's own) writing from those cards only. With none,
+ * nothing runs: the knowledge base doesn't know.
+ */
+export interface KbAskAnswer {
+  measured: KbAskCard[];
+  research: KbAskCard[];
+  unproven: KbAskCard[];
+  run?: AgentRun;
 }
 
 /**

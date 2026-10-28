@@ -203,7 +203,7 @@ function parseQuery(q: Record<string, string>): string | KbCardQuery {
     if (!isDate(q[k])) return `${k} must be YYYY-MM-DD`;
     out[k] = q[k];
   }
-  if (q.sort && !['updated', 'created', 'title', 'stage', 'verified', 'used'].includes(q.sort)) return 'sort must be updated, created, title, stage, verified or used';
+  if (q.sort && !['updated', 'created', 'title', 'stage', 'verified', 'used', 'relevance'].includes(q.sort)) return 'sort must be updated, created, title, stage, verified, used or relevance';
   if (q.q && q.q.length > 200) return 'q must be at most 200 characters';
   return {
     ...out,

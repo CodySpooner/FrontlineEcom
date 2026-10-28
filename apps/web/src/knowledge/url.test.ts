@@ -20,9 +20,11 @@ describe('the Knowledge page URL', () => {
     expect(wsFrom(p('ws=gone'), 'artboard', stores, ['peak'])).toBe('peak');
     expect(wsFrom(p(''), 'artboard', stores, ['peak', 'zen'])).toBe('general');
     expect(wsFrom(p(''), 'artboard', stores, [])).toBe('general');
-    // "All workspaces" is for the Research Center only.
+    // "All workspaces" is for the Research Center and the Library (search), not a board.
     expect(wsFrom(p('ws=all'), 'research', stores, [])).toBe('all');
+    expect(wsFrom(p('ws=all'), 'library', stores, [])).toBe('all');
     expect(wsFrom(p('ws=all'), 'artboard', stores, [])).toBe('general');
+    expect(wsFrom(p('ws=all'), 'relationships', stores, [])).toBe('general');
     // Stores still loading: trust the link.
     expect(wsFrom(p('ws=zen'), 'artboard', undefined, [])).toBe('zen');
   });

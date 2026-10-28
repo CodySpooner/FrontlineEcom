@@ -599,7 +599,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - traceability from card to source and evidence;
   - a data-retention setting (trim old logs and fetched text, keep the metadata).
   - Tests.
-- [ ] KB-24 **Search and ask:**
+- [x] KB-24 **Search and ask:**
   - ranked results with highlights in the toolbar search, using the §13 filters and an owner-only "All workspaces"
     scope;
   - "Ask the knowledge base": a natural-language answer from an agent run over the owner's allowed scope. It groups
@@ -642,6 +642,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-21 Experiments and the Campaigns library: a card's panel has a Tests section. "Plan a test" picks a metric (ROAS, click-through or conversion rate), an A and a B side made of the store's campaigns and library creatives, a window and a minimum sample on each side. Once the window's attribution has settled (30 days) and the store's ad accounts have synced past it, the app reads the two sides and writes the result on the card as evidence: worked (measured, so it climbs the ladder), failed (a conflict) or inconclusive. Demo stores can't be tested. The Library has a searchable Campaigns tab: each campaign's platform, dates, spend, ROAS, CTR and latest result, and opened, its creatives, copy and hooks, ad sets, metrics, the cards learned from it with their measurement window, and its Hypotheses as recommended tests. Products and audiences say "not linked". The Research Center's conflicts have "Plan a test".
 - 2026-10-27 KB-22 Autonomous research control: each workspace has research controls in the Research Center ("Self-directed research", Controls): whether its agents research on their own (off until the owner turns it on), which roles and the top-level categories each answers for, the triggers (contradictions, performance anomalies, knowledge gaps, stale cards), a budget per task and per day, depth, whether each task waits for approval, whether findings wait for review, and the sites to prefer or never read. Research can also run on a schedule (an automation with a research action). Every hour each store with it on starts at most one task, or one recommendation in "Agents recommend", which now shows what research like it has cost and has Dismiss. The server enforces all of it: never on the demo engine; what self-directed research made never starts more; a card and trigger wait 14 days; a topic open or researched in the last day isn't done again; contradictions research found don't start research.
 - 2026-10-27 KB-23 Maintenance: each top-level category has its own refresh age (ad platforms, creative, competitors, trends and SEO 45 days; psychology, brand, money and operations 180; the rest 90), which the owner changes in the Research Center's Controls ("Needs refresh after"). "Needs refresh" on the artboard and in the Research Center, the Knowledge gaps and the stale-card research trigger all follow it, and a stale card that gets new evidence shows as Refreshed. An hourly pass finds near-duplicate cards (Duplicate? in Latest discoveries: Merge, Compare or Not the same) and contradictions missed when cards were made (a link and an open conflict). Each workspace can keep fetched pages and research logs for 30 days to a year, or always (the default): past that, page text and finished research's logs, stage outputs and transcripts are trimmed, and the sources, tasks and reports stay.
+- 2026-10-27 KB-24 Search and ask: the Knowledge search now ranks cards by best match (unless a column sort is picked) and marks the matching words, in the title or in a passage under it; the Workspace picker has "All workspaces", which opens the Library over every store's and General's cards with each card's store named; the box says "Keyword search". Ask AI (Ctrl+K) has "Ask the knowledge base" for each store in view and, with several, for all workspaces: the store's Market Analyst answers from the matching cards only, grouped as Measured, Research and Unproven with their sources, citing each card; when no card matches, nothing runs and the palette says the knowledge base doesn't know yet, with "Research it".
 
 ## Blocked
 
@@ -957,3 +958,21 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   (KB-16), now on per-category ages. Mutation sweep: 37 of 38 killed after 6 more test cases; the one left
   (`coalesce(ended_at, '')`) is equivalent, as finished tasks always have an end time. Found for KB-26: at 390 px the
   Research Center scrolls sideways by 7 px (the view switcher and the Research Center's tab row), as before this item.
+- 2026-10-27 KB-24: `listCards` with `q` joins the FTS match for `bm25(kb_cards_fts, 4, 2, 1, 2)` (retrieval's
+  weights) and `snippet(-1)` with \u0002/\u0003 marks, served as `KbCardBrief.highlight`; the new sort `relevance` is
+  the default with a query (without one it is newest first; agents already search ranked, via `retrieveKnowledge`). Web: the
+  Library marks the title when the snippet is the title, else shows the passage; `wsFrom` allows `all` in the Library
+  (the boards stay one workspace; picking All from them opens the Library); saved views hide there (they belong to one
+  workspace); opening a result still moves to the card's own workspace, as any `?card=` link does.
+  `POST /api/kb/ask` (apps/server/src/kb/ask.ts, mounted in routes/agents.ts for `runs`) takes
+  `{ws: general|all|<store>, question, payerId?}`: cards come from `retrieveKnowledge` as the Market Analyst gets them
+  (active, not blocked, store + General; for all, each store's best 4 own and General's best 4), split by evidence
+  (any measured → Measured, else any research → Research, else Unproven), each with its sources. No card means no run
+  and `{measured: [], research: [], unproven: []}`; otherwise the store's (or `payerId`'s) Market Analyst gets a task
+  that lists them with `[kb:id]` and source titles, to answer from them only, grouped, and to say plainly what the KB
+  doesn't know. The answer is the ordinary chat (`/agents/<id>?run=`), whose `[kb:]` citations link to the cards
+  (KB-17), under the owner's message showing the grouped cards. Budgets and offline agents refuse as any run does
+  (409, with the palette's fix link). Semantic layer (decision 12): not built, as no embeddings provider is configured
+  anywhere in the app; search and ask are keyword (FTS5/bm25) plus metadata and links, and the UI says "Keyword
+  search". Adding one means a provider in Integrations, an embeddings table filled on card save, and blending its
+  cosine score into `matches()` in kb-retrieve.ts.

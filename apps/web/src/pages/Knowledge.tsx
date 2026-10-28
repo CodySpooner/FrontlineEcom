@@ -136,7 +136,14 @@ function Toolbar({ ws, view, general, q, set, search, onResearch, children }: { 
         <>
           <span className="relative flex items-center">
             <i aria-hidden className="pointer-events-none absolute left-3 size-[7px] rounded-full" style={{ background: store?.color ?? 'var(--color-muted)' }} />
-            <select aria-label="Workspace" value={ws} onChange={(e) => set({ ws: e.target.value, card: undefined })} className={cx(inputClass, 'cursor-pointer pl-7')}>
+            {/* All workspaces is a search over every store's cards (KB-24): the Library's, as the boards are one workspace's. */}
+            <select
+              aria-label="Workspace"
+              value={ws}
+              onChange={(e) => set({ ws: e.target.value, card: undefined, ...(e.target.value === 'all' && { view: 'library' }) })}
+              className={cx(inputClass, 'cursor-pointer pl-7')}
+            >
+              <option value="all">All workspaces</option>
               <option value="general">General · {cards('general')}</option>
               {stores.map((s) => (
                 <option key={s.id} value={s.id}>
@@ -156,7 +163,7 @@ function Toolbar({ ws, view, general, q, set, search, onResearch, children }: { 
       <label className="relative min-w-[180px] max-w-[320px] flex-1">
         <span className="sr-only">Search knowledge</span>
         <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
-        <input ref={search} type="search" value={q} onChange={(e) => set({ q: e.target.value || undefined })} placeholder="Search knowledge…" className={cx(inputClass, 'w-full pl-9')} />
+        <input ref={search} type="search" value={q} onChange={(e) => set({ q: e.target.value || undefined })} placeholder="Keyword search…" className={cx(inputClass, 'w-full pl-9')} />
       </label>
       <Button onClick={() => onResearch('source')}>
         <Link2 aria-hidden className="size-4" /> From source

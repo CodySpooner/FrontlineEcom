@@ -1,8 +1,9 @@
-// UI-19 Ask AI palette (Ctrl+K): ask the selected store's Market Analyst, or jump to a page.
+// UI-19 Ask AI palette (Ctrl+K): ask the selected store's Market Analyst or the knowledge base (KB-24), or jump to a page.
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { useNavigate } from 'react-router';
-import { Search, Sparkles, type LucideIcon } from 'lucide-react';
-import { useStartRun } from '../api/client';
+import { Link, useNavigate } from 'react-router';
+import { BookOpen, Search, Sparkles, type LucideIcon } from 'lucide-react';
+import { useAskKb, useStartRun } from '../api/client';
+import { researchHref } from '../knowledge/url';
 import { matchPages } from '../lib/palette';
 import { NAV } from '../nav';
 import { FixLink } from './Chat';
@@ -54,7 +55,11 @@ function Palette({ start: begun, onClose }: { start: AskStart; onClose: () => vo
   // One row per store in view (the first is Enter's default), so a question never lands on a store the owner didn't mean.
   const inView = stores.filter((s) => (begun.storeId ? s.id === begun.storeId : has(s.id)));
   const start = useStartRun();
+  const kb = useAskKb();
+  const busy = start.isPending || kb.isPending;
   const ask = q.trim();
+  // The knowledge base answers for each store in view (with General), or across every workspace.
+  const scopes = [...inView.map((s) => ({ ws: s.id, name: s.name })), ...(inView.length > 1 ? [{ ws: 'all', name: 'All workspaces' }] : [])];
   const go = (path: string) => {
     navigate(path);
     onClose();
@@ -65,7 +70,21 @@ function Palette({ start: begun, onClose }: { start: AskStart; onClose: () => vo
       icon: Sparkles,
       label: ask,
       hint: `Ask the Market Analyst · ${store.name}`,
-      run: () => start.mutate({ agentId: `${store.id}:market_analyst`, task: ask }, { onSuccess: (r) => go(`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`) }),
+      run: () => {
+        kb.reset();
+        start.mutate({ agentId: `${store.id}:market_analyst`, task: ask }, { onSuccess: (r) => go(`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`) });
+      },
+    })),
+    // A store's Market Analyst writes the answer from the cards; across all workspaces, the first store's.
+    ...(ask ? scopes : []).map((w) => ({
+      key: `kb:${w.ws}`,
+      icon: BookOpen,
+      label: ask,
+      hint: `Ask the knowledge base · ${w.name}`,
+      run: () => {
+        start.reset();
+        kb.mutate({ ws: w.ws, question: ask, ...(w.ws === 'all' && { payerId: inView[0]!.id }) }, { onSuccess: (a) => a.run && go(`/agents/${encodeURIComponent(a.run.agentId)}?run=${a.run.id}`) });
+      },
     })),
     ...matchPages(q, NAV).map((p) => ({ key: p.path, icon: p.icon, label: p.label, hint: 'Go to page', run: () => go(p.path) })),
   ];
@@ -74,7 +93,7 @@ function Palette({ start: begun, onClose }: { start: AskStart; onClose: () => vo
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       setActive((sel + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % Math.max(1, items.length));
-    } else if (e.key === 'Enter' && !start.isPending) {
+    } else if (e.key === 'Enter' && !busy) {
       e.preventDefault();
       items[sel]?.run();
     }
@@ -109,12 +128,12 @@ function Palette({ start: begun, onClose }: { start: AskStart; onClose: () => vo
             role="option"
             aria-selected={i === sel}
             onMouseMove={() => setActive(i)}
-            onClick={() => !start.isPending && it.run()}
+            onClick={() => !busy && it.run()}
             className={cx('flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2', i === sel && 'bg-panel-2')}
           >
             <it.icon className={cx('size-4 shrink-0', it.key === 'ask' ? 'text-red' : 'text-muted')} aria-hidden />
             <span className="min-w-0 flex-1 truncate text-[13px]">{it.label}</span>
-            <span className="shrink-0 text-xs text-muted">{start.isPending && it.key === `ask:${start.variables?.agentId}` ? 'Asking…' : it.hint}</span>
+            <span className="shrink-0 text-xs text-muted">{(start.isPending && it.key === `ask:${start.variables?.agentId}`) || (kb.isPending && it.key === `kb:${kb.variables?.ws}`) ? 'Asking…' : it.hint}</span>
           </li>
         ))}
         {!items.length && <li className="px-3 py-6 text-center text-[13px] text-muted">No page by that name.</li>}
@@ -122,6 +141,19 @@ function Palette({ start: begun, onClose }: { start: AskStart; onClose: () => vo
       {start.isError && (
         <p role="alert" className="px-5 pb-2 text-xs text-red">
           {start.error.message} <FixLink message={start.error.message} agentId={start.variables?.agentId ?? ''} onClick={onClose} />
+        </p>
+      )}
+      {kb.isError && (
+        <p role="alert" className="px-5 pb-2 text-xs text-red">
+          {kb.error.message} <FixLink message={kb.error.message} agentId={`${kb.variables.payerId ?? kb.variables.ws}:market_analyst`} onClick={onClose} />
+        </p>
+      )}
+      {kb.isSuccess && !kb.data.run && (
+        <p role="status" className="px-5 pb-2 text-xs text-text-2">
+          The knowledge base doesn't know yet: no card answers {`"${kb.variables.question}"`}.{' '}
+          <Link to={researchHref(kb.variables.payerId ?? kb.variables.ws, kb.variables.question)} onClick={onClose} className="text-red hover:underline">
+            Research it
+          </Link>
         </p>
       )}
       <p className="border-t border-line px-5 py-2 text-[11px] text-muted">↑ ↓ to move · Enter to open · Esc to close</p>

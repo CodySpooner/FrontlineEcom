@@ -68,6 +68,33 @@ describe('Knowledge Library › cards', () => {
     expect(await within(panel).findByRole('heading', { name: 'Card b' })).toBeTruthy();
   });
 
+  it('a search ranks by best match and marks the matching words; All workspaces says whose each card is', async () => {
+    const hit = brief('b', 'peak', { highlight: '…open on the \u0002hooks\u0003 first' });
+    const title = brief('a', 'peak', { title: 'Hooks first', highlight: '\u0002Hooks\u0003 first' });
+    const fetch = library('/knowledge?ws=peak&view=library&q=hooks', 2, [hit, title]);
+    const table = await screen.findByRole('table', { name: 'Cards' });
+    expect(within(table).getByText('hooks').tagName).toBe('MARK');
+    expect(within(table).getByText(/open on the/).textContent).toBe('…open on the hooks first');
+    // Only the title matched: it's marked there, not repeated.
+    expect(within(within(table).getByRole('button', { name: 'Hooks first' })).getByText('Hooks').tagName).toBe('MARK');
+    expect(within(table).getAllByText('Hooks')).toHaveLength(1);
+    expect(within(table).getByRole('columnheader', { name: 'Updated' }).getAttribute('aria-sort')).toBeNull();
+    expect(lastList(fetch)).toEqual({ ws: 'peak', general: '1', q: 'hooks', limit: '200' });
+    expect(screen.getByRole('searchbox', { name: 'Search knowledge' }).getAttribute('placeholder')).toBe('Keyword search…');
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace' }), { target: { value: 'all' } });
+    expect(where()).toBe('/knowledge?ws=all&view=library&q=hooks');
+    await vi.waitFor(() => expect(lastList(fetch)).toMatchObject({ ws: 'all', q: 'hooks' }));
+    expect(within(table).getAllByText('Peak Fit')).toHaveLength(2);
+    expect(screen.queryByRole('combobox', { name: 'Saved views' })).toBeNull(); // a view belongs to one workspace
+  });
+
+  it('All workspaces from the artboard opens the Library, which can search them all', async () => {
+    library('/knowledge?ws=peak');
+    fireEvent.change(await screen.findByRole('combobox', { name: 'Workspace' }), { target: { value: 'all' } });
+    expect(where()).toBe('/knowledge?ws=all&view=library');
+  });
+
   it('filters by every §13 field and clears them', async () => {
     const fetch = library();
     await screen.findByRole('table', { name: 'Cards' });
