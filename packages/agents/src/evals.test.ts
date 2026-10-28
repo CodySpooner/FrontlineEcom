@@ -1,7 +1,7 @@
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type Store } from '@frontline/shared';
 import { readFileSync } from 'node:fs';
 import { expect, test } from 'vitest';
-import { APP_TOOLS, assemblePrompt, BUILTIN_TYPES, CHECKS_LAST, contractOf, contractText, DEFAULT_JOBS, MISSION_TEMPLATES, playbook, ROLES, SQUAD_RULES, toolsFor, validateCustomRole, WORKFLOW_FIRST } from './index';
+import { APP_TOOLS, assemblePrompt, BUILTIN_TYPES, CHECKS_LAST, contractOf, contractText, DEFAULT_JOBS, MISSION_TEMPLATES, playbook, ROLES, runTools, SQUAD_RULES, toolsFor, validateCustomRole, WORKFLOW_FIRST } from './index';
 
 // Evals: the text an agent is given must only ask for tools that agent actually has. Catches drift whenever a
 // playbook, a role prompt, the squad rules, a scheduled job or a mission template is edited without updating the role's tool list.
@@ -25,7 +25,8 @@ test('every role tool exists, and app tools are all wired', () => {
 test.each(ROLE_IDS)('%s is only told to use tools it has', (role) => {
   expect(mentioned(playbook(role)).size, 'playbook names its tools').toBeGreaterThan(2);
   const jobs = [...DEFAULT_JOBS, ...MISSION_TEMPLATES.flatMap((m) => m.steps)].filter((j) => j.role === role).map((j) => j.task);
-  const missing = [...mentioned([playbook(role), contractText(contractOf(ROLES[role])), SQUAD_RULES, ...jobs].join('\n'))].filter((t) => !ROLES[role].tools.includes(t as never));
+  const has = new Set<string>([...ROLES[role].tools, ...runTools(role).map((t) => t.name)]); // save_research_report: every Product Researcher run (T4)
+  const missing = [...mentioned([playbook(role), contractText(contractOf(ROLES[role])), SQUAD_RULES, ...jobs].join('\n'))].filter((t) => !has.has(t));
   expect(missing).toEqual([]);
 });
 
@@ -61,8 +62,9 @@ test("a custom role narrows its base role's tools and adds its instructions to t
 
 test('every app tool is used by some role', () => {
   const used = new Set(ROLE_IDS.flatMap((r) => ROLES[r].tools));
-  // save_finding comes with a config's save-findings setting, not with a role (decision 11).
-  expect(APP_TOOLS.map((t) => t.name).filter((t) => !used.has(t) && t !== 'save_finding')).toEqual([]);
+  // save_finding comes with a config's save-findings setting, not with a role (decision 11); save_research_report with every
+  // Product Researcher run, whatever its config lists (product-research T4).
+  expect(APP_TOOLS.map((t) => t.name).filter((t) => !used.has(t) && t !== 'save_finding' && t !== 'save_research_report')).toEqual([]);
 });
 
 test('every approval kind an agent tool or engine produces has an owner-facing label', () => {

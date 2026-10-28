@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ConversationConfigInput, PrAgentRow, PrDiscovery, PrOwnerDetails, PrPreview, PrProductDetail, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask } from '@frontline/shared';
+import type { ConversationConfigInput, PrAgentRow, PrDiscovery, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -89,3 +89,10 @@ export interface PrTaskStart {
   config?: ConversationConfigInput;
 }
 export const useStartTask = (store: string) => usePrWrite<PrTaskStart, PrTask>(() => `/api/pr/tasks?${scope(store)}`);
+
+/** The Research tab (decision 7): the product's tasks in the store, newest first, and every report on it. */
+export const useTasks = (store: string, product: string) =>
+  useQuery({ queryKey: ['pr', 'tasks', store, product], queryFn: () => api<PrTask[]>(`/api/pr/tasks?${scope(store)}&product=${enc(product)}`) });
+export const useReports = (store: string, product: string) =>
+  useQuery({ queryKey: ['pr', 'reports', store, product], queryFn: () => api<PrReport[]>(`/api/pr/products/${enc(product)}/reports?${scope(store)}`) });
+export const useRetryTask = (store: string) => usePrWrite<{ id: string }, PrTask>((b) => `/api/pr/tasks/${enc(b.id)}/retry?${scope(store)}`);

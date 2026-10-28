@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { PrCard, PrDemandTab, PrDiscovery, PrHistoryRow, PrOffer, PrProductDetail, PrSourceHealth, PrSourceState, PrStoreProfile, Store } from '@frontline/shared';
+import type { PrCard, PrDemandTab, PrDiscovery, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { discoveryQuery } from '../product-research/Filters';
 import { sourceItem } from '../product-research/format';
@@ -237,7 +237,7 @@ describe('Detail panel', () => {
   beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })); // jsdom has none; the Demand chart tracks its width
   const detail = (o: Partial<PrProductDetail> = {}): PrProductDetail => ({
     card: card({ fixture: false }), currency: 'USD', shipTo: 'US', sku: 'CJ-BRUSH-M', url: 'https://cjdropshipping.com/p/1',
-    assessment: { fit: { fit: 'weak', reasons: ['battery', 'Missing price band'] }, demand: { level: 'moderate', sets: 1, ownOrders: false }, flags: [], confidence: { level: 'low', count: 1, has: { demand: true, offer: false, economics: false, report: false } } },
+    assessment: { fit: { fit: 'weak', reasons: ['battery', 'Missing price band'] }, demand: { level: 'moderate', sets: 1, ownOrders: false }, flags: [], confidence: { level: 'low', count: 1, has: { demand: true, offer: false, economics: false, report: false } }, report: null },
     notes: null, agentEstimates: null, stores: [], ...o,
   });
   const set: PrDemandTab['sets'][number] = {
@@ -250,6 +250,29 @@ describe('Detail panel', () => {
     processingDays: null, moq: null, shipsFrom: 'CN', stock: [{ warehouse: 'CN', units: 120 }], provenance: 'live', checkedAt: '2026-10-27T00:00:00Z', status: 'pending', reasons: ['Shipping cost unknown'],
   };
   const history: PrHistoryRow[] = [{ id: 'h1', storeId: 'paws', kind: 'stage', from: null, to: 'discovered', reason: 'Assigned from All stores', by: 'owner', at: '2026-10-27T00:00:00Z' }];
+  const prTask = (o: Partial<PrTask> = {}): PrTask => ({
+    id: 't1', storeId: 'paws', productId: 'p1', listingId: null, url: null, instructions: 'Evaluate this product for the store.', template: 'full_evaluation', mode: 'new', type: 'product_hunter',
+    conversationId: 'c1', runId: 'r1', status: 'running', detail: null, canRetry: false, createdAt: '2026-10-28T10:42:00Z', updatedAt: '2026-10-28T10:44:00Z', ...o,
+  });
+  const tasks = [prTask(), prTask({ id: 't0', conversationId: 'c0', runId: 'r0', status: 'failed', detail: 'Claude had a server error.', canRetry: true })];
+  const run = {
+    id: 'r1', status: 'running', createdAt: '2026-10-28T10:42:00Z',
+    transcript: [
+      { type: 'tool_call', id: 'a', name: 'mcp__frontline__search_suppliers', input: { query: 'dog brush' } },
+      { type: 'tool_result', id: 'a', output: 'sku,title', isError: false },
+      { type: 'tool_call', id: 'b', name: 'mcp__frontline__WebFetch', input: { url: 'https://www.example.com/brush' } },
+    ],
+  };
+  const real: PrReport['body'] = {
+    recommendation: 'shortlist', summary: 'Worth a small test.', purpose: 'Removes pet hair.', customer_problem: 'Hair on the sofa.', store_fit: { fit: 'strong', why: 'Pet grooming is the niche.' },
+    demand_evidence: 'Steady interest.', competitors: [{ name: 'Brushy', price: '$19.99', source: 'https://brushy.example/p' }], supplier_offers: [], risks: ['Bristles break.'], next_steps: ['Order a sample.'],
+    evidence: [{ claim: 'CJ lists it at $3.42', kind: 'measured', source: '[offer:o1]' }], open_questions: ['Shipping time?'], would_change_if: 'A 20-day delivery.',
+    proposals: [{ kind: 'ad_angle', text: 'No more hair on the sofa.' }], unknown_reasons: { supplier_offers: 'No offer verified yet.' },
+  };
+  const reports: PrReport[] = [
+    { id: 'rep2', taskId: 't1', runId: 'r1', conversationId: 'c1', runtime: 'claude', demo: false, createdAt: '2026-10-28T11:00:00Z', body: real },
+    { id: 'rep1', taskId: 't0', runId: 'r0', conversationId: 'c0', runtime: 'demo', demo: true, createdAt: '2026-10-27T11:00:00Z', body: { ...real, recommendation: 'reject', summary: 'Demo engine: scripted example.' } },
+  ];
   const panelApi = (d = detail()) =>
     stubApi((url) => {
       if (url.startsWith('/api/stores')) return [store, { ...store, id: 'glow', name: 'Glow Haus' }];
@@ -257,6 +280,11 @@ describe('Detail panel', () => {
       if (url.includes('/demand?')) return { sets: [set], suggested: [{ ...set, id: 's2', scope: 'query' }], notes: [] } satisfies PrDemandTab;
       if (url.includes('/offers?')) return [offer];
       if (url.includes('/history?')) return history;
+      if (url.includes('/reports?')) return reports;
+      if (url.includes('/retry?')) return { ...tasks[1], status: 'queued' };
+      if (url.startsWith('/api/pr/tasks?')) return tasks;
+      if (url.startsWith('/api/runs/')) return run;
+      if (url.startsWith('/api/conversations/')) return {};
       if (url.includes('/assign')) return { ok: true };
       if (url.startsWith('/api/pr/signals/')) return {};
       if (url.startsWith('/api/pr/products/')) return d;
@@ -276,7 +304,7 @@ describe('Detail panel', () => {
     expect(within(panel).getByText(/SKU CJ-BRUSH-M/)).toBeTruthy();
     expect(within(panel).getByText('battery; Missing price band')).toBeTruthy();
     expect(within(panel).getByText('Moderate')).toBeTruthy();
-    expect(within(panel).getAllByText('Not assessed yet')).toHaveLength(2); // economics and differentiation, until PR-18 and PR-17
+    expect(within(panel).getAllByText('Not assessed yet')).toHaveLength(2); // economics until PR-18, differentiation until a real report
     expect(within(panel).getByText('Evidence confidence: Low')).toBeTruthy();
     expect(within(panel).queryByRole('tab', { name: 'Economics' })).toBeNull(); // decision 1: absent until PR-18
     expect(within(panel).queryByRole('combobox', { name: 'Assign to a store' })).toBeNull(); // store scope
@@ -350,6 +378,34 @@ describe('Detail panel', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Add note' }));
     await waitFor(() => expect(calls(f, '/api/pr/products/p1/notes?store=paws')).toHaveLength(1));
     expect(bodyOf(f, '/notes?')).toMatchObject({ platform: 'tiktok_creative_center', url: 'https://ads.tiktok.com/business/creativecenter/x', note: '3 creators posted it this week' });
+  });
+
+  it('Research: the latest task with its real activity, Cancel run and Retry, then every report, the demo one labelled', async () => {
+    const f = panelApi(detail({ assessment: { ...detail().assessment, report: { createdAt: '2026-10-28T11:00:00Z', risks: ['Bristles break.'], proposals: real.proposals } } }));
+    renderApp(<Research />, '/research?store=paws&product=p1&tab=research');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    const activity = await within(panel).findByRole('list', { name: 'Activity' });
+    expect(within(activity).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Searched suppliers for "dog brush" ', 'Read example.com now']);
+    expect(within(panel).getAllByRole('link', { name: 'Open conversation in AI Agents' })[0]!.getAttribute('href')).toBe('/agents/c/c1?store=paws');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Cancel run' }));
+    await waitFor(() => expect(calls(f, '/api/conversations/c1/stop?store=paws')).toHaveLength(1));
+    expect(bodyOf(f, '/api/conversations/c1/stop')).toEqual({ runId: 'r1' });
+    expect(within(panel).getByText('Claude had a server error.')).toBeTruthy(); // the earlier task, as it ended
+    fireEvent.click(within(panel).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(calls(f, '/api/pr/tasks/t0/retry?store=paws')).toHaveLength(1));
+
+    expect(within(panel).getByText('Reports (2)')).toBeTruthy();
+    expect(within(panel).getByText('Shortlist for testing')).toBeTruthy();
+    expect(within(panel).getByText('Demo engine · scripted example, not research')).toBeTruthy();
+    expect(within(panel).queryByText('Reject')).toBeNull(); // a demo report has no recommendation
+    expect(within(panel).getByText('Proposals, not evidence')).toBeTruthy();
+    expect(within(panel).getByText('Unknown: No offer verified yet.')).toBeTruthy();
+    expect(within(panel).getByRole('link', { name: 'https://brushy.example/p' }).getAttribute('rel')).toBe('noopener noreferrer');
+
+    fireEvent.click(within(panel).getByRole('tab', { name: 'Overview' }));
+    expect(await within(panel).findByText('Proposal, not evidence')).toBeTruthy();
+    expect(within(panel).getByText('Ad angle: No more hair on the sofa.')).toBeTruthy();
+    expect(within(panel).getByText('From the report of Oct 28, 2026: Bristles break.')).toBeTruthy();
   });
 
   it("Watch: the card's eye watches without opening the card; All stores' panel watches for all stores", async () => {

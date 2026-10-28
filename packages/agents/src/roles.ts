@@ -34,6 +34,7 @@ export type ToolName =
   | 'request_approval'
   | 'ask_owner'
   | 'save_finding'
+  | 'save_research_report'
   | 'create_creative'
   | 'search_knowledge'
   | 'recommend_research'
@@ -169,10 +170,11 @@ export const ROLES: Record<AgentRole, RoleSpec> = {
     workflow: [
       "Start from the research feed and the store's own catalog (research_feed, list_products), so you don't propose what it already sells.",
       'Score each candidate on margin, demand trend, saturation, shipping and fit with the niche.',
+      'When the task names a research task id, finish by calling save_research_report once.',
     ],
     knowledge: ['products', 'sourcing', 'suppliers', 'trends'],
     outputs: ['A short list of candidates, each with landed cost, suggested price, margin and the angle that would sell it.', 'Adding a product as a request for the owner to approve.'],
-    checks: ['Every margin is after landed cost and platform fees.'],
+    checks: ['Every margin is after landed cost and platform fees.', 'No guaranteed-winner language and no sales or revenue projections; a recommendation is not a validated fact.'],
     task: 'Product research',
   },
   store_developer: {

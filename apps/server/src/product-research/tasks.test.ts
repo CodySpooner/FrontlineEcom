@@ -45,7 +45,7 @@ test('a new task opens a product conversation with the four-part message; a repe
   expect(message.length).toBeLessThan(20_000);
   expect(message).toContain(`Research task ${t.id} for product ${p}`);
   expect(message).toContain(`## The owner's instructions\nIs it worth testing?\n${'x'.repeat(5_900)}`); // verbatim
-  expect(message).toMatch(/## Product facts\n[\s\S]*> - Listing: Dog travel water bowl · source cj/);
+  expect(message).toMatch(/## Product facts\n[\s\S]*> - \[listing:[\w-]+\] Listing: Dog travel water bowl · source cj/); // a reference a report can cite
   expect(message).toMatch(/## Earlier in Pawsome Gear\n[\s\S]*> Stage: Discovered/);
   // Decision 5's one automatic move, recorded as the task's.
   expect(db.prepare(`SELECT from_stage, to_stage, by FROM pr_stage_history WHERE store_id = 'pawsome' AND product_id = ? AND kind = 'stage'`).all(p).map((r) => ({ ...r }))).toEqual([{ from_stage: 'discovered', to_stage: 'researching', by: t.id }]);
@@ -55,7 +55,7 @@ test('a new task opens a product conversation with the four-part message; a repe
   expect(((await again.json()) as PrTask).runId).toBe(t.runId);
   await idle();
   const list = await json<PrTask[]>(send('GET', `/api/pr/tasks?store=pawsome&product=${p}`));
-  expect(list.map((x) => [x.id, x.status])).toEqual([[t.id, 'finished_without_report']]); // the scripted engine saves no report
+  expect(list.map((x) => [x.id, x.status])).toEqual([[t.id, 'report_ready']]); // the scripted engine's report (T5)
   stop();
   expect(seen).toContainEqual({ type: 'research_task', storeId: 'pawsome', taskId: t.id, productId: p }); // the page refetches (T8)
   expect((await send('GET', `/api/pr/tasks/${t.id}?store=glow`)).status).toBe(404); // another store's task
@@ -145,13 +145,14 @@ test('an app restart mid-run leaves the task Interrupted; Retry goes on in its c
   expect(again.runId).not.toBe(t.runId);
   expect(getRun(db, again.runId!)!.task).toBe(getRun(db, t.runId!)!.task);
   await idle();
-  expect((await json<PrTask>(send('GET', `/api/pr/tasks/${t.id}?store=pawsome`))).status).toBe('finished_without_report');
+  expect((await json<PrTask>(send('GET', `/api/pr/tasks/${t.id}?store=pawsome`))).status).toBe('report_ready'); // the retry's run reported
   expect((await send('POST', `/api/pr/tasks/${t.id}/retry?store=pawsome`, {})).status).toBe(409); // nothing to retry
 });
 
 test("the discovery Research filter and the card footer show the latest task's state, the same as the task", async () => {
   const t = await json<PrTask>(task());
   await idle();
+  db.prepare('DELETE FROM pr_reports WHERE task_id = ?').run(t.id); // the scripted report: the run ends without one
   const products = (q: string, store = 'pawsome') => send('GET', `/api/pr/products?store=${store}&${q}`);
   const footer = async (status: string) => {
     const page = await json<PrDiscovery>(products(`research=${status}`));

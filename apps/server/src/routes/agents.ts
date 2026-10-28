@@ -74,6 +74,7 @@ import { askKnowledge } from '../kb/ask';
 import { kbFetch } from '../kb/fetch-instance';
 import { researchRoutes } from '../research';
 import { mirrorFind } from '../product-research/legacy';
+import { saveReport } from '../product-research/reports';
 import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftThemeCopy, EXPIRED_DEMO, onApproved, onDecision, publishDraft, publishThemeChange, rememberDenial, type PushPage, type SetPrice, type WriteAd } from './agents-actions';
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
@@ -160,6 +161,7 @@ const setPrice =
 export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): ToolEnv => ({
   db,
   kbFetch: (url, opts) => kbFetch(url, opts),
+  saveResearchReport: (task, report, run) => saveReport(db, task, report, run), // product-research T4
   approvals: approvalsHook(db),
   decide: (id, decision) => decide(db, id, decision),
   caps: (storeId) => getCaps(db, storeId),

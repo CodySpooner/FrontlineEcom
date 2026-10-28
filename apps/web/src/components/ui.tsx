@@ -169,10 +169,10 @@ export function Segmented<T extends string | number>({ label, options, value, on
 
 /** Underlined tab bar (store tabs, page sections). `color` adds an identity dot. */
 // `count` (opt-in): a muted number after the label, e.g. Product Research's server counts per view.
-export function Tabs<T extends string>({ label, tabs, value, onChange }: { label: string; tabs: { value: T; label: string; color?: string; count?: number }[]; value: T; onChange: (v: T) => void }) {
+export function Tabs<T extends string>({ label, tabs, value, onChange, className }: { label: string; tabs: { value: T; label: string; color?: string; count?: number }[]; value: T; onChange: (v: T) => void; className?: string }) {
   const { onKeyDown, stop } = roving(tabs.map((t) => t.value), value, onChange);
   return (
-    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="flex gap-1 overflow-x-auto [scrollbar-width:none] shadow-[inset_0_-1px_0_var(--color-line)]">
+    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className={cx('flex gap-1 overflow-x-auto [scrollbar-width:none] shadow-[inset_0_-1px_0_var(--color-line)]', className)}>
       {tabs.map((t, i) => (
         <button
           key={t.value}

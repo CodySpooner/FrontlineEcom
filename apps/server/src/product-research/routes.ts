@@ -15,6 +15,7 @@ import { runDue, stoppedReason, syncNow } from './jobs';
 import { cachedImage, listingImageRef, queueImage } from './images';
 import { checkUrl, ownerDetails, preview } from './preview';
 import { getProfile, saveProfile } from './profile';
+import { productReports } from './reports';
 import { scopeOf, storeOf } from './scope';
 import { ADAPTERS, sourceHealth, sourceStates } from './sources';
 import { INSTRUCTIONS_MAX, agentRows, getTask, listTasks, retryTask, startTask, type TaskInput } from './tasks';
@@ -189,6 +190,13 @@ export function prRoutes(db: Db, key: () => Buffer) {
       const task = getTask(db, c.req.param('id'), store.id);
       return task ? c.json(task) : c.json({ error: 'Research task not found' }, 404);
     })
+    // Every report on the product in the store, newest first (decision 7).
+    .get('/api/pr/products/:id/reports', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      return c.json(productReports(db, store.id, c.req.param('id')));
+    })
     .post('/api/pr/tasks/:id/retry', async (c) => {
       const store = storeOf(c, db);
       if (store instanceof Response) return store;
@@ -290,7 +298,18 @@ function watchTasks(db: Db) {
   subscribe((m) => {
     if (m.type !== 'run') return;
     try {
-      const t = db.prepare('SELECT id, store_id, product_id FROM pr_tasks WHERE run_id = ?').get(m.run.id);
+      let t = db.prepare('SELECT id, store_id, product_id FROM pr_tasks WHERE run_id = ?').get(m.run.id);
+      // The task takes its run at the run's first event, as launch() will: the scripted engine reports before start() returns.
+      // AI Agents' Retry or Resume of the task's run (runs.start links `retry:<old>:<new>`): the task follows the new run.
+      const linked =
+        !t &&
+        db
+          .prepare(
+            `SELECT t.id, t.store_id, t.product_id FROM pr_tasks t WHERE EXISTS (SELECT 1 FROM done_once WHERE ref = 'retry:' || t.run_id || ':' || ?1)
+               OR (t.run_id IS NULL AND EXISTS (SELECT 1 FROM agent_runs r WHERE r.id = ?1 AND r.store_id = t.store_id AND r.client_request_id = t.client_request_id))`,
+          )
+          .get(m.run.id);
+      if (linked) db.prepare('UPDATE pr_tasks SET run_id = ? WHERE id = ?').run(m.run.id, String((t = linked).id));
       if (t) publish({ type: 'research_task', storeId: String(t.store_id), taskId: String(t.id), productId: String(t.product_id) });
     } catch {
       /* a closed test database */

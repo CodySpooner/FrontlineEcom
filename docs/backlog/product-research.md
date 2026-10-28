@@ -756,7 +756,7 @@ STOP.
   this item.
 
 ### Research persistence
-- [ ] PR-17 **Reports** (decision 7): `save_research_report` with the role grant and contract lines (T4) and the
+- [x] PR-17 **Reports** (decision 7): `save_research_report` with the role grant and contract lines (T4) and the
   scripted branch (T5), `pr_reports`, the Research tab with every report, the demo-engine label, "Finished without a
   report", the after-Start progress card with real activity lines, "Open conversation in AI Agents", "Cancel run" and
   Retry. Tests: an old config and a narrowed custom role still get the tool; a second call from the same run is
@@ -944,6 +944,19 @@ STOP.
   <reason>"; `PrAgentRow.budgetUsd`. PR-15 follow-ups: decision 5's automatic Discovered → Researching when a task
   starts (by the task), T7's 429 test. Tests: 3 new API tests and 2 extended, 3 dialog, 1 Deploy (T1), page checks. Checked in the dev app on
   the fake engine (see Notes).
+- 2026-10-28 PR-17 Reports: `save_research_report` (T4) with every decision 7 field, an empty list's
+  `unknown_reasons`, granted to every Product Researcher run whatever its config lists (configs and narrowed custom
+  roles saved before the tool), and the two contract lines. The server half (`reports.ts`) takes product and listing
+  from the task row, accepts only the task's run in the task's store, once ("Report already saved for this run"), and
+  refuses evidence or offers citing a fixture or demo row, or a reference that isn't a fact. The task's facts now carry
+  `[listing:…]`, `[offer:…]` and `[set:…]` references to cite. The scripted engine (T5) saves a fixed report marked
+  demo; demo reports show "Demo engine · scripted example, not research" with no recommendation and never feed the
+  assessment, the confidence count or the next task's history. The panel's Research tab: the latest task with its
+  run's real activity lines, the queue or failure detail, "Open conversation in AI Agents", "Cancel run" (the
+  conversation's stop) and Retry; earlier tasks with "Finished without a report"; every report, newest open. Overview's
+  Differentiation and Risk read the latest real report ("Proposal, not evidence"); evidence confidence counts a real
+  report with measured evidence. Start opens the product on its Research tab. Tests: 4 API (one end to end: link,
+  existing listing, store, agent, instructions, start, report, restart), 1 roles (T4), 1 page; existing tests updated.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -975,6 +988,24 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-17 as built.** Report fields are snake_case as decision 7 names them (`customer_problem`, `open_questions`…).
+  A report is a demo when the scripted engine saved it (`engine = 'scripted'`, set by the fake engine's tool context)
+  or its run's runtime is Demo: a run forced onto the fake engine under a Claude config is still labelled. The task
+  takes its run at the run's first event (`watchTasks`, matched by the client request id they share), because the
+  scripted engine reports before `start()` returns; AI Agents' own Retry or Resume of that run moves the task to the
+  new run (`retry:<old>:<new>`), which is decision 7's "retry chain". A free-text source naming a fixture is refused
+  too. The panel's tab row now wraps like the board's (an optional `className` on `Tabs`, default unchanged): five
+  tabs don't fit the 346 px panel. `apps/web/src/agents/activity.ts` (ai-agents' file, that lane has stopped): one
+  phrase for the tool and a refused save shown as a warning, as decision 1's fallback; the page test covers the phrase.
+  `packages/agents/src/evals.test.ts` (same fallback): its two tool checks count the tool as a Product Researcher's,
+  like `save_finding` is a config's, because T4 grants it outside the role's list.
+  **Unintended live request:** 2026-10-28 ~11:57 local, the first run of `reports.test.ts` called the preview route
+  with a link whose listing had no canonical URL, so it fell through to the shared safe fetcher: one DNS lookup and
+  one GET of `https://cjdropshipping.com/robots.txt`, which refused the page, so no product page was read. No CJ API
+  call, no cost. The test now calls `preview()` with a getter that throws, so it can't reach the network again.
+  Dev-app check, 12:01 local, fake engine, demo store: Research with an agent on the SparkFun product → Supplier check
+  only → Start opened its Research tab with "Report ready", the run's two real activity lines and the demo-labelled
+  report (screenshots `.agent/shots/pr17-*.png`). The task stays in this worktree's dev database.
 - **PR-16 as built.** T1 (`Deploy.tsx`, ai-agents' file): `lockStore`, `types` and `onSubmit({type, config})`. The
   title is left out of what it returns, with the objective, attachments and the Agent settings link, because the task
   names its conversation "Research: <product>"; "+ Custom role" is hidden when `types` is set (custom roles are made

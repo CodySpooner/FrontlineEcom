@@ -8,6 +8,7 @@ import { evaluate } from './evaluate';
 import { offerRows, pointsOf } from './facts';
 import { flagsFor } from './flags';
 import { current, fulfillmentOf } from './fulfillment';
+import { reportAssessment } from './reports';
 import { signalSet } from './trends';
 
 // The detail panel (PR-12): the header and Overview in one call, each other tab in its own (progressive loading).
@@ -31,7 +32,8 @@ export function productDetail(db: Db, id: string, store: Store | null, shipTo: s
     flags = (JSON.parse(String(e.flags_json)) as PrFlag[]).filter((f) => !dismissed[f.id]);
   } else if (!store && card.flags) flags = flagsFor({ title: card.title, category: card.category });
   const own = store ? privateDemand(db, store.id).has(id) : false;
-  const has = { demand: card.demandSets > 0, offer: card.fulfillment?.status === 'verified', economics: false, report: false }; // economics PR-18, reports PR-17
+  const reported = store ? reportAssessment(db, store.id, id) : { report: null, measured: false };
+  const has = { demand: card.demandSets > 0, offer: card.fulfillment?.status === 'verified', economics: false, report: reported.measured }; // economics PR-18
   const count = Object.values(has).filter(Boolean).length;
   const estimates = db
     .prepare(`SELECT transform_json FROM pr_listings WHERE product_id = ? AND origin = 'agent_find' ${store ? 'AND (store_id IS NULL OR store_id = ?)' : 'AND store_id IS NULL'} ORDER BY first_seen_at LIMIT 1`)
@@ -56,6 +58,7 @@ export function productDetail(db: Db, id: string, store: Store | null, shipTo: s
       demand: { level: own || card.demandSets >= 2 ? 'strong' : card.demandSets === 1 ? 'moderate' : 'none', sets: card.demandSets, ownOrders: own },
       flags,
       confidence: { level: count >= 3 ? 'high' : count === 2 ? 'medium' : 'low', count, has },
+      report: reported.report,
     },
     notes: str(e?.notes),
     agentEstimates: estimates ? ((JSON.parse(String(estimates.transform_json ?? '{}')) as { estimates?: Record<string, unknown> }).estimates ?? null) : null,

@@ -1,6 +1,6 @@
 import { AGENT_ROLES, type AgentRole } from '@frontline/shared';
 import { expect, test } from 'vitest';
-import { DEFAULT_JOBS, playbook, ROLES } from './index';
+import { contractOf, DEFAULT_JOBS, playbook, ROLES, runTools } from './index';
 
 const roles = Object.keys(AGENT_ROLES) as AgentRole[];
 
@@ -22,4 +22,13 @@ test('a playbook or default job only names tools its role has', () => {
     const named = [...new Set(text.match(/\w+/g))].filter((w) => known.has(w));
     expect({ role, missing: named.filter((w) => !(ROLES[role].tools as string[]).includes(w)) }).toEqual({ role, missing: [] });
   }
+});
+
+test('every Product Researcher run can save its research report, whatever its config lists (T4)', () => {
+  const names = (role: AgentRole, tools: string[]) => runTools(role, undefined, { tools }).map((t) => t.name);
+  expect(names('product_hunter', ['store_summary'])).toContain('save_research_report'); // a narrowed custom role, or a config saved before the tool
+  expect(names('copywriter', ['store_summary'])).not.toContain('save_research_report');
+  const c = contractOf(ROLES.product_hunter);
+  expect(c.workflow).toContain('When the task names a research task id, finish by calling save_research_report once.');
+  expect(c.checks).toContain('No guaranteed-winner language and no sales or revenue projections; a recommendation is not a validated fact.');
 });

@@ -308,7 +308,7 @@ export function Research() {
           {...(researching.product ? { product: researching.product } : {})}
           onClose={() => setResearching(null)}
           // The task's store and product: its card footer and panel show where it is.
-          onStarted={(t) => (setResearching(null), pickScope(t.storeId, true), set('product', t.productId))}
+          onStarted={(t) => (setResearching(null), pickScope(t.storeId, true), set('product', t.productId), set('tab', 'research'))}
         />
       )}
     </>

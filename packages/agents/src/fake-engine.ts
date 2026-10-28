@@ -72,6 +72,9 @@ function demoWork(input: RunInput): FakeStep[] {
     case 'ad_strategist':
       return [{ call: 'review_campaigns', input: { days: 7 } }];
     case 'product_hunter': {
+      // A Product Research task: a fixed scripted report, which Product Research labels a demo (decision 7).
+      const task = /\bResearch task (\S+) for product /.exec(input.task)?.[1]; // after the conversation's context line
+      if (task) return [{ call: 'save_research_report', input: scriptedReport(task) }];
       // A bundle of the niche's most trending feed item not bundled yet, so AI Research shows a new scored card.
       const top = db
         .prepare(
@@ -219,7 +222,7 @@ export const echoScript: FakeScript = (input) => {
 export function fakeEngine(script: FakeScript = echoScript): Engine {
   return async function* (input) {
     const events = channel<AgentEvent>();
-    const ctx = input.env && { ...input.env, store: input.store, agent: input.agent, emit: events.push, signal: input.signal };
+    const ctx = input.env && { ...input.env, store: input.store, agent: input.agent, emit: events.push, signal: input.signal, scripted: true };
     const tools = runTools(input.agent.role, input.mode, input.config);
     (async () => {
       let n = 0;
@@ -269,3 +272,14 @@ function teamScript(input: RunInput): string | undefined {
   }
   return undefined;
 }
+
+/** The demo engine's report: every part says it is a scripted example; it cites nothing, so it can't pass for research. */
+const scriptedReport = (task: string) => {
+  const demo = 'Demo engine: scripted example, no research was done.';
+  return {
+    task, recommendation: 'research_further', summary: `${demo} Switch the agent to Claude for a real report.`, purpose: demo, customer_problem: demo,
+    store_fit: { fit: 'medium', why: demo }, demand_evidence: demo, competitors: [], supplier_offers: [], risks: [], next_steps: ['Run this task on a Claude agent.'],
+    evidence: [], open_questions: [], would_change_if: 'A real research run.', proposals: [],
+    unknown_reasons: Object.fromEntries(['competitors', 'supplier_offers', 'risks', 'evidence', 'open_questions', 'proposals'].map((k) => [k, demo])),
+  };
+};

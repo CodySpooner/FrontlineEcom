@@ -296,6 +296,8 @@ export interface PrProductDetail {
     /** Open flags (store scope) or the rule flags (All stores); null: not checked yet. */
     flags: PrFlag[] | null;
     confidence: { level: 'low' | 'medium' | 'high'; count: number; has: { demand: boolean; offer: boolean; economics: boolean; report: boolean } };
+    /** Store scope: the latest non-demo report's risks and proposals (Risk and Differentiation); null without one. */
+    report: { createdAt: string; risks: string[]; proposals: PrReportBody['proposals'] } | null;
   };
   /** Store scope: the owner's notes on the product in this store (owner-provided, never evidence). */
   notes: string | null;
@@ -452,4 +454,42 @@ export interface PrTask {
   createdAt: string;
   /** The run's last change (ended, started, queued), else the task's. */
   updatedAt: string;
+}
+
+/** A report's evidence kinds (decision 7): measured by the app or a tool, research from a named source, the supplier's word, or judgment. */
+export const PR_EVIDENCE_KINDS = ['measured', 'research', 'supplier_claim', 'hypothesis'] as const;
+export type PrEvidenceKind = (typeof PR_EVIDENCE_KINDS)[number];
+/** The report's list fields: an empty one carries its reason in `unknown_reasons`. */
+export const PR_REPORT_LISTS = ['competitors', 'supplier_offers', 'risks', 'next_steps', 'evidence', 'open_questions', 'proposals'] as const;
+export type PrReportList = (typeof PR_REPORT_LISTS)[number];
+
+/** What save_research_report stores, as the agent gave it (decision 7). Proposals are never evidence. */
+export interface PrReportBody {
+  recommendation: PrRecommendation;
+  summary: string;
+  purpose: string;
+  customer_problem: string;
+  store_fit: { fit: 'strong' | 'medium' | 'weak'; why: string };
+  demand_evidence: string;
+  competitors: { name: string; price?: string; source: string }[];
+  supplier_offers: { offer: string; provenance: string }[];
+  risks: string[];
+  next_steps: string[];
+  evidence: { claim: string; kind: PrEvidenceKind; source: string }[];
+  open_questions: string[];
+  would_change_if: string;
+  proposals: { kind: 'ad_angle' | 'differentiation'; text: string }[];
+  unknown_reasons: Partial<Record<PrReportList, string>>;
+}
+
+/** One saved report. `demo`: the demo engine's scripted example, never research (shown without a recommendation). */
+export interface PrReport {
+  id: string;
+  taskId: string;
+  runId: string;
+  conversationId: string | null;
+  runtime: string | null;
+  demo: boolean;
+  createdAt: string;
+  body: PrReportBody;
 }

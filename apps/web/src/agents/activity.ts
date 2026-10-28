@@ -25,6 +25,7 @@ export const savedText = (r: { result: 'saved' | 'added' | 'general'; card: { ti
 
 export const PHRASES: Record<string, string | ((input: Input) => string)> = {
   save_finding: (i) => `Saving a finding: ${String(i.title ?? '').slice(0, 80)}`,
+  save_research_report: 'Saved the research report',
   store_summary: "Read the store's last 30 days",
   compare_stores: 'Compared this store with your other stores',
   metrics_timeseries: (i) => `Read ${Number(i.days) || 30} days of store metrics`,
@@ -91,6 +92,8 @@ export function activitySteps(events: AgentEvent[]): Step[] {
         step.text = e.output.replace(/ \([\w-]+\)$/, '');
         if (step.text.startsWith('Not saved')) step.icon = 'warning';
       }
+      // A research report the server turned down says why (product-research decision 7).
+      if (step && step.text === PHRASES.save_research_report && !e.isError && /^(Not saved|Report already)/.test(e.output)) Object.assign(step, { icon: 'warning', text: e.output });
     } else if (e.type === 'approval_request') steps.push({ icon: 'warning', text: `Asked for your approval: ${e.approval.title}` });
     else if (e.type === 'memory_written') steps.push({ icon: 'done', text: `Saved to store memory: ${e.memory.text}` });
     else if (e.type === 'knowledge') steps.push({ icon: 'done', text: `Read ${e.cards.length} knowledge card${e.cards.length === 1 ? '' : 's'}: ${e.cards.map((c) => c.title).join('; ')}` });

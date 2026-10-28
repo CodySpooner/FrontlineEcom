@@ -20,11 +20,12 @@ import { AreaChart } from '../components/AreaChart';
 import { Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Tabs } from '../components/ui';
 import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useProductDetail, useProductTab, useSaveNotes, useWatch } from './api';
 import { Pill, TONE } from './Card';
+import { ResearchTab } from './ResearchTab';
 import { conditionsLine, countryName, demandLines, minorMoney, sourceLine } from './format';
 
-export const PANEL_TABS = ['overview', 'demand', 'suppliers', 'history'] as const;
+export const PANEL_TABS = ['overview', 'demand', 'suppliers', 'research', 'history'] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
-const TAB_LABEL: Record<PanelTab, string> = { overview: 'Overview', demand: 'Demand', suppliers: 'Suppliers', history: 'History' };
+const TAB_LABEL: Record<PanelTab, string> = { overview: 'Overview', demand: 'Demand', suppliers: 'Suppliers', research: 'Research', history: 'History' };
 const PLATFORM: Record<string, string> = { google_trends: 'Google Trends', orders: 'Your orders', tiktok_creative_center: 'TikTok Creative Center' };
 const METRIC: Record<string, string> = { interest_over_time: 'Interest over time', units_sold: 'Paid units per week' };
 const KIND: Record<string, string> = { stage: 'Stage', watch: 'Watch', flag: 'Flag dismissed', merge: 'Merged', separate: 'Separated', offer: 'Offer', evidence: 'Evidence' };
@@ -90,10 +91,12 @@ export function DetailPanel({
         ) : (
           <>
             <Header d={d!} scope={scope} store={store} onClose={onClose} />
-            <Tabs label="Product details" tabs={PANEL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t] }))} value={tab} onChange={setTab} />
+            {/* Wraps like the board's tab row: a narrow panel never hides a tab off the edge. */}
+            <Tabs label="Product details" tabs={PANEL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t] }))} value={tab} onChange={setTab} className="flex-wrap [&>button]:px-2.5" />
             {tab === 'overview' && <Overview d={d!} store={store} stores={stores} onAssigned={onAssigned} />}
             {tab === 'demand' && <Demand id={id} scope={scope} />}
             {tab === 'suppliers' && <Suppliers id={id} scope={scope} />}
+            {tab === 'research' && <ResearchTab id={id} store={scope} />}
             {tab === 'history' && <History id={id} scope={scope} stores={stores} />}
             <div className="flex flex-wrap gap-2 border-t border-line pt-3">
               {store && (
@@ -301,7 +304,16 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
           {c.fulfillment?.reasons.join('; ')}
         </Row>
         <Row label="Economics (base)" value="Not assessed yet" />
-        <Row label="Differentiation" value="Not assessed yet" />
+        {/* The latest non-demo report's proposals and risks (decision 11): ideas to test, never evidence. */}
+        <Row label="Differentiation" value={a.report?.proposals.length ? 'Proposal, not evidence' : 'Not assessed yet'}>
+          {a.report?.proposals.length ? (
+            <ul className="grid gap-0.5">
+              {a.report.proposals.map((p, i) => (
+                <li key={i}>{`${p.kind === 'ad_angle' ? 'Ad angle' : 'Differentiation'}: ${p.text}`}</li>
+              ))}
+            </ul>
+          ) : null}
+        </Row>
         <Row label="Risk" value={a.flags === null ? 'Not checked yet' : a.flags.length ? plural(a.flags.length, 'flag') : 'No flags found (rule checks only)'}>
           {a.flags?.length ? (
             <ul className="grid gap-0.5">
@@ -310,6 +322,7 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
               ))}
             </ul>
           ) : null}
+          {a.report?.risks.length ? <p>{`From the report of ${day(a.report.createdAt)}: ${a.report.risks.join('; ')}`}</p> : null}
         </Row>
         <p className="mt-2 text-[11.5px] text-text-2">
           <b className="text-text">{`Evidence confidence: ${CONFIDENCE[a.confidence.level]}`}</b>

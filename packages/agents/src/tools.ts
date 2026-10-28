@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, isPrivateHost, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardType, type KbLinkType, type KbStage, type KbWorkspace, type KnowledgeScope, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentConfig, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
+import { AGENT_ROLES, isPrivateHost, PR_EVIDENCE_KINDS, PR_RECOMMENDATION_LABEL, PR_RECOMMENDATIONS, PR_REPORT_LISTS, type PrReportBody, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardType, type KbLinkType, type KbStage, type KbWorkspace, type KnowledgeScope, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentConfig, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, uncostedShare, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
@@ -70,6 +70,8 @@ export interface ToolEnv {
   };
   /** The knowledge base's safe reader (apps/server kb/fetcher.ts: robots.txt, private hosts, paywalls), for fetch_source. */
   kbFetch?: (url: string, opts: { blocked: string[] }) => Promise<FetchedSource>;
+  /** Product Research's report store: saves the research task's report, or says why not (decision 7). */
+  saveResearchReport?: (taskId: string, report: PrReportBody, run: { runId?: string; storeId: string; scripted: boolean }) => string;
   runId?: string;
 }
 
@@ -86,6 +88,8 @@ export interface ToolContext extends ToolEnv {
   /** Pushes an event into the run's stream (approval requests, memories). */
   emit: (event: AgentEvent) => void;
   signal?: AbortSignal;
+  /** Set by the scripted engine: what its tools save is a demo, never research. */
+  scripted?: boolean;
 }
 
 export interface AppTool<Shape extends z.ZodRawShape = z.ZodRawShape> {
@@ -1271,6 +1275,39 @@ export const APP_TOOLS: AppTool[] = [
     },
   }),
   defineTool({
+    name: 'save_research_report',
+    description:
+      "Save your report on the research task the task names; Product Research shows it on the product. Once per run, at the end. Each evidence item's source is a URL you read or a fact's [listing:…], [offer:…] or [set:…] reference from the task; test fixtures and demo rows are not evidence. Ad angles and differentiation go in proposals, never in evidence. An empty list needs its reason in unknown_reasons.",
+    input: {
+      task: z.string().trim().min(1).max(64).describe('the research task id the task names'),
+      recommendation: z.enum(PR_RECOMMENDATIONS).describe(PR_RECOMMENDATIONS.map((r) => `${r}: ${PR_RECOMMENDATION_LABEL[r]}`).join('; ')),
+      summary: z.string().trim().min(10).max(1500),
+      purpose: z.string().trim().min(1).max(800).describe('what the product is for'),
+      customer_problem: z.string().trim().min(1).max(800),
+      store_fit: z.object({ fit: z.enum(['strong', 'medium', 'weak']), why: z.string().trim().min(1).max(800) }),
+      demand_evidence: z.string().trim().min(1).max(1500),
+      competitors: z.array(z.object({ name: z.string().trim().min(1).max(300).describe('name or URL'), price: z.string().trim().min(1).max(60).optional().describe('as seen, with its currency'), source: z.string().trim().min(1).max(500) })).max(10),
+      supplier_offers: z.array(z.object({ offer: z.string().trim().min(1).max(500).describe('an [offer:…] reference or a URL'), provenance: z.string().trim().min(1).max(300) })).max(10),
+      risks: z.array(z.string().trim().min(1).max(500)).max(10),
+      next_steps: z.array(z.string().trim().min(1).max(500)).max(10),
+      evidence: z.array(z.object({ claim: z.string().trim().min(1).max(600), kind: z.enum(PR_EVIDENCE_KINDS), source: z.string().trim().min(1).max(500) })).max(20),
+      open_questions: z.array(z.string().trim().min(1).max(500)).max(10),
+      would_change_if: z.string().trim().min(1).max(800),
+      proposals: z.array(z.object({ kind: z.enum(['ad_angle', 'differentiation']), text: z.string().trim().min(1).max(600) })).max(10).describe('ideas still to test, shown as "Proposal, not evidence"'),
+      unknown_reasons: z
+        .object(Object.fromEntries(PR_REPORT_LISTS.map((k) => [k, z.string().trim().min(1).max(300)])) as Record<(typeof PR_REPORT_LISTS)[number], z.ZodString>)
+        .partial()
+        .default({})
+        .describe('for each empty list, why it is empty'),
+    },
+    run: async ({ task, ...report }, ctx) => {
+      if (!ctx.saveResearchReport) return 'Research reports are not available.';
+      const missing = PR_REPORT_LISTS.filter((k) => !report[k].length && !report.unknown_reasons[k]);
+      if (missing.length) return `Not saved: ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} empty without a reason in unknown_reasons.`;
+      return ctx.saveResearchReport(task, report, { ...(ctx.runId ? { runId: ctx.runId } : {}), storeId: ctx.store.id, scripted: !!ctx.scripted });
+    },
+  }),
+  defineTool({
     name: 'save_finding',
     description:
       "Save a finding to this store's knowledge base: something this work showed that should hold beyond this task (what the buyers want, what converts, what didn't work), not the task's own output. Give it as a short claim and a summary, with its evidence tag and the URLs or [kb:<id>] cards behind it. It starts as an unproven Hypothesis. If the knowledge base already says it, it adds to that card. At most 5 per run.",
@@ -1705,6 +1742,8 @@ export const runTools = (role: Agent['role'], mode?: 'research', config?: Pick<A
         ...toolsFor(role).filter((t) => (t.name === 'search_knowledge' || !RESEARCH_TOOLS.includes(t.name)) && allows(config, t.name)),
         // Off: the tool is absent (decision 11). It's the config's setting, not one of its tools.
         ...APP_TOOLS.filter((t) => t.name === 'save_finding' && config?.permissions && config.permissions.saveFindings !== 'off'),
+        // Every Product Research run, whatever its config lists: configs and custom roles stored before the tool existed (T4).
+        ...APP_TOOLS.filter((t) => t.name === 'save_research_report' && role === 'product_hunter'),
       ];
 
 /** Whether a run on this config may use one of its role's tools, Claude built-ins and external servers (meta_ads) included. */

@@ -24,6 +24,7 @@ import { researchStarted } from './edits';
 import { fence } from './fence';
 import { refreshProduct } from './evaluate';
 import { canonicalUrl, checkUrl, previewFields } from './preview';
+import { REAL_REPORT } from './reports';
 
 // Research tasks (decision 6, PR-15): the owner asks an agent to research one product for one store. The run is the AI
 // Agents lane's; this module only starts it, links it, and reads its state.
@@ -116,15 +117,15 @@ const money = (minor: number | null, currency: string | null) => (minor == null 
 /** The product facts the agent gets (listing, offers, demand sets, preview fields with their origin): untrusted data. */
 function facts(db: Db, store: Store, productId: string, preview: string | null): string {
   const listings = db
-    .prepare(`SELECT title, source, origin, url, category FROM pr_listings WHERE product_id = ? AND origin != 'legacy_sample' AND (store_id IS NULL OR store_id = ?) ORDER BY first_seen_at LIMIT 5`)
+    .prepare(`SELECT id, title, source, origin, url, category FROM pr_listings WHERE product_id = ? AND origin != 'legacy_sample' AND (store_id IS NULL OR store_id = ?) ORDER BY first_seen_at LIMIT 5`)
     .all(productId, store.id)
-    .map((l) => `- Listing: ${line([String(l.title), `source ${l.source} (${l.origin})`, l.category != null && `category ${l.category}`, l.url != null && String(l.url)])}`);
+    .map((l) => `- [listing:${l.id}] Listing: ${line([String(l.title), `source ${l.source} (${l.origin})`, l.category != null && `category ${l.category}`, l.url != null && String(l.url)])}`);
   const offers = productOffers(db, productId, store.id).map(
     (o) =>
-      `- Offer: ${line([o.supplier, o.variant, o.destination && `to ${o.destination}`, `unit ${money(o.unitCost, o.currency)}`, `shipping ${money(o.shipCost, o.currency)}`, o.deliveryMax != null && `${o.deliveryMin ?? '?'}-${o.deliveryMax} days`, `provenance ${o.provenance}`, `checked ${o.checkedAt.slice(0, 10)}`, `status ${o.status}`])}`,
+      `- [offer:${o.id}] Offer: ${line([o.supplier, o.variant, o.destination && `to ${o.destination}`, `unit ${money(o.unitCost, o.currency)}`, `shipping ${money(o.shipCost, o.currency)}`, o.deliveryMax != null && `${o.deliveryMin ?? '?'}-${o.deliveryMax} days`, `provenance ${o.provenance}`, `checked ${o.checkedAt.slice(0, 10)}`, `status ${o.status}`])}`,
   );
   const sets = productDemand(db, productId, store.id).sets.map(
-    (s) => `- Demand set: ${line([s.platform, s.query && `"${s.query}"`, s.region, s.periodStart && `${s.periodStart} to ${s.periodEnd}`, s.metric, s.demandClass && `class ${s.demandClass}`, `origin ${s.origin}`, s.scope === 'query' && 'query-level'])}`,
+    (s) => `- [set:${s.id}] Demand set: ${line([s.platform, s.query && `"${s.query}"`, s.region, s.periodStart && `${s.periodStart} to ${s.periodEnd}`, s.metric, s.demandClass && `class ${s.demandClass}`, `origin ${s.origin}`, s.scope === 'query' && 'query-level'])}`,
   );
   const fields = preview ? Object.entries(JSON.parse(preview) as Record<string, { value: unknown; origin: string } | null>).filter(([, f]) => f) : [];
   const pasted = fields.map(([k, f]) => `- Preview ${k} (${f!.origin === 'owner' ? 'owner-provided' : 'from the page, not verified'}): ${typeof f!.value === 'string' ? f!.value : JSON.stringify(f!.value)}`);
@@ -139,9 +140,8 @@ function earlier(db: Db, store: Store, productId: string): string {
     .all(store.id, productId)
     .map((h) => `- ${String(h.at).slice(0, 10)}: ${h.from_stage ?? 'new'} → ${h.to_stage}${h.reason ? ` (${h.reason})` : ''}`);
   const reports = db
-    .prepare(`SELECT recommendation, report_json, runtime, created_at FROM pr_reports WHERE store_id = ? AND product_id = ? ORDER BY created_at DESC`)
+    .prepare(`SELECT recommendation, report_json, created_at FROM pr_reports WHERE store_id = ? AND product_id = ? AND ${REAL_REPORT} ORDER BY created_at DESC`) // a demo report is never research (decision 7)
     .all(store.id, productId)
-    .filter((r) => r.runtime !== 'demo') // a scripted demo report is never research (decision 7)
     .map((r) => `- Report ${String(r.created_at).slice(0, 10)}: ${r.recommendation}${((JSON.parse(String(r.report_json)) as { open_questions?: string[] }).open_questions ?? []).map((q) => `; open: ${q}`).join('')}`);
   const text = [
     `Stage: ${PR_STAGE_LABEL[(e?.stage ?? 'discovered') as PrStage]}`,
