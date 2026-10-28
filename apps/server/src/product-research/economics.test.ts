@@ -75,3 +75,23 @@ test("a store that sells the product brings its own price; a store's fee setting
   expect([e.derived.feePercent, e.derived.feePerOrder]).toEqual([{ value: 2.9, tag: 'owner', note: 'Store settings' }, { value: 30, tag: 'owner', note: 'Store settings' }]);
   expect((await json<PrProductDetail>(send('GET', `/api/pr/products/${p}?store=b`))).assessment.economics!.result.figures).toMatchObject({ before: 2450 - 342 - 410 - (71 + 30) });
 });
+
+test("mixed currencies: a EUR offer is converted to the store's currency with the rates' date; with no rate it stays unknown, never the EUR amount", async () => {
+  const { db, send, json } = setup();
+  const { id: listing, productId: q } = upsertListing(db, { source: 'cj', sourceRef: '2', title: 'Cat window perch', category: 'Pet Supplies > Cat', origin: 'ingest' });
+  db.prepare(`INSERT INTO pr_variants (id, listing_id, source_ref, sku, attributes_json) VALUES ('v2', ?, 'v2', 'CJ-PERCH', '{"name":"Grey"}')`).run(listing);
+  db.prepare(
+    `INSERT INTO pr_offers (id, listing_id, variant_id, supplier, destination, quantity, method, unit_cost_minor, shipping_cost_minor, currency, delivery_days_min, delivery_days_max, ships_from, stock_json, provenance, checked_at)
+     VALUES ('eur', ?, 'v2', 'CJdropshipping', 'US', 1, 'CJPacket', 342, 410, 'EUR', 6, 12, 'CN', '[{"countryCode":"CN","totalInventory":50}]', 'live', ?)`,
+  ).run(listing, new Date(NOW.getTime() - 86_400_000).toISOString());
+  refreshProduct(db, q, NOW);
+  const none = await json<PrEconomics>(send('GET', `/api/pr/products/${q}/economics?store=a`));
+  expect(none).toMatchObject({ currency: 'USD', rateDate: null });
+  expect(none.derived.supplierCost).toMatchObject({ value: null, tag: null });
+  db.prepare(`INSERT INTO settings (key, value_json) VALUES ('fx', ?)`).run(JSON.stringify({ date: '2026-10-27', rates: { EUR: 1, USD: 1.1 } }));
+  refreshProduct(db, q, NOW);
+  const e = await json<PrEconomics>(send('GET', `/api/pr/products/${q}/economics?store=a`));
+  expect(e).toMatchObject({ currency: 'USD', rateDate: '2026-10-27' });
+  expect(e.derived.supplierCost).toMatchObject({ value: 376, tag: 'verified' }); // €3.42 × 1.1
+  expect(e.derived.shipping).toMatchObject({ value: 451, tag: 'verified' }); // €4.10 × 1.1
+});

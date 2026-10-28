@@ -53,7 +53,7 @@ const dialog = () => screen.getByRole('dialog', { name: 'Research a Product' });
 const startButton = () => within(dialog()).getByRole('button', { name: 'Start research' }) as HTMLButtonElement;
 
 test('a read link, the store context, the agents with their state, a template, and Start sends exactly the draft', async () => {
-  const { posts } = api();
+  const { f, posts } = api();
   open();
   fireEvent.change(screen.getByRole('textbox', { name: 'Product link' }), { target: { value: 'https://shop.test/p/1?utm_source=x' } });
   fireEvent.click(screen.getByRole('button', { name: 'Fetch preview' }));
@@ -65,6 +65,7 @@ test('a read link, the store context, the agents with their state, a template, a
   fireEvent.change(screen.getByRole('textbox', { name: 'Price' }), { target: { value: '5.99' } });
 
   expect(await screen.findByText("Brings Pawsome Gear's niche (pet), its $15.00–$40.00 price band and 6 knowledge cards (the store's and General).")).toBeTruthy();
+  expect(f.mock.calls.map(([u]) => String(u)).find((u) => u.startsWith('/api/kb/cards'))).toContain('status=active'); // what the run gets, not proposed cards
   const agent = (name: RegExp) => screen.getByRole('radio', { name });
   expect(await screen.findByText('Working on “Research: Cat perch” · 1 queued in this conversation, then waits for a free store slot (2 per store)')).toBeTruthy();
   expect((agent(/^Old scout/) as HTMLInputElement).disabled).toBe(true);

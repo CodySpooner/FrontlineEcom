@@ -220,3 +220,17 @@ test("a new task runs on the config its row shows: the type's latest in the stor
   expect(getConfig(db, getConversation(db, t.conversationId!)!.configId)).toMatchObject({ runtime: 'demo', knowledge: ['store'], permissions: { saveFindings: 'ask' } });
   await idle();
 });
+
+test("a new agent made in Deploy (configure-only) runs the task on its config, over the row's; a repeat keeps one task", async () => {
+  await json(send('POST', '/api/conversations?store=pawsome', { clientRequestId: randomUUID(), type: 'product_hunter', message: 'Scout travel bowls', config: { knowledge: ['store'], permissions: { saveFindings: 'ask' } } }));
+  await idle();
+  const body = { clientRequestId: randomUUID(), config: { runtime: 'demo', knowledge: ['store', 'general'], permissions: { stopAfterMin: 5, saveFindings: 'off' } } };
+  const r = await task(body);
+  expect(r.status).toBe(201);
+  const t = (await r.json()) as PrTask;
+  expect(getConfig(db, getConversation(db, t.conversationId!)!.configId)).toMatchObject({ runtime: 'demo', knowledge: ['store', 'general'], permissions: { stopAfterMin: 5, saveFindings: 'off' } });
+  expect(getRun(db, t.runId!)!.configId).toBe(getConversation(db, t.conversationId!)!.configId);
+  expect((await task(body)).status).toBe(200);
+  expect(db.prepare('SELECT count(*) AS n FROM pr_tasks').get()!.n).toBe(1);
+  await idle();
+});

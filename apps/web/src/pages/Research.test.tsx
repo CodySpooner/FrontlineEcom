@@ -238,6 +238,21 @@ describe('Product Research page', () => {
     await waitFor(() => expect(screen.getByTestId('where').textContent).not.toContain('view='));
   });
 
+  it('a long title is clamped to two lines with the whole title kept; an image that fails to load falls back to the icon', async () => {
+    const long = `Reflective dog leash ${'with a very long supplier title '.repeat(8)}end`;
+    api({ items: [card({ id: 'p1', title: long, imageListing: 'l1' })] });
+    renderApp(<Research />, '/research?store=paws');
+    const c = await screen.findByRole('article', { name: long });
+    const h = within(c).getByRole('heading', { name: long });
+    expect(h.className).toContain('line-clamp-2');
+    expect(h.getAttribute('title')).toBe(long);
+    const img = c.querySelector('img')!;
+    expect(img.getAttribute('src')).toBe('/api/pr/listings/l1/image?store=paws');
+    fireEvent.error(img);
+    expect(c.querySelector('img')).toBeNull(); // the neutral icon stays, never a broken image
+    expect(c.querySelector('.bg-bg-2\\/90')).toBeNull(); // the pills' photo backing goes with the photo
+  });
+
   it('partial outage and stale data: the source that stopped answering, why, and when it last synced; other sources unaffected', async () => {
     api({ sources: [source({ access: 'verified', status: 'degraded', errorKind: 'server', lastError: 'CJ: no answer within 20 s', lastSuccessAt: '2026-10-27T09:30:00Z', products: 40 }), source({ id: 'trends_csv', name: 'Google Trends CSV', access: 'verified', products: 3 })] });
     renderApp(<Research />, '/research');

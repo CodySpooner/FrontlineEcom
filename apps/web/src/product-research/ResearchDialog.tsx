@@ -115,7 +115,8 @@ export function ResearchDialog({
   const agents = usePrAgents(storeId);
   const rows = agents.data;
   const profile = useProfile(storeId || null).data;
-  const cards = useKbCards(storeId, { general: true, limit: 1 }).data?.total;
+  // What the run receives: active cards only (proposed ones wait for the owner's review).
+  const cards = useKbCards(storeId, { general: true, status: 'active', limit: 1 }).data?.total;
   const caps = useCaps(storeId).data;
   const usage = useUsage([storeId]).data?.[0];
   const fetchPreview = usePreview(storeId);

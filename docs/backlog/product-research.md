@@ -811,7 +811,7 @@ STOP.
 - [x] PR-29 **Live verification** (decision 16): collect and re-run the live checks done so far (CJ, the owner's Trends
   CSV and supplier feed, the link previews) and do the one real research run, each recorded under Notes with time,
   calls and cost, reported separately from mocked tests. Whatever the owner hasn't provided stays under Blocked.
-- [ ] PR-30 **Acceptance:** walk "Done when" and fix what it finds. Fetch origin and check the ai-agents Done list for
+- [x] PR-30 **Acceptance:** walk "Done when" and fix what it finds. Fetch origin and check the ai-agents Done list for
   AA-17 to AA-20 and your Inbox requests: build what has shipped since (PR-23, PR-24, `untrustedBlock`), and apply
   decision 1's fallback to any request still open after ai-agents stopped.
 - [ ] PR-31 **Final report and STOP:** write `docs/features/product-research-report.md` with screenshots in
@@ -1060,6 +1060,11 @@ STOP.
   save), and the Research tab showed the last 6 of 12 steps numbered from 1 (now numbered where they fall, with "Show
   all 12 steps", tested). CJ, the Trends CSV and the supplier feed are still the owner's to provide (Blocked); the five
   preview checks were spent at PR-14 and are not re-run.
+- 2026-10-28 PR-30 Acceptance: every "Done when" line mapped to its tests or a recorded check (Notes). Four gaps
+  closed with tests: a task on a Deploy configure-only config, mixed-currency economics, a restart on the same database
+  file, and long titles with missing images. The dialog's knowledge count now counts active cards only, which is what the
+  run gets. `fence` uses AA-17's `untrustedBlock`. `pnpm build` is green, and a click-through of 19 surfaces found no
+  dead control. Real ingestion stays Blocked, and Demand on real data stays partial.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1091,6 +1096,65 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-30 acceptance: the "Done when" map** (PR-31's report cites it). The server tests are under
+  `apps/server/src/product-research/`.
+  - **Checks:** `pnpm check` and `pnpm build` are green. The repo has no linter, so linting doesn't apply.
+  - **Real ingestion:** Blocked. The dev DB check at PR-30 found `cj:global` 0, imported Trends sets 0, imported feed
+    listings 0 and `pr_calls` 0. Mocked only: `sources/cj.test.ts` (recorded responses), `trends.test.ts` and
+    `feed.test.ts` (fixture files).
+  - **Demand evidence:** `demand.test.ts` covers each label's rule and precedence. In `discovery.test.ts`, 10,000
+    catalog products give `demand: 0`, and the store's orders count in its own scope only. `trends.test.ts`: only the
+    owner's confirmation makes a query set evidence. `evidence.test.ts`: a Creative Center note never counts.
+    `page-data.test.ts`: fixtures never count. Partial: no real observation set yet.
+  - **Source failures:** `jobs.test.ts` (an auth failure isn't retried; rate limits and timeouts back off within a cap;
+    a schema change is explained) and `sources/cj.test.ts`.
+  - **Manual submission:** `tasks.test.ts` covers:
+    - a new task, and a repeat with the same `clientRequestId` returning the same task;
+    - queue and separate;
+    - a repeat whose run never started, and the refusals;
+    - new at PR-30: a Deploy configure-only config runs on its own config, and a repeat keeps one task.
+
+    `ResearchDialog.test.tsx` checks the dialog sends Deploy's configure-only config.
+  - **Busy agents:** `tasks.test.ts` "a busy agent both ways" (scripted engine).
+  - **Store isolation:** `security.test.ts` sweeps every `/api/pr/*` by-id route: another store's id gets a 404 and
+    nothing changes. `reports.test.ts`: `save_research_report` refuses another store's task.
+  - **Research results:** `knowledge.test.ts` (active store and General cards). `reports.test.ts`: only the task's
+    run saves; it links product, store, task and conversation; end to end on the scripted engine, through a restart.
+  - **Deduplication:**
+    - `preview.test.ts`: the same page pasted with other tracking parameters gives `existing` and no fetch.
+    - `feed.test.ts`: one variant per SKU.
+    - `matching.test.ts`: Exact needs a shared code; a lookalike from another supplier is Similar, not merged.
+  - **Economics:**
+    - `packages/shared/src/economics.test.ts`: missing required and optional inputs; zero and negative contribution
+      (no break-even ROAS); scenario defaults.
+    - `economics.test.ts`: provenance and saved scenarios; new at PR-30, a EUR offer for a USD store is converted with
+      the rates' date, and without a rate it stays unknown.
+  - **Watchlists:** `alerts.test.ts` (fake timers) covers stored results, the daily watch cap and one alert per change.
+    `legacy.test.ts` and `edits.test.ts` cover watching.
+  - **Persistence:** `persistence.test.ts` (new at PR-30): stage, History, watch, comparison and the owner's notes
+    after closing and reopening the database file. `reports.test.ts` keeps the task, its instructions and its report
+    across a restart. `tasks.test.ts`: a run cut off by a restart is Interrupted, and Retry continues it. In the
+    browser, reload and navigation keep everything in the URL and the server.
+  - **Usability:**
+    - `Research.test.tsx`: 10,000 matches with windowed rows, and 500 tasks and reports (PR-27); keyboard
+      (/, Enter, Esc); new at PR-30, a long title clamped to two lines with its full title kept, and a failed image
+      falling back to the icon.
+    - Screenshots of 1024×680: `.agent/shots/pr27-*`.
+  - **Spec §17 click-through** (`.agent/pr30-click.mjs` on the fake engine; its self-test catches a planted dead
+    button). 0 dead controls across 19 surfaces:
+    - the page, More filters, Source health, Edit research profile and the Research dialog;
+    - the four views and the panel's six tabs;
+    - the test brief and the comparison;
+    - All stores, its page and its panel.
+
+    10 controls are disabled without a title, each until its form has something to act on: the save, discard and add
+    buttons, Fetch preview, Start research, and Watch niche. The agent radio shows a visible "Not ready". Source health
+    shows only Close, because no source is connected.
+  - **ai-agents:** AA-17 to AA-20 are done. All three Inbox requests are done: the `product` context, agent WebFetch
+    through `kbFetch`, and `/api/pr/*` in the AA-23 sweep. So decision 1's fallback isn't needed. PR-23 and PR-24 had
+    shipped already. `fence` is now a wrapper over `untrustedBlock`.
+  - **Fix:** the dialog's "N knowledge cards" counted proposed cards too, but the run gets active cards only. It now
+    asks for `status=active` (tested).
 - **PR-29 live verification (decision 16), reported apart from the mocked tests.**
   - **Owner inputs:** the dev DB check found no `cj:global`, no imported Trends set and no imported feed at every item
     through PR-29, so there is no live CJ, Trends or feed check: `pr_calls` holds 0 calls. CJ is mocked-tested only
