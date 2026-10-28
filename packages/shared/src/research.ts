@@ -271,3 +271,77 @@ export interface PrSourceHealth extends PrSourceState {
   /** A job is queued or running. */
   syncing: boolean;
 }
+
+/** Decision 11's demand evidence: Strong (two or more qualifying sets, or own orders), Moderate (one), None. */
+export type PrDemandLevel = 'strong' | 'moderate' | 'none';
+export const PR_DEMAND_LEVEL_LABEL: Record<PrDemandLevel, string> = { strong: 'Strong', moderate: 'Moderate', none: 'None' };
+
+/** The detail panel's header and Overview (PR-12): the card, plus what only the panel shows. */
+export interface PrProductDetail {
+  card: PrCard;
+  currency: string;
+  shipTo: string | null;
+  /** The named listing's first variant SKU, and its page (http(s) only). */
+  sku: string | null;
+  url: string | null;
+  /** Decision 11, each part on its own; there is no combined score. */
+  assessment: {
+    /** Store scope only. */
+    fit: { fit: PrFit; reasons: string[] } | null;
+    demand: { level: PrDemandLevel; sets: number; ownOrders: boolean };
+    /** Open flags (store scope) or the rule flags (All stores); null: not checked yet. */
+    flags: PrFlag[] | null;
+    confidence: { level: 'low' | 'medium' | 'high'; count: number; has: { demand: boolean; offer: boolean; economics: boolean; report: boolean } };
+  };
+  /** An agent find's own numbers (decision 2): shown collapsed as "Agent's estimates (not evidence)", never used. */
+  agentEstimates: Record<string, unknown> | null;
+  /** All stores: the stores with this product in their pipeline, and its stage there. */
+  stores: { id: string; name: string; stage: PrStage }[];
+}
+
+/** The Demand tab: every set that speaks for the product (with its stored points), suggested query-level sets, notes. */
+export interface PrDemandTab {
+  sets: (PrSignalSet & { series: { at: string; value: number }[] })[];
+  /** Query-level sets a search matched to this product, waiting for the owner's Confirm / Not this product. */
+  suggested: PrSignalSet[];
+  /** Store scope: manual notes (TikTok Creative Center), never evidence. */
+  notes: { id: string; platform: string; note: string; url: string; observedAt: string }[];
+}
+
+/** One current offer row on the Suppliers tab, with its own status for its destination and quantity (decision 8). */
+export interface PrOffer {
+  id: string;
+  supplier: string;
+  variant: string | null;
+  sku: string | null;
+  destination: string | null;
+  quantity: number;
+  method: string | null;
+  /** Minor units of `currency`; null: unknown (never 0). */
+  unitCost: number | null;
+  shipCost: number | null;
+  currency: string | null;
+  deliveryMin: number | null;
+  deliveryMax: number | null;
+  processingDays: number | null;
+  moq: number | null;
+  shipsFrom: string | null;
+  stock: { warehouse: string | null; units: number | null }[];
+  provenance: string;
+  checkedAt: string;
+  status: PrFulfillment;
+  reasons: string[];
+}
+
+/** A History row: a stage change, watch, flag dismissal, merge or separation, offer or evidence change. */
+export interface PrHistoryRow {
+  id: string;
+  storeId: string;
+  kind: string;
+  from: string | null;
+  to: string | null;
+  reason: string | null;
+  /** "owner", or the research task id. */
+  by: string;
+  at: string;
+}

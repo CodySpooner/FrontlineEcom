@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Db } from '../db';
 import { log } from '../log';
 import { productVisible } from './catalog';
+import { assign, productDemand, productDetail, productHistory, productOffers } from './detail';
 import { discover, parseDiscovery } from './discovery';
 import { evaluateStore, refreshProduct } from './evaluate';
 import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
@@ -48,6 +49,30 @@ export function prRoutes(db: Db, key: () => Buffer) {
     })
     // Decision 12: only the cache for the listing's stored image_ref, never a URL from the client. A miss is a 404 (the
     // card shows its icon) and queues one fetch.
+    // The detail panel (PR-12): the header and Overview, then each tab on its own.
+    .get('/api/pr/products/:id', (c) => {
+      const s = scopeOf(c, db);
+      if (s instanceof Response) return s;
+      const ship = c.req.query('shipTo')?.toUpperCase();
+      if (ship !== undefined && !/^[A-Z]{2}$/.test(ship)) return c.json({ error: 'shipTo must be a two-letter country code' }, 400);
+      const d = productDetail(db, c.req.param('id'), s.store, ship);
+      return !d ? c.json({ error: 'product not found' }, 404) : 'error' in d ? c.json(d, 400) : c.json(d);
+    })
+    .get('/api/pr/products/:id/:tab{demand|offers|history}', (c) => {
+      const s = scopeOf(c, db);
+      if (s instanceof Response) return s;
+      const id = c.req.param('id');
+      const store = s.store?.id ?? null;
+      if (!productVisible(db, id, store)) return c.json({ error: 'product not found' }, 404);
+      const tab = c.req.param('tab');
+      return c.json(tab === 'demand' ? productDemand(db, id, store) : tab === 'offers' ? productOffers(db, id, store) : productHistory(db, id, store));
+    })
+    .post('/api/pr/products/:id/assign', async (c) => {
+      const body = (await c.req.json().catch(() => undefined)) as { storeId?: unknown } | undefined;
+      if (typeof body?.storeId !== 'string') return c.json({ error: 'storeId must be one of your stores' }, 400);
+      const err = assign(db, c.req.param('id'), body.storeId);
+      return err ? c.json({ error: err.error }, err.status) : c.json({ ok: true }, 201);
+    })
     .get('/api/pr/listings/:id/image', (c) => {
       const s = scopeOf(c, db);
       if (s instanceof Response) return s;

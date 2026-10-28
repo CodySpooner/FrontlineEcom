@@ -31,6 +31,8 @@ export interface DiscoveryFilters {
 }
 export interface DiscoveryQuery {
   store: Store | null;
+  /** One product only (the detail panel's card): facets are skipped. */
+  id?: string;
   /** All stores only (store scope uses the profile's ship-to). */
   shipTo?: string;
   q?: string;
@@ -49,7 +51,7 @@ const SOURCE_LABEL: Record<string, string> = { cj: 'CJdropshipping', research_fe
 const marks = (n: number) => Array(n).fill('?').join(', ');
 
 /** Decision 9's private evidence: the store's own orders sets with enough history (they never enter shared facts). */
-function privateDemand(db: Db, storeId: string): Map<string, ReturnType<typeof demandOf>> {
+export function privateDemand(db: Db, storeId: string): Map<string, ReturnType<typeof demandOf>> {
   const out = new Map<string, ReturnType<typeof demandOf>>();
   for (const s of db.prepare(`SELECT id, product_id, granularity FROM pr_signals WHERE store_id = ? AND platform = 'orders' AND product_id IS NOT NULL ORDER BY retrieved_at`).all(storeId)) {
     const d = demandOf(db, { id: String(s.id), granularity: s.granularity });
@@ -91,6 +93,7 @@ export function discover(db: Db, query: DiscoveryQuery, now = new Date()): PrDis
   const where: string[] = [];
   const p: (string | number)[] = [];
   const f = query.filters;
+  if (query.id) (where.push('p.id = ?'), p.push(query.id));
   const offerExists = (cond: string) =>
     `EXISTS (SELECT 1 FROM pr_offers o JOIN pr_listings l ON l.id = o.listing_id WHERE l.product_id = p.id AND l.origin != 'legacy_sample' AND ${vis('l.store_id')} AND ${vis('o.store_id')} AND ${cond})`;
   if (query.q?.trim()) {
@@ -173,7 +176,7 @@ export function discover(db: Db, query: DiscoveryQuery, now = new Date()): PrDis
   const scoped = [...fromP, ...scopeP];
   const listed = `JOIN pr_listings l ON l.product_id = s.id AND l.origin != 'legacy_sample' AND ${vis('l.store_id')}`;
   const offered = `${listed} JOIN pr_offers o ON o.listing_id = l.id AND ${vis('o.store_id')}`;
-  const facets = {
+  const facets = query.id ? { categories: [], sources: [], warehouses: [], suppliers: [] } : {
     categories: facet(`SELECT p.category AS value, count(*) AS n FROM pr_products p WHERE p.id IN (${inScope}) GROUP BY p.category ORDER BY n DESC, value`, scoped, (r) => (r.value == null ? 'Category unknown' : String(r.value))),
     sources: facet(`SELECT l.source AS value, max(json_extract(l.transform_json, '$.supplier')) AS supplier, count(DISTINCT s.id) AS n FROM (${inScope}) s ${listed} GROUP BY l.source ORDER BY n DESC, value`, [...scoped, ...visP], (r) =>
       SOURCE_LABEL[String(r.value)] ?? (r.supplier ? String(r.supplier) : String(r.value))),
