@@ -169,6 +169,10 @@ describe('Claude engine', () => {
     ]);
   });
 
+  test('compaction is an activity line (decision 10)', () => {
+    expect(toAgentEvents(sdk({ type: 'system', subtype: 'compact_boundary', compact_metadata: { trigger: 'auto', pre_tokens: 180_000 } }))).toEqual([{ type: 'notice', text: 'Earlier context was summarized to fit.' }]);
+  });
+
   test('maps failed results to error events', () => {
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }))).toEqual([{ type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.', code: 'error_max_turns' }]);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [], session_id: 'abc' }))[0]).toMatchObject({ sessionId: 'abc' }); // the next message goes on from it

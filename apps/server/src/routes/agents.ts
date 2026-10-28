@@ -32,6 +32,7 @@ import {
   ensureSquads,
   customRole,
   runDeliverables,
+  stateOf,
   getAgent,
   getConfig,
   getPageDraft,
@@ -657,14 +658,15 @@ export function agentRoutes(db: Db) {
       publish({ type: 'mission', mission });
       return c.json(mission);
     })
+    // With each run's derived state (decision 5): awaiting approval, needs a reply, interrupted.
     .get('/api/runs', (c) =>
-      c.json(listRuns(db, { agentId: c.req.query('agent'), storeIds: c.req.query('stores')?.split(',').filter(Boolean), limit: limit(c.req.query('limit')) })),
+      c.json(listRuns(db, { agentId: c.req.query('agent'), storeIds: c.req.query('stores')?.split(',').filter(Boolean), limit: limit(c.req.query('limit')) }).map((r) => ({ ...r, state: stateOf(db, r) }))),
     )
     .get('/api/runs/:id', (c) => {
       const run = runs.get(c.req.param('id'));
       if (!run || wrongStore(c, db, 'agent_runs', run.id)) return c.json({ error: 'Run not found' }, 404);
       const deliverables = runDeliverables(db, run.id);
-      return c.json({ ...run, ...(deliverables.length ? { deliverables } : {}) });
+      return c.json({ ...run, state: stateOf(db, run), ...(deliverables.length ? { deliverables } : {}) });
     })
     .post('/api/runs/:id/cancel', (c) => {
       if (wrongStore(c, db, 'agent_runs', c.req.param('id'))) return c.json({ error: 'Run not found' }, 404);

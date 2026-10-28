@@ -1192,6 +1192,7 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ title, reason, kind, payload, amount }, ctx) => {
       // The app carries these out on approval: only their own tool, which checks the numbers and caps, may ask.
       const own = OWN_TOOL[kind];
+      if (own && (kind === 'question' || kind === 'kb.save')) return `Not sent: ${kind} requests come from ${own}. Use it instead.`;
       if (own) {
         const theirs = !ROLES[ctx.agent.role].tools.includes(own as ToolName) && whose(own);
         return theirs
@@ -1241,6 +1242,28 @@ export const APP_TOOLS: AppTool[] = [
       if (manual) return `${message}. This app can't carry out "${kind}" itself: end your answer with numbered steps the owner can follow to do it.`;
       const outcome = await ACTIONS[kind]?.(payload);
       return `${message}${outcome ? `. ${outcome}` : ''}`;
+    },
+  }),
+  defineTool({
+    name: 'ask_owner',
+    description:
+      "Ask the owner a question only they can answer (a choice between options, a fact the data doesn't hold, a preference) when the task can't be done well without it. Waits for their reply in the conversation and returns it. Don't ask what your tools can tell you, and don't ask permission here: changes go through request_approval or the tool made for them.",
+    input: { question: z.string().trim().min(5).max(500).describe('one clear question, with the options if there are any') },
+    run: async ({ question }, ctx) => {
+      const conversation = ctx.runId && ctx.db.prepare('SELECT conversation_id FROM agent_runs WHERE id = ?').get(ctx.runId)?.conversation_id;
+      if (!conversation) return 'Not sent: only a run in a conversation can ask, and this one has none. End your answer with the question instead.';
+      // It acts on nothing outside the app, so the suggest, autopilot, patience and storeMoved gates don't apply (decision 11).
+      const request = ctx.approvals.create({
+        storeId: ctx.store.id,
+        agentId: ctx.agent.id,
+        runId: ctx.runId!,
+        title: question.length > 80 ? `${question.slice(0, 79)}…` : question,
+        reason: question,
+        action: { kind: 'question', payload: { question } },
+      });
+      ctx.emit({ type: 'approval_request', approval: request });
+      const answered = await abortable(ctx.approvals.decision(request.id), ctx.signal);
+      return answered.status === 'approved' && answered.decisionNote ? `The owner answered: ${answered.decisionNote}` : "The owner didn't answer. Go on with your best judgment and say what you assumed.";
     },
   }),
   // ---- the knowledge base (knowledge-base lane). The research-only tools act on the task the run is a stage of.
@@ -1591,6 +1614,8 @@ const OWN_TOOL: Record<string, string> = {
   'niche.promote_learning': 'promote_niche_learning',
   tool_use: 'calling the connected tool itself',
   'automation.run': 'the Automation screen',
+  question: 'ask_owner',
+  'kb.save': 'save_finding',
 };
 
 /** Actions the agents lane carries out itself once approved. Store/ad actions arrive with the connectors. */

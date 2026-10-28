@@ -133,7 +133,7 @@ function History({ agentId, onOpen }: { agentId: string; onOpen: (runId: string)
                   {r.parentRunId && <AssignedBy runId={r.parentRunId} />}
                 </td>
                 <td>
-                  <Badge tone={RUN_STATUS[r.status].tone}>{RUN_STATUS[r.status].label}</Badge>
+                  <Badge tone={RUN_STATUS[r.state ?? r.status].tone}>{RUN_STATUS[r.state ?? r.status].label}</Badge>
                 </td>
                 <td className="text-muted">{ago(r.startedAt ?? r.createdAt, now)}</td>
                 <td className="text-right text-muted">{cents(r.usage.costUsd)}</td>

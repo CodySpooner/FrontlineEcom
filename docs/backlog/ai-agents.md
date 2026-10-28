@@ -1445,7 +1445,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     - an approval asked over MCP appears as approval_request in the run's transcript and frees its slot;
     - a Codex run stopped while a save_niche_pack request is pending leaves nothing pending;
   - "Codex isn't set up" states everywhere it's offered.
-- [ ] AA-16 **Execution states:**
+- [x] AA-16 **Execution states:**
   - waiting for input: an `ask_owner` tool that waits like an approval (a `question` kind), answered from the
     composer; the run continues with the answer;
   - how ask_owner and the Ask-me save wait (decision 11 has the same rule):
@@ -1692,6 +1692,12 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   PID-tree Stop, no reflection, ultra refused; Deploy, "Change runtime or model…" and Details show Codex. 18 new
   tests against recorded (features list, signed-out turn) and from-source fixtures; no test spawns codex.exe. Checked
   in headless Chrome at 1440. Ships enabled: the isolation proof is under Notes.
+- 2026-10-28 AA-16 Execution states: `ask_owner` (every role, conversations only) waits like an approval as a
+  `question` and returns the owner's answer; `POST /api/approvals/:id/answer?store=`; the question card (no Approve or
+  Deny, "Answer in conversation", the answer once given) and the composer answering it; Save and Skip on a `kb.save`
+  card; request_approval refuses both kinds; question notifications link to the conversation; runs carry their derived
+  state in the run APIs and the settings drawer; compaction and expired-session activity lines. 10 new tests, plus the
+  Codex case over MCP. Not checked in headless Chrome: the demo engine never asks, so the dev server has no question.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
@@ -1829,6 +1835,32 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-16, 2026-10-28) For AA-17 and later:
+  - `ask_owner` is in every role's base tools (roles.ts BASE). A run with no conversation is refused (scheduled and
+    module runs have no composer to answer in). It calls `approvals.create` and `approvals.decision` itself, emits
+    approval_request (so the slot frees and the state reads waiting_for_input), and skips the suggest, autopilot,
+    patience and storeMoved gates. Answered: "The owner answered: <text>"; closed unanswered (Stop, run end): "The
+    owner didn't answer…". Configs saved before AA-16 list their tools, so their conversations can't ask.
+  - `ApprovalRequest.conversationId`: the asking run's conversation, from a join in approvals.ts (`getApproval`,
+    `listApprovals`) and filled on create. Question notifications link to `/agents/c/<id>?store=`.
+  - `decide()` now keeps a note on approve too; that note is a question's answer. The answer route takes `{text}` of 1 to
+    4,000 characters (400 otherwise) and returns 409 unless the approval is a pending question of `?store=`, missing
+    ids included. The generic approve and deny routes are unchanged.
+  - request_approval refuses `question` and `kb.save` ("Not sent: <kind> requests come from ask_owner / save_finding.
+    Use it instead."). `kb.save` isn't in OUTLIVE_RUN, so a run's end closes it. save_finding itself is AA-18's; the
+    card's Save and Skip are ready (Skip asks no reason, the verdict reads Saved or Skipped).
+  - `ApprovalCard` dispatches: a question renders `QuestionCard` (no buttons; `here` in its own thread says "Answer in
+    the message box below."; decided: "You answered: …" or "Not answered."), everything else the old card.
+  - The composer finds its conversation's pending question in `useApprovals()` (by conversationId) and sends the answer
+    instead of a message; the placeholder reads "Answer <type>'s question".
+  - `GET /api/runs` and `/api/runs/:id` carry `state` (stateOf); run events over the socket don't, so a cached run's
+    state can lag until refetch. The conversation header uses the conversation's own state.
+  - Compaction: the SDK's `compact_boundary` system message (SDKCompactBoundaryMessage, SDK 0.3.310 types; not seen
+    live) maps to the notice "Earlier context was summarized to fit." An expired session already went on from the
+    recap (AA-05, AA-14b); the activity now says so.
+  - Already in place before AA-16 and checked: the derived states with the question split (AA-02), RUN_STATUS labels
+    ("Approval", "Needs reply", "Interrupted"), the Stop tooltip "Stops this reply. Pause isn't supported." for both
+    runtimes (Codex's Stop kills the tree, AA-15), queued sends (the composer while a reply runs).
 - (AA-15, 2026-10-28) For AA-16 and later. Method: the codex-cli 0.163.0 source and protocol schema, `features list`
   under the run flags, and one signed-out exec (recorded); no model turn ran.
   - **Isolation proof: Codex ships enabled.** With sandbox read-only, approval never and these features off

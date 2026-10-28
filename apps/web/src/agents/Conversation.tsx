@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type Rea
 import { Link, useNavigate } from 'react-router';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Ellipsis, LoaderCircle, Pencil, Square, X } from 'lucide-react';
 import { AGENT_ROLES, EFFORT_LABEL, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationContext, type ConversationState, type KbStage, type RunDeliverable, type RuntimeId, type Store } from '@frontline/shared';
-import { useAgentTypes, useCreateConversation, useKbCard, useRetryRun, useRun, useSendMessage, useStopConversation, useThread, useUpdateConversation } from '../api/client';
+import { useAgentTypes, useAnswer, useApprovals, useCreateConversation, useKbCard, useRetryRun, useRun, useSendMessage, useStopConversation, useThread, useUpdateConversation } from '../api/client';
 import { ApprovalCard, FixLink, ToolBlock } from '../components/Chat';
 import { Button, cx, ErrorState, LoadingState, RUN_STATUS } from '../components/ui';
 import { cents, modelName } from '../lib/format';
@@ -74,6 +74,8 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
   const latest = runs.filter((r) => !runs.some((x) => x.retryOf === r.id)).at(-1);
   const last = useRun(latest?.id ?? '').data ?? latest;
   const live = c.state === 'running' || c.state === 'queued' || c.state === 'awaiting_approval' || c.state === 'waiting_for_input';
+  // The agent's question waiting on the owner (ask_owner): the composer answers it (decision 5).
+  const question = useApprovals().data?.find((a) => a.action.kind === 'question' && a.conversationId === c.id);
   // Opens where it was left, else at the newest message; while at the bottom, growing replies stay in view.
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -131,7 +133,7 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
         )}
       </div>
       {last && interrupted(last) && <Interrupted store={store} conversationId={c.id} runId={last.id} />}
-      <Composer store={store} conversationId={c.id} type={c.type} name={name} live={live} />
+      <Composer store={store} conversationId={c.id} type={c.type} name={name} live={live} question={question} />
     </section>
   );
 }
@@ -356,7 +358,7 @@ function Reply({ store, conversationId, run, name, latest, deliverables = [] }: 
       </div>
       {(steps.length > 0 || live) && <Activity run={run} steps={steps} tools={tools} />}
       <div onClick={appLinks} className="grid gap-2.5">
-        {parts.map((p, i) => (p.kind === 'text' ? <div key={i} className={REPLY} dangerouslySetInnerHTML={{ __html: html[i]! }} /> : <ApprovalCard key={i} a={p.approval} tone="amber" />))}
+        {parts.map((p, i) => (p.kind === 'text' ? <div key={i} className={REPLY} dangerouslySetInnerHTML={{ __html: html[i]! }} /> : <ApprovalCard key={i} a={p.approval} tone="amber" here />))}
       </div>
       {cites.length > 0 && (
         <div aria-label="Sources" className="flex flex-wrap gap-1.5">
@@ -497,10 +499,11 @@ function writeDraft(id: string, text: string) {
  * Enter sends, Shift+Enter adds a line. While a reply runs, the message waits in the queue behind it.
  * ponytail: attach and the knowledge-scope chip render from AA-17 (a control appears once it works).
  */
-function Composer({ store, conversationId, type, name, live }: { store: Store; conversationId: string; type: string; name: string; live: boolean }) {
+function Composer({ store, conversationId, type, name, live, question }: { store: Store; conversationId: string; type: string; name: string; live: boolean; question?: ApprovalRequest }) {
   const [text, setText] = useState(() => readDraft(conversationId));
   const [saved, setSaved] = useState(false);
   const send = useSendMessage(store.id, conversationId);
+  const answer = useAnswer(store.id, conversationId);
   const navigate = useNavigate();
   const create = useCreateConversation(store.id);
   // A conversation that ran on demo data can't go on once the store is live (DEMO_SESSION): the message starts a new one.
@@ -520,7 +523,8 @@ function Composer({ store, conversationId, type, name, live }: { store: Store; c
   }, [conversationId, text]);
   const submit = () => {
     const message = text.trim();
-    if (!message || send.isPending) return;
+    if (!message || send.isPending || answer.isPending) return;
+    if (question) return answer.mutate({ id: question.id, text: message }, { onSuccess: () => setText('') });
     send.mutate(
       { clientRequestId: request.current, message },
       {
@@ -545,7 +549,7 @@ function Composer({ store, conversationId, type, name, live }: { store: Store; c
           rows={2}
           value={text}
           maxLength={20000}
-          placeholder={live ? 'Reply… it sends when this reply finishes' : `Message ${name}`}
+          placeholder={question ? `Answer ${name}'s question` : live ? 'Reply… it sends when this reply finishes' : `Message ${name}`}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -557,9 +561,9 @@ function Composer({ store, conversationId, type, name, live }: { store: Store; c
         />
         <div className="flex items-center gap-2 px-2.5 pb-2.5">
           {saved && <span className="text-[11px] text-muted">Draft saved</span>}
-          {send.isError && (
+          {(send.error ?? answer.error) && (
             <span role="alert" className="text-[11px] text-red">
-              {send.error.message}
+              {(send.error ?? answer.error)!.message}
             </span>
           )}
           {stale && (
@@ -567,7 +571,7 @@ function Composer({ store, conversationId, type, name, live }: { store: Store; c
               Send as a new conversation
             </Button>
           )}
-          <button type="submit" aria-label="Send" disabled={!text.trim() || send.isPending} className="ml-auto grid size-8 cursor-pointer place-items-center rounded-full bg-red text-white transition hover:brightness-110 disabled:cursor-default disabled:opacity-40">
+          <button type="submit" aria-label={question ? 'Send answer' : 'Send'} disabled={!text.trim() || send.isPending || answer.isPending} className="ml-auto grid size-8 cursor-pointer place-items-center rounded-full bg-red text-white transition hover:brightness-110 disabled:cursor-default disabled:opacity-40">
             <ArrowUp className="size-4" strokeWidth={2.2} />
           </button>
         </div>

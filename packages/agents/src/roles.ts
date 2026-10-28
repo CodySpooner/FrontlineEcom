@@ -32,6 +32,7 @@ export type ToolName =
   | 'search_memory'
   | 'write_memory'
   | 'request_approval'
+  | 'ask_owner'
   | 'create_creative'
   | 'search_knowledge'
   | 'recommend_research'
@@ -143,7 +144,7 @@ export const BUILTIN_TYPES: Record<string, RoleSpec & { name: string; descriptio
   },
 };
 
-const BASE: ToolName[] = ['store_summary', 'search_memory', 'write_memory', 'request_approval', 'assign_task', 'search_knowledge', 'recommend_research', 'propose_general'];
+const BASE: ToolName[] = ['store_summary', 'search_memory', 'write_memory', 'request_approval', 'ask_owner', 'assign_task', 'search_knowledge', 'recommend_research', 'propose_general'];
 
 export const ROLES: Record<AgentRole, RoleSpec> = {
   ad_strategist: {

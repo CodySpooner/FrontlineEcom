@@ -189,3 +189,35 @@ test("the secrets test's Codex case: the child's env is the allowlist, its argv 
     else process.env.FRONTLINE_SECRET_KEY = saved;
   }
 });
+
+test('the Codex case: a question asked over MCP is answered from the composer, and one still waiting when its run is stopped is closed', async () => {
+  const ask = (child: FakeCodexChild) =>
+    mcp(child.env.FRONTLINE_MCP_TOKEN!, { method: 'tools/call', params: { name: 'ask_owner', arguments: { question: 'Lead with the serum or the LED mask?' } } });
+  const question = (m: ReturnType<typeof codexRuns>['m'], runId: string) =>
+    m.get(runId)!.transcript.flatMap((e) => (e.type === 'approval_request' && e.approval.action.kind === 'question' ? [e.approval] : [])).at(0);
+  let answered = '';
+  const first = codexRuns(async (child) => {
+    await child.turn;
+    child.write({ type: 'thread.started', thread_id: 'thread-1' });
+    answered = ((await (await ask(child)).json()) as { result: { content: { text: string }[] } }).result.content[0]!.text;
+    finish(child);
+  });
+  const run = turn(first.m, conversation('copywriter'));
+  await vi.waitFor(() => expect(question(first.m, run.id)).toBeDefined());
+  const answer = await send('POST', `/api/approvals/${question(first.m, run.id)!.id}/answer?store=glow`, { text: 'The LED mask' });
+  expect(answer.status).toBe(200);
+  await first.m.idle();
+  expect(answered).toBe('The owner answered: The LED mask');
+  expect(getRun(db, run.id)).toMatchObject({ status: 'done' });
+
+  const second = codexRuns(async (child) => {
+    await child.turn;
+    child.write({ type: 'thread.started', thread_id: 'thread-2' });
+    void ask(child); // waits until the owner answers or the run ends
+  });
+  const stopped = turn(second.m, conversation('copywriter'));
+  await vi.waitFor(() => expect(question(second.m, stopped.id)).toBeDefined());
+  second.m.cancel(stopped.id);
+  await second.m.idle();
+  expect(db.prepare(`SELECT status FROM approvals WHERE run_id = ?`).all(stopped.id)).toEqual([{ status: 'denied' }]);
+});

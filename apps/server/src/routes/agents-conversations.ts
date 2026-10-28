@@ -4,6 +4,7 @@ import {
 } from '@frontline/agents';
 import { INTERRUPTED, type AgentRun, type Conversation, type ConversationContext, type CreateConversationInput, type RuntimeCapabilities, type SendMessageInput, type Store } from '@frontline/shared';
 import { Hono, type Context } from 'hono';
+import { decide, getApproval } from '../approvals';
 import type { Db } from '../db';
 import { getStore } from '../stores';
 import { runtimes } from './agents-runtimes';
@@ -163,6 +164,15 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       setConversationConfig(db, conversation.id, saveConfig(db, store, type, draft).id);
       const changed = getConversation(db, conversation.id)!;
       return c.json({ ...changed, config: getConfig(db, changed.configId) });
+    })
+    // A question an agent asked (ask_owner), answered from its conversation's composer: the tool returns the text.
+    .post('/api/approvals/:id/answer', async (c) => {
+      const b = (await c.req.json().catch(() => null)) as { text?: unknown } | null;
+      if (!isText(b?.text, 1, 4000)) return c.json({ error: 'An answer is 1 to 4,000 characters.' }, 400);
+      const a = getApproval(db, c.req.param('id'));
+      if (!a || a.storeId !== c.req.query('store') || a.status !== 'pending' || a.action.kind !== 'question') return c.json({ error: 'That question is no longer waiting for an answer.' }, 409);
+      const answered = decide(db, a.id, 'approve', b.text.trim());
+      return answered && answered !== 'decided' ? c.json(answered) : c.json({ error: 'That question is no longer waiting for an answer.' }, 409);
     })
     .get('/api/conversations/:id/tools', (c) => {
       const conversation = mine(c);

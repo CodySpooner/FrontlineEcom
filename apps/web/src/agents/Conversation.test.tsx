@@ -229,3 +229,25 @@ test('a conversation from before the store went live sends the refused message a
     ['/api/conversations?store=glow', { clientRequestId: expect.any(String), type: 'ad_strategist', message: 'Headlines for the real catalog' }],
   ]);
 });
+
+test("while the agent waits on its question, the composer answers it and the card says to answer below", async () => {
+  const q = { id: 'q1', storeId: 'glow', agentId: 'glow:ad_strategist', runId: 'r1', conversationId: 'c1', title: 'Which budget?', reason: 'Test at $40/day or $80/day?', status: 'pending', createdAt: '2026-10-28T10:01:00Z', action: { kind: 'question', payload: {} } };
+  const asking = run('r1', 'running', { transcript: [{ type: 'approval_request', approval: q as never }] });
+  const fetch = stubApi((url, init) => {
+    const u = new URL(url, 'http://x');
+    if (init?.method === 'POST') return { ...q, status: 'approved', decisionNote: '$40/day' };
+    if (u.pathname === '/api/approvals' && u.searchParams.get('status') === 'pending') return [q];
+    if (u.pathname === '/api/approvals') return [];
+    if (u.pathname === '/api/conversations/c1/thread') return { items: [asking], total: 1 };
+    if (u.pathname === '/api/agent-types') return [{ id: 'ad_strategist', name: 'Ad Strategist', description: '', baseRole: 'ad_strategist' }];
+    return u.pathname === '/api/runs/r1' ? asking : undefined;
+  });
+  show(conversation('waiting_for_input'));
+  expect(await screen.findByText('Answer in the message box below.')).toBeTruthy();
+  expect(screen.getByText('Needs reply')).toBeTruthy();
+  const box = await screen.findByPlaceholderText("Answer Ad Strategist's question");
+  fireEvent.change(box, { target: { value: '$40/day' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send answer' }));
+  await vi.waitFor(() => expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url, init]) => [url, JSON.parse(String(init!.body))])).toEqual([['/api/approvals/q1/answer?store=glow', { text: '$40/day' }]]));
+  await vi.waitFor(() => expect((box as HTMLTextAreaElement).value).toBe(''));
+});

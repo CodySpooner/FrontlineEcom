@@ -125,3 +125,36 @@ describe('deciding a card in a waiting list', () => {
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Approve: Pause B' }));
   });
 });
+
+describe('a question (ask_owner) and a finding to save (kb.save)', () => {
+  const q = { id: 'q1', storeId: 'peak', agentId: 'peak:copywriter', runId: 'r1', conversationId: 'c1', title: 'Serum or mask?', reason: 'Lead with the serum or the LED mask?', status: 'pending', createdAt: '2026-10-28T08:00:00Z', action: { kind: 'question', payload: {} } } as ApprovalRequest;
+
+  it('never shows Approve or Deny: it links to its conversation, or says to answer below when shown there, and then shows the answer', async () => {
+    stubApi((url) => (url.startsWith('/api/approvals?status=pending') ? [q] : []));
+    renderApp(<ApprovalCard a={q} who="Copywriter · Peak Gear" />);
+    expect((await screen.findByRole('link', { name: 'Answer in conversation' })).getAttribute('href')).toBe('/agents/c/c1?store=peak');
+    expect(screen.getByText('Copywriter · Peak Gear · Question')).toBeTruthy();
+    expect(screen.getByText('Lead with the serum or the LED mask?')).toBeTruthy();
+    expect(screen.queryAllByRole('button')).toEqual([]);
+    cleanup();
+    stubApi((url) => (url.startsWith('/api/approvals?status=pending') ? [q] : []));
+    renderApp(<ApprovalCard a={q} tone="amber" here />);
+    expect(await screen.findByText('Answer in the message box below.')).toBeTruthy();
+    expect(screen.queryAllByRole('button')).toEqual([]);
+    cleanup();
+    stubApi((url) => (url.startsWith('/api/approvals?status=approved') ? [{ ...q, status: 'approved', decisionNote: 'The mask' }] : []));
+    renderApp(<ApprovalCard a={q} tone="amber" here />);
+    expect(await screen.findByText('The mask')).toBeTruthy();
+    expect(screen.getByText(/^You answered:/)).toBeTruthy();
+  });
+
+  it('labels a finding\'s buttons Save and Skip, and Skip asks no reason', async () => {
+    const f = { ...q, id: 'f1', title: 'Save: UGC hooks beat studio shots', reason: 'CTR 2.1% vs 0.9%', action: { kind: 'kb.save', payload: {} } } as ApprovalRequest;
+    const fetch = stubApi((url) => (url.startsWith('/api/approvals?status=pending') ? [f] : url === '/api/approvals/f1/deny' ? { ...f, status: 'denied' } : []));
+    renderApp(<ApprovalCard a={f} />);
+    expect((await screen.findAllByRole('button')).map((b) => b.textContent)).toEqual(['Save', 'Skip']);
+    fireEvent.click(screen.getByRole('button', { name: `Skip: ${f.title}` }));
+    expect(await screen.findByText('Skipped')).toBeTruthy();
+    expect(fetch.mock.calls.some(([url]) => url === '/api/approvals/f1/deny')).toBe(true);
+  });
+});

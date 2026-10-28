@@ -18,10 +18,14 @@ const toApproval = (r: Row): ApprovalRequest => ({
   ...(r.run_id ? { runId: String(r.run_id) } : {}),
   ...(r.decided_at ? { decidedAt: String(r.decided_at) } : {}),
   ...(r.decision_note ? { decisionNote: String(r.decision_note) } : {}),
+  ...(r.conversation_id ? { conversationId: String(r.conversation_id) } : {}),
 });
 
+/** With the asking run's conversation, where a question is answered. */
+const SELECT = 'SELECT a.*, r.conversation_id FROM approvals a LEFT JOIN agent_runs r ON r.id = a.run_id';
+
 export const getApproval = (db: Db, id: string) => {
-  const r = db.prepare('SELECT * FROM approvals WHERE id = ?').get(id);
+  const r = db.prepare(`${SELECT} WHERE a.id = ?`).get(id);
   return r ? toApproval(r) : undefined;
 };
 
@@ -31,20 +35,20 @@ export function listApprovals(db: Db, storeIds: string[], status?: ApprovalStatu
   const args: string[] = [...storeIds];
   if (status) args.push(status);
   return db
-    .prepare(`SELECT * FROM approvals WHERE store_id IN (${storeIds.map(() => '?').join(',')}) ${status ? 'AND status = ?' : ''} ORDER BY created_at DESC, rowid DESC`)
+    .prepare(`${SELECT} WHERE a.store_id IN (${storeIds.map(() => '?').join(',')}) ${status ? 'AND a.status = ?' : ''} ORDER BY a.created_at DESC, a.rowid DESC`)
     .all(...args)
     .map(toApproval);
 }
 
 /**
- * Approves or denies a pending request (a denial can carry the owner's `note`) and broadcasts it. Returns undefined if
- * missing, 'decided' if not pending.
+ * Approves or denies a pending request (a denial can carry the owner's `note`, an answered question its answer) and
+ * broadcasts it. Returns undefined if missing, 'decided' if not pending.
  */
 export function decide(db: Db, id: string, decision: ApprovalDecision, note?: string): ApprovalRequest | 'decided' | undefined {
   const status: ApprovalStatus = decision === 'approve' ? 'approved' : 'denied';
   const changed = db
     .prepare("UPDATE approvals SET status = ?, decided_at = ?, decision_note = ? WHERE id = ? AND status = 'pending'")
-    .run(status, new Date().toISOString(), decision === 'deny' ? (note ?? null) : null, id).changes;
+    .run(status, new Date().toISOString(), note ?? null, id).changes;
   const a = getApproval(db, id);
   if (!a) return undefined;
   if (!changed) return 'decided';
@@ -81,12 +85,15 @@ export function announceRestoreClosed(db: Db) {
 /** The in-process hook the agents engine uses to ask the owner and wait for the answer. */
 export const approvalsHook = (db: Db): ApprovalsHook => ({
   create(input) {
-    const a: ApprovalRequest = { id: randomUUID(), ...input, status: 'pending', createdAt: new Date().toISOString() };
+    const conversation = input.runId && db.prepare('SELECT conversation_id FROM agent_runs WHERE id = ?').get(input.runId)?.conversation_id;
+    const a: ApprovalRequest = { id: randomUUID(), ...input, status: 'pending', createdAt: new Date().toISOString(), ...(conversation ? { conversationId: String(conversation) } : {}) };
     db.prepare('INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
       a.id, a.storeId, a.agentId, a.runId ?? null, a.title, a.reason, JSON.stringify(a.action), a.status, a.createdAt,
     );
     publish({ type: 'approval', approval: a });
-    notify(db, { kind: 'approval', title: a.title, body: a.reason, storeId: a.storeId, link: '/' });
+    // A question is answered in its conversation (decision 5).
+    const link = a.action.kind === 'question' && a.conversationId ? `/agents/c/${encodeURIComponent(a.conversationId)}?store=${encodeURIComponent(a.storeId)}` : '/';
+    notify(db, { kind: 'approval', title: a.title, body: a.reason, storeId: a.storeId, link });
     return a;
   },
   decision(id) {

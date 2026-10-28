@@ -513,6 +513,7 @@ test('a follow-up whose session is gone goes on from a recap of the last exchang
   await m.idle();
   expect(getRun(db, reply.id)).toMatchObject({ status: 'done', sessionId: 's2' });
   expect(tasks[1]).toContain('asked: Draft 3 headlines\nYou answered: Glow your way to morning\n\nNow: Shorter please');
+  expect(getRun(db, reply.id)?.transcript).toContainEqual({ type: 'notice', text: 'The earlier session had ended, so this reply started from a summary of the earlier work.' });
 });
 
 test('an account problem (usage limit) is told once a day, not once per failed run', async () => {

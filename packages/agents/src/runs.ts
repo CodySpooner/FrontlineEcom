@@ -357,6 +357,7 @@ export function createRunManager(opts: RunManagerOptions) {
           // Claude Code keeps sessions 30 days, per folder: a follow-up whose session is gone goes on from a recap.
           if (end.type === 'error' && attempt.resume && end.message.startsWith('No conversation found')) {
             attempt = recapped(attempt, run.conversationId && conversationPreface(db, run.conversationId, run.id));
+            emit({ type: 'notice', text: 'The earlier session had ended, so this reply started from a summary of the earlier work.' });
             continue;
           }
           // A busy or failing service is tried again, twice at most, unless the attempt already changed something.

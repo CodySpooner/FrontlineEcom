@@ -161,8 +161,49 @@ function KbCite({ id, raw }: { id: string; raw: string }) {
 }
 
 /** `tone="amber"` (the AI Agents thread only): the board's amber card, with Deny… before Approve on the right. */
-export function ApprovalCard({ a, who, tone }: { a: ApprovalRequest; who?: string; tone?: 'amber' }) {
+/** `here`: shown in the conversation that asked, whose composer answers a question. */
+export function ApprovalCard(props: { a: ApprovalRequest; who?: string; tone?: 'amber'; here?: boolean }) {
+  return props.a.action.kind === 'question' ? <QuestionCard {...props} /> : <RequestCard {...props} />;
+}
+
+/** A question an agent asked (ask_owner): answered from its conversation's composer, never approved or denied. */
+function QuestionCard({ a, who, here }: { a: ApprovalRequest; who?: string; here?: boolean }) {
+  const open = useApprovals().data?.some((p) => p.id === a.id) ?? a.status === 'pending';
+  const answer = useApprovals('approved').data?.find((x) => x.id === a.id)?.decisionNote ?? a.decisionNote;
+  return (
+    <div className="rounded-lg border border-[#7aa7ff]/35 bg-[#7aa7ff]/5 p-3">
+      <div className="text-[11px] font-semibold tracking-[.07em] text-[#7aa7ff] uppercase">
+        {who ? `${who} · Question` : open ? 'Needs your answer' : 'Question'}
+      </div>
+      <div className="mt-1 text-[13px] font-semibold whitespace-pre-wrap">{a.reason}</div>
+      <div className="mt-1.5 text-xs text-muted">
+        {open ? (
+          here ? (
+            'Answer in the message box below.'
+          ) : (
+            a.conversationId && (
+              <Link to={`/agents/c/${encodeURIComponent(a.conversationId)}?store=${encodeURIComponent(a.storeId)}`} className="text-[#ff6b76] hover:underline">
+                Answer in conversation
+              </Link>
+            )
+          )
+        ) : answer ? (
+          <>
+            You answered: <span className="whitespace-pre-wrap text-text-2">{answer}</span>
+          </>
+        ) : (
+          'Not answered.'
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RequestCard({ a, who, tone }: { a: ApprovalRequest; who?: string; tone?: 'amber' }) {
   const amber = tone === 'amber';
+  // A finding to save (kb.save) is saved or skipped, with no reason asked (decision 11).
+  const finding = a.action.kind === 'kb.save';
+  const [yes, no] = finding ? ['Save', 'Skip'] : ['Approve', 'Deny'];
   const pending = useApprovals().data;
   const decide = useDecide();
   const [verdict, setVerdict] = useState<'approve' | 'deny'>();
@@ -178,6 +219,7 @@ export function ApprovalCard({ a, who, tone }: { a: ApprovalRequest; who?: strin
     (others.find((b) => card.current!.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ?? others.at(-1))?.focus();
     return decide.mutateAsync({ id: a.id, verdict: v, note }).then(() => setVerdict(v), () => {});
   };
+  const refuse = () => (finding ? act('deny') : setDenying(true));
   return (
     <div ref={card} className={amber ? 'rounded-lg border border-amber/38 bg-amber/5 p-3' : 'rounded-lg border border-red/40 bg-red-soft/40 p-3'}>
       <div className={amber ? 'text-[11px] font-semibold tracking-[.07em] text-amber uppercase' : 'font-display text-[11px] font-bold tracking-[.12em] text-red uppercase'}>
@@ -195,24 +237,24 @@ export function ApprovalCard({ a, who, tone }: { a: ApprovalRequest; who?: strin
           <DenyReason title={a.title} disabled={decide.isPending} onDeny={(note) => act('deny', note)} onBack={() => (setDenying(false), setBacked(true))} />
         ) : open && amber ? (
           <>
-            <Button size="sm" disabled={decide.isPending} onClick={() => setDenying(true)} aria-label={`Deny: ${a.title}`} autoFocus={backed}>
-              Deny…
+            <Button size="sm" disabled={decide.isPending} onClick={refuse} aria-label={`${no}: ${a.title}`} autoFocus={backed}>
+              {finding ? no : 'Deny…'}
             </Button>
-            <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => act('approve')} aria-label={`Approve: ${a.title}`} data-approve={a.id}>
-              Approve
+            <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => act('approve')} aria-label={`${yes}: ${a.title}`} data-approve={a.id}>
+              {yes}
             </Button>
           </>
         ) : open ? (
           <>
-            <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => act('approve')} aria-label={`Approve: ${a.title}`} data-approve={a.id}>
-              Approve
+            <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => act('approve')} aria-label={`${yes}: ${a.title}`} data-approve={a.id}>
+              {yes}
             </Button>
-            <Button size="sm" disabled={decide.isPending} onClick={() => setDenying(true)} aria-label={`Deny: ${a.title}`} autoFocus={backed}>
-              Deny
+            <Button size="sm" disabled={decide.isPending} onClick={refuse} aria-label={`${no}: ${a.title}`} autoFocus={backed}>
+              {no}
             </Button>
           </>
         ) : (
-          verdict ? <Badge tone={verdict === 'deny' ? 'red' : 'good'}>{verdict === 'approve' ? 'Approved' : 'Denied'}</Badge> : <Outcome id={a.id} />
+          verdict ? <Badge tone={verdict === 'deny' ? 'red' : 'good'}>{verdict === 'approve' ? (finding ? 'Saved' : 'Approved') : finding ? 'Skipped' : 'Denied'}</Badge> : <Outcome id={a.id} />
         )}
         {decide.isError && (
           <span role="alert" className="text-xs text-red">

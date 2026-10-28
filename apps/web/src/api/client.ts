@@ -358,6 +358,16 @@ export function useSendMessage(storeId: string, conversationId: string) {
   });
 }
 
+/** Answers an agent's question (ask_owner) from its conversation's composer; the run goes on with the text. */
+export function useAnswer(storeId: string, conversationId: string) {
+  const qc = useQueryClient();
+  const done = useConversationDone(storeId);
+  return useMutation({
+    mutationFn: ({ id, text }: { id: string; text: string }) => api<ApprovalRequest>(`/api/approvals/${id}/answer?store=${storeId}`, json('POST', { text })),
+    onSuccess: () => (qc.invalidateQueries({ queryKey: ['approvals'] }), done(conversationId)),
+  });
+}
+
 /** Retry (a failed or unsatisfying reply, from the last one that finished) or Resume (one cut off by a restart). */
 export function useRetryRun(storeId: string, conversationId: string) {
   const done = useConversationDone(storeId);

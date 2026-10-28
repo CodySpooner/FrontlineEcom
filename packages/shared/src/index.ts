@@ -157,6 +157,9 @@ export const APPROVAL_KINDS: Record<string, { label: string; autopilot?: boolean
   'kb.research': { label: 'Start research' },
   'kb.promote': { label: 'Promote knowledge to General' },
   tool_use: { label: 'Use a connected tool' },
+  // Waits that act on nothing outside the app (decisions 5 and 11): a question is answered, never approved or denied.
+  question: { label: 'Answer a question' },
+  'kb.save': { label: 'Save a finding' },
 };
 
 export interface ApprovalAction {
@@ -184,9 +187,12 @@ export interface ApprovalRequest {
   decidedAt?: string;
   /**
    * The owner's reason for a denial, e.g. "too expensive": POST /api/approvals/:id/deny takes an optional JSON body
-   * { note?: string } (1-300 characters, trimmed; 400 otherwise). Approve takes no body.
+   * { note?: string } (1-300 characters, trimmed; 400 otherwise). Approve takes no body. For a `question`, the owner's
+   * answer (POST /api/approvals/:id/answer?store= { text }).
    */
   decisionNote?: string;
+  /** The conversation of the run that asked, where a `question` is answered. */
+  conversationId?: string;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

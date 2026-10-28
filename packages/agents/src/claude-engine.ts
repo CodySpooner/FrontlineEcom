@@ -293,6 +293,9 @@ export function toAgentEvents(message: SDKMessage, mode?: RunInput['mode'], flag
           : [],
       );
     }
+    case 'system':
+      // The role prompt, store scope and permissions are in the system prompt, so compaction can't drop them (decision 10).
+      return message.subtype === 'compact_boundary' ? [{ type: 'notice', text: 'Earlier context was summarized to fit.' }] : [];
     case 'result': {
       const u = message.usage;
       // A run that stops early still spent money: errors carry it too, so the store's daily AI budget sees it.
