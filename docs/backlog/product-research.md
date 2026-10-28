@@ -664,6 +664,7 @@ STOP**, the owner may delete `.agent/STOP` and ask for "run PR-29, then update t
 STOP.
 
 ## Inbox
+- [ ] (from codex-hardening, CH-05) CH-04 reserves queued CJ calls on their admission date. A call admitted just before 00:00 UTC can dispatch the next day while its row still counts yesterday, so actual requests and reservation-day counts can diverge. Proposed default: on a UTC rollover while queued, atomically check the new day's capacity and transfer the reservation before fetch, without charging the dev-total cap twice; retain a truthful interrupted/refused record. Add a fake-clock boundary regression. No live CJ call was made.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 
 ## Items

@@ -394,6 +394,7 @@ This lane is finite. When KB-01..KB-26 are done, don't add new items (this overr
 rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog nudge if `.agent/STOP` exists.
 
 ## Inbox
+- [ ] (from codex-hardening, CH-05) `reservedUsd` counts pending autonomous approvals plus tasks. `decide` changes pending to approved synchronously, but `onApproved` creates the task on setImmediate, so the reservation disappears between those events and another trigger can take its budget. There is no approval-to-task key for a safe deduplicated transfer. Proposed default: durable approval/task linkage and one transaction transferring the reservation; approved-but-not-dispatched work must remain reserved (also after restart, with CH-03 reconciliation). Add a regression that approves one $1 task and scans another trigger before the deferred dispatch under a $1/day cap.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 
 ## Items

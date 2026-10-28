@@ -1025,9 +1025,9 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ campaignId, change, newDailyBudget, evidence }, ctx) => {
       const c = ctx.db.prepare('SELECT * FROM campaigns WHERE id = ? AND store_id = ?').get(campaignId, ctx.store.id);
       if (!c) return `No campaign ${campaignId} in this store. Use review_campaigns for ids.`;
-      const waiting = ctx.db
-        .prepare(`SELECT id, title, created_at FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign') AND json_extract(action_json, '$.payload.campaignId') = ?`)
-        .get(ctx.store.id, campaignId);
+      const pendingCampaign = ctx.db
+        .prepare(`SELECT id, title, created_at FROM approvals WHERE store_id = ? AND status = 'pending' AND json_extract(action_json, '$.kind') IN ('ads.set_budget', 'ads.pause_campaign') AND json_extract(action_json, '$.payload.campaignId') = ?`);
+      const waiting = pendingCampaign.get(ctx.store.id, campaignId);
       // A live store's request over 4 days old is never applied (its numbers moved), so a fresh one replaces it (below,
       // once the fresh one passed every check) instead of being blocked by it.
       const replace =
@@ -1056,6 +1056,12 @@ export const APP_TOOLS: AppTool[] = [
       if (to > most) {
         return `Not sent: raise a budget at most 30% at a time (${cash(from, ctx.store.currency)} → up to ${cash(most, ctx.store.currency)}/day); a bigger jump restarts the network's learning. Raise again once it has held for 3 days.`;
       }
+      // Autopilot caps bound the budget a change touches (a pause stops all of it); the added-spend cap counts raises only.
+      // ponytail: no rate → no amount, so the caps can't be checked and autopilot can't take it: the owner decides. Same
+      // for a pause with no campaign budget (ad set or lifetime budgets, synced as 0): what it stops is unknown, not $0.
+      const usd = change === 'pause' && !(from > 0) ? undefined : await inUsd(ctx, change === 'pause' ? from : Math.abs(to - from));
+      const pending = pendingCampaign.get(ctx.store.id, campaignId);
+      if (pending && pending.id !== replace) return `Not sent: "${pending.title}" is already waiting for the owner. One change per campaign at a time.`;
       // A change is judged on the 3 days after it, and delivery takes 48-72 h to settle after a budget edit: one at a
       // time. A pause can always go: it stops a loss.
       const recent =
@@ -1070,10 +1076,6 @@ export const APP_TOOLS: AppTool[] = [
       if (recent) {
         return `Not sent: ${String(c.name)}'s budget was changed on ${String(recent.decided_at).slice(0, 10)}. It needs 48-72 h to settle and is judged on the 3 days after, so propose the next step once those are over (a pause can go now).`;
       }
-      // Autopilot caps bound the budget a change touches (a pause stops all of it); the added-spend cap counts raises only.
-      // ponytail: no rate → no amount, so the caps can't be checked and autopilot can't take it: the owner decides. Same
-      // for a pause with no campaign budget (ad set or lifetime budgets, synced as 0): what it stops is unknown, not $0.
-      const usd = change === 'pause' && !(from > 0) ? undefined : await inUsd(ctx, change === 'pause' ? from : Math.abs(to - from));
       const addedUsd = to > from ? usd : 0;
       const cap = ctx.caps?.(ctx.store.id).adSpendChangePerDay;
       const addedToday = addedUsd ? budgetAddedToday(ctx.db, ctx.store.id) : 0;
@@ -1207,6 +1209,7 @@ export const APP_TOOLS: AppTool[] = [
           ? `Not sent: ${kind} requests come from ${own}, ${theirs} tool, not yours. Hand it over with assign_task (with the numbers), or put the recommendation in your answer.`
           : `Not sent: ${kind} requests come from ${own}, which checks the numbers and the owner's caps. Use it instead.`;
       }
+      const amountUsd = amount === undefined ? undefined : await inUsd(ctx, amount);
       const no = kind === 'store.add_products' && noStoreWrites(ctx.store);
       if (no) return no;
       if (kind === 'store.add_products') {
@@ -1241,7 +1244,6 @@ export const APP_TOOLS: AppTool[] = [
         payload = { ...payload, slug: nicheSlug(ctx.store.nicheDetail) }; // every store of that niche loads it: never another niche's
         reason = `${reason}\n\n${String(payload.markdown ?? '')}`; // what the owner approves is what gets saved
       }
-      const amountUsd = amount === undefined ? undefined : await inUsd(ctx, amount);
       // Nothing in the app carries some kinds out (price tests, customer messages...): the owner does, so say so up front.
       const manual = !ACTIONS[kind] && !OUTLIVE_RUN.includes(kind);
       const why = manual ? `${reason} (You apply this one yourself; the agent lists the steps.)` : reason;

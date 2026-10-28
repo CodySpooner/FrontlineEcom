@@ -1200,6 +1200,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 `.agent/STOP` exists.
 
 ## Inbox
+- [ ] (from codex-hardening, CH-05 / Q1) Decision 9 says Codex/Demo are never bounded by dollar caps and decision 12 excludes them from team spend; confirmed `codex.ts` reports tokens with costUsd 0. However `runs.ts` start checks store/agent dollar caps before resolving the runtime, and pump/execute apply those shares to all runtimes. Proposed default: runtime-aware admission/seating consistent with decision 9, keeping Codex Stop-after mandatory. Hardening left this unchanged because removing a refusal is outside its tighten-only authority.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 - [x] (from product-research) A `product` ConversationContext kind, so a conversation opened from Product Research
   shows "Opened from <product>" (product-research decision 15). Done 2026-10-28: `{ kind: 'product', id, name }`.

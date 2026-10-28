@@ -40,6 +40,8 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
 ## Notes (owner questions; work goes on with the default)
 
 - CH-03 filed in `docs/backlog/agents.md` Inbox: durable action execution state with an "unknown after interruption" outcome and owner reconciliation, no automatic replay. An absent marker cannot prove no live write occurred; existing successful ad writes also lack receipts. Default is no recovery behaviour change until that design is implemented.
+- CH-05 design/ownership filings: agents Inbox (agent/team share overbooking, concurrent theme copies, duplicate product batches and numeric validation), KB Inbox (approval→task reservation gap), Product Research Inbox (queued CJ calls crossing UTC midnight), core Inbox for Settings (store-zone cap resets). Proposed defaults are included in each filing; current policies remain.
+- Q1 resolved from AI Agents decisions 9 and 12 (`docs/backlog/ai-agents.md`): Codex records tokens, has no measured USD charge and is intended to be bounded by Stop-after, not dollar caps; no cost behaviour change. Filed a contradictory shared admission/seating refusal to that lane because removing it would loosen a guard.
 
 - Q1 Should Codex runs count toward a store's daily AI budget? Today they report `costUsd: 0` (`codex.ts` ~262), and
   `runs.ts` ~285 cites decision 12 for team budgets. Default: no behaviour change; confirm it's intended and say so.
@@ -73,7 +75,7 @@ the approval and cap-counter sections of `packages/agents/src/tools.ts`, `apps/s
 - [x] CH-04 CJ daily cap race: `refusal()` runs before `await turn()` and `recordCall` only after the fetch
   (`cj.ts` ~82-84), so calls queued at the same moment all pass the cap (`caps.ts` ~41-48). Reserve before waiting;
   a test with concurrent calls proves the cap holds.
-- [ ] CH-05 Sweep the rest of the map from CH-01 for the same classes: check-then-act races, caps counted after the
+- [x] CH-05 Sweep the rest of the map from CH-01 for the same classes: check-then-act races, caps counted after the
   spend, early returns that skip a record, amounts trusted from the agent. Fix each confirmed one (test first) or file
   it. Also settle Q1 above. The caps' "today" is machine-local midnight (`tools.ts` ~1661-1684), not the store's
   timezone: file only (Settings owns timezones).
@@ -159,6 +161,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-05: two failing concurrent-call regressions proved duplicate ad/product approvals across FX awaits; ad pending/recent checks and generic product checks now run after that await. 61 focused tests and `pnpm check` green (231 files / 1,705 tests). Audited synchronous autopilot approval counters, pending ad reservations, pre-render credit charging and synchronous PR draft requests; filed remaining reservation/ownership/design cases listed in Notes. Q1 confirmed against decisions 9/12; no dollar-cost policy changed.
 
 - 2026-10-28 CH-04: CJ reserves one `pr_calls` row synchronously before waiting, then updates its result; failed/interrupted calls keep the reservation. Four failing regressions proved concurrent ingestion/watch/dev-total overbooking and absent in-flight accounting; 31 focused tests and `pnpm check` green (230 files / 1,703 tests). No live requests.
 
