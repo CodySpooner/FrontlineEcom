@@ -1605,7 +1605,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - `styleseed-design-review` on the page, with fixes;
   - screenshots at the four sizes.
 - [x] AA-25 **Claude live smoke** (decision 16), recorded in Notes with its cost and time.
-- [ ] AA-25b **Codex live smoke** (decisions 9 and 16), recorded in Notes with its time. Its one run asks for a
+- [x] AA-25b **Codex live smoke** (decisions 9 and 16), recorded in Notes with its time. Its one run asks for a
   read-only tool call, then an ask_owner question (AA-16), which waits in the tool until the owner answers or the
   run ends (decision 9). While the question is pending, record the descendant tree and press Stop (decision 9), and
   check that no question is left pending. The JSONL up to Stop replaces the matching events in AA-15's fixture; the
@@ -1795,12 +1795,16 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   account's default model (Opus 5.5, medium effort). Done in 13.8 s for $0.112 (31,162 input and 1,053 output
   tokens): one store_summary call, an answer citing it and the demo data, three store memories from the reflection
   turn, and nothing else started. Details under Notes.
+- 2026-10-28 AA-25b Codex live smoke: not run. `codex login status` on the dev server's `CODEX_HOME` still says "Not
+  logged in", so the Blocked entry reads "Codex live smoke: needs the owner's sign-in" with the exact sign-in line.
+  Codex isn't disabled. The final report lists the Codex smoke as unverified.
 
 ## Blocked
-- (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
-  `CODEX_HOME` prints "Not logged in". In PowerShell:
+- (AA-15, 2026-10-28; checked again in AA-25b, 2026-10-28 11:23) **Codex live smoke: needs the owner's sign-in.**
+  `codex login status` with the dev server's `CODEX_HOME` still prints "Not logged in". To sign in, in PowerShell:
   `$env:CODEX_HOME='C:\Users\Xody2\orca\workspaces\FrontlineEcom\ai-agents\apps\server\.data\codex-home'; codex login`
-  AA-25b checks again first.
+  Then the AA-25b run (one read-only tool call, an ask_owner question, Stop while it waits, check no question is left
+  pending) can be made. Until then the Codex runtime is verified only against recorded fixtures and fakes.
 
 ## Notes
 - (coordinator, 2026-10-28) Open questions for the owner. They don't block any item:
