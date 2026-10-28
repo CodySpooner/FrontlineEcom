@@ -34,7 +34,7 @@ export function Analytics() {
   const s = summary.data;
   return (
     <>
-      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
+      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
       <div className="mb-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
         <StoreFilter />
         {s && (

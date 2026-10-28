@@ -1,11 +1,11 @@
 // Dev-only gallery of the design-system primitives (/dev/ui) for visual checks against docs/reference.
 import { useState } from 'react';
 import { Sparkles } from 'lucide-react';
-import { AGENT_ROLES, RANKS, type AgentRole, type AgentRunDetail } from '@frontline/shared';
+import { AGENT_ROLES, type AgentRole, type AgentRunDetail } from '@frontline/shared';
 import { Portrait } from '../components/Art';
 import { Transcript } from '../components/Chat';
 import { Hero } from '../components/Hero';
-import { AGENT_STATUS, Badge, Button, Card, Chip, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Table, Tooltip, XPBar } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, Card, Chip, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Table, Tooltip } from '../components/ui';
 
 export function DevGallery() {
   const [seg, setSeg] = useState('30D');
@@ -51,9 +51,6 @@ export function DevGallery() {
             <div className="flex items-center gap-3">
               <Portrait role="ad_strategist" />
               <Portrait role="product_hunter" />
-              <div className="flex-1">
-                <XPBar level={7} xp={320} next={500} />
-              </div>
             </div>
           </div>
         </Panel>
@@ -110,13 +107,12 @@ export function DevGallery() {
             </div>
           </Dialog>
         </Panel>
-        <Panel title="Agent portraits + rank frames (UI-08)" className="min-[1100px]:col-span-2">
+        <Panel title="Agent portraits (UI-08)" className="min-[1100px]:col-span-2">
           <div className="flex flex-wrap gap-3">
-            {(Object.keys(AGENT_ROLES) as AgentRole[]).map((r, i) => (
+            {(Object.keys(AGENT_ROLES) as AgentRole[]).map((r) => (
               <div key={r} className="grid justify-items-center gap-1.5 text-[11px] text-muted">
-                <Portrait role={r} rank={RANKS[i % RANKS.length]} className="size-24" />
+                <Portrait role={r} className="size-24" />
                 {AGENT_ROLES[r].name}
-                <span className="text-text-2">{RANKS[i % RANKS.length]}</span>
               </div>
             ))}
           </div>

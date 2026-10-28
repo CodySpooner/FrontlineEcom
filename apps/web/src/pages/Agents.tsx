@@ -1,4 +1,4 @@
-// UI-06 AI Agents: one store's squad at a time — portrait, status, level + XP, what it does, and Deploy for idle roles.
+// UI-06 AI Agents: one store's squad at a time — portrait, status, what it does, and Deploy for idle roles.
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Brain, MessageSquare, Plus, Settings2, Users } from 'lucide-react';
@@ -7,7 +7,7 @@ import { useAgents, useMemory, useStores, useSummary, useUpdateAgent } from '../
 import { Portrait } from '../components/Art';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { AGENT_STATUS, Badge, Button, buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState, ProgressBar, StatusDot, STORE_HEALTH, Tabs, XPBar } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState, ProgressBar, StatusDot, STORE_HEALTH, Tabs } from '../components/ui';
 import { NAV } from '../nav';
 
 const NAV_AGENTS = NAV[1]!;
@@ -35,7 +35,7 @@ export function Agents() {
 
   return (
     <>
-      <Hero title={NAV_AGENTS.title} subtitle={NAV_AGENTS.subtitle} icon={NAV_AGENTS.icon} art={NAV_AGENTS.art} />
+      <Hero title={NAV_AGENTS.title} subtitle={NAV_AGENTS.subtitle} icon={NAV_AGENTS.icon} />
       {stores.isPending || agents.isPending ? (
         <LoadingState rows={4} />
       ) : stores.isError || agents.isError ? (
@@ -121,7 +121,7 @@ function AgentCard({ a, learned, store, onDeploy, deploying, failed }: { a: Agen
   const to = `/agents/${encodeURIComponent(a.id)}`;
   return (
     <article className="card flex flex-col gap-3 p-3.5">
-      <Portrait role={a.role} rank={a.rank} className={cx('h-[132px] w-full', off && 'opacity-40 grayscale')} />
+      <Portrait role={a.role} className={cx('h-[132px] w-full', off && 'opacity-40 grayscale')} />
       <div className="flex items-start justify-between gap-2">
         <h2 className="font-display text-[15px] leading-tight font-semibold">{role.name}</h2>
         {off ? (
@@ -133,7 +133,6 @@ function AgentCard({ a, learned, store, onDeploy, deploying, failed }: { a: Agen
           </span>
         )}
       </div>
-      <XPBar level={a.level} rank={a.rank} xp={a.levelProgress?.xp ?? 0} next={a.levelProgress?.needed ?? 100} />
       <p className="line-clamp-3 min-h-[3lh] text-xs text-muted">{role.blurb}</p>
       {/* DESIGN §1: each agent becomes an expert in its store by learning from every run. */}
       {learned > 0 && !off && (

@@ -9,7 +9,7 @@ import { seedDemo } from '../demo';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
 import { discardThemeCopy, draftThemeCopy, onDecision, publishThemeChange } from './agents-actions';
-import { checkThemeOutcomes } from './agents-gamification';
+import { checkThemeOutcomes } from './agents-outcomes';
 
 let db: Db;
 beforeEach(() => {
@@ -209,14 +209,12 @@ test("a published theme change is judged on store conversion, 14 days before vs 
   for (let d = 1; d <= 14; d++) for (const id of [`etsy-${d}-a`, `etsy-${d}-b`, `woo-${d}`]) {
     db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('glow', ?, ?, 20, 'paid', 'delivered', ?)`).run(id, `${addDays(day, d)}T12:00:00Z`, addDays(day, d));
   }
-  const xp = getAgent(db, 'glow:store_developer')!.xp;
   checkThemeOutcomes(db);
   checkThemeOutcomes(db);
   expect(listMemory(db, 'glow').filter((m) => m.tags.includes('theme')).map((m) => m.text)).toEqual([
     'The theme change "Sticky ATC" worked: conversion 2.00% → 2.50% (14 days before vs after, 14,000 → 14,000 sessions).',
   ]);
-  expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Measured win: Store Developer'`).all()).toEqual([{ link: '/agents/glow:store_developer?tab=history' }]); // its XP line
-  expect(getAgent(db, 'glow:store_developer')!.xp).toBeGreaterThan(xp);
+  expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Measured win: Store Developer'`).all()).toEqual([{ link: '/agents/glow:store_developer?tab=memory' }]);
 });
 
 test("a theme change waits for GA4 to finish its window's last day, ~48h after it", () => {
@@ -251,12 +249,10 @@ test('a theme change on a store with a handful of orders is not judged on one or
   window(-14, -1, 0, 50);
   window(1, 14, 0, 50);
   db.prepare(`UPDATE daily_metrics SET orders = 1 WHERE store_id = 'glow' AND date IN (?, ?, ?)`).run(addDays(day, -3), addDays(day, 2), addDays(day, 3)); // 1 → 2 orders
-  const xp = getAgent(db, 'glow:store_developer')!.xp;
   checkThemeOutcomes(db);
   expect(listMemory(db, 'glow').filter((m) => m.tags.includes('theme')).map((m) => m.text)).toEqual([
     `The theme change "Sticky ATC" can't be judged on 3 orders (it takes 30): conversion 0.14% → 0.29% (14 days before vs after, 700 → 700 sessions).`,
   ]);
-  expect(getAgent(db, 'glow:store_developer')!.xp).toBe(xp);
   expect(db.prepare(`SELECT title FROM notifications WHERE title LIKE 'Store Developer:%'`).get()?.title).toBe('Store Developer: result unclear on too few orders');
 });
 

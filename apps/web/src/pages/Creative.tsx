@@ -63,7 +63,7 @@ export function Creative() {
 
   return (
     <>
-      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
+      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
       <Tabs label="Creative tools" tabs={TABS} value={tab.value} onChange={(t) => (start.reset(), setParams(t === 'generate' ? {} : { tab: t }, { replace: true }))} />
       <div className="mt-4 grid items-start gap-4 min-[1100px]:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <Panel title={media ? 'Create Your Ad' : 'Write Your Copy'} sub={`For ${store?.name ?? 'your store'} · ${tab.role === 'copywriter' ? 'Copywriter' : 'Creative Studio'} agent`}>

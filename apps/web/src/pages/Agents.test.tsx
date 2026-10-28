@@ -30,7 +30,7 @@ describe('AI agents', () => {
       url === '/api/stores'
         ? [{ id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', color: '#ff2a3a', currency: 'USD', timezone: 'UTC' }]
         : url === '/api/agents'
-          ? ['copywriter', 'ad_strategist'].map((role) => ({ id: `peak:${role}`, storeId: 'peak', role, status: 'idle', level: 2, rank: 'recruit', enabled: true }))
+          ? ['copywriter', 'ad_strategist'].map((role) => ({ id: `peak:${role}`, storeId: 'peak', role, status: 'idle', enabled: true }))
           : url === '/api/stores/peak/memory'
             ? [
                 { id: 'm1', storeId: 'peak', agentId: 'peak:copywriter', kind: 'learning', text: 'Short hooks win', confidence: 0.7, tags: [], createdAt: '2026-10-26T08:00:00Z' },

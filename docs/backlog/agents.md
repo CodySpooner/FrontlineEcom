@@ -5,6 +5,13 @@ Read the `claude-api` skill before writing engine code (Agent SDK: `query()`, st
 `packages/contracts/src/orchestrationV2.ts` for a battle-tested way to drive it (MIT — keep the notice on ported code).
 Tests always use the FakeEngine; at most one short real-engine smoke run per task.
 
+> Owner, 2026-10-28: XP, levels, ranks, achievements, daily missions (`/api/missions`), the commander, the profit streak
+> and the XP history (`/api/agents/:id/xp`, `xp_events`) are removed. `routes/agents-gamification.ts` is now
+> `routes/agents-outcomes.ts`: it exports `checkOutcomes`, run by `startOutcomeLoop` (startup + hourly), and every
+> outcome notification links `/agents/<id>?tab=memory`. Outcome checks (measured wins → store memory, confidence, KB
+> evidence, notifications), niche promotions and squad missions stay. Items below that built the removed parts are
+> history: don't rebuild them (CLAUDE.md hard rule).
+
 ## Inbox
 - [x] (from ui, small) The measured-win notification (`agents-gamification.ts` notify: "Measured win: …" / "…: no lift this time") links to `/agents/<id>`, which opens Chat. `/agents/<id>?tab=history` lands on the History tab, whose new "XP earned" list (UI-111) shows the win's "+N XP · Measured win: …" line.
 - [x] (from ui) An agent's XP history for AgentDetail (DESIGN §8: XP for tasks, accepted requests and measured wins; today the owner only sees passing toasts): `GET /api/agents/:id/xp?limit=` → `XpEvent[]` (shared) newest first from `xp_events` for that agent, default limit 50. The UI will list "+40 XP · Measured win: ROAS 1.8 → 2.4 after …" with the time, and hides the panel while the route 404s.

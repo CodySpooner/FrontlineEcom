@@ -8,7 +8,7 @@ const NICHES: Niche[] = ['beauty', 'pet', 'tech', 'fitness', 'home', 'fashion', 
 const glow: Store = { id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', nicheDetail: 'at-home skincare devices', currency: 'USD', timezone: 'America/Chicago', color: '#ff8f98', connected: false };
 const peak: Store = { id: 'peak', name: 'Peak Fit', platform: 'tiktok_shop', niche: 'fitness', currency: 'USD', timezone: 'America/Chicago', color: '#999', connected: true };
 const odd: Store = { id: 'odd', name: 'Odd Lots', platform: 'amazon', niche: 'other', nicheDetail: 'vintage fountain pens', currency: 'EUR', timezone: 'Europe/Berlin', color: '#fff', connected: false };
-const agentOf = (store: Store, role: AgentRole): Agent => ({ id: `${store.id}:${role}`, storeId: store.id, role, status: 'idle', level: 1, xp: 0 });
+const agentOf = (store: Store, role: AgentRole): Agent => ({ id: `${store.id}:${role}`, storeId: store.id, role, status: 'idle' });
 const memory = (n: number, text = `learning ${n}`): StoreMemory => ({ id: `m${n}`, storeId: 'glow', agentId: 'glow:copywriter', kind: 'learning', text, confidence: 0.8, tags: [], createdAt: '2026-10-01' });
 
 const inOrder = (text: string, parts: string[]) => {

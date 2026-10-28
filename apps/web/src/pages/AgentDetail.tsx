@@ -3,7 +3,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { ArrowLeft, Brain, Trash2 } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type Autonomy, type MemoryKind } from '@frontline/shared';
-import { useAddMemory, useAgents, useAgentXp, useApprovals, useAutomationActions, useAutomations, useCaps, useForgetMemory, useMemory, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
+import { useAddMemory, useAgents, useApprovals, useAutomationActions, useAutomations, useCaps, useForgetMemory, useMemory, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
 import { Portrait } from '../components/Art';
 import { ApprovalCard, Chat } from '../components/Chat';
 import { DemoJobsNote } from '../components/DemoJobsNote';
@@ -12,7 +12,7 @@ import { SharedLearnings } from '../components/NicheLearnings';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { nicheName } from '../components/StoreForm';
-import { AGENT_STATUS, Badge, Button, buttonClass, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter, XPBar } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, buttonClass, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, Panel, ProgressBar, MEMORY_KINDS, memoryAuthor, RUN_STATUS, Segmented, StatusDot, Switch, Table, Tabs, UsageMeter } from '../components/ui';
 import { describeTrigger, when } from '../lib/automation';
 import { ago, cents, modelName, money } from '../lib/format';
 import { NAV } from '../nav';
@@ -54,7 +54,7 @@ export function AgentDetail() {
   if (!agent || !role) {
     return (
       <>
-        <Hero title="Agent not found" subtitle="It may belong to a store that was removed." icon={nav.icon} art={nav.art} />
+        <Hero title="Agent not found" subtitle="It may belong to a store that was removed." icon={nav.icon} />
         <EmptyState title="No agent here" action={<Link to="/agents" className={buttonClass('primary')}>Back to AI Agents</Link>} />
       </>
     );
@@ -63,16 +63,16 @@ export function AgentDetail() {
   const st = AGENT_STATUS[agent.status];
   return (
     <>
-      <Hero title={role.name} subtitle={`${name(agent.storeId)} · Level ${agent.level}`} icon={nav.icon} art={nav.art} />
+      <Hero title={role.name} subtitle={name(agent.storeId)} icon={nav.icon} />
       <div className="mb-4 flex flex-wrap items-center gap-4">
         <Link to={`/agents?store=${agent.storeId}`} className="flex items-center gap-1.5 text-[13px] text-muted transition hover:text-white">
           <ArrowLeft className="size-4" />
           All agents
         </Link>
         <div className="flex min-w-0 flex-1 items-center gap-3">
-          <Portrait role={agent.role} rank={agent.rank} className="size-12" />
+          <Portrait role={agent.role} className="size-12" />
           <div className="min-w-0">
-            {/* Wraps rather than running into the XP bar when the badges outgrow a narrow window. */}
+            {/* Wraps when the badges outgrow a narrow window. */}
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-text-2">
               <span className="flex items-center gap-2 whitespace-nowrap">
                 <StatusDot tone={st.tone} pulse={st.pulse} />
@@ -87,9 +87,6 @@ export function AgentDetail() {
             <p className="mt-1 max-w-xl text-xs text-muted">{role.blurb}</p>
           </div>
         </div>
-        <div className="w-full max-w-60">
-          <XPBar level={agent.level} rank={agent.rank} xp={agent.levelProgress?.xp ?? 0} next={agent.levelProgress?.needed ?? 100} />
-        </div>
       </div>
       {waiting.length > 0 && (
         <div className="mb-4 grid gap-2">
@@ -102,16 +99,13 @@ export function AgentDetail() {
       <div className="mt-4">
         {tab === 'chat' && <Chat agent={agent} thread={thread} onThread={setThread} />}
         {tab === 'history' && (
-          <div className="grid gap-3.5">
-            <History
-              agentId={agent.id}
-              onOpen={(runId) => {
-                setThread([runId]);
-                go('chat');
-              }}
-            />
-            <XpLog agentId={agent.id} />
-          </div>
+          <History
+            agentId={agent.id}
+            onOpen={(runId) => {
+              setThread([runId]);
+              go('chat');
+            }}
+          />
         )}
         {tab === 'memory' && (
           <div className="grid gap-3.5">
@@ -143,33 +137,6 @@ function AssignedBy({ runId }: { runId: string }) {
     <Link to={`/agents/${encodeURIComponent(parent.agentId)}?run=${runId}`} className="mt-1 inline-block rounded-md border border-line-2 px-1.5 py-0.5 text-[11px] text-text-2 hover:border-red/60 hover:text-white">
       Assigned by {role?.name ?? 'a squadmate'}
     </Link>
-  );
-}
-
-/** DESIGN §8: agents earn XP for finished tasks, approved requests and measured wins. */
-function XpLog({ agentId }: { agentId: string }) {
-  const xp = useAgentXp(agentId);
-  const now = Date.now();
-  return (
-    <Panel title="XP earned" sub="What raised this agent's level, newest first.">
-      {xp.isPending ? (
-        <LoadingState rows={3} />
-      ) : xp.isError ? (
-        <ErrorState message="Couldn't load its XP." onRetry={() => xp.refetch()} />
-      ) : !xp.data.length ? (
-        <EmptyState title="No XP earned here yet">Agents earn XP for finished tasks, requests you approve and measured wins.</EmptyState>
-      ) : (
-        <ul className="grid gap-2">
-          {xp.data.map((e) => (
-            <li key={e.id} className="flex items-baseline gap-3 text-[13px]">
-              <b className="w-24 shrink-0 text-right font-display text-sm whitespace-nowrap text-red tabular-nums">{`${e.amount < 0 ? '−' : '+'}${Math.abs(e.amount).toLocaleString('en-US')} XP`}</b>
-              <span className="min-w-0 flex-1">{e.reason}</span>
-              <span className="shrink-0 text-xs text-muted">{ago(e.createdAt, now)}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Panel>
   );
 }
 

@@ -2,7 +2,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
-  Achievement,
   ActionLogEntry,
   Agent,
   AgentRun,
@@ -20,7 +19,6 @@ import type {
   Backup,
   CampaignStats,
   ClaudeAccount,
-  Commander,
   Competitor,
   CompetitorInput,
   CompetitorSnapshot,
@@ -62,7 +60,6 @@ import type {
   KnowledgeKind,
   LiveMessage,
   MemoryInput,
-  Mission,
   NicheLearning,
   OAuthStart,
   Order,
@@ -87,7 +84,6 @@ import type {
   StoreMemory,
   SupplierProduct,
   TopProduct,
-  XpEvent,
 } from '@frontline/shared';
 import { apiUp, waitForApi } from '../lib/restart';
 import { importing } from '../lib/sync';
@@ -156,9 +152,6 @@ export const useEvents = (storeIds: string[]) =>
 export const useApprovals = (status: ApprovalStatus = 'pending') =>
   useQuery({ queryKey: ['approvals', status], queryFn: () => api<ApprovalRequest[]>(`/api/approvals?status=${status}`) });
 export const useAgents = () => useQuery({ queryKey: ['agents'], queryFn: () => api<Agent[]>('/api/agents') });
-export const useMissions = () => useQuery({ queryKey: ['missions'], queryFn: () => api<Mission[]>('/api/missions') });
-export const useCommander = () => useQuery({ queryKey: ['commander'], queryFn: () => api<Commander>('/api/commander') });
-export const useAchievements = () => useQuery({ queryKey: ['achievements'], queryFn: () => api<Achievement[]>('/api/achievements') });
 
 export function useDecide() {
   const qc = useQueryClient();
@@ -178,8 +171,6 @@ export function useUpdateAgent() {
   });
 }
 
-/** What earned an agent its XP, newest first (the ledger behind its level). */
-export const useAgentXp = (agentId: string) => useQuery({ queryKey: ['xp', agentId], queryFn: () => api<XpEvent[]>(`/api/agents/${encodeURIComponent(agentId)}/xp`) });
 export const useRuns = (agentId: string) => useQuery({ queryKey: ['runs', agentId], queryFn: () => api<AgentRun[]>(`/api/runs?agent=${encodeURIComponent(agentId)}&limit=50`) });
 // Live events stream into this cache; the poll only covers a run that finished before its POST response landed.
 export const useRun = (id: string) =>
@@ -776,7 +767,7 @@ export function useLive() {
           if (old && (!ids.length || ids.includes(m.event.storeId))) qc.setQueryData(key, [m.event, ...old].slice(0, 30));
         }
         // An order event means a real order row and today's metrics moved.
-        if (m.event.type === 'order') ['summary', 'orders', 'top-products', 'missions'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+        if (m.event.type === 'order') ['summary', 'orders', 'top-products'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
       } else if (m.type === 'run_event') qc.setQueryData<AgentRunDetail>(['run', m.runId], (d) => d && applyRunEvent(d, m.event));
       else if (m.type === 'run') {
         // Finished: refetch the stored transcript, which also covers events that raced ahead of the POST response.
@@ -795,19 +786,13 @@ export function useLive() {
         // A custom niche's Market Analyst saves its pack, once approved, before its run ends.
         if (!isLive(m.run)) qc.invalidateQueries({ queryKey: ['knowledge'] });
       } else if (m.type === 'kb_task') qc.invalidateQueries({ queryKey: ['kb'] }); // the task, the task lists, and the cards it filed
-      if (m.type === 'approval' || m.type === 'run' || m.type === 'xp') {
-        qc.invalidateQueries({ queryKey: ['missions'] });
-        qc.invalidateQueries({ queryKey: ['commander'] });
+      if (m.type === 'approval' || m.type === 'run') {
         // Automation fires start runs or ask for approval; the log and "last fired" follow.
         ['automation-runs', 'automations'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         qc.invalidateQueries({ queryKey: ['usage'] });
       }
       if (m.type === 'notification') qc.setQueryData<AppNotification[]>(['notifications'], (old) => old && [m.notification, ...old].slice(0, BELL));
-      if (m.type === 'xp') {
-        ['agents', 'achievements', 'xp'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-        // XpToasts shows it.
-        window.dispatchEvent(new CustomEvent('frontline:xp', { detail: m }));
-      } else if (m.type === 'approval') {
+      if (m.type === 'approval') {
         qc.invalidateQueries({ queryKey: ['agents'] });
         // Approved requests change shared learnings, (ad changes) campaign budgets and statuses, or (price changes,
         // added products) the store's products.

@@ -5,7 +5,7 @@ import { createApp } from '../app';
 import { addDays } from '../dates';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
-import { storeDay } from '../routes/agents-gamification';
+import { storeDay } from '../routes/agents-outcomes';
 import { evaluateExperiments } from './experiments';
 
 let db: Db;

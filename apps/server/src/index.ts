@@ -13,7 +13,7 @@ import { autoDeps, scheduledResearch } from './kb/autonomy';
 import { startKbPerformanceLoop } from './kb/performance';
 import { startKbPromotionLoop } from './kb/promote';
 import { runManager } from './routes/agents';
-import { startOutcomeLoop } from './routes/agents-gamification';
+import { startOutcomeLoop } from './routes/agents-outcomes';
 import { initLog, log } from './log';
 import { loadKey } from './secrets';
 import { startSyncLoop } from './sync';

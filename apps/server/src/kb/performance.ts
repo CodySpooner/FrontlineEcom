@@ -2,7 +2,7 @@ import { learn, once, type Reading } from '@frontline/agents';
 import type { KbPerformance } from '@frontline/shared';
 import { addDays } from '../dates';
 import type { Db } from '../db';
-import { newSince, productSales, restTrend, storeDay, storeFunnel, synced } from '../routes/agents-gamification';
+import { newSince, productSales, restTrend, storeDay, storeFunnel, synced } from '../routes/agents-outcomes';
 import { listStores } from '../stores';
 import { autoDeps, autonomousResearch } from './autonomy';
 import { maintain } from './maintenance';

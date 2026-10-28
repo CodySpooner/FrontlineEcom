@@ -34,7 +34,7 @@ export function Orders() {
   const { ids } = useStoreSelection();
   return (
     <>
-      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
+      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
       <div className="mb-3.5">
         <StoreFilter />
       </div>

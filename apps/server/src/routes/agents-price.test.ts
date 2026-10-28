@@ -10,14 +10,13 @@ import { seedDemo } from '../demo';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
 import { applyPriceChange } from './agents-actions';
-import { checkPriceOutcomes } from './agents-gamification';
+import { checkPriceOutcomes } from './agents-outcomes';
 
 let db: Db;
-let app: ReturnType<typeof createApp>;
 beforeEach(() => {
   db = openDb();
   seedDemo(db);
-  app = createApp(db);
+  createApp(db);
 });
 const tick = () => new Promise((r) => setImmediate(r));
 async function run(storeId: string, steps: FakeStep[]) {
@@ -140,7 +139,7 @@ test("a price test is judged once its 14th day after is over in the store's own 
   }
 });
 
-test("on a real store a price test is judged on profit after the store's fee %, 14 days before vs after, once", async () => {
+test("on a real store a price test is judged on profit after the store's fee %, 14 days before vs after, once", () => {
   db.prepare(`UPDATE stores SET demo = 0, connected = 1, fee_percent = 20 WHERE id = 'peak'`).run();
   once(db, 'activate:peak', new Date('2020-01-01')); // live long before
   const day = addDays(localDate(), -20);
@@ -176,18 +175,13 @@ test("on a real store a price test is judged on profit after the store's fee %, 
   checkPriceOutcomes(db);
   expect(pricing()).toEqual([]);
   db.prepare(`UPDATE integrations SET status = 'connected' WHERE id = 'tiktok_shop:peak'`).run();
-  const xp = () => getAgent(db, 'peak:market_analyst')!.xp;
-  const before = xp();
-  await app.request('/api/achievements');
-  await app.request('/api/achievements');
+  checkPriceOutcomes(db);
+  checkPriceOutcomes(db);
 
   const texts = listMemory(db, 'peak').filter((m) => m.tags.includes('pricing')).map((m) => m.text);
   expect(texts).toEqual(['Pricing "Grip Socks" $20 → $25 worked: profit 100 USD → 106 USD, 10 → 9 units (14 days before vs after).']);
-  expect(xp()).toBe(before + 50);
   expect(listMemory(db, 'peak').find((m) => m.text === 'Grip Socks are underpriced vs rivals')?.confidence).toBe(0.7);
   expect(db.prepare(`SELECT body FROM notifications WHERE title = 'Measured win: Market Analyst'`).all()).toEqual([{ body: texts[0] }]);
-  const achievements = (await (await app.request('/api/achievements')).json()) as { id: string; unlockedAt?: string }[];
-  expect(achievements.find((a) => a.id === 'first_win')?.unlockedAt).toEqual(expect.any(String));
 });
 
 test("a price test on a product with no unit cost isn't called a win: its profit is before product cost", async () => {
@@ -203,11 +197,9 @@ test("a price test on a product with no unit cost isn't called a win: its profit
   };
   sell(4, addDays(day, -5), 25);
   sell(6, addDays(day, 5), 20); // more "profit" at the lower price only because the socks cost nothing here
-  const xp = getAgent(db, 'peak:market_analyst')!.xp;
   checkPriceOutcomes(db);
   const text = "Pricing \"Grip Socks\" $25 → $20 can't be judged: no unit cost is set, so profit before product cost went 100 USD → 120 USD, 4 → 6 units (14 days before vs after).";
   expect(listMemory(db, 'peak').filter((m) => m.tags.includes('pricing')).map((m) => [m.text, m.confidence])).toEqual([[text, 0.5]]);
-  expect(getAgent(db, 'peak:market_analyst')!.xp).toBe(xp);
   expect(db.prepare(`SELECT title, body FROM notifications WHERE body = ?`).all(text)).toEqual([{ title: 'Market Analyst: result unclear without unit costs', body: text }]);
 });
 
@@ -246,12 +238,10 @@ test('a price test on a few units sold is not judged on one order either way', (
   };
   sell(2, addDays(day, -5), 20);
   sell(2, addDays(day, 5), 25); // +10 profit on the same two units
-  const xp = getAgent(db, 'peak:market_analyst')!.xp;
   checkPriceOutcomes(db);
   expect(listMemory(db, 'peak').filter((m) => m.tags.includes('pricing')).map((m) => m.text)).toEqual([
     `Pricing "Grip Socks" $20 → $25 can't be judged on 4 units sold (it takes 10): profit 24 USD → 34 USD, 2 → 2 units (14 days before vs after).`,
   ]);
-  expect(getAgent(db, 'peak:market_analyst')!.xp).toBe(xp);
 });
 
 test("connected stores get the price on Shopify or WooCommerce; other platforms aren't asked and write errors tell the owner; neither starts a test", async () => {

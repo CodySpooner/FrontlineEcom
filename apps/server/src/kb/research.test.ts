@@ -397,7 +397,7 @@ describe('the research runner', () => {
     expect(getResearchTask(db, t.id)!.log.at(-1)!.message).toBe('Waiting: This agent is offline. Redeploy it first.');
   });
 
-  test('in the app, a stage ending moves its task on, and pays no XP or notification of its own', async () => {
+  test('in the app, a stage ending moves its task on, and sends no notification of its own', async () => {
     const t = createResearchTask(db, TOPIC);
     db.prepare(`UPDATE kb_tasks SET status = 'running', stage = 'planning' WHERE id = ?`).run(t.id);
     const run = runManager(db).start('pawsome:market_analyst', `Research task ${t.id}, step planning (attempt 1).`, undefined, undefined, { mode: `research:${t.id}` });
@@ -405,7 +405,6 @@ describe('the research runner', () => {
     db.prepare(`INSERT INTO kb_task_steps (task_id, stage, attempt, run_id, status, started_at) VALUES (?, 'planning', 1, ?, 'running', ?)`).run(t.id, run.id, new Date().toISOString());
     // The demo engine's answer isn't the stage's JSON, so the step fails and waits to try again: the task moved.
     await vi.waitFor(() => expect(getResearchTask(db, t.id)).toMatchObject({ attempt: 1, steps: [{ status: 'failed' }] }));
-    expect(db.prepare('SELECT count(*) AS n FROM xp_events WHERE ref = ?').get(`run:${run.id}`)!.n).toBe(0);
     expect(db.prepare(`SELECT count(*) AS n FROM notifications WHERE kind = 'agent_done'`).get()!.n).toBe(0);
   });
 

@@ -1,4 +1,4 @@
-import { getAgent, listMemory, once } from '@frontline/agents';
+import { listMemory, once } from '@frontline/agents';
 import type { ApprovalRequest } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -6,13 +6,13 @@ import { addDays, localDate } from '../dates';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { addProducts } from './agents-actions';
+import { checkOutcomes } from './agents-outcomes';
 
 let db: Db;
-let app: ReturnType<typeof createApp>;
 beforeEach(() => {
   db = openDb();
   seedDemo(db);
-  app = createApp(db);
+  createApp(db);
 });
 
 const approval = (storeId: string, titles: string[]): ApprovalRequest =>
@@ -33,7 +33,7 @@ test('products added on a real store are judged on their first 14 days of sales'
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
   once(db, 'activate:peak', new Date('2020-01-01')); // live long before
   await addProducts(db, approval('peak', ['Smart Jump Rope', 'Grip Socks']), () => undefined, async () => [{ id: '901', title: 'Smart Jump Rope' }, { id: '902', title: 'Grip Socks' }]);
-  await app.request('/api/achievements');
+  checkOutcomes(db);
   expect(outcomes('peak')).toEqual([]); // too early
 
   const added = addDays(localDate(), -20);
@@ -43,16 +43,14 @@ test('products added on a real store are judged on their first 14 days of sales'
   sell('peak', '902', 30, addDays(added, 16)); // after the 14-day window
   sell('peak', '902', 1, addDays(added, 14)); // its 15th day: out too
   db.prepare(`UPDATE stores SET fee_percent = 10, fee_per_order = 0.5 WHERE id = 'peak'`).run(); // one order per unit sold
-  const xp = () => getAgent(db, 'peak:product_hunter')!.xp;
-  const before = xp();
-  await app.request('/api/achievements');
-  await app.request('/api/achievements');
+  checkOutcomes(db);
+  checkOutcomes(db);
 
   expect(outcomes('peak')).toEqual([
     '"Grip Socks" did not take off: 2 units, 40 USD revenue, 23 USD profit in its first 14 days.',
     '"Smart Jump Rope" sold: 12 units, 240 USD revenue, 138 USD profit in its first 14 days.',
   ]);
-  expect(xp()).toBe(before + 50);
+  expect(db.prepare(`SELECT count(*) AS n FROM notifications WHERE title = 'Measured win: Product Hunter'`).get()?.n).toBe(1); // the rope, once
 });
 
 test("a product sold with no unit cost isn't called a win on revenue alone", async () => {
@@ -64,13 +62,12 @@ test("a product sold with no unit cost isn't called a win on revenue alone", asy
   sell('peak', '905', 12, addDays(added, 3));
   sell('peak', '906', 3, addDays(added, 3));
   db.prepare(`UPDATE order_items SET cost = 0 WHERE store_id = 'peak' AND product_id IN ('905', '906')`).run(); // the platform has no cost for them
-  const xp = getAgent(db, 'peak:product_hunter')!.xp;
-  await app.request('/api/achievements');
+  checkOutcomes(db);
   expect(outcomes('peak')).toEqual([
     '"Ankle Weights" sold 12 units, 240 USD revenue in its first 14 days; its profit can\'t be judged: it has no unit cost.',
     '"Yoga Strap" did not take off: 3 units, 60 USD revenue, 60 USD profit in its first 14 days.', // too few sold, whatever the cost
   ]);
-  expect(getAgent(db, 'peak:product_hunter')!.xp).toBe(xp);
+  expect(db.prepare(`SELECT 1 FROM notifications WHERE title LIKE 'Measured win:%'`).get()).toBeUndefined();
   expect(db.prepare(`SELECT title FROM notifications WHERE body LIKE '"Ankle Weights"%'`).get()?.title).toBe('Product Hunter: result unclear without unit costs');
 });
 
@@ -82,13 +79,13 @@ test('a product the owner put on sale days after it was added is judged on its f
   const added = addDays(localDate(), -30);
   db.prepare(`UPDATE product_tests SET added_on = ?`).run(added);
   db.prepare(`UPDATE products SET status = 'active' WHERE store_id = 'peak' AND id = '904'`).run(); // the owner put it on sale
-  await app.request('/api/achievements'); // seen on sale today: its 14 days start now, so not judged yet
+  checkOutcomes(db); // seen on sale today: its 14 days start now, so not judged yet
   expect(outcomes('peak')).toEqual([]);
   expect(db.prepare(`SELECT judged_at FROM product_tests`).get()?.judged_at).toBeNull();
   const onSale = addDays(added, 10); // as if seen on sale then
   db.prepare(`UPDATE done_once SET at = ? WHERE ref = 'product-live:peak:904'`).run(`${onSale}T12:00:00Z`);
   sell('peak', '904', 12, addDays(onSale, 3));
-  await app.request('/api/achievements');
+  checkOutcomes(db);
   expect(outcomes('peak')).toEqual(['"Speed Rope" sold: 12 units, 240 USD revenue, 168 USD profit in its first 14 days on sale.']);
 });
 
@@ -97,15 +94,15 @@ test("products from a store's demo phase aren't judged once it's live; one never
   db.prepare(`UPDATE stores SET demo = 0, connected = 1 WHERE id = 'peak'`).run();
   db.prepare(`UPDATE product_tests SET added_on = ?`).run(addDays(localDate(), -20));
   const judged = () => db.prepare('SELECT judged_at FROM product_tests').get()?.judged_at;
-  await app.request('/api/achievements'); // synced, but the squad hasn't seen it live yet (e.g. the hourly check ran first)
+  checkOutcomes(db); // synced, but the squad hasn't seen it live yet (e.g. the hourly check ran first)
   expect(judged()).toBeNull();
   once(db, 'activate:peak'); // went live after it was added
-  await app.request('/api/achievements');
+  checkOutcomes(db);
   expect(outcomes('peak')).toEqual([]);
   expect(judged()).toBeNull(); // left alone
 
   db.prepare(`UPDATE done_once SET at = '2020-01-01' WHERE ref = 'activate:peak'`).run(); // as if added after going live
-  await app.request('/api/achievements'); // still a draft with no sales: closed quietly, not "did not take off"
+  checkOutcomes(db); // still a draft with no sales: closed quietly, not "did not take off"
   expect(outcomes('peak')).toEqual([]);
   expect(judged()).toEqual(expect.any(String));
 });
@@ -116,14 +113,14 @@ test('a product archived after selling nothing is a flop the squad learns from',
   await addProducts(db, approval('peak', ['Ab Roller']), () => undefined, async () => [{ id: '903', title: 'Ab Roller' }]);
   db.prepare(`UPDATE product_tests SET added_on = ?`).run(addDays(localDate(), -20));
   db.prepare(`UPDATE products SET status = 'archived' WHERE store_id = 'peak' AND id = '903'`).run();
-  await app.request('/api/achievements');
+  checkOutcomes(db);
   expect(outcomes('peak')).toEqual(['"Ab Roller" did not take off: 0 units, 0 USD revenue, 0 USD profit in its first 14 days.']);
 });
 
 test('demo stores have no real line items, so their products are never judged', async () => {
   await addProducts(db, approval('glow', ['Ice Roller']), () => undefined, async () => []);
   db.prepare(`UPDATE product_tests SET added_on = ?`).run(addDays(localDate(), -20));
-  await app.request('/api/achievements');
+  checkOutcomes(db);
   expect(outcomes('glow')).toEqual([]);
   expect(db.prepare('SELECT judged_at FROM product_tests').get()).toEqual({ judged_at: null });
 });

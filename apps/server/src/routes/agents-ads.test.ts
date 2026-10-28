@@ -11,14 +11,13 @@ import { updateCaps } from '../settings';
 import { getStore } from '../stores';
 import { toolEnv } from './agents';
 import { applyAdChange } from './agents-actions';
-import { checkAdOutcomes, startOutcomeLoop } from './agents-gamification';
+import { checkAdOutcomes, checkOutcomes, startOutcomeLoop } from './agents-outcomes';
 
 let db: Db;
-let app: ReturnType<typeof createApp>;
 beforeEach(() => {
   db = openDb();
   seedDemo(db);
-  app = createApp(db);
+  createApp(db);
   // The demo's own pending budget request on pawsome-c1 would block new ones (one change per campaign at a time).
   db.prepare(`UPDATE approvals SET status = 'denied' WHERE store_id = 'pawsome' AND status = 'pending'`).run();
 });
@@ -488,7 +487,7 @@ test('a late approval does not undo a budget the owner moved, nor pause a paused
 
   approvedChange('a-skip', 'Raise it', 3);
   db.prepare(`INSERT INTO done_once (ref, at) VALUES ('not-applied:a-skip', '')`).run();
-  await app.request('/api/commander');
+  checkOutcomes(db);
   expect(outcomes()).toEqual([]);
 });
 
@@ -504,26 +503,23 @@ test("break-even ROAS is the store's own site's: Amazon channel sales come witho
   expect(after.aov).toBeCloseTo(site.aov, 6);
 });
 
-test("Amazon sales as an extra channel don't count toward an ad change's outcome: the store's ads didn't make them", async () => {
+test("Amazon sales as an extra channel don't count toward an ad change's outcome: the store's ads didn't make them", () => {
   approvedChange('a-amz', 'Raise it', 0.5);
   for (const d of [1, 2, 3].map((n) => addDays(decided(), n))) {
     const amazon = 3 * Number(db.prepare(`SELECT revenue FROM daily_metrics WHERE store_id = 'peak' AND date = ?`).get(d)!.revenue);
     db.prepare(`UPDATE daily_metrics SET revenue = revenue + ? WHERE store_id = 'peak' AND date = ?`).run(amazon, d); // as core's rebuild adds it
     db.prepare(`INSERT INTO channel_daily (store_id, channel, date, revenue, orders) VALUES ('peak', 'amazon', ?, ?, 9)`).run(d, amazon);
   }
-  await app.request('/api/commander');
+  checkOutcomes(db);
   expect(outcomes()).toEqual([expect.objectContaining({ text: expect.stringMatching(/^"Raise it" did not help: blended ROAS/) })]);
 });
 
-test('an approved ad change followed by better blended ROAS is a measured win, paid once and remembered', async () => {
+test('an approved ad change followed by better blended ROAS is a measured win, remembered once', () => {
   approvedChange('a-win', 'Pause Spark Ads · UGC', 3);
-  const xp = () => getAgent(db, 'peak:ad_strategist')!.xp;
-  const before = xp();
-  await app.request('/api/commander');
-  await app.request('/api/commander');
-  expect(xp()).toBe(before + 50);
+  checkOutcomes(db);
+  checkOutcomes(db);
   expect(basis('Pause Spark Ads · UGC')).toBe(0.7); // once, though checked twice
-  expect(String(db.prepare(`SELECT reason FROM xp_events WHERE ref = 'win:a-win'`).get()?.reason)).toMatch(/^Measured win: ROAS [\d.]+ → [\d.]+ after "Pause Spark Ads · UGC"$/);
+  expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Measured win: Ad Strategist'`).all()).toEqual([{ link: '/agents/peak:ad_strategist?tab=memory' }]);
   expect(outcomes()).toEqual([
     expect.objectContaining({
       agentId: 'peak:ad_strategist', kind: 'learning', confidence: 0.7,
@@ -543,13 +539,11 @@ test('a budget raise is judged on what its extra spend brought vs break-even, no
       `INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at, decided_at) VALUES (?, 'peak', 'peak:ad_strategist', NULL, ?, 'r', ?, 'approved', ?, ?)`,
     ).run(id, title, JSON.stringify({ kind: 'ads.set_budget', payload: { from: 250, to: 500 } }), `${day}T09:00:00Z`, `${day}T12:00:00Z`);
   raise('scale', 'Raise Broad budget $250 → $500/day');
-  const xp = getAgent(db, 'peak:ad_strategist')!.xp;
   checkAdOutcomes(db);
   // Blended ROAS fell 4.00 → 3.20, but +250/day of spend brought +600/day of revenue: 2.40 against a 1.67 break-even.
   expect(outcomes().map((m) => m.text)).toEqual([
     '"Raise Broad budget $250 → $500/day" worked: +250 USD/day ad spend brought +600 USD/day revenue (incremental ROAS 2.40 vs break-even 1.67) in the 3 days after.',
   ]);
-  expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(xp + 50);
 
   // Most sales with no unit cost: break-even reads low, so the raise is judged on blended ROAS (4.00 → 3.20) instead.
   db.prepare(`INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, local_date) VALUES ('peak', 'o-nc', ?, 90, 'paid', 'delivered', ?)`).run(`${day}T08:00:00Z`, day);
@@ -571,13 +565,11 @@ test('a pause or cut is judged on what the spend it took away was bringing vs br
     ).run(id, title, JSON.stringify({ kind, payload }), `${day}T09:00:00Z`, `${day}T12:00:00Z`);
   after(1500, 250);
   change('cut', 'Lower Broad budget $500 → $250/day', 'ads.set_budget', { from: 500, to: 250 });
-  const xp = getAgent(db, 'peak:ad_strategist')!.xp;
   checkAdOutcomes(db);
   // Blended ROAS rose 4.00 → 6.00, but the 250/day it cut was bringing 500/day: 2.00, over the 1.67 break-even.
   expect(outcomes().map((m) => m.text)).toEqual([
     '"Lower Broad budget $500 → $250/day" did not help: -250 USD/day ad spend went with -500 USD/day revenue (ROAS of the spend cut 2.00 vs break-even 1.67) in the 3 days after.',
   ]);
-  expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(xp);
 
   after(1900, 0); // every campaign off: judged too, with no spend left after
   change('pause', 'Pause Broad', 'ads.pause_campaign', {});
@@ -585,7 +577,6 @@ test('a pause or cut is judged on what the spend it took away was bringing vs br
   expect(outcomes().map((m) => m.text)).toContain(
     '"Pause Broad" worked: -500 USD/day ad spend went with -100 USD/day revenue (ROAS of the spend cut 0.20 vs break-even 1.67) in the 3 days after.',
   );
-  expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(xp + 50);
 });
 
 test('an ad change on a store with no margin left after costs is judged on blended ROAS, not against a break-even of Infinity', () => {
@@ -611,23 +602,19 @@ test("a raise approved the same days as a bigger cut can't be judged on the stor
     ).run(id, title, JSON.stringify({ kind: 'ads.set_budget', payload }), `${day}T09:00:00Z`, `${day}T12:00:00Z`);
   change('cut', 'Lower Loser $300 → $50/day', { from: 300, to: 50 });
   change('raise', 'Raise Winner $100 → $130/day', { from: 100, to: 130 });
-  const xp = getAgent(db, 'peak:ad_strategist')!.xp;
   checkAdOutcomes(db);
   expect(outcomes().map((m) => m.text).sort()).toEqual([
     '"Lower Loser $300 → $50/day" worked: -200 USD/day ad spend went with -100 USD/day revenue (ROAS of the spend cut 0.50 vs break-even 1.67) in the 3 days after.',
     "\"Raise Winner $100 → $130/day\" can't be judged: the store's ad spend moved -200 USD/day in the 3 days after, not this change's way, so other changes outweigh it (blended ROAS 4.00 → 6.33).",
   ]);
-  expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(xp + 50); // the cut's win only
   expect(db.prepare(`SELECT title FROM notifications WHERE store_id = 'peak' AND title LIKE 'Ad Strategist: result unclear%'`).all()).toEqual([
     { title: 'Ad Strategist: result unclear next to bigger ad changes' },
   ]);
 });
 
-test('a change that did not help is remembered too, without XP', async () => {
+test('a change that did not help is remembered too', () => {
   approvedChange('a-flop', 'Raise Prospecting · Broad budget $50 → $80/day', 0.3);
-  const before = getAgent(db, 'peak:ad_strategist')!.xp;
-  await app.request('/api/achievements');
-  expect(getAgent(db, 'peak:ad_strategist')!.xp).toBe(before);
+  checkOutcomes(db);
   expect(basis('Raise Prospecting · Broad budget $50 → $80/day')).toBe(0.5);
   expect(outcomes().map((m) => [m.text.replace(/[\d.]+ → [\d.]+/, 'x → y'), m.confidence])).toEqual([
     ['"Raise Prospecting · Broad budget $50 → $80/day" did not help: blended ROAS x → y in the 3 days after.', 0.6],

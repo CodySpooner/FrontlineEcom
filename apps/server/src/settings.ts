@@ -12,7 +12,6 @@ type Obj = Record<string, unknown>;
 
 const DEFAULT_SETTINGS: Omit<Settings, 'dataDir'> = {
   profile: { name: 'Cody', plan: 'Pro Plan' },
-  sound: false,
   notifications: { approvals: true, agentDone: true, errors: true, digest: true },
   baseCurrency: 'USD',
 };
@@ -28,7 +27,6 @@ export function getSettings(db: Db): Settings {
   // Fresh objects every call (callers mutate), defaults fill keys added after the row was saved.
   return {
     profile: { ...DEFAULT_SETTINGS.profile, ...saved.profile },
-    sound: saved.sound ?? DEFAULT_SETTINGS.sound,
     notifications: { ...DEFAULT_SETTINGS.notifications, ...saved.notifications },
     baseCurrency: saved.baseCurrency ?? DEFAULT_SETTINGS.baseCurrency,
     dataDir: resolve(dataDir()),
@@ -38,7 +36,7 @@ export function getSettings(db: Db): Settings {
 /** Validates and merges a SettingsUpdate. Returns an error message or the new Settings. */
 export function updateSettings(db: Db, body: unknown): string | Settings {
   if (!isObj(body)) return 'body must be a JSON object';
-  const bad = extra(body, ['profile', 'sound', 'notifications', 'baseCurrency']);
+  const bad = extra(body, ['profile', 'notifications', 'baseCurrency']);
   if (bad) return `unknown setting ${bad}`;
   const { dataDir: _, ...cur } = getSettings(db);
   if (body.profile !== undefined) {
@@ -53,10 +51,6 @@ export function updateSettings(db: Db, body: unknown): string | Settings {
   if (body.baseCurrency !== undefined) {
     if (typeof body.baseCurrency !== 'string' || !/^[A-Za-z]{3}$/.test(body.baseCurrency.trim())) return 'baseCurrency must be a 3-letter ISO code';
     cur.baseCurrency = body.baseCurrency.trim().toUpperCase();
-  }
-  if (body.sound !== undefined) {
-    if (typeof body.sound !== 'boolean') return 'sound must be true or false';
-    cur.sound = body.sound;
   }
   if (body.notifications !== undefined) {
     const keys = Object.keys(DEFAULT_SETTINGS.notifications) as (keyof Settings['notifications'])[];

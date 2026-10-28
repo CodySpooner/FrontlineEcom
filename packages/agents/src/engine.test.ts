@@ -6,7 +6,7 @@ import { describe, expect, test } from 'vitest';
 import { APP_TOOLS, claudeAccount, claudeEngine, defaultEngine, estimate, fakeEngine, ROLES, runAgent, toAgentEvents, type RunInput, type ToolEnv } from './index';
 
 const store: Store = { id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'America/Chicago', color: '#ff8f98', connected: false };
-const agent: Agent = { id: 'glow:market_analyst', storeId: 'glow', role: 'market_analyst', status: 'idle', level: 1, xp: 0 };
+const agent: Agent = { id: 'glow:market_analyst', storeId: 'glow', role: 'market_analyst', status: 'idle' };
 const input: RunInput = { agent, store, task: 'Summarize last week' };
 
 async function collect(events: AsyncIterable<AgentEvent>) {

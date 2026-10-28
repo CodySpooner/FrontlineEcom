@@ -1,7 +1,6 @@
 import { Hono } from 'hono';
-import { listMissions } from '@frontline/agents';
 import { OFFICE_ARCHETYPES, OFFICE_GEAR, OFFICE_DESKS, OFFICE_GRID, type OfficeAppearance, type OfficeSeat, type OfficeStats } from '@frontline/shared';
-import { once, type Db } from '../db';
+import type { Db } from '../db';
 
 const DEFAULT_LOOK: OfficeAppearance = { color: '#ff2a3a', hair: 0, skin: 0, outfit: 'jacket', accessory: 'headset' };
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -28,10 +27,6 @@ export function ecosystemRoutes(db: Db) {
         successRate: completed + failed ? completed / (completed + failed) : null,
         activeTeams: Number(db.prepare('SELECT count(*) AS n FROM squad_missions WHERE ended_at IS NULL').get()!.n),
         inputTokens: Number(r.input), outputTokens: Number(r.output), costUsd: Number(r.cost),
-        teamsCreated: Number(db.prepare('SELECT count(*) AS n FROM squad_missions').get()!.n),
-        completedMissions: listMissions(db, undefined, -1).filter((m) => m.steps.length && m.status === 'done').length,
-        handoffs: Number(db.prepare('SELECT count(*) AS n FROM agent_runs child JOIN agent_runs parent ON parent.id = child.parent_run_id WHERE parent.agent_id != child.agent_id').get()!.n),
-        fullOffice: !!db.prepare("SELECT 1 FROM done_once WHERE ref = 'ecosystem:full-office'").get(),
       } satisfies OfficeStats);
     })
     .get('/api/ecosystem/seats', (c) => c.json(db.prepare('SELECT * FROM ecosystem_seats ORDER BY desk_id, agent_id').all().map(seat)))
@@ -50,7 +45,6 @@ export function ecosystemRoutes(db: Db) {
         ON CONFLICT(agent_id) DO UPDATE SET desk_id = excluded.desk_id, display_name = excluded.display_name,
         appearance_json = excluded.appearance_json, position_json = NULL, archived = 0, updated_at = excluded.updated_at`)
         .run(body.agentId, String(body.deskId), name.trim(), JSON.stringify(look), new Date().toISOString());
-      if (Number(db.prepare('SELECT count(*) AS n FROM ecosystem_seats WHERE archived = 0').get()!.n) === 30) once(db, 'ecosystem:full-office');
       return c.json(get(body.agentId), 201);
     })
     .patch('/api/ecosystem/seats/:id', async (c) => {

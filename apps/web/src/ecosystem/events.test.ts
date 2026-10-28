@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import type { Agent, AgentEvent, AgentRun, ApprovalRequest, LiveMessage, SquadMission } from '@frontline/shared';
 import { applyOfficeMessage, emptyOffice, mergeOfficeSnapshot, workerActivity } from './events';
 
-const agent: Agent = { id: 'glow:copywriter', storeId: 'glow', role: 'copywriter', status: 'idle', level: 1, xp: 0 };
+const agent: Agent = { id: 'glow:copywriter', storeId: 'glow', role: 'copywriter', status: 'idle' };
 const run: AgentRun = { id: 'r1', agentId: agent.id, storeId: 'glow', task: 'Write headlines', status: 'running', createdAt: '2026-10-26T10:00:00Z', startedAt: '2026-10-26T10:00:01Z', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
 const live = (event: AgentEvent): LiveMessage => ({ type: 'run_event', runId: run.id, agentId: agent.id, storeId: agent.storeId, event });
 

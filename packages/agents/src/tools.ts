@@ -1025,7 +1025,7 @@ export const APP_TOOLS: AppTool[] = [
       const replace =
         waiting && ctx.store.connected && ctx.decide && autonomyNow(ctx) !== 'suggest' && String(waiting.created_at) < ago(4) ? String(waiting.id) : undefined;
       if (waiting && !replace) return `Not sent: "${waiting.title}" is already waiting for the owner. One change per campaign at a time.`;
-      // A change that changes nothing would still be judged (and win XP) on whatever else moved ROAS in the days after.
+      // A change that changes nothing would still be judged on whatever else moved ROAS in the days after.
       if (IDLE_CAMPAIGN_STATUSES.includes(String(c.status))) {
         return `Not sent: ${String(c.name)} is ${String(c.status)}, so ${change === 'pause' ? 'there is nothing to pause' : 'a budget change does nothing until the owner turns it back on in the ad manager'}.`;
       }

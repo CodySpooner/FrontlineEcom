@@ -12,18 +12,19 @@ writing copy and flows, watching competitors, handling ops. Agents bring decisio
 or deny. Every agent is an expert in its job *and* becomes an expert in its store's niche (beauty, pet, tech, …) by
 learning from every run.
 
-It should feel like a game HQ (dark grey + red, character portraits, levels, XP, missions, achievements) while staying
-as clear and trustworthy as a SaaS dashboard: numbers are never hidden behind flair.
+It should feel like a focused command center (dark grey + red, a character portrait per agent) and be as clear and
+trustworthy as a SaaS dashboard: numbers are never hidden behind flair. No game mechanics: no levels, XP, ranks,
+missions-as-challenges, achievements or streaks (owner, 2026-10-28).
 
 ## 2. Principles
 
-1. **SaaS-clear, game-flavored.** Data surfaces (KPIs, tables, charts) are clean and exact. Game flavor lives in agents,
-   missions, achievements, XP and motion — never in the way of a number.
+1. **SaaS-clear.** Data surfaces (KPIs, tables, charts) are clean and exact. Personality lives in the agents' portraits
+   and subtle motion, never in the way of a number.
 2. **Demo first.** Seeded fake stores make every screen work with zero credentials. Real connectors replace demo data
    per store when credentials are added.
 3. **Human in the loop for money and publishing.** Agents propose; the owner approves. Autopilot is opt-in per action
    type with hard caps (e.g. "pause ad sets with ROAS < 1 for 3 days, max $200/day affected").
-4. **One squad per store.** Agents are role × store. Their memory, level and settings belong to that store.
+4. **One squad per store.** Agents are role × store. Their memory and settings belong to that store.
 5. **Expertise in layers.** Role playbook → platform pack → niche pack → store memory. Agents get smarter per store.
 6. **Local and private.** Desktop app, local SQLite, credentials encrypted on disk. The only cloud calls are the
    platforms/ad networks/AI providers the owner connected.
@@ -31,25 +32,26 @@ as clear and trustworthy as a SaaS dashboard: numbers are never hidden behind fl
 ## 3. Look and feel
 
 Match `docs/reference/ui-reference.webp` (4 screens: Dashboard, AI Agents, Product Research, Creative Studio) and the
-approved dashboard mockup `docs/reference/dashboard-mockup-v3.html`.
+approved dashboard mockup `docs/reference/dashboard-mockup-v3.html`, except their page-header art and skyline and the
+profile chip's dropdown, which the owner removed on 2026-10-28.
 
 - Palette: near-black backgrounds (`#08080a`, panels `#131316`/`#1a1a1e`, lines `#24242a`), text `#f0f0f2`, muted
   `#8b8b94`, accent red `#ff2a3a` (deep `#c3121f`), positive green `#3ddc84`. Red glow on active/primary elements.
 - Type: Chakra Petch (display, uppercase headings), Inter (body), Teko (logo). Bundled via fontsource (works offline).
-- Layout: left sidebar (12 sections, active item = red pill), page hero header with dark hooded/armored character
-  art + red light + city skyline, top-right "Ask AI anything" search, notifications bell with count, profile chip.
+- Layout: left sidebar (12 sections, active item = red pill), page header: title + subtitle on the plain dark
+  background (no header image), top-right "Ask AI anything" search, notifications bell with count, profile chip.
 - Logo: white italic "FRONTL1NE" where the I is a red bolt, red pulse line underneath with spaced "ECOM". Current
   `BrandLogo` is an approximation; replace with the owner's original art when it's added to `apps/web/public/brand/`.
 - Agent portraits: dark armored / hooded / masked characters with glowing red eyes, one distinct look per role.
-- Motion: subtle (glows, XP bar fills, progress scans, level-up burst). Honors `prefers-reduced-motion`.
+- Motion: subtle (glows, progress scans). Honors `prefers-reduced-motion`.
 
 ## 4. Screens (sidebar order)
 
 1. **Dashboard / Command Center** — store filter (All or any subset) + range (7D/30D/90D/1Y); KPI cards with sparkline
    and delta vs previous period: Revenue, Profit (hero card), Ad Spend, ROAS, Orders (+ AOV); Revenue Overview area
    chart with hover tooltip; Live Store Activity feed; AI Agents strip (status + current task); **Agent Requests**
-   board (approve/deny inline); Daily Missions.
-2. **AI Agents** — store tabs; the store's squad as cards (portrait, name, status, level + XP bar, description,
+   board (approve/deny inline).
+2. **AI Agents** — store tabs; the store's squad as cards (portrait, name, status, description,
    Configure / Chat); Deploy Agent. Agent detail: streaming chat with tool steps, run history, memory (what it has
    learned about this store), settings (enabled, autonomy, budget caps, schedule).
 3. **Store Analytics** — per store: revenue/profit chart, funnel (sessions → add to cart → checkout → order), top
@@ -71,7 +73,7 @@ approved dashboard mockup `docs/reference/dashboard-mockup-v3.html`.
     TikTok), analytics (GA4), AI (Claude, Codex, Higgsfield), suppliers (CJ, DSers). Status per store.
 11. **Knowledge Base** — role playbooks, platform packs, niche packs, and each store's memory; view/edit/pin/delete.
 12. **Settings** — profile, stores (add: name, platform, niche, sub-niche, currency, color), budget caps, notifications,
-    sound, data folder.
+    data folder.
 
 Global: store switcher, Ask AI command palette (Ctrl+K) that routes questions to the selected store's Market Analyst,
 notification center, first-run onboarding ("explore demo" or "add your first store → pick niche → meet your squad").
@@ -89,7 +91,7 @@ apps/desktop (Electron)  ── starts ──>  apps/server (Node: Hono HTTP + W
                                                                                          ├─ store memory (learn loop)
                                                                                          ├─ tools (in-process MCP over app data)
                                                                                          ├─ approvals + run manager
-                                                                                         └─ gamification (XP, levels, missions)
+                                                                                         └─ outcome checks (→ store memory) + squad missions
 ```
 
 - The web app talks only to the local API (`/api/*` HTTP, `/api/live` WebSocket). It also runs in a normal browser for
@@ -108,12 +110,12 @@ apps/desktop (Electron)  ── starts ──>  apps/server (Node: Hono HTTP + W
 - `ad_accounts` (id, network, store_id) and `campaigns` (network, id, store_id, name, status, daily_budget) +
   `campaign_daily` (spend, revenue, purchases, clicks, impressions)
 - `integrations` (id, kind, store_id nullable, status, encrypted_credentials)
-- `agents` (id, store_id, role, enabled, autonomy, level, xp, settings_json)
+- `agents` (id, store_id, role, enabled, autonomy, settings_json)
 - `agent_runs` (id, agent_id, task, status, started_at, ended_at, tokens, cost, transcript_json)
 - `approvals` (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at, decided_at)
 - `store_memory` (id, store_id, agent_id, kind fact|learning|preference, text, evidence, confidence, tags, created_at,
   last_used_at) + FTS5 index
-- `xp_events`, `achievements`, `missions`
+- `squad_missions` (multi-agent plans over agent runs)
 - `competitors`, `competitor_snapshots`, `research_products`, `product_lists`, `automation_rules`, `automation_runs`,
   `creatives`
 
@@ -123,8 +125,8 @@ range against the immediately preceding range of the same length.
 ## 7. Agent system
 
 **Squads.** Creating a store creates its squad: one agent per role (8 roles in `packages/shared` `AGENT_ROLES`). Roles
-can be toggled per store. Each agent has level, XP, status, current task, autonomy (`suggest` → `ask` → `autopilot
-with cap`), budget caps, schedule.
+can be toggled per store. Each agent has status, current task, autonomy (`suggest` → `ask` → `autopilot with cap`),
+budget caps, schedule.
 
 **Engine.** `runAgent(agent, task)` streams normalized events (`text_delta`, `tool_call`, `tool_result`,
 `approval_request`, `memory_written`, `done`, `error`). Engines:
@@ -160,16 +162,12 @@ approve/deny resumes the run. Autopilot rules auto-approve within caps and log i
 **Run manager.** Queue with global concurrency (default 3) and per-store limits; cancel/resume; persisted transcripts;
 token/cost and Higgsfield-credit accounting per store with daily caps.
 
-## 8. Gamification
+## 8. Store health
 
-- **Agent XP / levels / ranks:** XP for completed tasks, accepted requests, and measured wins (KPI improved after the
-  agent's change). Ranks: Recruit → Operative → Specialist → Veteran → Elite → Legend; portrait frame changes by rank.
-- **Commander level** for the owner, from revenue/profit milestones and streaks.
-- **Daily missions** per store (e.g. "Clear all agent requests", "Hit $1,000 revenue", "Launch 2 new creatives"),
-  generated from the store's state.
-- **Achievements:** First Sale, $10K Month, ROAS 3x Week, 7-Day Profit Streak, Squad Fully Deployed, etc.
-- **Store health** = margin-based bar; status badge Winning / Steady / Bleeding.
-- Feedback: XP toasts, level-up burst, mission complete sting (sound off by default).
+- **Store health** = margin-based bar; status badge Winning / Steady / Bleeding (`storeHealth()` in shared).
+
+No gamification (owner, 2026-10-28): no XP, levels, ranks, achievements, daily missions, streaks, commander level, or
+XP/level-up toasts and sounds.
 
 ## 9. Integrations (verified 2026-10-26)
 

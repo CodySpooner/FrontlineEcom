@@ -7,7 +7,6 @@ import {
   isAccountError,
   costToday,
   creditsToday,
-  XP,
   ADS_JOB,
   IDLE_CAMPAIGN_STATUSES,
   MISSION_TEMPLATES,
@@ -31,7 +30,6 @@ import {
   deleteMemory,
   deleteNicheLearning,
   ensureSquads,
-  seedDemoXp,
   getAgent,
   getPageDraft,
   kbGoLive,
@@ -42,7 +40,6 @@ import {
   listAgents,
   listMemory,
   listNicheLearnings,
-  listXpEvents,
   addNicheLearning,
   nicheKey,
   nicheSlug,
@@ -67,7 +64,6 @@ import { convertRate, fxFor } from '../fx';
 import { approvalsHook, decide } from '../approvals';
 import { listCompetitors, priceChanges, publicFetch, watchCompetitorPrices } from '../competitors';
 import { localDate } from '../dates';
-import { DEMO_STORES } from '../demo';
 import { dataDir, type Db } from '../db';
 import { log } from '../log';
 import { askKnowledge } from '../kb/ask';
@@ -77,7 +73,6 @@ import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftTh
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { issueRoutes } from './agents-issues';
-import { award, gamificationRoutes } from './agents-gamification';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
 import { demoSupplierProducts, searchCj } from '../connectors/cj';
@@ -273,7 +268,7 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
   },
 });
 
-/** What the app does with runs: stream them over the live bus, pay XP, notify the owner when one finishes or fails. */
+/** What the app does with runs: stream them over the live bus, notify the owner when one finishes or fails. */
 /** Real runs start in their own folder, so their Claude Code sessions stay out of the owner's projects (`claude --resume`). */
 const agentSessions = () => {
   const cwd = resolve(dataDir(), 'agent-sessions');
@@ -286,18 +281,13 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent' | 
   onError: (run, e) => log('error', 'run failed to finish', { runId: run.id, agentId: run.agentId, error: e instanceof Error ? e.message : String(e) }),
   onEvent: (run, event) => {
     publish({ type: 'run_event', runId: run.id, agentId: run.agentId, storeId: run.storeId, event });
-    if (event.type === 'memory_written') {
-      const m = event.memory;
-      award(db, { ref: `memory:${m.id}`, amount: XP.memory, reason: `Learned: ${m.text.slice(0, 80)}`, storeId: m.storeId, agentId: run.agentId });
-    }
   },
   onRun: (run) => {
     publish({ type: 'run', run });
     const ended = run.status === 'done' || run.status === 'error' || run.status === 'cancelled';
-    // A research stage reports as its task (advanceKbResearch): no XP or notification for each stage.
+    // A research stage reports as its task (advanceKbResearch): no notification for each stage.
     if (run.mode?.startsWith('research:')) return void (ended && advanceKbResearch(db));
     if (ended) advanceSquadMissions(db);
-    if (run.status === 'done') award(db, { ref: `run:${run.id}`, amount: XP.runDone, reason: `Completed: ${run.task.slice(0, 80)}`, storeId: run.storeId, agentId: run.agentId });
     const agent = getAgent(db, run.agentId);
     const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
     const link = `/agents/${run.agentId}`;
@@ -471,7 +461,7 @@ function advanceSquadMissions(db: Db) {
   try {
     moved = advanceMissions(db, runs.start);
   } catch (e) {
-    // A damaged mission row mustn't cost every run end its XP and notification, or the app its start.
+    // A damaged mission row mustn't cost every run end its notification, or the app its start.
     return log('error', 'squad missions: advance failed', { error: e instanceof Error ? e.message : String(e) });
   }
   for (const m of moved) {
@@ -537,7 +527,6 @@ let account: { at: number; answer: Promise<ClaudeAccount> } | undefined;
 
 export function agentRoutes(db: Db) {
   ensureSquads(db);
-  seedDemoXp(db, DEMO_STORES.map((s) => s.id));
   const runs = runManager(db);
   activateConnectedStores(db, runs);
   advanceSquadMissions(db); // runs that ended while the app was closed
@@ -571,9 +560,6 @@ export function agentRoutes(db: Db) {
       const agent = getAgent(db, c.req.param('id'));
       return agent ? c.json(agent) : c.json({ error: 'Agent not found' }, 404);
     })
-    .get('/api/agents/:id/xp', (c) =>
-      getAgent(db, c.req.param('id')) ? c.json(listXpEvents(db, c.req.param('id'), limit(c.req.query('limit')))) : c.json({ error: 'Agent not found' }, 404),
-    )
     .patch('/api/agents/:id', async (c) => {
       const body = (await c.req.json().catch(() => null)) as AgentUpdate | null;
       if (
@@ -714,6 +700,5 @@ export function agentRoutes(db: Db) {
     .route('/', pageRoutes(db, pushPage(db)))
     .route('/', issueRoutes(db))
     .route('/', flowRoutes(db))
-    .route('/', gamificationRoutes(db))
     .route('/', creativeRoutes(db));
 }

@@ -1,8 +1,6 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { randomUUID } from 'node:crypto';
 import { AGENT_ROLES, type Agent, type AgentRole, type AgentUpdate, type Autonomy, type Store } from '@frontline/shared';
 import { engineInfo } from './engine';
-import { demoXp, levelForXp, levelProgress, rankForLevel, xpForLevel } from './gamification';
 import { createDefaultJobs } from './jobs';
 
 // Squads live in core's `agents` table (apps/server/src/db.ts). Agent id = `<storeId>:<role>`.
@@ -12,7 +10,7 @@ export const DEFAULT_AUTONOMY: Autonomy = 'ask';
 
 export const agentId = (storeId: string, role: AgentRole) => `${storeId}:${role}`;
 
-/** One agent per role for the store, plus its default jobs when the squad is new. Idempotent: existing agents keep their level, XP and settings. */
+/** One agent per role for the store, plus its default jobs when the squad is new. Idempotent: existing agents keep their settings. */
 export function createSquad(db: DatabaseSync, store: Pick<Store, 'id'>): Agent[] {
   const insert = db.prepare('INSERT OR IGNORE INTO agents (id, store_id, role, autonomy) VALUES (?, ?, ?, ?)');
   const roles = Object.keys(AGENT_ROLES) as AgentRole[];
@@ -24,23 +22,6 @@ export function createSquad(db: DatabaseSync, store: Pick<Store, 'id'>): Agent[]
     createDefaultJobs(db, store.id);
   }
   return listAgents(db, [store.id]);
-}
-
-/**
- * The showcase stores' squads start with some history so levels and ranks vary. Only touches agents still at 0 XP.
- * The starting XP is one line in the agent's XP history too, dated when its store was made, so the history adds up.
- * ponytail: the line is (back)filled for every demo agent: each got demoXp at its first start, before any work.
- */
-export function seedDemoXp(db: DatabaseSync, storeIds: string[]) {
-  const set = db.prepare('UPDATE agents SET xp = ?, level = ? WHERE id = ? AND xp = 0');
-  const line = db.prepare(
-    `INSERT OR IGNORE INTO xp_events (id, ref, store_id, agent_id, amount, reason, created_at)
-     SELECT ?, ?, id, ?, ?, 'Demo squad starting XP', created_at FROM stores WHERE id = ?`,
-  );
-  for (const a of listAgents(db, storeIds)) {
-    set.run(demoXp(a.id), levelForXp(demoXp(a.id)), a.id);
-    line.run(randomUUID(), `demo-xp:${a.id}`, a.id, demoXp(a.id), a.storeId);
-  }
 }
 
 /** Gives every store a full squad (new stores, and roles added since a squad was made). */
@@ -115,11 +96,6 @@ function toAgent(r: Record<string, unknown>, busy: ReturnType<typeof busyAgents>
     storeId: String(r.store_id),
     role: r.role as AgentRole,
     status: !enabled ? 'offline' : request ? 'waiting_approval' : task ? 'running' : failed ? 'error' : 'idle',
-    level: levelForXp(Number(r.xp)),
-    xp: Number(r.xp),
-    rank: rankForLevel(levelForXp(Number(r.xp))),
-    nextLevelXp: xpForLevel(levelForXp(Number(r.xp)) + 1),
-    levelProgress: levelProgress(Number(r.xp)),
     ...(currentTask ? { currentTask } : {}),
     enabled,
     autonomy: r.autonomy as Autonomy,

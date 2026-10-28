@@ -6,7 +6,7 @@ import { renderApp, stubApi } from '../test-utils';
 import { Onboarding } from './Onboarding';
 
 const added = { id: 'trail-co', name: 'Trail Co', platform: 'shopify', niche: 'outdoor', nicheDetail: 'ultralight camping gear', currency: 'USD', color: '#ff2a3a', connected: false } as Store;
-const squad = Object.keys(AGENT_ROLES).map((role) => ({ id: `trail-co:${role}`, storeId: 'trail-co', role, rank: 'Recruit' }));
+const squad = Object.keys(AGENT_ROLES).map((role) => ({ id: `trail-co:${role}`, storeId: 'trail-co', role }));
 const dialog = () => document.querySelector('dialog')!;
 
 beforeEach(() => localStorage.clear());

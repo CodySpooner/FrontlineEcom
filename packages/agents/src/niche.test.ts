@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { assemblePrompt, customNichePack, draftNichePackTask, fakeEngine, nicheSlug, runAgent, saveNichePack } from './index';
 
 const store: Store = { id: 'pens', name: 'Ink & Nib', platform: 'etsy', niche: 'other', nicheDetail: 'Vintage Fountain Pens!', currency: 'USD', timezone: 'America/New_York', color: '#fff', connected: false };
-const agent: Agent = { id: 'pens:copywriter', storeId: 'pens', role: 'copywriter', status: 'idle', level: 1, xp: 0 };
+const agent: Agent = { id: 'pens:copywriter', storeId: 'pens', role: 'copywriter', status: 'idle' };
 
 let dir: string;
 beforeEach(() => {

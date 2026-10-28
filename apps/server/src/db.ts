@@ -825,6 +825,11 @@ export const MIGRATIONS = [
   CREATE INDEX kb_conflicts_open ON kb_conflicts (store_id, status);
   CREATE INDEX kb_tasks_by_payer ON kb_tasks (payer_id, created_at);
   `,
+  /* 49 (gamification removed: the XP ledger and agent levels; its index drops with the table) */ `
+  DROP TABLE IF EXISTS xp_events;
+  ALTER TABLE agents DROP COLUMN level;
+  ALTER TABLE agents DROP COLUMN xp;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

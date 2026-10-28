@@ -17,7 +17,6 @@ import { useDemoOffice } from './useDemoOffice';
 import { demoStats } from './demo';
 import { DemoAgentPanel } from './DemoAgentPanel';
 import { loadTheme } from './themes';
-import { TrophyCabinet } from './TrophyCabinet';
 
 const TABS = ['Office View', 'Department View', 'Agent List', 'Task Board', 'Performance'].map((label) => ({ value: label, label }));
 
@@ -63,7 +62,6 @@ export function Ecosystem() {
       </div>
       <footer className="eco-bottom"><div><small>AGENT STATUS KEY</small><p><i className="eco-dot" />Working <i className="eco-dot waiting" />Waiting <i className="eco-dot collab" />Collaborating <i className="eco-dot idle" />Idle <i className="eco-dot blocked" />Blocked</p></div><div><small>QUICK ACTIONS</small><p><Button size="sm" onClick={() => setQuick(true)}>Quick Assign</Button><Button size="sm" disabled={demo} onClick={() => setDeploy(true)}>Deploy Agent</Button><Button size="sm" disabled={demo} onClick={() => setCreateTeam(true)}>Create Team</Button><Button size="sm" onClick={() => setSettings(true)}>Office Settings</Button></p></div><div><small>OFFICE CAPACITY</small><p>{seats.data?.filter((s) => !s.archived).length ?? '—'} / 30 · {stats.data?.activeTasks ?? '—'} active jobs</p></div></footer>
       <MissionPanel office={office.state} create={createTeam} onPreview={demo ? setSelected : undefined} onCreate={() => setCreateTeam(true)} onCloseCreate={() => setCreateTeam(false)} />
-      <TrophyCabinet seats={seats.data ?? []} stats={stats.data} demo={demo} />
       {agent && seat && (demo ? <DemoAgentPanel key={agent.id} agent={agent} seat={seat} office={office.state} onClose={() => setSelected('')} onSimulate={simulated.simulate} /> : <AgentPanel key={agent.id} agent={agent} seat={seat} office={office.state} assignInitially={assignInitially} onClose={() => setSelected('')} onFocus={() => { setFocus({ id: agent.id, at: Date.now() }); setTab('Office View'); setSelected(''); }} />)}
       {deploy && <DeployWizard agents={office.state.agents} seats={seats.data ?? []} onClose={() => setDeploy(false)} />}
       {settings && <OfficeSettings value={display} onChange={setDisplay} theme={theme} onTheme={setTheme} onClose={() => setSettings(false)} />}

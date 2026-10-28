@@ -273,24 +273,6 @@ export function UsageMeter({ label, used, cap, fmt }: { label: string; used: num
   );
 }
 
-/** `xp` / `next` = progress through the current level. */
-export function XPBar({ level, rank, xp, next }: { level: number; rank?: string; xp: number; next: number }) {
-  return (
-    <div>
-      <div className="mb-1 flex justify-between text-[11px]">
-        <span className="font-display font-bold tracking-[.12em] text-red">
-          LV {level}
-          {rank && <span className="ml-1.5 font-sans font-semibold tracking-normal text-text-2">{rank}</span>}
-        </span>
-        <span className="text-muted tabular-nums">
-          {xp.toLocaleString('en-US')} / {next.toLocaleString('en-US')} XP
-        </span>
-      </div>
-      <ProgressBar value={xp / next} label={`Level ${level} progress`} />
-    </div>
-  );
-}
-
 /** Hover/focus tooltip. The child must be focusable so keyboard users get it too. */
 export function Tooltip({ tip, children }: { tip: ReactNode; children: ReactElement<{ 'aria-describedby'?: string }> }) {
   const id = useId();

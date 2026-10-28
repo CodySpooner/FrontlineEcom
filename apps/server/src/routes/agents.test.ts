@@ -1,4 +1,4 @@
-import { createSquad, demoXp, listAgents } from '@frontline/agents';
+import { createSquad, listAgents } from '@frontline/agents';
 import { AGENT_ROLES, type Agent } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -22,7 +22,7 @@ test('every demo store gets a full squad on startup', async () => {
   const agents = (await get('/api/agents')) as Agent[];
   expect(agents).toHaveLength(3 * 8);
   expect(agents.slice(0, 8).map((a) => a.id)).toEqual(Object.keys(AGENT_ROLES).map((r) => `pawsome:${r}`));
-  expect(agents[0]).toMatchObject({ storeId: 'pawsome', role: 'ad_strategist', xp: demoXp('pawsome:ad_strategist'), enabled: true, autonomy: 'ask' });
+  expect(agents[0]).toMatchObject({ storeId: 'pawsome', role: 'ad_strategist', enabled: true, autonomy: 'ask' });
 });
 
 test('filters by store', async () => {
@@ -62,10 +62,10 @@ test('rejects bad updates and unknown agents', async () => {
   expect((await app.request('/api/agents/nope')).status).toBe(404);
 });
 
-test('createSquad is idempotent and keeps progress', () => {
+test('createSquad is idempotent and keeps settings', () => {
   insertStore(db, { id: 'kids', name: 'Tiny Trek', platform: 'etsy', niche: 'kids', currency: 'USD', timezone: 'America/Chicago', color: '#fff', connected: false });
   expect(createSquad(db, { id: 'kids' })).toHaveLength(8);
-  db.prepare(`UPDATE agents SET xp = 120, level = 2 WHERE id = 'kids:operations'`).run();
+  db.prepare(`UPDATE agents SET autonomy = 'autopilot', enabled = 0 WHERE id = 'kids:operations'`).run();
   createSquad(db, { id: 'kids' });
-  expect(listAgents(db, ['kids']).find((a) => a.role === 'operations')).toMatchObject({ xp: 120, level: 2 });
+  expect(listAgents(db, ['kids']).find((a) => a.role === 'operations')).toMatchObject({ autonomy: 'autopilot', enabled: false });
 });

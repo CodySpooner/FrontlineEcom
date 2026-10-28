@@ -8,7 +8,7 @@ import { appearanceFor } from './characters';
 
 vi.mock('./WorkerPortrait', () => ({ WorkerPortrait: () => <span>Portrait</span> }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
-const agent: Agent = { id: 'glow:copywriter', storeId: 'glow', role: 'copywriter', status: 'idle', level: 1, xp: 0 };
+const agent: Agent = { id: 'glow:copywriter', storeId: 'glow', role: 'copywriter', status: 'idle' };
 const seat = (id: string, deskId: string, archived = false): OfficeSeat => ({ agentId: id, deskId, archived, displayName: 'Nova', appearance: appearanceFor(id), position: null, updatedAt: '' });
 test('restores an archived identity into a free desk, preserving backend conflicts', async () => {
   let conflict = true;

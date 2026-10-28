@@ -108,7 +108,7 @@ function Squad({ store, onDone }: { store: Store; onDone: (to?: string) => void 
         <ul className="grid grid-cols-2 gap-2 min-[520px]:grid-cols-4">
           {agents.map((a) => (
             <li key={a.id} className="grid justify-items-center gap-1.5 rounded-lg border border-line bg-bg-2 p-2.5 text-center">
-              <Portrait role={a.role} rank={a.rank} className="size-12" />
+              <Portrait role={a.role} className="size-12" />
               <span className="text-xs font-semibold">{AGENT_ROLES[a.role].name}</span>
             </li>
           ))}

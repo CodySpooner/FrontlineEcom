@@ -56,7 +56,7 @@ export function Research() {
 
   return (
     <>
-      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
+      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
       <Tabs label="Research" tabs={TABS} value={tab} onChange={(t) => setParams(t === 'trending' ? {} : { tab: t }, { replace: true })} />
       {tab !== 'lists' && (
         <div className="my-4 flex flex-wrap items-center gap-2">

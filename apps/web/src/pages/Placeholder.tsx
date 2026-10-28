@@ -17,7 +17,7 @@ export function Placeholder({ nav }: { nav?: NavItem }) {
     );
   return (
     <>
-      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
+      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
       <Card>
         <EmptyState icon={nav.icon} title={`${nav.label} is being built`}>
           Your squad is on it ({nav.item}). Meanwhile, everything that's live is on the Command Center.

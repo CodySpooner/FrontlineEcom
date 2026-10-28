@@ -1,7 +1,7 @@
 # Frontline Ecom — rules for every agent working here
 
 Frontline Ecom is a Windows desktop command center for running several ecommerce stores, each with its own
-squad of specialized AI agents that learn the store's niche. Dark grey + red, gamified but SaaS-clear.
+squad of specialized AI agents that learn the store's niche. Dark grey + red, clean and SaaS-clear (no game mechanics).
 Read `docs/DESIGN.md` (what we build) and `docs/BUILD_PLAN.md` (in what order) before your first task.
 
 ## Stack
@@ -13,7 +13,7 @@ pnpm workspace, TypeScript strict, Node 24.
 | `apps/web` | React 19 + Vite + Tailwind v4 — the UI |
 | `apps/server` | Hono API + WebSocket + SQLite (`node:sqlite`), demo data, platform/ad connectors |
 | `packages/shared` | Domain types + API contracts used by web, server and agents |
-| `packages/agents` | Agent engine (Claude Agent SDK), roles, playbooks, niche packs, store memory, approvals, XP |
+| `packages/agents` | Agent engine (Claude Agent SDK), roles, playbooks, niche packs, store memory, approvals, outcome checks |
 | `apps/desktop` | Electron shell (later phase) |
 
 Commands: `pnpm install`, `pnpm dev` (web + server), `pnpm check` (typecheck + tests).
@@ -22,21 +22,24 @@ Ports come from `WEB_PORT` / `API_PORT` (each worker worktree has its own pair, 
 Reference material: `docs/reference/ui-reference.webp` (the look we're matching), `docs/reference/dashboard-mockup-v3.html`
 (approved dashboard layout + interactions), `C:/dev/_reference/t3code` and `C:/dev/_reference/orca` (MIT source we
 borrow agent-harness patterns from — see DESIGN.md "Reuse map"; keep their MIT notice in any file you port).
+The references predate the owner's 2026-10-28 cleanup: their page-header art and skyline and the profile chip's
+dropdown are superseded (the header is a plain title strip). Don't match or rebuild those.
 
 ## Lanes — one worker per lane, one Orca worktree each
 
 | Lane | Owns |
 |------|------|
-| `ui` | `apps/web/**` (except `src/ecosystem/**`, `public/ecosystem/**`, `public/art/**`, and the header/portrait art in `Hero.tsx`, `Art.tsx` while `image-generation` runs) |
+| `ui` | `apps/web/**` (except `src/ecosystem/**`, `public/ecosystem/**`, `public/art/**`) |
 | `core` | `apps/server/**` (except `src/routes/agents*`, `src/routes/ecosystem*`), `packages/shared/**`, `apps/desktop/**`, root config |
 | `agents` | `packages/agents/**`, `apps/server/src/routes/agents*.ts` |
 | `ecosystem` (Codex) | the AI Ecosystem page: `apps/web/src/ecosystem/**`, `apps/web/public/ecosystem/**`, `apps/server/src/routes/ecosystem*.ts` — touch points in `docs/backlog/ecosystem.md` |
-| `image-generation` (Codex) | generated page-header art and agent portraits: `apps/web/public/art/**`, `Hero.tsx`, `Art.tsx` — touch points in `docs/backlog/image-generation.md` |
+| `image-generation` (Codex, finished) | agent portraits: `apps/web/public/art/agents/**`, `Art.tsx` — touch points in `docs/backlog/image-generation.md` |
 | `knowledge-base` | the Knowledge Base & Research Intelligence feature (`docs/features/knowledge-base.md`): `apps/web/src/pages/Knowledge.tsx`, `apps/web/src/knowledge/**`, `apps/server/src/kb/**`, plus the KB touch points across packages listed in `docs/backlog/knowledge-base.md` (the other lanes are stopped) |
 
 Edit outside your lane only for a tiny unblocking change (an added export, mounting a route). Otherwise append a
 request to the other lane's backlog **Inbox** and stub the dependency behind a small interface so you can keep going.
-`packages/shared` is additive-only: never rename or remove a field someone else uses.
+`packages/shared` is additive-only: never rename or remove a field someone else uses (exception: when the owner
+removes a feature, remove its fields together with every user in the same change).
 
 ## Worker loop — never stop
 
@@ -77,6 +80,12 @@ the next item.
   smoke run per task.
 - **Lockfile conflict during rebase:** take origin's `pnpm-lock.yaml`, rerun `pnpm install`, `git add`, continue.
 - **Keep it simple:** smallest code that works, no speculative abstractions, match the surrounding style.
+- **No gamification, no header art** (owner decision, 2026-10-28: too gaming related for this app): no XP, levels,
+  ranks, rank frames, LV badges, achievements, trophies, daily missions, profit streaks, commander level,
+  XP/level-up/mission toasts or their sounds, and no page-header images (the header is a plain title strip). Never add
+  them back or propose them as backlog items. Squad missions (multi-agent plans, `squad_missions`), outcome checks
+  (measured results → store memory, `apps/server/src/routes/agents-outcomes.ts`) and store health badges are real
+  features and stay.
 - **Useful skills:** `ui-ux-pro-max`, `styleseed-design-review`, `dataviz` (ui); `claude-api` (agents — read it before
   touching the Agent SDK); the installed ecommerce skills (`shopify-*`, `tiktok-shop-*`, `etsy-*`,
   `dropshipping-product-research`, `ecommerce-*`) as source material for playbooks and niche packs;

@@ -3,6 +3,9 @@
 
 > Owner's feature spec, verbatim (2026-10-26). Visual target: `docs/reference/ai-ecosystem-reference.webp`.
 > Build lane, ownership and how it maps onto this repo: `docs/backlog/ecosystem.md`. Repo rules: `CLAUDE.md`.
+>
+> Owner update, 2026-10-28: leveling, XP, ranks, achievements and office trophies are dropped (§12 Optional
+> Gamification), here and everywhere in the app (too gaming related). This note wins over the verbatim text.
 
 ### YOUR MISSION
 
@@ -561,7 +564,6 @@ Support future additions such as:
 - Alternative lighting themes.
 - Animated signs.
 - Team banners.
-- Office trophies.
 - Additional ambient details.
 
 Create the underlying system so cosmetic upgrades can be added later without rewriting the entire map.
@@ -570,35 +572,7 @@ Create the underlying system so cosmetic upgrades can be added later without rew
 
 # 12. OPTIONAL GAMIFICATION
 
-Introduce simple visual progression that rewards meaningful completed work.
-
-### Agent Levels
-
-Possible progression:
-
-- Recruit
-- Specialist
-- Expert
-- Elite
-- Master Operator
-
-Agents can gain XP from verified completed workflows.
-
-### Achievements
-
-Examples:
-
-- First Agent Deployed.
-- First Team Created.
-- First Completed Mission.
-- First Agent Collaboration.
-- Ten Successful Missions.
-- Full Office — 30 Agents.
-- One Hundred Completed Tasks.
-
-Display earned achievements in an office trophy area or profile panel.
-
-Agent levels are visual progression mechanics and should not falsely imply that the underlying language models become more intelligent.
+Dropped 2026-10-28 (owner): no agent levels, XP, ranks, achievements or trophies (see the note at the top).
 
 ---
 
@@ -745,7 +719,7 @@ Implement task assignment, agent chat integration, activity inspection, configur
 
 ### Step 8 — Customization and Polish
 
-Add personalization, animation refinements, optional gamification, and performance optimizations.
+Add personalization, animation refinements, and performance optimizations.
 
 ### Step 9 — Testing
 

@@ -3,6 +3,10 @@
 Spec: `docs/features/ai-ecosystem.md` (the owner's prompt, verbatim — it wins over this file where they differ).
 Visual target: `docs/reference/ai-ecosystem-reference.webp`. Repo rules: `CLAUDE.md` (worker loop, hard rules).
 
+> Owner, 2026-10-28: agent levels, XP, ranks, the trophy cabinet (ECO-19) and the trophy stats (`teamsCreated`,
+> `completedMissions`, `handoffs`, `fullOffice`) are removed, and the `xp` live message is gone. Items below that built
+> them are history: don't rebuild them (CLAUDE.md hard rule). The office, squad missions and avatar cosmetics stay.
+
 ## Lane
 
 Owns: `apps/web/src/ecosystem/**`, `apps/web/public/ecosystem/**`, `apps/server/src/routes/ecosystem*.ts` (+ tests),
@@ -22,13 +26,12 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
   operations → Operations, email_sms → Email & SMS. Executive HQ and Integrations & Automation have no matching role:
   the wizard lets the owner seat any agent in any department with a free desk.
 - **Real state comes from what already exists:** agent `status`, runs (`AgentRun`), `/api/live` messages (`run`,
-  `run_event` with tool events, `approval`, `xp`), flows in `packages/agents/src/flows.ts` for multi-agent work and
+  `run_event` with tool events, `approval`), flows in `packages/agents/src/flows.ts` for multi-agent work and
   handoffs. Build the typed `AgentOfficeEvent` adapter on top of these in `apps/web/src/ecosystem/`. Only if a needed
   fact truly isn't exposed, ask the agents lane via its Inbox.
 - **Assign Task / Chat / Cancel / Configure** call the existing agent endpoints (see `apps/server/src/routes/agents*.ts`,
   `apps/web/src/pages/AgentDetail.tsx`). Don't add a parallel task system.
-- **Levels and XP:** reuse the existing XP / `RANKS` (`packages/shared`). Office achievements can be computed from
-  real seats, runs and flows.
+- **No levels, XP, ranks, achievements or trophies** (owner, 2026-10-28).
 - **Demo Mode** (spec §15) is a separate event provider in `apps/web/src/ecosystem/`, behind a clearly labeled toggle,
   never mixed into the real provider. The seeded demo stores already run on the free fake engine, so real tasks on
   demo stores are real-path tests that cost nothing. Never connect a real store or use a real Claude run for testing.
@@ -76,7 +79,7 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 - [x] ECO-16 Bottom bar + display toggles (names, bubbles, department labels, workload, connections, status icons), Office Settings.
 - [x] ECO-17 Demo Mode provider: clearly labeled, separate from the real provider, exercises every visual (spec §15).
 - [x] ECO-18 Customization: outfits/colors/accessories per seat, data-driven desk/decor themes so cosmetics can be added without rewriting the map.
-- [x] ECO-19 Gamification: levels from existing XP/ranks, office achievements from real data, trophy area.
+- [x] ECO-19 Gamification: levels from existing XP/ranks, office achievements from real data, trophy area — removed 2026-10-28 (owner: no gamification).
 - [x] ECO-20 Performance: 30 characters at ~60 FPS (measure and note it), atlases/batching, no React rerender per frame, reduced-motion, low-power fallback.
 - [x] ECO-21 Acceptance pass: walk every line of spec §17 in the browser, fix gaps, record the result here.
 - [x] ECO-22 Worker redesign (owner, 2026-10-26: "they look to plain i want to see some cooler designs for our workers but have them randomized and just i want you to make these look super cool and unique"). Today every worker is the same 32×40 chibi from `paintPerson` in `characters.ts` with 5 traits (6 colors, 6 hair, 4 skin, 3 outfits, 3 accessories), so they all share one silhouette. Make each worker a striking, distinct character: different archetypes and silhouettes (e.g. tactical operators with visors, hooded netrunners with glowing goggles, androids with face plates, robot/mech heads, execs in long coats, punks, helmeted specialists…), emissive/glowing accents, gear (cyber arms, backpacks, shoulder armor, capes, cables, holo-badges), palettes that pop on the dark floor and still fit the red/black office. Randomized per worker but stable across restarts (derive from the agent id; a reroll is saved in the seat's appearance). Keep all 10 animations × 4 directions, readable at fit zoom; more pixel detail is fine (bigger cell if needed, each atlas texture ≤ 4096 px). Image generation is allowed if it beats procedural parts; procedural parts are fine where they randomize better. `OfficeAppearance` changes stay additive: seats saved with the old shape must still load and render. Update server `validLook`, the Deploy wizard and seat editor (add a "Randomize look" button), portraits, demo seats and tests. Screenshot before/after in `.agent/`.

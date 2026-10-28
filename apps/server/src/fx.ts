@@ -98,13 +98,6 @@ export async function historicRate(from: string, to: string, fetchFn: Fetch = fe
   };
 }
 
-/** Units of `to` per unit of `from` from the rates already fetched (no network); undefined without one. */
-export function cachedRate(db: Db, from: string, to: string) {
-  if (from === to) return 1;
-  const rates = cached(db)?.rates;
-  return rates?.[from] && rates[to] ? rates[to] / rates[from] : undefined;
-}
-
 /**
  * Refetches rates older than 12 h while any store's currency differs from the base currency. Checked every 10 min, so
  * a store that just changed currency gets rates soon; after a failure it waits an hour. Returns stop().

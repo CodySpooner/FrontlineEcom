@@ -4,7 +4,7 @@ import { Link, useOutletContext } from 'react-router';
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight, Check, CreditCard, RotateCcw, ShoppingBag, ShoppingCart } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type Store, type StoreEventType } from '@frontline/shared';
-import { useAgents, useApprovals, useDecide, useEvents, useIntegrations, useMissingCosts, useMissions, useSummary } from '../api/client';
+import { useAgents, useApprovals, useDecide, useEvents, useIntegrations, useMissingCosts, useSummary } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Portrait } from '../components/Art';
 import { ApprovalExtras } from '../components/ApprovalExtras';
@@ -26,7 +26,7 @@ export function Dashboard() {
   const who = ids.length ? ids.map(name).join(' + ') : 'All stores';
   return (
     <>
-      <Hero title={NAV[0]!.title} subtitle={NAV[0]!.subtitle} art={NAV[0]!.art} />
+      <Hero title={NAV[0]!.title} subtitle={NAV[0]!.subtitle} />
       <div className="mb-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
         <StoreFilter />
         <span className="text-xs text-muted">Changes vs the {PERIOD[range].replace('last', 'previous')}</span>
@@ -56,7 +56,6 @@ export function Dashboard() {
         <AgentsStrip />
         <Requests />
       </div>
-      <Missions />
     </>
   );
 }
@@ -288,7 +287,7 @@ function AgentsStrip() {
             return (
               <li key={a.id} className="rounded-[10px] border border-line bg-bg-2 p-2.5">
                 <div className="flex items-center gap-[9px]">
-                  <Portrait role={a.role} rank={a.rank} />
+                  <Portrait role={a.role} />
                   <div className="min-w-0">
                     <div className="text-xs leading-tight font-semibold">{role}</div>
                     <div className={cx('mt-[3px] flex items-center gap-1.5 text-[11px] whitespace-nowrap', TONE_TEXT[st.tone])}>
@@ -306,55 +305,6 @@ function AgentsStrip() {
             );
           })}
         </ul>
-      )}
-    </Panel>
-  );
-}
-
-export function Missions() {
-  const { has, name } = useStoreSelection();
-  const q = useMissions();
-  const [more, setMore] = useState(false);
-  const all = (q.data ?? []).filter((m) => has(m.storeId));
-  const isDone = (m: { progress: number; target: number }) => m.progress >= m.target;
-  const done = all.filter(isDone).length;
-  // Open missions first: that's what the owner can still act on. Two rows of 4 until asked (3+ stores have more).
-  const sorted = [...all].sort((a, b) => Number(isDone(a)) - Number(isDone(b)));
-  const list = more ? sorted : sorted.slice(0, 8);
-  return (
-    <Panel title="Daily Missions" action={all.length > 0 && <span className="text-xs text-muted">{`${done}/${all.length} complete`}</span>}>
-      {q.isPending ? (
-        <LoadingState rows={2} />
-      ) : q.isError ? (
-        <ErrorState message="Couldn't load missions." onRetry={() => q.refetch()} />
-      ) : !list.length ? (
-        <EmptyState title="No missions today">New missions drop every morning.</EmptyState>
-      ) : (
-        <ul className="grid gap-x-5 gap-y-3.5 min-[620px]:grid-cols-2 min-[1280px]:grid-cols-4">
-          {list.map((m) => {
-            const complete = isDone(m);
-            return (
-              <li key={m.id} className="min-w-0">
-                <div className="mb-1.5 flex items-center justify-between gap-2">
-                  <span className={cx('flex min-w-0 items-center gap-1.5 text-[13px] font-semibold', complete && 'text-muted')}>
-                    {complete && <Check className="size-3.5 shrink-0 text-good" aria-label="Complete" />}
-                    <span className="truncate">{m.title}</span>
-                  </span>
-                  <Badge tone={complete ? 'good' : 'red'}>+{m.xp} XP</Badge>
-                </div>
-                <ProgressBar value={m.progress / m.target} tone={complete ? 'good' : 'red'} label={m.title} />
-                <div className="mt-1 text-[11px] text-muted tabular-nums">
-                  {name(m.storeId)} · {m.progress.toLocaleString('en-US')} / {m.target.toLocaleString('en-US')}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-      {sorted.length > 8 && (
-        <Button size="sm" className="mt-3" onClick={() => setMore(!more)}>
-          {more ? 'Show fewer' : `Show all ${sorted.length}`}
-        </Button>
       )}
     </Panel>
   );

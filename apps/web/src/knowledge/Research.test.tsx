@@ -15,7 +15,7 @@ afterEach(() => {
 
 const now = new Date().toISOString();
 const paw = { id: 'pawsome', name: 'Pawsome Gear', platform: 'shopify', niche: 'pets', color: '#ff2a3a', currency: 'USD', timezone: 'UTC' };
-const agent = (role: string, over = {}) => ({ id: `pawsome:${role}`, storeId: 'pawsome', role, status: 'idle', level: 1, xp: 0, enabled: true, ...over });
+const agent = (role: string, over = {}) => ({ id: `pawsome:${role}`, storeId: 'pawsome', role, status: 'idle', enabled: true, ...over });
 const task = (over: Partial<KbTaskDetail> = {}): KbTaskDetail => ({
   id: 't1', storeId: 'pawsome', payerId: 'pawsome', role: 'ad_strategist', objective: 'hooks for anxious dogs', status: 'running', stage: 'retrieving', createdAt: now,
   kind: 'source', origin: 'owner', brief: { urls: ['https://a.test/hooks', 'https://b.test/guide', 'https://c.test/paid'] }, attempt: 0, budgetUsd: 1, spentUsd: 0.12,

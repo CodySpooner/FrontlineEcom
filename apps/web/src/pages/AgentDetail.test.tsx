@@ -65,7 +65,7 @@ describe('agent header', () => {
   beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }));
 
   it('says when the agent runs on the free demo engine', async () => {
-    stubApi((url) => (url === '/api/agents' ? [{ ...agent, status: 'idle', level: 3, rank: 'recruit', engine: { provider: 'demo' } }] : undefined));
+    stubApi((url) => (url === '/api/agents' ? [{ ...agent, status: 'idle', engine: { provider: 'demo' } }] : undefined));
     renderApp(
       <Routes>
         <Route path="/agents/:id" element={<AgentDetail />} />
@@ -75,30 +75,20 @@ describe('agent header', () => {
     expect(await screen.findByText('Demo engine')).toBeTruthy();
   });
 
-  it('lists what earned the agent its XP on the History tab, with an empty state for a new one', async () => {
-    const xp = (id: string, amount: number, reason: string) => ({ id, storeId: 'peak', agentId: agent.id, amount, reason, createdAt: '2026-10-26T08:00:00Z' });
-    const route = (events: unknown[]) =>
-      stubApi((url) => (url === '/api/agents' ? [{ ...agent, status: 'idle', level: 3, rank: 'recruit' }] : url.startsWith('/api/agents/peak%3Aad_strategist/xp') ? events : url.startsWith('/api/runs') ? [] : undefined));
-    const open = () =>
-      renderApp(
-        <Routes>
-          <Route path="/agents/:id" element={<AgentDetail />} />
-        </Routes>,
-        '/agents/peak%3Aad_strategist?tab=history',
-      );
-    route([xp('x2', 40, 'Measured win: ROAS 1.80 → 2.40 after "Broad test"'), xp('x1', 1200, 'Demo squad starting XP')]);
-    open();
-    expect(await screen.findByText('Measured win: ROAS 1.80 → 2.40 after "Broad test"')).toBeTruthy();
-    expect(screen.getByText('+40 XP')).toBeTruthy();
-    expect(screen.getByText('+1,200 XP')).toBeTruthy();
-    cleanup();
-    route([]);
-    open();
-    expect(await screen.findByText('No XP earned here yet')).toBeTruthy();
+  it('lists its runs on the History tab', async () => {
+    const run = { id: 'r1', agentId: agent.id, storeId: 'peak', task: 'Audit the broad campaign', status: 'done', createdAt: '2026-10-26T08:00:00Z', usage: { costUsd: 0.12 } };
+    stubApi((url) => (url === '/api/agents' ? [{ ...agent, status: 'idle' }] : url.startsWith('/api/runs?') ? [run] : undefined));
+    renderApp(
+      <Routes>
+        <Route path="/agents/:id" element={<AgentDetail />} />
+      </Routes>,
+      '/agents/peak%3Aad_strategist?tab=history',
+    );
+    expect(await screen.findByText('Audit the broad campaign')).toBeTruthy();
   });
 
   it('names the Claude model a live agent thinks with', async () => {
-    stubApi((url) => (url === '/api/agents' ? [{ ...agent, status: 'idle', level: 3, rank: 'recruit', engine: { provider: 'claude', model: 'claude-opus-5-5' } }] : undefined));
+    stubApi((url) => (url === '/api/agents' ? [{ ...agent, status: 'idle', engine: { provider: 'claude', model: 'claude-opus-5-5' } }] : undefined));
     renderApp(
       <Routes>
         <Route path="/agents/:id" element={<AgentDetail />} />
@@ -113,7 +103,7 @@ describe('agent header', () => {
     const mem = (id: string, agentId: string, text: string) => ({ id, storeId: 'peak', agentId, kind: 'learning', text, confidence: 0.6, tags: [], createdAt: '2026-10-26T08:00:00Z' });
     stubApi((url) =>
       url === '/api/agents'
-        ? [{ ...agent, status: 'idle', level: 3, rank: 'recruit' }]
+        ? [{ ...agent, status: 'idle' }]
         : url === '/api/stores/peak/memory'
           ? [mem('m1', agent.id, 'Broad audiences beat interests here'), mem('m2', 'peak:copywriter', 'Short hooks win')]
           : undefined,
@@ -147,7 +137,7 @@ describe('an agent that needs the owner', () => {
   const open = (pending: ApprovalRequest[], run?: AgentRunDetail) => {
     stubApi((url) =>
       url === '/api/agents'
-        ? [{ ...agent, status: 'waiting_approval', level: 3, rank: 'recruit' }]
+        ? [{ ...agent, status: 'waiting_approval' }]
         : url.startsWith('/api/approvals?status=pending')
           ? pending
           : url.startsWith('/api/runs?')

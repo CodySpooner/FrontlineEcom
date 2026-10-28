@@ -3,7 +3,7 @@ import { addEvidence, lift } from '@frontline/agents';
 import { KB_TEST_METRICS, type KbCampaign, type KbExperiment, type KbStage, type KbTestMetric, type KbTestVariant, type NewKbExperiment } from '@frontline/shared';
 import { addDays } from '../dates';
 import { tx, type Db } from '../db';
-import { storeDay, synced } from '../routes/agents-gamification';
+import { storeDay, synced } from '../routes/agents-outcomes';
 
 // Experiments and the Campaigns library (knowledge-base lane, KB-21). The owner plans a test of a card's claim on a
 // store's ad numbers; once the window's attribution settles, the app reads it and writes the result on the card. The

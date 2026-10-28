@@ -76,6 +76,30 @@ test("before an update's migrations run on existing data, the data is copied int
   }
 });
 
+test('a database from before gamification was removed loses the XP ledger and agent levels, and keeps its agents', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontline-db-'));
+  try {
+    const file = join(dir, 'frontline.db');
+    const old = new DatabaseSync(file); // the last version with XP
+    for (const sql of MIGRATIONS.slice(0, 48)) old.exec(sql);
+    old.exec(`PRAGMA user_version = 48;
+      INSERT INTO stores (id, name, platform, niche) VALUES ('x', 'X', 'shopify', 'pet');
+      INSERT INTO agents (id, store_id, role, autonomy, level, xp) VALUES ('x:copywriter', 'x', 'copywriter', 'autopilot', 3, 420);
+      INSERT INTO xp_events (id, ref, store_id, agent_id, amount, reason, created_at) VALUES ('e', 'run:1', 'x', 'x:copywriter', 10, 'Completed', '2026-10-26');
+      INSERT INTO ecosystem_seats (agent_id, desk_id, display_name, appearance_json, updated_at) VALUES ('x:copywriter', 'research-1', 'Nova', '{}', '2026-10-26');`);
+    old.close();
+    const db = openDb(file);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(MIGRATIONS.length);
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name LIKE 'xp_events%'").all()).toEqual([]);
+    expect({ ...db.prepare('SELECT * FROM agents').get() }).toEqual({ id: 'x:copywriter', store_id: 'x', role: 'copywriter', enabled: 1, autonomy: 'autopilot', settings_json: '{}' });
+    expect(db.prepare('SELECT count(*) AS n FROM ecosystem_seats').get()?.n).toBe(1);
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("tests use a temp data folder, never the dev instance's (its Knowledge Base edits, its key)", () => {
   expect(dataDir().startsWith(tmpdir())).toBe(true);
 });

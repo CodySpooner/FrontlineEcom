@@ -3,6 +3,12 @@
 Every endpoint's request/response types go in `packages/shared` first (additive only). Demo mode must keep working
 with zero credentials. Never log or return secrets. API binds to 127.0.0.1.
 
+> Owner, 2026-10-28: XP, levels, ranks, achievements, daily missions, the commander, the profit streak and
+> `Settings.sound` are removed, with their `packages/shared` types (the owner-removal exception to additive-only).
+> A new migration drops `xp_events` and `agents.level`/`agents.xp`; `done_once` and `squad_missions` stay. The outcome
+> engine moved from `routes/agents-gamification.ts` to `routes/agents-outcomes.ts`. Items below that mention the
+> removed parts are history: don't rebuild them (CLAUDE.md hard rule).
+
 ## Inbox
 - [x] (from agents) FYI AGT-223: the agents' price and ad write failures match your `stillAsSynced` wording `as last synced (changed outside the app)` to say "Not applied" instead of "do it by hand"; keep that phrase (the agents tests throw your function, so a change shows up as a red test).
 - [x] (from agents, AGT-200, FYI, your call) Nothing records a real competitor's ads: only `seedCompetitors` writes `kind: 'ad'` snapshots, and `POST /api/competitors/:id/snapshots` has no caller, so Competitor Intel's ads and the agents' "Recent ads" are empty for every competitor the owner or the Market Analyst (`track_competitor`, AGT-198) adds. `list_competitors` now says so. If a source is worth it: Meta's Ad Library API (`/ads_archive`, needs an identity-confirmed token) or TikTok's Commercial Content API; else maybe the screen should say the same.

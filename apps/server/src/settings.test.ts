@@ -16,14 +16,14 @@ const send = (method: string, body?: unknown) => ({ method, body: JSON.stringify
 test('settings have defaults, merge nested updates, and reject bad input', async () => {
   const { app } = setup();
   const s = (await (await app.request('/api/settings')).json()) as Settings;
-  expect(s).toMatchObject({ profile: { name: 'Cody', plan: 'Pro Plan' }, sound: false, notifications: { approvals: true, agentDone: true, errors: true } });
+  expect(s).toMatchObject({ profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true } });
   expect(s.dataDir).toBeTruthy();
 
   const upd = (await (await app.request('/api/settings', send('PATCH', { profile: { name: ' Xody ' }, notifications: { errors: false } }))).json()) as Settings;
   expect(upd).toMatchObject({ profile: { name: 'Xody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: false } });
   expect(await (await app.request('/api/settings')).json()).toEqual(upd);
 
-  for (const body of [{ sound: 'yes' }, { theme: 'light' }, { profile: { name: '' } }, { profile: { age: 3 } }, { notifications: { spam: true } }, { dataDir: 'C:/' }]) {
+  for (const body of [{ theme: 'light' }, { profile: { name: '' } }, { profile: { age: 3 } }, { notifications: { spam: true } }, { dataDir: 'C:/' }]) {
     expect((await app.request('/api/settings', send('PATCH', body))).status, JSON.stringify(body)).toBe(400);
   }
 });

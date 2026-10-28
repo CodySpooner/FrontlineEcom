@@ -7,7 +7,7 @@ const roles = Object.keys(AGENT_ROLES) as AgentRole[];
 export function createDemo(now = Date.now()) {
   const at = new Date(now).toISOString();
   const calendarNow = now - new Date(now).getTimezoneOffset() * 60000;
-  const agents: Agent[] = DESKS.map((_, i) => ({ id: `demo-${Math.floor(i / 8)}:${roles[i % 8]}`, storeId: `demo-${Math.floor(i / 8)}`, role: roles[i % 8]!, status: i % 10 === 7 ? 'offline' : 'idle', level: 1 + i, xp: i * 100, engine: { provider: 'demo' } }));
+  const agents: Agent[] = DESKS.map((_, i) => ({ id: `demo-${Math.floor(i / 8)}:${roles[i % 8]}`, storeId: `demo-${Math.floor(i / 8)}`, role: roles[i % 8]!, status: i % 10 === 7 ? 'offline' : 'idle', engine: { provider: 'demo' } }));
   const seats: OfficeSeat[] = agents.map((a, i) => ({ agentId: a.id, deskId: DESKS[i]!.id, displayName: `${AGENT_ROLES[a.role].name} ${Math.floor(i / 8) + 1}`, appearance: appearanceFor(a.id), position: i < 3 ? null : deskTile(DESKS[i]!.id), archived: false, updatedAt: at }));
   const runs: AgentRun[] = agents.flatMap((a, i) => [0, 7, 9].includes(i % 10) ? [] : [{ id: `demo-seed-${i}`, agentId: a.id, storeId: a.storeId, task: `Demo: ${AGENT_ROLES[a.role].blurb}`, status: i % 10 === 1 ? 'queued' : i % 10 === 5 ? 'done' : i % 10 === 6 ? 'error' : 'running', createdAt: at, endedAt: [5, 6].includes(i % 10) ? at : undefined, error: i % 10 === 6 ? 'Demo integration needs attention' : undefined, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } }]);
   let state = mergeOfficeSnapshot(emptyOffice(), agents, runs, []);
@@ -60,5 +60,5 @@ export function advanceDemo(state: OfficeState, tick: number, now = Date.now()):
 }
 export function demoStats(state: OfficeState): OfficeStats {
   const runs = Object.values(state.runs), completedTasks = runs.filter((r) => r.status === 'done').length, failedTasks = runs.filter((r) => r.status === 'error').length;
-  return { activeTasks: runs.filter(activeRun).length, completedTasks, failedTasks, successRate: completedTasks + failedTasks ? completedTasks / (completedTasks + failedTasks) : null, activeTeams: Object.values(state.missions).filter((m) => m.status === 'running').length, inputTokens: 0, outputTokens: 0, costUsd: 0, teamsCreated: Object.keys(state.missions).length, completedMissions: Object.values(state.missions).filter((m) => m.status === 'done').length, handoffs: runs.filter((r) => r.parentRunId).length, fullOffice: true };
+  return { activeTasks: runs.filter(activeRun).length, completedTasks, failedTasks, successRate: completedTasks + failedTasks ? completedTasks / (completedTasks + failedTasks) : null, activeTeams: Object.values(state.missions).filter((m) => m.status === 'running').length, inputTokens: 0, outputTokens: 0, costUsd: 0 };
 }

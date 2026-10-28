@@ -2,7 +2,7 @@
 
 A desktop command center for running multiple ecommerce stores with squads of AI agents — one squad per store, each
 agent specialized in its job (ads, product research, store dev, creatives, analysis, copy, email/SMS, operations) and
-trained on the store's platform and niche. Dark grey + red, gamified.
+trained on the store's platform and niche. Dark grey + red.
 
 ```
 pnpm install
@@ -101,7 +101,7 @@ pnpm check    # typecheck + tests
 Three Claude Code agents build this in parallel, each in its own Orca worktree
 (`C:\Users\Xody2\orca\workspaces\FrontlineEcom\ui`, `\core`, `\agents`). A Codex agent builds the AI Ecosystem page in
 `\ecosystem` (spec: `docs/features/ai-ecosystem.md`) and stops by itself once that backlog is done. Another Codex agent in
-`\image-generation` (Orca: "Image Generation") generates the page-header art and agent portraits (`docs/backlog/image-generation.md`) and also stops by itself. One more Claude agent in
+`\image-generation` (Orca: "Image Generation") generated the agent portraits (`docs/backlog/image-generation.md`) and has stopped. One more Claude agent in
 `\knowledge-base` (Orca: "Knowledge Base") builds the Knowledge Base & Research Intelligence feature (spec: `docs/features/knowledge-base.md`,
 backlog: `docs/backlog/knowledge-base.md`) and stops by itself when that backlog is done. A Stop hook (`scripts/agent/keep-going.mjs`,
 enabled only in those worktrees' `.claude/settings.local.json`) keeps each one working, and `scripts/agent/watchdog.mjs`

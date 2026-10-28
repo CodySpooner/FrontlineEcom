@@ -5,7 +5,6 @@ import { useAgents, useClaudeAccount, useGoLiveRefresh, useHealth, useLive } fro
 import { NAV, pageTitle } from '../nav';
 import { AskPalette } from './AskPalette';
 import { BrandLogo } from './BrandLogo';
-import { XpToasts } from './Gamification';
 import { Onboarding } from './Onboarding';
 import { useStoreSelection } from './StoreFilter';
 import { UpdatePrompt } from './UpdatePrompt';
@@ -41,7 +40,6 @@ export function Shell() {
       >
         Skip to content
       </a>
-      <XpToasts />
       <AskPalette />
       <Onboarding />
       <UpdatePrompt />

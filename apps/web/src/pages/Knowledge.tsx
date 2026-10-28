@@ -85,7 +85,7 @@ export function Knowledge() {
   const switcher = <Segmented label="View" options={[...VIEWS]} value={view} onChange={(v: KbView) => set({ view: v === 'artboard' ? undefined : v, tab: undefined, doc: undefined })} />;
   return (
     <>
-      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
+      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
       <Toolbar ws={ws} view={view} general={general} q={q} set={set} search={search} onResearch={setForm}>
         {/* Its own scroller: at phone width the four views are wider than the screen. */}
         {view !== 'artboard' && <div className="ml-auto max-w-full overflow-x-auto [scrollbar-width:none]">{switcher}</div>}

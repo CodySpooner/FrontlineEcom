@@ -63,10 +63,6 @@ export const AGENT_ROLES: Record<AgentRole, { name: string; blurb: string }> = {
 
 export type AgentStatus = 'idle' | 'running' | 'waiting_approval' | 'error' | 'offline';
 
-/** Agent ranks by level: Recruit 1, Operative 5, Specialist 10, Veteran 15, Elite 20, Legend 30. */
-export type Rank = 'Recruit' | 'Operative' | 'Specialist' | 'Veteran' | 'Elite' | 'Legend';
-export const RANKS: Rank[] = ['Recruit', 'Operative', 'Specialist', 'Veteran', 'Elite', 'Legend'];
-
 /** suggest = recommends only; ask = side effects need approval; autopilot = auto-approved within caps (logged). */
 export type Autonomy = 'suggest' | 'ask' | 'autopilot';
 export const AUTONOMY_LEVELS: Autonomy[] = ['suggest', 'ask', 'autopilot'];
@@ -89,19 +85,11 @@ export interface Agent {
   storeId: string;
   role: AgentRole;
   status: AgentStatus;
-  level: number;
-  xp: number;
   currentTask?: string;
   /** Always set by the API. Disabled agents show as `offline`; "Deploy Agent" enables one. */
   enabled?: boolean;
   /** Always set by the API. */
   autonomy?: Autonomy;
-  /** Always set by the API. */
-  rank?: Rank;
-  /** Total XP at which the next level starts (same units as `xp`). Always set by the API. */
-  nextLevelXp?: number;
-  /** XP into the current level / XP the level costs (XP bar). Always set by the API. */
-  levelProgress?: { xp: number; needed: number };
   /** The agent's own daily AI budget, USD, inside the store's. Absent: only the store's cap applies. */
   dailyBudgetUsd?: number;
   /** What its runs spent today (since local midnight), USD: the sum `dailyBudgetUsd` is checked against. Always set by the API. */
@@ -390,8 +378,6 @@ export type LiveMessage =
   | { type: 'run'; run: AgentRun }
   /** One streamed event of a running agent (text, tool calls, approvals, memories, done/error). */
   | { type: 'run_event'; runId: string; agentId: string; storeId: string; event: AgentEvent }
-  /** XP was earned (toast); `levelUp` when it crossed a level (burst). No agentId = the commander. */
-  | { type: 'xp'; xp: XpEvent; levelUp?: { level: number; rank: Rank } }
   /** A squad mission was created, started a step, got a step's deliverable or ended (agents lane). */
   | { type: 'mission'; mission: SquadMission }
   /** A knowledge-base research task started, moved a stage, waits to retry, or ended (knowledge-base lane). */
@@ -419,44 +405,6 @@ export interface StoreMemory {
   createdAt: string;
   /** Owner-pinned: always in the agents' prompt, whatever the task. */
   pinned?: boolean;
-}
-
-/** GET /api/missions?stores= → Mission[]: 3 per store, regenerated daily. XP goes to the commander once complete. */
-export interface Mission {
-  id: string;
-  storeId: string;
-  title: string;
-  progress: number;
-  target: number;
-  xp: number;
-}
-
-/** GET /api/achievements → Achievement[] (whole catalog; unlocked ones carry unlockedAt). */
-export interface Achievement {
-  id: string;
-  title: string;
-  description: string;
-  xp: number;
-  unlockedAt?: string;
-}
-
-/** GET /api/commander → the owner's level (XP from missions + achievements) and profit streak in days. */
-export interface Commander {
-  level: number;
-  xp: number;
-  rank: Rank;
-  levelProgress: { xp: number; needed: number };
-  streakDays: number;
-}
-
-export interface XpEvent {
-  id: string;
-  storeId?: string;
-  /** Omitted = the commander. */
-  agentId?: string;
-  amount: number;
-  reason: string;
-  createdAt: string;
 }
 
 export type CreativeKind = 'image' | 'video' | 'ugc' | 'copy';
@@ -1052,8 +1000,6 @@ export interface AddToStoreInput {
 /** GET /api/settings → Settings; PATCH /api/settings with any subset (nested objects merge) → Settings. */
 export interface Settings {
   profile: { name: string; plan: string };
-  /** UI sound effects (mission sting, XP). Off by default. */
-  sound: boolean;
   /** Which events create notifications. */
   /** `digest`: a morning summary (8:00 local) of yesterday across stores and the approvals waiting. */
   notifications: { approvals: boolean; agentDone: boolean; errors: boolean; digest: boolean };
@@ -1063,7 +1009,7 @@ export interface Settings {
   dataDir: string;
 }
 
-export type SettingsUpdate = { profile?: Partial<Settings['profile']>; sound?: boolean; notifications?: Partial<Settings['notifications']>; baseCurrency?: string };
+export type SettingsUpdate = { profile?: Partial<Settings['profile']>; notifications?: Partial<Settings['notifications']>; baseCurrency?: string };
 
 /**
  * Per-store hard caps the agents must respect. GET /api/caps?stores= → StoreCaps[] (defaults until saved);
@@ -1306,10 +1252,6 @@ export interface OfficeStats {
   inputTokens: number;
   outputTokens: number;
   costUsd: number;
-  teamsCreated: number;
-  completedMissions: number;
-  handoffs: number;
-  fullOffice: boolean;
 }
 
 // ---------------------------------------------------------------------------------------------------------------------

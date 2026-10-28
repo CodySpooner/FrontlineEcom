@@ -1,23 +1,16 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router';
 import { Search, type LucideIcon } from 'lucide-react';
-import { CommanderChip } from './Gamification';
+import { useSettings } from '../api/client';
 import { NotificationBell } from './Notifications';
 
-export type HeaderImage = 'command-center' | 'ai-agents' | 'analytics' | 'product-research' | 'creative-studio' | 'store-builder' | 'orders-fulfillment' | 'competitor-intel' | 'automation' | 'integrations' | 'knowledge-base' | 'settings';
-
-export function Hero({ title, subtitle, icon: Icon, art = 'command-center', children }: { title: string; subtitle: string; icon?: LucideIcon; art?: HeaderImage; children?: ReactNode }) {
+export function Hero({ title, subtitle, icon: Icon, children }: { title: string; subtitle: string; icon?: LucideIcon; children?: ReactNode }) {
+  const profile = useSettings().data?.profile ?? { name: 'Owner', plan: '' };
   return (
-    <header className="titlebar hero-bg relative -mx-[22px] mb-4 min-h-[158px] overflow-hidden border-b border-line px-[22px] pt-5 pb-[26px]">
-      {/* Cap the image width so ultrawide windows keep the face and page prop in the shallow strip. */}
-      <img
-        src={`/art/headers/${art}.webp`}
-        alt=""
-        draggable={false}
-        className="pointer-events-none absolute top-8 right-0 h-[calc(100%-32px)] w-full max-w-[520px] object-cover object-right-top [mask-image:linear-gradient(to_right,transparent,#000_20%)]"
-      />
-      <div className="relative flex flex-wrap items-start justify-between gap-4">
+    <header className="titlebar hero-bg relative -mx-[22px] mb-4 border-b border-line px-[22px] pt-5 pb-[26px]">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="pt-[22px]">
-          <h1 className="flex items-center gap-3 font-display text-[34px] leading-none font-bold tracking-[.06em] uppercase [text-shadow:0_2px_18px_rgba(0,0,0,.7)]">
+          <h1 className="flex items-center gap-3 font-display text-[34px] leading-none font-bold tracking-[.06em] uppercase">
             {Icon && <Icon aria-hidden className="size-[30px] shrink-0 text-red drop-shadow-[0_0_10px_rgba(255,42,58,.65)]" strokeWidth={2.2} />}
             {title}
           </h1>
@@ -38,7 +31,13 @@ export function Hero({ title, subtitle, icon: Icon, art = 'command-center', chil
             <kbd className="ml-auto hidden rounded border border-line-2 px-1.5 font-sans text-[11px] text-muted min-[1100px]:inline">Ctrl K</kbd>
           </button>
           <NotificationBell />
-          <CommanderChip />
+          <Link to="/settings" className="glass flex items-center gap-2.5 rounded-[13px] py-[5px] pr-2.5 pl-[5px]">
+            <span className="grid size-8 place-items-center rounded-full border border-red bg-[radial-gradient(circle_at_50%_35%,#45121a,#120507)] font-display text-sm font-bold">{profile.name.charAt(0).toUpperCase()}</span>
+            <span>
+              <span className="block text-[13px] leading-tight font-semibold">{profile.name}</span>
+              <span className="block text-[11px] text-muted">{profile.plan || 'Owner'}</span>
+            </span>
+          </Link>
         </div>
       </div>
     </header>

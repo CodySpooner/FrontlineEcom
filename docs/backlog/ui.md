@@ -5,6 +5,11 @@ external images (the app must work offline). Use `lucide-react` for icons, `@tan
 `react-router` for routes, `recharts` (or hand-rolled SVG) for charts, `motion` for animation. Verify every screen in
 Orca's browser against the reference before ticking it.
 
+> Owner, 2026-10-28: XP, levels, ranks, rank frames, LV badges, achievements, Daily Missions, the commander level and
+> profile dialog, the profit streak, XP/level-up/mission toasts and Settings › Sound are removed, and so are the
+> page-header images (the header is a plain title strip; the profile chip links to Settings). Items below that built
+> them are history: don't rebuild them (CLAUDE.md hard rule). Where the references show them, they're superseded.
+
 ## Inbox
 - [x] (from agents, AGT-231) `POST /api/agents/:id/niche-pack` is live: 201 with the `AgentRun`; 409 `{ error }` for a built-in niche, an existing pack, a draft already waiting in Requests, or a store on the demo engine ("On the demo engine the Market Analyst can't research a niche...": a fake pack would become the niche's real one). Show the error text as is; the button can stay hidden when the agent's `engine.provider` is `demo`.
 - [x] (from agents, AGT-206) A Product Hunter find can come without a compare-at now (`compareAt` 0: sellers show no 'was' price, and the agent no longer has to make one up). Research's card (`<s>{cents(p.compareAt)}</s>`) and detail ("Compare at") would show it as $0.00: hide it when it isn't above the price. "Send to store" already creates such a product with no compare-at (core's CORE-104).
@@ -15,7 +20,7 @@ Orca's browser against the reference before ticking it.
 - [x] (from core, small) The desktop bridge has `window.desktop.openDataFolder(): Promise<string>`: it opens the app's data folder (database, logs, backups) in Explorer and resolves to '' or Windows' error text. Settings could show an Open folder button next to Copy when it exists (absent in a plain browser). Extend the `desktop?` type in UpdatePrompt.tsx.
 - [x] (from agents) `Agent.costTodayUsd` is live on every agent read (`/api/agents`, `/api/agents/:id`): what the agent's runs spent since local midnight, the same sum its `dailyBudgetUsd` is checked against. The Settings tab's usage meter can read it instead of summing `/api/runs`.
 - [x] (from core, small) Settings: show the running version ("Version 0.1.3") from `GET /api/health` → `version`. It's the installed app's version from the desktop shell, and "dev" when run from the repo, so the owner can see that an update went in.
-- [x] (from owner session, FYI) `components/UpdatePrompt.tsx` (mounted in Shell) is the desktop app's update popup, bottom-left. It reads `window.desktop` from the Electron preload and renders nothing in a browser. Keep it there and keep the bottom-left corner free for it (XP toasts stay bottom-right).
+- [x] (from owner session, FYI) `components/UpdatePrompt.tsx` (mounted in Shell) is the desktop app's update popup, bottom-left. It reads `window.desktop` from the Electron preload and renders nothing in a browser. Keep it there and keep the bottom-left corner free for it.
 - [x] (from core, small) Integrations: a "Sync now" button on connected cards, most useful on one in error (after the owner fixes the role or scope it names). `POST /api/integrations/:id/sync` → 202; the sync runs within 30 s and the card's `syncedAt`/`status` update on the next `GET /api/integrations` poll.
 - [x] (from core, small) Orders & Fulfillment: `Order.trackingUrl` is set whenever `tracking` is. It's the carrier's page for Shopify (when its fulfillment has one), else a 17TRACK link that finds the carrier from the number. Make the tracking number a link that opens it in the browser.
 - [x] (from agents, small) Two ponytail notes waiting on agents are done:

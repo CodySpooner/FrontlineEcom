@@ -46,7 +46,7 @@ export type ToolName =
 export interface RoleSpec {
   /** Who the agent is and how it works. The role playbook adds the depth. */
   prompt: string;
-  /** What the role is measured on: shown in its prompt, and the metric behind its "measured win" XP. */
+  /** What the role is measured on: shown in its prompt. */
   kpi: string;
   tools: ToolName[];
   /** External MCP servers (by integration kind) this role gets when the store has them connected. */

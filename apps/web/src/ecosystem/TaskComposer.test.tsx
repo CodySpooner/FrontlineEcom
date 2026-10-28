@@ -6,7 +6,7 @@ import { renderApp, reply, stubApi } from '../test-utils';
 import { TaskComposer } from './TaskComposer';
 import { emptyOffice } from './events';
 
-const agent: Agent = { id: 'glow:copywriter', storeId: 'glow', role: 'copywriter', status: 'idle', level: 1, xp: 0 };
+const agent: Agent = { id: 'glow:copywriter', storeId: 'glow', role: 'copywriter', status: 'idle' };
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 test('submits a trimmed instruction to the existing agent and shows its result', async () => {
   const fetch = stubApi((url, init) => url.endsWith('/runs') && init?.method === 'POST' ? { id: 'r1', agentId: agent.id, task: 'Write a headline', status: 'done' } : []);

@@ -1,4 +1,4 @@
-// UI-17 Settings: stores, per-store caps and autopilot, profile, notifications, sound, where the data lives.
+// UI-17 Settings: stores, per-store caps and autopilot, profile, notifications, where the data lives.
 import { useState, type FormEvent } from 'react';
 import { APPROVAL_KINDS, type Store, type StoreCaps } from '@frontline/shared';
 import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings, useUsage } from '../api/client';
@@ -15,7 +15,7 @@ export function Settings() {
   const nav = NAV.find((n) => n.path === '/settings')!;
   return (
     <>
-      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} art={nav.art} />
+      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
       <div className="grid items-start gap-3.5 min-[1100px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="grid gap-3.5">
           <Stores />
@@ -270,7 +270,6 @@ function Preferences() {
           {toggle('Agent finished', 'A task you started is done.', s.notifications.agentDone, (v) => ({ notifications: { agentDone: v } }))}
           {toggle('Errors', 'A run or a connector failed.', s.notifications.errors, (v) => ({ notifications: { errors: v } }))}
           {toggle('Morning digest', "Yesterday's numbers and the approvals waiting, at 8:00.", s.notifications.digest, (v) => ({ notifications: { digest: v } }))}
-          {toggle('Sound', 'Mission and XP sounds.', s.sound, (v) => ({ sound: v }))}
         </div>
         {update.isError && (
           <p role="alert" className="mt-2 text-xs text-red">

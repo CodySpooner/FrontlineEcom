@@ -6,6 +6,10 @@ lane ownership and the items. Code survey of everything this feature touches: `d
 Read all three before KB-01. Three independent reviewers checked this file against the spec, the code and the mockups
 before the lane started. Their findings are already worked in.
 
+> Owner, 2026-10-28: XP, levels, achievements and the page-header images are removed app-wide (the header is a plain
+> title strip). The rules below match; don't add them back (CLAUDE.md hard rule). The outcome engine is now
+> `apps/server/src/routes/agents-outcomes.ts` (`checkOutcomes`).
+
 ## What the owner asked for (verbatim, 2026-10-27)
 
 > make me 3 different designs show them to me and ill decide the direction we go then after i finalize a design
@@ -30,9 +34,8 @@ operations first) and C "Proving Ground" (evidence board). The owner picked:
 
 ### Page frame (all views)
 
-- **Header:** the page keeps the app's `Hero` with its generated Knowledge Base header art. The owner asked on
-  2026-10-27 for header art on every section, so it is not swapped for the mockup's slim bar. Pass props or children
-  to `Hero`; don't change `Hero.tsx`.
+- **Header:** the page keeps the app's `Hero` title strip (no header image since the owner's 2026-10-28 cleanup), not
+  the mockup's slim bar. Pass props or children to `Hero`.
 - **Toolbar row** under the Hero, `flex-wrap`, containing:
   - the workspace switcher (General, or one store with its niche and card count);
   - "Include General knowledge" (store workspaces only);
@@ -345,10 +348,10 @@ operations first) and C "Proving Ground" (evidence board). The owner picked:
       - currency-safe ratios;
       - confounds noted.
     - Weak patterns stay Hypotheses. Only the explanation text comes from an agent.
-14. **Gamification and notifications:**
-    - KB writes emit their own event, not `memory_written`, so they award no memory XP.
-    - `runHooks.onRun` skips the per-run XP award and the "<Role> finished" notification for research-mode runs.
-    - The runner sends one notification per task (done, failed or cancelled) and awards XP at most once per task.
+14. **Notifications:**
+    - KB writes emit their own event, not `memory_written`.
+    - `runHooks.onRun` skips the "<Role> finished" notification for research-mode runs.
+    - The runner sends one notification per task (done, failed or cancelled).
     - Every new tool is in a role's allowlist, and every new approval kind has a label, as `evals.test.ts` requires.
 15. **UI building blocks:**
     - Reuse `components/ui.tsx`: Panel, Card, Button, Tabs, Segmented, Badge, Dialog for true modals (From source, New
@@ -728,7 +731,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   owner starts these tasks; **KB-22's autonomous research must not start one on a demo store unasked.** Retrieving
   passes `blocked: []` for now; KB-13 or KB-22 should pass the workspace's blocked list. Pages are read one at a time
   (a ponytail ceiling: one slow site holds up the pass). Backoff waits ride agentRoutes' existing 60 s poll, so a 30 s
-  retry can start up to a minute late. A stage earns no XP and sends no notification; the task notifies once when it
+  retry can start up to a minute late. A stage sends no notification; the task notifies once when it
   ends. Ladder: `earnedStage` keeps a card at Hypothesis while the finding that created it (`kb_findings` status
   `stored`) was rated evidence 2 or less, or listed contradictions. A finding merged into an owner's card doesn't
   demote that card. Dedupe matches the same title in any state (the unique index), else 60%+ word overlap of title

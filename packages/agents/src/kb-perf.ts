@@ -109,7 +109,7 @@ export function learn(db: DatabaseSync, r: Reading, now = new Date()): 'lesson' 
 }
 
 /**
- * An approved change's outcome (agents-gamification's checkers) is evidence on the store's cards that the run asking
+ * An approved change's outcome (agents-outcomes' checkers) is evidence on the store's cards that the run asking
  * for it cited: measured when it worked, against them when it didn't. An unclear outcome adds nothing, nor does a demo
  * store's, nor one on a General card (those hold beyond one store).
  */

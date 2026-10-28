@@ -1,24 +1,12 @@
-import { adWindow, awardXp, cash, checkAchievements, commander, dailyMissions, economics, getAgent, judgeRun, learnFromOutcome, levelForXp, nicheKey, once, profitStreak, promotionCandidates, thresholds, uncostedShare, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
-import { AGENT_ROLES, PRODUCT_WRITE_PLATFORMS, type MetricTotals, type Mission, type Store } from '@frontline/shared';
-import { Hono } from 'hono';
-import { currentWindow, summarize } from '../analytics';
+import { adWindow, cash, economics, getAgent, judgeRun, learnFromOutcome, nicheKey, once, promotionCandidates, thresholds, uncostedShare, writeMemory, type NewMemory } from '@frontline/agents';
+import { AGENT_ROLES, type Store } from '@frontline/shared';
 import { approvalsHook } from '../approvals';
 import { adZone } from '../connectors/common';
-import { addDays, localDate, midnight } from '../dates';
-import { cachedRate, fxFor } from '../fx';
+import { addDays, localDate } from '../dates';
 import type { Db } from '../db';
-import { publish } from '../live';
 import { log } from '../log';
-import { onApproved } from './agents-actions';
 import { notify } from '../settings';
 import { listStores, storeZone } from '../stores';
-
-/** awardXp + an `xp` live message (XP toast / level-up burst). */
-export function award(db: Db, a: Award) {
-  const out = awardXp(db, a);
-  if (out) publish({ type: 'xp', ...out });
-  return out;
-}
 
 /** A measured outcome becomes the agent's store learning and, once per change, a note in the owner's feed. */
 function recordOutcome(db: Db, ref: string, worked: boolean | undefined, m: NewMemory, unclear = 'without unit costs', runId?: unknown) {
@@ -28,15 +16,9 @@ function recordOutcome(db: Db, ref: string, worked: boolean | undefined, m: NewM
   const agent = getAgent(db, m.agentId);
   const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
   const title = worked === undefined ? `${name}: result unclear ${unclear}` : worked ? `Measured win: ${name}` : `${name}: no lift this time`;
-  notify(db, { kind: 'info', title, body: m.text, storeId: m.storeId, link: `/agents/${m.agentId}?tab=${worked ? 'history' : 'memory'}` }); // a win's XP line, else the learning
+  notify(db, { kind: 'info', title, body: m.text, storeId: m.storeId, link: `/agents/${m.agentId}?tab=memory` });
 }
 
-const count = (db: Db, sql: string, ...args: string[]) => Number(db.prepare(sql).get(...args)?.n ?? 0);
-/** The dashboard's window: each store's today is its own (a live store dates its data in its zone). */
-const summary = (db: Db, storeIds: string[], range: 7 | 30) => {
-  const { to, todayFraction, rows } = currentWindow(db, storeIds, range);
-  return summarize(rows, { range, to, storeIds, todayFraction });
-};
 /** A day in the store's zone, the one its orders and metrics are dated in (demo stores: this machine's). */
 export const storeDay = (db: Db, storeId: string, at: string | number = Date.now()) => localDate(new Date(at), storeZone(db, storeId));
 // The 15-days-on checks pre-filter loosely in SQL (a store's day, or a UTC date, can sit up to 3 days off this machine's
@@ -62,15 +44,6 @@ export const synced = (db: Db, storeId: string, end: string) =>
     });
 const settled = (db: Db, storeId: string, day: string, today?: string) => day <= addDays(today ?? storeDay(db, storeId), -15) && synced(db, storeId, addDays(day, 14));
 
-const watched = new WeakSet<Db>();
-
-/** Approved requests pay the agent that made them. */
-function watchApprovals(db: Db) {
-  if (watched.has(db)) return;
-  watched.add(db);
-  onApproved(db, (db, { id, title, storeId, agentId }) => award(db, { ref: `approval:${id}`, amount: XP.approved, reason: `Request approved: ${title}`, storeId, agentId }));
-}
-
 /**
  * SQL: `at` (a time or date) is on or after the store went live. Requests from its demo phase acted on demo data the
  * real sync replaced, so real numbers say nothing about them. Demo stores (never live) always pass.
@@ -83,8 +56,8 @@ const sinceLive = (at: string, storeId: string) =>
 
 /**
  * Outcomes of approved ad changes: the store's blended ROAS over the 3 days after vs the 7 days before. Each outcome
- * becomes a store learning for the agent (so its next review knows what worked), and a win pays it once.
- * Checked lazily (commander/achievements reads); changes older than 30 days are left alone.
+ * becomes a store learning for the agent (so its next review knows what worked).
+ * Checked at startup and hourly (startOutcomeLoop); changes older than 30 days are left alone.
  */
 export function checkAdOutcomes(db: Db, today?: string) {
   const rows = db
@@ -144,22 +117,13 @@ export function checkAdOutcomes(db: Db, today?: string) {
     );
     // Once per run and day: its other changes that day are judged on the same store-wide ROAS, not new evidence.
     if (r.run_id && worked !== undefined) judgeRun(db, `ads:${r.run_id}:${day}`, String(r.run_id), worked);
-    if (!worked) continue;
-    award(db, {
-      ref: `win:${r.id}`, amount: XP.win, storeId: String(r.store_id), agentId: String(r.agent_id),
-      reason: raise
-        ? `Measured win: incremental ROAS ${vs} after "${r.title}"`
-        : cut
-          ? `Measured win: the spend "${r.title}" cut was returning ${marginal.toFixed(2)}, under break-even ${breakEven.toFixed(2)}`
-          : `Measured win: ROAS ${before.toFixed(2)} → ${after.toFixed(2)} after "${r.title}"`,
-    });
   }
 }
 
 /**
  * Products added through an approved request, judged on their first 14 days of real sales (core's order_items; demo
  * stores have none, so they're skipped). Each becomes a store learning for the agent that proposed it; a product that
- * sold 10+ units at a profit pays it once.
+ * sold 10+ units at a profit is a measured win.
  */
 export function checkProductOutcomes(db: Db, today?: string) {
   // Added as a draft, a product goes on sale when the owner activates it (on the platform, or its page on a demo store),
@@ -201,7 +165,6 @@ export function checkProductOutcomes(db: Db, today?: string) {
       evidence: `paid orders ${start} to ${end} (request ${t.approval_id})`,
     }, undefined, t.run_id);
     if (t.run_id && won !== undefined) judgeRun(db, `product:${t.approval_id}:${t.product_id}`, String(t.run_id), won);
-    if (won) award(db, { ref: `product-win:${t.approval_id}:${t.product_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" sold ${units} units in 14 days` });
     db.prepare('UPDATE product_tests SET judged_at = ? WHERE store_id = ? AND product_id = ?').run(new Date().toISOString(), storeId, String(t.product_id));
   }
 }
@@ -310,7 +273,6 @@ export function checkPriceOutcomes(db: Db, today?: string) {
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.approval_id})`,
     }, few ? 'on too few sales' : undefined, t.run_id);
     if (t.run_id && worked !== undefined) judgeRun(db, `price:${t.approval_id}`, String(t.run_id), worked);
-    if (worked) award(db, { ref: `price-win:${t.approval_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" at ${price(t.to_price)} made more profit` });
   }
 }
 
@@ -350,7 +312,6 @@ export function checkPageOutcomes(db: Db, today?: string) {
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (draft ${d.id})`,
     }, few ? 'on too few sales' : undefined, d.run_id);
     if (d.run_id && worked !== undefined) judgeRun(db, `page:${d.id}`, String(d.run_id), worked);
-    if (worked) award(db, { ref: `page-win:${d.id}`, amount: XP.win, storeId, agentId, reason: `Measured win: the new "${d.title}" page made more profit` });
   }
 }
 
@@ -403,72 +364,7 @@ export function checkThemeOutcomes(db: Db, today?: string) {
       evidence: `daily metrics ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.id})`,
     }, 'on too few orders', t.run_id);
     if (t.run_id && worked !== undefined) judgeRun(db, `theme:${t.id}`, String(t.run_id), worked);
-    if (worked) award(db, { ref: `theme-win:${t.id}`, amount: XP.win, storeId, agentId, reason: `Measured win: the theme change "${name}" lifted conversion` });
   }
-}
-
-function facts(db: Db): Facts {
-  const ids = listStores(db).map((s) => s.id);
-  const best = (totals: MetricTotals[], k: keyof MetricTotals) => Math.max(0, ...totals.map((t) => t[k]));
-  const month = summary(db, ids, 30);
-  const week = summary(db, ids, 7);
-  // "$10K Month" is USD; the summary is in the one store's currency or the base currency. No rate yet: not counted.
-  const usd = cachedRate(db, fxFor(db, ids).currency, 'USD') ?? 0;
-  return {
-    orders: month.totals.orders,
-    best30Revenue: best(month.byStore.map((s) => s.totals), 'revenue') * usd,
-    best7Roas: best(week.byStore.map((s) => s.totals), 'roas'),
-    profitStreak: profitStreak(month.series),
-    fullSquad: count(db, 'SELECT count(*) AS n FROM (SELECT store_id FROM agents GROUP BY store_id HAVING min(enabled) = 1 AND count(*) >= 8)') > 0,
-    runsDone: count(db, `SELECT count(*) AS n FROM agent_runs WHERE status = 'done'`),
-    approved: count(db, `SELECT count(*) AS n FROM approvals WHERE status = 'approved'`),
-    memories: count(db, 'SELECT count(*) AS n FROM store_memory'),
-    topLevel: levelForXp(count(db, 'SELECT coalesce(max(xp), 0) AS n FROM agents')),
-    wins: count(db, `SELECT count(*) AS n FROM xp_events WHERE reason LIKE 'Measured win:%'`),
-    liveStores: count(db, 'SELECT count(*) AS n FROM stores WHERE demo = 0 AND connected = 1'),
-  };
-}
-
-/** Today's missions; ones that are complete pay the commander (once). */
-function missions(db: Db, storeIds?: string[]): Mission[] {
-  return listStores(db)
-    .filter((s) => !storeIds?.length || storeIds.includes(s.id))
-    .flatMap((s) => {
-      // The store's own today and midnight: a live store in another zone has its day on its own clock.
-      const { series, to } = summary(db, [s.id], 30);
-      const since = new Date(midnight(to, storeZone(db, s.id))).toISOString();
-      const today = series.at(-1)?.date === to ? series.at(-1) : undefined;
-      const prev = series.filter((p) => p.date !== to).slice(-7);
-      const avg = (k: 'revenue' | 'orders') => (prev.length ? prev.reduce((n, p) => n + p[k], 0) / prev.length : 0);
-      const list = dailyMissions({
-        storeId: s.id,
-        date: to,
-        currency: s.currency,
-        usdRate: cachedRate(db, 'USD', s.currency),
-        revenueToday: today?.revenue ?? 0,
-        ordersToday: today?.orders ?? 0,
-        avgRevenue: avg('revenue'),
-        avgOrders: avg('orders'),
-        requestsOpen: count(db, `SELECT count(*) AS n FROM approvals WHERE store_id = ? AND status = 'pending'`, s.id),
-        requestsDecidedToday: count(db, `SELECT count(*) AS n FROM approvals WHERE store_id = ? AND decided_at >= ?`, s.id, since),
-        runsToday: count(db, 'SELECT count(*) AS n FROM agent_runs WHERE store_id = ? AND created_at >= ?', s.id, since),
-        creativeAgentsOn: !!count(db, `SELECT count(*) AS n FROM agents WHERE store_id = ? AND enabled = 1 AND role IN ('creative_studio', 'copywriter')`, s.id),
-        // A live store the app can't add products to can't get a product approved: no mission for it there.
-        productHunterOn:
-          (!s.connected || PRODUCT_WRITE_PLATFORMS.includes(s.platform)) &&
-          !!count(db, `SELECT count(*) AS n FROM agents WHERE store_id = ? AND enabled = 1 AND role = 'product_hunter'`, s.id),
-        creativesToday: count(db, 'SELECT count(*) AS n FROM creatives WHERE store_id = ? AND created_at >= ?', s.id, since),
-        productsApprovedToday: count(
-          db,
-          `SELECT count(*) AS n FROM approvals WHERE store_id = ? AND status = 'approved' AND json_extract(action_json, '$.kind') = 'store.add_products' AND decided_at >= ?`,
-          s.id, since,
-        ),
-      });
-      // One payout per slot a day: the third (requests or a briefing) and fourth (creatives or a product) swap as the day goes.
-      const slot = (id: string) => id.replace(/:brief$/, ':requests').replace(/:product$/, ':creatives');
-      for (const m of list) if (m.progress >= m.target) award(db, { ref: `mission:${slot(m.id)}`, amount: m.xp, reason: `Mission complete: ${m.title}`, storeId: s.id });
-      return list;
-    });
 }
 
 /**
@@ -513,22 +409,21 @@ export function proposeNichePromotions(db: Db) {
   }
 }
 
-/** Every outcome check, then the achievements they (and everything else) may have unlocked. */
-function judge(db: Db) {
+/** Every outcome check. */
+export function checkOutcomes(db: Db) {
   checkAdOutcomes(db);
   checkProductOutcomes(db);
   checkPriceOutcomes(db);
   checkPageOutcomes(db);
   checkThemeOutcomes(db);
-  return checkAchievements(db, facts(db), (a) => award(db, a));
 }
 
-/** Outcomes judged hourly as well as on dashboard reads, so the squad learns what worked while the app sits unopened. */
+/** Outcomes judged at startup and hourly, so the squad learns what worked while the app sits unopened. */
 export function startOutcomeLoop(db: Db, everyMs = 3_600_000) {
   const check = () => {
     try {
-      judge(db);
-      proposeNichePromotions(db); // a pairwise scan over the niche's learnings: hourly, not on every dashboard read
+      checkOutcomes(db);
+      proposeNichePromotions(db); // a pairwise scan over the niche's learnings: hourly
     } catch (e) {
       log('error', 'outcome check failed', { error: e instanceof Error ? e.message : String(e) });
     }
@@ -536,16 +431,4 @@ export function startOutcomeLoop(db: Db, everyMs = 3_600_000) {
   check();
   const timer = setInterval(check, everyMs);
   return () => clearInterval(timer);
-}
-
-export function gamificationRoutes(db: Db) {
-  watchApprovals(db);
-  const achievements = () => judge(db);
-  return new Hono()
-    .get('/api/missions', (c) => c.json(missions(db, c.req.query('stores')?.split(',').filter(Boolean))))
-    .get('/api/achievements', (c) => c.json(achievements()))
-    .get('/api/commander', (c) => {
-      achievements(); // newly unlocked ones count toward the level
-      return c.json(commander(db, profitStreak(summary(db, listStores(db).map((s) => s.id), 30).series)));
-    });
 }

@@ -5,7 +5,7 @@ import { createApp } from '../app';
 import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
 import { insertStore } from '../stores';
-import { proposeNichePromotions } from './agents-gamification';
+import { proposeNichePromotions } from './agents-outcomes';
 
 let db: Db;
 const store = (id: string, niche: Niche, connected: boolean) =>

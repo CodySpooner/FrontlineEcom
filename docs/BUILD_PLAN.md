@@ -9,20 +9,20 @@ pnpm workspace; `apps/web` (Vite + React + Tailwind v4, theme tokens, logo, side
 demo stores), `packages/shared` (domain types); `pnpm check` green; docs; three Orca workers launched.
 
 ## Phase 1 — Foundations → M1 "Command Center on demo data"
-- ui: UI-01 design system, UI-02 app shell + routing, UI-03 data layer, UI-04 Dashboard, UI-05 hero art
+- ui: UI-01 design system, UI-02 app shell + routing, UI-03 data layer, UI-04 Dashboard
 - core: CORE-01 SQLite, CORE-02 demo generator, CORE-03 analytics API, CORE-04 stores API, CORE-05 live events, CORE-06 approvals API
 - agents: AGT-01 engine (fake + Claude), AGT-02 roles, AGT-06 squads, AGT-03 first playbooks
 **M1 acceptance:** `pnpm dev` → Dashboard matches the reference/mockup: store filter + ranges drive KPIs/chart from the
 API; live feed ticks over WebSocket; agent strip shows each store's squad; approving a request updates the API.
 
 ## Phase 2 — Agents alive → M2 "Talk to your squad"
-- ui: UI-06 AI Agents page, UI-07 agent detail + chat, UI-08 portraits, UI-18 gamification layer, UI-20 notifications
+- ui: UI-06 AI Agents page, UI-07 agent detail + chat, UI-08 portraits, UI-18 store health badges, UI-20 notifications
 - core: CORE-07 secrets, CORE-14 products/orders API, CORE-15 research feed, CORE-20 settings/caps
 - agents: AGT-04 platform packs, AGT-05 niche packs, AGT-07 prompt assembly, AGT-08 memory + learning, AGT-09 tools,
-  AGT-10 approvals, AGT-11 run manager, AGT-12 API routes, AGT-13 gamification engine
+  AGT-10 approvals, AGT-11 run manager, AGT-12 API routes
 **M2 acceptance:** from the UI, chat with Glow Haus's Market Analyst (fake engine in tests, real engine in a smoke run);
 its answer cites store data via tools; it writes a learning to store memory; a side-effect request pauses for approval;
-approval resumes it and awards XP.
+approval resumes it.
 
 ## Phase 3 — Real business data → M3 "Plug in a real store"
 - core: CORE-08 Shopify, CORE-09 Meta Ads, CORE-10 Google Ads + GA4, CORE-11 TikTok, CORE-12 Etsy/Amazon, CORE-13 suppliers, CORE-16 competitors
@@ -39,5 +39,5 @@ Product Hunter shortlists products; Creative Studio generates an ad through Higg
 Product Hunter job runs on schedule and posts its shortlist as requests.
 
 ## Phase 5 — Depth and polish (ongoing)
-UI-22/23, AGT-19/20, perf, accessibility, more niche packs, more achievements/missions, docs. When a backlog runs dry,
+UI-22/23, AGT-19/20, perf, accessibility, more niche packs, docs. When a backlog runs dry,
 each worker compares the app against DESIGN.md and the reference and writes new items.
