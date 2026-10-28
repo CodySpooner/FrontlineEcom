@@ -56,7 +56,7 @@ the approval and cap-counter sections of `packages/agents/src/tools.ts`, `apps/s
 `call()` in `apps/server/src/connectors/cj.ts`, `requestDraftProduct` in `apps/server/src/product-research/pipeline.ts`,
 `apps/server/src/kb/autonomy.ts`.
 
-- [ ] CH-01 Map every path from an agent's request to a live write: requestApproval, propose_ad_change,
+- [x] CH-01 Map every path from an agent's request to a live write: requestApproval, propose_ad_change,
   propose_price_change, request_approval, the onApproved dispatch, applyAdChange, applyPriceChange, addProducts,
   publishDraft, requestDraftProduct, the KB `kb.research` budget reservations, run budget shares, autopilot caps.
   Write the map under Done (one line per path: guard → write → what's recorded). `pnpm check` baseline green.
@@ -157,5 +157,20 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-01 write-path audit: baseline `pnpm check` green (228 files / 1,688 tests); all existing other lane worktrees have `.agent/STOP`; Settings remains hands off.
+  - `requestApproval`: current autonomy + store activation/currency guards → durable pending approval → decision event and owner notification; only trusted callers opt into autopilot, whose computed amount is counted synchronously before yielding.
+  - `propose_ad_change`: scoped campaign, no duplicate pending request, active status, daily budget, ±/30% raise guard, three-day window, FX amount and added-spend cap → `ads.set_budget` / `ads.pause_campaign` approval → payload captures from/to, added USD and evidence. FX awaits leave earlier duplicate checks stale (CH-05).
+  - `propose_price_change`: scoped product, platform, cost/fee floor, ±30%, compare-at, overlapping price/page tests and pending requests → `store.set_price` approval → from/to and evidence recorded.
+  - `request_approval`: dedicated-action denylist, product title/price/cost/platform/duplicate guards → `store.add_products` approval; other unsupported actions stay manual. Agent-provided amount cannot opt into autopilot. Compare-at gap belongs to CH-10.
+  - `onApproved`: DB-scoped decision event + in-process duplicate set + activation guard → deferred dispatcher → failures only logged, no durable dispatch completion/recovery (CH-03).
+  - `applyAdChange`: payload/store, freshness, local drift and connector checks → live account then local campaign → failed/stale/no-op markers except earliest returns; approved rows without a marker reach outcome memory/KB (CH-02).
+  - `applyPriceChange`: payload/store, freshness and local drift → platform setter or demo update → `price_tests`; failures have `not-applied`, earliest returns do not, and missing demo products can create a test (CH-02).
+  - `addProducts`: store, valid positive price/title, existing product tests and in-flight title claims → remote drafts or demo products → `product_tests`, PR outcome links, developer run; missing/invalid/failed creates have no marker (CH-02).
+  - `publish_page` / `publishDraft`: scoped validated draft + platform and overlap checks → approval, in-flight guard, platform push → published timestamp/local activation; failure notifies and retains approved draft. Theme draft copies precede approval; publish approval → platform publish → `theme-live` or `not-applied`.
+  - `requestDraftProduct`: supported platform, existing store link, base economics price and pending title match → synchronous approval creation → PR product id in payload, later linked to created draft.
+  - `kb.research`: controls, role, cooldown, task/approval duplicates and reserved daily budget → pending approval or task → `kb_tasks` reservation, bounded run budgets; approved-to-task deferred gap temporarily releases pending reservation (CH-05).
+  - Run budgets: queue seats reserve store shares before the next seat, narrowed by agent/team/config/task budgets → engine budget plus spend-triggered cancellation → `agent_runs.cost_usd`/transcript; paused runs release shares and reporting can overshoot a cap. Codex reports zero measured USD; Claude-only team accounting is explicit decision 12 (Q1, CH-05).
+  - Creative generation: used + pending credit cap → approval, recheck and synchronous charge before render → creative or failure with credits retained. CJ: refusal before queue, HTTP fetch, then `pr_calls` → simultaneous callers can overbook the daily cap (CH-04).
 
 ## Blocked
