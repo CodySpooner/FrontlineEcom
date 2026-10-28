@@ -117,7 +117,7 @@ found in runs, teams or product-research code go to that lane's Inbox.
   Product Research task on a Codex config (find out first whether it's meant to be refused, `tasks.test.ts` ~98), and
   a Store Developer theme loop (read_theme_files → draft_theme_change → a `store.publish_theme` approval, stubbed
   theme connector, no 2-minute wait).
-- [ ] CH-15 Close AGT-19 under Blocked in `agents.md`: superseded by the shipped `codex.ts` runtime (theme work
+- [x] CH-15 Close AGT-19 under Blocked in `agents.md`: superseded by the shipped `codex.ts` runtime (theme work
   reaches Codex through the app's tools).
 - [ ] CH-16 One short live turn on a demo store that calls an app tool and finishes, then one resume. Replace the
   guessed lines in `CODEX_TURN` (`fake-codex.ts` ~62-81) with what was recorded. Needs the app's own Codex home signed
@@ -163,6 +163,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-15: closed AGT-19 as superseded by codex.ts and the CH-14 MCP theme coverage. Documentation only; pnpm check green (234 files / 1,730 tests, 4 workers).
 
 - 2026-10-28 CH-14: fake Codex over the real MCP endpoint now covers a team participant and synthesis handoff, a Product Research task (valid Stop-after is accepted; the earlier refusal lacked it), and theme read -> copy -> publish approval -> owner denial without waiting two minutes. Three focused tests and pnpm check green (234 files / 1,730 tests, 4 workers). No production changes or live calls.
 

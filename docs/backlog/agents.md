@@ -410,9 +410,11 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [x] AGT-249 (same review) The prompt's memory room counts the memory header and the always-kept "Scheduled jobs" and "Waiting for the owner" sections (`prompt.ts:76`): with 15 waiting requests and 6 jobs it comes out ~450 tokens over budget.
 
 ## Blocked
-- AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
+- [x] AGT-19 (closed 2026-10-28, codex-hardening CH-15): superseded by the shipped codex.ts runtime. Store Developer reaches theme read/copy/publish-approval tools through the app MCP endpoint; CH-14 now tests that path. The older inline-file alternate-engine proposal is no longer needed.
 
 ## Done
+
+- 2026-10-28 AGT-19 (codex-hardening CH-15): closed the obsolete alternate-engine proposal; the shipped Codex runtime handles Store Developer through app tools, covered by CH-14.
 
 - 2026-10-28 AGT-245 (codex-hardening CH-11): existing account_on_hold, oauth_org_not_allowed, verification_required and cloud_credential_error mappings now have normalization/account-classification tests. No engine behaviour changed; pnpm check green (1,725 tests, 4 workers).
 
