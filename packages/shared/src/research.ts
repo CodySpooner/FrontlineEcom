@@ -104,6 +104,50 @@ export interface PrTrendsImport {
 }
 
 export type PrFit = 'strong' | 'medium' | 'weak' | 'unknown';
+export const PR_FIT_LABEL: Record<PrFit, string> = { strong: 'Strong', medium: 'Medium', weak: 'Weak', unknown: 'Unknown' };
+
+/**
+ * An eligibility flag (decision 10), from rule checks on the title and category. `restricted` and `avoid` make store
+ * fit Weak until dismissed; `brand`, `compatibility` and `review` are warnings. Never a silent exclusion.
+ */
+export type PrFlagKind = 'brand' | 'compatibility' | 'restricted' | 'review' | 'avoid';
+export interface PrFlag {
+  /** Stable, e.g. `restricted:batteries`: a dismissal is kept against it. */
+  id: string;
+  kind: PrFlagKind;
+  /** e.g. "Batteries", "Brand: Apple". */
+  label: string;
+  /** Why: the matched term and where, e.g. `"lithium" in the title`. */
+  reason: string;
+}
+export const PR_FLAG_KIND_LABEL: Record<PrFlagKind, string> = {
+  brand: 'Brand or trademark term',
+  compatibility: 'Compatibility reference, fit unverified',
+  restricted: 'Restricted category',
+  review: 'Compliance review',
+  avoid: "On the store's avoid list",
+};
+
+/** A store's research profile (decision 5). Money in minor units of `priceCurrency`; null = unknown. */
+export interface PrStoreProfile {
+  storeId: string;
+  audience: string | null;
+  priceMin: number | null;
+  priceMax: number | null;
+  priceCurrency: string;
+  /** ISO country every cost, delivery time and fulfillment status is for; null until the owner picks one. */
+  shipTo: string | null;
+  /** True while shipTo is the default from the store's currency. */
+  shipToDefault: boolean;
+  /** Preferred warehouse countries; empty = no preference. */
+  warehouses: string[];
+  maxDeliveryDays: number | null;
+  avoidCategories: string[];
+  avoidTerms: string[];
+  includeCategories: string[];
+  keywords: string[];
+  updatedAt: string | null;
+}
 
 /** A research report's conclusion (spec §9). */
 export const PR_RECOMMENDATIONS = ['research_further', 'request_sample', 'shortlist', 'monitor', 'reject'] as const;

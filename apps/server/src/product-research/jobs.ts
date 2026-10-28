@@ -3,6 +3,7 @@ import type { PrErrorKind } from '@frontline/shared';
 import { once, tx, type Db } from '../db';
 import { log } from '../log';
 import { CAPS, refusal } from './caps';
+import { decayPass, refreshProduct } from './evaluate';
 import { refreshAllOrders } from './evidence';
 import { SourceError, type PrAdapter } from './sources/adapter';
 
@@ -178,7 +179,8 @@ export function startPrJobs(db: Db, key: Buffer, adapters: PrAdapter[], onStored
     try {
       planToday(db, adapters, key);
       refreshAllOrders(db);
-      await runDue(db, adapters, { key, ...(onStored ? { onStored } : {}) });
+      if (once(db, `pr:decay:${day(new Date())}`)) decayPass(db);
+      await runDue(db, adapters, { key, onStored: onStored ?? ((ids) => new Set(ids).forEach((id) => refreshProduct(db, id))) });
       for (const a of adapters) if (a.enrich && a.ready?.(db, key) && !stoppedReason(db, a)) await a.enrich(db, key);
     } catch (e) {
       log('error', 'product research jobs failed', { error: e instanceof Error ? e.message : String(e) });

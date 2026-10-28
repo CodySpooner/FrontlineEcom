@@ -68,6 +68,13 @@ export function fxFor(db: Db, storeIds: string[]) {
   return { currency, rate, unconverted };
 }
 
+/** Units of `to` per unit of `from` from the stored rates, with their date, never fetching (product-research's Rank step). */
+export function storedRate(db: Db, from: string, to: string): { rate: number; date: string | null } | undefined {
+  if (from === to) return { rate: 1, date: null };
+  const fx = cached(db);
+  return fx?.rates[from] && fx.rates[to] ? { rate: fx.rates[to] / fx.rates[from], date: fx.date } : undefined;
+}
+
 /**
  * Units of `to` per unit of `from` (an ad account billing in another currency than its store), refreshing rates older
  * than a day first. Undefined when the ECB doesn't publish one of them.

@@ -5,6 +5,7 @@ import { getCredentials } from '../../integrations';
 import { log } from '../../log';
 import { listStores } from '../../stores';
 import { CAPS, refusal } from '../caps';
+import { refreshProduct } from '../evaluate';
 import { markSource } from '../jobs';
 import { upsertListing } from '../catalog';
 import { discoveryQueries, shipTo } from '../profile';
@@ -141,7 +142,7 @@ export async function enrichPass(db: Db, key: Buffer, d: Omit<CjDeps, 'purpose'>
     if (!to) continue;
     const due = db
       .prepare(
-        `SELECT l.id FROM pr_listings l WHERE l.source = 'cj' AND l.store_id IS NULL AND l.status = 'active'
+        `SELECT l.id, l.product_id FROM pr_listings l WHERE l.source = 'cj' AND l.store_id IS NULL AND l.status = 'active'
            AND NOT EXISTS (SELECT 1 FROM pr_offers o WHERE o.listing_id = l.id AND o.destination = ? AND o.checked_at >= ?)
          ORDER BY l.first_seen_at DESC LIMIT 20`,
       )
@@ -150,6 +151,7 @@ export async function enrichPass(db: Db, key: Buffer, d: Omit<CjDeps, 'purpose'>
       if (refusal(db, 'cj', 'ingestion', now)) return; // the app's own daily cap: try again tomorrow
       try {
         await enrichCj(db, key, String(r.id), to, { ...d, purpose: 'ingestion' });
+        refreshProduct(db, String(r.product_id), now);
       } catch (e) {
         if (e instanceof CjError && e.kind === 'not_found') db.prepare(`UPDATE pr_listings SET status = 'gone' WHERE id = ?`).run(String(r.id));
         else if (e instanceof CjError && (e.kind === 'auth' || e.kind === 'quota')) return markSource(db, 'cj', { ok: false, kind: e.kind, error: e.message }, now);

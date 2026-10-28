@@ -710,7 +710,7 @@ STOP.
   file, else `supplier_claim`). Tests.
 
 ### Product discovery
-- [ ] PR-08 **Store research profile, store fit and eligibility** (decisions 5, 10, 11): profile API and "Edit research
+- [x] PR-08 **Store research profile, store fit and eligibility** (decisions 5, 10, 11): profile API and "Edit research
   profile", fit and flags computed in the Evaluate step and stored per store, fulfillment status and the cost + shipping
   figure in `pr_product_facts` (decision 8) with the daily decay pass, with a test per rule and branch.
 - [ ] PR-09 **Discovery API:** server-side search, filters (spec §7's, as the design's chips list them), sorts (nulls
@@ -723,7 +723,8 @@ STOP.
   decisions 12, 14): replace the page, keep `/research` and its nav entry (looked up by path), toolbar, profile line,
   filter chips, tabs, source strip, grid and cards, URL and storage state, the distinct states, the image proxy, and
   the dev-only fixture loader with its "Test fixture" labelling. Real data only: with no source connected, the
-  first-use state. Say under Done whether the source-to-interface path ran on live data or on fixtures.
+  first-use state. Say under Done whether the source-to-interface path ran on live data or on fixtures. The profile
+  line's "Edit research profile" dialog edits `GET`/`PUT /api/pr/profile?store=` (PR-08).
 - [ ] PR-11 **Source health view:** every source's status from decision 4, last successful sync, errors, quota and the
   call ledger, stale coverage, what the owner must do to connect it, and "Sync now" where it works. Opened from the
   source strip.
@@ -853,6 +854,12 @@ STOP.
   Creative Center notes with link and date (`POST /api/pr/products/:id/notes`, Manual research only, never evidence),
   and the supplier feed import (`POST /api/pr/imports/feed`, in `LARGE`: listing per product, variant per SKU, offer
   per row, `checked_at` from the file else `supplier_claim`, refused whole on a bad cell). 6 tests; 2 mutation checks.
+- 2026-10-28 PR-08 store profile, fit and eligibility: `GET`/`PUT /api/pr/profile?store=` (decision 5's defaults,
+  validated, partial saves; a save re-evaluates the store, re-ranking first when the ship-to moved), decision 10's
+  flags (brand, compatibility reference, restricted and review categories, avoid lists), decision 11's store fit per
+  store in `pr_evaluations`, decision 8's fulfillment status and cost + ship per facts key in Rank, and the daily
+  decay pass. Rank and Evaluate run after ingestion, enrichment and feed imports. 21 tests; 9 mutation checks. Server
+  only, on fixtures: the dialog lands with PR-10's profile line.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -884,6 +891,30 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-08, decisions 5, 8, 10 and 11 as built.**
+  - Evaluate writes one `pr_evaluations` row per product a store may see, at Discovered, with its fit, reasons and
+    flags (stage, owner, notes and dismissals stay as they are). So "<n> stores evaluating" (All stores) counts stores
+    with a `pr_stage_history` row for the product (Assign to a store…, a stage change, a task start), not evaluation
+    rows. A store with no evaluations yet (new, nothing saved) gets them on its first profile save or the next Rank of
+    each product; PR-09 runs `evaluateStore` when a store scope has none.
+  - Fit precedence: Weak, then Medium, then Unknown, then Strong (a known problem says more than a missing input).
+    With no offer yet, nothing known fails, so fit can be Strong. Delivery uses the fastest shippable row's upper
+    bound; "no preferred warehouse" means no shippable row ships from one.
+  - The niche test matches a word's start in the category path against a word list per niche (`NICHE_WORDS`), or
+    the owner's words for a custom niche, or an included category. A keyword heuristic, like the discovery queries:
+    switch to CJ category ids after the live check.
+  - Flags are word matches on the title and category, whole words only. Words that are also ordinary product words
+    (apple, galaxy, switch, gun, capsule, medical) are listed only in phrases (`iphone`, `stun gun`, `medical
+    device`). Restricted and avoid flags make fit Weak; brand, compatibility and review flags are warnings.
+  - Fulfillment is for quantity 1 (the only quantity CJ is quoted at). The current rows are, per listing, variant,
+    supplier and destination, those of the newest check. A product with offers but none for the destination is
+    Pending ("No quote for <country> yet"), not Insufficient. A store with no ship-to gets no status. Cost + ship uses
+    the stored ECB rates (`storedRate`, never a fetch inside Rank; the FX loop refreshes them daily), so its date is
+    the `fx` setting's date. Facts keys are each store's (ship-to, currency) plus All stores' default (US, base
+    currency); another All-stores ship-to is computed by PR-09.
+  - The decay pass runs in the jobs tick, once a UTC day, so it's off in the dev app unless `PR_INGEST=1` (like
+    every timer here). Flag dismissal with a reason (History) is PR-13; Evaluate already honours
+    `flag_dismissals_json`.
 - **PR-07, decision 4 as built.** The link between a research product and a store product is a `pr_outcomes` row
   (kind `store_product`): PR-20's "Already in your store" check and T9's `prProductId` write the same row. Own orders
   are weekly paid units (Sunday weeks, like Trends) from the first week with a sale to the last complete week, at most

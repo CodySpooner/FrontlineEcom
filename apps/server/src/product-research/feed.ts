@@ -3,6 +3,7 @@ import type { PrFeedImport } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { upsertListing } from './catalog';
 import { parseCsv } from './csv';
+import { refreshProduct } from './evaluate';
 import { minorDigits, toMinor } from './money';
 
 /** The supplier feed's columns (header names, any case). Only title, sku and currency are required. */
@@ -66,6 +67,7 @@ export function importFeed(db: Db, input: { supplier: string; name: string; csv:
   const fileId = randomUUID();
   const source = `feed:${slug(input.supplier)}`;
   const listings = new Map<string, string>();
+  const products = new Set<string>();
   const variants = new Set<string>();
   tx(db, () => {
     db.prepare(`INSERT INTO pr_files (id, kind, name, sha256, body, created_at) VALUES (?, 'feed', ?, ?, ?, ?)`).run(fileId, input.name, sha, input.csv, at);
@@ -80,8 +82,10 @@ export function importFeed(db: Db, input: { supplier: string; name: string; csv:
     for (const p of parsed) {
       let listingId = listings.get(p.ref);
       if (!listingId) {
-        listingId = upsertListing(db, { source, sourceRef: p.ref, origin: 'import', title: p.title, category: p.category, url: p.url, imageRef: p.image, currency: p.currency, retrievedAt: at, transform: { fileId, supplier: input.supplier }, at }).id;
+        const l = upsertListing(db, { source, sourceRef: p.ref, origin: 'import', title: p.title, category: p.category, url: p.url, imageRef: p.image, currency: p.currency, retrievedAt: at, transform: { fileId, supplier: input.supplier }, at });
+        listingId = l.id;
         listings.set(p.ref, listingId);
+        products.add(l.productId);
       }
       variant.run(randomUUID(), listingId, p.sku, p.sku, p.gtin, p.mpn, JSON.stringify({ name: p.variant }));
       variants.add(`${listingId}|${p.sku}`);
@@ -90,5 +94,6 @@ export function importFeed(db: Db, input: { supplier: string; name: string; csv:
       offer.run(randomUUID(), listingId, variantId, input.supplier, p.destination, p.unit, p.ship, p.currency, p.min, p.max, p.processing, p.moq, p.from, stock, p.checked ? 'import' : 'supplier_claim', p.checked ?? at);
     }
   });
+  for (const id of products) refreshProduct(db, id, now);
   return { fileId, duplicate: false, supplier: input.supplier, listings: listings.size, variants: variants.size, offers: parsed.length, undated: parsed.filter((p) => !p.checked).length };
 }

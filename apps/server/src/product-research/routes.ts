@@ -1,14 +1,32 @@
 import { Hono } from 'hono';
 import type { Db } from '../db';
 import { productVisible } from './catalog';
+import { evaluateStore } from './evaluate';
 import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
 import { importFeed } from './feed';
+import { getProfile, saveProfile } from './profile';
 import { scopeOf, storeOf } from './scope';
 import { importTrends, linkSet, signalSet } from './trends';
 
 /** Product Research's API (`/api/pr/*`, behind the KB guard: change and body limits). `?store=` sets the scope. */
 export function prRoutes(db: Db) {
   return new Hono()
+    .get('/api/pr/profile', (c) => {
+      const store = storeOf(c, db);
+      return store instanceof Response ? store : c.json(getProfile(db, store));
+    })
+    // Saving re-evaluates every product the store may see (re-ranked first when the ship-to moved), so fit is current.
+    .put('/api/pr/profile', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      const body = (await c.req.json().catch(() => undefined)) as Record<string, unknown> | undefined;
+      if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ error: 'body must be a JSON object of profile fields' }, 400);
+      const before = getProfile(db, store).shipTo;
+      const p = saveProfile(db, store, body);
+      if ('error' in p) return c.json(p, 400);
+      evaluateStore(db, store, { rerank: p.shipTo !== before });
+      return c.json(p);
+    })
     .post('/api/pr/imports/trends', async (c) => {
       const s = scopeOf(c, db);
       if (s instanceof Response) return s;
