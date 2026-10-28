@@ -78,6 +78,8 @@ export interface ClaudeAccount {
   checkedAt: string;
   /** Why it couldn't be asked (then `signedIn` is false). */
   error?: string;
+  /** What the login can run, from the same handshake (decision 9). */
+  models?: RuntimeModel[];
 }
 
 export interface Agent {
@@ -530,6 +532,8 @@ export interface RuntimeModel {
   defaultEffort?: string;
   /** The runtime's default model on this login. */
   default?: boolean;
+  /** Discovery left this model's effort fields out, so `efforts` come from the app's registry. */
+  effortsFromRegistry?: boolean;
 }
 
 /** GET /api/runtimes: what each runtime can run on this machine, checked without a model turn. */
@@ -1003,6 +1007,8 @@ export type AgentEvent =
   | { type: 'tool_result'; id: string; output: string; isError: boolean }
   | { type: 'approval_request'; approval: ApprovalRequest }
   | { type: 'memory_written'; memory: StoreMemory }
+  /** A line for the reply's activity, e.g. the run didn't run on what was asked (decision 9). */
+  | { type: 'notice'; text: string }
   /** `sessionId` continues the conversation when passed back as `resume`. */
   | { type: 'done'; sessionId: string; usage: RunUsage }
   /** `usage`: what the run spent before it stopped, when the engine reports it. */
@@ -2247,3 +2253,5 @@ export interface KbOverview {
   /** Each store in the workspace (none for General). */
   performance: KbPerformance[];
 }
+
+export * from './runtime-registry';

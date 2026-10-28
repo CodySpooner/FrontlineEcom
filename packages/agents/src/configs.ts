@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, INTEGRATION_KINDS, type AgentConfig, type AgentPreset, type AgentRole, type AgentTypeInfo, type CustomRole, type IntegrationKind, type RoleContract, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
+import { AGENT_ROLES, defaultEffort, EFFORT_LABEL, INTEGRATION_KINDS, type AgentConfig, type AgentPreset, type AgentRole, type AgentTypeInfo, type CustomRole, type IntegrationKind, type RoleContract, type RuntimeCapabilities, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
+import { agentModel } from './claude-engine';
 import { engineInfo } from './engine';
 import { BUILTIN_TYPES, contractOf, ROLES } from './roles';
 import { defaultTools } from './tools';
@@ -166,14 +167,18 @@ export type ConfigDraft = Omit<AgentConfig, 'id' | 'storeId' | 'agentId' | 'crea
 /**
  * The seat default (decision 9), for a conversation started without the Deploy dialog: the type's tools with every
  * draft on and compare_stores off, Store + General knowledge, save findings off, no limits of its own (the store and seat
- * caps apply), and what the store's agents run on today.
+ * caps apply), and what the store's agents run on: Demo on a demo store, else Claude's default model on this login
+ * (`claude`: the discovered list) at its default effort.
  */
-export function seatDefault(store: Store, type: AgentType): ConfigDraft {
-  const engine = engineInfo(store.connected);
+export function seatDefault(store: Store, type: AgentType, claude?: RuntimeCapabilities): ConfigDraft {
+  const onClaude = engineInfo(store.connected).provider === 'claude';
+  const pick = claude?.models.find((m) => m.default);
+  const model = pick?.id ?? agentModel();
+  const effort = pick ? pick.defaultEffort : defaultEffort(model);
   return {
     ...(type.customRoleId ? { customRoleId: type.customRoleId } : {}),
-    runtime: engine.provider === 'claude' ? 'claude' : 'demo',
-    ...(engine.model ? { model: engine.model } : {}),
+    runtime: onClaude ? 'claude' : 'demo',
+    ...(onClaude ? { model, ...(effort ? { effort } : {}) } : {}),
     tools: type.tools.filter((t) => t !== 'compare_stores'),
     knowledge: ['store', 'general'],
     permissions: { saveFindings: 'off' },
@@ -181,17 +186,36 @@ export function seatDefault(store: Store, type: AgentType): ConfigDraft {
 }
 
 /**
- * Checks what the Deploy dialog (or an API caller) chose against the type and store, before anything is queued
- * (decision 9). Left-out parts come from the seat default. A failure names the field the dialog shows it on.
+ * Checks what the Deploy dialog (or an API caller) chose against the type, the store and what the runtimes can run here
+ * (`runtimes`: GET /api/runtimes), before anything is queued (decision 9). Left-out parts come from the seat default. A
+ * failure names the field the dialog shows it on.
  */
-// ponytail: until AA-13 discovers runtimes and models, only the seat default's runtime, model and effort are accepted.
-export function validateConfig(store: Store, type: AgentType, input: unknown = {}): ConfigDraft | { field: string; error: string } {
-  if (typeof input !== 'object' || input === null || Array.isArray(input)) return { field: 'config', error: 'config must be an object.' };
+export function validateConfig(store: Store, type: AgentType, input: unknown, runtimes: RuntimeCapabilities[]): ConfigDraft | { field: string; error: string } {
+  input ??= {};
+  if (typeof input !== 'object' || Array.isArray(input)) return { field: 'config', error: 'config must be an object.' };
   const i = input as Record<string, unknown>;
-  const base = seatDefault(store, type);
-  if (i.runtime !== undefined && i.runtime !== base.runtime) return { field: 'runtime', error: `This store's agents run on ${base.runtime === 'claude' ? 'Claude' : 'Demo (free)'} for now.` };
-  if (i.model !== undefined && i.model !== base.model) return { field: 'model', error: base.model ? `Only ${base.model} is available for now.` : 'Demo (free) has no model to choose.' };
-  if (i.effort != null) return { field: 'effort', error: 'Choosing the effort comes later: leave it out.' };
+  const claude = runtimes.find((r) => r.runtime === 'claude');
+  const base = seatDefault(store, type, claude);
+  const runtime = i.runtime ?? base.runtime;
+  let model: string | undefined;
+  let effort: string | undefined;
+  if (runtime === 'demo') {
+    // Demo stands in for a runtime only where the store's agents run on it: anything else would run on Claude unasked.
+    if (base.runtime !== 'demo') return { field: 'runtime', error: 'Demo (free) is only for stores with demo data.' };
+    if (i.model != null || i.effort != null) return { field: i.model != null ? 'model' : 'effort', error: 'Demo (free) has no model or effort to choose.' };
+  } else if (runtime === 'claude') {
+    if (!claude || claude.reason) return { field: 'runtime', error: claude?.reason ?? "Claude isn't available here." };
+    model = (i.model ?? (base.runtime === 'claude' ? base.model : claude.models.find((m) => m.default)?.id)) as string | undefined;
+    // The login's discovered list, or the registry when discovery is down (the dialog says so).
+    const m = claude.models.find((x) => x.id === model);
+    if (!m) return { field: 'model', error: model === undefined ? 'Choose a model.' : `"${String(model)}" isn't on your Claude login's model list.` };
+    if (i.effort != null && !m.efforts.includes(i.effort as string)) {
+      return { field: 'effort', error: m.efforts.length ? `${m.label} runs at ${m.efforts.map((e) => EFFORT_LABEL[e] ?? e).join(', ')}.` : `${m.label} takes no effort level: leave it out.` };
+    }
+    effort = (i.effort as string | undefined) ?? m.defaultEffort;
+  } else {
+    return { field: 'runtime', error: runtime === 'codex' ? "Codex isn't available in this version of the app yet." : 'runtime must be claude or demo.' };
+  }
   const tools = i.tools ?? base.tools;
   if (!Array.isArray(tools) || tools.some((t) => typeof t !== 'string')) return { field: 'tools', error: 'tools must be a list of tool names.' };
   const extra = (tools as string[]).find((t) => !type.tools.includes(t));
@@ -203,11 +227,14 @@ export function validateConfig(store: Store, type: AgentType, input: unknown = {
   const { budgetUsd, stopAfterMin, saveFindings = 'off' } = p as Record<string, unknown>;
   const positive = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
   if (budgetUsd != null && !positive(budgetUsd)) return { field: 'permissions.budgetUsd', error: 'Budget for this run must be a positive amount in dollars.' };
-  if (budgetUsd != null && base.runtime !== 'claude') return { field: 'permissions.budgetUsd', error: 'Demo (free) costs nothing, so it takes no run budget.' };
+  if (budgetUsd != null && runtime !== 'claude') return { field: 'permissions.budgetUsd', error: 'Demo (free) costs nothing, so it takes no run budget.' };
   if (stopAfterMin != null && !positive(stopAfterMin)) return { field: 'permissions.stopAfterMin', error: '"Stop after" must be a positive number of minutes.' };
   if (saveFindings !== 'off' && saveFindings !== 'ask' && saveFindings !== 'auto') return { field: 'permissions.saveFindings', error: 'Save findings must be off, ask or auto.' };
   return {
-    ...base,
+    ...(base.customRoleId ? { customRoleId: base.customRoleId } : {}),
+    runtime,
+    ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
     tools: [...new Set(tools as string[])],
     knowledge: [...new Set(knowledge as AgentConfig['knowledge'])],
     permissions: { ...(budgetUsd != null ? { budgetUsd } : {}), ...(stopAfterMin != null ? { stopAfterMin } : {}), saveFindings },
@@ -249,7 +276,7 @@ export function listPresets(db: DatabaseSync, storeId: string, typeId: string): 
  * Saves the Deploy dialog's choices as a preset, checked as a deploy is (unknown keys dropped). It keeps a runtime, model
  * or effort only when one was chosen, so an all-stores preset still fits a store that runs on something else.
  */
-export function savePreset(db: DatabaseSync, store: Store, input: unknown): AgentPreset | { status: 400 | 404; error: string; field?: string } {
+export function savePreset(db: DatabaseSync, store: Store, input: unknown, runtimes: RuntimeCapabilities[]): AgentPreset | { status: 400 | 404; error: string; field?: string } {
   const b = (typeof input === 'object' && input !== null && !Array.isArray(input) ? input : {}) as Record<string, unknown>;
   const { name, type: typeId, config = {}, objective, allStores = false } = b;
   if (typeof name !== 'string' || !name.trim() || name.trim().length > 60) return { status: 400, field: 'name', error: 'Name the preset, in 60 characters or fewer.' };
@@ -257,7 +284,7 @@ export function savePreset(db: DatabaseSync, store: Store, input: unknown): Agen
   if (typeof allStores !== 'boolean') return { status: 400, field: 'allStores', error: 'allStores must be true or false.' };
   const type = typeof typeId === 'string' ? resolveType(db, store.id, typeId) : undefined;
   if (!type) return { status: 404, error: 'Agent type not found' };
-  const draft = validateConfig(store, type, config);
+  const draft = validateConfig(store, type, config, runtimes);
   if ('error' in draft) return { status: 400, ...draft };
   const chosen = config as Record<string, unknown>;
   const preset: AgentPreset['config'] = {
@@ -265,7 +292,7 @@ export function savePreset(db: DatabaseSync, store: Store, input: unknown): Agen
     ...(draft.customRoleId ? { customRoleId: draft.customRoleId } : {}),
     ...(chosen.runtime !== undefined ? { runtime: draft.runtime } : {}),
     ...(chosen.model !== undefined && draft.model ? { model: draft.model } : {}),
-    ...(draft.effort ? { effort: draft.effort } : {}),
+    ...(chosen.effort != null && draft.effort ? { effort: draft.effort } : {}),
     tools: draft.tools,
     knowledge: draft.knowledge,
     permissions: draft.permissions,

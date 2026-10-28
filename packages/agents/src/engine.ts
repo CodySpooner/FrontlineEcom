@@ -1,4 +1,4 @@
-import type { Agent, AgentConfig, AgentEvent, Store } from '@frontline/shared';
+import type { Agent, AgentConfig, AgentEvent, RuntimeId, Store } from '@frontline/shared';
 import { agentModel, claudeEngine } from './claude-engine';
 import { fakeEngine } from './fake-engine';
 import type { ToolEnv } from './tools';
@@ -26,6 +26,8 @@ export interface RunInput {
   mode?: 'research';
   /** What the run's conversation or team participant is configured with; none: the role's tools. */
   config?: AgentConfig;
+  /** Told what the run asks for (runtime, model, effort) and, as the engine learns it, what actually ran. */
+  onRuntime?: (r: { runtime?: RuntimeId; model?: string; effort?: string; actualModel?: string; effortApplied?: string }) => void;
 }
 
 /** Streams one agent run. Engines may throw or stop early; `runAgent` normalizes that. */
@@ -39,7 +41,9 @@ export type Engine = (input: RunInput) => AsyncIterable<AgentEvent>;
 export function defaultEngine(claude: Engine = claudeEngine(), fake: Engine = fakeEngine()): Engine {
   const forced = forcedEngine();
   if (forced) return forced === 'claude' ? claude : fake;
-  return (input) => (input.store.connected || input.mode === 'research' ? claude : fake)(input);
+  // A conversation configured for Claude runs on it on a demo store too (the owner picked it, decision 9).
+  // ponytail: a 'demo' config on a store that went live runs on Claude (Demo is never offered on a connected store).
+  return (input) => (input.store.connected || input.mode === 'research' || input.config?.runtime === 'claude' ? claude : fake)(input);
 }
 
 const forcedEngine = () => process.env.FRONTLINE_AGENT_ENGINE ?? (process.env.VITEST ? 'fake' : undefined); // a test run outside the root config never reaches Claude

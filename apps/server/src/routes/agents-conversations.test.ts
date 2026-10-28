@@ -1,5 +1,5 @@
 import { conversationPreface, defaultTools, getConfig, getRun, recap } from '@frontline/agents';
-import { AGENT_ROLES, type AgentPreset, type AgentRun, type AgentRunDetail, type AgentTypeInfo, type Conversation, type ConversationPage, type CursorPage, type CustomRole } from '@frontline/shared';
+import { AGENT_ROLES, registryModels, type AgentPreset, type AgentRun, type AgentRunDetail, type AgentTypeInfo, type Conversation, type ConversationPage, type CursorPage, type CustomRole } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -57,6 +57,8 @@ test('a config that fails a check is a 400 naming the field, and nothing is crea
   expect(await fails({ config: { permissions: { stopAfterMin: -5 } } })).toEqual([400, 'permissions.stopAfterMin']);
   expect(await fails({ config: { knowledge: ['store', 'peak'] } })).toEqual([400, 'knowledge']);
   expect(await fails({ config: { runtime: 'codex' } })).toEqual([400, 'runtime']);
+  expect(await fails({ config: { runtime: 'claude' } })).toEqual([400, 'runtime']); // the demo engine is forced here
+  expect(await fails({ config: { effort: 'high' } })).toEqual([400, 'effort']); // Demo has none
   expect(db.prepare('SELECT count(*) AS n FROM conversations').get()?.n).toBe(0);
   // The Analytics Specialist may compare stores; a built-in type gets its own narrowed tools.
   expect((await open({ type: 'market_analyst', config: { tools: ['store_summary', 'compare_stores'] } })).status).toBe(201);
@@ -326,4 +328,11 @@ test("a reply's deliverables come from its run_id, and its notification opens th
   expect(thread.items[0]!.deliverables).toEqual(made);
   expect(((await (await send('GET', `/api/runs/${run.id}?store=glow`)).json()) as AgentRunDetail).deliverables).toEqual(made);
   expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Ad Strategist finished'`).get()?.link).toBe(`/agents/w?store=glow&run=${run.id}`);
+});
+
+test('GET /api/runtimes: Claude from the registry while the demo engine is forced, saying why it is off', async () => {
+  expect(await (await send('GET', '/api/runtimes')).json()).toEqual([
+    { runtime: 'claude', connected: false, reason: 'Agents are set to the demo engine here (FRONTLINE_AGENT_ENGINE), so Claude is never used.', models: registryModels(), source: 'registry', registryVersion: '2026-10-28', checkedAt: expect.any(String) },
+  ]);
+  expect((await open({ config: { runtime: 'claude' } })).error).toBe('Agents are set to the demo engine here (FRONTLINE_AGENT_ENGINE), so Claude is never used.');
 });

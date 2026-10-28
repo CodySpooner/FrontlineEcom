@@ -1,8 +1,8 @@
 // Drives the Claude Agent SDK the way T3 Code's ClaudeAdapterV2 does (partial-message streaming, resume,
 // canUseTool, per-run mcpServers), minus Effect. Ideas ported from pingdotgg/t3code:
 // MIT License, Copyright (c) 2026 T3 Tools Inc.
-import { createSdkMcpServer, query, tool, type Options, type SDKAssistantMessageError, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { isPrivateHost, isReadOnly, type AgentEvent, type ClaudeAccount } from '@frontline/shared';
+import { createSdkMcpServer, query, tool, type EffortLevel, type HookCallback, type ModelInfo, type Options, type SDKAssistantMessageError, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import { defaultEffort, EFFORT_LABEL, isPrivateHost, isReadOnly, registryModels, RUNTIME_REGISTRY, type AgentEvent, type ClaudeAccount, type RuntimeCapabilities, type RuntimeModel } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
 import { assemblePrompt } from './prompt';
 import { ROLES } from './roles';
@@ -38,7 +38,7 @@ const ERRORS: Record<SDKAssistantMessageError, string> = {
   rate_limit: "You've hit your Claude usage limit for now. Agents can run again once it resets.",
   overloaded: 'Claude is overloaded right now. Retry in a few minutes.',
   invalid_request: 'Claude turned the request down as invalid. Retry; if it happens again, start a new conversation.',
-  model_not_found: "The agent model isn't available on your Claude login. Set FRONTLINE_AGENT_MODEL to one that is.",
+  model_not_found: "The agent's model isn't available on your Claude login any more. Choose another model for this agent.",
   server_error: 'Claude had a server error. Retry in a few minutes.',
   unknown: 'Claude stopped with an unknown error. Retry; if it keeps happening, check status.anthropic.com.',
   max_output_tokens: "The reply hit Claude's output limit. Retry and ask for a shorter answer, or split the task.",
@@ -47,22 +47,27 @@ const ERRORS: Record<SDKAssistantMessageError, string> = {
 /** The ones that fail every run the same way until the owner fixes them: the run stops at once, the owner is told once a day. */
 const ACCOUNT: SDKAssistantMessageError[] = ['authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error', 'rate_limit', 'model_not_found', 'cloud_credential_error'];
 
+/** A Fable run that would bill usage credits the plan doesn't have (code.claude.com/docs/en/model-config). */
+const CREDITS = 'Fable bills usage credits on your Claude plan, and none are available. Add usage credits at claude.ai, or choose another model for this agent.';
+const SIGN_IN = 'Sign in to Claude Code: open a terminal, run `claude` and sign in with /login.';
+
 /** The model agents run on: `FRONTLINE_AGENT_MODEL` or claude-opus-5-5. */
 export const agentModel = () => process.env.FRONTLINE_AGENT_MODEL ?? 'claude-opus-5-5';
 
 /**
- * Who Claude Code is signed in as here, asked without a prompt, so it spends no usage. It starts the CLI (~6 s).
+ * Who Claude Code is signed in as here and the models it offers, from one handshake without a prompt, so it spends no
+ * usage. It starts the CLI with the runs' isolation (no settings files, the runs' folder), so it lists what runs get.
  * Signed out reads `tokenSource: 'none'`; an API key or a cloud provider (no email) counts as signed in.
  */
 export async function claudeAccount(cwd?: string, run: typeof query = query, timeoutMs = 30_000): Promise<ClaudeAccount> {
   const checkedAt = new Date().toISOString();
-  const q = run({ prompt: (async function* () { await new Promise(() => {}); })(), options: { ...(cwd && { cwd }) } }); // accountInfo needs streaming input
+  const q = run({ prompt: (async function* () { await new Promise(() => {}); })(), options: { settingSources: [], ...(cwd && { cwd }) } }); // the handshake needs streaming input
   let timer: NodeJS.Timeout | undefined;
   try {
     const late = new Promise<never>((_, no) => (timer = setTimeout(() => no(new Error(`Claude Code didn't answer in ${timeoutMs / 1000} s.`)), timeoutMs)));
-    const info = await Promise.race([q.accountInfo(), late]);
+    const { account: info, models } = await Promise.race([q.initializationResult(), late]);
     const signedIn = info.tokenSource !== 'none' || (!!info.apiKeySource && info.apiKeySource !== 'none');
-    return { signedIn, ...(info.email && { email: info.email }), ...(info.subscriptionType && { subscription: info.subscriptionType }), checkedAt };
+    return { signedIn, ...(info.email && { email: info.email }), ...(info.subscriptionType && { subscription: info.subscriptionType }), checkedAt, models: claudeModels(models) };
   } catch (e) {
     return { signedIn: false, checkedAt, error: e instanceof Error ? e.message : String(e) };
   } finally {
@@ -70,6 +75,56 @@ export async function claudeAccount(cwd?: string, run: typeof query = query, tim
     q.close();
   }
 }
+
+/**
+ * Discovery's rows as the app lists them (AA-01 probe): alias rows (default, opus…) carry the id they resolve to, so rows
+ * dedupe on it, keeping the alias row's name ('Opus 5.5', not the default row's 'Default (recommended)'). Nothing gives a
+ * default effort, so it comes from the registry, as do the efforts of a row that leaves them out (flagged).
+ */
+export function claudeModels(infos: ModelInfo[]): RuntimeModel[] {
+  const defaultId = infos.find((m) => m.value === 'default')?.resolvedModel;
+  const out = new Map<string, RuntimeModel>();
+  for (const m of [...infos.filter((m) => m.value !== 'default'), ...infos.filter((m) => m.value === 'default')]) {
+    const id = m.resolvedModel ?? m.value;
+    if (out.has(id)) continue;
+    const listed = m.supportedEffortLevels ?? (m.supportsEffort === false ? [] : undefined);
+    const efforts: string[] = listed ?? RUNTIME_REGISTRY.claude.models[id]?.efforts ?? [];
+    const preset = defaultEffort(id);
+    const effort = preset && efforts.includes(preset) ? preset : efforts.includes('high') ? 'high' : efforts[0];
+    out.set(id, {
+      id,
+      label: m.displayName,
+      ...(m.description ? { description: m.description } : {}),
+      efforts,
+      ...(effort ? { defaultEffort: effort } : {}),
+      ...(id === defaultId ? { default: true } : {}),
+      ...(listed ? {} : { effortsFromRegistry: true }),
+    });
+  }
+  return [...out.values()];
+}
+
+/**
+ * GET /api/runtimes' Claude row from the login check. `reason`: why Claude can't be used, when that's known (signed out,
+ * the demo engine forced). A check that failed says nothing either way: the lists come from the registry, flagged.
+ */
+export function claudeRuntime(account: ClaudeAccount, reason?: string): RuntimeCapabilities {
+  const why = reason ?? (account.signedIn || account.error ? undefined : SIGN_IN);
+  const discovered = account.models?.length ? account.models : undefined;
+  return {
+    runtime: 'claude',
+    connected: account.signedIn,
+    ...(why ? { reason: why } : {}),
+    ...(account.email ? { account: account.email } : {}),
+    models: discovered ?? registryModels(),
+    source: discovered ? 'discovered' : 'registry',
+    ...(!discovered || discovered.some((m) => m.effortsFromRegistry) ? { registryVersion: RUNTIME_REGISTRY.version } : {}),
+    checkedAt: account.checkedAt,
+  };
+}
+
+const modelLabel = (id: string) => RUNTIME_REGISTRY.claude.models[id]?.label ?? id;
+const effortLabel = (e: string) => EFFORT_LABEL[e] ?? e;
 
 /** True for an account problem (signed out, usage limit…): every run fails the same way until the owner fixes it. */
 export const isAccountError = (message: string) => ACCOUNT.some((code) => ERRORS[code] === message);
@@ -99,11 +154,28 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     });
     const abortController = new AbortController();
     input.signal?.addEventListener('abort', () => abortController.abort(), { once: true });
-    const model = opts.model ?? agentModel();
+    // What the conversation picked, else the role's model at its default effort. Effort always goes explicitly: the API
+    // and Claude Code default differently. Never a fallbackModel: a run doesn't move models silently.
+    const model = input.config?.model ?? opts.model ?? agentModel();
+    const effort = input.config?.effort ?? defaultEffort(model);
+    input.onRuntime?.({ runtime: 'claude', model, ...(effort ? { effort } : {}) });
+    // The effort that ran, after any silent downgrade: hook inputs carry it (absent: unconfirmed).
+    let applied: string | undefined;
+    const heard: HookCallback = async (h) => {
+      const level = (h as { effort?: { level?: string } }).effort?.level;
+      if (level && level !== applied) {
+        applied = level;
+        input.onRuntime?.({ effortApplied: level });
+        if (effort && level !== effort) events.push({ type: 'notice', text: `Ran at ${effortLabel(level)}: ${effortLabel(effort)} isn't available on this account.` });
+      }
+      return {};
+    };
     const messages = run({
       prompt: input.task,
       options: {
         model,
+        ...(effort ? { effort: effort as EffortLevel } : {}),
+        hooks: { PreToolUse: [{ hooks: [heard] }], Stop: [{ hooks: [heard] }] },
         systemPrompt: input.systemPrompt ?? assemblePrompt(input),
         includePartialMessages: true,
         // Isolated from the owner's coding setup: no CLAUDE.md/settings, no file or shell tools, no skill listing, and
@@ -151,7 +223,11 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     let flagged: SDKAssistantMessageError | undefined; // the last error flagged on a reply: a failed result says why with it
     (async () => {
       for await (const message of messages) {
-        if (message.type === 'system' && message.subtype === 'init') input.onSession?.(message.session_id);
+        if (message.type === 'system' && message.subtype === 'init') {
+          input.onSession?.(message.session_id);
+          if (message.model) input.onRuntime?.({ actualModel: message.model });
+          if (message.model && message.model !== model) events.push({ type: 'notice', text: `Ran on ${modelLabel(message.model)}: ${modelLabel(model)} wasn't used for this reply.` });
+        }
         if (message.type === 'assistant' && message.message.usage) {
           spent.set(message.message.id, estimate(message.message.usage, model));
           input.onSpend?.([...spent.values()].reduce((a, b) => a + b, 0));
@@ -164,8 +240,12 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
   };
 }
 
-/** List prices by model family, USD per million tokens: [input, output, cache read] (claude-api skill, 2026-10-26). */
-const PRICES: Record<string, [number, number, number]> = { fable: [10, 50, 0.25], opus: [4, 20, 0.2], sonnet: [2, 10, 0.2], haiku: [0.1, 0.5, 0.01] };
+/** A model's list prices (the registry): its own, else a dated id's, else its family's current ones, else Opus 5.5's. */
+const pricesOf = (model: string) => {
+  const models = Object.entries(RUNTIME_REGISTRY.claude.models);
+  const family = /fable|opus|sonnet|haiku/.exec(model)?.[0];
+  return (RUNTIME_REGISTRY.claude.models[model] ?? models.find(([id]) => model.startsWith(id))?.[1] ?? models.find(([id]) => family && id.includes(family))?.[1] ?? RUNTIME_REGISTRY.claude.models[RUNTIME_REGISTRY.claude.default]!).prices;
+};
 
 /**
  * An assistant message's cost at the run model's list prices, cache writes at 2x input (Claude Code caches for an hour).
@@ -173,14 +253,15 @@ const PRICES: Record<string, [number, number, number]> = { fable: [10, 50, 0.25]
  * whichever is higher, so it must not read high: on Opus prices a Haiku run would be charged ~40x against the store's
  * budget. Checked 2026-10-26 on a real Opus run: $0.0757 estimated vs $0.0758 billed.
  */
-// ponytail: the family's current prices (Haiku's cache read assumed 0.1x input); an older, pricier model in a family
-// reads low until its result's exact total arrives. Unknown families use Opus.
 export const estimate = (
   u: { input_tokens: number; output_tokens: number; cache_creation_input_tokens?: number | null; cache_read_input_tokens?: number | null },
   model = 'claude-opus-5-5',
 ) => {
-  const [input, output, read] = Object.entries(PRICES).find(([family]) => model.includes(family))?.[1] ?? PRICES.opus!;
-  return (u.input_tokens * input + (u.cache_creation_input_tokens ?? 0) * input * 2 + (u.cache_read_input_tokens ?? 0) * read + u.output_tokens * output) / 1e6;
+  const p = pricesOf(model);
+  const prompt = u.input_tokens + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+  // Haiku 5.5: a request whose whole prompt is over 100K tokens pays the higher prices for all of it.
+  const { input, output, cacheRead } = p.over && prompt > p.over.promptTokens ? p.over : p;
+  return (u.input_tokens * input + (u.cache_creation_input_tokens ?? 0) * input * 2 + (u.cache_read_input_tokens ?? 0) * cacheRead + u.output_tokens * output) / 1e6;
 };
 
 /**
@@ -215,7 +296,9 @@ export function toAgentEvents(message: SDKMessage, mode?: RunInput['mode'], flag
       const u = message.usage;
       // A run that stops early still spent money: errors carry it too, so the store's daily AI budget sees it.
       const usage = u && { inputTokens: u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens, outputTokens: u.output_tokens, costUsd: message.total_cost_usd };
-      const failed = (text: string, code: string): AgentEvent[] => [{ type: 'error', message: text, code, ...(usage ? { usage } : {}), ...(message.session_id ? { sessionId: message.session_id } : {}) }];
+      const failed = (text: string, code: string): AgentEvent[] => [
+        { type: 'error', message: /usage credits/i.test(text) ? CREDITS : text, code, ...(usage ? { usage } : {}), ...(message.session_id ? { sessionId: message.session_id } : {}) },
+      ];
       if (flagged && (message.is_error || message.subtype === 'error_during_execution')) return failed(ERRORS[flagged], flagged);
       if (message.subtype === 'error_during_execution') return failed(`Stopped: ${message.errors.join('; ') || 'Claude hit an error while working'}. Retry; if it happens again, start a new conversation.`, message.subtype);
       if (message.subtype !== 'success') return failed((mode === 'research' ? STOPPED_RESEARCH : STOPPED)[message.subtype] ?? (message.errors.join('; ') || message.subtype), message.subtype);

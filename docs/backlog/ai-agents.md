@@ -1379,7 +1379,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - notification links that open the right conversation, with a test that one does.
 
 ### Runtime configuration
-- [ ] AA-13 **Claude discovery, registry and validation** (decision 9):
+- [x] AA-13 **Claude discovery, registry and validation** (decision 9):
   - `claudeModels()` and `GET /api/runtimes` (each runtime: connected, account, models with efforts, source
     discovered or registry, checked-at);
   - the registry file, its prices replacing the family table, with the doc URLs checked (or the Notes fallback);
@@ -1661,6 +1661,13 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   Orders and Creative links; reply deliverables by run_id (creatives, page and flow drafts, ad-request campaigns) in
   the thread and `GET /api/runs/:id`; run notifications open the run in its conversation; 5 new tests; checked in
   headless Chrome.
+- 2026-10-28 AA-13 Claude discovery, registry and validation: `claudeAccount` reads models and account from one
+  isolated handshake (`claudeModels` dedupes aliases, registry default efforts); `GET /api/runtimes`; the versioned
+  registry (`packages/shared/src/runtime-registry.ts`, checked against the docs today) prices the live estimate per
+  model; `validateConfig` checks runtime, model and effort against the discovered list (registry when discovery is
+  down) in the conversation, legacy run and preset routes; effort always explicit; `actual_model` and
+  `effort_applied` recorded with a "Ran at…"/"Ran on…" activity line on a mismatch; Fable usage-credit text;
+  model_not_found text; 6 new tests; discovery checked on this machine (12 models, no model turn).
 
 ## Blocked
 
@@ -1794,6 +1801,45 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-13, 2026-10-28) For AA-14 and later:
+  - **Registry** `RUNTIME_REGISTRY` (version 2026-10-28): the pricing, effort and model-config pages were fetched
+    today; the models overview is codemap item 21's fetch of the same day. Default efforts are Claude Code's (the SDK
+    drives it): medium on Opus/Sonnet/Haiku 5.5, xhigh on Opus 4.7, high elsewhere; Haiku 4.5 takes none. Also
+    `registryModels()`, `defaultEffort(model)`, `EFFORT_LABEL` (xhigh → "Extra high").
+  - **Discovery:** `claudeAccount(cwd)` now calls `initializationResult()` with `settingSources: []` and the
+    agent-sessions cwd, and returns `models` (`ClaudeAccount.models`). `claudeModels(infos)` dedupes rows on
+    `resolvedModel`, labels with the alias row's displayName, marks the default row's model, and flags a row without
+    effort fields (`effortsFromRegistry`, Haiku 4.5 on this login). A model the registry doesn't know defaults to high
+    (or its first level). `claudeRuntime(account, reason?)` builds the `RuntimeCapabilities` row: `reason` only when
+    Claude is known to be unusable (signed out, or the demo engine forced); a failed check has no reason and lists the
+    registry (`source: 'registry'`, `registryVersion`). `registryVersion` is also set when any model's efforts came
+    from the registry.
+  - **Server:** `apps/server/src/routes/agents-runtimes.ts` holds `agentSessions`, the 5-minute login cache
+    (`claudeLogin(refresh)`, the claude-account route) and `runtimes(refresh)` (`GET /api/runtimes`, `?refresh=1`).
+    Routes await `runtimes()` before validating: `openConversation(db, runs, store, input, caps)`,
+    `savePreset(db, store, input, caps)`, `validateConfig(store, type, input, caps)`,
+    `seatDefault(store, type, claude?)`. The team routes (AA-19) pass the same.
+  - **Validation:** runtime `demo` only where the seat default is demo (never on a connected store, nor when Claude is
+    forced); `claude` refused with the capability's `reason`; the model must be a resolved id on the list (aliases
+    are refused); the effort must be one of the model's, or absent when it has none; a left-out effort takes the
+    model's default. `codex` is refused until AA-15 ("Codex isn't available in this version of the app yet."); its
+    budget, Stop after and ultra rules come with it. A preset keeps an effort only when one was chosen.
+  - **Engine:** `defaultEngine` runs a config with runtime claude on Claude on a demo store too (ponytail: a demo
+    config on a store that went live runs on Claude). The Claude engine asks for `config.model ?? agentModel()` and
+    passes `effort` explicitly (`config.effort ?? defaultEffort(model)`), never `fallbackModel`. Runs without a config
+    get agentModel() at its default effort and record both through the new `RunInput.onRuntime` (the run manager
+    fills runtime, model and effort where null, and sets `actual_model`, `effort_applied`).
+  - **What ran:** `actual_model` is the init message's `model`; `effort_applied` is the `effort.level` of the
+    PreToolUse and Stop hook inputs. Absent `effort_applied` with an `effort` means unconfirmed. Unverified until
+    AA-25's live run: whether those hooks fire under `settingSources: []`, and whether init's `model` equals the
+    requested id exactly (a suffix would show a false "Ran on…" line). A mismatch adds a new `AgentEvent`
+    `{ type: 'notice', text }`, which the reply's activity shows as a warning step.
+  - **Fable:** any result error mentioning "usage credits" becomes the CREDITS text. The model-config page says an
+    SDK app that shows no consent prompt bills credits without asking, so the error may never come; AA-14's dialog
+    carries the warning.
+  - For AA-14: the caption reads `source`, `registryVersion` and `checkedAt`; model names are `RuntimeModel.label`
+    (the web's `modelName()` still formats ids, and `runtimeLabel` still capitalizes efforts as "Xhigh");
+    `effortsFromRegistry` deserves a note on that model.
 - (AA-12, 2026-10-28) For AA-13 and later:
   - `useStartConversation(storeId)` (client.ts) → `{ start({ type, title?, objective, context? }), isPending, error }`
     posts to `/api/conversations` and navigates to the conversation. One hook per store, so a multi-store list puts it

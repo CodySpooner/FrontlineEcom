@@ -1,6 +1,6 @@
 export { runAgent, defaultEngine, engineInfo, type Engine, type RunInput } from './engine';
 export { fakeEngine, echoScript, type FakeScript, type FakeStep } from './fake-engine';
-export { agentModel, claudeAccount, claudeEngine, estimate, isAccountError, isReadOnly, movesSpend, toAgentEvents, type ClaudeEngineOptions } from './claude-engine';
+export { agentModel, claudeAccount, claudeEngine, claudeModels, claudeRuntime, estimate, isAccountError, isReadOnly, movesSpend, toAgentEvents, type ClaudeEngineOptions } from './claude-engine';
 export { BUILTIN_TYPES, CHECKS_LAST, contractOf, contractText, ROLES, SQUAD_RULES, WORKFLOW_FIRST, type RoleSpec, type ToolName } from './roles';
 export { createSquad, ensureSquads, listAgents, getAgent, updateAgent, agentId, costToday, DEFAULT_AUTONOMY } from './squads';
 export { assemblePrompt, playbook, platformPack, nichePack, estimateTokens, oneLine, type PromptInput } from './prompt';

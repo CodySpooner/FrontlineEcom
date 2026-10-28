@@ -1,6 +1,5 @@
 import {
   budgetAddedToday,
-  claudeAccount,
   claudeEngine,
   defaultEngine,
   engineInfo,
@@ -58,10 +57,9 @@ import {
   type RunManagerOptions,
   type ToolEnv,
 } from '@frontline/agents';
-import { AGENT_ROLES, AUTONOMY_LEVELS, KB_RESEARCH_DEPTHS, type AdSnapshotData, type KbResearchBrief, type AgentRole, type AgentUpdate, type ClaudeAccount, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
+import { AGENT_ROLES, AUTONOMY_LEVELS, KB_RESEARCH_DEPTHS, type AdSnapshotData, type KbResearchBrief, type AgentRole, type AgentUpdate, type MemoryInput, type MemoryKind, type Page, type Platform, type ResearchProduct, type SquadMission, type StartRunInput, type Store, type StoreUsage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { Hono } from 'hono';
 import { currentWindow, summarize } from '../analytics';
 import { convertRate, fxFor } from '../fx';
@@ -78,6 +76,7 @@ import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { wrongStore } from './agents-scope';
 import { conversationRoutes, openConversation } from './agents-conversations';
+import { agentSessions, claudeLogin, runtimes } from './agents-runtimes';
 import { issueRoutes } from './agents-issues';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
@@ -275,12 +274,6 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
 });
 
 /** What the app does with runs: stream them over the live bus, notify the owner when one finishes or fails. */
-/** Real runs start in their own folder, so their Claude Code sessions stay out of the owner's projects (`claude --resume`). */
-const agentSessions = () => {
-  const cwd = resolve(dataDir(), 'agent-sessions');
-  mkdirSync(cwd, { recursive: true });
-  return { cwd };
-};
 
 export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent' | 'onError'> => ({
   // To api.log: the desktop app keeps no console.
@@ -531,9 +524,6 @@ function activateConnectedStores(db: Db, runs: RunManager) {
   }
 }
 
-// The Integrations screen's Claude card. ponytail: one answer per process, kept 5 minutes (each check starts the CLI).
-let account: { at: number; answer: Promise<ClaudeAccount> } | undefined;
-
 export function agentRoutes(db: Db) {
   ensureSquads(db);
   const runs = runManager(db);
@@ -600,7 +590,7 @@ export function agentRoutes(db: Db) {
         const run = runs.start(agent.id, body.task.trim(), body.resumeRunId, undefined, conversationId ? { conversationId } : {});
         return typeof run === 'string' ? c.json({ error: run }, 409) : c.json(run, 201);
       }
-      const opened = openConversation(db, runs, store, { clientRequestId: randomUUID(), type: agent.role, message: body.task.trim() });
+      const opened = openConversation(db, runs, store, { clientRequestId: randomUUID(), type: agent.role, message: body.task.trim() }, await runtimes());
       return 'status' in opened ? c.json({ error: opened.error }, opened.status === 400 ? 409 : opened.status) : c.json(opened.run, 201);
     })
     // Knowledge › Ask the knowledge base (KB-24): with cards matching the question, a Market Analyst answers from them only.
@@ -635,11 +625,8 @@ export function agentRoutes(db: Db) {
       const run = runs.start(agent.id, draftNichePackTask(store));
       return typeof run === 'string' ? c.json({ error: run }, 409) : c.json(run, 201);
     })
-    .get('/api/claude-account', async (c) => {
-      if (engineInfo(true).provider !== 'claude') return c.json({ signedIn: false, checkedAt: new Date().toISOString(), error: 'Agents are set to the demo engine here (FRONTLINE_AGENT_ENGINE), so Claude is never used.' } satisfies ClaudeAccount);
-      if (!account || c.req.query('refresh') === '1' || Date.now() - account.at > 5 * 60_000) account = { at: Date.now(), answer: claudeAccount(agentSessions().cwd) };
-      return c.json(await account.answer);
-    })
+    .get('/api/claude-account', async (c) => c.json(await claudeLogin(c.req.query('refresh') === '1')))
+    .get('/api/runtimes', async (c) => c.json(await runtimes(c.req.query('refresh') === '1')))
     .get('/api/squad-missions/templates', (c) => c.json(MISSION_TEMPLATES))
     .get('/api/squad-missions', (c) => c.json(listMissions(db, c.req.query('stores')?.split(',').filter(Boolean), limit(c.req.query('limit')))))
     .get('/api/squad-missions/:id', (c) => {

@@ -83,6 +83,7 @@ export function activitySteps(events: AgentEvent[]): Step[] {
       if (step) step.icon = e.isError ? 'failed' : 'done';
     } else if (e.type === 'approval_request') steps.push({ icon: 'warning', text: `Asked for your approval: ${e.approval.title}` });
     else if (e.type === 'memory_written') steps.push({ icon: 'done', text: `Saved to store memory: ${e.memory.text}` });
+    else if (e.type === 'notice') steps.push({ icon: 'warning', text: e.text });
     else if (e.type === 'error') steps.push({ icon: 'failed', text: e.message });
   }
   return steps;

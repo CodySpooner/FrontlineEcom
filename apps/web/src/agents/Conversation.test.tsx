@@ -69,6 +69,7 @@ test('the thread: meta chips, markdown with evidence and numbered citations, act
       endedAt: '2026-10-28T10:03:12Z',
       usage: { inputTokens: 10, outputTokens: 20, costUsd: 0.42 },
       transcript: [
+        { type: 'notice', text: "Ran at High: Max isn't available on this account." },
         { type: 'tool_call', id: '1', name: 'metrics_timeseries', input: { days: 14 } },
         { type: 'tool_result', id: '1', output: 'csv', isError: false },
         { type: 'tool_call', id: '2', name: 'search_knowledge', input: { query: 'gift' } },
@@ -78,7 +79,8 @@ test('the thread: meta chips, markdown with evidence and numbered citations, act
     }),
   ]);
   show();
-  expect(await screen.findByText('Worked for 3m 12s · 2 steps')).toBeTruthy();
+  expect(await screen.findByText('Worked for 3m 12s · 3 steps')).toBeTruthy();
+  expect(screen.getByText("Ran at High: Max isn't available on this account.")).toBeTruthy(); // never hidden (decision 9)
   expect(screen.getByRole('heading', { name: 'Plan the holiday test' }).getAttribute('title')).toBe('Plan the holiday test');
   for (const text of ['Claude · Opus 5.5 · High', 'This run $0.42 of $3.00', 'Glow Haus']) expect(screen.getAllByText(text)[0]).toBeTruthy(); // the runtime is also on each reply
   expect(screen.getByText(/^Switched to Claude · Opus 5\.5 · High · the history stays here/)).toBeTruthy();

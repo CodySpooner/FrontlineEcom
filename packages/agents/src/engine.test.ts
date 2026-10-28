@@ -1,9 +1,9 @@
-import type { McpSdkServerConfigWithInstance, Options, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { HookCallback, McpSdkServerConfigWithInstance, ModelInfo, Options, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import type { Agent, AgentEvent, AgentRole, Store } from '@frontline/shared';
+import type { Agent, AgentConfig, AgentEvent, AgentRole, Store } from '@frontline/shared';
 import { describe, expect, test } from 'vitest';
-import { APP_TOOLS, claudeAccount, claudeEngine, defaultEngine, estimate, fakeEngine, ROLES, runAgent, toAgentEvents, type RunInput, type ToolEnv } from './index';
+import { APP_TOOLS, claudeAccount, claudeEngine, claudeModels, defaultEngine, estimate, fakeEngine, ROLES, runAgent, toAgentEvents, type RunInput, type ToolEnv } from './index';
 
 const store: Store = { id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'America/Chicago', color: '#ff8f98', connected: false };
 const agent: Agent = { id: 'glow:market_analyst', storeId: 'glow', role: 'market_analyst', status: 'idle' };
@@ -46,18 +46,45 @@ describe('fake engine', () => {
   });
 });
 
-test("claudeAccount reads the login without a prompt, and says why when it can't", async () => {
+test("claudeAccount reads the login and its models without a prompt, isolated as runs are, and says why when it can't", async () => {
   const closed: string[] = [];
-  const fake = (info: () => Promise<object>) =>
-    (({ options }: { options: Options }) => ({ accountInfo: info, close: () => closed.push(String(options.cwd)) })) as never;
+  const opened: Options[] = [];
+  const models = [{ value: 'opus', resolvedModel: 'claude-opus-5-5', displayName: 'Opus 5.5', description: 'Most capable', supportedEffortLevels: ['low', 'medium', 'high', 'xhigh', 'max'] }];
+  const fake = (account: () => Promise<object>) =>
+    (({ options }: { options: Options }) => (opened.push(options), { initializationResult: async () => ({ account: await account(), models }), close: () => closed.push(String(options.cwd)) })) as never;
   // The two shapes Claude Code answered on a real machine (signed in; empty config dir).
   expect(await claudeAccount('/s', fake(async () => ({ email: 'o@x.com', organization: 'O', subscriptionType: 'Claude Max', apiProvider: 'firstParty' })))).toEqual({
     signedIn: true, email: 'o@x.com', subscription: 'Claude Max', checkedAt: expect.any(String),
+    models: [{ id: 'claude-opus-5-5', label: 'Opus 5.5', description: 'Most capable', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium' }],
   });
-  expect(await claudeAccount('/s', fake(async () => ({ tokenSource: 'none', apiProvider: 'firstParty' })))).toEqual({ signedIn: false, checkedAt: expect.any(String) });
+  expect(await claudeAccount('/s', fake(async () => ({ tokenSource: 'none', apiProvider: 'firstParty' })))).toMatchObject({ signedIn: false });
   expect((await claudeAccount('/s', fake(async () => ({ tokenSource: 'none', apiKeySource: 'ANTHROPIC_API_KEY' })))).signedIn).toBe(true);
   expect(await claudeAccount('/s', fake(() => new Promise(() => {})), 10)).toMatchObject({ signedIn: false, error: "Claude Code didn't answer in 0.01 s." });
   expect(closed).toEqual(['/s', '/s', '/s', '/s']); // the CLI is never left running
+  expect(opened.every((o) => o.settingSources?.length === 0 && o.cwd === '/s')).toBe(true);
+});
+
+test("discovered models dedupe on the id an alias resolves to, keep the alias's name, and take default efforts from the registry", () => {
+  const all = ['low', 'medium', 'high', 'xhigh', 'max'] as const;
+  // Rows as Claude Code answered on this machine (AA-01), plus a model the registry doesn't know.
+  const rows = [
+    { value: 'default', resolvedModel: 'claude-opus-5-5', displayName: 'Default (recommended)', description: 'Opus 5.5', supportedEffortLevels: [...all] },
+    { value: 'opus', resolvedModel: 'claude-opus-5-5', displayName: 'Opus 5.5', description: 'Most capable', supportedEffortLevels: [...all] },
+    { value: 'sonnet', resolvedModel: 'claude-sonnet-5-5', displayName: 'Sonnet 5.5', description: '', supportedEffortLevels: [...all] },
+    { value: 'claude-opus-4-7', displayName: 'Opus 4.7', description: '', supportedEffortLevels: [...all] },
+    { value: 'claude-sonnet-4-6', displayName: 'Sonnet 4.6', description: '', supportedEffortLevels: ['low', 'medium', 'high', 'max'] },
+    { value: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5', description: '' },
+    { value: 'claude-next-9', displayName: 'Next 9', description: '', supportedEffortLevels: ['low', 'medium'] },
+  ] as ModelInfo[];
+  expect(claudeModels(rows).map((m) => [m.id, m.label, m.defaultEffort, m.default ?? false, m.effortsFromRegistry ?? false])).toEqual([
+    ['claude-opus-5-5', 'Opus 5.5', 'medium', true, false],
+    ['claude-sonnet-5-5', 'Sonnet 5.5', 'medium', false, false],
+    ['claude-opus-4-7', 'Opus 4.7', 'xhigh', false, false],
+    ['claude-sonnet-4-6', 'Sonnet 4.6', 'high', false, false],
+    ['claude-haiku-4-5-20251001', 'Haiku 4.5', undefined, false, true], // no effort fields: the registry says it takes none
+    ['claude-next-9', 'Next 9', 'low', false, false],
+  ]);
+  expect(claudeModels(rows).find((m) => m.id === 'claude-haiku-4-5-20251001')?.efforts).toEqual([]);
 });
 
 test('connected stores get Claude and demo stores the fake engine, unless the env forces one', async () => {
@@ -73,6 +100,8 @@ test('connected stores get Claude and demo stores the fake engine, unless the en
     expect([await pick(true), await pick(false)]).toEqual(['claude', 'fake']);
     // Research needs a real model even on a demo store: the demo engine can't read the web.
     expect(text(await collect(defaultEngine(named('claude'), named('fake'))({ ...input, mode: 'research' })))).toBe('claude');
+    // The owner picked Claude for this conversation on a demo store.
+    expect(text(await collect(defaultEngine(named('claude'), named('fake'))({ ...input, config: { runtime: 'claude' } as AgentConfig })))).toBe('claude');
     process.env.FRONTLINE_AGENT_ENGINE = 'claude';
     expect(await pick(false)).toBe('claude');
   } finally {
@@ -145,8 +174,13 @@ describe('Claude engine', () => {
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [], session_id: 'abc' }))[0]).toMatchObject({ sessionId: 'abc' }); // the next message goes on from it
     const u = { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 10_000, output_tokens: 500 };
     expect(estimate(u)).toBeCloseTo(0.032);
-    expect(estimate(u, 'claude-sonnet-5-5')).toBeCloseTo(0.017); // 2 + 8 + 2 + 5 thousandths
+    expect(estimate(u, 'claude-sonnet-5-5')).toBeCloseTo(0.016); // 2 + 8 + 1 + 5 thousandths (cache reads $0.10)
     expect(estimate(u, 'claude-haiku-5-5')).toBeCloseTo(0.00085, 5); // 0.1 + 0.4 + 0.1 + 0.25 thousandths
+    // Haiku 5.5 prompts over 100K tokens pay its higher prices: 0.5 + 6 + 1.25 thousandths.
+    expect(estimate({ input_tokens: 1000, cache_read_input_tokens: 120_000, output_tokens: 500 }, 'claude-haiku-5-5')).toBeCloseTo(0.00775, 5);
+    expect(estimate(u, 'claude-haiku-4-5-20251001')).toBeCloseTo(0.0085); // a legacy model at its own prices, not its family's
+    expect(estimate(u, 'claude-fable-5')).toBeCloseTo(0.085); // cache reads $1
+    expect(estimate(u, 'claude-opus-4-8-20260101')).toBeCloseTo(0.0425); // a dated id
     expect(estimate(u, 'some-new-model')).toBe(estimate(u));
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: ['x'] }))[0]).toMatchObject({ message: expect.stringMatching(/^Stopped: the run used its share of today's AI budget/) });
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_during_execution', errors: ['boom', 'bang'] }))).toEqual([{ type: 'error', message: 'Stopped: boom; bang. Retry; if it happens again, start a new conversation.', code: 'error_during_execution' }]);
@@ -188,6 +222,39 @@ describe('Claude engine', () => {
       skills: [],
       strictMcpConfig: true, // the owner's claude.ai connectors stay out of agent runs
       maxTurns: 3,
+      effort: 'medium', // always explicit: Opus 5.5's default, not whatever the bundled CLI defaults to
+    });
+    expect(seen?.options).not.toHaveProperty('fallbackModel');
+  });
+
+  test("a configured run asks for its model and effort, records what ran, and says so when that differs", async () => {
+    let options: Options | undefined;
+    const said: object[] = [];
+    const engine = claudeEngine({
+      query: (params) => {
+        options = params.options;
+        return (async function* () {
+          yield sdk({ type: 'system', subtype: 'init', session_id: 'abc', model: 'claude-sonnet-5' });
+          const hook = params.options.hooks!.Stop![0]!.hooks[0] as HookCallback;
+          await hook({ hook_event_name: 'Stop', effort: { level: 'medium' } } as never, undefined, { signal: new AbortController().signal });
+          yield* frames.slice(1);
+        })();
+      },
+    });
+    const config = { model: 'claude-sonnet-5-5', effort: 'max', tools: [] } as unknown as AgentConfig;
+    const events = await collect(runAgent({ ...input, config, onRuntime: (r) => said.push(r) }, engine));
+    expect(options).toMatchObject({ model: 'claude-sonnet-5-5', effort: 'max' });
+    expect(said).toEqual([{ runtime: 'claude', model: 'claude-sonnet-5-5', effort: 'max' }, { actualModel: 'claude-sonnet-5' }, { effortApplied: 'medium' }]);
+    expect(events.filter((e) => e.type === 'notice')).toEqual([
+      { type: 'notice', text: "Ran on Sonnet 5: Sonnet 5.5 wasn't used for this reply." },
+      { type: 'notice', text: "Ran at Medium: Max isn't available on this account." },
+    ]);
+    expect(events.at(-1)).toMatchObject({ type: 'done' });
+  });
+
+  test('a Fable run without usage credits says what to do', () => {
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: true, result: 'This model requires usage credits.' }))[0]).toMatchObject({
+      message: 'Fable bills usage credits on your Claude plan, and none are available. Add usage credits at claude.ai, or choose another model for this agent.',
     });
   });
 

@@ -333,6 +333,11 @@ export function createRunManager(opts: RunManagerOptions) {
           ...(budget !== undefined ? { budgetUsd: budget } : {}),
           onSpend: spend,
           onSession: (sessionId) => db.prepare('UPDATE agent_runs SET session_id = ? WHERE id = ?').run(sessionId, run.id),
+          // What was asked (a run without a config learns its model and effort here) and what ran (decision 9).
+          onRuntime: (r) =>
+            db
+              .prepare('UPDATE agent_runs SET runtime = coalesce(runtime, ?), model = coalesce(model, ?), effort = coalesce(effort, ?), actual_model = coalesce(?, actual_model), effort_applied = coalesce(?, effort_applied) WHERE id = ?')
+              .run(r.runtime ?? null, r.model ?? null, r.effort ?? null, r.actualModel ?? null, r.effortApplied ?? null, run.id),
         };
         let toolCalls = 0;
         let attempt = input;

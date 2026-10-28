@@ -868,3 +868,22 @@ test('reads are told apart from tool calls that may have changed something', () 
   expect(['store_summary', 'list_orders', 'search_knowledge', 'read_theme_files', 'WebSearch', 'mcp__meta_ads__get_insights'].filter(hasEffects)).toEqual([]);
   expect(['create_creative', 'assign_task', 'request_approval', 'write_memory', 'mcp__meta_ads__update_ad'].every(hasEffects)).toBe(true);
 });
+
+test('a run records what it asked for and what ran, and a mismatch reads in its activity', async () => {
+  const engine: Engine = (input) =>
+    (async function* (): AsyncGenerator<AgentEvent> {
+      input.onRuntime?.({ runtime: 'claude', model: 'claude-opus-5-5', effort: 'max' });
+      input.onRuntime?.({ actualModel: 'claude-opus-5-5' });
+      input.onRuntime?.({ effortApplied: 'high' });
+      yield { type: 'notice', text: "Ran at High: Max isn't available on this account." };
+      yield { type: 'done', sessionId: 's', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
+    })();
+  const m = manager({ engine });
+  const run = m.start('glow:copywriter', 'Write the hero line');
+  if (typeof run === 'string') throw new Error(run);
+  await m.idle();
+  expect(getRun(db, run.id)).toMatchObject({
+    runtime: 'claude', model: 'claude-opus-5-5', effort: 'max', actualModel: 'claude-opus-5-5', effortApplied: 'high',
+  });
+  expect(getRun(db, run.id)!.transcript[0]).toEqual({ type: 'notice', text: "Ran at High: Max isn't available on this account." });
+});

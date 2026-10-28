@@ -2,10 +2,11 @@ import {
   agentTypes, archiveCustomRole, conversationCounts, conversationThread, createConversation, createCustomRole, discardConversation, getConfig, getConversation, getCustomRole, getRun, toolGroups, listConversations, listPresets,
   recap, resolveType, savePreset, updateConversation, validateConfig, validateCustomRole, type RunManager,
 } from '@frontline/agents';
-import { INTERRUPTED, type AgentRun, type Conversation, type ConversationContext, type CreateConversationInput, type SendMessageInput, type Store } from '@frontline/shared';
+import { INTERRUPTED, type AgentRun, type Conversation, type ConversationContext, type CreateConversationInput, type RuntimeCapabilities, type SendMessageInput, type Store } from '@frontline/shared';
 import { Hono, type Context } from 'hono';
 import type { Db } from '../db';
 import { getStore } from '../stores';
+import { runtimes } from './agents-runtimes';
 
 const isText = (v: unknown, min: number, max: number): v is string => typeof v === 'string' && v.trim().length >= min && v.trim().length <= max;
 const isId = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{8,64}$/.test(v);
@@ -21,9 +22,9 @@ type Opened = { conversation: Conversation; run: AgentRun; repeated: boolean } |
 /**
  * Opens a conversation in `store` and starts its first turn: Deploy, startConversation, Continue in a new conversation
  * and the legacy run route all come here. A repeated clientRequestId returns what the first request opened. A refusal
- * leaves nothing behind.
+ * leaves nothing behind. `caps`: GET /api/runtimes, what the config is checked against.
  */
-export function openConversation(db: Db, runs: RunManager, store: Store, input: CreateConversationInput): Opened {
+export function openConversation(db: Db, runs: RunManager, store: Store, input: CreateConversationInput, caps: RuntimeCapabilities[]): Opened {
   const same = db.prepare('SELECT c.id, r.id AS run_id FROM conversations c JOIN agent_runs r ON r.conversation_id = c.id AND r.client_request_id = c.client_request_id WHERE c.store_id = ? AND c.client_request_id = ?').get(store.id, input.clientRequestId);
   if (same) return { conversation: getConversation(db, String(same.id))!, run: getRun(db, String(same.run_id))!, repeated: true };
   let typeId = input.type;
@@ -48,7 +49,7 @@ export function openConversation(db: Db, runs: RunManager, store: Store, input: 
   }
   const type = typeId ? resolveType(db, store.id, typeId) : undefined;
   if (!type) return { status: 404, error: 'Agent type not found' };
-  const draft = validateConfig(store, type, input.config);
+  const draft = validateConfig(store, type, input.config, caps);
   if ('field' in draft) return { status: 400, ...draft };
   const conversation = createConversation(db, store, type, draft, { title: title?.trim() || firstLine(input.message), ...(context ? { context } : {}), clientRequestId: input.clientRequestId });
   const run = runs.start(conversation.agentId, input.message.trim(), undefined, undefined, { conversationId: conversation.id, clientRequestId: input.clientRequestId });
@@ -93,7 +94,7 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       if (!b || !isId(b.clientRequestId) || !isText(b.message, 1, MESSAGE_MAX) || (b.title !== undefined && !isText(b.title, 1, 200)) || !b.type === !b.fromRunId) {
         return c.json({ error: `Expected { clientRequestId, message (1–${MESSAGE_MAX.toLocaleString('en')} chars), type or fromRunId, title?, context?, config? }` }, 400);
       }
-      const opened = openConversation(db, runs, store, b);
+      const opened = openConversation(db, runs, store, b, await runtimes());
       if ('status' in opened) return c.json({ error: opened.error, ...(opened.field ? { field: opened.field } : {}) }, opened.status);
       return c.json({ conversation: opened.conversation, run: opened.run }, opened.repeated ? 200 : 201);
     })
@@ -124,7 +125,7 @@ export function conversationRoutes(db: Db, runs: RunManager) {
     .post('/api/presets', async (c) => {
       const store = getStore(db, c.req.query('store') ?? '');
       if (!store) return missing(c, 'Store');
-      const saved = savePreset(db, store, await c.req.json().catch(() => null));
+      const saved = savePreset(db, store, await c.req.json().catch(() => null), await runtimes());
       return 'status' in saved ? c.json({ error: saved.error, ...(saved.field ? { field: saved.field } : {}) }, saved.status) : c.json(saved, 201);
     })
     .get('/api/conversations/:id', (c) => {
