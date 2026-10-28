@@ -1286,7 +1286,7 @@ export const APP_TOOLS: AppTool[] = [
       customer_problem: z.string().trim().min(1).max(800),
       store_fit: z.object({ fit: z.enum(['strong', 'medium', 'weak']), why: z.string().trim().min(1).max(800) }),
       demand_evidence: z.string().trim().min(1).max(1500),
-      competitors: z.array(z.object({ name: z.string().trim().min(1).max(300).describe('name or URL'), price: z.string().trim().min(1).max(60).optional().describe('as seen, with its currency'), source: z.string().trim().min(1).max(500) })).max(10),
+      competitors: z.array(z.object({ name: z.string().trim().min(1).max(300).describe('name or URL'), price: z.string().trim().min(1).max(60).optional().describe('as seen, with its currency: 60 characters at most, e.g. "$10.66 USD (search snapshot)"'), source: z.string().trim().min(1).max(500) })).max(10),
       supplier_offers: z.array(z.object({ offer: z.string().trim().min(1).max(500).describe('an [offer:…] reference or a URL'), provenance: z.string().trim().min(1).max(300) })).max(10),
       risks: z.array(z.string().trim().min(1).max(500)).max(10),
       next_steps: z.array(z.string().trim().min(1).max(500)).max(10),

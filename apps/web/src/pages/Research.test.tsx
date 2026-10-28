@@ -685,6 +685,20 @@ describe('Detail panel', () => {
     expect(within(panel).getByRole('button', { name: 'Show all 500 reports' })).toBeTruthy();
   });
 
+  it('Research: a long run shows its latest 6 steps numbered where they fall, and Show all lists every step', async () => {
+    const many = { ...run, status: 'done', transcript: Array.from({ length: 8 }, (_, i) => [{ type: 'tool_call', id: `s${i}`, name: 'mcp__frontline__search_suppliers', input: { query: `brush ${i}` } }, { type: 'tool_result', id: `s${i}`, output: 'sku', isError: false }]).flat() };
+    panelApi(detail(), (url) => (url.startsWith('/api/runs/') ? many : undefined));
+    renderApp(<Research />, '/research?store=paws&product=p1&tab=research');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    const activity = await within(panel).findByRole('list', { name: 'Activity' });
+    expect(activity.getAttribute('start')).toBe('3');
+    expect(within(activity).getAllByRole('listitem').map((li) => li.textContent?.trim())).toEqual([2, 3, 4, 5, 6, 7].map((i) => `Searched suppliers for "brush ${i}"`));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Show all 8 steps' }));
+    expect(within(activity).getAllByRole('listitem')).toHaveLength(8);
+    expect(activity.getAttribute('start')).toBe('1');
+    expect(within(panel).queryByRole('button', { name: 'Show all 8 steps' })).toBeNull();
+  });
+
   it("History: the owner's stage decisions save to the Knowledge Base (once, then linked); a task's move doesn't", async () => {
     const rows: PrHistoryRow[] = [
       { id: 'h3', storeId: 'paws', kind: 'stage', from: 'researching', to: 'rejected', reason: 'Leaks', by: 'owner', at: '2026-10-28T12:00:00Z' },

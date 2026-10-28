@@ -139,20 +139,29 @@ function TaskCard({ t, store, agent, live = false }: { t: PrTask; store: string;
 
 function Activity({ runId, active }: { runId: string; active: boolean }) {
   const run = useRun(runId);
+  const [all, setAll] = useState(false);
   const steps = run.data ? activitySteps(run.data.transcript) : [];
   if (!steps.length) return run.data ? <p className="mt-2 text-muted">{active ? 'No activity yet.' : 'The run used no tools.'}</p> : null;
-  const shown = steps.slice(-6);
+  // The latest 6, numbered where they fall in the run: the earlier ones are a click away, never silently gone.
+  const shown = all ? steps : steps.slice(-6);
   return (
-    <ol aria-label="Activity" className="mt-2 grid list-decimal gap-1 pl-4 text-text-2">
-      {shown.map((s, i) => (
-        <li key={i}>
-          {s.icon === 'running' && active ? <b className="text-text">{s.text}</b> : s.text}{' '}
-          {s.icon === 'running' && active && <span className="text-muted">now</span>}
-          {s.icon === 'failed' && <span className="font-semibold text-red">failed</span>}
-          {s.icon === 'warning' && <span className="font-semibold text-amber">needs attention</span>}
-        </li>
-      ))}
-    </ol>
+    <>
+      <ol aria-label="Activity" start={steps.length - shown.length + 1} className="mt-2 grid list-decimal gap-1 pl-4 text-text-2">
+        {shown.map((s, i) => (
+          <li key={i}>
+            {s.icon === 'running' && active ? <b className="text-text">{s.text}</b> : s.text}{' '}
+            {s.icon === 'running' && active && <span className="text-muted">now</span>}
+            {s.icon === 'failed' && <span className="font-semibold text-red">failed</span>}
+            {s.icon === 'warning' && <span className="font-semibold text-amber">needs attention</span>}
+          </li>
+        ))}
+      </ol>
+      {shown.length < steps.length && (
+        <Button size="sm" variant="ghost" className="mt-1.5" onClick={() => setAll(true)}>
+          {`Show all ${steps.length} steps`}
+        </Button>
+      )}
+    </>
   );
 }
 

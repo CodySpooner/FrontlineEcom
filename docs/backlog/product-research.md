@@ -808,7 +808,7 @@ STOP.
   pages, every distinct state, keyboard paths, focus, contrast, small windows.
 - [x] PR-28 **Design pass:** compare with the board at the four sizes, run `styleseed-design-review`, fix or answer each
   finding under Notes.
-- [ ] PR-29 **Live verification** (decision 16): collect and re-run the live checks done so far (CJ, the owner's Trends
+- [x] PR-29 **Live verification** (decision 16): collect and re-run the live checks done so far (CJ, the owner's Trends
   CSV and supplier feed, the link previews) and do the one real research run, each recorded under Notes with time,
   calls and cost, reported separately from mocked tests. Whatever the owner hasn't provided stays under Blocked.
 - [ ] PR-30 **Acceptance:** walk "Done when" and fix what it finds. Fetch origin and check the ai-agents Done list for
@@ -1054,6 +1054,12 @@ STOP.
   variant), "+ Research a Product", "Not researched" on cards, missing values muted in Overview, theme tokens for
   hex, one link red, a backing for pills over photos, a shape cue on the watch eye, doubled dialog padding. 3 new
   tests.
+- 2026-10-28 PR-29 Live verification: the one real-engine research run (decision 16) ran at 17:58 UTC on the demo
+  store Pawsome Gear: Opus 5.5, medium, $0.4669 of its $0.50 budget, 87 s, report "Reject" saved and shown (Notes).
+  It found two things, both fixed: the report tool's competitor price didn't say its 60-character limit (one refused
+  save), and the Research tab showed the last 6 of 12 steps numbered from 1 (now numbered where they fall, with "Show
+  all 12 steps", tested). CJ, the Trends CSV and the supplier feed are still the owner's to provide (Blocked); the five
+  preview checks were spent at PR-14 and are not re-run.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1085,6 +1091,35 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-29 live verification (decision 16), reported apart from the mocked tests.**
+  - **Owner inputs:** the dev DB check found no `cj:global`, no imported Trends set and no imported feed at every item
+    through PR-29, so there is no live CJ, Trends or feed check: `pr_calls` holds 0 calls. CJ is mocked-tested only
+    (recorded-response fixtures). Still under Blocked.
+  - **Link previews:** decision 16 allows five; all five ran at PR-14 (Notes below: 2 read, 3 refused with HTTP 429).
+    Re-running them would exceed the cap, so they stand as recorded.
+  - **The one real-engine research run, 2026-10-28 17:58:07–17:59:35 UTC.** Dev server started without
+    `FRONTLINE_AGENT_ENGINE` (all three dev stores demo and unconnected, no Claude configs, no queued runs, no KB tasks,
+    no enabled automations checked first; nothing started on its own), switched back to the fake engine right after
+    (`/api/runtimes` confirmed "demo engine"). Started with `POST /api/pr/tasks?store=pawsome`, the request the
+    Research dialog sends, carrying the config Deploy's configure-only mode builds (sent by script, not by clicking):
+    runtime Claude, Deploy's default model Opus 5.5 (`claude-opus-5-5`, not Fable), its default effort medium,
+    knowledge store + General, budget $0.50, save findings off. Ran as asked: actual model `claude-opus-5-5`, effort
+    medium. Cost $0.4669 (175,153 input tokens with cache, 9,082 output), within the budget; the only Claude run in
+    this worktree's dev DB. Product: "silicone grooming brush", a test-fixture product; the store's sales, ads, catalog
+    and competitors are demo data. 9 tool calls: store summary, catalog, store memory, supplier search (no CJ listings:
+    CJ isn't connected), competitors, one web search (Walmart and a brand's page), `save_research_report` twice, and
+    `write_memory`. The first save was refused by the report schema (a 63-character competitor price, limit 60); the
+    agent shortened it and the second save landed. Report: **Reject**, store fit Weak, every number labelled: the
+    store's figures "simulated", the attached CJ offer and Trends set "fixture data, not evidence", web prices as
+    "research" with their URLs, the margin math as a hypothesis, open questions and what would change the answer. No
+    guaranteed-winner language. The run wrote 3 store memories (demo store) and, by PR-23's rule, 2 *proposed*
+    Hypothesis cards from its sourced web claims, waiting for the owner's review. Shown in the app: card "Report
+    ready", the Research tab's steps and the full report (`.agent/shots/pr29-real-run.png`). Nothing bought, listed,
+    published or signed into. **The store data was demo data**: the run shows the pipeline works end to end on Claude,
+    not that the product is a good or bad bet for a real store.
+  - **Found and fixed:** the tool's `competitors[].price` description now names its 60-character limit; the Research
+    tab numbered the last 6 of 12 steps from 1 (so "1. Saved the research report failed" read as the run's first step)
+    and hid the rest: steps keep their numbers and "Show all 12 steps" lists the rest (test).
 - **PR-28 design pass.** Board comparison (screenshots `.agent/shots/pr28-*.png` before, `pr28-after-*.png` after, no
   console errors and no sideways scroll at any size). Orca's browser at 1280×800: layout checked by script (viewport
   1280×800, no sideways scroll, 0 console errors); its screenshot tiles above 800 px, so the 1280×800 picture is the
