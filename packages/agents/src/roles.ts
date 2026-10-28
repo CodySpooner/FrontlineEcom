@@ -65,6 +65,25 @@ export const SQUAD_RULES = `You are one of eight specialist AI agents in this st
 - When you learn something durable about this store (what works, what doesn't, the owner's preferences), save it with write_memory: one sentence, the evidence, your confidence.
 - Be concise. Lead with the answer. Money with currency, rates as %, and always the period you looked at.`;
 
+/**
+ * Types defined in code on a seat's role (decision 2): they run on that seat (autonomy, daily budget, memory) with a
+ * narrowed tool list. AA-11 gives them their contracts.
+ */
+export const BUILTIN_TYPES: Record<string, { name: string; description: string; baseRole: AgentRole; tools: ToolName[] }> = {
+  'builtin:marketing_strategist': {
+    name: 'Marketing Strategist',
+    description: "Plans campaigns and positioning from the store's numbers. Drafts only, in its answers.",
+    baseRole: 'market_analyst',
+    tools: ['store_summary', 'metrics_timeseries', 'list_campaigns', 'list_products', 'search_knowledge', 'search_memory', 'write_memory'],
+  },
+  'builtin:general_researcher': {
+    name: 'General Researcher',
+    description: 'Researches a question on the web and in the knowledge base, with sources.',
+    baseRole: 'market_analyst',
+    tools: ['store_summary', 'WebSearch', 'WebFetch', 'search_knowledge', 'search_memory', 'write_memory'],
+  },
+};
+
 const BASE: ToolName[] = ['store_summary', 'search_memory', 'write_memory', 'request_approval', 'assign_task', 'search_knowledge', 'recommend_research', 'propose_general'];
 
 export const ROLES: Record<AgentRole, RoleSpec> = {

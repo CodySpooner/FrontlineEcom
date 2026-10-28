@@ -46,6 +46,7 @@ import {
   listRuns,
   getRun,
   runGist,
+  touchConversation,
   unsafeHtml,
   updateAgent,
   updateMemory,
@@ -73,6 +74,7 @@ import { addProducts, applyAdChange, applyPriceChange, discardThemeCopy, draftTh
 import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { wrongStore } from './agents-scope';
+import { conversationRoutes, openConversation } from './agents-conversations';
 import { issueRoutes } from './agents-issues';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
@@ -285,6 +287,7 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent' | 
   },
   onRun: (run) => {
     publish({ type: 'run', run });
+    touchConversation(db, run);
     const ended = run.status === 'done' || run.status === 'error' || run.status === 'cancelled';
     // A research stage reports as its task (advanceKbResearch): no notification for each stage.
     if (run.mode?.startsWith('research:')) return void (ended && advanceKbResearch(db));
@@ -577,14 +580,23 @@ export function agentRoutes(db: Db) {
       if (agent) advanceSquadMissions(db); // a mission step this agent turned down (offline, budget spent) may start now
       return agent ? c.json(agent) : c.json({ error: 'Agent not found' }, 404);
     })
+    // The module starters' run route (decision 14): a new task opens a conversation on the seat default, a follow-up
+    // goes on in its run's conversation (its lock and queue). It answers with the run, as before.
     .post('/api/agents/:id/runs', async (c) => {
-      if (!getAgent(db, c.req.param('id'))) return c.json({ error: 'Agent not found' }, 404);
+      const agent = getAgent(db, c.req.param('id'));
+      const store = agent && getStore(db, agent.storeId);
+      if (!agent || !store) return c.json({ error: 'Agent not found' }, 404);
       const body = (await c.req.json().catch(() => null)) as StartRunInput | null;
       if (!body || !isText(body.task, 1, 4000) || (body.resumeRunId !== undefined && typeof body.resumeRunId !== 'string')) {
         return c.json({ error: 'Expected { task: string (1–4000 chars), resumeRunId?: string }' }, 400);
       }
-      const run = runs.start(c.req.param('id'), body.task.trim(), body.resumeRunId);
-      return typeof run === 'string' ? c.json({ error: run }, 409) : c.json(run, 201);
+      if (body.resumeRunId) {
+        const conversationId = getRun(db, body.resumeRunId)?.conversationId;
+        const run = runs.start(agent.id, body.task.trim(), body.resumeRunId, undefined, conversationId ? { conversationId } : {});
+        return typeof run === 'string' ? c.json({ error: run }, 409) : c.json(run, 201);
+      }
+      const opened = openConversation(db, runs, store, { clientRequestId: randomUUID(), type: agent.role, message: body.task.trim() });
+      return 'status' in opened ? c.json({ error: opened.error }, opened.status === 400 ? 409 : opened.status) : c.json(opened.run, 201);
     })
     // Knowledge › Ask the knowledge base (KB-24): with cards matching the question, a Market Analyst answers from them only.
     .post('/api/kb/ask', async (c) => {
@@ -704,5 +716,6 @@ export function agentRoutes(db: Db) {
     .route('/', pageRoutes(db, pushPage(db)))
     .route('/', issueRoutes(db))
     .route('/', flowRoutes(db))
-    .route('/', creativeRoutes(db));
+    .route('/', creativeRoutes(db))
+    .route('/', conversationRoutes(db, runs));
 }

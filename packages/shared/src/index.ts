@@ -608,13 +608,20 @@ export interface AgentPreset {
 }
 
 /** What a module opened the conversation about (decision 14), checked against the conversation's store. */
-export type ConversationContext = { kind: 'campaign'; network: string; id: string; name: string };
+export type ConversationContext =
+  | { kind: 'campaign'; network: string; id: string; name: string }
+  /** Continue in a new conversation: the run it continues (its recap opens the first turn). */
+  | { kind: 'run'; id: string; name: string };
 
 /** A named thread with one agent type in one store. Its store never changes; its title can. */
 export interface Conversation {
   id: string;
   storeId: string;
   configId: string;
+  /** The seat (`store:role`) it runs on. */
+  agentId: string;
+  /** Its type: the config's custom role (a `builtin:` or saved one) when set, else the seat's role. */
+  type: string;
   title: string;
   context?: ConversationContext;
   pinned: boolean;
@@ -754,6 +761,59 @@ export interface NicheLearning {
  * GET /api/runs/:id → AgentRunDetail (live transcript while running). POST /api/runs/:id/cancel → AgentRun.
  * Live updates arrive on /api/live as `run` / `run_event`.
  */
+/** A page of a list read newest first: pass `next` back as `cursor` (`before` for a thread) for the next one. */
+export interface CursorPage<T> {
+  items: T[];
+  next?: string;
+  /** Rows matching the filters across all pages. */
+  total: number;
+}
+
+/** What the Deploy dialog chose; anything left out is the seat default's (decision 9). Unknown keys are ignored. */
+export interface ConversationConfigInput {
+  runtime?: RuntimeId;
+  model?: string;
+  effort?: string;
+  tools?: string[];
+  knowledge?: KnowledgeScope[];
+  permissions?: Partial<AgentPermissions>;
+}
+
+/**
+ * Conversations (`?store=` required on each; another store's record is a 404):
+ * - POST /api/conversations (CreateConversationInput) → 201 { conversation, run }, 200 for a repeated clientRequestId;
+ *   400 { error, field } for a config that fails validation;
+ * - GET /api/conversations?view=active|archived|pinned&type=&range=<days>&q=&cursor=&limit= → CursorPage<Conversation>,
+ *   last activity first; `type` is a role, a custom role id or 'team';
+ * - GET /api/conversations/:id → Conversation; GET /api/conversations/:id/thread?before=&limit= → CursorPage of its
+ *   runs (AgentRunDetail), oldest first within the page, pages going back from the newest;
+ * - PATCH /api/conversations/:id ({ title?, pinned?, archived? }) → Conversation;
+ * - POST /api/conversations/:id/messages (SendMessageInput) → 201 AgentRun, queued behind a reply that is going;
+ * - POST /api/conversations/:id/runs/:runId/retry and …/resume ({ clientRequestId }) → 201 AgentRun; resume only an
+ *   interrupted run (409 otherwise);
+ * - POST /api/conversations/:id/stop ({ runId? }) → AgentRun: the running reply, or that queued message.
+ */
+export interface CreateConversationInput {
+  /** Made when the dialog or composer opens; a repeat returns what the first request made. */
+  clientRequestId: string;
+  /** The type: a role (its seat), or a `builtin:` or custom role id (its base role's seat). */
+  type?: string;
+  /** Continue in a new conversation from this run (with no conversation): its store and seat, never the UI's. */
+  fromRunId?: string;
+  /** The first message (the objective). */
+  message: string;
+  /** Defaults to the message's first line. */
+  title?: string;
+  /** A module's reference, checked against the store. */
+  context?: ConversationContext;
+  config?: ConversationConfigInput;
+}
+
+export interface SendMessageInput {
+  clientRequestId: string;
+  message: string;
+}
+
 export interface StartRunInput {
   task: string;
   /** Continue that run's conversation (chat follow-up). */

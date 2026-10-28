@@ -1,4 +1,4 @@
-import { APP_TOOLS, callTool, claudeEngine, createCard, createRunManager, defaultTools, ensureCategoryPath, getAgent, retrieveKnowledge, runAgent, runTools, writeMemory, type ClaudeEngineOptions, type Engine, type RunInput, type ToolContext } from '@frontline/agents';
+import { APP_TOOLS, callTool, claudeEngine, createCard, createConversation, createRunManager, defaultTools, ensureCategoryPath, getAgent, getConfig, resolveType, retrieveKnowledge, runAgent, runTools, seatDefault, writeMemory, type ClaudeEngineOptions, type Engine, type RunInput, type ToolContext } from '@frontline/agents';
 import type { AgentConfig, AgentEvent } from '@frontline/shared';
 import { randomBytes } from 'node:crypto';
 import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
@@ -12,7 +12,7 @@ import { saveIntegration } from '../integrations';
 import { initLog } from '../log';
 import { loadKey } from '../secrets';
 import { getStore } from '../stores';
-import { runHooks, toolEnv } from './agents';
+import { runHooks, runManager, toolEnv } from './agents';
 
 let db: Db;
 let app: ReturnType<typeof createApp>;
@@ -47,6 +47,14 @@ const ROUTES: [method: string, path: string, body?: unknown][] = [
   ['GET', '/api/squad-missions/m1'],
   ['POST', '/api/squad-missions/m1/cancel'],
   ['DELETE', '/api/flow-drafts/f1'],
+  // AA-05: conversations require ?store= (decision 13).
+  ['GET', '/api/conversations/v1'],
+  ['GET', '/api/conversations/v1/thread'],
+  ['PATCH', '/api/conversations/v1', { pinned: true }],
+  ['POST', '/api/conversations/v1/messages', { clientRequestId: 'req-message-1', message: 'Shorter please' }],
+  ['POST', '/api/conversations/v1/runs/r2/retry', { clientRequestId: 'req-retry-1' }],
+  ['POST', '/api/conversations/v1/runs/r3/resume', { clientRequestId: 'req-resume-1' }],
+  ['POST', '/api/conversations/v1/stop', {}],
 ];
 
 test("by-id routes given another store answer 404 and change nothing; given the record's own store they work", async () => {
@@ -55,10 +63,15 @@ test("by-id routes given another store answer 404 and change nothing; given the 
       ('a1', 'glow', 'glow:copywriter', 'Try it', 'r', '{"kind":"k","payload":{}}', 'pending', '2026-10-28'),
       ('a2', 'glow', 'glow:copywriter', 'Try it', 'r', '{"kind":"k","payload":{}}', 'pending', '2026-10-28');
     INSERT INTO squad_missions (id, store_id, title, steps_json, created_at) VALUES ('m1', 'glow', 'Launch', '[]', '2026-10-28');
-    INSERT INTO flow_drafts (id, store_id, agent_id, name, trigger, messages_json, notes, created_at) VALUES ('f1', 'glow', 'glow:email_sms', 'Welcome', 'signup', '[]', '', '2026-10-28');`);
+    INSERT INTO flow_drafts (id, store_id, agent_id, name, trigger, messages_json, notes, created_at) VALUES ('f1', 'glow', 'glow:email_sms', 'Welcome', 'signup', '[]', '', '2026-10-28');
+    INSERT INTO agent_configs (id, store_id, agent_id, runtime, tools_json, knowledge_json, permissions_json, created_at) VALUES ('cfg1', 'glow', 'glow:copywriter', 'demo', '["store_summary"]', '["store"]', '{"saveFindings":"off"}', '2026-10-28');
+    INSERT INTO conversations (id, store_id, config_id, title, created_at, updated_at, last_activity_at) VALUES ('v1', 'glow', 'cfg1', 'Spring copy', '2026-10-28', '2026-10-28', '2026-10-28');
+    INSERT INTO agent_runs (id, store_id, agent_id, task, status, error, conversation_id, config_id, created_at) VALUES
+      ('r2', 'glow', 'glow:copywriter', 'Draft', 'error', 'boom', 'v1', 'cfg1', '2026-10-28'),
+      ('r3', 'glow', 'glow:copywriter', 'Draft', 'error', 'Interrupted by an app restart', 'v1', 'cfg1', '2026-10-28');`);
   const memory = writeMemory(db, { storeId: 'glow', agentId: 'owner', kind: 'fact', text: 'Ships from Ohio', confidence: 0.8 });
   const snapshot = () =>
-    ['agent_runs', 'approvals', 'store_memory', 'agents', 'squad_missions', 'flow_drafts'].map((t) => db.prepare(`SELECT * FROM ${t} WHERE store_id = 'glow' ORDER BY id`).all().map((r) => ({ ...r })));
+    ['agent_runs', 'approvals', 'store_memory', 'agents', 'squad_missions', 'flow_drafts', 'conversations'].map((t) => db.prepare(`SELECT * FROM ${t} WHERE store_id = 'glow' ORDER BY id`).all().map((r) => ({ ...r })));
   const before = snapshot();
   const call = async (store: string) => {
     const statuses: { route: string; status: number }[] = [];
@@ -67,7 +80,9 @@ test("by-id routes given another store answer 404 and change nothing; given the 
   };
   expect(await call('peak')).toEqual(ROUTES.map(([method, path]) => ({ route: `${method} ${path}`, status: 404 })));
   expect(snapshot()).toEqual(before);
+  expect(((await (await send('GET', '/api/conversations?store=peak')).json()) as { items: unknown[] }).items).toEqual([]);
   expect((await call('glow')).filter((r) => r.status === 404)).toEqual([]);
+  await runManager(db).idle();
 });
 
 test("tools refuse another store's ids, and retrieval never hands over another store's card", async () => {
@@ -177,8 +192,10 @@ test('credentials never appear in a run row, a config, the run API or the server
     const key = loadKey(dir);
     app = createApp(db, key);
     saveIntegration(db, key, { kind: 'meta_ads', storeId: 'peak', values: { adAccountId: 'act_1', accessToken: token } });
-    const c = config('peak:ad_strategist', defaultTools('ad_strategist'));
-    addConfig(c);
+    const store = getStore(db, 'peak')!;
+    const type = resolveType(db, 'peak', 'ad_strategist')!;
+    const conversation = createConversation(db, store, type, { ...seatDefault(store, type), runtime: 'claude' }, { title: 'Ad check' });
+    const c = getConfig(db, conversation.configId)!;
     let fail = false;
     const servers: unknown[] = [];
     const query: NonNullable<ClaudeEngineOptions['query']> = (params) =>
@@ -194,7 +211,7 @@ test('credentials never appear in a run row, a config, the run API or the server
     const runIds: string[] = [];
     for (const failing of [false, true]) {
       fail = failing;
-      const run = m.start('peak:ad_strategist', 'Check the ads', undefined, undefined, { configId: c.id });
+      const run = m.start('peak:ad_strategist', 'Check the ads', undefined, undefined, { conversationId: conversation.id });
       if (typeof run === 'string') throw new Error(run);
       runIds.push(run.id);
       await m.idle();
@@ -204,6 +221,7 @@ test('credentials never appear in a run row, a config, the run API or the server
       ...runIds.map((id) => JSON.stringify(db.prepare('SELECT * FROM agent_runs WHERE id = ?').get(id))),
       JSON.stringify(db.prepare('SELECT * FROM agent_configs').all()),
       ...(await Promise.all(runIds.map(async (id) => (await send('GET', `/api/runs/${id}`)).text()))),
+      ...(await Promise.all([`/api/conversations/${conversation.id}?store=peak`, `/api/conversations/${conversation.id}/thread?store=peak`, '/api/conversations?store=peak'].map(async (url) => (await send('GET', url)).text()))),
       existsSync(join(dir, 'logs', 'api.log')) ? readFileSync(join(dir, 'logs', 'api.log'), 'utf8') : '',
     ];
     expect(places[1]).toContain('"status":"error"'); // ...and the failing run did fail

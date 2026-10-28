@@ -1273,7 +1273,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - `runTools(role, mode, config?)` (decision 13), extending today's `runTools(role, mode)` in tools.ts, with
     compare_stores opt-in (AA-18 adds the save_finding part);
   - the secrets-never-leak test (decision 13).
-- [ ] AA-05 **Conversations API** (plus client hooks):
+- [x] AA-05 **Conversations API** (plus client hooks):
   - create with a config checked by decision 9's `validateConfig` (until AA-13 the runtime, model and effort part
     accepts only the seat default's values. The tools, knowledge, custom-role and limits checks are complete from
     AA-05. AA-13 to AA-15 widen only the runtime part; the team checks come with AA-19's routes);
@@ -1617,6 +1617,11 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   flow delete sends its store, `runTools(role, mode, config?)` with compare_stores opt-in and the config narrowing
   built-ins and external servers too, WebFetch refused for private hosts, the route/tool/retrieval sweep and the
   secrets-never-leak test (`agents-scope.test.ts`).
+- 2026-10-28 AA-05 conversations API: create (by type or fromRunId, with module context), list with filters, FTS
+  search and cursor paging, thread paged from the newest, send/retry/resume idempotent on clientRequestId, stop,
+  rename/pin/archive; `validateConfig` and the seat default; the legacy run route opens a conversation; the recap
+  and first-turn preface; kbGuard and STARTS on the new routes; client hooks; 8 API tests plus the scope sweep and
+  secrets test extended.
 
 ## Blocked
 
@@ -1750,6 +1755,33 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-05, 2026-10-28) For AA-06 and later:
+  - **Where it went** (AA-04's map said `config.ts` and `recap.ts`): `validateConfig`, `seatDefault`, `resolveType` and
+    `saveConfig` are in the existing `packages/agents/src/configs.ts`; `recap` and `conversationPreface` are in
+    `conversations.ts`. Presets (AA-13+) can join configs.ts.
+  - Routes (all need `?store=`; another store's record is a 404): `GET/POST /api/conversations`,
+    `GET/PATCH /api/conversations/:id`, `GET …/:id/thread?before=&limit=`, `POST …/:id/messages`,
+    `POST …/:id/runs/:runId/retry|resume`, `POST …/:id/stop` (`{runId?}` takes back a queued message). Create answers
+    `{conversation, run}`, 201, or 200 for a repeated clientRequestId. A config failure is `400 {error, field}`.
+  - `openConversation` (agents-conversations.ts) is the server side of startConversation: Deploy, Continue, module
+    context and the legacy route all go through it, and a start the run manager refuses deletes the conversation and
+    its config. AA-12 adds the client `startConversation` helper and the chip; `useCreateConversation` takes
+    `context` already. Context accepted now: `{kind:'campaign', network, id, name}`, checked against `campaigns`.
+  - A conversation's `type` is the custom role id when it has one, else the role; the list's `type=team` filter
+    matches conversations with a `kind='team'` squad mission (AA-19 writes those).
+  - The first turn of a fresh session (no resume) gets a preface: the recap of the run it continues, or a pointer to
+    its campaign by id, which the agent reads with its tools. Later turns resume the session, so the preface isn't
+    repeated. The recap holds exchanges only, newest kept within 6,000 characters; cards cited and open questions are
+    left for AA-14b's "Change runtime or model".
+  - Continue refuses a run already in a conversation, another store's run (404), an Ask-KB all-stores run, a run that
+    called compare_stores, and a run from before the store went live (409, the AA-03 wording).
+  - Search: `indexConversation` rebuilds the conversation's FTS row from the title, every run's task and final text,
+    on create, rename and every run end (runHooks `onRun` → `touchConversation`, which also bumps last_activity_at).
+    Store delete removes the store's FTS rows. The query goes through the KB's `ftsQuery`.
+  - The legacy route maps the opener's 400 to 409 (it never sends a config, so a 400 there means the seat itself
+    can't start). Its title is the task's first line, cut at a word to 80 characters with an ellipsis.
+  - kbGuard: one `.use('/api/conversations/*')` covers the bare path too (mounting both counted twice). Bodies up to
+    15 MB on create and send (attachments, decision 11), 1 MB elsewhere.
 - (AA-02, 2026-10-28) One migration, #50, holds every table, column and index of decision 3. `conversations_fts` is
   a plain FTS5 table with no foreign key, so a store delete leaves its rows: AA-05 deletes them where it writes them
   (with the store, in `stores.ts`), and its search joins `conversations` so a stray row never shows. The derived-state

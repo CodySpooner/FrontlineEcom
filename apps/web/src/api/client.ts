@@ -1,11 +1,14 @@
 // UI-03 data layer: typed fetchers + react-query hooks over the local API, and the /api/live socket.
 import { useEffect, useRef, useState } from 'react';
-import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ActionLogEntry,
   Agent,
   AgentRun,
   AgentRunDetail,
+  Conversation,
+  CreateConversationInput,
+  CursorPage,
   AgentUpdate,
   AnalyticsRange,
   AnalyticsSummary,
@@ -181,6 +184,110 @@ export const useRun = (id: string) =>
     enabled: !!id,
     refetchInterval: (q) => (q.state.data && isLive(q.state.data) ? 2000 : false),
   });
+
+// Conversations (AA-05). Every call names its store: the server answers 404 for another store's record (decision 13).
+// A clientRequestId is made when the dialog or composer opens (or per Retry/Resume click) and kept until the server
+// answers, so a repeated send returns what the first one started.
+
+export interface ConversationFilter {
+  view?: 'active' | 'archived' | 'pinned';
+  /** A role, a custom role id, or 'team'. */
+  type?: string;
+  /** Days of activity to show (running ones always show). */
+  range?: number;
+  q?: string;
+}
+
+const conversationsUrl = (storeId: string, f: ConversationFilter, cursor?: string) =>
+  `/api/conversations?${new URLSearchParams({
+    store: storeId,
+    ...(f.view ? { view: f.view } : {}),
+    ...(f.type ? { type: f.type } : {}),
+    ...(f.range ? { range: String(f.range) } : {}),
+    ...(f.q?.trim() ? { q: f.q.trim() } : {}),
+    ...(cursor ? { cursor } : {}),
+  })}`;
+
+/** A store's conversations, last activity first, 50 a page (fetchNextPage loads older ones). */
+export const useConversations = (storeId: string, filter: ConversationFilter = {}) =>
+  useInfiniteQuery({
+    queryKey: ['conversations', storeId, filter],
+    queryFn: ({ pageParam }) => api<CursorPage<Conversation>>(conversationsUrl(storeId, filter, pageParam || undefined)),
+    initialPageParam: '',
+    getNextPageParam: (last) => last.next,
+    enabled: !!storeId,
+  });
+
+export const useConversation = (storeId: string, id: string) =>
+  useQuery({ queryKey: ['conversation', id], queryFn: () => api<Conversation>(`/api/conversations/${id}?store=${storeId}`), enabled: !!storeId && !!id });
+
+/** A conversation's runs, oldest first; fetchNextPage loads the page before the oldest shown. */
+export const useThread = (storeId: string, id: string) =>
+  useInfiniteQuery({
+    queryKey: ['thread', id],
+    queryFn: ({ pageParam }) => api<CursorPage<AgentRunDetail>>(`/api/conversations/${id}/thread?store=${storeId}${pageParam ? `&before=${pageParam}` : ''}`),
+    initialPageParam: '',
+    getNextPageParam: (last) => last.next,
+    enabled: !!storeId && !!id,
+  });
+
+/** After any change to a conversation: its row, its thread and the store's lists. */
+function useConversationDone(storeId: string) {
+  const qc = useQueryClient();
+  return (conversationId: string, run?: AgentRunDetail | AgentRun) => {
+    if (run) qc.setQueryData<AgentRunDetail>(['run', run.id], (old) => old ?? { ...run, transcript: [] });
+    for (const key of [['conversations', storeId], ['conversation', conversationId], ['thread', conversationId]]) qc.invalidateQueries({ queryKey: key });
+  };
+}
+
+/**
+ * Deploy, startConversation and Continue in a new conversation: opens a conversation and starts its first turn. A
+ * module passes `type`, `message` (the objective) and its `context` reference.
+ */
+export function useCreateConversation(storeId: string) {
+  const done = useConversationDone(storeId);
+  return useMutation({
+    mutationFn: (input: CreateConversationInput) => api<{ conversation: Conversation; run: AgentRun }>(`/api/conversations?store=${storeId}`, json('POST', input)),
+    onSuccess: (r) => done(r.conversation.id, r.run),
+  });
+}
+
+/** Sends a message; while a reply is going it waits in the queue behind it. */
+export function useSendMessage(storeId: string, conversationId: string) {
+  const done = useConversationDone(storeId);
+  return useMutation({
+    mutationFn: (input: { clientRequestId: string; message: string }) => api<AgentRun>(`/api/conversations/${conversationId}/messages?store=${storeId}`, json('POST', input)),
+    onSuccess: (run) => done(conversationId, run),
+  });
+}
+
+/** Retry (a failed or unsatisfying reply, from the last one that finished) or Resume (one cut off by a restart). */
+export function useRetryRun(storeId: string, conversationId: string) {
+  const done = useConversationDone(storeId);
+  return useMutation({
+    mutationFn: ({ runId, resume, clientRequestId }: { runId: string; resume?: boolean; clientRequestId: string }) =>
+      api<AgentRun>(`/api/conversations/${conversationId}/runs/${runId}/${resume ? 'resume' : 'retry'}?store=${storeId}`, json('POST', { clientRequestId })),
+    onSuccess: (run) => done(conversationId, run),
+  });
+}
+
+/** Stops the reply that is going, or takes back a queued message (`runId`). */
+export function useStopConversation(storeId: string, conversationId: string) {
+  const done = useConversationDone(storeId);
+  return useMutation({
+    mutationFn: (runId?: string) => api<AgentRun>(`/api/conversations/${conversationId}/stop?store=${storeId}`, json('POST', runId ? { runId } : {})),
+    onSuccess: () => done(conversationId),
+  });
+}
+
+/** Rename, pin, archive or unarchive. */
+export function useUpdateConversation(storeId: string) {
+  const done = useConversationDone(storeId);
+  return useMutation({
+    mutationFn: ({ id, ...patch }: { id: string; title?: string; pinned?: boolean; archived?: boolean }) => api<Conversation>(`/api/conversations/${id}?store=${storeId}`, json('PATCH', patch)),
+    onSuccess: (c) => done(c.id),
+  });
+}
 
 /** Starts a run (or a chat follow-up with `resumeRunId`); the live socket streams the rest into ['run', id]. */
 export function useStartRun() {

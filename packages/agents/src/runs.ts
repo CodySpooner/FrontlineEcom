@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
 import { isReadOnly } from './claude-engine';
 import { getConfig } from './configs';
+import { conversationPreface } from './conversations';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { researchContext } from './kb-research';
 import { citedCards, logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
@@ -314,10 +315,12 @@ export function createRunManager(opts: RunManagerOptions) {
           research?.systemPrompt ??
           assemblePrompt({ agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id), knowledge });
         logKnowledgeUse(db, knowledge.filter((c) => systemPrompt.includes(`[kb:${c.id}]`)).map((c) => c.id), { storeId: store.id, agentId: agent.id, runId: run.id, kind: 'prompt' });
+        // A conversation's turn in a fresh session starts from what it continues or was opened from.
+        const preface = !resume && run.conversationId ? conversationPreface(db, run.conversationId) : undefined;
         const input: RunInput = {
           agent,
           store,
-          task: run.task,
+          task: preface ? `${preface}\n\nNow: ${run.task}` : run.task,
           systemPrompt,
           ...(research ? { mode: 'research' as const } : {}),
           ...(config ? { config } : {}),

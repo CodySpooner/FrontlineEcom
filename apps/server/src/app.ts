@@ -45,8 +45,13 @@ const isLocal = (url: string) => URL.canParse(url) && LOCAL_HOSTS.has(new URL(ur
 const sameHost = (origin: string, url: string) => URL.canParse(origin) && new URL(origin).host === new URL(url).host;
 
 const MB = 1_048_576;
-/** Agent runs a knowledge-base request starts: research (new, retried, refined) and Ask the knowledge base. */
-const STARTS = /^\/api\/kb\/(ask|research\/tasks(\/[^/]+\/(retry|refine))?)$/;
+/**
+ * Requests that start agent runs: knowledge-base research (new, retried, refined), Ask the knowledge base, and a
+ * conversation's create, send, retry and resume.
+ */
+const STARTS = /^\/api\/(kb\/(ask|research\/tasks(\/[^/]+\/(retry|refine))?)|conversations(\/[^/]+\/(messages|runs\/[^/]+\/(retry|resume)))?)$/;
+/** Bodies that may carry a document or attachments (10 MB in base64). */
+const LARGE = /^\/api\/(kb\/research\/tasks|conversations(\/[^/]+\/messages)?)$/;
 
 /**
  * KB-25: the knowledge base and product research read no body over its size (research from an uploaded document
@@ -63,7 +68,7 @@ function kbGuard(): MiddlewareHandler {
     const starts = c.req.method === 'POST' && STARTS.test(c.req.path);
     if (recent('change') >= 300 || (starts && recent('start') >= 10)) return c.json({ error: 'Too many requests at once: wait a minute and try again.' }, 429);
     hits.change.push(now);
-    const maxSize = c.req.path === '/api/kb/research/tasks' ? 15 * MB : MB;
+    const maxSize = LARGE.test(c.req.path) ? 15 * MB : MB;
     let tooLarge = false;
     const done = await bodyLimit({ maxSize, onError: (c) => ((tooLarge = true), c.json({ error: 'The request is too large.' }, 413)) })(c, next);
     if (starts && !tooLarge && c.res.status < 300) hits.start.push(now);
@@ -93,6 +98,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       c.res.headers.set('X-Frame-Options', 'DENY');
     })
     .use('/api/kb/*', guard)
+    .use('/api/conversations/*', guard) // the bare path too
     .use('/api/research/*', guard)
     .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))

@@ -130,6 +130,7 @@ export function deleteStore(db: Db, id: string, mediaDir = join(dataDir(), 'crea
   const files = db.prepare('SELECT media_url FROM creatives WHERE store_id = ?').all(id)
     .map((r) => String(r.media_url ?? '').match(/^\/api\/creatives\/media\/([\w-]+\.(?:jpg|png|webp|mp4))$/)?.[1]);
   if (!db.prepare('DELETE FROM stores WHERE id = ?').run(id).changes) return false;
+  db.prepare('DELETE FROM conversations_fts WHERE store_id = ?').run(id); // a virtual table: no cascade
   once(db, `deleted-store:${id}`); // see createStore
   for (const f of files) {
     try {
