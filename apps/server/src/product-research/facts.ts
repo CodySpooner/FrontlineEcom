@@ -4,7 +4,8 @@ import { storedRate } from '../fx';
 import { getSettings } from '../settings';
 import { listStores } from '../stores';
 import { classifyDemand, type Demand } from './demand';
-import { fulfillmentOf, type OfferRow } from './fulfillment';
+import { flagsFor } from './flags';
+import { fulfillmentOf, shippable, type OfferRow } from './fulfillment';
 import { minorDigits } from './money';
 import { shipTo } from './profile';
 
@@ -31,13 +32,13 @@ export const productSets = (db: Db, productId: string) =>
 
 /**
  * The (destination, currency) pairs facts are kept for: each store's ship-to and currency (`''` for a store with no
- * ship-to yet), plus All stores' default, US in the base currency (decision 5).
+ * ship-to yet), and for All stores (decision 5) US and every store's ship-to in the base currency.
  */
 export function factKeys(db: Db): (readonly [string, string])[] {
-  const keys = new Map(listStores(db).map((s) => [`${shipTo(db, s) ?? ''}|${s.currency}`, [shipTo(db, s) ?? '', s.currency] as const]));
+  const stores = listStores(db).map((s) => [shipTo(db, s) ?? '', s.currency] as const);
   const base = getSettings(db).baseCurrency;
-  keys.set(`US|${base}`, ['US', base]);
-  return [...keys.values()];
+  const all = ['US', ...stores.map(([to]) => to).filter(Boolean)].map((to) => [to, base] as const);
+  return [...new Map([...stores, ...all].map((k) => [k.join('|'), k])).values()];
 }
 
 /**
@@ -46,20 +47,22 @@ export function factKeys(db: Db): (readonly [string, string])[] {
  * newest evidence is. Fulfillment and cost columns are left as they are.
  */
 export function rankDemand(db: Db, productId: string, now = new Date()) {
-  const sets = productSets(db, productId).map((s) => ({ id: String(s.id), retrievedAt: String(s.retrieved_at), d: demandOf(db, { id: String(s.id), granularity: s.granularity }) }));
+  const sets = productSets(db, productId).map((s) => ({ id: String(s.id), origin: String(s.origin), retrievedAt: String(s.retrieved_at), d: demandOf(db, { id: String(s.id), granularity: s.granularity }) }));
   const best = sets.find((s) => s.d && s.d.cls !== 'insufficient_history') ?? sets[0];
+  // Decision 9's "qualifies": a real import or live set (never a fixture or a manual note) with enough history.
+  const qualifying = sets.filter((s) => (s.origin === 'import' || s.origin === 'live') && s.d && s.d.cls !== 'insufficient_history').length;
   const seen = db.prepare('SELECT min(first_seen_at) AS first, max(retrieved_at) AS newest FROM pr_listings WHERE product_id = ?').get(productId);
   const offer = db.prepare('SELECT max(o.checked_at) AS at FROM pr_offers o JOIN pr_listings l ON l.id = o.listing_id WHERE l.product_id = ?').get(productId)?.at;
   const evidenceAt = [seen?.newest, offer, sets[0]?.retrievedAt].filter((t): t is string => typeof t === 'string').sort().pop() ?? null;
   const up = db.prepare(
-    `INSERT INTO pr_product_facts (product_id, destination, currency, demand_class, momentum, demand_set_id, demand_peak_month, first_seen_at, evidence_at, computed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO pr_product_facts (product_id, destination, currency, demand_class, momentum, demand_set_id, demand_peak_month, demand_sets, first_seen_at, evidence_at, computed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (product_id, destination, currency) DO UPDATE SET demand_class = excluded.demand_class, momentum = excluded.momentum,
-       demand_set_id = excluded.demand_set_id, demand_peak_month = excluded.demand_peak_month, first_seen_at = excluded.first_seen_at,
+       demand_set_id = excluded.demand_set_id, demand_peak_month = excluded.demand_peak_month, demand_sets = excluded.demand_sets, first_seen_at = excluded.first_seen_at,
        evidence_at = excluded.evidence_at, computed_at = excluded.computed_at`,
   );
   for (const [destination, currency] of factKeys(db))
-    up.run(productId, destination, currency, best?.d?.cls ?? null, best?.d?.momentum ?? null, best?.id ?? null, best?.d?.peakMonth ?? null, (seen?.first as string | null) ?? null, evidenceAt, now.toISOString());
+    up.run(productId, destination, currency, best?.d?.cls ?? null, best?.d?.momentum ?? null, best?.id ?? null, best?.d?.peakMonth ?? null, qualifying, (seen?.first as string | null) ?? null, evidenceAt, now.toISOString());
 }
 
 /** A product's offer rows: the shared ones, plus `storeId`'s own (owner-entered) when given. Never a sample's. */
@@ -109,19 +112,25 @@ export function convertMinor(db: Db, minor: number, from: string, to: string): n
 export function rankFulfillment(db: Db, productId: string, now = new Date()) {
   const offers = offerRows(db, productId);
   const up = db.prepare(
-    `INSERT INTO pr_product_facts (product_id, destination, currency, fulfillment_status, fulfillment_checked_at, cost_ship_minor, cost_ship_offer_id, computed_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO pr_product_facts (product_id, destination, currency, fulfillment_status, fulfillment_checked_at, cost_ship_minor, cost_ship_offer_id, unit_minor, ship_minor, delivery_days, computed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (product_id, destination, currency) DO UPDATE SET fulfillment_status = excluded.fulfillment_status, fulfillment_checked_at = excluded.fulfillment_checked_at,
-       cost_ship_minor = excluded.cost_ship_minor, cost_ship_offer_id = excluded.cost_ship_offer_id, computed_at = excluded.computed_at`,
+       cost_ship_minor = excluded.cost_ship_minor, cost_ship_offer_id = excluded.cost_ship_offer_id, unit_minor = excluded.unit_minor, ship_minor = excluded.ship_minor,
+       delivery_days = excluded.delivery_days, computed_at = excluded.computed_at`,
   );
   for (const [destination, currency] of factKeys(db)) {
     const f = destination ? fulfillmentOf(offers, destination, 1, now, (minor, from) => convertMinor(db, minor, from, currency)) : null;
-    up.run(productId, destination, currency, f?.status ?? null, f?.offer?.checkedAt ?? null, f?.costShip ?? null, f?.costShip == null ? null : f.offer!.id, now.toISOString());
+    const o = f?.costShip == null ? null : f.offer!;
+    const part = (minor: number | null) => (o && minor !== null ? (convertMinor(db, minor, o.currency ?? '', currency) ?? null) : null);
+    const days = destination ? shippable(offers, destination, 1).map((r) => r.deliveryMax).filter((d): d is number => d !== null) : [];
+    up.run(productId, destination, currency, f?.status ?? null, f?.offer?.checkedAt ?? null, f?.costShip ?? null, o?.id ?? null, part(o?.unitCost ?? null), part(o?.shipCost ?? null), days.length ? Math.min(...days) : null, now.toISOString());
   }
 }
 
-/** Rank: demand and fulfillment facts for one product. */
+/** Rank: demand and fulfillment facts for one product, and its rule flags (no store's avoid list) for All stores. */
 export function rank(db: Db, productId: string, now = new Date()) {
   rankDemand(db, productId, now);
   rankFulfillment(db, productId, now);
+  const p = db.prepare('SELECT title, category FROM pr_products WHERE id = ?').get(productId);
+  if (p) db.prepare('UPDATE pr_product_facts SET rule_flags = ? WHERE product_id = ?').run(flagsFor({ title: String(p.title), category: p.category == null ? null : String(p.category) }).length, productId);
 }

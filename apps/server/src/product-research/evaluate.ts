@@ -4,7 +4,7 @@ import { listStores } from '../stores';
 import { offerRows, rank } from './facts';
 import { flagsFor } from './flags';
 import { shippable } from './fulfillment';
-import { getProfile, inNiche } from './profile';
+import { categoryMatches, getProfile, inNiche } from './profile';
 
 export interface FitInput {
   /** Undismissed flags. */
@@ -63,8 +63,9 @@ export function evaluate(db: Db, store: Store, productId: string, now = new Date
   const cost = db.prepare('SELECT cost_ship_minor FROM pr_product_facts WHERE product_id = ? AND destination = ? AND currency = ?').get(productId, profile.shipTo ?? '', store.currency)?.cost_ship_minor;
   const ships = profile.shipTo ? shippable(offerRows(db, productId, store.id), profile.shipTo, 1) : [];
   const days = ships.map((o) => o.deliveryMax).filter((d): d is number => d !== null);
+  const open = flags.filter((f) => !dismissed[f.id]);
   const { fit, reasons } = fitFor({
-    flags: flags.filter((f) => !dismissed[f.id]),
+    flags: open,
     category,
     inNiche: inNiche(store, profile.includeCategories, category),
     costShip: cost == null ? null : Number(cost),
@@ -74,10 +75,13 @@ export function evaluate(db: Db, store: Store, productId: string, now = new Date
     shipsFrom: [...new Set(ships.map((o) => o.shipsFrom).filter((w): w is string => w !== null))],
     warehouses: profile.warehouses,
   });
+  // Store scope keeps the included categories (all of them when none are set) and every unknown category (decision 5).
+  const inScope = category === null ? null : !profile.includeCategories.length || categoryMatches(profile.includeCategories, category) ? 1 : 0;
   db.prepare(
-    `INSERT INTO pr_evaluations (store_id, product_id, fit, fit_reasons_json, flags_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (store_id, product_id) DO UPDATE SET fit = excluded.fit, fit_reasons_json = excluded.fit_reasons_json, flags_json = excluded.flags_json`,
-  ).run(store.id, productId, fit, JSON.stringify(reasons), JSON.stringify(flags), now.toISOString(), now.toISOString());
+    `INSERT INTO pr_evaluations (store_id, product_id, fit, fit_reasons_json, flags_json, open_flags, in_scope, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (store_id, product_id) DO UPDATE SET fit = excluded.fit, fit_reasons_json = excluded.fit_reasons_json, flags_json = excluded.flags_json,
+       open_flags = excluded.open_flags, in_scope = excluded.in_scope`,
+  ).run(store.id, productId, fit, JSON.stringify(reasons), JSON.stringify(flags), open.length, inScope, now.toISOString(), now.toISOString());
 }
 
 /** The catalog products a store may see (shared or its own; never sample rows or merged-away products). */

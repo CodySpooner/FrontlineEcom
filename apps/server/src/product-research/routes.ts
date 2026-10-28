@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Db } from '../db';
 import { productVisible } from './catalog';
+import { discover, parseDiscovery } from './discovery';
 import { evaluateStore } from './evaluate';
 import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
 import { importFeed } from './feed';
@@ -11,6 +12,15 @@ import { importTrends, linkSet, signalSet } from './trends';
 /** Product Research's API (`/api/pr/*`, behind the KB guard: change and body limits). `?store=` sets the scope. */
 export function prRoutes(db: Db) {
   return new Hono()
+    // Discovery (decision 14): the scope's full matching set filtered, sorted and counted in SQL, a page at a time.
+    .get('/api/pr/products', (c) => {
+      const s = scopeOf(c, db);
+      if (s instanceof Response) return s;
+      const q = parseDiscovery(c.req.queries(), s.store);
+      if ('error' in q) return c.json(q, 400);
+      const r = discover(db, { ...q, store: s.store });
+      return 'error' in r ? c.json(r, 400) : c.json(r);
+    })
     .get('/api/pr/profile', (c) => {
       const store = storeOf(c, db);
       return store instanceof Response ? store : c.json(getProfile(db, store));

@@ -117,7 +117,7 @@ test('Evaluate flags per store; a dismissed restricted flag no longer makes fit 
 
 test('Rank: fulfillment and cost + ship per store ship-to and currency, a ship-to change re-ranks, and the 7-day decay', async () => {
   const { db, app, cup } = await setup();
-  expect(factKeys(db)).toEqual([['US', 'USD'], ['GB', 'GBP']]);
+  expect(factKeys(db)).toEqual([['US', 'USD'], ['GB', 'GBP'], ['GB', 'USD']]); // All stores: each ship-to in the base currency
   expect(facts(db, cup)).toEqual({ fulfillment_status: 'verified', fulfillment_checked_at: '2026-10-25T00:00:00.000Z', cost_ship_minor: 752 });
   expect(facts(db, cup, 'GB', 'GBP')).toEqual({ fulfillment_status: 'pending', fulfillment_checked_at: null, cost_ship_minor: null }); // no GB quote
 

@@ -159,3 +159,70 @@ export const PR_RECOMMENDATION_LABEL: Record<PrRecommendation, string> = {
   monitor: 'Monitor',
   reject: 'Reject',
 };
+
+/** Discovery sorts (decision 11, 14). `best_fit` is store scope only. Every nullable key sorts nulls last. */
+export const PR_SORTS = ['best_fit', 'recent', 'momentum', 'cost'] as const;
+export type PrSort = (typeof PR_SORTS)[number];
+/** Discovery view tabs, each with a server count. */
+export const PR_VIEWS = ['all', 'demand', 'new', 'watchlist', 'flagged'] as const;
+export type PrView = (typeof PR_VIEWS)[number];
+
+export interface PrFacet {
+  value: string;
+  label: string;
+  /** Products in the scope with this value. */
+  n: number;
+}
+
+/** One discovery card. Money in minor units of the response's currency; null = Unknown, never 0. */
+export interface PrCard {
+  id: string;
+  title: string;
+  imageRef: string | null;
+  /** null: "Category unknown" (kept in store scope, decision 5). */
+  category: string | null;
+  /** The listing the card names ("<source> · <category>", "Your link · <host>"). */
+  source: { id: string; label: string; host: string | null; origin: PrOrigin };
+  /** Dev fixture data: the "Test fixture" pill. */
+  fixture: boolean;
+  /** A private row's store id (All stores names the store). */
+  privateTo: string | null;
+  /** Store scope only. */
+  stage: PrStage | null;
+  watched: boolean;
+  /** Decision 8's "Cost + ship to <country>, excl. duties", from one verified row. */
+  costShip: number | null;
+  /** null: "Not checked yet" (no ship-to). */
+  fulfillment: { status: PrFulfillment; reasons: string[]; checkedAt: string | null } | null;
+  /** The conditions the status is for: variant, method, quantity, check date. */
+  conditions: { variant: string | null; method: string | null; quantity: number; checkedAt: string } | null;
+  /** null: "Not checked yet". */
+  demand: { cls: PrDemandClass; peakMonth: number | null; platform: string; query: string | null; region: string | null; periodStart: string | null; periodEnd: string | null; scope: PrSignalScope } | null;
+  /** Qualifying demand sets (decision 9), the store's own orders included in its scope. */
+  demandSets: number;
+  /** Store scope only: the fit and its main reason. */
+  fit: { fit: PrFit; reason: string } | null;
+  /** Flags not dismissed (store scope), or the rule flags (All stores); null = "Not checked yet". */
+  flags: { count: number; first: PrFlag | null } | null;
+  /** All stores: stores with this product in their pipeline (a History row). */
+  storesEvaluating: number;
+  firstSeenAt: string | null;
+  /** Evidence age: the newest retrieved or checked time. */
+  evidenceAt: string | null;
+}
+
+export interface PrDiscovery {
+  items: PrCard[];
+  /** Pass back as `cursor` for the next page; null at the end. */
+  next: string | null;
+  /** Matches in the current view, with every filter applied. */
+  total: number;
+  counts: Record<PrView, number>;
+  facets: { categories: PrFacet[]; sources: PrFacet[]; warehouses: PrFacet[]; suppliers: PrFacet[] };
+  currency: string;
+  shipTo: string | null;
+  /** The destinations this scope can show (All stores: US and the stores' ship-tos). */
+  shipTos: string[];
+  /** The ECB rates' date the costs were converted with, when any conversion happened. */
+  fxDate: string | null;
+}

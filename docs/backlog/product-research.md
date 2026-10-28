@@ -713,7 +713,7 @@ STOP.
 - [x] PR-08 **Store research profile, store fit and eligibility** (decisions 5, 10, 11): profile API and "Edit research
   profile", fit and flags computed in the Evaluate step and stored per store, fulfillment status and the cost + shipping
   figure in `pr_product_facts` (decision 8) with the daily decay pass, with a test per rule and branch.
-- [ ] PR-09 **Discovery API:** server-side search, filters (spec §7's, as the design's chips list them), sorts (nulls
+- [x] PR-09 **Discovery API:** server-side search, filters (spec §7's, as the design's chips list them), sorts (nulls
   last), cursor paging, tab counts, facet values and "unknown included" handling, store scope (included categories) vs
   All stores, private rows. SQL only over `pr_product_facts` and `pr_evaluations`; an index for every filter and sort
   the page uses; a test with 10,000 products. Also PR-03's test: a sample row never appears in discovery, counts or
@@ -747,7 +747,8 @@ STOP.
 - [ ] PR-15 **Research task API** (decision 6): eligible agents endpoint with state and the queue line; `POST
   /api/pr/tasks` in all three modes and with a Deploy config, idempotent on client_request_id; the store, type and
   conversation checks; the four-part message under 20,000 characters; `PR_STARTS` (T7); the `research_task` live
-  message (T8); status from the run; Retry; list and detail routes. API tests: the repeat, a repeat whose run never
+  message (T8); status from the run; Retry; list and detail routes. Also the discovery API's Research filter and the
+  card footer's execution state (`GET /api/pr/products`, PR-09, has neither until tasks exist). API tests: the repeat, a repeat whose run never
   started, another store's conversation, an ineligible type, a busy agent both ways, an app restart mid-run.
 - [ ] PR-16 **Research a Product dialog** (decision 6, The design: dialog): stepper, stores, eligible agents with state,
   Queue after current work or Run separately, Create new through Deploy configure-only (T1), templates, the real budget
@@ -860,6 +861,13 @@ STOP.
   store in `pr_evaluations`, decision 8's fulfillment status and cost + ship per facts key in Rank, and the daily
   decay pass. Rank and Evaluate run after ingestion, enrichment and feed imports. 21 tests; 9 mutation checks. Server
   only, on fixtures: the dialog lands with PR-10's profile line.
+- 2026-10-28 PR-09 discovery API: `GET /api/pr/products` (search over titles, categories and supplier SKUs; the
+  chips' and More filters' filters with "unknown included" unless `strict` names them; the four sorts, nulls last;
+  offset cursor, 48 a page; one-pass tab counts; category, source, warehouse and supplier facets; store scope with
+  included categories, private rows and the store's own orders as demand evidence; All stores with its ship-tos).
+  Migration 53 (what discovery reads, kept by Rank and Evaluate, with an index each). 10,000 products: first page
+  with counts and facets in 159 ms (All stores) and 88 ms (store, Best fit) on this machine. Includes PR-03's test (a
+  sample row never appears in discovery, counts, facets or sorts). 6 tests; 8 mutation checks. Server only, fixtures.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -891,6 +899,25 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-09, decisions 5, 9, 11 and 14 as built.**
+  - `GET /api/pr/products?store=&shipTo=&q=&view=&sort=&cursor=&limit=` plus repeated list filters (`category`,
+    `source`, `warehouse`, `supplier`, `stage`, `fit`, `availability`) and single ones (`costMax`, `deliveryMax`,
+    `unitMax`, `shipMax` in minor units; `evidenceDays`; `niche`; `flags=any|none`). `strict=cost,delivery,…` drops a
+    filter's unknowns; without it they're kept, which is what the chip's "unknown included" shows. Stage, fit and Best
+    fit need a store (400 otherwise). Store scope always uses the profile's ship-to.
+  - Migration 53 keeps what the filters need in the two tables decision 14 names: `pr_product_facts` gets the
+    qualifying set count, the cost row's unit and shipping cost (converted), the fastest shippable delivery and the
+    rule-flag count; `pr_evaluations` gets `in_scope` (NULL when the category is unknown, kept) and `open_flags`.
+    Source, warehouse and supplier filters are `EXISTS` over the scope's listings and offers.
+  - Best fit: fit, then demand class with "Seasonal in season" meaning the peak month is this month or next
+    (a seasonal set out of season ranks with No clear pattern), then verified cost + shipping, nulls last, then id.
+  - The cursor is an offset (ponytail: a card can repeat or be skipped while ingestion inserts; keyset if it shows).
+    Facets list the scope's values without the other filters applied. The niche filter matches a word start after a
+    space in SQL, a little looser than Evaluate's.
+  - A card shows the fulfillment status from the facts and the conditions (variant, method, quantity, date) of the
+    row Rank's rule picks, recomputed for the page's cards only. A store scope with no evaluations yet (a new store)
+    runs Evaluate over the store's products on first open (ponytail: synchronous; it re-ranks every product, so a
+    new store over a large catalog waits on that once).
 - **PR-08, decisions 5, 8, 10 and 11 as built.**
   - Evaluate writes one `pr_evaluations` row per product a store may see, at Discovered, with its fit, reasons and
     flags (stage, owner, notes and dismissals stay as they are). So "<n> stores evaluating" (All stores) counts stores
@@ -911,7 +938,8 @@ STOP.
     Pending ("No quote for <country> yet"), not Insufficient. A store with no ship-to gets no status. Cost + ship uses
     the stored ECB rates (`storedRate`, never a fetch inside Rank; the FX loop refreshes them daily), so its date is
     the `fx` setting's date. Facts keys are each store's (ship-to, currency) plus All stores' default (US, base
-    currency); another All-stores ship-to is computed by PR-09.
+    currency), plus each store's ship-to in the base currency (PR-09), so All stores can ship to US or any store's
+    ship-to.
   - The decay pass runs in the jobs tick, once a UTC day, so it's off in the dev app unless `PR_INGEST=1` (like
     every timer here). Flag dismissal with a reason (History) is PR-13; Evaluate already honours
     `flag_dismissals_json`.

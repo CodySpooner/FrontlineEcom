@@ -73,7 +73,7 @@ function setup() {
 const post = (app: ReturnType<typeof createApp>, path: string, body: unknown) => app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 /** 30 weeks: steady around 40, so the class is Sustained interest. */
 const steady = classic('Week', weeks(Array.from({ length: 30 }, (_, i) => (i % 2 ? 44 : 36))), 'dog paw cleaner: (United States)');
-const facts = (db: Db, productId: string) => db.prepare('SELECT destination, currency, demand_class, momentum, demand_set_id FROM pr_product_facts WHERE product_id = ? ORDER BY destination').all(productId).map((r) => ({ ...r }));
+const facts = (db: Db, productId: string) => db.prepare('SELECT destination, currency, demand_class, momentum, demand_set_id FROM pr_product_facts WHERE product_id = ? ORDER BY destination, currency').all(productId).map((r) => ({ ...r }));
 
 test('an import keeps the file, makes a query-level set per term and suggests only products the scope may see', async () => {
   const { db, shared, plural, privateY } = setup();
@@ -111,19 +111,20 @@ test("the owner's confirmation makes a query set the product's demand evidence; 
   const ok = await post(app, `/api/pr/signals/${set.id}/links`, { productId: shared, confirmed: true });
   expect(ok.status).toBe(200);
   expect(((await ok.json()) as PrSignalSet).links.find((l) => l.productId === shared)?.confirmed).toBe(true);
-  // One row per store ship-to and currency (USD store → US, GBP store → GB).
+  // One row per store ship-to and currency (USD store → US, GBP store → GB), and All stores' GB in the base currency.
   expect(facts(db, shared)).toEqual([
     { destination: 'GB', currency: 'GBP', demand_class: 'sustained', momentum: 1.02, demand_set_id: set.id },
+    { destination: 'GB', currency: 'USD', demand_class: 'sustained', momentum: 1.02, demand_set_id: set.id },
     { destination: 'US', currency: 'USD', demand_class: 'sustained', momentum: 1.02, demand_set_id: set.id },
   ]);
   rankDemand(db, plural); // still only suggested: not evidence
-  expect(facts(db, plural).map((f) => f.demand_class)).toEqual([null, null]);
+  expect(facts(db, plural).map((f) => f.demand_class)).toEqual([null, null, null]);
   // The owner may link a product the match didn't suggest.
   expect((await post(app, `/api/pr/signals/${set.id}/links`, { productId: other, confirmed: true })).status).toBe(200);
   expect(facts(db, other)[0]?.demand_class).toBe('sustained');
 
   await post(app, `/api/pr/signals/${set.id}/links`, { productId: shared, confirmed: false });
-  expect(facts(db, shared).map((f) => f.demand_class)).toEqual([null, null]);
+  expect(facts(db, shared).map((f) => f.demand_class)).toEqual([null, null, null]);
   expect(db.prepare('SELECT count(*) AS n FROM pr_signal_links WHERE product_id = ?').get(shared)?.n).toBe(0);
 
   expect((await post(app, `/api/pr/signals/${set.id}/links?store=x`, { productId: privateY, confirmed: true })).status).toBe(404); // store y's product
@@ -137,13 +138,13 @@ test("an import from a product's page is that product's evidence at once; the ne
   const res = await post(app, '/api/pr/imports/trends?store=x', { csv: steady, productId: shared });
   const set = ((await res.json()) as PrTrendsImport).sets[0]!;
   expect(set).toMatchObject({ scope: 'product', links: [] });
-  expect(facts(db, shared).map((f) => f.demand_set_id)).toEqual([set.id, set.id]);
+  expect(facts(db, shared).map((f) => f.demand_set_id)).toEqual([set.id, set.id, set.id]);
   expect((await post(app, `/api/pr/signals/${set.id}/links`, { productId: shared, confirmed: true })).status).toBe(400); // already the product's
 
   // A newer, shorter export doesn't replace the set that has enough history.
   const short = classic('Week', weeks([40, 41, 42], '2026-09-01'), 'paw cleaner: (US)');
   await post(app, '/api/pr/imports/trends', { csv: short, productId: shared });
-  expect(facts(db, shared).map((f) => f.demand_set_id)).toEqual([set.id, set.id]);
+  expect(facts(db, shared).map((f) => f.demand_set_id)).toEqual([set.id, set.id, set.id]);
 
   expect((await post(app, '/api/pr/imports/trends?store=x', { csv: steady, productId: privateY })).status).toBe(404);
   expect((await post(app, '/api/pr/imports/trends?store=nope', { csv: steady })).status).toBe(404);

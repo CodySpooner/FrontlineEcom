@@ -1228,6 +1228,20 @@ export const MIGRATIONS = [
   );
   ALTER TABLE pr_product_facts ADD COLUMN demand_peak_month INTEGER; -- 1-12 when demand_class is seasonal
   `,
+  /* 53 (product-research: PR-09 what discovery filters, sorts and counts on, kept by Rank and Evaluate) */ `
+  ALTER TABLE pr_product_facts ADD COLUMN demand_sets INTEGER NOT NULL DEFAULT 0; -- qualifying shared sets (decision 9)
+  ALTER TABLE pr_product_facts ADD COLUMN unit_minor INTEGER; -- the cost + ship row's unit cost, converted
+  ALTER TABLE pr_product_facts ADD COLUMN ship_minor INTEGER; -- and its shipping cost
+  ALTER TABLE pr_product_facts ADD COLUMN delivery_days INTEGER; -- the fastest shippable row's upper bound
+  ALTER TABLE pr_product_facts ADD COLUMN rule_flags INTEGER; -- decision 10's flags on the shared title and category
+  ALTER TABLE pr_evaluations ADD COLUMN in_scope INTEGER; -- 1 in the included categories (or none set), 0 outside, NULL category unknown
+  ALTER TABLE pr_evaluations ADD COLUMN open_flags INTEGER NOT NULL DEFAULT 0; -- flags not dismissed
+  CREATE INDEX pr_facts_delivery ON pr_product_facts (destination, currency, delivery_days);
+  CREATE INDEX pr_facts_demand_sets ON pr_product_facts (destination, currency, demand_sets);
+  CREATE INDEX pr_evaluations_scope ON pr_evaluations (store_id, in_scope);
+  CREATE INDEX pr_products_category ON pr_products (category);
+  CREATE INDEX pr_watches_by_target ON pr_watches (target_id);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

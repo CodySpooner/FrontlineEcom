@@ -52,12 +52,15 @@ export const NICHE_WORDS: Record<Exclude<Niche, 'other'>, string[]> = {
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/** Any of `words` at a word's start in the category path. */
+export const categoryMatches = (words: string[], category: string) =>
+  words.some((w) => new RegExp(`(^|[^\\p{L}\\p{N}])${escape(w.toLowerCase())}`, 'u').test(category.toLowerCase()));
+
 /** In the niche or an included category: true, false, or null when the category is unknown. */
 export function inNiche(store: Pick<Store, 'niche' | 'nicheDetail'>, include: string[], category: string | null): boolean | null {
   if (!category) return null;
-  const c = category.toLowerCase();
   const words = store.niche === 'other' ? ((store.nicheDetail ?? '').toLowerCase().match(/[\p{L}\p{N}]{3,}/gu) ?? []) : NICHE_WORDS[store.niche];
-  return [...words, ...include.map((i) => i.toLowerCase())].some((w) => new RegExp(`(^|[^\\p{L}\\p{N}])${escape(w)}`, 'u').test(c));
+  return categoryMatches([...words, ...include], category);
 }
 
 const num = (v: unknown) => (v == null ? null : Number(v));
