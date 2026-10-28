@@ -665,7 +665,7 @@ export function ReadOnlyRun({ store, run: seed, buttons }: { store: Store; run: 
           <Turns store={store} runs={[run]} name={name} />
         </div>
       </div>
-      {/* ponytail: a team step opens its team from AA-19 (decision 4); until then it reads here, without Continue. */}
+      {/* A team step's run opens in its team (RunView redirects); the teamId check keeps Continue off it all the same. */}
       {otherStores(run) ? (
         <p className={cx(COLUMN, 'px-6 pt-3 pb-4 text-[12.5px] text-muted')}>This run read other stores' data, so it can't continue in one store's conversation.</p>
       ) : !run.teamId && !isLive(run) ? (

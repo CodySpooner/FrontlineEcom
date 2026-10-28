@@ -51,9 +51,29 @@ profile chip's dropdown, which the owner removed on 2026-10-28.
    and delta vs previous period: Revenue, Profit (hero card), Ad Spend, ROAS, Orders (+ AOV); Revenue Overview area
    chart with hover tooltip; Live Store Activity feed; AI Agents strip (status + current task); **Agent Requests**
    board (approve/deny inline).
-2. **AI Agents** — store tabs; the store's squad as cards (portrait, name, status, description,
-   Configure / Chat); Deploy Agent. Agent detail: streaming chat with tool steps, run history, memory (what it has
-   learned about this store), settings (enabled, autonomy, budget caps, schedule).
+2. **AI Agents** — a three-pane workspace, one store at a time (redesigned 2026-10-28; spec
+   `docs/features/ai-agents.md`, report `docs/features/ai-agents-report.md`).
+   - **Left pane:** the store switcher (running and waiting counts per store), Deploy agent, Create team, search over
+     titles and messages, then Pinned, Teams and the agents grouped by type with their conversations. Rows rename,
+     pin and archive from their ⋯ menu; Archived and "active + 30 days" sit at the foot.
+   - **Centre:** the open conversation. The header has inline rename, state, Collaborate and a ⋯ menu (rename, pin,
+     archive, change runtime or model, agent settings). Under it are chips for type, store, runtime · model and this
+     run's spend. Replies stream with their tool steps, evidence and citations. Questions and approvals wait in the
+     thread. Failures say why with a fix (sign in, change runtime or model, Retry), and interrupted turns offer
+     Resume. The composer keeps a draft per conversation, queues a message while a reply runs, attaches documents
+     and picks knowledge scope. Save to Knowledge Base works from any reply.
+   - **Right panel:** Details (agent, runtime and sign-in state, store scope, tools with access and connection state,
+     approvals and limits), Activity (every run with runtime, cost and errors) and Knowledge (cards used, findings
+     saved). The agent settings drawer has Settings, Memory, History, and Flows for Email/SMS.
+   - **Deploy:** type (built-in roles and the store's custom roles), runtime (Claude, Codex, or Demo on demo stores),
+     model and effort read from the runtime itself, tools and knowledge, permissions and limits (budget, Stop after,
+     saving findings), presets, attachments. Unsupported combinations are refused with the reason.
+   - **Teams:** a shared objective and up to six participants, each on its own runtime · model · effort. The lead
+     plans, independent tasks run in parallel, dependents run in order, each step is retried on failure, and
+     disagreements are kept as Unresolved. The lead writes the synthesis, and To: Lead follows up in the team's
+     conversation.
+   - **Rules:** conversations, runs and teams persist across reloads and restarts. Interrupted turns wait for the
+     owner's Resume. Every route, tool and retrieval is scoped to the store.
 3. **Store Analytics** — per store: revenue/profit chart, funnel (sessions → add to cart → checkout → order), top
    products, channel split, ad campaigns table (spend, revenue, ROAS, CPA) colored by health.
 4. **Product Research** — tabs Trending / High Margin / Low Competition / TikTok Viral / Shopify Winners / My Lists;
@@ -133,7 +153,8 @@ budget caps, schedule.
 - `ClaudeEngine` — Claude Agent SDK `query()` using the owner's local Claude Code login (no API key needed), streaming
   partial messages, `resume` for chat continuity, `canUseTool` → approvals, per-run `mcpServers`.
 - `FakeEngine` — deterministic scripted runs for tests and demo mode.
-- (Later) Codex as an alternate engine for Store Developer code work.
+- `CodexEngine` — the installed Codex CLI (`codex exec --json`) on the app's own `CODEX_HOME`, read-only sandbox,
+  reaching only the app's MCP tools; chosen per conversation in Deploy. External MCP servers stay Claude only for now.
 
 **Expertise layers (prompt assembly).**
 1. Role prompt + **playbook** (`packages/agents/playbooks/<role>.md`) — distilled from the installed ecommerce skills

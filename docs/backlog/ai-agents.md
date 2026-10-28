@@ -1615,7 +1615,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   written: 'Codex live smoke: needs the owner's sign-in' or 'Codex live smoke: Codex is disabled (<reason>)'. The
   final report then lists the Codex smoke as unverified (and Codex as disabled, when it is) and says what it needs.
 - [x] AA-26 **Acceptance:** walk the "Done when" checklist and fix what it finds.
-- [ ] AA-27 **Final report and STOP.** Write `docs/features/ai-agents-report.md`, with screenshots in
+- [x] AA-27 **Final report and STOP.** Write `docs/features/ai-agents-report.md`, with screenshots in
   `docs/reference/ai-agents-final/`. Update `docs/DESIGN.md`'s AI Agents section to the new page. Then create
   `.agent/STOP`.
 
@@ -1807,6 +1807,12 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   model, the drawer's tabs, Deploy, Create team, Collaborate, the team page and its tabs, the empty workspace) found
   no control without an action. Three disabled buttons now say why on hover (Start team, Remove participant,
   Switch). `pnpm check` (1,615 tests) and `pnpm build` green; no console errors.
+- 2026-10-28 AA-27 Final report: `docs/features/ai-agents-report.md` (what was built, changed areas, each "Done when"
+  line with its tests or recorded check, what ran against real services and what only against fakes, limitations
+  and what they need). Screenshots of the finished page in `docs/reference/ai-agents-final/` (conversation and team
+  at 1280×800, 1440×900 and 1920×1080; Deploy, Create team, the settings drawer and the empty workspace at
+  1440×900; no console errors). `docs/DESIGN.md`'s AI Agents screen and the Codex engine line describe the new page.
+  `.agent/STOP` created; the lane is finished.
 
 ## Blocked
 - (AA-15, 2026-10-28; checked again in AA-25b, 2026-10-28 11:23) **Codex live smoke: needs the owner's sign-in.**
@@ -1945,6 +1951,12 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-27, 2026-10-28) **For the owner, after the lane:**
+  - **Codex:** sign in with the command under Blocked, then make AA-25b's one smoke run (it is the only unverified
+    runtime path).
+  - **Follow-up ideas** (not items; see the report's Limitations): a waiting state for a team step paused on an
+    approval; a cost estimate in Create team once per-model prices exist; per-record views in Analytics and Product
+    Research for reply links; Codex wiring for external MCP servers such as Meta Ads.
 - (AA-26, 2026-10-28) For AA-27:
   - **The click-through** (`.agent/aa26-click.mjs` through `cdp-drive.mjs`, output in `.agent/aa26/click.txt`): on
     each surface, every visible button, link, input, tab, menu item, radio and switch must have a React handler (on
