@@ -112,7 +112,7 @@ import { agentsUrl } from '../agents/urls';
 import { apiUp, waitForApi } from '../lib/restart';
 import { importing } from '../lib/sync';
 import { applyRunEvent, isLive } from '../lib/transcript';
-async function api<T>(path: string, init?: RequestInit): Promise<T> {
+export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   // fetch rejects only when nothing answered: say that, not the browser's "Failed to fetch" (mutations show the message).
   const r = await fetch(path, init).catch(() => {
     throw new Error("Couldn't reach the app's server: it may be restarting. Try again in a moment.");
@@ -126,7 +126,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   return (await r.json()) as T;
 }
 
-const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+export const json = (method: string, body: unknown): RequestInit => ({ method, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
 export const useSettings = () => useQuery({ queryKey: ['settings'], queryFn: () => api<Settings>('/api/settings') });
 export const useStores = () => useQuery({ queryKey: ['stores'], queryFn: () => api<Store[]>('/api/stores') });

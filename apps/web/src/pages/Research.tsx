@@ -1,479 +1,293 @@
-// UI-09 Product Research: browse scored products by tab, save them to lists, send winners to a store (as an approval).
-import { useDeferredValue, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
-import { Baby, Bookmark, Cpu, Dumbbell, Lamp, Package, PawPrint, Search, Shirt, Sparkles, Tent, TrendingDown, TrendingUp, type LucideIcon } from 'lucide-react';
-import { NICHES, PRODUCT_WRITE_PLATFORMS, type Niche, type ProductList, type ResearchProduct, type ResearchSource, type ResearchTab } from '@frontline/shared';
-import { useAddToStore, useListActions, useLists, useResearch, useStartRun, useSupplierSearch } from '../api/client';
-import { FixLink } from '../components/Chat';
+// Product Research (PR-10, design concept A): scope, search, ship-to and sort; the store's research profile; filter
+// chips; view tabs with server counts; the source strip; and the product grid. Every number comes from `/api/pr/*`.
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useSearchParams } from 'react-router';
+import { Search, TriangleAlert } from 'lucide-react';
+import { PR_SORTS, PR_VIEWS, type PrSort, type PrSourceState, type PrView } from '@frontline/shared';
+import { useStores } from '../api/client';
+import { useStored } from '../agents/layout';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { byHand } from '../components/StoreForm';
-import { Badge, Button, ConfirmDelete, cx, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Tabs } from '../components/ui';
-import { cents } from '../lib/format';
-import { customNiches } from '../lib/niche';
+import { Button, cx, EmptyState, ErrorState, LoadingState, Tabs } from '../components/ui';
 import { NAV } from '../nav';
+import { useDiscovery, useProfile, useSaveProfile, useSources } from '../product-research/api';
+import { ProductCard } from '../product-research/Card';
+import { activeFilters, discoveryQuery, FilterChips, type Filters } from '../product-research/Filters';
+import { countryName, profileLine, sourceItem } from '../product-research/format';
+import { ProfileDialog } from '../product-research/ProfileDialog';
 
-type Tab = ResearchTab | 'lists';
-const TABS: { value: Tab; label: string }[] = [
-  { value: 'trending', label: 'Trending' },
-  { value: 'high_margin', label: 'High Margin' },
-  { value: 'low_competition', label: 'Low Competition' },
-  { value: 'tiktok_viral', label: 'TikTok Viral' },
-  { value: 'shopify_winners', label: 'Shopify Winners' },
-  { value: 'lists', label: 'My Lists' },
-];
-
-// ponytail: demo data has no images, so each product shows its niche's icon; real connectors fill `image`.
-const NICHE_ICON: Record<Niche, LucideIcon> = { beauty: Sparkles, pet: PawPrint, tech: Cpu, fitness: Dumbbell, home: Lamp, fashion: Shirt, kids: Baby, outdoor: Tent, other: Package };
-const SOURCE: Record<ResearchSource, string> = { tiktok: 'TikTok', shopify: 'Shopify', amazon: 'Amazon', aliexpress: 'AliExpress' };
-const SAVED = 'Saved';
-const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+const VIEW_LABEL: Record<PrView, string> = { all: 'All matches', demand: 'With demand evidence', new: 'Newly discovered', watchlist: 'Watchlist', flagged: 'Flagged' };
+const DOT = { good: 'bg-good', warn: 'bg-[#f5b84a]', bad: 'bg-red', muted: 'bg-muted' };
+const CHIP = 'inline-flex items-center gap-1.5 rounded-full border border-[#33333b] bg-[#0e0e11] px-2.5 py-1.5 text-xs whitespace-nowrap text-text-2';
+const SELECT = 'cursor-pointer border-0 bg-transparent px-1 text-[13px] text-text [field-sizing:content] focus:outline-none';
+const SEG = (on: boolean) => cx('cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold [field-sizing:content]', on ? 'bg-[#24242a] text-text' : 'bg-transparent text-muted hover:text-text');
+const typing = (t: EventTarget | null) => t instanceof HTMLElement && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
 
 export function Research() {
-  const nav = NAV[3]!;
+  const nav = NAV.find((n) => n.path === '/research')!;
   const [params, setParams] = useSearchParams();
-  const tab = TABS.find((t) => t.value === params.get('tab'))?.value ?? 'trending';
-  const [niche, setNiche] = useState('');
-  const [q, setQ] = useState('');
-  const query = useDeferredValue(q.trim());
-  const [open, setOpen] = useState<ResearchProduct>();
-  const saved = useSaved();
-
-  const { ids, stores } = useStoreSelection();
-  // Research isn't per store, so the page has no store filter: with several stores, say whose Product Hunter runs.
-  const [storeId, setStoreId] = useState('');
-  const store = stores.find((s) => s.id === storeId) ?? stores.find((s) => s.id === ids[0]) ?? stores[0];
-  // A custom-niche store narrows to its own finds (`other:<slug>` → its own words); "Other" still lists every custom niche's.
-  const custom = customNiches(stores);
-  const start = useStartRun();
-  const navigate = useNavigate();
-  const research = () =>
-    store &&
-    start.mutate(
-      { agentId: `${store.id}:product_hunter`, task: `Find 5 new winning ${niche ? `${custom.get(niche) ?? niche} ` : ''}products for this store, with margin, trend and competition for each.` },
-      { onSuccess: (r) => navigate(`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`) },
+  const { isPending: storesLoading } = useStores();
+  const { ids, stores, name } = useStoreSelection();
+  const [last, setLast] = useStored('fe.research.page', { store: '', view: 'all', sort: '' });
+  const [filters, setFilters] = useStored<Filters>('fe.research.filters', {});
+  const [allShipTo, setAllShipTo] = useStored('fe.research.shipTo', 'US');
+  const set = (k: string, v: string | null) =>
+    setParams(
+      (p) => {
+        if (v) p.set(k, v);
+        else p.delete(k);
+        return p;
+      },
+      { replace: true },
     );
 
+  // Scope: the URL's store, else the last one used here, else the store picked in the app's store filter.
+  const scopeId = params.get('store') || last.store || ids[0] || stores[0]?.id || 'all';
+  const store = stores.find((s) => s.id === scopeId) ?? null;
+  const pickScope = (id: string) => (set('store', id), set('product', null), setLast({ ...last, store: id }));
+  const viewParam = params.get('view') || last.view;
+  const view: PrView = PR_VIEWS.includes(viewParam as PrView) ? (viewParam as PrView) : 'all';
+  const sortParam = params.get('sort') || last.sort;
+  const sort: PrSort = PR_SORTS.includes(sortParam as PrSort) && (store || sortParam !== 'best_fit') ? (sortParam as PrSort) : store ? 'best_fit' : 'recent';
+  const q = params.get('q') ?? '';
+  const [text, setText] = useState(q);
+  useEffect(() => {
+    const t = setTimeout(() => text.trim() !== q && set('q', text.trim() || null), 250);
+    return () => clearTimeout(t);
+  });
+  const product = params.get('product');
+
+  const profile = useProfile(store?.id ?? null);
+  const saveShipTo = useSaveProfile(store?.id ?? '');
+  const sources = useSources(store?.id ?? null);
+  const discovery = useDiscovery(discoveryQuery({ store: store?.id ?? null, shipTo: allShipTo, view, sort, q, filters }));
+  const first = discovery.data?.pages[0];
+  const items = discovery.data?.pages.flatMap((p) => p.items) ?? [];
+  const currency = first?.currency ?? store?.currency ?? 'USD';
+  const shipTo = store ? (profile.data?.shipTo ?? null) : allShipTo;
+  const [editProfile, setEditProfile] = useState(false);
+
+  // `/` focuses search; Esc closes the open product and returns focus to its card (a dialog handles its own Esc).
+  const search = useRef<HTMLInputElement>(null);
+  const grid = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === '/' && !typing(e.target)) return void (e.preventDefault(), search.current?.focus());
+      if (e.key === 'Escape' && product && !document.querySelector('dialog[open]')) {
+        grid.current?.querySelector<HTMLElement>(`[data-card="${CSS.escape(product)}"]`)?.focus();
+        set('product', null);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  // Arrow keys move through the grid by its own column count; Enter opens the product.
+  const onCardKey = (i: number) => (e: KeyboardEvent<HTMLElement>) => {
+    const cols = getComputedStyle(grid.current!).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+    const to = ({ ArrowRight: i + 1, ArrowLeft: i - 1, ArrowDown: i + cols, ArrowUp: i - cols } as Record<string, number>)[e.key];
+    if (e.key === 'Enter') set('product', items[i]!.id);
+    else if (to !== undefined) grid.current?.querySelectorAll<HTMLElement>('[data-card]')[to]?.focus();
+    else return;
+    e.preventDefault();
+  };
+  // The next 48 cards load when "Show more" scrolls near the viewport (or on its click).
+  const more = useRef<HTMLButtonElement>(null);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = discovery;
+  useEffect(() => {
+    const b = more.current;
+    if (!b || typeof IntersectionObserver === 'undefined') return;
+    const o = new IntersectionObserver(([e]) => e?.isIntersecting && !isFetchingNextPage && void fetchNextPage(), { rootMargin: '600px' });
+    o.observe(b);
+    return () => o.disconnect();
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const shipTos = [...new Set([...(first?.shipTos ?? []), ...(shipTo ? [shipTo] : [])])];
+  const problems = (sources.data ?? []).filter((s) => !s.fixtures && (s.errorKind || s.status === 'stopped'));
+  const set_ = activeFilters(filters, store?.id ?? null);
+  const clear = () => (setFilters({}), setText(''), set('q', null));
+
+  if (storesLoading) return <LoadingState rows={6} />;
   return (
     <>
       <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
-      <Tabs label="Research" tabs={TABS} value={tab} onChange={(t) => setParams(t === 'trending' ? {} : { tab: t }, { replace: true })} />
-      {tab !== 'lists' && (
-        <div className="my-4 flex flex-wrap items-center gap-2">
-          <label className="relative min-w-56 flex-1 min-[900px]:max-w-80">
-            <span className="sr-only">Search products</span>
-            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
-            <input
-              type="search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search products or categories"
-              className="w-full rounded-lg border border-line-2 bg-bg-2 py-2 pr-3 pl-9 text-[13px] placeholder:text-muted focus:border-red/60 focus:outline-none"
-            />
-          </label>
-          <label>
-            <span className="sr-only">Niche</span>
-            <select value={niche} onChange={(e) => setNiche(e.target.value)} className="cursor-pointer rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] focus:border-red/60 focus:outline-none">
-              <option value="">All niches</option>
-              {NICHES.map((n) => (
-                <option key={n} value={n}>
-                  {cap(n)}
-                </option>
-              ))}
-              {[...custom].map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          {stores.length > 1 && (
-            <label className="ml-auto">
-              <span className="sr-only">Store for AI Research</span>
-              <select value={store?.id ?? ''} onChange={(e) => setStoreId(e.target.value)} className="cursor-pointer rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] focus:border-red/60 focus:outline-none">
-                {stores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
+      <div className="mt-4 flex flex-wrap items-center gap-2.5">
+        <div role="group" aria-label="Scope" className="inline-flex rounded-[9px] border border-[#33333b] bg-[#0e0e11] p-[3px]">
+          <button type="button" aria-pressed={!store} onClick={() => pickScope('all')} className={SEG(!store)}>
+            All stores
+          </button>
+          {stores.length === 1 ? (
+            <button type="button" aria-pressed={!!store} onClick={() => pickScope(stores[0]!.id)} className={SEG(!!store)}>
+              {stores[0]!.name}
+            </button>
+          ) : (
+            stores.length > 1 && (
+              <select aria-label="Store" value={store?.id ?? ''} onChange={(e) => pickScope(e.target.value)} className={SEG(!!store)}>
+                {!store && (
+                  <option value="" disabled>
+                    A store…
                   </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <Button variant="primary" className={cx(stores.length < 2 && 'ml-auto')} disabled={!store || start.isPending} onClick={research} title={store && `Ask ${store.name}'s Product Researcher to find new winners`}>
-            <Sparkles className="size-4" />
-            AI Research
-          </Button>
-          {start.isError && (
-            <p role="alert" className="w-full text-right text-xs text-red">
-              {start.error.message} <FixLink message={start.error.message} agentId={start.variables?.agentId ?? ''} />
-            </p>
-          )}
-        </div>
-      )}
-      {tab === 'lists' ? (
-        <Lists onOpen={setOpen} saved={saved} />
-      ) : (
-        <Results tab={tab} niche={niche} q={query} onOpen={setOpen} saved={saved} onClear={() => (setQ(''), setNiche(''))} />
-      )}
-      <ProductDialog product={open} onClose={() => setOpen(undefined)} />
-    </>
-  );
-}
-
-/** The bookmark on a card = membership in the "Saved" list (created on first save). */
-function useSaved() {
-  const lists = useLists().data ?? [];
-  const { create, toggle } = useListActions();
-  const list = lists.find((l) => l.name === SAVED);
-  return {
-    has: (id: string) => !!list?.productIds.includes(id),
-    toggle: async (id: string) => {
-      const l = list ?? (await create.mutateAsync(SAVED));
-      toggle.mutate({ listId: l.id, productId: id, on: !l.productIds.includes(id) });
-    },
-  };
-}
-type Saved = ReturnType<typeof useSaved>;
-
-function Results({ tab, niche, q, onOpen, saved, onClear }: { tab: ResearchTab; niche: string; q: string; onOpen: (p: ResearchProduct) => void; saved: Saved; onClear: () => void }) {
-  const { stores } = useStoreSelection();
-  // Every store live: the sample catalog is only noise next to the Product Hunter's finds (with a demo store left, it stays, labelled).
-  const r = useResearch(tab, niche, q, stores.length > 0 && stores.every((s) => s.connected));
-  if (r.isPending) return <LoadingState rows={4} />;
-  if (r.isError) return <ErrorState message="Couldn't load research." onRetry={() => r.refetch()} />;
-  if (!r.data.items.length && tab === 'trending' && !niche && !q) {
-    return (
-      <EmptyState icon={Search} title="No finds yet">
-        Ask the Product Researcher with AI Research: what it finds for your stores lands here.
-      </EmptyState>
-    );
-  }
-  if (!r.data.items.length) {
-    return (
-      <EmptyState icon={Search} title="No products match" action={<Button onClick={onClear}>Clear filters</Button>}>
-        Try another niche or a broader search.
-      </EmptyState>
-    );
-  }
-  return (
-    <>
-      {/* The grid's heading: product cards are h3s, as they are under each list's title in My Lists. */}
-      <h2 className="mb-3 text-xs font-normal text-muted">{`${r.data.total} product${r.data.total === 1 ? '' : 's'}, best first`}</h2>
-      <Grid className={cx(r.isPlaceholderData && 'opacity-60')}>
-        {r.data.items.map((p) => (
-          <ProductCard key={p.id} p={p} onOpen={() => onOpen(p)} saved={saved} />
-        ))}
-      </Grid>
-    </>
-  );
-}
-
-/** A row from the sample catalog every install starts with (made-up trend and competition), not an agent's find.
- *  Said only once a real store is connected: in demo mode it's all sample. */
-const useSample = (p: ResearchProduct) => useStoreSelection().stores.some((s) => s.connected) && !!p.sample;
-
-const Grid = ({ className, children }: { className?: string; children: ReactNode }) => (
-  <div className={cx('grid grid-cols-1 gap-3.5 transition-opacity min-[560px]:grid-cols-2 min-[1000px]:grid-cols-3 min-[1280px]:grid-cols-4', className)}>{children}</div>
-);
-
-function ProductCard({ p, onOpen, saved }: { p: ResearchProduct; onOpen: () => void; saved: Saved }) {
-  const Icon = NICHE_ICON[p.niche];
-  const on = saved.has(p.id);
-  const sample = useSample(p);
-  return (
-    <article className="card flex flex-col overflow-hidden">
-      <div className="relative grid h-[150px] place-items-center border-b border-line bg-[radial-gradient(circle_at_50%_45%,rgb(255_42_58/.16),transparent_70%)]">
-        {p.image ? <img src={p.image} alt="" loading="lazy" className="size-full object-cover" /> : <Icon aria-hidden className="size-14 text-text-2/60" strokeWidth={1.2} />}
-        <span className="absolute top-2.5 left-2.5 rounded-md bg-red-fill px-2 py-0.5 text-[11px] font-bold text-white shadow-glow">AI Score {p.score}</span>
-        <button
-          type="button"
-          aria-pressed={on}
-          aria-label={on ? `Remove ${p.title} from ${SAVED}` : `Save ${p.title}`}
-          onClick={() => saved.toggle(p.id)}
-          className={cx('absolute top-2 right-2 grid size-8 cursor-pointer place-items-center rounded-lg bg-bg/70 transition hover:text-white', on ? 'text-red' : 'text-text-2')}
-        >
-          <Bookmark className="size-4" fill={on ? 'currentColor' : 'none'} />
-        </button>
-      </div>
-      <div className="flex flex-1 flex-col p-3.5">
-        <h3 className="text-[14px] leading-snug font-semibold">{p.title}</h3>
-        <p className="mt-0.5 text-xs text-muted">
-          {p.category} · {SOURCE[p.source]}
-          {sample && ' · Sample data'}
-        </p>
-        <div className="mt-2.5 flex flex-wrap items-baseline gap-x-2">
-          <b className="font-display text-lg tabular-nums">{cents(p.price)}</b>
-          {p.compareAt > p.price && <s className="text-xs text-muted tabular-nums">{cents(p.compareAt)}</s>}
-          {/* An arrow, not a bare "+248%" beside a struck-through price, where it reads as a markup. */}
-          <span className={cx('ml-auto inline-flex items-center gap-0.5 text-xs font-semibold whitespace-nowrap tabular-nums', p.trend > 0 ? 'text-good' : 'text-muted')} title="Demand growth, last 30 days">
-            {p.trend < 0 ? <TrendingDown className="size-3.5" aria-hidden="true" /> : <TrendingUp className="size-3.5" aria-hidden="true" />}
-            {demand(p.trend)}
-            <span className="sr-only"> demand</span>
-          </span>
-        </div>
-        <p className="mt-0.5 text-xs text-muted">
-          {Math.round(p.margin)}% margin · ships in {p.shippingDays}d
-        </p>
-        <Button size="sm" className="mt-3" onClick={onOpen}>
-          View Details
-        </Button>
-      </div>
-    </article>
-  );
-}
-
-function Lists({ onOpen, saved }: { onOpen: (p: ResearchProduct) => void; saved: Saved }) {
-  const lists = useLists();
-  const all = useResearch(undefined, '', '');
-  const { remove } = useListActions();
-  if (lists.isPending || all.isPending) return <LoadingState rows={3} className="mt-4" />;
-  if (lists.isError || all.isError) return <ErrorState message="Couldn't load your lists." onRetry={() => (lists.refetch(), all.refetch())} />;
-  if (!lists.data.length) {
-    return (
-      <EmptyState icon={Bookmark} title="No lists yet">
-        Bookmark a product to save it, or make a list from a product's details.
-      </EmptyState>
-    );
-  }
-  const byId = new Map(all.data.items.map((p) => [p.id, p]));
-  return (
-    <div className="mt-4 grid gap-4">
-      {lists.data.map((l) => {
-        const items = l.productIds.map((id) => byId.get(id)).filter((p) => !!p);
-        return (
-          <Panel
-            key={l.id}
-            title={l.name}
-            sub={`${items.length} product${items.length === 1 ? '' : 's'}`}
-            action={
-              <ConfirmDelete question="Delete this list?" confirm="Delete list" busy={remove.isPending} onConfirm={() => remove.mutate(l.id)}>
-                {(open, ref) => (
-                  <Button ref={ref} size="sm" disabled={remove.isPending} onClick={open} aria-label={`Delete list ${l.name}`}>
-                    Delete list
-                  </Button>
                 )}
-              </ConfirmDelete>
-            }
-          >
-            {items.length ? (
-              <Grid>
-                {items.map((p) => (
-                  <ProductCard key={p.id} p={p} onOpen={() => onOpen(p)} saved={saved} />
-                ))}
-              </Grid>
-            ) : (
-              <p className="text-[13px] text-muted">Empty. Add products from their details.</p>
-            )}
-          </Panel>
-        );
-      })}
-    </div>
-  );
-}
-
-const PARTS: { key: keyof ResearchProduct['scoreParts']; label: string; weight: number }[] = [
-  { key: 'margin', label: 'Margin', weight: 35 },
-  { key: 'trend', label: 'Trend', weight: 25 },
-  { key: 'competition', label: 'Low competition', weight: 25 },
-  { key: 'shipping', label: 'Fast shipping', weight: 15 },
-];
-
-function ProductDialog({ product: p, onClose }: { product?: ResearchProduct; onClose: () => void }) {
-  return (
-    <Dialog open={!!p} onClose={onClose} title={p?.title ?? 'Product'}>
-      {p && <ProductDetails key={p.id} p={p} />}
-    </Dialog>
-  );
-}
-
-export function ProductDetails({ p }: { p: ResearchProduct }) {
-  const lists = useLists().data ?? [];
-  const { create, toggle } = useListActions();
-  const [name, setName] = useState('');
-  const { ids, stores } = useStoreSelection();
-  const [storeId, setStoreId] = useState(ids[0] ?? stores[0]?.id ?? '');
-  const add = useAddToStore();
-  // An approved request would do nothing on a store the app can't write to.
-  const manual = byHand(stores.find((s) => s.id === storeId), PRODUCT_WRITE_PLATFORMS);
-  const sample = useSample(p);
-
-  const newList = (e: FormEvent) => {
-    e.preventDefault();
-    create.mutate(name.trim(), {
-      onSuccess: (l: ProductList) => {
-        setName('');
-        toggle.mutate({ listId: l.id, productId: p.id, on: true });
-      },
-    });
-  };
-
-  return (
-    <div className="grid gap-5">
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-xs text-muted">
-          {p.category} · {SOURCE[p.source]} · {(p.nicheDetail && customNiches(stores).get(`other:${p.nicheDetail}`)) || cap(p.niche)}
-        </p>
-        <Badge tone="red">AI Score {p.score}</Badge>
-      </div>
-      {sample && (
-        <p className="-mt-2 text-xs text-text-2">Sample data: made-up demand and competition from the demo catalog, not a find for your stores. AI Research brings real ones.</p>
-      )}
-      <dl className="grid grid-cols-3 gap-3 text-[13px]">
-        <Fact label="Cost" value={cents(p.cost)} />
-        <Fact label="Sell at" value={cents(p.price)} />
-        {p.compareAt > p.price && <Fact label="Compare at" value={cents(p.compareAt)} />}
-        <Fact label="Margin" value={`${Math.round(p.margin)}%`} />
-        <Fact label="Demand, 30 days" value={demand(p.trend)} />
-        <Fact label="Ships in" value={`${p.shippingDays} days`} />
-      </dl>
-      <section>
-        <h3 className="mb-2 text-[13px] font-semibold">Why it scores {p.score}</h3>
-        <div className="grid gap-2.5">
-          {PARTS.map((part) => (
-            <div key={part.key} className="grid grid-cols-[156px_minmax(0,1fr)_32px] items-center gap-3 text-xs">
-              <span className="text-text-2">
-                {part.label} <span className="text-muted">· {part.weight}%</span>
-              </span>
-              <ProgressBar value={p.scoreParts[part.key] / 100} label={part.label} />
-              <span className="text-right text-text-2 tabular-nums">{p.scoreParts[part.key]}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-      <Suppliers p={p} />
-      <section>
-        <h3 className="mb-2 text-[13px] font-semibold">Lists</h3>
-        <div className="flex flex-wrap gap-2">
-          {lists.map((l) => (
-            <label key={l.id} className="flex cursor-pointer items-center gap-2 rounded-lg border border-line-2 px-2.5 py-1.5 text-xs text-text-2">
-              <input type="checkbox" className="accent-red" checked={l.productIds.includes(p.id)} onChange={(e) => toggle.mutate({ listId: l.id, productId: p.id, on: e.target.checked })} />
-              {l.name}
-            </label>
-          ))}
-        </div>
-        <form onSubmit={newList} className="mt-2 flex gap-2">
-          <label htmlFor="new-list" className="sr-only">
-            New list name
-          </label>
-          <input
-            id="new-list"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={80}
-            placeholder="New list, e.g. Q4 gifts"
-            className="flex-1 rounded-lg border border-line-2 bg-bg-2 px-3 py-1.5 text-[13px] placeholder:text-muted focus:border-red/60 focus:outline-none"
-          />
-          <Button size="sm" type="submit" disabled={!name.trim() || create.isPending}>
-            Create and add
-          </Button>
-        </form>
-      </section>
-      <section className="border-t border-line pt-4">
-        <h3 className="mb-2 text-[13px] font-semibold">Add to a store</h3>
-        {add.isSuccess ? (
-          <p className="text-[13px] text-text-2">
-            {/* Core hands back the request already pending for this product (the owner's or an agent's) instead of a second. */}
-            {Date.parse(add.data.createdAt) < add.submittedAt - 5_000
-              ? `${stores.find((s) => s.id === storeId)?.name} already has a request waiting for this product.`
-              : `Sent to ${stores.find((s) => s.id === storeId)?.name}'s Product Researcher.`}{' '}
-            <Link to="/" className="text-red hover:underline">
-              Approve it on the Dashboard
-            </Link>
-          </p>
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <label>
-              <span className="sr-only">Store</span>
-              <select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="cursor-pointer rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] focus:border-red/60 focus:outline-none">
                 {stores.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
                 ))}
               </select>
-            </label>
-            {manual ? (
-              <span className="text-xs text-text-2">The app can't add products to {manual} stores yet. Add it in {manual} by hand.</span>
-            ) : (
-              <>
-                <Button variant="primary" disabled={!storeId || add.isPending} onClick={() => add.mutate({ productId: p.id, storeId })}>
-                  Request to add
+            )
+          )}
+        </div>
+        <label className="relative max-w-[360px] min-w-56 flex-[1_1_260px]">
+          <span className="sr-only">Search products</span>
+          <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
+          <input
+            ref={search}
+            type="search"
+            value={text}
+            maxLength={200}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Search products, categories or supplier SKUs"
+            className="min-h-9 w-full rounded-lg border border-[#33333b] bg-[#0e0e11] py-2 pr-3 pl-9 text-[13px] placeholder:text-muted focus:border-red/60 focus:outline-none"
+          />
+        </label>
+        <label className={CHIP}>
+          Ship to
+          <select
+            aria-label="Ship to"
+            value={shipTo ?? ''}
+            disabled={!!store && (!profile.data || saveShipTo.isPending)}
+            onChange={(e) => (store ? saveShipTo.mutate({ shipTo: e.target.value }) : setAllShipTo(e.target.value))}
+            className={SELECT}
+          >
+            {!shipTo && <option value="">Not set: pick it in the profile</option>}
+            {shipTos.map((c) => (
+              <option key={c} value={c}>
+                {countryName(c)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={CHIP}>
+          Sort
+          <select aria-label="Sort" value={sort} onChange={(e) => (set('sort', e.target.value), setLast({ ...last, sort: e.target.value }))} className={SELECT}>
+            {store && <option value="best_fit">{`Best fit for ${store.name}`}</option>}
+            <option value="recent">Recently discovered</option>
+            <option value="momentum">Strongest observed momentum</option>
+            <option value="cost">Lowest verified cost + shipping (excl. duties)</option>
+          </select>
+        </label>
+      </div>
+
+      {store && profile.data && (
+        <p className="mt-3 text-[12.5px] text-text-2">
+          Ranked for <b className="text-text">{store.name}</b>
+          {profileLine(store, profile.data).map((part) => ` · ${part}`)} ·{' '}
+          <button type="button" onClick={() => setEditProfile(true)} className="cursor-pointer text-red hover:underline">
+            Edit research profile
+          </button>
+        </p>
+      )}
+      {store && profile.data && editProfile && <ProfileDialog open onClose={() => setEditProfile(false)} store={store.id} storeName={store.name} profile={profile.data} />}
+
+      <FilterChips d={first} filters={filters} set={setFilters} store={store?.id ?? null} currency={currency} />
+
+      <div className="mt-3.5">
+        <Tabs
+          label="Product views"
+          tabs={PR_VIEWS.map((v) => ({ value: v, label: VIEW_LABEL[v], count: first?.counts[v] }))}
+          value={view}
+          onChange={(v) => (set('view', v === 'all' ? null : v), setLast({ ...last, view: v }))}
+        />
+      </div>
+
+      {sources.data && (
+        <div aria-label="Sources" className="mt-2.5 flex flex-wrap gap-x-[18px] gap-y-2 text-xs text-text-2">
+          {sources.data.map((s) => {
+            const it = sourceItem(s);
+            return (
+              <span key={s.id} className="inline-flex items-center gap-1.5" title={s.access === 'verified' ? undefined : s.connect}>
+                <i aria-hidden className={cx('size-[7px] shrink-0 rounded-full', DOT[it.tone])} />
+                {it.text}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      {problems.map((s) => (
+        <p key={s.id} role="status" className="mt-2.5 flex items-start gap-2 rounded-lg border border-red/30 bg-red/8 px-3 py-2 text-[12.5px] text-text-2">
+          <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-red" />
+          {s.errorKind === 'auth'
+            ? `${s.name} is disconnected: ${s.lastError ?? 'its credentials were refused'}. Reconnect it in Integrations.`
+            : `${s.name} isn't answering (${s.lastError ?? s.status}). ${s.lastSuccessAt ? `Its products are from its last successful sync, ${new Date(s.lastSuccessAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}` : 'It has never synced'}; other sources are unaffected.`}
+        </p>
+      ))}
+
+      <section aria-label="Products" className="mt-4">
+        {discovery.isPending ? (
+          <LoadingState rows={6} />
+        ) : discovery.isError ? (
+          <ErrorState message={discovery.error.message} onRetry={() => void discovery.refetch()} />
+        ) : !items.length ? (
+          set_.length || q ? (
+            <EmptyState title="No products match these filters" action={<Button onClick={clear}>Clear filters</Button>}>
+              {`Set: ${[...(q ? [`search "${q}"`] : []), ...set_].join(', ')}.`}
+            </EmptyState>
+          ) : view !== 'all' ? (
+            <EmptyState title={`Nothing in ${VIEW_LABEL[view]} yet`}>
+              {view === 'demand' ? 'Products show here once they have a qualifying demand set (an imported Trends CSV with enough history, or your own orders).' : 'Products show here as they qualify.'}
+            </EmptyState>
+          ) : (
+            <FirstUse sources={sources.data ?? []} />
+          )
+        ) : (
+          <>
+            <div ref={grid} className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3.5">
+              {items.map((c, i) => (
+                <ProductCard
+                  key={c.id}
+                  c={c}
+                  store={store?.name ?? null}
+                  scope={store?.id ?? null}
+                  currency={currency}
+                  shipTo={first?.shipTo ?? shipTo}
+                  storeName={name}
+                  selected={c.id === product}
+                  onOpen={() => set('product', c.id)}
+                  onKeyDown={onCardKey(i)}
+                />
+              ))}
+            </div>
+            {hasNextPage && (
+              <div className="mt-4 flex justify-center">
+                <Button ref={more} onClick={() => void fetchNextPage()} disabled={isFetchingNextPage}>
+                  {isFetchingNextPage ? 'Loading…' : 'Show more'}
                 </Button>
-                <span className="text-xs text-muted">Nothing changes until you approve it.</span>
-              </>
+              </div>
             )}
-          </div>
-        )}
-        {add.isError && (
-          <p role="alert" className="mt-2 text-xs text-red">
-            {add.error.message}
-          </p>
+          </>
         )}
       </section>
-    </div>
+    </>
   );
 }
 
-/** CJ Dropshipping matches for the product, with the margin left at our sell price (before shipping). */
-function Suppliers({ p }: { p: ResearchProduct }) {
-  const [look, setLook] = useState(false);
-  const q = useSupplierSearch(look ? p.title : '');
+/** First use: nothing to show and nothing connected that would bring products. What each source needs, from the server. */
+function FirstUse({ sources }: { sources: PrSourceState[] }) {
+  const connected = sources.filter((s) => s.access === 'verified');
   return (
-    <section>
-      <h3 className="mb-2 text-[13px] font-semibold">Suppliers</h3>
-      {!look ? (
-        <Button size="sm" onClick={() => setLook(true)}>
-          <Search className="size-3.5" />
-          Find on CJ Dropshipping
-        </Button>
-      ) : q.isPending ? (
-        <LoadingState rows={2} />
-      ) : q.isError ? (
-        <ErrorState message="Couldn't search CJ Dropshipping." onRetry={() => q.refetch()} />
-      ) : !q.data.length ? (
-        <p className="text-[13px] text-muted">No CJ Dropshipping match for this product.</p>
-      ) : (
-        <>
-          <ul className="grid gap-2">
-            {q.data.map((s) => (
-              <li key={s.id} className="flex items-center gap-3 rounded-lg border border-line bg-bg-2 px-3 py-2">
-                {s.image && <img src={s.image} alt="" className="size-10 shrink-0 rounded-md object-cover" />}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px]">{s.title}</p>
-                  <p className="text-xs text-muted">
-                    SKU {s.sku} · {s.listed.toLocaleString('en-US')} sellers list it
-                  </p>
-                </div>
-                <div className="text-right tabular-nums">
-                  <b className="text-[13px]">{cents(s.price)}</b>
-                  <p className="text-xs text-muted">{Math.round((1 - s.price / p.price) * 100)}% margin before shipping</p>
-                </div>
-              </li>
-            ))}
-          </ul>
-          {q.data.some((s) => s.demo) && (
-            <p className="mt-1.5 text-xs text-muted">
-              Demo matches.{' '}
-              <Link to="/integrations" className="text-red hover:underline">
-                Connect CJ Dropshipping
-              </Link>{' '}
-              for live prices.
-            </p>
-          )}
-        </>
-      )}
-    </section>
-  );
-}
-
-/** Demand growth, signed: an agent's find can be falling ("−12%"). */
-const demand = (t: number) => (t < 0 ? '−' : '+') + Math.abs(Math.round(t)) + '%';
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-line bg-bg-2 px-3 py-2">
-      <dt className="text-[11px] text-muted">{label}</dt>
-      <dd className="mt-0.5 font-semibold tabular-nums">{value}</dd>
-    </div>
+    <EmptyState title={connected.length ? 'No products yet' : 'No product sources connected yet'}>
+      <span className="block max-w-[640px] text-left">
+        {connected.length ? `${connected.map((s) => s.name).join(', ')} ${connected.length === 1 ? 'is' : 'are'} connected but no products have arrived yet. ` : 'Products appear here once a source brings them in. '}
+        To add one:
+      </span>
+      <ul className="mt-2 grid max-w-[640px] gap-1.5 text-left text-[12.5px]">
+        {sources
+          .filter((s) => s.access !== 'verified' && s.answers.includes('discovery'))
+          .map((s) => (
+            <li key={s.id}>
+              <b className="text-text">{s.name}:</b> {s.connect}
+            </li>
+          ))}
+      </ul>
+    </EmptyState>
   );
 }

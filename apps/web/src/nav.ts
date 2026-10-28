@@ -16,7 +16,7 @@ export const NAV: NavItem[] = [
   { path: '/', label: 'Dashboard', icon: LayoutDashboard, title: 'Command Center', subtitle: 'Your ecom business. Powered by AI.', item: 'UI-04' },
   { path: '/agents', label: 'AI Agents', icon: Bot, title: 'AI Agents', subtitle: 'Specialized agents. One powerful team.', item: 'UI-06' },
   { path: '/analytics', label: 'Store Analytics', icon: ChartColumn, title: 'Store Analytics', subtitle: 'Every number. Every store.', item: 'UI-11' },
-  { path: '/research', label: 'Product Research', icon: Target, title: 'Product Research', subtitle: 'Find winners. Faster.', item: 'UI-09' },
+  { path: '/research', label: 'Product Research', icon: Target, title: 'Product Research', subtitle: 'Discover. Verify. Test.', item: 'UI-09' },
   { path: '/creative', label: 'Ad Creation', icon: Megaphone, title: 'Creative Studio', subtitle: 'Generate high converting ads with AI.', item: 'UI-10' },
   { path: '/builder', label: 'Store Builder', icon: Store, title: 'Store Builder', subtitle: 'Your storefront, built by your squad.', item: 'UI-24' },
   { path: '/orders', label: 'Orders & Fulfillment', icon: Package, title: 'Orders & Fulfillment', subtitle: 'Every order. Out the door.', item: 'UI-12' },

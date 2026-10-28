@@ -168,7 +168,8 @@ export function Segmented<T extends string | number>({ label, options, value, on
 }
 
 /** Underlined tab bar (store tabs, page sections). `color` adds an identity dot. */
-export function Tabs<T extends string>({ label, tabs, value, onChange }: { label: string; tabs: { value: T; label: string; color?: string }[]; value: T; onChange: (v: T) => void }) {
+// `count` (opt-in): a muted number after the label, e.g. Product Research's server counts per view.
+export function Tabs<T extends string>({ label, tabs, value, onChange }: { label: string; tabs: { value: T; label: string; color?: string; count?: number }[]; value: T; onChange: (v: T) => void }) {
   const { onKeyDown, stop } = roving(tabs.map((t) => t.value), value, onChange);
   return (
     <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className="flex gap-1 overflow-x-auto [scrollbar-width:none] shadow-[inset_0_-1px_0_var(--color-line)]">
@@ -187,6 +188,7 @@ export function Tabs<T extends string>({ label, tabs, value, onChange }: { label
         >
           {t.color && <i className="size-[7px] rounded-full" style={{ background: t.color }} />}
           {t.label}
+          {t.count !== undefined && <span className="font-medium text-muted">{` ${t.count.toLocaleString('en-US')}`}</span>}
         </button>
       ))}
     </div>

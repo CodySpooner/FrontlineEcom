@@ -719,7 +719,7 @@ STOP.
   the page uses; a test with 10,000 products. Also PR-03's test: a sample row never appears in discovery, counts or
   sorts. "With demand evidence" in a store's scope also counts that store's own qualifying sets (its orders, PR-07),
   which stay out of the shared facts.
-- [ ] PR-10 **Page frame, product grid, image proxy and dev fixtures** (The design: page frame and product card;
+- [x] PR-10 **Page frame, product grid, image proxy and dev fixtures** (The design: page frame and product card;
   decisions 12, 14): replace the page, keep `/research` and its nav entry (looked up by path), toolbar, profile line,
   filter chips, tabs, source strip, grid and cards, URL and storage state, the distinct states, the image proxy, and
   the dev-only fixture loader with its "Test fixture" labelling. Real data only: with no source connected, the
@@ -868,6 +868,15 @@ STOP.
   Migration 53 (what discovery reads, kept by Rank and Evaluate, with an index each). 10,000 products: first page
   with counts and facets in 159 ms (All stores) and 88 ms (store, Best fit) on this machine. Includes PR-03's test (a
   sample row never appears in discovery, counts, facets or sorts). 6 tests; 8 mutation checks. Server only, fixtures.
+- 2026-10-28 PR-10 page frame and grid: `/research` is the discovery workspace (Hero, scope switch, server-side
+  search, Ship to, the four sorts, the profile line with "Edit research profile" on `PUT /api/pr/profile`, the chips
+  with "unknown included", More filters, view tabs with server counts, the source strip from `GET /api/pr/sources`,
+  cards per the board, 48 a page with Show more, URL and `fe.research.*` state, `/`, arrows, Enter and Esc), the
+  first-use, no-match and source-error states, the image proxy (`GET /api/pr/listings/:id/image`, cache only, T3's
+  image mode, T2's shared fetcher) and the dev fixture loader (`pnpm --filter @frontline/server pr:fixtures [n]`).
+  **Ran on fixtures only, not live data**: the dev DB has no `cj:global`, Trends import or feed. Screenshots (fixture
+  data, layout and styling only) at 1440×900 and 1024×680, store and All stores scopes, no console errors and no
+  sideways scroll. 15 tests (10 page, 5 server); 2 mutation checks on the page plus the server ones.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -899,6 +908,23 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-10, decisions 1, 5, 12 and 14 as built.**
+  - Decision 1 change: `api/client.ts` also exports its `api` and `json` helpers (two `export` keywords), so the new
+    hooks in `product-research/api.ts` reuse its error handling instead of copying it. Nothing else there changed.
+  - `ui.tsx` `Tabs` takes an opt-in `count` per tab (the board's muted number); without it nothing changes.
+  - The grid keeps every loaded card in the DOM with `content-visibility: auto` instead of windowing (ponytail: no
+    virtualizer dependency; nodes stay, layout and paint are skipped off screen; window it if a 10k-card scroll lags).
+    Chips are native selects sized with `field-sizing: content`; one value per chip (the API takes lists).
+  - Store scope's Ship to edits the profile's ship-to (a save re-ranks); All stores' is `fe.research.shipTo`.
+  - Selecting a card (click, Enter) sets `product=` and the red border; the panel itself is PR-12. The watch eye, the
+    Research chip and the footer's execution state, "Source health", and Research a Product are absent until PR-13,
+    PR-15, PR-11 and PR-16 (decision 1). First use lists each discovery source's own `connect` text from the server;
+    it says "Research a Product works now" once PR-16 ships. Add to store returns with PR-22.
+  - The image route keeps a route's own CSP: `app.ts` appends `frame-ancestors 'none'` to it instead of replacing it.
+    Images cache under `<dataDir>/pr-images`, keyed by the image_ref's SHA-256; a miss queues at most 500 refs and
+    fetches one every 2 s (30 a minute).
+  - Fixture rows are plain product names; the "Test fixture" pill and the strip label them. Re-running the loader
+    updates the same rows.
 - **PR-09, decisions 5, 9, 11 and 14 as built.**
   - `GET /api/pr/products?store=&shipTo=&q=&view=&sort=&cursor=&limit=` plus repeated list filters (`category`,
     `source`, `warehouse`, `supplier`, `stage`, `fit`, `availability`) and single ones (`costMax`, `deliveryMax`,

@@ -1,178 +1,179 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
-import type { ResearchProduct, Store } from '@frontline/shared';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import type { PrCard, PrDiscovery, PrSourceState, PrStoreProfile, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
-import { ProductDetails, Research } from './Research';
+import { discoveryQuery } from '../product-research/Filters';
+import { sourceItem } from '../product-research/format';
+import { Research } from './Research';
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  localStorage.clear();
 });
 
-const store = (id: string, name: string, platform: Store['platform']): Store => ({ id, name, platform, niche: 'beauty', currency: 'USD', timezone: 'UTC', color: '#f00', connected: true });
-const product: ResearchProduct = {
-  id: 'r1', title: 'Ice Facial Roller', category: 'Beauty', niche: 'beauty', source: 'tiktok', cost: 2.6, price: 11.3, compareAt: 34.99, margin: 77, trend: 141, competition: 33, shippingDays: 7, score: 88,
-  scoreParts: { margin: 90, trend: 80, competition: 70, shipping: 60 },
+const store: Store = { id: 'paws', name: 'Pawsome Gear', platform: 'shopify', niche: 'pet', currency: 'USD', timezone: 'UTC', color: '#f00', connected: true };
+const card = (o: Partial<PrCard> = {}): PrCard => ({
+  id: 'p1', title: 'Silicone grooming brush', imageListing: null, category: 'Pet Supplies > Grooming', source: { id: 'l1', label: 'CJdropshipping', host: null, origin: 'fixture' }, fixture: true, privateTo: null,
+  stage: 'discovered', watched: false, costShip: null, fulfillment: { status: 'pending', reasons: ['Fixture offer: not verified'], checkedAt: '2026-10-27T00:00:00Z' }, conditions: null,
+  demand: { cls: 'sustained', peakMonth: null, platform: 'google_trends', query: 'grooming brush', region: 'US', periodStart: '2024-11-03', periodEnd: '2026-10-25', scope: 'product' }, demandSets: 0,
+  fit: { fit: 'weak', reason: 'battery' }, flags: { count: 0, first: null }, storesEvaluating: 0, firstSeenAt: '2026-10-27T00:00:00Z', evidenceAt: null, ...o,
+});
+const page = (items: PrCard[], o: Partial<PrDiscovery> = {}): PrDiscovery => ({
+  items, next: null, total: items.length, counts: { all: items.length, demand: 0, new: items.length, watchlist: 0, flagged: 0 },
+  facets: { categories: [{ value: 'Pet Supplies > Grooming', label: 'Pet Supplies > Grooming', n: 1 }], sources: [{ value: 'cj', label: 'CJdropshipping', n: 1 }], warehouses: [], suppliers: [] },
+  currency: 'USD', shipTo: 'US', shipTos: ['US', 'CA'], fxDate: null, ...o,
+});
+const source = (o: Partial<PrSourceState>): PrSourceState => ({ id: 'cj', name: 'CJdropshipping', answers: ['discovery', 'fulfillment'], access: 'credentials_required', connect: 'Paste the API key in Integrations.', status: null, lastSuccessAt: null, lastError: null, errorKind: null, products: 0, fixtures: 0, ...o });
+const profile: PrStoreProfile = {
+  storeId: 'paws', audience: null, priceMin: 1500, priceMax: 4000, priceCurrency: 'USD', shipTo: 'US', shipToDefault: true, warehouses: ['US'], maxDeliveryDays: 12,
+  avoidCategories: ['batteries'], avoidTerms: [], includeCategories: [], keywords: [], updatedAt: null,
 };
 
-describe('ProductDetails › Add to a store', () => {
-  it("doesn't offer a request the app can't carry out on a connected non-Shopify store", async () => {
-    const fetch = stubApi((url) => (url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify'), store('etsy1', 'Clay Co', 'etsy'), store('woo1', 'Mug Lab', 'woocommerce')] : url.includes('add-to-store') ? { id: 'a1' } : []));
-    renderApp(<ProductDetails p={product} />);
-    await screen.findByRole('option', { name: 'Clay Co' });
-    const pick = screen.getByRole('combobox', { name: 'Store' });
-
-    fireEvent.change(pick, { target: { value: 'etsy1' } });
-    expect(screen.getByText(/can't add products to Etsy stores yet/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Request to add' })).toBeNull();
-
-    fireEvent.change(pick, { target: { value: 'woo1' } });
-    expect(screen.getByRole('button', { name: 'Request to add' })).toBeTruthy();
-
-    fireEvent.change(pick, { target: { value: 'shop1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Request to add' }));
-    await screen.findByText(/Sent to Peak Fit's Product Researcher/);
-    const [, init] = fetch.mock.calls.find(([u]) => String(u).includes('add-to-store'))!;
-    expect(JSON.parse(String(init?.body))).toEqual({ storeId: 'shop1' });
+function api(o: { items?: PrCard[]; sources?: PrSourceState[]; d?: Partial<PrDiscovery> } = {}) {
+  return stubApi((url, init) => {
+    if (url.startsWith('/api/stores')) return [store];
+    if (url.startsWith('/api/pr/products')) return page(o.items ?? [card()], o.d);
+    if (url.startsWith('/api/pr/sources')) return o.sources ?? [source({ fixtures: 10 })];
+    if (url.startsWith('/api/pr/profile')) return init?.method === 'PUT' ? { ...profile, ...JSON.parse(String(init.body)) } : profile;
+    return [];
   });
+}
+const calls = (f: ReturnType<typeof api>, path: string) => f.mock.calls.map(([u]) => String(u)).filter((u) => u.startsWith(path));
 
-  it('says a request for the product is already waiting when core hands back the pending one', async () => {
-    stubApi((url) => (url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify')] : url.includes('add-to-store') ? { id: 'a0', createdAt: '2026-10-20T08:00:00Z' } : []));
-    renderApp(<ProductDetails p={product} />);
-    await screen.findByRole('option', { name: 'Peak Fit' });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Store' }), { target: { value: 'shop1' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Request to add' }));
-    await screen.findByText(/Peak Fit already has a request waiting for this product/);
-    expect(screen.queryByText(/Sent to/)).toBeNull();
-  });
-});
-
-describe('AI Research', () => {
-  it("asks the Product Researcher of the store the owner picks, not silently the first one", async () => {
-    const fetch = stubApi((url, init) => {
-      if (init?.method === 'POST') return { id: 'r1', agentId: 'glow:product_hunter', status: 'queued', transcript: [] };
-      if (url.startsWith('/api/stores')) return [store('paws', 'Pawsome Gear', 'shopify'), store('glow', 'Glow Haus', 'shopify')];
-      if (url.startsWith('/api/research?')) return { items: [], total: 0, offset: 0, limit: 30 };
-      return [];
+describe('the discovery query', () => {
+  it('sends ship-to only in All stores, drops store-only filters there, and names strict filters only when they are set', () => {
+    const filters = { category: 'Grooming', stage: 'shortlisted' as const, costMax: 1500, strict: ['cost', 'delivery'] };
+    expect(Object.fromEntries(new URLSearchParams(discoveryQuery({ store: 'paws', shipTo: 'GB', view: 'all', sort: 'best_fit', q: ' brush ', filters })))).toEqual({
+      store: 'paws', q: 'brush', view: 'all', sort: 'best_fit', category: 'Grooming', stage: 'shortlisted', costMax: '1500', strict: 'cost', limit: '48',
     });
-    renderApp(<Research />);
-    await screen.findByRole('option', { name: 'Glow Haus' });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Store for AI Research' }), { target: { value: 'glow' } });
-    fireEvent.click(screen.getByRole('button', { name: 'AI Research' }));
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/agents/glow%3Aproduct_hunter/runs', expect.objectContaining({ method: 'POST' })));
-  });
-});
-
-describe('research results', () => {
-  it('heads the grid with its count (an h2 over the h3 product cards), singular for one', async () => {
-    stubApi((url) => (url.startsWith('/api/research?') ? { items: [product], total: 1, offset: 0, limit: 30 } : []));
-    renderApp(<Research />);
-    expect(await screen.findByRole('heading', { level: 2, name: '1 product, best first' })).toBeTruthy();
-    expect(screen.getByRole('heading', { level: 3, name: product.title })).toBeTruthy();
-  });
-});
-
-describe('a custom-niche store', () => {
-  it("can narrow research to its own niche's finds, and AI Research briefs it in plain words", async () => {
-    const yoga = { ...store('zen', 'Zen Studio', 'shopify'), niche: 'other', nicheDetail: 'Yoga mats' } as Store;
-    const fetch = stubApi((url, init) => {
-      if (init?.method === 'POST') return { id: 'r1', agentId: 'zen:product_hunter', status: 'queued', transcript: [] };
-      if (url.startsWith('/api/stores')) return [yoga];
-      if (url.startsWith('/api/research?')) return { items: [], total: 0, offset: 0, limit: 30 };
-      return [];
+    expect(Object.fromEntries(new URLSearchParams(discoveryQuery({ store: null, shipTo: 'GB', view: 'new', sort: 'recent', q: '', filters })))).toEqual({
+      shipTo: 'GB', view: 'new', sort: 'recent', category: 'Grooming', costMax: '1500', strict: 'cost', limit: '48',
     });
-    renderApp(<Research />);
-    await screen.findByRole('option', { name: 'Yoga mats' });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Niche' }), { target: { value: 'other:yoga-mats' } });
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringContaining('niche=other%3Ayoga-mats'), undefined));
-    fireEvent.click(screen.getByRole('button', { name: 'AI Research' }));
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/agents/zen%3Aproduct_hunter/runs', expect.objectContaining({ method: 'POST' })));
-    const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')!;
-    expect(JSON.parse(String(post[1]!.body)).task).toContain('Find 5 new winning Yoga mats products');
+  });
+
+  it("says each source's real state; fixture rows never read as connected", () => {
+    expect([
+      source({ fixtures: 3 }),
+      source({ access: 'verified', lastSuccessAt: new Date(Date.now() - 18 * 60_000).toISOString() }),
+      source({ name: 'Google Trends', access: 'authorized_import', products: 14 }),
+      source({ name: 'TikTok Creative Center', access: 'manual_only' }),
+      source({ access: 'verified', status: 'error', errorKind: 'auth', lastError: 'key refused' }),
+    ].map((s) => sourceItem(s).text)).toEqual([
+      'CJdropshipping · test fixtures (not connected)',
+      'CJdropshipping · synced 18 min ago',
+      'Google Trends · imports, 14 products',
+      'TikTok Creative Center · manual notes only',
+      'CJdropshipping · error: key refused',
+    ]);
   });
 });
 
-describe('the sample research catalog', () => {
-  it('is labelled once a real store is connected, so its made-up numbers are not read as finds', async () => {
-    stubApi((url) => (url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify')] : []));
-    renderApp(<ProductDetails p={{ ...product, sample: true }} />);
-    expect(await screen.findByText(/made-up demand and competition/)).toBeTruthy();
-    cleanup();
-    renderApp(<ProductDetails p={product} />);
-    await screen.findByRole('option', { name: 'Peak Fit' });
-    expect(screen.queryByText(/made-up demand and competition/)).toBeNull();
+describe('Product Research page', () => {
+  it('store scope: the profile line, tabs with server counts, the source strip and a card with its unknowns spelled out', async () => {
+    api();
+    renderApp(<Research />, '/research');
+    const c = await screen.findByRole('article', { name: 'Silicone grooming brush' });
+    expect(screen.getByText(/Ranked for/).textContent).toBe('Ranked for Pawsome Gear · Pet · audience not set · sells at $15.00–$40.00 · prefers US warehouse or ≤ 12 days · avoids batteries · Edit research profile');
+    expect(screen.getByRole('tab', { name: /^Newly discovered ?1$/ })).toBeTruthy();
+    expect(screen.getByText('CJdropshipping · test fixtures (not connected)')).toBeTruthy();
+    expect(within(c).getByText('Test fixture')).toBeTruthy();
+    expect(within(c).getByText('Discovered')).toBeTruthy();
+    expect(within(c).getByText('Unknown').getAttribute('title')).toBe('Fixture offer: not verified'); // never 0 when a part is missing
+    expect(within(c).getByText('Supplier found—verification pending')).toBeTruthy();
+    expect(within(c).getByText('Weak, battery')).toBeTruthy();
+    expect(within(c).getByText('No flags found (rule checks only)')).toBeTruthy();
+    expect(within(c).getByText('Trends "grooming brush" · US · Nov 2024–Oct 2026')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Research a Product/ })).toBeNull(); // absent until PR-16 (decision 1)
+    expect(screen.getByText('1 match · filtered and sorted on the server')).toBeTruthy();
   });
 
-  it('is not labelled in demo mode, where every store and number is sample', async () => {
-    stubApi((url) => (url.startsWith('/api/stores') ? [{ ...store('shop1', 'Peak Fit', 'shopify'), connected: false }] : []));
-    renderApp(<ProductDetails p={{ ...product, sample: true }} />);
-    await screen.findByRole('option', { name: 'Peak Fit' });
-    expect(screen.queryByText(/made-up demand and competition/)).toBeNull();
-  });
-});
-
-describe('research on a live install', () => {
-  const page = { items: [], total: 0, offset: 0, limit: 200 };
-
-  it('leaves the sample catalog out once every store is live, and says the finds are still to come', async () => {
-    const fetch = stubApi((url) => (url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify')] : url.startsWith('/api/research?') ? page : []));
-    renderApp(<Research />);
-    expect(await screen.findByText('No finds yet')).toBeTruthy();
-    expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/research\?.*sample=0/), undefined);
+  it('All stores: no profile line, no stage or fit, the evaluating count, and ship-to sent from the toolbar', async () => {
+    const f = api({ items: [card({ stage: null, fit: null, storesEvaluating: 2 })] });
+    renderApp(<Research />, '/research?store=all');
+    const c = await screen.findByRole('article', { name: 'Silicone grooming brush' });
+    expect(screen.queryByText(/Ranked for/)).toBeNull();
+    expect(within(c).queryByText('Discovered')).toBeNull();
+    expect(within(c).queryByText(/Fit for/)).toBeNull();
+    expect(within(c).getByText('2 stores evaluating')).toBeTruthy();
+    expect(screen.queryByRole('option', { name: /Best fit/ })).toBeNull();
+    fireEvent.change(screen.getByRole('combobox', { name: 'Ship to' }), { target: { value: 'CA' } });
+    await waitFor(() => expect(calls(f, '/api/pr/products').at(-1)).toContain('shipTo=CA'));
+    expect(localStorage.getItem('fe.research.shipTo')).toBe('"CA"');
   });
 
-  it('keeps it while a demo store is still around', async () => {
-    const fetch = stubApi((url) =>
-      url.startsWith('/api/stores') ? [store('shop1', 'Peak Fit', 'shopify'), { ...store('demo', 'Glow Haus', 'shopify'), connected: false }] : url.startsWith('/api/research?') ? page : [],
-    );
-    renderApp(<Research />);
-    await screen.findByRole('option', { name: 'Glow Haus' });
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith(expect.stringMatching(/^\/api\/research\?/), undefined));
-    expect(fetch.mock.calls.some(([u]) => String(u).includes('sample=0'))).toBe(false);
-  });
-});
-
-describe("a custom niche's find", () => {
-  it("names its niche in the store's own words, not just Other", async () => {
-    const yoga = { ...store('zen', 'Zen Studio', 'shopify'), niche: 'other', nicheDetail: 'Yoga mats' } as Store;
-    stubApi((url) => (url.startsWith('/api/stores') ? [yoga] : []));
-    renderApp(<ProductDetails p={{ ...product, niche: 'other', nicheDetail: 'yoga-mats' }} />);
-    expect(await screen.findByText('Beauty · TikTok · Yoga mats')).toBeTruthy();
-  });
-});
-
-describe('a find with no compare-at', () => {
-  const plain = { ...product, compareAt: 0 };
-
-  it('shows no struck-through $0.00 on its card', async () => {
-    stubApi((url) => (url.startsWith('/api/research?') ? { items: [plain], total: 1, offset: 0, limit: 30 } : []));
-    renderApp(<Research />);
-    await screen.findByRole('heading', { level: 3, name: product.title });
-    expect(screen.queryByText('$0.00')).toBeNull();
+  it('a chip filters on the server and keeps unknowns until the owner switches that off', async () => {
+    const f = api();
+    renderApp(<Research />, '/research');
+    await screen.findByRole('article', { name: 'Silicone grooming brush' });
+    fireEvent.change(screen.getByRole('combobox', { name: 'Delivery at most' }), { target: { value: '15' } });
+    await waitFor(() => expect(calls(f, '/api/pr/products').at(-1)).toContain('deliveryMax=15'));
+    expect(calls(f, '/api/pr/products').at(-1)).not.toContain('strict=');
+    fireEvent.click(screen.getByRole('button', { name: 'unknown included' }));
+    await waitFor(() => expect(calls(f, '/api/pr/products').at(-1)).toContain('strict=delivery'));
+    expect(screen.getByRole('button', { name: 'unknown excluded' })).toBeTruthy();
   });
 
-  it('leaves Compare at out of its details', async () => {
-    stubApi(() => []);
-    renderApp(<ProductDetails p={plain} />);
-    await screen.findByText('Sell at');
-    expect(screen.queryByText('Compare at')).toBeNull();
-  });
-});
-
-describe('a product whose demand fell', () => {
-  const falling = { ...product, trend: -12 };
-
-  it('says so on its card, labelled, not "+-12%"', async () => {
-    stubApi((url) => (url.startsWith('/api/research?') ? { items: [falling], total: 1, offset: 0, limit: 30 } : []));
-    renderApp(<Research />);
-    await screen.findByRole('heading', { level: 3, name: product.title });
-    expect(screen.getByTitle('Demand growth, last 30 days').textContent).toBe('−12% demand');
+  it('first use: no source connected and nothing found says what to connect, from the server', async () => {
+    api({ items: [], sources: [source({}), source({ id: 'tiktok', name: 'TikTok Creative Center', answers: ['demand'], access: 'manual_only', connect: 'Add a note.' })] });
+    renderApp(<Research />, '/research');
+    expect(await screen.findByText('No product sources connected yet')).toBeTruthy();
+    expect(screen.getByText('Paste the API key in Integrations.')).toBeTruthy();
+    expect(screen.queryByText('Add a note.')).toBeNull(); // a demand-only source doesn't bring products
   });
 
-  it('says so in its details', async () => {
-    stubApi(() => []);
-    renderApp(<ProductDetails p={falling} />);
-    expect((await screen.findByText('Demand, 30 days')).nextElementSibling!.textContent).toBe('−12%');
+  it('no match: names the filters that are set and clears them', async () => {
+    localStorage.setItem('fe.research.filters', JSON.stringify({ category: 'Toys' }));
+    const f = api({ items: [] });
+    renderApp(<Research />, '/research');
+    expect(await screen.findByText('No products match these filters')).toBeTruthy();
+    expect(screen.getByText('Set: category.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
+    await waitFor(() => expect(calls(f, '/api/pr/products').at(-1)).not.toContain('category='));
+  });
+
+  it('a source that refused its credentials says so and how to fix it', async () => {
+    api({ sources: [source({ access: 'verified', status: 'error', errorKind: 'auth', lastError: 'API key refused' })] });
+    renderApp(<Research />, '/research');
+    expect(await screen.findByText('CJdropshipping is disconnected: API key refused. Reconnect it in Integrations.')).toBeTruthy();
+  });
+
+  it('Edit research profile saves the fields as the API takes them', async () => {
+    const f = api();
+    renderApp(<Research />, '/research');
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit research profile' }));
+    fireEvent.change(screen.getByLabelText('Audience'), { target: { value: 'US dog owners' } });
+    fireEvent.change(screen.getByLabelText('To (USD)'), { target: { value: '39.99' } });
+    fireEvent.change(screen.getByLabelText('Avoided terms'), { target: { value: 'airtag, Airtag , lithium' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+    await waitFor(() => expect(f.mock.calls.some(([, i]) => i?.method === 'PUT')).toBe(true));
+    const [url, init] = f.mock.calls.find(([, i]) => i?.method === 'PUT')!;
+    expect(url).toBe('/api/pr/profile?store=paws');
+    expect(JSON.parse(String(init!.body))).toEqual({
+      audience: 'US dog owners', priceMin: 1500, priceMax: 3999, shipTo: null, maxDeliveryDays: 12,
+      warehouses: ['US'], includeCategories: [], avoidCategories: ['batteries'], avoidTerms: ['airtag', 'Airtag', 'lithium'], keywords: [],
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit research profile' }));
+    fireEvent.change(screen.getByLabelText('To (USD)'), { target: { value: 'forty' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save profile' }));
+    expect(screen.getByRole('alert').textContent).toBe('Enter the price band as amounts in USD, like 15 or 39.99.');
+  });
+
+  it('keyboard: / focuses search, Enter opens a card into the URL, Esc closes it and focus returns to the card', async () => {
+    api({ items: [card(), card({ id: 'p2', title: 'Slow feeder mat' })] });
+    renderApp(<Research />, '/research');
+    const c = await screen.findByRole('article', { name: 'Silicone grooming brush' });
+    fireEvent.keyDown(window, { key: '/' });
+    expect(document.activeElement).toBe(screen.getByRole('searchbox', { name: 'Search products' }));
+    c.focus();
+    fireEvent.keyDown(c, { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(screen.getByRole('article', { name: 'Slow feeder mat' }));
+    fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toContain('product=p2'));
+    expect(screen.getByRole('article', { name: 'Slow feeder mat' }).getAttribute('aria-current')).toBe('true');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.getByTestId('where').textContent).not.toContain('product='));
+    expect(document.activeElement).toBe(screen.getByRole('article', { name: 'Slow feeder mat' }));
   });
 });
