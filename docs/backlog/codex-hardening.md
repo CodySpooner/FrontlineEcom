@@ -39,6 +39,8 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
 
 ## Notes (owner questions; work goes on with the default)
 
+- CH-03 filed in `docs/backlog/agents.md` Inbox: durable action execution state with an "unknown after interruption" outcome and owner reconciliation, no automatic replay. An absent marker cannot prove no live write occurred; existing successful ad writes also lack receipts. Default is no recovery behaviour change until that design is implemented.
+
 - Q1 Should Codex runs count toward a store's daily AI budget? Today they report `costUsd: 0` (`codex.ts` ~262), and
   `runs.ts` ~285 cites decision 12 for team budgets. Default: no behaviour change; confirm it's intended and say so.
 - Q2 A Codex CLI version with new on-by-default features: warn (default) or switch in-app Codex off until re-qualified?
@@ -64,7 +66,7 @@ the approval and cap-counter sections of `packages/agents/src/tools.ts`, `apps/s
   `agents-actions.ts` ~101) writes no `not-applied:` marker, so `checkAdOutcomes` (`agents-outcomes.ts` ~62-69) scores
   it and its "outcome" reaches store memory and KB evidence (KB-19). Mark it not-applied; test first. Check the
   price and product paths for the same gap.
-- [ ] CH-03 Approved but never applied: the live write runs in `setImmediate` after the row says `approved`
+- [x] CH-03 Approved but never applied: the live write runs in `setImmediate` after the row says `approved`
   (`agents-actions.ts` ~16-35); a failure is only logged and nothing replays or flags it after a crash or quit. Smallest
   tightening fix if one exists (for example: on start, mark approved rows with no applied/not-applied record as not
   applied, with a visible note); otherwise file it with that proposal.
@@ -157,6 +159,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-03: traced approval commit → process event → deferred dispatch → log-only catch; filed durable execution/reconciliation design in agents Inbox. Automatic replay or labelling every unmarked historical approval not-applied would misrepresent possibly completed writes, so no speculative recovery was added.
 
 - 2026-10-28 CH-02: ad/price/product early exits and empty/failed product creation now record `not-applied`; missing products start no price test, and empty creates start no developer run. Eleven failing regressions first, then 82 focused tests and `pnpm check` green (229 files / 1,699 tests).
 
