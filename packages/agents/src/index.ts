@@ -27,7 +27,8 @@ export { APP_TOOLS, OUTLIVE_RUN, RESEARCH_TOOLS, allows, budgetAddedToday, cash,
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
 export { agentTypes, archiveCustomRole, createCustomRole, customRole, getConfig, getCustomRole, listPresets, resolveType, saveConfig, savePreset, seatDefault, toolGroups, validateConfig, validateCustomRole, type AgentType, type ConfigDraft } from './configs';
 export { conversationCounts, conversationFindings, conversationKnowledge, conversationPreface, conversationQuery, conversationThread, runDeliverables, setConversationConfig, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
-export { createRunManager, getRun, hasEffects, listRuns, replyBlocks, runGist, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
+export { createRunManager, getRun, hasEffects, listRuns, replyBlocks, runGist, teamCost, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
+export { addNote, addParticipant, createTeam, getTeam, parseContribution, parsePlan, resumeStep, TEAM_PLAN, TEAM_SYNTHESIS, TEAM_TASK, validateTeam } from './teams';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, adWindow, uncostedShare, type CampaignStats, type Economics, type Verdict } from './ads';
 export { ADS_JOB, DEFAULT_JOBS, createDefaultJobs, enableDefaultJobs } from './jobs';

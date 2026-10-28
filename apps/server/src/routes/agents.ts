@@ -79,6 +79,7 @@ import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { wrongStore } from './agents-scope';
 import { conversationRoutes, openConversation } from './agents-conversations';
+import { teamRoutes } from './agents-teams';
 import { agentSessions, appCodexEngine, claudeLogin, runtimes, setUpCodex } from './agents-runtimes';
 import { issueRoutes } from './agents-issues';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
@@ -292,6 +293,8 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent' | 
     // A research stage reports as its task (advanceKbResearch): no notification for each stage.
     if (run.mode?.startsWith('research:')) return void (ended && advanceKbResearch(db));
     if (ended) advanceSquadMissions(db);
+    // A team's steps report as the team: "Team ready" or "Team needs you" (decision 12).
+    if (run.teamId) return;
     const agent = getAgent(db, run.agentId);
     const custom = run.configId ? getConfig(db, run.configId)?.customRoleId : undefined;
     const name = (custom && customRole(db, custom)?.name) || (agent ? AGENT_ROLES[agent.role].name : 'Agent');
@@ -474,6 +477,10 @@ function advanceSquadMissions(db: Db) {
   }
   for (const m of moved) {
     publish({ type: 'mission', mission: m });
+    if (m.kind === 'team') {
+      teamNotice(db, m);
+      continue;
+    }
     if (m.status === 'running') {
       for (const s of m.steps) {
         if (s.note && once(db, `mission-wait:${m.id}:${s.id}:${s.note}`)) {
@@ -489,6 +496,19 @@ function advanceSquadMissions(db: Db) {
           kind: 'error', title: `Mission stuck: ${m.title}`, storeId: m.storeId, link: '/ecosystem',
           body: `The ${stuck ? AGENT_ROLES[stuck.role].name : 'squad'}'s step ${stuck?.status === 'cancelled' ? 'was cancelled' : 'failed'}, so the steps that need it didn't start.`,
         });
+  }
+}
+
+/** "Team ready" when the synthesis is in; "Team needs you" when it failed, or once for each step that waits on the owner. */
+function teamNotice(db: Db, team: SquadMission) {
+  const about = { storeId: team.storeId, link: `/agents/t/${encodeURIComponent(team.id)}?store=${encodeURIComponent(team.storeId)}` };
+  if (team.status === 'done') return notify(db, { kind: 'agent_done', title: `Team ready: ${team.title}`, body: team.steps.at(-1)?.deliverable, ...about });
+  const failed = team.steps.find((s) => (s.kind === 'plan' || s.kind === 'synthesis') && s.status === 'error');
+  if (team.status === 'blocked') return notify(db, { kind: 'error', title: `Team needs you: ${team.title}`, body: `The lead's ${failed?.kind ?? 'step'} failed: ${failed?.note ?? 'see the team.'}`, ...about });
+  if (team.status !== 'running') return;
+  for (const s of team.steps) {
+    const waits = s.interrupted || (s.status === 'waiting' && s.note && !s.nextTryAt);
+    if (waits && once(db, `team-wait:${team.id}:${s.id}:${s.runId ?? ''}:${s.note}`)) notify(db, { kind: 'info', title: `Team needs you: ${team.title}`, body: `Task ${s.id}: ${s.note}`, ...about });
   }
 }
 
@@ -726,5 +746,6 @@ export function agentRoutes(db: Db) {
     .route('/', issueRoutes(db))
     .route('/', flowRoutes(db))
     .route('/', creativeRoutes(db))
-    .route('/', conversationRoutes(db, runs));
+    .route('/', conversationRoutes(db, runs))
+    .route('/', teamRoutes(db, runs, () => advanceSquadMissions(db)));
 }

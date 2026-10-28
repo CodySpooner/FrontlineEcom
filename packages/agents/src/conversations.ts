@@ -4,6 +4,7 @@ import { conversationState, runState, type AgentRun, type AgentRunDetail, type C
 import { saveConfig, type AgentType, type ConfigDraft } from './configs';
 import { ftsQuery } from './kb-retrieve';
 import { finalText, getRun } from './runs';
+import { teamRecord } from './teams';
 
 // Conversations live in `conversations` (migration #50); their runs are agent_runs rows with its id. Search goes
 // through `conversations_fts`, one row per conversation, rebuilt on every write (indexConversation).
@@ -200,7 +201,11 @@ export function conversationPreface(db: DatabaseSync, conversationId: string, be
     .prepare(`SELECT id FROM agent_runs WHERE conversation_id = ? AND status = 'done' AND rowid < coalesce((SELECT rowid FROM agent_runs WHERE id = ?), 9e18) ORDER BY rowid`)
     .all(conversationId, before ?? null)
     .map((r) => String(r.id));
-  const parts = [openedFrom(db, String(c.store_id), c.context_json ? (JSON.parse(String(c.context_json)) as ConversationContext) : undefined), earlier.length ? recap(db, String(c.store_id), earlier, String(c.title)) : undefined];
+  const parts = [
+    teamRecord(db, conversationId),
+    openedFrom(db, String(c.store_id), c.context_json ? (JSON.parse(String(c.context_json)) as ConversationContext) : undefined),
+    earlier.length ? recap(db, String(c.store_id), earlier, String(c.title)) : undefined,
+  ];
   return parts.filter(Boolean).join('\n\n') || undefined;
 }
 

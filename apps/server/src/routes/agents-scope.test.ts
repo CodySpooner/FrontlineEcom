@@ -55,6 +55,12 @@ const ROUTES: [method: string, path: string, body?: unknown][] = [
   ['POST', '/api/conversations/v1/runs/r2/retry', { clientRequestId: 'req-retry-1' }],
   ['POST', '/api/conversations/v1/runs/r3/resume', { clientRequestId: 'req-resume-1' }],
   ['POST', '/api/conversations/v1/stop', {}],
+  // AA-19: teams (decision 12).
+  ['GET', '/api/teams/tm1'],
+  ['POST', '/api/teams/tm1/notes', { clientRequestId: 'req-note-1', text: 'Lead with the photo strip' }],
+  ['POST', '/api/teams/tm1/participants', { type: 'copywriter' }],
+  ['POST', '/api/teams/tm1/steps/plan/resume', { clientRequestId: 'req-team-resume-1' }],
+  ['POST', '/api/teams/tm1/cancel', {}],
 ];
 
 test("by-id routes given another store answer 404 and change nothing; given the record's own store they work", async () => {
@@ -66,6 +72,8 @@ test("by-id routes given another store answer 404 and change nothing; given the 
     INSERT INTO flow_drafts (id, store_id, agent_id, name, trigger, messages_json, notes, created_at) VALUES ('f1', 'glow', 'glow:email_sms', 'Welcome', 'signup', '[]', '', '2026-10-28');
     INSERT INTO agent_configs (id, store_id, agent_id, runtime, tools_json, knowledge_json, permissions_json, created_at) VALUES ('cfg1', 'glow', 'glow:copywriter', 'demo', '["store_summary"]', '["store"]', '{"saveFindings":"off"}', '2026-10-28');
     INSERT INTO conversations (id, store_id, config_id, title, created_at, updated_at, last_activity_at) VALUES ('v1', 'glow', 'cfg1', 'Spring copy', '2026-10-28', '2026-10-28', '2026-10-28');
+    INSERT INTO squad_missions (id, store_id, title, steps_json, created_at, kind, objective, participants_json, max_concurrent, retries, owner_notes_json) VALUES
+      ('tm1', 'glow', 'Spring launch', '[{"id":"plan","kind":"plan","role":"copywriter","configId":"cfg1","task":"Plan the spring launch","dependsOn":[]}]', '2026-10-28', 'team', 'Plan the spring launch', '[{"configId":"cfg1"}]', 2, 2, '[]');
     INSERT INTO agent_runs (id, store_id, agent_id, task, status, error, conversation_id, config_id, created_at) VALUES
       ('r2', 'glow', 'glow:copywriter', 'Draft', 'error', 'boom', 'v1', 'cfg1', '2026-10-28'),
       ('r3', 'glow', 'glow:copywriter', 'Draft', 'error', 'Interrupted by an app restart', 'v1', 'cfg1', '2026-10-28');`);

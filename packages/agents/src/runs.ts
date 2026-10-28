@@ -200,7 +200,11 @@ export function createRunManager(opts: RunManagerOptions) {
       // A config's budget for one run only narrows that, never widens it.
       const own = getAgent(db, run.agentId)?.dailyBudgetUsd;
       const seat = own === undefined ? undefined : Math.max(0, own - costToday(db, run.storeId, run.agentId)) / (working().filter((a) => a.agentId === run.agentId).length + 1);
-      const caps = [share, seat, run.configId && getConfig(db, run.configId)?.permissions.budgetUsd].filter((n) => typeof n === 'number');
+      // A team's Claude step: what is left of the team budget, split with the team's Claude runs going now (decision 12).
+      const team = run.teamId && run.runtime === 'claude' ? teamBudget(db, run.teamId) : undefined;
+      const going = team === undefined ? 0 : Number(db.prepare(`SELECT count(*) AS n FROM agent_runs WHERE team_id = ? AND runtime = 'claude' AND status = 'running'`).get(run.teamId!)?.n);
+      const teamShare = team === undefined ? undefined : Math.max(0, team - teamCost(db, run.teamId!)) / (going + 1);
+      const caps = [share, seat, teamShare, run.configId && getConfig(db, run.configId)?.permissions.budgetUsd].filter((n) => typeof n === 'number');
       const budget = caps.length ? Math.min(...caps) : undefined;
       const abort = new AbortController();
       const transcript: AgentEvent[] = [];
@@ -275,6 +279,9 @@ export function createRunManager(opts: RunManagerOptions) {
     let overCap = false;
     let overOwn = false;
     let overRun = false;
+    let overTeam = false;
+    // Codex and Demo steps aren't charged to a team budget (decision 12).
+    const team = run.teamId && run.runtime === 'claude' ? teamBudget(db, run.teamId) : undefined;
     const spend = (usd: number) => {
       if (ended) return;
       spent = Math.max(spent, usd); // the reflection reports from the engine's figure, which can be under the estimate
@@ -294,6 +301,10 @@ export function createRunManager(opts: RunManagerOptions) {
       }
       if (runBudget !== undefined && !overCap && spent > runBudget) {
         overCap = overRun = true;
+        abort.abort();
+      }
+      if (team !== undefined && !overCap && teamCost(db, run.teamId!) > team) {
+        overCap = overTeam = true;
         abort.abort();
       }
     };
@@ -385,7 +396,8 @@ export function createRunManager(opts: RunManagerOptions) {
         }
         // ponytail: only runs that looked at data (tool calls) reflect; a chat reply rarely teaches anything durable.
         // Research keeps what it learns as cards; Codex skips it in v1 (a second process, and plan quota).
-        if (end.type === 'done' && toolCalls > 0 && !signal.aborted && !research && config?.runtime !== 'codex') end = await reflect(attempt, end, emit);
+        // Team steps skip it too, like research (decision 12).
+        if (end.type === 'done' && toolCalls > 0 && !signal.aborted && !research && !run.teamId && config?.runtime !== 'codex') end = await reflect(attempt, end, emit);
       }
     } catch (err) {
       end = { type: 'error', message: err instanceof Error ? err.message : String(err) };
@@ -393,6 +405,7 @@ export function createRunManager(opts: RunManagerOptions) {
     clearTimeout(deadline);
     // The engine's own budget stop means the run's budget when that was the smallest limit.
     if (end.type === 'error' && (overRun || (end.code === 'error_max_budget_usd' && runBudget !== undefined && runBudget <= (budget ?? Infinity)))) end = { ...end, message: `Stopped: this run's budget ($${runBudget}) is used up.` };
+    else if (overTeam && end.type === 'error') end = { type: 'error', message: `Stopped: the team's budget ($${team}) is used up.` };
     else if (overCap && end.type === 'error') end = { type: 'error', message: overOwn ? ownUsedUp(own!, true) : `Stopped: today's AI budget for this store ($${cap}) is used up. Raise it in Settings.` };
     if (overTime && end.type === 'error') end = { ...end, message: `Stopped: this run's ${stopAfterMin}-minute limit was reached.` };
     emit(end);
@@ -492,6 +505,14 @@ export function createRunManager(opts: RunManagerOptions) {
 }
 
 const SHOWN = 4000;
+
+/** What a team's Claude steps have spent, live (each run saves its spend as it goes). */
+export const teamCost = (db: DatabaseSync, teamId: string) =>
+  Number(db.prepare(`SELECT coalesce(sum(cost_usd), 0) AS n FROM agent_runs WHERE team_id = ? AND runtime = 'claude'`).get(teamId)?.n ?? 0);
+const teamBudget = (db: DatabaseSync, teamId: string) => {
+  const usd = db.prepare('SELECT budget_usd FROM squad_missions WHERE id = ?').get(teamId)?.budget_usd;
+  return usd == null ? undefined : Number(usd);
+};
 
 /**
  * Runs older than 90 days keep their text and tool calls, but each tool output shrinks to its first 200 characters:

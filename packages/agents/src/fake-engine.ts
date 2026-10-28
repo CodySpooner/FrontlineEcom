@@ -2,6 +2,7 @@ import { AGENT_ROLES, type AgentEvent } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
 import { REFLECTION_PROMPT } from './memory';
 import type { ToolName } from './roles';
+import { TEAM_PLAN, TEAM_SYNTHESIS, TEAM_TASK } from './teams';
 import { callTool, cash, channel, runTools } from './tools';
 
 /** An event to emit, or a real call to one of the role's tools (needs `env`). */
@@ -201,6 +202,8 @@ function demoWork(input: RunInput): FakeStep[] {
 export const echoScript: FakeScript = (input) => {
   const done: AgentEvent = { type: 'done', sessionId: input.resume ?? `fake-${input.env?.runId ?? input.agent.id}`, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
   if (input.task === REFLECTION_PROMPT) return [{ type: 'text_delta', text: '[]' }, done];
+  const team = teamScript(input);
+  if (team) return [...team.split(/(?<= )/).map((text): AgentEvent => ({ type: 'text_delta', text })), done];
   // Quotes the task's first clause: scheduled jobs carry a paragraph of instructions after "Daily briefing:".
   const task = input.task.split(/[:\n]|\.(?=\s|$)/)[0]!.trim().slice(0, 80);
   let reply = `${AGENT_ROLES[input.agent.role].name} for ${input.store.name}: on it — "${task}".`;
@@ -235,4 +238,34 @@ export function fakeEngine(script: FakeScript = echoScript): Engine {
     })().then(() => events.end(), events.end);
     yield* events.drain();
   };
+}
+
+/**
+ * Team steps on demo data (decision 12): a valid plan (one task per participant after the lead, or the lead's own when
+ * alone), contributions of which task t2 disagrees with t1, and a synthesis. So a whole team runs free.
+ */
+function teamScript(input: RunInput): string | undefined {
+  const name = AGENT_ROLES[input.agent.role].name;
+  if (input.task.startsWith(TEAM_PLAN)) {
+    const ids = [...input.task.matchAll(/^- id (\S+): ([^,\n]+)/gm)].map((m) => ({ id: m[1]!, name: m[2]! }));
+    const doers = ids.length > 1 ? ids.slice(1) : ids;
+    const tasks = doers.map((p, i) => ({
+      id: `t${i + 1}`, assignee: p.id, depends_on: [],
+      task: `${p.name}: work out your part of the objective from ${input.store.name}'s last 30 days.`, expected: 'Your findings, with the numbers behind them.',
+    }));
+    return `${name} for ${input.store.name}: ${tasks.length} task${tasks.length === 1 ? '' : 's'}, run side by side. (Demo engine: switch to Claude for a real plan.)\n\n\`\`\`json\n${JSON.stringify({ tasks })}\n\`\`\``;
+  }
+  if (input.task.startsWith(TEAM_TASK)) {
+    const id = input.task.match(/\(task ([\w-]+)\)/)?.[1] ?? 't1';
+    const contribution = {
+      summary: `${name}'s part for ${input.store.name}, from the demo data.`, output: `${name}: the demo engine read the store's numbers for task ${id}. Switch to Claude for a real answer.`,
+      evidence: [], open_questions: [], disagrees_with: id === 't2' ? ['t1: the first move should come from the margin, not the reach.'] : [],
+    };
+    return `${contribution.summary}\n\n\`\`\`json\n${JSON.stringify(contribution)}\n\`\`\``;
+  }
+  if (input.task.startsWith(TEAM_SYNTHESIS)) {
+    const open = input.task.match(/^Unresolved:\n((?:- .+\n?)+)/m)?.[1]?.trim().split('\n').length ?? 0;
+    return `${name} for ${input.store.name}: the team's synthesis, from the demo data. ${open ? `${open} point${open === 1 ? '' : 's'} left unresolved.` : 'Nothing left unresolved.'} (Demo engine: switch to Claude for a real answer.)`;
+  }
+  return undefined;
 }

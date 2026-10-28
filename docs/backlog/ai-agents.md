@@ -1521,7 +1521,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
       with verified_at null and no kb_sources row.
 
 ### Collaboration
-- [ ] AA-19 **Team engine** (decision 12):
+- [x] AA-19 **Team engine** (decision 12):
   - using the squad_missions columns AA-02 added (no new migration);
   - the plan step and its validation and expansion inside `advanceOnce`. Parser tests use model-shaped answers: prose
     before the fence, a `` ```json `` fence, text after the fence, and a malformed or invalid plan that becomes a
@@ -1721,6 +1721,15 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   the Activity step in the confirmation's words, "Saved from this conversation" in the Knowledge tab, the demo-store
   note; go-live clears the demo store's observed rows. 8 server tests and 3 web tests, on the scripted engine. Checked
   in headless Chrome at 1440: a reply saved on a demo store, the finding in the Knowledge tab, and Deploy's row.
+- 2026-10-28 AA-19 Team engine: teams.ts (`parsePlan`, `parseContribution`, `validateTeam`, `createTeam` with the
+  team's conversations row, `addParticipant`, `addNote`, `resumeStep`, `advanceTeam`, `toTeam`, `teamRecord`), called
+  from missions.ts's advanceOnce before its status check; scheduling by config within "at once"; contributions wrapped
+  for dependents and the synthesis, Owner's notes outside the wrappers, a borrowed conversation's recap on its first
+  step; retries with a 30 s then 2 min backoff, unretried stops, interrupted steps left for Resume; the team budget in
+  `spend()` and the per-run share (Claude runs only); no assign_task and no reflection on team steps; "Team ready" and
+  "Team needs you" in place of per-run notices; the demo engine's team scripts; routes under /api/teams with the guard
+  and the store sweep; after the team, a message in its conversation starts the lead from the contributions and the
+  synthesis. 15 tests in agents-teams.test.ts, the sweep table extended. A demo team ran end to end on the dev server.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
@@ -1858,6 +1867,25 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-19, 2026-10-28) For AA-20 and later:
+  - **Team URLs:** the notifications link `/agents/t/<team id>?store=` (the squad_missions id, as agentsUrl's `team`).
+    The team's conversation is `team.conversationId`; its conversations row has `teamId`.
+  - **Interrupted steps:** a step whose run was cut by a restart reads `status: 'error'`, `interrupted: true`, with the
+    note "Interrupted by an app restart: resume it to go on." The team stays `running` (not ended) until it is
+    resumed (POST /api/teams/:id/steps/:step/resume) or stopped. There is no 'interrupted' team status: the UI reads
+    it off the steps.
+  - **A used-up team budget** leaves the remaining steps `waiting` with "Not started: the team's budget ($X) is used
+    up." The team stays `running` and sends "Team needs you" once; the owner stops it. ponytail: no "raise the budget"
+    route yet.
+  - **Backoff:** 30 s, then 2 min. The app advances missions on every run end and every 60 s, so a retry can start up
+    to a minute after its `nextTryAt`.
+  - **A task's answer without the JSON block** still hands on its text as the contribution's output, with its first
+    sentence as the summary (ponytail). An invalid plan, by contrast, is a failed attempt.
+  - **Add agent** is refused once the plan step's run has ended; while the lead is still planning it is accepted, but
+    that plan won't use the new participant.
+  - **Team conversations in the left list:** the conversation queries already type a team's conversation as `'team'`
+    (AA-05), so it never joins the lead type's group; AA-20 renders that group as Teams.
+  - **Messages to a team's conversation** are refused (409) while the team runs; "To: Lead" goes to the notes route then.
 - (AA-18, 2026-10-28) For AA-19 and later:
   - **Save to Knowledge Base is an inline panel** under the reply's actions, not a floating popover: it holds a title,
     a summary and the demo note, and an inline panel needs no positioning code. Its confirmation replaces it and links

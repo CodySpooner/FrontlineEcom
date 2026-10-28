@@ -948,7 +948,10 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ role, task }, ctx) => {
       if (!ctx.startRun || !ctx.runId) return 'Assigning tasks is not available here.';
       if (role === ctx.agent.role) return 'That is your own role: do it yourself.';
-      if (ctx.db.prepare('SELECT parent_run_id FROM agent_runs WHERE id = ?').get(ctx.runId)?.parent_run_id) {
+      const self = ctx.db.prepare('SELECT parent_run_id, team_id FROM agent_runs WHERE id = ?').get(ctx.runId);
+      // A team's tasks come from the lead's plan only (decision 12): no sub-teams.
+      if (self?.team_id) return "Not assigned: this is a team step, and a team's tasks come from the lead's plan. Do your part, and put what else is needed in your answer.";
+      if (self?.parent_run_id) {
         return 'This task was assigned to you, so it cannot be passed on. Do it, or say what is blocking it.';
       }
       // A run retried after a restart (runs.ts links `retry:<old>:<new>`) carries on its earlier attempt: the same role

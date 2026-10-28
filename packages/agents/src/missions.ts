@@ -2,12 +2,13 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import { AGENT_ROLES, type AgentRole, type AgentRun, type NewSquadMission, type SquadMission, type SquadMissionStep } from '@frontline/shared';
 import { finalText, getRun, INTERRUPTED, runGist, turnedDown } from './runs';
+import { advanceTeam, toTeam, type TeamStart } from './teams';
 
 // A squad mission is a plan over ordinary agent runs, not a second task system: only the plan, each step's run id and
 // its one-line deliverable are stored; every status is read off the runs.
 
 type Stored = { id: string; role: AgentRole; task: string; dependsOn: string[]; runId?: string; note?: string; deliverable?: string; cancelled?: boolean };
-type Start = (agentId: string, task: string, resumeRunId?: string, parentRunId?: string) => AgentRun | string;
+type Start = TeamStart;
 const and = new Intl.ListFormat('en', { type: 'conjunction' });
 /** A long answer keeps both ends: it leads with its result (squad rules) and ends with what the next steps need (asked below). */
 const clip = (a: string) => (a.length <= 2000 ? a : `${a.slice(0, 500).trimEnd()}\n…\n${a.slice(-1500).trimStart()}`);
@@ -139,7 +140,7 @@ export function getMission(db: DatabaseSync, id: string): SquadMission | undefin
  * ended (status no longer `running`; each ends once). A step its agent can't take yet (budget used up, agent off) keeps
  * a note and is tried again next time.
  */
-export function advanceMissions(db: DatabaseSync, start: Start): SquadMission[] {
+export function advanceMissions(db: DatabaseSync, start: Start, now = new Date()): SquadMission[] {
   // A run that can't even start (its budget is under a cent) ends inside start(), and that run's end calls back here
   // before the step's run id is saved. The nested call only asks for another pass, so a step never starts twice.
   if (advancing) return void (again = true), [];
@@ -148,7 +149,7 @@ export function advanceMissions(db: DatabaseSync, start: Start): SquadMission[] 
   try {
     do {
       again = false;
-      moved.push(...advanceOnce(db, start));
+      moved.push(...advanceOnce(db, start, now));
     } while (again);
   } finally {
     advancing = false;
@@ -158,10 +159,18 @@ export function advanceMissions(db: DatabaseSync, start: Start): SquadMission[] 
 let advancing = false;
 let again = false;
 
-function advanceOnce(db: DatabaseSync, start: Start): SquadMission[] {
+function advanceOnce(db: DatabaseSync, start: Start, at: Date): SquadMission[] {
   const rows = db.prepare('SELECT * FROM squad_missions WHERE ended_at IS NULL ORDER BY created_at').all();
   const moved: SquadMission[] = [];
   for (const r of rows) {
+    if (r.kind === 'team') {
+      // A team's plan expands into its tasks here, before the status check: a plan alone would read as done.
+      const changed = advanceTeam(db, r, start, at);
+      const team = getMission(db, String(r.id))!;
+      if (team.status !== 'running') db.prepare('UPDATE squad_missions SET ended_at = ? WHERE id = ?').run(at.toISOString(), team.id);
+      if (changed || team.status !== 'running') moved.push(team);
+      continue;
+    }
     const stored = JSON.parse(String(r.steps_json)) as Stored[];
     const mission = toMission(db, r);
     mission.steps.forEach((step, i) => {
@@ -225,6 +234,7 @@ export function stepRun(db: DatabaseSync, id: string): { id: string; status: Age
 }
 
 function toMission(db: DatabaseSync, r: Record<string, unknown>): SquadMission {
+  if (r.kind === 'team') return toTeam(db, r);
   const steps: SquadMissionStep[] = [];
   const stored = JSON.parse(String(r.steps_json)) as Stored[];
   for (const s of stored) {

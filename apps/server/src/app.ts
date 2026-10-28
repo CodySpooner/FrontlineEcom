@@ -47,10 +47,10 @@ const sameHost = (origin: string, url: string) => URL.canParse(origin) && new UR
 
 const MB = 1_048_576;
 /**
- * Requests that start agent runs: knowledge-base research (new, retried, refined), Ask the knowledge base, and a
- * conversation's create, send, retry and resume.
+ * Requests that start agent runs: knowledge-base research (new, retried, refined), Ask the knowledge base, a
+ * conversation's create, send, retry and resume, and a team's start and a step's resume.
  */
-const STARTS = /^\/api\/(kb\/(ask|research\/tasks(\/[^/]+\/(retry|refine))?)|conversations(\/[^/]+\/(messages|runs\/[^/]+\/(retry|resume)))?)$/;
+const STARTS = /^\/api\/(kb\/(ask|research\/tasks(\/[^/]+\/(retry|refine))?)|conversations(\/[^/]+\/(messages|runs\/[^/]+\/(retry|resume)))?|teams(\/[^/]+\/steps\/[^/]+\/resume)?)$/;
 /** Bodies that may carry a document or attachments (10 MB in base64). */
 const LARGE = /^\/api\/(kb\/research\/tasks|conversations(\/[^/]+\/messages)?)$/;
 
@@ -102,6 +102,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .use('/api/conversations/*', guard) // the bare path too
     .use('/api/research/*', guard)
     .use('/api/pr/*', guard) // product-research: every /api/pr route
+    .use('/api/teams/*', guard)
     .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))
     .get('/api/stores/:id', (c) => {

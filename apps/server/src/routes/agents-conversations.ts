@@ -249,6 +249,10 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       if (!conversation) return missing(c);
       const b = (await c.req.json().catch(() => null)) as SendMessageInput | null;
       if (!b || !isId(b.clientRequestId) || !isText(b.message, 1, MESSAGE_MAX)) return c.json({ error: `Expected { clientRequestId, message (1–${MESSAGE_MAX.toLocaleString('en')} chars) }` }, 400);
+      // While its team runs, "To: Lead" is a note for the synthesis (POST /api/teams/:id/notes), not a message.
+      if (conversation.teamId && db.prepare('SELECT 1 FROM squad_missions WHERE id = ? AND ended_at IS NULL').get(conversation.teamId)) {
+        return c.json({ error: 'The team is still running: send it as a note to the lead.' }, 409);
+      }
       const attachments = await readAttachments(b.attachments);
       if (typeof attachments === 'string') return c.json({ error: attachments, field: 'attachments' }, 400);
       return started(c, runs.start(conversation.agentId, b.message.trim(), undefined, undefined, { conversationId: conversation.id, clientRequestId: b.clientRequestId, attachments }));

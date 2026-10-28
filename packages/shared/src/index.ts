@@ -833,6 +833,37 @@ export interface CreateConversationInput {
   attachments?: AttachmentUpload[];
 }
 
+/**
+ * POST /api/teams?store= (decision 12): the lead first. A participant runs on `config` (as Deploy's), or borrows
+ * `fromConversationId`'s config and recap when `config` is left out. Teams: GET /api/teams/:id, POST …/cancel,
+ * …/notes (TeamNoteInput), …/participants (TeamParticipantInput, until the lead has planned), and
+ * …/steps/:step/resume ({ clientRequestId }) for an interrupted step. Each takes `?store=`.
+ */
+export interface CreateTeamInput {
+  clientRequestId: string;
+  title: string;
+  objective: string;
+  participants: TeamParticipantInput[];
+  /** USD, counting Claude participants only. */
+  budgetUsd?: number;
+  /** Tasks at once, ≥ 1; kept to the store's limit of 2. Default 2. */
+  maxConcurrent?: number;
+  /** Retries per task, 0–2. Default 2. */
+  retries?: number;
+}
+
+export interface TeamParticipantInput {
+  type: string;
+  config?: ConversationConfigInput;
+  fromConversationId?: string;
+}
+
+/** "To: Lead" while the team runs: a note the synthesis receives. A repeated id is ignored. */
+export interface TeamNoteInput {
+  clientRequestId: string;
+  text: string;
+}
+
 /** GET /api/conversations/:id/tools?store= → the config's tools by kind of access, with the integration behind a group. */
 export interface ToolGroup {
   id: string;
@@ -1091,6 +1122,8 @@ export interface SquadMissionStep {
   nextTryAt?: string;
   contribution?: TeamContribution;
   unresolved?: string[];
+  /** Its run was cut off by an app restart: the owner resumes it (decision 12). */
+  interrupted?: boolean;
 }
 
 export interface NewSquadMission {
