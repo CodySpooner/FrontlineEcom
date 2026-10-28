@@ -148,6 +148,20 @@ describe('ops', () => {
     expect(JSON.stringify(lines)).not.toMatch(/sk-live/);
   });
 
+  test('knowledge persists across restarts: closed and opened again, the cards, links and search are as they were', () => {
+    const file = join(mkdtempSync(join(tmpdir(), 'frontline-kb-restart-')), 'frontline.db');
+    const before = openDb(file);
+    const a = card(before, null, 'Problem-first hooks win', { summary: 'Hooks on the problem hold viewers' });
+    const b = card(before, null, 'Pain beats gain');
+    createLink(before, null, { from: a.id, to: b.id, type: 'supports', why: 'Same idea', authorId: 'owner', status: 'confirmed' });
+    before.close();
+    const after = openDb(file);
+    expect(getCard(after, a.id)).toMatchObject({ title: 'Problem-first hooks win', path: ['Advertising'] });
+    expect(listCards(after, null, { q: 'viewers' }).items.map((c) => c.id)).toEqual([a.id]);
+    expect(after.prepare('SELECT from_id, to_id, status FROM kb_links').all()).toEqual([{ from_id: a.id, to_id: b.id, status: 'confirmed' }]);
+    after.close();
+  });
+
   test("a backup holds the knowledge base, and restoring it brings back cards, their evidence and sources, links and search", async () => {
     const dir = mkdtempSync(join(tmpdir(), 'frontline-kb-backup-'));
     const file = join(dir, 'frontline.db');

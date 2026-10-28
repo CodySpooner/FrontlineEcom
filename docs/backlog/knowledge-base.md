@@ -615,7 +615,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - logging, with no secrets;
   - KB data confirmed in backup and restore;
   - indexes on the `node:sqlite` hot paths, so the API never stalls.
-- [ ] KB-26 **Acceptance** ("Done when" above). Fix what it finds, then STOP.
+- [x] KB-26 **Acceptance** ("Done when" above). Fix what it finds, then STOP.
 
 ## Done
 - 2026-10-27 KB-01 audit: decisions checked against the code, baseline 992 tests green, before shots in `.agent/before/`.
@@ -644,6 +644,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-23 Maintenance: each top-level category has its own refresh age (ad platforms, creative, competitors, trends and SEO 45 days; psychology, brand, money and operations 180; the rest 90), which the owner changes in the Research Center's Controls ("Needs refresh after"). "Needs refresh" on the artboard and in the Research Center, the Knowledge gaps and the stale-card research trigger all follow it, and a stale card that gets new evidence shows as Refreshed. An hourly pass finds near-duplicate cards (Duplicate? in Latest discoveries: Merge, Compare or Not the same) and contradictions missed when cards were made (a link and an open conflict). Each workspace can keep fetched pages and research logs for 30 days to a year, or always (the default): past that, page text and finished research's logs, stage outputs and transcripts are trimmed, and the sources, tasks and reports stay.
 - 2026-10-27 KB-24 Search and ask: the Knowledge search now ranks cards by best match (unless a column sort is picked) and marks the matching words, in the title or in a passage under it; the Workspace picker has "All workspaces", which opens the Library over every store's and General's cards with each card's store named; the box says "Keyword search". Ask AI (Ctrl+K) has "Ask the knowledge base" for each store in view and, with several, for all workspaces: the store's Market Analyst answers from the matching cards only, grouped as Measured, Research and Unproven with their sources, citing each card; when no card matches, nothing runs and the palette says the knowledge base doesn't know yet, with "Research it".
 - 2026-10-27 KB-25 Security and ops pass: the knowledge base and product research refuse request bodies over 1 MB (15 MB for research from an uploaded document) and more than 300 changes or 10 started agent runs a minute; every KB route is checked to never show or touch another store's knowledge; card text an agent wrote can no longer break onto a new line in a prompt, and a source only links to (and an agent only fetches) web addresses; the log keeps a failed request's path and error, never its query or body; backups are confirmed to carry the whole knowledge base; six new indexes keep each workspace's links, sources, positions, categories, conflicts and the daily research budget check off full-table reads.
+- 2026-10-27 KB-26 Acceptance: the owner's §17 workflow runs end to end as a test (research by the store's Ad Strategist, cards under Advertising → Creative Strategy → Video Hooks, Advertising → Targeting → Audience Research and Marketing → Consumer Psychology → Purchase Motivations, links proposed, the Creative Studio retrieving and citing them with General knowledge, a campaign change waiting for approval, the store's settled results becoming a Validated lesson a later task gets); each §19 checklist line has its test; one real-engine smoke (research from one Wikipedia page into Pawsome's workspace: 7 cards and 6 suggested links in 2 minutes for $0.39; a later Copywriter task got the cards in its prompt and cited five); the four views checked at 1280×800, 1366×728, 1440×900 and 1920×1080, and the 7 px sideways scroll at 390 px fixed.
 
 ## Blocked
 
@@ -997,3 +998,61 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   records every SELECT the KB read routes, retrieval and the hourly pass prepare and fails on any full scan of a KB
   table, except reads of everything on purpose (All workspaces, the category tree behind refresh ages) and the tiny
   owner-made tables (saved views, planned tests, controls).
+- 2026-10-27 KB-26: `apps/server/src/kb/workflow.test.ts` is §17 on the fake engine through the real pieces
+  (`createRunManager`, `advanceResearch`, the KB routes, `propose_ad_change`, `learnFromPerformance`): the research's
+  three cards land at the exact paths with read sources behind them, the finding the owner already had gets the
+  evidence instead of a duplicate, the suggester links the new card to it (on the artboard's cards and links routes),
+  the Creative Studio's prompt carries the store's cards and a General one and its `[kb:id]` is counted, the pause
+  waits for the owner and the campaign stays on when denied, and two settled 28-day periods make a Validated
+  Performance Lesson that the next Ad Strategist task gets. The §19 checklist, line by line:
+  General research → sourced General cards: research.test.ts "a source task reads the given link… General research
+  gets a store-neutral prompt" (files to General, nothing of a store leaks into the prompt). Niche task saves to the
+  right business: workflow.test.ts step 4, routes.test.ts "the owner's links, text and document go to the chosen
+  agent… into the chosen workspace and category". Directed URL research: the same two, and the smoke below. Failed
+  retrieval is reported: research.test.ts "when every source fails, the task fails with a report of why and makes no
+  cards", sources.test.ts "a source that wasn't read is never passed off as read". No duplicate cards: research.test.ts
+  "a finding the knowledge base already holds adds its evidence to that card" and "a card a stage files itself… merges
+  into it", kb.test.ts "a General category or card saved twice is refused", workflow.test.ts. Persists across
+  restarts: security.test.ts "knowledge persists across restarts" (new: a file database closed and opened again) and
+  research.test.ts "after an app restart it goes on from the last finished stage". Agents retrieve later:
+  retrieval.test.ts "a later task gets the cards an earlier one saved, once accepted", workflow.test.ts steps 6 and
+  10, the smoke. No cross-business leak: kb.test.ts "a store sees its own cards, plus General only when asked",
+  security.test.ts's sweep of every KB route, retrieval.test.ts. Conflicting evidence: performance.test.ts "a
+  measured reading the other way is evidence against the lesson… a conflict opens", maintenance.test.ts "finds a
+  contradiction that wasn't caught", autonomy.test.ts "a contradiction research found doesn't start research".
+  Artboard relationships persist and stay interactive: routes.test.ts "each workspace keeps its own places",
+  Artboard.test.tsx "nudges the card with Alt+Arrow and saves its new place", ArtboardPanels.test.tsx "draws each link
+  by type, explains it on click, and accepts or rejects a suggestion". Source references accessible:
+  DetailsPanel.test.tsx "shows every field… sources and usage" (a non-web address is shown, not linked),
+  routes.test.ts "lists a workspace's sources by title". Performance insights from real data: performance.test.ts's
+  campaign lesson and its guards ("a demo store: nothing from demo numbers", "attribution still settling").
+  Stoppable and recoverable: research.test.ts "cancel stops the stage running", "cancel while reading stops reading",
+  "after an app restart…", "Retry goes on from the stage that failed". Automated research within limits and
+  permissions: autonomy.test.ts "…at the workspace depth and task budget", "with approval required, it waits in
+  Agents recommend", "never on the demo engine, and never for a store that has it off", "the daily budget holds what
+  the last 24 hours reserved", security.test.ts "at most 10 agent-run starts and 300 changes a minute".
+  The real-engine smoke (the one run this item allows): the dev server's demo stores run their agents on the demo
+  engine, which can't cite, so it ran once as a throwaway vitest file (not committed) with
+  `FRONTLINE_AGENT_ENGINE=claude` on an in-memory seeded database, through the real app: `POST /api/kb/research/tasks`
+  as the From source dialog sends it (Pawsome's Copywriter, Pawsome's workspace, one link:
+  en.wikipedia.org/wiki/Call_to_action_(marketing), $1 budget), the server's own research loop and fetcher, the bulk
+  route to accept, then `POST /api/agents/pawsome:copywriter/runs`. A dry run on the fake engine first confirmed that
+  nothing starts on its own. Result: every stage passed on its first try (KB-12 had only tried planning). The page was
+  read, 7 findings became 7 Hypothesis cards (one general source), 6 links were suggested, and the report tied the
+  source to dog travel gear and kept to the store's red lines (urgency only when true). That took 120 s and $0.39. The
+  Copywriter task (12 s, $0.13) got 5 of the cards in its prompt, cited 5 as `[kb:id]` (each `cited_count` 1), said
+  they were untested hypotheses, and didn't invent a delivery date. The capture stayed in the session's scratchpad.
+  Views: 16 shots in `.agent/kb26/` (artboard, library, relationships, research × 1280×800, 1366×728, 1440×900,
+  1920×1080), no console errors, the dark grey and red of `docs/reference/`. At 390 px the Research Center scrolled
+  sideways by 7 px: its grids sized their one implicit column to the tab row's full width; `grid-cols-1`
+  (`minmax(0, 1fr)`) lets the row scroll inside itself. Artboard, Library and Relationships have no sideways scroll there.
+  Follow-ups for the owner (not built; the lane is finished):
+  - Semantic search once an embeddings provider is set up (decision 12): retrieval and Ask are keyword only, so "CTA"
+    doesn't find "call to action".
+  - The demo engine can't use knowledge: on a demo store an agent's reply doesn't cite cards. A canned demo reply that
+    quotes the top retrieved card would show the loop before the store is connected.
+  - Research spend shows per task; a monthly KB spend line on the Research Center (beside the daily budget) would make
+    autonomous research easier to trust.
+  - Relationship suggestions are word overlap; once there's an embeddings provider, suggest links by meaning too.
+  - The §17 workflow test could run against a tiny recorded real-engine transcript, to catch prompt drift without
+    spending usage.

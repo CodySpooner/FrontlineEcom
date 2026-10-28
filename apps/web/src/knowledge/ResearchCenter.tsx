@@ -43,9 +43,9 @@ export function ResearchCenter({ ws, set, footer }: { ws: string; set: Set; foot
         <>
           <Tiles ws={ws} o={o.data} />
           {/* Breakpoints all as min-[…px]: this Tailwind puts arbitrary ones before named ones, so they wouldn't win over lg:. */}
-          <div className="grid gap-4 min-[1024px]:grid-cols-[280px_minmax(0,1fr)] min-[1440px]:grid-cols-[280px_minmax(0,1fr)_360px]">
+          <div className="grid grid-cols-1 gap-4 min-[1024px]:grid-cols-[280px_minmax(0,1fr)] min-[1440px]:grid-cols-[280px_minmax(0,1fr)_360px]">
             <KnowledgeMap ws={ws} o={o.data} />
-            <div className="grid content-start gap-4">
+            <div className="grid grid-cols-1 content-start gap-4">
               <Discoveries ws={ws} o={o.data} name={name} />
               <Preview o={o.data} />
             </div>
