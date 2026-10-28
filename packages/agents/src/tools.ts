@@ -1214,12 +1214,13 @@ export const APP_TOOLS: AppTool[] = [
       if (no) return no;
       if (kind === 'store.add_products') {
         // The app skips a product it can't create and adds one priced below its cost: say so before the owner approves.
-        const products = (Array.isArray(payload.products) ? payload.products : []) as { title?: unknown; price?: unknown; cost?: unknown }[];
+        const products = (Array.isArray(payload.products) ? payload.products : []) as { title?: unknown; price?: unknown; compareAt?: unknown; cost?: unknown }[];
         if (!products.length || products.some((p) => typeof p?.title !== 'string' || !p.title.trim() || !(typeof p.price === 'number' && p.price > 0))) {
           return "Not sent: payload.products needs each product's title and a price above 0, in the store's currency.";
         }
         const fees = ctx.store.feePercent || ctx.store.feePerOrder;
         for (const p of products) {
+          if (p.compareAt !== undefined && !(typeof p.compareAt === 'number' && Number.isFinite(p.compareAt) && p.compareAt > Number(p.price))) return "Not sent: compareAt must be above the price; omit it when sellers show no 'was' price.";
           const floor = priceFloor(ctx.store, Number(p.cost) || 0);
           const $ = (n: number) => cash(n, ctx.store.currency);
           if (floor !== undefined && Number(p.price) <= floor) return `Not sent: "${String(p.title).trim()}" at ${$(Number(p.price))} is at or below its unit cost${fees ? ' plus fees' : ''} (${$(floor)}).`;

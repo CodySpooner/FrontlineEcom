@@ -71,6 +71,27 @@ test("a Product Researcher's own request goes through the same path; denied ones
   await runManager(db).idle();
 });
 
+test.each([
+  { compareAt: 19, valid: false }, { compareAt: 20, valid: false }, { compareAt: null, valid: false },
+  { compareAt: '30', valid: false }, { compareAt: Infinity, valid: false },
+  { compareAt: 21, valid: true }, { compareAt: undefined, valid: true },
+])('product approval validates compareAt $compareAt', async ({ compareAt, valid }) => {
+  const agent = getAgent(db, 'pawsome:product_hunter')!;
+  const step: FakeStep = { call: 'request_approval', input: {
+    title: 'Add a new product', reason: 'Demand evidence', kind: 'store.add_products',
+    payload: { products: [{ title: 'Fresh product for testing', price: 20, compareAt }] },
+  } };
+  const requests: ApprovalRequest[] = [];
+  const outputs: string[] = [];
+  for await (const e of runAgent({ agent, store: getStore(db, 'pawsome')!, task: 't', env: toolEnv(db) }, fakeEngine(() => [step]))) {
+    if (e.type === 'approval_request') { requests.push(e.approval); decide(db, e.approval.id, 'deny'); }
+    if (e.type === 'tool_result') outputs.push(e.output);
+  }
+  await tick();
+  expect(requests).toHaveLength(valid ? 1 : 0);
+  if (!valid) expect(outputs[0]).toContain('compareAt must be above the price');
+});
+
 test('connected stores get platform drafts; a platform error tells the owner instead', async () => {
   db.prepare(`UPDATE stores SET connected = 1, platform = 'shopify' WHERE id = 'peak'`).run();
   const approval = (await (await post('/api/research/smart-jump-rope/add-to-store', { storeId: 'peak' })).json()) as ApprovalRequest;

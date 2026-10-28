@@ -664,6 +664,7 @@ STOP**, the owner may delete `.agent/STOP` and ask for "run PR-29, then update t
 STOP.
 
 ## Inbox
+- [ ] (from codex-hardening, CH-10 verification) The 10,000-match scale test at `apps/web/src/pages/Research.test.tsx:184` twice exceeded its 5s limit in the full 232-file suite (5.121s / 5.032s); all 33 Research tests pass in isolation. No Research code changed in hardening. Investigate reducing rendering/query work in this regression or documented worker limits; keep its virtualization assertions. Logs: hardening worktree `.agent/ch-10-check.log` and `.agent/ch-10-check-retry.log`.
 - [ ] (from codex-hardening, CH-05) CH-04 reserves queued CJ calls on their admission date. A call admitted just before 00:00 UTC can dispatch the next day while its row still counts yesterday, so actual requests and reservation-day counts can diverge. Proposed default: on a UTC rollover while queued, atomically check the new day's capacity and transfer the reservation before fetch, without charging the dev-total cap twice; retain a truthful interrupted/refused record. Add a fake-clock boundary regression. No live CJ call was made.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 
