@@ -28,13 +28,24 @@ export interface ClaudeEngineOptions {
   query?: (params: { prompt: string; options: Options }) => AsyncIterable<SDKMessage>;
 }
 
-/** Account problems the SDK flags on an assistant message, in the owner's words (Claude Code's own text says "run /login"). */
-const ACCOUNT: Partial<Record<SDKAssistantMessageError, string>> = {
+/** Errors the SDK flags on an assistant message, in the owner's words with what to do (Claude Code's own text says "run /login"). */
+const ERRORS: Record<SDKAssistantMessageError, string> = {
   authentication_failed: "Claude isn't signed in on this computer. Open a terminal, run `claude`, sign in with /login, then run the agent again.",
+  oauth_org_not_allowed: "Your Claude login's organization doesn't allow Claude Code. Open a terminal, run `claude`, sign in with another account with /login, then run the agent again.",
+  account_on_hold: "Your Claude account is on hold, so agents can't run. Check your account at claude.ai.",
+  verification_required: 'Claude needs you to verify your account. Open a terminal, run `claude` and follow its steps, then run the agent again.',
   billing_error: "Claude reported a billing problem with your account, so agents can't run. Check your plan at claude.ai.",
   rate_limit: "You've hit your Claude usage limit for now. Agents can run again once it resets.",
+  overloaded: 'Claude is overloaded right now. Retry in a few minutes.',
+  invalid_request: 'Claude turned the request down as invalid. Retry; if it happens again, start a new conversation.',
   model_not_found: "The agent model isn't available on your Claude login. Set FRONTLINE_AGENT_MODEL to one that is.",
+  server_error: 'Claude had a server error. Retry in a few minutes.',
+  unknown: 'Claude stopped with an unknown error. Retry; if it keeps happening, check status.anthropic.com.',
+  max_output_tokens: "The reply hit Claude's output limit. Retry and ask for a shorter answer, or split the task.",
+  cloud_credential_error: "Claude Code's cloud provider credentials failed. Fix them in your Claude Code setup, then run the agent again.",
 };
+/** The ones that fail every run the same way until the owner fixes them: the run stops at once, the owner is told once a day. */
+const ACCOUNT: SDKAssistantMessageError[] = ['authentication_failed', 'oauth_org_not_allowed', 'account_on_hold', 'verification_required', 'billing_error', 'rate_limit', 'model_not_found', 'cloud_credential_error'];
 
 /** The model agents run on: `FRONTLINE_AGENT_MODEL` or claude-opus-5-5. */
 export const agentModel = () => process.env.FRONTLINE_AGENT_MODEL ?? 'claude-opus-5-5';
@@ -61,7 +72,7 @@ export async function claudeAccount(cwd?: string, run: typeof query = query, tim
 }
 
 /** True for an account problem (signed out, usage limit…): every run fails the same way until the owner fixes it. */
-export const isAccountError = (message: string) => Object.values(ACCOUNT).includes(message);
+export const isAccountError = (message: string) => ACCOUNT.some((code) => ERRORS[code] === message);
 
 /** Runs on the owner's local Claude Code login (no API key needed). */
 export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
@@ -135,6 +146,7 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
     const own = (e: AgentEvent): AgentEvent =>
       (e.type === 'done' || e.type === 'error') && e.usage && input.sessionCostUsd ? { ...e, usage: { ...e.usage, costUsd: Math.max(0, e.usage.costUsd - input.sessionCostUsd) } } : e;
     const spent = new Map<string, number>(); // assistant message id → its estimated cost (the SDK repeats a message per block)
+    let flagged: SDKAssistantMessageError | undefined; // the last error flagged on a reply: a failed result says why with it
     (async () => {
       for await (const message of messages) {
         if (message.type === 'system' && message.subtype === 'init') input.onSession?.(message.session_id);
@@ -142,7 +154,8 @@ export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {
           spent.set(message.message.id, estimate(message.message.usage, model));
           input.onSpend?.([...spent.values()].reduce((a, b) => a + b, 0));
         }
-        for (const event of toAgentEvents(message, input.mode)) events.push(own(event));
+        if (message.type === 'assistant' && message.parent_tool_use_id === null && message.error) flagged = message.error;
+        for (const event of toAgentEvents(message, input.mode, flagged)) events.push(own(event));
       }
     })().then(() => events.end(), events.end);
     yield* events.drain();
@@ -168,8 +181,11 @@ export const estimate = (
   return (u.input_tokens * input + (u.cache_creation_input_tokens ?? 0) * input * 2 + (u.cache_read_input_tokens ?? 0) * read + u.output_tokens * output) / 1e6;
 };
 
-/** Maps one SDK message to our events. Subagent traffic (parent_tool_use_id set) is not surfaced. */
-export function toAgentEvents(message: SDKMessage, mode?: RunInput['mode']): AgentEvent[] {
+/**
+ * Maps one SDK message to our events. Subagent traffic (parent_tool_use_id set) is not surfaced. `flagged`: the last
+ * error flagged on a reply; an account one stops the run there, any other explains the failed result.
+ */
+export function toAgentEvents(message: SDKMessage, mode?: RunInput['mode'], flagged?: SDKAssistantMessageError): AgentEvent[] {
   switch (message.type) {
     case 'stream_event': {
       const { event } = message;
@@ -179,7 +195,7 @@ export function toAgentEvents(message: SDKMessage, mode?: RunInput['mode']): Age
     }
     case 'assistant':
       if (message.parent_tool_use_id !== null) return [];
-      if (message.error && ACCOUNT[message.error]) return [{ type: 'error', message: ACCOUNT[message.error]! }];
+      if (message.error && ACCOUNT.includes(message.error)) return [{ type: 'error', message: ERRORS[message.error], code: message.error }];
       return message.message.content.flatMap((block): AgentEvent[] =>
         // Our own tools read as in demo runs (store_summary); external ones keep their server (mcp__meta_ads__…).
         block.type === 'tool_use' ? [{ type: 'tool_call', id: block.id, name: block.name.replace(/^mcp__frontline__/, ''), input: block.input }] : [],
@@ -197,9 +213,11 @@ export function toAgentEvents(message: SDKMessage, mode?: RunInput['mode']): Age
       const u = message.usage;
       // A run that stops early still spent money: errors carry it too, so the store's daily AI budget sees it.
       const usage = u && { inputTokens: u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens, outputTokens: u.output_tokens, costUsd: message.total_cost_usd };
-      const failed = (text: string): AgentEvent[] => [{ type: 'error', message: text, ...(usage ? { usage } : {}), ...(message.session_id ? { sessionId: message.session_id } : {}) }];
-      if (message.subtype !== 'success') return failed((mode === 'research' ? STOPPED_RESEARCH : STOPPED)[message.subtype] ?? (message.errors.join('; ') || message.subtype));
-      if (message.is_error) return failed(message.result || 'Claude returned an error');
+      const failed = (text: string, code: string): AgentEvent[] => [{ type: 'error', message: text, code, ...(usage ? { usage } : {}), ...(message.session_id ? { sessionId: message.session_id } : {}) }];
+      if (flagged && (message.is_error || message.subtype === 'error_during_execution')) return failed(ERRORS[flagged], flagged);
+      if (message.subtype === 'error_during_execution') return failed(`Stopped: ${message.errors.join('; ') || 'Claude hit an error while working'}. Retry; if it happens again, start a new conversation.`, message.subtype);
+      if (message.subtype !== 'success') return failed((mode === 'research' ? STOPPED_RESEARCH : STOPPED)[message.subtype] ?? (message.errors.join('; ') || message.subtype), message.subtype);
+      if (message.is_error) return failed(message.result || 'Claude returned an error', 'unknown');
       return [{ type: 'done', sessionId: message.session_id, usage }];
     }
     default:

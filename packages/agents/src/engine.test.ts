@@ -141,7 +141,7 @@ describe('Claude engine', () => {
   });
 
   test('maps failed results to error events', () => {
-    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }))).toEqual([{ type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.' }]);
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }))).toEqual([{ type: 'error', message: 'Stopped: the run hit its 40-turn limit before finishing. Give it a narrower task.', code: 'error_max_turns' }]);
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [], session_id: 'abc' }))[0]).toMatchObject({ sessionId: 'abc' }); // the next message goes on from it
     const u = { input_tokens: 1000, cache_creation_input_tokens: 2000, cache_read_input_tokens: 10_000, output_tokens: 500 };
     expect(estimate(u)).toBeCloseTo(0.032);
@@ -149,13 +149,18 @@ describe('Claude engine', () => {
     expect(estimate(u, 'claude-haiku-5-5')).toBeCloseTo(0.00085, 5); // 0.1 + 0.4 + 0.1 + 0.25 thousandths
     expect(estimate(u, 'some-new-model')).toBe(estimate(u));
     expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: ['x'] }))[0]).toMatchObject({ message: expect.stringMatching(/^Stopped: the run used its share of today's AI budget/) });
-    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_during_execution', errors: ['boom', 'bang'] }))).toEqual([{ type: 'error', message: 'boom; bang' }]);
-    expect(toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in' }))).toEqual([{ type: 'error', message: 'Not logged in' }]);
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_during_execution', errors: ['boom', 'bang'] }))).toEqual([{ type: 'error', message: 'Stopped: boom; bang. Retry; if it happens again, start a new conversation.', code: 'error_during_execution' }]);
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: true, result: 'Not logged in' }))).toEqual([{ type: 'error', message: 'Not logged in', code: 'unknown' }]);
     // Account problems arrive on an assistant message first, worded for Claude Code ("run /login"): the owner gets Frontline's words.
     const failed = (error: string) => toAgentEvents(sdk({ type: 'assistant', parent_tool_use_id: null, error, message: { content: [{ type: 'text', text: 'Not logged in · Please run /login' }] } }));
-    expect(failed('authentication_failed')).toEqual([{ type: 'error', message: expect.stringMatching(/^Claude isn't signed in on this computer\. Open a terminal, run `claude`/) }]);
+    expect(failed('authentication_failed')).toEqual([{ type: 'error', message: expect.stringMatching(/^Claude isn't signed in on this computer\. Open a terminal, run `claude`/), code: 'authentication_failed' }]);
     expect(failed('rate_limit')[0]).toMatchObject({ message: expect.stringMatching(/usage limit/) });
     expect(failed('server_error')).toEqual([]);
+    // Any other flagged error explains the failed result, with its code (the run manager retries the passing ones).
+    const result = (flagged: string) => toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: true, result: 'API Error: 529' }), undefined, flagged as never);
+    expect(result('overloaded')).toEqual([{ type: 'error', message: 'Claude is overloaded right now. Retry in a few minutes.', code: 'overloaded' }]);
+    expect(result('max_output_tokens')[0]).toMatchObject({ message: expect.stringMatching(/output limit\. Retry and ask for a shorter answer/), code: 'max_output_tokens' });
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'success', is_error: false, result: 'ok', session_id: 's' }), undefined, 'max_output_tokens')[0]).toMatchObject({ type: 'done' }); // recovered
   });
 
   test('passes prompt, resume and isolation options to query()', async () => {
@@ -233,8 +238,8 @@ describe('Claude engine', () => {
     await collect(runAgent({ ...input, agent: { ...agent, role: 'ad_strategist' }, mode: 'research', env, budgetUsd: 0.8 }, engine));
     expect(seen).toMatchObject({ tools: ['WebSearch'], maxTurns: 30, maxBudgetUsd: 0.8 });
     expect(Object.keys(seen!.mcpServers!)).toEqual(['frontline']); // the research tools, and none of the store's servers
-    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }), 'research')).toEqual([{ type: 'error', message: 'Stopped: this research step hit its 30-turn limit before finishing.' }]);
-    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: [] }), 'research')).toEqual([{ type: 'error', message: "Stopped: the research task's budget, or today's AI budget for this store, ran out." }]);
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_turns', errors: [] }), 'research')).toEqual([{ type: 'error', message: 'Stopped: this research step hit its 30-turn limit before finishing.', code: 'error_max_turns' }]);
+    expect(toAgentEvents(sdk({ type: 'result', subtype: 'error_max_budget_usd', errors: [] }), 'research')).toEqual([{ type: 'error', message: "Stopped: the research task's budget, or today's AI budget for this store, ran out.", code: 'error_max_budget_usd' }]);
   });
 
   // What Claude sees: every app tool's zod input must come out of the in-process MCP server as a valid object schema.

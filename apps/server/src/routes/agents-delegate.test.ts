@@ -54,6 +54,23 @@ test("a run retried after a restart doesn't hand out again what it assigned befo
   ]);
 });
 
+test("a conversation turn the owner resumes after a restart doesn't hand out again what it assigned before", async () => {
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO agent_configs (id, store_id, agent_id, runtime, tools_json, knowledge_json, permissions_json, created_at) VALUES ('cfg', 'glow', 'glow:market_analyst', 'demo', '[]', '["store"]', '{"saveFindings":"off"}', ?)`).run(now);
+  db.prepare(`INSERT INTO conversations (id, store_id, config_id, title, created_at, updated_at, last_activity_at) VALUES ('chat', 'glow', 'cfg', 'Briefing', ?, ?, ?)`).run(now, now, now);
+  const add = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, parent_run_id, conversation_id, config_id, created_at) VALUES (?, 'glow', ?, ?, ?, ?, ?, ?, ?)`);
+  add.run('p', 'glow:market_analyst', 'Plan the week', 'running', null, 'chat', 'cfg', now); // cut off by the restart
+  add.run('c', 'glow:copywriter', 'Rewrite the hero', 'done', 'p', null, null, now);
+  const m = manager({ market_analyst: [assign('copywriter'), assign('operations')] });
+  expect(listRuns(db, { agentId: 'glow:market_analyst' })).toHaveLength(1); // not run again on its own
+  const resumed = m.start('glow:market_analyst', 'Plan the week', undefined, undefined, { conversationId: 'chat', retryOf: 'p' }) as AgentRun;
+  await m.idle();
+  expect(outputs(resumed).map((o) => o.replace(/\(run [\w-]+,/, '(run …,'))).toEqual([
+    "Already assigned to the Copywriter before the app restarted (run …, done): don't assign it again.",
+    'Assigned to the Operations (run …, queued).',
+  ]);
+});
+
 test('no self-assigning, at most 3 per run, offline squadmates are reported', async () => {
   db.prepare(`UPDATE agents SET enabled = 0 WHERE id = 'glow:email_sms'`).run();
   const m = manager({ market_analyst: [assign('market_analyst'), assign('email_sms'), assign('copywriter'), assign('operations'), assign('ad_strategist'), assign('product_hunter')] });

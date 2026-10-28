@@ -1,9 +1,10 @@
-import { costToday, createRunManager, fakeEngine, getAgent, getRun, listRuns, listMemory, REFLECTION_PROMPT, runAgent, updateAgent, type Engine, type FakeStep, type RunManagerOptions } from '@frontline/agents';
+import { costToday, createRunManager, fakeEngine, getAgent, getRun, hasEffects, listRuns, listMemory, REFLECTION_PROMPT, runAgent, updateAgent, type Engine, type FakeStep, type RunInput, type RunManagerOptions, type StartOptions } from '@frontline/agents';
 import type { AgentEvent, AgentRun, LiveMessage } from '@frontline/shared';
+import { randomUUID } from 'node:crypto';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { beforeEach, expect, test } from 'vitest';
+import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
 import { openDb, type Db } from '../db';
@@ -95,7 +96,7 @@ test('a run streams, persists its transcript and usage, and shows the agent as r
   expect(getAgent(db, 'glow:copywriter')).toMatchObject({ status: 'running', currentTask: 'Rewrite the hero headline' });
   await m.idle();
   const saved = getRun(db, run.id)!;
-  expect(saved).toMatchObject({ status: 'done', sessionId: 'fake-glow:copywriter' });
+  expect(saved).toMatchObject({ status: 'done', sessionId: `fake-${run.id}` });
   // Demo engine: the Copywriter saves one ad copy for real, reads the summary, then replies quoting it.
   expect(saved.transcript.map((e) => e.type)).toEqual(['tool_call', 'tool_result', 'tool_call', 'tool_result', 'text_delta', 'done']);
   expect(saved.transcript[0]).toMatchObject({ name: 'create_creative', input: { kind: 'copy', cta: 'Shop now' } });
@@ -662,4 +663,208 @@ test('long tool outputs are cut in the stored transcript (the agent still saw al
   const result = getRun(db, run.id)!.transcript.find((e) => e.type === 'tool_result') as { output: string };
   expect(result.output).toMatch(/\n… \(\d+ more characters\)$/);
   expect(result.output.length).toBeLessThan(4100);
+});
+
+/** A conversation with the agent, on a config with these limits. */
+function conversation(agentId: string, permissions: Record<string, unknown> = {}) {
+  const storeId = agentId.split(':')[0]!;
+  const id = randomUUID();
+  const at = new Date().toISOString();
+  db.prepare(`INSERT INTO agent_configs (id, store_id, agent_id, runtime, tools_json, knowledge_json, permissions_json, created_at) VALUES (?, ?, ?, 'demo', '[]', '["store"]', ?, ?)`)
+    .run(`cfg-${id}`, storeId, agentId, JSON.stringify({ saveFindings: 'off', ...permissions }), at);
+  db.prepare(`INSERT INTO conversations (id, store_id, config_id, title, created_at, updated_at, last_activity_at) VALUES (?, ?, ?, 'Chat', ?, ?, ?)`).run(id, storeId, `cfg-${id}`, at, at, at);
+  return id;
+}
+const send = (m: ReturnType<typeof manager>, agentId: string, conversationId: string, task: string, o: StartOptions = {}) => ok(m.start(agentId, task, undefined, undefined, { conversationId, ...o }));
+
+/** Like gated(), and keeps what each run was started with; a fresh run gets its own session. */
+function recorded() {
+  const inputs: RunInput[] = [];
+  let open!: () => void;
+  const gate = new Promise<void>((r) => (open = r));
+  const engine: Engine = async function* (input) {
+    inputs.push(input);
+    await new Promise<void>((resolve, reject) => {
+      gate.then(resolve);
+      input.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+    });
+    yield { type: 'done', sessionId: input.resume ?? `s-${input.env?.runId}`, usage };
+  };
+  const of = (run: AgentRun) => inputs.find((i) => i.env?.runId === run.id);
+  return { engine, open, of };
+}
+
+test("an agent's conversations run side by side; one conversation's turns go one at a time, each on from the last", async () => {
+  const { engine, open, of } = recorded();
+  const m = manager({ engine, perStore: 4, concurrency: 4 });
+  const [one, two] = [conversation('glow:copywriter'), conversation('glow:copywriter')];
+  const a = send(m, 'glow:copywriter', one, 'Draft the hero line');
+  const b = send(m, 'glow:copywriter', two, 'Draft the hero line'); // no dedupe across conversations
+  const c = send(m, 'glow:copywriter', one, 'Shorter'); // sent while the reply is going
+  const d = send(m, 'glow:copywriter', one, 'Shorter'); // the same words again count too
+  const job = ok(m.start('glow:copywriter', 'Daily copy check')); // a run with no conversation keeps its own rule...
+  const again = ok(m.start('glow:copywriter', 'Weekly copy check')); // ...one at a time per agent
+  const status = () => [a, b, c, d, job, again].map((r) => getRun(db, r.id)?.status);
+  expect(status()).toEqual(['running', 'running', 'queued', 'queued', 'running', 'queued']);
+  expect(getRun(db, a.id)).toMatchObject({ conversationId: one, configId: `cfg-${one}`, runtime: 'demo' });
+  expect(m.cancel(d.id)?.status).toBe('cancelled'); // the owner can take a queued message back
+  open();
+  await m.idle();
+  expect(status()).toEqual(['done', 'done', 'done', 'cancelled', 'done', 'done']);
+  expect([a, b, c].map((r) => of(r)?.resume)).toEqual([undefined, undefined, `s-${a.id}`]);
+});
+
+test('a repeated client request id returns the run it started instead of starting another', async () => {
+  const m = manager({ engine: gated().engine });
+  const one = conversation('glow:copywriter');
+  const first = send(m, 'glow:copywriter', one, 'Draft the hero line', { clientRequestId: 'req-1' });
+  expect(send(m, 'glow:copywriter', one, 'Draft the hero line', { clientRequestId: 'req-1' }).id).toBe(first.id);
+  expect(send(m, 'glow:copywriter', one, 'Draft the hero line', { clientRequestId: 'req-2' }).id).not.toBe(first.id);
+  const step = ok(m.start('glow:copywriter', 'Team step', undefined, undefined, { teamId: 'team-1', clientRequestId: 'req-1' }));
+  expect(ok(m.start('glow:copywriter', 'Team step', undefined, undefined, { teamId: 'team-1', clientRequestId: 'req-1' })).id).toBe(step.id);
+  expect(db.prepare('SELECT count(*) AS n FROM agent_runs').get()?.n).toBe(3);
+  expect(m.start('glow:ad_strategist', 'x', undefined, undefined, { conversationId: one })).toBe('Conversation not found'); // another agent's
+  m.cancelStore('glow');
+  await m.idle();
+});
+
+test('Retry goes on from the last turn that finished; Resume goes on in the interrupted turn; a plain send in the latest session', async () => {
+  const { engine, open, of } = recorded();
+  open();
+  const m = manager({ engine });
+  const one = conversation('glow:copywriter');
+  const add = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, error, session_id, conversation_id, config_id, created_at) VALUES (?, 'glow', 'glow:copywriter', ?, ?, ?, ?, ?, ?, ?)`);
+  const row = (id: string, status: string, error: string | null, session: string) => add.run(id, 'Task', status, error, session, one, `cfg-${one}`, new Date().toISOString());
+  row('r1', 'error', 'boom', 's1'); // the first message failed: its Retry starts fresh
+  const fresh = send(m, 'glow:copywriter', one, 'Task', { retryOf: 'r1' });
+  await m.idle();
+  row('r2', 'done', null, 's2');
+  row('r3', 'error', 'Claude had a server error. Retry in a few minutes.', 's3');
+  const retry = send(m, 'glow:copywriter', one, 'Task', { retryOf: 'r3' });
+  await m.idle();
+  row('r4', 'error', 'Interrupted by an app restart', 's4');
+  const resume = send(m, 'glow:copywriter', one, 'Task', { retryOf: 'r4' });
+  await m.idle();
+  const next = send(m, 'glow:copywriter', one, 'Next');
+  await m.idle();
+  expect([fresh, retry, resume, next].map((r) => of(r)?.resume)).toEqual([undefined, 's2', 's4', 's4']);
+});
+
+test("conversation turns and team steps cut off by a restart wait for the owner's Resume instead of running again", async () => {
+  const one = conversation('glow:copywriter');
+  const now = new Date().toISOString();
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, conversation_id, created_at) VALUES ('c1', 'glow', 'glow:copywriter', 'Draft', 'running', ?, ?)`).run(one, now);
+  db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, team_id, created_at) VALUES ('t1', 'glow', 'glow:operations', 'Step', 'queued', 'team-1', ?)`).run(now);
+  await manager({ engine: fakeEngine() }).idle();
+  expect(db.prepare('SELECT id, status, error FROM agent_runs').all().map((r) => ({ ...r }))).toEqual([
+    { id: 'c1', status: 'error', error: 'Interrupted by an app restart' },
+    { id: 't1', status: 'error', error: 'Interrupted by an app restart' },
+  ]);
+});
+
+test("a run's Stop after aborts it at the deadline, not counting the time it waits on the owner's approval", async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    let decided!: () => void;
+    const approval = (status: string) => ({ type: 'approval_request', approval: { id: 'a1', status } }) as AgentEvent;
+    const engine: Engine = async function* (input) {
+      yield approval('pending');
+      await new Promise<void>((r) => (decided = r));
+      yield approval('approved');
+      await new Promise<void>((_, no) => input.signal?.addEventListener('abort', () => no(new Error('aborted'))));
+    };
+    const m = manager({ engine });
+    const run = send(m, 'glow:copywriter', conversation('glow:copywriter', { stopAfterMin: 1 }), 'Draft');
+    await vi.advanceTimersByTimeAsync(5 * 60_000); // the owner takes five minutes to decide
+    expect(getRun(db, run.id)?.status).toBe('running');
+    decided();
+    await vi.advanceTimersByTimeAsync(59_000);
+    expect(getRun(db, run.id)?.status).toBe('running');
+    await vi.advanceTimersByTimeAsync(2_000);
+    await m.idle();
+    expect(getRun(db, run.id)).toMatchObject({ status: 'error', error: "Stopped: this run's 1-minute limit was reached." });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("the agent's daily budget is split between its conversations running at once; a run's own budget only narrows it", async () => {
+  const { engine, open, of } = recorded();
+  const m = manager({ engine, perStore: 3, concurrency: 3 });
+  updateAgent(db, 'glow:copywriter', { dailyBudgetUsd: 2 });
+  updateCaps(db, 'glow', { agentCostPerDay: 100 });
+  const a = send(m, 'glow:copywriter', conversation('glow:copywriter'), 'a');
+  const b = send(m, 'glow:copywriter', conversation('glow:copywriter', { budgetUsd: 0.25 }), 'b');
+  const c = send(m, 'glow:copywriter', conversation('glow:copywriter', { budgetUsd: 50 }), 'c'); // can't widen the agent's
+  expect([a, b, c].map((r) => of(r)?.budgetUsd)).toEqual([2, 0.25, 2 / 3]);
+  open();
+  await m.idle();
+});
+
+test("a run stops once it spends its own budget, and says it was the run's budget", async () => {
+  const engine: Engine = async function* (input) {
+    input.onSpend?.(0.3);
+    if (input.signal?.aborted) throw new Error('aborted');
+    yield { type: 'done', sessionId: 's', usage: { ...usage, costUsd: 0.3 } };
+  };
+  const capped: Engine = async function* () {
+    yield { type: 'error', message: "Stopped: the run used its share of today's AI budget for this store. Raise it in Settings.", code: 'error_max_budget_usd' };
+  };
+  const m = manager({ engine });
+  const run = send(m, 'glow:copywriter', conversation('glow:copywriter', { budgetUsd: 0.25 }), 'Draft');
+  await m.idle();
+  expect(getRun(db, run.id)).toMatchObject({ status: 'error', error: "Stopped: this run's budget ($0.25) is used up." });
+  const n = manager({ engine: capped });
+  const engineStop = send(n, 'glow:copywriter', conversation('glow:copywriter', { budgetUsd: 0.25 }), 'Draft');
+  await n.idle();
+  expect(getRun(db, engineStop.id)?.error).toBe("Stopped: this run's budget ($0.25) is used up.");
+});
+
+test('a busy or failing service is retried twice with a pause, unless the attempt already changed something', async () => {
+  vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  try {
+    const busy: AgentEvent = { type: 'error', message: 'Claude is overloaded right now. Retry in a few minutes.', code: 'overloaded' };
+    let calls = 0;
+    const flaky: Engine = async function* () {
+      yield { type: 'text_delta', text: `attempt ${++calls}` };
+      yield calls < 3 ? busy : { type: 'done', sessionId: 's', usage };
+    };
+    const m = manager({ engine: flaky });
+    const run = ok(m.start('glow:copywriter', 'Draft'));
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(calls).toBe(1); // waiting before the first retry
+    await vi.advanceTimersByTimeAsync(30_000);
+    await m.idle();
+    expect(getRun(db, run.id)).toMatchObject({ status: 'done' });
+    expect(getRun(db, run.id)!.transcript).toEqual([{ type: 'text_delta', text: 'attempt 3' }, { type: 'done', sessionId: 's', usage }]);
+
+    const outcomes: Record<string, Engine> = {
+      'saved a draft': async function* () {
+        yield { type: 'tool_call', id: 't', name: 'create_creative', input: {} };
+        yield busy;
+      },
+      'not a passing error': async function* () {
+        yield { ...busy, message: 'Claude turned the request down as invalid.', code: 'invalid_request' };
+      },
+      'always busy': async function* () {
+        yield busy;
+      },
+    };
+    for (const [why, engine] of Object.entries(outcomes)) {
+      let tries = 0;
+      const counted: Engine = (input) => (tries++, engine(input));
+      const n = manager({ engine: counted });
+      const failed = ok(n.start('glow:copywriter', why));
+      await vi.advanceTimersByTimeAsync(60_000);
+      await n.idle();
+      expect({ why, tries, status: getRun(db, failed.id)?.status }).toEqual({ why, tries: why === 'always busy' ? 3 : 1, status: 'error' });
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test('reads are told apart from tool calls that may have changed something', () => {
+  expect(['store_summary', 'list_orders', 'search_knowledge', 'read_theme_files', 'WebSearch', 'mcp__meta_ads__get_insights'].filter(hasEffects)).toEqual([]);
+  expect(['create_creative', 'assign_task', 'request_approval', 'write_memory', 'mcp__meta_ads__update_ad'].every(hasEffects)).toBe(true);
 });

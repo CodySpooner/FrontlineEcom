@@ -1244,7 +1244,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - the derived-state helper (decision 5) with tests for every branch, including a running run with a newer queued
     run (it shows running);
   - `RUN_STATUS` in ui.tsx.
-- [ ] AA-03 **Run manager for conversations** (decisions 6–8):
+- [x] AA-03 **Run manager for conversations** (decisions 6–8):
   - the per-conversation lock, keeping the per-agent rule and dedupe for runs with no conversation_id and no team_id;
   - seat-budget shares and the run's own cap, when its config sets one;
   - client_request_id idempotency;
@@ -1608,6 +1608,11 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 - 2026-10-28 AA-02 migration #50 (custom roles, configs, presets, conversations + FTS, run config columns, team
   session columns) with its upgrade test; shared Conversation/AgentConfig/AgentPreset/CustomRole/team/runtime types;
   `runState` and `conversationState` with tests; RUN_STATUS gains the derived states.
+- 2026-10-28 AA-03 run manager: one run per conversation (team steps and per-agent rule as decided), seat-budget
+  split and the config's run budget, client_request_id idempotency, queued sends, Retry/Resume through retryOf,
+  Stop after (paused while waiting on the owner), every SDK error code mapped with a `code` on the event, two automatic
+  retries for rate_limit/overloaded/server_error, no restart re-run for conversation or team runs, `fake-<runId>`
+  sessions; 10 new tests.
 
 ## Blocked
 
@@ -1698,6 +1703,25 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
       emits thread.started and turn.started, then `error` events "Reconnecting... n/5 (unexpected status 401
       Unauthorized: Missing bearer or basic authentication …)". No turn can run signed out. AA-15 maps that 401 to
       "Set up Codex".
+- (AA-03, 2026-10-28) How the run manager behaves now, for AA-05 and later items:
+  - Send is `start(agentId, task, undefined, undefined, {conversationId, clientRequestId})`. A turn's session is found
+    when it leaves the queue (the latest earlier turn on the same config with a session), so a queued send goes on from
+    the reply before it, and a turn after a config change starts a new session.
+  - Retry and Resume both pass `retryOf`. start tells them apart: an interrupted run continues its own session; any other
+    run is retried from the last **done** turn before it, or a fresh session. Both link `retry:<old>:<new>`.
+  - A conversation that has turns from before the store went live refuses new turns ("ran on demo data … start a new
+    one"), as resuming a demo run already did.
+  - Seat share: what is left of the agent's daily budget ÷ (its working runs + 1). Runs already going keep their
+    larger share, and spend() still stops the agent at its cap. The config's `budgetUsd` is a third cap; its stop reads
+    "Stopped: this run's budget ($X) is used up.", and so does the engine's error_max_budget_usd when it was the
+    smallest limit.
+  - Error events carry `code` (the SDK error code or result subtype). isAccountError now covers eight codes: it adds
+    oauth_org_not_allowed, account_on_hold, verification_required and cloud_credential_error, so those are told
+    once a day too. Non-account codes no longer stop at the assistant message; they word the failed result.
+  - Automatic retries pause 5 s, then 20 s, inside the same run, and drop the failed attempt's events from the
+    transcript. "Changed something" is judged by tool name (`hasEffects`, exported for the attempt UI).
+  - Only one test pinned the old fake session id: engine.test.ts calls the engine without a runId and keeps
+    `fake-<agent id>`.
   - **Where the new pieces live:**
     - packages/shared: `runtime-registry.ts`, and the derived run state with the new types in `index.ts`.
     - packages/agents: `claudeModels()` in claude-engine.ts; `config.ts` (validateConfig, the seat default, presets);

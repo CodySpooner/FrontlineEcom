@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type Store } from '@frontline/shared';
+import { AGENT_ROLES, INTERRUPTED, type AgentEvent, type AgentPermissions, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
+import { isReadOnly } from './claude-engine';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { researchContext } from './kb-research';
 import { citedCards, logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
@@ -34,7 +35,7 @@ export type RunManager = ReturnType<typeof createRunManager>;
 export function createRunManager(opts: RunManagerOptions) {
   const { db, env, concurrency = 3, perStore = 2 } = opts;
   const engine = opts.engine ?? defaultEngine();
-  const active = new Map<string, { storeId: string; agentId: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[]; waiting?: boolean; budget?: number; spent?: number }>();
+  const active = new Map<string, { storeId: string; agentId: string; conversationId?: string; teamId?: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[]; waiting?: boolean; budget?: number; spent?: number }>();
   /** Runs paused on the owner's decision don't hold a slot, so one unanswered request can't stall the store's other work. */
   // ponytail: a resumed run can briefly push past the limits; they only gate starting runs.
   const working = () => [...active.values()].filter((a) => !a.waiting);
@@ -58,38 +59,57 @@ export function createRunManager(opts: RunManagerOptions) {
   }
 
   // In-flight runs die with the process; say so instead of leaving them "running" forever.
-  const interrupted = db.prepare(`SELECT id, agent_id, task, resume, parent_run_id, mode, created_at FROM agent_runs WHERE status IN ('queued', 'running')`).all();
+  const interrupted = db.prepare(`SELECT id, agent_id, task, resume, parent_run_id, mode, conversation_id, team_id, created_at FROM agent_runs WHERE status IN ('queued', 'running')`).all();
   db.prepare(`UPDATE agent_runs SET status = 'error', error = ?, ended_at = ? WHERE status IN ('queued', 'running')`).run(INTERRUPTED, new Date().toISOString());
   expireApprovals(interrupted.map((r) => String(r.id)));
   trimOldTranscripts(db);
 
   /**
    * Queues a task. Returns an error message when the agent can't take it. `mode` 'research:<task id>' makes it a stage of a
-   * knowledge-base research task (kb-research.ts).
+   * knowledge-base research task (kb-research.ts). A conversation's turn runs on its config and goes on from its session
+   * when it starts (resumeFor). A repeated `clientRequestId` returns the run it started.
    */
-  function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string, { retryOf, mode }: { retryOf?: string; mode?: string } = {}): AgentRun | string {
+  function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string, { retryOf, mode, conversationId, teamId, configId, clientRequestId }: StartOptions = {}): AgentRun | string {
     const agent = getAgent(db, agentId);
     if (!agent) return 'Agent not found';
+    if (clientRequestId && (conversationId || teamId)) {
+      const same = db.prepare(`SELECT id FROM agent_runs WHERE ${conversationId ? 'conversation_id' : 'team_id'} = ? AND client_request_id = ?`).get(conversationId ?? teamId!, clientRequestId);
+      if (same) return getRun(db, String(same.id))!;
+    }
     if (!agent.enabled) return OFFLINE;
+    const conversation = conversationId ? db.prepare('SELECT c.config_id, f.agent_id FROM conversations c JOIN agent_configs f ON f.id = c.config_id WHERE c.id = ?').get(conversationId) : undefined;
+    if (conversationId && conversation?.agent_id !== agentId) return 'Conversation not found';
+    const config = conversation ? String(conversation.config_id) : configId;
+    // A session holds what the tools said then: on a store since gone live, the demo numbers, read as the store's.
+    const live = db.prepare('SELECT at FROM done_once WHERE ref = ?').get(`activate:${agent.storeId}`)?.at;
+    if (live && conversationId && db.prepare('SELECT 1 FROM agent_runs WHERE conversation_id = ? AND created_at < ?').get(conversationId, String(live))) return DEMO_SESSION;
     let resume: string | undefined;
     if (resumeRunId) {
       const prev = getRun(db, resumeRunId);
       if (prev?.agentId !== agentId || !prev.sessionId) return 'That conversation cannot be continued';
-      // Its session holds what the tools said then: on a store since gone live, the demo numbers, read as the store's.
-      const live = db.prepare('SELECT at FROM done_once WHERE ref = ?').get(`activate:${agent.storeId}`)?.at;
-      if (live && prev.createdAt < String(live)) return 'That conversation ran on demo data, before the store went live: start a new one.';
+      if (live && prev.createdAt < String(live)) return DEMO_SESSION;
       resume = prev.sessionId;
+    }
+    if (conversationId && retryOf) {
+      // Resume goes on in the interrupted turn's session. Retry goes on from the last turn that finished before the one it
+      // retries, so the session never holds the message twice (none: a fresh session).
+      const prev = getRun(db, retryOf);
+      resume = prev?.error === INTERRUPTED
+        ? prev.sessionId
+        : (db.prepare(`SELECT session_id FROM agent_runs WHERE conversation_id = ? AND config_id IS ? AND status = 'done' AND session_id IS NOT NULL AND rowid < (SELECT rowid FROM agent_runs WHERE id = ?) ORDER BY rowid DESC`).get(conversationId, config ?? null, retryOf)?.session_id as string | undefined);
     }
     // Under a cent left is used up, as the queue counts it (execute): a run taken here and turned down there would come
     // back as a mission step and be turned down again, forever.
     const cap = env.caps?.(agent.storeId).agentCostPerDay;
     if (cap !== undefined && Math.min(cap / perStore, cap - costToday(db, agent.storeId)) < 0.01) return `Today's AI budget for this store ($${cap}) is used up. Raise it in Settings.`;
     if (agent.dailyBudgetUsd !== undefined && agent.dailyBudgetUsd - costToday(db, agent.storeId, agentId) < 0.01) return ownUsedUp(agent.dailyBudgetUsd);
+    const picked = config ? db.prepare('SELECT runtime, model, effort FROM agent_configs WHERE id = ?').get(config) : undefined;
     // A job that fires again while its last copy still waits in the queue (the agent is busy, e.g. on a request the owner
     // hasn't answered) doesn't stack another: the queued one does it.
     // Never a restart's retry (each is linked to the run it retries) or a mission's step (two missions with the same
     // first step would share one run, and calling one off would strand the other).
-    if (!resumeRunId && !parentRunId && !retryOf) {
+    // A conversation's turns and a team's steps each count, however alike.
+    if (!resumeRunId && !parentRunId && !retryOf && !conversationId && !teamId) {
       const queued = db
         .prepare(
           `SELECT id FROM agent_runs WHERE agent_id = ? AND status = 'queued' AND task = ? AND resume IS NULL AND parent_run_id IS NULL AND id NOT IN (
@@ -100,9 +120,14 @@ export function createRunManager(opts: RunManagerOptions) {
       if (queued) return getRun(db, String(queued.id))!;
     }
     const id = randomUUID();
-    db.prepare('INSERT INTO agent_runs (id, store_id, agent_id, task, resume, parent_run_id, mode, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-      id, agent.storeId, agentId, task, resume ?? null, parentRunId ?? null, mode ?? null, new Date().toISOString(),
+    db.prepare(
+      `INSERT INTO agent_runs (id, store_id, agent_id, task, resume, parent_run_id, mode, conversation_id, team_id, config_id, runtime, model, effort, client_request_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      id, agent.storeId, agentId, task, resume ?? null, parentRunId ?? null, mode ?? null, conversationId ?? null, teamId ?? null, config ?? null,
+      ...(['runtime', 'model', 'effort'] as const).map((k) => (picked?.[k] ?? null) as string | null), clientRequestId ?? null, new Date().toISOString(),
     );
+    if (conversationId) db.prepare('UPDATE conversations SET last_activity_at = ? WHERE id = ?').run(new Date().toISOString(), conversationId);
     // A retry is linked before it can start: missions and assign_task follow `retry:<old>:<new>`.
     if (retryOf) once(db, `retried:${id}`) && once(db, `retry:${retryOf}:${id}`);
     const run = getRun(db, id)!;
@@ -163,12 +188,15 @@ export function createRunManager(opts: RunManagerOptions) {
     const queued = db.prepare(`SELECT * FROM agent_runs WHERE status = 'queued' ORDER BY created_at, rowid`).all().map(toRun);
     for (const run of queued) {
       if (working().length >= concurrency) return;
-      if ([...active.values()].some((a) => a.agentId === run.agentId) || working().filter((a) => a.storeId === run.storeId).length >= perStore) continue;
+      if (busy(run) || working().filter((a) => a.storeId === run.storeId).length >= perStore) continue;
       const share = budgetFor(run.storeId);
       if (share !== undefined && share < 0.01 && working().some((a) => a.storeId === run.storeId)) continue; // waits for a share to free up
-      // One run per agent at a time, so its own cap needs no shares: what is left of it today.
+      // The agent's own cap: what is left of it today, split with its runs going now (its conversations run side by side).
+      // A config's budget for one run only narrows that, never widens it.
       const own = getAgent(db, run.agentId)?.dailyBudgetUsd;
-      const budget = own === undefined ? share : Math.min(share ?? Infinity, Math.max(0, own - costToday(db, run.storeId, run.agentId)));
+      const seat = own === undefined ? undefined : Math.max(0, own - costToday(db, run.storeId, run.agentId)) / (working().filter((a) => a.agentId === run.agentId).length + 1);
+      const caps = [share, seat, limits(run.configId)?.budgetUsd].filter((n) => n !== undefined);
+      const budget = caps.length ? Math.min(...caps) : undefined;
       const abort = new AbortController();
       const transcript: AgentEvent[] = [];
       const done = execute(run, abort, transcript, budget)
@@ -177,15 +205,49 @@ export function createRunManager(opts: RunManagerOptions) {
           active.delete(run.id);
           pump();
         });
-      active.set(run.id, { storeId: run.storeId, agentId: run.agentId, abort, done, transcript, ...(budget !== undefined ? { budget } : {}) });
+      active.set(run.id, { storeId: run.storeId, agentId: run.agentId, ...(run.conversationId && { conversationId: run.conversationId }), ...(run.teamId && { teamId: run.teamId }), abort, done, transcript, ...(budget !== undefined ? { budget } : {}) });
     }
   }
+
+  /**
+   * One run per conversation, its waits on the owner included: a message sent meanwhile goes after the reply. Team steps
+   * are bounded by their team (missions). Other runs keep one per agent, so a scheduled job doesn't overlap itself.
+   */
+  function busy(run: AgentRun) {
+    if (run.conversationId) return [...active.values()].some((a) => a.conversationId === run.conversationId);
+    return !run.teamId && [...active.values()].some((a) => a.agentId === run.agentId && !a.conversationId && !a.teamId);
+  }
+
+  /** The config's own limits: a budget for one run, Stop after. */
+  function limits(configId?: string) {
+    const row = configId ? db.prepare('SELECT permissions_json FROM agent_configs WHERE id = ?').get(configId) : undefined;
+    return row && (JSON.parse(String(row.permissions_json)) as AgentPermissions);
+  }
+
+  /** A conversation's turn goes on in the session of its latest earlier turn on the same config (a runtime change starts a new one). */
+  const resumeFor = (run: AgentRun) =>
+    db.prepare(`SELECT session_id FROM agent_runs WHERE conversation_id = ? AND config_id IS ? AND session_id IS NOT NULL AND rowid < (SELECT rowid FROM agent_runs WHERE id = ?) ORDER BY rowid DESC`)
+      .get(run.conversationId!, run.configId ?? null, run.id)?.session_id as string | undefined;
 
   async function execute(queued: AgentRun, abort: AbortController, transcript: AgentEvent[], budget: number | undefined) {
     const signal = abort.signal;
     db.prepare(`UPDATE agent_runs SET status = 'running', started_at = ? WHERE id = ?`).run(new Date().toISOString(), queued.id);
     const run = getRun(db, queued.id)!;
     opts.onRun?.(run);
+    const { budgetUsd: runBudget, stopAfterMin } = limits(run.configId) ?? {};
+    // Stop after N minutes of work: the clock stops while the run waits on the owner.
+    let overTime = false;
+    let left = stopAfterMin === undefined ? Infinity : stopAfterMin * 60_000;
+    let since = 0;
+    let deadline: NodeJS.Timeout | undefined;
+    const clock = (on: boolean) => {
+      if (left === Infinity) return;
+      clearTimeout(deadline);
+      if (!on) return void (left -= Date.now() - since);
+      since = Date.now();
+      deadline = setTimeout(() => ((overTime = true), abort.abort()), left);
+    };
+    clock(true);
     const emit = (full: AgentEvent) => {
       // The agent saw the whole tool output; the stored transcript and the live feed keep the first 4,000 characters.
       const event = full.type === 'tool_result' && full.output.length > SHOWN ? { ...full, output: `${full.output.slice(0, SHOWN)}\n… (${full.output.length - SHOWN} more characters)` } : full;
@@ -193,6 +255,7 @@ export function createRunManager(opts: RunManagerOptions) {
       const waiting = event.type === 'approval_request' && event.approval.status === 'pending';
       if (slot && !!slot.waiting !== waiting) {
         slot.waiting = waiting;
+        clock(!waiting);
         if (waiting) pump();
       }
       const last = transcript.at(-1);
@@ -211,6 +274,7 @@ export function createRunManager(opts: RunManagerOptions) {
     let own = getAgent(db, run.agentId)?.dailyBudgetUsd;
     let overCap = false;
     let overOwn = false;
+    let overRun = false;
     const spend = (usd: number) => {
       if (ended) return;
       spent = Math.max(spent, usd); // the reflection reports from the engine's figure, which can be under the estimate
@@ -228,6 +292,10 @@ export function createRunManager(opts: RunManagerOptions) {
         overCap = overOwn = true;
         abort.abort();
       }
+      if (runBudget !== undefined && !overCap && spent > runBudget) {
+        overCap = overRun = true;
+        abort.abort();
+      }
     };
     let end: AgentEvent = { type: 'error', message: 'Agent or store not found' };
     try {
@@ -242,7 +310,8 @@ export function createRunManager(opts: RunManagerOptions) {
         end = { type: 'error', message: ownGone ? ownUsedUp(own!) : `Today's AI budget for this store ($${env.caps?.(run.storeId).agentCostPerDay}) is used up. Raise it in Settings.` };
       }
       else if (agent && store) {
-        const resume = db.prepare('SELECT resume FROM agent_runs WHERE id = ?').get(run.id)?.resume;
+        // A Retry or Resume has its session set (start); none there means a fresh one.
+        const resume = db.prepare('SELECT resume FROM agent_runs WHERE id = ?').get(run.id)?.resume ?? (run.conversationId && !retried(run.id) ? resumeFor(run) : undefined);
         // A research stage has its own prompt and searches the knowledge base itself.
         const knowledge = research ? [] : retrieveKnowledge(db, { ws: store.id, role: agent.role, query: run.task, limit: 8 });
         const systemPrompt =
@@ -264,16 +333,28 @@ export function createRunManager(opts: RunManagerOptions) {
         };
         let toolCalls = 0;
         let attempt = input;
-        for (; ; attempt = recapped(attempt)) {
+        for (let retries = 0, mark = 0; ; mark = transcript.length) {
+          let acted = false;
           for await (const event of runAgent(attempt, engine)) {
             if (event.type === 'done' || event.type === 'error') end = event;
             else {
-              if (event.type === 'tool_call') toolCalls++;
+              if (event.type === 'tool_call') toolCalls++, (acted ||= hasEffects(event.name));
               emit(event);
             }
           }
           // Claude Code keeps sessions 30 days, per folder: a follow-up whose session is gone goes on from a recap.
-          if (end.type !== 'error' || !attempt.resume || !end.message.startsWith('No conversation found')) break;
+          if (end.type === 'error' && attempt.resume && end.message.startsWith('No conversation found')) {
+            attempt = recapped(attempt);
+            continue;
+          }
+          // A busy or failing service is tried again, twice at most, unless the attempt already changed something.
+          if (end.type !== 'error' || !TRANSIENT.includes(end.code ?? '') || acted || retries >= RETRY_MS.length || signal.aborted) break;
+          await pause(RETRY_MS[retries++]!, signal);
+          if (signal.aborted) {
+            end = { type: 'error', message: 'Cancelled' };
+            break;
+          }
+          transcript.length = mark; // what the failed attempt said goes; the retry says it again
         }
         // ponytail: only runs that looked at data (tool calls) reflect; a chat reply rarely teaches anything durable.
         if (end.type === 'done' && toolCalls > 0 && !signal.aborted && !research) end = await reflect(attempt, end, emit); // research keeps what it learns as cards
@@ -281,13 +362,17 @@ export function createRunManager(opts: RunManagerOptions) {
     } catch (err) {
       end = { type: 'error', message: err instanceof Error ? err.message : String(err) };
     }
-    if (overCap && end.type === 'error') end = { type: 'error', message: overOwn ? ownUsedUp(own!, true) : `Stopped: today's AI budget for this store ($${cap}) is used up. Raise it in Settings.` };
+    clearTimeout(deadline);
+    // The engine's own budget stop means the run's budget when that was the smallest limit.
+    if (end.type === 'error' && (overRun || (end.code === 'error_max_budget_usd' && runBudget !== undefined && runBudget <= (budget ?? Infinity)))) end = { ...end, message: `Stopped: this run's budget ($${runBudget}) is used up.` };
+    else if (overCap && end.type === 'error') end = { type: 'error', message: overOwn ? ownUsedUp(own!, true) : `Stopped: today's AI budget for this store ($${cap}) is used up. Raise it in Settings.` };
+    if (overTime && end.type === 'error') end = { ...end, message: `Stopped: this run's ${stopAfterMin}-minute limit was reached.` };
     emit(end);
 
     // The knowledge cards the answer cites as [kb:<id>] (the transcript already joined streamed pieces).
     const said = transcript.flatMap((e) => (e.type === 'text_delta' ? [e.text] : [])).join('');
     logKnowledgeUse(db, citedCards(db, said, run.storeId), { storeId: run.storeId, agentId: run.agentId, runId: run.id, kind: 'cited' });
-    const status: RunStatus = end.type === 'done' ? 'done' : signal.aborted && !overCap ? 'cancelled' : 'error';
+    const status: RunStatus = end.type === 'done' ? 'done' : signal.aborted && !overCap && !overTime ? 'cancelled' : 'error';
     ended = true;
     const reported = end.type === 'done' ? end.usage : (end.type === 'error' && end.usage) || { inputTokens: 0, outputTokens: 0, costUsd: 0 };
     // The engine's figure, unless the live estimate is higher: crash results can carry zeros, a cut-off reflection reports none.
@@ -310,6 +395,8 @@ export function createRunManager(opts: RunManagerOptions) {
     const final = getRun(db, run.id); // gone when its store was deleted meanwhile
     if (final) opts.onRun?.(final);
   }
+
+  const retried = (runId: string) => !!db.prepare('SELECT 1 FROM done_once WHERE ref = ?').get(`retried:${runId}`);
 
   /** What a session has cost so far: every run that continued it. */
   const sessionCost = (sessionId: string) => Number(db.prepare('SELECT coalesce(sum(cost_usd), 0) AS n FROM agent_runs WHERE session_id = ?').get(sessionId)?.n ?? 0);
@@ -363,9 +450,10 @@ export function createRunManager(opts: RunManagerOptions) {
   }
 
   // ...and the ones from the last 6 hours run again: closing the app at 8:01 shouldn't cost the day's briefing (the
-  // scheduler counts it as fired). Chat follow-ups are left for the owner to resend; a retry is never retried.
+  // scheduler counts it as fired). Chat follow-ups are left for the owner to resend; a retry is never retried. A
+  // conversation's turn or a team's step shows as interrupted, and the owner resumes it.
   for (const r of interrupted) {
-    if (r.resume || Date.now() - Date.parse(String(r.created_at)) > 6 * 3_600_000 || !once(db, `retried:${r.id}`)) continue;
+    if (r.resume || r.conversation_id || r.team_id || Date.now() - Date.parse(String(r.created_at)) > 6 * 3_600_000 || !once(db, `retried:${r.id}`)) continue;
     start(String(r.agent_id), String(r.task), undefined, r.parent_run_id ? String(r.parent_run_id) : undefined, { retryOf: String(r.id), ...(r.mode ? { mode: String(r.mode) } : {}) });
   }
 
@@ -410,6 +498,34 @@ const ownUsedUp = (usd: number, stopped = false) => `${stopped ? "Stopped: today
 /** The error of a run that was in flight when the app stopped (one from the last 6 hours runs again, as a new run). */
 export { INTERRUPTED };
 const OFFLINE = 'This agent is offline. Redeploy it first.';
+const DEMO_SESSION = 'That conversation ran on demo data, before the store went live: start a new one.';
+
+export interface StartOptions {
+  /** The run this one retries: a restart's retry, or the owner's Retry or Resume. Linked `retry:<old>:<new>`. */
+  retryOf?: string;
+  mode?: string;
+  conversationId?: string;
+  /** A team session's step. */
+  teamId?: string;
+  /** The config a run outside a conversation runs on (a team participant's). */
+  configId?: string;
+  /** The owner action's id: sent again, it returns the run it started. */
+  clientRequestId?: string;
+}
+
+/** Errors a moment later may not repeat (SDKAssistantMessageError codes). */
+const TRANSIENT = ['rate_limit', 'overloaded', 'server_error'];
+const RETRY_MS = [5_000, 20_000];
+const pause = (ms: number, signal: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const t = setTimeout(resolve, ms);
+    signal.addEventListener('abort', () => (clearTimeout(t), resolve()), { once: true });
+  });
+
+// ponytail: judged by name, like external tools (isReadOnly); anything that doesn't read like a read counts as acting.
+const READS = /^(store_summary|compare_stores|metrics_timeseries|research_feed|squad_log|review_campaigns|WebSearch|WebFetch)$|^(list|search|read|fetch|get)_/;
+/** A tool call that may have changed something (saved, proposed, assigned, asked the owner). */
+export const hasEffects = (tool: string) => !READS.test(tool) && !isReadOnly(tool);
 
 /**
  * A run that ended without doing anything because its agent couldn't take it then: the budget was used up by the time
@@ -458,6 +574,9 @@ export function listRuns(db: DatabaseSync, q: { agentId?: string; storeIds?: str
 function toRun(r: Record<string, unknown>): AgentRun {
   const opt = (k: string) => (r[k] == null ? undefined : String(r[k]));
   const [sessionId, error, startedAt, endedAt, parentRunId, mode] = ['session_id', 'error', 'started_at', 'ended_at', 'parent_run_id', 'mode'].map(opt);
+  const [conversationId, teamId, configId, runtime, model, effort, runtimeVersion, actualModel, effortApplied] = [
+    'conversation_id', 'team_id', 'config_id', 'runtime', 'model', 'effort', 'runtime_version', 'actual_model', 'effort_applied',
+  ].map(opt);
   return {
     id: String(r.id),
     storeId: String(r.store_id),
@@ -472,5 +591,14 @@ function toRun(r: Record<string, unknown>): AgentRun {
     ...(endedAt ? { endedAt } : {}),
     ...(parentRunId ? { parentRunId } : {}),
     ...(mode ? { mode } : {}),
+    ...(conversationId ? { conversationId } : {}),
+    ...(teamId ? { teamId } : {}),
+    ...(configId ? { configId } : {}),
+    ...(runtime ? { runtime: runtime as RuntimeId } : {}),
+    ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
+    ...(runtimeVersion ? { runtimeVersion } : {}),
+    ...(actualModel ? { actualModel } : {}),
+    ...(effortApplied ? { effortApplied } : {}),
   };
 }

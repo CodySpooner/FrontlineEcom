@@ -23,7 +23,7 @@ export {
 } from './memory';
 export { APP_TOOLS, OUTLIVE_RUN, RESEARCH_TOOLS, budgetAddedToday, cash, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
-export { createRunManager, getRun, listRuns, runGist, type RunManager, type RunManagerOptions } from './runs';
+export { createRunManager, getRun, hasEffects, listRuns, runGist, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, adWindow, uncostedShare, type CampaignStats, type Economics, type Verdict } from './ads';
 export { ADS_JOB, DEFAULT_JOBS, createDefaultJobs, enableDefaultJobs } from './jobs';

@@ -199,7 +199,7 @@ function demoWork(input: RunInput): FakeStep[] {
  * the store's last 30 days and quotes them. Reflection learns nothing, so demo runs don't fill store memory.
  */
 export const echoScript: FakeScript = (input) => {
-  const done: AgentEvent = { type: 'done', sessionId: input.resume ?? `fake-${input.agent.id}`, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
+  const done: AgentEvent = { type: 'done', sessionId: input.resume ?? `fake-${input.env?.runId ?? input.agent.id}`, usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } };
   if (input.task === REFLECTION_PROMPT) return [{ type: 'text_delta', text: '[]' }, done];
   // Quotes the task's first clause: scheduled jobs carry a paragraph of instructions after "Daily briefing:".
   const task = input.task.split(/[:\n]|\.(?=\s|$)/)[0]!.trim().slice(0, 80);
