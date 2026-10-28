@@ -128,7 +128,7 @@ found in runs, teams or product-research code go to that lane's Inbox.
 Files: new `e2e/**`, `playwright.config.ts`, root `package.json` (scripts + devDependencies only), `pnpm-lock.yaml`,
 `.gitignore`. Read-only on `apps/**` and `packages/**`: app bugs found go to the owning lane's Inbox.
 
-- [ ] CH-17 Harness: `@playwright/test` + `@axe-core/playwright` as devDependencies (owner approved), Playwright
+- [x] CH-17 Harness: `@playwright/test` + `@axe-core/playwright` as devDependencies (owner approved), Playwright
   channel `msedge` (no browser download). Global setup builds the web app and starts the real server on a free port
   with a temp `FRONTLINE_DATA_DIR`, `FRONTLINE_AGENT_ENGINE=fake`, a temp `FRONTLINE_CODEX_WORK` and
   `FRONTLINE_WEB_DIR=apps/web/dist`. `pnpm e2e` runs it; it stays out of `pnpm check`. Nothing touches the network.
@@ -163,6 +163,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-17: added Playwright/axe dev dependencies and pnpm e2e, Edge channel without downloads, built UI plus real HTTP/WebSocket server on port 0, temporary data/Codex work, fake engines, disabled server fetches and browser external requests, and teardown. One harness test passes; pnpm check green (234 files / 1,730 tests, 4 workers). Orca dashboard screenshot compared with reference: existing dark/red layout and plain header render correctly; no app UI changes. No CI wiring.
 
 - 2026-10-28 CH-15: closed AGT-19 as superseded by codex.ts and the CH-14 MCP theme coverage. Documentation only; pnpm check green (234 files / 1,730 tests, 4 workers).
 
