@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import type { Db } from '../db';
+import { publish, subscribe } from '../live';
 import { log } from '../log';
+import { runManager } from '../routes/agents';
+import { runtimes } from '../routes/agents-runtimes';
 import { productVisible } from './catalog';
 import { assign, productDemand, productDetail, productHistory, productOffers } from './detail';
 import { discover, parseDiscovery } from './discovery';
@@ -10,14 +13,16 @@ import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
 import { importFeed } from './feed';
 import { runDue, stoppedReason, syncNow } from './jobs';
 import { cachedImage, listingImageRef, queueImage } from './images';
-import { checkUrl, preview } from './preview';
+import { checkUrl, ownerDetails, preview } from './preview';
 import { getProfile, saveProfile } from './profile';
 import { scopeOf, storeOf } from './scope';
 import { ADAPTERS, sourceHealth, sourceStates } from './sources';
+import { INSTRUCTIONS_MAX, agentRows, getTask, listTasks, retryTask, startTask, type TaskInput } from './tasks';
 import { importTrends, linkSet, signalSet } from './trends';
 
 /** Product Research's API (`/api/pr/*`, behind the KB guard: change and body limits). `?store=` sets the scope. */
 export function prRoutes(db: Db, key: () => Buffer) {
+  watchTasks(db);
   return new Hono()
     .get('/api/pr/sources', (c) => {
       const s = scopeOf(c, db);
@@ -158,6 +163,38 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if ('error' in u) return c.json({ error: u.error }, 400);
       return c.json(await preview(db, store, u));
     })
+    // Research tasks (decision 6): the dialog's agent rows, then one request that inserts, composes, starts and links.
+    .get('/api/pr/agents', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      return c.json(agentRows(db, store, await runtimes()));
+    })
+    .post('/api/pr/tasks', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      const input = taskInput(await c.req.json().catch(() => undefined));
+      if ('error' in input) return c.json({ error: input.error, ...(input.field ? { field: input.field } : {}) }, 400);
+      const r = startTask(db, runManager(db), store, input, await runtimes());
+      if ('error' in r) return c.json({ error: r.error, ...(r.field ? { field: r.field } : {}) }, r.status);
+      return c.json(r.task, r.status);
+    })
+    .get('/api/pr/tasks', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      return c.json(listTasks(db, store.id, c.req.query('product')));
+    })
+    .get('/api/pr/tasks/:id', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      const task = getTask(db, c.req.param('id'), store.id);
+      return task ? c.json(task) : c.json({ error: 'Research task not found' }, 404);
+    })
+    .post('/api/pr/tasks/:id/retry', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      const r = retryTask(db, runManager(db), store, c.req.param('id'), await runtimes());
+      return 'error' in r ? c.json({ error: r.error }, r.status) : c.json(r.task, r.status);
+    })
     .post('/api/pr/products/:id/stage', async (c) => {
       const store = storeOf(c, db);
       if (store instanceof Response) return store;
@@ -205,4 +242,57 @@ export function prRoutes(db: Db, key: () => Buffer) {
       const set = db.prepare(`SELECT id FROM pr_signals WHERE store_id = ? AND product_id = ? AND platform = 'orders'`).get(store.id, c.req.param('id'));
       return c.json({ ordersSet: set ? signalSet(db, String(set.id), store.id) : null }, 201);
     });
+}
+
+const isId = (v: unknown): v is string => typeof v === 'string' && /^[\w-]{8,64}$/.test(v);
+const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
+
+/** POST /api/pr/tasks's body, checked. The instructions are kept exactly as typed. */
+function taskInput(body: unknown): TaskInput | { error: string; field?: string } {
+  const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
+  if (!isId(b.clientRequestId)) return { error: 'Expected { clientRequestId, productId, type, mode, instructions, … }' };
+  if (typeof b.productId !== 'string') return { error: 'productId must be the product to research', field: 'product' };
+  if (typeof b.type !== 'string') return { error: 'Pick an agent', field: 'agent' };
+  if (b.mode !== 'new' && b.mode !== 'queue' && b.mode !== 'separate') return { error: 'mode must be new, queue or separate', field: 'agent' };
+  if (b.mode !== 'new' && typeof b.conversationId !== 'string') return { error: 'Name the conversation to queue after or run beside', field: 'agent' };
+  if (!isText(b.instructions, INSTRUCTIONS_MAX) || !b.instructions.trim()) return { error: `Say what to research (up to ${INSTRUCTIONS_MAX.toLocaleString('en')} characters)`, field: 'instructions' };
+  if (b.url !== undefined && !isText(b.url, 2048)) return { error: 'url must be the link as pasted', field: 'link' };
+  if (b.template !== undefined && !isText(b.template, 100)) return { error: 'template must be a template name', field: 'instructions' };
+  const p = b.preview as Record<string, unknown> | undefined;
+  if (p !== undefined && (typeof p !== 'object' || p === null || (p.title != null && !isText(p.title, 300)) || (p.variants !== undefined && (!Array.isArray(p.variants) || p.variants.some((v) => !isText(v, 200)))))) return { error: 'preview must be the preview the page returned', field: 'link' };
+  const price = p?.price as { amount?: unknown; currency?: unknown } | null | undefined;
+  if (price != null && (!Number.isInteger(price.amount) || typeof price.currency !== 'string')) return { error: 'preview price must be { amount, currency }', field: 'link' };
+  const owner = b.owner === undefined ? { details: undefined } : ownerDetails(b.owner);
+  if ('error' in owner) return { error: owner.error, field: 'link' };
+  if (b.config !== undefined && (typeof b.config !== 'object' || b.config === null || Array.isArray(b.config))) return { error: 'config must be what Deploy returned', field: 'agent' };
+  return {
+    clientRequestId: b.clientRequestId,
+    productId: b.productId,
+    ...(typeof b.listingId === 'string' ? { listingId: b.listingId } : {}),
+    ...(typeof b.url === 'string' ? { url: b.url } : {}),
+    ...(p ? { preview: { title: (p.title as string | null) ?? null, price: (price as { amount: number; currency: string } | null) ?? null, variants: (p.variants as string[] | undefined) ?? [] } } : {}),
+    ...(owner.details ? { owner: owner.details } : {}),
+    instructions: b.instructions,
+    ...(typeof b.template === 'string' ? { template: b.template } : {}),
+    type: b.type,
+    mode: b.mode,
+    ...(typeof b.conversationId === 'string' ? { conversationId: b.conversationId } : {}),
+    ...(b.config ? { config: b.config as TaskInput['config'] } : {}),
+  };
+}
+
+const watched = new WeakSet<Db>();
+/** A task's run changed: tell the page (T8). One listener per database. */
+function watchTasks(db: Db) {
+  if (watched.has(db)) return;
+  watched.add(db);
+  subscribe((m) => {
+    if (m.type !== 'run') return;
+    try {
+      const t = db.prepare('SELECT id, store_id, product_id FROM pr_tasks WHERE run_id = ?').get(m.run.id);
+      if (t) publish({ type: 'research_task', storeId: String(t.store_id), taskId: String(t.id), productId: String(t.product_id) });
+    } catch {
+      /* a closed test database */
+    }
+  });
 }

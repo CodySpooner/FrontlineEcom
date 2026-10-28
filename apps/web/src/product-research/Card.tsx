@@ -1,6 +1,6 @@
 import { useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Eye, Package } from 'lucide-react';
-import { PR_FIT_LABEL, PR_FULFILLMENT_LABEL, PR_STAGE_LABEL, type PrCard, type PrFulfillment, type PrStage } from '@frontline/shared';
+import { PR_FIT_LABEL, PR_FULFILLMENT_LABEL, PR_STAGE_LABEL, PR_TASK_STATUS_LABEL, type PrCard, type PrFulfillment, type PrStage, type PrTaskStatus } from '@frontline/shared';
 import { cx } from '../components/ui';
 import { ago } from '../lib/format';
 import { useWatch } from './api';
@@ -19,6 +19,7 @@ export const Pill = ({ tone = 'muted', className, children }: { tone?: keyof typ
 
 const FULFILLMENT_TONE: Record<PrFulfillment, keyof typeof TONE> = { verified: 'good', pending: 'run', insufficient: 'warn', not_eligible: 'bad' };
 const STAGE_TONE: Partial<Record<PrStage, keyof typeof TONE>> = { researching: 'run', shortlisted: 'good', ready_to_test: 'good', testing: 'run', scaled: 'good', rejected: 'bad' };
+export const TASK_TONE: Partial<Record<PrTaskStatus, keyof typeof TONE>> = { queued: 'run', running: 'run', waiting_for_you: 'warn', awaiting_approval: 'warn', report_ready: 'good', not_started: 'bad', interrupted: 'warn', failed: 'bad' };
 
 const Row = ({ label, children }: { label: string; children: ReactNode }) => (
   <div className="flex justify-between gap-2.5 border-b border-dashed border-line py-[5px] last:border-b-0">
@@ -153,8 +154,13 @@ export function ProductCard({
           </Row>
         </div>
         <div className="mt-auto flex items-center justify-between gap-2 text-[11.5px] text-muted">
-          <span>{!store && c.privateTo ? `Private to ${storeName(c.privateTo)}` : !store && c.storesEvaluating > 0 ? `${c.storesEvaluating} store${c.storesEvaluating === 1 ? '' : 's'} evaluating` : ''}</span>
-          {(c.evidenceAt ?? c.firstSeenAt) && <span>Updated {ago((c.evidenceAt ?? c.firstSeenAt)!)}</span>}
+          {/* The execution state, never the stage (spec §10): the stage is the pill at the top. */}
+          {store && c.research ? (
+            <Pill tone={TASK_TONE[c.research.status]}>{PR_TASK_STATUS_LABEL[c.research.status]}</Pill>
+          ) : (
+            <span>{!store && c.privateTo ? `Private to ${storeName(c.privateTo)}` : !store && c.storesEvaluating > 0 ? `${c.storesEvaluating} store${c.storesEvaluating === 1 ? '' : 's'} evaluating` : ''}</span>
+          )}
+          {store && c.research ? <span>Updated {ago(c.research.updatedAt)}</span> : (c.evidenceAt ?? c.firstSeenAt) && <span>Updated {ago((c.evidenceAt ?? c.firstSeenAt)!)}</span>}
         </div>
       </div>
     </article>

@@ -390,7 +390,9 @@ export type LiveMessage =
   /** A squad mission was created, started a step, got a step's deliverable or ended (agents lane). */
   | { type: 'mission'; mission: SquadMission }
   /** A knowledge-base research task started, moved a stage, waits to retry, or ended (knowledge-base lane). */
-  | { type: 'kb_task'; task: KbTaskBrief };
+  | { type: 'kb_task'; task: KbTaskBrief }
+  /** Product Research: a research task's run changed (its status is derived from the run). */
+  | { type: 'research_task'; storeId: string; taskId: string; productId: string };
 
 /** Error body for any non-2xx API response. */
 export interface ApiError {

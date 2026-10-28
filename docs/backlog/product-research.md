@@ -744,7 +744,7 @@ STOP.
   the `fence()` helper. Tests with a fake transport: private address, redirect to a private address, too large,
   robots-blocked, login page, 404, JSON-LD product, og-only page, several Product blocks, redirect to another path,
   tracking parameters. Then run decision 16's preview live checks.
-- [ ] PR-15 **Research task API** (decision 6): eligible agents endpoint with state and the queue line; `POST
+- [x] PR-15 **Research task API** (decision 6): eligible agents endpoint with state and the queue line; `POST
   /api/pr/tasks` in all three modes and with a Deploy config, idempotent on client_request_id; the store, type and
   conversation checks; the four-part message under 20,000 characters; `PR_STARTS` (T7); the `research_task` live
   message (T8); status from the run; Retry; list and detail routes. Also the discovery API's Research filter and the
@@ -911,6 +911,21 @@ STOP.
   the store's private `owner_link` listing (page price kept as the page's, never an offer), its image cached through
   the fetcher. `ownerDetails` / `previewFields` check owner corrections and tag each field page or owner; `fence()`.
   Tests: 8 with a fake web through the real fetcher. Live: 5 public previews, see Notes (2 read, 3 refused with 429).
+- 2026-10-28 PR-15 research task API: `GET /api/pr/agents?store=` lists the Product Researcher seat and each custom
+  role built on it, with its runtime and model (latest config, else the seat default), state (available, busy with the
+  running conversation, its queued turns and whether the store's 2 slots are full, or not ready with the owner's next
+  step). `POST /api/pr/tasks?store=` checks the store, product, type (404 unknown, 409 not a product_hunter type) and
+  the conversation (404 another store's, 409 another type's), inserts the task, composes the four-part message (header,
+  the instructions verbatim up to 6,000 characters, two `fence()`d blocks: product facts and "Earlier in <store>"), and
+  starts it new (a product-context conversation), queued in the conversation, or separate (a new conversation on that
+  conversation's config); a Deploy config goes through `openConversation`'s own check (400 on its field). Idempotent on
+  `client_request_id`; a refusal stays on the task as Not started and a repeat starts it with the same task. Status comes
+  from the run (`stateOf`) plus the report; Retry for Not started, Interrupted and Failed; list and detail routes;
+  `PR_STARTS` (T7) in `kbGuard`; the `research_task` live message (T8) on each run change, and `useLive` refetches
+  `['pr']`. Discovery: the `research=` filter (the same status rule in SQL, `none` for no task) and `PrCard.research`
+  for the footer; the web adds the Research chip and the footer state. Tests: 6 API (the repeat, a run that never
+  started, another store's conversation, ineligible types, busy both ways, a restart mid-run, the filter agreeing with
+  the task for every status), 2 web.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -942,6 +957,12 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-15 as built.** The busy test stages the conversation's running turn as a row the run manager isn't running, so
+  the queued and separate turns go ahead in the test; the queue line is then read from staged queued runs. The restart
+  test marks the run running and builds a second run manager on the same database, which is the real restart path.
+  A config refused by Deploy's check keeps the task as Not started (400 with the field); the dialog's repeat with a
+  fixed config starts it under the same task. `queue` and Retry send the turn into the existing conversation, so the
+  conversation's config and session carry on. No real engine was used (the fake engine only).
 - **PR-14 live check (decision 16), 2026-10-28 15:12 UTC**, dev server with the fake agent engine, store pawsome, 5
   previews through `kbFetch` (each is robots.txt, the page, its redirects and at most one image; requests weren't
   counted one by one, about 15 to 20 in all). Cost $0, no sign-in, nothing bypassed:

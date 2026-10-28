@@ -52,6 +52,8 @@ const MB = 1_048_576;
  * conversation's create, send, retry and resume, and a team's start, note to the lead and a step's resume.
  */
 const STARTS = /^\/api\/(kb\/(ask|research\/tasks(\/[^/]+\/(retry|refine))?)|conversations(\/[^/]+\/(messages|runs\/[^/]+\/(retry|resume)))?|teams(\/[^/]+\/(notes|steps\/[^/]+\/resume))?)$/;
+/** Product Research's run starts (T7): kept apart from STARTS so the ai-agents lane's edits to it never conflict. */
+const PR_STARTS = /^\/api\/pr\/tasks(\/[^/]+\/retry)?$/;
 /** Bodies that may carry a document or attachments (10 MB in base64), or a Product Research import. */
 const LARGE = /^\/api\/(kb\/research\/tasks|conversations(\/[^/]+\/messages)?|pr\/imports\/(trends|feed))$/;
 
@@ -67,7 +69,7 @@ function kbGuard(): MiddlewareHandler {
     if (c.req.method === 'GET') return next();
     const now = Date.now();
     const recent = (k: keyof typeof hits) => (hits[k] = hits[k].filter((t) => now - t < 60_000)).length;
-    const starts = c.req.method === 'POST' && STARTS.test(c.req.path);
+    const starts = c.req.method === 'POST' && (STARTS.test(c.req.path) || PR_STARTS.test(c.req.path));
     if (recent('change') >= 300 || (starts && recent('start') >= 10)) return c.json({ error: 'Too many requests at once: wait a minute and try again.' }, 429);
     hits.change.push(now);
     const maxSize = LARGE.test(c.req.path) ? 15 * MB : MB;

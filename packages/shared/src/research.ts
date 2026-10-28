@@ -1,6 +1,8 @@
 // Product Research (docs/features/product-research.md, docs/backlog/product-research.md). Every name here starts with Pr:
 // the older Research* names belong to the legacy /api/research catalog, which the agents still read.
 
+import type { RuntimeId } from './index';
+
 /** Business stages (spec §10), kept apart from a task's execution state. */
 export const PR_STAGES = ['discovered', 'researching', 'shortlisted', 'sample_review', 'ready_to_test', 'testing', 'scaled', 'rejected'] as const;
 export type PrStage = (typeof PR_STAGES)[number];
@@ -207,6 +209,8 @@ export interface PrCard {
   flags: { count: number; first: PrFlag | null } | null;
   /** All stores: stores with this product in their pipeline (a History row). */
   storesEvaluating: number;
+  /** Store scope: the latest research task's execution state (the footer), never the stage; null: none yet. */
+  research: { taskId: string; status: PrTaskStatus; updatedAt: string } | null;
   firstSeenAt: string | null;
   /** Evidence age: the newest retrieved or checked time. */
   evidenceAt: string | null;
@@ -392,3 +396,58 @@ export interface PrOwnerDetails {
 }
 /** One preview field with where it came from. */
 export type PrPreviewField<T> = { value: T; origin: 'page' | 'owner' } | null;
+
+/** One row of the Research a Product dialog (decision 6): an eligible agent type in the store, with its state. */
+export interface PrAgentRow {
+  /** `product_hunter` (the seat) or a custom role id built on it. */
+  type: string;
+  name: string;
+  custom: boolean;
+  /** That type's most recent config in the store, else the seat default; this page never picks a model. */
+  runtime: RuntimeId;
+  model: string | null;
+  effort: string | null;
+  state: 'available' | 'busy' | 'not_ready';
+  /** Not ready: why, as the owner's next step. */
+  reason: string | null;
+  /** Busy: the running conversation, its queued turns, and whether the store's 2 slots are full. */
+  busy: { conversationId: string; title: string; queued: number; slotsFull: boolean } | null;
+}
+
+/** A research task's status, derived from its run (decision 6), never stored. */
+export type PrTaskStatus = 'not_started' | 'queued' | 'running' | 'waiting_for_you' | 'awaiting_approval' | 'report_ready' | 'finished_without_report' | 'interrupted' | 'failed' | 'cancelled';
+export const PR_TASK_STATUS_LABEL: Record<PrTaskStatus, string> = {
+  not_started: 'Not started',
+  queued: 'Queued',
+  running: 'Running',
+  waiting_for_you: 'Waiting for you',
+  awaiting_approval: 'Awaiting approval',
+  report_ready: 'Report ready',
+  finished_without_report: 'Finished without a report',
+  interrupted: 'Interrupted (app restarted)',
+  failed: 'Failed',
+  cancelled: 'Cancelled',
+};
+export const PR_TASK_STATUSES = Object.keys(PR_TASK_STATUS_LABEL) as PrTaskStatus[];
+export interface PrTask {
+  id: string;
+  storeId: string;
+  productId: string;
+  listingId: string | null;
+  url: string | null;
+  /** Exactly as typed. */
+  instructions: string;
+  template: string | null;
+  mode: 'new' | 'queue' | 'separate';
+  type: string;
+  conversationId: string | null;
+  runId: string | null;
+  status: PrTaskStatus;
+  /** Not started: the refusal; Queued: "behind <conversation>" or "waiting for a store slot"; Failed: the error. */
+  detail: string | null;
+  /** Retry is offered for Not started, Interrupted and Failed. */
+  canRetry: boolean;
+  createdAt: string;
+  /** The run's last change (ended, started, queued), else the task's. */
+  updatedAt: string;
+}

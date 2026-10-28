@@ -1,4 +1,4 @@
-import { NICHES, PR_SORTS, PR_STAGES, PR_VIEWS, type Niche, type PrCard, type PrDiscovery, type PrFacet, type PrFit, type PrFlag, type PrFulfillment, type PrSort, type PrStage, type PrView, type Store } from '@frontline/shared';
+import { NICHES, PR_SORTS, PR_STAGES, PR_TASK_STATUSES, PR_VIEWS, type Niche, type PrCard, type PrDiscovery, type PrFacet, type PrFit, type PrFlag, type PrFulfillment, type PrSort, type PrStage, type PrTaskStatus, type PrView, type Store } from '@frontline/shared';
 import type { Db } from '../db';
 import { getSettings } from '../settings';
 import { evaluateStore } from './evaluate';
@@ -6,6 +6,7 @@ import { convertMinor, demandOf, factKeys, offerRows } from './facts';
 import { flagsFor } from './flags';
 import { fulfillmentOf } from './fulfillment';
 import { NICHE_WORDS, shipTo as shipToOf } from './profile';
+import { RESEARCH_SQL, getTask, latestTask } from './tasks';
 
 /** The filter chips (and "More filters") that can keep unknowns; `strict` lists the ones whose unknowns are dropped. */
 export const LENIENT = ['category', 'warehouse', 'cost', 'delivery', 'evidence', 'niche', 'unit', 'ship'] as const;
@@ -28,6 +29,8 @@ export interface DiscoveryFilters {
   fit?: PrFit[];
   flags?: 'any' | 'none';
   availability?: (PrFulfillment | 'unchecked')[];
+  /** The latest research task's execution state; `none`: no task yet. Store scope only. */
+  research?: (PrTaskStatus | 'none')[];
 }
 export interface DiscoveryQuery {
   store: Store | null;
@@ -74,7 +77,7 @@ export function discover(db: Db, query: DiscoveryQuery, now = new Date()): PrDis
   const shipTos = [...new Set(keys.filter(([to, cur]) => to && cur === currency).map(([to]) => to))];
   const shipTo = store ? shipToOf(db, store) : (query.shipTo ?? 'US');
   if (!store && !shipTos.includes(shipTo ?? '')) return { error: `Ship to one of ${shipTos.join(', ')}: costs and fulfillment are kept for those destinations.` };
-  if (!store && (query.sort === 'best_fit' || query.filters.stage || query.filters.fit)) return { error: 'Store fit and stage are kept per store: pick a store.' };
+  if (!store && (query.sort === 'best_fit' || query.filters.stage || query.filters.fit || query.filters.research)) return { error: 'Store fit, stage and research are kept per store: pick a store.' };
   if (store && !db.prepare('SELECT 1 FROM pr_evaluations WHERE store_id = ? LIMIT 1').get(store.id)) evaluateStore(db, store, { rerank: true });
 
   const lenient = (k: Lenient) => (query.strict.includes(k) ? '0' : '1');
@@ -126,6 +129,7 @@ export function discover(db: Db, query: DiscoveryQuery, now = new Date()): PrDis
   const flagged = store ? 'coalesce(e.open_flags, 0) > 0' : 'coalesce(f.rule_flags, 0) > 0';
   if (f.flags) where.push(f.flags === 'any' ? flagged : `NOT (${flagged})`);
   if (f.availability?.length) (where.push(`coalesce(f.fulfillment_status, 'unchecked') IN (${marks(f.availability.length)})`), p.push(...f.availability));
+  if (f.research?.length) (where.push(`coalesce(${RESEARCH_SQL}, 'none') IN (${marks(f.research.length)})`), p.push(store!.id, ...f.research));
 
   // The view tabs, counted in one pass over the filtered set.
   const ownIds = JSON.stringify([...own.keys()]);
@@ -199,8 +203,15 @@ export function discover(db: Db, query: DiscoveryQuery, now = new Date()): PrDis
 
 const str = (v: unknown) => (v == null ? null : String(v));
 
+function research(db: Db, store: Store | null, productId: string): PrCard['research'] {
+  const id = store && latestTask(db, store.id, productId);
+  const t = id ? getTask(db, id, store.id) : undefined;
+  return t ? { taskId: t.id, status: t.status, updatedAt: t.updatedAt } : null;
+}
+
 const FITS: PrFit[] = ['strong', 'medium', 'weak', 'unknown'];
 const AVAILABILITY = ['verified', 'pending', 'insufficient', 'not_eligible', 'unchecked'] as const;
+const RESEARCH = [...PR_TASK_STATUSES, 'none'] as const;
 
 /** `GET /api/pr/products`'s query string, validated: list filters repeat (`category=a&category=b`), money is minor units. */
 export function parseDiscovery(q: Record<string, string[]>, store: Store | null): Omit<DiscoveryQuery, 'store'> | { error: string } {
@@ -237,7 +248,8 @@ export function parseDiscovery(q: Record<string, string[]>, store: Store | null)
   const stage = pick('stage', PR_STAGES);
   const fit = pick('fit', FITS);
   const availability = pick('availability', AVAILABILITY);
-  for (const v of [stage, fit, availability]) if (typeof v === 'string') return { error: v };
+  const research = pick('research', RESEARCH);
+  for (const v of [stage, fit, availability, research]) if (typeof v === 'string') return { error: v };
   const filters: DiscoveryFilters = {};
   for (const k of ['costMax', 'deliveryMax', 'evidenceDays', 'unitMax', 'shipMax'] as const) {
     const v = whole(k);
@@ -249,6 +261,7 @@ export function parseDiscovery(q: Record<string, string[]>, store: Store | null)
   if ((stage as PrStage[]).length) filters.stage = stage as PrStage[];
   if ((fit as PrFit[]).length) filters.fit = fit as PrFit[];
   if ((availability as DiscoveryFilters['availability'])!.length) filters.availability = availability as DiscoveryFilters['availability'];
+  if ((research as DiscoveryFilters['research'])!.length) filters.research = research as DiscoveryFilters['research'];
   if (niche) filters.niche = niche as DiscoveryFilters['niche'];
   if (flags) filters.flags = flags;
   return {
@@ -324,6 +337,7 @@ function card(db: Db, r: Record<string, unknown>, ctx: { store: Store | null; sh
     fit: store && r.fit ? { fit: String(r.fit) as PrFit, reason: (JSON.parse(String(r.fit_reasons_json ?? '[]')) as string[])[0] ?? '' } : null,
     flags,
     storesEvaluating: store ? 0 : Number(db.prepare("SELECT count(DISTINCT store_id) AS n FROM pr_stage_history WHERE product_id = ? AND kind = 'stage'").get(id)?.n ?? 0),
+    research: research(db, store, id),
     firstSeenAt: str(r.first_seen_at),
     evidenceAt: str(r.evidence_at),
   };

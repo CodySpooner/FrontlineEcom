@@ -1129,6 +1129,7 @@ export function useLive() {
         // A custom niche's Market Analyst saves its pack, once approved, before its run ends.
         if (!isLive(m.run)) qc.invalidateQueries({ queryKey: ['knowledge'] });
       } else if (m.type === 'kb_task') qc.invalidateQueries({ queryKey: ['kb'] }); // the task, the task lists, and the cards it filed
+      else if (m.type === 'research_task') qc.invalidateQueries({ queryKey: ['pr'] }); // Product Research: its status, the cards and panel
       else if (m.type === 'mission' && m.mission.kind === 'team') qc.setQueryData(['team', m.mission.id], m.mission);
       if (m.type === 'approval' || m.type === 'run') {
         qc.invalidateQueries({ queryKey: ['conversation-counts'] });

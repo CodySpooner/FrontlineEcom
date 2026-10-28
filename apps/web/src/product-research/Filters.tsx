@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { NICHES, PR_FIT_LABEL, PR_FULFILLMENT_LABEL, PR_STAGE_LABEL, PR_STAGES, type PrDiscovery, type PrFacet, type PrFit, type PrFulfillment, type PrSort, type PrStage, type PrView } from '@frontline/shared';
+import { NICHES, PR_FIT_LABEL, PR_FULFILLMENT_LABEL, PR_STAGE_LABEL, PR_STAGES, PR_TASK_STATUS_LABEL, PR_TASK_STATUSES, type PrDiscovery, type PrFacet, type PrFit, type PrFulfillment, type PrSort, type PrStage, type PrTaskStatus, type PrView } from '@frontline/shared';
 import { Button, cx, Dialog, Field, inputClass } from '../components/ui';
 import { fromMinor, toMinor } from './format';
 
@@ -12,6 +12,8 @@ export interface Filters {
   deliveryMax?: number;
   evidenceDays?: number;
   stage?: PrStage;
+  /** The latest research task's execution state; `none`: no research yet. */
+  research?: PrTaskStatus | 'none';
   niche?: string;
   supplier?: string;
   unitMax?: number;
@@ -24,7 +26,7 @@ export interface Filters {
 }
 // Each filter that keeps a product with an unknown value, by the server's `strict` name (discovery.ts LENIENT).
 const LENIENT: Partial<Record<keyof Filters, string>> = { category: 'category', warehouse: 'warehouse', costMax: 'cost', deliveryMax: 'delivery', evidenceDays: 'evidence', niche: 'niche', unitMax: 'unit', shipMax: 'ship' };
-const STORE_ONLY: (keyof Filters)[] = ['stage', 'fit'];
+const STORE_ONLY: (keyof Filters)[] = ['stage', 'research', 'fit'];
 
 /** The discovery query string for a scope (`store` null: All stores), the filters, sort, view and search. */
 export function discoveryQuery(o: { store: string | null; shipTo: string; view: PrView; sort: PrSort; q: string; filters: Filters }) {
@@ -101,7 +103,7 @@ const DAYS = [7, 10, 12, 15, 20, 30];
 const AGES = [[7, 'Last 7 days'], [30, 'Last 30 days'], [90, 'Last 90 days'], [365, 'Last year']] as const;
 const num = (v: string) => (v ? Number(v) : undefined);
 
-/** The chip row: Category, Source, Warehouse, Cost + shipping, Delivery, Evidence age, Stage (store scope), More filters. */
+/** The chip row: Category, Source, Warehouse, Cost + shipping, Delivery, Evidence age, Stage and Research (store scope), More filters. */
 export function FilterChips({ d, filters, set, store, currency }: { d: PrDiscovery | undefined; filters: Filters; set: (f: Filters) => void; store: string | null; currency: string }) {
   const [more, setMore] = useState(false);
   const f = d?.facets;
@@ -155,6 +157,19 @@ export function FilterChips({ d, filters, set, store, currency }: { d: PrDiscove
             {PR_STAGES.map((s) => (
               <option key={s} value={s}>
                 {PR_STAGE_LABEL[s]}
+              </option>
+            ))}
+          </select>
+        </Chip>
+      )}
+      {store && (
+        <Chip label="Research" k="research" {...chip}>
+          <select aria-label="Research" value={filters.research ?? ''} onChange={(e) => pick('research')(e.target.value)} className={SELECT}>
+            <option value="">Any</option>
+            <option value="none">No research yet</option>
+            {PR_TASK_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {PR_TASK_STATUS_LABEL[s]}
               </option>
             ))}
           </select>

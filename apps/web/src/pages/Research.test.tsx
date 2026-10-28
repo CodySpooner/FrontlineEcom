@@ -18,7 +18,7 @@ const card = (o: Partial<PrCard> = {}): PrCard => ({
   id: 'p1', title: 'Silicone grooming brush', imageListing: null, category: 'Pet Supplies > Grooming', source: { id: 'l1', label: 'CJdropshipping', host: null, origin: 'fixture' }, fixture: true, privateTo: null,
   stage: 'discovered', watched: false, costShip: null, fulfillment: { status: 'pending', reasons: ['Fixture offer: not verified'], checkedAt: '2026-10-27T00:00:00Z' }, conditions: null,
   demand: { cls: 'sustained', peakMonth: null, platform: 'google_trends', query: 'grooming brush', region: 'US', periodStart: '2024-11-03', periodEnd: '2026-10-25', scope: 'product' }, demandSets: 0,
-  fit: { fit: 'weak', reason: 'battery' }, flags: { count: 0, first: null }, storesEvaluating: 0, firstSeenAt: '2026-10-27T00:00:00Z', evidenceAt: null, ...o,
+  fit: { fit: 'weak', reason: 'battery' }, flags: { count: 0, first: null }, storesEvaluating: 0, research: null, firstSeenAt: '2026-10-27T00:00:00Z', evidenceAt: null, ...o,
 });
 const page = (items: PrCard[], o: Partial<PrDiscovery> = {}): PrDiscovery => ({
   items, next: null, total: items.length, counts: { all: items.length, demand: 0, new: items.length, watchlist: 0, flagged: 0 },
@@ -44,9 +44,9 @@ const calls = (f: ReturnType<typeof api>, path: string) => f.mock.calls.map(([u]
 
 describe('the discovery query', () => {
   it('sends ship-to only in All stores, drops store-only filters there, and names strict filters only when they are set', () => {
-    const filters = { category: 'Grooming', stage: 'shortlisted' as const, costMax: 1500, strict: ['cost', 'delivery'] };
+    const filters = { category: 'Grooming', stage: 'shortlisted' as const, research: 'failed' as const, costMax: 1500, strict: ['cost', 'delivery'] };
     expect(Object.fromEntries(new URLSearchParams(discoveryQuery({ store: 'paws', shipTo: 'GB', view: 'all', sort: 'best_fit', q: ' brush ', filters })))).toEqual({
-      store: 'paws', q: 'brush', view: 'all', sort: 'best_fit', category: 'Grooming', stage: 'shortlisted', costMax: '1500', strict: 'cost', limit: '48',
+      store: 'paws', q: 'brush', view: 'all', sort: 'best_fit', category: 'Grooming', stage: 'shortlisted', research: 'failed', costMax: '1500', strict: 'cost', limit: '48',
     });
     expect(Object.fromEntries(new URLSearchParams(discoveryQuery({ store: null, shipTo: 'GB', view: 'new', sort: 'recent', q: '', filters })))).toEqual({
       shipTo: 'GB', view: 'new', sort: 'recent', category: 'Grooming', costMax: '1500', strict: 'cost', limit: '48',
@@ -87,6 +87,16 @@ describe('Product Research page', () => {
     expect(within(c).getByText('Trends "grooming brush" · US · Nov 2024–Oct 2026')).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Research a Product/ })).toBeNull(); // absent until PR-16 (decision 1)
     expect(screen.getByText('1 match · filtered and sorted on the server')).toBeTruthy();
+  });
+
+  it("store scope: the footer shows the latest research task's execution state apart from the stage", async () => {
+    api({ items: [card({ stage: 'researching', research: { taskId: 't1', status: 'interrupted', updatedAt: new Date(Date.now() - 5 * 60_000).toISOString() } })] });
+    renderApp(<Research />, '/research');
+    const c = await screen.findByRole('article', { name: 'Silicone grooming brush' });
+    expect(within(c).getByText('Researching')).toBeTruthy(); // the stage, at the top
+    expect(within(c).getByText('Interrupted (app restarted)')).toBeTruthy(); // the execution state, in the footer
+    expect(within(c).getByText('Updated 5 min ago')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: 'Research' })).toBeTruthy();
   });
 
   it('All stores: no profile line, no stage or fit, the evaluating count, and ship-to sent from the toolbar', async () => {
