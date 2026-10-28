@@ -178,7 +178,7 @@ export function FilterChips({ d, filters, set, store, currency }: { d: PrDiscove
       <Button size="sm" onClick={() => setMore(true)}>
         More filters
       </Button>
-      {d && <span className="ml-auto text-xs text-muted">{`${d.total.toLocaleString('en-US')} match · filtered and sorted on the server`}</span>}
+      {d && <span className="ml-auto text-xs text-muted">{`${d.total.toLocaleString('en-US')} ${d.total === 1 ? 'match' : 'matches'} · filtered and sorted on the server`}</span>}
       <MoreFilters open={more} onClose={() => setMore(false)} d={d} filters={filters} set={set} store={store} currency={currency} />
     </div>
   );

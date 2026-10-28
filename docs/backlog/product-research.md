@@ -804,7 +804,7 @@ STOP.
   bytes, headers), credential-leak tests (web responses, prompts, job rows, logs), the guard on every `/api/pr/*` route,
   the isolation sweep over every route and the tool, rate limits and budgets for ingestion, enrichment, research and
   monitoring, untrusted text never rendered as HTML, a test that no production path writes origin `fixture`.
-- [ ] PR-27 **Scale, states and accessibility** (decision 14): 10,000 products and 500 tasks in jsdom with stubbed
+- [x] PR-27 **Scale, states and accessibility** (decision 14): 10,000 products and 500 tasks in jsdom with stubbed
   pages, every distinct state, keyboard paths, focus, contrast, small windows.
 - [ ] PR-28 **Design pass:** compare with the board at the four sizes, run `styleseed-design-review`, fix or answer each
   finding under Notes.
@@ -1041,6 +1041,12 @@ STOP.
   History row with otherwise-valid bodies: every one a 404 and no table changes (a mutation that drops one route's
   scope check fails it). **Guard:** non-local Host and foreign Origin (another local port included) get 403 on
   `/api/pr`. **No HTML:** no component of the page uses `dangerouslySetInnerHTML`, `innerHTML` or a markdown renderer.
+- 2026-10-28 PR-27 Scale, states and accessibility: the grid now keeps only the rows near the viewport once more than
+  300 cards are loaded (decision 14 asked for it; every loaded card stayed in the DOM before): whole rows with 3 rows of
+  overscan, full-width spacers sized by a measured row pitch, arrow keys find cards by id. The panel's Earlier tasks
+  and Reports show 10 until "Show all". Fix: the match count said "10,000 match". Tests: row math (unit), 10,000
+  matches paged 48 at a time with the window following the scroll and arrow keys inside it, 500 tasks and 500 reports,
+  partial outage with stale data. Dev checks (below) at 1440×900 and 1024×680.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1072,6 +1078,16 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-27 dev checks.** On a scratch copy of the dev data with the 10,000-row generator (10,012 products; the worktree's
+  own dev DB was not written and the copy is deleted), discovery answered in 0.65 s a page. In Chrome at 1440×900,
+  after 12 page loads: 20 to 40 cards in the DOM at the bottom, the middle, while scrolling up in 700 px steps and at
+  the top; every viewport probe landed on a card (no blank band); scroll height drifted at most 71 px as the window
+  moved (one averaged row pitch, the `ponytail:` ceiling in `rowWindow.ts`). At 1024×680 with a product open: no
+  sideways scroll, 0 of 873 visible text elements below WCAG AA contrast against their composited background, and a
+  visible focus indicator on every stop of 60 Tabs from the page top and 60 through the product panel. The states of
+  decision 14 and their tests: first use, no match, source disconnected (existing page tests), stale data and partial
+  outage (new), metric unavailable (the card test's "Unknown" with its reason), research failed (the Research tab
+  test's error and Retry).
 - **PR-26 coverage map** (each requirement and the test that holds it):
   - SSRF and redirects: `preview.test.ts` "blocked states…" through the real fetcher (`createFetcher`, stubbed transport
     and DNS): a private address and a redirect to one are refused and never fetched; the address ranges themselves are

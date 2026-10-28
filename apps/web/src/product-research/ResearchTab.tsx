@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { PR_RECOMMENDATION_LABEL, PR_STAGE_LABEL, PR_TASK_STATUS_LABEL, type PrRecommendation, type PrReport, type PrReportList, type PrStage, type PrTask, type PrTaskStatus } from '@frontline/shared';
 import { useRun, useStopConversation } from '../api/client';
@@ -10,6 +10,7 @@ import { useChangeStage, usePrAgents, useReports, useRetryTask, useTasks } from 
 import { Pill, TASK_TONE, TONE } from './Card';
 import { Specialists } from './Specialists';
 
+const LIST = 10;
 const ACTIVE: PrTaskStatus[] = ['queued', 'running', 'waiting_for_you', 'awaiting_approval'];
 const REC_TONE: Record<PrRecommendation, keyof typeof TONE> = { research_further: 'run', request_sample: 'run', shortlist: 'good', monitor: 'muted', reject: 'bad' };
 /** The stage a recommendation suggests (decision 5); Monitor is a watch, not a stage. The owner moves it. */
@@ -41,6 +42,7 @@ function StoreResearch({ id, store, stage }: { id: string; store: string; stage:
   const tasks = useTasks(store, id);
   const reports = useReports(store, id);
   const agents = usePrAgents(store);
+  const [all, setAll] = useState({ tasks: false, reports: false }); // long lists show their first 10 (decision 14)
   if (tasks.isPending || reports.isPending) return <LoadingState rows={4} />;
   if (tasks.isError) return <ErrorState message={tasks.error.message} onRetry={() => void tasks.refetch()} />;
   if (reports.isError) return <ErrorState message={reports.error.message} onRetry={() => void reports.refetch()} />;
@@ -55,12 +57,17 @@ function StoreResearch({ id, store, stage }: { id: string; store: string; stage:
       )}
       {older.length > 0 && (
         <section>
-          <Heading>Earlier tasks</Heading>
+          <Heading>{`Earlier tasks (${older.length})`}</Heading>
           <div className="grid gap-2">
-            {older.map((t) => (
+            {(all.tasks ? older : older.slice(0, LIST)).map((t) => (
               <TaskCard key={t.id} t={t} store={store} agent={name(t.type)} />
             ))}
           </div>
+          {!all.tasks && older.length > LIST && (
+            <Button size="sm" variant="ghost" className="mt-1.5" onClick={() => setAll({ ...all, tasks: true })}>
+              {`Show all ${older.length} earlier tasks`}
+            </Button>
+          )}
         </section>
       )}
       <Specialists id={id} store={store} />
@@ -68,9 +75,14 @@ function StoreResearch({ id, store, stage }: { id: string; store: string; stage:
         <Heading>{`Reports (${reports.data.length})`}</Heading>
         {reports.data.length ? (
           <div className="grid gap-2">
-            {reports.data.map((r, i) => (
+            {(all.reports ? reports.data : reports.data.slice(0, LIST)).map((r, i) => (
               <ReportCard key={r.id} r={r} id={id} store={store} stage={stage} open={i === 0} />
             ))}
+            {!all.reports && reports.data.length > LIST && (
+              <Button size="sm" variant="ghost" className="justify-self-start" onClick={() => setAll({ ...all, reports: true })}>
+                {`Show all ${reports.data.length} reports`}
+              </Button>
+            )}
           </div>
         ) : (
           <p className="text-muted">No reports yet. A report is saved by the agent at the end of its task; a run that ends without one says so above.</p>

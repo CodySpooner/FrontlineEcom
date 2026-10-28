@@ -19,6 +19,7 @@ import { countryName, profileLine, sourceItem } from '../product-research/format
 import { DetailPanel, PANEL_TABS, type PanelTab } from '../product-research/Panel';
 import { ProfileDialog } from '../product-research/ProfileDialog';
 import { ResearchDialog } from '../product-research/ResearchDialog';
+import { useRowWindow } from '../product-research/rowWindow';
 import { SourceHealth } from '../product-research/SourceHealth';
 
 const VIEW_LABEL: Record<PrView, string> = { all: 'All matches', demand: 'With demand evidence', new: 'Newly discovered', watchlist: 'Watchlist', flagged: 'Flagged' };
@@ -100,11 +101,13 @@ export function Research() {
   const onCardKey = (i: number) => (e: KeyboardEvent<HTMLElement>) => {
     const cols = getComputedStyle(grid.current!).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
     const to = ({ ArrowRight: i + 1, ArrowLeft: i - 1, ArrowDown: i + cols, ArrowUp: i - cols } as Record<string, number>)[e.key];
+    const next = to === undefined ? undefined : items[to]?.id;
     if (e.key === 'Enter') set('product', items[i]!.id);
-    else if (to !== undefined) grid.current?.querySelectorAll<HTMLElement>('[data-card]')[to]?.focus();
+    else if (next) grid.current?.querySelector<HTMLElement>(`[data-card="${CSS.escape(next)}"]`)?.focus();
     else return;
     e.preventDefault();
   };
+  const win = useRowWindow(grid, items.length);
   // The next 48 cards load when "Show more" scrolls near the viewport (or on its click).
   const more = useRef<HTMLButtonElement>(null);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = discovery;
@@ -273,7 +276,8 @@ export function Research() {
         ) : (
           <>
             <div ref={grid} className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3.5">
-              {items.map((c, i) => (
+              {win.above > 0 && <div aria-hidden className="col-span-full" style={{ height: win.above * win.pitch - win.gap }} />}
+              {items.slice(win.from, win.to).map((c, k) => (
                 <ProductCard
                   key={c.id}
                   c={c}
@@ -284,9 +288,10 @@ export function Research() {
                   storeName={name}
                   selected={c.id === product}
                   onOpen={() => set('product', c.id)}
-                  onKeyDown={onCardKey(i)}
+                  onKeyDown={onCardKey(win.from + k)}
                 />
               ))}
+              {win.below > 0 && <div aria-hidden className="col-span-full" style={{ height: win.below * win.pitch - win.gap }} />}
             </div>
             {hasNextPage && (
               <div className="mt-4 flex justify-center">

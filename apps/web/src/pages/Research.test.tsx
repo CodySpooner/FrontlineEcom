@@ -181,6 +181,51 @@ describe('Product Research page', () => {
     expect(screen.getByRole('alert').textContent).toBe('Enter the price band as amounts in USD, like 15 or 39.99.');
   });
 
+  it('scale: 10,000 matches load 48 at a time; past 300 cards only the rows near the viewport stay in the DOM, and they follow the scroll', async () => {
+    const batch = (n: number) => Array.from({ length: 48 }, (_, k) => card({ id: `p${n * 48 + k}`, title: `Product ${n * 48 + k}` }));
+    const f = stubApi((url) => {
+      if (url.startsWith('/api/stores')) return [store];
+      if (url.startsWith('/api/pr/products?')) {
+        const n = Number(new URLSearchParams(url.split('?')[1]).get('cursor') || 0);
+        return page(batch(n), { next: String(n + 1), total: 10_000, counts: { all: 10_000, demand: 0, new: 10_000, watchlist: 0, flagged: 0 } });
+      }
+      if (url.startsWith('/api/pr/sources')) return [source({ fixtures: 10 })];
+      if (url.startsWith('/api/pr/profile')) return profile;
+      return [];
+    });
+    renderApp(<Research />, '/research');
+    await screen.findByRole('article', { name: 'Product 0' });
+    expect(screen.getByText('10,000 matches · filtered and sorted on the server')).toBeTruthy();
+    expect(screen.getAllByRole('article')).toHaveLength(48);
+    for (let n = 1; n <= 7; n++) {
+      fireEvent.click(await screen.findByRole('button', { name: 'Show more' }));
+      await waitFor(() => expect(calls(f, '/api/pr/products?').some((u) => u.endsWith(`cursor=${n}`))).toBe(true));
+    }
+    await screen.findByRole('button', { name: 'Show more' }); // 384 loaded
+    // jsdom has no layout: one column of 434 px rows in a 768 px window, so rows 0–4 (3 below the fold).
+    await waitFor(() => expect(screen.getAllByRole('article')).toHaveLength(5));
+    const grid = screen.getByRole('region', { name: 'Products' }).querySelector<HTMLElement>('.grid')!;
+    grid.getBoundingClientRect = () => ({ top: -200 * 434 }) as DOMRect; // scrolled to row 200
+    fireEvent.scroll(window);
+    await screen.findByRole('article', { name: 'Product 200' });
+    expect(screen.queryByRole('article', { name: 'Product 0' })).toBeNull();
+    expect(screen.getAllByRole('article').map((a) => a.getAttribute('aria-label'))).toEqual(['Product 197', 'Product 198', 'Product 199', 'Product 200', 'Product 201', 'Product 202', 'Product 203', 'Product 204']); // rows 200–201 in view, 3 either side
+    expect((grid.firstElementChild as HTMLElement).style.height).toBe(`${197 * 434}px`); // the spacer keeps the scroll height
+    const c = screen.getByRole('article', { name: 'Product 200' });
+    c.focus();
+    fireEvent.keyDown(c, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(screen.getByRole('article', { name: 'Product 201' }));
+  });
+
+  it('partial outage and stale data: the source that stopped answering, why, and when it last synced; other sources unaffected', async () => {
+    api({ sources: [source({ access: 'verified', status: 'degraded', errorKind: 'server', lastError: 'CJ: no answer within 20 s', lastSuccessAt: '2026-10-27T09:30:00Z', products: 40 }), source({ id: 'trends_csv', name: 'Google Trends CSV', access: 'verified', products: 3 })] });
+    renderApp(<Research />, '/research');
+    await screen.findByRole('article', { name: 'Silicone grooming brush' });
+    const banner = screen.getAllByRole('status').find((s) => s.textContent?.includes("isn't answering"))!;
+    expect(banner.textContent).toBe(`CJdropshipping isn't answering (CJ: no answer within 20 s). Its products are from its last successful sync, ${new Date('2026-10-27T09:30:00Z').toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })}; other sources are unaffected.`);
+    expect(screen.getAllByRole('status').filter((s) => s.textContent?.includes('Google Trends CSV'))).toHaveLength(0);
+  });
+
   it('keyboard: / focuses search, Enter opens a card into the URL, Esc closes it and focus returns to the card', async () => {
     api({ items: [card(), card({ id: 'p2', title: 'Slow feeder mat' })] });
     renderApp(<Research />, '/research');
@@ -603,6 +648,20 @@ describe('Detail panel', () => {
     expect(summary.getByRole('list', { name: 'Assignments' }).textContent).toContain('Ad Strategist: Three ad angles for hikers · done → Leak-proof on the trail');
     expect(summary.getByText('Consolidated: Lead with leak-proof; test on hikers first')).toBeTruthy();
     expect(summary.getByRole('link', { name: 'Open the team in AI Agents' }).getAttribute('href')).toBe('/agents/c/cv9?store=paws');
+  });
+
+  it('Research: 500 tasks and as many reports show the latest, then the first 10 of each until Show all', async () => {
+    const many = Array.from({ length: 500 }, (_, i) => ({ ...tasks[1]!, id: `t${i}`, instructions: `Task ${i}` }));
+    const lots = Array.from({ length: 500 }, (_, i) => ({ ...reports[0]!, id: `r${i}` }));
+    panelApi(detail(), (url) => (url.startsWith('/api/pr/tasks?') ? many : url.includes('/reports?') ? lots : undefined));
+    renderApp(<Research />, '/research?store=paws&product=p1&tab=research');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    await within(panel).findByText('Earlier tasks (499)');
+    expect(within(panel).getAllByText(/^“Task \d+”$/)).toHaveLength(11); // the latest and 10 earlier
+    expect(within(panel).getByText('Reports (500)')).toBeTruthy();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Show all 499 earlier tasks' }));
+    expect(within(panel).getAllByText(/^“Task \d+”$/)).toHaveLength(500);
+    expect(within(panel).getByRole('button', { name: 'Show all 500 reports' })).toBeTruthy();
   });
 
   it("History: the owner's stage decisions save to the Knowledge Base (once, then linked); a task's move doesn't", async () => {
