@@ -9,9 +9,11 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-const api = (provider: 'claude' | 'demo', signedIn?: boolean) =>
+const api = (provider: 'claude' | 'demo', signedIn?: boolean, creatives: object[] = []) =>
   stubApi((url) =>
-    url === '/api/stores'
+    url.startsWith('/api/creatives')
+      ? creatives
+      : url === '/api/stores'
       ? [{ id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', color: '#ff2a3a', currency: 'USD', timezone: 'UTC' }]
       : url === '/api/agents'
         ? [{ id: 'glow:copywriter', storeId: 'glow', role: 'copywriter', status: 'idle', engine: { provider } }]
@@ -19,6 +21,20 @@ const api = (provider: 'claude' | 'demo', signedIn?: boolean) =>
           ? { signedIn, checkedAt: '2026-10-26T08:00:00Z' }
           : undefined,
   );
+
+describe('Preview', () => {
+  it('says what the ad is: format, hook, angle, length and offer (KB-20)', async () => {
+    const c = { id: 'c1', storeId: 'glow', agentId: 'glow:copywriter', kind: 'copy', headline: 'Glow in 3 steps', primaryText: 'The routine.', credits: 0, source: 'agent', createdAt: '2026-10-26T08:00:00Z' };
+    api('demo', undefined, [{ ...c, format: 'ugc', hook: 'problem-first', angle: 'saves time', lengthS: 15, offer: '20% off' }]);
+    renderApp(<Creative />, '/creative?tab=copy');
+    expect((await screen.findByLabelText('What the ad is')).textContent).toBe('UGC · Hook: problem-first · Angle: saves time · 15s · Offer: 20% off');
+    cleanup();
+    api('demo', undefined, [c]);
+    renderApp(<Creative />, '/creative?tab=copy');
+    await screen.findAllByText('The routine.');
+    expect(screen.queryByLabelText('What the ad is')).toBeNull();
+  });
+});
 
 describe('Claude integration chip', () => {
   it("says the copy is demo when the store's agent runs on the demo engine", async () => {

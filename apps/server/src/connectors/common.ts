@@ -145,6 +145,63 @@ export function rebuildAdSpend(db: Db, storeId: string, dates: Iterable<string>)
   for (const date of dates) up.run(storeId, date, Math.round(Number(sum.get(storeId, date)!.spend) * 100) / 100);
 }
 
+/** One ad as listed by its network; `copy` is its body text, where the network returns it. */
+export type AdRow = { id: string; campaignId: string; groupId?: string; name: string; status: string; copy?: string };
+/** One ad's day, in the store's currency. An ad missing from the list (deleted since) still gets a row, by `name`. */
+export type AdDay = { adId: string; campaignId: string; groupId?: string; name?: string; date: string; spend: number; revenue: number; purchases: number; clicks: number; impressions: number };
+
+/**
+ * Ad-level results (KB-20), beside the campaign totals and never part of rebuildAdSpend: campaign_daily stays the
+ * store's ad spend. Then each of the store's ads not linked yet is linked to the library creative it was made from.
+ */
+export function saveAds(db: Db, storeId: string, network: AdNetwork, ads: AdRow[], days: AdDay[]) {
+  const camp = db.prepare("INSERT OR IGNORE INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES (?, ?, ?, ?, 'archived', 0)");
+  const ad = db.prepare(
+    `INSERT INTO ads (network, id, campaign_id, group_id, name, status, copy) VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (network, id) DO UPDATE SET campaign_id = excluded.campaign_id, group_id = excluded.group_id, name = excluded.name, status = excluded.status,
+       copy = excluded.copy`,
+  );
+  const seen = db.prepare("INSERT OR IGNORE INTO ads (network, id, campaign_id, group_id, name, status) VALUES (?, ?, ?, ?, ?, 'archived')");
+  const day = db.prepare(
+    `INSERT INTO ad_daily (network, ad_id, date, spend, revenue, purchases, clicks, impressions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (network, ad_id, date) DO UPDATE SET spend = excluded.spend, revenue = excluded.revenue, purchases = excluded.purchases,
+       clicks = excluded.clicks, impressions = excluded.impressions`,
+  );
+  for (const a of ads) {
+    camp.run(network, a.campaignId, storeId, `Campaign ${a.campaignId}`);
+    ad.run(network, a.id, a.campaignId, a.groupId ?? null, a.name, a.status, a.copy ?? null);
+  }
+  for (const d of days) {
+    camp.run(network, d.campaignId, storeId, `Campaign ${d.campaignId}`);
+    seen.run(network, d.adId, d.campaignId, d.groupId ?? null, d.name || `Ad ${d.adId}`);
+    day.run(network, d.adId, d.date, d.spend, d.revenue, d.purchases, d.clicks, d.impressions);
+  }
+  linkCreatives(db, storeId);
+}
+
+/**
+ * Links each of the store's unlinked ads whose copy holds a library creative's primary text: the ad was made from it.
+ * ponytail: the same words (case and spacing aside), 20+ characters, the longest text wins; an ad whose copy was
+ * reworded when it was set up stays unlinked.
+ */
+function linkCreatives(db: Db, storeId: string) {
+  const norm = (s: unknown) => String(s).toLowerCase().replace(/\s+/g, ' ').trim();
+  const creatives = db
+    .prepare('SELECT id, primary_text FROM creatives WHERE store_id = ?')
+    .all(storeId)
+    .map((c) => ({ id: String(c.id), text: norm(c.primary_text) }))
+    .filter((c) => c.text.length >= 20)
+    .sort((a, b) => b.text.length - a.text.length);
+  if (!creatives.length) return;
+  const set = db.prepare('UPDATE ads SET creative_id = ? WHERE network = ? AND id = ?');
+  for (const a of db
+    .prepare('SELECT a.network, a.id, a.copy FROM ads a JOIN campaigns c ON c.network = a.network AND c.id = a.campaign_id WHERE c.store_id = ? AND a.creative_id IS NULL AND a.copy IS NOT NULL')
+    .all(storeId)) {
+    const hit = creatives.find((c) => norm(a.copy).includes(c.text));
+    if (hit) set.run(hit.id, String(a.network), String(a.id));
+  }
+}
+
 /**
  * Sets a store's timezone. On a real store a change re-dates its orders on the new zone's days and rebuilds those days, so
  * history and "today" share one calendar, and Amazon re-reads its daily totals (dated in the store's zone). Demo stores

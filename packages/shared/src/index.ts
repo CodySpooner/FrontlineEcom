@@ -489,6 +489,15 @@ export interface Creative {
   /** demo = simulated render (no Higgsfield connected); agent = written copy. */
   source: 'demo' | 'higgsfield' | 'agent';
   createdAt: string;
+  /** What the ad is, as its maker described it (KB-20): what ads are compared by. e.g. ugc, demo, testimonial, static. */
+  format?: string;
+  /** Its opening, as a short label: problem-first, question, social proof. */
+  hook?: string;
+  angle?: string;
+  /** Video length in seconds. */
+  lengthS?: number;
+  /** e.g. 20% off, free shipping. */
+  offer?: string;
 }
 
 export type RunStatus = 'queued' | 'running' | 'done' | 'error' | 'cancelled';

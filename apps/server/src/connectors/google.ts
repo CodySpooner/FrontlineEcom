@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adZone, AD_ZONES, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, stillAsSynced, syncedBudget, type CampaignChange } from './common';
+import { adZone, AD_ZONES, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, saveAds, stateOf, switchToReal, syncView, stillAsSynced, syncedBudget, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
 export const GOOGLE_ADS_API_VERSION = 'v26';
@@ -19,6 +19,9 @@ type GoogleError = { error?: string | { message?: string; details?: { errors?: {
 
 interface AdsRow {
   campaign: { id: string; name?: string; status?: string };
+  /** FROM ad_group_ad rows only. */
+  adGroup?: { id: string };
+  adGroupAd?: { status?: string; ad: { id: string; name?: string; responsiveSearchAd?: { headlines?: { text?: string }[]; descriptions?: { text?: string }[] } } };
   campaignBudget?: { amountMicros?: string };
   segments?: { date: string };
   metrics?: { costMicros?: string; conversions?: number; conversionsValue?: number; clicks?: string; impressions?: string };
@@ -113,6 +116,13 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       `SELECT campaign.id, segments.date, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.clicks, metrics.impressions FROM campaign WHERE segments.date BETWEEN '${start}' AND '${today}'`,
     );
     const campaigns = await search('SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, customer.currency_code, customer.time_zone FROM campaign');
+    // Each ad's days and its text (KB-20). ponytail: responsive search ads' descriptions only; Performance Max has asset groups, not ads.
+    const adRows = await search(
+      `SELECT ad_group_ad.ad.id, ad_group.id, campaign.id, segments.date, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.clicks, metrics.impressions FROM ad_group_ad WHERE segments.date BETWEEN '${start}' AND '${today}'`,
+    );
+    const ads = await search(
+      'SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions, ad_group.id, campaign.id FROM ad_group_ad',
+    );
     const currency = campaigns[0]?.customer?.currencyCode;
     const zone = campaigns[0]?.customer?.timeZone;
     if (zone) stateOf<string>(db, AD_ZONES).set(id, zone);
@@ -142,6 +152,21 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       }
       if (!cursor) for (const d of pruneCampaigns(db, storeId, 'google', [...campaigns.map((c) => c.campaign.id), ...rows.map((r) => r.campaign.id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);
+      saveAds(
+        db, storeId, 'google',
+        ads.map(({ adGroupAd: g, adGroup, campaign }) => {
+          const rsa = g!.ad.responsiveSearchAd;
+          const text = (rsa?.descriptions ?? []).map((t) => t.text).filter(Boolean).join('\n');
+          return { id: g!.ad.id, campaignId: campaign.id, groupId: adGroup?.id, name: g!.ad.name || rsa?.headlines?.[0]?.text || `Ad ${g!.ad.id}`, status: STATUS[g!.status ?? ''] ?? (g!.status ?? 'unknown').toLowerCase(), copy: text || undefined };
+        }),
+        adRows.map(({ adGroupAd: g, adGroup, campaign, segments, metrics: m = {} }) => {
+          const k = rateOn(segments!.date);
+          return {
+            adId: g!.ad.id, campaignId: campaign.id, groupId: adGroup?.id, date: segments!.date, spend: cents(micros(m.costMicros) * k), revenue: cents(Number(m.conversionsValue ?? 0) * k),
+            purchases: Math.round(Number(m.conversions ?? 0)), clicks: Number(m.clicks ?? 0), impressions: Number(m.impressions ?? 0),
+          };
+        }),
+      );
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
   } catch (e) {

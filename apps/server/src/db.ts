@@ -784,6 +784,39 @@ export const MIGRATIONS = [
   /* 46 (kb: KB-04 the owner set this card's stage: the app's ladder leaves it there) */ `
   ALTER TABLE kb_cards ADD COLUMN stage_by_owner INTEGER NOT NULL DEFAULT 0;
   `,
+  /* 47 (kb: KB-20 ad-level results beside the campaign totals, never in rebuildAdSpend; what a creative is: format, hook, angle, length, offer) */ `
+  CREATE TABLE ads (
+    network TEXT NOT NULL,
+    id TEXT NOT NULL,
+    campaign_id TEXT NOT NULL,
+    group_id TEXT, -- its ad set (Meta) or ad group (Google, TikTok): the people it's shown to
+    name TEXT NOT NULL,
+    status TEXT NOT NULL,
+    copy TEXT, -- the ad's text as the network returns it: how a library creative is found in it
+    creative_id TEXT REFERENCES creatives(id) ON DELETE SET NULL,
+    PRIMARY KEY (network, id),
+    FOREIGN KEY (network, campaign_id) REFERENCES campaigns (network, id) ON DELETE CASCADE
+  );
+  CREATE INDEX ads_by_campaign ON ads (network, campaign_id);
+  CREATE INDEX ads_by_creative ON ads (creative_id);
+  CREATE TABLE ad_daily (
+    network TEXT NOT NULL,
+    ad_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    spend REAL NOT NULL DEFAULT 0,
+    revenue REAL NOT NULL DEFAULT 0,
+    purchases INTEGER NOT NULL DEFAULT 0,
+    clicks INTEGER NOT NULL DEFAULT 0,
+    impressions INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (network, ad_id, date),
+    FOREIGN KEY (network, ad_id) REFERENCES ads (network, id) ON DELETE CASCADE
+  );
+  ALTER TABLE creatives ADD COLUMN format TEXT;
+  ALTER TABLE creatives ADD COLUMN hook TEXT;
+  ALTER TABLE creatives ADD COLUMN angle TEXT;
+  ALTER TABLE creatives ADD COLUMN length_s INTEGER;
+  ALTER TABLE creatives ADD COLUMN offer TEXT;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

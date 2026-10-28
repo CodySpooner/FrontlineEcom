@@ -54,6 +54,21 @@ test('ad copy goes straight to the library', async () => {
   expect(saved?.mediaUrl).toBeUndefined();
 });
 
+test('what the ad is (KB-20): its format, hook, angle, length and offer are saved and read back', async () => {
+  const traits = { format: 'ugc', hook: 'problem-first', angle: 'saves time', lengthS: 15, offer: '20% off' };
+  await run('glow:creative_studio', [ad('video', traits), ad('copy', { prompt: undefined, headline: 'Plain' })]);
+  const saved = (await (await app.request('/api/creatives?stores=glow')).json()) as Creative[];
+  expect(saved.map((c) => [c.headline, c.format, c.hook, c.angle, c.lengthS, c.offer])).toEqual([
+    ['Plain', undefined, undefined, undefined, undefined, undefined],
+    ['Glow in 3 steps', 'ugc', 'problem-first', 'saves time', 15, '20% off'],
+  ]);
+  const { outputs } = await run('glow:ad_strategist', [{ call: 'list_creatives' }]);
+  expect(outputs[0]!.split('\n').slice(1).map((r) => r.split(',').slice(7, 12))).toEqual([
+    ['', '', '', '', ''],
+    ['ugc', 'problem-first', 'saves time', '15', '20% off'],
+  ]);
+});
+
 test('media asks first, then saves a demo render with its credits', async () => {
   const { outputs, requests } = await run('glow:creative_studio', [ad('video')]);
   expect(requests[0]).toMatchObject({ title: 'Generate 9:16 video ad: Glow in 3 steps', action: { kind: 'creative.generate', payload: { credits: 20 } } });
@@ -209,7 +224,7 @@ test('the squad reads the library back without the media payloads', async () => 
   await run('glow:creative_studio', [ad('image'), ad('copy', { prompt: undefined, headline: 'Skin that glows by 8am' })]);
   const { outputs } = await run('glow:ad_strategist', [{ call: 'list_creatives' }, { call: 'list_creatives', input: { kind: 'copy' } }]);
   const rows = outputs[0]!.split('\n');
-  expect(rows[0]).toBe('id,created,kind,aspect,headline,primary_text,cta,media');
+  expect(rows[0]).toBe('id,created,kind,aspect,headline,primary_text,cta,format,hook,angle,length_s,offer,media');
   expect(rows.slice(1).map((r) => r.split(',').slice(2, 5).concat(r.split(',').at(-1)!))).toEqual([
     ['copy', '', 'Skin that glows by 8am', 'none'],
     ['image', '9:16', 'Glow in 3 steps', 'demo'],

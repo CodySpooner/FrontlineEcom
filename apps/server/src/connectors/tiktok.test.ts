@@ -1,4 +1,5 @@
 import { createHmac, randomBytes } from 'node:crypto';
+import { saveCreative } from '@frontline/agents';
 import { expect, test } from 'vitest';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
@@ -16,7 +17,7 @@ const report = (campaign_id: string, day: string, spend: string, roas: string) =
 });
 
 /** Fake Marketing API: campaign list + daily report (the first report request has two pages). */
-function fakeTikTok(error?: { code: number; message: string }) {
+function fakeTikTok(error?: { code: number; message: string }, ads: { rows?: unknown[]; list?: unknown[] } = {}) {
   const calls: URL[] = [];
   const fetchFn = (async (url: string, init: RequestInit) => {
     const u = new URL(url);
@@ -26,6 +27,9 @@ function fakeTikTok(error?: { code: number; message: string }) {
     const page = Number(u.searchParams.get('page'));
     if (u.pathname.endsWith('/advertiser/info/')) return Response.json({ code: 0, message: 'OK', data: { list: [{ advertiser_id: '7001', currency: 'USD', timezone: 'Etc/GMT+7', display_timezone: 'America/Phoenix' }] } });
     if (u.pathname.endsWith('/campaign/get/')) return Response.json({ code: 0, message: 'OK', data: { list: [{ campaign_id: '401', campaign_name: 'Spark - UGC', operation_status: 'ENABLE', budget: 80, budget_mode: 'BUDGET_MODE_DAY' }], page_info: { page: 1, total_page: 1 } } });
+    const one = (list: unknown[] = []) => Response.json({ code: 0, message: 'OK', data: { list, page_info: { page: 1, total_page: 1 } } });
+    if (u.pathname.endsWith('/ad/get/')) return one(ads.list);
+    if (u.searchParams.get('data_level') === 'AUCTION_AD') return one(calls.filter((c) => c.searchParams.get('data_level') === 'AUCTION_AD').length === 1 ? ads.rows : []);
     const first = calls.filter((c) => c.pathname.endsWith('/report/integrated/get/')).length <= 2;
     const list = !first ? [] : page === 1 ? [report('401', '2026-10-25', '40.00', '2.5')] : [report('499', '2026-10-25', '10.00', '-')];
     return Response.json({ code: 0, message: 'OK', data: { list, page_info: { page, total_page: first ? 2 : 1 } } });
@@ -66,6 +70,37 @@ test('TikTok Ads backfills in 30-day chunks, pages, stores campaigns + daily row
   // The account's named zone (the timezone notice), not its fixed offset, which is an hour off half the year.
   expect(JSON.parse(calls.find((c) => c.pathname.endsWith('/advertiser/info/'))!.searchParams.get('fields')!)).toEqual(['currency', 'timezone', 'display_timezone']);
   expect(JSON.parse(String(db.prepare("SELECT value_json FROM settings WHERE key = 'ad_timezones'").get()?.value_json))['tiktok_ads:glow']).toBe('America/Phoenix');
+});
+
+test("ad level (KB-20): each ad's days beside the campaign totals, never in the store's ad spend; an ad holding a library creative's text is linked to it", async () => {
+  const db = setup();
+  const creative = saveCreative(db, { storeId: 'glow', agentId: 'glow:creative_studio', kind: 'video', headline: 'Ice roller', primaryText: 'Puffy eyes at 7am? 60 seconds with this roller.', credits: 20, source: 'demo' });
+  const ad = (ad_id: string, spend: string, roas: string) => ({
+    dimensions: { ad_id, stat_time_day: '2026-10-25 00:00:00' },
+    metrics: { campaign_id: '401', adgroup_id: '501', ad_name: `Ad ${ad_id} as reported`, spend, impressions: '1200', clicks: '30', complete_payment: '2', complete_payment_roas: roas },
+  });
+  const { fetchFn, calls } = fakeTikTok(undefined, {
+    rows: [ad('9001', '30.00', '3'), ad('9002', '10.00', '-')],
+    list: [
+      { ad_id: '9001', ad_name: 'Puffy eyes hook', campaign_id: '401', operation_status: 'ENABLE', ad_text: 'puffy eyes at 7am?  60 seconds with this roller. #skincare' },
+      { ad_id: '9003', ad_name: 'Turned off', campaign_id: '401', operation_status: 'DISABLE' },
+    ],
+  });
+  await syncTikTokAds(db, key, 'glow', fetchFn, NOW);
+  const adReport = calls.find((c) => c.searchParams.get('data_level') === 'AUCTION_AD')!;
+  expect(JSON.parse(adReport.searchParams.get('dimensions')!)).toEqual(['ad_id', 'stat_time_day']);
+  expect(JSON.parse(adReport.searchParams.get('metrics')!)).toEqual(['campaign_id', 'adgroup_id', 'ad_name', 'spend', 'impressions', 'clicks', 'complete_payment', 'complete_payment_roas']);
+  expect(JSON.parse(calls.find((c) => c.pathname.endsWith('/ad/get/'))!.searchParams.get('fields')!)).toContain('adgroup_id');
+  expect(db.prepare("SELECT id, campaign_id, group_id, name, status, creative_id FROM ads WHERE network = 'tiktok' ORDER BY id").all().map((r) => ({ ...r }))).toEqual([
+    { id: '9001', campaign_id: '401', group_id: null, name: 'Puffy eyes hook', status: 'active', creative_id: creative.id },
+    { id: '9002', campaign_id: '401', group_id: '501', name: 'Ad 9002 as reported', status: 'archived', creative_id: null },
+    { id: '9003', campaign_id: '401', group_id: null, name: 'Turned off', status: 'paused', creative_id: null },
+  ]);
+  expect(db.prepare("SELECT ad_id, spend, revenue, purchases, clicks, impressions FROM ad_daily WHERE network = 'tiktok' ORDER BY ad_id").all().map((r) => ({ ...r }))).toEqual([
+    { ad_id: '9001', spend: 30, revenue: 90, purchases: 2, clicks: 30, impressions: 1200 },
+    { ad_id: '9002', spend: 10, revenue: 0, purchases: 2, clicks: 30, impressions: 1200 },
+  ]);
+  expect(db.prepare("SELECT ad_spend FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ ad_spend: 50 });
 });
 
 test('a bad token shows on the integration without leaking it, and keeps demo data', async () => {

@@ -210,6 +210,12 @@ function Media({ c, className, controls }: { c: CreativeT; className?: string; c
   return isVideo(c.mediaUrl) ? <video src={c.mediaUrl} controls={controls} muted playsInline className={className} /> : <img src={c.mediaUrl} alt={c.headline} loading="lazy" className={className} />;
 }
 
+/** The ad's format, hook, angle, length and offer, as its maker described them (KB-20). */
+const traits = (c: CreativeT) =>
+  [c.format && (c.format.length <= 3 ? c.format.toUpperCase() : c.format), c.hook && `Hook: ${c.hook}`, c.angle && `Angle: ${c.angle}`, c.lengthS && `${c.lengthS}s`, c.offer && `Offer: ${c.offer}`]
+    .filter(Boolean)
+    .join(' · ');
+
 function Preview({ c, onAsk, busy }: { c: CreativeT; onAsk: (task: string) => void; busy: boolean }) {
   const del = useDeleteCreative();
   const [copied, setCopied] = useState(false);
@@ -229,6 +235,11 @@ function Preview({ c, onAsk, busy }: { c: CreativeT; onAsk: (task: string) => vo
         </div>
         <p className="mt-1 text-[13px] whitespace-pre-wrap text-text-2">{c.primaryText}</p>
         {c.cta && <p className="mt-1.5 text-xs text-muted">CTA: {c.cta}</p>}
+        {traits(c) && (
+          <p aria-label="What the ad is" className="mt-1 text-xs text-muted">
+            {traits(c)}
+          </p>
+        )}
       </div>
       <div className="flex flex-wrap gap-2 border-t border-line pt-3">
         <Link to={`/agents/${encodeURIComponent(`${c.storeId}:${c.kind === 'copy' ? 'copywriter' : 'creative_studio'}`)}`} className={buttonClass('ghost', 'sm')}>

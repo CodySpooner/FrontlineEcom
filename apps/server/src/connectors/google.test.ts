@@ -1,4 +1,5 @@
 import { generateKeyPairSync, randomBytes, verify } from 'node:crypto';
+import { saveCreative } from '@frontline/agents';
 import { expect, test } from 'vitest';
 import type { Integration } from '@frontline/shared';
 import { createApp } from '../app';
@@ -15,7 +16,7 @@ const SA = JSON.stringify({ client_email: 'frontline@proj.iam.gserviceaccount.co
 
 type Call = { url: string; headers: Headers; body: string };
 /** Fake Google: token endpoint, Ads search (metrics paged once), GA4 runReport. */
-function fakeGoogle(opts: { tokenError?: unknown; adsError?: unknown; currency?: string } = {}) {
+function fakeGoogle(opts: { tokenError?: unknown; adsError?: unknown; currency?: string; ads?: { rows?: unknown[]; list?: unknown[] } } = {}) {
   const calls: Call[] = [];
   const fetchFn = (async (url: string, init: RequestInit) => {
     const body = String(init.body);
@@ -24,6 +25,7 @@ function fakeGoogle(opts: { tokenError?: unknown; adsError?: unknown; currency?:
     if (url.includes('googleads')) {
       if (opts.adsError) return Response.json(opts.adsError, { status: 403 });
       const { query, pageToken } = JSON.parse(body);
+      if (query.includes('FROM ad_group_ad')) return Response.json({ results: query.includes('segments.date') ? (opts.ads?.rows ?? []) : (opts.ads?.list ?? []) });
       if (!query.includes('segments.date')) return Response.json({ results: [{ campaign: { id: '301', name: 'Search - Brand', status: 'ENABLED' }, campaignBudget: { amountMicros: '25000000' }, customer: { currencyCode: opts.currency ?? 'USD', timeZone: 'America/Phoenix' } }, { campaign: { id: '302', name: 'PMax', status: 'REMOVED' } }] });
       const row = (id: string, date: string, cost: string) => ({ campaign: { id }, segments: { date }, metrics: { costMicros: cost, conversions: 2.6, conversionsValue: 130.5, clicks: '40', impressions: '900' } });
       return pageToken
@@ -119,11 +121,42 @@ test('auth and API errors show on the integration without leaking secrets, and k
   expect(db.prepare("SELECT error FROM integrations WHERE id = 'google_ads:glow'").get()).toEqual({ error: "Google Ads: User doesn't have permission to access customer." });
 });
 
+test("ad level (KB-20): each ad's days beside the campaign totals, never in the store's ad spend; a responsive search ad holding a library creative's text is linked to it", async () => {
+  const { db } = setup();
+  const creative = saveCreative(db, { storeId: 'glow', agentId: 'glow:creative_studio', kind: 'copy', headline: 'Glow serum', primaryText: 'Dull skin by noon? One drop of Glow fixes it.', credits: 0, source: 'agent' });
+  const day = (id: string, cost: string) => ({ adGroupAd: { ad: { id } }, campaign: { id: '301' }, segments: { date: '2026-10-25' }, metrics: { costMicros: cost, conversions: 1.4, conversionsValue: 60, clicks: '12', impressions: '300' } });
+  const { fetchFn, calls } = fakeGoogle({
+    ads: {
+      // 7003: its campaign was made between the campaign and ad queries.
+      rows: [day('7001', '8000000'), day('7002', '4340000'), { ...day('7003', '1000000'), adGroup: { id: '82' }, campaign: { id: '303' } }],
+      list: [
+        { adGroup: { id: '81' }, adGroupAd: { status: 'ENABLED', ad: { id: '7001', responsiveSearchAd: { headlines: [{ text: 'Glow serum' }, { text: 'Bright by noon' }], descriptions: [{ text: 'Dull skin by noon? One drop of Glow fixes it.' }] } } }, campaign: { id: '301' } },
+        { adGroupAd: { status: 'PAUSED', ad: { id: '7002', name: 'Image ad' } }, campaign: { id: '301' } },
+      ],
+    },
+  });
+  await syncGoogleAds(db, key, 'glow', fetchFn, NOW);
+  const queries = calls.filter((c) => c.url.includes('googleads')).map((c) => String(JSON.parse(c.body).query));
+  expect(queries.find((q) => q.includes('FROM ad_group_ad WHERE'))).toContain("BETWEEN '2024-10-27' AND '2026-10-26'");
+  expect(queries.filter((q) => q.includes('FROM ad_group_ad')).every((q) => q.includes('ad_group.id'))).toBe(true);
+  expect(db.prepare("SELECT id, campaign_id, group_id, name, status, creative_id FROM ads WHERE network = 'google' ORDER BY id").all().map((r) => ({ ...r }))).toEqual([
+    { id: '7001', campaign_id: '301', group_id: '81', name: 'Glow serum', status: 'active', creative_id: creative.id },
+    { id: '7002', campaign_id: '301', group_id: null, name: 'Image ad', status: 'paused', creative_id: null },
+    { id: '7003', campaign_id: '303', group_id: '82', name: 'Ad 7003', status: 'archived', creative_id: null },
+  ]);
+  expect({ ...db.prepare("SELECT spend, revenue, purchases, clicks, impressions FROM ad_daily WHERE network = 'google' AND ad_id = '7001' AND date = '2026-10-25'").get() }).toEqual({
+    spend: 8, revenue: 60, purchases: 1, clicks: 12, impressions: 300,
+  });
+  expect(db.prepare("SELECT ad_spend FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ ad_spend: 17.34 });
+});
+
 test('a USD Google Ads account on a euro store: cost, conversion value and budgets are converted into euros', async () => {
   const { db } = setup();
   db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'glow'").run();
   db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-26', fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1.25, JPY: 160 } }));
-  await syncGoogleAds(db, key, 'glow', fakeGoogle().fetchFn, NOW);
+  const ad = { adGroupAd: { ad: { id: '7001' } }, campaign: { id: '301' }, segments: { date: '2026-10-26' }, metrics: { costMicros: '10000000', conversions: 2.6, conversionsValue: 130.5 } };
+  await syncGoogleAds(db, key, 'glow', fakeGoogle({ ads: { rows: [ad] } }).fetchFn, NOW);
   expect({ ...db.prepare("SELECT spend, revenue FROM campaign_daily WHERE network = 'google' AND campaign_id = '301' AND date = '2026-10-26'").get() }).toEqual({ spend: 8, revenue: 104.4 });
+  expect({ ...db.prepare("SELECT spend, revenue FROM ad_daily WHERE network = 'google' AND ad_id = '7001'").get() }).toEqual({ spend: 8, revenue: 104.4 });
   expect(db.prepare("SELECT daily_budget AS b FROM campaigns WHERE network = 'google' AND id = '301'").get()?.b).toBe(20);
 });

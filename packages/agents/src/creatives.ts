@@ -12,11 +12,11 @@ export type NewCreative = Omit<Creative, 'id' | 'createdAt'>;
 export function saveCreative(db: DatabaseSync, c: NewCreative, now = new Date()): Creative {
   const creative: Creative = { ...c, id: randomUUID(), createdAt: now.toISOString() };
   db.prepare(
-    `INSERT INTO creatives (id, store_id, agent_id, run_id, kind, aspect, prompt, headline, primary_text, cta, media_url, credits, source, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO creatives (id, store_id, agent_id, run_id, kind, aspect, prompt, headline, primary_text, cta, media_url, credits, source, created_at, format, hook, angle, length_s, offer)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     creative.id, c.storeId, c.agentId, c.runId ?? null, c.kind, c.aspect ?? null, c.prompt ?? null, c.headline, c.primaryText, c.cta ?? null,
-    c.mediaUrl ?? null, c.credits, c.source, creative.createdAt,
+    c.mediaUrl ?? null, c.credits, c.source, creative.createdAt, c.format ?? null, c.hook ?? null, c.angle ?? null, c.lengthS ?? null, c.offer ?? null,
   );
   return creative;
 }
@@ -89,7 +89,7 @@ ${c.cta ? `<text x="50%" y="${y0 + (lines.length - 1) * lineH + fs * 1.4}" fill=
 
 function toCreative(r: Record<string, unknown>): Creative {
   const opt = (k: string) => (r[k] == null ? undefined : String(r[k]));
-  const [runId, aspect, prompt, cta, mediaUrl] = ['run_id', 'aspect', 'prompt', 'cta', 'media_url'].map(opt);
+  const [runId, aspect, prompt, cta, mediaUrl, format, hook, angle, offer] = ['run_id', 'aspect', 'prompt', 'cta', 'media_url', 'format', 'hook', 'angle', 'offer'].map(opt);
   return {
     id: String(r.id),
     storeId: String(r.store_id),
@@ -105,5 +105,10 @@ function toCreative(r: Record<string, unknown>): Creative {
     credits: Number(r.credits),
     source: r.source as Creative['source'],
     createdAt: String(r.created_at),
+    ...(format ? { format } : {}),
+    ...(hook ? { hook } : {}),
+    ...(angle ? { angle } : {}),
+    ...(r.length_s != null ? { lengthS: Number(r.length_s) } : {}),
+    ...(offer ? { offer } : {}),
   };
 }

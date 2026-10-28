@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { saveCreative } from '@frontline/agents';
 import { expect, test } from 'vitest';
 import type { AnalyticsSummary, Integration } from '@frontline/shared';
 import { createApp } from '../app';
@@ -19,8 +20,16 @@ const insight = (campaign_id: string, date_start: string, spend: string, value: 
   action_values: [{ action_type: 'omni_purchase', value }],
 });
 
-/** Fake Graph API: campaigns edge + insights edge (paged once), records requests. */
-function fakeGraph(rows: ReturnType<typeof insight>[], error?: { status: number; body: unknown }, currency = 'USD', zone = 'America/Chicago') {
+const adInsight = (ad_id: string, campaign_id: string, date_start: string, spend: string, value: string) => ({ ...insight(campaign_id, date_start, spend, value), ad_id, ad_name: `Old name ${ad_id}`, adset_id: '602' });
+
+/** Fake Graph API: campaigns and ads edges, insights edge per level (paged once), records requests. */
+function fakeGraph(
+  rows: ReturnType<typeof insight>[],
+  error?: { status: number; body: unknown },
+  currency = 'USD',
+  zone = 'America/Chicago',
+  ad: { rows?: ReturnType<typeof adInsight>[]; list?: unknown[] } = {},
+) {
   const calls: { url: URL; auth: string | null }[] = [];
   const fetchFn = (async (url: string, init: RequestInit) => {
     const u = new URL(url);
@@ -28,9 +37,11 @@ function fakeGraph(rows: ReturnType<typeof insight>[], error?: { status: number;
     if (error) return Response.json(error.body, { status: error.status });
     if (u.searchParams.get('fields') === 'currency,timezone_name') return Response.json({ id: 'act_1234567890', currency, timezone_name: zone });
     if (u.pathname.endsWith('/campaigns')) return Response.json({ data: [{ id: '201', name: 'Prospecting', effective_status: 'ACTIVE', daily_budget: '6000' }] });
+    if (u.pathname.endsWith('/ads')) return Response.json({ data: ad.list ?? [] });
+    const list = u.searchParams.get('level') === 'ad' ? (ad.rows ?? []) : rows;
     const page = u.searchParams.get('after');
-    if (page) return Response.json({ data: rows.slice(1) });
-    return Response.json({ data: rows.slice(0, 1), paging: rows.length > 1 ? { next: `${url}&after=p2` } : {} });
+    if (page) return Response.json({ data: list.slice(1) });
+    return Response.json({ data: list.slice(0, 1), paging: list.length > 1 ? { next: `${url}&after=p2` } : {} });
   }) as typeof fetch;
   return { fetchFn, calls };
 }
@@ -57,7 +68,7 @@ test('first sync backfills in chunks, stores campaigns + daily insights, feeds a
   await syncMeta(db, key, 'pawsome', fetchFn, NOW);
 
   expect(calls.every((c) => c.auth === `Bearer ${TOKEN}` && !c.url.search.includes(TOKEN))).toBe(true);
-  const ranges = calls.filter((c) => c.url.pathname.endsWith('/insights') && !c.url.searchParams.get('after')).map((c) => JSON.parse(c.url.searchParams.get('time_range')!));
+  const ranges = calls.filter((c) => c.url.searchParams.get('level') === 'campaign' && !c.url.searchParams.get('after')).map((c) => JSON.parse(c.url.searchParams.get('time_range')!));
   expect(ranges[0]).toEqual({ since: '2024-10-27', until: '2025-01-24' });
   expect(ranges.at(-1)!.until).toBe('2026-10-26');
   expect(ranges).toHaveLength(9);
@@ -73,6 +84,36 @@ test('first sync backfills in chunks, stores campaigns + daily insights, feeds a
     { date: '2026-10-25', s: 75 },
     { date: '2026-10-26', s: 58 },
   ]);
+});
+
+test("ad level (KB-20): each ad's days beside the campaign totals, never in the store's ad spend; an ad made from a library creative is linked to it", async () => {
+  const { db } = setup();
+  const copy = 'Your dog hates the car? Not with the Calm Crate: tested on 200 nervous travellers.';
+  const save = (primaryText: string) => saveCreative(db, { storeId: 'pawsome', agentId: 'pawsome:creative_studio', kind: 'copy', headline: 'Car-calm crate', primaryText, credits: 0, source: 'agent' });
+  save('Not with the Calm Crate: tested on 200 nervous travellers.'); // in the copy too, but the longer text wins
+  save('Shop now.'); // too short to say an ad was made from it
+  const creative = save(copy);
+  const { fetchFn, calls } = fakeGraph([insight('201', '2026-10-25', '60.00', '210.50')], undefined, 'USD', 'America/Chicago', {
+    rows: [adInsight('301', '201', '2026-10-25', '40.00', '150'), adInsight('302', '201', '2026-10-25', '20.00', '60.50'), adInsight('399', '201', '2026-10-25', '0.00', '0')],
+    list: [
+      { id: '301', name: 'Car hook', campaign_id: '201', adset_id: '601', effective_status: 'ACTIVE', creative: { body: `  ${copy.toUpperCase().replace(/ /g, '  ')}` } },
+      { id: '302', name: 'Studio', campaign_id: '201', effective_status: 'PAUSED', creative: { body: 'Our best crate, for every trip. Shop now.' } },
+    ],
+  });
+  await syncMeta(db, key, 'pawsome', fetchFn, NOW);
+  expect(calls.find((c) => c.url.searchParams.get('level') === 'ad')?.url.searchParams.get('fields')).toBe('campaign_id,campaign_name,ad_id,ad_name,adset_id,spend,impressions,clicks,actions,action_values');
+  expect(calls.find((c) => c.url.pathname.endsWith('/ads'))?.url.searchParams.get('fields')).toBe('id,name,campaign_id,adset_id,effective_status,creative{body}');
+  // An ad set from the list; for an ad not listed, from its results.
+  expect(db.prepare("SELECT id, campaign_id, group_id, name, status, creative_id FROM ads WHERE network = 'meta' ORDER BY id").all().map((r) => ({ ...r }))).toEqual([
+    { id: '301', campaign_id: '201', group_id: '601', name: 'Car hook', status: 'active', creative_id: creative.id },
+    { id: '302', campaign_id: '201', group_id: null, name: 'Studio', status: 'paused', creative_id: null },
+    { id: '399', campaign_id: '201', group_id: '602', name: 'Old name 399', status: 'archived', creative_id: null }, // deleted since: known from its results
+  ]);
+  expect({ ...db.prepare("SELECT spend, revenue, purchases, clicks, impressions FROM ad_daily WHERE ad_id = '301' AND date = '2026-10-25'").get() }).toEqual({
+    spend: 40, revenue: 150, purchases: 2, clicks: 40, impressions: 1000,
+  });
+  // The store's ad spend is the campaigns' 60, not 60 more for their ads.
+  expect(db.prepare("SELECT ad_spend FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()?.ad_spend).toBe(60);
 });
 
 test('Meta spend and Shopify revenue land on the same days without overwriting each other', async () => {
@@ -98,8 +139,9 @@ test('second sync only re-pulls the attribution window', async () => {
   await syncMeta(db, key, 'pawsome', fakeGraph([]).fetchFn, NOW);
   const second = fakeGraph([]);
   await syncMeta(db, key, 'pawsome', second.fetchFn, new Date('2026-10-30T18:00:00Z'));
-  const ranges = second.calls.filter((c) => c.url.pathname.endsWith('/insights')).map((c) => JSON.parse(c.url.searchParams.get('time_range')!));
-  expect(ranges).toEqual([{ since: '2026-09-28', until: '2026-10-30' }]);
+  const ranges = (level: string) => second.calls.filter((c) => c.url.searchParams.get('level') === level).map((c) => JSON.parse(c.url.searchParams.get('time_range')!));
+  expect(ranges('campaign')).toEqual([{ since: '2026-09-28', until: '2026-10-30' }]);
+  expect(ranges('ad')).toEqual(ranges('campaign'));
 });
 
 test('an expired token marks the integration as error and keeps demo data', async () => {
@@ -122,8 +164,9 @@ test('a USD ad account on a euro store: spend, purchase value and budgets are co
   const { db } = setup();
   db.prepare("UPDATE stores SET currency = 'EUR' WHERE id = 'pawsome'").run();
   db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-26', fetchedAt: new Date().toISOString(), rates: { EUR: 1, USD: 1.25 } }));
-  await syncMeta(db, key, 'pawsome', fakeGraph([insight('201', '2026-10-26', '60.00', '210.50')]).fetchFn, NOW);
+  await syncMeta(db, key, 'pawsome', fakeGraph([insight('201', '2026-10-26', '60.00', '210.50')], undefined, 'USD', 'America/Chicago', { rows: [adInsight('301', '201', '2026-10-26', '60.00', '210.50')] }).fetchFn, NOW);
   expect({ ...db.prepare("SELECT spend, revenue FROM campaign_daily WHERE campaign_id = '201' AND date = '2026-10-26'").get() }).toEqual({ spend: 48, revenue: 168.4 });
+  expect({ ...db.prepare("SELECT spend, revenue FROM ad_daily WHERE ad_id = '301' AND date = '2026-10-26'").get() }).toEqual({ spend: 48, revenue: 168.4 });
   expect(db.prepare("SELECT daily_budget AS b FROM campaigns WHERE id = '201'").get()?.b).toBe(48);
   expect(db.prepare("SELECT ad_spend AS s FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-26'").get()?.s).toBe(48);
 });

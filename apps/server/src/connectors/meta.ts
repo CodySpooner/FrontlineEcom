@@ -1,7 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, stateOf, switchToReal, syncView, stillAsSynced, syncedBudget, type CampaignChange } from './common';
+import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, saveAds, stateOf, switchToReal, syncView, stillAsSynced, syncedBudget, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
 export const META_API_VERSION = 'v24.0';
@@ -20,12 +20,25 @@ type Action = { action_type: string; value: string };
 interface InsightRow {
   campaign_id: string;
   campaign_name: string;
+  /** level=ad rows only. */
+  ad_id?: string;
+  ad_name?: string;
+  adset_id?: string;
   date_start: string;
   spend?: string;
   impressions?: string;
   clicks?: string;
   actions?: Action[];
   action_values?: Action[];
+}
+
+interface AdRow {
+  id: string;
+  name: string;
+  campaign_id: string;
+  adset_id?: string;
+  effective_status: string;
+  creative?: { body?: string };
 }
 
 interface CampaignRow {
@@ -95,17 +108,22 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
     if (money.zone) stateOf<string>(db, AD_ZONES).set(id, money.zone);
     const rateOn = cursor ? () => money.rate : await backfillRate(db, storeId, money.currency, money.rate, fetchFn);
     const campaigns = await edge<CampaignRow>(`${GRAPH}/${act}/campaigns?fields=id,name,effective_status,daily_budget&limit=200`, token, fetchFn);
+    const ads = await edge<AdRow>(`${GRAPH}/${act}/ads?fields=id,name,campaign_id,adset_id,effective_status,creative{body}&limit=200`, token, fetchFn);
+    // Campaign totals (the store's ad spend), then each ad's (KB-20).
     const rows: InsightRow[] = [];
+    const adRows: InsightRow[] = [];
     for (let since = start; since <= today; since = addDays(since, CHUNK_DAYS)) {
       const until = addDays(since, CHUNK_DAYS - 1) < today ? addDays(since, CHUNK_DAYS - 1) : today;
-      const params = new URLSearchParams({
-        level: 'campaign',
-        time_increment: '1',
-        time_range: JSON.stringify({ since, until }),
-        fields: 'campaign_id,campaign_name,spend,impressions,clicks,actions,action_values',
-        limit: '500',
-      });
-      rows.push(...(await edge<InsightRow>(`${GRAPH}/${act}/insights?${params}`, token, fetchFn)));
+      for (const [level, into] of [['campaign', rows], ['ad', adRows]] as const) {
+        const params = new URLSearchParams({
+          level,
+          time_increment: '1',
+          time_range: JSON.stringify({ since, until }),
+          fields: `campaign_id,campaign_name,${level === 'ad' ? 'ad_id,ad_name,adset_id,' : ''}spend,impressions,clicks,actions,action_values`,
+          limit: '500',
+        });
+        into.push(...(await edge<InsightRow>(`${GRAPH}/${act}/insights?${params}`, token, fetchFn)));
+      }
     }
 
     if (syncView(db, id) !== view) return;
@@ -135,6 +153,17 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       }
       if (!cursor) for (const d of pruneCampaigns(db, storeId, 'meta', [...campaigns.map((c) => c.id), ...rows.map((r) => r.campaign_id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);
+      saveAds(
+        db, storeId, 'meta',
+        ads.map((a) => ({ id: a.id, campaignId: a.campaign_id, groupId: a.adset_id, name: a.name, status: a.effective_status.toLowerCase(), copy: a.creative?.body })),
+        adRows.map((r) => {
+          const rate = rateOn(r.date_start);
+          return {
+            adId: r.ad_id!, campaignId: r.campaign_id, groupId: r.adset_id, name: r.ad_name, date: r.date_start, spend: cents(Number(r.spend ?? 0) * rate), revenue: cents(purchaseValue(r.action_values) * rate),
+            purchases: Math.round(purchaseValue(r.actions)), clicks: Number(r.clicks ?? 0), impressions: Number(r.impressions ?? 0),
+          };
+        }),
+      );
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
   } catch (e) {

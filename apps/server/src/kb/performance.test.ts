@@ -1,5 +1,5 @@
-import { createCard, ensureCategoryPath, getCard, learn, lift, listEvidence, updateCard, type Reading } from '@frontline/agents';
-import type { KbCard } from '@frontline/shared';
+import { createCard, ensureCategoryPath, getCard, learn, lift, listEvidence, saveCreative, updateCard, type Reading } from '@frontline/agents';
+import type { Creative, KbCard } from '@frontline/shared';
 import { beforeEach, describe, expect, test } from 'vitest';
 import { addDays } from '../dates';
 import { openDb, type Db } from '../db';
@@ -28,15 +28,27 @@ function real(syncedAt = `${today}T12:00:00Z`) {
 }
 
 type Ad = { spend: number; revenue: number; purchases: number; clicks?: number; impressions?: number; days?: number };
-/** A campaign's totals over `period`, spread over its first `days` days (all 28 by default). */
-function campaign(id: string, name: string, t: Ad, period: { from: string } = P[2], network = 'meta') {
-  db.prepare(`INSERT OR IGNORE INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES (?, ?, 'peak', ?, 'active', 50)`).run(network, id, name);
+/** `t` spread over the first `days` days of `period` (all 28 by default), whole counts each day. */
+function spread(t: Ad, period: { from: string }, row: (date: string, spend: number, revenue: number, purchases: number, clicks: number, impressions: number) => void) {
   const days = t.days ?? 28;
   const share = (n: number, i: number) => Math.floor((n * (i + 1)) / days) - Math.floor((n * i) / days);
-  for (let i = 0; i < days; i++)
-    db.prepare(`INSERT INTO campaign_daily (network, campaign_id, date, spend, revenue, purchases, clicks, impressions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(
-      network, id, addDays(period.from, i), t.spend / days, t.revenue / days, share(t.purchases, i), share(t.clicks ?? 1000, i), share(t.impressions ?? 50_000, i),
-    );
+  for (let i = 0; i < days; i++) row(addDays(period.from, i), t.spend / days, t.revenue / days, share(t.purchases, i), share(t.clicks ?? 1000, i), share(t.impressions ?? 50_000, i));
+}
+/** A campaign's totals over `period`. */
+function campaign(id: string, name: string, t: Ad, period: { from: string } = P[2], network = 'meta') {
+  db.prepare(`INSERT OR IGNORE INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES (?, ?, 'peak', ?, 'active', 50)`).run(network, id, name);
+  const day = db.prepare(`INSERT INTO campaign_daily (network, campaign_id, date, spend, revenue, purchases, clicks, impressions) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  spread(t, period, (...v) => day.run(network, id, ...v));
+}
+type Traits = Partial<Pick<Creative, 'format' | 'hook' | 'angle' | 'offer'>>;
+/** An ad's totals over P[2] in Meta campaign `campaign` (default c1), ad set `group` (default s1); `traits` = made from a library creative with them. */
+function ad(id: string, name: string, t: Ad, o: { group?: string | null; campaign?: string; traits?: Traits } = {}) {
+  const c = o.campaign ?? 'c1';
+  db.prepare(`INSERT OR IGNORE INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', ?, 'peak', ?, 'active', 50)`).run(c, `Campaign ${c}`);
+  const creative = o.traits && saveCreative(db, { storeId: 'peak', agentId: 'peak:creative_studio', kind: 'copy', headline: name, primaryText: name, credits: 0, source: 'agent', ...o.traits }).id;
+  db.prepare(`INSERT INTO ads (network, id, campaign_id, group_id, name, status, creative_id) VALUES ('meta', ?, ?, ?, ?, 'active', ?)`).run(id, c, o.group === undefined ? 's1' : o.group, name, creative ?? null);
+  const day = db.prepare(`INSERT INTO ad_daily (network, ad_id, date, spend, revenue, purchases, clicks, impressions) VALUES ('meta', ?, ?, ?, ?, ?, ?, ?)`);
+  spread(t, P[2], (...v) => day.run(id, ...v));
 }
 const DOG = { spend: 2800, revenue: 8400, purchases: 60 }; // ROAS 3
 const BROAD = { spend: 2800, revenue: 4200, purchases: 60 }; // ROAS 1.5
@@ -311,8 +323,109 @@ describe('performance learning', () => {
     });
   });
 
+  describe('ads and creatives (KB-20)', () => {
+    const CAR_UP = `The "Car hook" ad (Meta): ROAS above the other ads in its ad set`;
+    const STUDIO_DOWN = `The "Studio" ad (Meta): ROAS below the other ads in its ad set`;
+
+    test('an ad that beats the other ads in its ad set is a lesson, measured: same audience, same days', () => {
+      real();
+      ad('a1', 'Car hook', DOG);
+      ad('a2', 'Studio', BROAD);
+      ad('a3', 'Other people', DOG, { group: 's2' }); // against the campaign's 2.25: inside the noise; not in their baseline
+      learnFromPerformance(db, today);
+      expect(lessons().map(brief)).toEqual([
+        [CAR_UP, 'tested', 'measured'],
+        [STUDIO_DOWN, 'tested', 'measured'],
+      ]);
+      expect(lesson(CAR_UP)).toMatchObject({ path: ['Creative', 'Ad results'] });
+      // Ads aren't campaigns: the campaign has no campaign_daily of its own.
+      expect(observations()).toBe(6);
+    });
+
+    test('ads in different ad sets of a campaign reach different people: compared, as a Hypothesis', () => {
+      real();
+      ad('a1', 'Car hook', DOG, { group: 's1' });
+      ad('a2', 'Studio', BROAD, { group: 's2' });
+      learnFromPerformance(db, today);
+      expect(lessons().map(brief)).toEqual([
+        [`The "Car hook" ad (Meta): ROAS above the other ads in its campaign`, 'hypothesis', 'observed'],
+        [`The "Studio" ad (Meta): ROAS below the other ads in its campaign`, 'hypothesis', 'observed'],
+      ]);
+      expect(listEvidence(db, lessons()[0]!.id)[0]!.text).toMatch(/Not conclusive: they run in different ad sets, so to different people\.$/);
+    });
+
+    test('ads are compared within their own campaign only', () => {
+      real();
+      ad('a1', 'Car hook', DOG, { campaign: 'c1' });
+      ad('a2', 'Studio', BROAD, { campaign: 'c2' });
+      learnFromPerformance(db, today);
+      expect(lessons()).toEqual([]);
+    });
+
+    const guards: [string, () => void, (string | undefined)[][]][] = [
+      ['an ad that ran 6 days is left out', () => ad('a2', 'Studio', { ...BROAD, days: 6 }), []],
+      ['an ad under 5% of its campaign\'s spend is left out', () => (ad('a2', 'Studio', BROAD), ad('a3', 'Tiny', { spend: 290, revenue: 290, purchases: 12 })), [[CAR_UP, 'tested', 'measured'], [STUDIO_DOWN, 'tested', 'measured']]],
+      ['an ad that ran 20 days: a Hypothesis', () => ad('a2', 'Studio', { ...BROAD, days: 20 }), [[CAR_UP, 'hypothesis', 'observed'], [STUDIO_DOWN, 'hypothesis', 'observed']]],
+      ['9 purchases', () => ad('a2', 'Studio', { ...BROAD, revenue: 630, purchases: 9 }), []],
+      [
+        'its campaign changed in the period: a Hypothesis',
+        () => (
+          ad('a2', 'Studio', BROAD),
+          db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at, decided_at) VALUES ('b1', 'peak', 'peak:ad_strategist', 'Raise', 'r', ?, 'approved', ?2, ?2)`)
+            .run(JSON.stringify({ kind: 'ads.set_budget', payload: { network: 'meta', campaignId: 'c1', from: 50, to: 80 } }), '2026-08-20T15:00:00Z')
+        ),
+        [[CAR_UP, 'hypothesis', 'observed'], [STUDIO_DOWN, 'hypothesis', 'observed']],
+      ],
+      [
+        'an approved change to another campaign changes nothing here',
+        () => (
+          ad('a2', 'Studio', BROAD),
+          db.prepare(`INSERT INTO approvals (id, store_id, agent_id, title, reason, action_json, status, created_at, decided_at) VALUES ('b1', 'peak', 'peak:ad_strategist', 'Raise', 'r', ?, 'approved', ?2, ?2)`)
+            .run(JSON.stringify({ kind: 'ads.set_budget', payload: { network: 'meta', campaignId: 'c9', from: 50, to: 80 } }), '2026-08-20T15:00:00Z')
+        ),
+        [[CAR_UP, 'tested', 'measured'], [STUDIO_DOWN, 'tested', 'measured']],
+      ],
+      [
+        "an ad's share is of its own campaign's spend",
+        () => (ad('a2', 'Studio', BROAD), ad('b1', 'Big', { spend: 200_000, revenue: 400_000, purchases: 4000 }, { campaign: 'c2' })),
+        [[CAR_UP, 'tested', 'measured'], [STUDIO_DOWN, 'tested', 'measured']],
+      ],
+      [
+        "two ads with no known ad set aren't taken to share one",
+        () => (db.prepare(`UPDATE ads SET group_id = NULL`).run(), ad('a2', 'Studio', BROAD, { group: null })),
+        [[`The "Car hook" ad (Meta): ROAS above the other ads in its campaign`, 'hypothesis', 'observed'], [`The "Studio" ad (Meta): ROAS below the other ads in its campaign`, 'hypothesis', 'observed']],
+      ],
+    ];
+    test.each(guards)('guard: %s', (_, more, expected) => {
+      real();
+      ad('a1', 'Car hook', DOG);
+      more();
+      learnFromPerformance(db, today);
+      expect(lessons().map(brief)).toEqual(expected);
+    });
+
+    test("a creative trait against the store's other library ads with another: always a Hypothesis, as the ads differ in more than it", () => {
+      real();
+      ad('a1', 'Car hook', DOG, { traits: { hook: 'Problem-first', format: 'ugc' } });
+      ad('a2', 'Studio', BROAD, { traits: { hook: 'question', format: 'ugc' } });
+      ad('a3', 'Not from the library', BROAD);
+      learnFromPerformance(db, today);
+      const traits = lessons().filter((c) => c.title.startsWith('Ads whose'));
+      // Both are ugc: no format to compare. The ad not made from the library has no traits.
+      expect(traits.map(brief)).toEqual([
+        [`Ads whose hook is "problem-first" (Meta): ROAS above the store's other Meta ads from the library`, 'hypothesis', 'observed'],
+        [`Ads whose hook is "question" (Meta): ROAS below the store's other Meta ads from the library`, 'hypothesis', 'observed'],
+      ]);
+      expect(traits[0]).toMatchObject({ path: ['Creative', 'Creative results'] });
+      expect(listEvidence(db, traits[0]!.id)[0]!.text).toMatch(/Not conclusive: they differ in more than their hook: product, audience and the rest of the ad\.$/);
+    });
+  });
+
   test("what each store learns from, and what isn't enabled", () => {
-    const off = "Ad and creative results: only campaign totals sync, so no lesson is about one ad, hook or creative yet";
+    const off = [
+      'Ad results: none synced yet (ads sync with their Meta, Google or TikTok Ads campaigns)',
+      'Creative traits: no synced ad was made from a library creative with its format, hook, angle or offer noted',
+    ];
     expect(performanceStatus(db, 'peak')).toEqual({ storeId: 'peak', demo: true, on: [], off: [], lessons: 0 });
     real();
     campaign('dog', 'Dog car', DOG);
@@ -322,8 +435,15 @@ describe('performance learning', () => {
       storeId: 'peak',
       demo: false,
       on: ['Campaign results: ROAS and click-through rate'],
-      off: ["Conversion rate: no sessions synced yet (GA4, or the platform's analytics)", 'Order value and refunds: no orders synced yet', 'Product sales: no order lines synced yet', off],
+      off: ["Conversion rate: no sessions synced yet (GA4, or the platform's analytics)", 'Order value and refunds: no orders synced yet', 'Product sales: no order lines synced yet', ...off],
       lessons: 2,
     });
+    ad('a0', 'Never ran', { ...DOG, days: 0 });
+    expect(performanceStatus(db, 'peak').off).toContain(off[0]);
+    ad('a1', 'Car hook', DOG, { traits: {} });
+    expect(performanceStatus(db, 'peak').on.at(-1)).toBe('Ad results: each ad against the others in its ad set');
+    expect(performanceStatus(db, 'peak').off.at(-1)).toBe(off[1]);
+    ad('a2', 'Studio', BROAD, { traits: { offer: 'free shipping' } });
+    expect(performanceStatus(db, 'peak').on.at(-1)).toBe('Creative traits: format, hook, angle and offer of ads made from library creatives');
   });
 });

@@ -597,6 +597,7 @@ export const APP_TOOLS: AppTool[] = [
       csv(
         listCreatives(ctx.db, { storeIds: [ctx.store.id], ...(kind ? { kind } : {}), limit }).map((c) => ({
           id: c.id, created: c.createdAt.slice(0, 10), kind: c.kind, aspect: c.aspect ?? '', headline: c.headline, primary_text: c.primaryText, cta: c.cta ?? '',
+          format: c.format ?? '', hook: c.hook ?? '', angle: c.angle ?? '', length_s: c.lengthS ?? '', offer: c.offer ?? '',
           // ponytail: demo renders are data: URLs; the owner previews media in the app, agents only need to know it exists.
           media: c.mediaUrl ? c.source : 'none',
         })),
@@ -614,9 +615,15 @@ export const APP_TOOLS: AppTool[] = [
       cta: z.string().max(30).optional(),
       prompt: z.string().max(1000).optional().describe('visual brief for media kinds: subject, setting, style, motion, hook in the first second'),
       aspect: z.enum(['1:1', '4:5', '9:16', '16:9']).default('1:1'),
+      // What the ad is (KB-20): short labels, the same words for the same thing, so its results can be compared by them.
+      format: z.string().max(40).optional().describe('e.g. ugc, demo, testimonial, before-after, static'),
+      hook: z.string().max(60).optional().describe('its opening, e.g. problem-first, question, social proof, offer-first'),
+      angle: z.string().max(60).optional().describe('the reason to buy it leads with, e.g. saves time, gift, price'),
+      lengthS: z.number().int().min(1).max(600).optional().describe('video length in seconds'),
+      offer: z.string().max(60).optional().describe('e.g. 20% off, free shipping; leave out when there is none'),
     },
-    run: async ({ kind, headline, primaryText, cta, prompt, aspect }, ctx) => {
-      const base = { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), kind, headline, primaryText, ...(cta ? { cta } : {}) };
+    run: async ({ kind, headline, primaryText, cta, prompt, aspect, ...traits }, ctx) => {
+      const base = { storeId: ctx.store.id, agentId: ctx.agent.id, ...(ctx.runId ? { runId: ctx.runId } : {}), kind, headline, primaryText, ...(cta ? { cta } : {}), ...traits };
       if (kind === 'copy') return `Saved ad copy to the library (${saveCreative(ctx.db, { ...base, credits: 0, source: 'agent' }).id}).`;
       if (!prompt) return 'Not generated: media needs a prompt (the visual brief).';
       // Without Higgsfield the render is a demo picture: on a live store that's credits for an ad nobody can run.

@@ -560,7 +560,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
     reusable observation → insight path, not separate memories per agent;
   - when nothing is connected, an integration-ready state that names what isn't enabled.
   - Tests on every guard and on the math.
-- [ ] KB-20 **Ad-level and creative data:**
+- [x] KB-20 **Ad-level and creative data:**
   - extend the Meta / TikTok / Google syncs to ad level, in new tables (never double-count `rebuildAdSpend`);
   - descriptive attributes on creatives (format, hook, angle, length, offer);
   - link a creative to its ad when it's launched through the app.
@@ -638,6 +638,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-17 follow-up: "Use in a task" on a card is switched on. It opens Ask AI with "Use [kb:id] to " for the owner to finish, offered only to the card's own store (a General card's to every store in view). A card named that way reaches the agent first, whether or not it shares a word with the task, and the owner's message in Chat shows the card's title as a link.
 - 2026-10-27 KB-18 Promote to General: "Promote to General" on a store card asks the agent that wrote it (else the Market Analyst) to rewrite it for any store, and any agent can propose one itself. The draft comes back on the card, word by word against the original, and in the Research Center's discoveries. The owner approves it, edits it first, or keeps it in the store. Approved, it's a General card in the same category, starting as a Hypothesis, Derived From the store card. A card found on its own in two or more live stores is offered once, drafted from the strongest of them. In demo mode the draft only takes the store's name out.
 - 2026-10-27 KB-19 Performance pipeline: every hour, each real store's settled 28-day periods are read against a baseline: each campaign against the store's other campaigns on its network (ROAS, click-through rate), the store against its own 12 weeks before (conversion rate, order value, refund rate), and each product against its 4 weeks before, adjusted for the store's trend (unit sales). A difference outside the noise becomes a Performance Lesson with a 95% range, or evidence on the lesson it made before. It counts as measured when nothing else differed; otherwise it's a Hypothesis that names what did. A measured reading the other way moves the lesson down and opens a conflict. Approved changes' outcomes are now evidence on the store cards their run cited. The Research Center says what each store learns from and what isn't enabled. Demo stores learn nothing from demo numbers.
+- 2026-10-27 KB-20 Ad-level and creative data: Meta, Google and TikTok Ads now also sync each ad's days, with its ad set or ad group and its text, alongside the campaign totals; the store's ad spend still comes from the campaigns only. An ad whose text holds a library creative's primary text is linked to that creative. Agents describe a creative's format, hook, angle, length and offer, and the Creative Studio preview shows them. Performance learning now reads each ad against the other ads in its ad set (measured), and each creative trait against the store's other library ads with a different one (always a Hypothesis). The Research Center says when ad results and creative traits are on.
 
 ## Blocked
 
@@ -862,3 +863,28 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   tests (createCard already runs the suggester, so the extra call was removed), web 5 of 5. Found while checking 390
   px, not from this change: the Knowledge view switcher (Artboard … Research Center) and the Research Center column
   tabs stick out about 45 px past the viewport, so the page scrolls sideways.
+- 2026-10-27 KB-20: migration 47 adds `ads` (network, id, campaign_id, group_id = ad set / ad group, name, status,
+  copy, creative_id → creatives ON DELETE SET NULL; cascades from campaigns) and `ad_daily` (the campaign_daily
+  columns per ad), plus creatives.format / hook / angle / length_s / offer. `saveAds` in connectors/common.ts writes
+  both inside each sync's transaction, after `rebuildAdSpend`, which still sums campaign_daily only. An ad known only
+  from its results gets an 'archived' row by its reported name; an unknown campaign gets one too (a campaign made
+  between two queries must not fail the sync's foreign keys). What each network is asked:
+  - Meta: `/ads` (adset_id, effective_status, creative{body}) and insights at `level=ad` in the same chunks and
+    attribution window as the campaign pull;
+  - Google: `FROM ad_group_ad` with ad_group.id; text = responsive search ad descriptions (Performance Max has asset
+    groups, not ads, so its ads aren't seen);
+  - TikTok: AUCTION_AD reports with campaign_id, adgroup_id and ad_name as attribute metrics, and `/ad/get/`
+    (ad_text).
+  "Launched through the app" has no launch flow to hook into (the app's only ad actions are budgets and pauses), so
+  the link is made at sync time instead: an unlinked ad whose text contains a library creative's primary text
+  (case and spacing aside, 20+ characters, the longest wins) is linked to it. An ad reworded when it was set up stays
+  unlinked. When the app gets an ad-launch action, it should write `ads.creative_id` directly.
+  Performance (`adReadings`): ads that ran 7+ days on 5%+ of their campaign's spend. Each ad is read against the other
+  ads in its ad set (same people, budget and days: measured unless notes); with none there, against the rest of its
+  campaign with the confound "they run in different ad sets, so to different people". Two ads with no known ad set
+  aren't taken to share one. An approved ads.* change to the campaign in the period is a confound. Each trait value
+  (format, hook, angle, offer, lowercased) of library-linked ads is read against the network's library ads with a
+  different value, always confounded ("they differ in more than their hook: …"). Length isn't compared yet (needs
+  buckets). `ratios()` now holds the ROAS/CTR reading code that campaign, ad and trait readings share. Mutation sweep:
+  46 of 46 killed after 5 new tests. Not checked against live accounts: field names follow each API's docs, and the
+  fixtures are written from them.

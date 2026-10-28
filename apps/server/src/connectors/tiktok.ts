@@ -4,7 +4,7 @@ import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { logAction } from '../actions';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange, stillAsSynced, syncedBudget, syncedPrice } from './common';
+import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, saveAds, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange, stillAsSynced, syncedBudget, syncedPrice } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
 const ADS_API = 'https://business-api.tiktok.com/open_api/v1.3';
@@ -28,6 +28,21 @@ interface CampaignRow {
 interface ReportRow {
   dimensions: { campaign_id: string; stat_time_day: string };
   metrics: Record<string, string>;
+}
+
+/** AUCTION_AD: campaign_id, adgroup_id and ad_name come as attribute metrics. */
+interface AdReportRow {
+  dimensions: { ad_id: string; stat_time_day: string };
+  metrics: Record<string, string>;
+}
+
+interface AdListRow {
+  ad_id: string;
+  ad_name: string;
+  campaign_id: string;
+  adgroup_id?: string;
+  operation_status: string;
+  ad_text?: string;
 }
 
 /** GETs every page of an Ads endpoint. TikTok answers HTTP 200 with a non-zero `code` on errors. */
@@ -69,27 +84,34 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
     const cursor = db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
     const start = cursor ? addDays(cursor, -ATTRIBUTION_DAYS) : addDays(today, 1 - BACKFILL_DAYS);
 
-    const rows: ReportRow[] = [];
-    for (let from = start; from <= today; from = addDays(from, CHUNK_DAYS)) {
-      const to = addDays(from, CHUNK_DAYS - 1) < today ? addDays(from, CHUNK_DAYS - 1) : today;
-      rows.push(
-        ...(await pages<ReportRow>(
-          '/report/integrated/get/',
-          {
-            advertiser_id: advertiser,
-            report_type: 'BASIC',
-            data_level: 'AUCTION_CAMPAIGN',
-            dimensions: JSON.stringify(['campaign_id', 'stat_time_day']),
-            // ponytail: purchase value = complete_payment_roas × spend; the direct "total value" metric is ambiguously named in TikTok's docs
-            metrics: JSON.stringify(['spend', 'impressions', 'clicks', 'complete_payment', 'complete_payment_roas']),
-            start_date: from,
-            end_date: to,
-          },
-          token,
-          fetchFn,
-        )),
-      );
-    }
+    const report = async <T>(data_level: string, dimensions: string[], extra: string[] = []) => {
+      const out: T[] = [];
+      for (let from = start; from <= today; from = addDays(from, CHUNK_DAYS)) {
+        const to = addDays(from, CHUNK_DAYS - 1) < today ? addDays(from, CHUNK_DAYS - 1) : today;
+        out.push(
+          ...(await pages<T>(
+            '/report/integrated/get/',
+            {
+              advertiser_id: advertiser,
+              report_type: 'BASIC',
+              data_level,
+              dimensions: JSON.stringify(dimensions),
+              // ponytail: purchase value = complete_payment_roas × spend; the direct "total value" metric is ambiguously named in TikTok's docs
+              metrics: JSON.stringify([...extra, 'spend', 'impressions', 'clicks', 'complete_payment', 'complete_payment_roas']),
+              start_date: from,
+              end_date: to,
+            },
+            token,
+            fetchFn,
+          )),
+        );
+      }
+      return out;
+    };
+    const rows = await report<ReportRow>('AUCTION_CAMPAIGN', ['campaign_id', 'stat_time_day']);
+    // Each ad's days and its text (KB-20).
+    const adRows = await report<AdReportRow>('AUCTION_AD', ['ad_id', 'stat_time_day'], ['campaign_id', 'adgroup_id', 'ad_name']);
+    const ads = await pages<AdListRow>('/ad/get/', { advertiser_id: advertiser, fields: JSON.stringify(['ad_id', 'ad_name', 'campaign_id', 'adgroup_id', 'operation_status', 'ad_text']) }, token, fetchFn);
     const campaigns = await pages<CampaignRow>('/campaign/get/', { advertiser_id: advertiser }, token, fetchFn);
     const { currency, zone } = await advertiserInfo(advertiser, token, fetchFn);
     if (zone) stateOf<string>(db, AD_ZONES).set(id, zone);
@@ -124,6 +146,18 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
       }
       if (!cursor) for (const d of pruneCampaigns(db, storeId, 'tiktok', [...campaigns.map((c) => c.campaign_id), ...rows.map((r) => r.dimensions.campaign_id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);
+      saveAds(
+        db, storeId, 'tiktok',
+        ads.map((a) => ({ id: a.ad_id, campaignId: a.campaign_id, groupId: a.adgroup_id, name: a.ad_name, status: a.operation_status === 'ENABLE' ? 'active' : 'paused', ...(a.ad_text ? { copy: a.ad_text } : {}) })),
+        adRows.map(({ dimensions: d, metrics: m }) => {
+          const date = d.stat_time_day.slice(0, 10);
+          const k = rateOn(date);
+          return {
+            adId: d.ad_id, campaignId: m.campaign_id!, groupId: m.adgroup_id, name: m.ad_name, date, spend: cents(n(m.spend) * k), revenue: cents(n(m.complete_payment_roas) * n(m.spend) * k),
+            purchases: n(m.complete_payment), clicks: n(m.clicks), impressions: n(m.impressions),
+          };
+        }),
+      );
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
   } catch (e) {

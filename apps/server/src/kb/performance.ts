@@ -6,8 +6,8 @@ import { newSince, productSales, restTrend, storeDay, storeFunnel, synced } from
 import { listStores } from '../stores';
 
 // Performance learning (knowledge-base lane, KB-19, decision 13). Each real store's settled 28-day periods are read
-// against baselines: campaign by campaign, the store's funnel, product by product. learn() in packages/agents turns
-// the readings into lessons. Ads are campaign totals only, so no lesson is about one ad or creative (KB-20).
+// against baselines: campaign by campaign, ad by ad and creative trait by trait (KB-20), the store's funnel, product by
+// product. learn() in packages/agents turns the readings into lessons.
 
 type Period = { from: string; to: string };
 
@@ -20,7 +20,9 @@ const MIN = { days: 7, spendShare: 0.05, purchases: 10, clicks: 10, impressions:
 /** A campaign that ran fewer days than this isn't compared like for like: its days and the others' differ. */
 const FULL = 21;
 const NETWORK: Record<string, string> = { meta: 'Meta', google: 'Google', tiktok: 'TikTok' };
-const CREATIVE = 'Ad and creative results: only campaign totals sync, so no lesson is about one ad, hook or creative yet';
+/** What each network calls the set of ads shown to the same people. */
+const GROUP: Record<string, string> = { meta: 'ad set', google: 'ad group', tiktok: 'ad group' };
+const TRAITS = ['format', 'hook', 'angle', 'offer'] as const;
 
 const pct2 = (v: number) => `${(v * 100).toFixed(2)}%`;
 const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000);
@@ -40,7 +42,7 @@ export function learnFromPerformance(db: Db, today?: string) {
     if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(s.id)?.demo) continue;
     for (const p of settledPeriods(today ?? storeDay(db, s.id))) {
       if (!synced(db, s.id, addDays(p.to, SETTLE)) || !once(db, `kb-perf:${s.id}:${p.from}`)) continue;
-      for (const r of [...campaignReadings(db, s.id, p), ...storeReadings(db, s.id, s.currency, p), ...productReadings(db, s.id, p)]) learn(db, r);
+      for (const r of [...campaignReadings(db, s.id, p), ...adReadings(db, s.id, p), ...storeReadings(db, s.id, s.currency, p), ...productReadings(db, s.id, p)]) learn(db, r);
     }
   }
 }
@@ -61,10 +63,7 @@ function campaignReadings(db: Db, storeId: string, p: Period): Reading[] {
     )
     .all(storeId, p.from, p.to);
   const spent = rows.reduce((n, r) => n + Number(r.spend), 0);
-  const changed = db.prepare(
-    `SELECT min(substr(decided_at, 1, 10)) AS day FROM approvals WHERE store_id = ? AND status = 'approved' AND json_extract(action_json, '$.kind') LIKE 'ads.%'
-       AND json_extract(action_json, '$.payload.campaignId') = ? AND substr(decided_at, 1, 10) BETWEEN ? AND ?`,
-  );
+  const changed = changedOn(db);
   const ads = rows
     .filter((r) => Number(r.days) >= MIN.days && Number(r.spend) >= MIN.spendShare * spent)
     .map((r) => {
@@ -79,24 +78,104 @@ function campaignReadings(db: Db, storeId: string, p: Period): Reading[] {
     if (!base.length) return [];
     const t = sums(base);
     const network = NETWORK[a.network] ?? a.network;
-    const common = {
-      storeId, subject: `campaign:${a.network}:${a.id}`, name: `The "${a.name}" campaign (${network})`,
-      vs: peers.length ? `the store's other ${network} campaigns` : "the store's campaigns on other networks", from: p.from, to: p.to,
-      confounds: [...[a, ...base].flatMap((b) => b.notes), ...(peers.length ? [] : ['networks count purchases their own way'])], path: ['Advertising', 'Campaign results'],
-    };
-    const ref = (metric: string) => `perf:${storeId}:${common.subject}:${metric}:${p.from}`;
-    const out: Reading[] = [];
-    if (a.purchases >= MIN.purchases && t.purchases >= MIN.purchases)
-      out.push({ ...common, ref: ref('roas'), metric: 'roas', label: 'ROAS', value: a.revenue / a.spend, baseline: t.revenue / t.spend, k: a.purchases, kBase: t.purchases, n: a.purchases, unit: 'purchases', show: (v) => v.toFixed(2) });
-    if (Math.min(a.impressions, t.impressions) >= MIN.impressions && Math.min(a.clicks, t.clicks) >= MIN.clicks)
-      out.push({ ...common, ref: ref('ctr'), metric: 'ctr', label: 'click-through rate', value: a.clicks / a.impressions, baseline: t.clicks / t.impressions, k: a.clicks, kBase: t.clicks, n: a.impressions, unit: 'impressions', show: pct2 });
-    return out;
+    return ratios(
+      {
+        storeId, subject: `campaign:${a.network}:${a.id}`, name: `The "${a.name}" campaign (${network})`,
+        vs: peers.length ? `the store's other ${network} campaigns` : "the store's campaigns on other networks", from: p.from, to: p.to,
+        confounds: [...[a, ...base].flatMap((b) => b.notes), ...(peers.length ? [] : ['networks count purchases their own way'])], path: ['Advertising', 'Campaign results'],
+      },
+      a,
+      t,
+    );
   });
 }
+
+/**
+ * Each ad against the other ads in its ad set (ad group): the same people, budget and days, so the difference is the
+ * ad's. With none there, against the rest of its campaign, a Hypothesis. Ads on 5%+ of their campaign's spend only. Then
+ * each creative trait of the ads made from library creatives (KB-20) against the store's other library ads on the
+ * network with another: always a Hypothesis, as two ads differ in more than one trait.
+ */
+function adReadings(db: Db, storeId: string, p: Period): Reading[] {
+  const rows = db
+    .prepare(
+      `SELECT a.network, a.id, a.name, a.campaign_id, a.group_id, cr.format, cr.hook, cr.angle, cr.offer, sum(d.spend) AS spend, sum(d.revenue) AS revenue,
+         sum(d.purchases) AS purchases, sum(d.clicks) AS clicks, sum(d.impressions) AS impressions, count(CASE WHEN d.spend > 0 THEN 1 END) AS days
+       FROM ads a JOIN campaigns c ON c.network = a.network AND c.id = a.campaign_id JOIN ad_daily d ON d.network = a.network AND d.ad_id = a.id
+         LEFT JOIN creatives cr ON cr.id = a.creative_id
+       WHERE c.store_id = ? AND d.date BETWEEN ? AND ? GROUP BY a.network, a.id`,
+    )
+    .all(storeId, p.from, p.to);
+  const changed = changedOn(db);
+  const spent = (r: Record<string, unknown>) => rows.filter((b) => b.network === r.network && b.campaign_id === r.campaign_id).reduce((n, b) => n + Number(b.spend), 0);
+  const ads = rows
+    .filter((r) => Number(r.days) >= MIN.days && Number(r.spend) >= MIN.spendShare * spent(r))
+    .map((r) => {
+      const [name, days] = [String(r.name).slice(0, 60), Number(r.days)];
+      const notes = days < FULL ? [`"${name}" ran ${days} of ${PERIOD} days`] : [];
+      const traits = Object.fromEntries(TRAITS.map((k) => [k, r[k] == null ? undefined : String(r[k]).trim().toLowerCase()]));
+      return { network: String(r.network), id: String(r.id), name, campaign: String(r.campaign_id), group: r.group_id == null ? null : String(r.group_id), notes, traits, ...sums([r]) };
+    });
+  const out = ads.flatMap((a) => {
+    const campaign = ads.filter((b) => b !== a && b.network === a.network && b.campaign === a.campaign);
+    const peers = campaign.filter((b) => a.group !== null && b.group === a.group);
+    const base = peers.length ? peers : campaign;
+    const group = GROUP[a.network] ?? 'ad group';
+    const day = changed.get(storeId, a.campaign, p.from, p.to)?.day;
+    return ratios(
+      {
+        storeId, subject: `ad:${a.network}:${a.id}`, name: `The "${a.name}" ad (${NETWORK[a.network] ?? a.network})`, vs: `the other ads in its ${peers.length ? group : 'campaign'}`,
+        from: p.from, to: p.to,
+        confounds: [...[a, ...base].flatMap((b) => b.notes), ...(day ? [`the campaign was changed on ${day}`] : []), ...(peers.length ? [] : [`they run in different ${group}s, so to different people`])],
+        path: ['Creative', 'Ad results'],
+      },
+      a,
+      sums(base),
+    );
+  });
+  for (const trait of TRAITS) {
+    for (const [network, value] of [...new Set(ads.flatMap((a) => (a.traits[trait] ? [`${a.network}\n${a.traits[trait]}`] : [])))].map((k) => k.split('\n'))) {
+      const own = ads.filter((a) => a.network === network && a.traits[trait] === value);
+      const base = ads.filter((a) => a.network === network && a.traits[trait] && a.traits[trait] !== value);
+      const name = NETWORK[network!] ?? network;
+      out.push(
+        ...ratios(
+          {
+            storeId, subject: `trait:${network}:${trait}:${value}`, name: `Ads whose ${trait} is "${value!.slice(0, 40)}" (${name})`, vs: `the store's other ${name} ads from the library`,
+            from: p.from, to: p.to, confounds: [`they differ in more than their ${trait}: product, audience and the rest of the ad`], path: ['Creative', 'Creative results'],
+          },
+          sums(own),
+          sums(base),
+        ),
+      );
+    }
+  }
+  return out;
+}
+
+type Sums = ReturnType<typeof sums>;
 const sums = (rows: Record<string, unknown>[]) => {
   const sum = (k: string) => rows.reduce((n, r) => n + Number(r[k]), 0);
   return { spend: sum('spend'), revenue: sum('revenue'), purchases: sum('purchases'), clicks: sum('clicks'), impressions: sum('impressions') };
 };
+
+/** ROAS and click-through rate of `a` against `t`, each where both sides have enough to read. */
+function ratios(common: Pick<Reading, 'storeId' | 'subject' | 'name' | 'vs' | 'from' | 'to' | 'confounds' | 'path'>, a: Sums, t: Sums): Reading[] {
+  const ref = (metric: string) => `perf:${common.storeId}:${common.subject}:${metric}:${common.from}`;
+  const out: Reading[] = [];
+  if (a.purchases >= MIN.purchases && t.purchases >= MIN.purchases)
+    out.push({ ...common, ref: ref('roas'), metric: 'roas', label: 'ROAS', value: a.revenue / a.spend, baseline: t.revenue / t.spend, k: a.purchases, kBase: t.purchases, n: a.purchases, unit: 'purchases', show: (v) => v.toFixed(2) });
+  if (Math.min(a.impressions, t.impressions) >= MIN.impressions && Math.min(a.clicks, t.clicks) >= MIN.clicks)
+    out.push({ ...common, ref: ref('ctr'), metric: 'ctr', label: 'click-through rate', value: a.clicks / a.impressions, baseline: t.clicks / t.impressions, k: a.clicks, kBase: t.clicks, n: a.impressions, unit: 'impressions', show: pct2 });
+  return out;
+}
+
+/** The first day in a period an approved ads.* request changed a campaign. */
+const changedOn = (db: Db) =>
+  db.prepare(
+    `SELECT min(substr(decided_at, 1, 10)) AS day FROM approvals WHERE store_id = ? AND status = 'approved' AND json_extract(action_json, '$.kind') LIKE 'ads.%'
+       AND json_extract(action_json, '$.payload.campaignId') = ? AND substr(decided_at, 1, 10) BETWEEN ? AND ?`,
+  );
 
 /**
  * The store's conversion rate, average order value and refund rate against its own 12 weeks before. Season, promotions
@@ -177,8 +256,19 @@ export function performanceStatus(db: Db, storeId: string): KbPerformance {
     [has('SELECT 1 FROM daily_metrics WHERE store_id = ? AND sessions > 0 LIMIT 1'), 'Conversion rate', "Conversion rate: no sessions synced yet (GA4, or the platform's analytics)"],
     [has('SELECT 1 FROM orders WHERE store_id = ? LIMIT 1'), 'Order value and refunds', 'Order value and refunds: no orders synced yet'],
     [has('SELECT 1 FROM order_items WHERE store_id = ? LIMIT 1'), 'Product sales', 'Product sales: no order lines synced yet'],
+    [
+      has(`SELECT 1 FROM ads a JOIN campaigns c ON c.network = a.network AND c.id = a.campaign_id JOIN ad_daily d ON d.network = a.network AND d.ad_id = a.id WHERE c.store_id = ? LIMIT 1`),
+      'Ad results: each ad against the others in its ad set',
+      'Ad results: none synced yet (ads sync with their Meta, Google or TikTok Ads campaigns)',
+    ],
+    [
+      has(`SELECT 1 FROM ads a JOIN campaigns c ON c.network = a.network AND c.id = a.campaign_id JOIN creatives cr ON cr.id = a.creative_id
+           WHERE c.store_id = ? AND coalesce(cr.format, cr.hook, cr.angle, cr.offer) IS NOT NULL LIMIT 1`),
+      'Creative traits: format, hook, angle and offer of ads made from library creatives',
+      'Creative traits: no synced ad was made from a library creative with its format, hook, angle or offer noted',
+    ],
   ];
-  return { storeId, demo, on: parts.filter((x) => x[0]).map((x) => x[1]), off: [...parts.filter((x) => !x[0]).map((x) => x[2]), CREATIVE], lessons };
+  return { storeId, demo, on: parts.filter((x) => x[0]).map((x) => x[1]), off: parts.filter((x) => !x[0]).map((x) => x[2]), lessons };
 }
 
 /** The hourly read, while the app runs. */
