@@ -347,6 +347,9 @@ export function codexEngine(opts: CodexEngineOptions): Engine {
         '-c', `web_search=${web ? '"live"' : '"disabled"'}`,
         ...ISOLATION,
         ...(ctx ? ['-c', `mcp_servers.frontline.url=${toml(opts.mcpUrl())}`, '-c', `mcp_servers.frontline.bearer_token_env_var="${TOKEN_VAR}"`, '-c', 'mcp_servers.frontline.tool_timeout_sec=86400'] : []),
+        // The app's tools ask the owner themselves (approvals, ask_owner). Codex's own gate would ask too, and under
+        // approval "never" it refuses every tool without readOnlyHint (mcp_tool_call.rs, 0.163.0), so it is off for them.
+        ...(ctx ? ['-c', 'mcp_servers.frontline.default_tools_approval_mode="approve"'] : []),
       ];
       const c = (child = spawnCodex(['exec', ...(input.resume ? ['resume', ...flags, input.resume] : flags), '-'], { home: opts.home, cwd: codexWork(input.store.id, opts.workRoot), ...(ctx ? { token } : {}), ...(opts.spawn ? { spawn: opts.spawn } : {}) }));
       input.signal?.addEventListener('abort', () => killTree(c), { once: true });

@@ -60,14 +60,15 @@ export function fakeCodex(script: (child: FakeCodexChild) => unknown) {
 }
 
 /**
- * One exec turn built from the event types (exec_events.rs, sdk/typescript events.ts and items.ts) and
- * event_processor_with_jsonl_output.rs, at codex-cli 0.163.0. Every line is 'from source' until AA-25b records a turn.
+ * One exec turn at codex-cli 0.163.0. The first four lines are 'recorded' from AA-25b's live turn (2026-10-28), which was
+ * stopped while its ask_owner question waited. The rest are 'from source', built from the event types (exec_events.rs,
+ * sdk/typescript events.ts and items.ts) and event_processor_with_jsonl_output.rs.
  */
 export const CODEX_TURN: { from: 'source' | 'recorded'; line: object }[] = [
-  { from: 'source', line: { type: 'thread.started', thread_id: '0199a213-81c0-7800-8aa1-bbab2a035a53' } },
-  { from: 'source', line: { type: 'turn.started' } },
-  { from: 'source', line: { type: 'item.started', item: { id: 'item_0', type: 'mcp_tool_call', server: 'frontline', tool: 'store_summary', arguments: { range: 30 }, status: 'in_progress' } } },
-  { from: 'source', line: { type: 'item.completed', item: { id: 'item_0', type: 'mcp_tool_call', server: 'frontline', tool: 'store_summary', arguments: { range: 30 }, result: { content: [{ type: 'text', text: 'revenue_30d,21840' }], structured_content: null }, status: 'completed' } } },
+  { from: 'recorded', line: { type: 'thread.started', thread_id: '01a18351-07d0-7142-b1b5-fa784025752f' } },
+  { from: 'recorded', line: { type: 'turn.started' } },
+  { from: 'recorded', line: { type: 'item.started', item: { id: 'item_0', type: 'mcp_tool_call', server: 'frontline', tool: 'store_summary', arguments: { range: 7 }, result: null, error: null, status: 'in_progress' } } },
+  { from: 'recorded', line: { type: 'item.completed', item: { id: 'item_0', type: 'mcp_tool_call', server: 'frontline', tool: 'store_summary', arguments: { range: 7 }, result: { content: [{ type: 'text', text: '{"from":"2026-10-22","to":"2026-10-28","currency":"USD","totals":{"revenue":4431.08,"profit":995.06,"adSpend":1558.56,"roas":2.84,"orders":100,"aov":44.31},"previous":{"revenue":4169.57,"profit":905.99,"adSpend":1522.02,"roas":2.74,"orders":87,"aov":47.93},"deltasPct":{"revenue":6.27,"profit":9.83,"adSpend":2.4,"roas":3.65,"orders":14.94,"aov":-7.55},"health":{"status":"winning","marginPct":22.5,"bar":0.75}}' }], structured_content: null }, error: null, status: 'completed' } } },
   { from: 'source', line: { type: 'item.completed', item: { id: 'item_1', type: 'reasoning', text: '**Comparing the month**' } } },
   { from: 'source', line: { type: 'item.completed', item: { id: 'item_2', type: 'web_search', query: 'at-home skincare device trends' } } },
   { from: 'source', line: { type: 'item.completed', item: { id: 'item_3', type: 'error', message: 'model rerouted: gpt-6.1-sol -> gpt-6-luna (HighRiskCyberActivity)' } } },

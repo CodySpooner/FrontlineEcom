@@ -115,6 +115,8 @@ test("a Codex run's endpoint lists only its own tools (a switched-off draft is m
   for (const f of CODEX_FEATURES_OFF) expect(args).toContain(`features.${f}=false`);
   expect(args).toContain('features.multi_agent=false');
   expect(args).toEqual(expect.arrayContaining(['mcp_servers.frontline.url="http://127.0.0.1:8847/api/codex/mcp"', 'mcp_servers.frontline.bearer_token_env_var="FRONTLINE_MCP_TOKEN"', 'mcp_servers.frontline.tool_timeout_sec=86400']));
+  // Without it Codex 0.163.0 refuses every app tool: none has readOnlyHint, and approval "never" turns its ask into a no (AA-25b).
+  expect(args).toContain('mcp_servers.frontline.default_tools_approval_mode="approve"');
   expect(args.join(' ')).not.toContain(token);
   expect((await mcp(token, { method: 'tools/list' })).status).toBe(401);
   expect((await mcp(randomBytes(32).toString('hex'), { method: 'tools/list' })).status).toBe(401);

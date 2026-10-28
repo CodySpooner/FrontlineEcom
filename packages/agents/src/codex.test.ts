@@ -26,11 +26,11 @@ const answering = () =>
   });
 
 describe('codex exec --json events', () => {
-  test('a turn from source: the thread is the session, app tool calls come from the endpoint, a reroute is said and recorded, the answer and tokens arrive', () => {
+  test('a turn (recorded up to Stop, then from source): the thread is the session, app tool calls come from the endpoint, a reroute is said and recorded, the answer and tokens arrive', () => {
     const onSession = vi.fn();
     const onRuntime = vi.fn();
     const map = codexEvents({ onSession, onRuntime });
-    expect(CODEX_TURN.every((l) => l.from === 'source')).toBe(true);
+    expect(CODEX_TURN.map((l) => l.from).join(' ')).toBe(`${'recorded '.repeat(4)}${'source '.repeat(CODEX_TURN.length - 4)}`.trim());
     expect(CODEX_TURN.flatMap(({ line }) => map.line(JSON.stringify(line)))).toEqual([
       { type: 'tool_call', id: 'item_2', name: 'WebSearch', input: { query: 'at-home skincare device trends' } },
       { type: 'tool_result', id: 'item_2', output: 'Searched the web.', isError: false },
@@ -38,9 +38,9 @@ describe('codex exec --json events', () => {
       { type: 'notice', text: 'Reconnecting... 1/5 (stream disconnected before completion)' }, // its 2/5 is the same line
       { type: 'text_delta', text: 'Revenue is up 12% on last month.' },
       { type: 'text_delta', text: '\n\nLead with the LED mask.' },
-      { type: 'done', sessionId: '0199a213-81c0-7800-8aa1-bbab2a035a53', usage: { inputTokens: 24763, outputTokens: 122, costUsd: 0 } },
+      { type: 'done', sessionId: '01a18351-07d0-7142-b1b5-fa784025752f', usage: { inputTokens: 24763, outputTokens: 122, costUsd: 0 } },
     ]);
-    expect(onSession).toHaveBeenCalledWith('0199a213-81c0-7800-8aa1-bbab2a035a53');
+    expect(onSession).toHaveBeenCalledWith('01a18351-07d0-7142-b1b5-fa784025752f');
     expect(onRuntime).toHaveBeenCalledWith({ actualModel: 'gpt-6-luna' });
     expect(map.exited(0, '')).toEqual([]);
   });

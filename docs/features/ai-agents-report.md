@@ -2,18 +2,21 @@
 
 Lane `ai-agents`, 2026-10-28. Spec: `docs/features/ai-agents.md`. The owner approved "A's Workspace design, with B's
 Team View, and A's Deploy Design". Items, decisions and per-item notes: `docs/backlog/ai-agents.md`. 30 commits on
-`main`, from a3c3b1d5 (lane setup) to 969b86b5 (AA-26), plus the commit that adds this report.
+`main`, from a3c3b1d5 (lane setup) to 969b86b5 (AA-26), plus the commit that adds this report and the AA-25b commit
+after the owner signed in to Codex.
 
 ## Status
 
-- Every item from AA-01 to AA-27, including AA-14b, is done.
-- AA-25b, the Codex live smoke, is ticked under decision 16 but did not run. Codex isn't signed in on the app's
-  Codex folder, and only the owner can sign in. It is listed under Blocked with the exact command (see Limitations).
+- Every item from AA-01 to AA-27, including AA-14b and AA-25b, is done.
+- AA-25b, the Codex live smoke, ran once the owner signed in to Codex. Its first turn found that Codex refused every
+  app tool, so no Codex run had ever reached the app's tools. The fix is one flag, with a test, and a second turn
+  verified it (see "Real services" below).
 - `pnpm check` (typecheck plus every test) passes: 214 test files, 1,622 tests on the last run before this report.
-  `pnpm build` passes.
+  `pnpm build` passes. After the AA-25b fix: 214 test files, 1,622 tests.
 - The repo has no linter, so linting doesn't apply. It wasn't run, and this report doesn't claim it passed.
-- One live Claude run was made (AA-25). It finished in 13.8 s and cost $0.112, on a demo store. Everything else was
-  tested against the scripted engine, a fake Codex, and stubbed APIs. The two are reported separately below.
+- Live model turns: one Claude run (AA-25: 13.8 s, $0.112) and two Codex turns (AA-25b), all on a demo store.
+  Everything else was tested against the scripted engine, a fake Codex, and stubbed APIs. The two are reported
+  separately below.
 
 ## What was built
 
@@ -87,6 +90,8 @@ Team View, and A's Deploy Design". Items, decisions and per-item notes: `docs/ba
 - **Codex runtime:**
   - the installed CLI (`codex exec --json`) on the app's own `CODEX_HOME`, sandbox read-only, approvals never, and
     the features list cut down so the model reaches only the app's MCP tools;
+  - Codex's own approval gate is off for the app's server (`default_tools_approval_mode="approve"`). Under approval
+    "never" it refused every app tool, and the app's own approvals already ask the owner;
   - Set up Codex starts `codex login` on that folder for the owner;
   - questions and approvals arrive over MCP, and Stop kills only that process tree.
 - **Knowledge:**
@@ -136,7 +141,7 @@ Paths are test files, with the line where the test starts. Notes entries are in 
 
 | Line | Evidence |
 |------|----------|
-| All items ticked; `pnpm check` and `pnpm build` green | Backlog: AA-01 to AA-27 ticked. AA-25b counts as ticked through the Blocked entry "Codex live smoke: needs the owner's sign-in". Check and build results are above. Linting doesn't apply. |
+| All items ticked; `pnpm check` and `pnpm build` green | Backlog: AA-01 to AA-27 ticked. AA-25b ran after the owner signed in (AA-25b Notes). Check and build results are above. Linting doesn't apply. |
 | **Store isolation** | `apps/server/src/routes/agents-scope.test.ts:74` is the table-driven sweep of every by-id route in decision 13: 404 for another store, nothing changed, and the record's own store works. Also `:158` (Product Research routes), `:109` (tools and retrieval) and `:244` (no credentials in any GET). Body ids: `agents-teams.test.ts:419` and `:444`, `agents-conversations.test.ts`. Switching stores: `apps/web/src/agents/ListPane.test.tsx:100` and `Workspace.test.tsx:154`, and the list is this store's only (`agents-conversations.test.ts:74`). Knowledge: `agents-references.test.ts:45`. |
 | **Conversation management** | `agents-conversations.test.ts:249`: rename, pin, archive, search and reopen keep the messages, type, store and id. For teams, `agents-teams.test.ts:510` (added in AA-26) also checks that the team's own title follows. UI: `ListPane.test.tsx:80`, `Conversation.test.tsx:112`. |
 | **Deployment** | The config row and the engine's received options: `agents-deploy.test.ts:60`. A switched-off draft tool is absent: `agents-deploy.test.ts:73`, `packages/agents/src/engine.test.ts:289` (Claude) and `agents-codex.test.ts:99` (Codex). Stop after with fake timers: `agents-runs.test.ts:768`. Refusals with a reason: `agents-codex.test.ts:82`, `packages/agents/src/configs.test.ts:29`, `codex.test.ts:236`, `Deploy.test.tsx:222`. |
@@ -148,7 +153,7 @@ Paths are test files, with the line where the test starts. Notes entries are in 
 | **Permissions** | Conversations: `agents-approvals.test.ts`, `agents-codex.test.ts:123`. Teams: `agents-teams.test.ts:371` asks before an ad change, and a participant narrowed off the tool can't reach it. A team can't widen a participant's tools or store: `agents-teams.test.ts:371` and `:419`. Config narrowing: `agents-scope.test.ts:212`. |
 | **Interface quality** | `apps/web/src/agents/scale.test.tsx`: `:78` (500 conversations), `:91` (300-message thread), `:105` (25 stores, keyboard) and `:142` (three runs streaming at once). Long titles, widths from 1024 to 1920 px and keyboard-only use were checked in the browser in AA-22 (Notes). |
 | **Completion criteria** (no dead controls, true states) | The AA-26 click-through, `.agent/aa26-click.mjs` with output in `.agent/aa26/click.txt`, covered 19 surfaces and found 0 controls without an action. A self-test plants dead controls and is flagged. Disabled buttons give their reason. "Not connected · Set up": `Deploy.test.tsx:268` and `Details.test.tsx:81`. "Claude only for now" and "Codex · Set up Codex": `Details.test.tsx:81`. "Set up Codex": `Deploy.test.tsx:222`. "Install the Codex CLI": `codex.test.ts:226`. The Demo data pill shows only on demo stores: `Workspace.test.tsx:72` and `:83`. |
-| **Live smoke runs (decision 16)** | Claude: AA-25 Notes, and "Real services" below. Codex: not run, Blocked (see Limitations). |
+| **Live smoke runs (decision 16)** | Claude: AA-25 Notes. Codex: AA-25b Notes (two turns: the first found the approval bug, the second verified the fix). See also "Real services" below. |
 | **Browser checks** | Orca's browser at 1280×800 (measurements and console, AA-24 Notes). Headless Chrome over CDP at 1366×728, 1440×900 and 1920×1080, compared with the three boards: `.agent/aa24/`. No console errors on any of them, or on the AA-26 run. |
 | **styleseed-design-review** | Run in AA-24: scored 79 before, about 95 after. Remaining findings are answered in the AA-24 Notes. |
 | **Final report and screenshots** | This file, and `docs/reference/ai-agents-final/`. |
@@ -167,6 +172,20 @@ Paths are test files, with the line where the test starts. Notes entries are in 
   - **proves:** the SDK takes the app's run options; app tools reach a real model over the in-process MCP server; a
     narrowed config holds; the real stream lands as a transcript with real usage; the reflection resumes the real
     session.
+- **Codex, two live turns (AA-25b):**
+  - real routes on an in-memory demo database, on the dev server's signed-in `CODEX_HOME`: an Analytics Specialist
+    conversation on Glow Haus, narrowed to `store_summary` and `ask_owner`, with a 3-minute Stop after;
+  - catalog default `gpt-6.1-sol` at low effort, CLI 0.163.0;
+  - **turn 1:** done in 13.0 s (30,556 input and 139 output tokens), but Codex refused both tool calls ("MCP tool call
+    requires approval, but approval policy is never"). The cause, read in Codex's source, and the fix are above.
+  - **turn 2, after the fix:**
+    - `store_summary` returned the store's numbers over MCP, and `ask_owner` waited as a pending question at 12.2 s;
+    - the spawned tree was recorded (`codex.exe`, `codex-code-mode-host.exe`, two `conhost.exe`), then Stop was
+      pressed;
+    - all four processes were gone, the question was closed (denied), and the run was Cancelled;
+    - it reported no tokens, because Codex sends usage only at the end of a turn;
+  - **proves:** the CLI takes the app's flags; the MCP endpoint and bearer work; app tools reach a real Codex model; a
+    narrowed tool list holds; a question waits inside the tool; Stop kills only the spawned tree.
 - **Claude discovery (AA-01, AA-13):** the real account and model list, read without a model turn (13 models on a Max
   login).
 - **The real Codex CLI 0.163.0 (AA-01, AA-15):** `features list` under the run flags, `login status`, and one
@@ -179,8 +198,8 @@ Paths are test files, with the line where the test starts. Notes entries are in 
 - Every automated test: the scripted engine (`FRONTLINE_AGENT_ENGINE=fake`), `fake-codex.ts`, and jsdom with stubbed
   APIs and a fake socket.
 - **Not exercised live:**
-  - any Codex model turn;
-  - approvals with a real model (the live run was read-only);
+  - a completed Codex answer after a tool call, and resuming a Codex session;
+  - approvals with a real model (the live runs asked no request_approval);
   - team runs;
   - Retry and Resume after a real provider failure;
   - external MCP servers (Meta Ads and the others aren't connected on a demo store);
@@ -188,10 +207,10 @@ Paths are test files, with the line where the test starts. Notes entries are in 
 
 ## Limitations and what they need
 
-1. **Codex live smoke not run.** It needs the owner to sign in to Codex on the app's folder. In PowerShell:
-   `$env:CODEX_HOME='C:\Users\Xody2\orca\workspaces\FrontlineEcom\ai-agents\apps\server\.data\codex-home'; codex login`
-   Then run AA-25b's single smoke: one read-only tool call, an `ask_owner` question, Stop while it waits, and a check
-   that no question is left pending. Until then, Codex is verified only against the recorded fixtures and the fake.
+1. **A tool call Codex refuses itself leaves no trace in the transcript.** It never reaches the app's endpoint, so
+   only the model's own words say so; that is how AA-25b's first turn read. With the approval fix, Codex no longer
+   refuses the app's tools. Mapping a failed `mcp_tool_call` item from Codex's output to a tool error would make any
+   future refusal visible.
 2. **External MCP servers are Claude only** (decision 9). Under Codex, Meta Ads reads "Claude only for now" in Deploy
    and Details. Making it work needs Codex MCP wiring for remote servers with their OAuth.
 3. **A team step waiting on an approval reads Running** in the plan, the tabs and the list. A step's status is its

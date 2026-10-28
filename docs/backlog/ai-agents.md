@@ -1817,13 +1817,16 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   at 1280×800, 1440×900 and 1920×1080; Deploy, Create team, the settings drawer and the empty workspace at
   1440×900; no console errors). `docs/DESIGN.md`'s AI Agents screen and the Codex engine line describe the new page.
   `.agent/STOP` created; the lane is finished.
+- 2026-10-28 AA-25b Codex live smoke, after the owner signed in: the first turn found that Codex refused every app
+  tool ("MCP tool call requires approval, but approval policy is never"), so no Codex run had ever reached the app's
+  tools. Fixed with `mcp_servers.frontline.default_tools_approval_mode="approve"` (the app's own approvals still ask
+  the owner), with a test. The verification turn called store_summary over MCP, asked its ask_owner question, and was
+  stopped while it waited: all four processes of the spawned tree gone, the question closed, the run Cancelled.
+  The recorded lines replace the first four from-source lines of the Codex fixture. Details under Notes.
 
 ## Blocked
-- (AA-15, 2026-10-28; checked again in AA-25b, 2026-10-28 11:23) **Codex live smoke: needs the owner's sign-in.**
-  `codex login status` with the dev server's `CODEX_HOME` still prints "Not logged in". To sign in, in PowerShell:
-  `$env:CODEX_HOME='C:\Users\Xody2\orca\workspaces\FrontlineEcom\ai-agents\apps\server\.data\codex-home'; codex login`
-  Then the AA-25b run (one read-only tool call, an ask_owner question, Stop while it waits, check no question is left
-  pending) can be made. Until then the Codex runtime is verified only against recorded fixtures and fakes.
+- Resolved 2026-10-28: "Codex live smoke: needs the owner's sign-in". The owner signed in, and AA-25b ran (see Done
+  and Notes).
 
 ## Notes
 - (coordinator, 2026-10-28) Open questions for the owner. They don't block any item:
@@ -1955,9 +1958,59 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-25b, 2026-10-28) **Codex live smoke**, after the owner signed in (`codex login status` on the dev server's
+  `CODEX_HOME`: "Logged in using ChatGPT"):
+  - **How it ran:** the same method as AA-25. A throwaway script (`apps/server/src/zz-aa25b-smoke.ts`, deleted after,
+    never committed) used an in-memory demo database. The app was served on a free port so Codex could reach its MCP
+    endpoint. It ran on the dev server's signed-in `CODEX_HOME`, with `FRONTLINE_SECRET_KEY` unset and the engine not
+    forced. `child_process.spawn` was wrapped (`syncBuiltinESMExports`) only to copy `codex exec`'s stdout and read its
+    PID; the app's own code spawned Codex.
+  - **Dry run (no model turn):** Codex connected, CLI 0.163.0, catalog default `gpt-6.1-sol` at low effort, and no run
+    at startup.
+  - **Config:** `{ runtime: 'codex', model: 'gpt-6.1-sol', effort: 'low', tools: ['store_summary', 'ask_owner'],
+    permissions: { stopAfterMin: 3 } }` on Glow Haus.
+  - **Message:** "Call store_summary once. Then use ask_owner to ask me which product this store should lead with this
+    week, and wait for my answer. Use no other tools."
+  - **Turn 1, 16:17 UTC:**
+    - Done in 13.0 s (30,556 input and 139 output tokens).
+    - Both tool calls failed inside Codex: `"MCP tool call requires approval, but approval policy is never"`.
+    - The model answered "Both tool calls were blocked by the approval policy." The transcript held only that text: a
+      call Codex refuses never reaches the app's endpoint, so no tool_call row is written.
+  - **Cause** (codex-rs at rust-v0.163.0: `codex-mcp/src/server.rs` `McpServerMetadata::tool_approval_mode` and
+    `core/src/mcp_tool_call.rs` `requires_mcp_tool_approval_for_mode`):
+    - A custom MCP server's tools default to approval mode `auto`.
+    - `auto` asks for every tool without `readOnlyHint`, and the app sends no annotations.
+    - `approval_policy="never"` turns that ask into a refusal.
+    - So since AA-15, no Codex run could reach any app tool. The fakes and the from-source fixture assumed the calls
+      went through.
+  - **Fix:** `-c mcp_servers.frontline.default_tools_approval_mode="approve"`. In `approve` mode Codex never asks. The
+    app's approvals and ask_owner still ask the owner for anything consequential, and the endpoint still lists only the
+    run's tools. Test: `agents-codex.test.ts` (the endpoint test) asserts the flag; it failed before the fix.
+  - **Turn 2, 16:21 UTC, same config, after the fix:**
+    - store_summary `{ range: 7 }` returned Glow Haus's 7-day numbers over MCP (12.1 s).
+    - ask_owner asked "Which product should Glow Haus lead with this week?" and waited as a pending question (12.2 s).
+    - The descendant tree just before Stop, walked by `ParentProcessId` from the spawned PID: `codex.exe` 11560 →
+      `conhost.exe` 5920 and `codex-code-mode-host.exe` 8932 → `conhost.exe` 30832.
+    - Stop (`POST /api/conversations/:id/stop`) at 13.0 s answered 200. The run became Cancelled and codex exited 1.
+    - Three seconds later all four PIDs were gone. The question's approval row was denied, leaving none pending.
+    - Conversation state cancelled; one agent_runs row in all.
+    - Codex reports tokens only in `turn.completed`, which a stopped run never sends, so this run reported none.
+  - **Fixture:** CODEX_TURN's first four lines (thread.started, turn.started, store_summary started and completed) are
+    now turn 2's recorded lines. The ask_owner start has no matching line, and the lines after Stop stay 'from source'.
+    The recorded item.started carries `result: null, error: null`, which the source-built line left out.
+  - **Two live turns,** where decision 16 allows one. The first exposed the bug, the second verified the fix. Both ran
+    on the ChatGPT plan, with no Claude usage.
+  - **What it proves, beyond the mocked tests:**
+    - the CLI takes the app's flags on a signed-in home;
+    - the MCP endpoint and its bearer work, and app tools reach a real Codex model;
+    - a narrowed tool list holds;
+    - a question waits inside the tool call;
+    - Stop kills only the spawned tree and leaves nothing pending.
+  - **What it doesn't prove:** a completed Codex answer after a tool call, resuming a Codex session, request_approval
+    through Codex, and Codex in a team.
+  - **Follow-up idea:** a call Codex refuses itself never reaches the endpoint, so the transcript shows nothing. Mapping
+    a failed `mcp_tool_call` item from the JSONL to a tool_result error would make such refusals visible.
 - (AA-27, 2026-10-28) **For the owner, after the lane:**
-  - **Codex:** sign in with the command under Blocked, then make AA-25b's one smoke run (it is the only unverified
-    runtime path).
   - **Follow-up ideas** (not items; see the report's Limitations): a waiting state for a team step paused on an
     approval; a cost estimate in Create team once per-model prices exist; per-record views in Analytics and Product
     Research for reply links; Codex wiring for external MCP servers such as Meta Ads.
