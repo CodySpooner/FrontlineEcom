@@ -36,7 +36,12 @@ function api(stores = [store('glow', 'Glow Botanics'), store('peak', 'Peak Gear'
     const asked = u.searchParams.get('store');
     if (u.pathname === '/api/stores') return stores;
     if (u.pathname === '/api/health') return { connectors: [] };
-    if (u.pathname === '/api/conversations') return { items: asked === 'glow' ? CONVERSATIONS : [], total: asked === 'glow' ? 2 : 0 };
+    if (u.pathname === '/api/conversations') {
+      const items = asked === 'glow' && !u.searchParams.get('view') ? CONVERSATIONS : [];
+      return { items, total: items.length, byType: items.length ? { copywriter: items.length } : {} };
+    }
+    if (u.pathname === '/api/agent-types') return [{ id: 'copywriter', name: 'Copywriter', description: '', baseRole: 'copywriter' }, { id: 'operations', name: 'Operations', description: '', baseRole: 'operations' }];
+    if (u.pathname === '/api/conversations/counts') return {};
     const [, id, thread] = /^\/api\/conversations\/([^/]+)(\/thread)?$/.exec(u.pathname) ?? [];
     const found = CONVERSATIONS.find((c) => c.id === id);
     if (id && (!found || asked !== found.storeId)) return reply({ error: 'Conversation not found' }, 404);

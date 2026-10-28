@@ -1,4 +1,4 @@
-import { conversationThread, createConversation, discardConversation, getConversation, getRun, listConversations, recap, resolveType, updateConversation, validateConfig, type RunManager } from '@frontline/agents';
+import { agentTypes, conversationCounts, conversationThread, createConversation, discardConversation, getConversation, getRun, listConversations, recap, resolveType, updateConversation, validateConfig, type RunManager } from '@frontline/agents';
 import { INTERRUPTED, type AgentRun, type Conversation, type ConversationContext, type CreateConversationInput, type SendMessageInput, type Store } from '@frontline/shared';
 import { Hono, type Context } from 'hono';
 import type { Db } from '../db';
@@ -93,6 +93,11 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       const opened = openConversation(db, runs, store, b);
       if ('status' in opened) return c.json({ error: opened.error, ...(opened.field ? { field: opened.field } : {}) }, opened.status);
       return c.json({ conversation: opened.conversation, run: opened.run }, opened.repeated ? 200 : 201);
+    })
+    .get('/api/conversations/counts', (c) => c.json(conversationCounts(db)))
+    .get('/api/agent-types', (c) => {
+      const store = c.req.query('store');
+      return store && getStore(db, store) ? c.json(agentTypes(db, store)) : missing(c, 'Store');
     })
     .get('/api/conversations/:id', (c) => {
       const conversation = mine(c);

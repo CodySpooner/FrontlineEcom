@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, type AgentConfig, type AgentRole, type RuntimeId, type Store } from '@frontline/shared';
+import { AGENT_ROLES, type AgentConfig, type AgentRole, type AgentTypeInfo, type RuntimeId, type Store } from '@frontline/shared';
 import { engineInfo } from './engine';
 import { BUILTIN_TYPES } from './roles';
 import { defaultTools } from './tools';
@@ -48,6 +48,17 @@ export function resolveType(db: DatabaseSync, storeId: string, type: string): Ag
   if (!role || !Object.hasOwn(AGENT_ROLES, role)) return undefined;
   const narrowed: string[] | undefined = builtin?.tools ?? (custom?.tools_json ? JSON.parse(String(custom.tools_json)) : undefined);
   return { role, customRoleId: type, tools: narrowed ? defaultTools(role).filter((t) => narrowed.includes(t)) : defaultTools(role) };
+}
+
+/** Every type the store can use, in list order: the roles, the built-in types, then its custom roles by name. */
+export function agentTypes(db: DatabaseSync, storeId: string): AgentTypeInfo[] {
+  const roles = Object.entries(AGENT_ROLES).map(([id, r]) => ({ id, name: r.name, description: r.blurb, baseRole: id as AgentRole }));
+  const builtins = Object.entries(BUILTIN_TYPES).map(([id, t]) => ({ id, name: t.name, description: t.description, baseRole: t.baseRole }));
+  const custom = db
+    .prepare('SELECT id, name, description, base_role FROM agent_custom_roles WHERE (store_id = ? OR store_id IS NULL) AND archived_at IS NULL ORDER BY name COLLATE NOCASE')
+    .all(storeId)
+    .flatMap((r) => (Object.hasOwn(AGENT_ROLES, String(r.base_role)) ? [{ id: String(r.id), name: String(r.name), description: String(r.description), baseRole: r.base_role as AgentRole }] : []));
+  return [...roles, ...builtins, ...custom];
 }
 
 export type ConfigDraft = Omit<AgentConfig, 'id' | 'storeId' | 'agentId' | 'createdAt'>;

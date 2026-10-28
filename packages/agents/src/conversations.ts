@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { conversationState, runState, type AgentRun, type AgentRunDetail, type Conversation, type ConversationContext, type CursorPage, type Store } from '@frontline/shared';
+import { conversationState, runState, type AgentRun, type AgentRunDetail, type Conversation, type ConversationContext, type ConversationCounts, type ConversationPage, type CursorPage, type Store } from '@frontline/shared';
 import { saveConfig, type AgentType, type ConfigDraft } from './configs';
 import { ftsQuery } from './kb-retrieve';
 import { finalText, getRun } from './runs';
@@ -36,8 +36,8 @@ export function discardConversation(db: DatabaseSync, id: string) {
   if (configId) db.prepare('DELETE FROM agent_configs WHERE id = ? AND NOT EXISTS (SELECT 1 FROM agent_runs WHERE config_id = ?)').run(String(configId), String(configId));
 }
 
-const SELECT = `SELECT c.*, f.agent_id, f.custom_role_id, m.id AS team_id FROM conversations c JOIN agent_configs f ON f.id = c.config_id
-  LEFT JOIN squad_missions m ON m.conversation_id = c.id AND m.kind = 'team'`;
+const FROM = `FROM conversations c JOIN agent_configs f ON f.id = c.config_id LEFT JOIN squad_missions m ON m.conversation_id = c.id AND m.kind = 'team'`;
+const SELECT = `SELECT c.*, f.agent_id, f.custom_role_id, m.id AS team_id ${FROM}`;
 
 export function getConversation(db: DatabaseSync, id: string): Conversation | undefined {
   const r = db.prepare(`${SELECT} WHERE c.id = ?`).get(id);
@@ -55,31 +55,50 @@ export interface ConversationQuery {
   limit?: number;
 }
 
-/** A store's conversations, last activity first, in pages. */
-export function listConversations(db: DatabaseSync, storeId: string, q: ConversationQuery = {}): CursorPage<Conversation> {
+const TYPE = `CASE WHEN m.id IS NOT NULL THEN 'team' ELSE coalesce(f.custom_role_id, substr(f.agent_id, instr(f.agent_id, ':') + 1)) END`;
+
+/** A store's conversations, last activity first, in pages, with each type's count under the same filters. */
+export function listConversations(db: DatabaseSync, storeId: string, q: ConversationQuery = {}): ConversationPage {
   const where = ['c.store_id = ?', q.view === 'archived' ? 'c.archived_at IS NOT NULL' : 'c.archived_at IS NULL'];
   const args: (string | number)[] = [storeId];
   if (q.view === 'pinned') where.push('c.pinned = 1');
-  if (q.type === 'team') where.push('m.id IS NOT NULL');
-  else if (q.type) where.push(`m.id IS NULL AND coalesce(f.custom_role_id, substr(f.agent_id, instr(f.agent_id, ':') + 1)) = ?`), args.push(q.type);
+  if (q.type) where.push(`${TYPE} = ?`), args.push(q.type);
   if (q.rangeDays !== undefined) {
     where.push(`(c.last_activity_at >= ? OR EXISTS (SELECT 1 FROM agent_runs r WHERE r.conversation_id = c.id AND r.status IN ('queued', 'running')))`);
     args.push(new Date(Date.now() - q.rangeDays * 86_400_000).toISOString());
   }
   if (q.q !== undefined) {
     const match = ftsQuery(q.q);
-    if (!match) return { items: [], total: 0 };
+    if (!match) return { items: [], total: 0, byType: {} };
     where.push('c.id IN (SELECT conversation_id FROM conversations_fts WHERE conversations_fts MATCH ? AND store_id = ?)');
     args.push(match, storeId);
   }
-  const total = Number(db.prepare(`SELECT count(*) AS n FROM (${SELECT} WHERE ${where.join(' AND ')})`).get(...args)?.n);
+  const byType = Object.fromEntries(db.prepare(`SELECT ${TYPE} AS type, count(*) AS n ${FROM} WHERE ${where.join(' AND ')} GROUP BY type`).all(...args).map((r) => [String(r.type), Number(r.n)]));
+  const total = Object.values(byType).reduce((a, n) => a + n, 0);
   const [at, id] = q.cursor?.split('|') ?? [];
   const page = id ? [...where, '(c.last_activity_at, c.id) < (?, ?)'] : where;
   const limit = Math.min(100, Math.max(1, q.limit ?? 50));
   const rows = db.prepare(`${SELECT} WHERE ${page.join(' AND ')} ORDER BY c.last_activity_at DESC, c.id DESC LIMIT ?`).all(...args, ...(id ? [at!, id] : []), limit + 1);
   const items = rows.slice(0, limit).map((r) => toConversation(db, r));
   const last = items.at(-1);
-  return { items, total, ...(rows.length > limit && last ? { next: `${last.lastActivityAt}|${last.id}` } : {}) };
+  return { items, total, byType, ...(rows.length > limit && last ? { next: `${last.lastActivityAt}|${last.id}` } : {}) };
+}
+
+/** Per store: conversations with a reply going or queued, and those waiting on the owner (an approval or a question). */
+export function conversationCounts(db: DatabaseSync): ConversationCounts {
+  const counts: ConversationCounts = {};
+  const rows = db
+    .prepare(
+      `SELECT r.store_id, r.conversation_id, max(EXISTS (SELECT 1 FROM approvals a WHERE a.run_id = r.id AND a.status = 'pending')) AS waiting
+       FROM agent_runs r JOIN conversations c ON c.id = r.conversation_id WHERE r.status IN ('queued', 'running') GROUP BY r.store_id, r.conversation_id`,
+    )
+    .all();
+  for (const r of rows) {
+    const c = (counts[String(r.store_id)] ??= { running: 0, waiting: 0 });
+    if (Number(r.waiting)) c.waiting++;
+    else c.running++;
+  }
+  return counts;
 }
 
 /** A page of a conversation's runs, oldest first, going back from the newest. `get` adds a live run's transcript so far. */

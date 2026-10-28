@@ -25,25 +25,29 @@ export interface PaneState {
   rightOpen: boolean;
 }
 
-const KEY = 'fe.agents.panes';
-
-/** The owner's pane widths and whether the right panel is open, kept in this browser. */
-export function usePaneState() {
-  const [state, setState] = useState<PaneState>(() => {
-    const initial = { left: PANES.left.initial, right: PANES.right.initial, rightOpen: true };
+/** State kept in this browser under `key` (try/catch: storage can be unavailable, then it just doesn't persist). */
+export function useStored<T>(key: string, initial: T) {
+  const [state, setState] = useState<T>(() => {
     try {
-      return { ...initial, ...(JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<PaneState>) };
+      const raw = localStorage.getItem(key);
+      return raw ? (typeof initial === 'object' && !Array.isArray(initial) ? { ...initial, ...(JSON.parse(raw) as T) } : (JSON.parse(raw) as T)) : initial;
     } catch {
       return initial;
     }
   });
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify(state));
+      localStorage.setItem(key, JSON.stringify(state));
     } catch {
-      /* storage unavailable: the layout just won't persist */
+      /* storage unavailable */
     }
-  }, [state]);
+  }, [key, state]);
+  return [state, setState] as const;
+}
+
+/** The owner's pane widths and whether the right panel is open. */
+export function usePaneState() {
+  const [state, setState] = useStored<PaneState>('fe.agents.panes', { left: PANES.left.initial, right: PANES.right.initial, rightOpen: true });
   return [state, (patch: Partial<PaneState>) => setState((s) => ({ ...s, ...patch }))] as const;
 }
 

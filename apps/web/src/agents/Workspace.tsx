@@ -1,16 +1,16 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router';
-import { Bot, List, PanelRight, Search, SearchX, Users } from 'lucide-react';
-import { AGENT_ROLES, type AgentRole, type AgentRunDetail, type Conversation, type ConversationState, type Store } from '@frontline/shared';
+import { Bot, List, PanelRight, SearchX, Users } from 'lucide-react';
+import { AGENT_ROLES, type AgentRole, type AgentRunDetail, type Conversation, type Store } from '@frontline/shared';
 import { useConversation, useConversations, useRun, useStores, useThread } from '../api/client';
 import { Transcript } from '../components/Chat';
 import { Hero } from '../components/Hero';
-import { PLATFORM_NAME } from '../components/StoreForm';
 import { useStoreSelection } from '../components/StoreFilter';
-import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState, RUN_STATUS } from '../components/ui';
+import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState } from '../components/ui';
 import { NAV } from '../nav';
 import { useFill } from './fill';
 import { clampPanes, lastOpened, PANES, usePaneState } from './layout';
+import { ListPane, meta } from './ListPane';
 import { StateDot } from './StateDot';
 import { agentsUrl } from './urls';
 
@@ -91,7 +91,7 @@ function Panes({ store, conversationId }: { store: Store; conversationId?: strin
     return () => window.removeEventListener('keydown', onKey);
   }, []);
   const showRight = mode === 'three' && prefs.rightOpen;
-  const list = <ListPane store={store} open={conversationId} search={search} />;
+  const list = <ListPane key={store.id} store={store} open={conversationId} search={search} />;
   const details = <Details store={store} conversationId={conversationId} />;
   const buttons = (
     <>
@@ -177,72 +177,6 @@ function Handle({ label, value, min, max, edge, onChange }: { label: string; val
       }}
       className={cx('absolute inset-y-0 z-10 w-1.5 cursor-col-resize touch-none outline-none hover:bg-red/40 focus-visible:bg-red/60', edge === 'right' ? '-right-[3px]' : '-left-[3px]')}
     />
-  );
-}
-
-const ACTIVE = new Set<ConversationState>(['running', 'awaiting_approval', 'waiting_for_input', 'queued', 'failed', 'interrupted']);
-const meta = (c: Conversation) => (ACTIVE.has(c.state) ? RUN_STATUS[c.state].label : new Date(c.lastActivityAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-
-// ponytail: a flat list with search; AA-07 adds the store switcher, the groups, menus, archive and paging.
-function ListPane({ store, open, search }: { store: Store; open?: string; search: RefObject<HTMLInputElement | null> }) {
-  const [q, setQ] = useState('');
-  const list = useConversations(store.id, { q });
-  const items = list.data?.pages.flatMap((p) => p.items) ?? [];
-  const [focused, setFocused] = useState<string>();
-  const current = items.find((c) => c.id === focused)?.id ?? items.find((c) => c.id === open)?.id ?? items[0]?.id;
-  // ↑/↓ move through the rows (one tab stop for the list); Enter opens the focused row, as any link.
-  const rove = (e: KeyboardEvent<HTMLElement>) => {
-    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
-    const rows = [...e.currentTarget.querySelectorAll<HTMLElement>('[data-row]')];
-    const next = rows[rows.indexOf(document.activeElement as HTMLElement) + (e.key === 'ArrowDown' ? 1 : -1)];
-    if (!next) return;
-    e.preventDefault();
-    next.focus();
-  };
-  return (
-    <nav aria-label="Conversations" className="flex min-h-0 flex-1 flex-col">
-      <div className="flex flex-col gap-2.5 px-3.5 pt-3.5 pb-2.5">
-        <div className="flex items-center gap-2.5 rounded-[10px] border border-[#26262c] bg-[#111114] px-2.5 py-2">
-          <span aria-hidden className="grid size-[30px] shrink-0 place-items-center rounded-lg text-[13px] font-bold text-white" style={{ background: store.color }}>
-            {store.name.charAt(0).toUpperCase()}
-          </span>
-          <span className="min-w-0">
-            <span className="block truncate text-[13px] font-semibold">{store.name}</span>
-            <span className="block truncate text-[11px] text-muted">{[PLATFORM_NAME[store.platform], store.nicheDetail ?? store.niche].join(' · ')}</span>
-          </span>
-        </div>
-        <label className="flex h-8 items-center gap-2 rounded-lg border border-[#26262c] bg-bg-2 px-2.5 text-muted focus-within:border-red/60">
-          <Search aria-hidden className="size-4 shrink-0" strokeWidth={1.8} />
-          <input ref={search} type="search" aria-label="Search conversations" placeholder="Search this store's conversations" value={q} onChange={(e) => setQ(e.target.value)} className="w-full min-w-0 bg-transparent text-[12.5px] text-text outline-none placeholder:text-muted" />
-          <kbd className="rounded border border-[#2c2c33] px-1.5 font-sans text-[10px]">/</kbd>
-        </label>
-      </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2" onKeyDown={rove}>
-        {list.isPending ? (
-          <LoadingState rows={5} className="px-2" />
-        ) : list.isError ? (
-          <ErrorState message="Couldn't load the conversations." onRetry={() => list.refetch()} />
-        ) : !items.length ? (
-          <p className="px-2.5 py-3 text-[12.5px] text-muted">{q.trim() ? `No conversation matches "${q.trim()}".` : 'No conversations in this store yet.'}</p>
-        ) : (
-          items.map((c) => (
-            <Link
-              key={c.id}
-              data-row
-              to={agentsUrl({ store: store.id, conversation: c.id })}
-              tabIndex={c.id === current ? 0 : -1}
-              onFocus={() => setFocused(c.id)}
-              aria-current={c.id === open ? 'page' : undefined}
-              className={cx('flex items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-[13px] outline-none focus-visible:ring-1 focus-visible:ring-red/60', c.id === open ? 'bg-[#1b1b20] text-white' : 'text-text-2 hover:bg-[#141418]')}
-            >
-              <StateDot state={c.state} />
-              <span className="min-w-0 flex-1 truncate">{c.title}</span>
-              <span className="text-[11px] whitespace-nowrap text-muted">{meta(c)}</span>
-            </Link>
-          ))
-        )}
-      </div>
-    </nav>
   );
 }
 

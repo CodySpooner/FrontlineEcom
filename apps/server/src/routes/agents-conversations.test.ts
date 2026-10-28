@@ -1,5 +1,5 @@
 import { defaultTools, getConfig, getRun, recap } from '@frontline/agents';
-import type { AgentRun, AgentRunDetail, Conversation, CursorPage } from '@frontline/shared';
+import { AGENT_ROLES, type AgentRun, type AgentRunDetail, type Conversation, type ConversationPage, type CursorPage } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -25,7 +25,7 @@ async function open(body: Record<string, unknown> = {}, store = 'glow') {
   await idle();
   return { status: r.status, ...json };
 }
-const list = async (query: string, store = 'glow') => (await (await send('GET', `/api/conversations?store=${store}&${query}`)).json()) as CursorPage<Conversation>;
+const list = async (query: string, store = 'glow') => (await (await send('GET', `/api/conversations?store=${store}&${query}`)).json()) as ConversationPage;
 const said = (runId: string) => getRun(db, runId)!.transcript.flatMap((e) => (e.type === 'text_delta' ? [e.text] : [])).join('');
 
 test('Deploy opens a conversation on the seat default and starts its first turn; a repeated request returns the same', async () => {
@@ -188,4 +188,26 @@ test('creating and sending share the knowledge base guard: the 11th start in a m
   for (let i = 0; i < 11; i++) statuses.push((await send('POST', '/api/conversations?store=glow', { clientRequestId: randomUUID(), type: 'copywriter', message: `Task ${i}` })).status);
   expect(statuses).toEqual([...Array(10).fill(201), 429]);
   await idle();
+});
+
+test("the list counts each type under its filters; counts per store say what's going and what waits; types are the store's own", async () => {
+  await open({ title: 'One' });
+  await open({ title: 'Two' });
+  await open({ type: 'builtin:general_researcher', title: 'Three' });
+  expect((await list('')).byType).toEqual({ copywriter: 2, 'builtin:general_researcher': 1 });
+  expect((await list('limit=1')).byType).toEqual({ copywriter: 2, 'builtin:general_researcher': 1 }); // not just the page
+
+  const { conversation } = await open({ title: 'Busy' });
+  const add = db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, conversation_id, config_id, created_at) VALUES (?, 'glow', 'glow:copywriter', 'x', ?, ?, ?, '2026-10-28')`);
+  add.run('going', 'running', conversation.id, conversation.configId);
+  add.run('waits', 'running', (await open({ title: 'Waits' })).conversation.id, conversation.configId);
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('ap', 'glow', 'glow:copywriter', 'waits', 't', 'r', '{"kind":"pause_campaign","payload":{}}', 'pending', '2026-10-28')`).run();
+  expect(await (await send('GET', '/api/conversations/counts')).json()).toEqual({ glow: { running: 1, waiting: 1 } });
+  db.exec(`UPDATE agent_runs SET status = 'done' WHERE id IN ('going', 'waits')`);
+
+  db.prepare(`INSERT INTO agent_custom_roles (id, store_id, base_role, name, created_at) VALUES ('glow-voice', 'glow', 'copywriter', 'Brand voice', '2026-10-28')`).run();
+  const types = async (store: string) => ((await (await send('GET', `/api/agent-types?store=${store}`)).json()) as { id: string; name: string }[]).map((t) => t.id);
+  expect(await types('glow')).toEqual([...Object.keys(AGENT_ROLES), 'builtin:marketing_strategist', 'builtin:general_researcher', 'glow-voice']);
+  expect(await types('peak')).not.toContain('glow-voice');
+  expect((await send('GET', '/api/agent-types?store=nope')).status).toBe(404);
 });

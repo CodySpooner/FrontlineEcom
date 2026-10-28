@@ -809,6 +809,22 @@ export interface CreateConversationInput {
   config?: ConversationConfigInput;
 }
 
+/** GET /api/conversations?store= answers a page plus each type's count under the same filters ('team' for teams). */
+export interface ConversationPage extends CursorPage<Conversation> {
+  byType: Record<string, number>;
+}
+
+/** GET /api/conversations/counts → per store, conversations with a reply going (or queued) and those waiting on the owner. */
+export type ConversationCounts = Record<string, { running: number; waiting: number }>;
+
+/** GET /api/agent-types?store= → the types a store can talk to, in list order: roles, built-in types, its custom roles. */
+export interface AgentTypeInfo {
+  id: string;
+  name: string;
+  description: string;
+  baseRole: AgentRole;
+}
+
 export interface SendMessageInput {
   clientRequestId: string;
   message: string;

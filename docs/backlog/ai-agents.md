@@ -1316,7 +1316,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     AgentDetail.tsx, and nothing in the nav links to the workspace. The workspace is reachable at
     `/agents/c/:id?store=`, `/agents/t/:id?store=` and a temporary `/agents/w?store=` (the static segment outranks
     `:id`). Until AA-14, tests and browser passes create conversations through the AA-05 API.
-- [ ] AA-07 **Left pane:**
+- [x] AA-07 **Left pane:**
   - the store switcher popover with live counts;
   - Deploy and Create team (rendered from AA-14 and AA-20);
   - search;
@@ -1627,6 +1627,11 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   `/agents/c|t/:id` and `/agents/w`, `/` and ↑/↓, the loading, error, no-stores, not-found, empty and reconnecting
   states, Shell's PageBoundary keyed by page and NavLink `end` only for '/'; 8 tests; checked in headless Chrome at
   1440, 1024 and 700.
+- 2026-10-28 AA-07 left pane: the store switcher (native popover, live running/waiting counts per store, "N other
+  stores · M agents running there"), server search with flat results, Pinned, Teams, Agents grouped by type with
+  server counts and "N more agent types", collapsible groups kept per browser, row menus (Rename inline, Pin, Archive,
+  the context-menu key), Archived · N, the range picker and paging on scroll; `GET /api/agent-types` and
+  `GET /api/conversations/counts`; 5 new tests; checked in headless Chrome.
 
 ## Blocked
 
@@ -1760,6 +1765,25 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-07, 2026-10-28) For AA-08 and later:
+  - `ListPane.tsx` holds the left pane, keyed by store in `Workspace.tsx` (search, archive view and range reset on a
+    switch). `Popover.tsx` is the page's native popover (`role="menu"`, positioned under the button whose
+    `popoverTarget` names it, `[data-item]` rows with ↑/↓) plus `MenuItem` and `rove`. Use them for the ⋯ and type
+    menus to come.
+  - `useStored(key, initial)` in layout.ts is the try/catch localStorage state: panes in `fe.agents.panes`, collapsed
+    groups in `fe.agents.collapsed`. Two hooks must not share a key: each writes its whole value.
+  - New reads: `GET /api/agent-types?store=` (`agentTypes`: roles, the two built-in types, the store's and
+    all-stores custom roles not archived, in list order) and `GET /api/conversations/counts` (per store, a reply going
+    or queued vs waiting on an approval; global by design: counts only, for the switcher). The list's answer gains
+    `byType` (shared `ConversationPage`), counted under the same filters, so group counts don't grow with paging. AA-11
+    can extend `AgentTypeInfo` (contracts) and the endpoint.
+  - Not rendered yet, per "a control renders only once the item that makes it work has shipped": Deploy and Create
+    team (AA-14, AA-20), the type header's menu (New conversation from AA-14, Agent settings from AA-09) and "New
+    conversation" under "N more agent types" (AA-14). Team rows show the conversation's state word; the 'N agents' and
+    ended metas and the participant sub-rows need AA-19's team data (AA-20).
+  - The range is per visit (default 30 days); Pinned ignores it, and search and the archive search everything.
+  - Status words: rows whose meta is a date give the dot `role="img"` with the state's word; interrupted is the hollow
+    amber ring.
 - (AA-06, 2026-10-28) For AA-07 to AA-09:
   - The workspace is `apps/web/src/agents/`: `Workspace.tsx` (page, panes, states), `layout.ts` (`clampPanes`,
     `paneMode`, `usePaneState` in `fe.agents.panes`, `lastOpened` in `fe.agents.last`), `urls.ts` (`agentsUrl`),

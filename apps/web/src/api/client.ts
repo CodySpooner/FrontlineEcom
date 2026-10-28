@@ -6,7 +6,10 @@ import type {
   Agent,
   AgentRun,
   AgentRunDetail,
+  AgentTypeInfo,
   Conversation,
+  ConversationCounts,
+  ConversationPage,
   CreateConversationInput,
   CursorPage,
   AgentUpdate,
@@ -212,13 +215,19 @@ const conversationsUrl = (storeId: string, f: ConversationFilter, cursor?: strin
 export const useConversations = (storeId: string, filter: ConversationFilter = {}) =>
   useInfiniteQuery({
     queryKey: ['conversations', storeId, filter],
-    queryFn: ({ pageParam }) => api<CursorPage<Conversation>>(conversationsUrl(storeId, filter, pageParam || undefined)),
+    queryFn: ({ pageParam }) => api<ConversationPage>(conversationsUrl(storeId, filter, pageParam || undefined)),
     initialPageParam: '',
     getNextPageParam: (last) => last.next,
     enabled: !!storeId,
     // Typing in search keeps the last results up until the new ones land.
     placeholderData: keepPreviousData,
   });
+
+/** Per store, conversations going and waiting on the owner: the store switcher's counts. */
+export const useConversationCounts = () => useQuery({ queryKey: ['conversation-counts'], queryFn: () => api<ConversationCounts>('/api/conversations/counts') });
+
+/** The agent types a store can talk to, in list order. */
+export const useAgentTypes = (storeId: string) => useQuery({ queryKey: ['agent-types', storeId], queryFn: () => api<AgentTypeInfo[]>(`/api/agent-types?store=${storeId}`), enabled: !!storeId });
 
 /** A 404 (deleted, or another store's) shows at once instead of after three retries. */
 export const useConversation = (storeId: string, id: string) =>
@@ -913,6 +922,7 @@ export function useLive() {
         if (!isLive(m.run)) qc.invalidateQueries({ queryKey: ['knowledge'] });
       } else if (m.type === 'kb_task') qc.invalidateQueries({ queryKey: ['kb'] }); // the task, the task lists, and the cards it filed
       if (m.type === 'approval' || m.type === 'run') {
+        qc.invalidateQueries({ queryKey: ['conversation-counts'] });
         // Automation fires start runs or ask for approval; the log and "last fired" follow.
         ['automation-runs', 'automations'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         qc.invalidateQueries({ queryKey: ['usage'] });
