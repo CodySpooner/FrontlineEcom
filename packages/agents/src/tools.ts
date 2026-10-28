@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, isPrivateHost, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardType, type KbLinkType, type KbStage, type KbWorkspace, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentConfig, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
+import { AGENT_ROLES, isPrivateHost, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardType, type KbLinkType, type KbStage, type KbWorkspace, type KnowledgeScope, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentConfig, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, uncostedShare, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
@@ -12,8 +12,9 @@ import { createCard, ensureCategoryPath, getCard, kbControls, kbRow } from './kb
 import { addEvidence, agentCardError, createLink, sameCard } from './kb-links';
 import { estimateResearch, type FetchedSource } from './kb-research';
 import { promotedAs, promotionPending } from './kb-promote';
-import { logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
+import { inScope, logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
 import { saveSource, sourceForAgent } from './kb-sources';
+import { KB_UNTRUSTED } from './prompt';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 import { runGist } from './runs';
 
@@ -1278,9 +1279,11 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ query, limit }, ctx) => {
       const task = researchTask(ctx);
       const ws = task ? task.ws : ctx.store.id; // a General task's is null
-      const cards = retrieveKnowledge(ctx.db, { ws, role: ctx.agent.role, query, limit });
+      // A conversation's config may leave out the store's or General knowledge (Deploy); a research task reads its own.
+      const scope = task ? undefined : ctx.db.prepare('SELECT f.knowledge_json FROM agent_runs r JOIN agent_configs f ON f.id = r.config_id WHERE r.id = ?').get(ctx.runId ?? '')?.knowledge_json;
+      const cards = retrieveKnowledge(ctx.db, { ws, role: ctx.agent.role, query, limit }).filter(inScope(scope ? (JSON.parse(String(scope)) as KnowledgeScope[]) : undefined));
       logKnowledgeUse(ctx.db, cards.map((c) => c.id), { storeId: ctx.store.id, agentId: ctx.agent.id, runId: ctx.runId, kind: 'search' });
-      return csv(cards.map((c) => ({ id: c.id, title: c.title, stage: c.stage === 'hypothesis' ? 'Hypothesis (unproven)' : KB_STAGES[c.stage], type: c.type, where: c.storeId ? 'this store' : 'General', summary: c.summary.slice(0, 300) })));
+      return (cards.length ? `${KB_UNTRUSTED}\n` : '') + csv(cards.map((c) => ({ id: c.id, title: c.title, stage: c.stage === 'hypothesis' ? 'Hypothesis (unproven)' : KB_STAGES[c.stage], type: c.type, where: c.storeId ? 'this store' : 'General', summary: c.summary.slice(0, 300) })));
     },
   }),
   defineTool({

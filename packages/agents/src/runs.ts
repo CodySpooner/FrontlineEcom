@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, hasEffects, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
+import { AGENT_ROLES, hasEffects, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunAttachment, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
 import { customRole, getConfig } from './configs';
-import { conversationPreface } from './conversations';
+import { conversationPreface, conversationQuery } from './conversations';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { researchContext } from './kb-research';
-import { citedCards, logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
+import { citedCards, inScope, logKnowledgeUse, retrieveKnowledge, withConflicts } from './kb-retrieve';
+import { untrustedBlock } from './kb-sources';
 import { once, parseLearnings, REFLECTION_PROMPT, searchMemory, writeMemory } from './memory';
 import { listNicheLearnings, nicheKey } from './niche';
 import { assemblePrompt } from './prompt';
@@ -70,7 +71,7 @@ export function createRunManager(opts: RunManagerOptions) {
    * knowledge-base research task (kb-research.ts). A conversation's turn runs on its config and goes on from its session
    * when it starts (resumeFor). A repeated `clientRequestId` returns the run it started.
    */
-  function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string, { retryOf, mode, conversationId, teamId, configId, clientRequestId }: StartOptions = {}): AgentRun | string {
+  function start(agentId: string, task: string, resumeRunId?: string, parentRunId?: string, { retryOf, mode, conversationId, teamId, configId, clientRequestId, attachments }: StartOptions = {}): AgentRun | string {
     const agent = getAgent(db, agentId);
     if (!agent) return 'Agent not found';
     if (clientRequestId && (conversationId || teamId)) {
@@ -122,12 +123,14 @@ export function createRunManager(opts: RunManagerOptions) {
       if (queued) return getRun(db, String(queued.id))!;
     }
     const id = randomUUID();
+    // A retry or resume sends the same documents (decision 11).
+    const attached = attachments ?? (retryOf ? getRun(db, retryOf)?.attachments : undefined);
     db.prepare(
-      `INSERT INTO agent_runs (id, store_id, agent_id, task, resume, parent_run_id, mode, conversation_id, team_id, config_id, runtime, model, effort, client_request_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO agent_runs (id, store_id, agent_id, task, resume, parent_run_id, mode, conversation_id, team_id, config_id, runtime, model, effort, client_request_id, attachments_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(
       id, agent.storeId, agentId, task, resume ?? null, parentRunId ?? null, mode ?? null, conversationId ?? null, teamId ?? null, config ?? null,
-      ...(['runtime', 'model', 'effort'] as const).map((k) => (picked?.[k] ?? null) as string | null), clientRequestId ?? null, new Date().toISOString(),
+      ...(['runtime', 'model', 'effort'] as const).map((k) => (picked?.[k] ?? null) as string | null), clientRequestId ?? null, attached?.length ? JSON.stringify(attached) : null, new Date().toISOString(),
     );
     if (conversationId) db.prepare('UPDATE conversations SET last_activity_at = ? WHERE id = ?').run(new Date().toISOString(), conversationId);
     // A retry is linked before it can start: missions and assign_task follow `retry:<old>:<new>`.
@@ -309,22 +312,33 @@ export function createRunManager(opts: RunManagerOptions) {
       else if (agent && store) {
         // A Retry or Resume has its session set (start); none there means a fresh one.
         const resume = db.prepare('SELECT resume FROM agent_runs WHERE id = ?').get(run.id)?.resume ?? (run.conversationId && !retried(run.id) ? resumeFor(run) : undefined);
-        // A research stage has its own prompt and searches the knowledge base itself.
-        const knowledge = research ? [] : retrieveKnowledge(db, { ws: store.id, role: agent.role, query: run.task, limit: 8 });
-        const systemPrompt =
-          research?.systemPrompt ??
-          assemblePrompt({
-            agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id), knowledge,
-            ...(config ? { tools: config.tools } : {}),
-            ...(config?.customRoleId ? { customRole: customRole(db, config.customRoleId) } : {}),
-          });
-        logKnowledgeUse(db, knowledge.filter((c) => systemPrompt.includes(`[kb:${c.id}]`)).map((c) => c.id), { storeId: store.id, agentId: agent.id, runId: run.id, kind: 'prompt' });
+        // A research stage has its own prompt and searches the knowledge base itself. A conversation's turn searches by its
+        // title, objective and message (decision 11).
+        const query = run.conversationId ? conversationQuery(db, run.conversationId, run.task) : run.task;
+        const knowledge = research ? [] : withConflicts(db, retrieveKnowledge(db, { ws: store.id, role: agent.role, query, limit: 8 }).filter(inScope(config?.knowledge)));
+        const layers = {
+          agent, store, memories: searchMemory(db, store.id, run.task, 12), nicheLearnings: listNicheLearnings(db, nicheKey(store), 20), waiting: waitingFor(store.id), scheduled: scheduledFor(store.id), knowledge,
+          ...(config ? { tools: config.tools } : {}),
+          ...(config?.customRoleId ? { customRole: customRole(db, config.customRoleId) } : {}),
+        };
+        const systemPrompt = research?.systemPrompt ?? assemblePrompt(layers);
+        // A resumed session keeps the system prompt it was recorded with (SDK 0.3.310's default, AA-01): what changes
+        // between runs (memory, knowledge, waiting requests, jobs, the date) goes in the user turn.
+        const changed = resume && !research ? assemblePrompt({ ...layers, changing: true }) : undefined;
+        const placed = knowledge.filter((c) => (changed ?? systemPrompt).includes(`[kb:${c.id}]`));
+        logKnowledgeUse(db, placed.map((c) => c.id), { storeId: store.id, agentId: agent.id, runId: run.id, kind: 'prompt' });
+        if (placed.length) emit({ type: 'knowledge', cards: placed.map(({ id, title, stage, storeId }) => ({ id, title, stage, storeId })) });
+        const message = withAttachments(run);
         // A conversation's turn in a fresh session starts from what it continues or was opened from.
         const preface = !resume && run.conversationId ? conversationPreface(db, run.conversationId, run.id) : undefined;
         const input: RunInput = {
           agent,
           store,
-          task: preface ? `${preface}\n\nNow: ${run.task}` : run.task,
+          task: preface
+            ? `${preface}\n\nNow: ${message}`
+            : changed
+              ? `The app's context for this message, as it is now (not the owner's words):\n\n${changed}\n\nNow: ${message}`
+              : message,
           systemPrompt,
           ...(research ? { mode: 'research' as const } : {}),
           ...(config ? { config } : {}),
@@ -356,7 +370,7 @@ export function createRunManager(opts: RunManagerOptions) {
           }
           // Claude Code keeps sessions 30 days, per folder: a follow-up whose session is gone goes on from a recap.
           if (end.type === 'error' && attempt.resume && end.message.startsWith('No conversation found')) {
-            attempt = recapped(attempt, run.conversationId && conversationPreface(db, run.conversationId, run.id));
+            attempt = recapped({ ...attempt, task: message }, run.conversationId && conversationPreface(db, run.conversationId, run.id));
             emit({ type: 'notice', text: 'The earlier session had ended, so this reply started from a summary of the earlier work.' });
             continue;
           }
@@ -528,6 +542,14 @@ export interface StartOptions {
   configId?: string;
   /** The owner action's id: sent again, it returns the run it started. */
   clientRequestId?: string;
+  /** The documents sent with the message, read already (the server's route). */
+  attachments?: RunAttachment[];
+}
+
+/** The message with each attachment's text as an untrusted block after it (decision 11). */
+function withAttachments(run: AgentRun): string {
+  const blocks = (run.attachments ?? []).map((a) => untrustedBlock(`the attached file "${a.name}"${a.cut ? ` (only its first ${a.text.length.toLocaleString('en')} characters)` : ''}`, a.text, a.text.length));
+  return [run.task, ...blocks].join('\n\n');
 }
 
 /** Errors a moment later may not repeat (SDKAssistantMessageError codes). */
@@ -614,5 +636,6 @@ function toRun(r: Record<string, unknown>): AgentRun {
     ...(runtimeVersion ? { runtimeVersion } : {}),
     ...(actualModel ? { actualModel } : {}),
     ...(effortApplied ? { effortApplied } : {}),
+    ...(r.attachments_json ? { attachments: JSON.parse(String(r.attachments_json)) as RunAttachment[] } : {}),
   };
 }

@@ -16,6 +16,8 @@ export const EVIDENCE = {
 interface Env {
   cites: string[];
   cardHref: (id: string) => string;
+  /** Ids that aren't a card of the run's store or General: left as written, unnumbered. */
+  missing?: ReadonlySet<string>;
 }
 
 md.inline.ruler.before('link', 'cite', (state, silent) => {
@@ -28,6 +30,7 @@ md.inline.ruler.before('link', 'cite', (state, silent) => {
 
 md.renderer.rules.kb_cite = (tokens, i, _o, env: Env) => {
   const id = String(tokens[i]!.meta.id);
+  if (env.missing?.has(id)) return md.utils.escapeHtml(`[kb:${id}]`);
   const n = env.cites.indexOf(id) + 1 || env.cites.push(id);
   return `<sup><a class="ml-px text-[10px] font-bold text-[#ff6b76] no-underline" href="${md.utils.escapeHtml(env.cardHref(id))}">${n}</a></sup>`;
 };
@@ -53,6 +56,6 @@ md.renderer.rules.link_open = (tokens, i, o, _env, self) => {
 md.renderer.rules.link_close = (tokens, i, o, _env, self) => (tokens[i]!.meta?.drop ? '' : self.renderToken(tokens, i, o));
 
 /** The reply as HTML, and the card ids it cites in number order. Pass one `cites` to number several parts as one reply. */
-export function renderReply(text: string, cardHref: (id: string) => string, cites: string[] = []) {
-  return { html: md.render(text, { cites, cardHref } satisfies Env), cites };
+export function renderReply(text: string, cardHref: (id: string) => string, cites: string[] = [], missing?: ReadonlySet<string>) {
+  return { html: md.render(text, { cites, cardHref, ...(missing ? { missing } : {}) } satisfies Env), cites };
 }

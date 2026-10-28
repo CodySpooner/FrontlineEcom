@@ -9,9 +9,9 @@ import { buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState } from '.
 import { NAV } from '../nav';
 import { Conversation, ReadOnlyRun } from './Conversation';
 import { ChangeRuntime, DemoPill, Deploy, useChangeRuntime, useDeploy } from './Deploy';
-import { Details } from './Details';
+import { Details, type DetailsTab } from './Details';
 import { useFill } from './fill';
-import { clampPanes, lastOpened, PANES, usePaneState } from './layout';
+import { clampPanes, lastOpened, PANES, usePaneState, useStored } from './layout';
 import { ListPane, meta } from './ListPane';
 import { SettingsDrawer } from './settings';
 import { StateDot } from './StateDot';
@@ -104,6 +104,7 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
   const workspace = fill.width || window.innerWidth - 232;
   const { mode, left, right } = clampPanes(workspace, prefs, prefs.rightOpen);
   const [drawer, setDrawer] = useState<'list' | 'details'>();
+  const [tab, setTab] = useStored<DetailsTab>('fe.agents.tab', 'details');
   const search = useRef<HTMLInputElement>(null);
   const deploy = useDeploy();
   const online = useOutletContext<boolean | undefined>() ?? true;
@@ -124,7 +125,11 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
   }, []);
   const showRight = mode === 'three' && prefs.rightOpen;
   const list = <ListPane key={store.id} store={store} open={conversationId} search={search} />;
-  const details = (end?: ReactNode) => <Details store={store} conversationId={conversationId} end={end} />;
+  const details = (end?: ReactNode) => <Details store={store} conversationId={conversationId} end={end} tab={tab} onTab={setTab} />;
+  const showKnowledge = () => {
+    setTab('knowledge');
+    if (!showRight) mode === 'three' ? setPrefs({ rightOpen: true }) : setDrawer('details');
+  };
   const buttons = (
     <>
       {mode === 'one' && <IconButton label="Show conversations" icon={List} onClick={() => setDrawer('list')} />}
@@ -150,7 +155,7 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
           </p>
         )}
         {conversationId ? (
-          <ConversationView key={conversationId} store={store} id={conversationId} buttons={buttons} />
+          <ConversationView key={conversationId} store={store} id={conversationId} buttons={buttons} onKnowledge={showKnowledge} />
         ) : runId ? (
           <RunView key={runId} store={store} id={runId} buttons={buttons} />
         ) : (
@@ -243,7 +248,7 @@ function Start({ store, buttons }: { store: Store; buttons: ReactNode }) {
   );
 }
 
-function ConversationView({ store, id, buttons }: { store: Store; id: string; buttons: ReactNode }) {
+function ConversationView({ store, id, buttons, onKnowledge }: { store: Store; id: string; buttons: ReactNode; onKnowledge: () => void }) {
   const c = useConversation(store.id, id);
   const change = useChangeRuntime();
   const missing = c.isError && /not found$/.test(c.error.message);
@@ -255,7 +260,7 @@ function ConversationView({ store, id, buttons }: { store: Store; id: string; bu
   if (c.isError) return <ErrorState message="Couldn't load this conversation." onRetry={() => c.refetch()} />;
   return (
     <>
-      <Conversation store={store} conversation={c.data} config={c.data.config} buttons={buttons} />
+      <Conversation store={store} conversation={c.data} config={c.data.config} buttons={buttons} onKnowledge={onKnowledge} />
       {change.shown && <ChangeRuntime store={store} conversation={c.data} onClose={change.close} />}
     </>
   );

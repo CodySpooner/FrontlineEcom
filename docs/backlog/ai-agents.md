@@ -1480,7 +1480,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
       pending question.
 
 ### Knowledge integration
-- [ ] AA-17 **Retrieval and references** (decision 11):
+- [x] AA-17 **Retrieval and references** (decision 11):
   - the conversation-aware query;
   - cards for follow-ups in the user turn, verified against the SDK's behaviour without a live turn (decision 16),
     and the finding written in Notes;
@@ -1698,6 +1698,13 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   card; request_approval refuses both kinds; question notifications link to the conversation; runs carry their derived
   state in the run APIs and the settings drawer; compaction and expired-session activity lines. 10 new tests, plus the
   Codex case over MCP. Not checked in headless Chrome: the demo engine never asks, so the dev server has no question.
+- 2026-10-28 AA-17 Retrieval and references: the conversation-aware query; a resumed session's changing prompt parts
+  (memory, knowledge, jobs, waiting requests, the date) in its user turn; the `knowledge` event; open conflicts shown
+  with their other side; the framing sentence in the prompt and in search_knowledge; Deploy's knowledge scopes applied;
+  citations resolved in the run's store and General only, another store's left as written; documents attached from the
+  composer and Deploy, read into untrusted blocks and resent on retry; the Knowledge tab with its count, and the
+  composer's knowledge chip. `untrustedBlock` extracted (sources.test.ts unchanged). 8 new tests, 4 extended, on the scripted
+  engine. Checked in headless Chrome at 1440 on a demo-runtime conversation with two demo cards and a document.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
@@ -1835,6 +1842,39 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-17, 2026-10-28) For AA-18 and later:
+  - **Follow-up knowledge, verified without a live turn (decision 16):** AA-01 read SDK 0.3.310's types and found the
+    default (a bare `systemPrompt` string) records the prompt with the session and resends that record on resume. So
+    on a resumed session, runs.ts builds `assemblePrompt({ ...layers, changing: true })` (memory, knowledge, jobs,
+    waiting requests, the date: no role layers) and sends it in the user turn as "The app's context for this message,
+    as it is now (not the owner's words):", then "Now: <message>". The system prompt is still built and passed, so an
+    account that doesn't record yet sees the cards twice at worst. agents-references.test.ts checks the turn the
+    scripted engine receives; no model turn ran.
+  - Query: `conversationQuery` (conversations.ts) joins the title, the first run's task and the message, each cut to
+    1,000 characters, without repeats. Memory still searches by the message alone.
+  - `withConflicts` (kb-retrieve.ts) adds an open conflict's other side (the other card, else the conflict's note, 300
+    characters at most) to a card's line: "(Research-Supported; unresolved conflict: [kb:<id>] <title>: <summary>)".
+  - `KB_UNTRUSTED` (prompt.ts) is the framing sentence. It's in the knowledge section's intro, which now counts against
+    the budget, and on the first line of search_knowledge's output when it finds cards ("(none)" is unchanged).
+  - Deploy's knowledge scopes now apply: `inScope(config.knowledge)` filters the prompt's cards, and search_knowledge
+    reads the run's config (by SQL, not configs.ts, which imports tools.ts). A research task ignores it.
+  - The `knowledge` event (`{type, cards: KnowledgeRef[]}`) is the run's first transcript event when cards were placed.
+    The activity step reads "Read N knowledge cards: <titles>". The cards placed are logged as 'prompt' in
+    kb_retrievals, as before.
+  - Attachments: `readAttachments` (agents-conversations.ts) takes up to 10 `{name, data}` (base64), pdf/txt/md/csv/html,
+    10 MB in all, read with the KB's `readUpload`; text cut at `ATTACHMENT_TEXT` (20,000) with `cut`. Kept in
+    `agent_runs.attachments_json`; a retry or resume copies the run it retries. The engine gets the message, then one
+    `untrustedBlock` per file. No kb_sources row. "Send as a new conversation" (DEMO_SESSION) doesn't carry them.
+  - `GET /api/conversations/:id/knowledge?store=` returns `KnowledgeUse[]`: the latest started run's kb_retrievals,
+    this store's and General's cards only, with how each was used (prompt, search, cited). It refetches with the
+    conversation (the socket invalidates `['conversation', id]` on every run message). AA-18 adds findings.
+  - Web: Workspace's Panes holds the panel tab (`fe.agents.tab`), and Details takes `tab` and `onTab`. The composer's
+    chip sets Knowledge and opens the panel, or the drawer when it doesn't fit. Citations use `kbCardQuery(id, store)`
+    (`ws=<store>&general=1`, no retry and no `retryOnMount`: remounting the chip retried the 404 in a loop). An id that
+    404s renders as written, unnumbered, with a "not available in this store" chip. components/Chat.tsx's old
+    Transcript (DevGallery only) still asks with `ws=all`.
+  - Touch points outside the lane: `untrustedBlock` in kb-sources.ts and `withConflicts`/`inScope` in kb-retrieve.ts
+    (decision 1), and `base64` exported from knowledge/Research.tsx for the attach helper.
 - (AA-16, 2026-10-28) For AA-17 and later:
   - `ask_owner` is in every role's base tools (roles.ts BASE). A run with no conversation is refused (scheduled and
     module runs have no composer to answer in). It calls `approvals.create` and `approvals.decision` itself, emits

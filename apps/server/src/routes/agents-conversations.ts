@@ -1,11 +1,12 @@
 import {
-  agentTypes, archiveCustomRole, conversationCounts, conversationThread, createConversation, createCustomRole, discardConversation, getConfig, getConversation, getCustomRole, getRun, toolGroups, listConversations, listPresets,
+  agentTypes, archiveCustomRole, conversationCounts, conversationKnowledge, conversationThread, createConversation, createCustomRole, discardConversation, getConfig, getConversation, getCustomRole, getRun, toolGroups, listConversations, listPresets,
   recap, resolveType, saveConfig, savePreset, setConversationConfig, updateConversation, validateConfig, validateCustomRole, type RunManager,
 } from '@frontline/agents';
-import { INTERRUPTED, type AgentRun, type Conversation, type ConversationContext, type CreateConversationInput, type RuntimeCapabilities, type SendMessageInput, type Store } from '@frontline/shared';
+import { ATTACHMENT_TEXT, INTERRUPTED, type AgentRun, type Conversation, type ConversationContext, type CreateConversationInput, type RunAttachment, type RuntimeCapabilities, type SendMessageInput, type Store } from '@frontline/shared';
 import { Hono, type Context } from 'hono';
 import { decide, getApproval } from '../approvals';
 import type { Db } from '../db';
+import { readUpload } from '../kb/fetcher';
 import { getStore } from '../stores';
 import { runtimes } from './agents-runtimes';
 
@@ -20,12 +21,35 @@ const firstLine = (text: string) => {
 
 type Opened = { conversation: Conversation; run: AgentRun; repeated: boolean } | { status: 400 | 404 | 409; error: string; field?: string };
 
+const DOCUMENTS = ['pdf', 'txt', 'md', 'csv', 'html'];
+const ATTACHMENTS_MAX = 10 * 1_048_576;
+
+/**
+ * A message's documents (decision 11), read with the knowledge base's reader. The text is kept on the run, the file
+ * isn't, and nothing goes to kb_sources. A string is why they were refused.
+ */
+export async function readAttachments(list: unknown): Promise<RunAttachment[] | string> {
+  if (list === undefined) return [];
+  if (!Array.isArray(list) || list.length > 10 || list.some((a) => !isText(a?.name, 1, 200) || typeof a?.data !== 'string')) return 'Expected attachments: up to 10 of { name, data (base64) }';
+  const files = list.map((a: { name: string; data: string }) => ({ name: a.name.trim(), bytes: Buffer.from(a.data, 'base64') }));
+  if (files.reduce((n, f) => n + f.bytes.length, 0) > ATTACHMENTS_MAX) return 'Attachments are up to 10 MB in total per message.';
+  const read: RunAttachment[] = [];
+  for (const f of files) {
+    const type = f.name.includes('.') ? f.name.split('.').pop()!.toLowerCase() : '';
+    if (!DOCUMENTS.includes(type)) return `${f.name}: attach a PDF, TXT, MD, CSV or HTML file. Images aren't supported yet.`;
+    const doc = await readUpload(f.name, f.bytes, ATTACHMENTS_MAX);
+    if (doc.status !== 'read' || !doc.text?.trim()) return `${f.name}: ${(doc.error ?? 'it has no readable text').replace(/\.$/, '')}.`;
+    read.push({ name: f.name, type, size: f.bytes.length, text: doc.text.slice(0, ATTACHMENT_TEXT), ...(doc.text.length > ATTACHMENT_TEXT ? { cut: true } : {}) });
+  }
+  return read;
+}
+
 /**
  * Opens a conversation in `store` and starts its first turn: Deploy, startConversation, Continue in a new conversation
  * and the legacy run route all come here. A repeated clientRequestId returns what the first request opened. A refusal
  * leaves nothing behind. `caps`: GET /api/runtimes, what the config is checked against.
  */
-export function openConversation(db: Db, runs: RunManager, store: Store, input: CreateConversationInput, caps: RuntimeCapabilities[]): Opened {
+export function openConversation(db: Db, runs: RunManager, store: Store, input: CreateConversationInput, caps: RuntimeCapabilities[], attachments: RunAttachment[] = []): Opened {
   const same = db.prepare('SELECT c.id, r.id AS run_id FROM conversations c JOIN agent_runs r ON r.conversation_id = c.id AND r.client_request_id = c.client_request_id WHERE c.store_id = ? AND c.client_request_id = ?').get(store.id, input.clientRequestId);
   if (same) return { conversation: getConversation(db, String(same.id))!, run: getRun(db, String(same.run_id))!, repeated: true };
   let typeId = input.type;
@@ -53,7 +77,7 @@ export function openConversation(db: Db, runs: RunManager, store: Store, input: 
   const draft = validateConfig(store, type, input.config, caps);
   if ('field' in draft) return { status: 400, ...draft };
   const conversation = createConversation(db, store, type, draft, { title: title?.trim() || firstLine(input.message), ...(context ? { context } : {}), clientRequestId: input.clientRequestId });
-  const run = runs.start(conversation.agentId, input.message.trim(), undefined, undefined, { conversationId: conversation.id, clientRequestId: input.clientRequestId });
+  const run = runs.start(conversation.agentId, input.message.trim(), undefined, undefined, { conversationId: conversation.id, clientRequestId: input.clientRequestId, attachments });
   if (typeof run === 'string') {
     discardConversation(db, conversation.id);
     return { status: 409, error: run };
@@ -95,7 +119,9 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       if (!b || !isId(b.clientRequestId) || !isText(b.message, 1, MESSAGE_MAX) || (b.title !== undefined && !isText(b.title, 1, 200)) || !b.type === !b.fromRunId) {
         return c.json({ error: `Expected { clientRequestId, message (1–${MESSAGE_MAX.toLocaleString('en')} chars), type or fromRunId, title?, context?, config? }` }, 400);
       }
-      const opened = openConversation(db, runs, store, b, await runtimes());
+      const attachments = await readAttachments(b.attachments);
+      if (typeof attachments === 'string') return c.json({ error: attachments, field: 'attachments' }, 400);
+      const opened = openConversation(db, runs, store, b, await runtimes(), attachments);
       if ('status' in opened) return c.json({ error: opened.error, ...(opened.field ? { field: opened.field } : {}) }, opened.status);
       return c.json({ conversation: opened.conversation, run: opened.run }, opened.repeated ? 200 : 201);
     })
@@ -174,6 +200,10 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       const answered = decide(db, a.id, 'approve', b.text.trim());
       return answered && answered !== 'decided' ? c.json(answered) : c.json({ error: 'That question is no longer waiting for an answer.' }, 409);
     })
+    .get('/api/conversations/:id/knowledge', (c) => {
+      const conversation = mine(c);
+      return conversation ? c.json(conversationKnowledge(db, conversation.id)) : missing(c);
+    })
     .get('/api/conversations/:id/tools', (c) => {
       const conversation = mine(c);
       return conversation ? c.json(toolGroups(db, getConfig(db, conversation.configId)!)) : missing(c);
@@ -198,7 +228,9 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       if (!conversation) return missing(c);
       const b = (await c.req.json().catch(() => null)) as SendMessageInput | null;
       if (!b || !isId(b.clientRequestId) || !isText(b.message, 1, MESSAGE_MAX)) return c.json({ error: `Expected { clientRequestId, message (1–${MESSAGE_MAX.toLocaleString('en')} chars) }` }, 400);
-      return started(c, runs.start(conversation.agentId, b.message.trim(), undefined, undefined, { conversationId: conversation.id, clientRequestId: b.clientRequestId }));
+      const attachments = await readAttachments(b.attachments);
+      if (typeof attachments === 'string') return c.json({ error: attachments, field: 'attachments' }, 400);
+      return started(c, runs.start(conversation.agentId, b.message.trim(), undefined, undefined, { conversationId: conversation.id, clientRequestId: b.clientRequestId, attachments }));
     })
     .post('/api/conversations/:id/runs/:runId/retry', async (c) => {
       const { conversation, run, clientRequestId } = await turn(c);

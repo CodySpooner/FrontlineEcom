@@ -51,7 +51,7 @@ function api(runs: AgentRunDetail[]) {
     if (u.pathname === '/api/conversations/c1/thread') return { items: runs, total: runs.length };
     if (u.pathname === '/api/agent-types') return [{ id: 'ad_strategist', name: 'Ad Strategist', description: '', baseRole: 'ad_strategist' }];
     if (u.pathname === '/api/kb/cards/k1') return { id: 'k1', storeId: 'glow', stage: 'supported', title: 'Gift buyers convert', status: 'active' };
-    if (u.pathname === '/api/kb/cards/k2') return { id: 'k2', storeId: 'peak', stage: 'validated', title: "Peak's secret", status: 'active' };
+    if (u.pathname === '/api/kb/cards/k2') return new Response(JSON.stringify({ error: 'card not found' }), { status: 404 }); // peak's, asked with ws=glow
     const found = runs.find((r) => u.pathname === `/api/runs/${r.id}`);
     return found;
   });
@@ -88,13 +88,17 @@ test('the thread: meta chips, markdown with evidence and numbered citations, act
   expect(screen.getByText('Searched the knowledge base for "gift"')).toBeTruthy();
   expect(within(screen.getByRole('table')).getByText('$600')).toBeTruthy();
   expect(screen.getByText('Measured')).toBeTruthy();
-  // Citations number in order of first use; a card cited again keeps its number; another store's card shows no title.
-  expect(screen.getAllByRole('link', { name: '1' }).map((a) => a.getAttribute('href'))).toEqual(['/knowledge?card=k1&ws=glow', '/knowledge?card=k1&ws=glow']);
+  // Citations number in order of first use and resolve in the run's store and General only (never ws=all): a card cited
+  // again keeps its number; another store's stays as the agent wrote it, unnumbered, and its chip says why.
   const sources = screen.getByLabelText('Sources');
   expect((await within(sources).findByText('Gift buyers convert')).closest('a')!.getAttribute('href')).toBe('/knowledge?card=k1&ws=glow');
   expect(within(sources).getByText('Research-Supported')).toBeTruthy();
   expect(await within(sources).findByText('not available in this store')).toBeTruthy();
-  expect(within(sources).queryByText("Peak's secret")).toBeNull();
+  expect(within(sources).getByText('kb:k2').closest('a')).toBeNull();
+  expect(screen.getAllByRole('link', { name: '1' }).map((a) => a.getAttribute('href'))).toEqual(['/knowledge?card=k1&ws=glow', '/knowledge?card=k1&ws=glow']);
+  expect(screen.queryByRole('link', { name: '2' })).toBeNull();
+  expect(screen.getByText(/Not \[kb:k2\]\. Again/)).toBeTruthy();
+  expect(fetch.mock.calls.map(([url]) => url).filter((url) => url.startsWith('/api/kb/'))).toEqual(expect.arrayContaining(['/api/kb/cards/k1?ws=glow&general=1', '/api/kb/cards/k2?ws=glow&general=1']));
   // The failed attempt folds under its retry, saying it acted.
   expect(screen.getByText('Attempt 1 · failed')).toBeTruthy();
   expect(screen.getByText(/may have changed something before it ended: it ran propose_ad_change/)).toBeTruthy();
@@ -250,4 +254,31 @@ test("while the agent waits on its question, the composer answers it and the car
   fireEvent.click(screen.getByRole('button', { name: 'Send answer' }));
   await vi.waitFor(() => expect(fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url, init]) => [url, JSON.parse(String(init!.body))])).toEqual([['/api/approvals/q1/answer?store=glow', { text: '$40/day' }]]));
   await vi.waitFor(() => expect((box as HTMLTextAreaElement).value).toBe(''));
+});
+
+test('the composer attaches documents and sends them with the message; the chip opens the knowledge; a sent message lists its documents', async () => {
+  const fetch = api([run('r1', 'done', { attachments: [{ name: 'notes.md', type: 'md', size: 30_000, text: 'x'.repeat(20_000), cut: true }] })]);
+  const onKnowledge = vi.fn();
+  renderApp(<Conversation store={store} conversation={conversation()} config={{ ...config, knowledge: ['store'] }} buttons={null} onKnowledge={onKnowledge} />);
+  // The owner's sent message keeps its documents, saying when only the start was read.
+  expect((await screen.findByText('notes.md')).closest('li')!.textContent).toBe('notes.md29 KB · only its first 20,000 characters were read');
+  fireEvent.click(screen.getByRole('button', { name: 'Store knowledge' }));
+  expect(onKnowledge).toHaveBeenCalledOnce();
+  expect(screen.getByRole('button', { name: 'Attach documents' }).getAttribute('title')).toMatch(/Images aren't supported yet\.$/);
+  const picker = screen.getByLabelText('Documents to attach') as HTMLInputElement;
+  expect(picker.accept).toBe('.pdf,.txt,.md,.csv,.html');
+  fireEvent.change(picker, { target: { files: [new File(['sku,units'], 'stock.csv', { type: 'text/csv' }), new File(['x'], 'drop.txt')] } });
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove drop.txt' }));
+  expect(screen.queryByText('drop.txt')).toBeNull();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Use the stock sheet' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await vi.waitFor(() => expect(sent(fetch, 'POST')).toHaveLength(1));
+  expect(sent(fetch, 'POST')[0]).toEqual(['/api/conversations/c1/messages?store=glow', { clientRequestId: expect.any(String), message: 'Use the stock sheet', attachments: [{ name: 'stock.csv', data: btoa('sku,units') }] }]);
+  await vi.waitFor(() => expect(screen.queryByText('stock.csv')).toBeNull());
+  // Over 10 MB in all: it says so and doesn't send.
+  fireEvent.change(picker, { target: { files: [new File([new Uint8Array(10 * 1_048_576 + 1)], 'big.pdf')] } });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Read this' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  expect(await screen.findByText('Attachments are up to 10 MB in total per message.')).toBeTruthy();
+  expect(sent(fetch, 'POST')).toHaveLength(1);
 });

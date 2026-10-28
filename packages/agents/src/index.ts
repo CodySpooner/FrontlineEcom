@@ -5,7 +5,7 @@ export { CODEX_FEATURES_OFF, codexEngine, codexError, codexEvents, codexMcp, cod
 export { CODEX_TURN, fakeCodex, type FakeCodexChild } from './fake-codex';
 export { BUILTIN_TYPES, CHECKS_LAST, contractOf, contractText, ROLES, SQUAD_RULES, WORKFLOW_FIRST, type RoleSpec, type ToolName } from './roles';
 export { createSquad, ensureSquads, listAgents, getAgent, updateAgent, agentId, costToday, DEFAULT_AUTONOMY } from './squads';
-export { assemblePrompt, playbook, platformPack, nichePack, estimateTokens, oneLine, type PromptInput } from './prompt';
+export { assemblePrompt, KB_UNTRUSTED, playbook, platformPack, nichePack, estimateTokens, oneLine, type PromptInput } from './prompt';
 export {
   writeMemory,
   getMemory,
@@ -26,7 +26,7 @@ export {
 export { APP_TOOLS, OUTLIVE_RUN, RESEARCH_TOOLS, allows, budgetAddedToday, cash, defaultTools, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
 export { agentTypes, archiveCustomRole, createCustomRole, customRole, getConfig, getCustomRole, listPresets, resolveType, saveConfig, savePreset, seatDefault, toolGroups, validateConfig, validateCustomRole, type AgentType, type ConfigDraft } from './configs';
-export { conversationCounts, conversationPreface, conversationThread, runDeliverables, setConversationConfig, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
+export { conversationCounts, conversationKnowledge, conversationPreface, conversationQuery, conversationThread, runDeliverables, setConversationConfig, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
 export { createRunManager, getRun, hasEffects, listRuns, runGist, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, adWindow, uncostedShare, type CampaignStats, type Economics, type Verdict } from './ads';
@@ -78,8 +78,8 @@ export {
   suggestLinks,
   type NewKbEvidence,
 } from './kb-links';
-export { reliabilityOf, saveSource, setSourceReliability, sourceForAgent, type NewKbSource } from './kb-sources';
-export { kbRoleArea, citedCards, ftsQuery, logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
+export { reliabilityOf, saveSource, setSourceReliability, sourceForAgent, untrustedBlock, type NewKbSource } from './kb-sources';
+export { kbRoleArea, citedCards, ftsQuery, inScope, logKnowledgeUse, retrieveKnowledge, withConflicts } from './kb-retrieve';
 export { promotedAs, promotionPending, promotionTask, promoteToGeneral } from './kb-promote';
 export { learn, learnFromOutcome, lift, type Lift, type Reading } from './kb-perf';
 export {

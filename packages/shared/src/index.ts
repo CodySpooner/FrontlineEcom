@@ -493,6 +493,8 @@ export interface AgentRun {
   effortApplied?: string;
   /** Derived from status, error and its pending approvals (decision 5); the API fills it. */
   state?: RunState;
+  /** The documents sent with its message. */
+  attachments?: RunAttachment[];
   /** In a conversation's thread: the run this one retried or resumed (attempt history). */
   retryOf?: string;
 }
@@ -827,6 +829,8 @@ export interface CreateConversationInput {
   /** A module's reference, checked against the store. */
   context?: ConversationContext;
   config?: ConversationConfigInput;
+  /** Sent with the first message. */
+  attachments?: AttachmentUpload[];
 }
 
 /** GET /api/conversations/:id/tools?store= → the config's tools by kind of access, with the integration behind a group. */
@@ -890,6 +894,43 @@ export interface CreateCustomRoleInput {
 export interface SendMessageInput {
   clientRequestId: string;
   message: string;
+  attachments?: AttachmentUpload[];
+}
+
+/** A document sent with a message (decision 11): pdf, txt, md, csv or html, up to 10 MB in all per message. */
+export interface AttachmentUpload {
+  name: string;
+  /** The file, base64. */
+  data: string;
+}
+
+/** An attachment as its run keeps it: read when sent, the original file not kept. A retry sends the same text. */
+export interface RunAttachment {
+  name: string;
+  /** Its extension: pdf, txt, md, csv or html. */
+  type: string;
+  /** Bytes. */
+  size: number;
+  /** The extracted text, cut to ATTACHMENT_TEXT characters. */
+  text: string;
+  /** The text was longer and only its start is kept (the chip says so, and so does the agent's block). */
+  cut?: boolean;
+}
+
+export const ATTACHMENT_TEXT = 20_000;
+
+/** A knowledge card a run used: in its prompt (the `knowledge` event), found with search_knowledge, or cited. */
+export interface KnowledgeRef {
+  id: string;
+  title: string;
+  stage: KbStage;
+  /** null: General. */
+  storeId: string | null;
+}
+
+/** GET /api/conversations/:id/knowledge?store= → KnowledgeUse[]: the cards its latest started run used, this store's and General's only. */
+export interface KnowledgeUse extends KnowledgeRef {
+  how: ('prompt' | 'search' | 'cited')[];
 }
 
 export interface StartRunInput {
@@ -1013,6 +1054,8 @@ export type AgentEvent =
   | { type: 'tool_result'; id: string; output: string; isError: boolean }
   | { type: 'approval_request'; approval: ApprovalRequest }
   | { type: 'memory_written'; memory: StoreMemory }
+  /** At run start: the knowledge cards placed in its prompt or, on a resumed session, its user turn (decision 11). */
+  | { type: 'knowledge'; cards: KnowledgeRef[] }
   /** A line for the reply's activity, e.g. the run didn't run on what was asked (decision 9). */
   | { type: 'notice'; text: string }
   /** `sessionId` continues the conversation when passed back as `resume`. */

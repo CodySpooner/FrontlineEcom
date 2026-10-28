@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Lock } from 'lucide-react';
-import { AGENT_ROLES, CODEX_TESTED, EFFORT_LABEL, INTEGRATION_KINDS, INTERRUPTED, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
-import { useAgents, useAgentTypes, useCaps, useClaudeAccount, useConversation, useConversationTools, useRuntimes, useThread } from '../api/client';
+import { AGENT_ROLES, CODEX_TESTED, EFFORT_LABEL, INTEGRATION_KINDS, INTERRUPTED, KB_STAGES, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
+import { useAgents, useAgentTypes, useCaps, useClaudeAccount, useConversation, useConversationKnowledge, useConversationTools, useRuntimes, useThread } from '../api/client';
 import { FixLink } from '../components/Chat';
 import { cx, Dialog, ProgressBar, RUN_STATUS } from '../components/ui';
 import { cents, modelName } from '../lib/format';
@@ -10,18 +10,18 @@ import { isLive } from '../lib/transcript';
 import { took } from './activity';
 import { runtimeLabel, spendLabel } from './Conversation';
 import { useChangeRuntime } from './Deploy';
-import { useStored } from './layout';
 import { approvalLines, autopilotRules } from './settings';
 
-// The right panel: the open conversation's Details (agent, runtime, store scope, tools, approvals and budget) and its
-// Activity (every run, newest first). ponytail: the Knowledge tab renders from AA-17; the team variant from AA-20,
-// when AA-19's team data exists.
+// The right panel: the open conversation's Details (agent, runtime, store scope, tools, approvals and budget), its
+// Activity (every run, newest first) and its Knowledge (the cards the latest reply used). ponytail: the team variant
+// renders from AA-20, when AA-19's team data exists.
 
 const TABS = [
   { value: 'details', label: 'Details' },
   { value: 'activity', label: 'Activity' },
+  { value: 'knowledge', label: 'Knowledge' },
 ] as const;
-type Tab = (typeof TABS)[number]['value'];
+export type DetailsTab = (typeof TABS)[number]['value'];
 export const ACCESS: Record<ToolGroup['access'], string> = { read: 'Read', approval: 'Drafts need approval', on: 'On' };
 
 const Section = ({ title, children }: { title: string; children: ReactNode }) => (
@@ -34,10 +34,10 @@ const Section = ({ title, children }: { title: string; children: ReactNode }) =>
 /** The thread's runs, oldest first (the pages come newest first). */
 const runsOf = (pages?: { items: AgentRunDetail[] }[]) => [...(pages ?? [])].reverse().flatMap((p) => p.items);
 
-/** `end`: beside the tabs (the hide button). The tab is kept per browser, so it's still picked after leaving the page. */
-export function Details({ store, conversationId, end }: { store: Store; conversationId?: string; end?: ReactNode }) {
-  const [tab, setTab] = useStored<Tab>('fe.agents.tab', 'details');
+/** `end`: beside the tabs (the hide button). The workspace keeps the tab per browser, so it's still picked after leaving the page. */
+export function Details({ store, conversationId, end, tab, onTab }: { store: Store; conversationId?: string; end?: ReactNode; tab: DetailsTab; onTab: (tab: DetailsTab) => void }) {
   const c = useConversation(store.id, conversationId ?? '').data;
+  const cards = useConversationKnowledge(store.id, conversationId ?? '').data?.length;
   return (
     <>
       <div role="tablist" aria-label="Details panel" className="flex h-10 shrink-0 items-center gap-4 border-b border-[#1d1d22] pr-2 pl-4">
@@ -47,10 +47,12 @@ export function Details({ store, conversationId, end }: { store: Store; conversa
             type="button"
             role="tab"
             aria-selected={tab === t.value}
-            onClick={() => setTab(t.value)}
-            className={cx('flex h-full cursor-pointer items-center border-b-2 text-[12.5px] font-medium', tab === t.value ? 'border-red text-text' : 'border-transparent text-muted hover:text-white')}
+            onClick={() => onTab(t.value)}
+            className={cx('flex h-full cursor-pointer items-center gap-1.5 border-b-2 text-[12.5px] font-medium', tab === t.value ? 'border-red text-text' : 'border-transparent text-muted hover:text-white')}
           >
             {t.label}
+            {t.value === 'knowledge' && !!cards && ' '}
+            {t.value === 'knowledge' && !!cards && <span className="rounded bg-[#1d1d22] px-1.5 text-[10.5px] text-text-2">{cards}</span>}
           </button>
         ))}
         <span className="flex-1" />
@@ -60,7 +62,7 @@ export function Details({ store, conversationId, end }: { store: Store; conversa
         <p className="px-4 py-3.5 text-[12.5px] text-muted">Open a conversation to see its agent and scope.</p>
       ) : (
         <div role="tabpanel" aria-label={TABS.find((t) => t.value === tab)!.label} className="min-h-0 flex-1 overflow-y-auto">
-          {tab === 'details' ? <DetailsTab store={store} c={c} /> : <ActivityTab store={store} c={c} />}
+          {tab === 'details' ? <DetailsTab store={store} c={c} /> : tab === 'activity' ? <ActivityTab store={store} c={c} /> : <KnowledgeTab store={store} c={c} />}
         </div>
       )}
     </>
@@ -256,5 +258,37 @@ function ActivityTab({ store, c }: { store: Store; c: ConversationDetail }) {
         );
       })}
     </ol>
+  );
+}
+
+const HOW = { prompt: 'In its prompt', search: 'Searched for', cited: 'Cited' } as const;
+
+/** The cards the latest reply had in its prompt, searched for or cited: this store's, then General's (never another store's). */
+function KnowledgeTab({ store, c }: { store: Store; c: ConversationDetail }) {
+  const k = useConversationKnowledge(store.id, c.id).data ?? [];
+  if (!c.config.knowledge.length) return <p className="px-4 py-3.5 text-[12.5px] text-muted">This agent reads no knowledge: its settings leave out the store's and General.</p>;
+  if (!k.length) return <p className="px-4 py-3.5 text-[12.5px] text-muted">No cards yet. The cards a reply has in its prompt, searches for or cites show here.</p>;
+  const groups = [
+    [`${store.name}'s knowledge`, k.filter((x) => x.storeId !== null)],
+    ['General knowledge', k.filter((x) => x.storeId === null)],
+  ] as const;
+  return groups.map(
+    ([title, list]) =>
+      list.length > 0 && (
+        <Section key={title} title={title}>
+          <ul className="grid gap-2">
+            {list.map((card) => (
+              <li key={card.id} className="grid gap-0.5 text-[12.5px]">
+                <Link to={`/knowledge?card=${encodeURIComponent(card.id)}&ws=${encodeURIComponent(store.id)}`} className="text-text hover:text-white hover:underline">
+                  {card.title}
+                </Link>
+                <span className="text-xs text-muted">
+                  {card.stage === 'hypothesis' ? 'Hypothesis, unproven' : KB_STAGES[card.stage]} · {card.how.map((h) => HOW[h]).join(' · ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      ),
   );
 }

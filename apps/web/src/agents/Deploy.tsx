@@ -6,6 +6,7 @@ import { useAgents, useAgentTypes, useCaps, useChangeConfig, useCreateConversati
 import { Button, cx, Dialog, Segmented, Switch } from '../components/ui';
 import { withParams } from '../knowledge/url';
 import { ago, money } from '../lib/format';
+import { AttachButton, attachError, Attachments, toUploads } from './attach';
 import { runtimeLabel } from './Conversation';
 import { CustomRoleForm } from './CustomRoleForm';
 import { ACCESS } from './Details';
@@ -226,6 +227,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
     if (choice.runtime === 'codex') setStopAfter((s) => s || '20');
   }, [choice.runtime]);
   const [objective, setObjective] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
   const [title, setTitle] = useState<string>();
   const [toolsOpen, setToolsOpen] = useState(false);
   const [limitsOpen, setLimitsOpen] = useState(true);
@@ -244,7 +246,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
     knowledge,
     permissions: { ...(choice.runtime === 'claude' && budget ? { budgetUsd: Number(budget) } : {}), ...(stopAfter ? { stopAfterMin: Number(stopAfter) } : {}) },
   };
-  const created = fieldErrors(create.error, ['runtime', 'model', 'effort', 'tools', 'knowledge', 'permissions.budgetUsd', 'permissions.stopAfterMin', 'objective']);
+  const created = fieldErrors(create.error, ['runtime', 'model', 'effort', 'tools', 'knowledge', 'permissions.budgetUsd', 'permissions.stopAfterMin', 'objective', 'attachments']);
   const saved = fieldErrors(save.error, ['name', 'runtime', 'model', 'effort', 'tools', 'knowledge', 'permissions.budgetUsd', 'permissions.stopAfterMin', 'objective']);
   const said = (field: string) => created.said(field) || saved.said(field);
 
@@ -273,11 +275,12 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
     setPresetId(p.builtin ? undefined : p.id);
     fill(p, role || type);
   };
-  const start = (e: FormEvent) => {
+  const start = async (e: FormEvent) => {
     e.preventDefault();
-    if (!type) return;
+    if (!type || attachError(files)) return;
+    const attachments = files.length ? await toUploads(files) : undefined;
     create.mutate(
-      { clientRequestId, type: type.id, message: objective.trim(), title: (title ?? suggested).trim() || undefined, config },
+      { clientRequestId, type: type.id, message: objective.trim(), title: (title ?? suggested).trim() || undefined, config, ...(attachments ? { attachments } : {}) },
       { onSuccess: (r) => navigate(agentsUrl({ store: store.id, conversation: r.conversation.id })) },
     );
   };
@@ -286,7 +289,6 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
     save.mutate({ name: naming, type: type.id, config, ...(objective.trim() ? { objective: objective.trim() } : {}) }, { onSuccess: (p) => (setPresetId(p.id), setNaming(undefined)) });
   };
   const toggle = (list: string[], item: string, on: boolean) => (on ? list.filter((x) => x !== item) : [...list, item]);
-  const knowledgeLabel = knowledge.length === 2 ? 'Store + General knowledge' : knowledge[0] === 'store' ? 'Store knowledge' : knowledge[0] === 'general' ? 'General knowledge' : 'No knowledge';
 
   const footer =
     naming === undefined ? (
@@ -384,7 +386,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
           <textarea required rows={3} maxLength={20000} value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="What should the agent do? This is the first message." className={cx(input, 'h-[70px] w-full resize-none py-2')} />
           {said('objective')}
         </label>
-        <Fold title="Tools and knowledge" summary={`${knowledgeLabel} · ${base.length} tools`} open={toolsOpen} onToggle={() => setToolsOpen(!toolsOpen)}>
+        <Fold title="Tools and knowledge" summary={`${knowledgeLabel(knowledge)} · ${base.length} tools${files.length ? ` · ${files.length} attached` : ''}`} open={toolsOpen} onToggle={() => setToolsOpen(!toolsOpen)}>
           <ul className="grid gap-1">
             {groups?.map((g) => (
               <li key={g.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
@@ -422,8 +424,21 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
               <span className="text-xs text-muted">their names, platforms, niches and totals</span>
             </label>
           )}
+          <div className="mt-2.5 grid gap-1">
+            <span className="text-xs text-muted">Attachments (sent with the first message)</span>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <AttachButton files={files} onChange={setFiles} />
+              <Attachments files={files} onChange={setFiles} />
+            </div>
+            {attachError(files) && (
+              <p role="alert" className="text-xs text-red">
+                {attachError(files)}
+              </p>
+            )}
+          </div>
           {said('tools')}
           {said('knowledge')}
+          {said('attachments')}
         </Fold>
         <Fold title="Permissions and limits" summary={rules.length ? 'Autopilot within caps' : 'Asks before spending'} open={limitsOpen} onToggle={() => setLimitsOpen(!limitsOpen)}>
           <div className="grid grid-cols-2 gap-x-5">
@@ -524,3 +539,6 @@ export function ChangeRuntime({ store, conversation, onClose }: { store: Store; 
     </Dialog>
   );
 }
+
+export const knowledgeLabel = (k: KnowledgeScope[]) =>
+  k.length === 2 ? 'Store + General knowledge' : k[0] === 'store' ? 'Store knowledge' : k[0] === 'general' ? 'General knowledge' : 'No knowledge';

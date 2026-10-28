@@ -1,16 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Ellipsis, LoaderCircle, Pencil, Square, X } from 'lucide-react';
-import { AGENT_ROLES, EFFORT_LABEL, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationContext, type ConversationState, type KbStage, type RunDeliverable, type RuntimeId, type Store } from '@frontline/shared';
-import { useAgentTypes, useAnswer, useApprovals, useCreateConversation, useKbCard, useRetryRun, useRun, useSendMessage, useStopConversation, useThread, useUpdateConversation } from '../api/client';
+import { AGENT_ROLES, EFFORT_LABEL, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationContext, type ConversationState, type KnowledgeScope, type KbStage, type RunDeliverable, type RuntimeId, type Store } from '@frontline/shared';
+import { useAgentTypes, useAnswer, useApprovals, useCreateConversation, useKbCard, useKbCardsIn, useRetryRun, useRun, useSendMessage, useStopConversation, useThread, useUpdateConversation } from '../api/client';
 import { ApprovalCard, FixLink, ToolBlock } from '../components/Chat';
 import { Button, cx, ErrorState, LoadingState, RUN_STATUS } from '../components/ui';
 import { cents, modelName } from '../lib/format';
 import { isLive, toBlocks, toolName, type Block } from '../lib/transcript';
 import { activitySteps, activitySummary, type Step } from './activity';
+import { AttachButton, attachError, Attachments, toUploads } from './attach';
 import { renderReply } from './markdown';
 import { MenuItem, Popover } from './Popover';
-import { useChangeRuntime } from './Deploy';
+import { knowledgeLabel, useChangeRuntime } from './Deploy';
 import { useAgentSettings } from './settings';
 import { StateDot } from './StateDot';
 import { agentsUrl } from './urls';
@@ -65,7 +66,8 @@ function useAppLinks() {
   };
 }
 
-export function Conversation({ store, conversation: c, config, buttons }: { store: Store; conversation: ConversationRecord; config: AgentConfig; buttons: ReactNode }) {
+/** `onKnowledge`: the composer's knowledge chip opens the Knowledge tab. */
+export function Conversation({ store, conversation: c, config, buttons, onKnowledge }: { store: Store; conversation: ConversationRecord; config: AgentConfig; buttons: ReactNode; onKnowledge?: () => void }) {
   const thread = useThread(store.id, c.id);
   // Pages come newest first; each page is oldest first.
   const runs = [...(thread.data?.pages ?? [])].reverse().flatMap((p) => p.items);
@@ -133,7 +135,7 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
         )}
       </div>
       {last && interrupted(last) && <Interrupted store={store} conversationId={c.id} runId={last.id} />}
-      <Composer store={store} conversationId={c.id} type={c.type} name={name} live={live} question={question} />
+      <Composer store={store} conversationId={c.id} type={c.type} name={name} live={live} question={question} knowledge={config.knowledge} onKnowledge={onKnowledge} />
     </section>
   );
 }
@@ -245,6 +247,7 @@ function Turn({ store, conversationId, seed, prev, name, latest, attempts }: { s
     <article aria-label={`Turn: ${run.task.slice(0, 80)}`} className="grid gap-3">
       <div className="ml-auto grid max-w-[520px] justify-items-end gap-1">
         <p className="rounded-xl rounded-br-sm border border-red/30 bg-red-soft px-3 py-2 text-[13px] whitespace-pre-wrap">{run.task}</p>
+        <Attachments files={run.attachments ?? []} />
         <span className="flex items-center gap-2 text-[11px] text-muted">
           {run.status === 'queued' && conversationId ? (
             <>
@@ -340,7 +343,11 @@ function Reply({ store, conversationId, run, name, latest, deliverables = [] }: 
   }
   const cites: string[] = [];
   const href = (id: string) => `/knowledge?card=${encodeURIComponent(id)}&ws=${encodeURIComponent(run.storeId)}`;
-  const html = parts.map((p) => (p.kind === 'text' ? renderReply(p.text, href, cites).html : ''));
+  // Citations resolve in the run's store and General only (decision 11); another's stays as the agent wrote it.
+  const ids = [...new Set(parts.flatMap((p) => (p.kind === 'text' ? [...p.text.matchAll(/\[kb:([\w-]+)\]/gi)].map((m) => m[1]!) : [])))];
+  const checked = useKbCardsIn(ids, run.storeId);
+  const missing = new Set(ids.filter((_, i) => checked[i]!.isError));
+  const html = parts.map((p) => (p.kind === 'text' ? renderReply(p.text, href, cites, missing).html : ''));
   const text = parts.flatMap((p) => (p.kind === 'text' ? [p.text.trim()] : [])).join('\n\n');
   const failed = run.status === 'error' && !interrupted(run);
   const said = run.transcript.some((e) => e.type === 'error' && e.message === run.error);
@@ -360,10 +367,13 @@ function Reply({ store, conversationId, run, name, latest, deliverables = [] }: 
       <div onClick={appLinks} className="grid gap-2.5">
         {parts.map((p, i) => (p.kind === 'text' ? <div key={i} className={REPLY} dangerouslySetInnerHTML={{ __html: html[i]! }} /> : <ApprovalCard key={i} a={p.approval} tone="amber" here />))}
       </div>
-      {cites.length > 0 && (
+      {cites.length + missing.size > 0 && (
         <div aria-label="Sources" className="flex flex-wrap gap-1.5">
           {cites.map((id, i) => (
             <Source key={id} n={i + 1} id={id} storeId={run.storeId} href={href(id)} />
+          ))}
+          {[...missing].map((id) => (
+            <Source key={id} id={id} storeId={run.storeId} href={href(id)} />
           ))}
         </div>
       )}
@@ -438,14 +448,15 @@ function Activity({ run, steps, tools }: { run: AgentRunDetail; steps: Step[]; t
 }
 
 /** A cited card: number, title and its stage. Another store's card shows only that it isn't available here. */
-function Source({ n, id, storeId, href }: { n: number; id: string; storeId: string; href: string }) {
-  const card = useKbCard(id).data;
-  const elsewhere = card && card.storeId !== null && card.storeId !== storeId;
+function Source({ n, id, storeId, href }: { n?: number; id: string; storeId: string; href: string }) {
+  const q = useKbCard(id, storeId);
+  const card = q.data;
+  const elsewhere = q.isError || (card && card.storeId !== null && card.storeId !== storeId);
   const body = (
     <>
-      <b className="text-[#ff6b76]">{n}</b>
+      {n && <b className="text-[#ff6b76]">{n}</b>}
       <span className="min-w-0 truncate">{card && !elsewhere ? card.title : `kb:${id}`}</span>
-      {card && <span className={cx('shrink-0 text-[10.5px] font-semibold', elsewhere ? 'text-muted' : card.storeId === null ? 'text-text-2' : STAGE_TONE[card.stage])}>{elsewhere ? 'not available in this store' : card.storeId === null ? 'General' : KB_STAGES[card.stage]}</span>}
+      {(card || elsewhere) && <span className={cx('shrink-0 text-[10.5px] font-semibold', elsewhere || !card ? 'text-muted' : card.storeId === null ? 'text-text-2' : STAGE_TONE[card.stage])}>{elsewhere || !card ? 'not available in this store' : card.storeId === null ? 'General' : KB_STAGES[card.stage]}</span>}
     </>
   );
   const cls = 'inline-flex h-6 max-w-[320px] items-center gap-1.5 rounded-md border border-[#1d1d22] bg-[#111114] px-2 text-[11.5px] text-text-2';
@@ -496,11 +507,13 @@ function writeDraft(id: string, text: string) {
 }
 
 /**
- * Enter sends, Shift+Enter adds a line. While a reply runs, the message waits in the queue behind it.
- * ponytail: attach and the knowledge-scope chip render from AA-17 (a control appears once it works).
+ * Enter sends, Shift+Enter adds a line. While a reply runs, the message waits in the queue behind it. Documents go with
+ * the message (not with an answer to a question); the knowledge chip opens the Knowledge tab.
  */
-function Composer({ store, conversationId, type, name, live, question }: { store: Store; conversationId: string; type: string; name: string; live: boolean; question?: ApprovalRequest }) {
+function Composer({ store, conversationId, type, name, live, question, knowledge, onKnowledge }: { store: Store; conversationId: string; type: string; name: string; live: boolean; question?: ApprovalRequest; knowledge: KnowledgeScope[]; onKnowledge?: () => void }) {
   const [text, setText] = useState(() => readDraft(conversationId));
+  const [files, setFiles] = useState<File[]>([]);
+  const tooBig = attachError(files);
   const [saved, setSaved] = useState(false);
   const send = useSendMessage(store.id, conversationId);
   const answer = useAnswer(store.id, conversationId);
@@ -521,16 +534,20 @@ function Composer({ store, conversationId, type, name, live, question }: { store
     const t = setTimeout(() => setSaved(true), 800);
     return () => clearTimeout(t);
   }, [conversationId, text]);
-  const submit = () => {
+  const submit = async () => {
     const message = text.trim();
     if (!message || send.isPending || answer.isPending) return;
     if (question) return answer.mutate({ id: question.id, text: message }, { onSuccess: () => setText('') });
+    if (tooBig) return;
+    // A second Enter while the files read sends the same request id, which returns the first one's run.
+    const attachments = files.length ? await toUploads(files) : undefined;
     send.mutate(
-      { clientRequestId: request.current, message },
+      { clientRequestId: request.current, message, ...(attachments ? { attachments } : {}) },
       {
         onSuccess: () => {
           request.current = crypto.randomUUID();
           setText('');
+          setFiles([]);
         },
       },
     );
@@ -559,11 +576,22 @@ function Composer({ store, conversationId, type, name, live, question }: { store
           }}
           className="block max-h-48 min-h-[52px] w-full resize-none bg-transparent px-3.5 pt-3 text-[13.5px] text-text outline-none placeholder:text-muted"
         />
+        {!question && files.length > 0 && (
+          <div className="px-3 pb-1">
+            <Attachments files={files} onChange={setFiles} />
+          </div>
+        )}
         <div className="flex items-center gap-2 px-2.5 pb-2.5">
+          {!question && <AttachButton files={files} onChange={setFiles} />}
+          {onKnowledge && (
+            <button type="button" onClick={onKnowledge} title="See the knowledge this conversation uses" className={cx(chip, 'cursor-pointer hover:border-[#3a3a42] hover:text-white')}>
+              {knowledgeLabel(knowledge)}
+            </button>
+          )}
           {saved && <span className="text-[11px] text-muted">Draft saved</span>}
-          {(send.error ?? answer.error) && (
+          {(send.error ?? answer.error ?? (!question && tooBig)) && (
             <span role="alert" className="text-[11px] text-red">
-              {(send.error ?? answer.error)!.message}
+              {(send.error ?? answer.error)?.message ?? tooBig}
             </span>
           )}
           {stale && (

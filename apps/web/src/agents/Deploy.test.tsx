@@ -261,3 +261,16 @@ test('Codex shows only when the server reports it; moving a conversation to Code
   fireEvent.click(within(change).getByRole('button', { name: 'Switch' }));
   await waitFor(() => expect(posts).toEqual([{ url: '/api/conversations/c1/config?store=glow', body: { runtime: 'codex', model: 'gpt-6.1-sol', effort: 'low', stopAfterMin: 20 } }]));
 });
+
+test("Deploy's attachments go with the first message", async () => {
+  const posts: { url: string; body: unknown }[] = [];
+  api({ posts });
+  renderDeploy();
+  fireEvent.click(await screen.findByRole('button', { name: /^Tools and knowledge/ }));
+  fireEvent.change(screen.getByLabelText('Documents to attach'), { target: { files: [new File(['brief'], 'brief.txt')] } });
+  expect(await screen.findByRole('button', { name: /^Tools and knowledge.* · 1 attached$/ })).toBeTruthy();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Objective' }), { target: { value: 'Use the brief' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Start conversation' }));
+  await waitFor(() => expect(posts).toHaveLength(1));
+  expect(posts[0]!.body).toMatchObject({ message: 'Use the brief', attachments: [{ name: 'brief.txt', data: btoa('brief') }] });
+});

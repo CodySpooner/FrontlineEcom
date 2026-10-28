@@ -145,6 +145,10 @@ test("after leaving for /knowledge, the sidebar's /agents link brings back the c
   expect(screen.getByTestId('where').textContent).toBe('/agents/c/c2?store=glow');
   expect(screen.getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true');
   await vi.waitFor(() => expect(thread().scrollTop).toBe(120));
+  // The composer's knowledge chip opens the panel, hidden or not, on the Knowledge tab.
+  fireEvent.click(screen.getByRole('button', { name: 'Hide details' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Store + General knowledge' }));
+  expect((await screen.findByRole('tab', { name: 'Knowledge' })).getAttribute('aria-selected')).toBe('true');
 });
 
 test("switching stores keeps the conversation's draft and touches no run", async () => {

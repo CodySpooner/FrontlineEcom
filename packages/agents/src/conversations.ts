@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { conversationState, runState, type AgentRun, type AgentRunDetail, type Conversation, type ConversationContext, type ConversationCounts, type ConversationPage, type CreativeKind, type CursorPage, type RunDeliverable, type Store } from '@frontline/shared';
+import { conversationState, runState, type AgentRun, type AgentRunDetail, type Conversation, type ConversationContext, type ConversationCounts, type ConversationPage, type CreativeKind, type CursorPage, type KbStage, type KnowledgeUse, type RunDeliverable, type Store } from '@frontline/shared';
 import { saveConfig, type AgentType, type ConfigDraft } from './configs';
 import { ftsQuery } from './kb-retrieve';
 import { finalText, getRun } from './runs';
@@ -233,6 +233,31 @@ export function runDeliverables(db: DatabaseSync, runId: string): RunDeliverable
        WHERE a.run_id = ? AND json_extract(a.action_json, '$.kind') LIKE 'ads.%'`,
     ).map((r) => ({ kind: 'campaign' as const, id: String(r.id), title: String(r.name) })),
   ];
+}
+
+/** What a conversation's turn searches knowledge by (decision 11): its title, its objective (the first message) and `message`. */
+export function conversationQuery(db: DatabaseSync, conversationId: string, message: string): string {
+  const c = db.prepare('SELECT title FROM conversations WHERE id = ?').get(conversationId);
+  const objective = db.prepare('SELECT task FROM agent_runs WHERE conversation_id = ? ORDER BY rowid LIMIT 1').get(conversationId)?.task;
+  return [...new Set([c?.title, objective, message].filter(Boolean).map((t) => String(t).slice(0, 1000)))].join('\n');
+}
+
+/** The Knowledge tab: the cards its latest started run had in its prompt, searched or cited; this store's and General's only. */
+export function conversationKnowledge(db: DatabaseSync, conversationId: string): KnowledgeUse[] {
+  const run = db.prepare(`SELECT id, store_id FROM agent_runs WHERE conversation_id = ? AND status != 'queued' ORDER BY rowid DESC LIMIT 1`).get(conversationId);
+  if (!run) return [];
+  const cards = new Map<string, KnowledgeUse>();
+  const rows = db
+    .prepare(`SELECT r.card_id, r.kind, k.title, k.stage, k.store_id FROM kb_retrievals r JOIN kb_cards k ON k.id = r.card_id WHERE r.run_id = ? AND (k.store_id = ? OR k.store_id IS NULL) ORDER BY r.rowid`)
+    .all(String(run.id), String(run.store_id));
+  for (const r of rows) {
+    const id = String(r.card_id);
+    const card = cards.get(id) ?? { id, title: String(r.title), stage: r.stage as KbStage, storeId: r.store_id == null ? null : String(r.store_id), how: [] };
+    const how = r.kind as 'prompt' | 'search' | 'cited';
+    if (!card.how.includes(how)) card.how.push(how);
+    cards.set(id, card);
+  }
+  return [...cards.values()];
 }
 
 /** A run's state for the page (decision 5): its approvals waiting on the owner decide between approval and question. */

@@ -164,7 +164,7 @@ describe('retrieval in real tasks', () => {
     const ctx = { ...toolEnv(db), runId, store: getStore(db, 'pawsome')!, agent: getAgent(db, 'pawsome:market_analyst')!, emit: () => {} } as ToolContext;
     const search = (query: string) => callTool(APP_TOOLS.find((t) => t.name === 'search_knowledge')!, { query }, ctx).then((r) => r.output);
     const out = await search('tiktok hooks');
-    expect(out.split('\n').slice(1).map((l) => l.split(',')[1])).toEqual(['TikTok hooks for dog gear', 'TikTok hooks in general']);
+    expect(out.split('\n').slice(2).map((l) => l.split(',')[1])).toEqual(['TikTok hooks for dog gear', 'TikTok hooks in general']); // after the framing line and the header
     await search('hooks');
     expect(rows(a.id)).toEqual(['search pawsome pawsome:market_analyst', 'search pawsome pawsome:market_analyst']);
     expect(counts(a.id)).toEqual({ used: 1, cited: 0 });

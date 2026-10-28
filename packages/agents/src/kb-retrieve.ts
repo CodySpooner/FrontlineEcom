@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { AgentRole, KbCard, KbStage, KbWorkspace } from '@frontline/shared';
+import type { AgentRole, KbCard, KbStage, KbWorkspace, KnowledgeScope } from '@frontline/shared';
 import { getCard, kbScope } from './kb';
 import { RELIABLE } from './kb-links';
 
@@ -122,3 +122,21 @@ export function logKnowledgeUse(db: DatabaseSync, ids: string[], u: { storeId: s
 export function citedCards(db: DatabaseSync, text: string, storeId: string): string[] {
   return [...text.matchAll(/\[kb:([\w-]+)\]/g)].map((m) => m[1]!).filter((id) => db.prepare('SELECT 1 FROM kb_cards WHERE id = ? AND (store_id = ? OR store_id IS NULL)').get(id, storeId));
 }
+
+/** Each card with its open conflict's other side (the other card, else the conflict's note), for the prompt (decision 11). */
+export function withConflicts<T extends { id: string }>(db: DatabaseSync, cards: T[]): (T & { conflict?: string })[] {
+  return cards.map((c) => {
+    const r = db
+      .prepare(
+        `SELECT f.note, o.id AS other, o.title, o.summary FROM kb_conflicts f LEFT JOIN kb_cards o ON o.id = iif(f.card_id = ?, f.other_card_id, f.card_id)
+         WHERE (f.card_id = ? OR f.other_card_id = ?) AND f.status = 'open' ORDER BY f.created_at DESC LIMIT 1`,
+      )
+      .get(c.id, c.id, c.id);
+    if (!r) return c;
+    const side = r.other ? `[kb:${String(r.other)}] ${String(r.title)}: ${String(r.summary)}` : String(r.note);
+    return { ...c, conflict: side.slice(0, 300) };
+  });
+}
+
+/** A config's knowledge scopes (Deploy's "Store" and "General") as a card filter; no config reads both. */
+export const inScope = (scope?: readonly KnowledgeScope[]) => (c: { storeId: string | null }) => !scope || scope.includes(c.storeId === null ? 'general' : 'store');

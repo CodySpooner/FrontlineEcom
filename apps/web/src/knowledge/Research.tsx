@@ -19,7 +19,7 @@ export function splitSources(s: string) {
   return { urls, text: /[\p{L}\p{N}]/u.test(s.replace(URL_RE, '')) ? s.trim() : '' };
 }
 
-const base64 = (f: File) =>
+export const base64 = (f: File) =>
   new Promise<string>((ok, fail) => {
     const r = new FileReader();
     r.onload = () => ok(String(r.result).split(',')[1] ?? '');

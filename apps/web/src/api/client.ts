@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ActionLogEntry,
+  KnowledgeUse,
+  SendMessageInput,
   Agent,
   AgentRun,
   AgentRunDetail,
@@ -242,6 +244,10 @@ export const useConversationCounts = () => useQuery({ queryKey: ['conversation-c
 
 /** The agent types a store can talk to, in list order. */
 /** The conversation's tools by access, with each group's integration state (the Details panel). */
+/** The Knowledge tab: the cards the latest reply had in its prompt, searched for or cited (refetched with the conversation). */
+export const useConversationKnowledge = (storeId: string, id: string) =>
+  useQuery({ queryKey: ['conversation', id, 'knowledge'], queryFn: () => api<KnowledgeUse[]>(`/api/conversations/${id}/knowledge?store=${storeId}`), enabled: !!id });
+
 export const useConversationTools = (storeId: string, id: string) =>
   useQuery({ queryKey: ['conversation-tools', id], queryFn: () => api<ToolGroup[]>(`/api/conversations/${id}/tools?store=${storeId}`), enabled: !!id });
 
@@ -353,7 +359,7 @@ export function useStartConversation(storeId: string) {
 export function useSendMessage(storeId: string, conversationId: string) {
   const done = useConversationDone(storeId);
   return useMutation({
-    mutationFn: (input: { clientRequestId: string; message: string }) => api<AgentRun>(`/api/conversations/${conversationId}/messages?store=${storeId}`, json('POST', input)),
+    mutationFn: (input: SendMessageInput) => api<AgentRun>(`/api/conversations/${conversationId}/messages?store=${storeId}`, json('POST', input)),
     onSuccess: (run) => done(conversationId, run),
   });
 }
@@ -518,7 +524,14 @@ export function useSaveKbPositions(ws: string) {
 }
 
 /** One card from any workspace (a `?card=` link). */
-export const useKbCard = (id: string | undefined) => useQuery({ queryKey: ['kb', 'card', id], queryFn: () => api<KbCard>(`/api/kb/cards/${encodeURIComponent(id!)}?ws=all`), enabled: !!id });
+/** A card: any workspace's (the Knowledge page), or a store's and General's only (a reply's citation, decision 11: a 404 there is final). */
+export const kbCardQuery = (id: string, ws = 'all') => ({
+  queryKey: ['kb', 'card', id, ws],
+  queryFn: () => api<KbCard>(`/api/kb/cards/${encodeURIComponent(id)}?ws=${encodeURIComponent(ws)}${ws === 'all' ? '' : '&general=1'}`),
+  ...(ws === 'all' ? {} : { retry: false, retryOnMount: false }),
+});
+export const useKbCard = (id: string | undefined, ws = 'all') => useQuery({ ...kbCardQuery(id ?? '', ws), enabled: !!id });
+export const useKbCardsIn = (ids: string[], ws: string) => useQueries({ queries: ids.map((id) => kbCardQuery(id, ws)) });
 
 const wsq = (ws: string) => `ws=${encodeURIComponent(ws)}`;
 

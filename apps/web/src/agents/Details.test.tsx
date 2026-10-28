@@ -4,7 +4,8 @@ import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import type { AgentRunDetail, ConversationDetail, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { Conversation } from './Conversation';
-import { Details } from './Details';
+import { Details, type DetailsTab } from './Details';
+import { useStored } from './layout';
 import { SettingsDrawer } from './settings';
 
 afterEach(() => {
@@ -70,11 +71,16 @@ function api({ autonomy = 'ask', tools = ['store_summary', 'list_campaigns', 'pr
     return undefined;
   });
 }
+/** The panel as the workspace holds it: the tab kept per browser. */
+function Panel() {
+  const [tab, setTab] = useStored<DetailsTab>('fe.agents.tab', 'details');
+  return <Details store={store} conversationId="c1" tab={tab} onTab={setTab} />;
+}
 const tool = (name: string) => screen.getByText(name).closest('li')!;
 
 test('Details: runtime, tools with access and connection state, the approval lines and limits; spending asks unless autopilot applies', async () => {
   api();
-  renderApp(<Details store={store} conversationId="c1" />);
+  renderApp(<Panel />);
   expect(await screen.findByText('Claude · signed in')).toBeTruthy();
   expect(screen.getByText('Opus 5.5 · High effort')).toBeTruthy();
   expect(screen.getByText("Fixed when the conversation started. Other stores' data is never read.")).toBeTruthy();
@@ -87,20 +93,20 @@ test('Details: runtime, tools with access and connection state, the approval lin
   cleanup();
   // On autopilot with a rule on, and propose_ad_change among the tools: the rule, and the drafts group says so.
   api({ autonomy: 'autopilot', tools: ['store_summary', 'propose_ad_change', 'compare_stores'] });
-  renderApp(<Details store={store} conversationId="c1" />);
+  renderApp(<Panel />);
   expect(await screen.findByText('Change ad budgets up to $50/day is auto-approved (autopilot)')).toBeTruthy();
   expect(within(await screen.findByText('Drafts and changes').then((e) => e.closest('li')!)).getByText('Autopilot up to the caps below')).toBeTruthy();
   expect(screen.getByText(/^Also reads your other stores' names/)).toBeTruthy();
   cleanup();
   // Autopilot without propose_ad_change: spending still asks.
   api({ autonomy: 'autopilot', tools: ['store_summary'] });
-  renderApp(<Details store={store} conversationId="c1" />);
+  renderApp(<Panel />);
   expect(await screen.findByText('Spending always asks you first.')).toBeTruthy();
 });
 
 test("'Role instructions and checks' opens the type's contract", async () => {
   api();
-  renderApp(<Details store={store} conversationId="c1" />);
+  renderApp(<Panel />);
   fireEvent.click(await screen.findByRole('button', { name: 'Role instructions and checks' }));
   const dialog = await screen.findByRole('dialog', { name: 'Ad Strategist: role instructions and checks' });
   expect(within(dialog).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Establish the objective.', 'Read the campaigns.', 'Moves.', 'List the questions still open.']);
@@ -110,7 +116,7 @@ test("'Role instructions and checks' opens the type's contract", async () => {
 
 test('Activity lists the runs newest first with runtime, cost, duration and the error', async () => {
   api();
-  renderApp(<Details store={store} conversationId="c1" />);
+  renderApp(<Panel />);
   fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
   const rows = await screen.findAllByRole('listitem');
   expect(rows.map((r) => r.textContent)).toEqual([expect.stringMatching(/^Failed1m 5sTask r2Claude · Opus 5\.5 · \$0\.42Rate limited/), expect.stringMatching(/^Done1m 5sTask r1Claude · Opus 5\.5 · \$0\.42$/)]);
@@ -134,4 +140,25 @@ test('the conversation menu opens the seat settings drawer; a History row opens 
   fireEvent.click(within(drawer).getByRole('tab', { name: 'History' }));
   fireEvent.click(await within(drawer).findByRole('button', { name: 'Weekly ad check' }));
   expect(screen.getByTestId('where').textContent).toBe('/agents?store=glow&run=r9');
+});
+
+test("the Knowledge tab lists the latest reply's cards, the store's then General's, with how each was used and a count", async () => {
+  const fetch = api();
+  const stub = fetch.getMockImplementation()!;
+  fetch.mockImplementation(async (url: string, init?: RequestInit) =>
+    url === '/api/conversations/c1/knowledge?store=glow'
+      ? new Response(JSON.stringify([
+          { id: 'k1', title: 'Gift buyers convert', stage: 'supported', storeId: 'glow', how: ['prompt', 'cited'] },
+          { id: 'k3', title: 'Hooks in general', stage: 'hypothesis', storeId: null, how: ['search'] },
+        ]))
+      : stub(url, init),
+  );
+  renderApp(<Panel />);
+  const tab = await screen.findByRole('tab', { name: 'Knowledge 2' });
+  fireEvent.click(tab);
+  const panel = screen.getByRole('tabpanel', { name: 'Knowledge' });
+  expect(within(panel).getAllByRole('heading').map((h) => h.textContent)).toEqual(["Glow Haus's knowledge", 'General knowledge']);
+  expect(within(panel).getByRole('link', { name: 'Gift buyers convert' }).getAttribute('href')).toBe('/knowledge?card=k1&ws=glow');
+  expect(within(panel).getByText('Research-Supported · In its prompt · Cited')).toBeTruthy();
+  expect(within(panel).getByText('Hypothesis, unproven · Searched for')).toBeTruthy();
 });
