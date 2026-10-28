@@ -314,7 +314,7 @@ export const useKbLinks = (ws: string, general: boolean) => useQuery({ queryKey:
 export function useDecideKbLink() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ link, status }: { link: KbLink; status: 'confirmed' | 'rejected' }) => api<KbLink>(`/api/kb/links/${encodeURIComponent(link.id)}?${wsq(link.storeId ?? 'general')}`, json('PATCH', { status })),
+    mutationFn: ({ link, status }: { link: Pick<KbLink, 'id' | 'storeId'>; status: 'confirmed' | 'rejected' }) => api<KbLink>(`/api/kb/links/${encodeURIComponent(link.id)}?${wsq(link.storeId ?? 'general')}`, json('PATCH', { status })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
   });
 }

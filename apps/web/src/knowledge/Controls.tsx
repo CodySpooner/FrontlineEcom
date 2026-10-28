@@ -1,7 +1,8 @@
 // The Research Center's self-directed research line and its controls (KB-22): whether a store's agents research on their
 // own, who and for which categories, on what triggers and budget, whether each task waits for approval and its findings
-// for review, the sites to prefer or never read, and research on a schedule (automations with a research action). The
-// server enforces each one (apps/server kb/autonomy.ts and the research runner); this only sets them.
+// for review, the sites to prefer or never read, and research on a schedule (automations with a research action). Also
+// each top-level category's refresh age and how long fetched pages and research logs are kept (KB-23). The server
+// enforces each one (apps/server kb/autonomy.ts, kb/maintenance.ts and the research runner); this only sets them.
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { AGENT_ROLES, KB_RESEARCH_DEPTHS, KB_TRIGGERS, type AgentRole, type KbControls, type KbResearchDepth, type KbTrigger } from '@frontline/shared';
 import { useAutomationActions, useAutomations, useKbCategories, useKbControls, useSaveKbControls } from '../api/client';
@@ -11,6 +12,8 @@ const EVERY: Record<string, string> = { '0 9 * * *': 'Every day at 9:00', '0 9 *
 const small = 'h-7 cursor-pointer rounded-md border border-line-2 bg-panel-2 px-2.5 text-xs text-text-2 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
 const field = cx(inputClass, 'h-8 w-full py-0 text-xs');
 const lines = (s: string) => s.split('\n').map((x) => x.trim()).filter(Boolean);
+const AGES = [14, 30, 60, 90, 180, 365];
+const KEEP: [string, string][] = [['', 'Always'], ['365', '1 year'], ['180', '6 months'], ['90', '90 days'], ['30', '30 days']];
 const ROLES = Object.keys(AGENT_ROLES) as AgentRole[];
 
 /** `ws`: a store, general, or all (which has no controls of its own). */
@@ -56,11 +59,13 @@ function ControlsForm({ ws, c, onDone }: { ws: string; c: KbControls; onDone: ()
   const [depth, setDepth] = useState<KbResearchDepth>(c.depth);
   const [trusted, setTrusted] = useState(c.trustedDomains.join('\n'));
   const [blocked, setBlocked] = useState(c.blockedDomains.join('\n'));
+  const [fresh, setFresh] = useState(c.freshDays);
+  const [keep, setKeep] = useState(c.retentionDays);
   const toggle = <T,>(set: Set<T>, x: T) => new Set(set.has(x) ? [...set].filter((y) => y !== x) : [...set, x]);
   const role = (r: AgentRole, cats: string[] | undefined) => setRoles(({ [r]: _, ...rest }) => (cats ? { ...rest, [r]: cats } : rest));
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const sites = { trustedDomains: lines(trusted), blockedDomains: lines(blocked) };
+    const sites = { trustedDomains: lines(trusted), blockedDomains: lines(blocked), freshDays: fresh, retentionDays: keep };
     const own = { autonomous: on, approval, triggers: (Object.keys(KB_TRIGGERS) as KbTrigger[]).filter((t) => triggers.has(t)), roles, taskBudgetUsd: task, dailyBudgetUsd: daily, depth };
     save.mutate({ ws, review, ...sites, ...(store ? own : {}) }, { onSuccess: onDone });
   };
@@ -120,6 +125,36 @@ function ControlsForm({ ws, c, onDone }: { ws: string; c: KbControls; onDone: ()
       <label className="grid gap-1 text-muted">
         Blocked sites (one per line)
         <textarea rows={2} value={blocked} onChange={(e) => setBlocked(e.target.value)} className={cx(inputClass, 'w-full py-1 text-xs')} />
+      </label>
+      {top.length > 0 && (
+        <Group legend="Needs refresh after">
+          {top.map((k) => (
+            <label key={k.id} className="flex items-center justify-between gap-2 text-text-2">
+              {k.name}
+              <select
+                value={fresh[k.id] ?? ''}
+                onChange={(e) => setFresh(({ [k.id]: _, ...rest }) => (e.target.value ? { ...rest, [k.id]: Number(e.target.value) } : rest))}
+                className={cx(inputClass, 'h-8 w-36 shrink-0 py-0 text-xs')}
+              >
+                {/* With its own age in effect, the area's usual one isn't known here. */}
+                <option value="">{c.freshDays[k.id] ? 'Usual for its area' : `Usual (${k.freshDays} days)`}</option>
+                {[...new Set([...AGES, ...(fresh[k.id] ? [fresh[k.id]!] : [])])].sort((a, b) => a - b).map((d) => (
+                  <option key={d} value={d}>{`${d} days`}</option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </Group>
+      )}
+      <label className="grid gap-1 text-muted">
+        Keep fetched pages and research logs
+        <select value={keep ?? ''} onChange={(e) => setKeep(e.target.value ? Number(e.target.value) : null)} className={field}>
+          {KEEP.map(([v, l]) => (
+            <option key={v} value={v}>
+              {l}
+            </option>
+          ))}
+        </select>
       </label>
       {save.error && (
         <p role="alert" className="text-red">

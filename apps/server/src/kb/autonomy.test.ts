@@ -53,7 +53,7 @@ describe('the controls', () => {
   test('a workspace starts with self-directed research off, findings to review, and nothing reserved', async () => {
     expect((await req('GET', '/api/kb/controls?ws=peak')).body).toEqual({
       autonomous: false, roles: {}, triggers: ['conflict', 'anomaly', 'gap', 'stale'], taskBudgetUsd: 1, dailyBudgetUsd: 3, depth: 'standard', approval: true, review: true,
-      trustedDomains: [], blockedDomains: [], reservedUsd: 0,
+      trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null, reservedUsd: 0,
     });
     expect((await req('GET', '/api/kb/controls?ws=all')).status).toBe(400);
   });
@@ -152,6 +152,9 @@ describe('triggers', () => {
     expect(await objectives(['stale'])).toEqual([['stale', 'Is it still true? "Broad targeting wins"']]);
     expect(await objectives(['conflict'])).toEqual([['conflict', 'Settle the disagreement on "Offers beat hooks": A test found the opposite']]);
     expect(await objectives(['anomaly'])).toEqual([['anomaly', 'Why does this happen, and how do we use it? "The "Dog" campaign (Meta): ROAS above the store\'s other Meta campaigns"']]);
+    // Past its category's age, not a fixed one: given 180 days, Advertising's 100-day-old card is still fresh.
+    await controls({ freshDays: { [ensureCategoryPath(db, 'peak', ['Advertising'])]: 180 } });
+    expect(await objectives(['stale'])).toEqual([]);
     expect(await objectives([])).toEqual([]);
   });
 

@@ -28,6 +28,8 @@ const overview: KbOverview = {
     { kind: 'conflict', id: 'k1', at: now, note: 'Research says UGC wins; EXP-14 says studio', card: brief('c2', 'UGC beats studio footage'), other: brief('c1', 'Problem-first hooks win') },
     { kind: 'validated', at: now, reason: '2 independent measured tests', card: brief('c1', 'Problem-first hooks win') },
     { kind: 'promotion', id: 'p1', at: now, title: 'Open on the problem, anywhere', card: brief('c4', 'Open on the reaction') },
+    { kind: 'duplicate', id: 'l9', at: now, why: 'Possible duplicate: they share most of their words (problem, first, hooks)', card: brief('c5', 'Problem-first hooks win in video'), other: brief('c1', 'Problem-first hooks win') },
+    { kind: 'refreshed', at: now, reason: 'new research evidence after 60 days', card: brief('c6', 'Broad targeting wins') },
   ],
   gaps: [{ ws: 'pawsome', categoryId: 'p-pricing', name: 'Pricing', reason: 'only hypotheses' }],
   performance: [
@@ -88,7 +90,7 @@ describe('Research Center', () => {
     expect(href('Validated 1 14% of cards')).toBe('/knowledge?view=library&ws=pawsome&stage=validated');
     expect(href('Hypotheses 4 1 research-supported, ready to test')).toBe('/knowledge?view=library&ws=pawsome&stage=hypothesis');
     expect(href('Researching now 1 1 queued · 1 agent')).toBe('#kb-research');
-    expect(href('Needs refresh 3 over 90 days since checked')).toBe('/knowledge?view=library&ws=pawsome&sort=verified&dir=asc');
+    expect(href("Needs refresh 3 past their category's refresh age")).toBe('/knowledge?view=library&ws=pawsome&sort=verified&dir=asc');
     expect(href('Conflicts 1 waiting for your call')).toBe('#kb-discoveries');
 
     const map = screen.getByRole('region', { name: 'Knowledge map' });
@@ -154,6 +156,28 @@ describe('Research Center', () => {
     expect(await within(board).findByText('Open on the reaction')).toBeTruthy();
     expect(within(board).getByText('Advertising › Video hooks')).toBeTruthy();
     expect(href('Open artboard', board)).toBe('/knowledge?ws=pawsome&frame=p-hooks');
+  });
+
+  it('discoveries: a possible duplicate merges into the other card or is marked not the same; a refreshed card opens on the artboard', async () => {
+    const fetch = open('/knowledge?ws=all&view=research');
+    const d = await screen.findByRole('region', { name: 'Latest discoveries' });
+    const dup = (await within(d).findByText('Problem-first hooks win in video', { selector: 'h3' })).closest('article')!;
+    expect(within(dup).getByText('Duplicate?')).toBeTruthy();
+    expect(within(dup).getByText('Possible duplicate: they share most of their words (problem, first, hooks)')).toBeTruthy();
+    expect(within(dup).getByText('Same as: Problem-first hooks win')).toBeTruthy();
+    expect(href('Compare', dup)).toBe('/knowledge?view=library&ws=pawsome&card=c5');
+    fireEvent.click(within(dup).getByRole('button', { name: 'Merge' }));
+    fireEvent.click(within(dup).getByRole('button', { name: 'Not the same' }));
+    await vi.waitFor(() =>
+      expect(fetch.mock.calls.filter(([, i]) => i?.method === 'POST' || i?.method === 'PATCH').map(([u, i]) => [i!.method, u, JSON.parse(String(i!.body))])).toEqual([
+        ['POST', '/api/kb/cards/c1/merge?ws=pawsome', { from: 'c5' }],
+        ['PATCH', '/api/kb/links/l9?ws=pawsome', { status: 'rejected' }],
+      ]),
+    );
+    const fresh = within(d).getByText('Broad targeting wins', { selector: 'h3' }).closest('article')!;
+    expect(within(fresh).getByText('Refreshed')).toBeTruthy();
+    expect(within(fresh).getByText('new research evidence after 60 days')).toBeTruthy();
+    expect(href('Open on artboard', fresh)).toBe('/knowledge?ws=pawsome&card=c6');
   });
 
   it("the research column: a running task's progress with Stop, the queue, done tasks, sources, and recommendations to approve", async () => {

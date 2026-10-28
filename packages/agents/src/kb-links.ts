@@ -15,13 +15,14 @@ import {
   type KbStage,
   type KbWorkspace,
 } from '@frontline/shared';
-import { getCard, kbScope, revise } from './kb';
+import { freshness, getCard, kbScope, revise } from './kb';
 
 // Evidence, the confidence ladder, links and the suggester, revisions (knowledge-base lane, decision 11).
 
 type Row = Record<string, unknown>;
 const opt = (v: unknown) => (v == null ? undefined : String(v));
 const num = (v: unknown) => (v == null ? undefined : Number(v));
+const DAY = 86_400_000;
 const STAGES = Object.keys(KB_STAGES) as KbStage[];
 export const RELIABLE = new Set<string>(['platform_docs', 'research', 'publication'] satisfies KbSourceReliability[]);
 const host = (url: unknown) => {
@@ -158,6 +159,10 @@ export type NewKbEvidence = KbEvidenceInput & { authorId: string; runId?: string
 export function addEvidence(db: DatabaseSync, cardId: string, e: NewKbEvidence, now = new Date()): KbCard {
   const id = randomUUID();
   const at = now.toISOString();
+  // Checked again past its category's age (KB-23): its history says so, and the Research Center shows it this week.
+  const was = db.prepare('SELECT category_id, coalesce(verified_at, created_at) AS seen FROM kb_cards WHERE id = ?').get(cardId)!;
+  const days = Math.floor((now.getTime() - Date.parse(String(was.seen))) / DAY);
+  if (e.kind !== 'conflict' && days > freshness(db)(String(was.category_id))) revise(db, cardId, e.authorId, `Refreshed: new ${e.kind} evidence after ${days} days`, at);
   db.prepare(
     `INSERT INTO kb_evidence (id, card_id, kind, text, source_id, observation_id, metric, value, baseline, window_from, window_to, sample_size, test_ref,
        author_id, run_id, task_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -328,6 +333,42 @@ export function suggestLinks(db: DatabaseSync, cardId: string, now = new Date())
     const why = against ? `Possible contradiction: the same claim (${words}), but one of them says it doesn't hold` : source ? `Both cite "${source}"` : `Same topic: ${words}`;
     return createLink(db, ws ?? opt(k.store_id) ?? null, { from: cardId, to: String(k.id), type, why, authorId: 'app', status: 'suggested', score: Math.round(score * 100) / 100 }, now);
   });
+}
+
+/**
+ * The maintenance pass over one workspace's live cards (KB-23), for the pairs suggestLinks missed (edited since, past its
+ * top 3, made before it): a near-identical claim one side negates is a contradiction, and a near-identical pair (60%+
+ * shared words) suggests merging the weaker card (lower stage, else newer) into the other. A pair already linked that
+ * way, in any state, is left alone, so a rejected suggestion or a kept contradiction doesn't come back.
+ */
+// ponytail: every live card against its 50 FTS neighbours each pass; scan only cards changed since the last pass past a few thousand.
+export function scanCards(db: DatabaseSync, ws: KbWorkspace, now = new Date()): { duplicates: number; contradictions: number } {
+  const s = kbScope(ws, false, 'k.store_id');
+  const stage = (k: Row) => Object.keys(KB_STAGES).indexOf(String(k.stage));
+  const n = { duplicates: 0, contradictions: 0 };
+  for (const c of db.prepare(`SELECT * FROM kb_cards k WHERE ${s.sql} AND k.status IN ('proposed', 'active') ORDER BY k.seq`).all(...s.params)) {
+    const mine = tokens(textOf(c));
+    const terms = [...mine].slice(0, 24);
+    if (!terms.length) continue;
+    const later = db
+      .prepare(`SELECT k.* FROM kb_cards_fts JOIN kb_cards k ON k.seq = kb_cards_fts.rowid WHERE kb_cards_fts MATCH ? AND ${s.sql} AND k.seq > ? AND k.status IN ('proposed', 'active') LIMIT 50`)
+      .all(terms.map((t) => `"${t.replace(/"/g, '')}"`).join(' OR '), ...s.params, Number(c.seq));
+    for (const k of later) {
+      const theirs = tokens(textOf(k));
+      const shared = [...mine].filter((w) => theirs.has(w));
+      const j = shared.length / (mine.size + theirs.size - shared.length || 1);
+      const against = negated(textOf(c)) !== negated(textOf(k));
+      const type: KbLinkType | undefined = against ? (j >= 0.4 ? 'contradicts' : undefined) : j >= 0.6 ? 'duplicates' : undefined;
+      if (!type || linked(db, String(c.id), String(k.id), type)) continue;
+      const keepC = stage(c) !== stage(k) ? stage(c) > stage(k) : String(c.created_at) <= String(k.created_at);
+      const [from, to] = keepC ? [k, c] : [c, k];
+      const words = shared.slice(0, 5).join(', ');
+      const why = against ? `Possible contradiction: the same claim (${words}), but one of them says it doesn't hold` : `Possible duplicate: they share most of their words (${words})`;
+      createLink(db, ws, { from: String(from.id), to: String(to.id), type, why, authorId: 'app', status: 'suggested', score: Math.round(j * 100) / 100 }, now);
+      n[against ? 'contradictions' : 'duplicates']++;
+    }
+  }
+  return n;
 }
 
 // ---- merging, detaching and revisions

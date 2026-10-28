@@ -1,4 +1,4 @@
-import { getCard, kbScope } from '@frontline/agents';
+import { freshness, getCard, kbScope } from '@frontline/agents';
 import type { KbCard, KbDiscovery, KbOverview, KbStage, KbWorkspace } from '@frontline/shared';
 import type { Db } from '../db';
 import { listStores } from '../stores';
@@ -7,7 +7,6 @@ import { performanceStatus } from './performance';
 // The Research Center's numbers (KB-16), from the visible cards (proposed + active) of one workspace, or all of them.
 
 const DAY = 86_400_000;
-export const STALE_DAYS = 90; // ponytail: one age for every card, as on the artboard, until per-category freshness (KB-23).
 const VISIBLE = `status IN ('proposed', 'active')`;
 const GAPS = ['only hypotheses', 'stale', '0 measured'];
 
@@ -37,13 +36,14 @@ export function kbOverview(db: Db, ws: KbWorkspace | 'all', now = new Date()): K
   const stages: Record<KbStage, number> = { hypothesis: 0, supported: 0, tested: 0, validated: 0 };
   let thisWeek = 0;
   let stale = 0;
+  const fresh = freshness(db);
   for (const c of cards) {
     const r = root(String(c.category_id));
     if (!groups.has(r)) groups.set(r, { ws: c.store_id ? String(c.store_id) : 'general', categoryId: r, name: name.get(r) ?? '', stages: { hypothesis: 0, supported: 0, tested: 0, validated: 0 }, stale: 0, measured: false });
     const g = groups.get(r)!;
     g.stages[c.stage as KbStage]++;
     stages[c.stage as KbStage]++;
-    if (now.getTime() - Date.parse(String(c.seen)) > STALE_DAYS * DAY) {
+    if (now.getTime() - Date.parse(String(c.seen)) > fresh(String(c.category_id)) * DAY) {
       g.stale++;
       stale++;
     }
@@ -75,7 +75,8 @@ export function kbOverview(db: Db, ws: KbWorkspace | 'all', now = new Date()): K
     .slice(0, 5)
     .map(({ size: _, ...g }) => g);
 
-  // This week's discoveries: cards that earned Validated, and every conflict and promotion still waiting for the owner.
+  // This week's discoveries: cards that earned Validated or were refreshed, and every conflict, promotion and duplicate
+  // still waiting for the owner.
   const discoveries: KbDiscovery[] = [
     ...db
       .prepare(
@@ -104,6 +105,21 @@ export function kbOverview(db: Db, ws: KbWorkspace | 'all', now = new Date()): K
         const card = getCard(db, p.cardId);
         return card ? [{ kind: 'promotion' as const, id: String(r.id), at: String(r.created_at), title: p.title, card }] : [];
       }),
+    // The maintenance pass's merge suggestions (KB-23) while both cards are live, and cards checked again past their age.
+    ...db
+      .prepare(
+        `SELECT id, from_id, to_id, why, created_at FROM kb_links WHERE type = 'duplicates' AND status = 'suggested' AND ${s.sql}
+           AND from_id IN (SELECT id FROM kb_cards WHERE ${VISIBLE}) AND to_id IN (SELECT id FROM kb_cards WHERE ${VISIBLE}) ORDER BY created_at DESC LIMIT 8`,
+      )
+      .all(...s.params)
+      .map((r) => ({ kind: 'duplicate' as const, id: String(r.id), at: String(r.created_at), why: String(r.why), card: getCard(db, String(r.from_id))!, other: getCard(db, String(r.to_id))! })),
+    ...db
+      .prepare(
+        `SELECT card_id, max(created_at) AS at, reason FROM kb_revisions WHERE reason LIKE 'Refreshed: %' AND created_at >= ?
+         AND card_id IN (SELECT id FROM kb_cards WHERE ${VISIBLE} AND ${s.sql}) GROUP BY card_id`,
+      )
+      .all(week, ...s.params)
+      .map((r) => ({ kind: 'refreshed' as const, at: String(r.at), reason: String(r.reason).replace(/^Refreshed: /, ''), card: getCard(db, String(r.card_id))! })),
   ]
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 8);

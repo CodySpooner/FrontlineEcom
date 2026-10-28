@@ -12,12 +12,13 @@ afterEach(() => {
 
 const STORES = [{ id: 'pawsome', name: 'Pawsome Gear', connected: false, platform: 'shopify', niche: 'pets', color: '#f00', currency: 'USD', timezone: 'UTC' }];
 const OFF: KbControlsState = {
-  autonomous: false, roles: {}, triggers: ['conflict', 'anomaly', 'gap', 'stale'], taskBudgetUsd: 1, dailyBudgetUsd: 3, depth: 'standard', approval: true, review: true, trustedDomains: [], blockedDomains: [], reservedUsd: 0,
+  autonomous: false, roles: {}, triggers: ['conflict', 'anomaly', 'gap', 'stale'], taskBudgetUsd: 1, dailyBudgetUsd: 3, depth: 'standard', approval: true, review: true, trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null, reservedUsd: 0,
 };
 const CATS = [
-  { id: 'p-ads', storeId: 'pawsome', parentId: null, name: 'Advertising', position: 1, createdAt: '', cards: 3 },
-  { id: 'p-hooks', storeId: 'pawsome', parentId: 'p-ads', name: 'Hooks', position: 1, createdAt: '', cards: 1 },
-  { id: 'g-ads', storeId: null, parentId: null, name: 'Advertising', position: 1, createdAt: '', cards: 0 },
+  { id: 'p-ads', storeId: 'pawsome', parentId: null, name: 'Advertising', position: 1, createdAt: '', cards: 3, freshDays: 45 },
+  { id: 'p-hooks', storeId: 'pawsome', parentId: 'p-ads', name: 'Hooks', position: 1, createdAt: '', cards: 1, freshDays: 45 },
+  { id: 'p-psych', storeId: 'pawsome', parentId: null, name: 'Consumer Psychology', position: 2, createdAt: '', cards: 0, freshDays: 180 },
+  { id: 'g-ads', storeId: null, parentId: null, name: 'Advertising', position: 1, createdAt: '', cards: 0, freshDays: 45 },
 ];
 const WEEKLY = { id: 'r1', storeId: 'pawsome', name: "What's new in pet travel?", enabled: true, trigger: { type: 'schedule', cron: '0 9 * * 1' }, action: { type: 'kb_research', agentId: 'pawsome:market_analyst', task: "What's new in pet travel?" } } as AutomationRule;
 const OTHER = { ...WEEKLY, id: 'r2', action: { type: 'agent_task', agentId: 'pawsome:ad_strategist', task: 'Review ads' } } as AutomationRule;
@@ -65,16 +66,38 @@ describe('ResearchControls', () => {
     fireEvent.click(within(form).getByLabelText('Findings wait for my review'));
     fireEvent.change(within(form).getByLabelText('Trusted sites (one per line)'), { target: { value: 'ads.tiktok.com\n\n business.facebook.com ' } });
     fireEvent.change(within(form).getByLabelText('Blocked sites (one per line)'), { target: { value: 'reddit.com' } });
+    // Each top-level category's refresh age: its area's usual until the owner picks one.
+    const ages = within(form).getByRole('group', { name: 'Needs refresh after' });
+    expect([...within(ages).getByLabelText('Advertising').querySelectorAll('option')].map((o) => o.textContent)).toEqual(['Usual (45 days)', '14 days', '30 days', '60 days', '90 days', '180 days', '365 days']);
+    expect((within(ages).getByLabelText('Consumer Psychology') as HTMLSelectElement).value).toBe('');
+    fireEvent.change(within(ages).getByLabelText('Advertising'), { target: { value: '30' } });
+    fireEvent.change(within(form).getByLabelText('Keep fetched pages and research logs'), { target: { value: '90' } });
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
     await waitFor(() =>
       expect(sent).toEqual([
         ['PUT', '/api/kb/controls?ws=pawsome', {
           autonomous: true, approval: false, review: false, triggers: ['conflict', 'anomaly', 'gap'], roles: { ad_strategist: ['p-ads'] }, taskBudgetUsd: 0.5, dailyBudgetUsd: 2, depth: 'quick',
-          trustedDomains: ['ads.tiktok.com', 'business.facebook.com'], blockedDomains: ['reddit.com'],
+          trustedDomains: ['ads.tiktok.com', 'business.facebook.com'], blockedDomains: ['reddit.com'], freshDays: { 'p-ads': 30 }, retentionDays: 90,
         }],
       ]),
     );
     await waitFor(() => expect(screen.queryByRole('form', { name: 'Research controls' })).toBeNull());
+  });
+
+  it("an owner's refresh age and retention show as set; Usual clears the age", async () => {
+    const { sent } = render('pawsome', { ...OFF, freshDays: { 'p-ads': 14 }, retentionDays: 365 });
+    fireEvent.click(await screen.findByRole('button', { name: 'Controls' }));
+    const form = screen.getByRole('form', { name: 'Research controls' });
+    const ads = (await within(form).findByLabelText('Advertising', { selector: 'select' })) as HTMLSelectElement;
+    expect(ads.value).toBe('14');
+    expect(ads.options[0]!.textContent).toBe('Usual for its area'); // its own age is in effect, so the usual one isn't known here
+    expect((within(form).getByLabelText('Keep fetched pages and research logs') as HTMLSelectElement).value).toBe('365');
+    fireEvent.change(ads, { target: { value: '' } });
+    fireEvent.change(within(form).getByLabelText('Keep fetched pages and research logs'), { target: { value: '' } });
+    fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(sent).toHaveLength(1));
+    const { freshDays, retentionDays } = sent[0]![2] as Record<string, unknown>;
+    expect([freshDays, retentionDays]).toEqual([{}, null]);
   });
 
   it('shows why a save was refused', async () => {
@@ -114,9 +137,10 @@ describe('ResearchControls', () => {
     expect(within(form).queryByLabelText('Agents research on their own')).toBeNull();
     expect(within(form).queryByRole('group', { name: 'Who researches' })).toBeNull();
     expect(screen.queryByRole('group', { name: 'Add a schedule' })).toBeNull();
+    expect((await within(form).findByRole('group', { name: 'Needs refresh after' })).querySelectorAll('select')).toHaveLength(1); // General's own categories
     fireEvent.click(within(form).getByLabelText('Findings wait for my review'));
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(sent).toEqual([['PUT', '/api/kb/controls?ws=general', { review: false, trustedDomains: [], blockedDomains: [] }]]));
+    await waitFor(() => expect(sent).toEqual([['PUT', '/api/kb/controls?ws=general', { review: false, trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null }]]));
   });
 
   it('All workspaces has none of its own', async () => {

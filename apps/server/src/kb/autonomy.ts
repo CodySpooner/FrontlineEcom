@@ -3,7 +3,7 @@
 // An hourly pass looks for one trigger per store; an automation's research action asks the same gate. Loop guards: what
 // self-directed research made never triggers more of it, a card and trigger cool down for 14 days, a topic open or
 // researched in the last day is left alone, and a contradiction research found doesn't start research.
-import { createResearchTask, engineInfo, estimateResearch, getAgent, KB_CONTROLS, kbControls, kbRoleArea } from '@frontline/agents';
+import { createResearchTask, engineInfo, estimateResearch, freshness, getAgent, KB_CONTROLS, kbControls, kbRoleArea } from '@frontline/agents';
 import {
   AGENT_ROLES, KB_RESEARCH_DEPTHS, KB_TRIGGERS, type AgentRole, type ApprovalRequest, type AutomationAction, type KbControls, type KbControlsState, type KbResearchBrief, type KbTaskBrief,
   type KbTrigger, type KbWorkspace,
@@ -12,7 +12,7 @@ import { approvalsHook } from '../approvals';
 import type { Db } from '../db';
 import { advanceKbResearch } from '../routes/agents';
 import { getStore } from '../stores';
-import { kbOverview, STALE_DAYS } from './overview';
+import { kbOverview } from './overview';
 
 const DAY = 86_400_000;
 const COOLDOWN_DAYS = 14;
@@ -61,11 +61,16 @@ export function parseControls(db: Db, ws: KbWorkspace, body: unknown): KbControl
   const domains = (v: unknown) => (Array.isArray(v) && v.length <= 50 && v.every((d) => typeof d === 'string') ? [...new Set(v.map((d: string) => d.trim().toLowerCase()))] : undefined);
   const [trusted, blocked] = [domains(b.trustedDomains), domains(b.blockedDomains)];
   if (!trusted || !blocked || ![...trusted, ...blocked].every((d) => DOMAIN.test(d))) return 'trustedDomains and blockedDomains must be domain names, like example.com';
+  if (!isObj(b.freshDays) || !Object.entries(b.freshDays).every(([id, d]) => Number.isInteger(d) && (d as number) >= 7 && (d as number) <= 730 && top.get(id, ws ?? '')))
+    return "freshDays must map this workspace's top-level categories to 7-730 days";
+  if (b.retentionDays !== null && !(Number.isInteger(b.retentionDays) && (b.retentionDays as number) >= 30 && (b.retentionDays as number) <= 3650))
+    return 'retentionDays must be 30-3650 days, or null to keep everything';
   if (ws === null && b.autonomous) return 'Self-directed research runs on a store: its agents and AI budget. Turn it on for a store.';
   return {
     autonomous: b.autonomous as boolean, roles: Object.fromEntries(Object.entries(b.roles).map(([r, ids]) => [r, [...new Set(ids as string[])]])),
     triggers: (Object.keys(KB_TRIGGERS) as KbTrigger[]).filter((t) => (b.triggers as string[]).includes(t)), taskBudgetUsd: b.taskBudgetUsd, dailyBudgetUsd: b.dailyBudgetUsd,
     depth: b.depth as KbControls['depth'], approval: b.approval as boolean, review: b.review as boolean, trustedDomains: trusted, blockedDomains: blocked,
+    freshDays: b.freshDays as Record<string, number>, retentionDays: b.retentionDays as number | null,
   };
 }
 
@@ -170,12 +175,17 @@ function candidates(db: Db, storeId: string, c: KbControls): Candidate[] {
               .get(g.categoryId),
         )
         .map((g) => ({ trigger: 'gap', subject: g.categoryId, category: g.categoryId, objective: `${g.name} for a ${niche} store: which of its findings hold up?`, why: `Knowledge gap: everything in ${g.name} is a Hypothesis` })),
-    stale: () =>
-      own(
+    stale: () => {
+      // Past its category's age (KB-23). ponytail: the 200 least recently checked; enough for one task a pass.
+      const fresh = freshness(db);
+      return own(
         db
-          .prepare(`SELECT id, title, category_id, coalesce(verified_at, created_at) AS seen FROM kb_cards WHERE store_id = ? AND ${LIVE} AND origin != 'performance' AND coalesce(verified_at, created_at) < ? ORDER BY seen LIMIT 20`)
-          .all(storeId, iso(now - STALE_DAYS * DAY)),
-      ).map((r) => ({ trigger: 'stale', subject: String(r.id), category: root(String(r.category_id)), objective: `Is it still true? "${r.title}"`, why: `Stale card: last checked ${String(r.seen).slice(0, 10)}` })),
+          .prepare(`SELECT id, title, category_id, coalesce(verified_at, created_at) AS seen FROM kb_cards WHERE store_id = ? AND ${LIVE} AND origin != 'performance' ORDER BY seen LIMIT 200`)
+          .all(storeId)
+          .filter((r) => now - Date.parse(String(r.seen)) > fresh(String(r.category_id)) * DAY)
+          .slice(0, 20),
+      ).map((r) => ({ trigger: 'stale', subject: String(r.id), category: root(String(r.category_id)), objective: `Is it still true? "${r.title}"`, why: `Stale card: last checked ${String(r.seen).slice(0, 10)}` }));
+    },
   };
   return c.triggers.flatMap((t) => found[t]());
 }

@@ -119,6 +119,7 @@ export function sourceForAgent(db: DatabaseSync, id: string, max = 20_000): stri
   const r = db.prepare('SELECT * FROM kb_sources WHERE id = ?').get(id);
   if (!r) return `Source ${id} was not found.`;
   const where = String(r.url ?? r.title).replace(/[\r\n\v\f\u0085\u2028\u2029]+/g, ' ');
+  if (r.status === 'read' && !r.text) return `Source ${where} was read, but its text is no longer kept (the workspace's data retention). Fetch it again to read it.`;
   if (r.status !== 'read' || !r.text) return `Source ${where} was not read (${r.status}): ${String(r.error ?? 'no readable text').replace(/\.$/, '')}. Don't cite it as if it was.`;
   const text = String(r.text);
   const cut = text.length > max ? `${text.slice(0, max)}\n…(${text.length - max} more characters not shown)` : text;

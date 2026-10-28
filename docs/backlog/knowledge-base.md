@@ -590,7 +590,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
     - an open or recent task on the same workspace and topic is reused rather than duplicated;
     - conflicts that a research task itself created don't re-trigger research.
   - Tests for each control and guard.
-- [ ] KB-23 **Maintenance job:**
+- [x] KB-23 **Maintenance job:**
   - duplicate detection and merge suggestions;
   - contradiction detection into conflicts;
   - freshness per category, feeding "needs refresh" and refresh tasks;
@@ -641,6 +641,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-20 Ad-level and creative data: Meta, Google and TikTok Ads now also sync each ad's days, with its ad set or ad group and its text, alongside the campaign totals; the store's ad spend still comes from the campaigns only. An ad whose text holds a library creative's primary text is linked to that creative. Agents describe a creative's format, hook, angle, length and offer, and the Creative Studio preview shows them. Performance learning now reads each ad against the other ads in its ad set (measured), and each creative trait against the store's other library ads with a different one (always a Hypothesis). The Research Center says when ad results and creative traits are on.
 - 2026-10-27 KB-21 Experiments and the Campaigns library: a card's panel has a Tests section. "Plan a test" picks a metric (ROAS, click-through or conversion rate), an A and a B side made of the store's campaigns and library creatives, a window and a minimum sample on each side. Once the window's attribution has settled (30 days) and the store's ad accounts have synced past it, the app reads the two sides and writes the result on the card as evidence: worked (measured, so it climbs the ladder), failed (a conflict) or inconclusive. Demo stores can't be tested. The Library has a searchable Campaigns tab: each campaign's platform, dates, spend, ROAS, CTR and latest result, and opened, its creatives, copy and hooks, ad sets, metrics, the cards learned from it with their measurement window, and its Hypotheses as recommended tests. Products and audiences say "not linked". The Research Center's conflicts have "Plan a test".
 - 2026-10-27 KB-22 Autonomous research control: each workspace has research controls in the Research Center ("Self-directed research", Controls): whether its agents research on their own (off until the owner turns it on), which roles and the top-level categories each answers for, the triggers (contradictions, performance anomalies, knowledge gaps, stale cards), a budget per task and per day, depth, whether each task waits for approval, whether findings wait for review, and the sites to prefer or never read. Research can also run on a schedule (an automation with a research action). Every hour each store with it on starts at most one task, or one recommendation in "Agents recommend", which now shows what research like it has cost and has Dismiss. The server enforces all of it: never on the demo engine; what self-directed research made never starts more; a card and trigger wait 14 days; a topic open or researched in the last day isn't done again; contradictions research found don't start research.
+- 2026-10-27 KB-23 Maintenance: each top-level category has its own refresh age (ad platforms, creative, competitors, trends and SEO 45 days; psychology, brand, money and operations 180; the rest 90), which the owner changes in the Research Center's Controls ("Needs refresh after"). "Needs refresh" on the artboard and in the Research Center, the Knowledge gaps and the stale-card research trigger all follow it, and a stale card that gets new evidence shows as Refreshed. An hourly pass finds near-duplicate cards (Duplicate? in Latest discoveries: Merge, Compare or Not the same) and contradictions missed when cards were made (a link and an open conflict). Each workspace can keep fetched pages and research logs for 30 days to a year, or always (the default): past that, page text and finished research's logs, stage outputs and transcripts are trimmed, and the sources, tasks and reports stay.
 
 ## Blocked
 
@@ -931,3 +932,28 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   a rule's action as an agent task on save; it now keeps the rule's type (tested). Mutation sweep: 41 of 42 killed
   after 6 new tests; the one left was a shortcut the gate already covers, so it was removed. Left out: General
   self-directed research (no paying store), and per-category freshness (KB-23 owns staleness).
+- 2026-10-27 KB-23: per-category freshness lives in the workspace's controls (`freshDays`: top-level category id ->
+  7-730 days, checked against that workspace's roots), so it needs no migration. `freshness(db)` in
+  packages/agents/src/kb.ts walks a category up to its top-level one and returns the owner's age, else
+  `usualFreshDays(name)` by the area's name. It feeds `KbCategoryCount.freshDays`, each card brief's `refreshBy` (last
+  checked or made + that age), the overview's stale count and "N of M stale" gaps, and the self-directed stale trigger;
+  the Artboard reads `refreshBy`. `addEvidence` on a card past its age (any kind but conflict) writes the revision
+  "Refreshed: new <kind> evidence after N days", which the overview shows for 7 days. `scanCards(db, ws)`
+  (kb-links.ts), run per workspace by `maintain()` (apps/server/src/kb/maintenance.ts, in the hourly KB loop):
+  - each live card is compared with its 50 FTS neighbours made after it, in its own workspace only (store and General
+    cards are promotion territory);
+  - a near-identical claim one side negates (40%+ shared words) is a `contradicts` suggestion, which opens a conflict;
+  - 60%+ shared words without that is a new link type, `duplicates` (`KB_LINK_TYPES`), from the card to merge (lower
+    stage, else newer) to the one kept;
+  - a pair already linked that way in any state is skipped, so Not the same (link rejected) and Keep both stay
+    settled.
+  Duplicate discoveries need both cards live: Merge (the KB-08 merge route, which Detach undoes) ends them.
+  `retentionDays` (null = keep) trims `kb_sources.text` past the age (address, title, excerpt and hash stay;
+  `sourceForAgent` says to fetch it again, and fetching the same address refills it). For finished tasks it trims
+  `kb_task_log` (replaced by one "Data retention" line), `kb_task_steps.output_json` and their runs'
+  `transcript_json`. Queued and running tasks are never trimmed, even with an old `ended_at` from a failed try:
+  their outputs carry on. Already there and kept: version history with Restore (KB-08), card-to-source/evidence/run
+  traceability in Evidence, Sources and History (KB-04/KB-11), and the "only hypotheses" / stale / "0 measured" gaps
+  (KB-16), now on per-category ages. Mutation sweep: 37 of 38 killed after 6 more test cases; the one left
+  (`coalesce(ended_at, '')`) is equivalent, as finished tasks always have an end time. Found for KB-26: at 390 px the
+  Research Center scrolls sideways by 7 px (the view switcher and the Research Center's tab row), as before this item.

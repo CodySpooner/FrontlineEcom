@@ -1348,6 +1348,8 @@ export const KB_LINK_TYPES = {
   validated_by: 'Validated By',
   applied_to: 'Applied To',
   related_to: 'Related To',
+  /** The maintenance pass's merge suggestion (KB-23): `from` says what `to` says. */
+  duplicates: 'Duplicates',
 } as const;
 export type KbLinkType = keyof typeof KB_LINK_TYPES;
 /** `suggested` links are the app's guesses, drawn dotted until the owner accepts or rejects them. */
@@ -1401,6 +1403,8 @@ export interface KbCategory {
 /** GET /api/kb/categories?ws=general|<storeId>[&general=1] → KbCategory[], each with its own visible card count (proposed + active). */
 export interface KbCategoryCount extends KbCategory {
   cards: number;
+  /** Days its cards stay fresh: its top-level category's, as the owner set it or that area's usual (KB-23). */
+  freshDays: number;
 }
 
 /** Where a card came from. `agent` = an ordinary run; going live purges `agent` and `performance` cards of demo stores. */
@@ -1432,6 +1436,8 @@ export interface KbCardBrief {
   usedCount: number;
   citedCount: number;
   verifiedAt?: string;
+  /** When it needs checking again: last checked (or made) plus its category's refresh age (KB-23). */
+  refreshBy?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -1800,7 +1806,11 @@ export type KbDiscovery =
   | { kind: 'validated'; at: string; reason: string; card: KbCardBrief }
   | { kind: 'conflict'; id: string; at: string; note: string; card: KbCardBrief; other?: KbCardBrief }
   /** A General version of `card` waiting for the owner (approval `id`), titled `title`. */
-  | { kind: 'promotion'; id: string; at: string; title: string; card: KbCardBrief };
+  | { kind: 'promotion'; id: string; at: string; title: string; card: KbCardBrief }
+  /** The maintenance pass found `card` saying what `other` says (suggested link `id`): merge it in, or say they differ. */
+  | { kind: 'duplicate'; id: string; at: string; why: string; card: KbCardBrief; other: KbCardBrief }
+  /** A card past its category's age that new evidence checked again. */
+  | { kind: 'refreshed'; at: string; reason: string; card: KbCardBrief };
 
 /**
  * GET /api/kb/overview?ws=general|<storeId>|all → the Research Center, from the visible cards (proposed + active).
@@ -1900,6 +1910,10 @@ export interface KbControls {
   trustedDomains: string[];
   /** Sites never read (a domain blocks its subdomains). */
   blockedDomains: string[];
+  /** Days a card stays fresh, by this workspace's top-level category id (KB-23); one not here keeps its area's usual age. */
+  freshDays: Record<string, number>;
+  /** Days fetched page text and finished research's logs are kept (the sources, tasks and reports stay); null keeps them. */
+  retentionDays: number | null;
 }
 /** GET /api/kb/controls?ws= (general or a store): the controls, and what self-directed research reserved in the last 24 hours. PUT takes any of KbControls' fields. */
 export interface KbControlsState extends KbControls {

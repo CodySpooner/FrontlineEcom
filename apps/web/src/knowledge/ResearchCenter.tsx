@@ -4,7 +4,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { AGENT_ROLES, KB_CARD_TYPES, KB_TASK_STAGES, type AgentRole, type KbDiscovery, type KbOverview, type KbStage, type KbTaskBrief } from '@frontline/shared';
-import { useApprovals, useCreateKbCategory, useDecide, useKbCards, useKbOverview, useKbSources, useKbTask, useKbTaskAction, useKbTasks, useKbWorkspaces, useKeepBoth, useStores } from '../api/client';
+import { useApprovals, useCreateKbCategory, useDecide, useDecideKbLink, useKbCardWrite, useKbCards, useKbOverview, useKbSources, useKbTask, useKbTaskAction, useKbTasks, useKbWorkspaces, useKeepBoth, useStores } from '../api/client';
 import { Badge, Button, cx, ErrorState, LoadingState, Tabs } from '../components/ui';
 import { ago } from '../lib/format';
 import { NameForm } from './ArtboardPanels';
@@ -118,7 +118,7 @@ function Tiles({ ws, o }: { ws: string; o: KbOverview }) {
       <Tile to={lib({ stage: 'validated' })} label="Validated" value={o.validated} sub={o.cards ? `${Math.round((o.validated / o.cards) * 100)}% of cards` : 'none yet'} tone="good" />
       <Tile to={lib({ stage: 'hypothesis' })} label="Hypotheses" value={o.hypotheses} sub={`${o.supported} research-supported, ready to test`} />
       <Tile to="#kb-research" label="Researching now" value={o.running} sub={`${o.queued} queued · ${plural(o.researchers, 'agent')}`} />
-      <Tile to={lib({ sort: 'verified', dir: 'asc' })} label="Needs refresh" value={o.stale} sub="over 90 days since checked" />
+      <Tile to={lib({ sort: 'verified', dir: 'asc' })} label="Needs refresh" value={o.stale} sub="past their category's refresh age" />
       <Tile to="#kb-discoveries" label="Conflicts" value={o.conflicts} sub={o.conflicts ? 'waiting for your call' : 'none open'} tone="red" />
     </div>
   );
@@ -176,11 +176,13 @@ function KnowledgeMap({ ws, o }: { ws: string; o: KbOverview }) {
   );
 }
 
-const LABEL: Record<KbDiscovery['kind'], string> = { validated: 'Now validated', conflict: 'Conflict', promotion: 'Promote to General?' };
+const LABEL: Record<KbDiscovery['kind'], string> = { validated: 'Now validated', conflict: 'Conflict', promotion: 'Promote to General?', duplicate: 'Duplicate?', refreshed: 'Refreshed' };
 
 function Discoveries({ ws, o, name }: { ws: string; o: KbOverview; name: (ws: string) => string }) {
   const keep = useKeepBoth();
   const decide = useDecide();
+  const write = useKbCardWrite();
+  const link = useDecideKbLink();
   const home = (d: KbDiscovery) => d.card.storeId ?? 'general';
   return (
     <section id="kb-discoveries" aria-label="Latest discoveries" className={cx(panel, 'grid gap-3')}>
@@ -191,24 +193,46 @@ function Discoveries({ ws, o, name }: { ws: string; o: KbOverview; name: (ws: st
           View all
         </Link>
       </div>
-      {o.discoveries.length === 0 && <p className="text-xs text-muted">Nothing new this week. Cards that earn Validated, and conflicts and promotions waiting for your call, show here.</p>}
+      {o.discoveries.length === 0 && <p className="text-xs text-muted">Nothing new this week. Cards that earn Validated or are refreshed, and conflicts, promotions and possible duplicates waiting for your call, show here.</p>}
       {o.discoveries.map((d) => (
-        <article key={d.kind === 'validated' ? `v-${d.card.id}` : d.id} className={cx('grid gap-1.5 rounded-lg border p-3.5', d.kind === 'conflict' ? 'border-red/50 bg-red/5' : 'border-line')}>
+        <article key={d.kind === 'validated' || d.kind === 'refreshed' ? `${d.kind}-${d.card.id}` : d.id} className={cx('grid gap-1.5 rounded-lg border p-3.5', d.kind === 'conflict' ? 'border-red/50 bg-red/5' : 'border-line')}>
           <p className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-muted">
-            <span className={cx('font-display font-semibold tracking-[.12em] uppercase', d.kind === 'validated' ? 'text-good' : 'text-red')}>{LABEL[d.kind]}</span>
+            <span className={cx('font-display font-semibold tracking-[.12em] uppercase', d.kind === 'validated' || d.kind === 'refreshed' ? 'text-good' : 'text-red')}>{LABEL[d.kind]}</span>
             <span>{name(home(d))}</span>
             <span>{d.card.path.join(' › ')}</span>
             <span className="ml-auto">{ago(d.at)}</span>
           </p>
           <h3 className="text-[14px] font-semibold text-white">{d.card.title}</h3>
-          {d.kind === 'validated' ? (
+          {d.kind === 'validated' || d.kind === 'refreshed' ? (
             <>
               {d.card.summary && <p className="text-[13px] text-text-2">{d.card.summary}</p>}
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone="good">{d.reason}</Badge>
+                <Badge tone={d.kind === 'validated' ? 'good' : 'muted'}>{d.reason}</Badge>
                 <Link to={q({ ws: home(d), card: d.card.id })} className="ml-auto text-[13px] text-text-2 hover:text-white">
                   Open on artboard
                 </Link>
+              </div>
+            </>
+          ) : d.kind === 'duplicate' ? (
+            <>
+              <p className="text-[13px] text-text-2">{d.why}</p>
+              <p className="text-xs text-muted">{`Same as: ${d.other.title}`}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="primary"
+                  disabled={write.isPending}
+                  title={`Merge it into "${d.other.title}": its evidence and tags move over, and Detach brings it back`}
+                  onClick={() => write.mutate({ card: d.other, path: '/merge', body: { from: d.card.id } })}
+                >
+                  Merge
+                </Button>
+                <Link to={q({ view: 'library', ws: home(d), card: d.card.id })} className="inline-flex h-8 items-center rounded-lg border border-line-2 px-3 text-[13px] text-text-2 hover:text-white">
+                  Compare
+                </Link>
+                <Button size="sm" disabled={link.isPending} onClick={() => link.mutate({ link: { id: d.id, storeId: d.card.storeId }, status: 'rejected' })}>
+                  Not the same
+                </Button>
               </div>
             </>
           ) : d.kind === 'promotion' ? (

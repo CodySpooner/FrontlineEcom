@@ -43,13 +43,34 @@ export function kbScope(ws: KbWorkspace | 'all', general = false, col = 'store_i
 /** A workspace's research controls before the owner changes any (KB-22). */
 export const KB_CONTROLS: KbControls = {
   autonomous: false, roles: {}, triggers: ['conflict', 'anomaly', 'gap', 'stale'], taskBudgetUsd: 1, dailyBudgetUsd: 3, depth: 'standard', approval: true, review: true,
-  trustedDomains: [], blockedDomains: [],
+  trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null,
 };
 
 /** A workspace's research controls: what the owner set, over the defaults. */
 export function kbControls(db: DatabaseSync, ws: KbWorkspace): KbControls {
   const r = db.prepare(`SELECT settings_json FROM kb_controls WHERE coalesce(store_id, '') = ?`).get(ws ?? '');
   return { ...KB_CONTROLS, ...(r ? (JSON.parse(String(r.settings_json)) as Partial<KbControls>) : {}) };
+}
+
+/** How long a card stays fresh in an area (KB-23): ad platforms, creative, competitors, trends and SEO move fast; how people decide, brands, money and operations slowly. */
+export function usualFreshDays(name: string): number {
+  const n = name.toLowerCase();
+  return /advertis|\bads?\b|creative|competitor|product research|seo|social|tiktok|meta|facebook|google|trend/.test(n) ? 45 : /psycholog|brand|financ|profit|operations|business strategy/.test(n) ? 180 : 90;
+}
+
+/** Days a category's cards stay fresh: its top-level category's, as its workspace's owner set it or that area's usual. */
+// ponytail: reads every category once per call; per-workspace when the table holds thousands.
+export function freshness(db: DatabaseSync): (categoryId: string) => number {
+  const byId = new Map(db.prepare('SELECT id, store_id, parent_id, name FROM kb_categories').all().map((r) => [String(r.id), r]));
+  const controls = new Map<string, KbControls>();
+  return (id) => {
+    let r = byId.get(id);
+    for (let i = 0; r?.parent_id && i < 32; i++) r = byId.get(String(r.parent_id));
+    if (!r) return 90;
+    const ws = opt(r.store_id) ?? null;
+    if (!controls.has(ws ?? '')) controls.set(ws ?? '', kbControls(db, ws));
+    return controls.get(ws ?? '')!.freshDays[String(r.id)] ?? usualFreshDays(String(r.name));
+  };
 }
 
 type KbTable = 'kb_cards' | 'kb_categories' | 'kb_sources' | 'kb_links' | 'kb_conflicts' | 'kb_tasks' | 'kb_views';
@@ -94,7 +115,8 @@ export function listCategories(db: DatabaseSync, ws: KbWorkspace | 'all', genera
   const kids = new Map<string, Row[]>();
   for (const r of rows) kids.set(String(r.parent_id ?? ''), [...(kids.get(String(r.parent_id ?? '')) ?? []), r]);
   const out: KbCategoryCount[] = [];
-  const walk = (parent: string): void => (kids.get(parent) ?? []).forEach((r) => (out.push({ ...toCategory(r), cards: Number(r.cards) }), walk(String(r.id))));
+  const fresh = freshness(db);
+  const walk = (parent: string): void => (kids.get(parent) ?? []).forEach((r) => (out.push({ ...toCategory(r), cards: Number(r.cards), freshDays: fresh(String(r.id)) }), walk(String(r.id))));
   walk('');
   return out;
 }
@@ -173,7 +195,7 @@ export function cardsUnder(db: DatabaseSync, id: string): number {
 
 const STAGE_ORDER: KbStage[] = ['hypothesis', 'supported', 'tested', 'validated'];
 
-function toBrief(r: Row, path: (id: string) => string[]): KbCardBrief {
+function toBrief(r: Row, path: (id: string) => string[], fresh: (categoryId: string) => number): KbCardBrief {
   return {
     id: String(r.id),
     storeId: opt(r.store_id) ?? null,
@@ -196,13 +218,14 @@ function toBrief(r: Row, path: (id: string) => string[]): KbCardBrief {
     usedCount: Number(r.used_count),
     citedCount: Number(r.cited_count),
     ...(r.verified_at ? { verifiedAt: String(r.verified_at) } : {}),
+    refreshBy: new Date(Date.parse(String(r.verified_at ?? r.created_at)) + fresh(String(r.category_id)) * 86_400_000).toISOString(),
     createdAt: String(r.created_at),
     updatedAt: String(r.updated_at),
   };
 }
 
-const toCard = (r: Row, path: (id: string) => string[]): KbCard => ({
-  ...toBrief(r, path),
+const toCard = (r: Row, path: (id: string) => string[], fresh: (categoryId: string) => number): KbCard => ({
+  ...toBrief(r, path, fresh),
   body: String(r.body),
   relevance: String(r.relevance),
   application: String(r.application),
@@ -254,13 +277,14 @@ export function listCards(db: DatabaseSync, ws: KbWorkspace | 'all', q: KbCardQu
   const total = Number(db.prepare(`SELECT count(*) AS n ${from}`).get(...params)?.n);
   const rows = db.prepare(`SELECT * ${from} ORDER BY ${SORTS[q.sort ?? 'updated']} ${dir}, seq ${dir} LIMIT ? OFFSET ?`).all(...params, limit, offset);
   const path = pathsOf(db, ws);
-  return { items: rows.map((r) => toBrief(r, path)), total, offset, limit };
+  const fresh = freshness(db);
+  return { items: rows.map((r) => toBrief(r, path, fresh)), total, offset, limit };
 }
 
 /** One card, only if `ws` may see it. */
 export function getCard(db: DatabaseSync, id: string, ws: KbWorkspace | 'all' = 'all', general = false): KbCard | undefined {
   const r = kbRow(db, 'kb_cards', id, ws, general);
-  return r && toCard(r, pathsOf(db, opt(r.store_id) ?? null));
+  return r && toCard(r, pathsOf(db, opt(r.store_id) ?? null), freshness(db));
 }
 
 /** Records the card as it is now, with why it changed. Every move and edit is one. */

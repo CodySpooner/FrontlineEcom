@@ -37,8 +37,9 @@ const zoom = () => screen.getByTestId('zoom').textContent;
 describe('Knowledge artboard › cards', () => {
   it('shows each card per the design: type, workspace, author, confidence and freshness', async () => {
     board([
-      card('a', { type: 'validated_insight', stage: 'validated', title: 'Problem-first hooks win', tags: ['tiktok', 'hooks'] }),
-      card('b', { stage: 'hypothesis', status: 'proposed', title: 'UGC beats studio', authorId: 'owner', verifiedAt: '2026-01-01T00:00:00Z' }),
+      // Checked long ago, but its category keeps cards fresh for longer (KB-23).
+      card('a', { type: 'validated_insight', stage: 'validated', title: 'Problem-first hooks win', tags: ['tiktok', 'hooks'], verifiedAt: '2026-01-01T00:00:00Z', refreshBy: new Date(Date.now() + 86_400_000).toISOString() }),
+      card('b', { stage: 'hypothesis', status: 'proposed', title: 'UGC beats studio', authorId: 'owner', verifiedAt: '2026-01-01T00:00:00Z', refreshBy: '2026-02-15T00:00:00Z' }),
       card('g', { storeId: null, categoryId: 'general-psychology', path: ['Psychology'], title: 'Pain beats gain', authorId: 'peak:market_analyst' }),
     ]);
     const a = await cardEl('Problem-first hooks win');
@@ -54,6 +55,7 @@ describe('Knowledge artboard › cards', () => {
     expect(within(b).getByText('Unreviewed')).toBeTruthy();
     expect(within(b).getByText('You')).toBeTruthy();
     expect(within(b).getByText('needs refresh')).toBeTruthy();
+    expect(within(a).queryByText('needs refresh')).toBeNull();
     const g = await cardEl('Pain beats gain');
     expect(within(g).getByText('General')).toBeTruthy();
     expect(g.className).toMatch(/bg-\[#111114\]/);

@@ -5,6 +5,7 @@ import type { Db } from '../db';
 import { newSince, productSales, restTrend, storeDay, storeFunnel, synced } from '../routes/agents-gamification';
 import { listStores } from '../stores';
 import { autoDeps, autonomousResearch } from './autonomy';
+import { maintain } from './maintenance';
 import { evaluateExperiments } from './experiments';
 
 // Performance learning (knowledge-base lane, KB-19, decision 13). Each real store's settled 28-day periods are read
@@ -273,9 +274,9 @@ export function performanceStatus(db: Db, storeId: string): KbPerformance {
   return { storeId, demo, on: parts.filter((x) => x[0]).map((x) => x[1]), off: parts.filter((x) => !x[0]).map((x) => x[2]), lessons };
 }
 
-/** The hourly read, while the app runs: settled periods, then settled tests (KB-21), then self-directed research (KB-22). */
+/** The hourly read, while the app runs: settled periods, then settled tests (KB-21), self-directed research (KB-22) and maintenance (KB-23). */
 export function startKbPerformanceLoop(db: Db, everyMs = 3_600_000) {
-  const timer = setInterval(() => (learnFromPerformance(db), evaluateExperiments(db), autonomousResearch(db, autoDeps(db))), everyMs);
+  const timer = setInterval(() => (learnFromPerformance(db), evaluateExperiments(db), autonomousResearch(db, autoDeps(db)), maintain(db)), everyMs);
   timer.unref();
   return () => clearInterval(timer);
 }

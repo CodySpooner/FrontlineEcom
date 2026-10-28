@@ -13,7 +13,6 @@ import { bounds, CARD, cull, edge, fit, HEAD, layout, nearest, overlaps, PAD, pa
 
 /** The area Fit and pan-into-view use: below the view switcher, right of the Outline column. The details panel and the dock add to it. */
 export const INSET: Inset = { top: 64, right: 16, bottom: 16, left: 16 + 196 + 16 };
-const STALE_DAYS = 90; // ponytail: one age for every card until per-category freshness (KB-23).
 const ARROWS: Record<string, Dir> = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
 const STEP = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] } as const;
 const STAGES = Object.keys(KB_STAGES) as KbStage[];
@@ -461,7 +460,7 @@ const CardView = memo(function CardView({ p, x, y, selected, tabStop, store, onF
   const general = c.storeId === null;
   const step = STAGES.indexOf(c.stage);
   const when = c.verifiedAt ?? c.createdAt;
-  const stale = Date.now() - Date.parse(when) > STALE_DAYS * 86_400_000;
+  const stale = !!c.refreshBy && Date.now() > Date.parse(c.refreshBy); // its category's age (KB-23)
   const author = memoryAuthor(c.authorId);
   return (
     <div
