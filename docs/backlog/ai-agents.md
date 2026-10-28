@@ -1370,7 +1370,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     - Marketing Strategist: its read tools, then an answer, with no approval asked;
     - General Researcher: its app read tools only (FakeStep.call is a ToolName, so WebSearch and WebFetch can't be
       scripted).
-- [ ] AA-12 **Open a conversation with context** (decision 14):
+- [x] AA-12 **Open a conversation with context** (decision 14):
   - `startConversation`;
   - the Analytics "Ask Ad Strategist" action with a campaign reference;
   - the context chip, with the reference checked against the store;
@@ -1655,6 +1655,12 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   narrowed only); Default and saved presets; "Role instructions and checks" in Details; the run notification names the
   config's type; evals for every type's contract, custom-role narrowing, and flows keyed by role plus the two built-in
   types; 9 new tests; checked in headless Chrome.
+- 2026-10-28 AA-12 open a conversation with context: client `useStartConversation`; "Ask Ad Strategist" on Analytics
+  campaign rows; the context chip (campaign → Analytics, continued run → its read-only view); the first turn reads the
+  campaign from the store's data (status, budget, 30-day spend, revenue, ROAS, purchases); `?run=` on the Research,
+  Orders and Creative links; reply deliverables by run_id (creatives, page and flow drafts, ad-request campaigns) in
+  the thread and `GET /api/runs/:id`; run notifications open the run in its conversation; 5 new tests; checked in
+  headless Chrome.
 
 ## Blocked
 
@@ -1788,6 +1794,18 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-12, 2026-10-28) For AA-13 and later:
+  - `useStartConversation(storeId)` (client.ts) → `{ start({ type, title?, objective, context? }), isPending, error }`
+    posts to `/api/conversations` and navigates to the conversation. One hook per store, so a multi-store list puts it
+    in a row component (Analytics' `AskStrategist`).
+  - `conversationPreface` reads a campaign context's record from `campaigns` and `campaign_daily` (the store's own
+    data); the name the module passed is only the chip's label.
+  - `runDeliverables(db, runId)` (conversations.ts) feeds `AgentRunDetail.deliverables` in the thread and in
+    `GET /api/runs/:id` (absent when empty). The reply's "Made in this reply" row links a creative to its Creative tab,
+    a page draft to `/builder?draft=`, a flow draft to the Email & SMS drawer's Flows tab and an ad request's campaign
+    to `/analytics` (no per-campaign view exists; the chip uses the same). Approvals stay as their inline cards.
+  - Run notifications (agents.ts onRun) link to `/agents/w?store=&run=`: AA-14b moves that path with the workspace.
+    Module starters keep the legacy `/agents/<seat>?run=` form, which AA-14b maps.
 - (AA-11, 2026-10-28) For AA-12 and later:
   - Contracts: `RoleSpec` gained `workflow`, `knowledge`, `outputs`, `checks` and `task` (the Default preset's name);
     `contractOf(spec)` adds `WORKFLOW_FIRST` before and `CHECKS_LAST` after (check against the request, the

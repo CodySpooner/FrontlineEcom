@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import type { AnalyticsSummary, CampaignStats, Product, Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
 import { Campaigns, FunnelPanel, PlatformSplit, TopProducts, TopTable, UnitCosts } from './Analytics';
@@ -20,6 +20,33 @@ describe('Campaigns', () => {
     expect(screen.getByRole('link', { name: 'Research Spring sale' }).getAttribute('href')).toBe(
       '/knowledge?view=research&ws=pawsome&ask=How+to+make+the+%22Spring+sale%22+Meta+campaign+more+profitable',
     );
+  });
+});
+
+describe('Ask Ad Strategist', () => {
+  it("opens an Ad Strategist conversation about the campaign, in the campaign's store", async () => {
+    const posted: { url: string; body: Record<string, unknown> }[] = [];
+    stubApi((url, init) => {
+      if (init?.method !== 'POST') return [];
+      posted.push({ url, body: JSON.parse(String(init.body)) });
+      return reply({ conversation: { id: 'cv1', storeId: 'pawsome' }, run: { id: 'r1', storeId: 'pawsome', agentId: 'pawsome:ad_strategist', status: 'queued' } }, 201);
+    });
+    const c = { network: 'meta', id: 'c1', storeId: 'pawsome', name: 'Spring sale', status: 'active', dailyBudget: 20, spend: 100, revenue: 150, roas: 1.5, purchases: 3, clicks: 40, impressions: 2000 } as CampaignStats;
+    renderApp(<Campaigns q={{ data: [c], isPending: false, isError: false } as never} be={1} beOf={() => 1} />, '/analytics');
+    fireEvent.click(screen.getByRole('button', { name: 'Ask Ad Strategist about Spring sale' }));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/agents/c/cv1?store=pawsome'));
+    expect(posted).toEqual([
+      {
+        url: '/api/conversations?store=pawsome',
+        body: {
+          clientRequestId: expect.any(String),
+          message: 'Review the Meta campaign "Spring sale" and tell me what to do next.',
+          type: 'ad_strategist',
+          title: 'Spring sale: what next',
+          context: { kind: 'campaign', network: 'meta', id: 'c1', name: 'Spring sale' },
+        },
+      },
+    ]);
   });
 });
 

@@ -31,6 +31,7 @@ import {
   deleteNicheLearning,
   ensureSquads,
   customRole,
+  runDeliverables,
   getAgent,
   getConfig,
   getPageDraft,
@@ -297,7 +298,8 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent' | 
     const agent = getAgent(db, run.agentId);
     const custom = run.configId ? getConfig(db, run.configId)?.customRoleId : undefined;
     const name = (custom && customRole(db, custom)?.name) || (agent ? AGENT_ROLES[agent.role].name : 'Agent');
-    const link = `/agents/${run.agentId}`;
+    // The run, in its conversation (or read alone): ponytail: AA-14b moves the workspace off /agents/w, and this link with it.
+    const link = `/agents/w?store=${encodeURIComponent(run.storeId)}&run=${encodeURIComponent(run.id)}`;
     if (run.status === 'done') notify(db, { kind: 'agent_done', title: `${name} finished`, body: runGist(getRun(db, run.id)?.transcript ?? []) ?? run.task, storeId: run.storeId, link });
     // An account problem fails every queued and scheduled run alike: the owner hears it once a day, not once per run.
     const told = run.status === 'error' && isAccountError(run.error ?? '') && !once(db, `account-error:${localDate()}:${run.error}`);
@@ -664,7 +666,9 @@ export function agentRoutes(db: Db) {
     )
     .get('/api/runs/:id', (c) => {
       const run = runs.get(c.req.param('id'));
-      return run && !wrongStore(c, db, 'agent_runs', run.id) ? c.json(run) : c.json({ error: 'Run not found' }, 404);
+      if (!run || wrongStore(c, db, 'agent_runs', run.id)) return c.json({ error: 'Run not found' }, 404);
+      const deliverables = runDeliverables(db, run.id);
+      return c.json({ ...run, ...(deliverables.length ? { deliverables } : {}) });
     })
     .post('/api/runs/:id/cancel', (c) => {
       if (wrongStore(c, db, 'agent_runs', c.req.param('id'))) return c.json({ error: 'Run not found' }, 404);

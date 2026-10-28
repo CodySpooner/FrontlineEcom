@@ -1,4 +1,4 @@
-import { defaultTools, getConfig, getRun, recap } from '@frontline/agents';
+import { conversationPreface, defaultTools, getConfig, getRun, recap } from '@frontline/agents';
 import { AGENT_ROLES, type AgentPreset, type AgentRun, type AgentRunDetail, type AgentTypeInfo, type Conversation, type ConversationPage, type CursorPage, type CustomRole } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { beforeEach, expect, test } from 'vitest';
@@ -178,7 +178,9 @@ test("startConversation's module reference must be the store's own record; the f
   const opened = await open({ type: 'ad_strategist', message: 'Should I scale this?', context });
   expect(opened.status).toBe(201);
   expect(opened.conversation.context).toEqual(context);
-  expect(said(opened.run.id)).toContain(`on it — "The owner opened this from the ${context.network} campaign "Spring TOF" (id glow-c1)"`);
+  // The agent gets the record from the store's data, not the name the module passed.
+  expect(said(opened.run.id)).toContain(`on it — "The owner opened this from the ${context.network} campaign "Prospecting · Broad" (id glow-c1)`);
+  expect(conversationPreface(db, opened.conversation.id)).toMatch(/: active, daily budget [\d.]+ USD; last 30 days spend [\d.]+ USD, revenue [\d.]+ USD, ROAS [\d.]+, \d+ purchases\./);
   expect((await open({ type: 'ad_strategist', context: { ...context, id: 'peak-c1' } })).status).toBe(404);
   expect((await open({ type: 'ad_strategist', context: { kind: 'run', id: 'x', name: 'x' } })).field).toBe('context');
 });
@@ -306,4 +308,22 @@ test("presets: each type's Default first, then the owner's saved ones for it, ch
   expect(((await presets('ad_strategist')) as AgentPreset[]).map((p) => p.name)).toEqual(['Campaign planning', 'Everywhere', 'Tight budget']);
   expect(((await presets('ad_strategist', 'peak')) as AgentPreset[]).map((p) => p.name)).toEqual(['Campaign planning', 'Everywhere']);
   expect(((await presets('copywriter')) as AgentPreset[]).map((p) => p.name)).toEqual(['Copywriting']);
+});
+
+test("a reply's deliverables come from its run_id, and its notification opens the run in its conversation", async () => {
+  const { conversation, run } = await open({ type: 'ad_strategist', message: 'Tidy the account' });
+  const at = '2026-10-28T10:00:00Z';
+  db.prepare(`INSERT INTO creatives (id, store_id, agent_id, run_id, kind, headline, primary_text, source, created_at) VALUES ('cr1', 'glow', 'glow:ad_strategist', ?, 'copy', 'Glow in 3 steps', 'x', 'demo', ?)`).run(run.id, at);
+  db.prepare(`INSERT INTO page_drafts (id, store_id, agent_id, run_id, kind, title, html, notes, created_at) VALUES ('pd1', 'glow', 'glow:ad_strategist', ?, 'product', 'Serum page', '<p>x</p>', '', ?)`).run(run.id, at);
+  db.prepare(`INSERT INTO approvals (id, store_id, agent_id, run_id, title, reason, action_json, status, created_at) VALUES ('ap1', 'glow', 'glow:ad_strategist', ?, 'Pause it', 'r', '{"kind":"ads.pause_campaign","payload":{"campaignId":"glow-c1"}}', 'pending', ?)`).run(run.id, at);
+  db.prepare(`INSERT INTO creatives (id, store_id, agent_id, run_id, kind, headline, primary_text, source, created_at) VALUES ('cr2', 'glow', 'glow:ad_strategist', 'other-run', 'copy', 'Not this run', 'x', 'demo', ?)`).run(at);
+  const made = [
+    { kind: 'creative', id: 'cr1', title: 'Glow in 3 steps', creativeKind: 'copy' },
+    { kind: 'page_draft', id: 'pd1', title: 'Serum page' },
+    { kind: 'campaign', id: 'glow-c1', title: 'Prospecting · Broad' },
+  ];
+  const thread = (await (await send('GET', `/api/conversations/${conversation.id}/thread?store=glow`)).json()) as CursorPage<AgentRunDetail>;
+  expect(thread.items[0]!.deliverables).toEqual(made);
+  expect(((await (await send('GET', `/api/runs/${run.id}?store=glow`)).json()) as AgentRunDetail).deliverables).toEqual(made);
+  expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Ad Strategist finished'`).get()?.link).toBe(`/agents/w?store=glow&run=${run.id}`);
 });

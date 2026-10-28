@@ -907,6 +907,17 @@ export interface MemoryInput {
 /** A run with its transcript (consecutive text deltas merged into one). */
 export interface AgentRunDetail extends AgentRun {
   transcript: AgentEvent[];
+  /** What it made, found by run_id (decision 14): in a conversation's thread and GET /api/runs/:id. */
+  deliverables?: RunDeliverable[];
+}
+
+/** Something a run made, linked to where it lives: a creative, a page or flow draft, the campaign its ad request is about. */
+export interface RunDeliverable {
+  kind: 'creative' | 'page_draft' | 'flow_draft' | 'campaign';
+  id: string;
+  title: string;
+  /** A creative's kind, for its library tab. */
+  creativeKind?: CreativeKind;
 }
 
 /**

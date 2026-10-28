@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { conversationState, runState, type AgentRun, type AgentRunDetail, type Conversation, type ConversationContext, type ConversationCounts, type ConversationPage, type CursorPage, type Store } from '@frontline/shared';
+import { conversationState, runState, type AgentRun, type AgentRunDetail, type Conversation, type ConversationContext, type ConversationCounts, type ConversationPage, type CreativeKind, type CursorPage, type RunDeliverable, type Store } from '@frontline/shared';
 import { saveConfig, type AgentType, type ConfigDraft } from './configs';
 import { ftsQuery } from './kb-retrieve';
 import { finalText, getRun } from './runs';
@@ -112,7 +112,9 @@ export function conversationThread(db: DatabaseSync, id: string, { before, limit
   const items = rows.slice(0, n).reverse().flatMap((r) => {
     const run = get(String(r.id));
     const retryOf = run && retried.get(run.id)?.ref?.toString().split(':')[1];
-    return run ? [{ ...run, state: stateOf(db, run), ...(retryOf ? { retryOf } : {}) }] : [];
+    if (!run) return [];
+    const deliverables = runDeliverables(db, run.id);
+    return [{ ...run, state: stateOf(db, run), ...(retryOf ? { retryOf } : {}), ...(deliverables.length ? { deliverables } : {}) }];
   });
   return { items, total, ...(rows.length > n ? { next: String(rows[n - 1]!.rowid) } : {}) };
 }
@@ -179,8 +181,33 @@ export function conversationPreface(db: DatabaseSync, conversationId: string): s
   const c = db.prepare('SELECT store_id, context_json FROM conversations WHERE id = ?').get(conversationId);
   const context = c?.context_json ? (JSON.parse(String(c.context_json)) as ConversationContext) : undefined;
   if (context?.kind === 'run') return recap(db, String(c!.store_id), [context.id]);
-  if (context?.kind === 'campaign') return `The owner opened this from the ${context.network} campaign "${context.name}" (id ${context.id}). Read its numbers with your tools.`;
+  if (context?.kind === 'campaign') {
+    // The record from the store's own data, not what the module passed.
+    const camp = db.prepare('SELECT c.name, c.status, c.daily_budget, s.currency FROM campaigns c JOIN stores s ON s.id = c.store_id WHERE c.store_id = ? AND c.network = ? AND c.id = ?').get(String(c!.store_id), context.network, context.id);
+    if (!camp) return `The owner opened this from the ${context.network} campaign "${context.name}" (id ${context.id}), which is no longer in the store's data.`;
+    const t = db.prepare(`SELECT sum(spend) AS spend, sum(revenue) AS revenue, sum(purchases) AS purchases FROM campaign_daily WHERE network = ? AND campaign_id = ? AND date >= date('now', '-30 days')`).get(context.network, context.id);
+    const money = (n: unknown) => `${Number(n ?? 0).toFixed(2)} ${camp.currency}`;
+    const roas = Number(t?.spend) ? (Number(t?.revenue) / Number(t?.spend)).toFixed(2) : 'n/a';
+    return (
+      `The owner opened this from the ${context.network} campaign "${camp.name}" (id ${context.id}): ${camp.status}, daily budget ${money(camp.daily_budget)}; ` +
+      `last 30 days spend ${money(t?.spend)}, revenue ${money(t?.revenue)}, ROAS ${roas}, ${Number(t?.purchases ?? 0)} purchases. Check the latest numbers with your tools before you act.`
+    );
+  }
   return undefined;
+}
+
+/** What a run made, found by run_id (decision 14): creatives, page and flow drafts, and the campaigns its ad requests are about. */
+export function runDeliverables(db: DatabaseSync, runId: string): RunDeliverable[] {
+  const rows = (sql: string) => db.prepare(sql).all(runId);
+  return [
+    ...rows('SELECT id, headline, kind FROM creatives WHERE run_id = ? ORDER BY created_at').map((r) => ({ kind: 'creative' as const, id: String(r.id), title: String(r.headline), creativeKind: r.kind as CreativeKind })),
+    ...rows('SELECT id, title FROM page_drafts WHERE run_id = ? ORDER BY rowid').map((r) => ({ kind: 'page_draft' as const, id: String(r.id), title: String(r.title) })),
+    ...rows('SELECT id, name FROM flow_drafts WHERE run_id = ? ORDER BY rowid').map((r) => ({ kind: 'flow_draft' as const, id: String(r.id), title: String(r.name) })),
+    ...rows(
+      `SELECT DISTINCT c.id, c.name FROM approvals a JOIN campaigns c ON c.store_id = a.store_id AND c.id = json_extract(a.action_json, '$.payload.campaignId')
+       WHERE a.run_id = ? AND json_extract(a.action_json, '$.kind') LIKE 'ads.%'`,
+    ).map((r) => ({ kind: 'campaign' as const, id: String(r.id), title: String(r.name) })),
+  ];
 }
 
 /** A run's state for the page (decision 5): its approvals waiting on the owner decide between approval and question. */

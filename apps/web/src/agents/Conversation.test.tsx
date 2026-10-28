@@ -148,6 +148,33 @@ test('the composer keeps a draft per conversation, sends on Enter, and a queued 
   expect(localStorage.getItem('fe.agents.draft.c1')).toBeNull();
 });
 
+test('the context chip links back to what the conversation was opened from; a reply links what it made', async () => {
+  const done = run('r1', 'done', {
+    transcript: [{ type: 'text_delta', text: 'Done.' }],
+    deliverables: [
+      { kind: 'creative', id: 'cr1', title: 'Glow in 3 steps', creativeKind: 'copy' },
+      { kind: 'page_draft', id: 'pd 1', title: 'Serum page' },
+      { kind: 'flow_draft', id: 'fd1', title: 'Welcome flow' },
+      { kind: 'campaign', id: 'glow-c1', title: 'Prospecting · Broad' },
+    ],
+  });
+  api([done]);
+  show({ ...conversation(), context: { kind: 'campaign', network: 'meta', id: 'glow-c1', name: 'Prospecting · Broad' } });
+  expect((await screen.findByRole('link', { name: 'Campaign · Prospecting · Broad' })).getAttribute('href')).toBe('/analytics');
+  const made = within(await screen.findByLabelText('Made in this reply'));
+  expect(made.getAllByRole('link').map((a) => [a.textContent, a.getAttribute('href')])).toEqual([
+    ['Creative · Glow in 3 steps', '/creative?tab=copy'],
+    ['Page draft · Serum page', '/builder?draft=pd%201'],
+    ['Campaign · Prospecting · Broad', '/analytics'],
+  ]);
+  fireEvent.click(made.getByRole('button', { name: 'Flow draft · Welcome flow' }));
+  expect(screen.getByTestId('where').textContent).toBe('/?settings=email_sms&tab=flows');
+  cleanup();
+  api([done]);
+  show({ ...conversation(), context: { kind: 'run', id: 'r0', name: 'Weekly ad check' } });
+  expect((await screen.findByRole('link', { name: 'Continued from · Weekly ad check' })).getAttribute('href')).toBe('/agents/w?store=glow&run=r0');
+});
+
 test('an interrupted reply shows the banner with Resume, and no Retry', async () => {
   const fetch = api([run('r1', 'error', { error: INTERRUPTED, state: 'interrupted', transcript: [{ type: 'text_delta', text: 'Half an answer' }] })]);
   show(conversation('interrupted'));

@@ -51,7 +51,7 @@ export function Research() {
     store &&
     start.mutate(
       { agentId: `${store.id}:product_hunter`, task: `Find 5 new winning ${niche ? `${custom.get(niche) ?? niche} ` : ''}products for this store, with margin, trend and competition for each.` },
-      { onSuccess: (r) => navigate(`/agents/${encodeURIComponent(r.agentId)}`) },
+      { onSuccess: (r) => navigate(`/agents/${encodeURIComponent(r.agentId)}?run=${r.id}`) },
     );
 
   return (

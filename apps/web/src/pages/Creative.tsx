@@ -122,7 +122,7 @@ export function Creative() {
             {start.isSuccess && (
               <p className="text-xs text-text-2" role="status">
                 On it.{media && ` It asks you before spending ${CREDITS[tab.kind]} credits.`} The result lands in the library below.{' '}
-                <Link to={`/agents/${encodeURIComponent(start.data.agentId)}`} className="text-red hover:underline">
+                <Link to={`/agents/${encodeURIComponent(start.data.agentId)}?run=${start.data.id}`} className="text-red hover:underline">
                   Watch it work
                 </Link>
               </p>

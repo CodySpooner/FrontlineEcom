@@ -219,7 +219,7 @@ function CheckIssue({ i: { order: o, kind, detail } }: { i: Issue }) {
       icon={ISSUE_ICON[kind]}
       action={
         start.data ? (
-          <Link to={`/agents/${encodeURIComponent(start.data.agentId)}`} className="text-xs text-red hover:underline">
+          <Link to={`/agents/${encodeURIComponent(start.data.agentId)}?run=${start.data.id}`} className="text-xs text-red hover:underline">
             Operations is on it
           </Link>
         ) : (

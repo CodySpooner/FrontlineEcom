@@ -9,6 +9,7 @@ import type {
   AgentTypeInfo,
   Conversation,
   ConversationCounts,
+  ConversationContext,
   ConversationDetail,
   CreateCustomRoleInput,
   CustomRole,
@@ -95,6 +96,8 @@ import type {
   SupplierProduct,
   TopProduct,
 } from '@frontline/shared';
+import { useNavigate } from 'react-router';
+import { agentsUrl } from '../agents/urls';
 import { apiUp, waitForApi } from '../lib/restart';
 import { importing } from '../lib/sync';
 import { applyRunEvent, isLive } from '../lib/transcript';
@@ -294,6 +297,18 @@ export function useCreateConversation(storeId: string) {
     mutationFn: (input: CreateConversationInput) => api<{ conversation: Conversation; run: AgentRun }>(`/api/conversations?store=${storeId}`, json('POST', input)),
     onSuccess: (r) => done(r.conversation.id, r.run),
   });
+}
+
+/**
+ * startConversation (decision 14): a module opens a conversation about one of the store's records (the server refuses
+ * another store's) with the objective as its first message, and the workspace opens on it.
+ */
+export function useStartConversation(storeId: string) {
+  const create = useCreateConversation(storeId);
+  const navigate = useNavigate();
+  const start = ({ objective, ...input }: { type: string; title?: string; objective: string; context?: ConversationContext }) =>
+    create.mutate({ clientRequestId: crypto.randomUUID(), message: objective, ...input }, { onSuccess: (r) => navigate(agentsUrl({ store: storeId, conversation: r.conversation.id })) });
+  return { start, isPending: create.isPending, error: create.error };
 }
 
 /** Sends a message; while a reply is going it waits in the queue behind it. */

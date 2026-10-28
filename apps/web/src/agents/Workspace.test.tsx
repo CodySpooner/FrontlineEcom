@@ -45,6 +45,7 @@ function api(stores = [store('glow', 'Glow Botanics'), store('peak', 'Peak Gear'
     }
     if (u.pathname === '/api/agent-types') return [{ id: 'copywriter', name: 'Copywriter', description: '', baseRole: 'copywriter' }, { id: 'operations', name: 'Operations', description: '', baseRole: 'operations' }];
     if (u.pathname === '/api/conversations/counts') return {};
+    if (u.pathname === '/api/notifications') return [{ id: 'n1', kind: 'agent_done', title: 'Copywriter finished', storeId: 'glow', link: '/agents/w?store=glow&run=inc', createdAt: '2026-10-24T10:00:00Z' }];
     const r = /^\/api\/runs\/(\w+)$/.exec(u.pathname)?.[1];
     if (r) return RUNS[r] ?? reply({ error: 'Run not found' }, 404);
     const [, id, thread] = /^\/api\/conversations\/([^/]+)(\/thread)?$/.exec(u.pathname) ?? [];
@@ -195,4 +196,14 @@ test('through the real Shell: moving between conversations keeps the workspace m
   expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
   expect(screen.getByRole('navigation', { name: 'Conversations' })).toBe(list);
   expect(screen.getByRole('link', { name: 'AI Agents' }).getAttribute('aria-current')).toBe('page');
+});
+
+test("a finished run's notification opens the conversation holding the run", async () => {
+  api();
+  renderApp(<App />, '/agents/c/c1?store=glow');
+  expect(await screen.findByRole('heading', { name: 'Spring hero line' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: /^Notifications/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /Copywriter finished/ }));
+  expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
+  expect(screen.getByTestId('where').textContent).toBe('/agents/c/c2?store=glow');
 });

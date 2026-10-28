@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { AlertTriangle, ArrowUp, Check, ChevronRight, Ellipsis, LoaderCircle, Pencil, Square, X } from 'lucide-react';
-import { AGENT_ROLES, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationState, type KbStage, type RuntimeId, type Store } from '@frontline/shared';
+import { AGENT_ROLES, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationContext, type ConversationState, type KbStage, type RunDeliverable, type RuntimeId, type Store } from '@frontline/shared';
 import { useAgentTypes, useCreateConversation, useKbCard, useRetryRun, useRun, useSendMessage, useStopConversation, useThread, useUpdateConversation } from '../api/client';
 import { ApprovalCard, FixLink, ToolBlock } from '../components/Chat';
 import { Button, cx, ErrorState, LoadingState, RUN_STATUS } from '../components/ui';
@@ -97,6 +97,7 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
         </span>
         {runtimeLabel(config) && <span className={chip}>{runtimeLabel(config)}</span>}
         {last && last.status !== 'queued' && <span className={chip}>{spendLabel(last, config.permissions.budgetUsd)}</span>}
+        {c.context && <ContextChip store={store} context={c.context} />}
       </div>
       <div
         ref={scroller}
@@ -244,7 +245,7 @@ function Turn({ store, conversationId, seed, prev, name, latest, attempts }: { s
           )}
         </span>
       </div>
-      {run.status !== 'queued' && <Reply store={store} conversationId={conversationId} run={run} name={name} latest={latest} />}
+      {run.status !== 'queued' && <Reply store={store} conversationId={conversationId} run={run} name={name} latest={latest} deliverables={seed.deliverables} />}
       {attempts.map((a, i) => (
         <Attempt key={a.id} store={store} run={a} n={i + 1} name={name} />
       ))}
@@ -263,7 +264,7 @@ function Attempt({ store, run: seed, n, name }: { store: Store; run: AgentRunDet
       </summary>
       <div className="grid gap-2 border-t border-[#1d1d22] px-3 py-3">
         {acted.length > 0 && <p className="text-xs text-[#f2b84b]">This attempt may have changed something before it ended: it ran {acted.join(', ')}.</p>}
-        <Reply store={store} run={run} name={name} latest={false} />
+        <Reply store={store} run={run} name={name} latest={false} deliverables={seed.deliverables} />
       </div>
     </details>
   );
@@ -271,7 +272,45 @@ function Attempt({ store, run: seed, n, name }: { store: Store; run: AgentRunDet
 
 type Part = { kind: 'text'; text: string } | { kind: 'approval'; approval: ApprovalRequest };
 
-function Reply({ store, conversationId, run, name, latest }: { store: Store; conversationId?: string; run: AgentRunDetail; name: string; latest: boolean }) {
+/** The record a module opened the conversation from (decision 14), linking back to it. */
+function ContextChip({ store, context }: { store: Store; context: ConversationContext }) {
+  // ponytail: Analytics has no per-campaign view yet, so a campaign links to the page that lists it.
+  const to = context.kind === 'run' ? agentsUrl({ store: store.id, run: context.id }) : '/analytics';
+  return (
+    <Link to={to} title={context.name} className={cx(chip, 'max-w-[280px] hover:text-white')}>
+      <span className="truncate">
+        {context.kind === 'run' ? 'Continued from' : 'Campaign'} · {context.name}
+      </span>
+    </Link>
+  );
+}
+
+const MADE: Record<RunDeliverable['kind'], string> = { creative: 'Creative', page_draft: 'Page draft', flow_draft: 'Flow draft', campaign: 'Campaign' };
+const CREATIVE_TAB: Record<string, string> = { copy: 'copy', ugc: 'ugc', image: 'image' };
+
+/** What the reply made, linked to where it lives: the Creative library, Store Builder, the flows, the campaign. */
+function Deliverables({ items }: { items: RunDeliverable[] }) {
+  const settings = useAgentSettings();
+  const cls = cx(chip, 'max-w-[280px] cursor-pointer hover:text-white');
+  const label = (d: RunDeliverable) => <span className="truncate">{`${MADE[d.kind]} · ${d.title}`}</span>;
+  return (
+    <div aria-label="Made in this reply" className="flex flex-wrap gap-1.5">
+      {items.map((d) =>
+        d.kind === 'flow_draft' ? (
+          <button key={d.kind + d.id} type="button" onClick={() => settings.open('email_sms', 'flows')} className={cls}>
+            {label(d)}
+          </button>
+        ) : (
+          <Link key={d.kind + d.id} to={d.kind === 'creative' ? `/creative?tab=${CREATIVE_TAB[d.creativeKind ?? ''] ?? 'generate'}` : d.kind === 'page_draft' ? `/builder?draft=${encodeURIComponent(d.id)}` : '/analytics'} className={cls}>
+            {label(d)}
+          </Link>
+        ),
+      )}
+    </div>
+  );
+}
+
+function Reply({ store, conversationId, run, name, latest, deliverables = [] }: { store: Store; conversationId?: string; run: AgentRunDetail; name: string; latest: boolean; deliverables?: RunDeliverable[] }) {
   const retry = useRetryRun(store.id, conversationId ?? '');
   const appLinks = useAppLinks();
   const [copied, setCopied] = useState(false);
@@ -315,6 +354,7 @@ function Reply({ store, conversationId, run, name, latest }: { store: Store; con
           ))}
         </div>
       )}
+      {deliverables.length > 0 && <Deliverables items={deliverables} />}
       {failed && (
         <p role="alert" className="flex flex-wrap gap-2 text-xs text-red">
           {said || !run.error ? 'Failed' : `Failed: ${run.error}`}

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Platform, type Product, type TopProduct } from '@frontline/shared';
-import { useCampaigns, useMissingCosts, useSetCost, useSummary, useTopProducts } from '../api/client';
+import { useCampaigns, useMissingCosts, useSetCost, useStartConversation, useSummary, useTopProducts } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
 import { DemoMixNote, StoreFilter, UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
@@ -392,6 +392,21 @@ export function TopTable({ rows, name, cur, stock }: { rows: TopProduct[]; name?
   );
 }
 
+/** Opens an Ad Strategist conversation about the campaign (decision 14): the agent reads it from the store's own data. */
+function AskStrategist({ c }: { c: CampaignStats }) {
+  const { start, isPending, error } = useStartConversation(c.storeId);
+  const ask = () =>
+    start({ type: 'ad_strategist', title: `${c.name}: what next`, objective: `Review the ${NETWORK[c.network]} campaign "${c.name}" and tell me what to do next.`, context: { kind: 'campaign', network: c.network, id: c.id, name: c.name } });
+  return (
+    <>
+      <button type="button" aria-label={`Ask Ad Strategist about ${c.name}`} disabled={isPending} onClick={ask} className="cursor-pointer hover:text-white hover:underline disabled:opacity-60">
+        Ask Ad Strategist
+      </button>
+      {error && <span className="block whitespace-normal text-[#ff6b76]">{error.message}</span>}
+    </>
+  );
+}
+
 /** Each campaign is judged against its own store's break-even (margins differ per store); `be` is the blended one. */
 export function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number; beOf: (storeId: string) => number; name?: (id: string) => string; cur?: string }) {
   const cs = q.data ?? [];
@@ -431,6 +446,8 @@ export function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number
                       <Link aria-label={`Research ${c.name}`} to={researchHref(c.storeId, `How to make the "${c.name}" ${NETWORK[c.network]} campaign more profitable`)} className="hover:text-white hover:underline">
                         Research this
                       </Link>
+                      {' · '}
+                      <AskStrategist c={c} />
                     </div>
                   </td>
                   <td>{c.status === 'active' ? <span className="text-text-2">Active</span> : <Badge>{c.status === 'paused' ? 'Paused' : 'Archived'}</Badge>}</td>
