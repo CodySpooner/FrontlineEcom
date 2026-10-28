@@ -42,6 +42,7 @@ import { getApproval } from '../approvals';
 import { tx, type Db } from '../db';
 import { publish } from '../live';
 import { advanceKbResearch, runManager } from '../routes/agents';
+import { listCampaigns, listExperiments, parseExperiment, planExperiment } from './experiments';
 import { readUpload } from './fetcher';
 import { kbOverview } from './overview';
 import { drafter } from './promote';
@@ -573,6 +574,40 @@ export function kbRoutes(db: Db) {
       if (typeof e === 'string') return c.json({ error: e }, 400);
       if (e.sourceId && !kbRow(db, 'kb_sources', e.sourceId, ws)) return c.json({ error: 'sourceId must be a source of this workspace' }, 400);
       return c.json(tx(db, () => addEvidence(db, id, { ...e, authorId: 'owner' })), 201);
+    })
+    .get('/api/kb/cards/:id/experiments', (c) => {
+      const ws = wsOf(db, c.req.query('ws'), true);
+      if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
+      const id = c.req.param('id');
+      return kbRow(db, 'kb_cards', id, ws, c.req.query('general') === '1') ? c.json(listExperiments(db, { cardId: id })) : c.json({ error: 'card not found' }, 404);
+    })
+    .post('/api/kb/cards/:id/experiments', async (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      const card = getCard(db, c.req.param('id'), ws);
+      if (!card) return c.json({ error: 'card not found' }, 404);
+      if (card.status !== 'active' && card.status !== 'proposed') return c.json({ error: 'Only an active or unreviewed card can be tested' }, 409);
+      const b = await c.req.json().catch(() => undefined);
+      if (!isObj(b)) return c.json({ error: 'body must be a JSON object' }, 400);
+      const storeId = card.storeId ?? (wsOf(db, b.storeId) || undefined);
+      if (!storeId) return c.json({ error: 'A General card is tested on a store: storeId must be one' }, 400);
+      const e = parseExperiment(db, storeId, b);
+      if (typeof e === 'string') return c.json({ error: e }, e.startsWith('Tests read') ? 409 : 400);
+      return c.json(planExperiment(db, card.id, storeId, e), 201);
+    })
+    .delete('/api/kb/experiments/:id', (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined || ws === 'all') return c.json({ error: WS_ERROR }, 400);
+      const e = db.prepare('SELECT card_id, status FROM kb_experiments WHERE id = ?').get(c.req.param('id'));
+      if (!e || !kbRow(db, 'kb_cards', String(e.card_id), ws)) return c.json({ error: 'test not found' }, 404);
+      if (e.status !== 'planned') return c.json({ error: 'Only a planned test can be cancelled: its result is evidence now' }, 409);
+      db.prepare('DELETE FROM kb_experiments WHERE id = ?').run(c.req.param('id'));
+      return c.body(null, 204);
+    })
+    .get('/api/kb/campaigns', (c) => {
+      const ws = wsOf(db, c.req.query('ws'), true);
+      if (ws === undefined) return c.json({ error: 'ws must be general, all or a store id' }, 400);
+      return c.json(ws === null ? [] : listCampaigns(db, ws));
     })
     .delete('/api/kb/evidence/:id', (c) => {
       const ws = wsOf(db, c.req.query('ws'));

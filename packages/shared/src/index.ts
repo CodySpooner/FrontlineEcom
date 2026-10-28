@@ -1803,6 +1803,71 @@ export type KbDiscovery =
  * GET /api/kb/overview?ws=general|<storeId>|all → the Research Center, from the visible cards (proposed + active).
  * PATCH /api/kb/conflicts/:id?ws= {status: 'kept_both'} → 204: the owner keeps both sides.
  */
+/** What a test compares (KB-21). Each is read with its count's noise: purchases, clicks, purchases. */
+export const KB_TEST_METRICS = { roas: 'ROAS', ctr: 'Click-through rate', cvr: 'Conversion rate (purchases per click)' } as const;
+export type KbTestMetric = keyof typeof KB_TEST_METRICS;
+
+/** One side of a test: campaigns (`network:id`) and library creatives (their ads' results, outside those campaigns). */
+export interface KbTestVariant {
+  label: string;
+  campaigns: string[];
+  creatives: string[];
+}
+
+/**
+ * A test of a card's claim on a store's ad numbers (KB-21). B is what the card says works, A the control. Once `due`
+ * (the window's end + 30 days of attribution) the app reads it and writes the result on the card: worked = measured
+ * evidence (a test on the ladder), failed = conflict evidence, inconclusive = observed.
+ * GET /api/kb/cards/:id/experiments?ws= → KbExperiment[] (newest first); POST {storeId? (a General card), metric,
+ * variants: [A, B], from, to, minSample} → 201; DELETE /api/kb/experiments/:id?ws= → 204 while planned.
+ */
+export interface KbExperiment {
+  id: string;
+  cardId: string;
+  storeId: string;
+  metric: KbTestMetric;
+  variants: [KbTestVariant, KbTestVariant];
+  from: string;
+  to: string;
+  /** Purchases (ROAS, conversion rate) or clicks (click-through rate) each variant needs. */
+  minSample: number;
+  status: 'planned' | 'worked' | 'failed' | 'inconclusive';
+  /** The reading, once evaluated. */
+  result?: string;
+  due: string;
+  createdAt: string;
+}
+export type NewKbExperiment = Pick<KbExperiment, 'metric' | 'variants' | 'from' | 'to' | 'minSample'> & { storeId?: string };
+
+/**
+ * GET /api/kb/campaigns?ws= (a store or all; General has none): the Library's Campaigns section (KB-21). A field the
+ * synced data doesn't link (products, audiences) is left out here and shown as "not linked".
+ */
+export interface KbCampaign {
+  network: string;
+  id: string;
+  storeId: string;
+  name: string;
+  status: string;
+  /** First and last day with spend. */
+  from?: string;
+  to?: string;
+  spend: number;
+  revenue: number;
+  purchases: number;
+  clicks: number;
+  impressions: number;
+  ads: number;
+  /** Ad sets / ad groups its ads run in; their audiences aren't synced. */
+  groups: number;
+  /** Library creatives its ads were made from. */
+  creatives: Pick<Creative, 'id' | 'headline' | 'primaryText' | 'format' | 'hook' | 'angle' | 'offer'>[];
+  /** Tests that included it or its creatives, newest first. */
+  experiments: Pick<KbExperiment, 'id' | 'cardId' | 'status' | 'from' | 'to'>[];
+  /** Cards learned from it, its ads or its tests, with the window measured. */
+  cards: { id: string; title: string; stage: KbStage; from: string; to: string }[];
+}
+
 /** What a store's performance learning (KB-19) reads from, and what it can't yet: in KbOverview.performance. */
 export interface KbPerformance {
   storeId: string;

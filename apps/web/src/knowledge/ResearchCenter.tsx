@@ -233,6 +233,9 @@ function Discoveries({ ws, o, name }: { ws: string; o: KbOverview; name: (ws: st
                 <Link to={q({ view: 'library', ws: home(d), card: d.card.id })} className="inline-flex h-8 items-center rounded-lg border border-line-2 px-3 text-[13px] text-text-2 hover:text-white">
                   Compare evidence
                 </Link>
+                <Link to={q({ view: 'library', ws: home(d), card: d.card.id, plan: '1' })} className="inline-flex h-8 items-center rounded-lg border border-line-2 px-3 text-[13px] text-text-2 hover:text-white">
+                  Plan a test
+                </Link>
                 <Button size="sm" disabled={keep.isPending} onClick={() => keep.mutate({ id: d.id, ws: home(d) })}>
                   Keep both
                 </Button>

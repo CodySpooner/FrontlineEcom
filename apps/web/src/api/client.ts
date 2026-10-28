@@ -32,15 +32,18 @@ import type {
   Integration,
   IntegrationInput,
   IntegrationKind,
+  KbCampaign,
   KbCard,
   KbCardBrief,
   KbCategory,
   KbCardInput,
   KbCategoryCount,
   KbEvidence,
+  KbExperiment,
   KbLink,
   KbLinkInput,
   KbOverview,
+  NewKbExperiment,
   KbPromotion,
   KbRevision,
   KbPositions,
@@ -326,6 +329,20 @@ export function useCreateKbLink() {
 const cardUrl = (c: { id: string; storeId: string | null }, path = '') => `/api/kb/cards/${encodeURIComponent(c.id)}${path}?${wsq(c.storeId ?? 'general')}`;
 /** A card's evidence (oldest first), read in the card's own workspace. */
 export const useKbEvidence = (c: { id: string; storeId: string | null } | undefined) => useQuery({ queryKey: ['kb', 'evidence', c?.id], queryFn: () => api<KbEvidence[]>(cardUrl(c!, '/evidence')), enabled: !!c });
+/** A card's tests (KB-21), newest first. */
+export const useKbExperiments = (c: { id: string; storeId: string | null } | undefined) => useQuery({ queryKey: ['kb', 'experiments', c?.id], queryFn: () => api<KbExperiment[]>(cardUrl(c!, '/experiments')), enabled: !!c });
+/** A store's (or every store's) campaigns: the Library's Campaigns section, and what a test can compare. */
+export const useKbCampaigns = (ws: string | undefined) => useQuery({ queryKey: ['kb', 'campaigns', ws], queryFn: () => api<KbCampaign[]>(`/api/kb/campaigns?${wsq(ws!)}`), enabled: !!ws });
+
+/** Plans a test of a card (`plan`), or cancels a planned one (`cancel`: its id). */
+export function useKbTestWrite() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ card, plan, cancel }: { card: { id: string; storeId: string | null }; plan?: NewKbExperiment; cancel?: string }): Promise<unknown> =>
+      cancel ? api<void>(`/api/kb/experiments/${encodeURIComponent(cancel)}?${wsq(card.storeId ?? 'general')}`, { method: 'DELETE' }) : api<KbExperiment>(cardUrl(card, '/experiments'), json('POST', plan)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
 /** A card's revisions, newest first. */
 export const useKbRevisions = (c: { id: string; storeId: string | null } | undefined) => useQuery({ queryKey: ['kb', 'revisions', c?.id], queryFn: () => api<KbRevision[]>(cardUrl(c!, '/revisions')), enabled: !!c });
 

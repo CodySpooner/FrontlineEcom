@@ -26,6 +26,7 @@ import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
 import { nicheName } from '../components/StoreForm';
 import { Badge, Button, ConfirmDelete, cx, EmptyState, ErrorState, inputClass, LoadingState, MEMORY_KINDS, memoryAuthor, Panel, Segmented, Switch, Tabs, useFocusBack } from '../components/ui';
 import { Artboard } from '../knowledge/Artboard';
+import { CampaignLibrary } from '../knowledge/Campaigns';
 import { CardLibrary } from '../knowledge/Library';
 import { Relationships } from '../knowledge/Relationships';
 import { ResearchDialog, SourceBar } from '../knowledge/Research';
@@ -168,9 +169,10 @@ function Toolbar({ ws, view, general, q, set, search, onResearch, children }: { 
   );
 }
 
-type Tab = 'cards' | KnowledgeKind | 'memory';
+type Tab = 'cards' | 'campaigns' | KnowledgeKind | 'memory';
 const TABS: { value: Tab; label: string }[] = [
   { value: 'cards', label: 'Cards' },
+  { value: 'campaigns', label: 'Campaigns' },
   { value: 'playbook', label: 'Playbooks' },
   { value: 'platform', label: 'Platform packs' },
   { value: 'niche', label: 'Niche packs' },
@@ -193,7 +195,15 @@ function Library({ ws, general, q, card, set }: { ws: string; general: boolean; 
       <div className="mb-3.5">
         <Tabs label="Knowledge" tabs={TABS} value={tab} onChange={(t) => set({ view: 'library', tab: t === 'cards' ? undefined : t, doc: undefined })} />
       </div>
-      {tab === 'cards' ? <CardLibrary ws={ws} general={general} q={q} card={card} set={set} /> : tab === 'memory' ? <MemoryBrowser /> : <Docs key={tab} kind={tab} set={set} />}
+      {tab === 'cards' ? (
+        <CardLibrary ws={ws} general={general} q={q} card={card} set={set} />
+      ) : tab === 'campaigns' ? (
+        <CampaignLibrary ws={ws} q={q} set={set} />
+      ) : tab === 'memory' ? (
+        <MemoryBrowser />
+      ) : (
+        <Docs key={tab} kind={tab} set={set} />
+      )}
     </>
   );
 }

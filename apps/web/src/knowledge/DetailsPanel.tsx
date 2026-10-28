@@ -12,6 +12,7 @@ import { Button, cx, ErrorState, Field, inputClass, LoadingState, memoryAuthor }
 import { ago } from '../lib/format';
 import { escape, LinkPopover } from './ArtboardPanels';
 import { wordDiff } from './diff';
+import { Tests } from './Tests';
 import { withParams } from './url';
 
 export const PANEL_W = 340;
@@ -68,7 +69,7 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
   const board = useKbCards(ws, { general, limit: 1000 });
   // Cards merged into this one, whether or not any evidence came with them: each can be detached again.
   const merged = useKbCards(q.data ? (q.data.storeId ?? 'general') : ws, { status: 'merged', limit: 1000 });
-  const [, setParams] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const write = useKbCardWrite();
   const promote = usePromoteKbCard();
   const waiting = useApprovals().data?.find((a) => a.action.kind === 'kb.promote' && (a.action.payload as KbPromotion).cardId === id);
@@ -161,6 +162,9 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
           ) : (
             <p className="text-xs text-muted">{evidence.isPending ? 'Loading…' : 'No evidence yet. The stage stays where the evidence puts it.'}</p>
           )}
+        </Section>
+        <Section title="Tests">
+          <Tests key={card.id} card={card} plan={params.get('plan') === '1'} onClose={() => setParams((p) => withParams(p, { plan: undefined }), { replace: true })} />
         </Section>
         {(card.appliesTo || card.limits) && (
           <div className="grid grid-cols-2 gap-2.5">

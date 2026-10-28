@@ -565,7 +565,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - descriptive attributes on creatives (format, hook, angle, length, offer);
   - link a creative to its ad when it's launched through the app.
   - Tests against recorded API fixtures. With no connected account, nothing is claimed.
-- [ ] KB-21 **Experiments and the Campaigns library:**
+- [x] KB-21 **Experiments and the Campaigns library:**
   - "Plan a test" from a hypothesis: metric, variants, window, minimum sample, linked campaigns and creatives;
   - automatic evaluation once the data settles, with the result written as evidence;
   - a searchable Campaigns section in the Library. Per campaign: workspace, platform, products, creatives, copy and
@@ -639,6 +639,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-18 Promote to General: "Promote to General" on a store card asks the agent that wrote it (else the Market Analyst) to rewrite it for any store, and any agent can propose one itself. The draft comes back on the card, word by word against the original, and in the Research Center's discoveries. The owner approves it, edits it first, or keeps it in the store. Approved, it's a General card in the same category, starting as a Hypothesis, Derived From the store card. A card found on its own in two or more live stores is offered once, drafted from the strongest of them. In demo mode the draft only takes the store's name out.
 - 2026-10-27 KB-19 Performance pipeline: every hour, each real store's settled 28-day periods are read against a baseline: each campaign against the store's other campaigns on its network (ROAS, click-through rate), the store against its own 12 weeks before (conversion rate, order value, refund rate), and each product against its 4 weeks before, adjusted for the store's trend (unit sales). A difference outside the noise becomes a Performance Lesson with a 95% range, or evidence on the lesson it made before. It counts as measured when nothing else differed; otherwise it's a Hypothesis that names what did. A measured reading the other way moves the lesson down and opens a conflict. Approved changes' outcomes are now evidence on the store cards their run cited. The Research Center says what each store learns from and what isn't enabled. Demo stores learn nothing from demo numbers.
 - 2026-10-27 KB-20 Ad-level and creative data: Meta, Google and TikTok Ads now also sync each ad's days, with its ad set or ad group and its text, alongside the campaign totals; the store's ad spend still comes from the campaigns only. An ad whose text holds a library creative's primary text is linked to that creative. Agents describe a creative's format, hook, angle, length and offer, and the Creative Studio preview shows them. Performance learning now reads each ad against the other ads in its ad set (measured), and each creative trait against the store's other library ads with a different one (always a Hypothesis). The Research Center says when ad results and creative traits are on.
+- 2026-10-27 KB-21 Experiments and the Campaigns library: a card's panel has a Tests section. "Plan a test" picks a metric (ROAS, click-through or conversion rate), an A and a B side made of the store's campaigns and library creatives, a window and a minimum sample on each side. Once the window's attribution has settled (30 days) and the store's ad accounts have synced past it, the app reads the two sides and writes the result on the card as evidence: worked (measured, so it climbs the ladder), failed (a conflict) or inconclusive. Demo stores can't be tested. The Library has a searchable Campaigns tab: each campaign's platform, dates, spend, ROAS, CTR and latest result, and opened, its creatives, copy and hooks, ad sets, metrics, the cards learned from it with their measurement window, and its Hypotheses as recommended tests. Products and audiences say "not linked". The Research Center's conflicts have "Plan a test".
 
 ## Blocked
 
@@ -888,3 +889,20 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   buckets). `ratios()` now holds the ROAS/CTR reading code that campaign, ad and trait readings share. Mutation sweep:
   46 of 46 killed after 5 new tests. Not checked against live accounts: field names follow each API's docs, and the
   fixtures are written from them.
+- 2026-10-27 KB-21: tests reuse migration 44's `kb_experiments` (plan_json = {variants, from, to, minSample},
+  result_json = {text}); no new migration. `apps/server/src/kb/experiments.ts`: `parseExperiment` (each refusal is a
+  sentence the form shows), `planExperiment`, `evaluateExperiments` (in the KB performance loop, hourly) and
+  `listCampaigns`. A side's numbers: its campaigns' campaign_daily, plus its creatives' ads' ad_daily outside those
+  campaigns (never counted twice). Reading: `lift()` from KB-19 on the metric's rate (ROAS k = purchases, CTR k =
+  clicks, CVR k = purchases); |z| ≥ 1.96 is worked or failed, else inconclusive; a side under the minimum sample is
+  inconclusive and says so. Evidence: worked → measured with testRef `exp:<id>` (one test = Tested, two = Validated),
+  failed → conflict (opens a conflict), inconclusive → observed. Evaluated only once the window's end + 30 days has
+  passed (`due`) and `synced(db, store, due)`; demo stores never. Routes: `GET|POST /api/kb/cards/:id/experiments`
+  (409 for a card that isn't active or unreviewed, 400 for a General card without `storeId`), `DELETE
+  /api/kb/experiments/:id` (planned only), `GET /api/kb/campaigns?ws=` (General → []). Campaign cards: lessons through
+  kb_observations subjects `campaign:<network>:<id>` and its ads' `ad:` subjects (latest window per card), plus the
+  live cards of tests on it. "Not linked": products (no campaign↔product link is synced), audiences (ad set count only,
+  targeting isn't synced), creatives/copy when no ad is linked to a library creative. Left out: an agent proposing a
+  test plan (planning is the owner's form; an agent tool can come with KB-22's autonomy controls). Mutation sweep: 41
+  of 41 killed after 7 new tests. The worktree's dev DB had run an earlier draft of migration 47 without
+  `ads.group_id` (never shipped); the column was added by hand there.

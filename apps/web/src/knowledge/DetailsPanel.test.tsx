@@ -249,4 +249,15 @@ describe('Knowledge › promote to General', () => {
     await vi.waitFor(() => expect(sent(fetch, 'PATCH')).toEqual([['/api/kb/promotions/p1?ws=peak', { title: 'Lead with the problem', summary: 'Summary a', body: 'Shown in the first 3 seconds.' }]]));
     expect(await within(box).findByRole('button', { name: 'Approve' })).toBeTruthy();
   });
+
+describe('Tests (KB-21)', () => {
+  it("opens on the plan form when asked (the Research Center's Plan a test), and Cancel drops the ask from the URL", async () => {
+    open('a&plan=1');
+    const form = await screen.findByRole('form', { name: 'Plan a test' });
+    expect(screen.getByTestId('where').textContent).toContain('plan=1');
+    fireEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('form', { name: 'Plan a test' })).toBeNull();
+    expect(screen.getByTestId('where').textContent).not.toContain('plan=1');
+  });
+});
 });

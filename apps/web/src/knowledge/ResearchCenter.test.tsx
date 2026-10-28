@@ -139,6 +139,7 @@ describe('Research Center', () => {
     expect(within(conflict).getByText('Research says UGC wins; EXP-14 says studio')).toBeTruthy();
     expect(within(conflict).getByText('Against: Problem-first hooks win')).toBeTruthy();
     expect(href('Compare evidence', conflict)).toBe('/knowledge?view=library&ws=pawsome&card=c2');
+    expect(href('Plan a test', conflict)).toBe('/knowledge?view=library&ws=pawsome&card=c2&plan=1');
     fireEvent.click(within(conflict).getByRole('button', { name: 'Keep both' }));
     await vi.waitFor(() => expect(fetch.mock.calls.filter(([, i]) => i?.method === 'PATCH').map(([u, i]) => [u, JSON.parse(String(i!.body))])).toEqual([['/api/kb/conflicts/k1?ws=pawsome', { status: 'kept_both' }]]));
     expect(href('View all', d)).toBe('/knowledge?view=library&sort=updated');
