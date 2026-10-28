@@ -1324,7 +1324,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - "N more agent types";
   - row and type menus;
   - Archived, the range, and paging on scroll.
-- [ ] AA-08 **Conversation view:**
+- [x] AA-08 **Conversation view:**
   - the header (inline rename, status chip, Collaborate (rendered from AA-20), Stop, ⋯) and the meta chips;
   - the thread with the Markdown parser (decision 15), activity blocks from real events, evidence tags, numbered
     citations and the source-chip row;
@@ -1632,6 +1632,12 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   server counts and "N more agent types", collapsible groups kept per browser, row menus (Rename inline, Pin, Archive,
   the context-menu key), Archived · N, the range picker and paging on scroll; `GET /api/agent-types` and
   `GET /api/conversations/counts`; 5 new tests; checked in headless Chrome.
+- 2026-10-28 AA-08 conversation view: header (inline rename, status chip, Stop run, ⋯ Rename/Pin/Archive), meta chips
+  (type, store, runtime · model · effort, this run's spend against its budget), the thread through one markdown parser
+  (markdown-it, raw HTML off) with evidence tags, numbered citations and the source-chip row, activity blocks from real
+  transcript events, Copy and Retry, retried attempts folded under the retry, the handoff divider, amber approval
+  cards, the composer with per-conversation drafts and queued sends with Cancel, the interrupted banner with Resume,
+  and the read-only run view (`?run=`) with Continue in a new conversation; 12 new tests; checked in headless Chrome.
 
 ## Blocked
 
@@ -1765,6 +1771,26 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-08, 2026-10-28) For AA-09 and later:
+  - `agents/Conversation.tsx` is the centre pane: `Conversation` (header, chips, turns, composer) and `ReadOnlyRun`
+    (with `Continue`). `Workspace.tsx` keeps the loading and not-found wrappers and resolves `?run=`: a run in a
+    conversation redirects there, a run with none reads alone, another store's run is "Run not found".
+  - `agents/markdown.ts` `renderReply(text, cardHref, cites?)`: links only through webHref (new window), images off,
+    `[kb:id]` → numbered superscript (pass one `cites` array to number several parts as one reply), `[measured]`,
+    `[research]`, `[hypothesis]` → tags. `agents/activity.ts` holds the one phrase map (`PHRASES`); AA-18 adds
+    save_finding and its kb_written step there (the tool doesn't exist yet, so neither does the phrase).
+  - Thread runs carry `retryOf` (from the `retry:<old>:<new>` link), so attempts fold under the retry as "Attempt N ·
+    <state>", with a note when the attempt ran a tool with effects. `hasEffects` and `isReadOnly` moved to
+    packages/shared (re-exported from packages/agents, unchanged for its callers) so the web can use them.
+  - `GET /api/conversations/:id` now answers a `ConversationDetail` (the conversation plus its `config`).
+  - `ApprovalCard tone="amber"` (this page only) and `--color-amber` in the @theme.
+  - Not rendered yet, per the control rule: Collaborate (AA-20), "Change runtime or model…" and the runtime chip's ▾
+    (AA-14), Agent settings in ⋯ (AA-09), attach and the composer's knowledge chip (AA-17), Save to Knowledge Base
+    (AA-18), the question card (AA-16). The decision 9 "Ran at High" mismatch line comes with AA-13.
+  - Left for AA-14b: scrolling to the run on a `?run=` redirect, and expanding the run's type group for the read-only
+    view. A team step run reads alone without Continue until AA-19/20 opens its team.
+  - Known gap: an unresolved `[kb:id]` still renders a numbered superscript (the parser runs before the card loads); its
+    source chip shows `kb:<id>` with no link. The spec wants it left as written: fix with AA-17's citation work.
 - (AA-07, 2026-10-28) For AA-08 and later:
   - `ListPane.tsx` holds the left pane, keyed by store in `Workspace.tsx` (search, archive view and range reset on a
     switch). `Popover.tsx` is the page's native popover (`role="menu"`, positioned under the button whose

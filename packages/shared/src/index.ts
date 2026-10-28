@@ -485,7 +485,17 @@ export interface AgentRun {
   effortApplied?: string;
   /** Derived from status, error and its pending approvals (decision 5); the API fills it. */
   state?: RunState;
+  /** In a conversation's thread: the run this one retried or resumed (attempt history). */
+  retryOf?: string;
 }
+
+/** An external (MCP) tool whose name reads as a read: get_, list_, search_ and the like. */
+export const isReadOnly = (toolName: string) => toolName.startsWith('mcp__') && /^(get|list|search|read|fetch|describe|lookup|find)(_|$)/.test(toolName.split('__').at(-1) ?? '');
+
+// ponytail: judged by name, like external tools (isReadOnly); anything that doesn't read like a read counts as acting.
+const READS = /^(store_summary|compare_stores|metrics_timeseries|research_feed|squad_log|review_campaigns|WebSearch|WebFetch)$|^(list|search|read|fetch|get)_/;
+/** A tool call that may have changed something (saved, proposed, assigned, asked the owner). */
+export const hasEffects = (tool: string) => !READS.test(tool) && !isReadOnly(tool);
 
 /** The interrupted run's error text: a run cut off by an app restart. */
 export const INTERRUPTED = 'Interrupted by an app restart';
@@ -807,6 +817,11 @@ export interface CreateConversationInput {
   /** A module's reference, checked against the store. */
   context?: ConversationContext;
   config?: ConversationConfigInput;
+}
+
+/** GET /api/conversations/:id?store= → the conversation with the config it runs on. */
+export interface ConversationDetail extends Conversation {
+  config: AgentConfig;
 }
 
 /** GET /api/conversations?store= answers a page plus each type's count under the same filters ('team' for teams). */

@@ -1,4 +1,4 @@
-import { agentTypes, conversationCounts, conversationThread, createConversation, discardConversation, getConversation, getRun, listConversations, recap, resolveType, updateConversation, validateConfig, type RunManager } from '@frontline/agents';
+import { agentTypes, conversationCounts, conversationThread, createConversation, discardConversation, getConfig, getConversation, getRun, listConversations, recap, resolveType, updateConversation, validateConfig, type RunManager } from '@frontline/agents';
 import { INTERRUPTED, type AgentRun, type Conversation, type ConversationContext, type CreateConversationInput, type SendMessageInput, type Store } from '@frontline/shared';
 import { Hono, type Context } from 'hono';
 import type { Db } from '../db';
@@ -30,7 +30,7 @@ export function openConversation(db: Db, runs: RunManager, store: Store, input: 
     const from = getRun(db, input.fromRunId);
     if (!from || from.storeId !== store.id) return { status: 404, error: 'Run not found' };
     if (from.conversationId) return { status: 409, error: 'That run is in a conversation already: continue there.' };
-    if (from.task.includes('The cards come from every store and General') || from.transcript.some((e) => e.type === 'tool_call' && e.name === 'compare_stores')) {
+    if (from.task.includes('The cards come from every store and General') || from.transcript.some((e) => e.type === 'tool_call' && /(^|__)compare_stores$/.test(e.name))) {
       return { status: 409, error: "That run read other stores' data, so it can't continue in one store's conversation." };
     }
     if (!recap(db, store.id, [from.id])) return { status: 409, error: 'That conversation ran on demo data, before the store went live: start a new one.' };
@@ -101,7 +101,7 @@ export function conversationRoutes(db: Db, runs: RunManager) {
     })
     .get('/api/conversations/:id', (c) => {
       const conversation = mine(c);
-      return conversation ? c.json(conversation) : missing(c);
+      return conversation ? c.json({ ...conversation, config: getConfig(db, conversation.configId) }) : missing(c);
     })
     .get('/api/conversations/:id/thread', (c) => {
       const conversation = mine(c);

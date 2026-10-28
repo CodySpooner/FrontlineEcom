@@ -9,6 +9,7 @@ import type {
   AgentTypeInfo,
   Conversation,
   ConversationCounts,
+  ConversationDetail,
   ConversationPage,
   CreateConversationInput,
   CursorPage,
@@ -233,7 +234,7 @@ export const useAgentTypes = (storeId: string) => useQuery({ queryKey: ['agent-t
 export const useConversation = (storeId: string, id: string) =>
   useQuery({
     queryKey: ['conversation', id],
-    queryFn: () => api<Conversation>(`/api/conversations/${id}?store=${storeId}`),
+    queryFn: () => api<ConversationDetail>(`/api/conversations/${id}?store=${storeId}`),
     enabled: !!storeId && !!id,
     retry: (n, e) => n < 3 && !/not found$/.test(e.message),
   });

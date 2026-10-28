@@ -6,7 +6,7 @@ import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type AgentRunD
 import { useApprovals, useCancelRun, useDecide, useKbCard, useRun, useStartRun } from '../api/client';
 import { expiredWhy, shownReason } from '../lib/approvals';
 import { cents, money } from '../lib/format';
-import { isLive, toBlocks, toolName } from '../lib/transcript';
+import { isLive, toBlocks, toolName, type Block } from '../lib/transcript';
 import { budgetFix } from '../lib/usage';
 import { researchHref } from '../knowledge/url';
 import { ApprovalExtras } from './ApprovalExtras';
@@ -143,18 +143,7 @@ export function Transcript({ run, role, onRetry }: { run: AgentRunDetail; role: 
                 <Cited text={b.text} />
               </p>
             ) : b.kind === 'tool' ? (
-              <details key={i} className="group rounded-lg border border-line bg-bg-2 text-xs">
-                <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-text-2 [&::-webkit-details-marker]:hidden">
-                  <ChevronRight className="size-3.5 text-muted transition-transform group-open:rotate-90" />
-                  <Wrench className="size-3.5 text-muted" />
-                  <ToolName id={b.name} />
-                  <span className={cx('ml-auto', b.isError ? 'text-red' : 'text-muted')}>{b.output === undefined ? 'running…' : b.isError ? 'failed' : 'done'}</span>
-                </summary>
-                <div className="grid gap-2 border-t border-line px-3 py-2">
-                  <pre className="overflow-x-auto font-mono text-[11px] whitespace-pre-wrap text-muted">{JSON.stringify(b.input, null, 2)}</pre>
-                  {b.output !== undefined && <pre className="max-h-48 overflow-auto font-mono text-[11px] whitespace-pre-wrap text-text-2">{b.output}</pre>}
-                </div>
-              </details>
+              <ToolBlock key={i} b={b} />
             ) : b.kind === 'approval' ? (
               <ApprovalCard key={i} a={b.approval} />
             ) : b.kind === 'memory' ? (
@@ -281,7 +270,9 @@ function KbCite({ id, raw }: { id: string; raw: string }) {
   );
 }
 
-export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
+/** `tone="amber"` (the AI Agents thread only): the board's amber card, with Deny… before Approve on the right. */
+export function ApprovalCard({ a, who, tone }: { a: ApprovalRequest; who?: string; tone?: 'amber' }) {
+  const amber = tone === 'amber';
   const pending = useApprovals().data;
   const decide = useDecide();
   const [verdict, setVerdict] = useState<'approve' | 'deny'>();
@@ -298,17 +289,29 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
     return decide.mutateAsync({ id: a.id, verdict: v, note }).then(() => setVerdict(v), () => {});
   };
   return (
-    <div ref={card} className="rounded-lg border border-red/40 bg-red-soft/40 p-3">
-      <div className="font-display text-[11px] font-bold tracking-[.12em] text-red uppercase">{who ?? (open ? 'Needs your approval' : 'Request')}{APPROVAL_KINDS[a.action.kind] && ` · ${APPROVAL_KINDS[a.action.kind]!.label}`}</div>
+    <div ref={card} className={amber ? 'rounded-lg border border-amber/38 bg-amber/5 p-3' : 'rounded-lg border border-red/40 bg-red-soft/40 p-3'}>
+      <div className={amber ? 'text-[11px] font-semibold tracking-[.07em] text-amber uppercase' : 'font-display text-[11px] font-bold tracking-[.12em] text-red uppercase'}>
+        {who ?? (amber ? (open ? 'Approval needed' : 'Request') : open ? 'Needs your approval' : 'Request')}
+        {APPROVAL_KINDS[a.action.kind] && ` · ${APPROVAL_KINDS[a.action.kind]!.label}`}
+      </div>
       <div className="mt-1 text-[13px] font-semibold">{a.title}</div>
       <div className="mt-0.5 text-xs text-muted">
         {shownReason(a)}
         {a.action.amountUsd !== undefined && <span className="ml-1.5 font-semibold text-text-2">· {money(a.action.amountUsd)}/day at stake</span>}
       </div>
       <ApprovalExtras action={a.action} storeId={a.storeId} />
-      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+      <div className={cx('mt-2.5 flex flex-wrap items-center gap-1.5', amber && 'justify-end')}>
         {open && denying ? (
           <DenyReason title={a.title} disabled={decide.isPending} onDeny={(note) => act('deny', note)} onBack={() => (setDenying(false), setBacked(true))} />
+        ) : open && amber ? (
+          <>
+            <Button size="sm" disabled={decide.isPending} onClick={() => setDenying(true)} aria-label={`Deny: ${a.title}`} autoFocus={backed}>
+              Deny…
+            </Button>
+            <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => act('approve')} aria-label={`Approve: ${a.title}`} data-approve={a.id}>
+              Approve
+            </Button>
+          </>
         ) : open ? (
           <>
             <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => act('approve')} aria-label={`Approve: ${a.title}`} data-approve={a.id}>
@@ -328,6 +331,24 @@ export function ApprovalCard({ a, who }: { a: ApprovalRequest; who?: string }) {
         )}
       </div>
     </div>
+  );
+}
+
+/** One tool call: its name and outcome, opening to the raw input and output. */
+export function ToolBlock({ b }: { b: Extract<Block, { kind: 'tool' }> }) {
+  return (
+    <details className="group rounded-lg border border-line bg-bg-2 text-xs">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-text-2 [&::-webkit-details-marker]:hidden">
+        <ChevronRight className="size-3.5 text-muted transition-transform group-open:rotate-90" />
+        <Wrench className="size-3.5 text-muted" />
+        <ToolName id={b.name} />
+        <span className={cx('ml-auto', b.isError ? 'text-red' : 'text-muted')}>{b.output === undefined ? 'running…' : b.isError ? 'failed' : 'done'}</span>
+      </summary>
+      <div className="grid gap-2 border-t border-line px-3 py-2">
+        <pre className="overflow-x-auto font-mono text-[11px] whitespace-pre-wrap text-muted">{JSON.stringify(b.input, null, 2)}</pre>
+        {b.output !== undefined && <pre className="max-h-48 overflow-auto font-mono text-[11px] whitespace-pre-wrap text-text-2">{b.output}</pre>}
+      </div>
+    </details>
   );
 }
 

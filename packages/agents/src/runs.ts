@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
-import { isReadOnly } from './claude-engine';
+import { AGENT_ROLES, hasEffects, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
 import { getConfig } from './configs';
 import { conversationPreface } from './conversations';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
@@ -522,10 +521,7 @@ const pause = (ms: number, signal: AbortSignal) =>
     signal.addEventListener('abort', () => (clearTimeout(t), resolve()), { once: true });
   });
 
-// ponytail: judged by name, like external tools (isReadOnly); anything that doesn't read like a read counts as acting.
-const READS = /^(store_summary|compare_stores|metrics_timeseries|research_feed|squad_log|review_campaigns|WebSearch|WebFetch)$|^(list|search|read|fetch|get)_/;
-/** A tool call that may have changed something (saved, proposed, assigned, asked the owner). */
-export const hasEffects = (tool: string) => !READS.test(tool) && !isReadOnly(tool);
+export { hasEffects };
 
 /**
  * A run that ended without doing anything because its agent couldn't take it then: the budget was used up by the time

@@ -115,6 +115,25 @@ describe('backing out of a deny on a request card', () => {
   });
 });
 
+describe('the amber tone (the AI Agents thread)', () => {
+  const a = { id: 'a1', storeId: 'peak', agentId: 'peak:ad_strategist', title: 'Pause UGC', reason: 'ROAS 0.8', status: 'pending', createdAt: '2026-10-26T08:00:00Z', action: { kind: 'ads.pause_campaign', payload: {} } } as ApprovalRequest;
+  const order = () => screen.getAllByRole('button').map((b) => b.textContent);
+
+  it('puts Deny… before Approve under an amber label; the default card is unchanged', async () => {
+    stubApi((url) => (url.startsWith('/api/approvals?status=pending') ? [a] : []));
+    const { container } = renderApp(<ApprovalCard a={a} tone="amber" />);
+    await screen.findByRole('button', { name: 'Approve: Pause UGC' });
+    expect(order()).toEqual(['Deny…', 'Approve']);
+    expect(screen.getByText(/^Approval needed/).className).toContain('text-amber');
+    expect(container.querySelector('[class*="border-amber/38"]')).toBeTruthy();
+    cleanup();
+    renderApp(<ApprovalCard a={a} />);
+    await screen.findByRole('button', { name: 'Approve: Pause UGC' });
+    expect(order()).toEqual(['Approve', 'Deny']);
+    expect(screen.getByText(/^Needs your approval/).className).toContain('text-red');
+  });
+});
+
 describe('deciding a card in a waiting list', () => {
   it('moves focus on to the next card still open, as the decided one drops out', async () => {
     const asks = ['A', 'B'].map((t, i) => ({ id: `a${i + 1}`, storeId: 'peak', agentId: 'peak:ad_strategist', title: `Pause ${t}`, reason: 'ROAS 0.8', status: 'pending', createdAt: '2026-10-26T08:00:00Z', action: { kind: 'ads.pause_campaign', payload: {} } }) as ApprovalRequest);

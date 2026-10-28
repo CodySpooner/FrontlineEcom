@@ -2,7 +2,7 @@
 // canUseTool, per-run mcpServers), minus Effect. Ideas ported from pingdotgg/t3code:
 // MIT License, Copyright (c) 2026 T3 Tools Inc.
 import { createSdkMcpServer, query, tool, type Options, type SDKAssistantMessageError, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-import { isPrivateHost, type AgentEvent, type ClaudeAccount } from '@frontline/shared';
+import { isPrivateHost, isReadOnly, type AgentEvent, type ClaudeAccount } from '@frontline/shared';
 import type { Engine, RunInput } from './engine';
 import { assemblePrompt } from './prompt';
 import { ROLES } from './roles';
@@ -247,8 +247,7 @@ function privateUrl(url: unknown) {
 
 // ponytail: external tools are judged by name (their read-only annotations don't reach canUseTool). Anything that
 // doesn't read like a read goes to the owner, so a misnamed write still asks.
-const READ_VERBS = /^(get|list|search|read|fetch|describe|lookup|find)(_|$)/;
-export const isReadOnly = (toolName: string) => toolName.startsWith('mcp__') && READ_VERBS.test(toolName.split('__').at(-1) ?? '');
+export { isReadOnly };
 
 /**
  * A write on an ad server (mcp__meta_ads__…) whose name, or any identifier in its input (a key, or a value like

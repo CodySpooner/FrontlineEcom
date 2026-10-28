@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router';
 import { Bot, List, PanelRight, SearchX, Users } from 'lucide-react';
-import { AGENT_ROLES, type AgentRole, type AgentRunDetail, type Conversation, type Store } from '@frontline/shared';
-import { useConversation, useConversations, useRun, useStores, useThread } from '../api/client';
-import { Transcript } from '../components/Chat';
+import { AGENT_ROLES, type AgentRole, type Store } from '@frontline/shared';
+import { useConversation, useConversations, useRun, useStores } from '../api/client';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState } from '../components/ui';
+import { buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState } from '../components/ui';
 import { NAV } from '../nav';
+import { Conversation, ReadOnlyRun } from './Conversation';
 import { useFill } from './fill';
 import { clampPanes, lastOpened, PANES, usePaneState } from './layout';
 import { ListPane, meta } from './ListPane';
@@ -26,7 +26,8 @@ export function Workspace() {
   const { ids } = useStoreSelection();
   const store = stores.data?.find((s) => s.id === params.get('store'));
   const view = pathname.startsWith('/agents/c/') ? 'conversation' : pathname.startsWith('/agents/t/') ? 'team' : 'workspace';
-  const remembered = store && view === 'workspace' ? lastOpened.get(store.id) : undefined;
+  const run = params.get('run') ?? undefined;
+  const remembered = store && view === 'workspace' && !run ? lastOpened.get(store.id) : undefined;
   let body: ReactNode;
   if (stores.isPending) body = <LoadingState rows={6} className="pt-4" />;
   else if (stores.isError) body = <ErrorState message="Couldn't load your stores." onRetry={() => stores.refetch()} />;
@@ -42,7 +43,7 @@ export function Workspace() {
   else if (remembered) body = <Navigate replace to={agentsUrl({ store: store.id, conversation: remembered })} />;
   // ponytail: teams arrive with AA-19, so no team id can exist yet.
   else if (view === 'team') body = <NotFound what="team" store={store} />;
-  else body = <Panes store={store} conversationId={view === 'conversation' ? id : undefined} />;
+  else body = <Panes store={store} conversationId={view === 'conversation' ? id : undefined} runId={run} />;
   return (
     <>
       <Hero compact title={NAV[1]!.title} icon={NAV[1]!.icon}>
@@ -53,11 +54,11 @@ export function Workspace() {
   );
 }
 
-function NotFound({ what, store }: { what: 'store' | 'team' | 'conversation'; store?: Store }) {
+function NotFound({ what, store }: { what: 'store' | 'team' | 'conversation' | 'run'; store?: Store }) {
   return (
     <EmptyState
       icon={SearchX}
-      title={`${what === 'store' ? 'Store' : what === 'team' ? 'Team' : 'Conversation'} not found`}
+      title={`${{ store: 'Store', team: 'Team', conversation: 'Conversation', run: 'Run' }[what]} not found`}
       action={store && <Link to={agentsUrl({ store: store.id })} className={buttonClass()}>Back to {store.name}</Link>}
     >
       {what === 'store' ? 'That store was deleted, or the link is wrong.' : `It was deleted, or it belongs to another store than ${store?.name ?? 'this one'}.`}
@@ -66,7 +67,7 @@ function NotFound({ what, store }: { what: 'store' | 'team' | 'conversation'; st
 }
 
 /** The three panes, laid out for the workspace's own width (decision: breakpoints at 1100 and 720 px). */
-function Panes({ store, conversationId }: { store: Store; conversationId?: string }) {
+function Panes({ store, conversationId, runId }: { store: Store; conversationId?: string; runId?: string }) {
   const fill = useFill<HTMLDivElement>();
   const [prefs, setPrefs] = usePaneState();
   // Before the first measure (and in jsdom), assume the window minus the shell's 232 px sidebar.
@@ -117,7 +118,13 @@ function Panes({ store, conversationId }: { store: Store; conversationId?: strin
             Reconnecting… Live replies catch up when the connection is back.
           </p>
         )}
-        {conversationId ? <ConversationView key={conversationId} store={store} id={conversationId} buttons={buttons} /> : <Start store={store} buttons={buttons} />}
+        {conversationId ? (
+          <ConversationView key={conversationId} store={store} id={conversationId} buttons={buttons} />
+        ) : runId ? (
+          <RunView key={runId} store={store} id={runId} buttons={buttons} />
+        ) : (
+          <Start store={store} buttons={buttons} />
+        )}
       </div>
       {showRight && (
         <aside aria-label="Details" className="relative flex min-h-0 flex-col border-l border-[#1d1d22] bg-[#0a0a0c]">
@@ -205,7 +212,6 @@ function Start({ store, buttons }: { store: Store; buttons: ReactNode }) {
   );
 }
 
-// ponytail: the title and the runs as the old chat draws them; AA-08 builds the conversation view.
 function ConversationView({ store, id, buttons }: { store: Store; id: string; buttons: ReactNode }) {
   const c = useConversation(store.id, id);
   const missing = c.isError && /not found$/.test(c.error.message);
@@ -215,47 +221,17 @@ function ConversationView({ store, id, buttons }: { store: Store; id: string; bu
   if (c.isPending) return <LoadingState rows={4} className="p-6" />;
   if (missing) return <NotFound what="conversation" store={store} />;
   if (c.isError) return <ErrorState message="Couldn't load this conversation." onRetry={() => c.refetch()} />;
-  return (
-    <section aria-label="Conversation" className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center gap-2 border-b border-[#1d1d22] px-6 py-4">
-        <h2 className="min-w-0 flex-1 truncate text-lg font-semibold">{c.data.title}</h2>
-        {buttons}
-      </header>
-      <Thread store={store} conversation={c.data} />
-    </section>
-  );
+  return <Conversation store={store} conversation={c.data} config={c.data.config} buttons={buttons} />;
 }
 
-function Thread({ store, conversation }: { store: Store; conversation: Conversation }) {
-  const thread = useThread(store.id, conversation.id);
-  // Pages come newest first; each page is oldest first.
-  const runs = [...(thread.data?.pages ?? [])].reverse().flatMap((p) => p.items) 
-  const role = conversation.agentId.split(':')[1] as AgentRole;
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-      {thread.isPending ? (
-        <LoadingState rows={3} />
-      ) : thread.isError ? (
-        <ErrorState message="Couldn't load the messages." onRetry={() => thread.refetch()} />
-      ) : (
-        <div className="mx-auto grid max-w-3xl gap-6">
-          {thread.hasNextPage && (
-            <Button size="sm" className="justify-self-center" disabled={thread.isFetchingNextPage} onClick={() => thread.fetchNextPage()}>
-              Show earlier messages
-            </Button>
-          )}
-          {runs.map((r) => (
-            <ThreadRun key={r.id} run={r} role={role} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** One turn, live: the socket streams into ['run', id], which the thread page seeded. */
-function ThreadRun({ run, role }: { run: AgentRunDetail; role: AgentRole }) {
-  return <Transcript run={useRun(run.id).data ?? run} role={role} />;
+/** `?run=`: a run in a conversation opens there; one with none reads here (decision 4). Scope comes from the run. */
+function RunView({ store, id, buttons }: { store: Store; id: string; buttons: ReactNode }) {
+  const run = useRun(id);
+  if (run.isPending) return <LoadingState rows={4} className="p-6" />;
+  if ((run.isError && /not found$/i.test(run.error.message)) || (run.data && run.data.storeId !== store.id)) return <NotFound what="run" store={store} />;
+  if (run.isError) return <ErrorState message="Couldn't load this run." onRetry={() => run.refetch()} />;
+  if (run.data.conversationId) return <Navigate replace to={agentsUrl({ store: store.id, conversation: run.data.conversationId })} />;
+  return <ReadOnlyRun store={store} run={run.data} buttons={buttons} />;
 }
 
 // ponytail: the agent and its store scope; AA-09 adds runtime, tools, approvals and budget, and the Activity tab.

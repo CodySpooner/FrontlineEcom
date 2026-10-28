@@ -108,9 +108,11 @@ export function conversationThread(db: DatabaseSync, id: string, { before, limit
     .prepare(`SELECT id, rowid FROM agent_runs WHERE conversation_id = ? ${before ? 'AND rowid < ?' : ''} ORDER BY rowid DESC LIMIT ?`)
     .all(id, ...(before ? [Number(before)] : []), n + 1);
   const total = Number(db.prepare('SELECT count(*) AS n FROM agent_runs WHERE conversation_id = ?').get(id)?.n);
+  const retried = db.prepare(`SELECT ref FROM done_once WHERE ref LIKE 'retry:%:' || ?`);
   const items = rows.slice(0, n).reverse().flatMap((r) => {
     const run = get(String(r.id));
-    return run ? [{ ...run, state: stateOf(db, run) }] : [];
+    const retryOf = run && retried.get(run.id)?.ref?.toString().split(':')[1];
+    return run ? [{ ...run, state: stateOf(db, run), ...(retryOf ? { retryOf } : {}) }] : [];
   });
   return { items, total, ...(rows.length > n ? { next: String(rows[n - 1]!.rowid) } : {}) };
 }

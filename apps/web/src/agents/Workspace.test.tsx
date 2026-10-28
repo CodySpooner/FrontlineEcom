@@ -29,6 +29,9 @@ const conversation = (id: string, title: string, state: Conversation['state'] = 
 });
 const CONVERSATIONS = [conversation('c1', 'Spring hero line', 'running'), conversation('c2', 'FAQ rewrite')];
 
+const run = (id: string, extra: object) => ({ id, storeId: 'glow', agentId: 'glow:copywriter', task: 'Weekly copy check', status: 'done', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 }, createdAt: '2026-10-24T10:00:00Z', transcript: [], ...extra });
+const RUNS: Record<string, object> = { inc: run('inc', { conversationId: 'c2' }), solo: run('solo', {}), peaks: run('peaks', { storeId: 'peak' }) };
+
 /** glow has c1 and c2; asking for them with another store is the server's 404 (decision 13). */
 function api(stores = [store('glow', 'Glow Botanics'), store('peak', 'Peak Gear', true)]) {
   return stubApi((url) => {
@@ -42,10 +45,12 @@ function api(stores = [store('glow', 'Glow Botanics'), store('peak', 'Peak Gear'
     }
     if (u.pathname === '/api/agent-types') return [{ id: 'copywriter', name: 'Copywriter', description: '', baseRole: 'copywriter' }, { id: 'operations', name: 'Operations', description: '', baseRole: 'operations' }];
     if (u.pathname === '/api/conversations/counts') return {};
+    const r = /^\/api\/runs\/(\w+)$/.exec(u.pathname)?.[1];
+    if (r) return RUNS[r] ?? reply({ error: 'Run not found' }, 404);
     const [, id, thread] = /^\/api\/conversations\/([^/]+)(\/thread)?$/.exec(u.pathname) ?? [];
     const found = CONVERSATIONS.find((c) => c.id === id);
     if (id && (!found || asked !== found.storeId)) return reply({ error: 'Conversation not found' }, 404);
-    if (found) return thread ? { items: [], total: 0 } : found;
+    if (found) return thread ? { items: [], total: 0 } : { ...found, config: { runtime: 'demo', tools: [], knowledge: ['store', 'general'], permissions: { saveFindings: 'off' } } };
     return undefined;
   });
 }
@@ -94,6 +99,21 @@ test('with no store named it opens the first store; a store reopens the conversa
   renderAt('/agents/w?store=glow');
   expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
   expect(screen.getByTestId('where').textContent).toBe('/agents/c/c2?store=glow');
+});
+
+test("?run= opens the conversation holding the run, reads a run with none alone, and 404s another store's", async () => {
+  api();
+  renderAt('/agents/w?store=glow&run=inc');
+  expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
+  expect(screen.getByTestId('where').textContent).toBe('/agents/c/c2?store=glow');
+  cleanup();
+  localStorage.clear();
+  renderAt('/agents/w?store=glow&run=solo');
+  expect(await screen.findByText('Read-only · not part of a conversation')).toBeTruthy();
+  expect(screen.getByRole('heading', { name: 'Weekly copy check' })).toBeTruthy();
+  cleanup();
+  renderAt('/agents/w?store=glow&run=peaks');
+  expect(await screen.findByText('Run not found')).toBeTruthy();
 });
 
 test('no stores: the workspace says how to add one', async () => {
