@@ -228,7 +228,9 @@ function Row({
         className={cx('flex items-center gap-[9px] rounded-[7px] py-1.5 pr-2.5 text-[13px] outline-none focus-visible:ring-1 focus-visible:ring-red/60', pad, open ? 'bg-[#1b1b20] text-white' : 'text-text-2 hover:bg-[#141418]')}
       >
         {Icon ? <Icon aria-hidden className="size-3.5 shrink-0 text-muted" strokeWidth={1.8} /> : <StateDot state={c.state} label={word} />}
-        <span className="min-w-0 flex-1 truncate">{c.title}</span>
+        <span title={c.title} className="min-w-0 flex-1 truncate">
+          {c.title}
+        </span>
         {/* Pinned rows show only the dot, team rows the meta and the dot, as on the board. */}
         <span className="flex items-center gap-1.5 text-[11px] whitespace-nowrap text-muted group-focus-within:invisible group-hover:invisible">
           {Icon !== Pin && meta(c)}

@@ -224,3 +224,24 @@ test('the tools endpoint groups the config by access and says whether the integr
   expect((await groups()).at(-1)!.integration).toEqual({ kind: 'meta_ads', connected: true });
   expect((await send('GET', `/api/conversations/${conversation.id}/tools?store=peak`)).status).toBe(404);
 });
+
+test('rename, pin, archive, search and reopen keep the messages, the type, the store and the id', async () => {
+  const { conversation, run } = await open({ type: 'copywriter', message: 'Draft the spring hero line' });
+  const second = (await (await send('POST', `/api/conversations/${conversation.id}/messages?store=glow`, { clientRequestId: randomUUID(), message: 'Shorter, please' })).json()) as AgentRun;
+  await idle();
+  const patch = async (body: object) => (await (await send('PATCH', `/api/conversations/${conversation.id}?store=glow`, body)).json()) as Conversation;
+  await patch({ title: 'Spring hero line, final' });
+  await patch({ pinned: true });
+  await patch({ archived: true });
+  expect((await list('')).items.map((c) => c.id)).not.toContain(conversation.id);
+  expect((await list('view=archived&q=shorter')).items.map((c) => c.id)).toEqual([conversation.id]); // follow-up text is searchable
+  const back = await patch({ archived: false });
+  expect(back).toMatchObject({ id: conversation.id, storeId: 'glow', agentId: 'glow:copywriter', type: 'copywriter', configId: conversation.configId, title: 'Spring hero line, final', pinned: true });
+  expect(back.archivedAt).toBeUndefined();
+  expect((await list('')).items.map((c) => c.id)).toContain(conversation.id);
+  const thread = (await (await send('GET', `/api/conversations/${conversation.id}/thread?store=glow`)).json()) as CursorPage<AgentRunDetail>;
+  expect(thread.items.map((r) => [r.id, r.task])).toEqual([
+    [run.id, 'Draft the spring hero line'],
+    [second.id, 'Shorter, please'],
+  ]);
+});

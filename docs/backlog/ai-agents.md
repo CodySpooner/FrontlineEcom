@@ -1349,7 +1349,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - checked against the workspace reference.
 
 ### Store-scoped conversations
-- [ ] AA-10 **Conversation management, end to end:**
+- [x] AA-10 **Conversation management, end to end:**
   - several conversations per type, including several running at once within the store limit;
   - store switching that keeps drafts and never touches other stores' runs;
   - search, pin, archive and reopen;
@@ -1644,6 +1644,10 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   (Settings, Memory, History, Flows) from the type header and conversation ⋯ menus; the tab and each thread's scroll
   come back after leaving the page; AgentSettings, Memory and History moved to `agents/settings.tsx`; 6 new tests;
   checked in headless Chrome.
+- 2026-10-28 AA-10 conversation management end to end: an API test that rename, pin, archive, search (follow-up text)
+  and unarchive keep the messages, type, store, config and id; a jsdom test that switching stores keeps the draft and
+  sends nothing; full titles as tooltips on truncated rows; browser pass at 1024 and 1920 with a 170-character title and
+  two Creative Studio conversations waiting at once.
 
 ## Blocked
 
@@ -1777,6 +1781,10 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-10, 2026-10-28) Several conversations of one type running at once within the store limit is covered by
+  agents-runs.test.ts ("an agent's conversations run side by side"; perStore 2, a third waits) and seen in the browser
+  (two Creative Studio conversations awaiting approval together; approval waits hold no slot). Long titles: one line
+  with an ellipsis in the header and the list, the full title in a tooltip.
 - (AA-09, 2026-10-28) For AA-10 and later:
   - `agents/Details.tsx` is the right panel (`Details` takes `end`, the hide button beside its tabs); the tab is kept in
     `fe.agents.tab`. `agents/settings.tsx` holds the seat drawer (`SettingsDrawer`, URL state `?settings=<role>&tab=`

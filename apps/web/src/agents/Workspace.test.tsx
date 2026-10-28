@@ -146,6 +146,20 @@ test('after leaving for /knowledge, /agents/w?store= brings back the conversatio
   await vi.waitFor(() => expect(thread().scrollTop).toBe(120));
 });
 
+test("switching stores keeps the conversation's draft and touches no run", async () => {
+  vi.stubGlobal('innerWidth', 1440);
+  const fetch = api();
+  renderAt('/agents/c/c1?store=glow');
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Message' }), { target: { value: 'Half a thought' } });
+  const pick = (name: RegExp) => fireEvent.click(within(document.getElementById('store-switcher')!).getByRole('menuitem', { name, hidden: true }));
+  pick(/Peak Gear/);
+  expect(await screen.findByText("Peak Gear's agents")).toBeTruthy();
+  pick(/Glow Botanics/);
+  expect(await screen.findByRole('heading', { name: 'Spring hero line' })).toBeTruthy();
+  expect((screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement).value).toBe('Half a thought');
+  expect(fetch.mock.calls.filter(([, init]) => init?.method && init.method !== 'GET')).toEqual([]);
+});
+
 test('no stores: the workspace says how to add one', async () => {
   api([]);
   renderAt('/agents/w');

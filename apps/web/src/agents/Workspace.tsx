@@ -201,7 +201,9 @@ function Start({ store, buttons }: { store: Store; buttons: ReactNode }) {
           {recent.map((c) => (
             <Link key={c.id} to={agentsUrl({ store: store.id, conversation: c.id })} className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-[13px] text-text-2 hover:bg-[#141418]">
               <StateDot state={c.state} />
-              <span className="min-w-0 flex-1 truncate">{c.title}</span>
+              <span title={c.title} className="min-w-0 flex-1 truncate">
+                {c.title}
+              </span>
               <span className="text-[11px] text-muted">{meta(c)}</span>
             </Link>
           ))}
