@@ -17,9 +17,11 @@ import { agentsUrl } from './urls';
 // runs; and "Change runtime or model…" (decision 10), which moves a conversation to a new config.
 
 const label = 'text-[11px] font-semibold tracking-[.07em] text-muted uppercase';
-const select = 'h-[34px] w-full rounded-lg border border-[#2c2c33] bg-[#0c0c0f] px-2.5 text-[13px] text-[#e6e6ea] focus:border-red/60 focus:outline-none';
-const input = 'h-[34px] rounded-lg border border-[#2c2c33] bg-[#0c0c0f] px-2.5 text-[13px] text-[#f0f0f2] placeholder:text-muted focus:border-red/60 focus:outline-none';
-const warn = 'text-xs text-[#f2b84b]';
+/** A line chevron in place of the native select arrow, as on the boards. */
+export const ARROW = 'appearance-none bg-[url(data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2024%2024%27%20fill=%27none%27%20stroke=%27%238b8b94%27%20stroke-width=%272%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27%3E%3Cpath%20d=%27m6%209%206%206%206-6%27/%3E%3C/svg%3E)] bg-[length:14px] bg-[position:right_10px_center] bg-no-repeat';
+const select = `h-[34px] w-full rounded-lg border border-[#2c2c33] bg-[#0c0c0f] pr-8 pl-2.5 text-[13px] text-[#e6e6ea] focus:border-red/60 focus:outline-none ${ARROW}`;
+const input = 'h-[34px] rounded-lg border border-[#2c2c33] bg-[#0c0c0f] px-2.5 text-[13px] text-text placeholder:text-muted focus:border-red/60 focus:outline-none';
+const warn = 'text-xs text-amber';
 
 /** The board's 2–4 word line under each type tile; a custom role shows its own description. */
 const SHORT: Record<string, string> = {
@@ -58,7 +60,7 @@ export function useChangeRuntime() {
   return { shown: params.get('change') === 'runtime', open: () => set('runtime'), close: () => set(undefined) };
 }
 
-export const DemoPill = () => <span className="rounded-full border border-dashed border-[#f2b84b]/55 px-2 py-0.5 text-[10px] font-semibold tracking-[.08em] whitespace-nowrap text-[#f2b84b] uppercase">Demo data</span>;
+export const DemoPill = () => <span className="rounded-full border border-dashed border-amber/55 px-2 py-0.5 text-[10px] font-semibold tracking-[.08em] whitespace-nowrap text-amber uppercase">Demo data</span>;
 
 /** A refusal's text, on the field it names; `fields` lists the ones the form shows itself. */
 function fieldErrors(error: Error | null, fields: string[]) {
@@ -120,7 +122,7 @@ function NotReady({ info }: { info: RuntimeCapabilities }) {
 
 function RuntimeFields({ store, choice, said }: { store: Store; choice: ReturnType<typeof useRuntimeChoice>; said: (field: string) => ReactNode }) {
   const { runtime, model, effort, models, claude, codex, info } = choice;
-  const dot = (r?: RuntimeCapabilities) => <i aria-hidden className={cx('size-[7px] rounded-full', r?.connected && !r.reason ? 'bg-[#3ddc84]' : 'bg-[#55555e]')} />;
+  const dot = (r?: RuntimeCapabilities) => <i aria-hidden className={cx('size-[7px] rounded-full', r?.connected && !r.reason ? 'bg-good' : 'bg-[#55555e]')} />;
   const options = [
     ...(store.connected ? [] : [{ value: 'demo' as RuntimeId, label: 'Demo (free)' }]),
     { value: 'claude' as RuntimeId, label: <>{dot(claude)}Claude</>, title: claude?.reason },
@@ -184,7 +186,7 @@ function RuntimeFields({ store, choice, said }: { store: Store; choice: ReturnTy
 
 function Fold({ title, summary, open, onToggle, children }: { title: string; summary: ReactNode; open: boolean; onToggle: () => void; children: ReactNode }) {
   return (
-    <div className="rounded-[10px] border border-[#24242a]">
+    <div className="rounded-[10px] border border-line">
       <button type="button" aria-expanded={open} onClick={onToggle} className="flex w-full cursor-pointer items-center gap-2 px-3 py-[9px] text-left text-[13px] font-medium text-[#e6e6ea]">
         {open ? <ChevronDown aria-hidden className="size-3.5 text-muted" /> : <ChevronRight aria-hidden className="size-3.5 text-muted" />}
         {title}
@@ -195,7 +197,7 @@ function Fold({ title, summary, open, onToggle, children }: { title: string; sum
   );
 }
 
-const Row = ({ children }: { children: ReactNode }) => <div className="flex min-h-7 items-center gap-2 py-1 text-[12.5px] text-[#c4c4cc]">{children}</div>;
+const Row = ({ children }: { children: ReactNode }) => <div className="flex min-h-7 items-center gap-2 py-1 text-[12.5px] text-text-2">{children}</div>;
 
 /** Opens on the workspace's store and the type it was opened from (else the first); the store is fixed once it starts. */
 export function Deploy({ store: initial, type: preselected, onClose }: { store: Store; type: string; onClose: () => void }) {
@@ -366,7 +368,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
                 aria-checked={t.id === type?.id}
                 title={t.description}
                 onClick={() => pickType(t.id)}
-                className={cx('grid cursor-pointer gap-0.5 rounded-[9px] border px-2.5 py-2 text-left text-[13px] font-medium', t.id === type?.id ? 'border-[#e01e2d] bg-[rgba(255,42,58,.07)] text-white' : 'border-[#26262c] bg-[#0d0d10] text-[#e6e6ea] hover:border-line-2')}
+                className={cx('grid cursor-pointer gap-0.5 rounded-[9px] border px-2.5 py-2 text-left text-[13px] font-medium', t.id === type?.id ? 'border-red-fill bg-[rgba(255,42,58,.07)] text-white' : 'border-[#26262c] bg-[#0d0d10] text-[#e6e6ea] hover:border-line-2')}
               >
                 <span className="truncate">{t.name}</span>
                 <span className="truncate text-[11.5px] font-normal text-muted">{SHORT[t.id] ?? t.description}</span>
@@ -391,7 +393,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
           <ul className="grid gap-1">
             {groups?.map((g) => (
               <li key={g.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
-                <span className="text-[#c4c4cc]">{g.name}</span>
+                <span className="text-text-2">{g.name}</span>
                 <span className="text-right text-xs text-muted">
                   {g.integration && !g.tools.length && choice.runtime === 'codex' ? (
                     'Claude only for now'
@@ -412,14 +414,14 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
           <fieldset className="mt-2.5 grid gap-1">
             <legend className="pb-1 text-xs text-muted">Knowledge (never another store's)</legend>
             {(['store', 'general'] as const).map((k) => (
-              <label key={k} className="flex items-center gap-2 text-[12.5px] text-[#c4c4cc]">
-                <input type="checkbox" checked={knowledge.includes(k)} onChange={() => setKnowledge(toggle(knowledge, k, knowledge.includes(k)) as KnowledgeScope[])} className="accent-[#e01e2d]" />
+              <label key={k} className="flex items-center gap-2 text-[12.5px] text-text-2">
+                <input type="checkbox" checked={knowledge.includes(k)} onChange={() => setKnowledge(toggle(knowledge, k, knowledge.includes(k)) as KnowledgeScope[])} className="accent-red-fill" />
                 {k === 'store' ? `${store.name}'s knowledge` : 'General knowledge'}
               </label>
             ))}
           </fieldset>
           {comparable && (
-            <label className="mt-2.5 flex items-center gap-2.5 text-[12.5px] text-[#c4c4cc]">
+            <label className="mt-2.5 flex items-center gap-2.5 text-[12.5px] text-text-2">
               <Switch checked={compare} onChange={() => setCompare(!compare)} />
               Compare with my other stores
               <span className="text-xs text-muted">their names, platforms, niches and totals</span>
@@ -468,7 +470,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
               </span>
             </Row>
             {drafts.map((d) => (
-              <label key={d} className="flex min-h-7 items-center gap-2 py-1 text-[12.5px] text-[#c4c4cc]">
+              <label key={d} className="flex min-h-7 items-center gap-2 py-1 text-[12.5px] text-text-2">
                 {DRAFTS[d]}
                 <span className="ml-auto flex">
                   <Switch checked={!off.includes(d)} onChange={() => setOff(toggle(off, d, off.includes(d)))} />
@@ -476,14 +478,14 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
               </label>
             ))}
             {choice.runtime === 'claude' && (
-              <label className="flex min-h-7 items-center gap-2 py-1 text-[12.5px] text-[#c4c4cc]">
+              <label className="flex min-h-7 items-center gap-2 py-1 text-[12.5px] text-text-2">
                 Budget for this run
                 <span className="ml-auto flex items-center gap-1 text-xs text-muted">
                   $<input type="number" min="0.01" step="0.01" aria-label="Budget for this run" placeholder="No limit" value={budget} onChange={(e) => setBudget(e.target.value)} className={cx(input, 'h-7 w-24 text-right')} />
                 </span>
               </label>
             )}
-            <label className="flex min-h-7 items-center gap-2 py-1 text-[12.5px] text-[#c4c4cc]">
+            <label className="flex min-h-7 items-center gap-2 py-1 text-[12.5px] text-text-2">
               Stop after
               <span className="ml-auto flex items-center gap-1 text-xs text-muted">
                 <input type="number" min="1" step="1" aria-label="Stop after" placeholder={choice.runtime === 'codex' ? 'Required' : 'No limit'} value={stopAfter} onChange={(e) => setStopAfter(e.target.value)} className={cx(input, 'h-7 w-24 text-right')} />
@@ -491,7 +493,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
               </span>
             </label>
           </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-[#c4c4cc]">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-text-2">
             Save findings to knowledge
             <span className="ml-auto w-[360px] max-w-full">
               <Segmented
@@ -547,7 +549,7 @@ export function ChangeRuntime({ store, conversation, onClose }: { store: Store; 
       <div className="grid gap-4">
         <RuntimeFields store={store} choice={choice} said={said} />
         {toCodex && (
-          <label className="flex items-center gap-2 text-[12.5px] text-[#c4c4cc]">
+          <label className="flex items-center gap-2 text-[12.5px] text-text-2">
             Stop after
             <input type="number" min="1" step="1" aria-label="Stop after" value={stopAfter} onChange={(e) => setStopAfter(e.target.value)} className={cx(input, 'h-7 w-24 text-right')} />
             <span className="text-xs text-muted">min{conversation.config.permissions.budgetUsd ? '. The run budget stays with Claude.' : ''}</span>

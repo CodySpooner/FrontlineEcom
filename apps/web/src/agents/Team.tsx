@@ -16,8 +16,8 @@ import { StateDot } from './StateDot';
 // participant with its runs in full, and "To: Lead". TeamDetails is the right panel's team variant.
 
 const COLUMN = 'mx-auto w-full max-w-[760px]';
-const box = 'mt-1.5 rounded-[10px] border border-[#24242a] bg-[#0d0d10] px-3 py-2.5 text-[12.5px] text-[#d6d6dc]';
-const PILL = { muted: 'bg-[#1d1d22] text-[#c4c4cc]', good: 'bg-[#3ddc84]/10 text-[#3ddc84]', amber: 'bg-[#f2b84b]/10 text-[#f2b84b]', red: 'bg-[#ff5a66]/10 text-[#ff6b76]' };
+const box = 'mt-1.5 rounded-[10px] border border-line bg-[#0d0d10] px-3 py-2.5 text-[12.5px] text-[#d6d6dc]';
+const PILL = { muted: 'bg-[#1d1d22] text-text-2', good: 'bg-good/10 text-good', amber: 'bg-amber/10 text-amber', red: 'bg-[#ff5a66]/10 text-[#ff6b76]' };
 const link = 'cursor-pointer text-[#ff6b76] hover:underline';
 
 type Participant = NonNullable<SquadMission['participants']>[number];
@@ -100,7 +100,7 @@ function TeamView({ store, team: t, buttons }: { store: Store; team: SquadMissio
             role="tab"
             aria-selected={tab === p.configId}
             onClick={() => open(p.configId || undefined)}
-            className={cx('flex h-[38px] shrink-0 cursor-pointer items-center gap-[7px] border-b-2 px-1 text-[12.5px] font-medium whitespace-nowrap', tab === p.configId ? 'border-[#ff2a3a] text-white' : 'border-transparent text-muted hover:text-white')}
+            className={cx('flex h-[38px] shrink-0 cursor-pointer items-center gap-[7px] border-b-2 px-1 text-[12.5px] font-medium whitespace-nowrap', tab === p.configId ? 'border-red text-white' : 'border-transparent text-muted hover:text-white')}
           >
             {p.configId && <StateDot state={stateOf(t.steps.filter((s) => s.configId === p.configId))} label={RUN_STATUS[stateOf(t.steps.filter((s) => s.configId === p.configId))].label} />}
             {p.name}
@@ -194,11 +194,11 @@ function Header({ store, team: t, buttons }: { store: Store; team: SquadMission;
   );
 }
 
-/** One thread event: the avatar, a name, what happened and when, then its body. */
+/** One thread event: the avatar (`tone` replaces its background and text colours), a name, what happened and when, then its body. */
 function Event({ who, mark, what, at, tone, lead, children }: { who: string; mark?: string; what: ReactNode; at?: string; tone?: string; lead?: boolean; children?: ReactNode }) {
   return (
     <div className="grid grid-cols-[28px_minmax(0,1fr)] gap-3">
-      <span aria-hidden className={cx('inline-flex size-7 items-center justify-center rounded-lg border border-[#2c2c33] bg-[#1b1b20] text-[10px] font-bold text-[#d6d6dc]', tone)}>
+      <span aria-hidden className={cx('inline-flex size-7 items-center justify-center rounded-lg border border-[#2c2c33] text-[10px] font-bold', tone ?? 'bg-[#1b1b20] text-[#d6d6dc]')}>
         {mark ?? initials(who)}
       </span>
       <div className="min-w-0">
@@ -252,7 +252,7 @@ function Thread({ store, team: t, onOpen }: { store: Store; team: SquadMission; 
   const failed = tasks.filter((s) => (s.status === 'error' && !s.interrupted) || s.status === 'blocked' || (s.status === 'cancelled' && t.status !== 'cancelled'));
   return (
     <div className={cx(COLUMN, 'grid gap-3.5')}>
-      <Event who="You" mark="Y" tone="bg-[#24242a]" what="set the objective" at={t.createdAt}>
+      <Event who="You" mark="Y" tone="bg-line text-[#d6d6dc]" what="set the objective" at={t.createdAt}>
         <p className="mt-0.5 whitespace-pre-wrap text-[13px] text-[#e6e6ea]">{t.objective}</p>
       </Event>
       <Event who={lead} lead what={tasks.length ? `split the work into ${tasks.length} task${tasks.length === 1 ? '' : 's'}` : plan.status === 'done' ? 'planned no tasks' : 'is planning the work'} at={planRun?.endedAt ?? planRun?.startedAt}>
@@ -281,12 +281,12 @@ function Thread({ store, team: t, onOpen }: { store: Store; team: SquadMission; 
         <Contribution key={s.id} store={store} team={t} step={s} n={n(s.id)} onOpen={onOpen} />
       ))}
       {t.ownerNotes?.map((note) => (
-        <Event key={note.id} who="You" mark="Y" tone="bg-[#24242a]" what="note for the lead's synthesis" at={note.at}>
+        <Event key={note.id} who="You" mark="Y" tone="bg-line text-[#d6d6dc]" what="note for the lead's synthesis" at={note.at}>
           <p className="mt-0.5 whitespace-pre-wrap text-[13px] text-[#e6e6ea]">{note.text}</p>
         </Event>
       ))}
       {disagreements.map(({ s, other, text }, i) => (
-        <Event key={`d${i}`} who="Unresolved" mark="!" tone="text-[#7aa7ff]" what="participants disagree">
+        <Event key={`d${i}`} who="Unresolved" mark="!" tone="bg-[#1b1b20] text-[#7aa7ff]" what="participants disagree">
           <div className={cx(box, 'border-[#7aa7ff]/35')}>
             {nameOf(t, s.configId)} (task {n(s.id)}){other ? ` disagrees with ${nameOf(t, other.configId)} (task ${n(other.id)})` : ''}: {text}{' '}
             {other?.contribution && (
@@ -298,7 +298,7 @@ function Thread({ store, team: t, onOpen }: { store: Store; team: SquadMission; 
         </Event>
       ))}
       {failed.map((s) => (
-        <Event key={`f${s.id}`} who="Unresolved" mark="!" tone="text-[#7aa7ff]" what={s.status === 'blocked' ? "a task didn't run" : 'a task failed'}>
+        <Event key={`f${s.id}`} who="Unresolved" mark="!" tone="bg-[#1b1b20] text-[#7aa7ff]" what={s.status === 'blocked' ? "a task didn't run" : 'a task failed'}>
           <div className={cx(box, 'border-[#7aa7ff]/35')}>
             Task {n(s.id)} ({nameOf(t, s.configId)}) {s.status === 'blocked' ? "didn't run: a task it depends on failed." : `failed${s.note ? `: ${s.note}` : '.'}`}
           </div>
@@ -375,7 +375,7 @@ function Synthesis({ store, team: t, step, lead, tasks }: { store: Store; team: 
           ? 'The lead is writing the synthesis.'
           : `Final synthesis by the lead arrives after ${tasks > 1 ? `tasks 1 to ${tasks}` : tasks ? 'task 1' : 'the plan'}. You're notified when it's ready.`;
   return (
-    <div className="ml-10 flex items-center gap-3 rounded-[10px] border border-dashed border-[#33333b] px-3 py-2.5 text-[12.5px] text-muted">
+    <div className="ml-10 flex items-center gap-3 rounded-[10px] border border-dashed border-line-2 px-3 py-2.5 text-[12.5px] text-muted">
       <span className="flex-1">{why}</span>
       {step?.interrupted && <StepPill store={store} team={t} step={step} />}
     </div>
@@ -468,8 +468,8 @@ function ToLead({ store, team: t }: { store: Store; team: SquadMission }) {
       )}
       <div className={cx(COLUMN, 'flex items-center gap-2 rounded-[14px] border border-[#2c2c33] bg-[#111114] px-3 py-2.5')}>
         <span className="inline-flex h-[26px] shrink-0 items-center rounded-full border border-[#26262c] px-2.5 text-xs text-text-2">To: Lead</span>
-        <input aria-label="Message the lead" value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} placeholder={ended ? 'Message the lead…' : "Note for the lead's synthesis…"} className="min-w-0 flex-1 bg-transparent text-[13.5px] text-[#f0f0f2] outline-none placeholder:text-muted" />
-        <button type="submit" aria-label="Send" disabled={!text.trim() || busy} className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg bg-[#e01e2d] text-white disabled:opacity-50">
+        <input aria-label="Message the lead" value={text} onChange={(e) => setText(e.target.value)} maxLength={4000} placeholder={ended ? 'Message the lead…' : "Note for the lead's synthesis…"} className="min-w-0 flex-1 bg-transparent text-[13.5px] text-text outline-none placeholder:text-muted" />
+        <button type="submit" aria-label="Send" disabled={!text.trim() || busy} className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg bg-red-fill text-white disabled:opacity-50">
           <ArrowUp className="size-4" />
         </button>
       </div>

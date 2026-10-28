@@ -97,7 +97,7 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
         </div>
         <label className="flex h-8 items-center gap-2 rounded-lg border border-[#26262c] bg-bg-2 px-2.5 text-muted focus-within:border-red/60">
           <Search aria-hidden className="size-4 shrink-0" strokeWidth={1.8} />
-          <input ref={search} type="search" aria-label="Search conversations" placeholder="Search this store's conversations" value={q} onChange={(e) => setQ(e.target.value)} className="w-full min-w-0 bg-transparent text-[12.5px] text-text outline-none placeholder:text-muted" />
+          <input ref={search} type="search" aria-label="Search conversations" placeholder="Search conversations" value={q} onChange={(e) => setQ(e.target.value)} className="w-full min-w-0 bg-transparent text-[12.5px] text-text outline-none placeholder:text-muted" />
           <kbd className="rounded border border-[#2c2c33] px-1.5 font-sans text-[10px]">/</kbd>
         </label>
       </div>
@@ -141,7 +141,7 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
                           data-row
                           tabIndex={-1}
                           to={`${agentsUrl({ store: store.id, team: t.id })}&participant=${encodeURIComponent(p.configId)}`}
-                          className="flex items-center gap-2 rounded-[7px] py-[5px] pr-2.5 pl-[30px] text-[12px] text-[#c4c4cc] outline-none hover:bg-[#141418] focus-visible:ring-1 focus-visible:ring-red/60"
+                          className="flex items-center gap-2 rounded-[7px] py-[5px] pr-2.5 pl-[30px] text-[12px] text-text-2 outline-none hover:bg-[#141418] focus-visible:ring-1 focus-visible:ring-red/60"
                         >
                           <StateDot state={stateOf(t.steps.filter((s) => s.configId === p.configId))} label={RUN_STATUS[stateOf(t.steps.filter((s) => s.configId === p.configId))].label} />
                           <span className="shrink-0">
@@ -408,7 +408,7 @@ function StoreSwitcher({ store }: { store: Store }) {
       </button>
       {others.length > 0 && (
         <div className="-mt-1 px-0.5 text-[11.5px] text-muted">
-          {others.length} other store{others.length === 1 ? '' : 's'} · <span className={running ? 'text-[#3ddc84]' : undefined}>{running} agent{running === 1 ? '' : 's'} running there</span>
+          {others.length} other store{others.length === 1 ? '' : 's'} · <span className={running ? 'text-good' : undefined}>{running} agent{running === 1 ? '' : 's'} running there</span>
         </div>
       )}
       <Popover id="store-switcher" label="Switch store" className="w-[264px]">
@@ -430,7 +430,7 @@ function StoreSwitcher({ store }: { store: Store }) {
                 <span className="block truncate text-[13px] font-semibold">{s.name}</span>
                 <span className="block truncate text-[11px] text-muted">{PLATFORM_NAME[s.platform]}</span>
               </span>
-              {busy && <span className="text-[11px] whitespace-nowrap text-[#3ddc84]">{busy}</span>}
+              {busy && <span className="text-[11px] whitespace-nowrap text-good">{busy}</span>}
             </Link>
           );
         })}

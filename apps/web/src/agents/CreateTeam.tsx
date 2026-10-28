@@ -7,7 +7,7 @@ import { conversationQuery, useAgentTypes, useConversation, useConversations, us
 import { Button, cx, Dialog } from '../components/ui';
 import { withParams } from '../knowledge/url';
 import { runtimeLabel } from './Conversation';
-import { DemoPill } from './Deploy';
+import { ARROW, DemoPill } from './Deploy';
 import { agentsUrl } from './urls';
 
 // Create team (decision 12): a shared objective, up to six participants (each a type and a runtime · model · effort,
@@ -15,9 +15,9 @@ import { agentsUrl } from './urls';
 // the participant row while the lead is still planning.
 
 const label = 'text-[11px] font-semibold tracking-[.07em] text-muted uppercase';
-const select = 'h-[34px] w-full min-w-0 rounded-lg border border-[#2c2c33] bg-[#0c0c0f] px-2.5 text-[13px] text-[#e6e6ea] focus:border-red/60 focus:outline-none';
-const input = 'h-[34px] rounded-lg border border-[#2c2c33] bg-[#0c0c0f] px-2.5 text-[13px] text-[#f0f0f2] placeholder:text-muted focus:border-red/60 focus:outline-none';
-const small = 'ml-auto h-7 w-20 rounded-lg border border-[#2c2c33] bg-[#0c0c0f] px-2 text-[13px] text-[#e6e6ea] focus:border-red/60 focus:outline-none';
+const select = `h-[34px] w-full min-w-0 rounded-lg border border-[#2c2c33] bg-[#0c0c0f] pr-8 pl-2.5 text-[13px] text-[#e6e6ea] focus:border-red/60 focus:outline-none ${ARROW}`;
+const input = 'h-[34px] rounded-lg border border-[#2c2c33] bg-[#0c0c0f] px-2.5 text-[13px] text-text placeholder:text-muted focus:border-red/60 focus:outline-none';
+const small = `ml-auto h-7 w-20 rounded-lg border border-[#2c2c33] bg-[#0c0c0f] pr-8 pl-2 text-[13px] text-[#e6e6ea] focus:border-red/60 focus:outline-none ${ARROW}`;
 const error = 'text-xs text-[#ff6b76]';
 // ponytail: the server keeps "at once" to the store's limit (teams.ts STORE_LIMIT, 2); expose it if it ever varies.
 const AT_ONCE = [1, 2];
@@ -228,8 +228,8 @@ export function CreateTeam({ store: initial, from, onClose }: { store: Store; fr
                 said={rowError(r)}
                 extra={
                   <>
-                    <label className="flex items-center gap-1.5 text-[12.5px] text-[#c4c4cc]">
-                      <input type="radio" name="lead" checked={lead === r.key} onChange={() => setLead(r.key)} className="accent-[#e01e2d]" />
+                    <label className="flex items-center gap-1.5 text-[12.5px] text-text-2">
+                      <input type="radio" name="lead" checked={lead === r.key} onChange={() => setLead(r.key)} className="accent-red-fill" />
                       Lead
                     </label>
                     <button type="button" aria-label="Remove participant" disabled={rows.length === 1} onClick={() => remove(r.key)} className="grid size-6 cursor-pointer place-items-center rounded-md text-muted hover:bg-panel-2 hover:text-white disabled:invisible">
@@ -252,7 +252,7 @@ export function CreateTeam({ store: initial, from, onClose }: { store: Store; fr
         </div>
         <div className="grid gap-1.5">
           <span className={label}>Limits</span>
-          <div className="grid grid-cols-2 gap-x-5 gap-y-1 rounded-[10px] border border-[#24242a] px-3.5 py-2 text-[12.5px] text-[#c4c4cc]">
+          <div className="grid grid-cols-2 gap-x-5 gap-y-1 rounded-[10px] border border-line px-3.5 py-2 text-[12.5px] text-text-2">
             {claude && (
               <label className="flex min-h-8 items-center gap-2">
                 Team budget

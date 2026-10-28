@@ -105,7 +105,9 @@ test('Deploy agent opens Deploy on the store, with Demo (free) on a demo store; 
     </Routes>,
     '/agents?store=glow',
   );
-  fireEvent.click(await screen.findByRole('button', { name: 'Deploy agent' }));
+  const buttons = await screen.findAllByRole('button', { name: 'Deploy agent' });
+  expect(buttons).toHaveLength(2); // the list's, and the empty workspace's next step
+  fireEvent.click(buttons[0]!);
   expect(screen.getByTestId('where').textContent).toContain('deploy=');
   expect((await within(dialog()).findByRole('radio', { name: /^Copywriter/ })).getAttribute('aria-checked')).toBe('true');
   expect(radio('Runtime', 'Demo (free)').getAttribute('aria-checked')).toBe('true');

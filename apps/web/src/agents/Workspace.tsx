@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router';
-import { Bot, List, PanelRight, SearchX, Users } from 'lucide-react';
+import { Bot, List, PanelRight, Plus, SearchX, Users } from 'lucide-react';
 import { AGENT_ROLES, type Store } from '@frontline/shared';
 import { useConversation, useConversations, useRun, useStores } from '../api/client';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
-import { buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState } from '../components/ui';
+import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState } from '../components/ui';
 import { NAV } from '../nav';
 import { Conversation, ReadOnlyRun } from './Conversation';
 import { CreateTeam, useTeamDialog } from './CreateTeam';
@@ -145,7 +145,7 @@ function Panes({ store, conversationId, teamId, runId }: { store: Store; convers
     <div
       ref={fill.ref}
       style={{ ...fill.style, gridTemplateColumns: [mode !== 'one' && `${left}px`, 'minmax(0,1fr)', showRight && `${right}px`].filter(Boolean).join(' ') }}
-      className="-mx-[22px] -mb-8 grid min-h-0 grid-rows-[minmax(0,1fr)] bg-bg"
+      className="-mx-[22px] -mb-8 grid min-h-0 grid-rows-[minmax(0,1fr)] bg-bg [&_*]:[scrollbar-color:#2c2c33_transparent] [&_*]:[scrollbar-width:thin]"
     >
       {mode !== 'one' && (
         <div className="relative flex min-h-0 flex-col border-r border-[#1d1d22] bg-[#0a0a0c]">
@@ -155,7 +155,7 @@ function Panes({ store, conversationId, teamId, runId }: { store: Store; convers
       )}
       <div className="flex min-h-0 min-w-0 flex-col">
         {!online && (
-          <p role="status" className="border-b border-[#1d1d22] bg-[#f2b84b]/8 px-6 py-2 text-xs text-[#f2b84b]">
+          <p role="status" className="border-b border-[#1d1d22] bg-amber/8 px-6 py-2 text-xs text-amber">
             Reconnecting… Live replies catch up when the connection is back.
           </p>
         )}
@@ -232,10 +232,19 @@ function Handle({ label, value, min, max, edge, onChange }: { label: string; val
 /** No conversation open: how to start, and the store's latest conversations. */
 function Start({ store, buttons }: { store: Store; buttons: ReactNode }) {
   const recent = (useConversations(store.id).data?.pages[0]?.items ?? []).slice(0, 5);
+  const deploy = useDeploy();
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="flex justify-end gap-1 px-4 pt-3">{buttons}</div>
-      <EmptyState icon={Bot} title={`${store.name}'s agents`}>
+      <EmptyState
+        icon={Bot}
+        title={`${store.name}'s agents`}
+        action={
+          <Button variant="primary" size="sm" onClick={() => deploy.open()}>
+            <Plus aria-hidden className="size-3.5" /> Deploy agent
+          </Button>
+        }
+      >
         Pick a conversation from the list, or deploy an agent to start one. Ask AI (Ctrl K) and the agent actions on other pages start new ones too.
       </EmptyState>
       {recent.length > 0 && (

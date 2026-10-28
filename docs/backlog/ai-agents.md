@@ -1599,7 +1599,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - no credentials in client state (grep the web bundle and API payloads for secret names).
 
 ### Verification
-- [ ] AA-24 **Design pass:**
+- [x] AA-24 **Design pass:**
   - every screen against its reference at 1440×900;
   - the reading column at 1920×1080 with the right panel closed;
   - `styleseed-design-review` on the page, with fixes;
@@ -1781,6 +1781,15 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   history fallback and a Product Research listing's title are fenced, and agent WebFetch goes through the app's
   reader (`kbFetch`: private addresses, redirects, size, robots, blocked sites) with the page fenced. A team step
   that proposes an ad change asks the owner like any run; a participant narrowed off the tool can't reach it.
+- 2026-10-28 AA-24 Design pass: the workspace, team, Deploy and empty screens compared with the three boards at
+  1440×900, and the reading column measured at 1920×1080 with the details panel closed (700 px, centred in the pane,
+  composer on the same edges, no sideways scroll). Fixed: the owner's bubble is the board's neutral grey (it was the
+  action red), the team's Unresolved mark is the board's blue "!" (a colour-class clash drew it white, reading as
+  "I"), the Tools rows carry the board's check and cross, selects get a line chevron instead of the native arrow,
+  scrollbars in the panes and dialogs are thin and dark, the list search placeholder fits ("Search conversations"),
+  the empty workspace offers Deploy agent, and 47 hex values that duplicated theme tokens use the tokens. styleseed
+  scored 79 before and about 95 after. The AA-22 audit rerun is clean (contrast, names, focus, sideways scroll).
+  Screenshots at 1280×800, 1366×728, 1440×900 and 1920×1080 are in `.agent/aa24/`, all with no console errors.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
@@ -1918,6 +1927,21 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-24, 2026-10-28) For AA-25 and later:
+  - **styleseed findings answered, not changed:** the type scale has half-pixel steps (10.5, 11.5, 12.5, 13.5 px);
+    they are the boards' own sizes, size for size, so they stay. The remaining hex values (#1d1d22, #111114,
+    #ff6b76 for links, #7aa7ff for Needs reply and Unresolved) have no theme token; the boards use them as is. The
+    Tools rows show a green check on every available tool as the board does, with text beside it, so status never
+    rests on colour alone.
+  - **Orca's browser** at 1280×800: `orca exec --command "set viewport 1280 800"` works but resets on reload, and its
+    screenshot tiles anything wider than its ~800 px pane. The 1280×800 check there is measurements and console
+    (no sideways scroll, two panes, 700 px column, zero console errors); the 1280×800 image comes from cdp-shot.
+    Set `frontline:onboarded` in localStorage first or onboarding covers the page.
+  - **A class clash to watch:** passing a colour class into `cx()` next to a default colour of the same property
+    doesn't override it; the generated CSS order decides. Team's `Event` now takes `tone` in place of its default
+    colours.
+  - **Scripts:** `.agent/aa24-reading.mjs` (reading column measurements) and `.agent/aa24-mark.mjs` (computed
+    colours of the team avatars), both through `cdp-drive.mjs`.
 - (AA-23, 2026-10-28) For AA-24 and later:
   - **WebFetch is an app tool now** (`tools.ts`, served over the frontline MCP server as `mcp__frontline__WebFetch`;
     Codex gets it through its MCP endpoint too). The Claude engine filters the built-in out, so the old `privateUrl`

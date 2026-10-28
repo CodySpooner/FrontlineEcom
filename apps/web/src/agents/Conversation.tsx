@@ -26,7 +26,7 @@ export const chip = 'inline-flex h-6 items-center gap-1.5 rounded-md border bord
 // The reply's markdown: tables scroll sideways inside the column, code and quotes as the board draws them.
 const REPLY =
   'grid gap-2.5 text-[13.5px] leading-relaxed text-text [&_a]:text-[#ff6b76] [&_a:hover]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[#2a2a30] [&_blockquote]:pl-3 [&_blockquote]:text-text-2 [&_code]:rounded [&_code]:bg-[#16161a] [&_code]:px-1 [&_code]:font-mono [&_code]:text-[12px] [&_h1]:text-[15px] [&_h1]:font-semibold [&_h2]:text-[14.5px] [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-[#111114] [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_table]:block [&_table]:overflow-x-auto [&_table]:border-collapse [&_table]:text-[12.5px] [&_td]:border-b [&_td]:border-[#1d1d22] [&_td]:px-2.5 [&_td]:py-1.5 [&_th]:border-b [&_th]:border-[#26262c] [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold [&_th]:text-text-2';
-const STAGE_TONE: Record<KbStage, string> = { hypothesis: 'text-[#f2b84b]', supported: 'text-[#7aa7ff]', tested: 'text-[#7aa7ff]', validated: 'text-[#3ddc84]' };
+const STAGE_TONE: Record<KbStage, string> = { hypothesis: 'text-amber', supported: 'text-[#7aa7ff]', tested: 'text-[#7aa7ff]', validated: 'text-good' };
 
 // Each conversation's thread scroll offset for this session: leaving the page and coming back returns to it.
 const scrollTops = new Map<string, number>();
@@ -253,7 +253,7 @@ function Turn({ store, conversationId, seed, prev, name, latest, attempts }: { s
   return (
     <article aria-label={`Turn: ${run.task.slice(0, 80)}`} className="grid gap-3">
       <div className="ml-auto grid max-w-[520px] justify-items-end gap-1">
-        <p className="rounded-xl rounded-br-sm border border-red/30 bg-red-soft px-3 py-2 text-[13px] whitespace-pre-wrap">{run.task}</p>
+        <p className="rounded-[14px] rounded-br-[4px] border border-line bg-[#17171b] px-3.5 py-2.5 text-[13px] text-[#e6e6ea] whitespace-pre-wrap">{run.task}</p>
         <Attachments files={run.attachments ?? []} />
         <span className="flex items-center gap-2 text-[11px] text-muted">
           {run.status === 'queued' && conversationId ? (
@@ -286,7 +286,7 @@ function Attempt({ store, run: seed, n, name }: { store: Store; run: AgentRunDet
         Attempt {n} · {RUN_STATUS[seed.state ?? run.status].label.toLowerCase()}
       </summary>
       <div className="grid gap-2 border-t border-[#1d1d22] px-3 py-3">
-        {acted.length > 0 && <p className="text-xs text-[#f2b84b]">This attempt may have changed something before it ended: it ran {acted.join(', ')}.</p>}
+        {acted.length > 0 && <p className="text-xs text-amber">This attempt may have changed something before it ended: it ran {acted.join(', ')}.</p>}
         <Reply store={store} run={run} name={name} latest={false} deliverables={seed.deliverables} />
       </div>
     </details>
@@ -431,9 +431,9 @@ export function Reply({ store, conversationId, run, name, latest, deliverables =
 }
 
 const ICONS: Record<Step['icon'], ReactNode> = {
-  done: <Check aria-label="Done" className="size-3.5 text-[#3ddc84]" />,
+  done: <Check aria-label="Done" className="size-3.5 text-good" />,
   running: <LoaderCircle aria-label="Running" className="size-3.5 animate-spin text-muted" />,
-  warning: <AlertTriangle aria-label="Waiting" className="size-3.5 text-[#f2b84b]" />,
+  warning: <AlertTriangle aria-label="Waiting" className="size-3.5 text-amber" />,
   failed: <X aria-label="Failed" className="size-3.5 text-[#ff5a66]" />,
 };
 

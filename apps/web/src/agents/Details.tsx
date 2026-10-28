@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
-import { Lock } from 'lucide-react';
+import { Check, Lock, X } from 'lucide-react';
 import { AGENT_ROLES, CODEX_TESTED, EFFORT_LABEL, INTEGRATION_KINDS, INTERRUPTED, KB_STAGES, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
 import { useAgents, useAgentTypes, useCaps, useClaudeAccount, useConversation, useConversationFindings, useConversationKnowledge, useConversationTools, useRuntimes, useThread } from '../api/client';
 import { FixLink } from '../components/Chat';
@@ -178,27 +178,32 @@ function DetailsTab({ store, c }: { store: Store; c: ConversationDetail }) {
           <p className="text-xs text-muted">Loading…</p>
         ) : (
           <ul className="grid gap-1.5">
-            {tools.map((g) => (
-              <li key={g.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
-                <span className="text-text-2">{g.name}</span>
-                <span className="text-right text-xs text-muted">
-                  {g.integration && !g.tools.length && c.config.runtime === 'codex' ? (
-                    'Claude only for now'
-                  ) : g.integration && !g.integration.connected ? (
-                    <>
-                      Not connected ·{' '}
-                      <Link to="/integrations" className="text-[#ff6b76] hover:underline">
-                        Set up
-                      </Link>
-                    </>
-                  ) : rules.length && g.tools.includes('propose_ad_change') ? (
-                    'Autopilot up to the caps below'
-                  ) : (
-                    ACCESS[g.access]
-                  )}
-                </span>
-              </li>
-            ))}
+            {tools.map((g) => {
+              // As the board draws it: a check on what the agent can use, a cross and muted text on what it can't.
+              const off = !!g.integration && (!g.integration.connected || (!g.tools.length && c.config.runtime === 'codex'));
+              return (
+                <li key={g.id} className={cx('flex items-center gap-2 text-[12.5px]', off ? 'text-muted' : 'text-text-2')}>
+                  {off ? <X aria-hidden className="size-3.5 shrink-0" /> : <Check aria-hidden className="size-3.5 shrink-0 text-good" />}
+                  <span className="min-w-0 flex-1">{g.name}</span>
+                  <span className="text-right text-xs text-muted">
+                    {g.integration && !g.tools.length && c.config.runtime === 'codex' ? (
+                      'Claude only for now'
+                    ) : g.integration && !g.integration.connected ? (
+                      <>
+                        Not connected ·{' '}
+                        <Link to="/integrations" className="text-[#ff6b76] hover:underline">
+                          Set up
+                        </Link>
+                      </>
+                    ) : rules.length && g.tools.includes('propose_ad_change') ? (
+                      'Autopilot up to the caps below'
+                    ) : (
+                      ACCESS[g.access]
+                    )}
+                  </span>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Section>
