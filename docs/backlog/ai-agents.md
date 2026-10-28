@@ -1614,7 +1614,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   the owner hasn't signed in, or Codex is disabled (AA-15, decision 9), tick it once decision 16's Blocked entry is
   written: 'Codex live smoke: needs the owner's sign-in' or 'Codex live smoke: Codex is disabled (<reason>)'. The
   final report then lists the Codex smoke as unverified (and Codex as disabled, when it is) and says what it needs.
-- [ ] AA-26 **Acceptance:** walk the "Done when" checklist and fix what it finds.
+- [x] AA-26 **Acceptance:** walk the "Done when" checklist and fix what it finds.
 - [ ] AA-27 **Final report and STOP.** Write `docs/features/ai-agents-report.md`, with screenshots in
   `docs/reference/ai-agents-final/`. Update `docs/DESIGN.md`'s AI Agents section to the new page. Then create
   `.agent/STOP`.
@@ -1798,6 +1798,15 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 - 2026-10-28 AA-25b Codex live smoke: not run. `codex login status` on the dev server's `CODEX_HOME` still says "Not
   logged in", so the Blocked entry reads "Codex live smoke: needs the owner's sign-in" with the exact sign-in line.
   Codex isn't disabled. The final report lists the Codex smoke as unverified.
+- 2026-10-28 AA-26 Acceptance: every "Done when" line walked against the tests and recorded checks. Three had no
+  proof and now do: teams renamed, pinned, archived, found and reopened through their conversation (the team's own
+  title follows); a 4-participant team end to end (two Copywriters at once, a dependent after its dependency with
+  only its handoff, a failed task a retry recovers, a disagreement left Unresolved, the synthesis, assign_task
+  refused); and the "Not connected · Set up" and "Claude only for now" labels in Deploy and Details. A headless
+  click-through of 19 surfaces (the page and its three tabs, every ⋯ menu, the store switcher, Change runtime or
+  model, the drawer's tabs, Deploy, Create team, Collaborate, the team page and its tabs, the empty workspace) found
+  no control without an action. Three disabled buttons now say why on hover (Start team, Remove participant,
+  Switch). `pnpm check` (1,615 tests) and `pnpm build` green; no console errors.
 
 ## Blocked
 - (AA-15, 2026-10-28; checked again in AA-25b, 2026-10-28 11:23) **Codex live smoke: needs the owner's sign-in.**
@@ -1936,6 +1945,15 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-26, 2026-10-28) For AA-27:
+  - **The click-through** (`.agent/aa26-click.mjs` through `cdp-drive.mjs`, output in `.agent/aa26/click.txt`): on
+    each surface, every visible button, link, input, tab, menu item, radio and switch must have a React handler (on
+    it or within three parents), an href, a native popover target, or be a submit in a handled form; otherwise it's
+    disabled, and its reason is listed. A self-test (`CLICK_SELFTEST=1`) plants a dead button, a link with no href
+    and a disabled button with no reason, and the check flags all three. Disabled until something is typed or
+    changed: Send, Save budget, Teach the squad (the empty field is the reason). The Flows tab shows only for an
+    Email/SMS seat, so it wasn't on this run's Copywriter seat.
+  - **Also fixed:** `updateConversation`'s doc comment had slipped above `setConversationConfig`.
 - (AA-25, 2026-10-28) **Claude live smoke** (decision 16), the lane's only live Claude turn, 15:19 UTC:
   - **How it ran:** a throwaway script (`apps/server/src/zz-aa25-smoke.ts`, deleted after, never committed) on an
     in-memory database with `seedDemo`, `createApp(db, <random key>)`, the real routes through `app.request`, and the

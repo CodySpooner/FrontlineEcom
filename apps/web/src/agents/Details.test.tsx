@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 const store = { id: 'glow', name: 'Glow Haus', platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'UTC', color: '#c2461c', connected: true } as Store;
-const detail = (tools: string[]): ConversationDetail => ({
+const detail = (tools: string[], runtime: 'claude' | 'codex' = 'claude'): ConversationDetail => ({
   id: 'c1',
   storeId: 'glow',
   configId: 'cfg',
@@ -27,7 +27,7 @@ const detail = (tools: string[]): ConversationDetail => ({
   updatedAt: '2026-10-28T09:00:00Z',
   lastActivityAt: '2026-10-28T10:00:00Z',
   state: 'failed',
-  config: { id: 'cfg', storeId: 'glow', agentId: 'glow:ad_strategist', runtime: 'claude', model: 'claude-opus-5-5', effort: 'high', tools, knowledge: ['store', 'general'], permissions: { budgetUsd: 3, saveFindings: 'off' }, createdAt: '2026-10-28T09:00:00Z' },
+  config: { id: 'cfg', storeId: 'glow', agentId: 'glow:ad_strategist', runtime, model: 'claude-opus-5-5', effort: 'high', tools, knowledge: ['store', 'general'], permissions: { budgetUsd: 3, saveFindings: 'off' }, createdAt: '2026-10-28T09:00:00Z' },
 });
 const run = (id: string, status: AgentRunDetail['status'], extra: Partial<AgentRunDetail> = {}): AgentRunDetail => ({
   id,
@@ -46,10 +46,11 @@ const run = (id: string, status: AgentRunDetail['status'], extra: Partial<AgentR
   ...extra,
 });
 
-function api({ autonomy = 'ask', tools = ['store_summary', 'list_campaigns', 'propose_ad_change', 'meta_ads'] }: { autonomy?: string; tools?: string[] } = {}) {
+function api({ autonomy = 'ask', tools = ['store_summary', 'list_campaigns', 'propose_ad_change', 'meta_ads'], runtime = 'claude' }: { autonomy?: string; tools?: string[]; runtime?: 'claude' | 'codex' } = {}) {
   return stubApi((url) => {
     const u = new URL(url, 'http://x');
-    if (u.pathname === '/api/conversations/c1') return detail(tools);
+    if (u.pathname === '/api/conversations/c1') return detail(tools, runtime);
+    if (u.pathname === '/api/runtimes') return [{ runtime: 'codex', connected: false, reason: 'Set up Codex', source: 'discovered', checkedAt: '2026-10-28T10:00:00Z', models: [] }];
     if (u.pathname === '/api/conversations/c1/thread') return { items: [run('r1', 'done'), run('r2', 'error', { error: 'Rate limited' })], total: 2 };
     if (u.pathname === '/api/conversations/c1/tools')
       return [
@@ -86,6 +87,7 @@ test('Details: runtime, tools with access and connection state, the approval lin
   expect(screen.getByText("Fixed when the conversation started. Other stores' data is never read.")).toBeTruthy();
   expect(within(await screen.findByText('Store data').then((e) => e.closest('li')!)).getByText('Read')).toBeTruthy();
   expect(within(tool('Drafts and changes')).getByText('Drafts need approval')).toBeTruthy();
+  expect(tool('Meta Ads (MCP)').textContent).toBe('Meta Ads (MCP)Not connected · Set up');
   expect(within(tool('Meta Ads (MCP)')).getByRole('link', { name: 'Set up' }).getAttribute('href')).toBe('/integrations');
   expect(screen.getByText('Spending always asks you first.')).toBeTruthy();
   expect(screen.getByText('This run $0.42 of $3.00')).toBeTruthy();
@@ -102,6 +104,12 @@ test('Details: runtime, tools with access and connection state, the approval lin
   api({ autonomy: 'autopilot', tools: ['store_summary'] });
   renderApp(<Panel />);
   expect(await screen.findByText('Spending always asks you first.')).toBeTruthy();
+  cleanup();
+  // Under Codex, signed out: the runtime says what to do, and Meta Ads is Claude only (decision 9).
+  api({ runtime: 'codex' });
+  renderApp(<Panel />);
+  expect(await screen.findByText('Codex · Set up Codex')).toBeTruthy();
+  expect((await screen.findByText('Meta Ads (MCP)')).closest('li')!.textContent).toBe('Meta Ads (MCP)Claude only for now');
 });
 
 test("'Role instructions and checks' opens the type's contract", async () => {

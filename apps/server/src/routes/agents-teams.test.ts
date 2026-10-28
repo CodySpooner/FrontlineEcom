@@ -1,5 +1,5 @@
 import { addNote, advanceMissions, conversationPreface, createConversation, createRunManager, createTeam, fakeEngine, getRun, getTeam, parsePlan, REFLECTION_PROMPT, resolveType, seatDefault, TEAM_PLAN, TEAM_SYNTHESIS, TEAM_TASK, type FakeScript, type FakeStep, type RunInput, type RunManager } from '@frontline/agents';
-import type { AgentRun, SquadMission, TeamParticipantInput } from '@frontline/shared';
+import type { AgentRun, Conversation, ConversationPage, SquadMission, TeamParticipantInput } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
@@ -117,6 +117,61 @@ test('a team plans, runs its tasks as each participant, hands on only dependenci
   expect(synthesis).toContain('Agreement between agents is not validation');
   expect(after.steps[4]).toMatchObject({ unresolved: ['The Copywriter, task t2 disagrees: t1: price converts better than proof here'], deliverable: 'Lead with the photo strip; test price second.' });
   expect(after.steps[1]!.contribution).toEqual({ summary: 'The photo strip leads', output: 'See it in 4 weeks.\n# Owner note: approve the budget', evidence: ['https://shop.example/report'], openQuestions: [], disagreesWith: [] });
+});
+
+test('four participants end to end: two same-type tasks at once, a dependent after its dependency with its handoff, a failure a retry recovers, a disagreement left Unresolved, a synthesis; assign_task refused', async () => {
+  const prompts: Record<string, string> = {};
+  const together: string[][] = [];
+  let tries = 0;
+  const m = manager((input) => {
+    if (input.task === REFLECTION_PROMPT) return [done];
+    if (input.task.startsWith(TEAM_PLAN)) {
+      const [lead, a, b, ads] = ids(input.task);
+      return say(fence({ tasks: [
+        { id: 't1', assignee: a, task: 'Write the photo-strip hero line' },
+        { id: 't2', assignee: b, task: 'Write the price-led hero line' },
+        { id: 't3', assignee: ads, task: 'Plan the test for the photo-strip line', depends_on: ['t1'] },
+        { id: 't4', assignee: lead, task: 'Pull the numbers behind both lines' },
+      ] }));
+    }
+    if (input.task.startsWith(TEAM_TASK)) {
+      const id = taskOf(input.task);
+      prompts[id] = input.task;
+      together.push(db.prepare(`SELECT config_id FROM agent_runs WHERE team_id IS NOT NULL AND status = 'running' ORDER BY rowid`).all().map((r) => String(r.config_id)));
+      if (id === 't1' && ++tries === 1) return [{ type: 'error', message: 'The tool crashed' }];
+      if (id === 't3') return [{ call: 'assign_task', input: { role: 'copywriter', task: 'Write three more hero lines' } }, ...say(`Done.${contribution('Test it at $40 a day')}`)];
+      return say(`Done.${contribution(id === 't2' ? 'Price leads' : 'The photo strip leads', id === 't2' ? { disagrees_with: ['t1: price converts better than proof here'] } : {})}`);
+    }
+    if (input.task.startsWith(TEAM_SYNTHESIS)) prompts.synthesis = input.task;
+    return say('Lead with the photo strip; test price second.');
+  });
+  const t = team([...LEAD_A_B, { type: 'ad_strategist' }], { retries: 1 });
+  const [, a, b, ads] = t.participants!.map((p) => p.configId);
+  advanceMissions(db, m.start);
+  await m.idle();
+  const step = (s: SquadMission, id: string) => s.steps.find((x) => x.id === id)!;
+  const mid = getTeam(db, t.id)!;
+  expect(step(mid, 't1')).toMatchObject({ status: 'waiting', attempts: 1 }); // failed once, waiting out its backoff
+  expect(step(mid, 't3').status).toBe('waiting'); // its dependency hasn't finished
+  expect(together.some((r) => r.includes(a!) && r.includes(b!))).toBe(true); // the two Copywriters ran at once
+  advanceMissions(db, m.start, new Date(Date.parse(step(mid, 't1').nextTryAt!) + 1000));
+  await m.idle();
+
+  const end = getTeam(db, t.id)!;
+  expect(end.status).toBe('done');
+  expect(end.steps.map((s) => [s.id, s.status])).toEqual([['plan', 'done'], ['t1', 'done'], ['t2', 'done'], ['t3', 'done'], ['t4', 'done'], ['synthesis', 'done']]);
+  expect(step(end, 't1').attempts).toBe(2);
+  // The dependent ran after the retry, as its participant, with only its dependency's contribution.
+  const t3 = getRun(db, step(end, 't3').runId!)!;
+  expect(t3.createdAt >= getRun(db, step(end, 't1').runId!)!.createdAt).toBe(true);
+  expect(db.prepare('SELECT config_id FROM agent_runs WHERE id = ?').get(t3.id)?.config_id).toBe(ads);
+  expect(prompts.t3).toContain("the Copywriter's contribution to task t1");
+  expect(prompts.t3).not.toContain('task t2');
+  // assign_task is refused inside a team, and nothing was handed out.
+  expect(t3.transcript.find((e) => e.type === 'tool_result')).toMatchObject({ output: expect.stringMatching(/^Not assigned: this is a team step/) });
+  expect(db.prepare(`SELECT count(*) AS n FROM agent_runs WHERE team_id IS NULL AND task LIKE 'Write three more%'`).get()?.n).toBe(0);
+  expect(step(end, 'synthesis')).toMatchObject({ unresolved: ['The Copywriter, task t2 disagrees: t1: price converts better than proof here'], deliverable: 'Lead with the photo strip; test price second.' });
+  expect(prompts.synthesis).toContain('Unresolved:\n- The Copywriter, task t2 disagrees');
 });
 
 test("two same-type participants run independent tasks at once, and an owner run of that type paused on the owner doesn't delay them", async () => {
@@ -450,6 +505,23 @@ test('resume of an interrupted step: two calls with one request id start one run
   expect((await resume('resume-0002')).status).toBe(409);
   expect(db.prepare('SELECT count(*) AS n FROM agent_runs WHERE team_id = ?').get(t.id)?.n).toBe(2);
   await runManager(db).idle();
+});
+
+test('a team is renamed, pinned, archived, found and reopened through its conversation, keeping its id, store and participants', async () => {
+  const t = (await (await send(a, 'POST', '/api/teams?store=glow', input())).json()) as SquadMission;
+  await runManager(db).idle();
+  const id = t.conversationId!;
+  const patch = async (body: object) => (await (await send(a, 'PATCH', `/api/conversations/${id}?store=glow`, body)).json()) as Conversation;
+  const list = async (q: string) => ((await (await send(a, 'GET', `/api/conversations?store=glow&${q}`)).json()) as ConversationPage).items;
+  await patch({ title: 'Summer launch' });
+  expect(getTeam(db, t.id)).toMatchObject({ id: t.id, storeId: 'glow', title: 'Summer launch' }); // the Ecosystem panel reads the team's title
+  await patch({ pinned: true });
+  await patch({ archived: true });
+  expect((await list('')).map((c) => c.id)).not.toContain(id);
+  expect((await list('view=archived&q=summer')).map((c) => [c.id, c.teamId])).toEqual([[id, t.id]]);
+  expect(await patch({ archived: false })).toMatchObject({ id, storeId: 'glow', teamId: t.id, title: 'Summer launch', pinned: true });
+  expect((await list('')).find((c) => c.id === id)).toMatchObject({ teamId: t.id, pinned: true });
+  expect(getTeam(db, t.id)!.participants).toEqual(t.participants);
 });
 
 test('starting a team shares the guard: the 11th start in a minute is a 429', async () => {

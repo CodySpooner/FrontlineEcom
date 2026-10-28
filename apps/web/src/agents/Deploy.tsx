@@ -540,7 +540,7 @@ export function ChangeRuntime({ store, conversation, onClose }: { store: Store; 
         <div className="flex items-center justify-end gap-2.5">
           <span className="flex-1">{rest}</span>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={same || change.isPending} onClick={() => change.mutate({ ...choice.config, ...(toCodex ? { stopAfterMin: Number(stopAfter) } : {}) }, { onSuccess: onClose })}>
+          <Button variant="primary" title={same ? 'Pick a different runtime, model or effort' : undefined} disabled={same || change.isPending} onClick={() => change.mutate({ ...choice.config, ...(toCodex ? { stopAfterMin: Number(stopAfter) } : {}) }, { onSuccess: onClose })}>
             Switch
           </Button>
         </div>

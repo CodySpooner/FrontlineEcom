@@ -121,12 +121,12 @@ export function conversationThread(db: DatabaseSync, id: string, { before, limit
   return { items, total, ...(rows.length > n ? { next: String(rows[n - 1]!.rowid) } : {}) };
 }
 
-/** Rename, pin, archive. A team's conversation renames its team too, so the Ecosystem panel matches. */
 /** "Change runtime or model…" (decision 10): the conversation moves to a new config; its next turn starts a new session. */
 export function setConversationConfig(db: DatabaseSync, id: string, configId: string) {
   db.prepare('UPDATE conversations SET config_id = ?, updated_at = ? WHERE id = ?').run(configId, new Date().toISOString(), id);
 }
 
+/** Rename, pin, archive. A team's conversation renames its team too, so the Ecosystem panel matches. */
 export function updateConversation(db: DatabaseSync, id: string, patch: { title?: string; pinned?: boolean; archived?: boolean }): Conversation | undefined {
   if (!getConversation(db, id)) return undefined;
   const at = new Date().toISOString();

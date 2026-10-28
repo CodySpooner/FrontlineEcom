@@ -270,6 +270,7 @@ test("Deploy's attachments go with the first message", async () => {
   api({ posts });
   renderDeploy();
   fireEvent.click(await screen.findByRole('button', { name: /^Tools and knowledge/ }));
+  expect((await screen.findByText('Creatives')).closest('li')!.textContent).toBe('CreativesNot connected · Set up'); // its integration isn't connected
   fireEvent.change(screen.getByLabelText('Documents to attach'), { target: { files: [new File(['brief'], 'brief.txt')] } });
   expect(await screen.findByRole('button', { name: /^Tools and knowledge.* · 1 attached$/ })).toBeTruthy();
   fireEvent.change(screen.getByRole('textbox', { name: 'Objective' }), { target: { value: 'Use the brief' } });

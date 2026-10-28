@@ -182,7 +182,7 @@ export function CreateTeam({ store: initial, from, onClose }: { store: Store; fr
         )}
       </span>
       <Button onClick={onClose}>Cancel</Button>
-      <Button type="submit" form="team-form" variant="primary" disabled={!rows.length || objective.trim().length < 10 || create.isPending}>
+      <Button type="submit" form="team-form" variant="primary" title={objective.trim().length < 10 ? 'Write a shared objective of at least 10 characters' : undefined} disabled={!rows.length || objective.trim().length < 10 || create.isPending}>
         Start team
       </Button>
     </div>
@@ -232,7 +232,7 @@ export function CreateTeam({ store: initial, from, onClose }: { store: Store; fr
                       <input type="radio" name="lead" checked={lead === r.key} onChange={() => setLead(r.key)} className="accent-red-fill" />
                       Lead
                     </label>
-                    <button type="button" aria-label="Remove participant" disabled={rows.length === 1} onClick={() => remove(r.key)} className="grid size-6 cursor-pointer place-items-center rounded-md text-muted hover:bg-panel-2 hover:text-white disabled:invisible">
+                    <button type="button" aria-label="Remove participant" title={rows.length === 1 ? 'A team needs at least one participant' : undefined} disabled={rows.length === 1} onClick={() => remove(r.key)} className="grid size-6 cursor-pointer place-items-center rounded-md text-muted hover:bg-panel-2 hover:text-white disabled:invisible">
                       <X className="size-3.5" />
                     </button>
                   </>
