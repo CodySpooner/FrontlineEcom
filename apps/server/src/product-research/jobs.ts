@@ -46,6 +46,23 @@ export function stoppedReason(db: Db, adapter: Pick<PrAdapter, 'id' | 'credentia
   return 'The source changed its data format: the app stopped reading it and kept its last good data.';
 }
 
+/**
+ * "Sync now" (PR-11): today's planned queries as jobs, now. The owner asking clears a schema stop (they've looked);
+ * an auth stop still waits for new credentials and a quota stop for 00:00 UTC. One sync per source at a time.
+ */
+export function syncNow(db: Db, a: PrAdapter, key: Buffer, now = new Date()): { error: string } | { jobs: number } {
+  if (!a.plan || !a.page) return { error: `${a.name} has nothing to sync.` };
+  if (!a.ready?.(db, key)) return { error: `${a.name} isn't set up yet. ${a.connect}` };
+  if (db.prepare(`SELECT 1 FROM pr_jobs WHERE source = ? AND status IN ('queued', 'running')`).get(a.id)) return { error: `${a.name} is already syncing.` };
+  if (sourceRow(db, a.id)?.error_kind === 'schema') db.prepare(`UPDATE pr_sources SET status = 'degraded', updated_at = ? WHERE id = ?`).run(now.toISOString(), a.id);
+  const stop = stoppedReason(db, a, now);
+  if (stop) return { error: stop };
+  const plans = a.plan(db).filter((p) => p.queries.length);
+  if (!plans.length) return { error: "No queries to run: no store has a niche, an included category or a saved keyword that maps to this source." };
+  for (const p of plans) enqueue(db, { kind: 'ingest', source: a.id, storeId: p.storeId, queries: p.queries }, now);
+  return { jobs: plans.length };
+}
+
 export function enqueue(db: Db, j: { kind: string; source: string; storeId: string | null; queries: string[] }, now = new Date()) {
   const id = randomUUID();
   const cp: Checkpoint = { queries: j.queries, q: 0, page: 1, pagesToday: 0, day: day(now) };

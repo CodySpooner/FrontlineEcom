@@ -1,14 +1,16 @@
 import { Hono } from 'hono';
 import type { Db } from '../db';
+import { log } from '../log';
 import { productVisible } from './catalog';
 import { discover, parseDiscovery } from './discovery';
-import { evaluateStore } from './evaluate';
+import { evaluateStore, refreshProduct } from './evaluate';
 import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
 import { importFeed } from './feed';
+import { runDue, stoppedReason, syncNow } from './jobs';
 import { cachedImage, listingImageRef, queueImage } from './images';
 import { getProfile, saveProfile } from './profile';
 import { scopeOf, storeOf } from './scope';
-import { sourceStates } from './sources';
+import { ADAPTERS, sourceHealth, sourceStates } from './sources';
 import { importTrends, linkSet, signalSet } from './trends';
 
 /** Product Research's API (`/api/pr/*`, behind the KB guard: change and body limits). `?store=` sets the scope. */
@@ -17,6 +19,23 @@ export function prRoutes(db: Db, key: () => Buffer) {
     .get('/api/pr/sources', (c) => {
       const s = scopeOf(c, db);
       return s instanceof Response ? s : c.json(sourceStates(db, key(), s.store?.id ?? null));
+    })
+    .get('/api/pr/source-health', (c) => {
+      const s = scopeOf(c, db);
+      return s instanceof Response ? s : c.json(sourceHealth(db, key(), s.store?.id ?? null));
+    })
+    // Sync now: queues today's planned queries and runs them in the background, one job at a time, then enriches.
+    .post('/api/pr/sources/:id/sync', (c) => {
+      const a = ADAPTERS.find((x) => x.id === c.req.param('id'));
+      if (!a) return c.json({ error: 'unknown source' }, 404);
+      const r = syncNow(db, a, key());
+      if ('error' in r) return c.json(r, 409);
+      void (async () => {
+        const deps = { key: key(), onStored: (ids: string[]) => new Set(ids).forEach((id) => refreshProduct(db, id)) };
+        for (let i = 0; i < r.jobs; i++) await runDue(db, [a], deps);
+        if (a.enrich && !stoppedReason(db, a)) await a.enrich(db, key());
+      })().catch((e) => log('error', 'product research sync failed', { source: a.id, error: e instanceof Error ? e.message : String(e) }));
+      return c.json(r, 202);
     })
     // Discovery (decision 14): the scope's full matching set filtered, sorted and counted in SQL, a page at a time.
     .get('/api/pr/products', (c) => {

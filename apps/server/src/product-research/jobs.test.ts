@@ -2,7 +2,7 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { openDb, type Db } from '../db';
 import { CAPS, callsToday, recordCall, refusal } from './caps';
 import { upsertListing } from './catalog';
-import { enqueue, planToday, requeueRunning, runDue, runJob, startPrJobs } from './jobs';
+import { enqueue, markSource, planToday, requeueRunning, runDue, runJob, startPrJobs, syncNow } from './jobs';
 import { SourceError, type PrAdapter } from './sources/adapter';
 
 const key = Buffer.alloc(32);
@@ -198,4 +198,22 @@ test("planning runs once a day per ready source; the timer is off in the dev app
   startPrJobs(db, key, [a]);
   expect(spy).not.toHaveBeenCalled();
   spy.mockRestore();
+});
+
+test('Sync now queues today\'s plan once, clears a schema stop the owner asked past, and refuses what still blocks it', async () => {
+  const db = openDb();
+  const a = { ...fake({ dog: [items(2)] }), plan: () => [{ storeId: null, queries: ['dog'] }] };
+  expect(syncNow(db, { ...a, ready: () => false }, key, T0)).toMatchObject({ error: expect.stringMatching(/isn't set up yet/) });
+  expect(syncNow(db, { ...a, plan: () => [{ storeId: null, queries: [] }] }, key, T0)).toMatchObject({ error: expect.stringMatching(/^No queries/) });
+  expect(syncNow(db, a, key, T0)).toEqual({ jobs: 1 });
+  expect(syncNow(db, a, key, T0)).toEqual({ error: 'Fake is already syncing.' });
+  await runDue(db, [a], { key, now: () => T0 });
+  expect(a.calls).toEqual(['dog#1']);
+
+  markSource(db, 'fake', { ok: false, kind: 'schema', error: 'Required field "title" missing' }, T0);
+  expect(syncNow(db, a, key, T0)).toEqual({ jobs: 1 }); // asking again clears the schema stop
+  await runDue(db, [a], { key, now: () => T0 });
+  markSource(db, 'fake', { ok: false, kind: 'auth', error: 'refused' }, T0);
+  expect(syncNow(db, a, key, T0)).toEqual({ error: 'The credentials were refused: enter them again in Integrations.' });
+  expect(syncNow(db, { ...a, page: undefined }, key, T0)).toEqual({ error: 'Fake has nothing to sync.' });
 });

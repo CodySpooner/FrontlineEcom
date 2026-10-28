@@ -1,15 +1,17 @@
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { PrDiscovery, PrSourceState } from '@frontline/shared';
+import type { PrDiscovery, PrSourceHealth, PrSourceState } from '@frontline/shared';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { openDb } from '../db';
 import type { Fetched } from '../kb/fetcher';
+import { recordCall } from './caps';
 import { upsertListing } from './catalog';
 import { loadFixtures } from './dev-fixtures';
 import { refusal } from './dev-fixtures-cli';
 import { cachedImage, fetchImage, queuedImages } from './images';
+import { enqueue, markSource } from './jobs';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
 beforeEach(() => vi.stubEnv('FRONTLINE_DATA_DIR', mkdtempSync(join(tmpdir(), 'pr-img-'))));
@@ -106,4 +108,42 @@ test('no production path writes a fixture row: only the dev loader inserts origi
   expect(writers).toEqual(['product-research/dev-fixtures.ts']);
   const callers = files.filter((f) => f !== 'product-research/dev-fixtures.ts' && /loadFixtures|dev-fixtures'/.test(readFileSync(join(root, f), 'utf8')));
   expect(callers).toEqual(['product-research/dev-fixtures-cli.ts']);
+});
+
+test('source health: calls against the caps, the ledger, jobs, CJ points, stale coverage and why a source is stopped', async () => {
+  const db = openDb();
+  db.exec(`INSERT INTO stores (id, name, platform, niche, currency, demo, connected) VALUES ('a', 'A', 'shopify', 'pet', 'USD', 1, 1)`);
+  const app = createApp(db);
+  const now = new Date();
+  const old = new Date(now.getTime() - 10 * 86_400_000).toISOString();
+  for (const p of ['ingestion', 'ingestion', 'search'] as const) recordCall(db, 'cj', p, p !== 'search', now);
+  const { id: listing } = upsertListing(db, { source: 'cj', sourceRef: '1', title: 'Brush', origin: 'ingest' });
+  db.prepare(`INSERT INTO pr_offers (id, listing_id, supplier, destination, quantity, currency, provenance, checked_at) VALUES ('o1', ?, 'CJdropshipping', 'US', 1, 'USD', 'live', ?)`).run(listing, old);
+  loadFixtures(db); // fixture offers are never "stale coverage"
+  markSource(db, 'cj', { ok: false, kind: 'auth', error: 'API key refused' }, now);
+  db.prepare(`UPDATE pr_sources SET quota_json = ? WHERE id = 'cj'`).run(JSON.stringify({ pointsRemaining: 49_900, pointsTotal: 50_000 }));
+  enqueue(db, { kind: 'ingest', source: 'cj', storeId: 'a', queries: ['dog'] }, now);
+
+  const h = (await (await app.request('/api/pr/source-health?store=a')).json()) as PrSourceHealth[];
+  const cj = h.find((s) => s.id === 'cj')!;
+  expect(cj).toMatchObject({
+    stopped: 'The credentials were refused: enter them again in Integrations.',
+    points: { remaining: 49_900, total: 50_000 },
+    callsToday: [
+      { purpose: 'ingestion', calls: 2, cap: 500 },
+      { purpose: 'search', calls: 1, cap: null },
+      { purpose: 'watch', calls: 0, cap: 100 },
+    ],
+    stale: 1,
+    canSync: false, // no CJ key in this database
+    syncing: true,
+    refreshHours: 24,
+  });
+  expect(cj.ledger.map((c) => [c.purpose, c.ok])).toEqual([['search', false], ['ingestion', true], ['ingestion', true]]);
+  expect(cj.jobs).toMatchObject([{ kind: 'ingest', status: 'queued', attempts: 0 }]);
+  expect(h.find((s) => s.id === 'google_trends_csv')).toMatchObject({ callsToday: [], ledger: [], stale: 0, canSync: false, refreshHours: null, stopped: null });
+
+  expect((await app.request('/api/pr/sources/nope/sync', { method: 'POST' })).status).toBe(404);
+  const r = await app.request('/api/pr/sources/cj/sync', { method: 'POST' });
+  expect([r.status, ((await r.json()) as { error: string }).error]).toEqual([409, expect.stringMatching(/^CJdropshipping isn't set up yet/)]);
 });

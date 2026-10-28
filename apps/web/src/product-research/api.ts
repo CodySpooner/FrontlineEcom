@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PrDiscovery, PrSourceState, PrStoreProfile } from '@frontline/shared';
+import type { PrDiscovery, PrSourceHealth, PrSourceState, PrStoreProfile } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -25,5 +25,22 @@ export function useSaveProfile(store: string) {
     mutationFn: (body: Partial<PrStoreProfile>) => api<PrStoreProfile>(`/api/pr/profile?${scope(store)}`, json('PUT', body)),
     // A save re-evaluates the store: its fit, scope and (with a new ship-to) costs all change.
     onSuccess: (p) => (qc.setQueryData(['pr', 'profile', store], p), qc.invalidateQueries({ queryKey: ['pr', 'products'] })),
+  });
+}
+
+/** The source health view; while a source syncs it refreshes every 5 s. */
+export const useSourceHealth = (store: string | null, enabled: boolean) =>
+  useQuery({
+    queryKey: ['pr', 'source-health', store],
+    queryFn: () => api<PrSourceHealth[]>(`/api/pr/source-health?${scope(store)}`),
+    enabled,
+    refetchInterval: (q) => (q.state.data?.some((s) => s.syncing) ? 5000 : false),
+  });
+
+export function useSyncSource() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api<{ jobs: number }>(`/api/pr/sources/${encodeURIComponent(id)}/sync`, { method: 'POST' }),
+    onSettled: () => qc.invalidateQueries({ queryKey: ['pr'] }),
   });
 }

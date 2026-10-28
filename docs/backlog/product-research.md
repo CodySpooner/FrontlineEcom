@@ -725,7 +725,7 @@ STOP.
   the dev-only fixture loader with its "Test fixture" labelling. Real data only: with no source connected, the
   first-use state. Say under Done whether the source-to-interface path ran on live data or on fixtures. The profile
   line's "Edit research profile" dialog edits `GET`/`PUT /api/pr/profile?store=` (PR-08).
-- [ ] PR-11 **Source health view:** every source's status from decision 4, last successful sync, errors, quota and the
+- [x] PR-11 **Source health view:** every source's status from decision 4, last successful sync, errors, quota and the
   call ledger, stale coverage, what the owner must do to connect it, and "Sync now" where it works. Opened from the
   source strip.
 
@@ -877,6 +877,13 @@ STOP.
   **Ran on fixtures only, not live data**: the dev DB has no `cj:global`, Trends import or feed. Screenshots (fixture
   data, layout and styling only) at 1440×900 and 1024×680, store and All stores scopes, no console errors and no
   sideways scroll. 15 tests (10 page, 5 server); 2 mutation checks on the page plus the server ones.
+- 2026-10-28 PR-11 source health: "Source health" in the strip opens a right-hand view with every source's access
+  status, state, last successful sync and attempt, last error and its kind, why it is stopped and what clears it,
+  rate and quota (CJ's reported points), today's calls against the daily caps, products with real data and fixture
+  rows, stale coverage (newest offer check over 7 days), what the owner does to connect it, recent jobs and the call
+  ledger (`GET /api/pr/source-health`). "Sync now" (`POST /api/pr/sources/:id/sync`) shows only for a scheduled source
+  that is set up. Checked in the dev app on fixtures: no source is set up there, so Sync now was absent, as intended;
+  the sync path itself is tested with a fake source only. 3 tests.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -908,6 +915,11 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-11 as built.** Sync now queues today's planned queries (one job per store plan) and runs them in the background
+  one at a time, then enriches; it refuses while a job is queued or running, clears a schema stop (the owner asking is
+  the "asks for a sync again" of decision 4), and still refuses an auth stop until new credentials and a quota stop
+  until 00:00 UTC. Store orders have no Sync now: they refresh daily from the synced orders. First use now lists the
+  sources that bring supplier products (not demand-only, not manual notes): CJ and the supplier feed.
 - **PR-10, decisions 1, 5, 12 and 14 as built.**
   - Decision 1 change: `api/client.ts` also exports its `api` and `json` helpers (two `export` keywords), so the new
     hooks in `product-research/api.ts` reuse its error handling instead of copying it. Nothing else there changed.

@@ -62,14 +62,19 @@ export function profileLine(store: Store, p: PrStoreProfile): string[] {
   ];
 }
 
+type Tone = 'good' | 'warn' | 'bad' | 'muted';
+const stateOf = (s: PrSourceState, now: number): [string, Tone] => {
+  if (s.fixtures && s.access !== 'verified') return ['test fixtures (not connected)', 'muted'];
+  if (s.status === 'stopped' || s.errorKind) return [`${s.status === 'stopped' ? 'stopped' : 'error'}: ${s.lastError ?? 'see Source health'}`, 'bad'];
+  if (s.access === 'verified') return [s.lastSuccessAt ? `synced ${ago(s.lastSuccessAt, now)}` : 'connected, not synced yet', 'good'];
+  if (s.access === 'authorized_import') return [s.products ? `imports, ${s.products} product${s.products === 1 ? '' : 's'}` : 'import a file to start', s.products ? 'good' : 'muted'];
+  if (s.access === 'manual_only') return ['manual notes only', 'muted'];
+  if (s.access === 'credentials_required') return ['not connected', 'warn'];
+  if (s.access === 'approval_required') return ['access pending approval', 'warn'];
+  return ['unsupported', 'muted'];
+};
 /** One source in the strip: its real state, never a placeholder. Tone: good (synced), warn (needs the owner), muted. */
-export function sourceItem(s: PrSourceState, now = Date.now()): { text: string; tone: 'good' | 'warn' | 'bad' | 'muted' } {
-  if (s.fixtures && s.access !== 'verified') return { text: `${s.name} · test fixtures (not connected)`, tone: 'muted' };
-  if (s.status === 'stopped' || s.errorKind) return { text: `${s.name} · ${s.status === 'stopped' ? 'stopped' : 'error'}: ${s.lastError ?? 'see Source health'}`, tone: 'bad' };
-  if (s.access === 'verified') return { text: `${s.name} · ${s.lastSuccessAt ? `synced ${ago(s.lastSuccessAt, now)}` : 'connected, not synced yet'}`, tone: 'good' };
-  if (s.access === 'authorized_import') return { text: `${s.name} · ${s.products ? `imports, ${s.products} product${s.products === 1 ? '' : 's'}` : 'import a file to start'}`, tone: s.products ? 'good' : 'muted' };
-  if (s.access === 'manual_only') return { text: `${s.name} · manual notes only`, tone: 'muted' };
-  if (s.access === 'credentials_required') return { text: `${s.name} · not connected`, tone: 'warn' };
-  if (s.access === 'approval_required') return { text: `${s.name} · access pending approval`, tone: 'warn' };
-  return { text: `${s.name} · unsupported`, tone: 'muted' };
+export function sourceItem(s: PrSourceState, now = Date.now()): { text: string; state: string; tone: Tone } {
+  const [state, tone] = stateOf(s, now);
+  return { text: `${s.name} · ${state}`, state, tone };
 }

@@ -15,6 +15,7 @@ import { ProductCard } from '../product-research/Card';
 import { activeFilters, discoveryQuery, FilterChips, type Filters } from '../product-research/Filters';
 import { countryName, profileLine, sourceItem } from '../product-research/format';
 import { ProfileDialog } from '../product-research/ProfileDialog';
+import { SourceHealth } from '../product-research/SourceHealth';
 
 const VIEW_LABEL: Record<PrView, string> = { all: 'All matches', demand: 'With demand evidence', new: 'Newly discovered', watchlist: 'Watchlist', flagged: 'Flagged' };
 const DOT = { good: 'bg-good', warn: 'bg-[#f5b84a]', bad: 'bg-red', muted: 'bg-muted' };
@@ -66,6 +67,7 @@ export function Research() {
   const currency = first?.currency ?? store?.currency ?? 'USD';
   const shipTo = store ? (profile.data?.shipTo ?? null) : allShipTo;
   const [editProfile, setEditProfile] = useState(false);
+  const [health, setHealth] = useState(false);
 
   // `/` focuses search; Esc closes the open product and returns focus to its card (a dialog handles its own Esc).
   const search = useRef<HTMLInputElement>(null);
@@ -210,8 +212,12 @@ export function Research() {
               </span>
             );
           })}
+          <button type="button" onClick={() => setHealth(true)} className="cursor-pointer text-red hover:underline">
+            Source health
+          </button>
         </div>
       )}
+      <SourceHealth open={health} onClose={() => setHealth(false)} store={store?.id ?? null} />
       {problems.map((s) => (
         <p key={s.id} role="status" className="mt-2.5 flex items-start gap-2 rounded-lg border border-red/30 bg-red/8 px-3 py-2 text-[12.5px] text-text-2">
           <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-red" />
@@ -281,7 +287,8 @@ function FirstUse({ sources }: { sources: PrSourceState[] }) {
       </span>
       <ul className="mt-2 grid max-w-[640px] gap-1.5 text-left text-[12.5px]">
         {sources
-          .filter((s) => s.access !== 'verified' && s.answers.includes('discovery'))
+          // The sources that bring supplier products in: not demand-only, and not manual notes (a note needs a product).
+          .filter((s) => s.access !== 'verified' && s.access !== 'manual_only' && s.answers.some((q) => q !== 'demand'))
           .map((s) => (
             <li key={s.id}>
               <b className="text-text">{s.name}:</b> {s.connect}

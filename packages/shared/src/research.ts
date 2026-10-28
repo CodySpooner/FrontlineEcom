@@ -246,3 +246,28 @@ export interface PrSourceState {
   /** Dev fixture rows from this source in the scope: the strip says "test fixtures (not connected)". */
   fixtures: number;
 }
+
+/** The source health view (PR-11): a source's state plus its limits, calls, jobs and coverage. */
+export interface PrSourceHealth extends PrSourceState {
+  rate: string;
+  quota: string;
+  /** Scheduled ingestion's interval; null: never scheduled. */
+  refreshHours: number | null;
+  lastAttemptAt: string | null;
+  /** Why the source is stopped and what clears it; null when it isn't. */
+  stopped: string | null;
+  /** The source's own quota as it last reported it (CJ's daily points). */
+  points: { remaining: number; total: number } | null;
+  /** Calls since 00:00 UTC per purpose, with the daily cap where there is one. */
+  callsToday: { purpose: string; calls: number; cap: number | null }[];
+  /** The newest 20 calls (`pr_calls`). */
+  ledger: { purpose: string; at: string; ok: boolean }[];
+  /** The newest 10 jobs. */
+  jobs: { id: string; kind: string; status: string; attempts: number; error: string | null; createdAt: string; finishedAt: string | null; nextAttemptAt: string | null }[];
+  /** Products in the scope whose newest offer check from this source is over 7 days old (a re-check is due). */
+  stale: number;
+  /** "Sync now" works: a scheduled source that is set up. */
+  canSync: boolean;
+  /** A job is queued or running. */
+  syncing: boolean;
+}

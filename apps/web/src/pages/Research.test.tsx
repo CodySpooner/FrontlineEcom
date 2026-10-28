@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { PrCard, PrDiscovery, PrSourceState, PrStoreProfile, Store } from '@frontline/shared';
+import type { PrCard, PrDiscovery, PrSourceHealth, PrSourceState, PrStoreProfile, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { discoveryQuery } from '../product-research/Filters';
 import { sourceItem } from '../product-research/format';
@@ -116,11 +116,21 @@ describe('Product Research page', () => {
   });
 
   it('first use: no source connected and nothing found says what to connect, from the server', async () => {
-    api({ items: [], sources: [source({}), source({ id: 'tiktok', name: 'TikTok Creative Center', answers: ['demand'], access: 'manual_only', connect: 'Add a note.' })] });
+    api({
+      items: [],
+      sources: [
+        source({}),
+        source({ id: 'tiktok', name: 'TikTok Creative Center', answers: ['discovery'], access: 'manual_only', connect: 'Add a note.' }),
+        source({ id: 'trends', name: 'Google Trends', answers: ['demand'], access: 'authorized_import', connect: 'Upload a CSV.' }),
+        source({ id: 'feed', name: 'Supplier feed', answers: ['fulfillment'], access: 'authorized_import', connect: 'Upload a feed.' }),
+      ],
+    });
     renderApp(<Research />, '/research');
     expect(await screen.findByText('No product sources connected yet')).toBeTruthy();
     expect(screen.getByText('Paste the API key in Integrations.')).toBeTruthy();
-    expect(screen.queryByText('Add a note.')).toBeNull(); // a demand-only source doesn't bring products
+    expect(screen.getByText('Upload a feed.')).toBeTruthy();
+    expect(screen.queryByText('Add a note.')).toBeNull(); // a note needs a product
+    expect(screen.queryByText('Upload a CSV.')).toBeNull(); // demand only
   });
 
   it('no match: names the filters that are set and clears them', async () => {
@@ -175,5 +185,39 @@ describe('Product Research page', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(screen.getByTestId('where').textContent).not.toContain('product='));
     expect(document.activeElement).toBe(screen.getByRole('article', { name: 'Slow feeder mat' }));
+  });
+});
+
+describe('Source health', () => {
+  const health = (o: Partial<PrSourceHealth> = {}): PrSourceHealth => ({
+    ...source({ access: 'verified', status: 'ok', lastSuccessAt: '2026-10-28T09:00:00Z', products: 4 }),
+    rate: '1 request a second', quota: '50,000 points a day', refreshHours: 24, lastAttemptAt: '2026-10-28T09:00:00Z', stopped: null,
+    points: { remaining: 49_900, total: 50_000 }, callsToday: [{ purpose: 'ingestion', calls: 2, cap: 500 }], ledger: [{ purpose: 'ingestion', at: '2026-10-28T09:00:00Z', ok: true }],
+    jobs: [], stale: 3, canSync: true, syncing: false, ...o,
+  });
+
+  it('opens from the strip with each source\'s limits and coverage, and Sync now only where it works', async () => {
+    let syncing = false;
+    const f = stubApi((url) => {
+      if (url.startsWith('/api/stores')) return [store];
+      if (url.startsWith('/api/pr/products')) return page([card()]);
+      if (url.startsWith('/api/pr/sources/cj/sync')) return (syncing = true), { jobs: 1 };
+      if (url.startsWith('/api/pr/sources')) return [source({ fixtures: 10 })];
+      if (url.startsWith('/api/pr/source-health')) return [health({ syncing }), health({ ...source({ id: 'tiktok', name: 'TikTok Creative Center', access: 'manual_only', connect: 'Add a note.' }), canSync: false, refreshHours: null, points: null, callsToday: [], ledger: [], stale: 0 })];
+      if (url.startsWith('/api/pr/profile')) return profile;
+      return [];
+    });
+    renderApp(<Research />, '/research');
+    fireEvent.click(await screen.findByRole('button', { name: 'Source health' }));
+    const cj = await screen.findByRole('region', { name: 'CJdropshipping' });
+    expect(within(cj).getByText('49,900 of 50,000 points left today')).toBeTruthy();
+    expect(within(cj).getByText('ingestion 2 of 500')).toBeTruthy();
+    expect(within(cj).getByText('3 products: newest offer check over 7 days old')).toBeTruthy();
+    const tiktok = screen.getByRole('region', { name: 'TikTok Creative Center' });
+    expect(within(tiktok).queryByRole('button', { name: 'Sync now' })).toBeNull();
+    expect(within(tiktok).getByText('Add a note.')).toBeTruthy();
+    fireEvent.click(within(cj).getByRole('button', { name: 'Sync now' }));
+    await waitFor(() => expect(f.mock.calls.some(([u, i]) => u === '/api/pr/sources/cj/sync' && i?.method === 'POST')).toBe(true));
+    expect(await within(cj).findByRole('button', { name: 'Syncing…' })).toBeTruthy();
   });
 });
