@@ -74,25 +74,25 @@ const redact = (ctx: CjCtx, init: RequestInit, text: string) =>
   [ctx.apiKey?.trim(), (init.headers as Record<string, string> | undefined)?.['CJ-Access-Token']].reduce<string>((t, s) => (s ? t.split(s).join('[redacted]') : t), text);
 
 /**
- * One CJ call: checks the caps, waits its turn, times out after 60 s (the live check saw listV2 take 25 s), and records
- * itself in pr_calls. Success is CJ's documented rule: HTTP 200 and a code of 200 or 0, or no code at all. Throws
+ * One CJ call: reserves its cap slot, waits its turn, times out after 60 s (the live check saw listV2 take 25 s), and
+ * updates its pr_calls result. Success is CJ's documented rule: HTTP 200 and a code of 200 or 0, or no code at all. Throws
  * CjError with the failure's class.
  */
 async function call<T>(ctx: CjCtx, path: string, init: RequestInit): Promise<T> {
   const refused = refusal(ctx.db, 'cj', ctx.purpose);
   if (refused) throw new CjError('quota', refused);
+  const reserved = recordCall(ctx.db, 'cj', ctx.purpose, false).lastInsertRowid;
   await turn(ctx.purpose, ctx.gapMs);
   let res: Response;
   try {
     res = await ctx.fetchFn(`${API}${path}`, { ...init, signal: AbortSignal.timeout(60_000) });
   } catch (e) {
-    recordCall(ctx.db, 'cj', ctx.purpose, false);
     const timeout = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
     throw new CjError(timeout ? 'timeout' : 'server', timeout ? 'no answer within 60 s' : redact(ctx, init, e instanceof Error ? e.message : String(e)));
   }
   const body = (await res.json().catch(() => ({}))) as Partial<CjResponse<T>>;
   const ok = res.ok && (body.code === undefined || body.code === 200 || body.code === 0);
-  recordCall(ctx.db, 'cj', ctx.purpose, ok);
+  ctx.db.prepare('UPDATE pr_calls SET ok = ? WHERE id = ?').run(ok ? 1 : 0, reserved);
   if (body.pointsInfo?.remaining !== undefined) {
     const at = new Date().toISOString();
     const quota = JSON.stringify({ pointsRemaining: body.pointsInfo.remaining, pointsTotal: body.pointsInfo.total ?? null, at });

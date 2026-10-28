@@ -35,8 +35,8 @@ export const callsToday = (db: Db, source: string, purpose: CallPurpose, now = n
 const devApp = () => !process.env.FRONTLINE_WEB_DIR;
 
 /**
- * Why a call may not be made now, or undefined when it may. Checked before every metered call; the call is then
- * recorded with `recordCall`, whatever its outcome.
+ * Why a call may not be made now, or undefined when it may. Reserve with `recordCall` before yielding so queued
+ * calls count too; failed or interrupted calls retain their reservation.
  */
 export function refusal(db: Db, source: string, purpose: CallPurpose, now = new Date()): string | undefined {
   const cap = DAILY[purpose];

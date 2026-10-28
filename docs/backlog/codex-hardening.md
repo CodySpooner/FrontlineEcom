@@ -70,7 +70,7 @@ the approval and cap-counter sections of `packages/agents/src/tools.ts`, `apps/s
   (`agents-actions.ts` ~16-35); a failure is only logged and nothing replays or flags it after a crash or quit. Smallest
   tightening fix if one exists (for example: on start, mark approved rows with no applied/not-applied record as not
   applied, with a visible note); otherwise file it with that proposal.
-- [ ] CH-04 CJ daily cap race: `refusal()` runs before `await turn()` and `recordCall` only after the fetch
+- [x] CH-04 CJ daily cap race: `refusal()` runs before `await turn()` and `recordCall` only after the fetch
   (`cj.ts` ~82-84), so calls queued at the same moment all pass the cap (`caps.ts` ~41-48). Reserve before waiting;
   a test with concurrent calls proves the cap holds.
 - [ ] CH-05 Sweep the rest of the map from CH-01 for the same classes: check-then-act races, caps counted after the
@@ -159,6 +159,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-04: CJ reserves one `pr_calls` row synchronously before waiting, then updates its result; failed/interrupted calls keep the reservation. Four failing regressions proved concurrent ingestion/watch/dev-total overbooking and absent in-flight accounting; 31 focused tests and `pnpm check` green (230 files / 1,703 tests). No live requests.
 
 - 2026-10-28 CH-03: traced approval commit → process event → deferred dispatch → log-only catch; filed durable execution/reconciliation design in agents Inbox. Automatic replay or labelling every unmarked historical approval not-applied would misrepresent possibly completed writes, so no speculative recovery was added.
 
