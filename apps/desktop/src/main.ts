@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, screen, shell, Tray, utilityProcess } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeImage, Notification, safeStorage, screen, session, shell, Tray, utilityProcess } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -91,6 +91,10 @@ async function start() {
   win.webContents.on('will-navigate', (e, to) => {
     if (new URL(to).origin !== new URL(url).origin) e.preventDefault();
   });
+  // The API sends the web build with Last-Modified and no Cache-Control, so Chromium may treat the previous version's
+  // index.html as fresh for hours after an update (same origin, stable port) and load the old UI. Start each launch
+  // with an empty HTTP cache; storage (onboarding, filters) is separate and stays.
+  await session.defaultSession.clearCache();
   await win.loadURL(url);
   checkForUpdates();
   // Settings' "Open folder": only the app's own data folder, so the page can't have any other path opened.
