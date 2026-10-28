@@ -1200,6 +1200,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 `.agent/STOP` exists.
 
 ## Inbox
+- [ ] (from codex-hardening, CH-13 / Q2) Unknown enabled CLI features pass featuresChanged. Add an optional nonblocking warning to RuntimeCapabilities and render it in runtime status/selection, then compare an untested CLI listing with the checked-in 0.163.0 feature names: any new true row warns by name. Keep connected=true when signed in, and preserve the existing refusal for known-off features missing/enabled. Pin a fixture with a new enabled feature plus an off-feature control. Do not use reason: configs.ts refuses every runtime with reason. Shared status/UI files are outside hardening Phase C; proposed default is warn, not disable.
 - [ ] (from codex-hardening, CH-05 / Q1) Decision 9 says Codex/Demo are never bounded by dollar caps and decision 12 excludes them from team spend; confirmed `codex.ts` reports tokens with costUsd 0. However `runs.ts` start checks store/agent dollar caps before resolving the runtime, and pump/execute apply those shares to all runtimes. Proposed default: runtime-aware admission/seating consistent with decision 9, keeping Codex Stop-after mandatory. Hardening left this unchanged because removing a refusal is outside its tighten-only authority.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 - [x] (from product-research) A `product` ConversationContext kind, so a conversation opened from Product Research

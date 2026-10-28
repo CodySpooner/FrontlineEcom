@@ -39,6 +39,8 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
 
 ## Notes (owner questions; work goes on with the default)
 
+- CH-13 filed to AI Agents Inbox: a nonblocking status warning needs an additive shared field plus UI rendering outside Phase C. Q2 default remains warn; no misuse of the disabling reason field.
+
 - CH-03 filed in `docs/backlog/agents.md` Inbox: durable action execution state with an "unknown after interruption" outcome and owner reconciliation, no automatic replay. An absent marker cannot prove no live write occurred; existing successful ad writes also lack receipts. Default is no recovery behaviour change until that design is implemented.
 - CH-05 design/ownership filings: agents Inbox (agent/team share overbooking, concurrent theme copies, duplicate product batches and numeric validation), KB Inbox (approval→task reservation gap), Product Research Inbox (queued CJ calls crossing UTC midnight), core Inbox for Settings (store-zone cap resets). Proposed defaults are included in each filing; current policies remain.
 - Q1 resolved from AI Agents decisions 9 and 12 (`docs/backlog/ai-agents.md`): Codex records tokens, has no measured USD charge and is intended to be bounded by Stop-after, not dollar caps; no cost behaviour change. Filed a contradictory shared admission/seating refusal to that lane because removing it would loosen a guard.
@@ -200,3 +202,5 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   - Creative generation: used + pending credit cap → approval, recheck and synchronous charge before render → creative or failure with credits retained. CJ: refusal before queue, HTTP fetch, then `pr_calls` → simultaneous callers can overbook the daily cap (CH-04).
 
 ## Blocked
+
+- 2026-10-28 CH-13: unknown-on detection/status warning deferred to AI Agents. RuntimeCapabilities has no warning field; reason disables the runtime in configs.ts and UI. Implement the proposed field/rendering plus baseline feature fixture there; keep Codex available for unknown-on warnings and retain known-off refusal. No partial detector or silent status field shipped.
