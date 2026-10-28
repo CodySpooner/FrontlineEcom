@@ -24,7 +24,7 @@ export function productDetail(db: Db, id: string, store: Store | null, shipTo: s
     .prepare(`SELECT id, url FROM pr_listings WHERE product_id = ? AND origin != 'legacy_sample' ${store ? 'AND (store_id IS NULL OR store_id = ?)' : ''} ORDER BY store_id IS NOT NULL, first_seen_at LIMIT 1`)
     .get(id, ...(store ? [store.id] : []))!;
   const url = str(l.url);
-  const e = store ? db.prepare('SELECT fit, fit_reasons_json, flags_json, flag_dismissals_json FROM pr_evaluations WHERE store_id = ? AND product_id = ?').get(store.id, id) : undefined;
+  const e = store ? db.prepare('SELECT fit, fit_reasons_json, flags_json, flag_dismissals_json, notes FROM pr_evaluations WHERE store_id = ? AND product_id = ?').get(store.id, id) : undefined;
   let flags: PrFlag[] | null = null;
   if (store && e?.flags_json != null) {
     const dismissed = JSON.parse(String(e.flag_dismissals_json ?? '{}')) as Record<string, unknown>;
@@ -41,7 +41,7 @@ export function productDetail(db: Db, id: string, store: Store | null, shipTo: s
     : db
         .prepare(
           `SELECT s.id, s.name, coalesce(e.stage, 'discovered') AS stage FROM stores s LEFT JOIN pr_evaluations e ON e.store_id = s.id AND e.product_id = ?
-           WHERE s.id IN (SELECT store_id FROM pr_stage_history WHERE product_id = ?) ORDER BY s.name`,
+           WHERE s.id IN (SELECT store_id FROM pr_stage_history WHERE product_id = ? AND kind = 'stage') ORDER BY s.name`,
         )
         .all(id, id)
         .map((r) => ({ id: String(r.id), name: String(r.name), stage: String(r.stage) as PrStage }));
@@ -57,6 +57,7 @@ export function productDetail(db: Db, id: string, store: Store | null, shipTo: s
       flags,
       confidence: { level: count >= 3 ? 'high' : count === 2 ? 'medium' : 'low', count, has },
     },
+    notes: str(e?.notes),
     agentEstimates: estimates ? ((JSON.parse(String(estimates.transform_json ?? '{}')) as { estimates?: Record<string, unknown> }).estimates ?? null) : null,
     stores,
   };
@@ -130,7 +131,7 @@ export const productHistory = (db: Db, id: string, store: string | null): PrHist
 export function assign(db: Db, id: string, storeId: string, now = new Date()): { error: string; status: 404 | 409 } | null {
   const store = listStores(db).find((s) => s.id === storeId);
   if (!store || !productVisible(db, id, store.id)) return { error: 'That store cannot see this product.', status: 404 };
-  if (db.prepare('SELECT 1 FROM pr_stage_history WHERE store_id = ? AND product_id = ?').get(store.id, id)) return { error: `It is already in ${store.name}'s pipeline.`, status: 409 };
+  if (db.prepare("SELECT 1 FROM pr_stage_history WHERE store_id = ? AND product_id = ? AND kind = 'stage'").get(store.id, id)) return { error: `It is already in ${store.name}'s pipeline.`, status: 409 };
   evaluate(db, store, id, now);
   db.prepare(`INSERT INTO pr_stage_history (id, store_id, product_id, kind, from_stage, to_stage, reason, by, at) VALUES (?, ?, ?, 'stage', NULL, 'discovered', 'Assigned from All stores', 'owner', ?)`).run(
     randomUUID(),

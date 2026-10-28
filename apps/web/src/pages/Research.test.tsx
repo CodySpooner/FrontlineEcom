@@ -227,7 +227,7 @@ describe('Detail panel', () => {
   const detail = (o: Partial<PrProductDetail> = {}): PrProductDetail => ({
     card: card({ fixture: false }), currency: 'USD', shipTo: 'US', sku: 'CJ-BRUSH-M', url: 'https://cjdropshipping.com/p/1',
     assessment: { fit: { fit: 'weak', reasons: ['battery', 'Missing price band'] }, demand: { level: 'moderate', sets: 1, ownOrders: false }, flags: [], confidence: { level: 'low', count: 1, has: { demand: true, offer: false, economics: false, report: false } } },
-    agentEstimates: null, stores: [], ...o,
+    notes: null, agentEstimates: null, stores: [], ...o,
   });
   const set: PrDemandTab['sets'][number] = {
     id: 's1', platform: 'google_trends', query: 'dog brush', region: 'US', granularity: 'week', metric: 'interest_over_time', scope: 'product', origin: 'import', periodStart: '2024-11-03', periodEnd: '2026-10-25',
@@ -303,5 +303,54 @@ describe('Detail panel', () => {
     expect(screen.getByTestId('where').textContent).toContain('product=p1');
     fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Product details' })).toBeNull());
+  });
+
+  it('owner edits: a stage move asks why, a flag is dismissed with a reason, notes save, and a Creative Center note is added', async () => {
+    const flag = { id: 'restricted:batteries', label: 'Batteries', kind: 'restricted' as const, reason: 'Title mentions "rechargeable"' };
+    const f = panelApi(detail({ assessment: { ...detail().assessment, flags: [flag] } }));
+    renderApp(<Research />, '/research?store=paws&product=p1');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    fireEvent.change(await within(panel).findByRole('combobox', { name: 'Stage' }), { target: { value: 'shortlisted' } });
+    const why = within(panel).getByRole('textbox', { name: /Why move it to Shortlisted/ });
+    expect((within(panel).getByRole('button', { name: 'Move' }) as HTMLButtonElement).disabled).toBe(true); // no reason yet
+    fireEvent.change(why, { target: { value: 'Ships in 8 days' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Move' }));
+    await waitFor(() => expect(calls(f, '/api/pr/products/p1/stage?store=paws')).toHaveLength(1));
+    expect(bodyOf(f, '/stage?')).toEqual({ stage: 'shortlisted', reason: 'Ships in 8 days' });
+
+    fireEvent.click(within(panel).getByRole('button', { name: 'Dismiss…' }));
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Why Batteries does not apply' }), { target: { value: 'Sealed USB-C cell' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Dismiss' }));
+    await waitFor(() => expect(calls(f, '/api/pr/products/p1/flags/restricted%3Abatteries/dismiss?store=paws')).toHaveLength(1));
+    expect(bodyOf(f, '/dismiss?')).toMatchObject({ reason: 'Sealed USB-C cell' });
+
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Your notes' }), { target: { value: 'Ask for a UK warehouse ' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save notes' }));
+    await waitFor(() => expect(calls(f, '/api/pr/products/p1/store-notes?store=paws')).toHaveLength(1));
+    expect(bodyOf(f, '/store-notes?')).toEqual({ notes: 'Ask for a UK warehouse' });
+
+    fireEvent.click(within(panel).getByRole('tab', { name: 'Demand' }));
+    fireEvent.change(await within(panel).findByRole('textbox', { name: 'Link you looked at' }), { target: { value: 'https://ads.tiktok.com/business/creativecenter/x' } });
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'What you saw' }), { target: { value: '3 creators posted it this week' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Add note' }));
+    await waitFor(() => expect(calls(f, '/api/pr/products/p1/notes?store=paws')).toHaveLength(1));
+    expect(bodyOf(f, '/notes?')).toMatchObject({ platform: 'tiktok_creative_center', url: 'https://ads.tiktok.com/business/creativecenter/x', note: '3 creators posted it this week' });
+  });
+
+  it("Watch: the card's eye watches without opening the card; All stores' panel watches for all stores", async () => {
+    const f = panelApi();
+    renderApp(<Research />, '/research?store=paws');
+    fireEvent.click(await screen.findByRole('button', { name: 'Watch Silicone grooming brush' }));
+    await waitFor(() => expect(calls(f, '/api/pr/products/p1/watch?store=paws')).toHaveLength(1));
+    expect(bodyOf(f, '/watch?store=paws')).toEqual({ on: true });
+    expect(screen.getByTestId('where').textContent).not.toContain('product=');
+    cleanup();
+    const g = panelApi();
+    renderApp(<Research />, '/research?store=all&product=p1');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Watch for all stores' }));
+    await waitFor(() => expect(calls(g, '/api/pr/products/p1/watch?')).toHaveLength(1));
+    expect(within(panel).queryByRole('combobox', { name: 'Stage' })).toBeNull();
+    expect(within(panel).queryByRole('textbox', { name: 'Your notes' })).toBeNull();
   });
 });

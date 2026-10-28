@@ -293,6 +293,8 @@ export interface PrProductDetail {
     flags: PrFlag[] | null;
     confidence: { level: 'low' | 'medium' | 'high'; count: number; has: { demand: boolean; offer: boolean; economics: boolean; report: boolean } };
   };
+  /** Store scope: the owner's notes on the product in this store (owner-provided, never evidence). */
+  notes: string | null;
   /** An agent find's own numbers (decision 2): shown collapsed as "Agent's estimates (not evidence)", never used. */
   agentEstimates: Record<string, unknown> | null;
   /** All stores: the stores with this product in their pipeline, and its stage there. */

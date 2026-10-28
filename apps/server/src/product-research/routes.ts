@@ -4,6 +4,7 @@ import { log } from '../log';
 import { productVisible } from './catalog';
 import { assign, productDemand, productDetail, productHistory, productOffers } from './detail';
 import { discover, parseDiscovery } from './discovery';
+import { changeStage, dismissFlag, saveNotes, watchProduct } from './edits';
 import { evaluateStore, refreshProduct } from './evaluate';
 import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
 import { importFeed } from './feed';
@@ -146,6 +147,42 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if (!Number.isFinite(observed.getTime()) || observed.getTime() > Date.now() + 86_400_000) return c.json({ error: 'observedAt must be the date you looked' }, 400);
       const id = addNote(db, store.id, c.req.param('id'), { platform: String(body!.platform), url: body!.url, note: body!.note.trim(), observedAt: observed.toISOString() });
       return c.json({ id }, 201);
+    })
+    .post('/api/pr/products/:id/stage', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const body = (await c.req.json().catch(() => undefined)) as { stage?: unknown; reason?: unknown } | undefined;
+      const reason = typeof body?.reason === 'string' ? body.reason.trim().slice(0, 500) : '';
+      const err = changeStage(db, store, c.req.param('id'), String(body?.stage ?? ''), reason);
+      return err ? c.json({ error: err.error }, err.status) : c.json({ ok: true });
+    })
+    .put('/api/pr/products/:id/store-notes', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const body = (await c.req.json().catch(() => undefined)) as { notes?: unknown } | undefined;
+      if (typeof body?.notes !== 'string' || body.notes.length > 4000) return c.json({ error: 'notes must be text (up to 4,000 characters)' }, 400);
+      saveNotes(db, store, c.req.param('id'), body.notes.trim());
+      return c.json({ ok: true });
+    })
+    .post('/api/pr/products/:id/flags/:flag/dismiss', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const body = (await c.req.json().catch(() => undefined)) as { reason?: unknown } | undefined;
+      const err = dismissFlag(db, store, c.req.param('id'), c.req.param('flag'), typeof body?.reason === 'string' ? body.reason.trim().slice(0, 500) : '');
+      return err ? c.json({ error: err.error }, err.status) : c.json({ ok: true });
+    })
+    // The watch toggle: a store's list, or the owner's all-stores list (the only private write in All stores).
+    .put('/api/pr/products/:id/watch', async (c) => {
+      const s = scopeOf(c, db);
+      if (s instanceof Response) return s;
+      if (!productVisible(db, c.req.param('id'), s.store?.id ?? null)) return c.json({ error: 'product not found' }, 404);
+      const body = (await c.req.json().catch(() => undefined)) as { on?: unknown } | undefined;
+      if (typeof body?.on !== 'boolean') return c.json({ error: 'body must be { on: true | false }' }, 400);
+      watchProduct(db, s.store, c.req.param('id'), body.on);
+      return c.json({ watched: body.on });
     })
     .post('/api/pr/products/:id/store-products', async (c) => {
       const store = storeOf(c, db);

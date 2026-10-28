@@ -1,8 +1,9 @@
 import { useState, type KeyboardEvent, type ReactNode } from 'react';
-import { Package } from 'lucide-react';
+import { Eye, Package } from 'lucide-react';
 import { PR_FIT_LABEL, PR_FULFILLMENT_LABEL, PR_STAGE_LABEL, type PrCard, type PrFulfillment, type PrStage } from '@frontline/shared';
 import { cx } from '../components/ui';
 import { ago } from '../lib/format';
+import { useWatch } from './api';
 import { conditionsLine, demandLines, minorMoney, sourceLine } from './format';
 
 // The board's pills (docs/reference/product-research-workspace.html `.pill`, `.good`, `.warn`, `.bad`, `.run`).
@@ -26,6 +27,25 @@ const Row = ({ label, children }: { label: string; children: ReactNode }) => (
   </div>
 );
 const Sub = ({ children }: { children: ReactNode }) => <span className="block text-[11px] text-muted">{children}</span>;
+
+/** The card's watch toggle: the store's list, or the owner's all-stores list. It never opens the card. */
+function WatchEye({ c, scope }: { c: PrCard; scope: string | null }) {
+  const watch = useWatch(c.id, scope);
+  return (
+    <button
+      type="button"
+      aria-label={`Watch ${c.title}`}
+      aria-pressed={c.watched}
+      title={c.watched ? 'Watching: click to stop' : 'Watch'}
+      disabled={watch.isPending}
+      onClick={(e) => (e.stopPropagation(), watch.mutate({ on: !c.watched }))}
+      onKeyDown={(e) => e.stopPropagation()}
+      className={cx('absolute top-[7px] right-[7px] grid size-[30px] cursor-pointer place-items-center rounded-lg border border-line-2 bg-[rgb(8_8_10/.7)] hover:text-text', c.watched ? 'text-red' : 'text-text-2')}
+    >
+      <Eye aria-hidden className="size-3.5" strokeWidth={c.watched ? 2.6 : 2} />
+    </button>
+  );
+}
 
 /** One product card as on the board. `store`: the store scope's name (stage, fit and the footer), null in All stores. */
 export function ProductCard({
@@ -81,6 +101,7 @@ export function ProductCard({
           {store && c.stage && <Pill tone={STAGE_TONE[c.stage]}>{PR_STAGE_LABEL[c.stage]}</Pill>}
           {c.fixture && <Pill tone="warn">Test fixture</Pill>}
         </span>
+        <WatchEye c={c} scope={scope} />
       </div>
       <div className="flex flex-1 flex-col gap-2 p-3">
         <div>

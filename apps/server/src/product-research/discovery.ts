@@ -323,7 +323,7 @@ function card(db: Db, r: Record<string, unknown>, ctx: { store: Store | null; sh
     demandSets: Number(r.demand_sets ?? 0) + (mine ? 1 : 0),
     fit: store && r.fit ? { fit: String(r.fit) as PrFit, reason: (JSON.parse(String(r.fit_reasons_json ?? '[]')) as string[])[0] ?? '' } : null,
     flags,
-    storesEvaluating: store ? 0 : Number(db.prepare('SELECT count(DISTINCT store_id) AS n FROM pr_stage_history WHERE product_id = ?').get(id)?.n ?? 0),
+    storesEvaluating: store ? 0 : Number(db.prepare("SELECT count(DISTINCT store_id) AS n FROM pr_stage_history WHERE product_id = ? AND kind = 'stage'").get(id)?.n ?? 0),
     firstSeenAt: str(r.first_seen_at),
     evidenceAt: str(r.evidence_at),
   };

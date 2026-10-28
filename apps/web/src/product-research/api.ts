@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PrDiscovery, PrProductDetail, PrSourceHealth, PrSourceState, PrStoreProfile } from '@frontline/shared';
+import type { PrDiscovery, PrProductDetail, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -63,3 +63,10 @@ function usePrWrite<B>(path: (b: B) => string, method = 'POST') {
 export const useLinkSet = (store: string | null) => usePrWrite<{ signalId: string; productId: string; confirmed: boolean }>((b) => `/api/pr/signals/${enc(b.signalId)}/links?${scope(store)}`);
 export const useImportTrends = (store: string | null) => usePrWrite<{ name: string; csv: string; productId: string }>(() => `/api/pr/imports/trends?${scope(store)}`);
 export const useAssign = (id: string) => usePrWrite<{ storeId: string }>(() => `/api/pr/products/${enc(id)}/assign`);
+
+/** The owner's edits (PR-13): each is kept in History; store scope only, except Watch (the all-stores list). */
+export const useChangeStage = (id: string, store: string) => usePrWrite<{ stage: PrStage; reason: string }>(() => `/api/pr/products/${enc(id)}/stage?${scope(store)}`);
+export const useSaveNotes = (id: string, store: string) => usePrWrite<{ notes: string }>(() => `/api/pr/products/${enc(id)}/store-notes?${scope(store)}`, 'PUT');
+export const useDismissFlag = (id: string, store: string) => usePrWrite<{ flag: string; reason: string }>((b) => `/api/pr/products/${enc(id)}/flags/${enc(b.flag)}/dismiss?${scope(store)}`);
+export const useAddNote = (id: string, store: string) => usePrWrite<{ platform: 'tiktok_creative_center'; url: string; note: string; observedAt: string }>(() => `/api/pr/products/${enc(id)}/notes?${scope(store)}`);
+export const useWatch = (id: string, store: string | null) => usePrWrite<{ on: boolean }>(() => `/api/pr/products/${enc(id)}/watch?${scope(store)}`, 'PUT');

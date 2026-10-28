@@ -734,7 +734,7 @@ STOP.
   the chart from stored points, "Import a Trends CSV" on Demand (`POST /api/pr/imports/trends` with `productId`), and
   the query-level sets suggested for the product with Confirm / Not this product (`POST /api/pr/signals/:id/links`), Suppliers with offers and statuses, History, the agent-find estimates block, and the
   All stores panel with "Assign to a store…". Progressive loading per tab.
-- [ ] PR-13 **Owner edits:** stage changes with reason (history), notes, flag dismissal with reason, Watch toggle (with
+- [x] PR-13 **Owner edits:** stage changes with reason (history), notes, flag dismissal with reason, Watch toggle (with
   the "Saved" mirror), confirming a query-scope demand set, manual Creative Center notes, owner-provided fields tagged
   as such.
 
@@ -894,6 +894,14 @@ STOP.
   a store, then switches to that store with the panel still open. `GET /api/pr/products/:id`, `/demand`, `/offers`,
   `/history`, `POST /:id/assign`. Checked in the dev app on fixtures (store scope, All stores, 900 px drawer); Confirm,
   the import and Assign are tested against stubs and the server tests only. 6 tests.
+- 2026-10-28 PR-13 owner edits: the panel's Stage select asks why and keeps the move in History
+  (`POST /api/pr/products/:id/stage`, reason required), the store's notes (`PUT …/store-notes`, owner-provided), a
+  flag dismissed with a reason (`POST …/flags/:flag/dismiss`; fit, open flags and the Flagged view re-evaluate for that
+  store only), Watch on the card's eye and under the panel (`PUT …/watch`; a store's list, or in All stores the owner's
+  all-stores list; a legacy research row is watched through its listing so "Saved" mirrors it), the Creative Center
+  note form on Demand, and owner-entered offers labelled "Owner-provided". Confirming a query-level set shipped with
+  PR-12. Checked in the dev app on fixtures with the forms opened, not submitted; the writes are tested on the server
+  and against stubs. 5 tests.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -925,6 +933,13 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-13 as built.** Every owner stage move needs a reason (500 characters), not only Rejected: decision 5 keeps
+  "who and why" for each change. "In a store's pipeline" (`n stores evaluating`, the panel's store list, Assign's 409)
+  now counts only `kind = 'stage'` History rows, so a watch, a note or a flag dismissal doesn't put a product there.
+  Watches and dismissals in a store write History; an all-stores watch has no History row (History rows belong to a
+  store). Notes are one text per store and product (`pr_evaluations.notes`); the spec's "owners" column
+  (`pr_evaluations.owner`) has no control yet: the app has one owner. A dismissed flag can't be restored from the
+  panel yet; add "Restore" if the owner asks.
 - **PR-12 as built.** The Stage select arrives with PR-13 (a stage change needs its reason form); until then the header
   shows the stage as a pill. Economics and differentiation read "Not assessed yet" and have no tab until PR-18 and
   PR-17 (decision 1). An offer's status on Suppliers is decision 8 run on that row alone, for its own destination and

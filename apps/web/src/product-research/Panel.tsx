@@ -1,21 +1,24 @@
 import { useState, type ReactNode } from 'react';
-import { ExternalLink, Package, X } from 'lucide-react';
+import { ExternalLink, Eye, Package, X } from 'lucide-react';
 import {
   PR_DEMAND_LABEL,
   PR_DEMAND_LEVEL_LABEL,
   PR_FIT_LABEL,
   PR_FULFILLMENT_LABEL,
   PR_STAGE_LABEL,
+  PR_STAGES,
   type PrDemandTab,
+  type PrFlag,
   type PrHistoryRow,
   type PrOffer,
   type PrProductDetail,
   type PrSignalSet,
+  type PrStage,
   type Store,
 } from '@frontline/shared';
 import { AreaChart } from '../components/AreaChart';
 import { Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Tabs } from '../components/ui';
-import { useAssign, useImportTrends, useLinkSet, useProductDetail, useProductTab } from './api';
+import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useProductDetail, useProductTab, useSaveNotes, useWatch } from './api';
 import { Pill, TONE } from './Card';
 import { conditionsLine, countryName, demandLines, minorMoney, sourceLine } from './format';
 
@@ -89,6 +92,9 @@ export function DetailPanel({
             {tab === 'demand' && <Demand id={id} scope={scope} />}
             {tab === 'suppliers' && <Suppliers id={id} scope={scope} />}
             {tab === 'history' && <History id={id} scope={scope} stores={stores} />}
+            <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+              <WatchButton id={id} scope={scope} watched={d!.card.watched} />
+            </div>
           </>
         )}
       </aside>
@@ -123,14 +129,142 @@ function Header({ d, scope, store, onClose }: { d: PrProductDetail; scope: strin
           )}
         </p>
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {store && c.stage && <Pill>{`Stage: ${PR_STAGE_LABEL[c.stage]}`}</Pill>}
           {c.fixture && <Pill tone="warn">Test fixture</Pill>}
+          {store && c.stage && <StageSelect key={c.stage} id={c.id} store={store} stage={c.stage} />}
         </div>
       </div>
       <button type="button" aria-label="Close details" onClick={onClose} className="grid size-7 shrink-0 cursor-pointer place-items-center rounded-md text-muted hover:bg-white/5 hover:text-text">
         <X className="size-4" />
       </button>
     </header>
+  );
+}
+
+/** The header's Stage select: a move needs the owner's reason, kept in History (decision 5). */
+function StageSelect({ id, store, stage }: { id: string; store: Store; stage: PrStage }) {
+  const [to, setTo] = useState<PrStage | null>(null);
+  const [reason, setReason] = useState('');
+  const move = useChangeStage(id, store.id);
+  const cancel = () => (setTo(null), setReason(''), move.reset());
+  return (
+    <>
+      <label className="inline-flex items-center gap-0.5 rounded-full border border-[#33333b] bg-[#0e0e11] py-0.5 pr-1 pl-2.5 text-xs text-muted">
+        Stage
+        <select value={to ?? stage} onChange={(e) => setTo(e.target.value === stage ? null : (e.target.value as PrStage))} className="cursor-pointer border-0 bg-transparent px-1 text-xs font-semibold text-text [field-sizing:content] focus:outline-none">
+          {PR_STAGES.map((s) => (
+            <option key={s} value={s}>
+              {PR_STAGE_LABEL[s]}
+            </option>
+          ))}
+        </select>
+      </label>
+      {to && (
+        <form
+          className="mt-1 grid w-full gap-1.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            move.mutate({ stage: to, reason: reason.trim() });
+          }}
+        >
+          <label className="grid gap-1 text-xs text-text-2">
+            {`Why move it to ${PR_STAGE_LABEL[to]}? Kept in History.`}
+            <input autoFocus value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), cancel())} className={cx(inputClass, 'py-1.5 text-xs')} />
+          </label>
+          <div className="flex gap-2">
+            <Button size="sm" type="submit" disabled={!reason.trim() || move.isPending}>
+              Move
+            </Button>
+            <Button size="sm" variant="ghost" onClick={cancel}>
+              Cancel
+            </Button>
+          </div>
+          {move.error && (
+            <p role="alert" className="text-xs text-red">
+              {move.error.message}
+            </p>
+          )}
+        </form>
+      )}
+    </>
+  );
+}
+
+/** One open flag; in a store, the owner can dismiss it with a reason (decision 10), kept in History. */
+function FlagItem({ f, id, store }: { f: PrFlag; id: string; store: Store | null }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const dismiss = useDismissFlag(id, store?.id ?? '');
+  return (
+    <li>
+      <b className="text-[#f5b84a]">{f.label}</b>: {f.reason}
+      {store && !open && (
+        <button type="button" onClick={() => setOpen(true)} className="ml-1.5 cursor-pointer text-red hover:underline">
+          Dismiss…
+        </button>
+      )}
+      {open && (
+        <form
+          className="mt-1 flex gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            dismiss.mutate({ flag: f.id, reason: reason.trim() });
+          }}
+        >
+          <input
+            autoFocus
+            aria-label={`Why ${f.label} does not apply`}
+            placeholder="Why it doesn't apply"
+            value={reason}
+            maxLength={500}
+            onChange={(e) => setReason(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setOpen(false))}
+            className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')}
+          />
+          <Button size="sm" type="submit" disabled={!reason.trim() || dismiss.isPending}>
+            Dismiss
+          </Button>
+        </form>
+      )}
+      {dismiss.error && (
+        <p role="alert" className="text-red">
+          {dismiss.error.message}
+        </p>
+      )}
+    </li>
+  );
+}
+
+/** The store's own notes on the product: owner-provided, never evidence. */
+function Notes({ id, store, notes }: { id: string; store: Store; notes: string | null }) {
+  const [text, setText] = useState(notes ?? '');
+  const save = useSaveNotes(id, store.id);
+  const dirty = text.trim() !== (notes ?? '');
+  return (
+    <Section title="Your notes (owner-provided)">
+      <textarea aria-label="Your notes" value={text} rows={3} maxLength={4000} onChange={(e) => setText(e.target.value)} placeholder={`What to remember about it for ${store.name}`} className={cx(inputClass, 'w-full resize-y py-1.5 text-xs')} />
+      <div className="mt-1.5 flex items-center gap-2">
+        <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate({ notes: text.trim() })}>
+          Save notes
+        </Button>
+        {save.isSuccess && !dirty && <span className="text-muted">Saved</span>}
+      </div>
+      {save.error && (
+        <p role="alert" className="mt-1 text-red">
+          {save.error.message}
+        </p>
+      )}
+    </Section>
+  );
+}
+
+/** The panel's Watch action: the store's list, or in All stores the owner's all-stores list. */
+function WatchButton({ id, scope, watched }: { id: string; scope: string | null; watched: boolean }) {
+  const watch = useWatch(id, scope);
+  return (
+    <Button size="sm" aria-pressed={watched} disabled={watch.isPending} onClick={() => watch.mutate({ on: !watched })}>
+      <Eye aria-hidden className={cx('size-3.5', watched && 'text-red')} />
+      {watched ? (scope ? 'Watching' : 'Watching for all stores') : scope ? 'Watch' : 'Watch for all stores'}
+    </Button>
   );
 }
 
@@ -164,9 +298,7 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
           {a.flags?.length ? (
             <ul className="grid gap-0.5">
               {a.flags.map((f) => (
-                <li key={f.id}>
-                  <b className="text-[#f5b84a]">{f.label}</b>: {f.reason}
-                </li>
+                <FlagItem key={f.id} f={f} id={c.id} store={store} />
               ))}
             </ul>
           ) : null}
@@ -188,6 +320,7 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
         </p>
         {conditions && <p className="text-muted">{conditions}</p>}
       </Section>
+      {store && <Notes id={c.id} store={store} notes={d.notes} />}
       {!store && <Assign id={c.id} stores={stores} evaluating={d.stores} onAssigned={onAssigned} />}
       {d.agentEstimates && (
         <details className="rounded-md border border-line px-3 py-2">
@@ -326,7 +459,7 @@ function Demand({ id, scope }: { id: string; scope: string | null }) {
         </Section>
       )}
       {notes.length > 0 && (
-        <Section title="Manual research notes (not evidence)">
+        <Section title="Your Creative Center notes (owner-provided, not evidence)">
           {notes.map((n) => (
             <div key={n.id} className="border-b border-dashed border-line py-2 last:border-b-0">
               <p className="text-text-2">{n.note}</p>
@@ -340,6 +473,7 @@ function Demand({ id, scope }: { id: string; scope: string | null }) {
           ))}
         </Section>
       )}
+      {scope && <NoteForm id={id} store={scope} />}
       <Section title="Import a Trends CSV">
         <p className="mb-1.5 text-muted">On trends.google.com, search this product's term for your country, then Download (CSV) on "Interest over time". The file's sets become this product's.</p>
         <input
@@ -365,8 +499,43 @@ function Demand({ id, scope }: { id: string; scope: string | null }) {
   );
 }
 
+/** A manual TikTok Creative Center note: what the owner saw, with its link and date. Never counted as demand. */
+function NoteForm({ id, store }: { id: string; store: string }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [url, setUrl] = useState('');
+  const [note, setNote] = useState('');
+  const [date, setDate] = useState(today);
+  const add = useAddNote(id, store);
+  return (
+    <Section title="Add a Creative Center note">
+      <p className="mb-1.5 text-muted">What you saw on TikTok Creative Center for this product, with its link and the date. Kept as your note, never counted as demand.</p>
+      <form
+        className="grid gap-1.5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          add.mutate({ platform: 'tiktok_creative_center', url: url.trim(), note: note.trim(), observedAt: date }, { onSuccess: () => (setUrl(''), setNote('')) });
+        }}
+      >
+        <input type="url" required aria-label="Link you looked at" placeholder="https://ads.tiktok.com/business/creativecenter/…" value={url} onChange={(e) => setUrl(e.target.value)} className={cx(inputClass, 'py-1.5 text-xs')} />
+        <textarea required aria-label="What you saw" placeholder="What you saw" rows={2} maxLength={4000} value={note} onChange={(e) => setNote(e.target.value)} className={cx(inputClass, 'resize-y py-1.5 text-xs')} />
+        <div className="flex items-center gap-2">
+          <input type="date" required aria-label="Date you looked" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={cx(inputClass, 'py-1 text-xs')} />
+          <Button size="sm" type="submit" disabled={!url.trim() || !note.trim() || add.isPending}>
+            Add note
+          </Button>
+        </div>
+        {add.error && (
+          <p role="alert" className="text-red">
+            {add.error.message}
+          </p>
+        )}
+      </form>
+    </Section>
+  );
+}
+
 const STATUS_TONE = { verified: 'good', pending: 'run', insufficient: 'warn', not_eligible: 'bad' } as const;
-const PROVENANCE: Record<string, string> = { live: 'Live from the supplier', import: 'Imported feed', owner: 'Entered by you', supplier_claim: 'Supplier claim', fixture: 'Test fixture' };
+const PROVENANCE: Record<string, string> = { live: 'Live from the supplier', import: 'Imported feed', owner: 'Owner-provided', supplier_claim: 'Supplier claim', fixture: 'Test fixture' };
 const cost = (v: number | null, currency: string | null) => (v === null || !currency ? 'Unknown' : minorMoney(v, currency));
 
 function Suppliers({ id, scope }: { id: string; scope: string | null }) {
