@@ -27,7 +27,7 @@ export interface RunInput {
   /** What the run's conversation or team participant is configured with; none: the role's tools. */
   config?: AgentConfig;
   /** Told what the run asks for (runtime, model, effort) and, as the engine learns it, what actually ran. */
-  onRuntime?: (r: { runtime?: RuntimeId; model?: string; effort?: string; actualModel?: string; effortApplied?: string }) => void;
+  onRuntime?: (r: { runtime?: RuntimeId; model?: string; effort?: string; actualModel?: string; effortApplied?: string; runtimeVersion?: string }) => void;
 }
 
 /** Streams one agent run. Engines may throw or stop early; `runAgent` normalizes that. */
@@ -36,14 +36,19 @@ export type Engine = (input: RunInput) => AsyncIterable<AgentEvent>;
 /**
  * Connected stores run on the owner's Claude Code login; demo stores on the free fake engine, so exploring the demo
  * never spends Claude usage. Research runs on Claude either way: the demo engine can't read the web, and the owner
- * started it. `FRONTLINE_AGENT_ENGINE=claude|fake` forces one for every store (tests default to fake).
+ * started it. A conversation configured for Codex runs on `codex` (the server passes codexEngine). `FRONTLINE_AGENT_ENGINE=
+ * claude|fake` forces one for every store and runtime (tests default to fake).
  */
-export function defaultEngine(claude: Engine = claudeEngine(), fake: Engine = fakeEngine()): Engine {
+export function defaultEngine(claude: Engine = claudeEngine(), fake: Engine = fakeEngine(), codex: Engine = noCodex): Engine {
   const forced = forcedEngine();
   if (forced) return forced === 'claude' ? claude : fake;
   // A conversation configured for Claude runs on it on a demo store too (the owner picked it, decision 9).
   // ponytail: a 'demo' config on a store that went live runs on Claude (Demo is never offered on a connected store).
-  return (input) => (input.store.connected || input.mode === 'research' || input.config?.runtime === 'claude' ? claude : fake)(input);
+  return (input) => (input.config?.runtime === 'codex' ? codex : input.store.connected || input.mode === 'research' || input.config?.runtime === 'claude' ? claude : fake)(input);
+}
+
+async function* noCodex(): AsyncGenerator<AgentEvent> {
+  yield { type: 'error', message: "Codex isn't available here." };
 }
 
 const forcedEngine = () => process.env.FRONTLINE_AGENT_ENGINE ?? (process.env.VITEST ? 'fake' : undefined); // a test run outside the root config never reaches Claude

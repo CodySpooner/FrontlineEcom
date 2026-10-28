@@ -2,7 +2,7 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { Route, Routes } from 'react-router';
-import type { AgentPreset, Store } from '@frontline/shared';
+import { CODEX_ULTRA, type AgentPreset, type Store } from '@frontline/shared';
 import { renderApp, reply, stubApi } from '../test-utils';
 import { Deploy } from './Deploy';
 import { Workspace } from './Workspace';
@@ -29,7 +29,8 @@ const GROUPS: Record<string, object[]> = {
   ],
 };
 
-function api({ autonomy = 'ask', posts = [] as { url: string; body: unknown }[], refuse = 0 } = {}) {
+/** `codex`: Codex's row as the server reports it ('' signed in, else its reason); null leaves it out. */
+function api({ autonomy = 'ask', posts = [] as { url: string; body: unknown }[], refuse = 0, codex = null as string | null } = {}) {
   let refusals = refuse;
   stubApi((url, init) => {
     const u = new URL(url, 'http://x');
@@ -38,6 +39,7 @@ function api({ autonomy = 'ask', posts = [] as { url: string; body: unknown }[],
       posts.push({ url: `${u.pathname}${u.search}`, body: JSON.parse(String(init.body)) });
       if (refusals-- > 0) return reply({ error: 'A run budget is a positive number of dollars.', field: 'permissions.budgetUsd' }, 400);
       if (u.pathname === '/api/presets') return preset('p9', 'Saved', {});
+      if (u.pathname === '/api/runtimes/codex/setup') return reply({ started: true }, 202);
       if (u.pathname === '/api/conversations/c1/config') return reply({ error: 'That conversation ran on demo data, before the store went live: start a new one.' }, 409);
       return reply({ conversation: { id: 'new1', storeId: s }, run: { id: 'r1', storeId: s, agentId: `${s}:copywriter`, status: 'queued', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 } } }, 201);
     }
@@ -65,6 +67,14 @@ function api({ autonomy = 'ask', posts = [] as { url: string; body: unknown }[],
             { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5', efforts: [] },
           ],
         },
+        ...(codex === null
+          ? []
+          : [
+              {
+                runtime: 'codex', connected: !codex, ...(codex ? { reason: codex } : {}), source: 'discovered', version: '0.163.0', checkedAt: new Date(Date.now() - 60_000).toISOString(),
+                models: [{ id: 'gpt-6.1-sol', label: 'GPT-6.1-Sol', description: 'Latest workhorse model.', efforts: ['low', 'medium', 'high', 'ultra'], defaultEffort: 'low', default: true }],
+              },
+            ]),
       ];
     if (u.pathname === '/api/agents') return ['glow', 'peak'].map((id) => ({ id: `${id}:ad_strategist`, storeId: id, role: 'ad_strategist', enabled: true, autonomy, status: 'idle' }));
     if (u.pathname === '/api/caps') return [{ storeId: s, autopilot: { 'ads.set_budget': { enabled: true, maxUsdPerDay: 50 } } }];
@@ -204,4 +214,50 @@ test('"Change runtime or model…" opens from the runtime chip and posts the new
   fireEvent.click(switchTo);
   expect(await within(change).findByText('That conversation ran on demo data, before the store went live: start a new one.')).toBeTruthy();
   expect(posts).toEqual([{ url: '/api/conversations/c1/config?store=glow', body: { runtime: 'claude', model: 'claude-opus-5-5', effort: 'high' } }]);
+});
+
+test('Codex in Deploy: Set up Codex when signed out, ultra refused with its reason, Stop after required and no budget, and Start sends a Codex config', async () => {
+  const posts: { url: string; body: unknown }[] = [];
+  api({ posts, codex: 'Set up Codex' });
+  renderDeploy('peak');
+  fireEvent.click(await within(dialog()).findByRole('radio', { name: 'Codex' }));
+  expect(radio('Runtime', 'Codex').title).toBe('Set up Codex');
+  fireEvent.click(within(dialog()).getByRole('button', { name: 'Set up Codex' }));
+  expect(await within(dialog()).findByText(/^Sign in to Codex in the browser window that opened, then check again./)).toBeTruthy();
+  expect(posts).toEqual([{ url: '/api/runtimes/codex/setup', body: {} }]);
+  expect(within(dialog()).getByRole('button', { name: 'Check again' })).toBeTruthy();
+  const ultra = radio('Effort', 'Ultra');
+  expect([ultra.getAttribute('aria-disabled'), ultra.title]).toEqual(['true', CODEX_ULTRA]);
+  fireEvent.click(ultra);
+  expect(radio('Effort', 'Low').getAttribute('aria-checked')).toBe('true');
+  expect(screen.getByText('Models and effort levels come from your Codex CLI 0.163.0, checked 1 min ago.')).toBeTruthy();
+  expect(screen.getByText(/^Codex replies appear when complete\./)).toBeTruthy();
+  expect(screen.queryByRole('spinbutton', { name: 'Budget for this run' })).toBeNull();
+  expect((screen.getByRole('spinbutton', { name: 'Stop after' }) as HTMLInputElement).value).toBe('20');
+  fireEvent.change(screen.getByRole('textbox', { name: 'Objective' }), { target: { value: 'Write the hero line' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Start conversation' }));
+  await waitFor(() => expect(posts).toHaveLength(2));
+  expect((posts[1]!.body as { config: object }).config).toEqual({ runtime: 'codex', model: 'gpt-6.1-sol', effort: 'low', knowledge: ['store', 'general'], permissions: { stopAfterMin: 20 } });
+});
+
+test('Codex shows only when the server reports it; moving a conversation to Codex sends a Stop after', async () => {
+  api();
+  renderDeploy();
+  await within(dialog()).findByRole('radio', { name: 'Claude' });
+  expect(within(dialog()).queryByRole('radio', { name: 'Codex' })).toBeNull();
+  cleanup();
+  const posts: { url: string; body: unknown }[] = [];
+  api({ posts, codex: '' });
+  renderApp(
+    <Routes>
+      <Route path="/agents/c/:id" element={<Workspace />} />
+    </Routes>,
+    '/agents/c/c1?store=glow',
+  );
+  fireEvent.click(await screen.findByRole('button', { name: 'Demo (free): change runtime or model' }));
+  const change = await screen.findByRole('dialog', { name: 'Change runtime or model' });
+  fireEvent.click(within(change).getByRole('radio', { name: 'Codex' }));
+  expect((within(change).getByRole('spinbutton', { name: 'Stop after' }) as HTMLInputElement).value).toBe('20');
+  fireEvent.click(within(change).getByRole('button', { name: 'Switch' }));
+  await waitFor(() => expect(posts).toEqual([{ url: '/api/conversations/c1/config?store=glow', body: { runtime: 'codex', model: 'gpt-6.1-sol', effort: 'low', stopAfterMin: 20 } }]));
 });

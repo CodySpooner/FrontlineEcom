@@ -139,8 +139,9 @@ function roving<T>(values: T[], value: T, onChange: (v: T) => void) {
 }
 
 /** `quiet`: full width, grey selection (the AI Agents dialogs); `title` explains an option. */
-export function Segmented<T extends string | number>({ label, options, value, onChange, quiet }: { label: string; options: { value: T; label: ReactNode; title?: string }[]; value: T; onChange: (v: T) => void; quiet?: boolean }) {
-  const { onKeyDown, stop } = roving(options.map((o) => o.value), value, onChange);
+export function Segmented<T extends string | number>({ label, options, value, onChange, quiet }: { label: string; options: { value: T; label: ReactNode; title?: string; disabled?: boolean }[]; value: T; onChange: (v: T) => void; quiet?: boolean }) {
+  const pick = (v: T) => !options.find((o) => o.value === v)?.disabled && onChange(v); // a disabled option says why in its title
+  const { onKeyDown, stop } = roving(options.map((o) => o.value), value, pick);
   return (
     <div role="radiogroup" aria-label={label} onKeyDown={onKeyDown} className={quiet ? 'flex gap-0.5 rounded-[9px] border border-[#26262c] bg-[#0c0c0f] p-[3px]' : 'inline-flex gap-0.5 rounded-[10px] border border-line-2 bg-panel p-[3px]'}>
       {options.map((o, i) => (
@@ -150,11 +151,12 @@ export function Segmented<T extends string | number>({ label, options, value, on
           role="radio"
           aria-checked={o.value === value}
           title={o.title}
+          aria-disabled={o.disabled || undefined}
           tabIndex={stop(i)}
-          onClick={() => onChange(o.value)}
+          onClick={() => pick(o.value)}
           className={
             quiet
-              ? cx('flex h-7 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-md text-[12.5px] whitespace-nowrap', o.value === value ? 'bg-[#232329] text-white' : 'text-[#a9a9b2] hover:text-white')
+              ? cx('flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md text-[12.5px] whitespace-nowrap', o.disabled ? 'cursor-not-allowed text-[#55555e]' : o.value === value ? 'cursor-pointer bg-[#232329] text-white' : 'cursor-pointer text-[#a9a9b2] hover:text-white')
               : cx('cursor-pointer rounded-[7px] px-3 py-1 font-display text-xs font-semibold transition duration-150', o.value === value ? 'bg-red-fill text-white shadow-glow' : 'text-muted hover:text-white')
           }
         >

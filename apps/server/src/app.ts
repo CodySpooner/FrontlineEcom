@@ -24,6 +24,7 @@ import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
 import { settingsRoutes } from './settings';
 import { agentRoutes, runManager } from './routes/agents';
+import { listeningOn } from './routes/agents-runtimes';
 import { wrongStore } from './routes/agents-scope';
 import { ecosystemRoutes } from './routes/ecosystem';
 import { loadKey } from './secrets';
@@ -230,5 +231,5 @@ export const startServer = (db: Db, port: number, onListen?: (port: number) => v
     const index = serveStatic({ root: webDir, path: 'index.html' });
     app.use('*', serveStatic({ root: webDir })).get('*', (c, next) => (c.req.path.startsWith('/api/') ? next() : index(c, next)));
   }
-  return serve({ fetch: app.fetch, port, hostname: '127.0.0.1', websocket: { server: new WebSocketServer({ noServer: true }) } }, (info) => onListen?.(info.port));
+  return serve({ fetch: app.fetch, port, hostname: '127.0.0.1', websocket: { server: new WebSocketServer({ noServer: true }) } }, (info) => (listeningOn(info.port), onListen?.(info.port)));
 };

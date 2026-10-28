@@ -145,8 +145,8 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       const store = conversation && getStore(db, conversation.storeId);
       const type = conversation && resolveType(db, conversation.storeId, conversation.type);
       if (!conversation || !store || !type) return missing(c);
-      const b = (await c.req.json().catch(() => null)) as { runtime?: unknown; model?: unknown; effort?: unknown } | null;
-      if (!b || typeof b !== 'object' || b.runtime === undefined) return c.json({ error: 'Expected { runtime, model?, effort? }' }, 400);
+      const b = (await c.req.json().catch(() => null)) as { runtime?: unknown; model?: unknown; effort?: unknown; stopAfterMin?: unknown } | null;
+      if (!b || typeof b !== 'object' || b.runtime === undefined) return c.json({ error: 'Expected { runtime, model?, effort?, stopAfterMin? }' }, 400);
       if (['running', 'queued', 'awaiting_approval', 'waiting_for_input'].includes(conversation.state)) return c.json({ error: 'Wait for the reply to finish, or stop it, before changing the runtime or model.' }, 409);
       const live = db.prepare('SELECT at FROM done_once WHERE ref = ?').get(`activate:${store.id}`)?.at;
       if (live && !db.prepare('SELECT 1 FROM agent_runs WHERE conversation_id = ? AND created_at >= ?').get(conversation.id, String(live))) {
@@ -154,8 +154,10 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       }
       const old = getConfig(db, conversation.configId)!;
       const { budgetUsd, ...limits } = old.permissions;
-      // Only Claude bills dollars: a budget doesn't move to another runtime (decision 9).
-      const input = { runtime: b.runtime, model: b.model, effort: b.effort, tools: old.tools, knowledge: old.knowledge, permissions: b.runtime === 'claude' && budgetUsd ? { ...limits, budgetUsd } : limits };
+      // Only Claude bills dollars: a budget doesn't move to another runtime (decision 9). Moving to Codex, the dialog sends
+      // the Stop after it requires.
+      const kept = b.runtime === 'claude' && budgetUsd ? { ...limits, budgetUsd } : limits;
+      const input = { runtime: b.runtime, model: b.model, effort: b.effort, tools: old.tools, knowledge: old.knowledge, permissions: b.stopAfterMin === undefined ? kept : { ...kept, stopAfterMin: b.stopAfterMin } };
       const draft = validateConfig(store, type, input, await runtimes());
       if ('field' in draft) return c.json({ error: draft.error, field: draft.field }, 400);
       setConversationConfig(db, conversation.id, saveConfig(db, store, type, draft).id);

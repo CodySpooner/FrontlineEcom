@@ -1414,7 +1414,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   AgentDetail.test.tsx, Chat.test.tsx and nav.test.ts assertions onto the new page or the aliases. Switch the URL
   helper's store-workspace form to `/agents?store=` and remove `/agents/w`. Re-run AA-09's navigation-state test
   through the sidebar's /agents link. Main is never without chat, approvals or agent settings between items.
-- [ ] AA-15 **Codex runtime**, spawning the installed CLI with `codex exec --experimental-json` (decision 9):
+- [x] AA-15 **Codex runtime**, spawning the installed CLI with `codex exec --experimental-json` (decision 9):
   - status and "Set up Codex" (login into the app's `CODEX_HOME`);
   - cached model and effort discovery;
   - the engine with event mapping (thread id → session; MCP tool calls → tool_call and tool_result; answer → text;
@@ -1684,8 +1684,20 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   conversation; the server's run notifications link `/agents?store=`; the old tests moved onto the workspace, the
   aliases, Transcript and the drawer; the navigation-state test runs through the sidebar's `/agents`; checked in
   headless Chrome.
+- 2026-10-28 AA-15 Codex runtime: the installed CLI spawned by one helper (`codex exec --json … -`, prompt on stdin,
+  `shell: false`, scrubbed env, the app's own `CODEX_HOME`, a work folder outside every git repo, sandbox read-only,
+  approval never, 13 features off plus skills and AGENTS.md off), status and discovery without a model turn
+  (`--version`, `login status`, app-server `model/list`, `features list` on untested versions), Set up Codex and Check
+  again, the run-scoped MCP endpoint `/api/codex/mcp`, the JSONL event mapping, account and session errors, the
+  PID-tree Stop, no reflection, ultra refused; Deploy, "Change runtime or model…" and Details show Codex. 18 new
+  tests against recorded (features list, signed-out turn) and from-source fixtures; no test spawns codex.exe. Checked
+  in headless Chrome at 1440. Ships enabled: the isolation proof is under Notes.
 
 ## Blocked
+- (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
+  `CODEX_HOME` prints "Not logged in". In PowerShell:
+  `$env:CODEX_HOME='C:\Users\Xody2\orca\workspaces\FrontlineEcom\ai-agents\apps\server\.data\codex-home'; codex login`
+  AA-25b checks again first.
 
 ## Notes
 - (coordinator, 2026-10-28) Open questions for the owner. They don't block any item:
@@ -1817,6 +1829,55 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-15, 2026-10-28) For AA-16 and later. Method: the codex-cli 0.163.0 source and protocol schema, `features list`
+  under the run flags, and one signed-out exec (recorded); no model turn ran.
+  - **Isolation proof: Codex ships enabled.** With sandbox read-only, approval never and these features off
+    (`CODEX_FEATURES_OFF` in codex.ts): shell_tool, hooks, multi_agent, multi_agent_v2, apps, plugins,
+    image_generation, browser_use, computer_use, in_app_browser, goals, view_image, skill_mcp_dependency_install,
+    the model reaches only the app's MCP tools and, when the role has WebSearch, web search. Why each other path is
+    closed:
+    - code mode is a V8 isolate with no imports, file system or network, so it can only call the enabled tools;
+    - apply_patch is rejected under read-only + never ("writing is blocked by read-only sandbox");
+    - shell needs shell_tool; request_permissions_tool is off by default; view_image is in the list;
+    - `~/.agents/skills` loads whatever `CODEX_HOME` is, hence `skills.include_instructions=false` and
+      `skills.bundled.enabled=false`; `project_doc_max_bytes=0` keeps AGENTS.md out.
+    - An unknown `-c features.x` is silently ignored, so presence is checked: the recorded list
+      (fixtures/codex-0.163.0-features.txt) is the test, and on a CLI version not in `CODEX_TESTED` the status check
+      runs `features list` under the run flags and reads "Not available: Codex <v> changed a feature the app turns
+      off" if one is missing or on.
+  - Flags: `--json` is the documented flag (`--experimental-json`, as the item says, is its hidden alias). `exec resume`
+    takes no `-s`/`-C`, so everything goes as `-c` config and the work folder is the spawn's cwd.
+  - Work folder: `FRONTLINE_CODEX_WORK` (tests set a temp dir) or `%LOCALAPPDATA%\FrontlineEcom\codex-work\<store>`. It's
+    refused when a parent holds `.git`, Codex's own project-root marker, so no git process is spawned to check.
+  - App tool calls show from the endpoint: it emits tool_call and tool_result around each call. Exec's
+    `mcp_tool_call` items for the `frontline` server are skipped, because code mode can nest calls the JSONL doesn't
+    show. Other servers map to `mcp__<server>__<tool>`. Codex runs get no store MCP servers: Meta Ads and the like
+    read "Claude only for now" in Deploy and Details.
+  - Endpoint: `/api/codex/mcp` (every method), stateless Streamable HTTP with JSON responses, a new McpServer per
+    request. Auth is the run's 64-hex bearer, held only in memory (`RUNS` in codex.ts) and handed to the child as
+    `FRONTLINE_MCP_TOKEN`; an unknown or ended token gets 401. The URL uses the port the server listens on.
+  - Long waits: an approval holds the tool call's HTTP request open (`tool_timeout_sec=86400`; Node sets no response
+    timeout). Whether Codex's HTTP client keeps a long idle request open is unconfirmed until AA-25b watches one.
+  - Status, no model turn: `--version` means installed, `login status` exit 0 means signed in, app-server
+    `model/list` over stdio gives the catalog (hidden models left out). Signed out, `model/list` still answers from
+    the CLI's bundled catalog (the dev server shows "Set up Codex" with 8 models); whether a signed-in account sees a
+    different list is unconfirmed until the owner signs in. The result is cached 5 minutes; Check again
+    (`?refresh=1`) skips the cache, and Set up Codex resets it when `codex login` exits. Under vitest or a forced
+    engine the server never spawns codex: Codex reads not connected with the demo reason.
+  - Errors: 401, unauthorized or not logged in means "Set up Codex" (codex_signed_out); a usage limit or 429 means
+    the limit text (codex_usage_limit). Both are account errors (`isAccountError`), like Claude's. "no rollout found"
+    is session_not_found, so a follow-up goes to the recap like a lost Claude session. Anything else reads "Codex
+    stopped: …" with cf-ray and request ids cut. Retry notices are deduped with their digits normalized. The success
+    turn is 'from source' (`CODEX_TURN` in fake-codex.ts) until AA-25b records one.
+  - Runs record `runtime_version`, skip reflection on Codex and report tokens with costUsd 0. `expireApprovals` now
+    runs at every run end (it skipped done runs), so a Codex run that ends during an approval wait leaves nothing
+    pending.
+  - Validation: Codex refuses a budget, needs Stop after and refuses ultra (`CODEX_ULTRA`). Deploy prefills Stop
+    after with 20 minutes. Moving a conversation to Codex sends `stopAfterMin` (the config route now takes it), and
+    the budget stays with Claude. An effort option can be `disabled` in `Segmented`, with its reason in the title.
+  - Tests: `fakeCodex` (fake-codex.ts) stands in for every spawn. The tree-kill test runs node with a grandchild and
+    checks that both PIDs are gone after Stop.
+  - The server refuses a Codex run while Codex isn't signed in (field runtime, the status reason).
 - (AA-14b, 2026-10-28) For AA-15 and later:
   - **Routes** (App.tsx): `/agents` (NAV[1], still the sidebar's AI Agents), `/agents/c/:id` and `/agents/t/:id` render
     Workspace; `/agents/:id` renders `LegacyAgent` (Workspace.tsx). `agentsUrl` builds `/agents?store=`. Links other

@@ -1,5 +1,5 @@
 import { conversationPreface, defaultTools, getConfig, getRun, recap } from '@frontline/agents';
-import { AGENT_ROLES, registryModels, type AgentPreset, type AgentRun, type AgentRunDetail, type AgentTypeInfo, type Conversation, type ConversationPage, type CursorPage, type CustomRole } from '@frontline/shared';
+import { AGENT_ROLES, codexRegistryModels, registryModels, type AgentPreset, type AgentRun, type AgentRunDetail, type AgentTypeInfo, type Conversation, type ConversationPage, type CursorPage, type CustomRole } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
@@ -330,9 +330,12 @@ test("a reply's deliverables come from its run_id, and its notification opens th
   expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Ad Strategist finished'`).get()?.link).toBe(`/agents?store=glow&run=${run.id}`);
 });
 
-test('GET /api/runtimes: Claude from the registry while the demo engine is forced, saying why it is off', async () => {
+test('GET /api/runtimes: Claude and Codex from the registry while the demo engine is forced, saying why they are off, and no codex spawned', async () => {
   expect(await (await send('GET', '/api/runtimes')).json()).toEqual([
     { runtime: 'claude', connected: false, reason: 'Agents are set to the demo engine here (FRONTLINE_AGENT_ENGINE), so Claude is never used.', models: registryModels(), source: 'registry', registryVersion: '2026-10-28', checkedAt: expect.any(String) },
+    { runtime: 'codex', connected: false, reason: 'Agents are set to the demo engine here (FRONTLINE_AGENT_ENGINE), so Codex is never used.', models: codexRegistryModels(), source: 'registry', registryVersion: '2026-10-28', checkedAt: expect.any(String) },
   ]);
   expect((await open({ config: { runtime: 'claude' } })).error).toBe('Agents are set to the demo engine here (FRONTLINE_AGENT_ENGINE), so Claude is never used.');
+  expect((await open({ config: { runtime: 'codex' } })).error).toBe('Agents are set to the demo engine here (FRONTLINE_AGENT_ENGINE), so Codex is never used.');
+  expect((await send('POST', '/api/runtimes/codex/setup')).status).toBe(409);
 });

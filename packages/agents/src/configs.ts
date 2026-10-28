@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, defaultEffort, EFFORT_LABEL, INTEGRATION_KINDS, type AgentConfig, type AgentPreset, type AgentRole, type AgentTypeInfo, type CustomRole, type IntegrationKind, type RoleContract, type RuntimeCapabilities, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
+import { AGENT_ROLES, CODEX_ULTRA, defaultEffort, EFFORT_LABEL, INTEGRATION_KINDS, type AgentConfig, type AgentPreset, type AgentRole, type AgentTypeInfo, type CustomRole, type IntegrationKind, type RoleContract, type RuntimeCapabilities, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
 import { agentModel } from './claude-engine';
 import { engineInfo } from './engine';
 import { BUILTIN_TYPES, contractOf, ROLES } from './roles';
@@ -203,18 +203,21 @@ export function validateConfig(store: Store, type: AgentType, input: unknown, ru
     // Demo stands in for a runtime only where the store's agents run on it: anything else would run on Claude unasked.
     if (base.runtime !== 'demo') return { field: 'runtime', error: 'Demo (free) is only for stores with demo data.' };
     if (i.model != null || i.effort != null) return { field: i.model != null ? 'model' : 'effort', error: 'Demo (free) has no model or effort to choose.' };
-  } else if (runtime === 'claude') {
-    if (!claude || claude.reason) return { field: 'runtime', error: claude?.reason ?? "Claude isn't available here." };
-    model = (i.model ?? (base.runtime === 'claude' ? base.model : claude.models.find((m) => m.default)?.id)) as string | undefined;
+  } else if (runtime === 'claude' || runtime === 'codex') {
+    const r = runtimes.find((x) => x.runtime === runtime);
+    const name = runtime === 'claude' ? 'Claude' : 'Codex';
+    if (!r || r.reason) return { field: 'runtime', error: r?.reason ?? `${name} isn't available here.` };
+    model = (i.model ?? (base.runtime === runtime ? base.model : r.models.find((m) => m.default)?.id)) as string | undefined;
     // The login's discovered list, or the registry when discovery is down (the dialog says so).
-    const m = claude.models.find((x) => x.id === model);
-    if (!m) return { field: 'model', error: model === undefined ? 'Choose a model.' : `"${String(model)}" isn't on your Claude login's model list.` };
+    const m = r.models.find((x) => x.id === model);
+    if (!m) return { field: 'model', error: model === undefined ? 'Choose a model.' : `"${String(model)}" isn't on your ${name} login's model list.` };
+    if (runtime === 'codex' && i.effort === 'ultra') return { field: 'effort', error: CODEX_ULTRA };
     if (i.effort != null && !m.efforts.includes(i.effort as string)) {
       return { field: 'effort', error: m.efforts.length ? `${m.label} runs at ${m.efforts.map((e) => EFFORT_LABEL[e] ?? e).join(', ')}.` : `${m.label} takes no effort level: leave it out.` };
     }
-    effort = (i.effort as string | undefined) ?? m.defaultEffort;
+    effort = (i.effort as string | undefined) ?? (m.defaultEffort === 'ultra' ? undefined : m.defaultEffort);
   } else {
-    return { field: 'runtime', error: runtime === 'codex' ? "Codex isn't available in this version of the app yet." : 'runtime must be claude or demo.' };
+    return { field: 'runtime', error: 'runtime must be claude, codex or demo.' };
   }
   const tools = i.tools ?? base.tools;
   if (!Array.isArray(tools) || tools.some((t) => typeof t !== 'string')) return { field: 'tools', error: 'tools must be a list of tool names.' };
@@ -227,8 +230,11 @@ export function validateConfig(store: Store, type: AgentType, input: unknown, ru
   const { budgetUsd, stopAfterMin, saveFindings = 'off' } = p as Record<string, unknown>;
   const positive = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n > 0;
   if (budgetUsd != null && !positive(budgetUsd)) return { field: 'permissions.budgetUsd', error: 'Budget for this run must be a positive amount in dollars.' };
-  if (budgetUsd != null && runtime !== 'claude') return { field: 'permissions.budgetUsd', error: 'Demo (free) costs nothing, so it takes no run budget.' };
+  if (budgetUsd != null && runtime !== 'claude') {
+    return { field: 'permissions.budgetUsd', error: runtime === 'codex' ? 'Codex reports tokens, not dollars, so it takes no run budget: use "Stop after".' : 'Demo (free) costs nothing, so it takes no run budget.' };
+  }
   if (stopAfterMin != null && !positive(stopAfterMin)) return { field: 'permissions.stopAfterMin', error: '"Stop after" must be a positive number of minutes.' };
+  if (stopAfterMin == null && runtime === 'codex') return { field: 'permissions.stopAfterMin', error: 'Codex needs a "Stop after" limit: dollar caps don\'t apply to it.' };
   if (saveFindings !== 'off' && saveFindings !== 'ask' && saveFindings !== 'auto') return { field: 'permissions.saveFindings', error: 'Save findings must be off, ask or auto.' };
   return {
     ...(base.customRoleId ? { customRoleId: base.customRoleId } : {}),

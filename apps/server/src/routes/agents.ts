@@ -1,6 +1,7 @@
 import {
   budgetAddedToday,
   claudeEngine,
+  codexMcp,
   defaultEngine,
   engineInfo,
   isAccountError,
@@ -76,7 +77,7 @@ import { pageRoutes } from './agents-pages';
 import { flowRoutes } from './agents-flows';
 import { wrongStore } from './agents-scope';
 import { conversationRoutes, openConversation } from './agents-conversations';
-import { agentSessions, claudeLogin, runtimes } from './agents-runtimes';
+import { agentSessions, appCodexEngine, claudeLogin, runtimes, setUpCodex } from './agents-runtimes';
 import { issueRoutes } from './agents-issues';
 import { creativeRoutes, higgsfieldGenerate } from './agents-creatives';
 import { pauseCampaign, setCampaignBudget } from '../connectors/ads';
@@ -306,7 +307,7 @@ const managers = new WeakMap<Db, RunManager>();
 export function runManager(db: Db): RunManager {
   let manager = managers.get(db);
   if (!manager) {
-    manager = createRunManager({ db, env: toolEnv(db), store: (id) => getStore(db, id), engine: defaultEngine(claudeEngine({ queryOptions: agentSessions })), ...runHooks(db) });
+    manager = createRunManager({ db, env: toolEnv(db), store: (id) => getStore(db, id), engine: defaultEngine(claudeEngine({ queryOptions: agentSessions }), undefined, appCodexEngine()), ...runHooks(db) });
     managers.set(db, manager);
     // Approved actions that can come from outside a run (research screen, automations) are carried out here.
     onDecision(db, 'denied', (db, a) => {
@@ -627,6 +628,14 @@ export function agentRoutes(db: Db) {
     })
     .get('/api/claude-account', async (c) => c.json(await claudeLogin(c.req.query('refresh') === '1')))
     .get('/api/runtimes', async (c) => c.json(await runtimes(c.req.query('refresh') === '1')))
+    // "Set up Codex": starts `codex login` on the app's CODEX_HOME (decision 9). Not while agents are forced to an engine.
+    .post('/api/runtimes/codex/setup', (c) => {
+      if (process.env.FRONTLINE_AGENT_ENGINE || process.env.VITEST) return c.json({ error: 'Agents are set to one engine here (FRONTLINE_AGENT_ENGINE), so Codex is never used.' }, 409);
+      setUpCodex();
+      return c.json({ started: true }, 202);
+    })
+    // The run-scoped MCP endpoint Codex runs reach the app's tools on: the bearer token picks the run (codexMcp).
+    .all('/api/codex/mcp', (c) => codexMcp(c.req.raw))
     .get('/api/squad-missions/templates', (c) => c.json(MISSION_TEMPLATES))
     .get('/api/squad-missions', (c) => c.json(listMissions(db, c.req.query('stores')?.split(',').filter(Boolean), limit(c.req.query('limit')))))
     .get('/api/squad-missions/:id', (c) => {

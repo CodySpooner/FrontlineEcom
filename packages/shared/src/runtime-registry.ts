@@ -27,6 +27,7 @@ export const RUNTIME_REGISTRY = {
     'https://platform.claude.com/docs/en/build-with-claude/effort',
     'https://platform.claude.com/docs/en/about-claude/models/overview',
     'https://code.claude.com/docs/en/model-config',
+    'codex-cli 0.163.0: `codex debug models --bundled` and the app-server model/list (AA-01)',
   ],
   claude: {
     default: 'claude-opus-5-5',
@@ -51,6 +52,21 @@ export const RUNTIME_REGISTRY = {
       'claude-haiku-4-5-20251001': { label: 'Haiku 4.5', efforts: [], prices: { input: 1, output: 5, cacheRead: 0.1 } },
     } as Record<string, RegistryModel>,
   },
+  // The CLI's bundled catalog (no prices: Codex reports tokens, not dollars). Ultra is listed as the catalog has it; the app
+  // never offers it (CODEX_ULTRA).
+  codex: {
+    default: 'gpt-6.1-sol',
+    models: {
+      'gpt-6.1-sol': { label: 'GPT-6.1-Sol', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], defaultEffort: 'low' },
+      'gpt-6-astra': { label: 'GPT-6-Astra', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], defaultEffort: 'low' },
+      'gpt-6-sol': { label: 'GPT-6-Sol', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], defaultEffort: 'medium' },
+      'gpt-6-luna': { label: 'GPT-6-Luna', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium' },
+      'gpt-5.6-sol': { label: 'GPT-5.6-Sol', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], defaultEffort: 'low' },
+      'gpt-5.6-terra': { label: 'GPT-5.6-Terra', efforts: ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'], defaultEffort: 'medium' },
+      'gpt-5.6-luna': { label: 'GPT-5.6-Luna', efforts: ['low', 'medium', 'high', 'xhigh', 'max'], defaultEffort: 'medium' },
+      'gpt-5.5': { label: 'GPT-5.5', efforts: ['low', 'medium', 'high', 'xhigh'], defaultEffort: 'medium' },
+    } as Record<string, Omit<RegistryModel, 'prices'>>,
+  },
 };
 
 /** The registry's Claude models, as discovery would list them. */
@@ -63,7 +79,23 @@ export const registryModels = (): RuntimeModel[] =>
     ...(id === RUNTIME_REGISTRY.claude.default ? { default: true } : {}),
   }));
 
+/** The registry's Codex models, as the catalog would list them. */
+export const codexRegistryModels = (): RuntimeModel[] =>
+  Object.entries(RUNTIME_REGISTRY.codex.models).map(([id, m]) => ({
+    id,
+    label: m.label,
+    efforts: m.efforts,
+    ...(m.defaultEffort ? { defaultEffort: m.defaultEffort } : {}),
+    ...(id === RUNTIME_REGISTRY.codex.default ? { default: true } : {}),
+  }));
+
+/** The Codex CLI versions AA-15 checked; on any other the status check lists its features again (decision 9). */
+export const CODEX_TESTED = ['0.163.0'];
+
+/** Why Codex's ultra effort is never offered or run (decision 9). */
+export const CODEX_ULTRA = "Ultra runs Codex's own sub-agents, which the app turns off so its run limits hold.";
+
 /** The effort a run on `model` gets when none was chosen. */
 export const defaultEffort = (model: string): string | undefined => RUNTIME_REGISTRY.claude.models[model]?.defaultEffort;
 
-export const EFFORT_LABEL: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max' };
+export const EFFORT_LABEL: Record<string, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'Extra high', max: 'Max', ultra: 'Ultra' };

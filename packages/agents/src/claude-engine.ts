@@ -3,6 +3,7 @@
 // MIT License, Copyright (c) 2026 T3 Tools Inc.
 import { createSdkMcpServer, query, tool, type EffortLevel, type HookCallback, type ModelInfo, type Options, type SDKAssistantMessageError, type SDKMessage } from '@anthropic-ai/claude-agent-sdk';
 import { defaultEffort, EFFORT_LABEL, isPrivateHost, isReadOnly, registryModels, RUNTIME_REGISTRY, type AgentEvent, type ClaudeAccount, type RuntimeCapabilities, type RuntimeModel } from '@frontline/shared';
+import { CODEX_ACCOUNT } from './codex';
 import type { Engine, RunInput } from './engine';
 import { assemblePrompt } from './prompt';
 import { ROLES } from './roles';
@@ -127,7 +128,7 @@ const modelLabel = (id: string) => RUNTIME_REGISTRY.claude.models[id]?.label ?? 
 const effortLabel = (e: string) => EFFORT_LABEL[e] ?? e;
 
 /** True for an account problem (signed out, usage limit…): every run fails the same way until the owner fixes it. */
-export const isAccountError = (message: string) => ACCOUNT.some((code) => ERRORS[code] === message);
+export const isAccountError = (message: string) => ACCOUNT.some((code) => ERRORS[code] === message) || CODEX_ACCOUNT.includes(message);
 
 /** Runs on the owner's local Claude Code login (no API key needed). */
 export function claudeEngine(opts: ClaudeEngineOptions = {}): Engine {

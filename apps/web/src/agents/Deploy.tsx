@@ -1,8 +1,8 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
-import { APPROVAL_KINDS, EFFORT_LABEL, type AgentPreset, type AgentTypeInfo, type ConversationDetail, type KnowledgeScope, type RuntimeId, type Store } from '@frontline/shared';
-import { useAgents, useAgentTypes, useCaps, useChangeConfig, useCreateConversation, usePresets, useRuntimes, useSavePreset, useStores, useTypeTools } from '../api/client';
+import { APPROVAL_KINDS, CODEX_ULTRA, EFFORT_LABEL, type AgentPreset, type AgentTypeInfo, type ConversationDetail, type KnowledgeScope, type RuntimeCapabilities, type RuntimeId, type Store } from '@frontline/shared';
+import { useAgents, useAgentTypes, useCaps, useChangeConfig, useCreateConversation, usePresets, useRefreshRuntimes, useRuntimes, useSavePreset, useSetUpCodex, useStores, useTypeTools } from '../api/client';
 import { Button, cx, Dialog, Segmented, Switch } from '../components/ui';
 import { withParams } from '../knowledge/url';
 import { ago, money } from '../lib/format';
@@ -74,34 +74,70 @@ type Choice = { runtime: RuntimeId; model?: string; effort?: string };
 /** Runtime, model and effort, resolved against what this machine can run: an unlisted model falls back to the default. */
 function useRuntimeChoice(store: Store, start: Choice) {
   const [v, setV] = useState(start);
-  const claude = useRuntimes().data?.find((c) => c.runtime === 'claude');
+  const all = useRuntimes().data;
+  const claude = all?.find((c) => c.runtime === 'claude');
+  const codex = all?.find((c) => c.runtime === 'codex');
   // A demo store may run on the demo engine; a live one never does (decision 9).
   const runtime: RuntimeId = v.runtime === 'demo' && store.connected ? 'claude' : v.runtime;
-  const models = runtime === 'claude' ? (claude?.models ?? []) : [];
+  const info = runtime === 'claude' ? claude : runtime === 'codex' ? codex : undefined;
+  const models = info?.models ?? [];
   const model = models.find((m) => m.id === v.model) ?? models.find((m) => m.default) ?? models[0];
-  const effort = model && (v.effort && model.efforts.includes(v.effort) ? v.effort : (model.defaultEffort ?? model.efforts[0]));
-  return { runtime, model, effort, models, claude, set: (patch: Partial<Choice>) => setV((p) => ({ ...p, ...patch })), reset: setV, config: { runtime, ...(model ? { model: model.id } : {}), ...(effort ? { effort } : {}) } };
+  const usable = model?.efforts.filter((e) => runtime !== 'codex' || e !== 'ultra') ?? []; // never Codex's ultra (CODEX_ULTRA)
+  const effort = model && (v.effort && usable.includes(v.effort) ? v.effort : model.defaultEffort && usable.includes(model.defaultEffort) ? model.defaultEffort : usable[0]);
+  return { runtime, model, effort, models, claude, codex, info, set: (patch: Partial<Choice>) => setV((p) => ({ ...p, ...patch })), reset: setV, config: { runtime, ...(model ? { model: model.id } : {}), ...(effort ? { effort } : {}) } };
+}
+
+/** The picked runtime can't run here: what to do, with Codex's own "Set up Codex" and a check again (decision 9). */
+function NotReady({ info }: { info: RuntimeCapabilities }) {
+  const setup = useSetUpCodex();
+  const refresh = useRefreshRuntimes();
+  const fixable = info.runtime === 'codex' && (info.reason === 'Set up Codex' || info.reason === 'Install the Codex CLI');
+  return (
+    <span className="text-xs text-muted">
+      {info.reason === 'Set up Codex' && info.runtime === 'codex' ? (
+        setup.isSuccess ? (
+          'Sign in to Codex in the browser window that opened, then check again.'
+        ) : (
+          <button type="button" disabled={setup.isPending} onClick={() => setup.mutate()} className="cursor-pointer text-[#ff6b76] hover:underline">
+            Set up Codex
+          </button>
+        )
+      ) : (
+        info.reason
+      )}
+      {fixable && (
+        <>
+          {' · '}
+          <button type="button" disabled={refresh.isPending} onClick={() => refresh.mutate()} className="cursor-pointer text-[#ff6b76] hover:underline">
+            {refresh.isPending ? 'Checking…' : 'Check again'}
+          </button>
+        </>
+      )}
+      {setup.isError && <span className="block text-red">{setup.error.message}</span>}
+    </span>
+  );
 }
 
 function RuntimeFields({ store, choice, said }: { store: Store; choice: ReturnType<typeof useRuntimeChoice>; said: (field: string) => ReactNode }) {
-  const { runtime, model, effort, models, claude } = choice;
-  const ready = !!claude?.connected && !claude.reason;
+  const { runtime, model, effort, models, claude, codex, info } = choice;
+  const dot = (r?: RuntimeCapabilities) => <i aria-hidden className={cx('size-[7px] rounded-full', r?.connected && !r.reason ? 'bg-[#3ddc84]' : 'bg-[#55555e]')} />;
   const options = [
     ...(store.connected ? [] : [{ value: 'demo' as RuntimeId, label: 'Demo (free)' }]),
-    { value: 'claude' as RuntimeId, label: <><i aria-hidden className={cx('size-[7px] rounded-full', ready ? 'bg-[#3ddc84]' : 'bg-[#55555e]')} />Claude</>, title: claude?.reason },
+    { value: 'claude' as RuntimeId, label: <>{dot(claude)}Claude</>, title: claude?.reason },
+    ...(codex ? [{ value: 'codex' as RuntimeId, label: <>{dot(codex)}Codex</>, title: codex.reason }] : []),
   ];
+  const from = info && (info.source === 'discovered' ? `your ${info.runtime === 'claude' ? 'Claude connection' : `Codex CLI ${info.version ?? ''}`}, checked ${ago(info.checkedAt)}` : `the app's model list (${info.registryVersion}); not confirmed on this account`);
   const caption =
     runtime === 'demo'
       ? "The app's demo engine answers with sample replies on this store's demo data. It costs nothing."
-      : claude &&
-        `Models and effort levels come from ${claude.source === 'discovered' ? `your Claude connection, checked ${ago(claude.checkedAt)}` : `the app's model list (${claude.registryVersion}); not confirmed on this account`}.${claude.source === 'discovered' && model?.effortsFromRegistry ? ` ${model.label}'s effort levels come from the app's model list.` : ''}`;
+      : from && `Models and effort levels come from ${from}.${info?.source === 'discovered' && model?.effortsFromRegistry ? ` ${model.label}'s effort levels come from the app's model list.` : ''}`;
   return (
     <>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid content-start gap-1.5">
           <span className={label}>Runtime</span>
           <Segmented quiet label="Runtime" options={options} value={runtime} onChange={(r) => choice.set({ runtime: r })} />
-          {runtime === 'claude' && claude?.reason && <span className="text-xs text-muted">{claude.reason}</span>}
+          {info?.reason && <NotReady info={info} />}
           {said('runtime')}
         </div>
         {runtime !== 'demo' && (
@@ -127,13 +163,20 @@ function RuntimeFields({ store, choice, said }: { store: Store; choice: ReturnTy
         {model && model.efforts.length > 0 && (
           <>
             <span className={label}>Effort</span>
-            <Segmented quiet label="Effort" options={model.efforts.map((e) => ({ value: e, label: EFFORT_LABEL[e] ?? e }))} value={effort ?? ''} onChange={(e) => choice.set({ effort: e })} />
+            <Segmented
+              quiet
+              label="Effort"
+              options={model.efforts.map((e) => ({ value: e, label: EFFORT_LABEL[e] ?? e, ...(runtime === 'codex' && e === 'ultra' ? { disabled: true, title: CODEX_ULTRA } : {}) }))}
+              value={effort ?? ''}
+              onChange={(e) => choice.set({ effort: e })}
+            />
           </>
         )}
         {said('effort')}
         {caption && <span className="text-[11.5px] text-muted">{caption}</span>}
         {model?.id.includes('fable') && <span className={warn}>Fable bills usage credits on your Claude plan, without asking each time.</span>}
-        {runtime === 'claude' && !store.connected && <span className={warn}>This store has demo data: the agent works on sample numbers and uses your real Claude usage.</span>}
+        {runtime === 'codex' && <span className="text-[11.5px] text-muted">Codex replies appear when complete. It reports tokens, not dollars, so its runs stop after a time limit instead of a budget.</span>}
+        {runtime !== 'demo' && !store.connected && <span className={warn}>This store has demo data: the agent works on sample numbers and uses your real {runtime === 'claude' ? 'Claude' : 'Codex'} usage.</span>}
       </div>
     </>
   );
@@ -178,6 +221,10 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
   const [knowledge, setKnowledge] = useState<KnowledgeScope[]>(['store', 'general']);
   const [budget, setBudget] = useState('');
   const [stopAfter, setStopAfter] = useState('');
+  // Codex requires a Stop after (dollar caps don't apply to it): 20 minutes unless one is set (decision 9).
+  useEffect(() => {
+    if (choice.runtime === 'codex') setStopAfter((s) => s || '20');
+  }, [choice.runtime]);
   const [objective, setObjective] = useState('');
   const [title, setTitle] = useState<string>();
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -343,7 +390,9 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
               <li key={g.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
                 <span className="text-[#c4c4cc]">{g.name}</span>
                 <span className="text-right text-xs text-muted">
-                  {g.integration && !g.integration.connected ? (
+                  {g.integration && !g.tools.length && choice.runtime === 'codex' ? (
+                    'Claude only for now'
+                  ) : g.integration && !g.integration.connected ? (
                     <>
                       Not connected ·{' '}
                       <Link to="/integrations" className="text-[#ff6b76] hover:underline">
@@ -421,7 +470,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
             <label className="flex min-h-7 items-center gap-2 py-1 text-[12.5px] text-[#c4c4cc]">
               Stop after
               <span className="ml-auto flex items-center gap-1 text-xs text-muted">
-                <input type="number" min="1" step="1" aria-label="Stop after" placeholder="No limit" value={stopAfter} onChange={(e) => setStopAfter(e.target.value)} className={cx(input, 'h-7 w-24 text-right')} />
+                <input type="number" min="1" step="1" aria-label="Stop after" placeholder={choice.runtime === 'codex' ? 'Required' : 'No limit'} value={stopAfter} onChange={(e) => setStopAfter(e.target.value)} className={cx(input, 'h-7 w-24 text-right')} />
                 min
               </span>
             </label>
@@ -439,8 +488,11 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
 export function ChangeRuntime({ store, conversation, onClose }: { store: Store; conversation: ConversationDetail; onClose: () => void }) {
   const choice = useRuntimeChoice(store, conversation.config);
   const change = useChangeConfig(store.id, conversation.id);
-  const { said, rest } = fieldErrors(change.error, ['runtime', 'model', 'effort']);
+  const { said, rest } = fieldErrors(change.error, ['runtime', 'model', 'effort', 'permissions.stopAfterMin']);
   const same = runtimeLabel(choice.config) === runtimeLabel(conversation.config);
+  // Moving to Codex takes a Stop after (20 minutes unless the conversation had one); a run budget doesn't move (decision 9).
+  const [stopAfter, setStopAfter] = useState(String(conversation.config.permissions.stopAfterMin ?? 20));
+  const toCodex = choice.runtime === 'codex';
   return (
     <Dialog
       open
@@ -452,7 +504,7 @@ export function ChangeRuntime({ store, conversation, onClose }: { store: Store; 
         <div className="flex items-center justify-end gap-2.5">
           <span className="flex-1">{rest}</span>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" disabled={same || change.isPending} onClick={() => change.mutate(choice.config, { onSuccess: onClose })}>
+          <Button variant="primary" disabled={same || change.isPending} onClick={() => change.mutate({ ...choice.config, ...(toCodex ? { stopAfterMin: Number(stopAfter) } : {}) }, { onSuccess: onClose })}>
             Switch
           </Button>
         </div>
@@ -460,6 +512,14 @@ export function ChangeRuntime({ store, conversation, onClose }: { store: Store; 
     >
       <div className="grid gap-4">
         <RuntimeFields store={store} choice={choice} said={said} />
+        {toCodex && (
+          <label className="flex items-center gap-2 text-[12.5px] text-[#c4c4cc]">
+            Stop after
+            <input type="number" min="1" step="1" aria-label="Stop after" value={stopAfter} onChange={(e) => setStopAfter(e.target.value)} className={cx(input, 'h-7 w-24 text-right')} />
+            <span className="text-xs text-muted">min{conversation.config.permissions.budgetUsd ? '. The run budget stays with Claude.' : ''}</span>
+          </label>
+        )}
+        {said('permissions.stopAfterMin')}
       </div>
     </Dialog>
   );

@@ -337,8 +337,11 @@ export function createRunManager(opts: RunManagerOptions) {
           // What was asked (a run without a config learns its model and effort here) and what ran (decision 9).
           onRuntime: (r) =>
             db
-              .prepare('UPDATE agent_runs SET runtime = coalesce(runtime, ?), model = coalesce(model, ?), effort = coalesce(effort, ?), actual_model = coalesce(?, actual_model), effort_applied = coalesce(?, effort_applied) WHERE id = ?')
-              .run(r.runtime ?? null, r.model ?? null, r.effort ?? null, r.actualModel ?? null, r.effortApplied ?? null, run.id),
+              .prepare(
+                `UPDATE agent_runs SET runtime = coalesce(runtime, ?), model = coalesce(model, ?), effort = coalesce(effort, ?), actual_model = coalesce(?, actual_model),
+                 effort_applied = coalesce(?, effort_applied), runtime_version = coalesce(?, runtime_version) WHERE id = ?`,
+              )
+              .run(r.runtime ?? null, r.model ?? null, r.effort ?? null, r.actualModel ?? null, r.effortApplied ?? null, r.runtimeVersion ?? null, run.id),
         };
         let toolCalls = 0;
         let attempt = input;
@@ -366,7 +369,8 @@ export function createRunManager(opts: RunManagerOptions) {
           transcript.length = mark; // what the failed attempt said goes; the retry says it again
         }
         // ponytail: only runs that looked at data (tool calls) reflect; a chat reply rarely teaches anything durable.
-        if (end.type === 'done' && toolCalls > 0 && !signal.aborted && !research) end = await reflect(attempt, end, emit); // research keeps what it learns as cards
+        // Research keeps what it learns as cards; Codex skips it in v1 (a second process, and plan quota).
+        if (end.type === 'done' && toolCalls > 0 && !signal.aborted && !research && config?.runtime !== 'codex') end = await reflect(attempt, end, emit);
       }
     } catch (err) {
       end = { type: 'error', message: err instanceof Error ? err.message : String(err) };
@@ -400,7 +404,8 @@ export function createRunManager(opts: RunManagerOptions) {
       new Date().toISOString(),
       run.id,
     );
-    if (status !== 'done') expireApprovals([run.id]);
+    // No run ends with one of its in-run requests still open, a finished one included (a Codex tool's wait timed out).
+    expireApprovals([run.id]);
     const final = getRun(db, run.id); // gone when its store was deleted meanwhile
     if (final) opts.onRun?.(final);
   }

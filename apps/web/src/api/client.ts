@@ -249,6 +249,13 @@ export const useAgentTypes = (storeId: string) => useQuery({ queryKey: ['agent-t
 
 /** What each runtime can run here (decision 9): checked without a model turn, kept 5 minutes by the server too. */
 export const useRuntimes = () => useQuery({ queryKey: ['runtimes'], queryFn: () => api<RuntimeCapabilities[]>('/api/runtimes'), staleTime: 5 * 60_000 });
+/** "Check again": the runtimes checked now rather than from the server's 5-minute cache. */
+export function useRefreshRuntimes() {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: () => api<RuntimeCapabilities[]>('/api/runtimes?refresh=1'), onSuccess: (r) => qc.setQueryData(['runtimes'], r) });
+}
+/** "Set up Codex": the server starts `codex login` on the app's own Codex folder; the owner signs in in the browser it opens. */
+export const useSetUpCodex = () => useMutation({ mutationFn: () => api<{ started: boolean }>('/api/runtimes/codex/setup', json('POST', {})) });
 
 /** A type's tools for Deploy, with each group's integration state. */
 export const useTypeTools = (storeId: string, type: string) =>
@@ -270,7 +277,7 @@ export function useSavePreset(storeId: string) {
 export function useChangeConfig(storeId: string, conversationId: string) {
   const done = useConversationDone(storeId);
   return useMutation({
-    mutationFn: (input: { runtime: RuntimeId; model?: string; effort?: string }) => api<ConversationDetail>(`/api/conversations/${conversationId}/config?store=${storeId}`, json('POST', input)),
+    mutationFn: (input: { runtime: RuntimeId; model?: string; effort?: string; stopAfterMin?: number }) => api<ConversationDetail>(`/api/conversations/${conversationId}/config?store=${storeId}`, json('POST', input)),
     onSuccess: () => done(conversationId),
   });
 }

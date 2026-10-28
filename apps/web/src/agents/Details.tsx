@@ -1,8 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Lock } from 'lucide-react';
-import { AGENT_ROLES, EFFORT_LABEL, INTEGRATION_KINDS, INTERRUPTED, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
-import { useAgents, useAgentTypes, useCaps, useClaudeAccount, useConversation, useConversationTools, useThread } from '../api/client';
+import { AGENT_ROLES, CODEX_TESTED, EFFORT_LABEL, INTEGRATION_KINDS, INTERRUPTED, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
+import { useAgents, useAgentTypes, useCaps, useClaudeAccount, useConversation, useConversationTools, useRuntimes, useThread } from '../api/client';
 import { FixLink } from '../components/Chat';
 import { cx, Dialog, ProgressBar, RUN_STATUS } from '../components/ui';
 import { cents, modelName } from '../lib/format';
@@ -117,6 +117,7 @@ function DetailsTab({ store, c }: { store: Store; c: ConversationDetail }) {
   const tools = useConversationTools(store.id, c.id).data;
   const runs = runsOf(useThread(store.id, c.id).data?.pages);
   const claude = useClaudeAccount(c.config.runtime === 'claude').q.data;
+  const codex = useRuntimes().data?.find((r) => r.runtime === 'codex');
   const latest = runs.at(-1);
   const first = runs.find((r) => r.runtime);
   const rules = autopilotRules(seat?.autonomy, caps, c.config.tools);
@@ -143,9 +144,19 @@ function DetailsTab({ store, c }: { store: Store; c: ConversationDetail }) {
           Change…
         </button>
         <div className="text-[12.5px] text-text-2">
-          {c.config.runtime === 'demo' ? 'Demo (free)' : c.config.runtime === 'claude' ? `Claude · ${claude ? (claude.signedIn ? 'signed in' : 'not signed in') : 'checking…'}` : 'Codex'}
+          {c.config.runtime === 'demo'
+            ? 'Demo (free)'
+            : c.config.runtime === 'claude'
+              ? `Claude · ${claude ? (claude.signedIn ? 'signed in' : 'not signed in') : 'checking…'}`
+              : `Codex · ${codex ? (codex.reason ?? 'signed in') : 'checking…'}`}
         </div>
         {c.config.model && <div className="text-[12.5px] text-text-2">{[modelName(c.config.model), c.config.effort && `${EFFORT_LABEL[c.config.effort] ?? c.config.effort} effort`].filter(Boolean).join(' · ')}</div>}
+        {c.config.runtime === 'codex' && codex?.version && (
+          <p className="text-xs text-muted">
+            Codex CLI {codex.version}
+            {CODEX_TESTED.includes(codex.version) ? ', a version the app was tested with.' : `. The app was tested with ${CODEX_TESTED.join(', ')}; it checks this one's features before each use.`}
+          </p>
+        )}
         {first && runtimeLabel(first) !== runtimeLabel(c.config) && <p className="text-xs text-muted">Started on {runtimeLabel(first)}: the history stays here, and the new session started from a summary.</p>}
       </Section>
       <Section title="Store scope">
@@ -168,7 +179,9 @@ function DetailsTab({ store, c }: { store: Store; c: ConversationDetail }) {
               <li key={g.id} className="flex items-baseline justify-between gap-3 text-[12.5px]">
                 <span className="text-text-2">{g.name}</span>
                 <span className="text-right text-xs text-muted">
-                  {g.integration && !g.integration.connected ? (
+                  {g.integration && !g.tools.length && c.config.runtime === 'codex' ? (
+                    'Claude only for now'
+                  ) : g.integration && !g.integration.connected ? (
                     <>
                       Not connected ·{' '}
                       <Link to="/integrations" className="text-[#ff6b76] hover:underline">
