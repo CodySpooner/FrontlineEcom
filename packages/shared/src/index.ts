@@ -819,6 +819,17 @@ export interface CreateConversationInput {
   config?: ConversationConfigInput;
 }
 
+/** GET /api/conversations/:id/tools?store= → the config's tools by kind of access, with the integration behind a group. */
+export interface ToolGroup {
+  id: string;
+  name: string;
+  /** read: reads only; approval: its drafts and changes need your approval; on: works inside the app. */
+  access: 'read' | 'approval' | 'on';
+  tools: string[];
+  /** The integration (or its MCP server) the group needs, and whether this store has it connected. */
+  integration?: { kind: IntegrationKind; connected: boolean };
+}
+
 /** GET /api/conversations/:id?store= → the conversation with the config it runs on. */
 export interface ConversationDetail extends Conversation {
   config: AgentConfig;

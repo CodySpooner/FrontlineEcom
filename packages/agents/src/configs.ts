@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, type AgentConfig, type AgentRole, type AgentTypeInfo, type RuntimeId, type Store } from '@frontline/shared';
+import { AGENT_ROLES, INTEGRATION_KINDS, type AgentConfig, type AgentRole, type AgentTypeInfo, type IntegrationKind, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
 import { engineInfo } from './engine';
 import { BUILTIN_TYPES } from './roles';
 import { defaultTools } from './tools';
@@ -59,6 +59,31 @@ export function agentTypes(db: DatabaseSync, storeId: string): AgentTypeInfo[] {
     .all(storeId)
     .flatMap((r) => (Object.hasOwn(AGENT_ROLES, String(r.base_role)) ? [{ id: String(r.id), name: String(r.name), description: String(r.description), baseRole: r.base_role as AgentRole }] : []));
   return [...roles, ...builtins, ...custom];
+}
+
+// The Details panel's tool groups (AA-09): a tool goes in the first group it matches.
+const GROUPS: [id: string, name: string, access: ToolGroup['access'], match: RegExp, needs?: IntegrationKind][] = [
+  ['data', 'Store data', 'read', /^(store_summary|metrics_timeseries|compare_stores|research_feed|squad_log|review_campaigns|search_suppliers)$|^(list|read)_/],
+  ['web', 'Web', 'read', /^(WebSearch|WebFetch|fetch_source)$/],
+  ['knowledge', 'Knowledge and memory', 'on', /memory|knowledge|research|niche_learning|^(propose_general|propose_card|add_evidence|suggest_link)$/],
+  ['creatives', 'Creatives', 'approval', /^create_creative$/, 'higgsfield'],
+  ['drafts', 'Drafts and changes', 'approval', /^(propose_(ad|price)_change|draft_|publish_page)/],
+  ['squad', 'Squad and records', 'on', /./],
+];
+
+/** The config's tools in groups, in GROUPS order; an integration in the tools is its MCP server (reads run, writes ask). */
+export function toolGroups(db: DatabaseSync, config: AgentConfig): ToolGroup[] {
+  const live = new Set(db.prepare(`SELECT kind FROM integrations WHERE status = 'connected' AND (store_id = ? OR store_id IS NULL)`).all(config.storeId).map((r) => String(r.kind)));
+  const groups: ToolGroup[] = [];
+  for (const tool of config.tools) {
+    const server = INTEGRATION_KINDS[tool as IntegrationKind];
+    const [id, name, access, , needs] = server ? [tool, `${server.name} (MCP)`, 'approval' as const, undefined, tool as IntegrationKind] : GROUPS.find((g) => g[3].test(tool))!;
+    let group = groups.find((g) => g.id === id);
+    if (!group) groups.push((group = { id, name, access, tools: [], ...(needs ? { integration: { kind: needs, connected: live.has(needs) } } : {}) }));
+    if (!server) group.tools.push(tool);
+  }
+  const order = (g: ToolGroup) => GROUPS.findIndex(([id]) => id === g.id) >>> 0; // MCP servers (-1) last
+  return groups.sort((a, b) => order(a) - order(b));
 }
 
 export type ConfigDraft = Omit<AgentConfig, 'id' | 'storeId' | 'agentId' | 'createdAt'>;

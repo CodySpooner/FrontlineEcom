@@ -1335,7 +1335,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - the interrupted banner with Resume;
   - the read-only single-run view (decision 4), with a test that an Ask KB all-stores run and a compare_stores run
     show no Continue.
-- [ ] AA-09 **Right panel and settings drawer:**
+- [x] AA-09 **Right panel and settings drawer:**
   - Details and Activity tabs (the Knowledge tab renders from AA-17);
   - the tools endpoint, and tools with real connection state and "Set up" links;
   - the team variant;
@@ -1638,6 +1638,12 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   transcript events, Copy and Retry, retried attempts folded under the retry, the handoff divider, amber approval
   cards, the composer with per-conversation drafts and queued sends with Cancel, the interrupted banner with Resume,
   and the read-only run view (`?run=`) with Continue in a new conversation; 12 new tests; checked in headless Chrome.
+- 2026-10-28 AA-09 right panel and settings drawer: Details (agent, runtime with Claude sign-in state, store scope with
+  the compare-stores wording, tools by access with connection state and Set up, approvals and budget from one autopilot
+  helper, limits, run footer) and Activity tabs; `GET /api/conversations/:id/tools`; the seat settings drawer
+  (Settings, Memory, History, Flows) from the type header and conversation ⋯ menus; the tab and each thread's scroll
+  come back after leaving the page; AgentSettings, Memory and History moved to `agents/settings.tsx`; 6 new tests;
+  checked in headless Chrome.
 
 ## Blocked
 
@@ -1771,6 +1777,23 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-09, 2026-10-28) For AA-10 and later:
+  - `agents/Details.tsx` is the right panel (`Details` takes `end`, the hide button beside its tabs); the tab is kept in
+    `fe.agents.tab`. `agents/settings.tsx` holds the seat drawer (`SettingsDrawer`, URL state `?settings=<role>&tab=`
+    via `useAgentSettings`, so AA-14b's legacy `?tab=` links only need to map onto it), the moved AgentSettings,
+    Memory, History, AgentBudget and NicheLearnings (AgentDetail.tsx imports them until AA-14b), and the autopilot
+    rule: `autopilotRules(autonomy, caps, tools)` (seat on autopilot, a store rule on for a kind with
+    `APPROVAL_KINDS[kind].autopilot`, propose_ad_change among the tools) plus `approvalLines`. Deploy's spending row
+    (AA-14) reads `autopilotRules` too.
+  - `toolGroups(db, config)` in packages/agents configs.ts groups the config's tools (first matching group; an
+    integration kind in the tools is its MCP server, approval access) and reads the store's connected integrations.
+    The panel's "Autopilot up to the caps below" override is applied client-side from `autopilotRules`.
+  - AgentSettings' two columns now follow its container (`@3xl`), so it stacks in the 440 px drawer.
+  - A History or Flows row opens `agentsUrl({ store, run })`: its conversation, or the read-only view.
+  - Thread scroll offsets live in a module Map for the session; a thread opens at the newest message otherwise and stays
+    pinned to the bottom while it is there (ResizeObserver).
+  - Not built yet: the Knowledge tab (AA-17), "Role instructions and checks" (AA-11), "Change…" (AA-14), and the
+    team variant of the panel (AA-20: no team data before AA-19).
 - (AA-08, 2026-10-28) For AA-09 and later:
   - `agents/Conversation.tsx` is the centre pane: `Conversation` (header, chips, turns, composer) and `ReadOnlyRun`
     (with `Continue`). `Workspace.tsx` keeps the loading and not-found wrappers and resolves `?run=`: a run in a

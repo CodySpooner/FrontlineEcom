@@ -4,7 +4,8 @@
 // ponytail: AA-14b moves the workspace to /agents?store= and removes /agents/w.
 const WORKSPACE = '/agents/w';
 
-export function agentsUrl({ store, conversation, team }: { store: string; conversation?: string; team?: string }) {
+/** `run`: a run, which opens in its conversation, or read-only when it has none (decision 4). */
+export function agentsUrl({ store, conversation, team, run }: { store: string; conversation?: string; team?: string; run?: string }) {
   const path = conversation ? `/agents/c/${encodeURIComponent(conversation)}` : team ? `/agents/t/${encodeURIComponent(team)}` : WORKSPACE;
-  return `${path}?store=${encodeURIComponent(store)}`;
+  return `${path}?store=${encodeURIComponent(store)}${run ? `&run=${encodeURIComponent(run)}` : ''}`;
 }

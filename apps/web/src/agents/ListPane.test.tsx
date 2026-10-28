@@ -113,7 +113,7 @@ test('search, the archive, the range and older pages each ask the server', async
   const fetch = api();
   renderAt();
   const list = await pane();
-  await list.findByRole('button', { name: /Ad Strategist/ });
+  await list.findByRole('button', { name: /^Ad Strategist/ });
   fireEvent.click(list.getByRole('button', { name: 'Show older' }));
   expect(await list.findByRole('link', { name: /FAQ rewrite/ })).toBeTruthy();
   expect(asked(fetch, 'cursor=cursor-1')).toBe(true);
@@ -132,5 +132,5 @@ test('search, the archive, the range and older pages each ask the server', async
   fireEvent.click(await list.findByRole('button', { name: 'Archived · 1' }));
   expect(await list.findByRole('link', { name: /Old launch/ })).toBeTruthy();
   fireEvent.click(list.getByRole('button', { name: 'Archived conversations' }));
-  expect(await list.findByRole('button', { name: /Ad Strategist/ })).toBeTruthy();
+  expect(await list.findByRole('button', { name: /^Ad Strategist/ })).toBeTruthy();
 });

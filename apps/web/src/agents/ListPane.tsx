@@ -7,6 +7,7 @@ import { PLATFORM_NAME } from '../components/StoreForm';
 import { cx, ErrorState, LoadingState, RUN_STATUS } from '../components/ui';
 import { useStored } from './layout';
 import { hidePopover, MenuItem, Popover, rove } from './Popover';
+import { useAgentSettings } from './settings';
 import { StateDot } from './StateDot';
 import { agentsUrl } from './urls';
 
@@ -121,16 +122,19 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
               const shut = collapsed.includes(g.id);
               return (
                 <div key={g.id}>
-                  <button
-                    type="button"
-                    aria-expanded={!shut}
-                    onClick={() => setCollapsed((all) => (shut ? all.filter((id) => id !== g.id) : [...all, g.id]))}
-                    className="flex w-full cursor-pointer items-center gap-[7px] rounded-[7px] px-2.5 pt-[9px] pb-[3px] text-left text-[12.5px] font-semibold text-[#e6e6ea]"
-                  >
-                    {shut ? <ChevronRight aria-hidden className="size-[13px] text-muted" /> : <ChevronDown aria-hidden className="size-[13px] text-muted" />}
-                    {g.name}
-                    <span className="text-[11px] font-medium text-muted">{byType[g.id]}</span>
-                  </button>
+                  <div className="group relative">
+                    <button
+                      type="button"
+                      aria-expanded={!shut}
+                      onClick={() => setCollapsed((all) => (shut ? all.filter((id) => id !== g.id) : [...all, g.id]))}
+                      className="flex w-full cursor-pointer items-center gap-[7px] rounded-[7px] px-2.5 pt-[9px] pb-[3px] text-left text-[12.5px] font-semibold text-[#e6e6ea]"
+                    >
+                      {shut ? <ChevronRight aria-hidden className="size-[13px] text-muted" /> : <ChevronDown aria-hidden className="size-[13px] text-muted" />}
+                      {g.name}
+                      <span className="text-[11px] font-medium text-muted">{byType[g.id]}</span>
+                    </button>
+                    {named.has(g.id) && <TypeMenu type={g} />}
+                  </div>
                   {!shut && items.filter((c) => !c.teamId && c.type === g.id).map((c) => row(c, 'g'))}
                 </div>
               );
@@ -268,6 +272,29 @@ function MoreTypes({ types }: { types: AgentTypeInfo[] }) {
           </div>
         ))}
     </div>
+  );
+}
+
+/** A type header's menu: its seat's settings. ponytail: New conversation joins it with AA-14. */
+function TypeMenu({ type }: { type: AgentTypeInfo }) {
+  const settings = useAgentSettings();
+  const id = `type-${type.id.replace(/\W/g, '-')}`;
+  return (
+    <>
+      <button
+        type="button"
+        aria-label={`More for ${type.name}`}
+        popoverTarget={id}
+        className="absolute top-[6px] right-1 grid size-6 cursor-pointer place-items-center rounded-md text-muted opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 hover:bg-panel-2 hover:text-white"
+      >
+        <Ellipsis className="size-4" />
+      </button>
+      <Popover id={id} label={`Actions for ${type.name}`} align="end" className="w-40">
+        <MenuItem popover={id} onClick={() => settings.open(type.baseRole)}>
+          Agent settings
+        </MenuItem>
+      </Popover>
+    </>
   );
 }
 

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, screen, within } from '@testing-library/react';
-import { Route, Routes } from 'react-router';
+import { Link, Route, Routes } from 'react-router';
 import type { Conversation, Store } from '@frontline/shared';
 import { App } from '../App';
 import { renderApp, reply, stubApi } from '../test-utils';
@@ -114,6 +114,36 @@ test("?run= opens the conversation holding the run, reads a run with none alone,
   cleanup();
   renderAt('/agents/w?store=glow&run=peaks');
   expect(await screen.findByText('Run not found')).toBeTruthy();
+});
+
+test('after leaving for /knowledge, /agents/w?store= brings back the conversation, the Activity tab and the thread scroll', async () => {
+  vi.stubGlobal('innerWidth', 1440); // three panes: the Details panel is open beside the thread
+  api();
+  renderApp(
+    <>
+      <Link to="/knowledge">Knowledge page</Link>
+      <Link to="/agents/w?store=glow">AI Agents page</Link>
+      <Routes>
+        {['/agents/c/:id', '/agents/t/:id', '/agents/w'].map((p) => (
+          <Route key={p} path={p} element={<Workspace />} />
+        ))}
+        <Route path="/knowledge" element={<p>Knowledge</p>} />
+      </Routes>
+    </>,
+    '/agents/w?store=glow',
+  );
+  fireEvent.click(await screen.findByRole('link', { name: /FAQ rewrite/ }));
+  fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
+  const thread = () => screen.getByRole('region', { name: 'Conversation' }).querySelector(':scope > .overflow-y-auto')!;
+  await screen.findByRole('heading', { name: 'FAQ rewrite' });
+  fireEvent.scroll(thread(), { target: { scrollTop: 120 } });
+  fireEvent.click(screen.getByRole('link', { name: 'Knowledge page' }));
+  expect(await screen.findByText('Knowledge')).toBeTruthy();
+  fireEvent.click(screen.getByRole('link', { name: 'AI Agents page' }));
+  expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
+  expect(screen.getByTestId('where').textContent).toBe('/agents/c/c2?store=glow');
+  expect(screen.getByRole('tab', { name: 'Activity' }).getAttribute('aria-selected')).toBe('true');
+  await vi.waitFor(() => expect(thread().scrollTop).toBe(120));
 });
 
 test('no stores: the workspace says how to add one', async () => {

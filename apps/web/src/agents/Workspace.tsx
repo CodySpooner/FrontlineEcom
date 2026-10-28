@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router';
 import { Bot, List, PanelRight, SearchX, Users } from 'lucide-react';
-import { AGENT_ROLES, type AgentRole, type Store } from '@frontline/shared';
+import type { Store } from '@frontline/shared';
 import { useConversation, useConversations, useRun, useStores } from '../api/client';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
 import { buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState } from '../components/ui';
 import { NAV } from '../nav';
 import { Conversation, ReadOnlyRun } from './Conversation';
+import { Details } from './Details';
 import { useFill } from './fill';
 import { clampPanes, lastOpened, PANES, usePaneState } from './layout';
 import { ListPane, meta } from './ListPane';
+import { SettingsDrawer } from './settings';
 import { StateDot } from './StateDot';
 import { agentsUrl } from './urls';
 
@@ -93,7 +95,7 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
   }, []);
   const showRight = mode === 'three' && prefs.rightOpen;
   const list = <ListPane key={store.id} store={store} open={conversationId} search={search} />;
-  const details = <Details store={store} conversationId={conversationId} />;
+  const details = (end?: ReactNode) => <Details store={store} conversationId={conversationId} end={end} />;
   const buttons = (
     <>
       {mode === 'one' && <IconButton label="Show conversations" icon={List} onClick={() => setDrawer('list')} />}
@@ -129,11 +131,7 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
       {showRight && (
         <aside aria-label="Details" className="relative flex min-h-0 flex-col border-l border-[#1d1d22] bg-[#0a0a0c]">
           <Handle label="Resize the details panel" value={right} min={PANES.right.min} max={PANES.right.max} edge="left" onChange={(v) => setPrefs({ right: clampPanes(workspace, { ...prefs, right: v }).right })} />
-          <div className="flex h-10 items-center justify-between border-b border-[#1d1d22] pr-2 pl-4">
-            <span className="flex h-full items-center border-b-2 border-red text-[12.5px] font-medium">Details</span>
-            <IconButton label="Hide details" icon={PanelRight} onClick={() => setPrefs({ rightOpen: false })} />
-          </div>
-          {details}
+          {details(<IconButton label="Hide details" icon={PanelRight} onClick={() => setPrefs({ rightOpen: false })} />)}
         </aside>
       )}
       {mode === 'one' && (
@@ -143,9 +141,10 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
       )}
       {mode !== 'three' && (
         <Dialog side="right" open={drawer === 'details'} onClose={() => setDrawer(undefined)} title="Details">
-          {details}
+          {details()}
         </Dialog>
       )}
+      <SettingsDrawer storeId={store.id} />
     </div>
   );
 }
@@ -232,25 +231,4 @@ function RunView({ store, id, buttons }: { store: Store; id: string; buttons: Re
   if (run.isError) return <ErrorState message="Couldn't load this run." onRetry={() => run.refetch()} />;
   if (run.data.conversationId) return <Navigate replace to={agentsUrl({ store: store.id, conversation: run.data.conversationId })} />;
   return <ReadOnlyRun store={store} run={run.data} buttons={buttons} />;
-}
-
-// ponytail: the agent and its store scope; AA-09 adds runtime, tools, approvals and budget, and the Activity tab.
-function Details({ store, conversationId }: { store: Store; conversationId?: string }) {
-  const c = useConversation(store.id, conversationId ?? '').data;
-  if (!conversationId || !c) return <p className="px-4 py-3.5 text-[12.5px] text-muted">Open a conversation to see its agent and scope.</p>;
-  const role = AGENT_ROLES[c.agentId.split(':')[1] as AgentRole];
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      <section className="flex flex-col gap-1.5 border-b border-[#1d1d22] px-4 py-3.5">
-        <h3 className="text-[11px] font-semibold tracking-[.07em] text-muted uppercase">Agent</h3>
-        <div className="text-sm font-semibold">{role?.name ?? 'Agent'}</div>
-        {role && <p className="text-[12.5px] text-text-2">{role.blurb}</p>}
-      </section>
-      <section className="flex flex-col gap-1.5 border-b border-[#1d1d22] px-4 py-3.5">
-        <h3 className="text-[11px] font-semibold tracking-[.07em] text-muted uppercase">Store scope</h3>
-        <div className="text-[12.5px] text-text-2">{store.name} only</div>
-        <p className="text-xs text-muted">Fixed when the conversation started. Other stores' data is never read.</p>
-      </section>
-    </div>
-  );
 }

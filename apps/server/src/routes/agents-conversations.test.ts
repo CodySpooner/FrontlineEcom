@@ -211,3 +211,16 @@ test("the list counts each type under its filters; counts per store say what's g
   expect(await types('peak')).not.toContain('glow-voice');
   expect((await send('GET', '/api/agent-types?store=nope')).status).toBe(404);
 });
+
+test('the tools endpoint groups the config by access and says whether the integration behind a group is connected', async () => {
+  const { conversation } = await open({ type: 'ad_strategist', message: 'Check the campaigns' });
+  const groups = async () => (await (await send('GET', `/api/conversations/${conversation.id}/tools?store=glow`)).json()) as { id: string; access: string; tools: string[]; integration?: { kind: string; connected: boolean } }[];
+  const first = await groups();
+  expect(first.map((g) => [g.id, g.access])).toEqual([['data', 'read'], ['web', 'read'], ['knowledge', 'on'], ['drafts', 'approval'], ['squad', 'on'], ['meta_ads', 'approval']]);
+  expect(first.find((g) => g.id === 'drafts')!.tools).toEqual(['propose_ad_change']);
+  expect(first.find((g) => g.id === 'data')!.tools).toContain('list_campaigns');
+  expect(first.at(-1)!.integration).toEqual({ kind: 'meta_ads', connected: false });
+  db.prepare(`INSERT INTO integrations (id, kind, store_id, encrypted_credentials, updated_at) VALUES ('i1', 'meta_ads', 'glow', '', '2026-10-28')`).run();
+  expect((await groups()).at(-1)!.integration).toEqual({ kind: 'meta_ads', connected: true });
+  expect((await send('GET', `/api/conversations/${conversation.id}/tools?store=peak`)).status).toBe(404);
+});

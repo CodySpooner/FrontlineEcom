@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { AlertTriangle, ArrowUp, Check, ChevronRight, Ellipsis, LoaderCircle, Pencil, Square, X } from 'lucide-react';
 import { AGENT_ROLES, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationState, type KbStage, type RuntimeId, type Store } from '@frontline/shared';
@@ -10,6 +10,7 @@ import { isLive, toBlocks, toolName, type Block } from '../lib/transcript';
 import { activitySteps, activitySummary, type Step } from './activity';
 import { renderReply } from './markdown';
 import { MenuItem, Popover } from './Popover';
+import { useAgentSettings } from './settings';
 import { StateDot } from './StateDot';
 import { agentsUrl } from './urls';
 
@@ -23,6 +24,9 @@ const chip = 'inline-flex h-6 items-center gap-1.5 rounded-md border border-[#1d
 const REPLY =
   'grid gap-2.5 text-[13.5px] leading-relaxed text-text [&_a]:text-[#ff6b76] [&_a:hover]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[#2a2a30] [&_blockquote]:pl-3 [&_blockquote]:text-text-2 [&_code]:rounded [&_code]:bg-[#16161a] [&_code]:px-1 [&_code]:font-mono [&_code]:text-[12px] [&_h1]:text-[15px] [&_h1]:font-semibold [&_h2]:text-[14.5px] [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-[#111114] [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_table]:block [&_table]:overflow-x-auto [&_table]:border-collapse [&_table]:text-[12.5px] [&_td]:border-b [&_td]:border-[#1d1d22] [&_td]:px-2.5 [&_td]:py-1.5 [&_th]:border-b [&_th]:border-[#26262c] [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold [&_th]:text-text-2';
 const STAGE_TONE: Record<KbStage, string> = { hypothesis: 'text-[#f2b84b]', supported: 'text-[#7aa7ff]', tested: 'text-[#7aa7ff]', validated: 'text-[#3ddc84]' };
+
+// Each conversation's thread scroll offset for this session: leaving the page and coming back returns to it.
+const scrollTops = new Map<string, number>();
 
 const initials = (name: string) => (name.match(/\b\p{L}/gu) ?? []).join('').slice(0, 2).toUpperCase();
 const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
@@ -68,6 +72,20 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
   const latest = runs.filter((r) => !runs.some((x) => x.retryOf === r.id)).at(-1);
   const last = useRun(latest?.id ?? '').data ?? latest;
   const live = c.state === 'running' || c.state === 'queued' || c.state === 'awaiting_approval' || c.state === 'waiting_for_input';
+  // Opens where it was left, else at the newest message; while at the bottom, growing replies stay in view.
+  const scroller = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+  const loaded = !thread.isPending;
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!loaded || !el) return;
+    el.scrollTop = scrollTops.get(c.id) ?? el.scrollHeight;
+    stick.current = !scrollTops.has(c.id);
+    if (typeof ResizeObserver === 'undefined' || !el.firstElementChild) return;
+    const ro = new ResizeObserver(() => stick.current && (el.scrollTop = el.scrollHeight));
+    ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, [loaded, c.id]);
   return (
     <section aria-label="Conversation" className="flex min-h-0 flex-1 flex-col">
       <Header store={store} conversation={c} live={live} buttons={buttons} />
@@ -80,7 +98,15 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
         {runtimeLabel(config) && <span className={chip}>{runtimeLabel(config)}</span>}
         {last && last.status !== 'queued' && <span className={chip}>{spendLabel(last, config.permissions.budgetUsd)}</span>}
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+      <div
+        ref={scroller}
+        onScroll={(e) => {
+          const el = e.currentTarget;
+          scrollTops.set(c.id, el.scrollTop);
+          stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+        }}
+        className="min-h-0 flex-1 overflow-y-auto px-6 py-5"
+      >
         {thread.isPending ? (
           <LoadingState rows={3} className={COLUMN} />
         ) : thread.isError ? (
@@ -104,6 +130,7 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
 
 function Header({ store, conversation: c, live, buttons }: { store: Store; conversation: ConversationRecord; live: boolean; buttons: ReactNode }) {
   const update = useUpdateConversation(store.id);
+  const settings = useAgentSettings();
   const stop = useStopConversation(store.id, c.id);
   const [renaming, setRenaming] = useState(false);
   const rename = (title?: string) => {
@@ -163,6 +190,9 @@ function Header({ store, conversation: c, live, buttons }: { store: Store; conve
         </MenuItem>
         <MenuItem popover="conversation-menu" onClick={() => update.mutate({ id: c.id, archived: !c.archivedAt })}>
           {c.archivedAt ? 'Unarchive' : 'Archive'}
+        </MenuItem>
+        <MenuItem popover="conversation-menu" onClick={() => settings.open(c.agentId.split(':')[1] as AgentRole)}>
+          Agent settings
         </MenuItem>
       </Popover>
       {buttons}

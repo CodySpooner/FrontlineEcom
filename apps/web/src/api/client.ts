@@ -10,6 +10,7 @@ import type {
   Conversation,
   ConversationCounts,
   ConversationDetail,
+  ToolGroup,
   ConversationPage,
   CreateConversationInput,
   CursorPage,
@@ -228,6 +229,10 @@ export const useConversations = (storeId: string, filter: ConversationFilter = {
 export const useConversationCounts = () => useQuery({ queryKey: ['conversation-counts'], queryFn: () => api<ConversationCounts>('/api/conversations/counts') });
 
 /** The agent types a store can talk to, in list order. */
+/** The conversation's tools by access, with each group's integration state (the Details panel). */
+export const useConversationTools = (storeId: string, id: string) =>
+  useQuery({ queryKey: ['conversation-tools', id], queryFn: () => api<ToolGroup[]>(`/api/conversations/${id}/tools?store=${storeId}`), enabled: !!id });
+
 export const useAgentTypes = (storeId: string) => useQuery({ queryKey: ['agent-types', storeId], queryFn: () => api<AgentTypeInfo[]>(`/api/agent-types?store=${storeId}`), enabled: !!storeId });
 
 /** A 404 (deleted, or another store's) shows at once instead of after three retries. */

@@ -23,7 +23,7 @@ export {
 } from './memory';
 export { APP_TOOLS, OUTLIVE_RUN, RESEARCH_TOOLS, allows, budgetAddedToday, cash, defaultTools, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
-export { agentTypes, getConfig, resolveType, saveConfig, seatDefault, validateConfig, type AgentType, type ConfigDraft } from './configs';
+export { agentTypes, getConfig, resolveType, saveConfig, seatDefault, toolGroups, validateConfig, type AgentType, type ConfigDraft } from './configs';
 export { conversationCounts, conversationPreface, conversationThread, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
 export { createRunManager, getRun, hasEffects, listRuns, runGist, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';

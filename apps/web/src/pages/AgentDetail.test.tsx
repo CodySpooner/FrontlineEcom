@@ -4,7 +4,8 @@ import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Agent, AgentRunDetail, ApprovalRequest, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { Route, Routes } from 'react-router';
-import { AgentBudget, AgentDetail, NicheLearnings } from './AgentDetail';
+import { AgentBudget, NicheLearnings } from '../agents/settings';
+import { AgentDetail } from './AgentDetail';
 
 afterEach(() => {
   cleanup();
