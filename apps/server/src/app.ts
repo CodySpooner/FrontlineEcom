@@ -53,7 +53,7 @@ const MB = 1_048_576;
  */
 const STARTS = /^\/api\/(kb\/(ask|research\/tasks(\/[^/]+\/(retry|refine))?)|conversations(\/[^/]+\/(messages|runs\/[^/]+\/(retry|resume)))?|teams(\/[^/]+\/steps\/[^/]+\/resume)?)$/;
 /** Bodies that may carry a document or attachments (10 MB in base64), or a Product Research import. */
-const LARGE = /^\/api\/(kb\/research\/tasks|conversations(\/[^/]+\/messages)?|pr\/imports\/trends)$/;
+const LARGE = /^\/api\/(kb\/research\/tasks|conversations(\/[^/]+\/messages)?|pr\/imports\/(trends|feed))$/;
 
 /**
  * KB-25: the knowledge base and product research read no body over its size (research from an uploaded document

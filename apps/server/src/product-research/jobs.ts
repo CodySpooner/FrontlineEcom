@@ -3,6 +3,7 @@ import type { PrErrorKind } from '@frontline/shared';
 import { once, tx, type Db } from '../db';
 import { log } from '../log';
 import { CAPS, refusal } from './caps';
+import { refreshAllOrders } from './evidence';
 import { SourceError, type PrAdapter } from './sources/adapter';
 
 /*
@@ -176,6 +177,7 @@ export function startPrJobs(db: Db, key: Buffer, adapters: PrAdapter[], onStored
     running = true;
     try {
       planToday(db, adapters, key);
+      refreshAllOrders(db);
       await runDue(db, adapters, { key, ...(onStored ? { onStored } : {}) });
       for (const a of adapters) if (a.enrich && a.ready?.(db, key) && !stoppedReason(db, a)) await a.enrich(db, key);
     } catch (e) {

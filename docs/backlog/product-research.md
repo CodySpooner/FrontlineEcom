@@ -705,7 +705,7 @@ STOP.
   and momentum, `pr_product_facts` demand columns, the Trends API adapter reporting Approval required. Tests on
   real-format fixtures, including "<1" values, daily, weekly and monthly exports, and a mislabelled file; a test per
   class threshold.
-- [ ] PR-07 **Other sources** (decision 4): own-store orders as measured demand (`demo = 0` stores only, test that a demo
+- [x] PR-07 **Other sources** (decision 4): own-store orders as measured demand (`demo = 0` stores only, test that a demo
   store's orders never count), TikTok Creative Center manual notes, supplier feed CSV import (`checked_at` from the
   file, else `supplier_claim`). Tests.
 
@@ -717,7 +717,8 @@ STOP.
   last), cursor paging, tab counts, facet values and "unknown included" handling, store scope (included categories) vs
   All stores, private rows. SQL only over `pr_product_facts` and `pr_evaluations`; an index for every filter and sort
   the page uses; a test with 10,000 products. Also PR-03's test: a sample row never appears in discovery, counts or
-  sorts.
+  sorts. "With demand evidence" in a store's scope also counts that store's own qualifying sets (its orders, PR-07),
+  which stay out of the shared facts.
 - [ ] PR-10 **Page frame, product grid, image proxy and dev fixtures** (The design: page frame and product card;
   decisions 12, 14): replace the page, keep `/research` and its nav entry (looked up by path), toolbar, profile line,
   filter chips, tabs, source strip, grid and cards, URL and storage state, the distinct states, the image proxy, and
@@ -768,7 +769,8 @@ STOP.
 - [ ] PR-20 **Supplier matching and existing-product checks:** alternative suppliers for a product (CJ search by
   attributes, at most 3 calls a search), **Exact match only on the same SKU, GTIN or MPN, or the owner's confirmation;
   everything else is Similar** with the matching and differing fields; confirm, merge or separate with sources kept;
-  and the "Already in your store" check against the store's products with a confirm step for uncertain matches.
+  and the "Already in your store" check against the store's products with a confirm step for uncertain matches (the
+  confirmed link is `POST /api/pr/products/:id/store-products`, PR-07, which also starts the store's order set).
 
 ### Watchlists and pipeline
 - [ ] PR-21 **Watchlists and alerts:** watch products, niches and offers (store or all-stores, decision 3), preferences
@@ -846,6 +848,11 @@ STOP.
   same file twice is one import), query-match link suggestions the owner confirms (`POST /api/pr/signals/:id/links`),
   decision 9's classifier and momentum in one pure function, the demand part of Rank into `pr_product_facts`, and the
   Trends CSV (Authorized import) and Trends API (Approval required) sources. 15 tests; 4 mutation checks.
+- 2026-10-28 PR-07 other sources: a store's own paid orders as weekly units for the research product it is linked to
+  (`POST /api/pr/products/:id/store-products`; `demo = 0` stores only, refreshed daily, private to the store), TikTok
+  Creative Center notes with link and date (`POST /api/pr/products/:id/notes`, Manual research only, never evidence),
+  and the supplier feed import (`POST /api/pr/imports/feed`, in `LARGE`: listing per product, variant per SKU, offer
+  per row, `checked_at` from the file else `supplier_claim`, refused whole on a bad cell). 6 tests; 2 mutation checks.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -863,9 +870,13 @@ STOP.
 - **One Google Trends export (owner):** on trends.google.com, search the product term for the store's country over
   the past 12 months (or 5 years for seasonality), then use the download (CSV) button on the "Interest over time"
   chart. Upload it on the Research page once PR-12 ships (the import API is in since PR-06). It needs at least one product to link to (from the CJ key or a pasted link). Needed for PR-29.
-- **Supplier feed (owner, optional):** a CSV you're entitled to export from a supplier or feed tool, with product
-  title, SKU, variant, unit cost, currency, shipping cost and destination (PR-07 lists the exact columns here). Upload
-  it on the Research page once PR-07 ships.
+- **Supplier feed (owner, optional):** a CSV you're entitled to export from a supplier or feed tool. Header row with
+  these column names (any case, any order): **title, sku, currency** (required), and any of product_ref (groups
+  variants into one product; default the sku), variant, unit_cost, shipping_cost (plain amounts like 3.42), destination
+  and ships_from (two-letter country codes), delivery_days_min, delivery_days_max, processing_days, stock, moq (whole
+  numbers), gtin, mpn, category, image_url, url, checked_at (the date the supplier's figures are from; rows without it
+  are kept as supplier claims). One file, at most 20,000 rows and 10 MB. The import API is in (PR-07); the upload
+  control comes with the page (PR-10).
 - **Google Trends API (owner, optional):** applications are open as of 2026-10-28 ("We're now accepting
   applications for alpha testers", https://developers.google.com/search/apis/trends#apply). Fill in the form that page
   embeds: https://docs.google.com/forms/d/e/1FAIpQLSfiP3XUUWGr4CkYk1oJHpthCAcAw2kL0UaE6p7tq3ZoxFiLtA/viewform. Google
@@ -873,6 +884,13 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-07, decision 4 as built.** The link between a research product and a store product is a `pr_outcomes` row
+  (kind `store_product`): PR-20's "Already in your store" check and T9's `prProductId` write the same row. Own orders
+  are weekly paid units (Sunday weeks, like Trends) from the first week with a sale to the last complete week, at most
+  104 weeks, classified with decision 9's rules. They are private to the store, so Rank keeps them out of the shared
+  facts and PR-09 adds them for that store's scope. A note needs a product (notes come from the detail panel). Feed
+  money uses the currency's ISO minor units from the runtime (`Intl`), so yen has no cents; a well-formed but unknown
+  three-letter code passes (ICU accepts it). A feed is shared (store NULL), like the CJ catalog.
 - **PR-06, decision 9 as built.** A 0 counts as "<1" for Insufficient history (Google shows low-volume terms as 0).
   A year's "top 10%" only takes points above that year's median, so a flat baseline's ties never make a month
   seasonal. Momentum is null for an Insufficient history set and when the window before averages 0; it is rounded to

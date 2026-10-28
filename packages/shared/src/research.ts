@@ -84,6 +84,17 @@ export interface PrSignalSet {
   links: { productId: string; title: string; confirmed: boolean }[];
 }
 
+/** POST /api/pr/imports/feed: what one supplier feed added. `undated`: offers with no date in the file (supplier claims). */
+export interface PrFeedImport {
+  fileId: string;
+  duplicate: boolean;
+  supplier: string;
+  listings: number;
+  variants: number;
+  offers: number;
+  undated: number;
+}
+
 /** POST /api/pr/imports/trends: one set per term in the file. `duplicate`: the same file was imported before. */
 export interface PrTrendsImport {
   fileId: string;

@@ -12,14 +12,15 @@ export const demandOf = (db: Db, s: { id: string; granularity: unknown }): Deman
   s.granularity ? classifyDemand(pointsOf(db, s.id), s.granularity as PrGranularity) : null;
 
 /**
- * The sets that speak for a product: its product-scope sets and the query-scope sets the owner confirmed for it,
- * newest first. A suggested (unconfirmed) link or a category set never does (decision 9).
+ * The shared sets that speak for a product: its product-scope sets and the query-scope sets the owner confirmed for it,
+ * newest first. A suggested (unconfirmed) link or a category set never does (decision 9). A store's private sets (its
+ * own orders, notes) stay out of the shared facts: the discovery API adds them for that store's scope.
  */
 export const productSets = (db: Db, productId: string) =>
   db
     .prepare(
-      `SELECT id, granularity, origin, retrieved_at FROM pr_signals WHERE product_id = ?
-        OR id IN (SELECT signal_id FROM pr_signal_links WHERE product_id = ? AND confirmed_at IS NOT NULL)
+      `SELECT id, granularity, origin, retrieved_at FROM pr_signals WHERE store_id IS NULL AND (product_id = ?
+        OR id IN (SELECT signal_id FROM pr_signal_links WHERE product_id = ? AND confirmed_at IS NOT NULL))
        ORDER BY retrieved_at DESC, id`,
     )
     .all(productId, productId);
