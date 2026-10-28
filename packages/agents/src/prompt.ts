@@ -72,7 +72,7 @@ export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [
     platformPack(store.platform),
     nichePack(store.niche) || customNichePack(store.nicheDetail),
     nicheLearnings.length
-      ? [`# Learned across ${store.niche === 'other' ? store.nicheDetail : store.niche} stores (owner-approved)`, ...nicheLearnings.map((l) => `- ${l.text}${l.evidence ? ` Evidence: ${l.evidence}.` : ''}`)].join('\n')
+      ? [`# Learned across ${store.niche === 'other' ? store.nicheDetail : store.niche} stores (owner-approved)`, ...nicheLearnings.map((l) => `- ${oneLine(l.text)}${l.evidence ? ` Evidence: ${oneLine(l.evidence)}.` : ''}`)].join('\n')
       : '',
     storeProfile(store),
   ]
@@ -90,7 +90,7 @@ export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [
   const known: string[] = [];
   const owners = (m: StoreMemory) => author(m).startsWith('owner');
   for (const m of [...memories.filter(owners), ...memories.filter((m) => !owners(m))]) {
-    const line = `- ${m.text}${m.evidence ? ` Evidence: ${m.evidence}.` : ''} (${m.kind}, ${author(m)}, confidence ${m.confidence.toFixed(1)})`;
+    const line = `- ${oneLine(m.text)}${m.evidence ? ` Evidence: ${oneLine(m.evidence)}.` : ''} (${m.kind}, ${author(m)}, confidence ${m.confidence.toFixed(1)})`;
     const cost = estimateTokens(line) + 1;
     if (cost > room) continue; // a long one doesn't keep the shorter ones after it out
     room -= cost;

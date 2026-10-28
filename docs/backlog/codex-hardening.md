@@ -88,7 +88,7 @@ dated Done line there too.
 
 - [x] CH-06 AGT-247: `parseLearnings` finds the array's own closing `]` (`memory.ts` ~167 uses `lastIndexOf(']')`, so
   "See step [2]." after the array drops every learning).
-- [ ] CH-07 AGT-248: memory and niche-learning lines go through the existing `oneLine()` (`prompt.ts` ~27; raw
+- [x] CH-07 AGT-248: memory and niche-learning lines go through the existing `oneLine()` (`prompt.ts` ~27; raw
   `m.text` at ~75 and ~91), so a memory can't forge a line labelled as the owner's preference.
 - [ ] CH-08 AGT-249: the prompt's memory room counts the memory header and the "Scheduled jobs" and "Waiting for the
   owner" sections (`prompt.ts` ~88-125).
@@ -161,6 +161,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-07 / AGT-248: memory and niche-learning text/evidence use existing oneLine(), preventing forged owner lines via CR/LF or Unicode line separators. Regression failed first; pnpm check green (232 files / 1,710 tests).
 
 - 2026-10-28 CH-06 / AGT-247: reflection parsing finds the array boundary despite trailing citations, quoted brackets and nested tags; prose [2] is skipped. Three failing regressions first, then 17 focused tests and pnpm check green (232 files / 1,709 tests).
 
