@@ -164,14 +164,16 @@ Skip anything already in "What the squad has learned", generic advice, and guess
 
 /** Parses the reflection reply. Tolerates prose or code fences around the array; drops invalid items. */
 export function parseLearnings(reply: string): Omit<NewMemory, 'storeId' | 'agentId'>[] {
-  const end = reply.lastIndexOf(']');
   let items: unknown;
-  // The array starts at the first [ that parses: prose before it can hold one too (a [link], "[2]").
-  for (let start = reply.indexOf('['); start >= 0 && start < end && items === undefined; start = reply.indexOf('[', start + 1)) {
-    try {
-      items = JSON.parse(reply.slice(start, end + 1));
-    } catch {
-      // not this one
+  // JSON.parse finds the matching end even with brackets in strings; prose citations like [2] aren't learnings.
+  for (let start = reply.indexOf('['); start >= 0 && items === undefined; start = reply.indexOf('[', start + 1)) {
+    for (let end = reply.indexOf(']', start + 1); end >= 0 && items === undefined; end = reply.indexOf(']', end + 1)) {
+      try {
+        const parsed: unknown = JSON.parse(reply.slice(start, end + 1));
+        if (Array.isArray(parsed) && (!parsed.length || parsed.some((i) => i !== null && typeof i === 'object'))) items = parsed;
+      } catch {
+        // not this boundary
+      }
     }
   }
   if (!Array.isArray(items)) return [];

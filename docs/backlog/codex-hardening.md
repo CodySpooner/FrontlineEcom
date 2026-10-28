@@ -86,7 +86,7 @@ Files: `packages/agents/src/memory.ts`, `prompt.ts`, `runs.ts` (only the AGT-246
 from a review "traced against sdk.d.ts, not yet run": check each claim before fixing. Tick them in `agents.md` with a
 dated Done line there too.
 
-- [ ] CH-06 AGT-247: `parseLearnings` finds the array's own closing `]` (`memory.ts` ~167 uses `lastIndexOf(']')`, so
+- [x] CH-06 AGT-247: `parseLearnings` finds the array's own closing `]` (`memory.ts` ~167 uses `lastIndexOf(']')`, so
   "See step [2]." after the array drops every learning).
 - [ ] CH-07 AGT-248: memory and niche-learning lines go through the existing `oneLine()` (`prompt.ts` ~27; raw
   `m.text` at ~75 and ~91), so a memory can't forge a line labelled as the owner's preference.
@@ -161,6 +161,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-06 / AGT-247: reflection parsing finds the array boundary despite trailing citations, quoted brackets and nested tags; prose [2] is skipped. Three failing regressions first, then 17 focused tests and pnpm check green (232 files / 1,709 tests).
 
 - 2026-10-28 CH-05: two failing concurrent-call regressions proved duplicate ad/product approvals across FX awaits; ad pending/recent checks and generic product checks now run after that await. 61 focused tests and `pnpm check` green (231 files / 1,705 tests). Audited synchronous autopilot approval counters, pending ad reservations, pre-render credit charging and synchronous PR draft requests; filed remaining reservation/ownership/design cases listed in Notes. Q1 confirmed against decisions 9/12; no dollar-cost policy changed.
 
