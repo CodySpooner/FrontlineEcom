@@ -1,4 +1,4 @@
-import { adWindow, awardXp, cash, checkAchievements, commander, dailyMissions, economics, getAgent, judgeRun, levelForXp, nicheKey, once, profitStreak, promotionCandidates, thresholds, uncostedShare, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
+import { adWindow, awardXp, cash, checkAchievements, commander, dailyMissions, economics, getAgent, judgeRun, learnFromOutcome, levelForXp, nicheKey, once, profitStreak, promotionCandidates, thresholds, uncostedShare, writeMemory, XP, type Award, type Facts, type NewMemory } from '@frontline/agents';
 import { AGENT_ROLES, PRODUCT_WRITE_PLATFORMS, type MetricTotals, type Mission, type Store } from '@frontline/shared';
 import { Hono } from 'hono';
 import { currentWindow, summarize } from '../analytics';
@@ -21,9 +21,10 @@ export function award(db: Db, a: Award) {
 }
 
 /** A measured outcome becomes the agent's store learning and, once per change, a note in the owner's feed. */
-function recordOutcome(db: Db, ref: string, worked: boolean | undefined, m: NewMemory, unclear = 'without unit costs') {
+function recordOutcome(db: Db, ref: string, worked: boolean | undefined, m: NewMemory, unclear = 'without unit costs', runId?: unknown) {
   writeMemory(db, m);
   if (!once(db, `outcome-note:${ref}`)) return;
+  learnFromOutcome(db, { ref, runId: runId ? String(runId) : undefined, storeId: m.storeId, agentId: m.agentId, worked, text: m.text, evidence: m.evidence }); // KB-19
   const agent = getAgent(db, m.agentId);
   const name = agent ? AGENT_ROLES[agent.role].name : 'Agent';
   const title = worked === undefined ? `${name}: result unclear ${unclear}` : worked ? `Measured win: ${name}` : `${name}: no lift this time`;
@@ -37,7 +38,7 @@ const summary = (db: Db, storeIds: string[], range: 7 | 30) => {
   return summarize(rows, { range, to, storeIds, todayFraction });
 };
 /** A day in the store's zone, the one its orders and metrics are dated in (demo stores: this machine's). */
-const storeDay = (db: Db, storeId: string, at: string | number = Date.now()) => localDate(new Date(at), storeZone(db, storeId));
+export const storeDay = (db: Db, storeId: string, at: string | number = Date.now()) => localDate(new Date(at), storeZone(db, storeId));
 // The 15-days-on checks pre-filter loosely in SQL (a store's day, or a UTC date, can sit up to 3 days off this machine's
 // date), then gate each row on its store's own today.
 const roughly15DaysAgo = (today?: string) => addDays(today ?? localDate(), -12);
@@ -49,7 +50,7 @@ const roughly15DaysAgo = (today?: string) => addDays(today ?? localDate(), -12);
  * GA4 finishes a day ~48h after it (core re-reads its last 3 days each sync): its sync must be a day further on.
  * ponytail: Amazon's daily totals land a day or two late; only the ad check reads them.
  */
-const synced = (db: Db, storeId: string, end: string) =>
+export const synced = (db: Db, storeId: string, end: string) =>
   db
     .prepare('SELECT id, kind, status, synced_at FROM integrations WHERE store_id = ?')
     .all(storeId)
@@ -139,6 +140,7 @@ export function checkAdOutcomes(db: Db, today?: string) {
         evidence: `7 days before vs 3 days after ${day} (request ${r.id})`,
       },
       'next to bigger ad changes',
+      r.run_id,
     );
     // Once per run and day: its other changes that day are judged on the same store-wide ROAS, not new evidence.
     if (r.run_id && worked !== undefined) judgeRun(db, `ads:${r.run_id}:${day}`, String(r.run_id), worked);
@@ -197,7 +199,7 @@ export function checkProductOutcomes(db: Db, today?: string) {
           ? `"${t.title}" sold ${units} units, ${money(revenue)} revenue in its first 14 days${t.live_at ? ' on sale' : ''}; its profit can't be judged: it has no unit cost.`
           : `"${t.title}" ${won ? 'sold' : 'did not take off'}: ${units} units, ${money(revenue)} revenue, ${money(profit)} profit in its first 14 days${t.live_at ? ' on sale' : ''}.`,
       evidence: `paid orders ${start} to ${end} (request ${t.approval_id})`,
-    });
+    }, undefined, t.run_id);
     if (t.run_id && won !== undefined) judgeRun(db, `product:${t.approval_id}:${t.product_id}`, String(t.run_id), won);
     if (won) award(db, { ref: `product-win:${t.approval_id}:${t.product_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" sold ${units} units in 14 days` });
     db.prepare('UPDATE product_tests SET judged_at = ? WHERE store_id = ? AND product_id = ?').run(new Date().toISOString(), storeId, String(t.product_id));
@@ -212,7 +214,7 @@ const onSaleSince = (db: Db, storeId: string, addedOn: string, liveAt: unknown) 
  * A product the app added went on sale after `day`: the 14 days before a change on it from then hold only part of its
  * sales, no baseline for 14 days after. ponytail: one added outside the app has no such date and is judged as it sold.
  */
-function newSince(db: Db, storeId: string, productId: string, day: string) {
+export function newSince(db: Db, storeId: string, productId: string, day: string) {
   const t = db.prepare(`SELECT added_on, (SELECT at FROM done_once WHERE ref = 'product-live:' || ?1 || ':' || ?2) AS live_at FROM product_tests WHERE store_id = ?1 AND product_id = ?2`).get(storeId, productId);
   return !!t && onSaleSince(db, storeId, String(t.added_on), t.live_at) > day;
 }
@@ -223,7 +225,7 @@ function newSince(db: Db, storeId: string, productId: string, day: string) {
  * order's day, as on the dashboard. ponytail: units stay gross (a refund line has no quantity), a refund posted after
  * the judgement isn't seen, and an order with several products charges each of them the whole per-order fee (errs low).
  */
-const productSales = (db: Db, storeId: string, productId: string, from: string, to: string) => {
+export const productSales = (db: Db, storeId: string, productId: string, from: string, to: string) => {
   const r = db
     .prepare(
       `SELECT coalesce(sum(units), 0) AS units, coalesce(sum(revenue), 0) AS revenue,
@@ -249,15 +251,20 @@ const productSales = (db: Db, storeId: string, productId: string, from: string, 
  * says so when that's 10%+. ponytail: store-wide, revenue-weighted; a loss before isn't scaled.
  */
 function par(db: Db, storeId: string, productId: string, day: string, before: { profit: number }, money: (n: number) => string) {
+  const trend = before.profit > 0 ? restTrend(db, storeId, productId, { from: addDays(day, -14), to: addDays(day, -1) }, { from: addDays(day, 1), to: addDays(day, 14) }) : 1;
+  const moved = Math.round((trend - 1) * 100);
+  const profit = before.profit * trend;
+  return { profit, note: Math.abs(moved) >= 10 ? ` (par ${money(profit)}: the rest of the store's sales moved ${moved > 0 ? '+' : ''}${moved}%)` : '' };
+}
+
+/** How much the rest of the store's product sales moved from `b` to `a` (1 without sales on either side). */
+export function restTrend(db: Db, storeId: string, productId: string, b: { from: string; to: string }, a: { from: string; to: string }) {
   const rest = db.prepare(
     `SELECT coalesce(sum(i.revenue), 0) AS revenue FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
      WHERE i.store_id = ? AND i.product_id != ? AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?`,
   );
-  const [b, a] = [[-14, -1], [1, 14]].map(([from, to]) => Number(rest.get(storeId, productId, addDays(day, from!), addDays(day, to!))?.revenue));
-  const trend = b! > 0 && a! > 0 && before.profit > 0 ? a! / b! : 1;
-  const moved = Math.round((trend - 1) * 100);
-  const profit = before.profit * trend;
-  return { profit, note: Math.abs(moved) >= 10 ? ` (par ${money(profit)}: the rest of the store's sales moved ${moved > 0 ? '+' : ''}${moved}%)` : '' };
+  const [x, y] = [b, a].map((w) => Number(rest.get(storeId, productId, w.from, w.to)?.revenue));
+  return x! > 0 && y! > 0 ? y! / x! : 1;
 }
 
 /** Units a price test or page needs across its 28 days to be judged. ponytail: under it one order flips the verdict; no significance test. */
@@ -301,7 +308,7 @@ export function checkPriceOutcomes(db: Db, today?: string) {
         ? `Pricing "${t.title}" ${price(t.from_price)} → ${price(t.to_price)} can't be judged: no unit cost is set, so profit before product cost went ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`
         : `Pricing "${t.title}" ${price(t.from_price)} → ${price(t.to_price)} ${worked ? 'worked' : 'did not help'}: profit ${money(before.profit)} → ${money(after.profit)}${season.note}, ${before.units} → ${after.units} units (14 days before vs after).`,
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.approval_id})`,
-    }, few ? 'on too few sales' : undefined);
+    }, few ? 'on too few sales' : undefined, t.run_id);
     if (t.run_id && worked !== undefined) judgeRun(db, `price:${t.approval_id}`, String(t.run_id), worked);
     if (worked) award(db, { ref: `price-win:${t.approval_id}`, amount: XP.win, storeId, agentId, reason: `Measured win: "${t.title}" at ${price(t.to_price)} made more profit` });
   }
@@ -341,7 +348,7 @@ export function checkPageOutcomes(db: Db, today?: string) {
         ? `The new "${d.title}" page can't be judged: no unit cost is set, so profit before product cost went ${money(before.profit)} → ${money(after.profit)}, ${before.units} → ${after.units} units (14 days before vs after).`
         : `The new "${d.title}" page ${worked ? 'worked' : 'did not help'}: profit ${money(before.profit)} → ${money(after.profit)}${season.note}, ${before.units} → ${after.units} units (14 days before vs after).`,
       evidence: `paid orders ${addDays(day, -14)} to ${addDays(day, 14)} (draft ${d.id})`,
-    }, few ? 'on too few sales' : undefined);
+    }, few ? 'on too few sales' : undefined, d.run_id);
     if (d.run_id && worked !== undefined) judgeRun(db, `page:${d.id}`, String(d.run_id), worked);
     if (worked) award(db, { ref: `page-win:${d.id}`, amount: XP.win, storeId, agentId, reason: `Measured win: the new "${d.title}" page made more profit` });
   }
@@ -349,6 +356,25 @@ export function checkPageOutcomes(db: Db, today?: string) {
 
 /** Theme changes that went live 15+ days ago: store conversion rate in the 14 days after vs the 14 before, once each. */
 // ponytail: any lift counts as a win, no significance test; small stores need a few thousand sessions a side to mean much.
+/**
+ * The orders the store's own site took over [from, to], and its sessions. Amazon as an extra channel (core's
+ * channel_daily; a theme store is Shopify), TikTok Shop's `tt-` orders (CORE-82) and an Etsy shop's or second site's
+ * (`etsy-`, `woo-`; CORE-108) are in orders, but their shoppers never saw the site. Only days with sessions: before
+ * traffic was reported (GA4 connected mid-window) a day's orders have no sessions to divide by.
+ */
+export function storeFunnel(db: Db, storeId: string, from: string, to: string) {
+  const r = db
+    .prepare(
+      `SELECT coalesce(sum(d.orders - coalesce(c.orders, 0)
+           - (SELECT count(*) FROM orders o WHERE o.store_id = d.store_id AND o.local_date = d.date AND o.status = 'paid' AND (+o.id GLOB 'tt-*' OR +o.id GLOB 'etsy-*' OR +o.id GLOB 'woo-*'))), 0) AS orders,
+         coalesce(sum(d.sessions), 0) AS sessions
+       FROM daily_metrics d LEFT JOIN channel_daily c ON c.store_id = d.store_id AND c.date = d.date AND c.channel = 'amazon'
+       WHERE d.store_id = ?1 AND d.date BETWEEN ?2 AND ?3 AND d.sessions > 0`,
+    )
+    .get(storeId, from, to)!;
+  return { orders: Number(r.orders), sessions: Number(r.sessions) };
+}
+
 export function checkThemeOutcomes(db: Db, today?: string) {
   const live = db
     .prepare(
@@ -357,22 +383,12 @@ export function checkThemeOutcomes(db: Db, today?: string) {
        WHERE s.demo = 0 AND substr(o.at, 1, 10) <= ?`,
     )
     .all(roughly15DaysAgo(today));
-  // Amazon as an extra channel (core's channel_daily; a theme store is Shopify), TikTok Shop's `tt-` orders (CORE-82) and
-  // an Etsy shop's or second site's (`etsy-`, `woo-`; CORE-108) are in orders, but their shoppers never saw the theme.
-  // Only days with sessions: before traffic was reported (GA4 connected mid-window) a day's orders have no sessions to divide by.
-  const funnel = db.prepare(
-    `SELECT coalesce(sum(d.orders - coalesce(c.orders, 0)
-         - (SELECT count(*) FROM orders o WHERE o.store_id = d.store_id AND o.local_date = d.date AND o.status = 'paid' AND (+o.id GLOB 'tt-*' OR +o.id GLOB 'etsy-*' OR +o.id GLOB 'woo-*'))), 0) AS orders,
-       coalesce(sum(d.sessions), 0) AS sessions
-     FROM daily_metrics d LEFT JOIN channel_daily c ON c.store_id = d.store_id AND c.date = d.date AND c.channel = 'amazon'
-     WHERE d.store_id = ?1 AND d.date BETWEEN ?2 AND ?3 AND d.sessions > 0`,
-  );
   for (const t of live) {
     const [storeId, agentId] = [String(t.store_id), String(t.agent_id)];
     const day = storeDay(db, storeId, String(t.at));
     if (!settled(db, storeId, day, today) || !once(db, `theme-outcome:${t.id}`)) continue;
-    const before = funnel.get(storeId, addDays(day, -14), addDays(day, -1))!;
-    const after = funnel.get(storeId, addDays(day, 1), addDays(day, 14))!;
+    const before = storeFunnel(db, storeId, addDays(day, -14), addDays(day, -1));
+    const after = storeFunnel(db, storeId, addDays(day, 1), addDays(day, 14));
     if (!Number(before.sessions) || !Number(after.sessions)) continue;
     const [cr0, cr1] = [Number(before.orders) / Number(before.sessions), Number(after.orders) / Number(after.sessions)];
     // A few orders a fortnight: one either way moves conversion more than any theme change (as MIN_UNITS for prices).
@@ -385,7 +401,7 @@ export function checkThemeOutcomes(db: Db, today?: string) {
       storeId, agentId, kind: 'learning', confidence: worked ? 0.7 : worked === undefined ? 0.5 : 0.6, tags: ['outcome', 'theme'],
       text: `The theme change "${name}" ${verdict}: conversion ${pct(cr0)} → ${pct(cr1)} (14 days before vs after, ${Number(before.sessions).toLocaleString('en-US')} → ${Number(after.sessions).toLocaleString('en-US')} sessions).`,
       evidence: `daily metrics ${addDays(day, -14)} to ${addDays(day, 14)} (request ${t.id})`,
-    }, 'on too few orders');
+    }, 'on too few orders', t.run_id);
     if (t.run_id && worked !== undefined) judgeRun(db, `theme:${t.id}`, String(t.run_id), worked);
     if (worked) award(db, { ref: `theme-win:${t.id}`, amount: XP.win, storeId, agentId, reason: `Measured win: the theme change "${name}" lifted conversion` });
   }

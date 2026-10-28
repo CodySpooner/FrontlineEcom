@@ -1794,6 +1794,19 @@ export type KbDiscovery =
  * GET /api/kb/overview?ws=general|<storeId>|all → the Research Center, from the visible cards (proposed + active).
  * PATCH /api/kb/conflicts/:id?ws= {status: 'kept_both'} → 204: the owner keeps both sides.
  */
+/** What a store's performance learning (KB-19) reads from, and what it can't yet: in KbOverview.performance. */
+export interface KbPerformance {
+  storeId: string;
+  /** Demo numbers are never learned from. */
+  demo: boolean;
+  /** What it learns from, e.g. 'Campaign results: ROAS and click-through rate'. */
+  on: string[];
+  /** What isn't enabled, and why. */
+  off: string[];
+  /** Its Performance Lesson cards. */
+  lessons: number;
+}
+
 export interface KbOverview {
   cards: number;
   /** Made in the last 7 days. */
@@ -1816,4 +1829,6 @@ export interface KbOverview {
   discoveries: KbDiscovery[];
   /** Root categories with weak evidence, weakest first, at most 5: 'only hypotheses', 'N of M stale', '0 measured'. */
   gaps: { ws: string; categoryId: string; name: string; reason: string }[];
+  /** Each store in the workspace (none for General). */
+  performance: KbPerformance[];
 }

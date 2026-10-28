@@ -371,6 +371,38 @@ function Column({ ws, o, name, set }: { ws: string; o: KbOverview; name: (ws: st
       ) : (
         <p className="text-xs text-muted">No weak spots found.</p>
       )}
+
+      <H3>Performance learning</H3>
+      {ws === 'general' ? (
+        <p className="text-xs text-muted">Lessons come from each store's own numbers. Promote one to share it here.</p>
+      ) : (
+        <ul aria-label="Performance learning" className="grid gap-2.5">
+          {o.performance.map((p) => (
+            <li key={p.storeId} className="grid gap-1 text-xs">
+              <p className="flex items-baseline justify-between gap-2">
+                <span className="text-[13px] text-text">{name(p.storeId)}</span>
+                <Link to={q({ view: 'library', ws: p.storeId, type: 'performance_lesson' })} className="text-muted hover:text-white">
+                  {`${p.lessons} lesson${p.lessons === 1 ? '' : 's'}`}
+                </Link>
+              </p>
+              {p.demo ? (
+                <p className="text-muted">Demo store: nothing is learned from demo numbers. It starts when the store goes live.</p>
+              ) : (
+                <>
+                  {p.on.map((s) => (
+                    <p key={s} className="text-text-2">
+                      {s}
+                    </p>
+                  ))}
+                  {p.off.map((s) => (
+                    <p key={s} className="text-muted">{`Not enabled: ${s}`}</p>
+                  ))}
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }

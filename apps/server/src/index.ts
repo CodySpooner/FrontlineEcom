@@ -9,6 +9,7 @@ import { dataDir, dbFile, openDb } from './db';
 import { seedCreatives, seedDemo } from './demo';
 import { startDemoEmitter } from './live';
 import { seedResearch } from './research';
+import { startKbPerformanceLoop } from './kb/performance';
 import { startKbPromotionLoop } from './kb/promote';
 import { runManager } from './routes/agents';
 import { startOutcomeLoop } from './routes/agents-gamification';
@@ -36,6 +37,7 @@ startCompetitorWatch(db, key);
 startScheduler(db, (agentId, task) => runManager(db).start(agentId, task));
 startOutcomeLoop(db);
 startKbPromotionLoop(db, (agentId, task) => runManager(db).start(agentId, task));
+startKbPerformanceLoop(db);
 
 startServer(db, Number(process.env.API_PORT ?? 8787), (port) => {
   console.log(`Frontline API on http://127.0.0.1:${port}`);

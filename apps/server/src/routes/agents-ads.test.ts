@@ -1,6 +1,6 @@
-import { deleteMemory, economics, fakeEngine, getAgent, listMemory, once, runAgent, updateAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
+import { createCard, deleteMemory, economics, ensureCategoryPath, fakeEngine, getAgent, getCard, listEvidence, listMemory, logKnowledgeUse, once, runAgent, updateAgent, writeMemory, type FakeStep, type RunInput } from '@frontline/agents';
 import type { AgentEvent, ApprovalDecision, ApprovalRequest } from '@frontline/shared';
-import { beforeEach, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
 import { decide } from '../approvals';
 import { AD_ZONES, stateOf, stillAsSynced } from '../connectors/common';
@@ -325,6 +325,46 @@ test('outcomes are judged without the dashboard open: the server loop checks the
   approvedChange('unattended', 'Raise Broad', 1.5);
   startOutcomeLoop(db)(); // started, then stopped before the hourly tick
   expect(outcomes().map((m) => m.text)).toEqual([expect.stringMatching(/^"Raise Broad" worked/)]);
+});
+
+describe('outcomes are evidence on the knowledge their run cited (KB-19)', () => {
+  /** A store card and a General one that the run asking for `id` cited. */
+  function cited(id: string) {
+    const card = (ws: string | null, title: string) =>
+      createCard(db, ws, { categoryId: ensureCategoryPath(db, ws, ['Advertising']), title, summary: `${title}, in short`, type: 'strategy', stage: 'hypothesis', status: 'active', authorId: 'owner', origin: 'owner' }).id;
+    const ids = [card('peak', 'Cut what trails'), card(null, 'Cut what trails, anywhere')];
+    logKnowledgeUse(db, ids, { storeId: 'peak', agentId: 'peak:ad_strategist', runId: `run-${id}`, kind: 'cited' });
+    return ids;
+  }
+  const evidence = (id: string) => listEvidence(db, id).map((e) => [e.kind, e.metric, e.testRef, e.authorId, e.text]);
+
+  test("worked: measured evidence on the store's cards (General ones hold beyond one store), once", () => {
+    db.prepare(`UPDATE stores SET demo = 0 WHERE id = 'peak'`).run();
+    approvedChange('won', 'Pause Broad', 1.5);
+    const [mine, general] = cited('won');
+    checkAdOutcomes(db);
+    checkAdOutcomes(db);
+    expect(evidence(mine!)).toEqual([
+      ['measured', 'outcome', 'ads:won', 'peak:ad_strategist', expect.stringMatching(/^Acted on in an approved change: "Pause Broad" worked: blended ROAS .* \(7 days before vs 3 days after .*\)$/)],
+    ]);
+    expect(getCard(db, mine!)?.stage).toBe('tested');
+    expect(evidence(general!)).toEqual([]);
+  });
+
+  test('did not help: evidence against them; unclear or a demo store adds nothing', () => {
+    db.prepare(`UPDATE stores SET demo = 0 WHERE id = 'peak'`).run();
+    approvedChange('lost', 'Pause Broad', 0.5);
+    const [mine] = cited('lost');
+    checkAdOutcomes(db);
+    expect(evidence(mine!).map((e) => e.slice(0, 3))).toEqual([['conflict', 'outcome', 'ads:lost']]);
+
+    db.prepare(`UPDATE stores SET demo = 1 WHERE id = 'peak'`).run();
+    db.prepare('DELETE FROM kb_cards').run();
+    approvedChange('demo', 'Pause UGC', 1.5);
+    const [demo] = cited('demo');
+    checkAdOutcomes(db);
+    expect(evidence(demo!)).toEqual([]);
+  });
 });
 
 test("an ad change is judged once: an outcome the owner deleted doesn't come back", () => {

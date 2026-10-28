@@ -37,7 +37,7 @@ function open(path: string, detail: KbTaskDetail = task()) {
     if (url === '/api/stores') return [paw];
     if (url === '/api/agents') return [agent('market_analyst'), agent('ad_strategist'), agent('copywriter', { enabled: false })];
     if (url === '/api/kb/workspaces') return {};
-    if (url.startsWith('/api/kb/overview?')) return { cards: 0, thisWeek: 0, validated: 0, hypotheses: 0, supported: 0, stale: 0, conflicts: 0, running: 0, queued: 0, researchers: 0, sources: 0, map: [], discoveries: [], gaps: [] };
+    if (url.startsWith('/api/kb/overview?')) return { cards: 0, thisWeek: 0, validated: 0, hypotheses: 0, supported: 0, stale: 0, conflicts: 0, running: 0, queued: 0, researchers: 0, sources: 0, map: [], discoveries: [], gaps: [], performance: [] };
     if (url.startsWith('/api/kb/categories?ws=pawsome')) return [{ id: 'pawsome-ads', storeId: 'pawsome', parentId: null, name: 'Advertising', position: 1, createdAt: now, cards: 0 }];
     if (url.startsWith('/api/kb/categories?ws=general')) return [{ id: 'general-ads', storeId: null, parentId: null, name: 'Ads', position: 1, createdAt: now, cards: 0 }];
     if (url === '/api/kb/research/tasks/t1') return detail;

@@ -30,6 +30,10 @@ const overview: KbOverview = {
     { kind: 'promotion', id: 'p1', at: now, title: 'Open on the problem, anywhere', card: brief('c4', 'Open on the reaction') },
   ],
   gaps: [{ ws: 'pawsome', categoryId: 'p-pricing', name: 'Pricing', reason: 'only hypotheses' }],
+  performance: [
+    { storeId: 'pawsome', demo: false, on: ['Campaign results: ROAS and click-through rate'], off: ['Conversion rate: no sessions synced yet'], lessons: 1 },
+    { storeId: 'peak', demo: true, on: [], off: [], lessons: 0 },
+  ],
 };
 const t = (id: string, objective: string, status: KbTaskBrief['status'], stage = 'reporting'): KbTaskBrief => ({ id, storeId: 'pawsome', payerId: 'pawsome', role: 'market_analyst', objective, status, stage, createdAt: now });
 const running: KbTaskDetail = {
@@ -94,6 +98,21 @@ describe('Research Center', () => {
     await vi.waitFor(() => expect(fetch.mock.calls.some(([u]) => u === '/api/kb/overview?ws=all')).toBe(true));
     expect((await screen.findByRole('link', { name: 'Validated 1 14% of cards' })).getAttribute('href')).toBe('/knowledge?view=library&stage=validated');
     expect(href(/^Advertising 3/, screen.getByRole('region', { name: 'Knowledge map' }))).toBe('/knowledge?ws=pawsome&frame=p-ads');
+  });
+
+  it("performance learning: what each store learns from, what isn't enabled, and its lessons", async () => {
+    open();
+    const p = await screen.findByRole('list', { name: 'Performance learning' });
+    const [paw, peak] = within(p).getAllByRole('listitem');
+    expect(within(paw!).getByRole('link', { name: '1 lesson' }).getAttribute('href')).toBe('/knowledge?view=library&ws=pawsome&type=performance_lesson');
+    expect(within(paw!).getByText('Campaign results: ROAS and click-through rate')).toBeTruthy();
+    expect(within(paw!).getByText('Not enabled: Conversion rate: no sessions synced yet')).toBeTruthy();
+    expect(peak!.textContent).toBe("peak0 lessonsDemo store: nothing is learned from demo numbers. It starts when the store goes live.");
+  });
+
+  it('performance learning in General: lessons come from stores', async () => {
+    open('/knowledge?ws=general&view=research');
+    expect(await screen.findByText("Lessons come from each store's own numbers. Promote one to share it here.")).toBeTruthy();
   });
 
   it('discoveries: a General version waiting for the owner, to approve, review or keep in the store', async () => {

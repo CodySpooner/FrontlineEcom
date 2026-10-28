@@ -550,7 +550,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - Tests.
 
 ### Phase 6: learning from performance
-- [ ] KB-19 **Performance pipeline:**
+- [x] KB-19 **Performance pipeline:**
   - connected data → validation (skip demo and sample data; the guards in decision 13) → analysis (per campaign and
     store funnel against the baseline, with uncertainty) → pattern → insight → evidence assessment → storage (a
     Performance Lesson card, or evidence on an existing card that moves its ladder up or down, then the suggester from
@@ -637,6 +637,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-17 Retrieval in real tasks: every agent task now starts with a "Relevant knowledge" section, the store's accepted cards that match the task and then General's, hypotheses labelled unproven, never another store's, unreviewed, archived or blocked ones. It fits in what the store's memory leaves of the prompt. search_knowledge ranks the same way (any of the words, then stage, recency, the role's areas, use, reliable sources and confirmed links). Each time a card goes into a prompt, a search or a citation, it's logged and counted once per run, and a `[kb:id]` in an answer shows in Chat as a link to the card, named by its title.
 - 2026-10-27 KB-17 follow-up: "Use in a task" on a card is switched on. It opens Ask AI with "Use [kb:id] to " for the owner to finish, offered only to the card's own store (a General card's to every store in view). A card named that way reaches the agent first, whether or not it shares a word with the task, and the owner's message in Chat shows the card's title as a link.
 - 2026-10-27 KB-18 Promote to General: "Promote to General" on a store card asks the agent that wrote it (else the Market Analyst) to rewrite it for any store, and any agent can propose one itself. The draft comes back on the card, word by word against the original, and in the Research Center's discoveries. The owner approves it, edits it first, or keeps it in the store. Approved, it's a General card in the same category, starting as a Hypothesis, Derived From the store card. A card found on its own in two or more live stores is offered once, drafted from the strongest of them. In demo mode the draft only takes the store's name out.
+- 2026-10-27 KB-19 Performance pipeline: every hour, each real store's settled 28-day periods are read against a baseline: each campaign against the store's other campaigns on its network (ROAS, click-through rate), the store against its own 12 weeks before (conversion rate, order value, refund rate), and each product against its 4 weeks before, adjusted for the store's trend (unit sales). A difference outside the noise becomes a Performance Lesson with a 95% range, or evidence on the lesson it made before. It counts as measured when nothing else differed; otherwise it's a Hypothesis that names what did. A measured reading the other way moves the lesson down and opens a conflict. Approved changes' outcomes are now evidence on the store cards their run cited. The Research Center says what each store learns from and what isn't enabled. Demo stores learn nothing from demo numbers.
 
 ## Blocked
 
@@ -829,3 +830,35 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   a decided one after the card is filed. The approvals inbox (Chat's approval card) shows only the title and the
   agent's why; the diff lives on the card. Left out: carrying a store card's evidence over to General. Mutation
   sweeps: server 38 of 38 meaningful killed (3 equivalent bits of code removed rather than tested), web 11 of 11.
+- 2026-10-27 KB-19: one path, `learn(db, Reading)` in `packages/agents/src/kb-perf.ts`. A reading is recorded once in
+  kb_observations (unique `ref` = what over which days). `lift()` gives the ratio, its 95% range and z, with each side as
+  noisy as a count (Poisson, log scale). ROAS counts its purchases. An average counts orders / (sd/mean)², so its noise
+  comes from the spread of order totals. Under |z| 1.96 the reading stays an observation. Otherwise it's evidence on the
+  lesson for the same subject, metric and direction (found through its observations, or by title), else a new card:
+  type performance_lesson, origin `performance`, author `app`, stage set by the ladder. Kind `measured` if the reading
+  has no confounds, else `observed` (a Hypothesis at most). A measured reading the other way is also `conflict` evidence
+  on the opposite lesson. A lesson the owner archived or rejected takes nothing more and isn't made again. The
+  analyzers are in `apps/server/src/kb/performance.ts`:
+  - periods are fixed 28 days from 2024-01-01, so periods never overlap and two of them are two independent tests
+    (Validated);
+  - the last 3 periods are read once per store (`done_once kb-perf:<store>:<from>`), only after every integration
+    synced 30+ days after the period ended (the 28/30-day attribution re-pull) and only for `stores.demo = 0`;
+  - campaigns: 7+ days and 5%+ of the period's ad spend (share, so currency-safe), 10+ purchases for ROAS, 1,000+
+    impressions and 10+ clicks for CTR, on each side. The baseline is the same network's other campaigns, else the
+    rest of the store's (a confound: networks count purchases their own way). Confounds: any campaign compared ran
+    under 21 of 28 days, or was changed by an approved ads.* request in the period;
+  - the store: CVR from `storeFunnel` (the theme check's query, now exported), AOV and refund rate from orders, 30+
+    orders and 10+ refunds a side, always confounded (season, promotions);
+  - products: units vs the 4 weeks before × `restTrend` (par's season adjustment, now exported), 10+ units a side; a
+    product new in those weeks is left out (`newSince`); a price test or page publish in them is a confound.
+  Outcomes: `recordOutcome` takes the checker's run id and calls `learnFromOutcome`. Cards cited (kb_retrievals
+  `cited`) in that run, the store's own, get `measured` (worked) or `conflict` (did not help) evidence with metric
+  `outcome` and testRef = the outcome ref. Unclear outcomes, demo stores and General cards get none.
+  `KbOverview.performance` (`KbPerformance`): per store in the workspace, what it learns from (data present), what
+  isn't (and why), and its lessons. Ad-level and creative data is always listed as not enabled, until KB-20.
+  Left out: an agent's explanation of a lesson (decision 13 allows only the explanation text from an agent; it would
+  spend the owner's usage on every lesson, so it waits for KB-21's test planning). Also left out: email, landing-page
+  and segment learning (no data synced for them). Mutation sweeps: server 36 of 36 meaningful killed after 13 new
+  tests (createCard already runs the suggester, so the extra call was removed), web 5 of 5. Found while checking 390
+  px, not from this change: the Knowledge view switcher (Artboard … Research Center) and the Research Center column
+  tabs stick out about 45 px past the viewport, so the page scrolls sideways.

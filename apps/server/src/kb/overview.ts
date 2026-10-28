@@ -1,6 +1,8 @@
 import { getCard, kbScope } from '@frontline/agents';
 import type { KbCard, KbDiscovery, KbOverview, KbStage, KbWorkspace } from '@frontline/shared';
 import type { Db } from '../db';
+import { listStores } from '../stores';
+import { performanceStatus } from './performance';
 
 // The Research Center's numbers (KB-16), from the visible cards (proposed + active) of one workspace, or all of them.
 
@@ -123,5 +125,6 @@ export function kbOverview(db: Db, ws: KbWorkspace | 'all', now = new Date()): K
     map,
     discoveries,
     gaps,
+    performance: ws === null ? [] : listStores(db).filter((st) => ws === 'all' || st.id === ws).map((st) => performanceStatus(db, st.id)),
   };
 }

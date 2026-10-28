@@ -73,6 +73,7 @@ export {
 export { reliabilityOf, saveSource, setSourceReliability, sourceForAgent, type NewKbSource } from './kb-sources';
 export { citedCards, ftsQuery, logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
 export { promotedAs, promotionPending, promotionTask, promoteToGeneral } from './kb-promote';
+export { learn, learnFromOutcome, lift, type Lift, type Reading } from './kb-perf';
 export {
   advanceResearch,
   cancelResearch,
