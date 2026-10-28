@@ -270,6 +270,7 @@ function Preferences() {
           {toggle('Agent finished', 'A task you started is done.', s.notifications.agentDone, (v) => ({ notifications: { agentDone: v } }))}
           {toggle('Errors', 'A run or a connector failed.', s.notifications.errors, (v) => ({ notifications: { errors: v } }))}
           {toggle('Morning digest', "Yesterday's numbers and the approvals waiting, at 8:00.", s.notifications.digest, (v) => ({ notifications: { digest: v } }))}
+          {toggle('Research alerts', 'A watched product, niche or offer changed. Off: alerts still appear on the Watchlist.', s.notifications.researchAlerts, (v) => ({ notifications: { researchAlerts: v } }))}
         </div>
         {update.isError && (
           <p role="alert" className="mt-2 text-xs text-red">

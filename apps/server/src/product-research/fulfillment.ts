@@ -65,11 +65,12 @@ function missing(o: OfferRow, now: Date): string[] {
  * only ever read as "re-check due", never Verified; key the check itself if that shows.
  */
 export function current(offers: OfferRow[]): OfferRow[] {
-  const key = (o: OfferRow) => [o.listingId, o.variantId, o.supplier, o.destination].join('|');
   const newest = new Map<string, string>();
-  for (const o of offers) if (o.checkedAt > (newest.get(key(o)) ?? '')) newest.set(key(o), o.checkedAt);
-  return offers.filter((o) => o.checkedAt === newest.get(key(o)));
+  for (const o of offers) if (o.checkedAt > (newest.get(offerKey(o)) ?? '')) newest.set(offerKey(o), o.checkedAt);
+  return offers.filter((o) => o.checkedAt === newest.get(offerKey(o)));
 }
+/** An offer's series: one listing, variant, supplier and destination, across its checks. */
+export const offerKey = (o: Pick<OfferRow, 'listingId' | 'variantId' | 'supplier' | 'destination'>) => [o.listingId, o.variantId ?? '', o.supplier, o.destination ?? ''].join('|');
 
 /** The current rows for a destination and quantity that can ship there (decision 11's delivery and warehouse inputs). */
 export const shippable = (offers: OfferRow[], destination: string, quantity: number) =>

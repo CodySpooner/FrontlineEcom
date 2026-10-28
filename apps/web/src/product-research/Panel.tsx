@@ -20,7 +20,7 @@ import {
 } from '@frontline/shared';
 import { AreaChart } from '../components/AreaChart';
 import { Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Tabs } from '../components/ui';
-import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useLinkStoreProduct, useMatches, useProductDetail, useProductTab, useSaveNotes, useWatch } from './api';
+import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useLinkStoreProduct, useMatches, useProductDetail, useProductTab, useAddWatch, useSaveNotes, useUnwatch, useWatch, useWatches } from './api';
 import { Pill, TONE } from './Card';
 import { EconomicsTab, incomplete } from './EconomicsTab';
 import { Alternatives } from './Matches';
@@ -607,12 +607,16 @@ function InStore({ id, store }: { id: string; store: Store }) {
 
 function Suppliers({ id, store }: { id: string; store: Store | null }) {
   const tab = useProductTab<PrOffer[]>(id, store?.id ?? null, 'offers', true);
+  const watches = useWatches(store?.id ?? null);
+  const watch = useAddWatch(store?.id ?? null);
+  const unwatch = useUnwatch(store?.id ?? null);
+  const watchOf = (key: string) => watches.data?.find((w) => w.kind === 'offer' && w.targetId === key && w.storeId === (store?.id ?? null));
   if (tab.isPending) return <LoadingState rows={4} />;
   if (tab.isError) return <ErrorState message={tab.error.message} onRetry={() => void tab.refetch()} />;
   return (
     <div className="grid gap-2.5 text-xs">
       {!tab.data.length && <EmptyState title="No supplier offers yet">Offers appear once a supplier source quotes this product.</EmptyState>}
-      {tab.data.map((o) => (
+      {tab.data.map((o, i) => (
         <section key={o.id} aria-label={`${o.supplier} to ${o.destination ?? 'unknown destination'}`} className="rounded-lg border border-line p-3">
           <div className="flex items-start justify-between gap-2">
             <b className="text-text">{o.supplier}</b>
@@ -639,9 +643,31 @@ function Suppliers({ id, store }: { id: string; store: Store | null }) {
               </div>
             ))}
           </dl>
-          <p className="mt-1.5 text-muted">{`Checked ${day(o.checkedAt)}`}</p>
+          <div className="mt-1.5 flex items-center justify-between gap-2">
+            <p className="text-muted">{`Checked ${day(o.checkedAt)}`}</p>
+            {/* One watch per offer series (its methods share it): the button sits on the series' first row. */}
+            {tab.data.findIndex((x) => x.key === o.key) === i && (
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={!watches.data || watch.isPending || unwatch.isPending}
+                onClick={() => {
+                  const w = watchOf(o.key);
+                  if (w) unwatch.mutate({ id: w.id });
+                  else watch.mutate({ kind: 'offer', targetId: o.key });
+                }}
+              >
+                {watchOf(o.key) ? 'Stop watching this offer' : 'Watch this offer'}
+              </Button>
+            )}
+          </div>
         </section>
       ))}
+      {(watch.error ?? unwatch.error) && (
+        <p role="alert" className="text-red">
+          {(watch.error ?? unwatch.error)!.message}
+        </p>
+      )}
       {tab.data.length > 0 && <p className="text-muted">Duties: Unknown, left out of the figures above.</p>}
       <Alternatives id={id} store={store} />
     </div>

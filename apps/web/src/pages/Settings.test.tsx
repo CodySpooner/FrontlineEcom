@@ -54,7 +54,7 @@ describe('backups', () => {
 });
 
 describe('your data', () => {
-  const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
+  const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true, researchAlerts: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
   it.each([
     ['0.1.3', 'Version 0.1.3'],
     ['dev', 'Development build'],
@@ -78,7 +78,7 @@ describe('your data', () => {
 
 describe('Caps with no stores', () => {
   it('says caps come with a store instead of loading forever', async () => {
-    const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
+    const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true, researchAlerts: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
     stubApi((url) => (url === '/api/stores' ? [] : url === '/api/settings' ? settings : undefined));
     renderApp(<Settings />, '/settings');
     expect(await screen.findByText('Caps are set per store: add a store above, then set its limits here.')).toBeTruthy();
@@ -87,7 +87,7 @@ describe('Caps with no stores', () => {
 
 describe('deleting a store', () => {
   it('asks with focus on Keep, and Keep hands focus back to Delete', async () => {
-    const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
+    const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true, researchAlerts: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
     const store = { id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', color: '#ff2a3a', currency: 'USD', timezone: 'UTC', connected: false };
     stubApi((url) => (url === '/api/stores' ? [store] : url === '/api/settings' ? settings : undefined));
     renderApp(<Settings />, '/settings');

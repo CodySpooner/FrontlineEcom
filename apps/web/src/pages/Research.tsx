@@ -13,6 +13,7 @@ import { NAV } from '../nav';
 import { useDiscovery, useProfile, useSaveProfile, useSources } from '../product-research/api';
 import { ProductCard } from '../product-research/Card';
 import { CompareBar } from '../product-research/Compare';
+import { Watches } from '../product-research/Watches';
 import { activeFilters, discoveryQuery, FilterChips, type Filters } from '../product-research/Filters';
 import { countryName, profileLine, sourceItem } from '../product-research/format';
 import { DetailPanel, PANEL_TABS, type PanelTab } from '../product-research/Panel';
@@ -245,6 +246,7 @@ export function Research() {
       ))}
 
       {store && <CompareBar store={store} ids={tray} setIds={setTray} shipTo={shipTo} />}
+      {view === 'watchlist' && <Watches store={store} categories={first?.facets.categories ?? []} onOpen={(id) => set('product', id)} />}
 
       <div className="mt-4 flex items-start gap-4">
         <section aria-label="Products" className="min-w-0 flex-[999_1_520px]">
@@ -259,7 +261,11 @@ export function Research() {
             </EmptyState>
           ) : view !== 'all' ? (
             <EmptyState title={`Nothing in ${VIEW_LABEL[view]} yet`}>
-              {view === 'demand' ? 'Products show here once they have a qualifying demand set (an imported Trends CSV with enough history, or your own orders).' : 'Products show here as they qualify.'}
+              {view === 'demand'
+                ? 'Products show here once they have a qualifying demand set (an imported Trends CSV with enough history, or your own orders).'
+                : view === 'watchlist'
+                  ? "Products you watch show here: use Watch in a product's panel."
+                  : 'Products show here as they qualify.'}
             </EmptyState>
           ) : (
             <FirstUse sources={sources.data ?? []} onResearch={stores.length ? () => setResearching({}) : undefined} />

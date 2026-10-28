@@ -15,11 +15,13 @@ import { evaluateStore, refreshProduct } from './evaluate';
 import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
 import { importFeed } from './feed';
 import { decideMatch, productMatches, searchCjAlternatives } from './matching';
+import { addWatch, checkWatch, listWatches, ownWatch, parsePrefs } from './alerts';
 import { runDue, stoppedReason, syncNow } from './jobs';
 import { cachedImage, listingImageRef, queueImage } from './images';
 import { checkUrl, ownerDetails, preview } from './preview';
 import { getProfile, saveProfile } from './profile';
 import { productReports } from './reports';
+import { setWatch } from './watches';
 import { scopeOf, storeOf } from './scope';
 import { ADAPTERS, sourceHealth, sourceStates } from './sources';
 import { INSTRUCTIONS_MAX, agentRows, getTask, listTasks, retryTask, startTask, type TaskInput } from './tasks';
@@ -232,6 +234,44 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if (!PR_MATCH_ACTIONS.includes(action)) return c.json({ error: `action must be one of ${PR_MATCH_ACTIONS.join(', ')}` }, 400);
       const err = decideMatch(db, store, c.req.param('id'), c.req.param('listing'), action);
       return err ? c.json({ error: err.error }, err.status) : c.json(productMatches(db, key(), store, c.req.param('id')));
+    })
+    // Watchlists and alerts (PR-21): a store's list and the owner's all-stores list; each scope changes only its own.
+    .get('/api/pr/watches', (c) => {
+      const s = scopeOf(c, db);
+      return s instanceof Response ? s : c.json(listWatches(db, s.store));
+    })
+    .post('/api/pr/watches', async (c) => {
+      const s = scopeOf(c, db);
+      if (s instanceof Response) return s;
+      const err = addWatch(db, s.store, await c.req.json().catch(() => undefined));
+      return err ? c.json({ error: err }, 400) : c.json(listWatches(db, s.store), 201);
+    })
+    .put('/api/pr/watches/:id', async (c) => {
+      const s = scopeOf(c, db);
+      if (s instanceof Response) return s;
+      if (!ownWatch(db, s.store, c.req.param('id'))) return c.json({ error: 'watch not found' }, 404);
+      const prefs = parsePrefs(await c.req.json().catch(() => undefined));
+      if (typeof prefs === 'string') return c.json({ error: prefs }, 400);
+      db.prepare('UPDATE pr_watches SET prefs_json = ? WHERE id = ?').run(JSON.stringify(prefs), c.req.param('id'));
+      return c.json(listWatches(db, s.store));
+    })
+    .delete('/api/pr/watches/:id', (c) => {
+      const s = scopeOf(c, db);
+      if (s instanceof Response) return s;
+      const w = ownWatch(db, s.store, c.req.param('id')) && listWatches(db, s.store).find((x) => x.id === c.req.param('id'));
+      if (!w) return c.json({ error: 'watch not found' }, 404);
+      // A product (or its legacy listing) stops being watched the way its panel's Watch does it, with a History row.
+      if ((w.kind === 'product' || w.kind === 'listing') && w.productId) watchProduct(db, s.store, w.productId, false);
+      else setWatch(db, { storeId: s.store?.id ?? null, kind: w.kind, targetId: w.targetId, on: false });
+      return c.json(listWatches(db, s.store));
+    })
+    // Check now: the scheduled check, run once on the owner's click (the same live cap applies).
+    .post('/api/pr/watches/:id/check', async (c) => {
+      const s = scopeOf(c, db);
+      if (s instanceof Response) return s;
+      if (!ownWatch(db, s.store, c.req.param('id'))) return c.json({ error: 'watch not found' }, 404);
+      await checkWatch(db, key(), c.req.param('id'));
+      return c.json(listWatches(db, s.store));
     })
     // Saved comparisons (PR-19), per store; the page reads each product's own figures again when one is opened.
     .get('/api/pr/comparisons', (c) => {

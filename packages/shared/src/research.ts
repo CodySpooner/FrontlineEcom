@@ -321,6 +321,8 @@ export interface PrDemandTab {
 /** One current offer row on the Suppliers tab, with its own status for its destination and quantity (decision 8). */
 export interface PrOffer {
   id: string;
+  /** Its series (listing, variant, supplier, destination): what an offer watch follows across checks. */
+  key: string;
   supplier: string;
   variant: string | null;
   sku: string | null;
@@ -636,3 +638,41 @@ export interface PrMatches {
 }
 export const PR_MATCH_ACTIONS = ['same', 'not_same', 'undo', 'merge', 'split'] as const;
 export type PrMatchAction = (typeof PR_MATCH_ACTIONS)[number];
+
+/** PR-21: what a watch alerts on; a field it doesn't set takes this default. */
+export interface PrWatchPrefs {
+  /** Cost + ship moved by at least this percentage (1–100). */
+  priceChangePct: number;
+  stockOut: boolean;
+  newEvidence: boolean;
+  shippingChange: boolean;
+}
+export const PR_WATCH_PREFS: PrWatchPrefs = { priceChangePct: 10, stockOut: true, newEvidence: true, shippingChange: true };
+export type PrWatchKind = 'product' | 'listing' | 'niche' | 'offer';
+export type PrAlertKind = 'price' | 'stock_out' | 'new_evidence' | 'shipping' | 'new_products';
+export interface PrAlert {
+  id: string;
+  kind: PrAlertKind;
+  title: string;
+  body: string | null;
+  createdAt: string;
+}
+/** GET /api/pr/watches: the scope's watches (a store's list and the owner's all-stores list), with their checks. */
+export interface PrWatch {
+  id: string;
+  /** null: the owner's all-stores list. */
+  storeId: string | null;
+  kind: PrWatchKind;
+  targetId: string;
+  /** A product's title, a niche's category, or an offer's supplier, listing and destination. */
+  label: string;
+  productId: string | null;
+  prefs: PrWatchPrefs;
+  lastCheckedAt: string | null;
+  lastSuccessAt: string | null;
+  lastError: string | null;
+  /** What the last check couldn't cover, e.g. "CJdropshipping isn't connected: compared with stored offers only". */
+  coverage: string | null;
+  /** The newest alerts, at most 5. */
+  alerts: PrAlert[];
+}

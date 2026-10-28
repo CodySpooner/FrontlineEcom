@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrMatches, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
+import type { PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrMatches, PrWatch, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { discoveryQuery } from '../product-research/Filters';
 import { sourceItem } from '../product-research/format';
@@ -246,7 +246,7 @@ describe('Detail panel', () => {
     series: [{ at: '2026-10-11', value: 48 }, { at: '2026-10-18', value: 52 }, { at: '2026-10-25', value: 50 }],
   };
   const offer: PrOffer = {
-    id: 'o1', supplier: 'CJdropshipping', variant: 'M / Grey', sku: 'CJ-BRUSH-M', destination: 'US', quantity: 1, method: 'CJPacket', unitCost: 342, shipCost: null, currency: 'USD', deliveryMin: 6, deliveryMax: 12,
+    id: 'o1', key: 'l1|v1|CJdropshipping|US', supplier: 'CJdropshipping', variant: 'M / Grey', sku: 'CJ-BRUSH-M', destination: 'US', quantity: 1, method: 'CJPacket', unitCost: 342, shipCost: null, currency: 'USD', deliveryMin: 6, deliveryMax: 12,
     processingDays: null, moq: null, shipsFrom: 'CN', stock: [{ warehouse: 'CN', units: 120 }], provenance: 'live', checkedAt: '2026-10-27T00:00:00Z', status: 'pending', reasons: ['Shipping cost unknown'],
   };
   const history: PrHistoryRow[] = [{ id: 'h1', storeId: 'paws', kind: 'stage', from: null, to: 'discovered', reason: 'Assigned from All stores', by: 'owner', at: '2026-10-27T00:00:00Z' }];
@@ -492,6 +492,47 @@ describe('Detail panel', () => {
     expect(JSON.parse(String(f.mock.calls.find(([, i]) => i?.method === 'POST')![1]!.body))).toEqual({ name: 'Grooming picks', productIds: ['p1', 'p2'], figures: { discountPct: 0, adCost: 800 } });
     expect(await within(dialog).findByRole('button', { name: 'Save changes' })).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: 'Delete Grooming picks' })).toBeTruthy();
+  });
+
+  it('Watchlist: each watch with its last successful check, partial coverage and alerts; watch a niche, set preferences, check now; watch an offer', async () => {
+    const watch = (o: Partial<PrWatch>): PrWatch => ({
+      id: 'w1', storeId: 'paws', kind: 'product', targetId: 'p1', label: 'Silicone grooming brush', productId: 'p1', prefs: { priceChangePct: 10, stockOut: true, newEvidence: true, shippingChange: true },
+      lastCheckedAt: '2026-10-28T09:00:00Z', lastSuccessAt: '2026-10-28T09:00:00Z', lastError: null, coverage: "CJdropshipping isn't connected: compared with stored offers only", alerts: [], ...o,
+    });
+    const watches = [
+      watch({ alerts: [{ id: 'a1', kind: 'price', title: 'Cost + ship to US up 13%', body: '$8.00 → $9.00, excl. duties', createdAt: '2026-10-28T09:00:00Z' }] }),
+      watch({ id: 'w2', storeId: null, kind: 'niche', targetId: 'Pet Supplies > Grooming', label: 'Pet Supplies > Grooming', productId: null, coverage: null, lastError: 'CJdropshipping: CJ: refused', lastSuccessAt: null }),
+    ];
+    const f = panelApi(detail(), (url) => (url.startsWith('/api/pr/watches') ? watches : undefined));
+    renderApp(<Research />, '/research?store=paws&view=watchlist');
+    const list = await screen.findByRole('region', { name: 'Watches' });
+    const mine = await within(list).findByRole('article', { name: 'Watch: Silicone grooming brush' });
+    expect(mine.textContent).toContain('Last successful check Oct 28, 2026');
+    expect(mine.textContent).toContain("Partial coverage: CJdropshipping isn't connected: compared with stored offers only");
+    expect(mine.textContent).toContain('Cost + ship to US up 13% · $8.00 → $9.00, excl. duties');
+    const niche = within(list).getByRole('article', { name: 'Watch: Pet Supplies > Grooming' });
+    expect(niche.textContent).toContain('No successful check yet');
+    expect(niche.textContent).toContain('Last check failed');
+    expect(within(niche).getByText('Change it in All stores')).toBeTruthy(); // the all-stores list isn't this store's to change
+    expect(within(niche).queryByRole('button', { name: 'Check now' })).toBeNull();
+
+    const posted = (path: string, method = 'POST') => f.mock.calls.filter(([u, i]) => String(u).startsWith(path) && i?.method === method).map(([, i]) => JSON.parse(String(i!.body)));
+    fireEvent.change(within(list).getByRole('combobox', { name: 'Niche to watch' }), { target: { value: 'Pet Supplies > Grooming' } });
+    fireEvent.click(within(list).getByRole('button', { name: 'Watch niche' }));
+    await waitFor(() => expect(posted('/api/pr/watches?store=paws')).toEqual([{ kind: 'niche', targetId: 'Pet Supplies > Grooming' }]));
+    fireEvent.click(within(mine).getByText('Alert on'));
+    fireEvent.change(within(mine).getByRole('spinbutton'), { target: { value: '25' } });
+    fireEvent.click(within(mine).getByRole('checkbox', { name: 'New evidence' }));
+    fireEvent.click(within(mine).getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(posted('/api/pr/watches/w1?store=paws', 'PUT')).toEqual([{ id: 'w1', prefs: { priceChangePct: 25, stockOut: true, newEvidence: false, shippingChange: true } }]));
+    fireEvent.click(within(mine).getByRole('button', { name: 'Check now' }));
+    await waitFor(() => expect(posted('/api/pr/watches/w1/check?store=paws')).toEqual([{ id: 'w1' }]));
+
+    fireEvent.click(within(mine).getByRole('button', { name: 'Silicone grooming brush' }));
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    fireEvent.click(await within(panel).findByRole('tab', { name: 'Suppliers' }));
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Watch this offer' }));
+    await waitFor(() => expect(posted('/api/pr/watches?store=paws')).toContainEqual({ kind: 'offer', targetId: 'l1|v1|CJdropshipping|US' }));
   });
 
   it('Suppliers: other suppliers marked Exact match or Similar with what matches and differs; merge, confirm, rule out, separate; and "Already in your store"', async () => {

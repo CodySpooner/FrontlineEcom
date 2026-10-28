@@ -1486,7 +1486,7 @@ export interface Settings {
   profile: { name: string; plan: string };
   /** Which events create notifications. */
   /** `digest`: a morning summary (8:00 local) of yesterday across stores and the approvals waiting. */
-  notifications: { approvals: boolean; agentDone: boolean; errors: boolean; digest: boolean };
+  notifications: { approvals: boolean; agentDone: boolean; errors: boolean; digest: boolean; researchAlerts: boolean };
   /** ISO code that multi-store totals are converted to (default USD). */
   baseCurrency: string;
   /** Read-only: where the local database and key live (plus logs/ and backups/). POST /api/settings/open-data-folder → 204 opens it in Explorer. */
@@ -1522,7 +1522,7 @@ export interface StoreUsage {
   adBudgetAddedUsd: number;
 }
 
-export type NotificationKind = 'approval' | 'agent_done' | 'error' | 'info';
+export type NotificationKind = 'approval' | 'agent_done' | 'error' | 'info' | 'research_alert';
 
 /** GET /api/notifications?unread=true&limit= → AppNotification[] newest first. POST /api/notifications/read { ids? } (no ids = all) → { updated }. */
 export interface AppNotification {

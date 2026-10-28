@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ConversationConfigInput, PrAgentRow, PrComparison, PrComparisonInput, PrDiscovery, PrEconomics, PrEconOverrides, PrMatchAction, PrMatches, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask } from '@frontline/shared';
+import type { ConversationConfigInput, PrAgentRow, PrComparison, PrComparisonInput, PrDiscovery, PrEconomics, PrEconOverrides, PrMatchAction, PrMatches, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask, PrWatch, PrWatchPrefs } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -125,5 +125,12 @@ export const useMatchAction = (store: string, product: string) =>
   usePrWrite<{ listing: string; action: PrMatchAction }, PrMatches>((b) => `/api/pr/products/${enc(product)}/matches/${enc(b.listing)}?${scope(store)}`);
 export const useSearchCj = (store: string, product: string) =>
   usePrWrite<void, { calls: number; stored: number; error?: string }>(() => `/api/pr/products/${enc(product)}/matches/search?${scope(store)}`);
+
+/** Watchlists and alerts (PR-21): the scope's watches; each scope adds and changes only its own list. */
+export const useWatches = (store: string | null) => useQuery({ queryKey: ['pr', 'watches', store], queryFn: () => api<PrWatch[]>(`/api/pr/watches?${scope(store)}`) });
+export const useAddWatch = (store: string | null) => usePrWrite<{ kind: 'niche' | 'offer'; targetId: string }, PrWatch[]>(() => `/api/pr/watches?${scope(store)}`);
+export const useWatchPrefs = (store: string | null) => usePrWrite<{ id: string; prefs: PrWatchPrefs }, PrWatch[]>((b) => `/api/pr/watches/${enc(b.id)}?${scope(store)}`, 'PUT');
+export const useUnwatch = (store: string | null) => usePrWrite<{ id: string }, PrWatch[]>((b) => `/api/pr/watches/${enc(b.id)}?${scope(store)}`, 'DELETE');
+export const useCheckWatch = (store: string | null) => usePrWrite<{ id: string }, PrWatch[]>((b) => `/api/pr/watches/${enc(b.id)}/check?${scope(store)}`);
 export const useLinkStoreProduct = (store: string, product: string) =>
   usePrWrite<{ storeProductId: string; same?: false }>(() => `/api/pr/products/${enc(product)}/store-products?${scope(store)}`);

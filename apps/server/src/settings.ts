@@ -12,7 +12,7 @@ type Obj = Record<string, unknown>;
 
 const DEFAULT_SETTINGS: Omit<Settings, 'dataDir'> = {
   profile: { name: 'Cody', plan: 'Pro Plan' },
-  notifications: { approvals: true, agentDone: true, errors: true, digest: true },
+  notifications: { approvals: true, agentDone: true, errors: true, digest: true, researchAlerts: true },
   baseCurrency: 'USD',
 };
 
@@ -110,7 +110,7 @@ const toNotification = (r: Row): AppNotification => ({
   ...(r.read_at ? { readAt: String(r.read_at) } : {}),
 });
 
-const PREF: Record<NotificationKind, keyof Settings['notifications'] | undefined> = { approval: 'approvals', agent_done: 'agentDone', error: 'errors', info: undefined };
+const PREF: Record<NotificationKind, keyof Settings['notifications'] | undefined> = { approval: 'approvals', agent_done: 'agentDone', error: 'errors', info: undefined, research_alert: 'researchAlerts' };
 
 /** Stores + broadcasts a notification unless the owner turned that kind off. */
 export function notify(db: Db, n: NewNotification): AppNotification | undefined {

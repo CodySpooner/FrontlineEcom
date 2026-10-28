@@ -1,7 +1,7 @@
 // UI-20 Notification center: the bell in the top bar and its drawer.
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
-import { Bell, CircleAlert, CircleCheck, CircleX, Info, ShieldCheck, type LucideIcon } from 'lucide-react';
+import { Bell, CircleAlert, CircleCheck, CircleX, Eye, Info, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { AGENT_ROLES, type AppNotification, type ApprovalRequest, type NotificationKind } from '@frontline/shared';
 import { useAgents, useApprovals, useMarkRead, useNotifications } from '../api/client';
 import { expiredWhy } from '../lib/approvals';
@@ -15,6 +15,7 @@ const KIND: Record<NotificationKind, { icon: LucideIcon; label: string }> = {
   agent_done: { icon: CircleCheck, label: 'Agent finished' },
   error: { icon: CircleAlert, label: 'Error' },
   info: { icon: Info, label: 'Info' },
+  research_alert: { icon: Eye, label: 'Research alert' },
 };
 
 export function NotificationBell() {

@@ -1245,6 +1245,9 @@ export const MIGRATIONS = [
   /* 54 (product-research: PR-20 a merge moves listings and remembers where from, so Separate can move them back) */ `
   ALTER TABLE pr_listings ADD COLUMN merged_from TEXT REFERENCES pr_products(id); -- the product a merge moved it from
   `,
+  /* 55 (product-research: PR-21 a watch keeps its last check's result, which the next check compares with) */ `
+  ALTER TABLE pr_watches ADD COLUMN state_json TEXT;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

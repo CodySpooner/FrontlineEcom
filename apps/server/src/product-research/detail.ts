@@ -8,7 +8,7 @@ import { baseEconomics } from './economics';
 import { evaluate } from './evaluate';
 import { offerRows, pointsOf } from './facts';
 import { flagsFor } from './flags';
-import { current, fulfillmentOf } from './fulfillment';
+import { current, fulfillmentOf, offerKey } from './fulfillment';
 import { reportAssessment } from './reports';
 import { signalSet } from './trends';
 
@@ -103,6 +103,7 @@ export function productOffers(db: Db, id: string, store: string | null, now = ne
       const f = o.destination ? fulfillmentOf([o], o.destination, o.quantity, now, (m) => m) : { status: 'insufficient' as const, reasons: ['No destination on this quote'] };
       return {
         id: o.id,
+        key: offerKey(o),
         supplier: o.supplier,
         variant: v ? str((JSON.parse(String(v.attributes_json ?? '{}')) as { name?: string }).name) : null,
         sku: v ? str(v.sku) : null,

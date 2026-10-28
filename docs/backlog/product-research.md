@@ -775,7 +775,7 @@ STOP.
   confirmed link is `POST /api/pr/products/:id/store-products`, PR-07, which also starts the store's order set).
 
 ### Watchlists and pipeline
-- [ ] PR-21 **Watchlists and alerts:** watch products, niches and offers (store or all-stores, decision 3), preferences
+- [x] PR-21 **Watchlists and alerts:** watch products, niches and offers (store or all-stores, decision 3), preferences
   (price change over a set %, default 10; stock out; new evidence; shipping change), scheduled checks within the
   watch-check cap, results stored, one alert per change (dedupe key), notifications with a deep link, an owner toggle
   for research alerts in Settings (additive shared field, honoured by `notify()`; test that alerts are stored but not
@@ -989,6 +989,18 @@ STOP.
   at most 3 catalog calls and stores the results as listings. Overview's "Already in <store>" shows the linked store
   product, or possible ones by title with Same product (the PR-07 link) and Not this one. API: `GET …/matches`,
   `POST …/matches/search`, `POST …/matches/:listing`, `same: false` on `POST …/store-products`. Tests: 4 API, 1 page.
+- 2026-10-28 PR-21 Watchlists and alerts: products (the panel's Watch), offers (Suppliers tab: Watch this offer, one
+  per listing, variant, supplier and destination) and niches (a product category, from the Watchlist view) on a
+  store's list or the owner's all-stores list. The hourly jobs tick checks each watch every 12 hours (at most 50 a
+  tick): a CJ listing is re-checked live with purpose `watch` within its 100-call daily cap; otherwise the check uses
+  stored data and says so. The result is kept on the watch (`state_json`, migration 55) and compared with the next:
+  cost + ship moved by the watch's % (default 10), out of stock, shipping change (delivery or methods), new evidence
+  (a demand set or a real report), new products in a niche. Each change is one `pr_alerts` row (dedupe key: the
+  observation) and one `research_alert` notification linking to the product, unless Settings > Research alerts is off
+  (`Settings.notifications.researchAlerts`, additive). The Watchlist view lists the watches with the last successful
+  check, partial coverage, the last error, the newest alerts, Alert on preferences, Check now and Stop watching. API:
+  `GET/POST /api/pr/watches`, `PUT/DELETE /api/pr/watches/:id`, `POST /api/pr/watches/:id/check`. Tests: 3 API
+  (fake timers), 1 page.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1020,6 +1032,19 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-21 as built.** A scope changes only its own list: a store adds, edits and removes its watches; the all-stores
+  list (store_id NULL) shows in every store but is changed in All stores, where only shared rows can be watched. The
+  first check records a starting point and never alerts. A check that falls back to stored data (CJ not connected, or
+  the watch cap reached) still counts as a successful check, with its coverage shown; a failed live call keeps the
+  error and the earlier success, and the next scheduled check tries again (no retry loop). The all-stores list checks
+  ship-to US (the page's default); per-store lists use the store's ship-to. Alert titles are stored without the
+  target's name; the notification adds it. Overlapping live calls: a product watched by several stores is re-checked
+  once per watch; fine at the watch cap, dedupe the listing per pass if it shows. Nudged outside the lane, as the item
+  asks: `Settings.tsx` gets the Research alerts toggle and `Notifications.tsx` the `research_alert` kind (icon, label).
+  **Live CJ re-checks are mocked-tested only** (CJ key Blocked). Dev-app check 12:53 local on Pawsome Gear: a niche
+  watch (Pet Supplies > Grooming) and an offer watch (the fixture brush's CJ offer to US) checked with 0 CJ calls; the
+  offer watch shows "Partial coverage: CJdropshipping isn't connected"; no alerts (nothing changed); both removed after,
+  leaving the dev DB without watches. Screenshots `.agent/shots/pr21-*.png`.
 - **PR-20 as built.** A candidate shares a code or at least 2 title words (a LIKE prefilter on the product's words,
   capped at 300 rows; the top 12 shown, exact first). The owner's verdicts are on listing pairs in `pr_matches`, which
   has no store: whether two listings are the same product is a catalog fact, so it holds for every store; the History
