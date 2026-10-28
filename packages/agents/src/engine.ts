@@ -66,6 +66,16 @@ export async function* runAgent(input: RunInput, engine: Engine = defaultEngine(
     }
     yield { type: 'error', message: input.signal?.aborted ? 'Cancelled' : 'Run ended without a result' };
   } catch (err) {
-    yield { type: 'error', message: input.signal?.aborted ? 'Cancelled' : err instanceof Error ? err.message : String(err) };
+    yield { type: 'error', message: input.signal?.aborted ? 'Cancelled' : thrown(err, input.config?.runtime) };
   }
+}
+
+/**
+ * An engine that threw instead of ending with an error event: its process died or the connection dropped. That reads
+ * as a lost connection with a retry; anything else keeps its own message.
+ */
+function thrown(err: unknown, runtime?: string) {
+  const raw = err instanceof Error ? err.message : String(err);
+  const who = runtime === 'codex' ? 'Codex' : runtime === 'demo' ? 'the demo engine' : 'Claude';
+  return /ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EPIPE|socket hang up|fetch failed|network|process exited|terminated/i.test(raw) ? `Lost the connection to ${who} (${raw}). Retry in a few minutes.` : raw;
 }

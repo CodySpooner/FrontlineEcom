@@ -1567,7 +1567,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - checked against the team reference.
 
 ### Reliability
-- [ ] AA-21 **Live updates and recovery:**
+- [x] AA-21 **Live updates and recovery:**
   - no poll while online;
   - cache seeding for runs the client didn't start;
   - in-order streaming with no duplicate or dropped text across a reconnect (test with the fake socket);
@@ -1746,6 +1746,15 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   the team (the run on its participant's tab, scrolled to); the right panel's team variant, closed by default. Team
   responses carry each participant's name, type and config, and the Claude spend. 7 web tests and 1 server test;
   checked in headless Chrome at 1440 against the team board.
+- 2026-10-28 AA-21 Live updates and recovery: each run's live events are numbered (`run_event.seq`; GET /api/runs/:id
+  and the thread give a live run's `seq`). The client appends the next one, skips one it has, and on a gap (dropped
+  socket, a retry that took back what it said) refetches the run and catches up from the events held meanwhile. The
+  run poll runs only while the socket is down. A `run` message seeds the copy of a run the client didn't start. The
+  failure matrix: an engine that dies reads "Lost the connection to Claude/Codex (…). Retry in a few minutes."; a
+  failed reply that another runtime, model or limit fixes (usage limit, model gone, Fable credits, Codex signed out or
+  missing, the time limit) gets "Change runtime or model", Claude signed out keeps "Check your Claude login", every
+  failure keeps Retry, and Interrupted keeps Resume. 2 server tests, 4 web tests; checked on the dev server with the
+  demo engine and in headless Chrome.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
@@ -1883,6 +1892,22 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-21, 2026-10-28) For AA-22 and later:
+  - **Event numbers:** `seq` counts a run's live events from 1 (RunManager slot). It isn't stored: an ended run has
+    none, and its stored transcript is the whole of it. A transient retry skips a number on purpose, so a client that
+    streamed the failed attempt refetches. An event emitted before the run's slot exists would read 0 and be skipped;
+    none is today.
+  - **The race the seeding covers:** the demo engine finishes before the POST response lands (on the dev server the
+    first ~24 events arrive before the client knows the run id). The `queued` run message seeds the copy at seq 0, so
+    those events still apply in order.
+  - **Polls left:** useKbTask (KB lane) still polls every 2 s while a task runs; health and integrations poll on long
+    intervals. Not AA-21's to change.
+  - **Failure matrix, as built:** provider disconnected → the lost-connection line + Retry; expired sign-in → Check
+    your Claude login (Claude) or Change runtime or model (Codex: the dialog has Set up Codex); rate limit → Change
+    runtime or model + Retry; timeout → Change runtime or model (Stop after is there) + Retry; unavailable model and
+    Codex missing → Change runtime or model; interrupted → Resume. "Change runtime or model" shows only on the
+    conversation page's latest turn (a team's follow-ups have no such dialog). Overloaded and server errors were
+    already "Retry in a few minutes" with Retry.
 - (AA-20, 2026-10-28) For AA-21 and later:
   - **Live team updates:** `useLive` sets `['team', id]` from the `mission` message (every advance and team route
     publishes one) and refetches it on a team step's `run` message. AA-21 can fold this into its reconnect handling.

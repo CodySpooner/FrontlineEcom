@@ -385,7 +385,8 @@ export type LiveMessage =
   /** An agent run was queued, started or finished (agents lane). */
   | { type: 'run'; run: AgentRun }
   /** One streamed event of a running agent (text, tool calls, approvals, memories, done/error). */
-  | { type: 'run_event'; runId: string; agentId: string; storeId: string; event: AgentEvent }
+  /** `seq`: the event's number in its run (1, 2, …); a client that holds the run up to seq − 1 appends it, else refetches. */
+  | { type: 'run_event'; runId: string; agentId: string; storeId: string; event: AgentEvent; seq?: number }
   /** A squad mission was created, started a step, got a step's deliverable or ended (agents lane). */
   | { type: 'mission'; mission: SquadMission }
   /** A knowledge-base research task started, moved a stage, waits to retry, or ended (knowledge-base lane). */
@@ -1049,6 +1050,8 @@ export interface MemoryInput {
 /** A run with its transcript (consecutive text deltas merged into one). */
 export interface AgentRunDetail extends AgentRun {
   transcript: AgentEvent[];
+  /** A queued or running run: how many of its live events the transcript holds (run_event `seq` goes on from here). */
+  seq?: number;
   /** What it made, found by run_id (decision 14): in a conversation's thread and GET /api/runs/:id. */
   deliverables?: RunDeliverable[];
 }

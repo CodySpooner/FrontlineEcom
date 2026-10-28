@@ -1,8 +1,9 @@
 // UI-03 data layer: typed fetchers + react-query hooks over the local API, and the /api/live socket.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ActionLogEntry,
+  AgentEvent,
   CreateTeamInput,
   SquadMission,
   ConversationFinding,
@@ -199,15 +200,40 @@ export function useUpdateAgent() {
 }
 
 export const useRuns = (agentId: string) => useQuery({ queryKey: ['runs', agentId], queryFn: () => api<AgentRun[]>(`/api/runs?agent=${encodeURIComponent(agentId)}&limit=50`) });
-// Live events stream into this cache; the poll only covers a run that finished before its POST response landed.
-export const useRun = (id: string) =>
-  useQuery({
+// Live events stream into this cache (useLive); it polls only while the socket is down.
+export function useRun(id: string) {
+  const connected = useConnected();
+  return useQuery({
     queryKey: ['run', id],
-    queryFn: () => api<AgentRunDetail>(`/api/runs/${id}`),
+    queryFn: () => api<AgentRunDetail>(`/api/runs/${id}`).then(catchUp),
     staleTime: Infinity,
     enabled: !!id,
-    refetchInterval: (q) => (q.state.data && isLive(q.state.data) ? 2000 : false),
+    refetchInterval: (q) => (!connected && q.state.data && isLive(q.state.data) ? 2000 : false),
   });
+}
+
+/** Live events a watched run's copy couldn't take (it was behind, or being fetched), by run: its fetch catches up from them. */
+const held = new Map<string, { seq: number; event: AgentEvent }[]>();
+
+/** A fetched run plus the held events that go on from its `seq`, in order; later ones wait for the next fetch. */
+export function catchUp(r: AgentRunDetail): AgentRunDetail {
+  const events = (held.get(r.id) ?? []).sort((a, b) => a.seq - b.seq);
+  let out = r;
+  if (out.seq !== undefined) for (const h of events) if (h.seq === out.seq! + 1) out = { ...applyRunEvent(out, h.event), seq: h.seq };
+  const rest = out.seq === undefined ? [] : events.filter((h) => h.seq > out.seq!);
+  if (rest.length) held.set(r.id, rest);
+  else held.delete(r.id);
+  return out;
+}
+
+/** Whether the live socket is open (useLive keeps it). */
+let connected = false;
+const onConnected = new Set<() => void>();
+const setConnected = (v: boolean) => {
+  connected = v;
+  onConnected.forEach((f) => f());
+};
+const useConnected = () => useSyncExternalStore((f) => (onConnected.add(f), () => void onConnected.delete(f)), () => connected);
 
 // Conversations (AA-05). Every call names its store: the server answers 404 for another store's record (decision 13).
 // A clientRequestId is made when the dialog or composer opens (or per Retry/Resume click) and kept until the server
@@ -1041,6 +1067,27 @@ export function useLive() {
     let retry = 0;
     let closed = false;
     let dropped = false;
+    // A run's events come numbered: the next one is appended; a gap (a dropped socket, a retry that took back what it
+    // said) refetches the run, which catches up from the events held meanwhile; one already in the copy is skipped.
+    const onRunEvent = (m: Extract<LiveMessage, { type: 'run_event' }>) => {
+      const key = ['run', m.runId];
+      if (m.seq === undefined) return void qc.setQueryData<AgentRunDetail>(key, (d) => d && applyRunEvent(d, m.event));
+      const d = qc.getQueryData<AgentRunDetail>(key);
+      const query = qc.getQueryCache().find({ queryKey: key, exact: true });
+      const hold = () => held.set(m.runId, [...(held.get(m.runId) ?? []), { seq: m.seq!, event: m.event }]);
+      // A fetch in flight may answer from before this event: its answer catches up from it.
+      const fetching = query?.state.fetchStatus === 'fetching';
+      if (fetching) hold();
+      const have = d && (d.seq ?? (d.status === 'queued' && !d.transcript.length ? 0 : undefined));
+      if (have !== undefined && m.seq <= have) return;
+      if (have !== undefined && m.seq === have + 1) return void qc.setQueryData<AgentRunDetail>(key, { ...applyRunEvent(d!, m.event), seq: m.seq });
+      // Behind, or no copy yet: refetch (once) if the run is shown, else whenever it is.
+      if (!query?.isActive()) return void (d && qc.invalidateQueries({ queryKey: key, exact: true }));
+      if (!fetching) {
+        hold();
+        qc.invalidateQueries({ queryKey: key, exact: true });
+      }
+    };
     const onMessage = (m: LiveMessage) => {
       if (m.type === 'event') {
         // Each feed is fetched for its picked stores ([] = all); an event only joins the feeds it belongs to.
@@ -1050,11 +1097,22 @@ export function useLive() {
         }
         // An order event means a real order row and today's metrics moved.
         if (m.event.type === 'order') ['summary', 'orders', 'top-products'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
-      } else if (m.type === 'run_event') qc.setQueryData<AgentRunDetail>(['run', m.runId], (d) => d && applyRunEvent(d, m.event));
+      } else if (m.type === 'run_event') onRunEvent(m);
       else if (m.type === 'run') {
-        // Finished: refetch the stored transcript, which also covers events that raced ahead of the POST response.
-        if (isLive(m.run)) qc.setQueryData<AgentRunDetail>(['run', m.run.id], (d) => d && { ...d, ...m.run });
-        else qc.invalidateQueries({ queryKey: ['run', m.run.id] });
+        const key = ['run', m.run.id];
+        const d = qc.getQueryData<AgentRunDetail>(key);
+        // A run this client didn't start (a schedule, a team step, another window) gets a copy too.
+        if (!isLive(m.run)) {
+          // Ended: the stored transcript is the whole of it, fetched now if the run is shown, else when it is.
+          held.delete(m.run.id);
+          if (!d) qc.setQueryData<AgentRunDetail>(key, { ...m.run, transcript: [] });
+          qc.invalidateQueries({ queryKey: key, exact: true });
+        } else if (d) qc.setQueryData<AgentRunDetail>(key, { ...d, ...m.run, transcript: d.transcript });
+        else if (m.run.status === 'queued') qc.setQueryData<AgentRunDetail>(key, { ...m.run, transcript: [], seq: 0 });
+        else {
+          qc.setQueryData<AgentRunDetail>(key, { ...m.run, transcript: [] }); // started elsewhere: what it said so far is fetched when shown
+          qc.invalidateQueries({ queryKey: key, exact: true });
+        }
         qc.invalidateQueries({ queryKey: ['runs', m.run.agentId] });
         if (m.run.conversationId) for (const key of [['conversations', m.run.storeId], ['conversation', m.run.conversationId], ['thread', m.run.conversationId]]) qc.invalidateQueries({ queryKey: key });
         // A team step's run moves its team: the step's status, the next step, the synthesis.
@@ -1104,10 +1162,12 @@ export function useLive() {
         if (dropped) qc.invalidateQueries();
         dropped = false;
         setOnline(true);
+        setConnected(true);
       };
       ws.onmessage = (e) => onMessage(JSON.parse(String(e.data)) as LiveMessage);
       ws.onclose = () => {
         dropped = true;
+        setConnected(false);
         if (closed) return;
         setOnline(false);
         retry = window.setTimeout(connect, 3000);
@@ -1116,6 +1176,7 @@ export function useLive() {
     connect();
     return () => {
       closed = true;
+      setConnected(false);
       ws?.close();
       clearTimeout(retry);
     };

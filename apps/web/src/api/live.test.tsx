@@ -3,7 +3,8 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useGoLiveRefresh, useLive } from './client';
+import type { AgentRunDetail } from '@frontline/shared';
+import { useGoLiveRefresh, useLive, useRun } from './client';
 
 class FakeSocket {
   static all: FakeSocket[] = [];
@@ -144,5 +145,92 @@ describe('useGoLiveRefresh', () => {
     act(() => qc.setQueryData(['integrations'], [server]));
     await new Promise((r) => setTimeout(r, 50));
     expect(refetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useLive run streaming (AA-21)', () => {
+  const base = { id: 'r1', storeId: 'glow', agentId: 'glow:copywriter', task: 'Write it', usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 }, createdAt: '2026-10-28T08:00:00Z' };
+  const say = (text: string) => ({ type: 'text_delta', text });
+  const text = (qc: QueryClient) => (qc.getQueryData<AgentRunDetail>(['run', 'r1'])?.transcript ?? []).map((e) => (e.type === 'text_delta' ? e.text : '')).join('');
+  /** The server's copy of r1: GET /api/runs/r1 answers it, as runs.get does (transcript so far and its seq). */
+  function setup(server: { current: object }) {
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const gets: (() => void)[] = [];
+    let auto = true;
+    vi.stubGlobal('fetch', (path: string) => {
+      expect(path).toBe('/api/runs/r1');
+      const body = server.current;
+      const answer = { ok: true, status: 200, json: async () => body };
+      return auto ? Promise.resolve(answer) : new Promise((r) => gets.push(() => r(answer)));
+    });
+    const qc = new QueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    renderHook(() => (useLive(), useRun('r1')), { wrapper });
+    const send = (m: object) => act(() => FakeSocket.all.at(-1)!.onmessage?.({ data: JSON.stringify(m) }));
+    const event = (seq: number, e: object) => send({ type: 'run_event', runId: 'r1', agentId: base.agentId, storeId: 'glow', event: e, seq });
+    return { qc, send, event, gets, hold: () => (auto = false), release: async () => { await act(async () => gets.splice(0).forEach((g) => g())); } };
+  }
+
+  it('appends events in order, skips ones it has, and catches up across a dropped socket without doubling or losing text', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const server = { current: { ...base, status: 'running', transcript: [say('Hel')], seq: 1 } as object };
+    const { qc, event, hold, release } = setup(server);
+    act(() => FakeSocket.all[0]!.onopen?.());
+    await vi.waitFor(() => expect(text(qc)).toBe('Hel'));
+    event(2, say('lo'));
+    event(2, say('lo')); // a repeat changes nothing
+    expect(text(qc)).toBe('Hello');
+
+    // Dropped: events 3 and 4 go nowhere. Back: everything refetches, and event 5 lands before that answer does.
+    act(() => FakeSocket.all[0]!.onclose?.());
+    server.current = { ...base, status: 'running', transcript: [say('Hello wor')], seq: 4 };
+    hold();
+    await act(async () => vi.advanceTimersByTimeAsync(3000)); // the reconnect timer
+    act(() => FakeSocket.all[1]!.onopen?.());
+    event(5, say('ld'));
+    await release();
+    await vi.waitFor(() => expect(text(qc)).toBe('Hello world'));
+    event(5, say('ld'));
+    event(6, say('!'));
+    expect(text(qc)).toBe('Hello world!');
+
+    // A gap (a retry took back what it said): refetch, and later events wait for that answer.
+    server.current = { ...base, status: 'running', transcript: [say('Hi')], seq: 8 };
+    event(8, say('ignored: the answer has it'));
+    event(9, say(' there'));
+    await release();
+    await vi.waitFor(() => expect(text(qc)).toBe('Hi there'));
+    expect(qc.getQueryData<AgentRunDetail>(['run', 'r1'])!.seq).toBe(9);
+  });
+
+  it("polls a live run only while the socket is down", async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'] });
+    const server = { current: { ...base, status: 'running', transcript: [], seq: 0 } as object };
+    const fetches = vi.fn();
+    const { gets } = setup(server);
+    const real = globalThis.fetch;
+    vi.stubGlobal('fetch', (path: string) => (fetches(path), real(path)));
+    void gets;
+    act(() => FakeSocket.all[0]!.onopen?.());
+    await act(async () => vi.advanceTimersByTimeAsync(6000));
+    expect(fetches).not.toHaveBeenCalled();
+    act(() => FakeSocket.all[0]!.onclose?.());
+    await act(async () => vi.advanceTimersByTimeAsync(2100));
+    expect(fetches).toHaveBeenCalledWith('/api/runs/r1');
+  });
+
+  it("seeds a copy of a run this client didn't start, so its first events land; an ended one is fetched when shown", () => {
+    vi.stubGlobal('WebSocket', FakeSocket);
+    const qc = new QueryClient();
+    renderHook(() => useLive(), { wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider> });
+    const send = (m: object) => act(() => FakeSocket.all[0]!.onmessage?.({ data: JSON.stringify(m) }));
+    send({ type: 'run', run: { ...base, id: 'r2', status: 'queued', transcript: [] } });
+    send({ type: 'run', run: { ...base, id: 'r2', status: 'running', transcript: [] } });
+    send({ type: 'run_event', runId: 'r2', agentId: base.agentId, storeId: 'glow', event: say('Started'), seq: 1 });
+    expect(qc.getQueryData(['run', 'r2'])).toMatchObject({ status: 'running', seq: 1, transcript: [say('Started')] });
+
+    send({ type: 'run', run: { ...base, id: 'r3', status: 'done', transcript: [] } });
+    expect(qc.getQueryData(['run', 'r3'])).toMatchObject({ status: 'done' });
+    expect(qc.getQueryState(['run', 'r3'])!.isInvalidated).toBe(true);
   });
 });

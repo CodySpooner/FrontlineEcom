@@ -26,7 +26,8 @@ export interface RunManagerOptions {
   perStore?: number;
   /** Queued, started, finished. */
   onRun?: (run: AgentRun) => void;
-  onEvent?: (run: AgentRun, event: AgentEvent) => void;
+  /** `seq`: the event's number in the run, for the live feed (AgentRunDetail.seq). */
+  onEvent?: (run: AgentRun, event: AgentEvent, seq: number) => void;
   /** A run that failed to finish (its row or the hooks above threw); the console when unset. */
   onError?: (run: AgentRun, error: unknown) => void;
 }
@@ -37,7 +38,7 @@ export type RunManager = ReturnType<typeof createRunManager>;
 export function createRunManager(opts: RunManagerOptions) {
   const { db, env, concurrency = 3, perStore = 2 } = opts;
   const engine = opts.engine ?? defaultEngine();
-  const active = new Map<string, { storeId: string; agentId: string; conversationId?: string; teamId?: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[]; waiting?: boolean; budget?: number; spent?: number }>();
+  const active = new Map<string, { storeId: string; agentId: string; conversationId?: string; teamId?: string; abort: AbortController; done: Promise<void>; transcript: AgentEvent[]; seq: number; waiting?: boolean; budget?: number; spent?: number }>();
   /** Runs paused on the owner's decision don't hold a slot, so one unanswered request can't stall the store's other work. */
   // ponytail: a resumed run can briefly push past the limits; they only gate starting runs.
   const working = () => [...active.values()].filter((a) => !a.waiting);
@@ -163,11 +164,11 @@ export function createRunManager(opts: RunManagerOptions) {
     for (const r of db.prepare(`SELECT id FROM agent_runs WHERE agent_id = ? AND status IN ('queued', 'running')`).all(agentId)) cancel(String(r.id), OFFLINE);
   };
 
-  /** The run with its transcript so far while it is still running. */
+  /** The run with its transcript so far while it is still running, and how many live events that holds. */
   function get(id: string): AgentRunDetail | undefined {
     const run = getRun(db, id);
-    const live = active.get(id)?.transcript;
-    return run && (live ? { ...run, transcript: [...live] } : run);
+    const live = active.get(id);
+    return run && (live ? { ...run, transcript: [...live.transcript], seq: live.seq } : run.status === 'queued' ? { ...run, seq: 0 } : run);
   }
 
   /** Resolves once nothing is running or queued (tests, shutdown). */
@@ -214,7 +215,7 @@ export function createRunManager(opts: RunManagerOptions) {
           active.delete(run.id);
           pump();
         });
-      active.set(run.id, { storeId: run.storeId, agentId: run.agentId, ...(run.conversationId && { conversationId: run.conversationId }), ...(run.teamId && { teamId: run.teamId }), abort, done, transcript, ...(budget !== undefined ? { budget } : {}) });
+      active.set(run.id, { storeId: run.storeId, agentId: run.agentId, ...(run.conversationId && { conversationId: run.conversationId }), ...(run.teamId && { teamId: run.teamId }), abort, done, transcript, seq: 0, ...(budget !== undefined ? { budget } : {}) });
     }
   }
 
@@ -267,7 +268,8 @@ export function createRunManager(opts: RunManagerOptions) {
       else transcript.push(event);
       // Paused on the owner, a run can wait for days: what it did so far is kept, so a crash or restart meanwhile doesn't lose it.
       if (waiting) db.prepare('UPDATE agent_runs SET transcript_json = ? WHERE id = ?').run(JSON.stringify(transcript), run.id);
-      opts.onEvent?.(run, event);
+      const seq = slot ? ++slot.seq : 0;
+      opts.onEvent?.(run, event, seq);
     };
 
     // What the run has spent so far, saved as it goes with its transcript: a cancel, crash or restart (no result from the
@@ -393,6 +395,8 @@ export function createRunManager(opts: RunManagerOptions) {
             break;
           }
           transcript.length = mark; // what the failed attempt said goes; the retry says it again
+          const slot = active.get(run.id);
+          if (slot) slot.seq++; // a skipped number: a client that streamed the failed attempt refetches the transcript
         }
         // ponytail: only runs that looked at data (tool calls) reflect; a chat reply rarely teaches anything durable.
         // Research keeps what it learns as cards; Codex skips it in v1 (a second process, and plan quota).

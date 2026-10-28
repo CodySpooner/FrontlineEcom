@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { Link, useMatch, useNavigate } from 'react-router';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Ellipsis, LoaderCircle, Pencil, Square, Users, X } from 'lucide-react';
 import { AGENT_ROLES, blockFinding, EFFORT_LABEL, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationContext, type ConversationState, type KnowledgeScope, type KbStage, type RunDeliverable, type RuntimeId, type Store } from '@frontline/shared';
 import { useAgentTypes, useAnswer, useApprovals, useCreateConversation, useKbCard, useKbCardsIn, useRetryRun, useSaveFinding, useRun, useSendMessage, useStopConversation, useThread, useUpdateConversation } from '../api/client';
@@ -34,6 +34,8 @@ const scrollTops = new Map<string, number>();
 export const initials = (name: string) => (name.match(/\b\p{L}/gu) ?? []).join('').slice(0, 2).toUpperCase();
 export const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const interrupted = (r: Pick<AgentRunDetail, 'status' | 'error'>) => r.status === 'error' && r.error === INTERRUPTED;
+// The engines' failures another runtime, model or time limit fixes (claude-engine.ts ERRORS, codex.ts, runs.ts).
+const RUNTIME_FIX = /usage limit|choose another model|Codex isn't signed in|Codex CLI isn't installed|minute limit was reached/i;
 // An Ask KB all-stores run, or one that compared stores, holds other stores' data (decision 17): it can't continue here.
 const otherStores = (r: AgentRunDetail) => r.task.includes('The cards come from every store and General') || r.transcript.some((e) => e.type === 'tool_call' && toolName(e.name)[0] === 'compare_stores');
 
@@ -333,6 +335,8 @@ function Deliverables({ items }: { items: RunDeliverable[] }) {
 
 export function Reply({ store, conversationId, run, name, latest, deliverables = [] }: { store: Store; conversationId?: string; run: AgentRunDetail; name: string; latest: boolean; deliverables?: RunDeliverable[] }) {
   const retry = useRetryRun(store.id, conversationId ?? '');
+  const change = useChangeRuntime();
+  const own = !!useMatch('/agents/c/:id'); // a team's follow-ups have no Change runtime dialog
   const appLinks = useAppLinks();
   const [copied, setCopied] = useState(false);
   const live = isLive(run);
@@ -389,6 +393,11 @@ export function Reply({ store, conversationId, run, name, latest, deliverables =
         <p role="alert" className="flex flex-wrap gap-2 text-xs text-red">
           {said || !run.error ? 'Failed' : `Failed: ${run.error}`}
           {run.error && <FixLink message={run.error} agentId={run.agentId} />}
+          {run.error && latest && own && RUNTIME_FIX.test(run.error) && (
+            <button type="button" onClick={change.open} className="cursor-pointer font-semibold whitespace-nowrap text-text-2 underline underline-offset-2 hover:text-white">
+              Change runtime or model
+            </button>
+          )}
         </p>
       )}
       {run.status === 'cancelled' && <p className="text-xs text-muted">Stopped</p>}

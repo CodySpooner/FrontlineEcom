@@ -185,6 +185,31 @@ test('the context chip links back to what the conversation was opened from; a re
   expect((await screen.findByRole('link', { name: 'Opened from · LED face mask' })).getAttribute('href')).toBe('/research');
 });
 
+test('a failed reply says why with its fix: sign in, change runtime or model, or retry', async () => {
+  const cases: [string, RegExp][] = [
+    ["Claude isn't signed in on this computer. Open a terminal, run `claude`, sign in with /login, then run the agent again.", /^Check your Claude login$/],
+    ["Codex isn't signed in for this app. Choose Codex in Deploy an agent and use Set up Codex, then run the agent again.", /^Change runtime or model$/],
+    ["You've hit your Claude usage limit for now. Agents can run again once it resets.", /^Change runtime or model$/],
+    ["The agent's model isn't available on your Claude login any more. Choose another model for this agent.", /^Change runtime or model$/],
+    ["The Codex CLI isn't installed on this computer. Install it, then run the agent again.", /^Change runtime or model$/],
+    ["Stopped: this run's 20-minute limit was reached.", /^Change runtime or model$/],
+    ['Lost the connection to Claude (socket hang up). Retry in a few minutes.', /^Retry$/],
+  ];
+  for (const [error, fix] of cases) {
+    cleanup();
+    api([run('r1', 'error', { error })]);
+    renderApp(<Conversation store={store} conversation={conversation('failed')} config={config} buttons={null} />, '/agents/c/c1?store=glow');
+    expect(await screen.findByText(`Failed: ${error}`)).toBeTruthy();
+    expect(screen.getByRole(fix.source.includes('login') ? 'link' : 'button', { name: fix })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy(); // every failure can be retried
+  }
+  cleanup();
+  api([run('r1', 'error', { error: "Stopped: this run's 20-minute limit was reached." })]);
+  renderApp(<Conversation store={store} conversation={conversation('failed')} config={config} buttons={null} />, '/agents/c/c1?store=glow');
+  fireEvent.click(await screen.findByRole('button', { name: 'Change runtime or model' }));
+  expect(screen.getByTestId('where').textContent).toBe('/agents/c/c1?store=glow&change=runtime');
+});
+
 test('an interrupted reply shows the banner with Resume, and no Retry', async () => {
   const fetch = api([run('r1', 'error', { error: INTERRUPTED, state: 'interrupted', transcript: [{ type: 'text_delta', text: 'Half an answer' }] })]);
   show(conversation('interrupted'));
