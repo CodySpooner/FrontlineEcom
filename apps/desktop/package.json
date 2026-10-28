@@ -1,7 +1,7 @@
 {
   "name": "@frontline/desktop",
   "productName": "Frontline Ecom",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "Command center for running several ecommerce stores with AI agent squads.",
   "author": "Frontline Ecom",
   "private": true,
