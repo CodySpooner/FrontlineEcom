@@ -2364,3 +2364,4 @@ export interface KbOverview {
 }
 
 export * from './runtime-registry';
+export * from './research';

@@ -903,6 +903,319 @@ export const MIGRATIONS = [
   ALTER TABLE squad_missions ADD COLUMN conversation_id TEXT REFERENCES conversations(id);
   ALTER TABLE squad_missions ADD COLUMN owner_notes_json TEXT;
   `,
+  /* 51 (product-research: PR-02 the shared catalog, evidence, sources and jobs; each store's evaluations, tasks, reports and watches) */ `
+  CREATE TABLE pr_products (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    category TEXT,
+    image_ref TEXT,
+    merged_into TEXT REFERENCES pr_products(id), -- a merge keeps both rows and every listing
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE pr_listings (
+    id TEXT PRIMARY KEY,
+    product_id TEXT NOT NULL REFERENCES pr_products(id),
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE, -- NULL: shared; set: that store's private row (a pasted link, an agent find)
+    source TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    url TEXT,
+    canonical_url TEXT,
+    title TEXT NOT NULL,
+    category TEXT,
+    image_ref TEXT,
+    origin TEXT NOT NULL, -- ingest | import | owner_link | agent_find | legacy_sample | fixture
+    currency TEXT,
+    region TEXT,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL,
+    retrieved_at TEXT,
+    raw_hash TEXT,
+    transform_json TEXT,
+    status TEXT NOT NULL DEFAULT 'active' -- active | gone | blocked
+  );
+  CREATE UNIQUE INDEX pr_listings_ref ON pr_listings (source, source_ref, ifnull(store_id, ''));
+  CREATE INDEX pr_listings_by_product ON pr_listings (product_id);
+  CREATE INDEX pr_listings_by_canonical ON pr_listings (canonical_url);
+  CREATE INDEX pr_listings_by_store ON pr_listings (store_id);
+  CREATE TABLE pr_variants (
+    id TEXT PRIMARY KEY,
+    listing_id TEXT NOT NULL REFERENCES pr_listings(id) ON DELETE CASCADE,
+    source_ref TEXT NOT NULL,
+    sku TEXT,
+    gtin TEXT,
+    mpn TEXT,
+    attributes_json TEXT,
+    weight_g REAL,
+    dimensions_json TEXT,
+    UNIQUE (listing_id, source_ref)
+  );
+  CREATE INDEX pr_variants_by_sku ON pr_variants (sku);
+  CREATE TABLE pr_offers ( -- one observation: a new check inserts a row, the latest per key is current
+    id TEXT PRIMARY KEY,
+    listing_id TEXT NOT NULL REFERENCES pr_listings(id) ON DELETE CASCADE,
+    variant_id TEXT REFERENCES pr_variants(id) ON DELETE CASCADE,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE, -- set: an owner-entered offer, private
+    supplier TEXT NOT NULL,
+    destination TEXT, -- ISO country the quote is for
+    quantity INTEGER NOT NULL DEFAULT 1,
+    method TEXT, -- shipping method
+    unit_cost_minor INTEGER, -- NULL: unknown, never 0
+    shipping_cost_minor INTEGER,
+    currency TEXT,
+    delivery_days_min INTEGER,
+    delivery_days_max INTEGER,
+    processing_days INTEGER,
+    moq INTEGER,
+    ships_from TEXT,
+    stock_json TEXT, -- per warehouse
+    restrictions TEXT,
+    returns_note TEXT,
+    provenance TEXT NOT NULL, -- live | import | owner | supplier_claim | fixture
+    checked_at TEXT NOT NULL
+  );
+  CREATE INDEX pr_offers_by_listing ON pr_offers (listing_id, destination, checked_at);
+  CREATE TABLE pr_signals ( -- one observation set: a Trends export, an order history, a manual note
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT REFERENCES pr_products(id), -- a product-scope set; query and category sets link through pr_signal_links
+    platform TEXT NOT NULL,
+    query TEXT,
+    region TEXT,
+    period_start TEXT,
+    period_end TEXT,
+    granularity TEXT, -- day | week | month
+    metric TEXT NOT NULL,
+    scope TEXT NOT NULL, -- product | query | category
+    origin TEXT NOT NULL, -- live | import | manual | fixture
+    file_ref TEXT,
+    note TEXT,
+    url TEXT,
+    retrieved_at TEXT NOT NULL
+  );
+  CREATE INDEX pr_signals_by_product ON pr_signals (product_id);
+  CREATE TABLE pr_signal_points (
+    signal_id TEXT NOT NULL REFERENCES pr_signals(id) ON DELETE CASCADE,
+    at TEXT NOT NULL,
+    value REAL NOT NULL,
+    below_one INTEGER NOT NULL DEFAULT 0, -- Trends "<1"
+    PRIMARY KEY (signal_id, at)
+  );
+  CREATE TABLE pr_signal_links (
+    signal_id TEXT NOT NULL REFERENCES pr_signals(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL REFERENCES pr_products(id),
+    confirmed_at TEXT, -- NULL: suggested by a query match, not confirmed by the owner
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (signal_id, product_id)
+  );
+  CREATE INDEX pr_signal_links_by_product ON pr_signal_links (product_id);
+  CREATE TABLE pr_matches (
+    id TEXT PRIMARY KEY,
+    listing_a TEXT NOT NULL REFERENCES pr_listings(id) ON DELETE CASCADE,
+    listing_b TEXT NOT NULL REFERENCES pr_listings(id) ON DELETE CASCADE,
+    verdict TEXT NOT NULL, -- exact | similar | separate
+    matching_json TEXT,
+    differing_json TEXT,
+    decided_by TEXT NOT NULL, -- rule | owner
+    reason TEXT,
+    decided_at TEXT NOT NULL,
+    UNIQUE (listing_a, listing_b)
+  );
+  CREATE TABLE pr_product_facts ( -- the Rank step's output: every discovery sort and filter reads it
+    product_id TEXT NOT NULL REFERENCES pr_products(id),
+    destination TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    cost_ship_minor INTEGER,
+    cost_ship_offer_id TEXT,
+    fulfillment_status TEXT,
+    fulfillment_checked_at TEXT,
+    demand_class TEXT,
+    momentum REAL,
+    demand_set_id TEXT,
+    first_seen_at TEXT,
+    evidence_at TEXT,
+    computed_at TEXT NOT NULL,
+    PRIMARY KEY (product_id, destination, currency)
+  );
+  CREATE INDEX pr_facts_cost ON pr_product_facts (destination, currency, cost_ship_minor);
+  CREATE INDEX pr_facts_momentum ON pr_product_facts (destination, currency, momentum);
+  CREATE INDEX pr_facts_seen ON pr_product_facts (destination, currency, first_seen_at);
+  CREATE INDEX pr_facts_evidence ON pr_product_facts (destination, currency, evidence_at);
+  CREATE INDEX pr_facts_demand ON pr_product_facts (destination, currency, demand_class);
+  CREATE INDEX pr_facts_fulfillment ON pr_product_facts (destination, currency, fulfillment_status);
+  CREATE TABLE pr_sources (
+    id TEXT PRIMARY KEY, -- the adapter id
+    status TEXT NOT NULL,
+    last_success_at TEXT,
+    last_attempt_at TEXT,
+    last_error TEXT,
+    error_kind TEXT, -- auth | rate_limit | quota | timeout | server | schema
+    quota_json TEXT,
+    cursor_json TEXT,
+    schema_hash TEXT,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE pr_jobs (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    source TEXT NOT NULL,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    status TEXT NOT NULL, -- queued | running | done | failed | stopped
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TEXT,
+    checkpoint_json TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT
+  );
+  CREATE INDEX pr_jobs_due ON pr_jobs (status, next_attempt_at);
+  CREATE TABLE pr_calls ( -- every call to a metered source: the caps count these
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    purpose TEXT NOT NULL, -- token | ingestion | search | watch | order_sync | owner
+    at TEXT NOT NULL,
+    ok INTEGER NOT NULL
+  );
+  CREATE INDEX pr_calls_by_source ON pr_calls (source, at);
+  CREATE TABLE pr_store_profiles (
+    store_id TEXT PRIMARY KEY REFERENCES stores(id) ON DELETE CASCADE,
+    audience TEXT,
+    price_min_minor INTEGER,
+    price_max_minor INTEGER,
+    price_currency TEXT,
+    ship_to TEXT,
+    warehouses_json TEXT,
+    max_delivery_days INTEGER,
+    avoid_categories_json TEXT,
+    avoid_terms_json TEXT,
+    include_categories_json TEXT,
+    keywords_json TEXT,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE pr_evaluations (
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL REFERENCES pr_products(id),
+    stage TEXT NOT NULL DEFAULT 'discovered',
+    owner TEXT,
+    fit TEXT, -- strong | medium | weak | unknown
+    fit_reasons_json TEXT,
+    flags_json TEXT,
+    flag_dismissals_json TEXT,
+    notes TEXT,
+    selling_price_minor INTEGER, -- set by the owner
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (store_id, product_id)
+  );
+  CREATE INDEX pr_evaluations_stage ON pr_evaluations (store_id, stage);
+  CREATE INDEX pr_evaluations_fit ON pr_evaluations (store_id, fit);
+  CREATE TABLE pr_stage_history (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL REFERENCES pr_products(id),
+    kind TEXT NOT NULL DEFAULT 'stage', -- stage | watch | flag | merge | separate | offer | evidence
+    from_stage TEXT,
+    to_stage TEXT,
+    reason TEXT,
+    by TEXT NOT NULL, -- owner, or the research task id
+    at TEXT NOT NULL
+  );
+  CREATE INDEX pr_stage_history_by_product ON pr_stage_history (store_id, product_id, at);
+  CREATE TABLE pr_tasks (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL REFERENCES pr_products(id),
+    listing_id TEXT REFERENCES pr_listings(id),
+    url TEXT, -- as pasted
+    preview_json TEXT, -- the preview with the owner's corrections, each field tagged with its origin
+    instructions TEXT NOT NULL, -- exactly as typed
+    template TEXT,
+    mode TEXT NOT NULL, -- new | queue | separate
+    type TEXT NOT NULL, -- the agent type: product_hunter or a custom role built on it
+    conversation_id TEXT,
+    run_id TEXT,
+    config_id TEXT,
+    not_started_reason TEXT,
+    client_request_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (store_id, client_request_id)
+  );
+  CREATE INDEX pr_tasks_by_product ON pr_tasks (store_id, product_id, created_at);
+  CREATE INDEX pr_tasks_by_run ON pr_tasks (run_id);
+  CREATE TABLE pr_reports ( -- append-only: never edited or deleted
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    task_id TEXT NOT NULL REFERENCES pr_tasks(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL REFERENCES pr_products(id),
+    run_id TEXT NOT NULL UNIQUE,
+    runtime TEXT,
+    engine TEXT,
+    recommendation TEXT NOT NULL,
+    report_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX pr_reports_by_product ON pr_reports (store_id, product_id, created_at);
+  CREATE TABLE pr_economics (
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL REFERENCES pr_products(id),
+    inputs_json TEXT NOT NULL, -- base, conservative and optimistic, each input with its provenance
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (store_id, product_id)
+  );
+  CREATE TABLE pr_comparisons (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    product_ids_json TEXT NOT NULL,
+    assumptions_json TEXT NOT NULL, -- one destination, currency, date and cost assumptions for every product
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE pr_briefs (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL REFERENCES pr_products(id),
+    fields_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE INDEX pr_briefs_by_product ON pr_briefs (store_id, product_id);
+  CREATE TABLE pr_outcomes (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL REFERENCES pr_products(id),
+    kind TEXT NOT NULL, -- product_test | store_product | experiment | kb_card
+    ref_id TEXT NOT NULL,
+    context_json TEXT, -- offer, audience, creative, spend, inventory, period
+    created_at TEXT NOT NULL,
+    UNIQUE (store_id, product_id, kind, ref_id)
+  );
+  CREATE TABLE pr_watches (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE, -- NULL: the owner's all-stores list
+    list_name TEXT NOT NULL DEFAULT 'Watchlist',
+    target_kind TEXT NOT NULL, -- listing | product | niche | offer
+    target_id TEXT NOT NULL,
+    prefs_json TEXT,
+    last_checked_at TEXT,
+    last_success_at TEXT,
+    last_error TEXT,
+    created_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX pr_watches_target ON pr_watches (ifnull(store_id, ''), list_name, target_kind, target_id);
+  CREATE TABLE pr_alerts (
+    id TEXT PRIMARY KEY,
+    watch_id TEXT NOT NULL REFERENCES pr_watches(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT,
+    dedupe_key TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (watch_id, dedupe_key)
+  );
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

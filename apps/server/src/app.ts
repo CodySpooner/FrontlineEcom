@@ -101,6 +101,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .use('/api/kb/*', guard)
     .use('/api/conversations/*', guard) // the bare path too
     .use('/api/research/*', guard)
+    .use('/api/pr/*', guard) // product-research: every /api/pr route
     .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))
     .get('/api/stores/:id', (c) => {

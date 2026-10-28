@@ -684,7 +684,7 @@ STOP.
     (`packages/shared/src/index.ts`) give the same path, naming both fields (account email and API key).
   - Finish the Blocked entries below with what you found (the Trends API form URL, or "no public application open as of
     <date>").
-- [ ] PR-02 **Data model** (decision 3): the migration with its upgrade test (`user_version`,
+- [x] PR-02 **Data model** (decision 3): the migration with its upgrade test (`user_version`,
   `PRAGMA foreign_key_check`), the shared `Pr*` types in `packages/shared/src/research.ts`, the store-scoping helper
   every route uses (store rows, NULL-store rows, private rows), and the `/api/pr/*` mount with its guard (T7, mount
   part). Write the migration for everything decision 3 lists; later items add their own appended migrations.
@@ -819,6 +819,10 @@ STOP.
   HEAD (Notes). `docs/features/product-research-sources.md`: CJ's endpoints, limits, points, error codes and key path;
   Google Trends CSV and API; the other decision-4 sources; 5 more suppliers and 4 licensed intelligence services.
   `INTEGRATION_KINDS.cj` help gives CJ's documented key path; its email field is optional.
+- 2026-10-28 PR-02 data model: migration 51 with every decision-3 table (shared catalog, evidence, sources, jobs,
+  calls; per-store profiles, evaluations, history, tasks, reports, economics, comparisons, briefs, outcomes, watches,
+  alerts), its upgrade test from a version-50 database (lists kept, keys, `foreign_key_check`, store delete), the
+  shared `Pr*` types, `scopeOf`/`storeOf`/`visible` store scoping and the `/api/pr/*` guard (413 test).
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -846,6 +850,12 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-02, decision 3 as built.** `pr_listings` is unique on (source, source_ref, store) so two stores can each paste
+  the same link privately; `pr_watches` is unique on (store, list name, target), so one product can sit in two named
+  lists; both use `ifnull(store_id, '')` so the all-stores rows are unique too. Added `pr_stage_history.kind` (stage
+  or a flag dismissal), `pr_signals.product_id`, `note` and `url` (a manual note is a signal), and a unique
+  `pr_reports.run_id` (one report per run). `conversation_id` and `run_id` have no foreign keys: those tables belong
+  to the ai-agents lane and a deleted run must not delete research.
 - **PR-01, decisions against HEAD (2026-10-28).** The code map holds, with these changes:
   - Decision 4, CJ: the old success check `!body.result` is wrong for CJ's documented responses (some have no
     `result`); PR-05 uses CJ's rule (HTTP 200 and code 200, 0 or none). The caps stay as written: they come to under a

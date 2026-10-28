@@ -131,6 +131,44 @@ test('a database from before conversations keeps its runs and missions, and gain
   }
 });
 
+test('a database from before Product Research keeps its lists and finds, and gains the pr_ tables with their keys', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontline-db-'));
+  try {
+    const file = join(dir, 'frontline.db');
+    const old = new DatabaseSync(file); // the last version without pr_ tables
+    for (const sql of MIGRATIONS.slice(0, 50)) old.exec(sql);
+    old.exec(`PRAGMA user_version = 50;
+      INSERT INTO stores (id, name, platform, niche) VALUES ('x', 'X', 'shopify', 'pet'), ('y', 'Y', 'shopify', 'pet');
+      INSERT INTO research_products (id, title, category, niche, source, cost, price, compare_at, trend, competition, shipping_days) VALUES ('find-1', 'Paw cup', 'Grooming', 'pet', 'tiktok', 3, 12, 0, 40, 30, 9);
+      INSERT INTO product_lists (id, name, created_at) VALUES ('l1', 'Saved', '2026-10-01');
+      INSERT INTO product_list_items (list_id, product_id, added_at) VALUES ('l1', 'find-1', '2026-10-01');`);
+    old.close();
+    const db = openDb(file);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(MIGRATIONS.length);
+    expect(db.prepare('SELECT count(*) AS n FROM product_list_items').get()?.n).toBe(1);
+    const at = '2026-10-28';
+    db.exec(`INSERT INTO pr_products (id, title, created_at, updated_at) VALUES ('p1', 'Paw cup', '${at}', '${at}');
+      INSERT INTO pr_listings (id, product_id, source, source_ref, title, origin, first_seen_at, last_seen_at) VALUES ('a', 'p1', 'cj', '123', 'Paw cup', 'ingest', '${at}', '${at}');
+      INSERT INTO pr_listings (id, product_id, store_id, source, source_ref, title, origin, first_seen_at, last_seen_at) VALUES ('b', 'p1', 'x', 'link', 'shop.example/cup', 'Paw cup', 'owner_link', '${at}', '${at}');
+      INSERT INTO pr_listings (id, product_id, store_id, source, source_ref, title, origin, first_seen_at, last_seen_at) VALUES ('c', 'p1', 'y', 'link', 'shop.example/cup', 'Paw cup', 'owner_link', '${at}', '${at}');
+      INSERT INTO pr_tasks (id, store_id, product_id, instructions, mode, type, client_request_id, created_at, updated_at) VALUES ('t1', 'x', 'p1', 'Check it', 'new', 'product_hunter', 'req-1', '${at}', '${at}');
+      INSERT INTO pr_watches (id, store_id, target_kind, target_id, created_at) VALUES ('w1', NULL, 'listing', 'a', '${at}');
+      INSERT INTO pr_watches (id, store_id, list_name, target_kind, target_id, created_at) VALUES ('w2', NULL, 'Saved', 'listing', 'a', '${at}');`);
+    // Two stores may paste the same link (each a private row); one source can't list the same ref twice.
+    expect(() => db.prepare(`INSERT INTO pr_listings (id, product_id, source, source_ref, title, origin, first_seen_at, last_seen_at) VALUES ('d', 'p1', 'cj', '123', 'Again', 'ingest', '', '')`).run()).toThrow(/UNIQUE/);
+    expect(() => db.prepare(`INSERT INTO pr_listings (id, product_id, store_id, source, source_ref, title, origin, first_seen_at, last_seen_at) VALUES ('e', 'p1', 'x', 'link', 'shop.example/cup', 'Again', 'owner_link', '', '')`).run()).toThrow(/UNIQUE/);
+    // A repeated request is the same task; the all-stores watchlist can't hold one target twice in one list.
+    expect(() => db.prepare(`INSERT INTO pr_tasks (id, store_id, product_id, instructions, mode, type, client_request_id, created_at, updated_at) VALUES ('t2', 'x', 'p1', 'Again', 'new', 'product_hunter', 'req-1', '', '')`).run()).toThrow(/UNIQUE/);
+    expect(() => db.prepare(`INSERT INTO pr_watches (id, store_id, target_kind, target_id, created_at) VALUES ('w3', NULL, 'listing', 'a', '')`).run()).toThrow(/UNIQUE/);
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    db.exec("DELETE FROM stores WHERE id = 'x'"); // a store's private rows go with it; shared rows stay
+    expect(['pr_tasks', 'pr_listings', 'pr_products'].map((t) => db.prepare(`SELECT count(*) AS n FROM ${t}`).get()?.n)).toEqual([0, 2, 1]);
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("tests use a temp data folder, never the dev instance's (its Knowledge Base edits, its key)", () => {
   expect(dataDir().startsWith(tmpdir())).toBe(true);
 });
