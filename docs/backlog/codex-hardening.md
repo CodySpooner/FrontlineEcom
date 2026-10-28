@@ -90,7 +90,7 @@ dated Done line there too.
   "See step [2]." after the array drops every learning).
 - [x] CH-07 AGT-248: memory and niche-learning lines go through the existing `oneLine()` (`prompt.ts` ~27; raw
   `m.text` at ~75 and ~91), so a memory can't forge a line labelled as the owner's preference.
-- [ ] CH-08 AGT-249: the prompt's memory room counts the memory header and the "Scheduled jobs" and "Waiting for the
+- [x] CH-08 AGT-249: the prompt's memory room counts the memory header and the "Scheduled jobs" and "Waiting for the
   owner" sections (`prompt.ts` ~88-125).
 - [ ] CH-09 AGT-246: a run stopped at the agent's own daily budget says so. Record which cap was binding when the run
   was seated (`runs.ts` ~202-209, ~411-413) and pass it on; don't re-derive it. AGT-244 just reworked this path: keep
@@ -161,6 +161,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-08 / AGT-249: memory room now counts its header plus scheduled jobs and waiting requests. Busy-prompt regression was 643 estimated tokens over budget before; both cases fit after. Memory floor and owner priority preserved; pnpm check green (232 files / 1,712 tests).
 
 - 2026-10-28 CH-07 / AGT-248: memory and niche-learning text/evidence use existing oneLine(), preventing forged owner lines via CR/LF or Unicode line separators. Regression failed first; pnpm check green (232 files / 1,710 tests).
 

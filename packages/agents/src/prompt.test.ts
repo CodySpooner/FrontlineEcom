@@ -112,6 +112,22 @@ describe('assemblePrompt', () => {
     expect(prompt).not.toContain('<!--');
   });
 
+  test.each([false, true])('memory room counts its header and always-kept sections (jobs/waiting: %s)', (busy) => {
+    const input = {
+      agent: agentOf(glow, 'copywriter'), store: glow, today: '2026-10-26',
+      waiting: busy ? Array.from({ length: 15 }, (_, i) => `Request ${i}: ${'review the proposed change '.repeat(4)}`) : [],
+      scheduled: busy ? Array.from({ length: 6 }, (_, i) => `Job ${i}: ${'check the daily numbers '.repeat(4)}`) : [],
+    };
+    const base = assemblePrompt(input);
+    const budget = estimateTokens(base) + 2000;
+    const memories = Array.from({ length: 80 }, (_, i) => memory(i, `memory ${i} ${'x'.repeat(200)}`));
+    const prompt = assemblePrompt({ ...input, budget, memories });
+    expect(prompt).toContain('memory 0 ');
+    expect(prompt).not.toContain('memory 79 ');
+    for (const line of [...input.waiting, ...input.scheduled]) expect(prompt).toContain(line);
+    expect(estimateTokens(prompt)).toBeLessThanOrEqual(budget);
+  });
+
   test('drops the lowest-ranked memories to fit the budget, never the fixed layers', () => {
     const base = assemblePrompt({ agent: agentOf(glow, 'copywriter'), store: glow, today: '2026-10-26' });
     const memories = Array.from({ length: 50 }, (_, i) => memory(i + 1, `memory number ${i + 1} ${'x'.repeat(200)}`));

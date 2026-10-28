@@ -407,12 +407,14 @@ Tests always use the FakeEngine; at most one short real-engine smoke run per tas
 - [ ] AGT-246 (same review) A run the SDK stops with `error_max_budget_usd` at the agent's own daily budget says so, not "…for this store. Raise it in Settings.": `overOwn` is never set when the SDK stops first, because the live estimate reads a little low (`claude-engine.ts:14`, `runs.ts:268`).
 - [x] AGT-247 (same review) `parseLearnings` (`memory.ts`) finds the array's own closing `]`: today it cuts at the reply's last `]`, so prose after the array such as "See step [2]." drops every learning.
 - [x] AGT-248 (same review) A memory's text can't start a line of its own in the prompt (`prompt.ts:80`): `parseLearnings` and `write_memory` accept newlines, so a squad memory can forge a line labelled as the owner's preference. Strip line breaks as `csv()` does (AGT-243).
-- [ ] AGT-249 (same review) The prompt's memory room counts the memory header and the always-kept "Scheduled jobs" and "Waiting for the owner" sections (`prompt.ts:76`): with 15 waiting requests and 6 jobs it comes out ~450 tokens over budget.
+- [x] AGT-249 (same review) The prompt's memory room counts the memory header and the always-kept "Scheduled jobs" and "Waiting for the owner" sections (`prompt.ts:76`): with 15 waiting requests and 6 jobs it comes out ~450 tokens over budget.
 
 ## Blocked
 - AGT-19 (later) Codex as an alternate engine for Store Developer code work: optional now that theme edits work through the Claude engine (AGT-57). `codex exec --json` for that role when the owner has Codex installed. Probed 2026-10-26 (codex-cli 0.163, Windows): `--sandbox workspace-write` still ran read-only and `read-only` blocked reading files, so what works is files inline in the prompt + `--sandbox read-only --ephemeral --ignore-user-config --output-schema {summary, files[{filename, body}]} -o last.json`; ~25k tokens for a one-word edit.
 
 ## Done
+
+- 2026-10-28 AGT-249 (codex-hardening CH-08): account for memory header, scheduled jobs and waiting requests before filling memory room; keep floor/owner priority. Busy-prompt regression and pnpm check green (1,712 tests).
 
 - 2026-10-28 AGT-248 (codex-hardening CH-07): normalized memory and niche text/evidence on prompt insertion; owner/squad labels preserved. CR/LF and Unicode separator regression; pnpm check green (1,710 tests).
 
