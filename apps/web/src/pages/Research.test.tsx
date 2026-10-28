@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { PrCard, PrDiscovery, PrSourceHealth, PrSourceState, PrStoreProfile, Store } from '@frontline/shared';
+import type { PrCard, PrDemandTab, PrDiscovery, PrHistoryRow, PrOffer, PrProductDetail, PrSourceHealth, PrSourceState, PrStoreProfile, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { discoveryQuery } from '../product-research/Filters';
 import { sourceItem } from '../product-research/format';
@@ -219,5 +219,89 @@ describe('Source health', () => {
     fireEvent.click(within(cj).getByRole('button', { name: 'Sync now' }));
     await waitFor(() => expect(f.mock.calls.some(([u, i]) => u === '/api/pr/sources/cj/sync' && i?.method === 'POST')).toBe(true));
     expect(await within(cj).findByRole('button', { name: 'Syncing…' })).toBeTruthy();
+  });
+});
+
+describe('Detail panel', () => {
+  beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })); // jsdom has none; the Demand chart tracks its width
+  const detail = (o: Partial<PrProductDetail> = {}): PrProductDetail => ({
+    card: card({ fixture: false }), currency: 'USD', shipTo: 'US', sku: 'CJ-BRUSH-M', url: 'https://cjdropshipping.com/p/1',
+    assessment: { fit: { fit: 'weak', reasons: ['battery', 'Missing price band'] }, demand: { level: 'moderate', sets: 1, ownOrders: false }, flags: [], confidence: { level: 'low', count: 1, has: { demand: true, offer: false, economics: false, report: false } } },
+    agentEstimates: null, stores: [], ...o,
+  });
+  const set: PrDemandTab['sets'][number] = {
+    id: 's1', platform: 'google_trends', query: 'dog brush', region: 'US', granularity: 'week', metric: 'interest_over_time', scope: 'product', origin: 'import', periodStart: '2024-11-03', periodEnd: '2026-10-25',
+    retrievedAt: '2026-10-26T00:00:00Z', points: 3, demandClass: 'sustained', peakMonth: null, momentum: 1, links: [],
+    series: [{ at: '2026-10-11', value: 48 }, { at: '2026-10-18', value: 52 }, { at: '2026-10-25', value: 50 }],
+  };
+  const offer: PrOffer = {
+    id: 'o1', supplier: 'CJdropshipping', variant: 'M / Grey', sku: 'CJ-BRUSH-M', destination: 'US', quantity: 1, method: 'CJPacket', unitCost: 342, shipCost: null, currency: 'USD', deliveryMin: 6, deliveryMax: 12,
+    processingDays: null, moq: null, shipsFrom: 'CN', stock: [{ warehouse: 'CN', units: 120 }], provenance: 'live', checkedAt: '2026-10-27T00:00:00Z', status: 'pending', reasons: ['Shipping cost unknown'],
+  };
+  const history: PrHistoryRow[] = [{ id: 'h1', storeId: 'paws', kind: 'stage', from: null, to: 'discovered', reason: 'Assigned from All stores', by: 'owner', at: '2026-10-27T00:00:00Z' }];
+  const panelApi = (d = detail()) =>
+    stubApi((url) => {
+      if (url.startsWith('/api/stores')) return [store, { ...store, id: 'glow', name: 'Glow Haus' }];
+      if (url.startsWith('/api/pr/products?')) return page([card()]);
+      if (url.includes('/demand?')) return { sets: [set], suggested: [{ ...set, id: 's2', scope: 'query' }], notes: [] } satisfies PrDemandTab;
+      if (url.includes('/offers?')) return [offer];
+      if (url.includes('/history?')) return history;
+      if (url.includes('/assign')) return { ok: true };
+      if (url.startsWith('/api/pr/signals/')) return {};
+      if (url.startsWith('/api/pr/products/')) return d;
+      if (url.startsWith('/api/pr/sources')) return [source({ fixtures: 10 })];
+      if (url.startsWith('/api/pr/profile')) return profile;
+      return [];
+    });
+  const bodyOf = (f: ReturnType<typeof panelApi>, part: string) => JSON.parse(String(f.mock.calls.find(([u]) => String(u).includes(part))![1]!.body));
+
+  it('opens from a card: header with SKU and a safe listing link, each assessment part on its own, and the confidence rule', async () => {
+    panelApi();
+    renderApp(<Research />, '/research?store=paws');
+    fireEvent.click(await screen.findByRole('article', { name: /Silicone grooming brush/ }));
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    const link = await within(panel).findByRole('link', { name: 'Open listing' });
+    expect([link.getAttribute('href'), link.getAttribute('rel'), link.getAttribute('target')]).toEqual(['https://cjdropshipping.com/p/1', 'noopener noreferrer', '_blank']);
+    expect(within(panel).getByText(/SKU CJ-BRUSH-M/)).toBeTruthy();
+    expect(within(panel).getByText('battery; Missing price band')).toBeTruthy();
+    expect(within(panel).getByText('Moderate')).toBeTruthy();
+    expect(within(panel).getAllByText('Not assessed yet')).toHaveLength(2); // economics and differentiation, until PR-18 and PR-17
+    expect(within(panel).getByText('Evidence confidence: Low')).toBeTruthy();
+    expect(within(panel).queryByRole('tab', { name: 'Economics' })).toBeNull(); // decision 1: absent until PR-18
+    expect(within(panel).queryByRole('combobox', { name: 'Assign to a store' })).toBeNull(); // store scope
+    expect(screen.getByTestId('where').textContent).toContain('product=p1');
+  });
+
+  it('Demand draws stored points with the Trends caption and confirms a suggested set; Suppliers says what is unknown', async () => {
+    const f = panelApi();
+    renderApp(<Research />, '/research?store=paws&product=p1&tab=demand');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    expect(await within(panel).findByText('Relative interest (0–100), not search volume or sales.')).toBeTruthy();
+    expect(within(panel).getByRole('img', { name: /Google Trends "dog brush", 3 points/ })).toBeTruthy();
+    fireEvent.click(within(panel).getByRole('button', { name: "Confirm it's about this product" }));
+    await waitFor(() => expect(calls(f, '/api/pr/signals/s2/links')).toHaveLength(1));
+    expect(bodyOf(f, '/api/pr/signals/s2/links')).toMatchObject({ productId: 'p1', confirmed: true });
+    fireEvent.click(within(panel).getByRole('tab', { name: 'Suppliers' }));
+    const o = await within(panel).findByRole('region', { name: 'CJdropshipping to US' });
+    expect(within(o).getByText('Shipping cost unknown')).toBeTruthy();
+    expect(within(o).getAllByText('Unknown').length).toBeGreaterThan(1); // shipping, processing, MOQ: never 0
+    expect(within(panel).getByText('Duties: Unknown, left out of the figures above.')).toBeTruthy();
+    expect(screen.getByTestId('where').textContent).toContain('tab=suppliers');
+  });
+
+  it('All stores: Assign to a store records it and switches to that store with the product still open; Esc closes it', async () => {
+    const f = panelApi(detail({ assessment: { ...detail().assessment, fit: null }, stores: [{ id: 'glow', name: 'Glow Haus', stage: 'researching' }] }));
+    renderApp(<Research />, '/research?store=all&product=p1');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    expect(await within(panel).findByText('Glow Haus · Researching')).toBeTruthy();
+    const pick = within(panel).getByRole('combobox', { name: 'Assign to a store' });
+    expect(within(pick).queryByRole('option', { name: 'Glow Haus' })).toBeNull(); // already evaluating it
+    fireEvent.change(pick, { target: { value: 'paws' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Assign' }));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toContain('store=paws'));
+    expect(bodyOf(f, '/assign')).toEqual({ storeId: 'paws' });
+    expect(screen.getByTestId('where').textContent).toContain('product=p1');
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Product details' })).toBeNull());
   });
 });

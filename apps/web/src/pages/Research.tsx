@@ -14,6 +14,7 @@ import { useDiscovery, useProfile, useSaveProfile, useSources } from '../product
 import { ProductCard } from '../product-research/Card';
 import { activeFilters, discoveryQuery, FilterChips, type Filters } from '../product-research/Filters';
 import { countryName, profileLine, sourceItem } from '../product-research/format';
+import { DetailPanel, PANEL_TABS, type PanelTab } from '../product-research/Panel';
 import { ProfileDialog } from '../product-research/ProfileDialog';
 import { SourceHealth } from '../product-research/SourceHealth';
 
@@ -45,7 +46,7 @@ export function Research() {
   // Scope: the URL's store, else the last one used here, else the store picked in the app's store filter.
   const scopeId = params.get('store') || last.store || ids[0] || stores[0]?.id || 'all';
   const store = stores.find((s) => s.id === scopeId) ?? null;
-  const pickScope = (id: string) => (set('store', id), set('product', null), setLast({ ...last, store: id }));
+  const pickScope = (id: string, keepProduct = false) => (set('store', id), keepProduct || set('product', null), setLast({ ...last, store: id }));
   const viewParam = params.get('view') || last.view;
   const view: PrView = PR_VIEWS.includes(viewParam as PrView) ? (viewParam as PrView) : 'all';
   const sortParam = params.get('sort') || last.sort;
@@ -57,6 +58,9 @@ export function Research() {
     return () => clearTimeout(t);
   });
   const product = params.get('product');
+  const [lastTab, setLastTab] = useStored<PanelTab>('fe.research.tab', 'overview');
+  const tabParam = params.get('tab') as PanelTab | null;
+  const tab: PanelTab = tabParam && PANEL_TABS.includes(tabParam) ? tabParam : PANEL_TABS.includes(lastTab) ? lastTab : 'overview';
 
   const profile = useProfile(store?.id ?? null);
   const saveShipTo = useSaveProfile(store?.id ?? '');
@@ -75,14 +79,16 @@ export function Research() {
   useEffect(() => {
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === '/' && !typing(e.target)) return void (e.preventDefault(), search.current?.focus());
-      if (e.key === 'Escape' && product && !document.querySelector('dialog[open]')) {
-        grid.current?.querySelector<HTMLElement>(`[data-card="${CSS.escape(product)}"]`)?.focus();
-        set('product', null);
-      }
+      if (e.key === 'Escape' && product && !document.querySelector('dialog[open]')) closePanel();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+  // Closing the panel returns focus to its card.
+  const closePanel = () => {
+    if (product) grid.current?.querySelector<HTMLElement>(`[data-card="${CSS.escape(product)}"]`)?.focus();
+    set('product', null);
+  };
   // Arrow keys move through the grid by its own column count; Enter opens the product.
   const onCardKey = (i: number) => (e: KeyboardEvent<HTMLElement>) => {
     const cols = getComputedStyle(grid.current!).gridTemplateColumns.split(' ').filter(Boolean).length || 1;
@@ -227,7 +233,8 @@ export function Research() {
         </p>
       ))}
 
-      <section aria-label="Products" className="mt-4">
+      <div className="mt-4 flex items-start gap-4">
+        <section aria-label="Products" className="min-w-0 flex-[999_1_520px]">
         {discovery.isPending ? (
           <LoadingState rows={6} />
         ) : discovery.isError ? (
@@ -271,7 +278,21 @@ export function Research() {
             )}
           </>
         )}
-      </section>
+        </section>
+        {product && (
+          <DetailPanel
+            key={product}
+            id={product}
+            store={store}
+            stores={stores}
+            shipTo={allShipTo}
+            tab={tab}
+            setTab={(t) => (set('tab', t === 'overview' ? null : t), setLastTab(t))}
+            onClose={closePanel}
+            onAssigned={(id) => pickScope(id, true)}
+          />
+        )}
+      </div>
     </>
   );
 }

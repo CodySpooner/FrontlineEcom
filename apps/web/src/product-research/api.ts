@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PrDiscovery, PrSourceHealth, PrSourceState, PrStoreProfile } from '@frontline/shared';
+import type { PrDiscovery, PrProductDetail, PrSourceHealth, PrSourceState, PrStoreProfile } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -44,3 +44,22 @@ export function useSyncSource() {
     onSettled: () => qc.invalidateQueries({ queryKey: ['pr'] }),
   });
 }
+
+const enc = encodeURIComponent;
+/** The detail panel's header and Overview (All stores: for the page's ship-to). */
+export const useProductDetail = (id: string, store: string | null, shipTo: string) =>
+  useQuery({ queryKey: ['pr', 'product', id, store, store ? null : shipTo], queryFn: () => api<PrProductDetail>(`/api/pr/products/${enc(id)}?${store ? scope(store) : `shipTo=${enc(shipTo)}`}`) });
+
+/** One panel tab, loaded when it is opened. */
+export const useProductTab = <T,>(id: string, store: string | null, tab: 'demand' | 'offers' | 'history', enabled: boolean) =>
+  useQuery({ queryKey: ['pr', 'product', id, store, tab], queryFn: () => api<T>(`/api/pr/products/${enc(id)}/${tab}?${scope(store)}`), enabled });
+
+/** A write that changes what the page shows: every research query refetches after it. */
+function usePrWrite<B>(path: (b: B) => string, method = 'POST') {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (b: B) => api<unknown>(path(b), json(method, b)), onSuccess: () => qc.invalidateQueries({ queryKey: ['pr'] }) });
+}
+/** Confirm a suggested query-level set for the product, or say it isn't about it. */
+export const useLinkSet = (store: string | null) => usePrWrite<{ signalId: string; productId: string; confirmed: boolean }>((b) => `/api/pr/signals/${enc(b.signalId)}/links?${scope(store)}`);
+export const useImportTrends = (store: string | null) => usePrWrite<{ name: string; csv: string; productId: string }>(() => `/api/pr/imports/trends?${scope(store)}`);
+export const useAssign = (id: string) => usePrWrite<{ storeId: string }>(() => `/api/pr/products/${enc(id)}/assign`);

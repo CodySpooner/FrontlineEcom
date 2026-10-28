@@ -730,7 +730,7 @@ STOP.
   source strip.
 
 ### Product details
-- [ ] PR-12 **Detail panel** (The design: detail panel): header, Stage select, Overview with the assessment, Demand with
+- [x] PR-12 **Detail panel** (The design: detail panel): header, Stage select, Overview with the assessment, Demand with
   the chart from stored points, "Import a Trends CSV" on Demand (`POST /api/pr/imports/trends` with `productId`), and
   the query-level sets suggested for the product with Confirm / Not this product (`POST /api/pr/signals/:id/links`), Suppliers with offers and statuses, History, the agent-find estimates block, and the
   All stores panel with "Assign to a store…". Progressive loading per tab.
@@ -884,6 +884,16 @@ STOP.
   ledger (`GET /api/pr/source-health`). "Sync now" (`POST /api/pr/sources/:id/sync`) shows only for a scheduled source
   that is set up. Checked in the dev app on fixtures: no source is set up there, so Sync now was absent, as intended;
   the sync path itself is tested with a fake source only. 3 tests.
+- 2026-10-28 PR-12 detail panel: a right-hand panel beside the grid (an overlay drawer below 1100 px) with the header
+  (image, SKU, "Open listing" with `noopener noreferrer`, stage and fixture pills), Overview (decision 11's parts each
+  with value and reason, the confidence line naming its rule, the cost and conditions, the agent-find estimates
+  collapsed as "not evidence"), Demand (one chart per set from stored points, its values table, the Trends caption,
+  suggested query-level sets with Confirm / Not this product, notes, "Import a Trends CSV"), Suppliers (each current
+  offer with its own status; unknowns say Unknown, duties too) and History. Tabs load when opened and live in `tab=`
+  and `fe.research.tab`; Esc closes and refocuses the card. All stores lists the stores evaluating it and assigns it to
+  a store, then switches to that store with the panel still open. `GET /api/pr/products/:id`, `/demand`, `/offers`,
+  `/history`, `POST /:id/assign`. Checked in the dev app on fixtures (store scope, All stores, 900 px drawer); Confirm,
+  the import and Assign are tested against stubs and the server tests only. 6 tests.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -915,6 +925,12 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-12 as built.** The Stage select arrives with PR-13 (a stage change needs its reason form); until then the header
+  shows the stage as a pill. Economics and differentiation read "Not assessed yet" and have no tab until PR-18 and
+  PR-17 (decision 1). An offer's status on Suppliers is decision 8 run on that row alone, for its own destination and
+  quantity. "Assign to a store…" puts the product in the store's pipeline at Discovered with a History row ("Assigned
+  from All stores"); a store that already has it gets 409. `AreaChart` takes an opt-in `format` for non-money values
+  (Trends interest); without it nothing changes for the dashboard and analytics charts.
 - **PR-11 as built.** Sync now queues today's planned queries (one job per store plan) and runs them in the background
   one at a time, then enriches; it refuses while a job is queued or running, clears a schema stop (the owner asking is
   the "asks for a sync again" of decision 4), and still refuses an auth stop until new credentials and a quota stop

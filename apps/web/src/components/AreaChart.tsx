@@ -12,8 +12,9 @@ const PB = 28;
 /**
  * Single-series money area chart (ported from the mockup): crosshair + tooltip on hover, arrow keys when focused.
  * `partial`: the last point is still in progress (today so far), so its segment is dashed instead of reading as a crash.
+ * `format` (opt-in): how a value reads when it isn't money, e.g. Product Research's 0–100 Trends interest.
  */
-export function AreaChart({ points, weekly, partial, label, currency }: { points: { date: string; value: number }[]; weekly?: boolean; partial?: boolean; label: string; currency?: string }) {
+export function AreaChart({ points, weekly, partial, label, currency, format }: { points: { date: string; value: number }[]; weekly?: boolean; partial?: boolean; label: string; currency?: string; format?: (v: number) => string }) {
   const wrap = useRef<HTMLDivElement>(null);
   const [W, setW] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
@@ -88,7 +89,7 @@ export function AreaChart({ points, weekly, partial, label, currency }: { points
             <g key={t}>
               <line x1={PL} x2={W - PR} y1={y(t)} y2={y(t)} className="stroke-grid" />
               <text x={PL - 8} y={y(t) + 4} textAnchor="end">
-                {shortMoney(t, currency)}
+                {format ? format(t) : shortMoney(t, currency)}
               </text>
             </g>
           ))}
@@ -113,7 +114,7 @@ export function AreaChart({ points, weekly, partial, label, currency }: { points
         className="pointer-events-none absolute rounded-[9px] border border-line-2 bg-bg-2/95 px-[11px] py-[7px] whitespace-nowrap shadow-[0_8px_24px_-6px_rgb(0_0_0/.55),0_0_18px_-8px_rgb(255_42_58/.35)]"
         style={{ left: px, top: py, transform: `translate(${shift}, calc(-100% - 14px))` }}
       >
-        <b className="block font-display text-base">{money(p.value, currency)}</b>
+        <b className="block font-display text-base">{format ? format(p.value) : money(p.value, currency)}</b>
         <span className="text-[11px] text-muted">
           {partial && i === n - 1 ? (weekly ? 'This week so far' : 'Today so far') : `${weekly ? 'Week ending ' : ''}${fmtDay(p.date, true)}`}
         </span>
