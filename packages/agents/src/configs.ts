@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, CODEX_ULTRA, defaultEffort, EFFORT_LABEL, INTEGRATION_KINDS, type AgentConfig, type AgentPreset, type AgentRole, type AgentTypeInfo, type CustomRole, type IntegrationKind, type RoleContract, type RuntimeCapabilities, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
+import { AGENT_ROLES, appearanceFor, CODEX_ULTRA, defaultEffort, EFFORT_LABEL, INTEGRATION_KINDS, OFFICE_DEPARTMENTS, OFFICE_DESKS, type AgentConfig, type AgentPreset, type AgentRole, type AgentTypeInfo, type CustomRole, type IntegrationKind, type RoleContract, type RuntimeCapabilities, type RuntimeId, type Store, type ToolGroup } from '@frontline/shared';
 import { agentModel } from './claude-engine';
 import { engineInfo } from './engine';
 import { BUILTIN_TYPES, contractOf, ROLES } from './roles';
@@ -317,5 +317,21 @@ export function saveConfig(db: DatabaseSync, store: Store, type: AgentType, draf
     id, store.id, `${store.id}:${type.role}`, draft.customRoleId ?? null, draft.runtime, draft.model ?? null, draft.effort ?? null,
     JSON.stringify(draft.tools), JSON.stringify(draft.knowledge), JSON.stringify(draft.permissions), new Date().toISOString(),
   );
+  seatInOffice(db, `${store.id}:${type.role}`, type.role);
   return getConfig(db, id)!;
+}
+
+/**
+ * A deployed agent shows up in the AI Ecosystem office (owner, 2026-10-28): it takes a free desk in its home department,
+ * else the first free one. Only once: an agent the owner archived from the office stays out, and a full office seats no one.
+ */
+function seatInOffice(db: DatabaseSync, agentId: string, role: AgentRole) {
+  if (db.prepare('SELECT 1 FROM ecosystem_seats WHERE agent_id = ?').get(agentId)) return;
+  const taken = new Set(db.prepare('SELECT desk_id FROM ecosystem_seats WHERE archived = 0').all().map((r) => String(r.desk_id)));
+  const free = OFFICE_DESKS.filter((d) => !taken.has(d.id));
+  const home = OFFICE_DEPARTMENTS.find((d) => d.role === role)?.id;
+  const desk = free.find((d) => d.department === home) ?? free[0];
+  if (!desk) return;
+  db.prepare('INSERT INTO ecosystem_seats (agent_id, desk_id, display_name, appearance_json, updated_at) VALUES (?, ?, ?, ?, ?)')
+    .run(agentId, desk.id, '', JSON.stringify(appearanceFor(agentId)), new Date().toISOString());
 }

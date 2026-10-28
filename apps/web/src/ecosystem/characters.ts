@@ -1,4 +1,6 @@
-import { OFFICE_ARCHETYPES, OFFICE_GEAR, type OfficeAppearance } from '@frontline/shared';
+import { appearanceFor, type OfficeAppearance } from '@frontline/shared';
+
+export { appearanceFor };
 
 export const ANIMATIONS = ['idle', 'walk', 'sit', 'work', 'think', 'talk', 'collaborate', 'complete', 'approval', 'error'] as const;
 export type Animation = (typeof ANIMATIONS)[number];
@@ -7,8 +9,6 @@ export const CELL = { width: 48, height: 64 };
 export const SHEET = { width: CELL.width * 16, height: CELL.height * ANIMATIONS.length, columns: 5 };
 export const ARCHETYPE_LABELS = ['Tactical operator', 'Hooded netrunner', 'Synthetic android', 'Heavy mech', 'Long-coat executive', 'Neon punk', 'Flight specialist', 'Circuit engineer'];
 export const GEAR_LABELS = ['Cyber arm', 'Reactor pack', 'Signal cape', 'Antenna rig', 'Utility belt'];
-const COLORS = ['#f34b65', '#5288f2', '#39c5b0', '#bc72ec', '#f0ac4f', '#e1e5ed', '#ef7351', '#65768d'];
-const ACCENTS = ['#60f3ee', '#ff577c', '#c09aff', '#f9db78', '#7dffb1', '#a5ceff'];
 export function frameAt(animation: Animation, elapsed: number, direction: Direction, worker: number) {
   const state = animation === 'complete' && elapsed > 1800 ? 'sit' : animation;
   const frame = Math.floor(Math.max(0, elapsed) / (state === 'walk' ? 110 : 230)) % 4;
@@ -16,16 +16,6 @@ export function frameAt(animation: Animation, elapsed: number, direction: Direct
     y: Math.floor(worker / SHEET.columns) * SHEET.height + ANIMATIONS.indexOf(state) * CELL.height };
 }
 
-/** Hash mixing keeps neighboring agent IDs from inheriting nearly identical looks. */
-export function appearanceFor(id: string): Required<OfficeAppearance> {
-  let hash = 2166136261;
-  for (const char of id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
-  const pick = (count: number) => { hash ^= hash << 13; hash ^= hash >>> 17; hash ^= hash << 5; return (hash >>> 0) % count; };
-  return { color: COLORS[pick(COLORS.length)]!, hair: pick(6), skin: pick(4),
-    outfit: (['jacket', 'suit', 'hoodie'] as const)[pick(3)]!, accessory: (['headset', 'glasses', 'none'] as const)[pick(3)]!,
-    archetype: OFFICE_ARCHETYPES[pick(OFFICE_ARCHETYPES.length)]!, accent: ACCENTS[pick(ACCENTS.length)]!,
-    gear: OFFICE_GEAR[pick(OFFICE_GEAR.length)]!, variant: pick(8) };
-}
 export const resolveAppearance = (look: OfficeAppearance, agentId: string): Required<OfficeAppearance> => ({ ...appearanceFor(agentId), ...look });
 
 /** Four frames and four directions per pose; thirty workers share a 3840 × 3840 atlas. */

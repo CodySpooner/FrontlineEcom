@@ -1823,6 +1823,11 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   the owner), with a test. The verification turn called store_summary over MCP, asked its ask_owner question, and was
   stopped while it waited: all four processes of the spawned tree gone, the question closed, the run Cancelled.
   The recorded lines replace the first four from-source lines of the Codex fixture. Details under Notes.
+- 2026-10-28 (owner report, after v0.1.8) A deployed agent never showed up in the AI Ecosystem: the office seats only
+  agents placed with its own "+ Deploy Agent", and Deploy here only opened a conversation. `saveConfig` now gives the
+  agent a desk the first time it is deployed (new conversation, team, runtime change): its home department if a desk is
+  free, else the first free one, with its default look (`appearanceFor`, moved to shared so the server can use it).
+  An agent archived from the office stays out; a full office seats no one. Test in agents-deploy.test.ts.
 
 ## Blocked
 - Resolved 2026-10-28: "Codex live smoke: needs the owner's sign-in". The owner signed in, and AA-25b ran (see Done

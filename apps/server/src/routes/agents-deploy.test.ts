@@ -1,5 +1,5 @@
 import { claudeEngine, claudeRuntime, conversationPreface, createRunManager, getConfig, getRun } from '@frontline/agents';
-import type { AgentRun, Conversation, ConversationDetail, ToolGroup } from '@frontline/shared';
+import { appearanceFor, type AgentRun, type Conversation, type ConversationDetail, type OfficeSeat, type ToolGroup } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { beforeEach, expect, test, vi } from 'vitest';
 import { createApp } from '../app';
@@ -120,4 +120,21 @@ test("the runtime can't change while a reply is going", async () => {
   const opened = await deploy({});
   db.prepare(`UPDATE agent_runs SET status = 'running' WHERE id = ?`).run(opened.run.id);
   expect(await change(opened.conversation.id, { runtime: 'claude' })).toMatchObject({ status: 409, body: { error: expect.stringMatching(/^Wait for the reply to finish/) } });
+});
+
+test('a deployed agent takes a desk in the office, in its home department, once', async () => {
+  const seats = async () => (await (await send('GET', '/api/ecosystem/seats')).json()) as OfficeSeat[];
+  const opened = await deploy({});
+  expect(await seats()).toEqual([expect.objectContaining({ agentId: 'glow:copywriter', deskId: 'copywriting-1', displayName: '', appearance: appearanceFor('glow:copywriter'), archived: false })]);
+  await deploy({}); // a second conversation, and a runtime change, keep the desk
+  expect((await change(opened.conversation.id, { runtime: 'claude' })).status).toBe(200);
+  expect((await seats()).map((s) => s.deskId)).toEqual(['copywriting-1']);
+  // Archived from the office: deploying again leaves it out.
+  await send('DELETE', '/api/ecosystem/seats/glow:copywriter');
+  await deploy({});
+  expect((await seats()).map((s) => [s.agentId, s.archived])).toEqual([['glow:copywriter', true]]);
+  // Home department full: the first free desk elsewhere.
+  for (const [i, store] of ['glow', 'peak', 'pawsome'].entries()) await send('POST', '/api/ecosystem/seats', { agentId: `${store}:operations`, deskId: `analytics-${i + 1}` });
+  await deploy({ type: 'market_analyst' });
+  expect((await seats()).find((s) => s.agentId === 'glow:market_analyst')?.deskId).toBe('executive-1');
 });

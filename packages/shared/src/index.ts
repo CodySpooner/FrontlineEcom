@@ -1717,6 +1717,18 @@ export interface OfficeAppearance {
   gear?: (typeof OFFICE_GEAR)[number];
   variant?: number;
 }
+const COLORS = ['#f34b65', '#5288f2', '#39c5b0', '#bc72ec', '#f0ac4f', '#e1e5ed', '#ef7351', '#65768d'];
+const ACCENTS = ['#60f3ee', '#ff577c', '#c09aff', '#f9db78', '#7dffb1', '#a5ceff'];
+/** Hash mixing keeps neighboring agent IDs from inheriting nearly identical looks. */
+export function appearanceFor(id: string): Required<OfficeAppearance> {
+  let hash = 2166136261;
+  for (const char of id) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619) >>> 0;
+  const pick = (count: number) => { hash ^= hash << 13; hash ^= hash >>> 17; hash ^= hash << 5; return (hash >>> 0) % count; };
+  return { color: COLORS[pick(COLORS.length)]!, hair: pick(6), skin: pick(4),
+    outfit: (['jacket', 'suit', 'hoodie'] as const)[pick(3)]!, accessory: (['headset', 'glasses', 'none'] as const)[pick(3)]!,
+    archetype: OFFICE_ARCHETYPES[pick(OFFICE_ARCHETYPES.length)]!, accent: ACCENTS[pick(ACCENTS.length)]!,
+    gear: OFFICE_GEAR[pick(OFFICE_GEAR.length)]!, variant: pick(8) };
+}
 export interface OfficeSeat {
   agentId: string;
   deskId: string;
