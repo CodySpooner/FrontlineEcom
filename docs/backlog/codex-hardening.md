@@ -113,7 +113,7 @@ found in runs, teams or product-research code go to that lane's Inbox.
   `docs/features/ai-agents-report.md`.
 - [ ] CH-13 `featuresChanged` (~80-83) only checks the known-off list, so a new on-by-default feature in an untested
   CLI version passes. Detect it and warn in the Codex status (Q2 default); test with a fixture.
-- [ ] CH-14 Fake-Codex tests through the real MCP endpoint for the paths nothing tests: a team with a Codex member, a
+- [x] CH-14 Fake-Codex tests through the real MCP endpoint for the paths nothing tests: a team with a Codex member, a
   Product Research task on a Codex config (find out first whether it's meant to be refused, `tasks.test.ts` ~98), and
   a Store Developer theme loop (read_theme_files → draft_theme_change → a `store.publish_theme` approval, stubbed
   theme connector, no 2-minute wait).
@@ -163,6 +163,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-14: fake Codex over the real MCP endpoint now covers a team participant and synthesis handoff, a Product Research task (valid Stop-after is accepted; the earlier refusal lacked it), and theme read -> copy -> publish approval -> owner denial without waiting two minutes. Three focused tests and pnpm check green (234 files / 1,730 tests, 4 workers). No production changes or live calls.
 
 - 2026-10-28 CH-12: two failing regressions proved CLI-side refusals and failed MCP results disappeared. Failed frontline calls now emit tool errors; successful calls remain endpoint-owned. Checked the 0.163.0 exec_events.rs contract and installed resume help. pnpm check green (233 files / 1,727 tests, 4 workers).
 
