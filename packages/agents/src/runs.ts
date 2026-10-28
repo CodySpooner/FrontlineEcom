@@ -209,7 +209,7 @@ export function createRunManager(opts: RunManagerOptions) {
       const budget = caps.length ? Math.min(...caps) : undefined;
       const abort = new AbortController();
       const transcript: AgentEvent[] = [];
-      const done = execute(run, abort, transcript, budget)
+      const done = execute(run, abort, transcript, budget, seat === budget ? own : undefined)
         .catch((e) => (opts.onError ? opts.onError(run, e) : console.error(`Run ${run.id} failed to finish:`, e)))
         .finally(() => {
           active.delete(run.id);
@@ -233,7 +233,7 @@ export function createRunManager(opts: RunManagerOptions) {
     db.prepare(`SELECT session_id FROM agent_runs WHERE conversation_id = ? AND config_id IS ? AND session_id IS NOT NULL AND rowid < (SELECT rowid FROM agent_runs WHERE id = ?) ORDER BY rowid DESC`)
       .get(run.conversationId!, run.configId ?? null, run.id)?.session_id as string | undefined;
 
-  async function execute(queued: AgentRun, abort: AbortController, transcript: AgentEvent[], budget: number | undefined) {
+  async function execute(queued: AgentRun, abort: AbortController, transcript: AgentEvent[], budget: number | undefined, ownBudget: number | undefined) {
     const signal = abort.signal;
     db.prepare(`UPDATE agent_runs SET status = 'running', started_at = ? WHERE id = ?`).run(new Date().toISOString(), queued.id);
     const run = getRun(db, queued.id)!;
@@ -316,7 +316,10 @@ export function createRunManager(opts: RunManagerOptions) {
       const store = opts.store(run.storeId);
       // A research stage: its task's own prompt, and at most what the task has left.
       const research = agent && store && run.mode?.startsWith('research:') ? researchContext(db, run.mode.slice('research:'.length), agent, store, run.id) : undefined;
-      if (research) budget = Math.min(budget ?? Infinity, research.left);
+      if (research) {
+        if (research.left < (budget ?? Infinity)) ownBudget = undefined;
+        budget = Math.min(budget ?? Infinity, research.left);
+      }
       if (research && research.left < 0.01) end = { type: 'error', message: "Stopped: the research task's budget is used up." };
       else if (budget !== undefined && budget < 0.01) {
         const ownGone = own !== undefined && costToday(db, run.storeId, run.agentId) >= own - 0.01;
@@ -411,6 +414,7 @@ export function createRunManager(opts: RunManagerOptions) {
     if (end.type === 'error' && (overRun || (end.code === 'error_max_budget_usd' && runBudget !== undefined && runBudget <= (budget ?? Infinity)))) end = { ...end, message: `Stopped: this run's budget ($${runBudget}) is used up.` };
     else if (overTeam && end.type === 'error') end = { type: 'error', message: `Stopped: the team's budget ($${team}) is used up.` };
     else if (overCap && end.type === 'error') end = { type: 'error', message: overOwn ? ownUsedUp(own!, true) : `Stopped: today's AI budget for this store ($${cap}) is used up. Raise it in Settings.` };
+    else if (end.type === 'error' && end.code === 'error_max_budget_usd' && ownBudget !== undefined) end = { ...end, message: ownUsedUp(ownBudget, true) };
     if (overTime && end.type === 'error') end = { ...end, message: `Stopped: this run's ${stopAfterMin}-minute limit was reached.` };
     emit(end);
 

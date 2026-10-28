@@ -92,7 +92,7 @@ dated Done line there too.
   `m.text` at ~75 and ~91), so a memory can't forge a line labelled as the owner's preference.
 - [x] CH-08 AGT-249: the prompt's memory room counts the memory header and the "Scheduled jobs" and "Waiting for the
   owner" sections (`prompt.ts` ~88-125).
-- [ ] CH-09 AGT-246: a run stopped at the agent's own daily budget says so. Record which cap was binding when the run
+- [x] CH-09 AGT-246: a run stopped at the agent's own daily budget says so. Record which cap was binding when the run
   was seated (`runs.ts` ~202-209, ~411-413) and pass it on; don't re-derive it. AGT-244 just reworked this path: keep
   every runs test green.
 - [ ] CH-10 `request_approval` with `store.add_products` refuses a product whose `compareAt` is at or below its price,
@@ -161,6 +161,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-09 / AGT-246: capture the binding agent daily cap when seating a run and carry it into SDK budget-stop wording; a narrower research task clears that binding. Two failing regressions include a cap changed mid-run. All runs tests and pnpm check green (232 files / 1,714 tests).
 
 - 2026-10-28 CH-08 / AGT-249: memory room now counts its header plus scheduled jobs and waiting requests. Busy-prompt regression was 643 estimated tokens over budget before; both cases fit after. Memory floor and owner priority preserved; pnpm check green (232 files / 1,712 tests).
 

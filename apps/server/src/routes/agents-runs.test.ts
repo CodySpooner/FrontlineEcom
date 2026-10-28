@@ -356,6 +356,21 @@ test("a run stops once its agent's spend today passes the agent's own budget", a
   expect(getRun(db, run.id)).toMatchObject({ status: 'error', error: "Stopped: today's budget for this agent ($0.5) is used up. Raise it in its settings." });
 });
 
+test.each([false, true])("an SDK budget stop names the seated agent cap (changed during run: %s)", async (changed) => {
+  updateCaps(db, 'glow', { agentCostPerDay: 100 });
+  updateAgent(db, 'glow:copywriter', { dailyBudgetUsd: 0.5 });
+  const m = manager({
+    engine: async function* (input) {
+      expect(input.budgetUsd).toBe(0.5);
+      if (changed) updateAgent(db, 'glow:copywriter', { dailyBudgetUsd: 2 });
+      yield { type: 'error', message: "Stopped: the run used its share of today's AI budget for this store. Raise it in Settings.", code: 'error_max_budget_usd' };
+    },
+  });
+  const run = ok(m.start('glow:copywriter', 'Draft'));
+  await m.idle();
+  expect(getRun(db, run.id)?.error).toBe("Stopped: today's budget for this agent ($0.5) is used up. Raise it in its settings.");
+});
+
 test("each run is told what is left of the store's daily AI budget", async () => {
   const budgets: (number | undefined)[] = [];
   const m = manager({ engine: fakeEngine((input) => (budgets.push(input.budgetUsd), [{ type: 'done', sessionId: 's', usage }])) });
