@@ -1214,8 +1214,8 @@ export const INTEGRATION_KINDS: Record<IntegrationKind, { name: string; category
     { key: 'propertyId', label: 'Property ID', secret: false },
     { key: 'serviceAccountJson', label: 'Service account JSON', secret: true },
   ] },
-  cj: { name: 'CJ Dropshipping', category: 'supplier', perStore: false, help: 'CJ Dropshipping → My CJ → Authorization → API → generate an API key. Read-only for now: order status and tracking for orders your stores send to CJ.', fields: [
-    { key: 'email', label: 'Account email', secret: false },
+  cj: { name: 'CJ Dropshipping', category: 'supplier', perStore: false, help: 'In CJ: Apps → install "API" (under Others) → My CJ → Authorization → API → Add API, Type API Key → copy the key from the "API Key & MCP Token" column. Read-only: order status and tracking for orders your stores send to CJ, plus product, stock and shipping-quote lookups for Product Research. The API needs only the key; the email is optional.', fields: [
+    { key: 'email', label: 'Account email', secret: false, optional: true },
     { key: 'apiKey', label: 'API key', secret: true },
   ] },
   higgsfield: { name: 'Higgsfield AI', category: 'creative', perStore: false, help: 'console.higgsfield.ai → API keys → Create key → copy the key ID and the secret (shown once). Generations spend your Higgsfield credits, capped per store per day in Settings.', fields: [

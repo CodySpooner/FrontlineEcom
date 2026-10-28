@@ -669,7 +669,7 @@ STOP.
 ## Items
 
 ### Verified data foundation
-- [ ] PR-01 **Audit, baseline and sources.**
+- [x] PR-01 **Audit, baseline and sources.**
   - `pnpm install`, then `pnpm check`: record the baseline (files, tests, time) under Done.
   - Before screenshots of `/research` in `.agent/before/`. Copy `cdp-shot.mjs` and `cdp-drive.mjs` from
     `../ai-agents/.agent/` and `ship.sh` from `../knowledge-base/.agent/` into `.agent/` (never commit them).
@@ -813,6 +813,12 @@ STOP.
   `.agent/STOP`.
 
 ## Done
+- 2026-10-28 PR-01 audit and sources. Baseline at bb50708f: `pnpm install` + `pnpm check` 1m33s, 191 test files,
+  1,459 tests, all green (tests 42 s). Before screenshots of /research at 1280×800, 1440×900 and 1024×680 in
+  `.agent/before/`; `cdp-shot.mjs`, `cdp-drive.mjs` and `ship.sh` copied into `.agent/`. Decisions checked against
+  HEAD (Notes). `docs/features/product-research-sources.md`: CJ's endpoints, limits, points, error codes and key path;
+  Google Trends CSV and API; the other decision-4 sources; 5 more suppliers and 4 licensed intelligence services.
+  `INTEGRATION_KINDS.cj` help gives CJ's documented key path; its email field is optional.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -820,16 +826,40 @@ STOP.
   `cd C:/Users/Xody2/orca/workspaces/FrontlineEcom/product-research; pnpm dev`, then open
   http://localhost:5243/integrations. Leave it running while you enter things; the worker notices them at its next
   item.
-- **CJdropshipping API key (owner, free):** in CJ, My CJ → Authorization → API, generate an API key (PR-01 confirms
-  this path against CJ's docs and updates it here and in the app's help text). In the dev app, Integrations → CJ
-  Dropshipping, enter the account email and the API key. Needed for the live CJ check and PR-29.
+- **CJdropshipping API key (owner, free):** in CJ (cjdropshipping.com, signed in), open **Apps** in the left
+  navigation → Install App → under Others, install **API** (installing it doesn't create a key) → **My CJ →
+  Authorization → API** (https://www.cjdropshipping.com/my.html#/authorize/API) → **Add API**, Type **API Key**,
+  Confirm → copy the key from the **API Key & MCP Token** column. In the dev app, Integrations → CJ Dropshipping: paste
+  it in **API key**; **Account email** is optional (CJ's API needs only the key). Checked against CJ's API-key page on
+  2026-10-28; the app's help text says the same. If API access was suspended after 30 days without orders, reactivate
+  it at https://www.cjdropshipping.com/my.html#/authorize/APIStores. Needed for the live CJ check and PR-29.
 - **One Google Trends export (owner):** on trends.google.com, search the product term for the store's country over
   the past 12 months (or 5 years for seasonality), then use the download (CSV) button. Upload it on the Research page
   once PR-06 ships. It needs at least one product to link to (from the CJ key or a pasted link). Needed for PR-29.
 - **Supplier feed (owner, optional):** a CSV you're entitled to export from a supplier or feed tool, with product
   title, SKU, variant, unit cost, currency, shipping cost and destination (PR-07 lists the exact columns here). Upload
   it on the Research page once PR-07 ships.
-- **Google Trends API (owner, optional):** PR-01 adds the exact application URL here, or records that none is open.
-  Until access is granted the adapter stays at Approval required.
+- **Google Trends API (owner, optional):** applications are open as of 2026-10-28 ("We're now accepting
+  applications for alpha testers", https://developers.google.com/search/apis/trends#apply). Fill in the form that page
+  embeds: https://docs.google.com/forms/d/e/1FAIpQLSfiP3XUUWGr4CkYk1oJHpthCAcAw2kL0UaE6p7tq3ZoxFiLtA/viewform. Google
+  takes "a very limited number of testers"; auth, cost and quotas aren't published. Until access is granted the
+  adapter stays at Approval required.
 
 ## Notes
+- **PR-01, decisions against HEAD (2026-10-28).** The code map holds, with these changes:
+  - Decision 4, CJ: the old success check `!body.result` is wrong for CJ's documented responses (some have no
+    `result`); PR-05 uses CJ's rule (HTTP 200 and code 200, 0 or none). The caps stay as written: they come to under a
+    fifth of CJ's free 50,000 points a day (sources doc). CJ defines points, so `pr_sources.quota_json` keeps the last
+    `pointsInfo.remaining`.
+  - Decision 4, CJ key: CJ's API needs only the key (getAccessToken takes `apiKey` alone), so the help text names
+    both fields and the email is now optional.
+  - Decision 4, Trends CSV: Google doesn't document the file layout or "<1"; PR-06's parser finds the header row
+    instead of assuming one, and is checked on the owner's first export.
+  - Decision 4, not built: eBay's and Etsy's terms restrict feeding their data to AI they haven't licensed; Amazon's
+    license allows only use that sends traffic to Amazon. Recorded in the matrix, no change to the build.
+  - "The dev app" in decisions 4 and 16 means a server started without `FRONTLINE_WEB_DIR` (the desktop app always
+    sets it).
+  - Code map line numbers moved with the ai-agents lane: `kbFetch` is now `routes/agents.ts:444`. AA-16 (execution
+    states) has shipped, so "Waiting for you" is available to decision 6.
+  - Two functions are called `stateOf`: decision 6's run status is `packages/agents/src/conversations.ts:239`, not the
+    settings map in `connectors/common.ts:361`.

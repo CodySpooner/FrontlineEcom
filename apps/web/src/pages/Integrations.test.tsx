@@ -22,7 +22,7 @@ describe('connect form', () => {
     const key = screen.getByLabelText('API key') as HTMLInputElement;
     expect(key.required).toBe(false);
     expect(key.placeholder).toBe('Saved. Leave blank to keep it.');
-    fireEvent.change(screen.getByLabelText('Account email'), { target: { value: ' buyer@shop.test ' } });
+    fireEvent.change(screen.getByLabelText('Account email (optional)'), { target: { value: ' buyer@shop.test ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await vi.waitFor(() => expect(onDone).toHaveBeenCalled());
@@ -46,7 +46,7 @@ describe('connect form', () => {
     const key = screen.getByLabelText('API key') as HTMLInputElement;
     expect(key.required).toBe(true);
     expect(key.type).toBe('password');
-    fireEvent.change(screen.getByLabelText('Account email'), { target: { value: 'ops@shop.test' } });
+    fireEvent.change(screen.getByLabelText('Account email (optional)'), { target: { value: 'ops@shop.test' } });
     fireEvent.change(key, { target: { value: 'test-key-1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Connect CJ Dropshipping' }));
 
