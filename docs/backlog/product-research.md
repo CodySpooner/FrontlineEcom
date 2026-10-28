@@ -800,7 +800,7 @@ STOP.
   audience, creative, spend, inventory, period); never edit the original research.
 
 ### Hardening
-- [ ] PR-26 **Security pass** (decisions 12, 15, 17): SSRF and redirect tests, the image proxy (no client URL, magic
+- [x] PR-26 **Security pass** (decisions 12, 15, 17): SSRF and redirect tests, the image proxy (no client URL, magic
   bytes, headers), credential-leak tests (web responses, prompts, job rows, logs), the guard on every `/api/pr/*` route,
   the isolation sweep over every route and the tool, rate limits and budgets for ingestion, enrichment, research and
   monitoring, untrusted text never rendered as HTML, a test that no production path writes origin `fixture`.
@@ -1032,6 +1032,15 @@ STOP.
   Performance Lesson under "Product outcomes", once per period, its context frozen in `pr_outcomes.context_json`.
   A demo store's orders never count. API: `GET …/outcomes`, `POST …/outcomes/:storeProductId/knowledge`. Tests: 1
   API (a real and a demo store; the reports are byte-identical after), 1 page.
+- 2026-10-28 PR-26 Security pass: one fix and four new tests (`security.test.ts`, `no-html.test.ts`). **Fix:** a CJ
+  error repeated CJ's own message verbatim, so an answer that echoed the API key or the access token would have put
+  them in errors, job rows, the source and integration status (shown in the app) and the log; `call` now redacts both
+  (a test drove a job, a search and the order sync against a CJ that echoes them, then scanned the web responses, every
+  database row, the research prompt and the log). **Isolation sweep:** all 35 parameterized `/api/pr` routes (source sync
+  excepted: sources are the app's) called as Pawsome on Glow's product, listing, task, watch, comparison, signal and
+  History row with otherwise-valid bodies: every one a 404 and no table changes (a mutation that drops one route's
+  scope check fails it). **Guard:** non-local Host and foreign Origin (another local port included) get 403 on
+  `/api/pr`. **No HTML:** no component of the page uses `dangerouslySetInnerHTML`, `innerHTML` or a markdown renderer.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1063,6 +1072,24 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-26 coverage map** (each requirement and the test that holds it):
+  - SSRF and redirects: `preview.test.ts` "blocked states…" through the real fetcher (`createFetcher`, stubbed transport
+    and DNS): a private address and a redirect to one are refused and never fetched; the address ranges themselves are
+    the KB lane's `fetcher.test.ts`. Agent WebFetch is not covered (decision 12: ai-agents Inbox request, a stated
+    limitation).
+  - Image proxy: `page-data.test.ts`: a `?url=` from the client is ignored, nosniff and `default-src 'none'`, magic bytes
+    (an SVG is refused and never cached), the LRU size cap; `images.ts` caps fetches at 30 a minute.
+  - Credentials: `security.test.ts` (above). Secrets live only in the encrypted `integrations` store.
+  - Guard: `scope.test.ts` (1 MB body on every `/api/pr` path), `security.test.ts` (Host/Origin), T7 429 and 15 MB
+    imports (`scope.test.ts`, `trends.test.ts`).
+  - Isolation: `security.test.ts` sweep; the `save_research_report` tool: `reports.test.ts` "only the run the task
+    started, in its store, saves".
+  - Rate limits and budgets: ingestion (500 CJ calls a day, 5 pages a query; `discovery.test.ts` "caps"), enrichment
+    (the same ingestion daily cap, 20 listings per store a pass), owner searches (3 calls a click; `matching.test.ts`),
+    monitoring (100 watch calls a day, 50 watches a tick; `alerts.test.ts`), research (10 starts a minute, T7, plus the
+    AI Agents run budgets), the dev app's 200 CJ calls in total.
+  - Untrusted text: `fence` (`preview.test.ts`), `no-html.test.ts`.
+  - Fixtures: `page-data.test.ts` "no production path writes a fixture row".
 - **PR-25 as built.** Read-only over other lanes' data (`product_tests`, `order_items` through core's `productSales`,
   `kb_experiments`), so nothing new is stored until the owner saves an outcome. Supplier quality, delivery, returns
   and customer feedback aren't recorded anywhere in the app, so they aren't compared; the card and the panel say

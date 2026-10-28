@@ -67,7 +67,11 @@ function pump(gapMs: number) {
 }
 const turn = (purpose: CallPurpose, gapMs: number) => new Promise<void>((go) => (lane.push({ prio: PRIORITY[purpose], go }), pump(gapMs)));
 
-export interface CjCtx { db: Db; fetchFn: Fetch; gapMs: number; purpose: CallPurpose }
+export interface CjCtx { db: Db; fetchFn: Fetch; gapMs: number; purpose: CallPurpose; apiKey?: string }
+
+/** CJ's answer (or a network error) may repeat the key or the token: neither reaches an error, a log or a row. */
+const redact = (ctx: CjCtx, init: RequestInit, text: string) =>
+  [ctx.apiKey?.trim(), (init.headers as Record<string, string> | undefined)?.['CJ-Access-Token']].reduce<string>((t, s) => (s ? t.split(s).join('[redacted]') : t), text);
 
 /**
  * One CJ call: checks the caps, waits its turn, times out after 20 s, and records itself in pr_calls. Success is CJ's
@@ -83,7 +87,7 @@ async function call<T>(ctx: CjCtx, path: string, init: RequestInit): Promise<T> 
   } catch (e) {
     recordCall(ctx.db, 'cj', ctx.purpose, false);
     const timeout = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
-    throw new CjError(timeout ? 'timeout' : 'server', timeout ? 'no answer within 20 s' : e instanceof Error ? e.message : String(e));
+    throw new CjError(timeout ? 'timeout' : 'server', timeout ? 'no answer within 20 s' : redact(ctx, init, e instanceof Error ? e.message : String(e)));
   }
   const body = (await res.json().catch(() => ({}))) as Partial<CjResponse<T>>;
   const ok = res.ok && (body.code === undefined || body.code === 200 || body.code === 0);
@@ -94,7 +98,7 @@ async function call<T>(ctx: CjCtx, path: string, init: RequestInit): Promise<T> 
     ctx.db.prepare(`INSERT INTO pr_sources (id, status, quota_json, updated_at) VALUES ('cj', 'ok', ?, ?) ON CONFLICT (id) DO UPDATE SET quota_json = excluded.quota_json`).run(quota, at);
   }
   if (!ok) {
-    const message = body.message ?? `HTTP ${res.status}`;
+    const message = redact(ctx, init, body.message ?? `HTTP ${res.status}`);
     const after = Number(res.headers.get('retry-after'));
     throw new CjError(classifyCj(res.status, body.code, message), message, body.code, after > 0 ? Math.min(after, 600) * 1000 : undefined);
   }
@@ -132,7 +136,7 @@ export async function syncCj(db: Db, key: Buffer, _storeId: string, fetchFn: Fet
   const creds = getCredentials(db, key, 'cj');
   if (!creds) return;
   try {
-    const ctx: CjCtx = { db, fetchFn, gapMs, purpose: 'order_sync' };
+    const ctx: CjCtx = { db, fetchFn, gapMs, purpose: 'order_sync', apiKey: creds.apiKey };
     const orders: CjOrder[] = [];
     for (const status of STATUSES) {
       for (let page = 1; ; page++) {
@@ -180,7 +184,7 @@ interface CjProduct { id: string; sku: string; nameEn: string; bigImage?: string
 export async function searchCj(db: Db, key: Buffer, q: string, limit: number, fetchFn: Fetch = fetch, now = new Date(), gapMs = 1100): Promise<SupplierProduct[] | undefined> {
   const creds = getCredentials(db, key, 'cj');
   if (!creds) return undefined;
-  const ctx: CjCtx = { db, fetchFn, gapMs, purpose: 'search' };
+  const ctx: CjCtx = { db, fetchFn, gapMs, purpose: 'search', apiKey: creds.apiKey };
   const params = new URLSearchParams({ keyWord: q, page: '1', size: String(Math.min(limit, 100)) }); // listV2 takes at most 100
   const data = await withToken(ctx, key, creds, now, (token) => call<{ content?: { productList?: CjProduct[] }[] }>(ctx, `/product/listV2?${params}`, { headers: { 'CJ-Access-Token': token } }));
   return (data.content ?? []).flatMap((c) => c.productList ?? []).slice(0, limit).map((p) => ({
@@ -238,7 +242,7 @@ export interface CjDeps { fetchFn?: Fetch; now?: Date; gapMs?: number; purpose: 
 async function cj<T>(db: Db, key: Buffer, d: CjDeps, path: string, init: RequestInit = {}): Promise<T> {
   const creds = getCredentials(db, key, 'cj');
   if (!creds?.apiKey) throw new CjError('auth', 'not connected: enter the API key in Integrations');
-  const ctx: CjCtx = { db, fetchFn: d.fetchFn ?? fetch, gapMs: d.gapMs ?? 1100, purpose: d.purpose };
+  const ctx: CjCtx = { db, fetchFn: d.fetchFn ?? fetch, gapMs: d.gapMs ?? 1100, purpose: d.purpose, apiKey: creds.apiKey };
   return withToken(ctx, key, creds, d.now ?? new Date(), (token) => call<T>(ctx, path, { ...init, headers: { ...(init.headers as Record<string, string>), 'CJ-Access-Token': token } }));
 }
 
