@@ -1,15 +1,18 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
 import { Link, useSearchParams } from 'react-router';
+import { useQueries } from '@tanstack/react-query';
 import { Archive, ArrowLeft, ChevronDown, ChevronRight, ChevronsUpDown, Ellipsis, Pin, Plus, Search, Users, type LucideIcon } from 'lucide-react';
-import type { AgentTypeInfo, Conversation, ConversationState, Store } from '@frontline/shared';
-import { useAgentTypes, useConversationCounts, useConversations, useStores, useUpdateConversation } from '../api/client';
+import type { AgentTypeInfo, Conversation, ConversationState, SquadMission, Store } from '@frontline/shared';
+import { teamQuery, useAgentTypes, useConversationCounts, useConversations, useStores, useUpdateConversation } from '../api/client';
 import { PLATFORM_NAME } from '../components/StoreForm';
 import { Button, cx, ErrorState, LoadingState, RUN_STATUS } from '../components/ui';
+import { useTeamDialog } from './CreateTeam';
 import { useDeploy } from './Deploy';
 import { useStored } from './layout';
 import { hidePopover, MenuItem, Popover, rove } from './Popover';
 import { useAgentSettings } from './settings';
 import { StateDot } from './StateDot';
+import { currentTask, stateOf, teamMeta } from './Team';
 import { agentsUrl } from './urls';
 
 const ACTIVE = new Set<ConversationState>(['running', 'awaiting_approval', 'waiting_for_input', 'queued', 'failed', 'interrupted']);
@@ -39,11 +42,15 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
   const types = useAgentTypes(store.id).data ?? [];
   const update = useUpdateConversation(store.id);
   const deploy = useDeploy();
+  const teamDialog = useTeamDialog();
   // `?expand=<type>` (an old agent link): that type's group is shown open.
   const expand = useSearchParams()[0].get('expand') ?? undefined;
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const byType = list.data?.pages[0]?.byType ?? {};
-  const teams = items.filter((c) => c.teamId).sort((a, b) => Number(ACTIVE.has(b.state)) - Number(ACTIVE.has(a.state)));
+  // Running teams first, then ended ones, newest first (the list comes newest first).
+  const teamRows = useQueries({ queries: items.flatMap((c) => (c.teamId ? [teamQuery(store.id, c.teamId)] : [])) });
+  const byTeam = new Map(teamRows.flatMap((q) => (q.data ? [[q.data.id, q.data] as const] : [])));
+  const teams = items.filter((c) => c.teamId).sort((a, b) => Number(byTeam.get(b.teamId!)?.status === 'running') - Number(byTeam.get(a.teamId!)?.status === 'running'));
   // Types with conversations become groups (a type no longer listed, such as an archived custom role, keeps its own);
   // the rest fold into one row.
   const named = new Map(types.map((t) => [t.id, t]));
@@ -52,12 +59,13 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
   const keys = flat ? items.map((c) => `f:${c.id}`) : [...pinned.map((c) => `p:${c.id}`), ...teams.map((c) => `t:${c.id}`), ...groups.flatMap((g) => (collapsed.includes(g.id) ? [] : items.filter((c) => !c.teamId && c.type === g.id).map((c) => `g:${c.id}`)))];
   // One tab stop for the rows: the last one focused, else the open conversation, else the first.
   const stop = keys.includes(tabStop ?? '') ? tabStop : (keys.find((k) => k.endsWith(`:${open}`)) ?? keys[0]);
-  const row = (c: Conversation, section: string, icon?: LucideIcon) => (
+  const row = (c: Conversation, section: string, icon?: LucideIcon, team?: SquadMission) => (
     <Row
       key={`${section}:${c.id}`}
       c={c}
       store={store}
-      open={c.id === open}
+      team={team}
+      open={c.id === open || (!!c.teamId && c.teamId === open)}
       icon={icon}
       indent={!icon && section === 'g'}
       tabStop={stop === `${section}:${c.id}`}
@@ -79,9 +87,14 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
     <nav aria-label="Conversations" className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-col gap-2.5 px-3.5 pt-3.5 pb-2.5">
         <StoreSwitcher store={store} />
-        <Button variant="primary" size="sm" className="w-full" onClick={() => deploy.open()}>
-          <Plus aria-hidden className="size-3.5" /> Deploy agent
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="primary" size="sm" className="flex-1" onClick={() => deploy.open()}>
+            <Plus aria-hidden className="size-3.5" /> Deploy agent
+          </Button>
+          <Button size="sm" className="flex-1" onClick={() => teamDialog.open()}>
+            <Users aria-hidden className="size-3.5" /> Create team
+          </Button>
+        </div>
         <label className="flex h-8 items-center gap-2 rounded-lg border border-[#26262c] bg-bg-2 px-2.5 text-muted focus-within:border-red/60">
           <Search aria-hidden className="size-4 shrink-0" strokeWidth={1.8} />
           <input ref={search} type="search" aria-label="Search conversations" placeholder="Search this store's conversations" value={q} onChange={(e) => setQ(e.target.value)} className="w-full min-w-0 bg-transparent text-[12.5px] text-text outline-none placeholder:text-muted" />
@@ -101,7 +114,7 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
           <ErrorState message="Couldn't load the conversations." onRetry={() => list.refetch()} />
         ) : flat ? (
           items.length ? (
-            items.map((c) => row(c, 'f'))
+            items.map((c) => row(c, 'f', undefined, c.teamId ? byTeam.get(c.teamId) : undefined))
           ) : (
             <p className="px-2.5 py-3 text-[12.5px] text-muted">{query ? `No conversation matches "${query}".` : 'No archived conversations.'}</p>
           )
@@ -110,14 +123,37 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
             {pinned.length > 0 && (
               <>
                 <Label className="pt-1.5">Pinned</Label>
-                {pinned.map((c) => row(c, 'p', c.teamId ? Users : Pin))}
+                {pinned.map((c) => row(c, 'p', c.teamId ? Users : Pin, c.teamId ? byTeam.get(c.teamId) : undefined))}
               </>
             )}
-            {/* ponytail: team rows only; AA-19 brings the team API, then AA-20 adds 'N agents', the ended meta and participant rows. */}
             {teams.length > 0 && (
               <>
                 <Label>Teams</Label>
-                {teams.map((c) => row(c, 't', Users))}
+                {teams.map((c) => {
+                  const t = byTeam.get(c.teamId!);
+                  // A running team, or the one open, shows its participants (role, status, current task).
+                  return (
+                    <div key={`t:${c.id}`}>
+                      {row(c, 't', Users, t)}
+                      {t && (t.status === 'running' || t.id === open) && t.participants?.map((p, i) => (
+                        <Link
+                          key={p.configId}
+                          data-row
+                          tabIndex={-1}
+                          to={`${agentsUrl({ store: store.id, team: t.id })}&participant=${encodeURIComponent(p.configId)}`}
+                          className="flex items-center gap-2 rounded-[7px] py-[5px] pr-2.5 pl-[30px] text-[12px] text-[#c4c4cc] outline-none hover:bg-[#141418] focus-visible:ring-1 focus-visible:ring-red/60"
+                        >
+                          <StateDot state={stateOf(t.steps.filter((s) => s.configId === p.configId))} label={RUN_STATUS[stateOf(t.steps.filter((s) => s.configId === p.configId))].label} />
+                          <span className="shrink-0">
+                            {p.name}
+                            {i === 0 && ' (lead)'}
+                          </span>
+                          <span className="ml-auto min-w-0 truncate text-[11px] text-muted">{currentTask(t, p.configId)}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  );
+                })}
               </>
             )}
             <div className="flex items-baseline px-2.5 pt-3 pb-1">
@@ -176,6 +212,7 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
 function Row({
   c,
   store,
+  team,
   open,
   icon: Icon,
   indent,
@@ -188,6 +225,8 @@ function Row({
 }: {
   c: Conversation;
   store: Store;
+  /** A team's own conversation row: it opens the team, and the team gives its dot and meta. */
+  team?: SquadMission;
   open: boolean;
   icon?: LucideIcon;
   indent: boolean;
@@ -198,7 +237,9 @@ function Row({
   onRename: (title?: string) => void;
   actions: [string, () => void][];
 }) {
-  const word = ACTIVE.has(c.state) ? undefined : RUN_STATUS[c.state].label;
+  const t = team && teamMeta(team);
+  const state = t?.state ?? c.state;
+  const word = t ? t.word : ACTIVE.has(c.state) ? undefined : RUN_STATUS[c.state].label;
   const pad = indent ? 'pl-[30px]' : 'pl-2.5';
   if (renaming)
     return (
@@ -227,21 +268,21 @@ function Row({
     <div className="group relative">
       <Link
         data-row
-        to={agentsUrl({ store: store.id, conversation: c.id })}
+        to={c.teamId ? agentsUrl({ store: store.id, team: c.teamId }) : agentsUrl({ store: store.id, conversation: c.id })}
         tabIndex={tabStop ? 0 : -1}
         onFocus={onFocus}
         onKeyDown={onKey}
         aria-current={open ? 'page' : undefined}
         className={cx('flex items-center gap-[9px] rounded-[7px] py-1.5 pr-2.5 text-[13px] outline-none focus-visible:ring-1 focus-visible:ring-red/60', pad, open ? 'bg-[#1b1b20] text-white' : 'text-text-2 hover:bg-[#141418]')}
       >
-        {Icon ? <Icon aria-hidden className="size-3.5 shrink-0 text-muted" strokeWidth={1.8} /> : <StateDot state={c.state} label={word} />}
+        {Icon ? <Icon aria-hidden className="size-3.5 shrink-0 text-muted" strokeWidth={1.8} /> : <StateDot state={state} label={word} />}
         <span title={c.title} className="min-w-0 flex-1 truncate">
           {c.title}
         </span>
         {/* Pinned rows show only the dot, team rows the meta and the dot, as on the board. */}
         <span className="flex items-center gap-1.5 text-[11px] whitespace-nowrap text-muted group-focus-within:invisible group-hover:invisible">
-          {Icon !== Pin && meta(c)}
-          {Icon && <StateDot state={c.state} label={Icon === Pin ? RUN_STATUS[c.state].label : word} />}
+          {Icon !== Pin && (t ? t.meta : meta(c))}
+          {Icon && <StateDot state={state} label={Icon === Pin ? (t?.word ?? RUN_STATUS[c.state].label) : word} />}
         </span>
       </Link>
       <button

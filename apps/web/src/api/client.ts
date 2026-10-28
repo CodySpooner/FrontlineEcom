@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ActionLogEntry,
+  CreateTeamInput,
+  SquadMission,
   ConversationFinding,
   FindingSaved,
   KnowledgeUse,
@@ -317,13 +319,13 @@ export function useCreateCustomRole(storeId: string) {
 }
 
 /** A 404 (deleted, or another store's) shows at once instead of after three retries. */
-export const useConversation = (storeId: string, id: string) =>
-  useQuery({
-    queryKey: ['conversation', id],
-    queryFn: () => api<ConversationDetail>(`/api/conversations/${id}?store=${storeId}`),
-    enabled: !!storeId && !!id,
-    retry: (n, e) => n < 3 && !/not found$/.test(e.message),
-  });
+export const conversationQuery = (storeId: string, id: string) => ({
+  queryKey: ['conversation', id],
+  queryFn: () => api<ConversationDetail>(`/api/conversations/${id}?store=${storeId}`),
+  enabled: !!storeId && !!id,
+  retry: (n: number, e: Error) => n < 3 && !/not found$/.test(e.message),
+});
+export const useConversation = (storeId: string, id: string) => useQuery(conversationQuery(storeId, id));
 
 /** A conversation's runs, oldest first; fetchNextPage loads the page before the oldest shown. Seeds each ['run', id]. */
 export function useThread(storeId: string, id: string) {
@@ -372,6 +374,36 @@ export function useStartConversation(storeId: string) {
   const start = ({ objective, ...input }: { type: string; title?: string; objective: string; context?: ConversationContext }) =>
     create.mutate({ clientRequestId: crypto.randomUUID(), message: objective, ...input }, { onSuccess: (r) => navigate(agentsUrl({ store: storeId, conversation: r.conversation.id })) });
   return { start, isPending: create.isPending, error: create.error };
+}
+
+/** A team (decision 12): its steps, participants and limits. The socket's run messages refetch it. */
+export const teamQuery = (storeId: string, id: string) => ({
+  queryKey: ['team', id],
+  queryFn: () => api<SquadMission>(`/api/teams/${id}?store=${storeId}`),
+  enabled: !!storeId && !!id,
+  retry: (n: number, e: Error) => n < 3 && !/not found$/i.test(e.message),
+});
+export const useTeam = (storeId: string, id: string) => useQuery(teamQuery(storeId, id));
+
+/** Create team: the plan starts at once; the team's conversation row joins the store's list. */
+export function useCreateTeam(storeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateTeamInput) => api<SquadMission>(`/api/teams?store=${storeId}`, json('POST', input)),
+    onSuccess: (t) => {
+      qc.setQueryData(['team', t.id], t);
+      qc.invalidateQueries({ queryKey: ['conversations', storeId] });
+    },
+  });
+}
+
+/** Stop team (`cancel`), "To: Lead" while it runs (`notes`), Add agent (`participants`) and Resume (`steps/<id>/resume`). */
+export function useTeamAction(storeId: string, id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ path, body = {} }: { path: string; body?: object }) => api<SquadMission | AgentRun>(`/api/teams/${id}/${path}?store=${storeId}`, json('POST', body)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['team', id] }),
+  });
 }
 
 /** Sends a message; while a reply is going it waits in the queue behind it. */
@@ -1025,6 +1057,8 @@ export function useLive() {
         else qc.invalidateQueries({ queryKey: ['run', m.run.id] });
         qc.invalidateQueries({ queryKey: ['runs', m.run.agentId] });
         if (m.run.conversationId) for (const key of [['conversations', m.run.storeId], ['conversation', m.run.conversationId], ['thread', m.run.conversationId]]) qc.invalidateQueries({ queryKey: key });
+        // A team step's run moves its team: the step's status, the next step, the synthesis.
+        if (m.run.teamId) qc.invalidateQueries({ queryKey: ['team', m.run.teamId] });
         qc.invalidateQueries({ queryKey: ['kb', 'tasks'] });
         qc.invalidateQueries({ queryKey: ['agents'] });
         qc.invalidateQueries({ queryKey: ['memory', m.run.storeId] });
@@ -1037,6 +1071,7 @@ export function useLive() {
         // A custom niche's Market Analyst saves its pack, once approved, before its run ends.
         if (!isLive(m.run)) qc.invalidateQueries({ queryKey: ['knowledge'] });
       } else if (m.type === 'kb_task') qc.invalidateQueries({ queryKey: ['kb'] }); // the task, the task lists, and the cards it filed
+      else if (m.type === 'mission' && m.mission.kind === 'team') qc.setQueryData(['team', m.mission.id], m.mission);
       if (m.type === 'approval' || m.type === 'run') {
         qc.invalidateQueries({ queryKey: ['conversation-counts'] });
         // Automation fires start runs or ask for approval; the log and "last fired" follow.

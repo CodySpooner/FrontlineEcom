@@ -1080,10 +1080,12 @@ export interface SquadMission {
   /** 'team': a team session (decision 12). Plain missions leave the team fields out. */
   kind?: 'team';
   objective?: string;
-  /** The lead first. `fromConversationId`: the conversation that lent its config and recap. */
-  participants?: { configId: string; fromConversationId?: string }[];
+  /** The lead first. `fromConversationId`: the conversation that lent its config and recap. `name`, `type` and `config` describe it for the team view. */
+  participants?: { configId: string; fromConversationId?: string; name?: string; type?: string; config?: AgentConfig }[];
   /** Counts Claude participants only. */
   budgetUsd?: number;
+  /** What its Claude runs have cost so far. */
+  spentUsd?: number;
   maxConcurrent?: number;
   /** Retries per task, 0–2. */
   retries?: number;

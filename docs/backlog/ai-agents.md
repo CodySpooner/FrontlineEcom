@@ -1551,7 +1551,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     - each route joins the AA-04 sweep table, with a participant conversation and config from another store refused
       (404). The run-starting ones join the guard's STARTS in the same commit, with a 429 test;
   - the Ecosystem page still works (its tests pass).
-- [ ] AA-20 **Team UI:**
+- [x] AA-20 **Team UI:**
   - the Create team dialog;
   - B's thread view in the centre, with participant tabs, plan, contributions, handoff lines, Unresolved with "Compare
     both", and synthesis;
@@ -1735,6 +1735,17 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   product the store can see (a shared listing or one of its own; another store's find is a 404), the first turn
   describes it from `pr_products`, and the chip reads "Opened from · <product>" and links to /research (no per-product
   view yet). One server test and one web assertion.
+- 2026-10-28 AA-20 Team UI: Create team (store, shared objective, up to six participants with a type, a runtime ·
+  model · effort select where Codex ultra and an unavailable runtime show disabled with the reason, a Lead radio, and
+  New or "Use <conversation>" lending its settings; team budget only with a Claude participant, at once, retries,
+  Sub-teams locked Off) and Collaborate prefilled from a conversation; the team view in the centre pane (header line,
+  rename, Add agent while the lead plans, Stop team, Thread and participant tabs, plan with "after N" and live pills,
+  Interrupted with Resume, contribution cards with sources and Open full output, handoff lines, Unresolved with Compare
+  both, the synthesis or its placeholder, follow-ups after it, "To: Lead" as a note then a message); team rows with
+  'N agents' or Ready / Failed / Stopped and participant sub-rows; a team's conversation and a team step's run link open
+  the team (the run on its participant's tab, scrolled to); the right panel's team variant, closed by default. Team
+  responses carry each participant's name, type and config, and the Claude spend. 7 web tests and 1 server test;
+  checked in headless Chrome at 1440 against the team board.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
@@ -1872,6 +1883,17 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-20, 2026-10-28) For AA-21 and later:
+  - **Live team updates:** `useLive` sets `['team', id]` from the `mission` message (every advance and team route
+    publishes one) and refetches it on a team step's `run` message. AA-21 can fold this into its reconnect handling.
+  - **Approval states on teams:** a step's status is its run's status, which has no approval or needs-reply state, so a
+    step waiting on an approval reads Running in the plan, the tabs and the list (ponytail in Team.tsx `stateOf`). Its
+    participant tab shows the approval card. Surface it if owners miss approvals inside teams (AA-23 looks at approvals in teams).
+  - **Not built:** the dialog's cost estimate (no per-model prices on the web) and a separate "Team name" field (the
+    title comes from the objective's first line and is renamed in the team view, through its conversation row).
+  - **"At once"** offers 1 and 2: the server's store limit (teams.ts STORE_LIMIT). Change both together.
+  - **Participant sub-rows** show under a running team and the open one; an ended team's row stays one line.
+  - **Codex participants** get Stop after 20 minutes (Deploy's default), since a team row has no Stop after field.
 - (AA-19, 2026-10-28) For AA-20 and later:
   - **Team URLs:** the notifications link `/agents/t/<team id>?store=` (the squad_missions id, as agentsUrl's `team`).
     The team's conversation is `team.conversationId`; its conversations row has `teamId`.

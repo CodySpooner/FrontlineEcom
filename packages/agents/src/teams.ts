@@ -405,8 +405,12 @@ export function toTeam(db: DatabaseSync, r: Record<string, unknown>): SquadMissi
   return {
     id: String(r.id), storeId: String(r.store_id), title: String(r.title), createdAt: String(r.created_at), status, steps,
     kind: 'team', objective: String(r.objective),
-    participants: (JSON.parse(String(r.participants_json)) as Participant[]).map((p) => ({ configId: p.configId, ...(p.fromConversationId ? { fromConversationId: p.fromConversationId } : {}) })),
+    participants: (JSON.parse(String(r.participants_json)) as Participant[]).map((p) => {
+      const config = getConfig(db, p.configId);
+      return { configId: p.configId, ...(p.fromConversationId ? { fromConversationId: p.fromConversationId } : {}), name: nameOf(db, p.configId), ...(config ? { type: config.customRoleId ?? roleOf(config.agentId), config } : {}) };
+    }),
     ...(r.budget_usd != null ? { budgetUsd: Number(r.budget_usd) } : {}),
+    spentUsd: teamCost(db, String(r.id)),
     maxConcurrent: Number(r.max_concurrent ?? STORE_LIMIT),
     retries: Number(r.retries ?? 2),
     ...(r.conversation_id ? { conversationId: String(r.conversation_id) } : {}),

@@ -8,6 +8,7 @@ import { useStoreSelection } from '../components/StoreFilter';
 import { buttonClass, cx, Dialog, EmptyState, ErrorState, LoadingState } from '../components/ui';
 import { NAV } from '../nav';
 import { Conversation, ReadOnlyRun } from './Conversation';
+import { CreateTeam, useTeamDialog } from './CreateTeam';
 import { ChangeRuntime, DemoPill, Deploy, useChangeRuntime, useDeploy } from './Deploy';
 import { Details, type DetailsTab } from './Details';
 import { useFill } from './fill';
@@ -15,6 +16,7 @@ import { clampPanes, lastOpened, PANES, usePaneState, useStored } from './layout
 import { ListPane, meta } from './ListPane';
 import { SettingsDrawer } from './settings';
 import { StateDot } from './StateDot';
+import { TeamDetails, TeamPage } from './Team';
 import { agentsUrl } from './urls';
 
 /**
@@ -46,9 +48,7 @@ export function Workspace() {
   else if (!params.get('store')) body = <Navigate replace to={agentsUrl({ store: (stores.data.find((s) => ids.includes(s.id)) ?? stores.data[0]!).id })} />;
   else if (!store) body = <NotFound what="store" />;
   else if (remembered) body = <Navigate replace to={agentsUrl({ store: store.id, conversation: remembered })} />;
-  // ponytail: teams arrive with AA-19, so no team id can exist yet.
-  else if (view === 'team') body = <NotFound what="team" store={store} />;
-  else body = <Panes store={store} conversationId={view === 'conversation' ? id : undefined} runId={run} />;
+  else body = <Panes store={store} conversationId={view === 'conversation' ? id : undefined} teamId={view === 'team' ? id : undefined} runId={run} />;
   return (
     <>
       <Hero compact title={NAV[1]!.title} icon={NAV[1]!.icon}>
@@ -97,18 +97,23 @@ function NotFound({ what, store }: { what: 'store' | 'team' | 'conversation' | '
 }
 
 /** The three panes, laid out for the workspace's own width (decision: breakpoints at 1100 and 720 px). */
-function Panes({ store, conversationId, runId }: { store: Store; conversationId?: string; runId?: string }) {
+function Panes({ store, conversationId, teamId, runId }: { store: Store; conversationId?: string; teamId?: string; runId?: string }) {
   const fill = useFill<HTMLDivElement>();
   const [prefs, setPrefs] = usePaneState();
+  // A team's details panel starts closed, because its thread needs the width; the choice lasts for this visit.
+  const [teamPanel, setTeamPanel] = useState(false);
+  const rightOpen = teamId ? teamPanel : prefs.rightOpen;
+  const setRightOpen = (open: boolean) => (teamId ? setTeamPanel(open) : setPrefs({ rightOpen: open }));
   // Before the first measure (and in jsdom), assume the window minus the shell's 232 px sidebar.
   const workspace = fill.width || window.innerWidth - 232;
-  const { mode, left, right } = clampPanes(workspace, prefs, prefs.rightOpen);
+  const { mode, left, right } = clampPanes(workspace, prefs, rightOpen);
   const [drawer, setDrawer] = useState<'list' | 'details'>();
   const [tab, setTab] = useStored<DetailsTab>('fe.agents.tab', 'details');
   const search = useRef<HTMLInputElement>(null);
   const deploy = useDeploy();
+  const teamDialog = useTeamDialog();
   const online = useOutletContext<boolean | undefined>() ?? true;
-  useEffect(() => setDrawer(undefined), [conversationId, mode]);
+  useEffect(() => setDrawer(undefined), [conversationId, teamId, mode]);
   useEffect(() => {
     if (conversationId) lastOpened.set(store.id, conversationId);
   }, [store.id, conversationId]);
@@ -123,17 +128,17 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
-  const showRight = mode === 'three' && prefs.rightOpen;
-  const list = <ListPane key={store.id} store={store} open={conversationId} search={search} />;
-  const details = (end?: ReactNode) => <Details store={store} conversationId={conversationId} end={end} tab={tab} onTab={setTab} />;
+  const showRight = mode === 'three' && rightOpen;
+  const list = <ListPane key={store.id} store={store} open={conversationId ?? teamId} search={search} />;
+  const details = (end?: ReactNode) => (teamId ? <TeamDetails store={store} id={teamId} end={end} /> : <Details store={store} conversationId={conversationId} end={end} tab={tab} onTab={setTab} />);
   const showKnowledge = () => {
     setTab('knowledge');
-    if (!showRight) mode === 'three' ? setPrefs({ rightOpen: true }) : setDrawer('details');
+    if (!showRight) mode === 'three' ? setRightOpen(true) : setDrawer('details');
   };
   const buttons = (
     <>
       {mode === 'one' && <IconButton label="Show conversations" icon={List} onClick={() => setDrawer('list')} />}
-      {!showRight && <IconButton label="Show details" icon={PanelRight} onClick={() => (mode === 'three' ? setPrefs({ rightOpen: true }) : setDrawer('details'))} />}
+      {!showRight && <IconButton label="Show details" icon={PanelRight} onClick={() => (mode === 'three' ? setRightOpen(true) : setDrawer('details'))} />}
     </>
   );
   return (
@@ -145,7 +150,7 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
       {mode !== 'one' && (
         <div className="relative flex min-h-0 flex-col border-r border-[#1d1d22] bg-[#0a0a0c]">
           {list}
-          <Handle label="Resize the conversation list" value={left} min={PANES.left.min} max={PANES.left.max} edge="right" onChange={(v) => setPrefs({ left: clampPanes(workspace, { ...prefs, left: v }, prefs.rightOpen).left })} />
+          <Handle label="Resize the conversation list" value={left} min={PANES.left.min} max={PANES.left.max} edge="right" onChange={(v) => setPrefs({ left: clampPanes(workspace, { ...prefs, left: v }, rightOpen).left })} />
         </div>
       )}
       <div className="flex min-h-0 min-w-0 flex-col">
@@ -156,6 +161,8 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
         )}
         {conversationId ? (
           <ConversationView key={conversationId} store={store} id={conversationId} buttons={buttons} onKnowledge={showKnowledge} />
+        ) : teamId ? (
+          <TeamPage key={teamId} store={store} id={teamId} buttons={buttons} notFound={<NotFound what="team" store={store} />} />
         ) : runId ? (
           <RunView key={runId} store={store} id={runId} buttons={buttons} />
         ) : (
@@ -165,7 +172,7 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
       {showRight && (
         <aside aria-label="Details" className="relative flex min-h-0 flex-col border-l border-[#1d1d22] bg-[#0a0a0c]">
           <Handle label="Resize the details panel" value={right} min={PANES.right.min} max={PANES.right.max} edge="left" onChange={(v) => setPrefs({ right: clampPanes(workspace, { ...prefs, right: v }).right })} />
-          {details(<IconButton label="Hide details" icon={PanelRight} onClick={() => setPrefs({ rightOpen: false })} />)}
+          {details(<IconButton label="Hide details" icon={PanelRight} onClick={() => setRightOpen(false)} />)}
         </aside>
       )}
       {mode === 'one' && (
@@ -180,6 +187,7 @@ function Panes({ store, conversationId, runId }: { store: Store; conversationId?
       )}
       <SettingsDrawer storeId={store.id} />
       {deploy.type !== null && <Deploy store={store} type={deploy.type} onClose={deploy.close} />}
+      {teamDialog.shown && <CreateTeam store={store} from={teamDialog.from} onClose={teamDialog.close} />}
     </div>
   );
 }
@@ -258,6 +266,8 @@ function ConversationView({ store, id, buttons, onKnowledge }: { store: Store; i
   if (c.isPending) return <LoadingState rows={4} className="p-6" />;
   if (missing) return <NotFound what="conversation" store={store} />;
   if (c.isError) return <ErrorState message="Couldn't load this conversation." onRetry={() => c.refetch()} />;
+  // A team's own conversation opens as the team (decision 3).
+  if (c.data.teamId) return <Navigate replace to={agentsUrl({ store: store.id, team: c.data.teamId })} />;
   return (
     <>
       <Conversation store={store} conversation={c.data} config={c.data.config} buttons={buttons} onKnowledge={onKnowledge} />
@@ -273,5 +283,7 @@ function RunView({ store, id, buttons }: { store: Store; id: string; buttons: Re
   if ((run.isError && /not found$/i.test(run.error.message)) || (run.data && run.data.storeId !== store.id)) return <NotFound what="run" store={store} />;
   if (run.isError) return <ErrorState message="Couldn't load this run." onRetry={() => run.refetch()} />;
   if (run.data.conversationId) return <Navigate replace to={agentsUrl({ store: store.id, conversation: run.data.conversationId })} />;
+  // A team step opens in its team, on that participant's tab, scrolled to the run.
+  if (run.data.teamId) return <Navigate replace to={agentsUrl({ store: store.id, team: run.data.teamId, run: id })} />;
   return <ReadOnlyRun store={store} run={run.data} buttons={buttons} />;
 }

@@ -14,8 +14,8 @@ import { useChangeRuntime } from './Deploy';
 import { approvalLines, autopilotRules } from './settings';
 
 // The right panel: the open conversation's Details (agent, runtime, store scope, tools, approvals and budget), its
-// Activity (every run, newest first) and its Knowledge (the cards the latest reply used). ponytail: the team variant
-// renders from AA-20, when AA-19's team data exists.
+// Activity (every run, newest first) and its Knowledge (the cards the latest reply used). With a team open, the
+// workspace shows the team variant (Team.tsx TeamDetails) instead.
 
 const TABS = [
   { value: 'details', label: 'Details' },

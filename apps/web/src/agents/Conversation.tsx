@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Ellipsis, LoaderCircle, Pencil, Square, X } from 'lucide-react';
+import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Ellipsis, LoaderCircle, Pencil, Square, Users, X } from 'lucide-react';
 import { AGENT_ROLES, blockFinding, EFFORT_LABEL, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationContext, type ConversationState, type KnowledgeScope, type KbStage, type RunDeliverable, type RuntimeId, type Store } from '@frontline/shared';
 import { useAgentTypes, useAnswer, useApprovals, useCreateConversation, useKbCard, useKbCardsIn, useRetryRun, useSaveFinding, useRun, useSendMessage, useStopConversation, useThread, useUpdateConversation } from '../api/client';
 import { ApprovalCard, FixLink, ToolBlock } from '../components/Chat';
@@ -11,6 +11,7 @@ import { activitySteps, activitySummary, savedText, type Step } from './activity
 import { AttachButton, attachError, Attachments, toUploads } from './attach';
 import { renderReply } from './markdown';
 import { MenuItem, Popover } from './Popover';
+import { useTeamDialog } from './CreateTeam';
 import { knowledgeLabel, useChangeRuntime } from './Deploy';
 import { useAgentSettings } from './settings';
 import { StateDot } from './StateDot';
@@ -21,7 +22,7 @@ import { agentsUrl } from './urls';
 // conversation opens read-only, with Continue in a new conversation in place of the composer (decision 4).
 
 const COLUMN = 'mx-auto w-full max-w-[700px]';
-const chip = 'inline-flex h-6 items-center gap-1.5 rounded-md border border-[#1d1d22] bg-[#111114] px-2 text-[11.5px] whitespace-nowrap text-text-2';
+export const chip = 'inline-flex h-6 items-center gap-1.5 rounded-md border border-[#1d1d22] bg-[#111114] px-2 text-[11.5px] whitespace-nowrap text-text-2';
 // The reply's markdown: tables scroll sideways inside the column, code and quotes as the board draws them.
 const REPLY =
   'grid gap-2.5 text-[13.5px] leading-relaxed text-text [&_a]:text-[#ff6b76] [&_a:hover]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-[#2a2a30] [&_blockquote]:pl-3 [&_blockquote]:text-text-2 [&_code]:rounded [&_code]:bg-[#16161a] [&_code]:px-1 [&_code]:font-mono [&_code]:text-[12px] [&_h1]:text-[15px] [&_h1]:font-semibold [&_h2]:text-[14.5px] [&_h2]:font-semibold [&_h3]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded-lg [&_pre]:bg-[#111114] [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_table]:block [&_table]:overflow-x-auto [&_table]:border-collapse [&_table]:text-[12.5px] [&_td]:border-b [&_td]:border-[#1d1d22] [&_td]:px-2.5 [&_td]:py-1.5 [&_th]:border-b [&_th]:border-[#26262c] [&_th]:px-2.5 [&_th]:py-1.5 [&_th]:text-left [&_th]:font-semibold [&_th]:text-text-2';
@@ -30,8 +31,8 @@ const STAGE_TONE: Record<KbStage, string> = { hypothesis: 'text-[#f2b84b]', supp
 // Each conversation's thread scroll offset for this session: leaving the page and coming back returns to it.
 const scrollTops = new Map<string, number>();
 
-const initials = (name: string) => (name.match(/\b\p{L}/gu) ?? []).join('').slice(0, 2).toUpperCase();
-const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+export const initials = (name: string) => (name.match(/\b\p{L}/gu) ?? []).join('').slice(0, 2).toUpperCase();
+export const time = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
 const interrupted = (r: Pick<AgentRunDetail, 'status' | 'error'>) => r.status === 'error' && r.error === INTERRUPTED;
 // An Ask KB all-stores run, or one that compared stores, holds other stores' data (decision 17): it can't continue here.
 const otherStores = (r: AgentRunDetail) => r.task.includes('The cards come from every store and General') || r.transcript.some((e) => e.type === 'tool_call' && toolName(e.name)[0] === 'compare_stores');
@@ -145,6 +146,7 @@ function Header({ store, conversation: c, live, buttons }: { store: Store; conve
   const settings = useAgentSettings();
   const change = useChangeRuntime();
   const stop = useStopConversation(store.id, c.id);
+  const team = useTeamDialog();
   const [renaming, setRenaming] = useState(false);
   const rename = (title?: string) => {
     setRenaming(false);
@@ -186,6 +188,9 @@ function Header({ store, conversation: c, live, buttons }: { store: Store; conve
           {error.message}
         </span>
       )}
+      <Button size="sm" title="Start a team with this agent as the lead" className="shrink-0 whitespace-nowrap" onClick={() => team.open(c.id)}>
+        <Users className="size-3.5" /> Collaborate
+      </Button>
       {live && (
         <Button size="sm" title="Stops this reply. Pause isn't supported." className="shrink-0 whitespace-nowrap" disabled={stop.isPending} onClick={() => stop.mutate(undefined)}>
           <Square className="size-3 fill-current" /> Stop run
@@ -217,7 +222,7 @@ function Header({ store, conversation: c, live, buttons }: { store: Store; conve
 }
 
 /** The thread's turns, oldest first. A retried run folds under its retry as "Attempt N"; a model change gets a divider. */
-function Turns({ store, conversationId, runs, name, latest }: { store: Store; conversationId?: string; runs: AgentRunDetail[]; name: string; latest?: string }) {
+export function Turns({ store, conversationId, runs, name, latest }: { store: Store; conversationId?: string; runs: AgentRunDetail[]; name: string; latest?: string }) {
   const byId = new Map(runs.map((r) => [r.id, r]));
   const shown = runs.filter((r) => !runs.some((x) => x.retryOf === r.id));
   return shown.map((r, i) => {
@@ -326,7 +331,7 @@ function Deliverables({ items }: { items: RunDeliverable[] }) {
   );
 }
 
-function Reply({ store, conversationId, run, name, latest, deliverables = [] }: { store: Store; conversationId?: string; run: AgentRunDetail; name: string; latest: boolean; deliverables?: RunDeliverable[] }) {
+export function Reply({ store, conversationId, run, name, latest, deliverables = [] }: { store: Store; conversationId?: string; run: AgentRunDetail; name: string; latest: boolean; deliverables?: RunDeliverable[] }) {
   const retry = useRetryRun(store.id, conversationId ?? '');
   const appLinks = useAppLinks();
   const [copied, setCopied] = useState(false);
@@ -456,7 +461,7 @@ function Activity({ run, steps, tools }: { run: AgentRunDetail; steps: Step[]; t
 }
 
 /** A cited card: number, title and its stage. Another store's card shows only that it isn't available here. */
-function Source({ n, id, storeId, href }: { n?: number; id: string; storeId: string; href: string }) {
+export function Source({ n, id, storeId, href }: { n?: number; id: string; storeId: string; href: string }) {
   const q = useKbCard(id, storeId);
   const card = q.data;
   const elsewhere = q.isError || (card && card.storeId !== null && card.storeId !== storeId);
