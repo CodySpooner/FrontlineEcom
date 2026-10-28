@@ -290,12 +290,12 @@ type Part = { kind: 'text'; text: string } | { kind: 'approval'; approval: Appro
 
 /** The record a module opened the conversation from (decision 14), linking back to it. */
 function ContextChip({ store, context }: { store: Store; context: ConversationContext }) {
-  // ponytail: Analytics has no per-campaign view yet, so a campaign links to the page that lists it.
-  const to = context.kind === 'run' ? agentsUrl({ store: store.id, run: context.id }) : '/analytics';
+  // ponytail: Analytics and Product Research have no per-record view yet, so a campaign or product links to its page.
+  const to = context.kind === 'run' ? agentsUrl({ store: store.id, run: context.id }) : context.kind === 'product' ? '/research' : '/analytics';
   return (
     <Link to={to} title={context.name} className={cx(chip, 'max-w-[280px] hover:text-white')}>
       <span className="truncate">
-        {context.kind === 'run' ? 'Continued from' : 'Campaign'} · {context.name}
+        {context.kind === 'run' ? 'Continued from' : context.kind === 'product' ? 'Opened from' : 'Campaign'} · {context.name}
       </span>
     </Link>
   );

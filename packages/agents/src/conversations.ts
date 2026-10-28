@@ -211,6 +211,12 @@ export function conversationPreface(db: DatabaseSync, conversationId: string, be
 
 function openedFrom(db: DatabaseSync, storeId: string, context?: ConversationContext): string | undefined {
   if (context?.kind === 'run') return recap(db, storeId, [context.id]);
+  if (context?.kind === 'product') {
+    // The record from Product Research, not what the page passed.
+    const p = db.prepare('SELECT title, category FROM pr_products WHERE id = ?').get(context.id);
+    if (!p) return `The owner opened this from the Product Research product "${context.name}" (id ${context.id}), which is no longer there.`;
+    return `The owner opened this from the Product Research product "${p.title}" (id ${context.id}${p.category ? `, ${p.category}` : ''}). Check what you need with your tools before you act.`;
+  }
   if (context?.kind === 'campaign') {
     // The record from the store's own data, not what the module passed.
     const camp = db.prepare('SELECT c.name, c.status, c.daily_budget, s.currency FROM campaigns c JOIN stores s ON s.id = c.store_id WHERE c.store_id = ? AND c.network = ? AND c.id = ?').get(storeId, context.network, context.id);

@@ -67,10 +67,13 @@ export function openConversation(db: Db, runs: RunManager, store: Store, input: 
     title ??= firstLine(from.task);
     context = { kind: 'run', id: from.id, name: firstLine(from.task) };
   } else if (context) {
-    const c = context as Partial<Extract<ConversationContext, { kind: 'campaign' }>>;
-    if (c.kind !== 'campaign' || !isText(c.network, 1, 40) || !isText(c.id, 1, 200) || !isText(c.name, 1, 200)) return { status: 400, error: 'context must be { kind: campaign, network, id, name }', field: 'context' };
-    // The reference must be this store's own record (decision 14).
-    if (!db.prepare('SELECT 1 FROM campaigns WHERE store_id = ? AND network = ? AND id = ?').get(store.id, c.network, c.id)) return { status: 404, error: 'Campaign not found' };
+    const c = context as Partial<{ kind: string; network: string; id: string; name: string }>;
+    if ((c.kind !== 'campaign' && c.kind !== 'product') || (c.kind === 'campaign' && !isText(c.network, 1, 40)) || !isText(c.id, 1, 200) || !isText(c.name, 1, 200)) {
+      return { status: 400, error: 'context must be { kind: campaign, network, id, name } or { kind: product, id, name }', field: 'context' };
+    }
+    // The reference must be this store's own record (decision 14), or a product it can see in Product Research.
+    if (c.kind === 'campaign' && !db.prepare('SELECT 1 FROM campaigns WHERE store_id = ? AND network = ? AND id = ?').get(store.id, c.network!, c.id!)) return { status: 404, error: 'Campaign not found' };
+    if (c.kind === 'product' && !db.prepare('SELECT 1 FROM pr_listings WHERE product_id = ? AND (store_id IS NULL OR store_id = ?)').get(c.id!, store.id)) return { status: 404, error: 'Product not found' };
   }
   const type = typeId ? resolveType(db, store.id, typeId) : undefined;
   if (!type) return { status: 404, error: 'Agent type not found' };

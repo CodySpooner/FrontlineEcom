@@ -179,6 +179,10 @@ test('the context chip links back to what the conversation was opened from; a re
   api([done]);
   show({ ...conversation(), context: { kind: 'run', id: 'r0', name: 'Weekly ad check' } });
   expect((await screen.findByRole('link', { name: 'Continued from · Weekly ad check' })).getAttribute('href')).toBe('/agents?store=glow&run=r0');
+  cleanup();
+  api([done]);
+  show({ ...conversation(), context: { kind: 'product', id: 'p1', name: 'LED face mask' } });
+  expect((await screen.findByRole('link', { name: 'Opened from · LED face mask' })).getAttribute('href')).toBe('/research');
 });
 
 test('an interrupted reply shows the banner with Resume, and no Retry', async () => {

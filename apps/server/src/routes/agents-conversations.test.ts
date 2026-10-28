@@ -187,6 +187,19 @@ test("startConversation's module reference must be the store's own record; the f
   expect((await open({ type: 'ad_strategist', context: { kind: 'run', id: 'x', name: 'x' } })).field).toBe('context');
 });
 
+test("a Product Research product as the reference: one the store can see, described from the record", async () => {
+  const at = new Date().toISOString();
+  db.exec(`INSERT INTO pr_products (id, title, category, created_at, updated_at) VALUES ('p-shared', 'LED face mask', 'Beauty', '${at}', '${at}'), ('p-peak', 'Trail poles', NULL, '${at}', '${at}');
+    INSERT INTO pr_listings (id, product_id, store_id, source, source_ref, title, origin, first_seen_at, last_seen_at) VALUES
+      ('l1', 'p-shared', NULL, 'fixture', 'a', 'LED face mask', 'fixture', '${at}', '${at}'),
+      ('l2', 'p-peak', 'peak', 'owner_link', 'b', 'Trail poles', 'owner_link', '${at}', '${at}');`);
+  const opened = await open({ type: 'product_hunter', message: 'Is this worth launching?', context: { kind: 'product', id: 'p-shared', name: 'Mask' } });
+  expect(opened.status).toBe(201);
+  expect(conversationPreface(db, opened.conversation.id, opened.run.id)).toBe('The owner opened this from the Product Research product "LED face mask" (id p-shared, Beauty). Check what you need with your tools before you act.');
+  expect((await open({ type: 'product_hunter', context: { kind: 'product', id: 'p-peak', name: 'Trail poles' } })).status).toBe(404); // Peak's own find
+  expect((await open({ type: 'product_hunter', context: { kind: 'product', name: 'Mask' } })).field).toBe('context');
+});
+
 test('creating and sending share the knowledge base guard: the 11th start in a minute is a 429', async () => {
   const statuses: number[] = [];
   for (let i = 0; i < 11; i++) statuses.push((await send('POST', '/api/conversations?store=glow', { clientRequestId: randomUUID(), type: 'copywriter', message: `Task ${i}` })).status);

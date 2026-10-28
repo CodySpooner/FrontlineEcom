@@ -632,6 +632,8 @@ export interface AgentPreset {
 /** What a module opened the conversation about (decision 14), checked against the conversation's store. */
 export type ConversationContext =
   | { kind: 'campaign'; network: string; id: string; name: string }
+  /** A Product Research product (pr_products), one the store can see: a shared listing or one of its own. */
+  | { kind: 'product'; id: string; name: string }
   /** Continue in a new conversation: the run it continues (its recap opens the first turn). */
   | { kind: 'run'; id: string; name: string };
 

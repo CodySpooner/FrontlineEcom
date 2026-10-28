@@ -1201,12 +1201,13 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from product-research) A `product` ConversationContext kind, so a conversation opened from Product Research
-  shows "Opened from <product>" (product-research decision 15).
+- [x] (from product-research) A `product` ConversationContext kind, so a conversation opened from Product Research
+  shows "Opened from <product>" (product-research decision 15). Done 2026-10-28: `{ kind: 'product', id, name }`.
 - [ ] (from product-research) Agent WebFetch through the shared `kbFetch` instance (`routes/agents.ts`), so agents
-  get the same SSRF, redirect, size and robots rules as product previews (product-research decision 12).
-- [ ] (from product-research) Include `/api/pr/*` in AA-23's security sweep (guarded since PR-02).
-- [ ] (from product-research, FYI, done) T6 shipped in PR-03: `recordFind` in `routes/agents.ts` calls `mirrorFind`
+  get the same SSRF, redirect, size and robots rules as product previews (product-research decision 12). Taken in
+  AA-23 (its untrusted-content review covers web reads).
+- [ ] (from product-research) Include `/api/pr/*` in AA-23's security sweep (guarded since PR-02). Taken in AA-23.
+- [x] (from product-research, FYI, done) T6 shipped in PR-03: `recordFind` in `routes/agents.ts` calls `mirrorFind`
   after its INSERT, and `ToolEnv.recordFind` in `packages/agents/src/tools.ts` now also receives the run id
   (`ctx.runId`). A demo-engine run's find is not mirrored.
 
@@ -1730,6 +1731,10 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   "Team needs you" in place of per-run notices; the demo engine's team scripts; routes under /api/teams with the guard
   and the store sweep; after the team, a message in its conversation starts the lead from the contributions and the
   synthesis. 15 tests in agents-teams.test.ts, the sweep table extended. A demo team ran end to end on the dev server.
+- 2026-10-28 Inbox (product-research): a `product` ConversationContext kind. The server takes a Product Research
+  product the store can see (a shared listing or one of its own; another store's find is a 404), the first turn
+  describes it from `pr_products`, and the chip reads "Opened from · <product>" and links to /research (no per-product
+  view yet). One server test and one web assertion.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
