@@ -27,6 +27,7 @@ const overview: KbOverview = {
   discoveries: [
     { kind: 'conflict', id: 'k1', at: now, note: 'Research says UGC wins; EXP-14 says studio', card: brief('c2', 'UGC beats studio footage'), other: brief('c1', 'Problem-first hooks win') },
     { kind: 'validated', at: now, reason: '2 independent measured tests', card: brief('c1', 'Problem-first hooks win') },
+    { kind: 'promotion', id: 'p1', at: now, title: 'Open on the problem, anywhere', card: brief('c4', 'Open on the reaction') },
   ],
   gaps: [{ ws: 'pawsome', categoryId: 'p-pricing', name: 'Pricing', reason: 'only hypotheses' }],
 };
@@ -93,6 +94,18 @@ describe('Research Center', () => {
     await vi.waitFor(() => expect(fetch.mock.calls.some(([u]) => u === '/api/kb/overview?ws=all')).toBe(true));
     expect((await screen.findByRole('link', { name: 'Validated 1 14% of cards' })).getAttribute('href')).toBe('/knowledge?view=library&stage=validated');
     expect(href(/^Advertising 3/, screen.getByRole('region', { name: 'Knowledge map' }))).toBe('/knowledge?ws=pawsome&frame=p-ads');
+  });
+
+  it('discoveries: a General version waiting for the owner, to approve, review or keep in the store', async () => {
+    const fetch = open('/knowledge?ws=all&view=research');
+    const d = await screen.findByRole('region', { name: 'Latest discoveries' });
+    const promo = (await within(d).findByText('Open on the reaction', { selector: 'h3' })).closest('article')!;
+    expect(within(promo).getByText('Promote to General?')).toBeTruthy();
+    expect(within(promo).getByText('General version: Open on the problem, anywhere')).toBeTruthy();
+    expect(href('Review the edit', promo)).toBe('/knowledge?view=library&ws=pawsome&card=c4');
+    fireEvent.click(within(promo).getByRole('button', { name: 'Approve' }));
+    fireEvent.click(within(promo).getByRole('button', { name: 'Keep in store' }));
+    await vi.waitFor(() => expect(fetch.mock.calls.filter(([, i]) => i?.method === 'POST').map(([u]) => u)).toEqual(['/api/approvals/p1/approve', '/api/approvals/p1/deny']));
   });
 
   it('discoveries: a card that earned Validated opens on the artboard; a conflict opens to compare, or Keep both', async () => {

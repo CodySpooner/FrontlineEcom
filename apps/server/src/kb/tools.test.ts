@@ -41,11 +41,11 @@ const card = (ws: KbWorkspace, title: string, more: Partial<Parameters<typeof cr
 const PROPOSAL = { title: 'Open TikTok ads on the problem', summary: 'Problem-first hooks hold viewers past 3 seconds', type: 'strategy', path: ['Advertising', 'TikTok', 'Hooks'], evidence: 'Held 3-second views 40% longer across 200 pet ads.' };
 
 describe('KB agent tools', () => {
-  test('research runs get the research tools; every role gets search_knowledge and recommend_research, and no research-only tool, otherwise', () => {
+  test('research runs get the research tools; every role gets search_knowledge, recommend_research and propose_general, and no research-only tool, otherwise', () => {
     expect(runTools('copywriter', 'research').map((t) => t.name).sort()).toEqual(['add_evidence', 'fetch_source', 'propose_card', 'search_knowledge', 'suggest_link']);
     for (const role of Object.keys(AGENT_ROLES) as AgentRole[]) {
       const names = runTools(role).map((t) => t.name);
-      expect(names, role).toEqual(expect.arrayContaining(['search_knowledge', 'recommend_research']));
+      expect(names, role).toEqual(expect.arrayContaining(['search_knowledge', 'recommend_research', 'propose_general']));
       expect(names.filter((n) => RESEARCH_TOOLS.includes(n) && n !== 'search_knowledge'), role).toEqual([]);
     }
   });

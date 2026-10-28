@@ -35,6 +35,7 @@ export type ToolName =
   | 'create_creative'
   | 'search_knowledge'
   | 'recommend_research'
+  | 'propose_general'
   | 'fetch_source'
   | 'propose_card'
   | 'add_evidence'
@@ -64,7 +65,7 @@ export const SQUAD_RULES = `You are one of eight specialist AI agents in this st
 - When you learn something durable about this store (what works, what doesn't, the owner's preferences), save it with write_memory: one sentence, the evidence, your confidence.
 - Be concise. Lead with the answer. Money with currency, rates as %, and always the period you looked at.`;
 
-const BASE: ToolName[] = ['store_summary', 'search_memory', 'write_memory', 'request_approval', 'assign_task', 'search_knowledge', 'recommend_research'];
+const BASE: ToolName[] = ['store_summary', 'search_memory', 'write_memory', 'request_approval', 'assign_task', 'search_knowledge', 'recommend_research', 'propose_general'];
 
 export const ROLES: Record<AgentRole, RoleSpec> = {
   ad_strategist: {

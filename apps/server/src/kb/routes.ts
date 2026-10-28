@@ -31,15 +31,20 @@ import {
   listCards,
   listCategories,
   mergeCards,
+  promotedAs,
+  promotionPending,
+  promotionTask,
   updateCard,
   updateCategory,
 } from '@frontline/agents';
-import { AGENT_ROLES, KB_CARD_TYPES, KB_RESEARCH_DEPTHS, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbResearchDepth, type KbSourceReliability, type KbView, type KbWorkspace } from '@frontline/shared';
+import { AGENT_ROLES, type KbPromotion, KB_CARD_TYPES, KB_RESEARCH_DEPTHS, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbResearchDepth, type KbSourceReliability, type KbView, type KbWorkspace } from '@frontline/shared';
+import { getApproval } from '../approvals';
 import { tx, type Db } from '../db';
 import { publish } from '../live';
 import { advanceKbResearch, runManager } from '../routes/agents';
 import { readUpload } from './fetcher';
 import { kbOverview } from './overview';
+import { drafter } from './promote';
 
 // Knowledge Base routes (knowledge-base lane). Every by-id route names its workspace (?ws=) and 404s on another's id.
 
@@ -342,6 +347,34 @@ export function kbRoutes(db: Db) {
       publish({ type: 'kb_task', task: t });
       advanceKbResearch(db);
       return c.json(t);
+    })
+    // Promote to General (KB-18): an agent drafts the card for any store, and the owner approves, edits or declines it.
+    .post('/api/kb/cards/:id/promote', (c) => {
+      const ws = wsOf(db, c.req.query('ws'));
+      if (ws === undefined) return c.json({ error: 'ws must be general or a store id' }, 400);
+      if (ws === null) return c.json({ error: 'Only a store card can be promoted' }, 400);
+      const card = getCard(db, c.req.param('id'), ws);
+      if (!card) return c.json({ error: 'card not found' }, 404);
+      if (card.status !== 'active') return c.json({ error: 'Only an accepted card can be promoted' }, 409);
+      if (promotionPending(db, card.id)) return c.json({ error: 'Already waiting for your call' }, 409);
+      const general = promotedAs(db, card.id);
+      if (general) return c.json({ error: `Already in General as "${general.title}"` }, 409);
+      const agentId = drafter({ storeId: ws, authorId: card.authorId });
+      const run = runManager(db).start(agentId, promotionTask(card.id));
+      return typeof run === 'string' ? c.json({ error: run }, 409) : c.json({ runId: run.id, agentId }, 202);
+    })
+    .patch('/api/kb/promotions/:id', async (c) => {
+      const a = getApproval(db, c.req.param('id'));
+      if (!a || a.status !== 'pending' || a.action.kind !== 'kb.promote' || a.storeId !== c.req.query('ws')) return c.json({ error: 'promotion not found' }, 404);
+      const b = await c.req.json().catch(() => undefined);
+      if (!isObj(b)) return c.json({ error: 'body must be a JSON object' }, 400);
+      const p = parseCard({ title: b.title, summary: b.summary ?? '', body: b.body ?? '' }, false);
+      if (typeof p === 'string') return c.json({ error: p }, 400);
+      const payload: KbPromotion = { cardId: String((a.action.payload as KbPromotion).cardId), title: p.title!, summary: p.summary!, ...(p.body ? { body: p.body } : {}) };
+      db.prepare('UPDATE approvals SET action_json = ? WHERE id = ?').run(JSON.stringify({ ...a.action, payload }), a.id);
+      const edited = getApproval(db, a.id)!;
+      publish({ type: 'approval', approval: edited });
+      return c.json(edited);
     })
     .post('/api/kb/research/tasks/:id/refine', async (c) => {
       const status = db.prepare('SELECT status FROM kb_tasks WHERE id = ?').get(c.req.param('id'))?.status;

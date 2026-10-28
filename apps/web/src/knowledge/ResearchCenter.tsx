@@ -175,8 +175,11 @@ function KnowledgeMap({ ws, o }: { ws: string; o: KbOverview }) {
   );
 }
 
+const LABEL: Record<KbDiscovery['kind'], string> = { validated: 'Now validated', conflict: 'Conflict', promotion: 'Promote to General?' };
+
 function Discoveries({ ws, o, name }: { ws: string; o: KbOverview; name: (ws: string) => string }) {
   const keep = useKeepBoth();
+  const decide = useDecide();
   const home = (d: KbDiscovery) => d.card.storeId ?? 'general';
   return (
     <section id="kb-discoveries" aria-label="Latest discoveries" className={cx(panel, 'grid gap-3')}>
@@ -187,11 +190,11 @@ function Discoveries({ ws, o, name }: { ws: string; o: KbOverview; name: (ws: st
           View all
         </Link>
       </div>
-      {o.discoveries.length === 0 && <p className="text-xs text-muted">Nothing new this week. Cards that earn Validated, and conflicts waiting for your call, show here.</p>}
+      {o.discoveries.length === 0 && <p className="text-xs text-muted">Nothing new this week. Cards that earn Validated, and conflicts and promotions waiting for your call, show here.</p>}
       {o.discoveries.map((d) => (
-        <article key={d.kind === 'conflict' ? d.id : `v-${d.card.id}`} className={cx('grid gap-1.5 rounded-lg border p-3.5', d.kind === 'conflict' ? 'border-red/50 bg-red/5' : 'border-line')}>
+        <article key={d.kind === 'validated' ? `v-${d.card.id}` : d.id} className={cx('grid gap-1.5 rounded-lg border p-3.5', d.kind === 'conflict' ? 'border-red/50 bg-red/5' : 'border-line')}>
           <p className="flex flex-wrap items-baseline gap-x-2 text-[11px] text-muted">
-            <span className={cx('font-display font-semibold tracking-[.12em] uppercase', d.kind === 'conflict' ? 'text-red' : 'text-good')}>{d.kind === 'conflict' ? 'Conflict' : 'Now validated'}</span>
+            <span className={cx('font-display font-semibold tracking-[.12em] uppercase', d.kind === 'validated' ? 'text-good' : 'text-red')}>{LABEL[d.kind]}</span>
             <span>{name(home(d))}</span>
             <span>{d.card.path.join(' › ')}</span>
             <span className="ml-auto">{ago(d.at)}</span>
@@ -205,6 +208,21 @@ function Discoveries({ ws, o, name }: { ws: string; o: KbOverview; name: (ws: st
                 <Link to={q({ ws: home(d), card: d.card.id })} className="ml-auto text-[13px] text-text-2 hover:text-white">
                   Open on artboard
                 </Link>
+              </div>
+            </>
+          ) : d.kind === 'promotion' ? (
+            <>
+              <p className="text-[13px] text-text-2">{`General version: ${d.title}`}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ id: d.id, verdict: 'approve' })}>
+                  Approve
+                </Button>
+                <Link to={q({ view: 'library', ws: home(d), card: d.card.id })} className="inline-flex h-8 items-center rounded-lg border border-line-2 px-3 text-[13px] text-text-2 hover:text-white">
+                  Review the edit
+                </Link>
+                <Button size="sm" disabled={decide.isPending} onClick={() => decide.mutate({ id: d.id, verdict: 'deny' })}>
+                  Keep in store
+                </Button>
               </div>
             </>
           ) : (

@@ -41,6 +41,7 @@ import type {
   KbLink,
   KbLinkInput,
   KbOverview,
+  KbPromotion,
   KbRevision,
   KbPositions,
   KbSourceResearchInput,
@@ -385,6 +386,20 @@ export function useKeepBoth() {
   return useMutation({
     mutationFn: ({ id, ws }: { id: string; ws: string }) => api<void>(`/api/kb/conflicts/${encodeURIComponent(id)}?${wsq(ws)}`, json('PATCH', { status: 'kept_both' })),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
+  });
+}
+
+/** Asks an agent to draft the store card's General version (KB-18); the draft comes back as a 'kb.promote' approval. */
+export const usePromoteKbCard = () =>
+  useMutation({ mutationFn: (card: KbCard) => api<{ runId: string; agentId: string }>(`/api/kb/cards/${encodeURIComponent(card.id)}/promote?${wsq(card.storeId ?? 'general')}`, { method: 'POST' }) });
+
+/** The owner's edit of a General draft, before approving it. */
+export function useEditPromotion() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ approval, draft }: { approval: ApprovalRequest; draft: Omit<KbPromotion, 'cardId'> }) =>
+      api<ApprovalRequest>(`/api/kb/promotions/${encodeURIComponent(approval.id)}?${wsq(approval.storeId)}`, json('PATCH', draft)),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['approvals'] }),
   });
 }
 
@@ -766,6 +781,9 @@ export function useLive() {
         if (m.approval.status === 'denied') qc.invalidateQueries({ queryKey: ['memory', m.approval.storeId] });
         // A decided request lingers ~1s so its "Approved"/"Denied" verdict shows before the row drops.
         setTimeout(() => qc.invalidateQueries({ queryKey: ['approvals'] }), m.approval.status === 'pending' ? 0 : 1000);
+        // Knowledge requests (promotions, research an agent recommended) show in the Research Center, and approved ones
+        // file a card or start a task a moment later.
+        if (m.approval.action.kind.startsWith('kb.')) setTimeout(() => qc.invalidateQueries({ queryKey: ['kb'] }), m.approval.status === 'pending' ? 0 : 1000);
       }
     };
     const connect = () => {

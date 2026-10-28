@@ -541,7 +541,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
     - it never gets another store's cards;
     - blocked, proposed and archived cards never appear;
     - hypotheses arrive labelled.
-- [ ] KB-18 **Promote to General:**
+- [x] KB-18 **Promote to General:**
   - requested by the owner or an agent;
   - an agent drafts the generalized card with store specifics stripped, shown as a diff;
   - approve / edit / reject through `approvals` (outlives the run: `OUTLIVE_RUN` + `onApproved`);
@@ -636,6 +636,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-16 Research Center: workspace chips (All workspaces, General, each store), six tiles linking to their Library filter or the widget below, the knowledge map (each root category's cards stacked by stage, linking to its frame on the artboard, plus "+ Custom category"), latest discoveries (cards that earned Validated this week and conflicts waiting for a call, with Compare evidence and Keep both) and a preview of the newest one's frame, and the research column: Active / Queue / Done / Sources, running tasks with their stage bar, reads, blocks, findings, matches and spend (Stop, Open task), agents' research recommendations to approve, and knowledge gaps. A task opens as a drawer: where it files, the execution log, the report, and Stop / Retry / Refine. Three columns at 1440 px, two below, one on a phone. No view scrolls sideways at 390 px anymore.
 - 2026-10-27 KB-17 Retrieval in real tasks: every agent task now starts with a "Relevant knowledge" section, the store's accepted cards that match the task and then General's, hypotheses labelled unproven, never another store's, unreviewed, archived or blocked ones. It fits in what the store's memory leaves of the prompt. search_knowledge ranks the same way (any of the words, then stage, recency, the role's areas, use, reliable sources and confirmed links). Each time a card goes into a prompt, a search or a citation, it's logged and counted once per run, and a `[kb:id]` in an answer shows in Chat as a link to the card, named by its title.
 - 2026-10-27 KB-17 follow-up: "Use in a task" on a card is switched on. It opens Ask AI with "Use [kb:id] to " for the owner to finish, offered only to the card's own store (a General card's to every store in view). A card named that way reaches the agent first, whether or not it shares a word with the task, and the owner's message in Chat shows the card's title as a link.
+- 2026-10-27 KB-18 Promote to General: "Promote to General" on a store card asks the agent that wrote it (else the Market Analyst) to rewrite it for any store, and any agent can propose one itself. The draft comes back on the card, word by word against the original, and in the Research Center's discoveries. The owner approves it, edits it first, or keeps it in the store. Approved, it's a General card in the same category, starting as a Hypothesis, Derived From the store card. A card found on its own in two or more live stores is offered once, drafted from the strongest of them. In demo mode the draft only takes the store's name out.
 
 ## Blocked
 
@@ -809,3 +810,22 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   lightest way to pick a question and an agent, and it still asks only Market Analysts. `retrieveKnowledge` puts cards
   named `[kb:id]` in the query first, with the same workspace, status and role checks, and strips the ids before the
   keyword query, so they don't use up its 24 words. search_knowledge with an id finds that card the same way.
+- 2026-10-27 KB-18: approvals kind `kb.promote` (in `OUTLIVE_RUN`), payload `KbPromotion {cardId, title, summary, body?}`
+  (shared). Tool `propose_general` is in every role's base set (normal runs, not research). It takes only the store's
+  own accepted cards, one waiting promotion per card, and none already promoted. "Promoted" means a confirmed Derived
+  From link from a General card. `promoteToGeneral` (`kb-promote.ts`, run by agentRoutes' onApproved) only promotes
+  the asking store's card. The General card has the same category path, stage Hypothesis (one store's evidence isn't
+  evidence for the others), origin `promotion`, and the drafting agent as author. A General card with the same title
+  gets the link instead of a twin. The link is stored in the store's workspace, since General never sees store cards.
+  Routes: `POST /api/kb/cards/:id/promote?ws=<store>` (202 {runId, agentId}; 400/404/409) starts the drafting run
+  with `promotionTask` (the card named as `[kb:id]`, so retrieval gives it to the agent first), and `PATCH
+  /api/kb/promotions/:approvalId?ws=` {title, summary, body} edits a waiting draft within the card limits. Cross-store
+  suggestions: `proposeKbPromotions` (`apps/server/src/kb/promote.ts`) looks at live stores only (connected and gone
+  live, as proposeNichePromotions does). Cards match on ≥50% of the words of title + summary, each card is offered
+  once (`done_once kb-promote:<id>`), and the strongest card's agent drafts it. It runs hourly from
+  `startKbPromotionLoop`, mounted in `apps/server/src/index.ts` (core's file, one line beside the other loops). The
+  overview's discoveries add `{kind: 'promotion'}` for waiting promotions, for their store and All workspaces. A
+  live `approval` message for any `kb.*` kind now refreshes the KB queries too (client.ts): a waiting one at once,
+  a decided one after the card is filed. The approvals inbox (Chat's approval card) shows only the title and the
+  agent's why; the diff lives on the card. Left out: carrying a store card's evidence over to General. Mutation
+  sweeps: server 38 of 38 meaningful killed (3 equivalent bits of code removed rather than tested), web 11 of 11.

@@ -73,7 +73,7 @@ export function kbOverview(db: Db, ws: KbWorkspace | 'all', now = new Date()): K
     .slice(0, 5)
     .map(({ size: _, ...g }) => g);
 
-  // This week's discoveries: cards that earned Validated, and every conflict still waiting for the owner.
+  // This week's discoveries: cards that earned Validated, and every conflict and promotion still waiting for the owner.
   const discoveries: KbDiscovery[] = [
     ...db
       .prepare(
@@ -92,6 +92,15 @@ export function kbOverview(db: Db, ws: KbWorkspace | 'all', now = new Date()): K
         const card = getCard(db, String(r.card_id));
         const other: KbCard | undefined = r.other_card_id ? getCard(db, String(r.other_card_id)) : undefined;
         return card ? [{ kind: 'conflict' as const, id: String(r.id), at: String(r.created_at), note: String(r.note), card, ...(other ? { other } : {}) }] : [];
+      }),
+    // General versions of cards waiting for the owner (KB-18). Requests belong to a store, so General's overview has none.
+    ...db
+      .prepare(`SELECT id, created_at, action_json FROM approvals WHERE status = 'pending' AND json_extract(action_json, '$.kind') = 'kb.promote' AND ${s.sql}`)
+      .all(...s.params)
+      .flatMap((r) => {
+        const p = JSON.parse(String(r.action_json)).payload as { cardId: string; title: string };
+        const card = getCard(db, p.cardId);
+        return card ? [{ kind: 'promotion' as const, id: String(r.id), at: String(r.created_at), title: p.title, card }] : [];
       }),
   ]
     .sort((a, b) => b.at.localeCompare(a.at))

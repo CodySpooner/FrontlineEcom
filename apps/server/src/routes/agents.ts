@@ -15,6 +15,7 @@ import {
   advanceResearch,
   createResearchTask,
   getResearchTask,
+  promoteToGeneral,
   createMission,
   getMission,
   cancelMission,
@@ -349,6 +350,11 @@ export function runManager(db: Db): RunManager {
         if (typeof p.niche === 'string' && typeof p.text === 'string') {
           return addNicheLearning(db, { niche: p.niche, text: p.text, ...(typeof p.evidence === 'string' ? { evidence: p.evidence } : {}), storeId: a.storeId });
         }
+      }
+      if (a.action.kind === 'kb.promote') {
+        const p = (a.action.payload ?? {}) as { cardId?: unknown; title?: unknown; summary?: unknown; body?: unknown };
+        if (typeof p.cardId !== 'string' || typeof p.title !== 'string' || typeof p.summary !== 'string') return;
+        return promoteToGeneral(db, a.storeId, { cardId: p.cardId, title: p.title, summary: p.summary, ...(typeof p.body === 'string' ? { body: p.body } : {}) }, a.agentId);
       }
       if (a.action.kind === 'kb.research') {
         // An agent's recommend_research: the store that asked pays, and the findings go to it or to General, never elsewhere.

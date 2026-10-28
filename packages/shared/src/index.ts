@@ -165,6 +165,7 @@ export const APPROVAL_KINDS: Record<string, { label: string; autopilot?: boolean
   'niche.promote_learning': { label: 'Share a learning with the niche' },
   save_niche_pack: { label: 'Save a niche pack' },
   'kb.research': { label: 'Start research' },
+  'kb.promote': { label: 'Promote knowledge to General' },
   tool_use: { label: 'Use a connected tool' },
 };
 
@@ -1771,9 +1772,23 @@ export interface KbConflict {
 }
 
 /** A Research Center discovery: a card that moved up to Validated this week, or a conflict waiting for the owner. */
+/**
+ * A store card's General version waiting for the owner: the payload of a 'kb.promote' approval (KB-18). POST
+ * /api/kb/cards/:id/promote?ws=<storeId> → 202 {runId, agentId}: the agent drafting it. PATCH
+ * /api/kb/promotions/:approvalId?ws=<storeId> {title, summary, body} → the approval with the owner's edit.
+ */
+export interface KbPromotion {
+  cardId: string;
+  title: string;
+  summary: string;
+  body?: string;
+}
+
 export type KbDiscovery =
   | { kind: 'validated'; at: string; reason: string; card: KbCardBrief }
-  | { kind: 'conflict'; id: string; at: string; note: string; card: KbCardBrief; other?: KbCardBrief };
+  | { kind: 'conflict'; id: string; at: string; note: string; card: KbCardBrief; other?: KbCardBrief }
+  /** A General version of `card` waiting for the owner (approval `id`), titled `title`. */
+  | { kind: 'promotion'; id: string; at: string; title: string; card: KbCardBrief };
 
 /**
  * GET /api/kb/overview?ws=general|<storeId>|all → the Research Center, from the visible cards (proposed + active).

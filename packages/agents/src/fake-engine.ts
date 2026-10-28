@@ -60,6 +60,13 @@ function demoWork(input: RunInput): FakeStep[] {
   const storeId = input.store.id;
   const product = (id?: string) =>
     db.prepare(`SELECT id, title, price FROM products WHERE store_id = ? AND (id = ? OR ? IS NULL) ORDER BY status = 'active' DESC, price DESC LIMIT 1`).get(storeId, id ?? null, id ?? null);
+  // Promote to General (promotionTask): any role drafts it, with only the store's name taken out.
+  const promote = /^Promote \[kb:([\w-]+)\]/.exec(input.task)?.[1];
+  const card = promote && db.prepare('SELECT title, summary FROM kb_cards WHERE id = ?').get(promote);
+  if (card) {
+    const general = (s: unknown) => String(s).replaceAll(input.store.name, 'this store');
+    return [{ call: 'propose_general', input: { card: promote, title: general(card.title), summary: general(card.summary), why: "Demo draft: only the store's name is taken out. Switch to Claude for a real rewrite." } }];
+  }
   switch (input.agent.role) {
     case 'ad_strategist':
       return [{ call: 'review_campaigns', input: { days: 7 } }];

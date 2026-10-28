@@ -1,16 +1,17 @@
 // The card details panel (design A's right aside, `docs/reference/kb-atlas.html`): non-modal, so the board stays
 // usable beside it. Every field of spec §4, the evidence behind the stage, and the owner's controls from spec §14 with
 // their reversals.
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router';
+import { Fragment, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { Link, useSearchParams } from 'react-router';
 import { Pencil, Pin, PinOff, X } from 'lucide-react';
-import { KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCard, type KbCardBrief, type KbCardType, type KbCategory, type KbEvidenceKind, type KbLinkType, type KbSourceBrief, type KbStage } from '@frontline/shared';
-import { useCreateKbCard, useCreateKbLink, useKbCard, useKbCardWrite, useKbCards, useKbCategories, useKbEvidence, useKbLinks, useKbRevisions } from '../api/client';
+import { AGENT_ROLES, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type AgentRole, type ApprovalRequest, type KbCard, type KbCardBrief, type KbCardType, type KbCategory, type KbEvidenceKind, type KbLinkType, type KbPromotion, type KbSourceBrief, type KbStage } from '@frontline/shared';
+import { useApprovals, useCreateKbCard, useCreateKbLink, useDecide, useEditPromotion, useKbCard, useKbCardWrite, useKbCards, useKbCategories, useKbEvidence, useKbLinks, useKbRevisions, usePromoteKbCard } from '../api/client';
 import type { AskStart } from '../components/AskPalette';
 import { useStoreSelection } from '../components/StoreFilter';
 import { Button, cx, ErrorState, Field, inputClass, LoadingState, memoryAuthor } from '../components/ui';
 import { ago } from '../lib/format';
 import { escape, LinkPopover } from './ArtboardPanels';
+import { wordDiff } from './diff';
 import { withParams } from './url';
 
 export const PANEL_W = 340;
@@ -25,7 +26,6 @@ const KIND: Record<KbEvidenceKind, [string, string]> = {
 /** How a link reads from its target's side. */
 export const BACK: Record<KbLinkType, string> = { supports: 'Supported by', contradicts: 'Contradicts', builds_upon: 'Built upon by', derived_from: 'Source of', validated_by: 'Validates', applied_to: 'Applies', related_to: 'Related To' };
 export const FETCH: Record<KbSourceBrief['status'], string> = { read: 'read', blocked_robots: 'blocked by robots.txt', blocked_domain: 'blocked domain', paywalled: 'paywalled', login: 'needs a login', unsupported: 'unsupported', too_large: 'too large', failed: 'failed' };
-const SOON = { promote: "Promotion isn't switched on yet" };
 const who = (actor: string) => (actor === 'app' ? 'The app' : memoryAuthor(actor));
 const small = 'h-7 cursor-pointer rounded-md border border-line-2 bg-panel-2 px-2.5 text-xs text-text-2 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
 const iconBtn = 'grid size-7 cursor-pointer place-items-center rounded-md text-muted transition hover:text-white';
@@ -70,6 +70,8 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
   const merged = useKbCards(q.data ? (q.data.storeId ?? 'general') : ws, { status: 'merged', limit: 1000 });
   const [, setParams] = useSearchParams();
   const write = useKbCardWrite();
+  const promote = usePromoteKbCard();
+  const waiting = useApprovals().data?.find((a) => a.action.kind === 'kb.promote' && (a.action.payload as KbPromotion).cardId === id);
   const [editing, setEditing] = useState(false);
   const [tool, setTool] = useState<'link' | 'merge'>();
   const [why, setWhy] = useState<string>();
@@ -110,6 +112,7 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
           <span className="text-xs text-muted">{[home, ...card.path].join(' › ')}</span>
         </div>
         <Banners card={card} blocked={blocked} title={title} patch={patch} onOpen={onOpen} />
+        <Promotion card={card} approval={waiting} drafting={promote.data} />
         {write.isError && (
           <p role="alert" className="text-xs text-red">
             Couldn't save that: {write.error.message}
@@ -320,12 +323,136 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
           Research deeper
         </Button>
         {card.storeId !== null && (
-          <Button size="sm" disabled title={SOON.promote}>
+          <Button
+            size="sm"
+            disabled={!!waiting || !!promote.data || promote.isPending || card.status !== 'active'}
+            title={waiting ? 'Waiting for your call above' : card.status === 'active' ? 'An agent rewrites it for any store, for you to approve' : 'Only an accepted card can be promoted'}
+            onClick={() => promote.mutate(card)}
+          >
             Promote to General
           </Button>
         )}
+        {promote.isError && (
+          <p role="alert" className="w-full text-xs text-red">
+            {promote.error.message}
+          </p>
+        )}
       </div>
     </>
+  );
+}
+
+/**
+ * Promote to General (KB-18): who is drafting the General version, then the draft against the card, word by word, to
+ * approve, edit or keep in the store.
+ */
+function Promotion({ card, approval, drafting }: { card: KbCard; approval?: ApprovalRequest; drafting?: { runId: string; agentId: string } }) {
+  const decide = useDecide();
+  const edit = useEditPromotion();
+  const [editing, setEditing] = useState(false);
+  if (!approval) {
+    if (!drafting) return null;
+    return (
+      <p className="text-xs text-text-2">
+        {`${AGENT_ROLES[drafting.agentId.split(':')[1] as AgentRole].name} is drafting a General version. It comes back here for your call.`}{' '}
+        <Link to={`/agents/${encodeURIComponent(drafting.agentId)}?run=${drafting.runId}`} className="text-red hover:underline">
+          Watch
+        </Link>
+      </p>
+    );
+  }
+  const d = approval.action.payload as KbPromotion;
+  return (
+    <section aria-label="General version" className="grid gap-2 rounded-lg border border-red/40 bg-red/5 p-3">
+      <p className="font-display text-[10.5px] font-semibold tracking-[.1em] text-red uppercase">Promote to General?</p>
+      <p className="text-xs text-text-2">{approval.reason}</p>
+      {editing ? (
+        <DraftForm draft={d} pending={edit.isPending} onSave={(draft) => edit.mutate({ approval, draft }, { onSuccess: () => setEditing(false) })} onCancel={() => setEditing(false)} />
+      ) : (
+        <>
+          <dl className="grid gap-1.5">
+            <Diff label="Title" from={card.title} to={d.title} />
+            <Diff label="Summary" from={card.summary} to={d.summary} />
+            {(card.body || d.body) && <Diff label="Body" from={card.body} to={d.body ?? ''} />}
+          </dl>
+          <div className="flex flex-wrap gap-1.5">
+            <Button size="sm" variant="primary" disabled={decide.isPending} onClick={() => decide.mutate({ id: approval.id, verdict: 'approve' })}>
+              Approve
+            </Button>
+            <Button size="sm" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+            <Button size="sm" disabled={decide.isPending} onClick={() => decide.mutate({ id: approval.id, verdict: 'deny' })}>
+              Keep in store
+            </Button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** One field of the card against the draft: cut words struck through, added ones highlighted. */
+function Diff({ label, from, to }: { label: string; from: string; to: string }) {
+  return (
+    <div className="grid gap-0.5">
+      <dt className="text-[10.5px] tracking-[.06em] text-muted uppercase">{label}</dt>
+      <dd className="text-[13px] leading-normal text-text">
+        {wordDiff(from, to).map((p, i) => (
+          <Fragment key={i}>
+            {i > 0 && ' '}
+            {p.op === 'cut' ? (
+              <del className="text-muted">
+                <span className="sr-only">Removed: </span>
+                {p.text}
+              </del>
+            ) : p.op === 'add' ? (
+              <ins className="rounded-sm bg-good/15 px-0.5 text-good no-underline">
+                <span className="sr-only">Added: </span>
+                {p.text}
+              </ins>
+            ) : (
+              p.text
+            )}
+          </Fragment>
+        ))}
+      </dd>
+    </div>
+  );
+}
+
+/** The owner's edit of the draft. */
+function DraftForm({ draft, pending, onSave, onCancel }: { draft: KbPromotion; pending: boolean; onSave: (d: Omit<KbPromotion, 'cardId'>) => void; onCancel: () => void }) {
+  const [f, setF] = useState({ title: draft.title, summary: draft.summary, body: draft.body ?? '' });
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
+  const field = cx(inputClass, 'w-full py-1.5 text-xs');
+  return (
+    <form
+      onKeyDown={escape(onCancel)}
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave({ title: f.title.trim(), summary: f.summary.trim(), body: f.body.trim() });
+      }}
+      className="grid gap-2"
+    >
+      <Field label="Title">
+        <input autoFocus required minLength={3} maxLength={160} value={f.title} onChange={set('title')} className={field} />
+      </Field>
+      <Field label="Summary">
+        <textarea rows={2} maxLength={600} value={f.summary} onChange={set('summary')} className={cx(field, 'resize-y')} />
+      </Field>
+      <Field label="Body">
+        <textarea rows={4} maxLength={8000} value={f.body} onChange={set('body')} className={cx(field, 'resize-y')} />
+      </Field>
+      <div className="flex gap-1.5">
+        <Button size="sm" variant="primary" type="submit" disabled={pending}>
+          Save
+        </Button>
+        <Button size="sm" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 

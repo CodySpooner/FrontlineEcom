@@ -33,10 +33,12 @@ const revisions: KbRevision[] = [
 ];
 const links = [{ id: 'l1', storeId: 'peak', fromId: 'a', toId: 'b', type: 'supports', why: 'Both lifted CTR in the same test', status: 'confirmed', authorId: 'owner', createdAt: now }];
 
-/** The board with `card` open; `cards` overrides the full cards by id. */
-const open = (card: string, over: Record<string, Partial<KbCardBrief>> = {}) => {
+/** The board with `card` open; `cards` overrides the full cards by id, and `more` answers first. */
+const open = (card: string, over: Record<string, Partial<KbCardBrief>> = {}, more: (url: string, init?: RequestInit) => unknown = () => undefined) => {
   const all = [brief('a'), brief('b'), brief('s', 'peak', { categoryId: 'peak-seo', path: ['SEO'] }), brief('g', null)].map((c) => ({ ...c, ...over[c.id] }));
   const fetch = stubApi((url, init) => {
+    const answer = more(url, init);
+    if (answer !== undefined) return answer;
     const m = init?.method;
     if (m === 'POST' && url === '/api/kb/cards') return new Response(JSON.stringify(full(brief('new1'))), { status: 201, headers: { 'content-type': 'application/json' } });
     if (m && m !== 'GET') return m === 'DELETE' || m === 'PUT' ? new Response(null, { status: 204 }) : full(all[0]!);
@@ -196,5 +198,55 @@ describe('Knowledge › details panel', () => {
     click('Save', p);
     await vi.waitFor(() => expect(sent(fetch, 'POST')).toEqual([['/api/kb/cards', { ws: 'peak', title: 'Bundles beat discounts', category: ['Advertising', 'Hooks'], summary: 'Kits outsell coupons' }]])); // no stage: an owner-set stage would stop the ladder moving it
     await vi.waitFor(() => expect(where()).toBe('/knowledge?ws=peak&card=new1'));
+  });
+});
+
+describe('Knowledge › promote to General', () => {
+  const reply = (body: unknown, status: number) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  it('asks an agent to draft a General version and says who is drafting; a refusal says why', async () => {
+    open('a', {}, (url) => {
+      if (url === '/api/kb/cards/a/promote?ws=peak') return reply({ runId: 'r1', agentId: 'peak:market_analyst' }, 202);
+      if (url === '/api/kb/cards/b/promote?ws=peak') return reply({ error: 'Already in General as "Card g"' }, 409);
+    });
+    let p = await panel();
+    click('Promote to General', p);
+    expect(await within(p).findByText('Market Analyst is drafting a General version. It comes back here for your call.')).toBeTruthy();
+    expect(within(p).getByRole('link', { name: 'Watch' }).getAttribute('href')).toBe('/agents/peak%3Amarket_analyst?run=r1');
+    expect(within(p).getByRole('button', { name: 'Promote to General' })).toHaveProperty('disabled', true);
+    cleanup();
+
+    open('b', {}, (url) => (url === '/api/kb/cards/b/promote?ws=peak' ? reply({ error: 'Already in General as "Card g"' }, 409) : undefined));
+    p = await panel();
+    click('Promote to General', p);
+    expect((await within(p).findByRole('alert')).textContent).toBe('Already in General as "Card g"');
+  });
+
+  it('a draft waiting for the owner shows against the card, word by word, to approve, edit or keep in the store', async () => {
+    const draft = {
+      id: 'p1', storeId: 'peak', agentId: 'peak:market_analyst', title: 'Promote to General: Card a', reason: 'It held in 200 ads.', status: 'pending', createdAt: now,
+      action: { kind: 'kb.promote', payload: { cardId: 'a', title: 'Any card a', summary: 'Summary a' } },
+    };
+    const other = { ...draft, id: 'p0', reason: "Card b's draft", action: { kind: 'kb.promote', payload: { cardId: 'b', title: 'Any card b', summary: 'Summary b' } } };
+    const fetch = open('a', {}, (url) => (url.startsWith('/api/approvals?') ? [other, draft] : url.startsWith('/api/kb/promotions/') ? draft : undefined));
+    const p = await panel();
+    const box = await within(p).findByRole('region', { name: 'General version' });
+    expect(within(box).getByText('It held in 200 ads.')).toBeTruthy();
+    // Title "Card a" → "Any card a"; the summary stays; the draft drops the body.
+    expect([...box.querySelectorAll('del')].map((e) => e.textContent)).toEqual(['Removed: Card', 'Removed: Explanation a']);
+    expect([...box.querySelectorAll('ins')].map((e) => e.textContent)).toEqual(['Added: Any card']);
+    expect(within(p).getByRole('button', { name: 'Promote to General' })).toHaveProperty('disabled', true);
+    click('Approve', box);
+    click('Keep in store', box);
+    await vi.waitFor(() => expect(sent(fetch, 'POST')).toEqual([['/api/approvals/p1/approve', undefined], ['/api/approvals/p1/deny', undefined]]));
+
+    click('Edit', box);
+    const field = (name: string) => within(box).getByRole('textbox', { name }) as HTMLInputElement;
+    expect([field('Title').value, field('Summary').value, field('Body').value]).toEqual(['Any card a', 'Summary a', '']);
+    fireEvent.change(field('Title'), { target: { value: 'Lead with the problem' } });
+    fireEvent.change(field('Body'), { target: { value: ' Shown in the first 3 seconds. ' } });
+    click('Save', box);
+    await vi.waitFor(() => expect(sent(fetch, 'PATCH')).toEqual([['/api/kb/promotions/p1?ws=peak', { title: 'Lead with the problem', summary: 'Summary a', body: 'Shown in the first 3 seconds.' }]]));
+    expect(await within(box).findByRole('button', { name: 'Approve' })).toBeTruthy();
   });
 });
