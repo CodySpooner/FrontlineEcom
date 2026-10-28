@@ -131,7 +131,7 @@ export function Conversation({ store, conversation: c, config, buttons }: { stor
         )}
       </div>
       {last && interrupted(last) && <Interrupted store={store} conversationId={c.id} runId={last.id} />}
-      <Composer store={store} conversationId={c.id} name={name} live={live} />
+      <Composer store={store} conversationId={c.id} type={c.type} name={name} live={live} />
     </section>
   );
 }
@@ -497,10 +497,18 @@ function writeDraft(id: string, text: string) {
  * Enter sends, Shift+Enter adds a line. While a reply runs, the message waits in the queue behind it.
  * ponytail: attach and the knowledge-scope chip render from AA-17 (a control appears once it works).
  */
-function Composer({ store, conversationId, name, live }: { store: Store; conversationId: string; name: string; live: boolean }) {
+function Composer({ store, conversationId, type, name, live }: { store: Store; conversationId: string; type: string; name: string; live: boolean }) {
   const [text, setText] = useState(() => readDraft(conversationId));
   const [saved, setSaved] = useState(false);
   const send = useSendMessage(store.id, conversationId);
+  const navigate = useNavigate();
+  const create = useCreateConversation(store.id);
+  // A conversation that ran on demo data can't go on once the store is live (DEMO_SESSION): the message starts a new one.
+  const stale = send.isError && send.error.message.startsWith('That conversation ran on demo data');
+  const fresh = () => {
+    const message = send.variables!.message;
+    create.mutate({ clientRequestId: crypto.randomUUID(), type, message }, { onSuccess: (r) => (setText(''), navigate(agentsUrl({ store: store.id, conversation: r.conversation.id }))) });
+  };
   // One id per message until the server answers, so a repeated send returns the first one's run.
   const request = useRef(crypto.randomUUID());
   useEffect(() => {
@@ -553,6 +561,11 @@ function Composer({ store, conversationId, name, live }: { store: Store; convers
             <span role="alert" className="text-[11px] text-red">
               {send.error.message}
             </span>
+          )}
+          {stale && (
+            <Button size="sm" disabled={create.isPending} onClick={fresh}>
+              Send as a new conversation
+            </Button>
           )}
           <button type="submit" aria-label="Send" disabled={!text.trim() || send.isPending} className="ml-auto grid size-8 cursor-pointer place-items-center rounded-full bg-red text-white transition hover:brightness-110 disabled:cursor-default disabled:opacity-40">
             <ArrowUp className="size-4" strokeWidth={2.2} />

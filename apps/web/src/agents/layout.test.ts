@@ -15,7 +15,7 @@ test('the centre keeps 480 px: the right panel gives way first, then the left', 
 });
 
 test('every workspace URL carries its store', () => {
-  expect(agentsUrl({ store: 'glow' })).toBe('/agents/w?store=glow');
+  expect(agentsUrl({ store: 'glow' })).toBe('/agents?store=glow');
   expect(agentsUrl({ store: 'glow', conversation: 'c1' })).toBe('/agents/c/c1?store=glow');
   expect(agentsUrl({ store: 'my store', team: 't/1' })).toBe('/agents/t/t%2F1?store=my%20store');
 });

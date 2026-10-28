@@ -1,8 +1,7 @@
 // The one helper that builds every AI Agents workspace URL. `store` is the lookup key the server requires (decision 13);
 // the conversation or team record decides the real scope.
 
-// ponytail: AA-14b moves the workspace to /agents?store= and removes /agents/w.
-const WORKSPACE = '/agents/w';
+const WORKSPACE = '/agents';
 
 /** `run`: a run, which opens in its conversation, or read-only when it has none (decision 4). */
 export function agentsUrl({ store, conversation, team, run }: { store: string; conversation?: string; team?: string; run?: string }) {

@@ -174,7 +174,7 @@ test('the context chip links back to what the conversation was opened from; a re
   cleanup();
   api([done]);
   show({ ...conversation(), context: { kind: 'run', id: 'r0', name: 'Weekly ad check' } });
-  expect((await screen.findByRole('link', { name: 'Continued from · Weekly ad check' })).getAttribute('href')).toBe('/agents/w?store=glow&run=r0');
+  expect((await screen.findByRole('link', { name: 'Continued from · Weekly ad check' })).getAttribute('href')).toBe('/agents?store=glow&run=r0');
 });
 
 test('an interrupted reply shows the banner with Resume, and no Retry', async () => {
@@ -207,4 +207,25 @@ test('a run with no conversation reads alone with Continue, except an Ask KB all
     expect(await screen.findByText(/read other stores' data/)).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Continue in a new conversation' })).toBeNull();
   }
+});
+
+test('a conversation from before the store went live sends the refused message as a new conversation in one click', async () => {
+  const fetch = stubApi((url, init) => {
+    const u = new URL(url, 'http://x');
+    if (init?.method === 'POST' && u.pathname === '/api/conversations/c1/messages') return new Response(JSON.stringify({ error: 'That conversation ran on demo data, before the store went live: start a new one.' }), { status: 409 });
+    if (init?.method === 'POST' && u.pathname === '/api/conversations') return { conversation: { ...conversation(), id: 'c2' }, run: run('n1', 'queued') };
+    if (u.pathname === '/api/conversations/c1/thread') return { items: [run('r1', 'done')], total: 1 };
+    if (u.pathname === '/api/runs/r1') return run('r1', 'done');
+    return undefined;
+  });
+  show();
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Message' }), { target: { value: 'Headlines for the real catalog' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Send as a new conversation' }));
+  await vi.waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/agents/c/c2?store=glow'));
+  const posts = fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([url, init]) => [url, JSON.parse(String(init!.body))]);
+  expect(posts).toEqual([
+    ['/api/conversations/c1/messages?store=glow', { clientRequestId: expect.any(String), message: 'Headlines for the real catalog' }],
+    ['/api/conversations?store=glow', { clientRequestId: expect.any(String), type: 'ad_strategist', message: 'Headlines for the real catalog' }],
+  ]);
 });

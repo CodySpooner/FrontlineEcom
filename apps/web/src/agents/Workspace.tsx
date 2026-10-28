@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router';
 import { Bot, List, PanelRight, SearchX, Users } from 'lucide-react';
-import type { Store } from '@frontline/shared';
+import { AGENT_ROLES, type Store } from '@frontline/shared';
 import { useConversation, useConversations, useRun, useStores } from '../api/client';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
@@ -30,7 +30,9 @@ export function Workspace() {
   const store = stores.data?.find((s) => s.id === params.get('store'));
   const view = pathname.startsWith('/agents/c/') ? 'conversation' : pathname.startsWith('/agents/t/') ? 'team' : 'workspace';
   const run = params.get('run') ?? undefined;
-  const remembered = store && view === 'workspace' && !run ? lastOpened.get(store.id) : undefined;
+  // Only the bare store workspace (the sidebar's link) goes back to the last conversation; a drawer, Deploy or a run
+  // link opens on the workspace itself.
+  const remembered = store && view === 'workspace' && [...params.keys()].every((k) => k === 'store') ? lastOpened.get(store.id) : undefined;
   let body: ReactNode;
   if (stores.isPending) body = <LoadingState rows={6} className="pt-4" />;
   else if (stores.isError) body = <ErrorState message="Couldn't load your stores." onRetry={() => stores.refetch()} />;
@@ -55,6 +57,31 @@ export function Workspace() {
       {body}
     </>
   );
+}
+
+/**
+ * The old agent page's URLs, from saved notifications, other modules and other lanes: `/agents/<store:role>` (raw or
+ * `%3A`) opens that type's latest conversation in the store, else the workspace with its group expanded; `?run=` opens
+ * the run; `?tab=` and `?by=agent` open the type's settings drawer on that tab. `/agents/w?…` (before AA-14b) is the
+ * workspace.
+ */
+export function LegacyAgent() {
+  const { id = '' } = useParams();
+  const { search } = useLocation();
+  const [params] = useSearchParams();
+  const [store = '', role] = id.split(':');
+  const known = !!role && Object.hasOwn(AGENT_ROLES, role);
+  const run = params.get('run');
+  const by = params.get('by') === 'agent';
+  const tab = params.get('tab') ?? (by ? 'memory' : undefined);
+  const latest = useConversations(known && !run && !tab ? store : '', { type: role });
+  if (!id.includes(':')) return <Navigate replace to={`/agents${search}`} />;
+  if (!known) return <Navigate replace to={agentsUrl({ store })} />;
+  if (run) return <Navigate replace to={agentsUrl({ store, run })} />;
+  if (tab && tab !== 'chat') return <Navigate replace to={`${agentsUrl({ store })}&settings=${role}&tab=${encodeURIComponent(tab)}${by ? '&by=agent' : ''}`} />;
+  if (latest.isPending) return <LoadingState rows={4} className="pt-4" />;
+  const c = latest.data?.pages[0]?.items[0];
+  return <Navigate replace to={c ? agentsUrl({ store, conversation: c.id }) : `${agentsUrl({ store })}&expand=${role}`} />;
 }
 
 function NotFound({ what, store }: { what: 'store' | 'team' | 'conversation' | 'run'; store?: Store }) {
@@ -196,7 +223,7 @@ function Start({ store, buttons }: { store: Store; buttons: ReactNode }) {
     <div className="min-h-0 flex-1 overflow-y-auto">
       <div className="flex justify-end gap-1 px-4 pt-3">{buttons}</div>
       <EmptyState icon={Bot} title={`${store.name}'s agents`}>
-        Pick a conversation from the list. Ask AI (Ctrl K) and the agent actions on other pages start new ones.
+        Pick a conversation from the list, or deploy an agent to start one. Ask AI (Ctrl K) and the agent actions on other pages start new ones too.
       </EmptyState>
       {recent.length > 0 && (
         <div className="mx-auto grid max-w-md gap-1 px-4 pb-8">

@@ -45,7 +45,7 @@ function api(stores = [store('glow', 'Glow Botanics'), store('peak', 'Peak Gear'
     }
     if (u.pathname === '/api/agent-types') return [{ id: 'copywriter', name: 'Copywriter', description: '', baseRole: 'copywriter' }, { id: 'operations', name: 'Operations', description: '', baseRole: 'operations' }];
     if (u.pathname === '/api/conversations/counts') return {};
-    if (u.pathname === '/api/notifications') return [{ id: 'n1', kind: 'agent_done', title: 'Copywriter finished', storeId: 'glow', link: '/agents/w?store=glow&run=inc', createdAt: '2026-10-24T10:00:00Z' }];
+    if (u.pathname === '/api/notifications') return [{ id: 'n1', kind: 'agent_done', title: 'Copywriter finished', storeId: 'glow', link: '/agents?store=glow&run=inc', createdAt: '2026-10-24T10:00:00Z' }];
     const r = /^\/api\/runs\/(\w+)$/.exec(u.pathname)?.[1];
     if (r) return RUNS[r] ?? reply({ error: 'Run not found' }, 404);
     const [, id, thread] = /^\/api\/conversations\/([^/]+)(\/thread)?$/.exec(u.pathname) ?? [];
@@ -58,7 +58,7 @@ function api(stores = [store('glow', 'Glow Botanics'), store('peak', 'Peak Gear'
 const renderAt = (path: string) =>
   renderApp(
     <Routes>
-      {['/agents/c/:id', '/agents/t/:id', '/agents/w'].map((p) => (
+      {['/agents/c/:id', '/agents/t/:id', '/agents'].map((p) => (
         <Route key={p} path={p} element={<Workspace />} />
       ))}
     </Routes>,
@@ -79,10 +79,10 @@ test('another store, an unknown store and an unknown conversation each show the 
   api();
   renderAt('/agents/c/c1?store=peak');
   expect(await screen.findByText('Conversation not found')).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'Back to Peak Gear' }).getAttribute('href')).toBe('/agents/w?store=peak');
+  expect(screen.getByRole('link', { name: 'Back to Peak Gear' }).getAttribute('href')).toBe('/agents?store=peak');
   expect(screen.queryByText('Demo data')).toBeNull(); // Peak is live
   cleanup();
-  renderAt('/agents/w?store=gone');
+  renderAt('/agents?store=gone');
   expect(await screen.findByText('Store not found')).toBeTruthy();
   cleanup();
   renderAt('/agents/t/t1?store=glow');
@@ -91,47 +91,47 @@ test('another store, an unknown store and an unknown conversation each show the 
 
 test('with no store named it opens the first store; a store reopens the conversation last opened there', async () => {
   api();
-  renderAt('/agents/w');
+  renderAt('/agents');
   expect(await screen.findByText("Glow Botanics's agents")).toBeTruthy();
-  expect(screen.getByTestId('where').textContent).toBe('/agents/w?store=glow');
+  expect(screen.getByTestId('where').textContent).toBe('/agents?store=glow');
   fireEvent.click(await screen.findByRole('link', { name: /FAQ rewrite/ }));
   expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
   cleanup();
-  renderAt('/agents/w?store=glow');
+  renderAt('/agents?store=glow');
   expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
   expect(screen.getByTestId('where').textContent).toBe('/agents/c/c2?store=glow');
 });
 
 test("?run= opens the conversation holding the run, reads a run with none alone, and 404s another store's", async () => {
   api();
-  renderAt('/agents/w?store=glow&run=inc');
+  renderAt('/agents?store=glow&run=inc');
   expect(await screen.findByRole('heading', { name: 'FAQ rewrite' })).toBeTruthy();
   expect(screen.getByTestId('where').textContent).toBe('/agents/c/c2?store=glow');
   cleanup();
   localStorage.clear();
-  renderAt('/agents/w?store=glow&run=solo');
+  renderAt('/agents?store=glow&run=solo');
   expect(await screen.findByText('Read-only · not part of a conversation')).toBeTruthy();
   expect(screen.getByRole('heading', { name: 'Weekly copy check' })).toBeTruthy();
   cleanup();
-  renderAt('/agents/w?store=glow&run=peaks');
+  renderAt('/agents?store=glow&run=peaks');
   expect(await screen.findByText('Run not found')).toBeTruthy();
 });
 
-test('after leaving for /knowledge, /agents/w?store= brings back the conversation, the Activity tab and the thread scroll', async () => {
+test("after leaving for /knowledge, the sidebar's /agents link brings back the conversation, the Activity tab and the thread scroll", async () => {
   vi.stubGlobal('innerWidth', 1440); // three panes: the Details panel is open beside the thread
   api();
   renderApp(
     <>
       <Link to="/knowledge">Knowledge page</Link>
-      <Link to="/agents/w?store=glow">AI Agents page</Link>
+      <Link to="/agents">AI Agents page</Link>
       <Routes>
-        {['/agents/c/:id', '/agents/t/:id', '/agents/w'].map((p) => (
+        {['/agents/c/:id', '/agents/t/:id', '/agents'].map((p) => (
           <Route key={p} path={p} element={<Workspace />} />
         ))}
         <Route path="/knowledge" element={<p>Knowledge</p>} />
       </Routes>
     </>,
-    '/agents/w?store=glow',
+    '/agents?store=glow',
   );
   fireEvent.click(await screen.findByRole('link', { name: /FAQ rewrite/ }));
   fireEvent.click(await screen.findByRole('tab', { name: 'Activity' }));
@@ -163,13 +163,14 @@ test("switching stores keeps the conversation's draft and touches no run", async
 
 test('no stores: the workspace says how to add one', async () => {
   api([]);
-  renderAt('/agents/w');
+  renderAt('/agents');
   expect(await screen.findByText('No stores yet')).toBeTruthy();
+  expect(screen.getByRole('link', { name: 'Add a store' }).getAttribute('href')).toBe('/settings');
 });
 
 test('/ focuses the list search unless typing; ↑/↓ move through the list', async () => {
   api();
-  renderAt('/agents/w?store=glow');
+  renderAt('/agents?store=glow');
   const list = within(await screen.findByRole('navigation', { name: 'Conversations' }));
   const first = await list.findByRole('link', { name: /Spring hero line/ });
   const second = list.getByRole('link', { name: /FAQ rewrite/ });

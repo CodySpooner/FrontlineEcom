@@ -2,7 +2,8 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Brain, Trash2 } from 'lucide-react';
 import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type Autonomy, type MemoryKind, type StoreCaps } from '@frontline/shared';
-import { useAddMemory, useAgents, useAutomationActions, useAutomations, useCaps, useForgetMemory, useMemory, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
+import { useAddMemory, useAgents, useApprovals, useAutomationActions, useAutomations, useCaps, useForgetMemory, useMemory, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
+import { ApprovalCard } from '../components/Chat';
 import { DemoJobsNote } from '../components/DemoJobsNote';
 import { FlowLibrary } from '../components/FlowLibrary';
 import { SharedLearnings } from '../components/NicheLearnings';
@@ -14,8 +15,8 @@ import { ago, cents, money } from '../lib/format';
 import { withParams } from '../knowledge/url';
 import { agentsUrl } from './urls';
 
-// An agent seat's settings, memory and run history: the agent-type settings drawer's tabs (moved from AgentDetail.tsx,
-// which imports them until AA-14b deletes it), and the autopilot rule both the Details panel and Deploy read.
+// An agent seat's settings, memory and run history: the agent-type settings drawer's tabs, and the autopilot rule both
+// the Details panel and Deploy read.
 
 const DRAWER_TABS = [
   { value: 'settings', label: 'Settings' },
@@ -39,6 +40,8 @@ export function SettingsDrawer({ storeId }: { storeId: string }) {
   const { role, tab, setTab, close } = useAgentSettings();
   const navigate = useNavigate();
   const agent = useAgents().data?.find((a) => a.id === `${storeId}:${role}`);
+  // What the seat is waiting on, answerable here even when no conversation raised it (a scheduled job, a seeded request).
+  const waiting = (useApprovals().data ?? []).filter((a) => a.agentId === agent?.id);
   const tabs = DRAWER_TABS.filter((t) => t.value !== 'flows' || role === 'email_sms');
   const openRun = (run: string) => navigate(agentsUrl({ store: storeId, run }));
   return (
@@ -47,6 +50,13 @@ export function SettingsDrawer({ storeId }: { storeId: string }) {
         <LoadingState rows={4} />
       ) : (
         <>
+          {waiting.length > 0 && (
+            <div className="mb-4 grid gap-2">
+              {waiting.map((a) => (
+                <ApprovalCard key={a.id} a={a} />
+              ))}
+            </div>
+          )}
           <Tabs label="Agent settings" tabs={tabs} value={tabs.some((t) => t.value === tab) ? tab : 'settings'} onChange={setTab} />
           <div className="mt-4">
             {tab === 'settings' && <AgentSettings agent={agent} />}
@@ -92,7 +102,7 @@ function AssignedBy({ runId }: { runId: string }) {
   );
 }
 
-export function History({ agentId, onOpen }: { agentId: string; onOpen: (runId: string) => void }) {
+function History({ agentId, onOpen }: { agentId: string; onOpen: (runId: string) => void }) {
   const runs = useRuns(agentId);
   const now = Date.now();
   return (
@@ -143,7 +153,7 @@ export function NicheLearnings({ storeId }: { storeId: string }) {
   return <SharedLearnings by={{ store: storeId }} niche={store.niche === 'other' ? store.nicheDetail || 'your niche' : nicheName(store.niche)} />;
 }
 
-export function Memory({ agent }: { agent: Agent }) {
+function Memory({ agent }: { agent: Agent }) {
   const { name } = useStoreSelection();
   const mem = useMemory(agent.storeId);
   const add = useAddMemory(agent.storeId);
@@ -252,13 +262,13 @@ export function Memory({ agent }: { agent: Agent }) {
   );
 }
 
-export const AUTONOMY: Record<Autonomy, { label: string; help: string }> = {
+const AUTONOMY: Record<Autonomy, { label: string; help: string }> = {
   suggest: { label: 'Suggest', help: 'Recommends only. Never acts on the store.' },
   ask: { label: 'Ask first', help: 'Acts, but anything that spends, publishes or changes the store waits for your approval.' },
   autopilot: { label: 'Autopilot', help: "Approves its own actions within the store's autopilot caps. Everything is logged." },
 };
 
-export function AgentSettings({ agent }: { agent: Agent }) {
+function AgentSettings({ agent }: { agent: Agent }) {
   const update = useUpdateAgent();
   const caps = useCaps(agent.storeId).data;
   const usage = useUsage([agent.storeId]).data?.[0];

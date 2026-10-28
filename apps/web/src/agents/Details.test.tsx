@@ -133,5 +133,5 @@ test('the conversation menu opens the seat settings drawer; a History row opens 
   expect(within(drawer).queryByRole('tab', { name: 'Flows' })).toBeNull(); // Email & SMS only
   fireEvent.click(within(drawer).getByRole('tab', { name: 'History' }));
   fireEvent.click(await within(drawer).findByRole('button', { name: 'Weekly ad check' }));
-  expect(screen.getByTestId('where').textContent).toBe('/agents/w?store=glow&run=r9');
+  expect(screen.getByTestId('where').textContent).toBe('/agents?store=glow&run=r9');
 });

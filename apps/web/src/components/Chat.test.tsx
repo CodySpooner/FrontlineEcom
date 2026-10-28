@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Agent, AgentRunDetail, ApprovalRequest } from '@frontline/shared';
-import { renderApp, reply, stubApi } from '../test-utils';
-import { ApprovalCard, Chat } from './Chat';
+import { renderApp, stubApi } from '../test-utils';
+import { ApprovalCard, Transcript } from './Chat';
 
 const agent = { id: 'peak:copywriter', storeId: 'peak', role: 'copywriter', enabled: true } as Agent;
 const run = (id: string, status: AgentRunDetail['status'], extra: Partial<AgentRunDetail> = {}): AgentRunDetail => ({
@@ -18,38 +18,15 @@ const run = (id: string, status: AgentRunDetail['status'], extra: Partial<AgentR
   ...extra,
 });
 
-// jsdom has no ResizeObserver; Chat only uses it to keep the newest message in view.
-beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} }));
-
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
 
-describe('chat retry', () => {
-  it('runs a failed last task again, in the same conversation', async () => {
-    const fetch = stubApi((url, init) => {
-      if (init?.method === 'POST') return run('r2', 'queued');
-      if (url === '/api/runs/r0') return run('r0', 'error', { error: 'Rate limited' });
-      if (url === '/api/runs/r1') return run('r1', 'error', { error: 'Interrupted by an app restart', sessionId: 's1' });
-    });
-    const onThread = vi.fn();
-    renderApp(<Chat agent={agent} thread={['r0', 'r1']} onThread={onThread} />);
-
-    // Only the newest message offers it.
-    expect(await screen.findByText(/Interrupted by an app restart/)).toBeTruthy();
-    expect(screen.getAllByRole('button', { name: 'Try again' })).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
-
-    await vi.waitFor(() => expect(onThread).toHaveBeenCalledWith(['r0', 'r1', 'r2']));
-    const post = fetch.mock.calls.find(([, init]) => init?.method === 'POST')!;
-    expect(post[0]).toBe('/api/agents/peak%3Acopywriter/runs');
-    expect(JSON.parse(String(post[1]!.body))).toEqual({ task: 'Draft 3 headlines', resumeRunId: 'r1' });
-  });
-
-  it('offers nothing to retry after a finished run', async () => {
-    stubApi((url) => (url === '/api/runs/r1' ? run('r1', 'done') : undefined));
-    renderApp(<Chat agent={agent} thread={['r1']} onThread={() => {}} />);
+describe('a finished run', () => {
+  it('offers nothing to retry', async () => {
+    stubApi(() => undefined);
+    renderApp(<Transcript run={run('r1', 'done')} role="copywriter" />);
     expect(await screen.findByText('Done')).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
     // It offers to research the question further instead (KB-15).
@@ -61,11 +38,10 @@ describe('knowledge citations', () => {
   it('turns [kb:<id>] in an answer into a link to that card, named by its title; an id with no card stays as written', async () => {
     const answer = 'Lead with the problem [kb:c1], as [kb:c1] says. [kb:gone] is not a card.';
     stubApi((url) => {
-      if (url === '/api/runs/r1') return run('r1', 'done', { task: 'Use [kb:c1] for 3 headlines', transcript: [{ type: 'text_delta', text: answer.slice(0, 30) }, { type: 'text_delta', text: answer.slice(30) }] });
       if (url === '/api/kb/cards/c1?ws=all') return { id: 'c1', storeId: 'peak', title: 'Problem-first hooks win' };
       if (url === '/api/kb/cards/gone?ws=all') return new Response(JSON.stringify({ error: 'card not found' }), { status: 404 });
     });
-    renderApp(<Chat agent={agent} thread={['r1']} onThread={() => {}} />);
+    renderApp(<Transcript run={run('r1', 'done', { task: 'Use [kb:c1] for 3 headlines', transcript: [{ type: 'text_delta', text: answer.slice(0, 30) }, { type: 'text_delta', text: answer.slice(30) }] })} role="copywriter" />);
     const links = await screen.findAllByRole('link', { name: 'Problem-first hooks win' });
     // The owner's question names it too (Use in a task).
     expect(links.map((a) => a.getAttribute('href'))).toEqual(['/knowledge?card=c1', '/knowledge?card=c1', '/knowledge?card=c1']);
@@ -77,8 +53,8 @@ describe('knowledge citations', () => {
 describe('a run a daily AI budget stopped', () => {
   it("links to the setting that lifts it", async () => {
     const error = "Stopped: today's budget for this agent ($0.3) is used up. Raise it in its settings.";
-    stubApi((url) => (url === '/api/runs/r1' ? run('r1', 'error', { error, transcript: [{ type: 'error', message: error }] }) : undefined));
-    renderApp(<Chat agent={agent} thread={['r1']} onThread={() => {}} />);
+    stubApi(() => undefined);
+    renderApp(<Transcript run={run('r1', 'error', { error, transcript: [{ type: 'error', message: error }] })} role="copywriter" />);
     const link = await screen.findByRole('link', { name: "Raise the agent's budget" });
     expect(link.getAttribute('href')).toBe('/agents/peak%3Acopywriter?tab=settings');
     expect(screen.getAllByText(/is used up/)).toHaveLength(1); // the footer doesn't repeat the transcript's error
@@ -147,27 +123,5 @@ describe('deciding a card in a waiting list', () => {
     );
     fireEvent.click(await screen.findByRole('button', { name: 'Approve: Pause A' }));
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Approve: Pause B' }));
-  });
-});
-
-describe('a conversation from before the store went live', () => {
-  it('sends the refused follow-up as a new chat in one click', async () => {
-    const fetch = stubApi((url, init) => {
-      if (init?.method === 'POST')
-        return JSON.parse(String(init.body)).resumeRunId
-          ? reply({ error: 'That conversation ran on demo data, before the store went live: start a new one.' }, 409)
-          : run('r2', 'queued');
-      if (url === '/api/runs/r1') return run('r1', 'done', { sessionId: 's1' });
-    });
-    const onThread = vi.fn();
-    renderApp(<Chat agent={agent} thread={['r1']} onThread={onThread} />);
-    await screen.findByText('Done');
-    fireEvent.change(screen.getByLabelText('Message Copywriter'), { target: { value: 'Headlines for the real catalog' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Send as a new chat' }));
-    await vi.waitFor(() => expect(onThread).toHaveBeenCalledWith(['r2']));
-    const posts = fetch.mock.calls.filter(([, init]) => init?.method === 'POST').map(([, init]) => JSON.parse(String(init!.body)));
-    expect(posts).toEqual([{ task: 'Headlines for the real catalog', resumeRunId: 'r1' }, { task: 'Headlines for the real catalog' }]);
   });
 });

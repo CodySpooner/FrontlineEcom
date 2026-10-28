@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Archive, ArrowLeft, ChevronDown, ChevronRight, ChevronsUpDown, Ellipsis, Pin, Plus, Search, Users, type LucideIcon } from 'lucide-react';
 import type { AgentTypeInfo, Conversation, ConversationState, Store } from '@frontline/shared';
 import { useAgentTypes, useConversationCounts, useConversations, useStores, useUpdateConversation } from '../api/client';
@@ -39,6 +39,8 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
   const types = useAgentTypes(store.id).data ?? [];
   const update = useUpdateConversation(store.id);
   const deploy = useDeploy();
+  // `?expand=<type>` (an old agent link): that type's group is shown open.
+  const expand = useSearchParams()[0].get('expand') ?? undefined;
   const items = list.data?.pages.flatMap((p) => p.items) ?? [];
   const byType = list.data?.pages[0]?.byType ?? {};
   const teams = items.filter((c) => c.teamId).sort((a, b) => Number(ACTIVE.has(b.state)) - Number(ACTIVE.has(a.state)));
@@ -124,7 +126,7 @@ export function ListPane({ store, open, search }: { store: Store; open?: string;
             </div>
             {!groups.length && <p className="px-2.5 py-2 text-[12.5px] text-muted">{range ? `No conversations in the last ${range} days.` : 'No conversations yet.'}</p>}
             {groups.map((g) => {
-              const shut = collapsed.includes(g.id);
+              const shut = collapsed.includes(g.id) && g.id !== expand;
               return (
                 <div key={g.id}>
                   <div className="group relative">

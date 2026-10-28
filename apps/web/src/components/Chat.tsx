@@ -1,9 +1,9 @@
-// UI-07 agent chat: each message is a run; follow-ups resume the previous run's session. Runs stream in over /api/live.
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react';
+// A run's transcript and the approval cards, used by the AI Agents workspace and across the app. Runs stream in over /api/live.
+import { useRef, useState } from 'react';
 import { Link } from 'react-router';
-import { Brain, ChevronRight, MessageSquare, SendHorizontal, Wrench } from 'lucide-react';
-import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type AgentRunDetail, type ApprovalRequest } from '@frontline/shared';
-import { useApprovals, useCancelRun, useDecide, useKbCard, useRun, useStartRun } from '../api/client';
+import { Brain, ChevronRight, Wrench } from 'lucide-react';
+import { APPROVAL_KINDS, type AgentRole, type AgentRunDetail, type ApprovalRequest } from '@frontline/shared';
+import { useApprovals, useCancelRun, useDecide, useKbCard } from '../api/client';
 import { expiredWhy, shownReason } from '../lib/approvals';
 import { cents, money } from '../lib/format';
 import { isLive, toBlocks, toolName, type Block } from '../lib/transcript';
@@ -11,117 +11,7 @@ import { budgetFix } from '../lib/usage';
 import { researchHref } from '../knowledge/url';
 import { ApprovalExtras } from './ApprovalExtras';
 import { Portrait } from './Art';
-import { Badge, Button, cx, EmptyState, inputClass, LoadingState, Panel, StatusDot } from './ui';
-
-export function Chat({ agent, thread, onThread }: { agent: Agent; thread: string[]; onThread: (ids: string[]) => void }) {
-  const name = AGENT_ROLES[agent.role].name;
-  const start = useStartRun();
-  const [task, setTask] = useState('');
-  const last = useRun(thread.at(-1) ?? '').data;
-  const busy = !!last && isLive(last);
-  const off = agent.enabled === false;
-
-  // Keep the newest message in view as text streams in.
-  const scroller = useRef<HTMLDivElement>(null);
-  const content = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const ro = new ResizeObserver(() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight }));
-    if (content.current) ro.observe(content.current);
-    return () => ro.disconnect();
-  }, []);
-
-  const ask = (t: string, sent?: () => void) => {
-    if (!t || busy || start.isPending) return;
-    start.mutate(
-      { agentId: agent.id, task: t, resumeRunId: last?.sessionId ? last.id : undefined },
-      {
-        onSuccess: (r) => {
-          sent?.();
-          onThread([...thread, r.id]);
-        },
-      },
-    );
-  };
-  // A follow-up whose conversation can't resume (AGT-214: it ran on demo data, before the store went live): same task, new chat.
-  const stale = start.isError && /^That conversation (ran on demo data|cannot be continued)/.test(start.error.message);
-  const fresh = () => {
-    const t = start.variables!.task;
-    start.mutate({ agentId: agent.id, task: t }, { onSuccess: (r) => (task.trim() === t && setTask(''), onThread([r.id])) });
-  };
-  const send = (e?: FormEvent) => {
-    e?.preventDefault();
-    ask(task.trim(), () => setTask(''));
-  };
-  const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key !== 'Enter' || e.shiftKey) return;
-    e.preventDefault();
-    send();
-  };
-
-  return (
-    <Panel
-      title={`Chat with ${name}`}
-      sub="Follow-ups continue the same conversation."
-      action={
-        thread.length > 0 && (
-          <Button size="sm" onClick={() => onThread([])}>
-            New chat
-          </Button>
-        )
-      }
-    >
-      <div ref={scroller} className="max-h-[min(60vh,560px)] min-h-[240px] overflow-y-auto pr-1" aria-live="polite">
-        <div ref={content} className="grid gap-5">
-          {thread.length ? (
-            thread.map((id, i) => <RunView key={id} id={id} role={agent.role} onRetry={i === thread.length - 1 && !off ? ask : undefined} />)
-          ) : (
-            <EmptyState icon={MessageSquare} title={`Brief your ${name}`}>
-              Give it a task, e.g. "What should we change this week?" It works with this store's data and asks before it spends or
-              publishes anything.
-            </EmptyState>
-          )}
-        </div>
-      </div>
-      <form onSubmit={send} className="mt-3 flex items-end gap-2 border-t border-line pt-3">
-        <label htmlFor="chat-task" className="sr-only">
-          Message {name}
-        </label>
-        <textarea
-          id="chat-task"
-          rows={2}
-          value={task}
-          onChange={(e) => setTask(e.target.value)}
-          onKeyDown={onKey}
-          disabled={off}
-          maxLength={4000}
-          placeholder={off ? `Deploy ${name} to chat with it` : `Message ${name}…  (Enter to send, Shift+Enter for a new line)`}
-          className="min-h-[44px] flex-1 resize-y rounded-lg border border-line-2 bg-bg-2 px-3 py-2 text-[13px] placeholder:text-muted focus:border-red/60 focus:outline-none disabled:opacity-50"
-        />
-        <Button type="submit" variant="primary" disabled={off || busy || start.isPending || !task.trim()} aria-label="Send">
-          <SendHorizontal className="size-4" strokeWidth={2} />
-          Send
-        </Button>
-      </form>
-      {start.isError && (
-        <p role="alert" className="mt-2 text-xs text-red">
-          {start.error.message} <FixLink message={start.error.message} agentId={agent.id} />
-          {stale && (
-            <Button size="sm" className="ml-1" onClick={fresh}>
-              Send as a new chat
-            </Button>
-          )}
-        </p>
-      )}
-    </Panel>
-  );
-}
-
-function RunView({ id, role, onRetry }: { id: string; role: AgentRole; onRetry?: (task: string) => void }) {
-  const q = useRun(id);
-  if (q.isPending) return <LoadingState rows={1} />;
-  if (q.isError) return <p className="text-xs text-red">Couldn't load this message.</p>;
-  return <Transcript run={q.data} role={role} onRetry={onRetry} />;
-}
+import { Badge, Button, cx, inputClass, StatusDot } from './ui';
 
 /** One exchange: the owner's task, then the agent's streamed reply, tool steps, approvals and learnings. */
 /** `onRetry` (the newest message only) offers to send a failed or stopped task again. */

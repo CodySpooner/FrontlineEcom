@@ -327,7 +327,7 @@ test("a reply's deliverables come from its run_id, and its notification opens th
   const thread = (await (await send('GET', `/api/conversations/${conversation.id}/thread?store=glow`)).json()) as CursorPage<AgentRunDetail>;
   expect(thread.items[0]!.deliverables).toEqual(made);
   expect(((await (await send('GET', `/api/runs/${run.id}?store=glow`)).json()) as AgentRunDetail).deliverables).toEqual(made);
-  expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Ad Strategist finished'`).get()?.link).toBe(`/agents/w?store=glow&run=${run.id}`);
+  expect(db.prepare(`SELECT link FROM notifications WHERE title = 'Ad Strategist finished'`).get()?.link).toBe(`/agents?store=glow&run=${run.id}`);
 });
 
 test('GET /api/runtimes: Claude from the registry while the demo engine is forced, saying why it is off', async () => {

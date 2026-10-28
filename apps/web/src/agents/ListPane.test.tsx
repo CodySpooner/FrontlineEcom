@@ -48,10 +48,10 @@ function api() {
     return p.get('cursor') ? page(OLDER) : page(ACTIVE, 'cursor-1');
   });
 }
-const renderAt = (path = '/agents/w?store=glow') =>
+const renderAt = (path = '/agents?store=glow') =>
   renderApp(
     <Routes>
-      {['/agents/c/:id', '/agents/w'].map((p) => (
+      {['/agents/c/:id', '/agents'].map((p) => (
         <Route key={p} path={p} element={<Workspace />} />
       ))}
     </Routes>,
@@ -106,7 +106,7 @@ test('the store switcher lists every store with what is going there, and switche
   const picker = within(document.getElementById('store-switcher')!); // a closed popover
   expect(picker.getByRole('menuitem', { name: /Peak Fit.*2 running · 1 waiting/, hidden: true })).toBeTruthy();
   fireEvent.click(picker.getByRole('menuitem', { name: /Peak Fit/, hidden: true }));
-  await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/agents/w?store=peak'));
+  await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/agents?store=peak'));
 });
 
 test('search, the archive, the range and older pages each ask the server', async () => {

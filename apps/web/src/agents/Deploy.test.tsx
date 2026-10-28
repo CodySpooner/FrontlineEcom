@@ -82,18 +82,18 @@ const renderDeploy = (storeId = 'glow', typeId = 'copywriter') =>
     <Routes>
       <Route path="*" element={<Deploy store={STORES.find((s) => s.id === storeId)!} type={typeId} onClose={() => undefined} />} />
     </Routes>,
-    '/agents/w?store=glow',
+    '/agents?store=glow',
   );
 
 test('Deploy agent opens Deploy on the store, with Demo (free) on a demo store; New conversation preselects its type', async () => {
   api();
   renderApp(
     <Routes>
-      {['/agents/c/:id', '/agents/w'].map((p) => (
+      {['/agents/c/:id', '/agents'].map((p) => (
         <Route key={p} path={p} element={<Workspace />} />
       ))}
     </Routes>,
-    '/agents/w?store=glow',
+    '/agents?store=glow',
   );
   fireEvent.click(await screen.findByRole('button', { name: 'Deploy agent' }));
   expect(screen.getByTestId('where').textContent).toContain('deploy=');

@@ -1407,7 +1407,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     - a seat on autopilot with ads.set_budget enabled shows that kind and its cap in the locked row and in the
       Details line, not 'Always'. With autonomy 'ask', both read Always. A seat on autopilot with ads.set_budget
       enabled, whose type has no propose_ad_change (or whose ad-proposal draft switch is off), reads 'Always'.
-- [ ] AA-14b **Switch-over:** point `/agents`, `/agents/:id` (both encodings) and every legacy form in Page frame
+- [x] AA-14b **Switch-over:** point `/agents`, `/agents/:id` (both encodings) and every legacy form in Page frame
   (`?tab=`, `?by=agent`, `?run=`) at the workspace, the drawer and the conversations, with one test per form (`?run=`
   for a run with a team_id comes with AA-20). Delete Agents.tsx, AgentDetail.tsx and the Chat shell. ApprovalCard,
   DenyReason, FixLink and Transcript stay exported from Chat.tsx (Lane › Owns). Move the Agents.test.tsx,
@@ -1677,6 +1677,13 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   Details) writes a new config through `POST /api/conversations/:id/config`, and the next turn starts a new session
   from the decision 10 recap (pre-go-live runs left out); `GET /api/tool-groups`; the house Dialog gains width,
   subtitle, headerExtra and footer; 11 new tests; checked in headless Chrome at 1440 and 1024×680.
+- 2026-10-28 AA-14b Switch-over: `/agents` is the workspace; `LegacyAgent` sends `/agents/<store:role>` (both
+  encodings) to the type's latest conversation or the workspace with its group open (`?expand=`), `?run=` to the run,
+  `?tab=`/`?by=agent` to the settings drawer, and `/agents/w?…` to `/agents?…`; Agents.tsx, AgentDetail.tsx and the
+  Chat shell deleted; the drawer lists the seat's waiting requests; the composer sends a demo-era refusal as a new
+  conversation; the server's run notifications link `/agents?store=`; the old tests moved onto the workspace, the
+  aliases, Transcript and the drawer; the navigation-state test runs through the sidebar's `/agents`; checked in
+  headless Chrome.
 
 ## Blocked
 
@@ -1810,6 +1817,23 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-14b, 2026-10-28) For AA-15 and later:
+  - **Routes** (App.tsx): `/agents` (NAV[1], still the sidebar's AI Agents), `/agents/c/:id` and `/agents/t/:id` render
+    Workspace; `/agents/:id` renders `LegacyAgent` (Workspace.tsx). `agentsUrl` builds `/agents?store=`. Links other
+    modules and the server write as `/agents/<store:role>[?tab=…]` keep working through the alias; nothing else needs
+    to change them.
+  - **Remembered conversation:** only the bare `/agents?store=` URL goes back to the store's last conversation. Any
+    other parameter (`settings`, `deploy`, `expand`, `run`, `change`) opens on the workspace itself, so the drawer and
+    dialogs never get dropped by that redirect.
+  - **Moved, not kept** (by design, the old page's parts the new one doesn't have): the store-health line and squad
+    grid with "N things learned" (health stays on Analytics and the Dashboard), the seat header's "Demo engine" /
+    "Claude Opus 5.5" badges (each conversation's runtime chip and Details show what it runs on), and the Chat shell's
+    "Try again" (the workspace's Retry, Conversation.test). Their tests went with them; the rest moved to
+    `agents/settings.test.tsx`, `components/Chat.test.tsx` (now on `Transcript`), `Conversation.test.tsx`,
+    `Workspace.test.tsx` and `nav.test.ts`.
+  - **Drawer:** the seat's pending requests show above its tabs (`useApprovals`), as AgentDetail did. `AgentSettings`,
+    `AUTONOMY`, `History` and `Memory` are module-private now.
+  - `Chat.tsx` keeps `Transcript`, `FixLink`, `DenyReason`, `ApprovalCard` and `ToolBlock`.
 - (AA-14, 2026-10-28) For AA-14b and later:
   - **Dialog** (ui.tsx): `width`, `subtitle`, `headerExtra`, `footer`. With a footer the dialog is a flex column capped
     at the viewport and only the body scrolls (`open:flex`, so a closed dialog stays hidden). `Segmented` takes
