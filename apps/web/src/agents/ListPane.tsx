@@ -378,6 +378,12 @@ function LoadOlder({ busy, onLoad }: { busy: boolean; onLoad: () => void }) {
   );
 }
 
+/** The letter on a store's colour: near-black on a light one, white on a dark one, whichever contrasts more (WCAG luminance). */
+export function inkOn(hex: string) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b! > 0.19 ? '#111114' : '#ffffff';
+}
+
 /** The store button and its picker: every store with what's going and waiting there. Switching changes only the view. */
 function StoreSwitcher({ store }: { store: Store }) {
   const stores = useStores().data ?? [];
@@ -385,7 +391,7 @@ function StoreSwitcher({ store }: { store: Store }) {
   const others = stores.filter((s) => s.id !== store.id);
   const running = others.reduce((n, s) => n + (counts[s.id]?.running ?? 0), 0);
   const square = (s: Store) => (
-    <span aria-hidden className="grid size-[30px] shrink-0 place-items-center rounded-lg text-[13px] font-bold text-white" style={{ background: s.color }}>
+    <span aria-hidden className="grid size-[30px] shrink-0 place-items-center rounded-lg text-[13px] font-bold" style={{ background: s.color, color: inkOn(s.color) }}>
       {s.name.charAt(0).toUpperCase()}
     </span>
   );

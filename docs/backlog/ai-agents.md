@@ -1577,7 +1577,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - in-order streaming with no duplicate or dropped text across a reconnect (test with the fake socket);
   - the failure matrix: provider disconnected, expired sign-in, rate limit, timeout, unavailable model, Codex missing,
     worker interrupted. Each gets an owner-readable message and an action.
-- [ ] AA-22 **Scale and accessibility:**
+- [x] AA-22 **Scale and accessibility:**
   - one page of rows rendered for 500 conversations, the newest page of a 300-message thread, a scrolling store
     popover for 25 stubbed stores (the demo seed has 3), and 3 concurrent runs streaming correctly: jsdom tests, as
     described under Interface quality;
@@ -1759,6 +1759,15 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   missing, the time limit) gets "Change runtime or model", Claude signed out keeps "Check your Claude login", every
   failure keeps Retry, and Interrupted keeps Resume. 2 server tests, 4 web tests; checked on the dev server with the
   demo engine and in headless Chrome.
+- 2026-10-28 AA-22 Scale and accessibility: jsdom tests prove 500 conversations keep one page of rows plus Pinned
+  until Show older, a 300-message thread keeps the newest 20 until Show earlier messages, a 25-store picker scrolls,
+  starts on the current store and moves with ↑/↓, and three runs stream at once into their own threads across
+  conversation switches with nothing mixed or dropped. A browser audit (contrast against the real backgrounds, controls
+  without a name, focus that doesn't show, sideways scroll) over the conversation, team, empty workspace, Deploy,
+  Create team, the ⋯ menu and the settings drawer's four tabs found one failure: the store letter, white on a light
+  store colour (2.18:1), now near-black or white by luminance. Window widths 1920, 1440, 1366, 1280, 1024×680 and 900
+  keep the pane rules with no sideways scroll and long titles truncated; both drawers open with Enter, take focus,
+  close with Escape and hand focus back. Reduced motion was already global. 5 web tests.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
@@ -1896,6 +1905,16 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-22, 2026-10-28) For AA-23 and later:
+  - **The audit scripts** are in `.agent/` (not in git): `aa22-audit.mjs` (contrast, names, focus, sideways scroll;
+    `AUDIT_OPEN` clicks buttons first), `aa22-sizes.mjs` (pane widths per window size) and `aa22-drawers.mjs` (a
+    drawer's keyboard path), each run through `cdp-drive.mjs`. Rerun them after UI changes in AA-24 and AA-26.
+  - **What the audit doesn't cover:** closed popovers and menus (only open ones are seen), disabled controls (exempt
+    under WCAG 1.4.3), and text over images (none here). Screen-reader names were checked from the DOM, not with a
+    screen reader.
+  - **The shell sidebar** scrolls at 1024×680 (its own height). It's the ui lane's, and it doesn't scroll sideways.
+  - **Streaming in jsdom:** react-query notifies on a timer, so a test asserts streamed text with `findBy…` after
+    sending events, not `getBy…`.
 - (AA-21, 2026-10-28) For AA-22 and later:
   - **Event numbers:** `seq` counts a run's live events from 1 (RunManager slot). It isn't stored: an ended run has
     none, and its stored transcript is the whole of it. A transient retry skips a number on purpose, so a client that
