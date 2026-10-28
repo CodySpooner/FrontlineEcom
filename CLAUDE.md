@@ -35,6 +35,7 @@ dropdown are superseded (the header is a plain title strip). Don't match or rebu
 | `ecosystem` (Codex) | the AI Ecosystem page: `apps/web/src/ecosystem/**`, `apps/web/public/ecosystem/**`, `apps/server/src/routes/ecosystem*.ts` — touch points in `docs/backlog/ecosystem.md` |
 | `image-generation` (Codex, finished) | agent portraits: `apps/web/public/art/agents/**`, `Art.tsx` — touch points in `docs/backlog/image-generation.md` |
 | `knowledge-base` | the Knowledge Base & Research Intelligence feature (`docs/features/knowledge-base.md`): `apps/web/src/pages/Knowledge.tsx`, `apps/web/src/knowledge/**`, `apps/server/src/kb/**`, plus the KB touch points across packages listed in `docs/backlog/knowledge-base.md` (the other lanes are stopped) |
+| `ai-agents` | the AI Agents page redesign (`docs/features/ai-agents.md`): the agents workspace in `apps/web` (`pages/Agents*.tsx`, `AgentDetail.tsx`, `Chat.tsx`, a new `apps/web/src/agents/**`), `apps/server/src/routes/agents*.ts`, the run, engine, role and mission code in `packages/agents`, plus the touch points listed in `docs/backlog/ai-agents.md` (the other lanes are stopped) |
 
 Edit outside your lane only for a tiny unblocking change (an added export, mounting a route). Otherwise append a
 request to the other lane's backlog **Inbox** and stub the dependency behind a small interface so you can keep going.

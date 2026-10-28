@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en"><head><style>
+    .sc-placeholder{background:color-mix(in srgb,currentColor 8%,transparent);
+      border:1px solid color-mix(in srgb,currentColor 50%,transparent);
+      border-radius:2px;box-sizing:border-box;overflow:hidden}
+    @keyframes sc-shine{0%{background-position:100% 50%}100%{background-position:0% 50%}}
+    html.sc-dc-streaming .sc-placeholder,
+    html.sc-dc-streaming .sc-interp.sc-missing{position:relative;
+      background:color-mix(in srgb,currentColor 5%,transparent);
+      border-color:transparent}
+    html.sc-dc-streaming .sc-placeholder::before,
+    html.sc-dc-streaming .sc-interp.sc-missing::before{content:'';
+      position:absolute;inset:0;pointer-events:none;
+      background:linear-gradient(90deg,rgba(217,119,87,0) 25%,rgba(247,225,211,.95) 37%,rgba(217,119,87,0) 63%);
+      background-size:400% 100%;animation:sc-shine 1.4s ease infinite}
+    html.sc-dc-streaming .sc-placeholder:nth-child(n+9 of .sc-placeholder)::before,
+    html.sc-dc-streaming .sc-interp.sc-missing:nth-child(n+9 of .sc-interp.sc-missing)::before{animation:none;
+      background:color-mix(in srgb,currentColor 8%,transparent)}
+    .sc-placeholder-error{padding:4px 8px;font:11px/1.4 ui-monospace,monospace;
+      color:color-mix(in srgb,currentColor 70%,transparent);word-break:break-word}
+    .sc-interp.sc-missing{display:inline-block;width:2em;height:1em;overflow:hidden;
+      vertical-align:text-bottom;background:rgba(255,255,255,.3);border:1px solid rgba(0,0,0,.5);
+      border-radius:2px;box-sizing:border-box;color:transparent;
+      user-select:none}
+    .sc-interp.sc-unresolved{font-family:ui-monospace,monospace;font-size:.85em;
+      color:color-mix(in srgb,currentColor 50%,transparent);
+      background:color-mix(in srgb,currentColor 10%,transparent);border-radius:3px;
+      padding:0 3px}
+    .sc-host.sc-has-error{position:relative}
+    .sc-logic-error{position:absolute;top:8px;left:8px;z-index:2147483647;max-width:60ch;
+      padding:6px 10px;background:#b00020;color:#fff;font:12px/1.4 ui-monospace,monospace;
+      border-radius:4px;white-space:pre-wrap;pointer-events:none}
+    /* Mirrors PRINT_BASELINE_CSS in apps/web deck-stage-export.ts — keep both
+       in sync until dc-runtime regains a build step. */
+    @media print {
+      @page { margin: 0.5cm; }
+      figure, table { break-inside: avoid; }
+      #dc-root, #dc-root > .sc-host { height: auto; }
+      *, *::before, *::after {
+        print-color-adjust: exact; -webkit-print-color-adjust: exact;
+        backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+        animation-delay: -99s !important; animation-duration: .001s !important;
+        animation-iteration-count: 1 !important; animation-fill-mode: both !important;
+        animation-play-state: running !important; transition-duration: 0s !important;
+      }
+    }
+  </style>
+<meta charset="utf-8">
+<title>Concept A · Deploy dialog</title>
+<style>x-dc{display:none!important}</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" data-dc-tpl="1"><style data-dc-tpl="2">
+body{margin:0}
+*{box-sizing:border-box}
+button{font:inherit;cursor:pointer}
+.r{font-family:Inter,system-ui,sans-serif;color:#f0f0f2;background:#050506;width:760px;min-height:1240px;padding:20px 0;display:flex;align-items:center;justify-content:center;font-size:13px;line-height:1.5}
+.dlg{width:688px;height:auto;background:#111114;border:1px solid #2c2c33;border-radius:14px;display:flex;flex-direction:column;box-shadow:0 30px 80px rgba(0,0,0,.6)}
+.ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.lbl{font-size:11px;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:#8b8b94}
+.f{display:flex;flex-direction:column;gap:6px}
+.sel{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border:1px solid #2c2c33;border-radius:8px;background:#0c0c0f;color:#e6e6ea;font-size:13px}
+.role{display:flex;flex-direction:column;gap:1px;padding:8px 10px;border:1px solid #26262c;border-radius:9px;background:#0d0d10;text-align:left;color:#e6e6ea}
+.role.on{border-color:#e01e2d;background:rgba(255,42,58,.07)}
+.role span{font-size:11.5px;color:#8b8b94}
+.seg{display:flex;padding:3px;border:1px solid #26262c;border-radius:9px;background:#0c0c0f;gap:2px}
+.seg button{flex:1;height:28px;border:0;border-radius:6px;background:transparent;color:#a9a9b2;font-size:12.5px;display:flex;align-items:center;justify-content:center;gap:6px}
+.seg button.on{background:#232329;color:#fff}
+.inp{height:34px;padding:0 10px;border:1px solid #2c2c33;border-radius:8px;background:#0c0c0f;color:#f0f0f2;font:inherit;font-size:13px;width:100%}
+.disc{border:1px solid #24242a;border-radius:10px}
+.dh{display:flex;align-items:center;gap:8px;width:100%;padding:9px 12px;border:0;background:transparent;color:#e6e6ea;font-size:13px;font-weight:500;text-align:left}
+.dh .s{margin-left:auto;font-size:12px;color:#8b8b94;font-weight:400}
+.kv{display:flex;align-items:center;gap:8px;font-size:12.5px;color:#c4c4cc;padding:4px 0}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;height:34px;padding:0 14px;border-radius:8px;border:1px solid #2c2c33;background:#17171b;color:#e6e6ea;font-size:13px;font-weight:500}
+.btn.p{background:#e01e2d;border-color:#e01e2d;color:#fff}
+.tag{font-size:10.5px;font-weight:600;border-radius:4px;padding:1px 6px;color:#c4c4cc;background:#1d1d22}
+.sw{width:30px;height:18px;border-radius:9px;background:#3ddc84;position:relative;flex:none}
+.sw i{position:absolute;top:2px;right:2px;width:14px;height:14px;border-radius:50%;background:#08080a}
+.lock{color:#8b8b94;font-size:11.5px;margin-left:auto;display:flex;align-items:center;gap:5px}
+</style></head>
+<body>
+<div id="dc-root"><div class="sc-host" data-sc-name="A-Deploy"><div data-dc-tpl="3" class="r"><section data-dc-tpl="4" class="dlg" role="dialog" aria-label="Deploy an agent"><div data-dc-tpl="5" style="display: flex; align-items: flex-start; padding: 18px 20px 14px; border-bottom: 1px solid rgb(31, 31, 36);"><div data-dc-tpl="6" style="flex: 1 1 0%;"><div data-dc-tpl="7" style="font-size: 16px; font-weight: 600;">Deploy an agent</div><div data-dc-tpl="8" style="font-size: 12.5px; color: rgb(139, 139, 148);">Starts a new conversation. Everything below can be changed later except the store.</div></div><span data-dc-tpl="9" style="font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: rgb(242, 184, 75); border: 1px dashed rgba(242, 184, 75, 0.55); border-radius: 999px; padding: 2px 8px; margin-right: 10px;">Demo data</span><button data-dc-tpl="10" aria-label="Close" style="width: 28px; height: 28px; border: 0px; background: transparent; color: rgb(139, 139, 148); display: flex; align-items: center; justify-content: center;"><svg data-dc-tpl="11" class="ic" viewBox="0 0 24 24" aria-hidden="true"><path data-dc-tpl="12" d="M18 6L6 18M6 6l12 12"></path></svg></button></div><div data-dc-tpl="13" style="flex: 1 1 0%; overflow: hidden; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px;"><div data-dc-tpl="14" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;"><div data-dc-tpl="15" class="f"><span data-dc-tpl="16" class="lbl">Store</span><div data-dc-tpl="17" class="sel"><span data-dc-tpl="18" style="width: 16px; height: 16px; border-radius: 4px; background: rgb(194, 70, 28);"></span>Truck Accessories Store<svg data-dc-tpl="19" class="ic" viewBox="0 0 24 24" aria-hidden="true" style="margin-left: auto; color: rgb(139, 139, 148);"><path data-dc-tpl="20" d="M6 9l6 6 6-6"></path></svg></div></div><div data-dc-tpl="21" class="f"><span data-dc-tpl="22" class="lbl">Start from a preset</span><div data-dc-tpl="23" class="sel">Campaign planning<span data-dc-tpl="24" class="tag">Default</span><svg data-dc-tpl="25" class="ic" viewBox="0 0 24 24" aria-hidden="true" style="margin-left: auto; color: rgb(139, 139, 148);"><path data-dc-tpl="26" d="M6 9l6 6 6-6"></path></svg></div></div></div><div data-dc-tpl="27" class="f"><div data-dc-tpl="28" style="display: flex; align-items: center;"><span data-dc-tpl="29" class="lbl">Agent type</span><a data-dc-tpl="30" href="#" style="margin-left: auto; font-size: 12px; color: rgb(255, 107, 118);">+ Custom role</a></div><div data-dc-tpl="31" style="display: grid; grid-template-columns: repeat(4, minmax(0px, 1fr)); gap: 8px;"><button data-dc-tpl="32" class="role">Product Researcher<span data-dc-tpl="33">Opportunities, evidence</span></button><button data-dc-tpl="34" class="role on">Ad Strategist<span data-dc-tpl="35">Campaigns and tests</span></button><button data-dc-tpl="36" class="role">Creative Strategist<span data-dc-tpl="37">Concepts and hooks</span></button><button data-dc-tpl="38" class="role">Copywriter<span data-dc-tpl="39">Pages, ads, emails</span></button><button data-dc-tpl="40" class="role">Analytics Specialist<span data-dc-tpl="41">Measured vs. guessed</span></button><button data-dc-tpl="42" class="role">Store Developer<span data-dc-tpl="43">Theme, pages, speed</span></button><button data-dc-tpl="44" class="role">Marketing Strategist<span data-dc-tpl="45">Positioning, calendar</span></button><button data-dc-tpl="46" class="role">General Researcher<span data-dc-tpl="47">Open questions</span></button></div></div><div data-dc-tpl="48" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;"><div data-dc-tpl="49" class="f"><span data-dc-tpl="50" class="lbl">Runtime</span><div data-dc-tpl="51" class="seg"><button data-dc-tpl="52" class="on"><span data-dc-tpl="53" style="width: 7px; height: 7px; border-radius: 50%; background: rgb(61, 220, 132);"></span>Claude</button><button data-dc-tpl="54"><span data-dc-tpl="55" style="width: 7px; height: 7px; border-radius: 50%; background: rgb(61, 220, 132);"></span>Codex</button></div></div><div data-dc-tpl="56" class="f"><span data-dc-tpl="57" class="lbl">Model</span><div data-dc-tpl="58" class="sel">Opus 5.5<span data-dc-tpl="59" style="font-size: 11.5px; color: rgb(139, 139, 148);">most capable</span><svg data-dc-tpl="60" class="ic" viewBox="0 0 24 24" aria-hidden="true" style="margin-left: auto; color: rgb(139, 139, 148);"><path data-dc-tpl="61" d="M6 9l6 6 6-6"></path></svg></div></div></div><div data-dc-tpl="62" class="f"><span data-dc-tpl="63" class="lbl">Effort</span><div data-dc-tpl="64" class="seg"><button data-dc-tpl="65">Low</button><button data-dc-tpl="66">Medium</button><button data-dc-tpl="67" class="on">High</button><button data-dc-tpl="68">Extra high</button><button data-dc-tpl="69">Max</button></div><span data-dc-tpl="70" style="font-size: 11.5px; color: rgb(139, 139, 148);">Models and effort levels come from your Claude connection, checked 2 min ago. Switching to Codex reloads both lists.</span></div><div data-dc-tpl="71" class="f"><div data-dc-tpl="72" style="display: flex; align-items: center;"><span data-dc-tpl="73" class="lbl">Conversation title</span><span data-dc-tpl="74" class="tag" style="margin-left: 8px;">Suggested</span></div><input data-dc-tpl="75" class="inp" aria-label="Conversation title" value="Holiday campaign planning"></div><div data-dc-tpl="76" class="f"><span data-dc-tpl="77" class="lbl">Objective</span><textarea data-dc-tpl="78" class="inp" aria-label="Objective" rows="3" style="height: 70px; padding: 8px 10px; resize: none;">Plan the holiday campaign for tonneau covers and bed organizers. Test plan before any spend; first two weeks under $1,500.</textarea></div><div data-dc-tpl="79" class="disc"><button data-dc-tpl="80" class="dh" aria-expanded="false"><svg data-dc-tpl="81" class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; color: rgb(139, 139, 148);"><path data-dc-tpl="82" d="M9 6l6 6-6 6"></path></svg>Tools and knowledge<span data-dc-tpl="83" class="s">Store + General knowledge · Meta Ads, Shopify, web</span></button></div><div data-dc-tpl="84" class="disc"><button data-dc-tpl="85" class="dh" aria-expanded="true"><svg data-dc-tpl="86" class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 14px; height: 14px; color: rgb(139, 139, 148);"><path data-dc-tpl="87" d="M6 9l6 6 6-6"></path></svg>Permissions and limits<span data-dc-tpl="88" class="s">Asks before spending</span></button><div data-dc-tpl="89" style="padding: 0px 14px 10px 34px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 20px;"><div data-dc-tpl="90" class="kv">Ask before spending money<span data-dc-tpl="91" class="lock"><svg data-dc-tpl="92" class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px;"><path data-dc-tpl="93" d="M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4"></path></svg>Always</span></div><div data-dc-tpl="94" class="kv">Ask before publishing<span data-dc-tpl="95" class="lock"><svg data-dc-tpl="96" class="ic" viewBox="0 0 24 24" aria-hidden="true" style="width: 12px; height: 12px;"><path data-dc-tpl="97" d="M5 11h14v10H5zM8 11V7a4 4 0 0 1 8 0v4"></path></svg>Always</span></div><div data-dc-tpl="98" class="kv">Draft campaigns in Meta<span data-dc-tpl="99" class="sw" style="margin-left: auto;"><i data-dc-tpl="100"></i></span></div><div data-dc-tpl="101" class="kv">Save findings to knowledge<span data-dc-tpl="102" style="margin-left: auto; font-size: 12px; color: rgb(169, 169, 178);">Ask me</span></div><div data-dc-tpl="103" class="kv">Budget for this run<span data-dc-tpl="104" style="margin-left: auto; font-size: 12px; color: rgb(230, 230, 234);">$3.00</span></div><div data-dc-tpl="105" class="kv">Stop after<span data-dc-tpl="106" style="margin-left: auto; font-size: 12px; color: rgb(230, 230, 234);">20 min</span></div></div></div></div><div data-dc-tpl="107" style="display: flex; align-items: center; gap: 10px; padding: 14px 20px; border-top: 1px solid rgb(31, 31, 36);"><span data-dc-tpl="108" style="font-size: 12px; color: rgb(139, 139, 148); flex: 1 1 0%;">Checked by the app before it starts. An unsupported combination is refused with the reason.</span><button data-dc-tpl="109" class="btn">Cancel</button><button data-dc-tpl="110" class="btn p">Start conversation</button></div></section></div></div></div>
+
+
+
+</body></html>
