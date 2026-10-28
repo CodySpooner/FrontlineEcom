@@ -1201,6 +1201,14 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from product-research) A `product` ConversationContext kind, so a conversation opened from Product Research
+  shows "Opened from <product>" (product-research decision 15).
+- [ ] (from product-research) Agent WebFetch through the shared `kbFetch` instance (`routes/agents.ts`), so agents
+  get the same SSRF, redirect, size and robots rules as product previews (product-research decision 12).
+- [ ] (from product-research) Include `/api/pr/*` in AA-23's security sweep (guarded since PR-02).
+- [ ] (from product-research, FYI, done) T6 shipped in PR-03: `recordFind` in `routes/agents.ts` calls `mirrorFind`
+  after its INSERT, and `ToolEnv.recordFind` in `packages/agents/src/tools.ts` now also receives the run id
+  (`ctx.runId`). A demo-engine run's find is not mirrored.
 
 ## Items
 
