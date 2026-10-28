@@ -60,7 +60,7 @@ the approval and cap-counter sections of `packages/agents/src/tools.ts`, `apps/s
   propose_price_change, request_approval, the onApproved dispatch, applyAdChange, applyPriceChange, addProducts,
   publishDraft, requestDraftProduct, the KB `kb.research` budget reservations, run budget shares, autopilot caps.
   Write the map under Done (one line per path: guard → write → what's recorded). `pnpm check` baseline green.
-- [ ] CH-02 A change that never happened gets scored: `applyAdChange`'s early return (bad payload / missing store,
+- [x] CH-02 A change that never happened gets scored: `applyAdChange`'s early return (bad payload / missing store,
   `agents-actions.ts` ~101) writes no `not-applied:` marker, so `checkAdOutcomes` (`agents-outcomes.ts` ~62-69) scores
   it and its "outcome" reaches store memory and KB evidence (KB-19). Mark it not-applied; test first. Check the
   price and product paths for the same gap.
@@ -157,6 +157,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-02: ad/price/product early exits and empty/failed product creation now record `not-applied`; missing products start no price test, and empty creates start no developer run. Eleven failing regressions first, then 82 focused tests and `pnpm check` green (229 files / 1,699 tests).
 
 - 2026-10-28 CH-01 write-path audit: baseline `pnpm check` green (228 files / 1,688 tests); all existing other lane worktrees have `.agent/STOP`; Settings remains hands off.
   - `requestApproval`: current autonomy + store activation/currency guards → durable pending approval → decision event and owner notification; only trusted callers opt into autopilot, whose computed amount is counted synchronously before yielding.

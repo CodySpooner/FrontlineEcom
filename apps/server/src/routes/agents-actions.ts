@@ -95,14 +95,15 @@ const STALE_DAYS = 3;
 const moved = (from: number, now: number) => Math.abs(now - from) > from * 0.01;
 
 export async function applyAdChange(db: Db, a: ApprovalRequest, write: WriteAd) {
+  // Nothing changes (already off, refused, failed): `not-applied` keeps checkAdOutcomes from scoring it.
+  const skip = () => void once(db, `not-applied:${a.id}`);
   const p = (a.action.payload ?? {}) as { network?: unknown; campaignId?: unknown; from?: unknown; to?: unknown };
   const store = getStore(db, a.storeId);
   const pause = a.action.kind === 'ads.pause_campaign';
-  if (!store || typeof p.campaignId !== 'string' || (!pause && !(typeof p.to === 'number' && p.to >= 1 && typeof p.from === 'number'))) return;
+  if (!store || typeof p.campaignId !== 'string' || (!pause && !(typeof p.to === 'number' && p.to >= 1 && typeof p.from === 'number'))) return skip();
   const c = db.prepare('SELECT network, daily_budget, status FROM campaigns WHERE id = ? AND store_id = ?').get(p.campaignId, store.id);
+  if (!c) return skip();
   const network = (typeof p.network === 'string' ? p.network : c?.network) as AdNetwork;
-  // Nothing changes (already off, refused, failed): `not-applied` keeps checkAdOutcomes from scoring it.
-  const skip = () => void once(db, `not-applied:${a.id}`);
   if (pause && c && IDLE_CAMPAIGN_STATUSES.includes(String(c.status))) return skip(); // Meta's delivering ones read in_process, with_issues…
   // A real account's results move in days: a change asked on last week's numbers is asked again, not applied.
   const days = Math.floor((Date.parse(a.decidedAt ?? new Date().toISOString()) - Date.parse(a.createdAt)) / 86_400_000);
@@ -146,7 +147,7 @@ export type SetPrice = (storeId: string, productId: string, change: { price: num
 export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: SetPrice) {
   const p = (a.action.payload ?? {}) as { productId?: unknown; title?: unknown; from?: unknown; to?: unknown; compareAt?: unknown };
   const store = getStore(db, a.storeId);
-  if (!store || typeof p.productId !== 'string' || typeof p.to !== 'number' || typeof p.from !== 'number') return;
+  if (!store || typeof p.productId !== 'string' || typeof p.to !== 'number' || typeof p.from !== 'number') return void once(db, `not-applied:${a.id}`);
   // A live store's sales and its competitors' prices move in weeks: a test asked on two-week-old numbers is asked again.
   const days = Math.floor((Date.parse(a.decidedAt ?? new Date().toISOString()) - Date.parse(a.createdAt)) / 86_400_000);
   if (store.connected && days > 14) {
@@ -155,6 +156,7 @@ export async function applyPriceChange(db: Db, a: ApprovalRequest, setPrice: Set
     return;
   }
   const now = db.prepare('SELECT price FROM products WHERE store_id = ? AND id = ?').get(store.id, p.productId)?.price;
+  if (now == null) return void once(db, `not-applied:${a.id}`);
   if (now != null && moved(p.from, Number(now))) {
     once(db, `not-applied:${a.id}`); // squad_log: approved, not shipped
     notify(db, { kind: 'info', title: `Not applied: "${a.title}"`, body: `The price moved since this was asked (${cash(p.from, store.currency)} → now ${cash(Number(now), store.currency)}). Ask the Analytics Specialist again if it still makes sense.`, storeId: store.id, link: `/agents/${a.agentId}` });
@@ -203,9 +205,10 @@ export type CreateProducts = (storeId: string, products: Omit<AddProduct, 'resea
  * connected stores as drafts on the platform; then their Store Developer drafts each page. Returns the titles added.
  */
 export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId: string, task: string) => unknown, createRemote: CreateProducts): Promise<string[]> {
+  const skip = (): string[] => { once(db, `not-applied:${a.id}`); return []; };
   const store = getStore(db, a.storeId);
   const products = ((a.action.payload as { products?: unknown })?.products ?? []) as AddProduct[];
-  if (!store) return [];
+  if (!store || !Array.isArray(products)) return skip();
   // One an earlier request already added and the store still has (the same find asked twice, both approved) isn't made twice.
   const have = db.prepare(
     'SELECT 1 FROM product_tests t JOIN products p ON p.store_id = t.store_id AND p.id = t.product_id WHERE t.store_id = ? AND t.approval_id != ? AND lower(t.title) = lower(?)',
@@ -215,7 +218,7 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
   const valid = products.filter(
     (p) => typeof p?.title === 'string' && p.title.trim() && typeof p.price === 'number' && p.price > 0 && !adding.has(key(p)) && !have.get(store.id, a.id, p.title.trim()),
   );
-  if (!valid.length) return [];
+  if (!valid.length) return skip();
   const titles = valid.map((p) => p.title.trim());
   let added: { id: string; title: string }[];
   if (store.connected) {
@@ -225,7 +228,7 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
       added = await createRemote(store.id, valid.map((p, i) => ({ title: titles[i]!, price: p.price, compareAt: p.compareAt, cost: p.cost })));
     } catch (e) {
       notify(db, { kind: 'error', title: `Couldn't add products to ${store.name}`, body: `${(e as Error).message}. Approved: ${titles.join(', ')}. Add any not created yet by hand.`, storeId: store.id, link: '/research' });
-      return [];
+      return skip();
     } finally {
       for (const k of claimed) adding.delete(k); // product_tests (written below, before any other await) answers from here on
     }
@@ -241,6 +244,7 @@ export async function addProducts(db: Db, a: ApprovalRequest, startRun: (agentId
       insert.run(store.id, id, titles[i]!, img == null ? null : String(img), p.price, p.compareAt ?? null, p.cost ?? 0);
     }
   }
+  if (!added.length) return skip();
   // Remembered so the product can be judged on its first 14 days of sales (checkProductOutcomes).
   const test = db.prepare('INSERT OR IGNORE INTO product_tests (store_id, product_id, approval_id, agent_id, title, added_on) VALUES (?, ?, ?, ?, ?, ?)');
   for (const p of added) test.run(store.id, p.id, a.id, a.agentId, p.title, localDate(new Date(), storeZone(db, store.id)));
