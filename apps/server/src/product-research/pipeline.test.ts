@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { ApprovalRequest, PrBrief, PrHistoryRow, PrLinks, PrProductDetail, PrReportBody, PrTask } from '@frontline/shared';
+import type { ApprovalRequest, PrBrief, PrHistoryRow, PrLinks, PrProductDetail, PrReportBody, PrSpecialistTeam, PrTask, SquadMission } from '@frontline/shared';
 import { beforeEach, expect, test } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
@@ -104,4 +104,31 @@ test('Prepare draft product: an approval request only (T9), one per product; app
   const links = (await send<PrLinks>('GET', url('/links'))).body.links;
   expect(links.map((l) => [l.kind, l.label])).toEqual([['store_product', 'Dog travel water bowl (draft)']]);
   expect((await send('POST', url('/draft-product'))).body).toEqual({ error: 'Already in Pawsome Gear: Dog travel water bowl.' });
+});
+
+test('Ask a specialist: a team on the AI Agents team engine, Product Researcher leading, from stored facts only, linked back to the product', async () => {
+  expect((await send('GET', url('/specialist').replace('?', '?ask=pricing&'))).status).toBe(400);
+  const bare = (await send<PrSpecialistTeam>('GET', `/api/pr/products/${p}/specialist?store=pawsome&ask=positioning`)).body;
+  expect(bare.participants).toEqual([{ type: 'product_hunter' }, { type: 'ad_strategist' }]);
+  expect(bare.objective).toContain('- Base economics: incomplete (missing selling price, supplier cost, shipping, store fees, store fee per order).');
+  await send('PUT', url('/economics'), { base: { price: 2900, supplierCost: 800, shipping: 400, feePercent: 3, feePerOrder: 30 } });
+  await send('PUT', url('/brief'), { fields: { targetCustomer: 'Dog owners who hike' } });
+  const team = (await send<PrSpecialistTeam>('GET', `/api/pr/products/${p}/specialist?store=pawsome&ask=measurement`)).body;
+  expect(team.title).toBe('Dog travel water bowl: measurement plan');
+  expect(team.participants).toEqual([{ type: 'product_hunter' }, { type: 'market_analyst' }]);
+  expect(team.objective).toMatch(/^Asked from Product Research about "Dog travel water bowl"\. Analytics Specialist: propose a measurement plan/);
+  expect(team.objective).toContain('Do not launch, publish or spend anything.');
+  expect(team.objective).toMatch(/- Base economics \(the owner's scenario\): selling price \$29\.00, contribution before ads \$[\d.]+ per order, break-even ROAS [\d.]+×\./);
+  expect(team.objective).toContain("- Owner's test brief, target customer: Dog owners who hike");
+
+  // The team itself is the AI Agents route's (the client starts it), then linked here.
+  const made = await send<SquadMission>('POST', '/api/teams?store=pawsome', { clientRequestId: randomUUID(), ...team });
+  expect(made.status).toBe(201);
+  expect(made.body.participants?.map((x) => x.type)).toEqual(['product_hunter', 'market_analyst']);
+  const links = (await send<PrLinks>('POST', url('/links'), { kind: 'team', refId: made.body.id })).body.links;
+  expect(links.map((l) => [l.kind, l.refId, l.label])).toEqual([['team', made.body.id, 'Dog travel water bowl: measurement plan']]);
+  expect((await send<PrHistoryRow[]>('GET', url('/history'))).body[0]).toMatchObject({ kind: 'team', reason: 'Asked a specialist: Dog travel water bowl: measurement plan' });
+
+  const theirs = await send<SquadMission>('POST', '/api/teams?store=glow', { clientRequestId: randomUUID(), title: 'Glow team', objective: 'Something for Glow Haus to do.', participants: [{ type: 'product_hunter' }] });
+  expect((await send('POST', url('/links'), { kind: 'team', refId: theirs.body.id })).status).toBe(404); // another store's team
 });

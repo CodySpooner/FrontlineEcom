@@ -8,6 +8,7 @@ import { Button, ErrorState, LoadingState } from '../components/ui';
 import { ago } from '../lib/format';
 import { useChangeStage, usePrAgents, useReports, useRetryTask, useTasks } from './api';
 import { Pill, TASK_TONE, TONE } from './Card';
+import { Specialists } from './Specialists';
 
 const ACTIVE: PrTaskStatus[] = ['queued', 'running', 'waiting_for_you', 'awaiting_approval'];
 const REC_TONE: Record<PrRecommendation, keyof typeof TONE> = { research_further: 'run', request_sample: 'run', shortlist: 'good', monitor: 'muted', reject: 'bad' };
@@ -62,6 +63,7 @@ function StoreResearch({ id, store, stage }: { id: string; store: string; stage:
           </div>
         </section>
       )}
+      <Specialists id={id} store={store} />
       <section>
         <Heading>{`Reports (${reports.data.length})`}</Heading>
         {reports.data.length ? (

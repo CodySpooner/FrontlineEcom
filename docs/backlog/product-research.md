@@ -792,7 +792,7 @@ STOP.
   AA-18 has shipped, findings are saved through `captureFinding` (deduped, unreviewed) and the owner can save a stage
   decision as a store-scoped card; until then this part sits under Blocked "waits for ai-agents AA-18". General
   findings and store decisions stay separate. Demo-engine reports never feed the KB.
-- [ ] PR-24 **Collaboration:** "Ask a specialist" (Ad Strategist for positioning, Analytics Specialist for a measurement
+- [x] PR-24 **Collaboration:** "Ask a specialist" (Ad Strategist for positioning, Analytics Specialist for a measurement
   plan) through the AI Agents team engine once AA-19 and AA-20 have shipped, with assignments, outputs and the
   consolidated result linked to the product. Until then the control is absent and this sits under Blocked.
 - [ ] PR-25 **Outcomes** (spec §12): link sampled, listed, testing, scaled and rejected products to `product_tests`, orders
@@ -1017,6 +1017,13 @@ STOP.
   General; a demo report, a hypothesis and an app-only reference feed nothing. History's "Save decision to Knowledge
   Base" keeps an owner's stage decision as the owner's own card under "Product decisions" (User-Provided, Hypothesis
   stage), once, then links to it. API: `POST …/history/:hid/knowledge`. Tests: 3 API, 1 page.
+- 2026-10-28 PR-24 Collaboration: the Research tab's "Ask a specialist" (Ad Strategist: positioning; Analytics
+  Specialist: measurement plan) shows the team's objective, built from stored facts only (product, store audience,
+  base economics or what they lack, the owner's saved brief), then Start team creates it through AA-19's
+  `POST /api/teams` with Product Researcher leading, and links it to the product (`pr_outcomes` kind `team`, a History
+  row). Each linked team shows its status, the assignments with their outputs, the consolidated answer and a link to
+  the team in AI Agents. API: `GET …/specialist?ask=`, `POST …/links` takes `kind: 'team'` (another store's team: 404).
+  Tests: 1 API (it creates a real team on the scripted engine), 1 page.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1048,6 +1055,13 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-24 as built.** The team runs entirely on the AI Agents team engine (AA-19/AA-20): this lane only prepares the
+  objective and links the result, so budgets, retries, approvals and the team view stay theirs. The objective says
+  everything the team returns is a proposal, not evidence, and forbids launching, publishing or spending; what a
+  team says is never written into a report or the KB by this lane. The client creates then links in two calls; if
+  the link call fails the team still exists in AI Agents and the error shows (a retry of Start team would make a
+  second team, so the error tells the owner to look in AI Agents). Dev-app check was read-only: picking an ask only
+  GETs the objective (screenshot `.agent/shots/pr24-specialist.png`); no team was started on the dev DB.
 - **PR-23 as built.** Findings and decisions stay apart by category, type and author: findings are agent Hypothesis
   cards in "Findings" (status proposed, so no agent reads one until the owner accepts it), decisions are the owner's
   User-Provided cards in "Product decisions" (active, Hypothesis stage: a decision is not a measured result). A

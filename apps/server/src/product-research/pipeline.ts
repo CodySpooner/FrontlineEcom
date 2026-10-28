@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createCard, ensureCategoryPath } from '@frontline/agents';
-import { econInputs, PR_BRIEF_FIELDS, PR_STAGE_LABEL, PRODUCT_WRITE_PLATFORMS, type PrBrief, type PrBriefField, type PrLinks, type PrStage, type Store } from '@frontline/shared';
+import { econInputs, PR_BRIEF_FIELDS, PR_BRIEF_LABEL, PR_ECON_LABEL, PR_SPECIALIST_ASKS, PR_STAGE_LABEL, PRODUCT_WRITE_PLATFORMS, type PrBrief, type PrBriefField, type PrLinks, type PrSpecialistAsk, type PrSpecialistTeam, type PrStage, type Store } from '@frontline/shared';
 import { approvalsHook, getApproval } from '../approvals';
 import type { Db } from '../db';
 import { productEconomics, baseEconomics } from './economics';
@@ -32,11 +32,15 @@ export function productLinks(db: Db, store: Store, id: string): PrLinks {
   const exp = db.prepare(`SELECT e.id, e.metric, e.status, c.title FROM kb_experiments e JOIN kb_cards c ON c.id = e.card_id WHERE e.store_id = ? ORDER BY e.created_at DESC LIMIT 50`).all(store.id);
   const label = (e: Record<string, unknown>) => `${String(e.title)}: ${String(e.metric)} (${String(e.status)})`;
   const links = db
-    .prepare(`SELECT kind, ref_id, created_at FROM pr_outcomes WHERE store_id = ? AND product_id = ? AND kind IN ('store_product', 'experiment') ORDER BY created_at, rowid`)
+    .prepare(`SELECT kind, ref_id, created_at FROM pr_outcomes WHERE store_id = ? AND product_id = ? AND kind IN ('store_product', 'experiment', 'team') ORDER BY created_at, rowid`)
     .all(store.id, id)
     .map((r) => {
-      const kind = String(r.kind) as 'store_product' | 'experiment';
+      const kind = String(r.kind) as PrLinks['links'][number]['kind'];
       const refId = String(r.ref_id);
+      if (kind === 'team') {
+        const t = db.prepare(`SELECT title FROM squad_missions WHERE id = ? AND store_id = ? AND kind = 'team'`).get(refId, store.id);
+        return { kind, refId, label: t ? String(t.title) : 'A team that is gone', at: String(r.created_at) };
+      }
       const name =
         kind === 'store_product'
           ? db.prepare('SELECT title, status FROM products WHERE store_id = ? AND id = ?').get(store.id, refId)
@@ -44,6 +48,49 @@ export function productLinks(db: Db, store: Store, id: string): PrLinks {
       return { kind, refId, label: !name ? 'No longer in the store' : kind === 'store_product' ? `${String(name.title)}${name.status === 'draft' ? ' (draft)' : ''}` : label(name), at: String(r.created_at) };
     });
   return { links, experiments: exp.map((e) => ({ id: String(e.id), label: label(e) })) };
+}
+
+/** PR-24: links a team started from the product ("Ask a specialist"); only one of this store's teams. */
+export function linkTeam(db: Db, store: Store, id: string, teamId: string, now = new Date()): Result {
+  const t = db.prepare(`SELECT title FROM squad_missions WHERE id = ? AND store_id = ? AND kind = 'team'`).get(teamId, store.id);
+  if (!t) return { error: 'team not found', status: 404 };
+  const added = db.prepare(`INSERT OR IGNORE INTO pr_outcomes (id, store_id, product_id, kind, ref_id, created_at) VALUES (?, ?, ?, 'team', ?, ?)`).run(randomUUID(), store.id, id, teamId, now.toISOString()).changes;
+  if (added) history(db, { storeId: store.id, productId: id, kind: 'team', reason: `Asked a specialist: ${String(t.title)}`, at: now });
+  return null;
+}
+
+/**
+ * PR-24: the team "Ask a specialist" starts on the AI Agents team engine: Product Researcher leads and consolidates,
+ * the specialist contributes. The objective carries only stored facts, each labelled, and the owner's brief if saved.
+ */
+export function specialistTeam(db: Db, store: Store, id: string, ask: PrSpecialistAsk): PrSpecialistTeam {
+  const a = PR_SPECIALIST_ASKS[ask];
+  const p = db.prepare('SELECT title, category FROM pr_products WHERE id = ?').get(id)!;
+  const title = String(p.title);
+  const econ = baseEconomics(db, store, id);
+  const price = econInputs(productEconomics(db, store, id), 'base').price;
+  const brief = db.prepare('SELECT fields_json FROM pr_briefs WHERE store_id = ? AND product_id = ? ORDER BY updated_at DESC LIMIT 1').get(store.id, id);
+  const fields = brief ? (JSON.parse(String(brief.fields_json)) as Partial<Record<PrBriefField, string>>) : {};
+  const roas = (r: number | null) => (r === null ? 'none (contribution not above zero)' : `${r.toFixed(2)}×`);
+  const facts = [
+    `Product: ${title} (category: ${p.category == null ? 'unknown' : String(p.category)}).`,
+    `Store: ${store.name}; audience: ${getProfile(db, store).audience ?? 'not set'}.`,
+    econ.figures && price !== null
+      ? `Base economics (the owner's scenario): selling price ${money(price, store.currency)}, contribution before ads ${money(econ.figures.before, store.currency)} per order, break-even ROAS ${roas(econ.figures.breakEvenRoas)}.`
+      : `Base economics: incomplete (missing ${econ.missing.map((k) => PR_ECON_LABEL[k].toLowerCase()).join(', ')}).`,
+    ...PR_BRIEF_FIELDS.filter((k) => fields[k]).map((k) => `Owner's test brief, ${PR_BRIEF_LABEL[k].toLowerCase()}: ${fields[k]!.slice(0, 400)}`),
+  ];
+  const job =
+    ask === 'positioning'
+      ? `${a.who}: propose the positioning for this product in this store and three ad angles to test, each with the audience it targets, the hook and the creative it needs.`
+      : `${a.who}: propose a measurement plan for a first test: the metrics, the tracking each needs, the window and minimum sample, and stop / continue thresholds tied to the break-even ROAS above.`;
+  const objective = [
+    `Asked from Product Research about "${title}". ${job}`,
+    'Product Researcher leads: plan the work, then consolidate one answer for the owner. Everything you propose is a proposal, not evidence; say what is unknown. Do not launch, publish or spend anything.',
+    'Stored facts (from the app, not checked by you):',
+    ...facts.map((f) => `- ${f}`),
+  ].join('\n');
+  return { title: `${title}: ${a.label.toLowerCase()}`.slice(0, 200), objective: objective.slice(0, 4000), participants: [{ type: 'product_hunter' }, { type: a.type }] };
 }
 
 /** Links or unlinks one of the store's KB experiments (History keeps both). */

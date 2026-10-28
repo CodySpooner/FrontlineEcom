@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ApprovalRequest, ConversationConfigInput, PrAgentRow, PrBrief, PrBriefField, PrLinks, PrComparison, PrComparisonInput, PrDiscovery, PrEconomics, PrEconOverrides, PrMatchAction, PrMatches, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask, PrWatch, PrWatchPrefs } from '@frontline/shared';
+import type { ApprovalRequest, ConversationConfigInput, PrAgentRow, PrBrief, PrBriefField, PrLinks, PrSpecialistAsk, PrSpecialistTeam, PrComparison, PrComparisonInput, PrDiscovery, PrEconomics, PrEconOverrides, PrMatchAction, PrMatches, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask, PrWatch, PrWatchPrefs } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -77,7 +77,10 @@ export const useWatch = (id: string, store: string | null) => usePrWrite<{ on: b
 /** The pipeline's owner fields (PR-22), store scope: owner, linked outcomes, the test brief, the draft product request. */
 export const useSetOwner = (id: string, store: string) => usePrWrite<{ owner: string }>(() => `/api/pr/products/${enc(id)}/owner?${scope(store)}`, 'PUT');
 export const useLinks = (id: string, store: string) => useQuery({ queryKey: ['pr', 'links', store, id], queryFn: () => api<PrLinks>(`/api/pr/products/${enc(id)}/links?${scope(store)}`) });
-export const useLinkExperiment = (id: string, store: string) => usePrWrite<{ kind: 'experiment'; refId: string }, PrLinks>(() => `/api/pr/products/${enc(id)}/links?${scope(store)}`);
+export const useAddLink = (id: string, store: string) => usePrWrite<{ kind: 'experiment' | 'team'; refId: string }, PrLinks>(() => `/api/pr/products/${enc(id)}/links?${scope(store)}`);
+/** PR-24: the team "Ask a specialist" would start, from stored data (fetched once the owner picks an ask). */
+export const useSpecialistTeam = (id: string, store: string, ask: PrSpecialistAsk | null) =>
+  useQuery({ queryKey: ['pr', 'specialist', store, id, ask], queryFn: () => api<PrSpecialistTeam>(`/api/pr/products/${enc(id)}/specialist?${scope(store)}&ask=${ask}`), enabled: !!ask });
 export const useUnlink = (id: string, store: string) => usePrWrite<{ refId: string }, PrLinks>((b) => `/api/pr/products/${enc(id)}/links/${enc(b.refId)}?${scope(store)}`, 'DELETE');
 export const useBrief = (id: string, store: string) => useQuery({ queryKey: ['pr', 'brief', store, id], queryFn: () => api<PrBrief>(`/api/pr/products/${enc(id)}/brief?${scope(store)}`) });
 export const useSaveBrief = (id: string, store: string) => usePrWrite<{ fields: Record<PrBriefField, string> }, PrBrief>(() => `/api/pr/products/${enc(id)}/brief?${scope(store)}`, 'PUT');

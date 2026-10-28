@@ -19,7 +19,7 @@ import { addWatch, checkWatch, listWatches, ownWatch, parsePrefs } from './alert
 import { runDue, stoppedReason, syncNow } from './jobs';
 import { cachedImage, listingImageRef, queueImage } from './images';
 import { checkUrl, ownerDetails, preview } from './preview';
-import { getBrief, linkExperiment, parseBrief, productLinks, requestDraftProduct, saveBrief, saveDecision, setOwner } from './pipeline';
+import { getBrief, linkExperiment, linkTeam, parseBrief, productLinks, requestDraftProduct, saveBrief, saveDecision, setOwner, specialistTeam } from './pipeline';
 import { getProfile, saveProfile } from './profile';
 import { productReports } from './reports';
 import { setWatch } from './watches';
@@ -257,8 +257,8 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if (store instanceof Response) return store;
       if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
       const body = (await c.req.json().catch(() => undefined)) as { kind?: unknown; refId?: unknown } | undefined;
-      if (body?.kind !== 'experiment' || typeof body.refId !== 'string') return c.json({ error: 'kind must be experiment, with refId' }, 400);
-      const err = linkExperiment(db, store, c.req.param('id'), body.refId, true);
+      if ((body?.kind !== 'experiment' && body?.kind !== 'team') || typeof body.refId !== 'string') return c.json({ error: 'kind must be experiment or team, with refId' }, 400);
+      const err = body.kind === 'team' ? linkTeam(db, store, c.req.param('id'), body.refId) : linkExperiment(db, store, c.req.param('id'), body.refId, true);
       return err ? c.json({ error: err.error }, err.status) : c.json(productLinks(db, store, c.req.param('id')), 201);
     })
     .delete('/api/pr/products/:id/links/:ref', (c) => {
@@ -279,6 +279,15 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
       const fields = parseBrief(await c.req.json().catch(() => undefined));
       return typeof fields === 'string' ? c.json({ error: fields }, 400) : c.json(saveBrief(db, store, c.req.param('id'), fields));
+    })
+    // PR-24: "Ask a specialist": the team to start through POST /api/teams (the client links it back with POST …/links).
+    .get('/api/pr/products/:id/specialist', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const ask = c.req.query('ask');
+      if (ask !== 'positioning' && ask !== 'measurement') return c.json({ error: 'ask must be positioning or measurement' }, 400);
+      return c.json(specialistTeam(db, store, c.req.param('id'), ask));
     })
     // PR-23: an owner's stage decision (a History row) saved as a card in the store's Knowledge Base.
     .post('/api/pr/products/:id/history/:hid/knowledge', (c) => {

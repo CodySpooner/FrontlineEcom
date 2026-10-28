@@ -21,7 +21,7 @@ import {
 } from '@frontline/shared';
 import { AreaChart } from '../components/AreaChart';
 import { Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Tabs } from '../components/ui';
-import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useLinkStoreProduct, useMatches, useProductDetail, useProductTab, useAddWatch, useLinkExperiment, useLinks, useSaveDecision, useSaveNotes, useSetOwner, useUnlink, useUnwatch, useWatch, useWatches } from './api';
+import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useLinkStoreProduct, useMatches, useProductDetail, useProductTab, useAddWatch, useAddLink, useLinks, useSaveDecision, useSaveNotes, useSetOwner, useUnlink, useUnwatch, useWatch, useWatches } from './api';
 import { Pill, TONE } from './Card';
 import { BriefDialog } from './Brief';
 import { EconomicsTab, incomplete } from './EconomicsTab';
@@ -34,7 +34,7 @@ export type PanelTab = (typeof PANEL_TABS)[number];
 const TAB_LABEL: Record<PanelTab, string> = { overview: 'Overview', demand: 'Demand', suppliers: 'Suppliers', economics: 'Economics', research: 'Research', history: 'History' };
 const PLATFORM: Record<string, string> = { google_trends: 'Google Trends', orders: 'Your orders', tiktok_creative_center: 'TikTok Creative Center' };
 const METRIC: Record<string, string> = { interest_over_time: 'Interest over time', units_sold: 'Paid units per week' };
-const KIND: Record<string, string> = { stage: 'Stage', watch: 'Watch', flag: 'Flag dismissed', merge: 'Merged', separate: 'Separated', offer: 'Offer', evidence: 'Evidence', owner: 'Owner', experiment: 'Experiment' };
+const KIND: Record<string, string> = { stage: 'Stage', watch: 'Watch', flag: 'Flag dismissed', merge: 'Merged', separate: 'Separated', offer: 'Offer', evidence: 'Evidence', owner: 'Owner', experiment: 'Experiment', team: 'Specialist team' };
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -298,7 +298,7 @@ function Pipeline({ id, store, owner }: { id: string; store: Store; owner: strin
   const [pick, setPick] = useState('');
   const save = useSetOwner(id, store.id);
   const links = useLinks(id, store.id);
-  const link = useLinkExperiment(id, store.id);
+  const link = useAddLink(id, store.id);
   const unlink = useUnlink(id, store.id);
   const linked = links.data?.links ?? [];
   const free = links.data?.experiments.filter((e) => !linked.some((l) => l.kind === 'experiment' && l.refId === e.id)) ?? [];
@@ -315,7 +315,7 @@ function Pipeline({ id, store, owner }: { id: string; store: Store; owner: strin
         <ul aria-label="Linked" className="mt-2 grid gap-1">
           {linked.map((l) => (
             <li key={`${l.kind}:${l.refId}`} className="flex items-center justify-between gap-2 text-text-2">
-              <span>{`${l.kind === 'store_product' ? 'Store product' : 'Experiment'}: ${l.label}`}</span>
+              <span>{`${l.kind === 'store_product' ? 'Store product' : l.kind === 'team' ? 'Specialist team' : 'Experiment'}: ${l.label}`}</span>
               {l.kind === 'experiment' && (
                 <Button size="sm" variant="ghost" aria-label={`Unlink ${l.label}`} disabled={unlink.isPending} onClick={() => unlink.mutate({ refId: l.refId })}>
                   Unlink

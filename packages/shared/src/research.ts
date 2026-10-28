@@ -702,6 +702,20 @@ export interface PrBrief {
 }
 /** GET /api/pr/products/:id/links?store=: what the product led to in the store, and the store's experiments to link. */
 export interface PrLinks {
-  links: { kind: 'store_product' | 'experiment'; refId: string; label: string; at: string }[];
+  /** `team`: an "Ask a specialist" team (PR-24); its refId is the team id. */
+  links: { kind: 'store_product' | 'experiment' | 'team'; refId: string; label: string; at: string }[];
   experiments: { id: string; label: string }[];
+}
+
+/** PR-24: "Ask a specialist", a team on the AI Agents team engine that Product Researcher leads. */
+export const PR_SPECIALIST_ASKS = {
+  positioning: { type: 'ad_strategist', label: 'Positioning', who: 'Ad Strategist' },
+  measurement: { type: 'market_analyst', label: 'Measurement plan', who: 'Analytics Specialist' },
+} as const;
+export type PrSpecialistAsk = keyof typeof PR_SPECIALIST_ASKS;
+/** GET /api/pr/products/:id/specialist?store=&ask=: the team to start (POST /api/teams), from stored data only. */
+export interface PrSpecialistTeam {
+  title: string;
+  objective: string;
+  participants: { type: string }[];
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { PrBrief, PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrLinks, PrMatches, PrWatch, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
+import type { PrBrief, PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrLinks, PrMatches, PrWatch, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrSpecialistTeam, PrStoreProfile, PrTask, SquadMission, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { discoveryQuery } from '../product-research/Filters';
 import { sourceItem } from '../product-research/format';
@@ -533,6 +533,43 @@ describe('Detail panel', () => {
     const research = await screen.findByRole('dialog', { name: 'Research a Product' });
     expect(within(research).getByRole('button', { name: 'Test brief' }).getAttribute('aria-pressed')).toBe('true');
     expect((within(research).getByRole('textbox', { name: 'Instructions' }) as HTMLTextAreaElement).value).toMatch(/^Draft a test brief for this product/);
+  });
+
+  it('Research: Ask a specialist starts a team from stored facts, links it, and shows its assignments and consolidated answer', async () => {
+    const plan: PrSpecialistTeam = { title: 'Silicone grooming brush: positioning', objective: 'Asked from Product Research about "Silicone grooming brush". Ad Strategist: propose the positioning…', participants: [{ type: 'product_hunter' }, { type: 'ad_strategist' }] };
+    const team: SquadMission = {
+      id: 'tm1', storeId: 'paws', title: plan.title, createdAt: '2026-10-28T12:00:00Z', status: 'done', conversationId: 'cv9',
+      participants: [{ configId: 'c1', name: 'Product Researcher', type: 'product_hunter' }, { configId: 'c2', name: 'Ad Strategist', type: 'ad_strategist' }],
+      steps: [
+        { id: 'plan', kind: 'plan', role: 'product_hunter', task: 'Plan', dependsOn: [], status: 'done' },
+        { id: 's1', kind: 'task', role: 'ad_strategist', task: 'Three ad angles for hikers', dependsOn: ['plan'], status: 'done', deliverable: 'Leak-proof on the trail' },
+        { id: 'syn', kind: 'synthesis', role: 'product_hunter', task: 'Consolidate', dependsOn: ['s1'], status: 'done', deliverable: 'Lead with leak-proof; test on hikers first' },
+      ],
+    };
+    let linked = false;
+    const f = panelApi(detail(), (url, init) => {
+      if (url.includes('/specialist?')) return plan;
+      if (url === '/api/teams?store=paws') return team;
+      if (url.startsWith('/api/teams/tm1?')) return team;
+      if (url.includes('/links') && init?.method === 'POST') return (linked = true), { links: [], experiments: [] };
+      if (url.includes('/links')) return { links: linked ? [{ kind: 'team', refId: 'tm1', label: plan.title, at: '2026-10-28T12:00:00Z' }] : [], experiments: [] } satisfies PrLinks;
+      return undefined;
+    });
+    const sent = (part: string, method: string) => JSON.parse(String(f.mock.calls.find(([u, i]) => String(u).includes(part) && i?.method === method)?.[1]?.body ?? 'null'));
+    renderApp(<Research />, '/research?store=paws&product=p1&tab=research');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    const ask = within(await within(panel).findByRole('region', { name: 'Ask a specialist' }));
+    fireEvent.click(ask.getByRole('button', { name: 'Ad Strategist: positioning' }));
+    await ask.findByText(plan.objective);
+    expect(f.mock.calls.some(([u]) => String(u) === '/api/pr/products/p1/specialist?store=paws&ask=positioning')).toBe(true);
+    fireEvent.click(ask.getByRole('button', { name: 'Start team' }));
+    await waitFor(() => expect(sent('/links', 'POST')).toEqual({ kind: 'team', refId: 'tm1' }));
+    expect(sent('/api/teams?store=paws', 'POST')).toMatchObject({ title: plan.title, objective: plan.objective, participants: plan.participants });
+    const summary = within(await ask.findByRole('article', { name: `Team: ${plan.title}` }));
+    expect(summary.getByText('Done')).toBeTruthy();
+    expect(summary.getByRole('list', { name: 'Assignments' }).textContent).toContain('Ad Strategist: Three ad angles for hikers · done → Leak-proof on the trail');
+    expect(summary.getByText('Consolidated: Lead with leak-proof; test on hikers first')).toBeTruthy();
+    expect(summary.getByRole('link', { name: 'Open the team in AI Agents' }).getAttribute('href')).toBe('/agents/c/cv9?store=paws');
   });
 
   it("History: the owner's stage decisions save to the Knowledge Base (once, then linked); a task's move doesn't", async () => {
