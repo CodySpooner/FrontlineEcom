@@ -24,6 +24,9 @@ export function wsFrom(p: URLSearchParams, view: KbView, storeIds: string[] | un
   return picked.length === 1 ? picked[0]! : 'general';
 }
 
+/** A source's address as a link, only when it's a web page: an agent's source could name any scheme (KB-25). */
+export const webHref = (url?: string) => (url && /^https?:\/\//i.test(url) ? url : undefined);
+
 /** "Research this" from anywhere in the app: the Knowledge page's New research, prefilled (the server takes 500 characters). */
 export const researchHref = (ws: string, ask: string, cat?: string) => `/knowledge?${new URLSearchParams({ view: 'research', ws, ask: ask.slice(0, 500), ...(cat ? { cat } : {}) })}`;
 

@@ -608,7 +608,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   - the optional semantic layer behind a configured provider (decision 12).
 
 ### Phase 8: hardening and acceptance
-- [ ] KB-25 **Security and ops pass:**
+- [x] KB-25 **Security and ops pass:**
   - isolation tests on every KB route and tool;
   - body-size and rate limits on the KB and research routes;
   - an untrusted-content review;
@@ -643,6 +643,7 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
 - 2026-10-27 KB-22 Autonomous research control: each workspace has research controls in the Research Center ("Self-directed research", Controls): whether its agents research on their own (off until the owner turns it on), which roles and the top-level categories each answers for, the triggers (contradictions, performance anomalies, knowledge gaps, stale cards), a budget per task and per day, depth, whether each task waits for approval, whether findings wait for review, and the sites to prefer or never read. Research can also run on a schedule (an automation with a research action). Every hour each store with it on starts at most one task, or one recommendation in "Agents recommend", which now shows what research like it has cost and has Dismiss. The server enforces all of it: never on the demo engine; what self-directed research made never starts more; a card and trigger wait 14 days; a topic open or researched in the last day isn't done again; contradictions research found don't start research.
 - 2026-10-27 KB-23 Maintenance: each top-level category has its own refresh age (ad platforms, creative, competitors, trends and SEO 45 days; psychology, brand, money and operations 180; the rest 90), which the owner changes in the Research Center's Controls ("Needs refresh after"). "Needs refresh" on the artboard and in the Research Center, the Knowledge gaps and the stale-card research trigger all follow it, and a stale card that gets new evidence shows as Refreshed. An hourly pass finds near-duplicate cards (Duplicate? in Latest discoveries: Merge, Compare or Not the same) and contradictions missed when cards were made (a link and an open conflict). Each workspace can keep fetched pages and research logs for 30 days to a year, or always (the default): past that, page text and finished research's logs, stage outputs and transcripts are trimmed, and the sources, tasks and reports stay.
 - 2026-10-27 KB-24 Search and ask: the Knowledge search now ranks cards by best match (unless a column sort is picked) and marks the matching words, in the title or in a passage under it; the Workspace picker has "All workspaces", which opens the Library over every store's and General's cards with each card's store named; the box says "Keyword search". Ask AI (Ctrl+K) has "Ask the knowledge base" for each store in view and, with several, for all workspaces: the store's Market Analyst answers from the matching cards only, grouped as Measured, Research and Unproven with their sources, citing each card; when no card matches, nothing runs and the palette says the knowledge base doesn't know yet, with "Research it".
+- 2026-10-27 KB-25 Security and ops pass: the knowledge base and product research refuse request bodies over 1 MB (15 MB for research from an uploaded document) and more than 300 changes or 10 started agent runs a minute; every KB route is checked to never show or touch another store's knowledge; card text an agent wrote can no longer break onto a new line in a prompt, and a source only links to (and an agent only fetches) web addresses; the log keeps a failed request's path and error, never its query or body; backups are confirmed to carry the whole knowledge base; six new indexes keep each workspace's links, sources, positions, categories, conflicts and the daily research budget check off full-table reads.
 
 ## Blocked
 
@@ -976,3 +977,23 @@ rule). Put follow-up ideas under **Notes** for the owner, and ignore a watchdog 
   anywhere in the app; search and ask are keyword (FTS5/bm25) plus metadata and links, and the UI says "Keyword
   search". Adding one means a provider in Integrations, an embeddings table filled on card save, and blending its
   cosine score into `matches()` in kb-retrieve.ts.
+- 2026-10-27 KB-25: limits are one middleware in app.ts (`kbGuard`, per app instance) on `/api/kb/*` and
+  `/api/research/*`: hono's `bodyLimit` (1 MB; 15 MB on `POST /api/kb/research/tasks`, whose 10 MB document arrives in
+  base64), and a one-minute window of 300 non-GET requests, of which 10 may start agent runs (`/api/kb/ask`, research
+  tasks new, retry, refine). A refused start (4xx, 413) isn't counted, so the owner's typos never lock them out. The
+  app is local-only already (Host and Origin checks), so this guards against runaway client loops, not strangers.
+  `security.test.ts` holds the limits, a sweep of every KB route with another store's marked data (lists never show
+  it; 22 by-id and cross-reference writes are 404/400 and change nothing; two mutations were caught), the log check,
+  and a backup→restore round trip (cards, evidence with sources, links, FTS search). Research task routes by id take
+  no workspace on purpose: the owner sees every workspace there ("All"). Untrusted content: fetched titles were already
+  one line and capped (fetcher `clean`), source text reaches agents fenced with a nonce (KB-11), card Markdown renders no
+  links; new: `oneLine()` (packages/agents prompt.ts) on card titles/summaries in the system prompt's knowledge lines
+  and the Ask task, `fetch_source` refuses non-http(s) addresses before fetching or saving, and `webHref()`
+  (knowledge/url.ts) makes only http(s) source addresses links (the desktop shell already opens only http(s) outside).
+  Logging: the KB writes almost nothing; the app's error handler logs method, path (no query), stack; pinned by test.
+  Indexes: migration 48 adds `store_id` indexes on kb_links, kb_sources, kb_positions, kb_categories, (store_id,
+  status) on kb_conflicts and (payer_id, created_at) on kb_tasks; the overview's duplicate discoveries use EXISTS
+  instead of `IN (SELECT id FROM kb_cards WHERE status …)`, which SQLite materialized over every card. `plans.test.ts`
+  records every SELECT the KB read routes, retrieval and the hourly pass prepare and fails on any full scan of a KB
+  table, except reads of everything on purpose (All workspaces, the category tree behind refresh ages) and the tiny
+  owner-made tables (saved views, planned tests, controls).

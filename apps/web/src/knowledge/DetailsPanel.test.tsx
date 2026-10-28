@@ -20,11 +20,13 @@ const brief = (id: string, storeId: string | null = 'peak', extra: Partial<KbCar
 });
 const full = (b: KbCardBrief): KbCard => ({ ...b, body: `Explanation ${b.id}`, relevance: `Matters ${b.id}`, application: `Agents use ${b.id}`, appliesTo: `Applies ${b.id}`, limits: `Limits ${b.id}` });
 const source = { id: 'src1', url: 'https://ads.tiktok.com/creative', title: 'TikTok Creative Center', status: 'read' as const, reliability: 'platform_docs' as const, fetchedAt: '2026-10-20T10:00:00Z' };
+const hidden = { ...source, id: 'src2', url: 'javascript:alert(1)', title: 'Odd page', reliability: 'publication' as const };
 const evidence: KbEvidence[] = [
   { id: 'e1', cardId: 'a', kind: 'measured', text: 'EXP-14 · 2.9 vs 1.6 ROAS', metric: 'roas', value: 2.9, baseline: 1.6, testRef: 'EXP-14', authorId: 'owner', createdAt: now },
   { id: 'e2', cardId: 'a', kind: 'research', text: '3 of 4 sources agree', source, authorId: 'peak:market_analyst', createdAt: now },
   { id: 'e3', cardId: 'a', kind: 'conflict', text: 'One study found the opposite', authorId: 'app', createdAt: now },
   { id: 'e4', cardId: 'a', kind: 'observed', text: 'Seen on the old card', mergedFrom: 'z', authorId: 'owner', createdAt: now },
+  { id: 'e5', cardId: 'a', kind: 'research', text: 'An odd page agrees', source: hidden, authorId: 'peak:market_analyst', createdAt: now },
 ];
 const snap = (title: string) => ({ title, summary: '', body: '', relevance: '', application: '', appliesTo: '', limits: '', tags: [], categoryId: 'peak-hooks', type: 'strategy' as const, stage: 'tested' as const, status: 'active' as const });
 const revisions: KbRevision[] = [
@@ -77,7 +79,8 @@ describe('Knowledge › details panel', () => {
     const ladder = within(p).getByRole('list', { name: 'Confidence' });
     expect(within(ladder).getByText('Tested').closest('li')!.getAttribute('aria-current')).toBe('step');
     const ev = await within(p).findByRole('list', { name: 'Evidence' });
-    expect(within(ev).getAllByRole('listitem').map((li) => li.textContent!.slice(0, 8))).toEqual(['MEASURED', 'RESEARCH', 'CONFLICT', 'OBSERVED']);
+    expect(within(ev).getAllByRole('listitem').map((li) => li.textContent!.slice(0, 8))).toEqual(['MEASURED', 'RESEARCH', 'CONFLICT', 'OBSERVED', 'RESEARCH']);
+    expect(within(within(p).getByRole('list', { name: 'Sources' })).getByText('Odd page').closest('a')).toBeNull(); // only a web address is a link
     const src = within(p).getByRole('link', { name: /TikTok Creative Center/ });
     expect([src.getAttribute('href'), src.getAttribute('target'), src.getAttribute('rel')]).toEqual(['https://ads.tiktok.com/creative', '_blank', 'noopener noreferrer']);
     expect(within(p).getByText(/Platform docs · read · fetched/)).toBeTruthy();

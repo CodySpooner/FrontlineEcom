@@ -109,7 +109,8 @@ export function kbOverview(db: Db, ws: KbWorkspace | 'all', now = new Date()): K
     ...db
       .prepare(
         `SELECT id, from_id, to_id, why, created_at FROM kb_links WHERE type = 'duplicates' AND status = 'suggested' AND ${s.sql}
-           AND from_id IN (SELECT id FROM kb_cards WHERE ${VISIBLE}) AND to_id IN (SELECT id FROM kb_cards WHERE ${VISIBLE}) ORDER BY created_at DESC LIMIT 8`,
+           AND EXISTS (SELECT 1 FROM kb_cards c WHERE c.id = from_id AND c.${VISIBLE}) AND EXISTS (SELECT 1 FROM kb_cards c WHERE c.id = to_id AND c.${VISIBLE})
+           ORDER BY created_at DESC LIMIT 8`,
       )
       .all(...s.params)
       .map((r) => ({ kind: 'duplicate' as const, id: String(r.id), at: String(r.created_at), why: String(r.why), card: getCard(db, String(r.from_id))!, other: getCard(db, String(r.to_id))! })),

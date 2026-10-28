@@ -61,6 +61,10 @@ describe('KB agent tools', () => {
     expect(db.prepare('SELECT store_id FROM kb_sources WHERE id = ?').get(id!)).toEqual({ store_id: 'pawsome' });
     expect(await call('fetch_source', { url: 'https://a.test/hooks' }, context().ctx)).toBe('Reading sources is only available in research.');
     expect(toolEnv(db).kbFetch).toBeTypeOf('function'); // the app's runs read through the KB-11 reader
+    // Only a web address: anything else is never fetched or kept as a source.
+    const before = db.prepare('SELECT count(*) AS n FROM kb_sources').get()!.n;
+    for (const url of ['javascript:alert(1)', 'file:///C:/Windows/notepad.exe']) expect(await call('fetch_source', { url }, ctx)).toMatch(/http or https/);
+    expect(db.prepare('SELECT count(*) AS n FROM kb_sources').get()!.n).toBe(before);
   });
 
   test("propose_card files a proposed card that its read sources move up the ladder; forbidden types and stages, and unread sources, are refused", async () => {

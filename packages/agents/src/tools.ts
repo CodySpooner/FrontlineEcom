@@ -1326,6 +1326,7 @@ export const APP_TOOLS: AppTool[] = [
     run: async ({ url }, ctx) => {
       const task = researchTask(ctx);
       if (!task || !ctx.kbFetch) return 'Reading sources is only available in research.';
+      if (!/^https?:\/\//i.test(url)) return 'Only web pages (an http or https address) can be read.';
       const f = await ctx.kbFetch(url, { blocked: kbControls(ctx.db, task.ws).blockedDomains });
       const s = saveSource(ctx.db, task.ws, { kind: 'url', url: f.url, title: f.title ?? '', status: f.status, text: f.text, error: f.error, publishedAt: f.publishedAt, fetchedAt: new Date().toISOString() });
       ctx.db.prepare('INSERT OR IGNORE INTO kb_task_sources (task_id, source_id) VALUES (?, ?)').run(task.id, s.id);

@@ -11,6 +11,7 @@ import { NameForm } from './ArtboardPanels';
 import { ResearchControls } from './Controls';
 import { FETCH } from './DetailsPanel';
 import { STAGE } from './Research';
+import { webHref } from './url';
 
 type Set = (changes: Record<string, string | undefined>) => void;
 const panel = 'rounded-xl border border-line bg-panel p-4';
@@ -353,8 +354,8 @@ function Column({ ws, o, name, set }: { ws: string; o: KbOverview; name: (ws: st
           <ul className="grid gap-1">
             {sources.data.map((s) => (
               <li key={s.id} className="flex items-center gap-2 text-[13px]">
-                {s.url ? (
-                  <a href={s.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-text-2 hover:text-white">
+                {webHref(s.url) ? (
+                  <a href={webHref(s.url)} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-text-2 hover:text-white">
                     {s.title || s.url}
                   </a>
                 ) : (

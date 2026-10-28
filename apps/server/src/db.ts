@@ -817,6 +817,14 @@ export const MIGRATIONS = [
   ALTER TABLE creatives ADD COLUMN length_s INTEGER;
   ALTER TABLE creatives ADD COLUMN offer TEXT;
   `,
+  /* 48 (kb: KB-25 a workspace's links, sources, positions, categories and open conflicts, and a payer's research, by index) */ `
+  CREATE INDEX kb_links_by_store ON kb_links (store_id);
+  CREATE INDEX kb_sources_by_store ON kb_sources (store_id);
+  CREATE INDEX kb_positions_by_store ON kb_positions (store_id);
+  CREATE INDEX kb_categories_by_store ON kb_categories (store_id);
+  CREATE INDEX kb_conflicts_open ON kb_conflicts (store_id, status);
+  CREATE INDEX kb_tasks_by_payer ON kb_tasks (payer_id, created_at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

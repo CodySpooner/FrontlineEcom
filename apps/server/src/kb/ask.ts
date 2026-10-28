@@ -1,7 +1,7 @@
 // "Ask the knowledge base" (KB-24): the cards matching a question in the owner's scope, grouped by what backs them, and
 // the task for the agent run that answers from them only. Retrieval is the agents' own (keyword, metadata and links,
 // decision 12) as a Market Analyst gets it, so blocked, unreviewed and archived cards never reach an answer.
-import { retrieveKnowledge } from '@frontline/agents';
+import { oneLine, retrieveKnowledge } from '@frontline/agents';
 import { KB_STAGES, type KbAskAnswer, type KbAskCard, type KbCard, type KbSourceBrief, type KbSourceReliability, type KbSourceStatus, type KbWorkspace } from '@frontline/shared';
 import type { Db } from '../db';
 import { listStores } from '../stores';
@@ -41,8 +41,8 @@ export function askKnowledge(db: Db, ws: KbWorkspace | 'all', question: string):
   if (!cards.length) return { answer };
   const store = new Map(listStores(db).map((s) => [s.id, s.name]));
   const line = ({ card: c, sources }: KbAskCard) =>
-    `- [kb:${c.id}] ${c.title} (${c.storeId ? (store.get(c.storeId) ?? c.storeId) : 'General'}, ${KB_STAGES[c.stage]})${c.summary ? `: ${c.summary.replace(/\.$/, '')}` : ''}${
-      sources.length ? `. Sources: ${sources.map((s) => `"${s.title || s.url}"`).join('; ')}` : ''
+    `- [kb:${c.id}] ${oneLine(c.title)} (${c.storeId ? (store.get(c.storeId) ?? c.storeId) : 'General'}, ${KB_STAGES[c.stage]})${c.summary ? `: ${oneLine(c.summary).replace(/\.$/, '')}` : ''}${
+      sources.length ? `. Sources: ${sources.map((s) => `"${oneLine(s.title || s.url || '')}"`).join('; ')}` : ''
     }`;
   const part = (title: string, xs: KbAskCard[]) => [title, ...(xs.length ? xs.map(line) : ['(none)'])];
   const task = [

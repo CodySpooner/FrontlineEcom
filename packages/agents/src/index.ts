@@ -3,7 +3,7 @@ export { fakeEngine, echoScript, type FakeScript, type FakeStep } from './fake-e
 export { agentModel, claudeAccount, claudeEngine, estimate, isAccountError, isReadOnly, movesSpend, toAgentEvents, type ClaudeEngineOptions } from './claude-engine';
 export { ROLES, SQUAD_RULES, type RoleSpec, type ToolName } from './roles';
 export { createSquad, ensureSquads, seedDemoXp, listAgents, getAgent, updateAgent, agentId, costToday, DEFAULT_AUTONOMY } from './squads';
-export { assemblePrompt, playbook, platformPack, nichePack, estimateTokens, type PromptInput } from './prompt';
+export { assemblePrompt, playbook, platformPack, nichePack, estimateTokens, oneLine, type PromptInput } from './prompt';
 export {
   writeMemory,
   getMemory,

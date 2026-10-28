@@ -13,7 +13,7 @@ import { ago } from '../lib/format';
 import { escape, LinkPopover } from './ArtboardPanels';
 import { wordDiff } from './diff';
 import { Tests } from './Tests';
-import { withParams } from './url';
+import { webHref, withParams } from './url';
 
 export const PANEL_W = 340;
 const STAGES = Object.keys(KB_STAGES) as KbStage[];
@@ -224,8 +224,8 @@ function Details({ id, ws, general, onOpen, onClose }: { id: string; ws: string;
             <ul aria-label="Sources" className="grid gap-1.5">
               {sources.map((s) => (
                 <li key={s.id} className="grid gap-0.5 text-xs leading-[1.4]">
-                  {s.url ? (
-                    <a href={s.url} target="_blank" rel="noopener noreferrer" className="text-text underline decoration-line-3 underline-offset-2 hover:decoration-text">
+                  {webHref(s.url) ? (
+                    <a href={webHref(s.url)} target="_blank" rel="noopener noreferrer" className="text-text underline decoration-line-3 underline-offset-2 hover:decoration-text">
                       {s.title}
                     </a>
                   ) : (

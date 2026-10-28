@@ -62,7 +62,7 @@ function open(path = '/knowledge?ws=pawsome&view=research') {
     if (url.startsWith('/api/kb/overview?')) return overview;
     if (url.startsWith('/api/kb/research/tasks?')) return [running, t('t2', 'Bundles for travel', 'queued', 'created'), t('t3', 'Crate sizes', 'done'), t('t4', 'Calming sprays', 'failed', 'retrieving')];
     if (url === '/api/kb/research/tasks/t1') return running;
-    if (url.startsWith('/api/kb/sources?')) return [{ id: 's1', url: 'https://a.test/1', title: 'Hook study', status: 'read', reliability: 'research' }, { id: 's3', url: 'https://c.test/3', title: 'Paid report', status: 'paywalled', reliability: 'unknown' }];
+    if (url.startsWith('/api/kb/sources?')) return [{ id: 's1', url: 'https://a.test/1', title: 'Hook study', status: 'read', reliability: 'research' }, { id: 's3', url: 'javascript:alert(1)', title: 'Paid report', status: 'paywalled', reliability: 'unknown' }];
     if (url.startsWith('/api/approvals?'))
       return [
         recommend('a1', 'pawsome', 'Why do bundles convert?'),
@@ -203,6 +203,8 @@ describe('Research Center', () => {
     fireEvent.click(within(tabs).getByRole('tab', { name: 'Sources 2' }));
     expect(await within(rc).findByText('Hook study')).toBeTruthy();
     expect(within(within(rc).getByText('Paid report').closest('li')!).getByText('paywalled')).toBeTruthy();
+    expect(within(rc).getByText('Paid report').closest('a')).toBeNull(); // only a web address is a link
+    expect(within(rc).getByRole('link', { name: 'Hook study' }).getAttribute('href')).toBe('https://a.test/1');
 
     // This workspace's research recommendations only, with what they'd cost; Approve starts the research, Dismiss drops it.
     const rec = within(rc).getByRole('list', { name: 'Agents recommend' });

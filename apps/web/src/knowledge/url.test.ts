@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { viewOf, withParams, wsFrom } from './url';
+import { viewOf, webHref, withParams, wsFrom } from './url';
 
 const p = (s: string) => new URLSearchParams(s);
 
@@ -31,5 +31,15 @@ describe('the Knowledge page URL', () => {
 
   it('changes some keys and keeps the rest', () => {
     expect(withParams(p('view=library&tab=memory&doc=x'), { tab: undefined, doc: 'y' }).toString()).toBe('view=library&doc=y');
+  });
+
+  it("links a source only to a web address: an agent's page could name anything", () => {
+    expect(webHref('https://a.test/x')).toBe('https://a.test/x');
+    expect(webHref('HTTP://a.test')).toBe('HTTP://a.test');
+    expect(webHref('javascript:alert(1)')).toBeUndefined();
+    expect(webHref(' javascript:alert(1)')).toBeUndefined();
+    expect(webHref('file:///C:/Windows/notepad.exe')).toBeUndefined();
+    expect(webHref('upload:/brief.pdf')).toBeUndefined();
+    expect(webHref(undefined)).toBeUndefined();
   });
 });

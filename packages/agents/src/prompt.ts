@@ -23,6 +23,8 @@ export const nichePack = (niche: Niche) => layer(`packs/niche/${niche}.md`);
 
 // ponytail: chars/4 heuristic, swap for the SDK token counter if budgets get tight.
 export const estimateTokens = (text: string) => Math.ceil(text.length / 4);
+/** Text laid into one line of a prompt (a card's title and summary, which agents write from web pages): no line breaks to start a section with. */
+export const oneLine = (text: string) => text.replace(/\s+/g, ' ').trim();
 
 /** Tokens the store's memories always get, however big the fixed layers are. */
 const MEMORY_FLOOR = 1500;
@@ -90,7 +92,7 @@ export function assemblePrompt({ agent, store, memories = [], nicheLearnings = [
     : '';
   // Knowledge takes what memory left of the room, so memory keeps its floor; a long card doesn't keep shorter ones out.
   const fit = (c: KbCardBrief) => {
-    const line = `- [kb:${c.id}] ${c.title} (${c.stage === 'hypothesis' ? 'Hypothesis, unproven' : KB_STAGES[c.stage]}): ${c.summary}`;
+    const line = `- [kb:${c.id}] ${oneLine(c.title)} (${c.stage === 'hypothesis' ? 'Hypothesis, unproven' : KB_STAGES[c.stage]}): ${oneLine(c.summary)}`;
     const cost = estimateTokens(line) + 1;
     if (cost > room) return [];
     room -= cost;

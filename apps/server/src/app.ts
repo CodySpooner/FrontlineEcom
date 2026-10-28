@@ -1,7 +1,8 @@
 import { createSquad } from '@frontline/agents';
 import { serve, upgradeWebSocket } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { WebSocketServer } from 'ws';
 import { ANALYTICS_RANGES, type AnalyticsRange, type ApprovalDecision, type ApprovalStatus, type StoreInput } from '@frontline/shared';
 import { campaignStats, currentWindow, dayShifts, platformSplit, summarize, topProducts } from './analytics';
@@ -42,9 +43,37 @@ const isLocal = (url: string) => URL.canParse(url) && LOCAL_HOSTS.has(new URL(ur
 /** Same host and port: a page from another local port (another dev server, a local tool) is a different site. */
 const sameHost = (origin: string, url: string) => URL.canParse(origin) && new URL(origin).host === new URL(url).host;
 
+const MB = 1_048_576;
+/** Agent runs a knowledge-base request starts: research (new, retried, refined) and Ask the knowledge base. */
+const STARTS = /^\/api\/kb\/(ask|research\/tasks(\/[^/]+\/(retry|refine))?)$/;
+
+/**
+ * KB-25: the knowledge base and product research read no body over its size (research from an uploaded document
+ * carries the file, at most 10 MB, in base64) and take at most 300 changes a minute, of which 10 start agent runs (a
+ * refused request starts none), so a runaway client loop gets 429s instead of spending budgets or stalling the API.
+ * Reads are never limited.
+ */
+function kbGuard(): MiddlewareHandler {
+  const hits = { start: [] as number[], change: [] as number[] };
+  return async (c, next) => {
+    if (c.req.method === 'GET') return next();
+    const now = Date.now();
+    const recent = (k: keyof typeof hits) => (hits[k] = hits[k].filter((t) => now - t < 60_000)).length;
+    const starts = c.req.method === 'POST' && STARTS.test(c.req.path);
+    if (recent('change') >= 300 || (starts && recent('start') >= 10)) return c.json({ error: 'Too many requests at once: wait a minute and try again.' }, 429);
+    hits.change.push(now);
+    const maxSize = c.req.path === '/api/kb/research/tasks' ? 15 * MB : MB;
+    let tooLarge = false;
+    const done = await bodyLimit({ maxSize, onError: (c) => ((tooLarge = true), c.json({ error: 'The request is too large.' }, 413)) })(c, next);
+    if (starts && !tooLarge && c.res.status < 300) hits.start.push(now);
+    return done;
+  };
+}
+
 /** `secretKey` defaults to the key file in the data dir, loaded on first use. */
 export const createApp = (db: Db, secretKey?: Buffer) => {
   const key = () => (secretKey ??= loadKey(dataDir()));
+  const guard = kbGuard();
   return new Hono()
     // A bug in a route reaches the log file (the packaged app has no console) and the UI still gets JSON.
     .onError((e, c) => {
@@ -62,6 +91,8 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       c.res.headers.set('Content-Security-Policy', "frame-ancestors 'none'");
       c.res.headers.set('X-Frame-Options', 'DENY');
     })
+    .use('/api/kb/*', guard)
+    .use('/api/research/*', guard)
     .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))
     .get('/api/stores/:id', (c) => {
