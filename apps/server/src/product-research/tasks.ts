@@ -18,10 +18,12 @@ import {
 import type { Db } from '../db';
 import { openConversation } from '../routes/agents-conversations';
 import { getCaps } from '../settings';
-import { productVisible } from './catalog';
+import { productVisible, upsertListing } from './catalog';
 import { productDemand, productOffers } from './detail';
+import { researchStarted } from './edits';
 import { fence } from './fence';
-import { previewFields } from './preview';
+import { refreshProduct } from './evaluate';
+import { canonicalUrl, checkUrl, previewFields } from './preview';
 
 // Research tasks (decision 6, PR-15): the owner asks an agent to research one product for one store. The run is the AI
 // Agents lane's; this module only starts it, links it, and reads its state.
@@ -49,13 +51,21 @@ function seatProblem(db: Db, store: Store): string | null {
   return null;
 }
 
+/** The type's most recent config in the store (what its dialog row shows). */
+function latestConfig(db: Db, storeId: string, type: string) {
+  const r = db
+    .prepare(`SELECT id FROM agent_configs WHERE store_id = ? AND agent_id = ? AND custom_role_id IS ? ORDER BY created_at DESC, rowid DESC LIMIT 1`)
+    .get(storeId, `${storeId}:${SEAT}`, type === SEAT ? null : type);
+  return r ? getConfig(db, String(r.id)) : undefined;
+}
+
 /** One row per eligible agent type with its state (one call for the whole dialog). */
 export function agentRows(db: Db, store: Store, caps: RuntimeCapabilities[]): PrAgentRow[] {
   const seat = seatProblem(db, store);
   const running = Number(db.prepare(`SELECT count(*) AS n FROM agent_runs WHERE store_id = ? AND status = 'running'`).get(store.id)!.n);
   return eligibleTypes(db, store.id).map(({ type, name, custom }) => {
     const latest = db
-      .prepare(`SELECT runtime, model, effort FROM agent_configs WHERE store_id = ? AND agent_id = ? AND custom_role_id IS ? ORDER BY created_at DESC, rowid DESC LIMIT 1`)
+      .prepare(`SELECT runtime, model, effort, json_extract(permissions_json, '$.budgetUsd') AS budget FROM agent_configs WHERE store_id = ? AND agent_id = ? AND custom_role_id IS ? ORDER BY created_at DESC, rowid DESC LIMIT 1`)
       .get(store.id, `${store.id}:${SEAT}`, custom ? type : null);
     const fallback = latest ? undefined : seatDefault(store, resolveType(db, store.id, type)!, caps.find((c) => c.runtime === 'claude'));
     const runtime = (latest ? String(latest.runtime) : fallback!.runtime) as RuntimeId;
@@ -76,6 +86,7 @@ export function agentRows(db: Db, store: Store, caps: RuntimeCapabilities[]): Pr
       runtime,
       model: latest ? (latest.model == null ? null : String(latest.model)) : (fallback!.model ?? null),
       effort: latest ? (latest.effort == null ? null : String(latest.effort)) : (fallback!.effort ?? null),
+      budgetUsd: latest?.budget == null ? null : Number(latest.budget),
       state: reason ? 'not_ready' : active ? 'busy' : 'available',
       reason,
       busy: active ? { conversationId: String(active.id), title: String(active.title), queued: Number(active.queued), slotsFull: running >= 2 } : null,
@@ -85,7 +96,8 @@ export function agentRows(db: Db, store: Store, caps: RuntimeCapabilities[]): Pr
 
 export interface TaskInput {
   clientRequestId: string;
-  productId: string;
+  /** Unset: a link the page wouldn't give, researched from the owner's details (`url` and `owner.title`). */
+  productId?: string;
   listingId?: string;
   url?: string;
   preview?: Pick<PrPreview, 'title' | 'price' | 'variants'>;
@@ -233,7 +245,9 @@ function launch(db: Db, runs: RunManager, store: Store, id: string, caps: Runtim
       result = typeof run === 'string' ? run : { runId: run.id, conversationId: conversation.id, configId: run.configId ?? null };
     }
   } else {
-    const from = String(t.mode) === 'separate' && conversation ? getConfig(db, conversation.configId) : undefined;
+    // Separate: the busy conversation's config. New: Deploy's choice, else the config the dialog's row showed (the type's
+    // latest in the store), else none (the seat default, as the row said).
+    const from = String(t.mode) === 'separate' && conversation ? getConfig(db, conversation.configId) : config ? undefined : latestConfig(db, store.id, String(t.type));
     const cfg: ConversationConfigInput | undefined = from ? { runtime: from.runtime, ...(from.model ? { model: from.model } : {}), ...(from.effort ? { effort: from.effort } : {}), tools: from.tools, knowledge: from.knowledge, permissions: from.permissions } : config;
     const opened = openConversation(db, runs, store, { clientRequestId: crid, type: String(t.type), message, title: `Research: ${title}`.slice(0, 200), context: { kind: 'product', id: String(t.product_id), name: title.slice(0, 200) }, ...(cfg ? { config: cfg } : {}) }, caps);
     if ('status' in opened && opened.field) {
@@ -249,15 +263,24 @@ function launch(db: Db, runs: RunManager, store: Store, id: string, caps: Runtim
     return { task: getTask(db, id, store.id)!, status: 409 };
   }
   db.prepare('UPDATE pr_tasks SET conversation_id = ?, run_id = ?, config_id = ?, not_started_reason = NULL, updated_at = ? WHERE id = ?').run(result.conversationId, result.runId, result.configId, at, id);
+  researchStarted(db, store, String(t.product_id), id);
   return { task: getTask(db, id, store.id)!, status: 201 };
 }
 
-/** POST /api/pr/tasks: check, insert, compose, start, link (decision 6). A repeat returns the same task. */
+/**
+ * POST /api/pr/tasks: check, insert, compose, start, link (decision 6). A repeat returns the same task; a repeat whose run
+ * never started starts it under the same task, with what the repeat sends (the owner may have fixed the draft).
+ */
 export function startTask(db: Db, runs: RunManager, store: Store, input: TaskInput, caps: RuntimeCapabilities[]): Started {
   const prior = db.prepare('SELECT id, run_id FROM pr_tasks WHERE store_id = ? AND client_request_id = ?').get(store.id, input.clientRequestId);
   if (prior?.run_id) return { task: getTask(db, String(prior.id), store.id)!, status: 200 };
-  if (prior) return launch(db, runs, store, String(prior.id), caps, input.config); // its run never started: start it with the same id
-  if (!productVisible(db, input.productId, store.id)) return { error: 'Product not found', status: 404 };
+  if (!input.productId) {
+    const made = byHand(db, store, input.url, input.owner?.title);
+    if ('error' in made) return { error: made.error, status: 400, field: 'link' };
+    input = { ...input, ...made };
+  }
+  const productId = input.productId!;
+  if (!productVisible(db, productId, store.id)) return { error: 'Product not found', status: 404 };
   const type = resolveType(db, store.id, input.type);
   if (!type) return { error: 'Agent type not found', status: 404 };
   if (type.role !== SEAT) return { error: `Only the ${AGENT_ROLES[SEAT].name} or a custom role built on it can research products.`, status: 409 };
@@ -268,15 +291,34 @@ export function startTask(db: Db, runs: RunManager, store: Store, input: TaskInp
     if (c.type !== input.type) return { error: "That conversation is another agent type's.", status: 409 };
     conversationId = c.id;
   }
-  const listing = input.listingId && db.prepare(`SELECT 1 FROM pr_listings WHERE id = ? AND product_id = ? AND (store_id IS NULL OR store_id = ?)`).get(input.listingId, input.productId, store.id) ? input.listingId : null;
+  const listing = input.listingId && db.prepare(`SELECT 1 FROM pr_listings WHERE id = ? AND product_id = ? AND (store_id IS NULL OR store_id = ?)`).get(input.listingId, productId, store.id) ? input.listingId : null;
   const preview = input.preview || input.owner ? JSON.stringify(previewFields(input.preview ?? { title: null, price: null, variants: [] }, input.owner ?? {})) : null;
-  const id = randomUUID();
+  const id = prior ? String(prior.id) : randomUUID();
   const at = new Date().toISOString();
-  db.prepare(
-    `INSERT INTO pr_tasks (id, store_id, product_id, listing_id, url, preview_json, instructions, template, mode, type, conversation_id, client_request_id, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(id, store.id, input.productId, listing, input.url ?? null, preview, input.instructions, input.template ?? null, input.mode, input.type, conversationId, input.clientRequestId, at, at);
+  const fields = [productId, listing, input.url ?? null, preview, input.instructions, input.template ?? null, input.mode, input.type, conversationId] as const;
+  if (prior) db.prepare('UPDATE pr_tasks SET product_id = ?, listing_id = ?, url = ?, preview_json = ?, instructions = ?, template = ?, mode = ?, type = ?, conversation_id = ?, updated_at = ? WHERE id = ?').run(...fields, at, id);
+  else
+    db.prepare(
+      `INSERT INTO pr_tasks (id, store_id, product_id, listing_id, url, preview_json, instructions, template, mode, type, conversation_id, client_request_id, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(id, store.id, ...fields, input.clientRequestId, at, at);
   return launch(db, runs, store, id, caps, input.config);
+}
+
+/**
+ * A link whose page couldn't be read, with the owner's details: the store's listing for that link (one it already has,
+ * else a private `owner_link` listing named by the owner, marked owner-entered: nothing was read from the page).
+ */
+function byHand(db: Db, store: Store, url: string | undefined, title: string | undefined): { productId: string; listingId: string } | { error: string } {
+  const link = checkUrl(url);
+  if ('error' in link) return { error: 'Paste the product link, or open the product to research.' };
+  if (!title?.trim()) return { error: "The page wasn't read: enter the product's title by hand." };
+  const canonical = canonicalUrl(link.parsed);
+  const known = db.prepare(`SELECT id, product_id FROM pr_listings WHERE canonical_url = ? AND origin != 'legacy_sample' AND (store_id IS NULL OR store_id = ?) ORDER BY store_id IS NULL, first_seen_at LIMIT 1`).get(canonical, store.id);
+  if (known) return { productId: String(known.product_id), listingId: String(known.id) };
+  const made = upsertListing(db, { source: 'owner_link', sourceRef: canonical, storeId: store.id, origin: 'owner_link', title: title.trim(), url: link.url, canonicalUrl: canonical, transform: { ownerEntered: true } });
+  refreshProduct(db, made.productId);
+  return { productId: made.productId, listingId: made.id };
 }
 
 /** Retry: a task that never started starts again; an interrupted or failed run is retried in its conversation. */

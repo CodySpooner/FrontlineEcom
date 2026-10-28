@@ -40,6 +40,13 @@ export function changeStage(db: Db, store: Store, id: string, to: string, reason
   return null;
 }
 
+/** Decision 5's one automatic move: Discovered → Researching when a research task starts, by that task. */
+export function researchStarted(db: Db, store: Store, id: string, taskId: string, now = new Date()) {
+  if (String(evaluation(db, store, id, now)?.stage ?? 'discovered') !== 'discovered') return;
+  db.prepare('UPDATE pr_evaluations SET stage = ?, updated_at = ? WHERE store_id = ? AND product_id = ?').run('researching', now.toISOString(), store.id, id);
+  history(db, { storeId: store.id, productId: id, kind: 'stage', from: 'discovered', to: 'researching', reason: 'A research task started', by: taskId, at: now });
+}
+
 /** The store's own notes on the product (owner-provided, never evidence). Empty clears them. */
 export function saveNotes(db: Db, store: Store, id: string, notes: string, now = new Date()) {
   evaluation(db, store, id, now);

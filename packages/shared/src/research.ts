@@ -407,6 +407,8 @@ export interface PrAgentRow {
   runtime: RuntimeId;
   model: string | null;
   effort: string | null;
+  /** That config's budget for one run (USD); null: none set. */
+  budgetUsd: number | null;
   state: 'available' | 'busy' | 'not_ready';
   /** Not ready: why, as the owner's next step. */
   reason: string | null;

@@ -1,4 +1,4 @@
-import { createRunManager, getConversation, getRun } from '@frontline/agents';
+import { createRunManager, getConfig, getConversation, getRun } from '@frontline/agents';
 import { INTERRUPTED, type Conversation, type LiveMessage, type PrAgentRow, type PrDiscovery, type PrTask } from '@frontline/shared';
 import { randomUUID } from 'node:crypto';
 import { beforeEach, expect, test } from 'vitest';
@@ -47,6 +47,8 @@ test('a new task opens a product conversation with the four-part message; a repe
   expect(message).toContain(`## The owner's instructions\nIs it worth testing?\n${'x'.repeat(5_900)}`); // verbatim
   expect(message).toMatch(/## Product facts\n[\s\S]*> - Listing: Dog travel water bowl · source cj/);
   expect(message).toMatch(/## Earlier in Pawsome Gear\n[\s\S]*> Stage: Discovered/);
+  // Decision 5's one automatic move, recorded as the task's.
+  expect(db.prepare(`SELECT from_stage, to_stage, by FROM pr_stage_history WHERE store_id = 'pawsome' AND product_id = ? AND kind = 'stage'`).all(p).map((r) => ({ ...r }))).toEqual([{ from_stage: 'discovered', to_stage: 'researching', by: t.id }]);
 
   const again = await task({ clientRequestId, instructions: long });
   expect(again.status).toBe(200);
@@ -66,13 +68,15 @@ test('a repeat whose run never started starts it, with the same task', async () 
   const refused = await task({ clientRequestId });
   expect(refused.status).toBe(409);
   const t = (await refused.json()) as PrTask;
-  expect(t).toMatchObject({ status: 'not_started', detail: 'This agent is offline. Redeploy it first.', runId: null, conversationId: null, canRetry: true });
+  expect(t).toMatchObject({ status: 'not_started', detail: 'This agent is offline. Redeploy it first.', runId: null, conversationId: null, canRetry: true, error: 'Not started: This agent is offline. Redeploy it first.' });
   expect(db.prepare('SELECT count(*) AS n FROM conversations').get()!.n).toBe(0); // nothing half-made
 
   db.prepare('UPDATE agents SET enabled = 1 WHERE id = ?').run('pawsome:product_hunter');
-  const started = await task({ clientRequestId });
+  const started = await task({ clientRequestId, instructions: 'Only the supplier check, please.' }); // the owner fixed the draft
   expect(started.status).toBe(201);
-  expect(((await started.json()) as PrTask)).toMatchObject({ id: t.id, detail: null });
+  const s = (await started.json()) as PrTask;
+  expect(s).toMatchObject({ id: t.id, detail: null, instructions: 'Only the supplier check, please.' });
+  expect(getRun(db, s.runId!)!.task).toContain("## The owner's instructions\nOnly the supplier check, please.");
   expect(db.prepare('SELECT count(*) AS n FROM pr_tasks').get()!.n).toBe(1);
 });
 
@@ -182,4 +186,36 @@ test("the discovery Research filter and the card footer show the latest task's s
   expect(none.items.find((c) => c.id === p)).toMatchObject({ research: null }); // another store: no task there
   expect((await products('research=none', 'all')).status).toBe(400); // kept per store
   expect((await products('research=done')).status).toBe(400);
+});
+
+test('T7: the 11th research start in a minute gets 429; a refused one counts for none', async () => {
+  db.prepare('UPDATE agents SET enabled = 0 WHERE id = ?').run('pawsome:product_hunter');
+  expect((await task()).status).toBe(409); // refused: starts nothing, so it isn't counted
+  db.prepare('UPDATE agents SET enabled = 1 WHERE id = ?').run('pawsome:product_hunter');
+  for (let i = 0; i < 10; i++) expect((await task()).status).toBe(201);
+  expect((await task()).status).toBe(429);
+  await idle();
+});
+
+test("a link the page wouldn't give is researched from the owner's details, kept as owner-entered", async () => {
+  const bad = await task({ productId: undefined, url: 'https://shop.test/p/9?utm_source=x' });
+  expect([bad.status, ((await bad.json()) as { field: string }).field]).toEqual([400, 'link']);
+  const r = await task({ productId: undefined, url: 'https://shop.test/p/9?utm_source=x', owner: { title: 'Collapsible dog bowl', price: { amount: 1299, currency: 'USD' } } });
+  expect(r.status).toBe(201);
+  const t = (await r.json()) as PrTask;
+  const l = db.prepare('SELECT store_id, origin, title, canonical_url, transform_json FROM pr_listings WHERE id = ?').get(t.listingId!)!;
+  expect({ ...l }).toEqual({ store_id: 'pawsome', origin: 'owner_link', title: 'Collapsible dog bowl', canonical_url: 'https://shop.test/p/9', transform_json: '{"ownerEntered":true}' });
+  expect(getRun(db, t.runId!)!.task).toContain('> - Preview title (owner-provided): Collapsible dog bowl');
+  // The same link again uses that listing.
+  const again = (await json<PrTask>(task({ productId: undefined, url: 'https://shop.test/p/9', owner: { title: 'Another name' } })));
+  expect([again.productId, again.listingId]).toEqual([t.productId, t.listingId]);
+  await idle();
+});
+
+test("a new task runs on the config its row shows: the type's latest in the store", async () => {
+  await json(send('POST', '/api/conversations?store=pawsome', { clientRequestId: randomUUID(), type: 'product_hunter', message: 'Scout travel bowls', config: { knowledge: ['store'], permissions: { saveFindings: 'ask' } } }));
+  await idle();
+  const t = await json<PrTask>(task());
+  expect(getConfig(db, getConversation(db, t.conversationId!)!.configId)).toMatchObject({ runtime: 'demo', knowledge: ['store'], permissions: { saveFindings: 'ask' } });
+  await idle();
 });

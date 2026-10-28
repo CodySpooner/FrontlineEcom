@@ -750,7 +750,7 @@ STOP.
   message (T8); status from the run; Retry; list and detail routes. Also the discovery API's Research filter and the
   card footer's execution state (`GET /api/pr/products`, PR-09, has neither until tasks exist). API tests: the repeat, a repeat whose run never
   started, another store's conversation, an ineligible type, a busy agent both ways, an app restart mid-run.
-- [ ] PR-16 **Research a Product dialog** (decision 6, The design: dialog): stepper, stores, eligible agents with state,
+- [x] PR-16 **Research a Product dialog** (decision 6, The design: dialog): stepper, stores, eligible agents with state,
   Queue after current work or Run separately, Create new through Deploy configure-only (T1), templates, the real budget
   line, the Demo-runtime warning, draft persistence, Start. The toolbar button and "Research with an agent" appear with
   this item.
@@ -926,6 +926,24 @@ STOP.
   for the footer; the web adds the Research chip and the footer state. Tests: 6 API (the repeat, a run that never
   started, another store's conversation, ineligible types, busy both ways, a restart mid-run, the filter agreeing with
   the task for every status), 2 web.
+- 2026-10-28 PR-16 Research a Product dialog: the toolbar's red **Research a Product**, the panel's **Research with an
+  agent** (store scope, the product filled in) and the first-use line "Research a Product works now". The dialog has
+  the four-step stepper (done / current / to do, each a link to its section); the link and Fetch preview with the
+  preview card (title, image, host, "read from the public page <time>", page price "(not verified)", variants, what
+  the page didn't show, Correct details · Add notes), every other outcome said as it is with "Enter the details by
+  hand" (an ambiguous page lists its candidates as prefills); the store select with "Brings <store>'s niche, price band
+  and <n> knowledge cards" (the KB's count for the store plus General); the agent rows with their state pill, runtime ·
+  model · effort, the busy row's work and queue line, Queue after current work / Run separately, the reason a row isn't
+  ready, "+ Create new Product Research agent" through Deploy configure-only (T1) shown as "New: <type>", and the
+  Demo-runtime warning; the four template chips and a 5-row resizable box sent exactly as typed; the footer line, the
+  real budget (the config's run budget, what is left of the store's agent budget today, "No budget set for this run"),
+  Cancel and Start research. The draft is kept per browser (`fe.research.draft`) and reset after a start; Start opens
+  the product in the task's store. Server additions: a link the page wouldn't give becomes the store's private
+  `owner_link` listing named by the owner (marked owner-entered); a new task runs on the config its row shows (the
+  type's latest in the store); a repeat whose run never started takes the repeat's fields; a 409 says "Not started:
+  <reason>"; `PrAgentRow.budgetUsd`. PR-15 follow-ups: decision 5's automatic Discovered → Researching when a task
+  starts (by the task), T7's 429 test. Tests: 3 new API tests and 2 extended, 3 dialog, 1 Deploy (T1), page checks. Checked in the dev app on
+  the fake engine (see Notes).
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -957,6 +975,15 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-16 as built.** T1 (`Deploy.tsx`, ai-agents' file): `lockStore`, `types` and `onSubmit({type, config})`. The
+  title is left out of what it returns, with the objective, attachments and the Agent settings link, because the task
+  names its conversation "Research: <product>"; "+ Custom role" is hidden when `types` is set (custom roles are made
+  in AI Agents; one built on the Product Researcher then lists here). A read page's listing is private to the store it
+  was previewed for, so changing the dialog's store drops that preview (the link stays; Fetch preview reads it for the
+  new store). Dev-app check, 2026-10-28 15:44 UTC, fake engine, no page fetched (the SparkFun link pawsome already
+  had answered "existing"): the dialog opened, Start made a task in pawsome, the product moved to Researching by the
+  task and its card's Research state reads "Finished without a report" (no report tool until PR-17). That task stays
+  in this worktree's dev database. Screenshot `.agent/shots/pr16-dialog.png`.
 - **PR-15 as built.** The busy test stages the conversation's running turn as a row the run manager isn't running, so
   the queued and separate turns go ahead in the test; the queue line is then read from staged queued runs. The restart
   test marks the run running and builds a second run manager on the same database, which is the real restart path.

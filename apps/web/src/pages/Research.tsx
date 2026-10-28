@@ -16,6 +16,7 @@ import { activeFilters, discoveryQuery, FilterChips, type Filters } from '../pro
 import { countryName, profileLine, sourceItem } from '../product-research/format';
 import { DetailPanel, PANEL_TABS, type PanelTab } from '../product-research/Panel';
 import { ProfileDialog } from '../product-research/ProfileDialog';
+import { ResearchDialog } from '../product-research/ResearchDialog';
 import { SourceHealth } from '../product-research/SourceHealth';
 
 const VIEW_LABEL: Record<PrView, string> = { all: 'All matches', demand: 'With demand evidence', new: 'Newly discovered', watchlist: 'Watchlist', flagged: 'Flagged' };
@@ -72,6 +73,7 @@ export function Research() {
   const shipTo = store ? (profile.data?.shipTo ?? null) : allShipTo;
   const [editProfile, setEditProfile] = useState(false);
   const [health, setHealth] = useState(false);
+  const [researching, setResearching] = useState<{ product?: { id: string; title: string } } | null>(null);
 
   // `/` focuses search; Esc closes the open product and returns focus to its card (a dialog handles its own Esc).
   const search = useRef<HTMLInputElement>(null);
@@ -183,6 +185,11 @@ export function Research() {
             <option value="cost">Lowest verified cost + shipping (excl. duties)</option>
           </select>
         </label>
+        {stores.length > 0 && (
+          <Button variant="primary" className="ml-auto" onClick={() => setResearching({})}>
+            Research a Product
+          </Button>
+        )}
       </div>
 
       {store && profile.data && (
@@ -249,7 +256,7 @@ export function Research() {
               {view === 'demand' ? 'Products show here once they have a qualifying demand set (an imported Trends CSV with enough history, or your own orders).' : 'Products show here as they qualify.'}
             </EmptyState>
           ) : (
-            <FirstUse sources={sources.data ?? []} />
+            <FirstUse sources={sources.data ?? []} onResearch={stores.length ? () => setResearching({}) : undefined} />
           )
         ) : (
           <>
@@ -290,15 +297,26 @@ export function Research() {
             setTab={(t) => (set('tab', t === 'overview' ? null : t), setLastTab(t))}
             onClose={closePanel}
             onAssigned={(id) => pickScope(id, true)}
+            onResearch={(p) => setResearching({ product: p })}
           />
         )}
       </div>
+      {researching && (
+        <ResearchDialog
+          stores={stores}
+          store={store?.id ?? null}
+          {...(researching.product ? { product: researching.product } : {})}
+          onClose={() => setResearching(null)}
+          // The task's store and product: its card footer and panel show where it is.
+          onStarted={(t) => (setResearching(null), pickScope(t.storeId, true), set('product', t.productId))}
+        />
+      )}
     </>
   );
 }
 
 /** First use: nothing to show and nothing connected that would bring products. What each source needs, from the server. */
-function FirstUse({ sources }: { sources: PrSourceState[] }) {
+function FirstUse({ sources, onResearch }: { sources: PrSourceState[]; onResearch?: () => void }) {
   const connected = sources.filter((s) => s.access === 'verified');
   return (
     <EmptyState title={connected.length ? 'No products yet' : 'No product sources connected yet'}>
@@ -316,6 +334,14 @@ function FirstUse({ sources }: { sources: PrSourceState[] }) {
             </li>
           ))}
       </ul>
+      {onResearch && (
+        <p className="mt-3 max-w-[640px] text-left text-[12.5px]">
+          <b className="text-text">Research a Product works now:</b> paste any product link and an agent researches it for one of your stores.{' '}
+          <button type="button" onClick={onResearch} className="cursor-pointer text-[#ff6b76] hover:underline">
+            Research a Product
+          </button>
+        </p>
+      )}
     </EmptyState>
   );
 }

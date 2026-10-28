@@ -278,3 +278,31 @@ test("Deploy's attachments go with the first message", async () => {
   await waitFor(() => expect(posts).toHaveLength(1));
   expect(posts[0]!.body).toMatchObject({ message: 'Use the brief', attachments: [{ name: 'brief.txt', data: btoa('brief') }] });
 });
+
+test('configure-only (product-research T1): store locked, only the offered types, no objective, and the choice comes back without creating anything', async () => {
+  const posts: { url: string; body: unknown }[] = [];
+  api({ posts });
+  const chosen = vi.fn();
+  renderApp(
+    <Routes>
+      <Route path="*" element={<Deploy store={STORES[0]!} type="copywriter" lockStore types={['copywriter', 'cr1']} onSubmit={chosen} onClose={() => undefined} />} />
+    </Routes>,
+    '/research?store=glow',
+  );
+  await waitFor(() => expect(radio('Agent type', /^Copywriter/).getAttribute('aria-checked')).toBe('true'));
+  expect(within(within(dialog()).getByRole('radiogroup', { name: 'Agent type' })).getAllByRole('radio').map((r) => r.textContent)).toEqual([expect.stringMatching(/^Copywriter/), expect.stringMatching(/^Brand voice/)]);
+  expect((screen.getByRole('combobox', { name: 'Store' }) as HTMLSelectElement).disabled).toBe(true);
+  expect(screen.queryByRole('textbox', { name: 'Objective' })).toBeNull();
+  expect(screen.queryByRole('textbox', { name: /Conversation title/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: '+ Custom role' })).toBeNull();
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Start from a preset' }), { target: { value: 'p1' } });
+  await waitFor(() => expect(radio('Runtime', 'Claude').getAttribute('aria-checked')).toBe('true'));
+  fireEvent.click(screen.getByRole('button', { name: 'Use this agent' }));
+  await waitFor(() => expect(chosen).toHaveBeenCalledTimes(1));
+  expect(chosen).toHaveBeenCalledWith({
+    type: 'copywriter',
+    config: { runtime: 'claude', model: 'claude-sonnet-5-5', effort: 'low', tools: ['store_summary', 'list_products', 'create_creative', 'publish_page'], knowledge: ['store', 'general'], permissions: { budgetUsd: 2, stopAfterMin: 15, saveFindings: 'ask' } },
+  });
+  expect(posts).toEqual([]); // nothing created
+  expect(screen.getByTestId('where').textContent).toBe('/research?store=glow'); // no navigation
+});

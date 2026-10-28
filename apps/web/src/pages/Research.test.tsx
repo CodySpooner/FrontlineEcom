@@ -85,7 +85,7 @@ describe('Product Research page', () => {
     expect(within(c).getByText('Weak, battery')).toBeTruthy();
     expect(within(c).getByText('No flags found (rule checks only)')).toBeTruthy();
     expect(within(c).getByText('Trends "grooming brush" · US · Nov 2024–Oct 2026')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Research a Product/ })).toBeNull(); // absent until PR-16 (decision 1)
+    expect(screen.getByRole('button', { name: 'Research a Product' })).toBeTruthy(); // PR-16
     expect(screen.getByText('1 match · filtered and sorted on the server')).toBeTruthy();
   });
 
@@ -141,6 +141,7 @@ describe('Product Research page', () => {
     expect(screen.getByText('Upload a feed.')).toBeTruthy();
     expect(screen.queryByText('Add a note.')).toBeNull(); // a note needs a product
     expect(screen.queryByText('Upload a CSV.')).toBeNull(); // demand only
+    expect(screen.getByText('Research a Product works now:')).toBeTruthy(); // PR-16
   });
 
   it('no match: names the filters that are set and clears them', async () => {
@@ -280,6 +281,10 @@ describe('Detail panel', () => {
     expect(within(panel).queryByRole('tab', { name: 'Economics' })).toBeNull(); // decision 1: absent until PR-18
     expect(within(panel).queryByRole('combobox', { name: 'Assign to a store' })).toBeNull(); // store scope
     expect(screen.getByTestId('where').textContent).toContain('product=p1');
+    fireEvent.click(within(panel).getByRole('button', { name: 'Research with an agent' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Research a Product' });
+    expect(within(dialog).getByText('Silicone grooming brush')).toBeTruthy(); // filled in
+    expect(within(dialog).queryByRole('textbox', { name: 'Product link' })).toBeNull();
   });
 
   it('Demand draws stored points with the Trends caption and confirms a suggested set; Suppliers says what is unknown', async () => {
@@ -362,5 +367,6 @@ describe('Detail panel', () => {
     await waitFor(() => expect(calls(g, '/api/pr/products/p1/watch?')).toHaveLength(1));
     expect(within(panel).queryByRole('combobox', { name: 'Stage' })).toBeNull();
     expect(within(panel).queryByRole('textbox', { name: 'Your notes' })).toBeNull();
+    expect(within(panel).queryByRole('button', { name: 'Research with an agent' })).toBeNull(); // kept per store
   });
 });

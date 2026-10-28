@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { PrDiscovery, PrProductDetail, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile } from '@frontline/shared';
+import type { ConversationConfigInput, PrAgentRow, PrDiscovery, PrOwnerDetails, PrPreview, PrProductDetail, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -55,9 +55,9 @@ export const useProductTab = <T,>(id: string, store: string | null, tab: 'demand
   useQuery({ queryKey: ['pr', 'product', id, store, tab], queryFn: () => api<T>(`/api/pr/products/${enc(id)}/${tab}?${scope(store)}`), enabled });
 
 /** A write that changes what the page shows: every research query refetches after it. */
-function usePrWrite<B>(path: (b: B) => string, method = 'POST') {
+function usePrWrite<B, R = unknown>(path: (b: B) => string, method = 'POST') {
   const qc = useQueryClient();
-  return useMutation({ mutationFn: (b: B) => api<unknown>(path(b), json(method, b)), onSuccess: () => qc.invalidateQueries({ queryKey: ['pr'] }) });
+  return useMutation({ mutationFn: (b: B) => api<R>(path(b), json(method, b)), onSuccess: () => qc.invalidateQueries({ queryKey: ['pr'] }) });
 }
 /** Confirm a suggested query-level set for the product, or say it isn't about it. */
 export const useLinkSet = (store: string | null) => usePrWrite<{ signalId: string; productId: string; confirmed: boolean }>((b) => `/api/pr/signals/${enc(b.signalId)}/links?${scope(store)}`);
@@ -70,3 +70,22 @@ export const useSaveNotes = (id: string, store: string) => usePrWrite<{ notes: s
 export const useDismissFlag = (id: string, store: string) => usePrWrite<{ flag: string; reason: string }>((b) => `/api/pr/products/${enc(id)}/flags/${enc(b.flag)}/dismiss?${scope(store)}`);
 export const useAddNote = (id: string, store: string) => usePrWrite<{ platform: 'tiktok_creative_center'; url: string; note: string; observedAt: string }>(() => `/api/pr/products/${enc(id)}/notes?${scope(store)}`);
 export const useWatch = (id: string, store: string | null) => usePrWrite<{ on: boolean }>(() => `/api/pr/products/${enc(id)}/watch?${scope(store)}`, 'PUT');
+
+/** Research a Product (decision 6): the store's eligible agents with their state, the link preview, and Start. */
+export const usePrAgents = (store: string) => useQuery({ queryKey: ['pr', 'agents', store], queryFn: () => api<PrAgentRow[]>(`/api/pr/agents?${scope(store)}`), enabled: !!store });
+export const usePreview = (store: string) => usePrWrite<{ url: string }, PrPreview>(() => `/api/pr/preview?${scope(store)}`);
+export interface PrTaskStart {
+  clientRequestId: string;
+  productId?: string;
+  listingId?: string;
+  url?: string;
+  preview?: Pick<PrPreview, 'title' | 'price' | 'variants'>;
+  owner?: PrOwnerDetails;
+  instructions: string;
+  template?: string;
+  type: string;
+  mode: PrTask['mode'];
+  conversationId?: string;
+  config?: ConversationConfigInput;
+}
+export const useStartTask = (store: string) => usePrWrite<PrTaskStart, PrTask>(() => `/api/pr/tasks?${scope(store)}`);

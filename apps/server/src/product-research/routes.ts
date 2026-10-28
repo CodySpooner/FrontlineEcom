@@ -176,7 +176,7 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if ('error' in input) return c.json({ error: input.error, ...(input.field ? { field: input.field } : {}) }, 400);
       const r = startTask(db, runManager(db), store, input, await runtimes());
       if ('error' in r) return c.json({ error: r.error, ...(r.field ? { field: r.field } : {}) }, r.status);
-      return c.json(r.task, r.status);
+      return c.json(r.status === 409 ? { ...r.task, error: `Not started: ${r.task.detail}` } : r.task, r.status); // Not started: the reason, as an error too
     })
     .get('/api/pr/tasks', (c) => {
       const store = storeOf(c, db);
@@ -193,7 +193,7 @@ export function prRoutes(db: Db, key: () => Buffer) {
       const store = storeOf(c, db);
       if (store instanceof Response) return store;
       const r = retryTask(db, runManager(db), store, c.req.param('id'), await runtimes());
-      return 'error' in r ? c.json({ error: r.error }, r.status) : c.json(r.task, r.status);
+      return 'error' in r ? c.json({ error: r.error }, r.status) : c.json(r.status === 409 ? { ...r.task, error: `Not started: ${r.task.detail}` } : r.task, r.status);
     })
     .post('/api/pr/products/:id/stage', async (c) => {
       const store = storeOf(c, db);
@@ -251,7 +251,8 @@ const isText = (v: unknown, max: number): v is string => typeof v === 'string' &
 function taskInput(body: unknown): TaskInput | { error: string; field?: string } {
   const b = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
   if (!isId(b.clientRequestId)) return { error: 'Expected { clientRequestId, productId, type, mode, instructions, … }' };
-  if (typeof b.productId !== 'string') return { error: 'productId must be the product to research', field: 'product' };
+  if (b.productId !== undefined && typeof b.productId !== 'string') return { error: 'productId must be the product to research', field: 'link' };
+  if (b.productId === undefined && b.url === undefined) return { error: 'Paste the product link, or open the product to research.', field: 'link' };
   if (typeof b.type !== 'string') return { error: 'Pick an agent', field: 'agent' };
   if (b.mode !== 'new' && b.mode !== 'queue' && b.mode !== 'separate') return { error: 'mode must be new, queue or separate', field: 'agent' };
   if (b.mode !== 'new' && typeof b.conversationId !== 'string') return { error: 'Name the conversation to queue after or run beside', field: 'agent' };
@@ -267,7 +268,7 @@ function taskInput(body: unknown): TaskInput | { error: string; field?: string }
   if (b.config !== undefined && (typeof b.config !== 'object' || b.config === null || Array.isArray(b.config))) return { error: 'config must be what Deploy returned', field: 'agent' };
   return {
     clientRequestId: b.clientRequestId,
-    productId: b.productId,
+    ...(typeof b.productId === 'string' ? { productId: b.productId } : {}),
     ...(typeof b.listingId === 'string' ? { listingId: b.listingId } : {}),
     ...(typeof b.url === 'string' ? { url: b.url } : {}),
     ...(p ? { preview: { title: (p.title as string | null) ?? null, price: (price as { amount: number; currency: string } | null) ?? null, variants: (p.variants as string[] | undefined) ?? [] } } : {}),

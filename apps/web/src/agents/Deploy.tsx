@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
-import { APPROVAL_KINDS, CODEX_ULTRA, EFFORT_LABEL, type AgentPermissions, type AgentPreset, type AgentTypeInfo, type ConversationDetail, type KnowledgeScope, type RuntimeCapabilities, type RuntimeId, type Store } from '@frontline/shared';
+import { APPROVAL_KINDS, CODEX_ULTRA, EFFORT_LABEL, type AgentPermissions, type AgentPreset, type AgentTypeInfo, type ConversationDetail, type ConversationConfigInput, type KnowledgeScope, type RuntimeCapabilities, type RuntimeId, type Store } from '@frontline/shared';
 import { useAgents, useAgentTypes, useCaps, useChangeConfig, useCreateConversation, usePresets, useRefreshRuntimes, useRuntimes, useSavePreset, useSetUpCodex, useStores, useTypeTools } from '../api/client';
 import { Button, cx, Dialog, Segmented, Switch } from '../components/ui';
 import { withParams } from '../knowledge/url';
@@ -199,14 +199,25 @@ function Fold({ title, summary, open, onToggle, children }: { title: string; sum
 
 const Row = ({ children }: { children: ReactNode }) => <div className="flex min-h-7 items-center gap-2 py-1 text-[12.5px] text-text-2">{children}</div>;
 
-/** Opens on the workspace's store and the type it was opened from (else the first); the store is fixed once it starts. */
-export function Deploy({ store: initial, type: preselected, onClose }: { store: Store; type: string; onClose: () => void }) {
+/** What configure-only Deploy hands back (product-research T1): nothing is created. */
+export interface DeployChoice {
+  type: string;
+  config: ConversationConfigInput;
+}
+
+/**
+ * Opens on the workspace's store and the type it was opened from (else the first); the store is fixed once it starts.
+ * Product Research's configure-only mode (T1): `lockStore`, `types` (the ids offered) and `onSubmit`, which gets the
+ * checked choice instead of a conversation being created; the objective, title, attachments and Agent settings are
+ * hidden (the research task brings its own message and title).
+ */
+export function Deploy({ store: initial, type: preselected, onClose, lockStore, types: offered, onSubmit }: { store: Store; type: string; onClose: () => void; lockStore?: boolean; types?: string[]; onSubmit?: (choice: DeployChoice) => void }) {
   const navigate = useNavigate();
   const settings = useAgentSettings();
   const stores = useStores().data ?? [initial];
   const [storeId, setStoreId] = useState(initial.id);
   const store = stores.find((s) => s.id === storeId) ?? initial;
-  const types = useAgentTypes(store.id).data;
+  const types = useAgentTypes(store.id).data?.filter((t) => !offered || offered.includes(t.id));
   const [typeId, setTypeId] = useState(preselected);
   const type = types?.find((t) => t.id === typeId) ?? types?.[0];
   const presets = usePresets(store.id, type?.id ?? '').data;
@@ -281,6 +292,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
   const start = async (e: FormEvent) => {
     e.preventDefault();
     if (!type || attachError(files)) return;
+    if (onSubmit) return onSubmit({ type: type.id, config });
     const attachments = files.length ? await toUploads(files) : undefined;
     create.mutate(
       { clientRequestId, type: type.id, message: objective.trim(), title: (title ?? suggested).trim() || undefined, config, ...(attachments ? { attachments } : {}) },
@@ -302,7 +314,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
         </button>
         <Button onClick={onClose}>Cancel</Button>
         <Button type="submit" form="deploy-form" variant="primary" disabled={!type || !groups || create.isPending}>
-          Start conversation
+          {onSubmit ? 'Use this agent' : 'Start conversation'}
         </Button>
       </div>
     ) : (
@@ -317,13 +329,14 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
     );
 
   return (
-    <Dialog open onClose={onClose} title="Deploy an agent" width={688} subtitle="Starts a new conversation. The store can't be changed after it starts." headerExtra={!store.connected && <DemoPill />} footer={footer}>
+    <Dialog open onClose={onClose} title="Deploy an agent" width={688} subtitle={onSubmit ? 'Sets up the agent for this task. Nothing starts until you start it there.' : "Starts a new conversation. The store can't be changed after it starts."} headerExtra={!store.connected && <DemoPill />} footer={footer}>
       <form id="deploy-form" onSubmit={start} className="grid gap-4">
         <div className="grid grid-cols-2 gap-3">
           <label className="grid content-start gap-1.5">
             <span className={label}>Store</span>
             <select
               className={select}
+              disabled={lockStore}
               value={store.id}
               onChange={(e) => {
                 const s = stores.find((x) => x.id === e.target.value)!;
@@ -355,9 +368,11 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
             <span id="deploy-type" className={label}>
               Agent type
             </span>
-            <button type="button" onClick={() => setCustomRole(true)} className="ml-auto cursor-pointer text-xs text-[#ff6b76] hover:underline">
-              + Custom role
-            </button>
+            {!offered && (
+              <button type="button" onClick={() => setCustomRole(true)} className="ml-auto cursor-pointer text-xs text-[#ff6b76] hover:underline">
+                + Custom role
+              </button>
+            )}
           </div>
           <div role="radiogroup" aria-labelledby="deploy-type" className="grid grid-cols-4 gap-2">
             {types?.map((t) => (
@@ -377,18 +392,22 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
           </div>
         </div>
         <RuntimeFields store={store} choice={choice} said={said} />
-        <label className="grid gap-1.5">
-          <span className="flex items-center gap-2">
-            <span className={label}>Conversation title</span>
-            {title === undefined && suggested && <span className="rounded bg-[#1d1d22] px-1.5 py-px text-[10.5px] font-semibold text-text-2">Suggested</span>}
-          </span>
-          <input className={cx(input, 'w-full')} maxLength={200} value={title ?? suggested} onChange={(e) => setTitle(e.target.value)} placeholder="From the objective" />
-        </label>
-        <label className="grid gap-1.5">
-          <span className={label}>Objective</span>
-          <textarea required rows={3} maxLength={20000} value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="What should the agent do? This is the first message." className={cx(input, 'h-[70px] w-full resize-none py-2')} />
-          {said('objective')}
-        </label>
+        {!onSubmit && (
+          <>
+            <label className="grid gap-1.5">
+              <span className="flex items-center gap-2">
+                <span className={label}>Conversation title</span>
+                {title === undefined && suggested && <span className="rounded bg-[#1d1d22] px-1.5 py-px text-[10.5px] font-semibold text-text-2">Suggested</span>}
+              </span>
+              <input className={cx(input, 'w-full')} maxLength={200} value={title ?? suggested} onChange={(e) => setTitle(e.target.value)} placeholder="From the objective" />
+            </label>
+            <label className="grid gap-1.5">
+              <span className={label}>Objective</span>
+              <textarea required rows={3} maxLength={20000} value={objective} onChange={(e) => setObjective(e.target.value)} placeholder="What should the agent do? This is the first message." className={cx(input, 'h-[70px] w-full resize-none py-2')} />
+              {said('objective')}
+            </label>
+          </>
+        )}
         <Fold title="Tools and knowledge" summary={`${knowledgeLabel(knowledge)} · ${base.length} tools${files.length ? ` · ${files.length} attached` : ''}`} open={toolsOpen} onToggle={() => setToolsOpen(!toolsOpen)}>
           <ul className="grid gap-1">
             {groups?.map((g) => (
@@ -427,18 +446,20 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
               <span className="text-xs text-muted">their names, platforms, niches and totals</span>
             </label>
           )}
-          <div className="mt-2.5 grid gap-1">
-            <span className="text-xs text-muted">Attachments (sent with the first message)</span>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <AttachButton files={files} onChange={setFiles} />
-              <Attachments files={files} onChange={setFiles} />
+          {!onSubmit && (
+            <div className="mt-2.5 grid gap-1">
+              <span className="text-xs text-muted">Attachments (sent with the first message)</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <AttachButton files={files} onChange={setFiles} />
+                <Attachments files={files} onChange={setFiles} />
+              </div>
+              {attachError(files) && (
+                <p role="alert" className="text-xs text-red">
+                  {attachError(files)}
+                </p>
+              )}
             </div>
-            {attachError(files) && (
-              <p role="alert" className="text-xs text-red">
-                {attachError(files)}
-              </p>
-            )}
-          </div>
+          )}
           {said('tools')}
           {said('knowledge')}
           {said('attachments')}
@@ -451,7 +472,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
                 <Lock aria-hidden className="size-3 shrink-0" />
                 <span>
                   {rules.length ? `Autopilot: ${rules.map(([k, v]) => `${APPROVAL_KINDS[k]?.label ?? k} up to ${money(v.maxUsdPerDay)}/day`).join(', ')}` : 'Always'}
-                  {rules.length > 0 && store.id === initial.id && type && (
+                  {rules.length > 0 && store.id === initial.id && type && !onSubmit && (
                     <>
                       {' · '}
                       <button type="button" onClick={() => (onClose(), settings.open(type.baseRole))} className="cursor-pointer text-[#ff6b76] hover:underline">

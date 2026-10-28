@@ -1214,6 +1214,10 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 - [x] (from product-research, FYI, done) T6 shipped in PR-03: `recordFind` in `routes/agents.ts` calls `mirrorFind`
   after its INSERT, and `ToolEnv.recordFind` in `packages/agents/src/tools.ts` now also receives the run id
   (`ctx.runId`). A demo-engine run's find is not mirrored.
+- [x] (from product-research, FYI, done) T1 shipped in PR-16: `Deploy` takes optional `lockStore`, `types` (the type
+  ids offered) and `onSubmit({type, config})`. With `onSubmit` it hands back the checked choice instead of creating a
+  conversation and hides the objective, title, attachments and Agent settings link; with `types` it hides "+ Custom
+  role". Without the new props it behaves as before (its existing tests unchanged, one new test).
 - [x] (from product-research, FYI, done) T2 shipped in PR-10: the shared fetcher moved to `kb/fetch-instance.ts`
   (`export const kbFetch`); `routes/agents.ts` imports it instead of creating it, behaviour unchanged. The fetcher
   also has an opt-in `image` mode (T3) that product research's image cache uses. Agent WebFetch through it is still

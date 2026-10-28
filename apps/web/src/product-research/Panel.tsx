@@ -60,6 +60,7 @@ export function DetailPanel({
   setTab,
   onClose,
   onAssigned,
+  onResearch,
 }: {
   id: string;
   store: Store | null;
@@ -69,6 +70,8 @@ export function DetailPanel({
   setTab: (t: PanelTab) => void;
   onClose: () => void;
   onAssigned: (storeId: string) => void;
+  /** Opens Research a Product with this product filled in (store scope). */
+  onResearch: (product: { id: string; title: string }) => void;
 }) {
   const scope = store?.id ?? null;
   const detail = useProductDetail(id, scope, shipTo);
@@ -93,6 +96,11 @@ export function DetailPanel({
             {tab === 'suppliers' && <Suppliers id={id} scope={scope} />}
             {tab === 'history' && <History id={id} scope={scope} stores={stores} />}
             <div className="flex flex-wrap gap-2 border-t border-line pt-3">
+              {store && (
+                <Button size="sm" variant="primary" onClick={() => onResearch({ id, title: d!.card.title })}>
+                  Research with an agent
+                </Button>
+              )}
               <WatchButton id={id} scope={scope} watched={d!.card.watched} />
             </div>
           </>
