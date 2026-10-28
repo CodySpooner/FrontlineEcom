@@ -93,7 +93,7 @@ function TeamSummary({ store, id }: { store: string; id: string }) {
       )}
       <p className="text-text-2">{consolidated ? `Consolidated: ${consolidated}` : 'No consolidated answer yet.'}</p>
       {t.conversationId && (
-        <Link to={agentsUrl({ store, conversation: t.conversationId })} className="text-[#ff6b76] hover:underline">
+        <Link to={agentsUrl({ store, conversation: t.conversationId })} className="text-red hover:underline">
           Open the team in AI Agents
         </Link>
       )}

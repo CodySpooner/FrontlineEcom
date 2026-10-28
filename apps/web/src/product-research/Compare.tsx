@@ -248,7 +248,7 @@ function CompareBody({ store, ids, setIds, shipTo, saved, loaded, onLoad }: Prop
           {PR_COMPARE_FIELDS.map((k) => (
             <label key={k} className="grid gap-1">
               <span>{`${PR_ECON_LABEL[k]} (${pct(k) ? '%' : cur})`}</span>
-              <input className={cx(inputClass, 'py-1 text-right')} inputMode="decimal" placeholder="Each product's own" value={draft[k] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))} />
+              <input className={cx(inputClass, 'text-right')} inputMode="decimal" placeholder="Each product's own" value={draft[k] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, [k]: e.target.value }))} />
             </label>
           ))}
         </div>
@@ -269,7 +269,7 @@ function CompareBody({ store, ids, setIds, shipTo, saved, loaded, onLoad }: Prop
         >
           <label className="grid gap-1">
             Name
-            <input className={cx(inputClass, 'w-[240px] py-1')} maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
+            <input className={cx(inputClass, 'w-[240px]')} maxLength={80} value={name} onChange={(e) => setName(e.target.value)} />
           </label>
           <Button size="sm" variant="primary" type="submit" disabled={!name.trim() || !ids.length || errors.length > 0 || save.isPending}>
             {loaded ? 'Save changes' : 'Save comparison'}

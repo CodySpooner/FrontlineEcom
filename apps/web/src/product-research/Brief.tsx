@@ -43,7 +43,7 @@ function BriefForm({ id, store, brief, onDraftWithAgent }: { id: string; store: 
             rows={k === 'creativeConcepts' || k === 'budgetAssumptions' ? 3 : 2}
             maxLength={4000}
             onChange={(e) => setFields({ ...fields, [k]: e.target.value })}
-            className={cx(inputClass, 'w-full resize-y py-1.5 text-xs')}
+            className={cx(inputClass, 'w-full resize-y')}
           />
         </label>
       ))}

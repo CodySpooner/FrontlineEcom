@@ -125,9 +125,9 @@ function Editor({ e, id, store }: { e: PrEconomics; id: string; store: string })
           const own = draft[scenario][k] ?? '';
           const from = scenario === 'base' ? e.derived[k] : null;
           const tag = own.trim() ? (
-            <Pill tone="run">Yours</Pill>
+            <Pill tone="muted">Yours</Pill>
           ) : from ? (
-            <Pill tone={from.tag === 'verified' ? 'good' : from.tag === 'assumption' ? 'warn' : from.tag === 'owner' ? 'run' : 'muted'}>
+            <Pill tone={from.tag === 'verified' ? 'good' : from.tag === 'assumption' ? 'warn' : 'muted'}>
               {from.tag === 'verified' ? 'Verified' : from.tag === 'assumption' ? 'Assumption' : from.tag === 'owner' ? 'Yours' : 'Unknown'}
             </Pill>
           ) : (
@@ -137,7 +137,7 @@ function Editor({ e, id, store }: { e: PrEconomics; id: string; store: string })
             <label key={k} className="grid grid-cols-[1fr_7rem] items-center gap-x-2 gap-y-0.5">
               <span className="text-text-2">{`${PR_ECON_LABEL[k]} (${pct(k) ? '%' : e.currency})`}</span>
               <input
-                className={cx(inputClass, 'py-1 text-right')}
+                className={cx(inputClass, 'text-right')}
                 inputMode="decimal"
                 value={own}
                 placeholder={scenario === 'base' ? (from!.value === null ? 'Unknown' : text(k, from!.value)) : base[k] === null ? 'Unknown' : text(k, base[k]!)}

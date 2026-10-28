@@ -57,7 +57,7 @@ export function ProfileDialog({ open, onClose, store, storeName, profile }: { op
       title="Edit research profile"
       subtitle={`How products are ranked and flagged for ${storeName}`}
       footer={
-        <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3">
+        <div className="flex items-center justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
@@ -68,7 +68,7 @@ export function ProfileDialog({ open, onClose, store, storeName, profile }: { op
       }
     >
       <form
-        className="grid gap-4 overflow-y-auto p-5"
+        className="grid gap-4"
         onSubmit={(e) => {
           e.preventDefault();
           submit();

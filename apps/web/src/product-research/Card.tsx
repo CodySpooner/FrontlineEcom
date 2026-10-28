@@ -9,9 +9,9 @@ import { conditionsLine, demandLines, minorMoney, sourceLine } from './format';
 // The board's pills (docs/reference/product-research-workspace.html `.pill`, `.good`, `.warn`, `.bad`, `.run`).
 const PILL = 'inline-flex items-center gap-1 rounded-md border px-[7px] py-0.5 text-[11px] font-semibold';
 export const TONE = {
-  muted: 'border-[#33333b] bg-[#0e0e11] text-text-2',
+  muted: 'border-line-2 bg-bg-2 text-text-2',
   good: 'border-good/35 bg-good/8 text-good',
-  warn: 'border-[#f5b84a]/35 bg-[#f5b84a]/8 text-[#f5b84a]',
+  warn: 'border-amber/35 bg-amber/8 text-amber',
   bad: 'border-red/40 bg-red/10 text-[#ff5a66]',
   run: 'border-[#7cb4ff]/35 bg-[#7cb4ff]/8 text-[#8cbcff]',
 };
@@ -43,7 +43,7 @@ function WatchEye({ c, scope }: { c: PrCard; scope: string | null }) {
       onKeyDown={(e) => e.stopPropagation()}
       className={cx('absolute top-[7px] right-[7px] grid size-[30px] cursor-pointer place-items-center rounded-lg border border-line-2 bg-[rgb(8_8_10/.7)] hover:text-text', c.watched ? 'text-red' : 'text-text-2')}
     >
-      <Eye aria-hidden className="size-3.5" strokeWidth={c.watched ? 2.6 : 2} />
+      <Eye aria-hidden className="size-3.5" strokeWidth={c.watched ? 2.6 : 2} fill={c.watched ? 'currentColor' : 'none'} />
     </button>
   );
 }
@@ -98,7 +98,8 @@ export function ProductCard({
             className="absolute inset-0 size-full object-contain p-2"
           />
         )}
-        <span className="absolute top-[9px] left-[9px] flex gap-1">
+        {/* Over a photo the pills' 8% fills need a backing to stay readable. */}
+        <span className={cx('absolute top-[9px] left-[9px] flex gap-1', c.imageListing && !noImage && 'rounded-lg bg-bg-2/90 p-0.5')}>
           {store && c.stage && <Pill tone={STAGE_TONE[c.stage]}>{PR_STAGE_LABEL[c.stage]}</Pill>}
           {c.fixture && <Pill tone="warn">Test fixture</Pill>}
         </span>
@@ -157,6 +158,8 @@ export function ProductCard({
           {/* The execution state, never the stage (spec §10): the stage is the pill at the top. */}
           {store && c.research ? (
             <Pill tone={TASK_TONE[c.research.status]}>{PR_TASK_STATUS_LABEL[c.research.status]}</Pill>
+          ) : store ? (
+            <Pill tone="muted">Not researched</Pill>
           ) : (
             <span>{!store && c.privateTo ? `Private to ${storeName(c.privateTo)}` : !store && c.storesEvaluating > 0 ? `${c.storesEvaluating} store${c.storesEvaluating === 1 ? '' : 's'} evaluating` : ''}</span>
           )}

@@ -39,7 +39,7 @@ function Body({ id, store, o }: { id: string; store: string; o: PrOutcomes }) {
         <ul aria-label="Lessons" className="grid gap-0.5">
           {o.lessons.map((l) => (
             <li key={l.cardId}>
-              <Link to={kb(l.cardId)} className="text-[#ff6b76] hover:underline">
+              <Link to={kb(l.cardId)} className="text-red hover:underline">
                 {l.title}
               </Link>
             </li>
@@ -79,7 +79,7 @@ function Product({ id, store, p, o }: { id: string; store: string; p: PrOutcomeP
         {`Context: offer ${p.offer ? `${m(p.offer.price)}${p.offer.compareAt ? ` (compare at ${m(p.offer.compareAt)})` : ''}` : 'unknown'}, inventory ${p.inventory ?? 'unknown'}, audience ${o.audience ?? 'not set'}; creative and ad spend aren't tracked per product. Sales alone don't show the product caused the result.`}
       </p>
       {p.cardId ? (
-        <Link to={kb(p.cardId)} className="text-[#ff6b76] hover:underline">
+        <Link to={kb(p.cardId)} className="text-red hover:underline">
           In the Knowledge Base
         </Link>
       ) : (

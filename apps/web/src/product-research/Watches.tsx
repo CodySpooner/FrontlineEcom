@@ -96,7 +96,7 @@ function WatchRow({ w, store, onOpen }: { w: PrWatch; store: string | null; onOp
       <p className="mt-1 text-muted">
         {w.lastSuccessAt ? `Last successful check ${when(w.lastSuccessAt)}` : w.lastCheckedAt ? 'No successful check yet' : 'Not checked yet: the first check records the starting point'}
       </p>
-      {w.coverage && <p className="text-[#f5b84a]">{`Partial coverage: ${w.coverage}`}</p>}
+      {w.coverage && <p className="text-amber">{`Partial coverage: ${w.coverage}`}</p>}
       {w.lastError && w.lastCheckedAt && <p className="text-[#ff5a66]">{`Last check failed ${when(w.lastCheckedAt)}: ${w.lastError}`}</p>}
       {w.alerts.length > 0 && (
         <ul aria-label="Alerts" className="mt-1.5 grid gap-1 border-t border-line pt-1.5">

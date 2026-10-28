@@ -169,10 +169,11 @@ export function Segmented<T extends string | number>({ label, options, value, on
 
 /** Underlined tab bar (store tabs, page sections). `color` adds an identity dot. */
 // `count` (opt-in): a muted number after the label, e.g. Product Research's server counts per view.
-export function Tabs<T extends string>({ label, tabs, value, onChange, className }: { label: string; tabs: { value: T; label: string; color?: string; count?: number }[]; value: T; onChange: (v: T) => void; className?: string }) {
+/** `underline`: the Product Research board's tabs (a red underline, no fill). */
+export function Tabs<T extends string>({ label, tabs, value, onChange, className, variant = 'fill' }: { label: string; tabs: { value: T; label: string; color?: string; count?: number }[]; value: T; onChange: (v: T) => void; className?: string; variant?: 'fill' | 'underline' }) {
   const { onKeyDown, stop } = roving(tabs.map((t) => t.value), value, onChange);
   return (
-    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className={cx('flex gap-1 overflow-x-auto [scrollbar-width:none] shadow-[inset_0_-1px_0_var(--color-line)]', className)}>
+    <div role="tablist" aria-label={label} onKeyDown={onKeyDown} className={cx('flex overflow-x-auto [scrollbar-width:none] shadow-[inset_0_-1px_0_var(--color-line)]', variant === 'underline' ? 'gap-x-5' : 'gap-1', className)}>
       {tabs.map((t, i) => (
         <button
           key={t.value}
@@ -182,8 +183,9 @@ export function Tabs<T extends string>({ label, tabs, value, onChange, className
           tabIndex={stop(i)}
           onClick={() => onChange(t.value)}
           className={cx(
-            'flex shrink-0 cursor-pointer items-center gap-1.5 border-b-2 px-4 py-2.5 text-[13px] font-semibold transition duration-150',
-            t.value === value ? 'border-red bg-red-soft text-white' : 'border-transparent text-muted hover:text-white',
+            'flex shrink-0 cursor-pointer items-center gap-1.5 border-b-2 py-2.5 text-[13px] font-semibold transition duration-150',
+            variant === 'underline' ? 'px-0.5' : 'px-4',
+            t.value === value ? cx('border-red text-white', variant === 'fill' && 'bg-red-soft') : 'border-transparent text-muted hover:text-white',
           )}
         >
           {t.color && <i className="size-[7px] rounded-full" style={{ background: t.color }} />}

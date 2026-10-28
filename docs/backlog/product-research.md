@@ -806,7 +806,7 @@ STOP.
   monitoring, untrusted text never rendered as HTML, a test that no production path writes origin `fixture`.
 - [x] PR-27 **Scale, states and accessibility** (decision 14): 10,000 products and 500 tasks in jsdom with stubbed
   pages, every distinct state, keyboard paths, focus, contrast, small windows.
-- [ ] PR-28 **Design pass:** compare with the board at the four sizes, run `styleseed-design-review`, fix or answer each
+- [x] PR-28 **Design pass:** compare with the board at the four sizes, run `styleseed-design-review`, fix or answer each
   finding under Notes.
 - [ ] PR-29 **Live verification** (decision 16): collect and re-run the live checks done so far (CJ, the owner's Trends
   CSV and supplier feed, the link previews) and do the one real research run, each recorded under Notes with time,
@@ -1047,6 +1047,13 @@ STOP.
   and Reports show 10 until "Show all". Fix: the match count said "10,000 match". Tests: row math (unit), 10,000
   matches paged 48 at a time with the window following the scroll and arrow keys inside it, 500 tasks and 500 reports,
   partial outage with stale data. Dev checks (below) at 1440×900 and 1024×680.
+- 2026-10-28 PR-28 Design pass: compared with the board at 1024×680, 1280×800, 1366×728, 1440×900 and 1920×1080
+  (CDP) and in Orca's browser at 1280×800; `styleseed-design-review` run, every finding fixed or answered (Notes).
+  Fixed: two states that never ended (profile and agent-list load failures now say so with Try again), the toolbar on
+  one row at 1366, three card columns beside the panel at 1440 as on the board, underline tabs (an opt-in `Tabs`
+  variant), "+ Research a Product", "Not researched" on cards, missing values muted in Overview, theme tokens for
+  hex, one link red, a backing for pills over photos, a shape cue on the watch eye, doubled dialog padding. 3 new
+  tests.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1078,6 +1085,33 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-28 design pass.** Board comparison (screenshots `.agent/shots/pr28-*.png` before, `pr28-after-*.png` after, no
+  console errors and no sideways scroll at any size). Orca's browser at 1280×800: layout checked by script (viewport
+  1280×800, no sideways scroll, 0 console errors); its screenshot tiles above 800 px, so the 1280×800 picture is the
+  CDP one. Fixed to match the board: the toolbar wrapped "Research a Product" at 1280 and 1366 (the search's 260 px
+  basis; now 224 px, it fits from 1366 up; at 1280 the button still takes a second row); the panel left 2 card columns
+  at 1440 where the board has 3 (card minimum 250 → 240 px, the board's card is 234 px); tabs had a red fill block
+  where the board underlines (`Tabs variant="underline"`, opt-in, default look unchanged, per "House primitives vs
+  the board"); the primary button lacked the board's "+" and was 38 px (now 36); cards left the footer blank where the
+  board says "Not researched"; Overview showed "None" and "Not assessed yet" as bold as real figures.
+  `styleseed-design-review` (StyleSeed rubric, run by a read-only reviewer on the page's 15 files): 45/100 before.
+  Fixed: a profile that fails to load left Ship to disabled with no message, and the dialog's agent list said
+  "Loading…" forever on an error (both now an alert with Try again, tested); an empty Watchlist or Flagged view had no
+  action (Show all matches, tested); hex where a token exists (`#33333b`, `#0e0e11`, `#24242a`, `#1a1a1e`, `#f5b84a`,
+  `rgba(255,42,58,.06)`) → `line-2`, `bg-2`, `line`, `panel-2`, `amber`, `red/6`; links in two reds → the `red` token
+  (`#ff5a66` stays for error text, the board's `.bad`); pills over a product photo had 8% fills (unreadable on a white
+  photo, which the PR-27 contrast scan can't see) → a backing; the watch eye said "watching" by colour alone → filled;
+  the "Yours" economics tag used the blue that means running → muted; plain `py-*`/`text-xs` overrides passed to
+  `inputClass` never applied (measured 8 px / 13 px with and without them) → removed, so the inputs keep the board's
+  `.inp` size; the dialog body's padding and footer divider were doubled in Edit research profile, More filters and
+  Source health; one `rounded-md` box → `rounded-lg`. Answered, kept: the radii (8 px controls, 9 px chips, 10 px
+  boxes, 6 px pills) are the house primitives' and the board's scale, one per element kind; the 11–13 px sizes and the
+  5/7/9 px offsets are the board's own values (match the board's type sizes, above); toolbar heights follow the board
+  (its `.chip` is about 33 px beside 36 px `.inp` and `.btn`); "Compare" and "Cancel run" are the board's copy; Source
+  health can't be empty (the server always lists decision 4's sources); the search placeholder is cut at 1440 because
+  the board's own 260–360 px search is narrower than its 13 px text. Primitive notes for other lanes, not changed:
+  `Button` md is 14 px where the board's `.btn` is 12.5 px. The rubric re-scored by hand after the fixes (not a second
+  review run): about 78/100, the remaining deductions being the answered items above.
 - **PR-27 dev checks.** On a scratch copy of the dev data with the 10,000-row generator (10,012 products; the worktree's
   own dev DB was not written and the copy is deleted), discovery answered in 0.65 s a page. In Chrome at 1440×900,
   after 12 page loads: 20 to 40 cards in the DOM at the bottom, the middle, while scrolling up in 700 px steps and at

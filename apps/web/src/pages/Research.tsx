@@ -2,7 +2,7 @@
 // chips; view tabs with server counts; the source strip; and the product grid. Every number comes from `/api/pr/*`.
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useSearchParams } from 'react-router';
-import { Search, TriangleAlert } from 'lucide-react';
+import { Plus, Search, TriangleAlert } from 'lucide-react';
 import { PR_COMPARE_MAX, PR_SORTS, PR_VIEWS, type PrSort, type PrSourceState, type PrView } from '@frontline/shared';
 import { useStores } from '../api/client';
 import { useStored } from '../agents/layout';
@@ -23,10 +23,10 @@ import { useRowWindow } from '../product-research/rowWindow';
 import { SourceHealth } from '../product-research/SourceHealth';
 
 const VIEW_LABEL: Record<PrView, string> = { all: 'All matches', demand: 'With demand evidence', new: 'Newly discovered', watchlist: 'Watchlist', flagged: 'Flagged' };
-const DOT = { good: 'bg-good', warn: 'bg-[#f5b84a]', bad: 'bg-red', muted: 'bg-muted' };
-const CHIP = 'inline-flex items-center gap-1.5 rounded-full border border-[#33333b] bg-[#0e0e11] px-2.5 py-1.5 text-xs whitespace-nowrap text-text-2';
+const DOT = { good: 'bg-good', warn: 'bg-amber', bad: 'bg-red', muted: 'bg-muted' };
+const CHIP = 'inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-bg-2 px-2.5 py-1.5 text-xs whitespace-nowrap text-text-2';
 const SELECT = 'cursor-pointer border-0 bg-transparent px-1 text-[13px] text-text [field-sizing:content] focus:outline-none';
-const SEG = (on: boolean) => cx('cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold [field-sizing:content]', on ? 'bg-[#24242a] text-text' : 'bg-transparent text-muted hover:text-text');
+const SEG = (on: boolean) => cx('cursor-pointer rounded-md px-2.5 py-1 text-xs font-semibold [field-sizing:content]', on ? 'bg-line text-text' : 'bg-transparent text-muted hover:text-text');
 const typing = (t: EventTarget | null) => t instanceof HTMLElement && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
 
 export function Research() {
@@ -129,7 +129,7 @@ export function Research() {
     <>
       <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
       <div className="mt-4 flex flex-wrap items-center gap-2.5">
-        <div role="group" aria-label="Scope" className="inline-flex rounded-[9px] border border-[#33333b] bg-[#0e0e11] p-[3px]">
+        <div role="group" aria-label="Scope" className="inline-flex rounded-[9px] border border-line-2 bg-bg-2 p-[3px]">
           <button type="button" aria-pressed={!store} onClick={() => pickScope('all')} className={SEG(!store)}>
             All stores
           </button>
@@ -154,7 +154,7 @@ export function Research() {
             )
           )}
         </div>
-        <label className="relative max-w-[360px] min-w-56 flex-[1_1_260px]">
+        <label className="relative max-w-[360px] min-w-56 flex-[1_1_224px]">
           <span className="sr-only">Search products</span>
           <Search aria-hidden className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
           <input
@@ -164,7 +164,7 @@ export function Research() {
             maxLength={200}
             onChange={(e) => setText(e.target.value)}
             placeholder="Search products, categories or supplier SKUs"
-            className="min-h-9 w-full rounded-lg border border-[#33333b] bg-[#0e0e11] py-2 pr-3 pl-9 text-[13px] placeholder:text-muted focus:border-red/60 focus:outline-none"
+            className="min-h-9 w-full rounded-lg border border-line-2 bg-bg-2 py-2 pr-3 pl-9 text-[13px] placeholder:text-muted focus:border-red/60 focus:outline-none"
           />
         </label>
         <label className={CHIP}>
@@ -194,7 +194,8 @@ export function Research() {
           </select>
         </label>
         {stores.length > 0 && (
-          <Button variant="primary" className="ml-auto" onClick={() => setResearching({})}>
+          <Button variant="primary" className="ml-auto h-9 py-0!" onClick={() => setResearching({})}>
+            <Plus aria-hidden className="size-4" />
             Research a Product
           </Button>
         )}
@@ -209,6 +210,14 @@ export function Research() {
           </button>
         </p>
       )}
+      {store && profile.isError && (
+        <p role="alert" className="mt-3 text-[12.5px] text-text-2">
+          {`The research profile didn't load (${profile.error.message}): ranking and Ship to wait for it. `}
+          <button type="button" onClick={() => void profile.refetch()} className="cursor-pointer text-red hover:underline">
+            Try again
+          </button>
+        </p>
+      )}
       {store && profile.data && editProfile && <ProfileDialog open onClose={() => setEditProfile(false)} store={store.id} storeName={store.name} profile={profile.data} />}
 
       <FilterChips d={first} filters={filters} set={setFilters} store={store?.id ?? null} currency={currency} />
@@ -216,6 +225,7 @@ export function Research() {
       <div className="mt-3.5">
         <Tabs
           label="Product views"
+          variant="underline"
           tabs={PR_VIEWS.map((v) => ({ value: v, label: VIEW_LABEL[v], count: first?.counts[v] }))}
           value={view}
           onChange={(v) => (set('view', v === 'all' ? null : v), setLast({ ...last, view: v }))}
@@ -263,7 +273,7 @@ export function Research() {
               {`Set: ${[...(q ? [`search "${q}"`] : []), ...set_].join(', ')}.`}
             </EmptyState>
           ) : view !== 'all' ? (
-            <EmptyState title={`Nothing in ${VIEW_LABEL[view]} yet`}>
+            <EmptyState title={`Nothing in ${VIEW_LABEL[view]} yet`} action={<Button onClick={() => set('view', null)}>Show all matches</Button>}>
               {view === 'demand'
                 ? 'Products show here once they have a qualifying demand set (an imported Trends CSV with enough history, or your own orders).'
                 : view === 'watchlist'
@@ -275,7 +285,7 @@ export function Research() {
           )
         ) : (
           <>
-            <div ref={grid} className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-3.5">
+            <div ref={grid} className="grid grid-cols-[repeat(auto-fill,minmax(240px,1fr))] gap-3.5">
               {win.above > 0 && <div aria-hidden className="col-span-full" style={{ height: win.above * win.pitch - win.gap }} />}
               {items.slice(win.from, win.to).map((c, k) => (
                 <ProductCard
@@ -356,7 +366,7 @@ function FirstUse({ sources, onResearch }: { sources: PrSourceState[]; onResearc
       {onResearch && (
         <p className="mt-3 max-w-[640px] text-left text-[12.5px]">
           <b className="text-text">Research a Product works now:</b> paste any product link and an agent researches it for one of your stores.{' '}
-          <button type="button" onClick={onResearch} className="cursor-pointer text-[#ff6b76] hover:underline">
+          <button type="button" onClick={onResearch} className="cursor-pointer text-red hover:underline">
             Research a Product
           </button>
         </p>

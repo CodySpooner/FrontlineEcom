@@ -39,11 +39,12 @@ const KIND: Record<string, string> = { stage: 'Stage', watch: 'Watch', flag: 'Fl
 const day = (iso: string) => new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
-const Row = ({ label, value, children }: { label: string; value: ReactNode; children?: ReactNode }) => (
+/** `muted`: a value that isn't there yet (the board greys those, so real figures stand out). */
+const Row = ({ label, value, muted, children }: { label: string; value: ReactNode; muted?: boolean; children?: ReactNode }) => (
   <div className="border-b border-dashed border-line py-2 last:border-b-0">
     <div className="flex justify-between gap-3">
       <span className="text-muted">{label}</span>
-      <b className="text-right text-text">{value}</b>
+      <b className={cx('text-right', muted ? 'font-medium text-muted' : 'text-text')}>{value}</b>
     </div>
     {children && <div className="mt-0.5 text-[11.5px] text-muted">{children}</div>}
   </div>
@@ -103,7 +104,7 @@ export function DetailPanel({
           <>
             <Header d={d!} scope={scope} store={store} onClose={onClose} />
             {/* Wraps like the board's tab row: a narrow panel never hides a tab off the edge. */}
-            <Tabs label="Product details" tabs={PANEL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t] }))} value={tab} onChange={setTab} className="shrink-0 flex-wrap [&>button]:px-2.5" />
+            <Tabs variant="underline" label="Product details" tabs={PANEL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t] }))} value={tab} onChange={setTab} className="shrink-0 flex-wrap" />
             {tab === 'overview' && <Overview d={d!} store={store} stores={stores} onAssigned={onAssigned} />}
             {tab === 'demand' && <Demand id={id} scope={scope} />}
             {tab === 'suppliers' && <Suppliers id={id} store={store} />}
@@ -184,7 +185,7 @@ function StageSelect({ id, store, stage }: { id: string; store: Store; stage: Pr
   const cancel = () => (setTo(null), setReason(''), move.reset());
   return (
     <>
-      <label className="inline-flex items-center gap-0.5 rounded-full border border-[#33333b] bg-[#0e0e11] py-0.5 pr-1 pl-2.5 text-xs text-muted">
+      <label className="inline-flex items-center gap-0.5 rounded-full border border-line-2 bg-bg-2 py-0.5 pr-1 pl-2.5 text-xs text-muted">
         Stage
         <select value={to ?? stage} onChange={(e) => setTo(e.target.value === stage ? null : (e.target.value as PrStage))} className="cursor-pointer border-0 bg-transparent px-1 text-xs font-semibold text-text [field-sizing:content] focus:outline-none">
           {PR_STAGES.map((s) => (
@@ -204,7 +205,7 @@ function StageSelect({ id, store, stage }: { id: string; store: Store; stage: Pr
         >
           <label className="grid gap-1 text-xs text-text-2">
             {`Why move it to ${PR_STAGE_LABEL[to]}? Kept in History.`}
-            <input autoFocus value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), cancel())} className={cx(inputClass, 'py-1.5 text-xs')} />
+            <input autoFocus value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), cancel())} className={inputClass} />
           </label>
           <div className="flex gap-2">
             <Button size="sm" type="submit" disabled={!reason.trim() || move.isPending}>
@@ -232,7 +233,7 @@ function FlagItem({ f, id, store }: { f: PrFlag; id: string; store: Store | null
   const dismiss = useDismissFlag(id, store?.id ?? '');
   return (
     <li>
-      <b className="text-[#f5b84a]">{f.label}</b>: {f.reason}
+      <b className="text-amber">{f.label}</b>: {f.reason}
       {store && !open && (
         <button type="button" onClick={() => setOpen(true)} className="ml-1.5 cursor-pointer text-red hover:underline">
           Dismiss…
@@ -254,7 +255,7 @@ function FlagItem({ f, id, store }: { f: PrFlag; id: string; store: Store | null
             maxLength={500}
             onChange={(e) => setReason(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setOpen(false))}
-            className={cx(inputClass, 'min-w-0 flex-1 py-1 text-xs')}
+            className={cx(inputClass, 'min-w-0 flex-1')}
           />
           <Button size="sm" type="submit" disabled={!reason.trim() || dismiss.isPending}>
             Dismiss
@@ -277,7 +278,7 @@ function Notes({ id, store, notes }: { id: string; store: Store; notes: string |
   const dirty = text.trim() !== (notes ?? '');
   return (
     <Section title="Your notes (owner-provided)">
-      <textarea aria-label="Your notes" value={text} rows={3} maxLength={4000} onChange={(e) => setText(e.target.value)} placeholder={`What to remember about it for ${store.name}`} className={cx(inputClass, 'w-full resize-y py-1.5 text-xs')} />
+      <textarea aria-label="Your notes" value={text} rows={3} maxLength={4000} onChange={(e) => setText(e.target.value)} placeholder={`What to remember about it for ${store.name}`} className={cx(inputClass, 'w-full resize-y')} />
       <div className="mt-1.5 flex items-center gap-2">
         <Button size="sm" disabled={!dirty || save.isPending} onClick={() => save.mutate({ notes: text.trim() })}>
           Save notes
@@ -307,7 +308,7 @@ function Pipeline({ id, store, owner }: { id: string; store: Store; owner: strin
   return (
     <Section title="Owner and links">
       <div className="flex gap-2">
-        <input aria-label="Owner" value={text} maxLength={80} onChange={(e) => setText(e.target.value)} placeholder="Who handles it" className={cx(inputClass, 'min-w-0 flex-1 py-1.5 text-xs')} />
+        <input aria-label="Owner" value={text} maxLength={80} onChange={(e) => setText(e.target.value)} placeholder="Who handles it" className={cx(inputClass, 'min-w-0 flex-1')} />
         <Button size="sm" disabled={text.trim() === (owner ?? '') || save.isPending} onClick={() => save.mutate({ owner: text.trim() })}>
           Save owner
         </Button>
@@ -330,7 +331,7 @@ function Pipeline({ id, store, owner }: { id: string; store: Store; owner: strin
       )}
       {free.length > 0 && (
         <div className="mt-1.5 flex gap-2">
-          <select aria-label="Link an experiment" value={pick} onChange={(e) => setPick(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1.5 text-xs')}>
+          <select aria-label="Link an experiment" value={pick} onChange={(e) => setPick(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1')}>
             <option value="">Link an experiment…</option>
             {free.map((e) => (
               <option key={e.id} value={e.id}>
@@ -381,19 +382,19 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
             {a.fit.reasons.join('; ')}
           </Row>
         )}
-        <Row label="Demand evidence" value={PR_DEMAND_LEVEL_LABEL[a.demand.level]}>
+        <Row label="Demand evidence" value={PR_DEMAND_LEVEL_LABEL[a.demand.level]} muted={a.demand.level === 'none'}>
           {[a.demand.ownOrders ? 'Your own orders' : null, a.demand.sets ? plural(a.demand.sets - (a.demand.ownOrders ? 1 : 0), 'qualifying set') : 'No qualifying set', a.demand.sets ? cls : null].filter(Boolean).join(' · ')}
         </Row>
-        <Row label={`Fulfillment to ${d.shipTo ? countryName(d.shipTo) : 'your country'}`} value={c.fulfillment ? PR_FULFILLMENT_LABEL[c.fulfillment.status] : 'Not checked yet'}>
+        <Row label={`Fulfillment to ${d.shipTo ? countryName(d.shipTo) : 'your country'}`} value={c.fulfillment ? PR_FULFILLMENT_LABEL[c.fulfillment.status] : 'Not checked yet'} muted={!c.fulfillment}>
           {c.fulfillment?.reasons.join('; ')}
         </Row>
-        <Row label="Economics (base)" value={!a.economics ? 'Not assessed yet' : a.economics.result.figures ? minorMoney(a.economics.result.figures.before, a.economics.currency) : incomplete(a.economics.result)}>
+        <Row label="Economics (base)" value={!a.economics ? 'Not assessed yet' : a.economics.result.figures ? minorMoney(a.economics.result.figures.before, a.economics.currency) : incomplete(a.economics.result)} muted={!a.economics}>
           {a.economics?.result.figures &&
             `per order before ads${a.economics.result.excluded.length ? `, excl. ${a.economics.result.excluded.map((k) => PR_ECON_LABEL[k].toLowerCase()).join(', ')}` : ''}`}
         </Row>
         {store && <InStore id={c.id} store={store} />}
         {/* The latest non-demo report's proposals and risks (decision 11): ideas to test, never evidence. */}
-        <Row label="Differentiation" value={a.report?.proposals.length ? 'Proposal, not evidence' : 'Not assessed yet'}>
+        <Row label="Differentiation" value={a.report?.proposals.length ? 'Proposal, not evidence' : 'Not assessed yet'} muted={!a.report?.proposals.length}>
           {a.report?.proposals.length ? (
             <ul className="grid gap-0.5">
               {a.report.proposals.map((p, i) => (
@@ -402,7 +403,7 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
             </ul>
           ) : null}
         </Row>
-        <Row label="Risk" value={a.flags === null ? 'Not checked yet' : a.flags.length ? plural(a.flags.length, 'flag') : 'No flags found (rule checks only)'}>
+        <Row label="Risk" value={a.flags === null ? 'Not checked yet' : a.flags.length ? plural(a.flags.length, 'flag') : 'No flags found (rule checks only)'} muted={a.flags === null}>
           {a.flags?.length ? (
             <ul className="grid gap-0.5">
               {a.flags.map((f) => (
@@ -434,7 +435,7 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
       {store && <Notes id={c.id} store={store} notes={d.notes} />}
       {!store && <Assign id={c.id} stores={stores} evaluating={d.stores} onAssigned={onAssigned} />}
       {d.agentEstimates && (
-        <details className="rounded-md border border-line px-3 py-2">
+        <details className="rounded-lg border border-line px-3 py-2">
           <summary className="cursor-pointer text-muted">Agent's estimates (not evidence)</summary>
           <ul className="mt-1.5 grid gap-0.5 text-text-2">
             {Object.entries(d.agentEstimates)
@@ -468,7 +469,7 @@ function Assign({ id, stores, evaluating, onAssigned }: { id: string; stores: St
       )}
       {free.length > 0 && (
         <div className="flex gap-2">
-          <select aria-label="Assign to a store" value={pick} onChange={(e) => setPick(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1 py-1.5')}>
+          <select aria-label="Assign to a store" value={pick} onChange={(e) => setPick(e.target.value)} className={cx(inputClass, 'min-w-0 flex-1')}>
             <option value="">Assign to a store…</option>
             {free.map((s) => (
               <option key={s.id} value={s.id}>
@@ -597,7 +598,7 @@ function Demand({ id, scope }: { id: string; scope: string | null }) {
             e.target.value = '';
             if (file) upload.mutate({ name: file.name, csv: await file.text(), productId: id });
           }}
-          className="block w-full text-muted file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-line-2 file:bg-[#1a1a1e] file:px-2.5 file:py-1 file:text-text"
+          className="block w-full text-muted file:mr-2 file:cursor-pointer file:rounded-md file:border file:border-line-2 file:bg-panel-2 file:px-2.5 file:py-1 file:text-text"
         />
         {upload.isPending && <p className="mt-1 text-muted">Importing…</p>}
         {upload.error && (
@@ -627,10 +628,10 @@ function NoteForm({ id, store }: { id: string; store: string }) {
           add.mutate({ platform: 'tiktok_creative_center', url: url.trim(), note: note.trim(), observedAt: date }, { onSuccess: () => (setUrl(''), setNote('')) });
         }}
       >
-        <input type="url" required aria-label="Link you looked at" placeholder="https://ads.tiktok.com/business/creativecenter/…" value={url} onChange={(e) => setUrl(e.target.value)} className={cx(inputClass, 'py-1.5 text-xs')} />
-        <textarea required aria-label="What you saw" placeholder="What you saw" rows={2} maxLength={4000} value={note} onChange={(e) => setNote(e.target.value)} className={cx(inputClass, 'resize-y py-1.5 text-xs')} />
+        <input type="url" required aria-label="Link you looked at" placeholder="https://ads.tiktok.com/business/creativecenter/…" value={url} onChange={(e) => setUrl(e.target.value)} className={inputClass} />
+        <textarea required aria-label="What you saw" placeholder="What you saw" rows={2} maxLength={4000} value={note} onChange={(e) => setNote(e.target.value)} className={cx(inputClass, 'resize-y')} />
         <div className="flex items-center gap-2">
-          <input type="date" required aria-label="Date you looked" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={cx(inputClass, 'py-1 text-xs')} />
+          <input type="date" required aria-label="Date you looked" max={today} value={date} onChange={(e) => setDate(e.target.value)} className={inputClass} />
           <Button size="sm" type="submit" disabled={!url.trim() || !note.trim() || add.isPending}>
             Add note
           </Button>
@@ -656,7 +657,7 @@ function InStore({ id, store }: { id: string; store: Store }) {
   const linked = q.data?.inStore.filter((s) => s.linked) ?? [];
   const possible = linked.length ? [] : (q.data?.inStore ?? []);
   return (
-    <Row label={`Already in ${store.name}`} value={!q.data ? (q.isError ? 'Unknown' : 'Checking…') : linked.length ? 'Yes' : possible.length ? 'Possibly' : 'Not found'}>
+    <Row label={`Already in ${store.name}`} value={!q.data ? (q.isError ? 'Unknown' : 'Checking…') : linked.length ? 'Yes' : possible.length ? 'Possibly' : 'Not found'} muted={!linked.length && !possible.length}>
       {linked.length > 0 && `Linked: ${linked.map((s) => s.title).join(', ')}`}
       {possible.map((s) => (
         <span key={s.id} className="mt-1 flex flex-wrap items-center gap-1.5">

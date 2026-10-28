@@ -58,7 +58,7 @@ function Chip({ label, lenient, filters, set, k, children }: { label: string; le
   const on = filters[k] !== undefined && filters[k] !== '';
   const strict = !!name && !!filters.strict?.includes(name);
   return (
-    <span className={cx('inline-flex items-center gap-1 rounded-full border bg-[#0e0e11] py-1 pr-1.5 pl-2.5 text-xs whitespace-nowrap text-text-2', on ? 'border-red/45' : 'border-[#33333b]')}>
+    <span className={cx('inline-flex items-center gap-1 rounded-full border bg-bg-2 py-1 pr-1.5 pl-2.5 text-xs whitespace-nowrap text-text-2', on ? 'border-red/45' : 'border-line-2')}>
       <label className="flex items-center">
         {label}
         {children}
@@ -200,7 +200,7 @@ function MoreFilters({ open, onClose, d, filters, set, store, currency }: { open
   const pick = (k: keyof Filters) => (v: string | number | undefined) => set({ ...filters, [k]: v === '' ? undefined : v });
   return (
     <Dialog open={open} onClose={onClose} title="More filters" side="right" subtitle="Applied on the server as you change them">
-      <div className="grid gap-4 p-5">
+      <div className="grid gap-4">
         <Field label="Niche">
           <select value={filters.niche ?? ''} onChange={(e) => pick('niche')(e.target.value)} className={inputClass}>
             <option value="">Any</option>

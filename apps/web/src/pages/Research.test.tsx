@@ -217,6 +217,27 @@ describe('Product Research page', () => {
     expect(document.activeElement).toBe(screen.getByRole('article', { name: 'Product 201' }));
   });
 
+  it('a research profile that fails to load says so and retries; an empty view offers all matches', async () => {
+    let down = true;
+    stubApi((url) => {
+      if (url.startsWith('/api/stores')) return [store];
+      if (url.startsWith('/api/pr/products')) return page([]);
+      if (url.startsWith('/api/pr/sources')) return [source({ fixtures: 10 })];
+      if (url.startsWith('/api/pr/profile')) return down ? new Response(JSON.stringify({ error: 'database is locked' }), { status: 500 }) : profile;
+      return [];
+    });
+    renderApp(<Research />, '/research?store=paws&view=flagged');
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toBe("The research profile didn't load (database is locked): ranking and Ship to wait for it. Try again");
+    down = false;
+    fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+    await screen.findByRole('button', { name: 'Edit research profile' });
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getByText('Nothing in Flagged yet')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Show all matches' }));
+    await waitFor(() => expect(screen.getByTestId('where').textContent).not.toContain('view='));
+  });
+
   it('partial outage and stale data: the source that stopped answering, why, and when it last synced; other sources unaffected', async () => {
     api({ sources: [source({ access: 'verified', status: 'degraded', errorKind: 'server', lastError: 'CJ: no answer within 20 s', lastSuccessAt: '2026-10-27T09:30:00Z', products: 40 }), source({ id: 'trends_csv', name: 'Google Trends CSV', access: 'verified', products: 3 })] });
     renderApp(<Research />, '/research');

@@ -84,7 +84,7 @@ function ownerDetails(o: Draft['owner'], currency: string): PrOwnerDetails | und
 }
 
 const when = (iso: string) => new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-const link = 'cursor-pointer text-[#ff6b76] hover:underline';
+const link = 'cursor-pointer text-red hover:underline';
 const section = 'scroll-mt-4';
 
 /** `store`: the page's store scope (null: All stores). `product`: the product it was opened from. */
@@ -112,7 +112,8 @@ export function ResearchDialog({
   }, [product?.id, template]); // eslint-disable-line react-hooks/exhaustive-deps -- only when it opens on another product or template
   const store = stores.find((s) => s.id === draft.storeId) ?? stores.find((s) => s.id === scope) ?? stores[0];
   const storeId = store?.id ?? '';
-  const rows = usePrAgents(storeId).data;
+  const agents = usePrAgents(storeId);
+  const rows = agents.data;
   const profile = useProfile(storeId || null).data;
   const cards = useKbCards(storeId, { general: true, limit: 1 }).data?.total;
   const caps = useCaps(storeId).data;
@@ -194,7 +195,7 @@ export function ResearchDialog({
 
         <section id="pr-step-0" aria-label="Product link" className={section}>
           {draft.product ? (
-            <div className="flex items-center gap-3 rounded-[10px] border border-line bg-[#0e0e11] p-2.5 text-[12.5px]">
+            <div className="flex items-center gap-3 rounded-[10px] border border-line bg-bg-2 p-2.5 text-[12.5px]">
               <Package aria-hidden className="size-5 text-muted" />
               <span className="min-w-0 flex-1">
                 Researching <b className="text-text">{draft.product.title}</b>
@@ -237,13 +238,20 @@ export function ResearchDialog({
           <section id="pr-step-2" aria-label="Agent" className={section}>
             <fieldset className="m-0 border-0 p-0">
               <legend className="text-xs text-muted">Product Research agent</legend>
-              {!rows ? (
+              {agents.isError ? (
+                <p role="alert" className="mt-1.5 text-xs text-[#ff5a66]">
+                  {`The store's agents didn't load (${agents.error.message}). `}
+                  <button type="button" className={link} onClick={() => void agents.refetch()}>
+                    Try again
+                  </button>
+                </p>
+              ) : !rows ? (
                 <p className="mt-1.5 text-xs text-muted">Loading the store&apos;s agents…</p>
               ) : (
                 rows.map((r) => <AgentRow key={r.type} r={r} picked={!draft.agent?.choice && draft.agent?.type === r.type} mode={draft.agent?.mode ?? 'queue'} pick={(mode) => update({ agent: { type: r.type, mode } })} />)
               )}
               {draft.agent?.choice && (
-                <label className="mt-1.5 flex items-start gap-2 rounded-[9px] border border-red-fill bg-[rgba(255,42,58,.06)] px-2.5 py-2 text-[12.5px]">
+                <label className="mt-1.5 flex items-start gap-2 rounded-[9px] border border-red-fill bg-red/6 px-2.5 py-2 text-[12.5px]">
                   <input type="radio" name="pr-agent" checked readOnly className="mt-[3px] accent-red-fill" />
                   <span>
                     <b className="text-text">New: {rows?.find((r) => r.type === draft.agent!.type)?.name ?? draft.agent.type}</b>
@@ -254,7 +262,7 @@ export function ResearchDialog({
               <Button size="sm" className="mt-1.5" onClick={() => setDeploy(true)} disabled={!rows}>
                 + Create new Product Research agent
               </Button>
-              {runtime === 'demo' && <p className="mt-1.5 text-[11.5px] text-[#f5b84a]">Demo runtime: its report will be a scripted example, not research.</p>}
+              {runtime === 'demo' && <p className="mt-1.5 text-[11.5px] text-amber">Demo runtime: its report will be a scripted example, not research.</p>}
             </fieldset>
           </section>
         </div>
@@ -299,7 +307,7 @@ export function ResearchDialog({
 function AgentRow({ r, picked, mode, pick }: { r: PrAgentRow; picked: boolean; mode: 'queue' | 'separate'; pick: (mode: 'queue' | 'separate') => void }) {
   const [tone, label] = STATE[r.state];
   return (
-    <div className={cx('mt-1.5 rounded-[9px] border px-2.5 py-2 text-[12.5px]', picked ? 'border-red-fill bg-[rgba(255,42,58,.06)]' : 'border-[#33333b]', r.state === 'not_ready' && 'opacity-70')}>
+    <div className={cx('mt-1.5 rounded-[9px] border px-2.5 py-2 text-[12.5px]', picked ? 'border-red-fill bg-red/6' : 'border-line-2', r.state === 'not_ready' && 'opacity-70')}>
       <label className="flex cursor-pointer items-start gap-2">
         <input type="radio" name="pr-agent" checked={picked} disabled={r.state === 'not_ready'} onChange={() => pick(mode)} className="mt-[3px] accent-red-fill" />
         <span className="min-w-0">
@@ -340,7 +348,7 @@ function ProductLink({ draft, update, store, currency, fetch }: { draft: Draft; 
   let body: ReactNode = null;
   if (p && read) {
     body = (
-      <div className="mt-2.5 flex gap-3 rounded-[10px] border border-line bg-[#0e0e11] p-2.5">
+      <div className="mt-2.5 flex gap-3 rounded-[10px] border border-line bg-bg-2 p-2.5">
         <div className="grid size-14 shrink-0 place-items-center overflow-hidden rounded-lg border border-line text-muted">
           {p.imageListing ? <img src={`/api/pr/listings/${encodeURIComponent(p.imageListing)}/image?store=${encodeURIComponent(store.id)}`} alt="" className="size-full object-cover" /> : <Package aria-hidden className="size-6" />}
         </div>
@@ -368,8 +376,8 @@ function ProductLink({ draft, update, store, currency, fetch }: { draft: Draft; 
     );
   } else if (p) {
     body = (
-      <div role="status" className="mt-2.5 rounded-[10px] border border-[#f5b84a]/35 bg-[#f5b84a]/8 p-2.5 text-xs text-text-2">
-        <b className="text-[#f5b84a]">{p.message}</b>
+      <div role="status" className="mt-2.5 rounded-[10px] border border-amber/35 bg-amber/8 p-2.5 text-xs text-text-2">
+        <b className="text-amber">{p.message}</b>
         {p.candidates.length > 0 && (
           <ul className="mt-1.5 grid gap-1">
             {p.candidates.map((c, i) => (

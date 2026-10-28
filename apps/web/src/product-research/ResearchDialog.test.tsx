@@ -150,3 +150,19 @@ test('from a product, with a new agent made in Deploy (configure-only): Start se
   expect(sent).not.toHaveProperty('url');
   expect(posts.map((p) => p.url)).toEqual(['/api/pr/tasks?store=paws']); // Deploy created nothing
 });
+
+test("the store's agents that fail to load say so and retry, instead of loading forever", async () => {
+  let down = true;
+  const { f } = api();
+  const base = f.getMockImplementation()!;
+  f.mockImplementation(async (url: string, init?: RequestInit) =>
+    down && new URL(url, 'http://x').pathname === '/api/pr/agents' ? new Response(JSON.stringify({ error: 'database is locked' }), { status: 500 }) : base(url, init),
+  );
+  open();
+  const alert = await within(dialog()).findByRole('alert');
+  expect(alert.textContent).toBe("The store's agents didn't load (database is locked). Try again");
+  down = false;
+  fireEvent.click(within(alert).getByRole('button', { name: 'Try again' }));
+  expect(await screen.findByRole('radio', { name: /^Product Researcher/ })).toBeTruthy();
+  expect(within(dialog()).queryByRole('alert')).toBeNull();
+});

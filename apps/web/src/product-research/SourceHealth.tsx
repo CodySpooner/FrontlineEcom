@@ -5,7 +5,7 @@ import { useSourceHealth, useSyncSource } from './api';
 import { Pill } from './Card';
 import { sourceItem } from './format';
 
-const DOT = { good: 'bg-good', warn: 'bg-[#f5b84a]', bad: 'bg-red', muted: 'bg-muted' };
+const DOT = { good: 'bg-good', warn: 'bg-amber', bad: 'bg-red', muted: 'bg-muted' };
 const when = (iso: string | null, never = 'Never') => (iso ? new Date(iso).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : never);
 const Row = ({ label, children }: { label: string; children: ReactNode }) => (
   <div className="flex justify-between gap-4 border-b border-dashed border-line py-[5px] last:border-b-0">
@@ -19,7 +19,7 @@ export function SourceHealth({ open, onClose, store }: { open: boolean; onClose:
   const health = useSourceHealth(store, open);
   return (
     <Dialog open={open} onClose={onClose} side="right" width={560} title="Source health" subtitle="Where products, demand and supplier data come from, and how each source is doing">
-      <div className="grid gap-3 overflow-y-auto p-5">
+      <div className="grid gap-3">
         {health.isPending ? <LoadingState rows={5} /> : health.isError ? <ErrorState message={health.error.message} onRetry={() => void health.refetch()} /> : health.data.map((s) => <Source key={s.id} s={s} />)}
       </div>
     </Dialog>

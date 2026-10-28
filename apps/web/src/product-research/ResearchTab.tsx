@@ -18,14 +18,14 @@ const REC_STAGE: Record<PrRecommendation, PrStage | null> = { research_further: 
 const KIND = { measured: 'Measured', research: 'Research', supplier_claim: 'Supplier claim', hypothesis: 'Hypothesis' };
 const FIT = { strong: 'Strong', medium: 'Medium', weak: 'Weak' };
 const time = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-const link = 'cursor-pointer text-[#ff6b76] hover:underline';
+const link = 'cursor-pointer text-red hover:underline';
 
 const Heading = ({ children }: { children: ReactNode }) => <h3 className="mb-1.5 text-[11px] font-semibold tracking-[.07em] text-muted uppercase">{children}</h3>;
 
 /** A source as given: a link when it is an http(s) address, else its text. */
 const Source = ({ s }: { s: string }) =>
   /^https?:\/\/\S+$/i.test(s) ? (
-    <a href={s} target="_blank" rel="noopener noreferrer" className="break-all text-[#ff6b76] hover:underline">
+    <a href={s} target="_blank" rel="noopener noreferrer" className="break-all text-red hover:underline">
       {s}
     </a>
   ) : (
@@ -149,7 +149,7 @@ function Activity({ runId, active }: { runId: string; active: boolean }) {
           {s.icon === 'running' && active ? <b className="text-text">{s.text}</b> : s.text}{' '}
           {s.icon === 'running' && active && <span className="text-muted">now</span>}
           {s.icon === 'failed' && <span className="font-semibold text-red">failed</span>}
-          {s.icon === 'warning' && <span className="font-semibold text-[#f5b84a]">needs attention</span>}
+          {s.icon === 'warning' && <span className="font-semibold text-amber">needs attention</span>}
         </li>
       ))}
     </ol>
