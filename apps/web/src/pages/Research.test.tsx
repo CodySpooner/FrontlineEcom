@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { PrBrief, PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrLinks, PrMatches, PrWatch, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrSpecialistTeam, PrStoreProfile, PrTask, SquadMission, Store } from '@frontline/shared';
+import type { PrBrief, PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrLinks, PrMatches, PrOutcomes, PrWatch, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrSpecialistTeam, PrStoreProfile, PrTask, SquadMission, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { discoveryQuery } from '../product-research/Filters';
 import { sourceItem } from '../product-research/format';
@@ -279,6 +279,7 @@ describe('Detail panel', () => {
       returnRatePct: { value: 0, tag: 'assumption', note: 'No returns' }, refundPct: { value: 100, tag: 'assumption', note: 'Full refund on a return' }, returnCost: unknown(), otherCosts: unknown(), adCost: unknown(),
     },
   };
+  const noOutcomes: PrOutcomes = { currency: 'USD', research: null, assumed: null, audience: null, products: [], experiments: [], lessons: [] };
   const brief: PrBrief = {
     fields: { targetCustomer: 'Dog owners who hike', offerHypothesis: '', creativeConcepts: '- No more fur on the sofa.', measurementPlan: '', budgetAssumptions: '', decisionCriteria: '' },
     from: { targetCustomer: 'Research profile', creativeConcepts: 'Proposal: report of Oct 28, 2026' },
@@ -312,6 +313,7 @@ describe('Detail panel', () => {
       if (url.includes('/matches')) return matches;
       if (url.includes('/links')) return { links: [{ kind: 'store_product', refId: 's1', label: 'Grooming Brush (draft)', at: '2026-10-28T10:00:00Z' }], experiments: [{ id: 'e1', label: 'Brush hooks: ctr (planned)' }] } satisfies PrLinks;
       if (url.includes('/brief?')) return brief;
+      if (url.includes('/outcomes?')) return noOutcomes;
       if (url.includes('/draft-product?')) return { id: 'ap1', title: 'Add "Silicone grooming brush" to Pawsome Gear as a draft' };
       if (url.includes('/owner?')) return { owner: 'Cody' };
       if (url.includes('/store-products?')) return { ruledOut: true };
@@ -533,6 +535,37 @@ describe('Detail panel', () => {
     const research = await screen.findByRole('dialog', { name: 'Research a Product' });
     expect(within(research).getByRole('button', { name: 'Test brief' }).getAttribute('aria-pressed')).toBe('true');
     expect((within(research).getByRole('textbox', { name: 'Instructions' }) as HTMLTextAreaElement).value).toMatch(/^Draft a test brief for this product/);
+  });
+
+  it("Overview: Outcomes compares what sold with what was assumed, with its context, and saves a measured period to the KB", async () => {
+    const outcomes: PrOutcomes = {
+      currency: 'USD', research: { recommendation: 'shortlist', at: '2026-09-20T00:00:00Z' }, assumed: { price: 2900, contribution: 1200, breakEvenRoas: 2.42 }, audience: 'Dog owners who hike',
+      products: [
+        {
+          storeProductId: 'sp1', title: 'Paw Cup', status: 'active', test: { addedOn: '2026-10-01', approvalId: 'ap1', judgedAt: null }, period: { from: '2026-10-01', to: '2026-10-28' },
+          offer: { price: 1999, compareAt: 2499 }, inventory: 40, observed: { units: 5, revenue: 10000, profit: 6000, uncosted: false, pricePerUnit: 2000, profitPerUnit: 1200 },
+        },
+        { storeProductId: 'sp2', title: 'Paw Cup XL', status: 'draft', test: null, period: { from: '2026-10-28', to: '2026-10-28' }, offer: { price: 2499, compareAt: null }, inventory: 0, observed: null },
+      ],
+      experiments: [{ id: 'e1', label: 'Paw Cup hooks: ctr', status: 'worked', result: 'B beat A on CTR' }],
+      lessons: [{ cardId: 'k1', title: 'Silicone grooming brush: Rejected (Oct 1, 2026)', stage: 'hypothesis' }],
+    };
+    const f = panelApi(detail(), (url) => (url.includes('/outcomes/sp1/knowledge?') ? { cardId: 'k2' } : url.includes('/outcomes?') ? outcomes : undefined));
+    renderApp(<Research />, '/research?store=paws&product=p1');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    const section = within(await within(panel).findByRole('region', { name: 'Outcomes' }));
+    await section.findByText('Research said: Shortlist for testing (Sep 20, 2026).');
+    section.getByText('Assumed (base economics): $29.00 selling price, $12.00 contribution before ads per order.');
+    const sold = within(section.getByRole('article', { name: 'Outcome: Paw Cup' }));
+    sold.getByText('5 sold, $100.00 revenue, $60.00 profit after unit cost and store fees.');
+    sold.getByText('Per unit: $20.00 revenue (assumed $29.00), $12.00 profit before shipping, returns and ads (assumed $12.00 contribution before ads).');
+    expect(sold.getByText(/^Context: offer \$19\.99 \(compare at \$24\.99\), inventory 40, audience Dog owners who hike;/)).toBeTruthy();
+    within(section.getByRole('article', { name: 'Outcome: Paw Cup XL' })).getByText("A demo store's orders are generated: they never count as outcomes.");
+    expect(within(section.getByRole('article', { name: 'Outcome: Paw Cup XL' })).queryByRole('button')).toBeNull(); // nothing measured: nothing to save
+    section.getByText('Experiment Paw Cup hooks: ctr: worked, B beat A on CTR');
+    expect(section.getByRole('link', { name: 'Silicone grooming brush: Rejected (Oct 1, 2026)' }).getAttribute('href')).toBe('/knowledge?card=k1');
+    fireEvent.click(sold.getByRole('button', { name: 'Save outcome to Knowledge Base' }));
+    await waitFor(() => expect(f.mock.calls.some(([u, i]) => String(u) === '/api/pr/products/p1/outcomes/sp1/knowledge?store=paws' && i?.method === 'POST')).toBe(true));
   });
 
   it('Research: Ask a specialist starts a team from stored facts, links it, and shows its assignments and consolidated answer', async () => {

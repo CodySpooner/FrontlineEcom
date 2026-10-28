@@ -719,3 +719,36 @@ export interface PrSpecialistTeam {
   objective: string;
   participants: { type: string }[];
 }
+
+/**
+ * GET /api/pr/products/:id/outcomes?store= (PR-25, spec §12): what happened after the research, read-only; the
+ * research itself is never edited. Money in minor units of the store's currency.
+ */
+export interface PrOutcomes {
+  currency: string;
+  /** The latest model report's recommendation: what the research said at the time. */
+  research: { recommendation: PrRecommendation; at: string } | null;
+  /** The owner's base economics; null while incomplete. */
+  assumed: { price: number; contribution: number; breakEvenRoas: number | null } | null;
+  audience: string | null;
+  products: PrOutcomeProduct[];
+  experiments: { id: string; label: string; status: string; result: string | null }[];
+  /** Knowledge Base cards linked to the product: saved decisions and outcomes. */
+  lessons: { cardId: string; title: string; stage: string }[];
+}
+export interface PrOutcomeProduct {
+  storeProductId: string;
+  /** null: no longer in the store. */
+  title: string | null;
+  status: string | null;
+  /** Added through an approved request (`product_tests`). */
+  test: { addedOn: string; approvalId: string; judgedAt: string | null } | null;
+  period: { from: string; to: string };
+  /** The store's offer and inventory as they are now. */
+  offer: { price: number; compareAt: number | null } | null;
+  inventory: number | null;
+  /** Paid orders in the period, profit after unit cost and store fees (no shipping, returns or ads). null on a demo store. */
+  observed: { units: number; revenue: number; profit: number; uncosted: boolean; pricePerUnit: number | null; profitPerUnit: number | null } | null;
+  /** This period's saved Knowledge Base card. */
+  cardId?: string;
+}

@@ -795,7 +795,7 @@ STOP.
 - [x] PR-24 **Collaboration:** "Ask a specialist" (Ad Strategist for positioning, Analytics Specialist for a measurement
   plan) through the AI Agents team engine once AA-19 and AA-20 have shipped, with assignments, outputs and the
   consolidated result linked to the product. Until then the control is absent and this sits under Blocked.
-- [ ] PR-25 **Outcomes** (spec §12): link sampled, listed, testing, scaled and rejected products to `product_tests`, orders
+- [x] PR-25 **Outcomes** (spec §12): link sampled, listed, testing, scaled and rejected products to `product_tests`, orders
   (`productSales`), experiments and KB lessons; compare assumptions with observed results, with their context (offer,
   audience, creative, spend, inventory, period); never edit the original research.
 
@@ -1024,6 +1024,14 @@ STOP.
   row). Each linked team shows its status, the assignments with their outputs, the consolidated answer and a link to
   the team in AI Agents. API: `GET …/specialist?ask=`, `POST …/links` takes `kind: 'team'` (another store's team: 404).
   Tests: 1 API (it creates a real team on the scripted engine), 1 page.
+- 2026-10-28 PR-25 Outcomes: the Overview's Outcomes section, per linked store product: its `product_tests` row, paid
+  orders since it was added (`productSales`: units, revenue, profit after unit cost and store fees, per unit) beside
+  the owner's base assumptions and the latest model report's recommendation, with its context (offer and inventory
+  now, audience, period; creative and ad spend said to be untracked per product), plus linked experiments with their
+  result and the product's KB lessons. "Save outcome to Knowledge Base" keeps a measured period as the owner's
+  Performance Lesson under "Product outcomes", once per period, its context frozen in `pr_outcomes.context_json`.
+  A demo store's orders never count. API: `GET …/outcomes`, `POST …/outcomes/:storeProductId/knowledge`. Tests: 1
+  API (a real and a demo store; the reports are byte-identical after), 1 page.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1055,6 +1063,15 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-25 as built.** Read-only over other lanes' data (`product_tests`, `order_items` through core's `productSales`,
+  `kb_experiments`), so nothing new is stored until the owner saves an outcome. Supplier quality, delivery, returns
+  and customer feedback aren't recorded anywhere in the app, so they aren't compared; the card and the panel say
+  sales alone don't show the product caused the result. An outcome card is Research-Supported, not Validated: one
+  store's sales over one period, with no control. Profit per unit is before shipping, returns and ads, and it is
+  shown beside the assumed contribution before ads, which does include shipping, so the two are labelled as such
+  rather than presented as the same measure. The period starts when the product was added through an approved
+  request, else on the day it was linked. Dev-app check: the dev DB has no linked store products (demo stores), so
+  the section shows its empty state (`.agent/shots/pr25-outcomes.png`); the filled states are covered by the tests.
 - **PR-24 as built.** The team runs entirely on the AI Agents team engine (AA-19/AA-20): this lane only prepares the
   objective and links the result, so budgets, retries, approvals and the team view stay theirs. The objective says
   everything the team returns is a proposal, not evidence, and forbids launching, publishing or spending; what a

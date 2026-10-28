@@ -22,6 +22,7 @@ import {
 import { AreaChart } from '../components/AreaChart';
 import { Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Tabs } from '../components/ui';
 import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useLinkStoreProduct, useMatches, useProductDetail, useProductTab, useAddWatch, useAddLink, useLinks, useSaveDecision, useSaveNotes, useSetOwner, useUnlink, useUnwatch, useWatch, useWatches } from './api';
+import { Outcomes } from './Outcomes';
 import { Pill, TONE } from './Card';
 import { BriefDialog } from './Brief';
 import { EconomicsTab, incomplete } from './EconomicsTab';
@@ -429,6 +430,7 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
         {conditions && <p className="text-muted">{conditions}</p>}
       </Section>
       {store && <Pipeline id={c.id} store={store} owner={d.owner ?? null} />}
+      {store && <Outcomes id={c.id} store={store.id} />}
       {store && <Notes id={c.id} store={store} notes={d.notes} />}
       {!store && <Assign id={c.id} stores={stores} evaluating={d.stores} onAssigned={onAssigned} />}
       {d.agentEstimates && (

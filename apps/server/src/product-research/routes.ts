@@ -19,6 +19,7 @@ import { addWatch, checkWatch, listWatches, ownWatch, parsePrefs } from './alert
 import { runDue, stoppedReason, syncNow } from './jobs';
 import { cachedImage, listingImageRef, queueImage } from './images';
 import { checkUrl, ownerDetails, preview } from './preview';
+import { productOutcomes, saveOutcome } from './outcomes';
 import { getBrief, linkExperiment, linkTeam, parseBrief, productLinks, requestDraftProduct, saveBrief, saveDecision, setOwner, specialistTeam } from './pipeline';
 import { getProfile, saveProfile } from './profile';
 import { productReports } from './reports';
@@ -279,6 +280,20 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
       const fields = parseBrief(await c.req.json().catch(() => undefined));
       return typeof fields === 'string' ? c.json({ error: fields }, 400) : c.json(saveBrief(db, store, c.req.param('id'), fields));
+    })
+    // PR-25: what happened after the research, and "Save outcome to Knowledge Base" for a measured period.
+    .get('/api/pr/products/:id/outcomes', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      return c.json(productOutcomes(db, store, c.req.param('id')));
+    })
+    .post('/api/pr/products/:id/outcomes/:ref/knowledge', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const r = saveOutcome(db, store, c.req.param('id'), c.req.param('ref'));
+      return 'error' in r ? c.json({ error: r.error }, r.status) : c.json({ cardId: r.cardId }, r.created ? 201 : 200);
     })
     // PR-24: "Ask a specialist": the team to start through POST /api/teams (the client links it back with POST …/links).
     .get('/api/pr/products/:id/specialist', (c) => {
