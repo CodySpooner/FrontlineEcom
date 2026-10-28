@@ -97,7 +97,7 @@ dated Done line there too.
   every runs test green.
 - [x] CH-10 `request_approval` with `store.add_products` refuses a product whose `compareAt` is at or below its price,
   as `record_find` and `propose_price_change` already do (agents.md Inbox line ~48; `tools.ts` ~503, ~1130, ~1214).
-- [ ] CH-11 AGT-245 already shipped (`claude-engine.ts` ERRORS/ACCOUNT) but nothing tests it: add the test, tick it.
+- [x] CH-11 AGT-245 already shipped (`claude-engine.ts` ERRORS/ACCOUNT) but nothing tests it: add the test, tick it.
 
 ### Phase C — the app's own Codex runtime (owner's pick 4)
 Files: `packages/agents/src/codex.ts`, `fake-codex.ts`, `codex.test.ts`, `packages/agents/src/fixtures/codex-*`,
@@ -161,6 +161,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-11 / AGT-245: confirmed all four account mappings already shipped; new adjacent tests cover immediate errors, isAccountError classification, nested-frame isolation, and result usage/session preservation. No SDK calls/options changed; 27 focused tests and pnpm check green (233 files / 1,725 tests, 4 workers).
 
 - 2026-10-28 CH-10: generic product approvals refuse nonnumeric/nonfinite compareAt and values at/below price, allowing omitted or higher finite values. Five failing regressions first, then 16 focused tests. pnpm check green (232 files / 1,721 tests) with VITEST_MAX_WORKERS=4; unrestricted suite twice timed out in the unchanged Research scale test (filed to Product Research; isolated tests pass).
 
