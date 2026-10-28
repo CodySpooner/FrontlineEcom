@@ -1604,7 +1604,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - the reading column at 1920×1080 with the right panel closed;
   - `styleseed-design-review` on the page, with fixes;
   - screenshots at the four sizes.
-- [ ] AA-25 **Claude live smoke** (decision 16), recorded in Notes with its cost and time.
+- [x] AA-25 **Claude live smoke** (decision 16), recorded in Notes with its cost and time.
 - [ ] AA-25b **Codex live smoke** (decisions 9 and 16), recorded in Notes with its time. Its one run asks for a
   read-only tool call, then an ask_owner question (AA-16), which waits in the tool until the owner answers or the
   run ends (decision 9). While the question is pending, record the descendant tree and press Stop (decision 9), and
@@ -1790,6 +1790,11 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   the empty workspace offers Deploy agent, and 47 hex values that duplicated theme tokens use the tokens. styleseed
   scored 79 before and about 95 after. The AA-22 audit rerun is clean (contrast, names, focus, sideways scroll).
   Screenshots at 1280×800, 1366×728, 1440×900 and 1920×1080 are in `.agent/aa24/`, all with no console errors.
+- 2026-10-28 AA-25 Claude live smoke: one real run through the app's routes on Glow Haus (demo store), an
+  Analytics Specialist conversation narrowed to store_summary and metrics_timeseries with a $0.50 budget, on the
+  account's default model (Opus 5.5, medium effort). Done in 13.8 s for $0.112 (31,162 input and 1,053 output
+  tokens): one store_summary call, an answer citing it and the demo data, three store memories from the reflection
+  turn, and nothing else started. Details under Notes.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
@@ -1927,6 +1932,32 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-25, 2026-10-28) **Claude live smoke** (decision 16), the lane's only live Claude turn, 15:19 UTC:
+  - **How it ran:** a throwaway script (`apps/server/src/zz-aa25-smoke.ts`, deleted after, never committed) on an
+    in-memory database with `seedDemo`, `createApp(db, <random key>)`, the real routes through `app.request`, and the
+    engine not forced (no `FRONTLINE_AGENT_ENGINE`, no `VITEST`), so only a conversation configured for Claude reaches
+    it. `FRONTLINE_DATA_DIR` pointed at an empty scratch folder, so the Codex check saw an empty, signed-out home and
+    nothing touched the dev server's data. Queued research tasks and missions were cleared first (there were none).
+    A dry run of the same flow on the demo engine came first: no run at startup, only its own run after.
+  - **The run:** `POST /api/conversations?store=glow` with type market_analyst, config `{ runtime: 'claude', model:
+    'claude-opus-5-5', tools: ['store_summary', 'metrics_timeseries'], permissions: { budgetUsd: 0.5 } }` (the model
+    is the runtimes list's default, checked not to be Fable; effort left at its default, medium) and the message
+    "Call store_summary once, then tell me in two short sentences which number this store should watch this week and
+    why. Use no other tools."
+  - **Result:** status done in 13.8 s wall time; $0.112 (31,162 input, 1,053 output tokens) against the $0.50 cap,
+    reflection included. Transcript: one tool_call `store_summary { range: 7 }` with its result, one reply ("watch
+    average order value: it fell 8.0%, from $48.14 to $44.31 … (store_summary, simulated demo data) …"), three
+    memory_written events, done. Conversation state completed; the thread route answered 200. One agent_runs row
+    in all.
+  - **What it proves, beyond the mocked tests:** the Agent SDK takes the app's run options (model id, effort,
+    `maxBudgetUsd`, session isolation) on this account with a real model; app tools reach a real model over the
+    in-process MCP server and their results come back; a narrowed config holds (the model used only the allowed tool);
+    the real stream lands as a run transcript with real usage and cost; the reflection turn resumes the real session
+    id and writes store memory; demo answers say they're demo data.
+  - **What it doesn't prove:** Codex (AA-25b), approvals with a real model (a read-only run asks for none), team runs,
+    retry and resume after a real failure, and live MCP servers (Meta Ads isn't connected on a demo store).
+  - **Worth knowing:** the reflection writes store memory whatever the config's tool list (it is the squad's memory
+    feature, not a tool), and its cost counts toward the run's budget.
 - (AA-24, 2026-10-28) For AA-25 and later:
   - **styleseed findings answered, not changed:** the type scale has half-pixel steps (10.5, 11.5, 12.5, 13.5 px);
     they are the boards' own sizes, size for size, so they stay. The remaining hex values (#1d1d22, #111114,
