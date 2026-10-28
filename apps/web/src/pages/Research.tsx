@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { Search, TriangleAlert } from 'lucide-react';
-import { PR_SORTS, PR_VIEWS, type PrSort, type PrSourceState, type PrView } from '@frontline/shared';
+import { PR_COMPARE_MAX, PR_SORTS, PR_VIEWS, type PrSort, type PrSourceState, type PrView } from '@frontline/shared';
 import { useStores } from '../api/client';
 import { useStored } from '../agents/layout';
 import { Hero } from '../components/Hero';
@@ -12,6 +12,7 @@ import { Button, cx, EmptyState, ErrorState, LoadingState, Tabs } from '../compo
 import { NAV } from '../nav';
 import { useDiscovery, useProfile, useSaveProfile, useSources } from '../product-research/api';
 import { ProductCard } from '../product-research/Card';
+import { CompareBar } from '../product-research/Compare';
 import { activeFilters, discoveryQuery, FilterChips, type Filters } from '../product-research/Filters';
 import { countryName, profileLine, sourceItem } from '../product-research/format';
 import { DetailPanel, PANEL_TABS, type PanelTab } from '../product-research/Panel';
@@ -34,6 +35,7 @@ export function Research() {
   const [last, setLast] = useStored('fe.research.page', { store: '', view: 'all', sort: '' });
   const [filters, setFilters] = useStored<Filters>('fe.research.filters', {});
   const [allShipTo, setAllShipTo] = useStored('fe.research.shipTo', 'US');
+  const [trays, setTrays] = useStored<Record<string, string[]>>('fe.research.compare', {}); // the comparison tray, per store
   const set = (k: string, v: string | null) =>
     setParams(
       (p) => {
@@ -71,6 +73,8 @@ export function Research() {
   const items = discovery.data?.pages.flatMap((p) => p.items) ?? [];
   const currency = first?.currency ?? store?.currency ?? 'USD';
   const shipTo = store ? (profile.data?.shipTo ?? null) : allShipTo;
+  const tray = store ? (trays[store.id] ?? []) : [];
+  const setTray = (ids: string[]) => store && setTrays({ ...trays, [store.id]: ids });
   const [editProfile, setEditProfile] = useState(false);
   const [health, setHealth] = useState(false);
   const [researching, setResearching] = useState<{ product?: { id: string; title: string } } | null>(null);
@@ -240,6 +244,8 @@ export function Research() {
         </p>
       ))}
 
+      {store && <CompareBar store={store} ids={tray} setIds={setTray} shipTo={shipTo} />}
+
       <div className="mt-4 flex items-start gap-4">
         <section aria-label="Products" className="min-w-0 flex-[999_1_520px]">
         {discovery.isPending ? (
@@ -298,6 +304,7 @@ export function Research() {
             onClose={closePanel}
             onAssigned={(id) => pickScope(id, true)}
             onResearch={(p) => setResearching({ product: p })}
+            compare={{ on: tray.includes(product), full: tray.length >= PR_COMPARE_MAX, toggle: () => setTray(tray.includes(product) ? tray.filter((x) => x !== product) : [...tray, product]) }}
           />
         )}
       </div>

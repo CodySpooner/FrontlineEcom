@@ -329,7 +329,7 @@ function card(db: Db, r: Record<string, unknown>, ctx: { store: Store | null; sh
       .get(...(store ? [store.id] : []), id, id),
     costShip: r.cost_ship_minor == null ? null : Number(r.cost_ship_minor),
     fulfillment: r.fulfillment_status ? { status: String(r.fulfillment_status) as PrFulfillment, reasons: shown?.reasons ?? [], checkedAt: str(r.fulfillment_checked_at) } : null,
-    conditions: o ? { variant, method: o.method, quantity: o.quantity, checkedAt: o.checkedAt } : null,
+    conditions: o ? { variant, method: o.method, quantity: o.quantity, checkedAt: o.checkedAt, supplier: o.supplier, deliveryMax: o.deliveryMax, shipsFrom: o.shipsFrom } : null,
     demand: cls && ds
       ? { cls: cls as NonNullable<PrCard['demand']>['cls'], peakMonth: set ? (r.demand_peak_month == null ? null : Number(r.demand_peak_month)) : (mine?.peakMonth ?? null), platform: String(ds.platform), query: str(ds.query), region: str(ds.region), periodStart: str(ds.period_start), periodEnd: str(ds.period_end), scope: String(ds.scope) as NonNullable<PrCard['demand']>['scope'] }
       : null,

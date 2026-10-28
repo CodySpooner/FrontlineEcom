@@ -1,5 +1,5 @@
-import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ConversationConfigInput, PrAgentRow, PrDiscovery, PrEconomics, PrEconOverrides, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask } from '@frontline/shared';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { ConversationConfigInput, PrAgentRow, PrComparison, PrComparisonInput, PrDiscovery, PrEconomics, PrEconOverrides, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -46,9 +46,12 @@ export function useSyncSource() {
 }
 
 const enc = encodeURIComponent;
+const detailQuery = (id: string, store: string | null, shipTo: string) => ({
+  queryKey: ['pr', 'product', id, store, store ? null : shipTo],
+  queryFn: () => api<PrProductDetail>(`/api/pr/products/${enc(id)}?${store ? scope(store) : `shipTo=${enc(shipTo)}`}`),
+});
 /** The detail panel's header and Overview (All stores: for the page's ship-to). */
-export const useProductDetail = (id: string, store: string | null, shipTo: string) =>
-  useQuery({ queryKey: ['pr', 'product', id, store, store ? null : shipTo], queryFn: () => api<PrProductDetail>(`/api/pr/products/${enc(id)}?${store ? scope(store) : `shipTo=${enc(shipTo)}`}`) });
+export const useProductDetail = (id: string, store: string | null, shipTo: string) => useQuery(detailQuery(id, store, shipTo));
 
 /** One panel tab, loaded when it is opened. */
 export const useProductTab = <T,>(id: string, store: string | null, tab: 'demand' | 'offers' | 'history', enabled: boolean) =>
@@ -97,7 +100,20 @@ export const useReports = (store: string, product: string) =>
   useQuery({ queryKey: ['pr', 'reports', store, product], queryFn: () => api<PrReport[]>(`/api/pr/products/${enc(product)}/reports?${scope(store)}`) });
 export const useRetryTask = (store: string) => usePrWrite<{ id: string }, PrTask>((b) => `/api/pr/tasks/${enc(b.id)}/retry?${scope(store)}`);
 
+const economicsQuery = (store: string, product: string) => ({
+  queryKey: ['pr', 'economics', store, product],
+  queryFn: () => api<PrEconomics>(`/api/pr/products/${enc(product)}/economics?${scope(store)}`),
+});
 /** Unit economics (decision 13): the derived inputs and the owner's figures per scenario. */
-export const useEconomics = (store: string, product: string) =>
-  useQuery({ queryKey: ['pr', 'economics', store, product], queryFn: () => api<PrEconomics>(`/api/pr/products/${enc(product)}/economics?${scope(store)}`) });
+export const useEconomics = (store: string, product: string) => useQuery(economicsQuery(store, product));
 export const useSaveEconomics = (store: string, product: string) => usePrWrite<PrEconOverrides, PrEconomics>(() => `/api/pr/products/${enc(product)}/economics?${scope(store)}`, 'PUT');
+
+/** Comparisons (PR-19): the store's saved ones, and each compared product's detail and economics (the panel's queries). */
+export const useComparisons = (store: string) => useQuery({ queryKey: ['pr', 'comparisons', store], queryFn: () => api<PrComparison[]>(`/api/pr/comparisons?${scope(store)}`) });
+export const useCompared = (store: string, ids: string[]) => ({
+  details: useQueries({ queries: ids.map((id) => detailQuery(id, store, '')) }),
+  economics: useQueries({ queries: ids.map((id) => economicsQuery(store, id)) }),
+});
+export const useSaveComparison = (store: string, id: string | null) =>
+  usePrWrite<PrComparisonInput, PrComparison>(() => `/api/pr/comparisons${id ? `/${enc(id)}` : ''}?${scope(store)}`, id ? 'PUT' : 'POST');
+export const useDeleteComparison = (store: string) => usePrWrite<{ id: string }>((b) => `/api/pr/comparisons/${enc(b.id)}?${scope(store)}`, 'DELETE');

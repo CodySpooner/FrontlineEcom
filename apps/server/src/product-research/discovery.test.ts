@@ -150,7 +150,7 @@ test('cards: cost + ship, fulfillment conditions, fit, flags and demand, with th
     stage: 'discovered',
     costShip: 752,
     fulfillment: { status: 'verified', reasons: [], checkedAt: '2026-10-25T00:00:00.000Z' },
-    conditions: { variant: 'Medium', method: null, quantity: 1, checkedAt: '2026-10-25T00:00:00.000Z' },
+    conditions: { variant: 'Medium', method: null, quantity: 1, checkedAt: '2026-10-25T00:00:00.000Z', supplier: 'Acme', deliveryMax: 10, shipsFrom: 'CN' },
     fit: { fit: 'strong', reason: 'Every known input passes' },
     flags: { count: 0, first: null },
     demand: null,

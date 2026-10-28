@@ -1,16 +1,18 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
-import { PR_RECOMMENDATION_LABEL, PR_TASK_STATUS_LABEL, type PrRecommendation, type PrReport, type PrReportList, type PrTask, type PrTaskStatus } from '@frontline/shared';
+import { PR_RECOMMENDATION_LABEL, PR_STAGE_LABEL, PR_TASK_STATUS_LABEL, type PrRecommendation, type PrReport, type PrReportList, type PrStage, type PrTask, type PrTaskStatus } from '@frontline/shared';
 import { useRun, useStopConversation } from '../api/client';
 import { activitySteps } from '../agents/activity';
 import { agentsUrl } from '../agents/urls';
 import { Button, ErrorState, LoadingState } from '../components/ui';
 import { ago } from '../lib/format';
-import { usePrAgents, useReports, useRetryTask, useTasks } from './api';
+import { useChangeStage, usePrAgents, useReports, useRetryTask, useTasks } from './api';
 import { Pill, TASK_TONE, TONE } from './Card';
 
 const ACTIVE: PrTaskStatus[] = ['queued', 'running', 'waiting_for_you', 'awaiting_approval'];
 const REC_TONE: Record<PrRecommendation, keyof typeof TONE> = { research_further: 'run', request_sample: 'run', shortlist: 'good', monitor: 'muted', reject: 'bad' };
+/** The stage a recommendation suggests (decision 5); Monitor is a watch, not a stage. The owner moves it. */
+const REC_STAGE: Record<PrRecommendation, PrStage | null> = { research_further: 'researching', request_sample: 'sample_review', shortlist: 'shortlisted', monitor: null, reject: 'rejected' };
 const KIND = { measured: 'Measured', research: 'Research', supplier_claim: 'Supplier claim', hypothesis: 'Hypothesis' };
 const FIT = { strong: 'Strong', medium: 'Medium', weak: 'Weak' };
 const time = (iso: string) => new Date(iso).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
@@ -29,12 +31,12 @@ const Source = ({ s }: { s: string }) =>
   );
 
 /** The Research tab (decision 7): the product's tasks in this store, the latest with its run's real activity, then every report. */
-export function ResearchTab({ id, store }: { id: string; store: string | null }) {
+export function ResearchTab({ id, store, stage }: { id: string; store: string | null; stage: PrStage | null }) {
   if (!store) return <p className="text-xs text-muted">Research tasks and reports are kept per store: pick a store to see them.</p>;
-  return <StoreResearch id={id} store={store} />;
+  return <StoreResearch id={id} store={store} stage={stage} />;
 }
 
-function StoreResearch({ id, store }: { id: string; store: string }) {
+function StoreResearch({ id, store, stage }: { id: string; store: string; stage: PrStage | null }) {
   const tasks = useTasks(store, id);
   const reports = useReports(store, id);
   const agents = usePrAgents(store);
@@ -65,7 +67,7 @@ function StoreResearch({ id, store }: { id: string; store: string }) {
         {reports.data.length ? (
           <div className="grid gap-2">
             {reports.data.map((r, i) => (
-              <ReportCard key={r.id} r={r} store={store} open={i === 0} />
+              <ReportCard key={r.id} r={r} id={id} store={store} stage={stage} open={i === 0} />
             ))}
           </div>
         ) : (
@@ -141,8 +143,10 @@ function Activity({ runId, active }: { runId: string; active: boolean }) {
 }
 
 /** One report as the agent saved it. A demo report is labelled and shows no recommendation (decision 7). */
-function ReportCard({ r, store, open }: { r: PrReport; store: string; open: boolean }) {
+function ReportCard({ r, id, store, stage, open }: { r: PrReport; id: string; store: string; stage: PrStage | null; open: boolean }) {
   const b = r.body;
+  const move = useChangeStage(id, store);
+  const to = r.demo ? null : REC_STAGE[b.recommendation];
   const unknown = (k: PrReportList) => <p className="text-muted italic">{`Unknown: ${b.unknown_reasons[k] ?? 'not given'}`}</p>;
   const list = (title: string, k: PrReportList, items: ReactNode[]) => (
     <div>
@@ -179,6 +183,18 @@ function ReportCard({ r, store, open }: { r: PrReport; store: string; open: bool
             {list('Next steps', 'next_steps', b.next_steps)}
             {list('Proposals, not evidence', 'proposals', b.proposals.map((p) => `${p.kind === 'ad_angle' ? 'Ad angle' : 'Differentiation'}: ${p.text}`))}
           </>
+        )}
+        {to && to !== stage && (
+          <div>
+            <Button size="sm" disabled={move.isPending} onClick={() => move.mutate({ stage: to, reason: `Report of ${time(r.createdAt)}: ${PR_RECOMMENDATION_LABEL[b.recommendation]}` })}>
+              {`Move to ${PR_STAGE_LABEL[to]}`}
+            </Button>
+            {move.error && (
+              <p role="alert" className="mt-1 text-red">
+                {move.error.message}
+              </p>
+            )}
+          </div>
         )}
         {r.conversationId && (
           <Link to={agentsUrl({ store, conversation: r.conversationId, run: r.runId })} className={link}>

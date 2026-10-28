@@ -766,7 +766,7 @@ STOP.
 ### Comparison and economics
 - [x] PR-18 **Unit economics** (decision 13): the pure function with tests, the Economics tab with three scenarios,
   provenance per input, saved assumptions per store and product.
-- [ ] PR-19 **Comparison:** add up to 4 products, one destination, currency, date and assumptions for all, side-by-side
+- [x] PR-19 **Comparison:** add up to 4 products, one destination, currency, date and assumptions for all, side-by-side
   demand, offers, shipping, fit, risks and economics, missing fields shown as missing. Saved comparisons.
 - [ ] PR-20 **Supplier matching and existing-product checks:** alternative suppliers for a product (CJ search by
   attributes, at most 3 calls a search), **Exact match only on the same SKU, GTIN or MPN, or the owner's confirmation;
@@ -969,6 +969,17 @@ STOP.
   every input shows Verified, Yours, Assumption or Unknown with its source; Save and Discard. Overview's Economics
   (base) reads "$x per order before ads, excl. …", and complete base economics count toward evidence confidence.
   Tests: 6 shared, 3 API, 2 page.
+- 2026-10-28 PR-19 Comparison: Compare in a product's panel (store scope) adds it to the store's comparison tray (up
+  to 4, kept per store in `fe.research.compare`); the tray bar names them and opens the comparison. The comparison
+  puts the products side by side on the store's ship-to, currency and today's date (and the stored exchange rate's
+  date): stage, store fit, demand evidence, cost + ship, supplier with its check date, shipping (method, delivery,
+  origin), risks (flags and report risks), evidence confidence, and the base economics, every gap as "Missing: <why>".
+  Shared cost assumptions (discount, store fees, returns, refund, cost per return, ad cost) apply to every product;
+  where those are left to each product and differ, it says "Not like for like yet". Saved comparisons per store
+  (`pr_comparisons`, `GET`/`POST /api/pr/comparisons`, `PUT`/`DELETE …/:id`) with Open and Delete; each product's own
+  figures are read again when one is opened, and a comparison saved for another ship-to or currency says so. Also
+  decision 5's report button: a real report's recommendation shows "Move to <stage>" (the owner's move, with the
+  report as the reason; never from a demo report). Tests: 2 API, 1 page, plus the Move to test.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1000,6 +1011,16 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-19 as built.** "One destination, currency and date for all": the store's ship-to and currency (economics and
+  offers are per store, so a comparison is too), and today's figures; the saved row keeps the ship-to and currency it
+  was saved with. Price, supplier cost, shipping, duties and other costs stay each product's own; the shared figures
+  are only the store-level ones. The card's `conditions` now also carries the offer's supplier, delivery maximum and
+  origin (additive). The comparison reuses the panel's detail and economics queries (`useQueries`), so no second
+  compute path. Decision 5's "Move to <stage>" on a report was missing from PR-17 and is built here: Research further
+  → Researching, Request a sample → Sample review, Shortlist → Shortlisted, Reject → Rejected; Monitor suggests no
+  stage. Dev-app check 12:28 local on Pawsome Gear: two fixture products added from their panels, compared (every
+  offer figure Missing: fixture provenance), shared figures typed, saved as "Dev check", listed, then deleted from the
+  dialog; the dev DB holds no comparison. Screenshot `.agent/shots/pr19-compare.png`.
 - **PR-18 as built.** A store's fees are "not set" when both are 0 (the stores table defaults them to 0, so 0 and 0
   can't be told from "never entered"): Economics asks for them rather than computing with no fees. The owner can type
   them per product, or set them in Settings. The store's own price comes from a store product linked to the research

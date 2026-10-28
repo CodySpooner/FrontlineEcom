@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { PrCard, PrDemandTab, PrDiscovery, PrEconomics, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
+import type { PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { discoveryQuery } from '../product-research/Filters';
 import { sourceItem } from '../product-research/format';
@@ -283,8 +283,10 @@ describe('Detail panel', () => {
     { id: 'rep2', taskId: 't1', runId: 'r1', conversationId: 'c1', runtime: 'claude', demo: false, createdAt: '2026-10-28T11:00:00Z', body: real },
     { id: 'rep1', taskId: 't0', runId: 'r0', conversationId: 'c0', runtime: 'demo', demo: true, createdAt: '2026-10-27T11:00:00Z', body: { ...real, recommendation: 'reject', summary: 'Demo engine: scripted example.' } },
   ];
-  const panelApi = (d = detail()) =>
-    stubApi((url) => {
+  const panelApi = (d = detail(), more: (url: string, init?: RequestInit) => unknown = () => undefined) =>
+    stubApi((url, init) => {
+      const r = more(url, init);
+      if (r !== undefined) return r;
       if (url.startsWith('/api/stores')) return [store, { ...store, id: 'glow', name: 'Glow Haus' }];
       if (url.startsWith('/api/pr/products?')) return page([card()]);
       if (url.includes('/demand?')) return { sets: [set], suggested: [{ ...set, id: 's2', scope: 'query' }], notes: [] } satisfies PrDemandTab;
@@ -424,6 +426,62 @@ describe('Detail panel', () => {
     });
   });
 
+  it('Compare: the panel fills the tray; the comparison sets products side by side on one ship-to, missing as missing, with shared figures; Save keeps it', async () => {
+    const offer2 = { variant: 'M', method: 'CJPacket', quantity: 1, checkedAt: '2026-10-27T00:00:00Z', supplier: 'CJdropshipping', deliveryMax: 10, shipsFrom: 'CN' };
+    const p2 = detail({
+      card: card({ id: 'p2', title: 'Paw cleaner cup', fixture: false, costShip: 752, fulfillment: { status: 'verified', reasons: [], checkedAt: '2026-10-27T00:00:00Z' }, conditions: offer2 }),
+      assessment: { ...detail().assessment, fit: null, demand: { level: 'none', sets: 0, ownOrders: false }, flags: [{ id: 'restricted:batteries', kind: 'restricted', label: 'Batteries', reason: '"battery" in the title' }] },
+    });
+    const econ2: PrEconomics = { ...econ, derived: { ...econ.derived, price: { value: 2499, tag: 'owner', note: "Your store's price" }, discountPct: { value: 10, tag: 'owner', note: null } } };
+    const saved: PrComparison[] = [];
+    const f = panelApi(detail(), (url, init) => {
+      if (url.startsWith('/api/pr/comparisons')) {
+        if (init?.method !== 'POST') return saved;
+        saved.push({ ...(JSON.parse(String(init.body)) as PrComparison), id: 'cmp1', destination: 'US', currency: 'USD', createdAt: '2026-10-28T12:00:00Z', updatedAt: '2026-10-28T12:00:00Z' });
+        return saved[0];
+      }
+      if (url.startsWith('/api/pr/products/p2/economics')) return econ2;
+      if (url.startsWith('/api/pr/products/p2?')) return p2;
+      return undefined;
+    });
+    renderApp(<Research />, '/research?store=paws&product=p1');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    fireEvent.click(await within(panel).findByRole('button', { name: 'Compare' }));
+    expect(within(panel).getByRole('button', { name: 'Remove from comparison' })).toBeTruthy();
+    const tray = await screen.findByRole('region', { name: 'Comparison' });
+    expect(within(tray).getByText('Compare 1 of 4')).toBeTruthy();
+    expect((within(tray).getByRole('button', { name: 'Open comparison' }) as HTMLButtonElement).disabled).toBe(true); // 2 or more
+    localStorage.setItem('fe.research.compare', JSON.stringify({ paws: ['p1', 'p2'] })); // the second from its own panel
+    cleanup();
+    renderApp(<Research />, '/research?store=paws');
+    fireEvent.click(await within(await screen.findByRole('region', { name: 'Comparison' })).findByRole('button', { name: 'Open comparison' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Compare products' });
+    await within(dialog).findByText('Paw cleaner cup');
+    const row = (name: string) => within(within(dialog).getByRole('row', { name: new RegExp(`^${name}`) })).getAllByRole('cell').map((c) => c.textContent);
+    await waitFor(() => expect(row('Selling price')).toEqual(['Missing: Needs a selling price', '$24.99']));
+    expect(row('Store fit')).toEqual(['Weak: battery', 'Missing: Not assessed yet']);
+    expect(row('Demand evidence')).toEqual(['Moderate · 1 set', 'Missing: No qualifying demand set']);
+    expect(row('Cost')).toEqual(['Missing: Fixture offer: not verified', '$7.52 · Fulfillment verified for selected conditions']);
+    expect(row('Shipping')).toEqual(['Missing: No offer for this ship-to', 'CJPacket · up to 10 days · from China']);
+    expect(row('Risks')).toEqual(['No flags found (rule checks only), no report risks', 'Batteries']);
+    expect(row('Contribution before ads')).toEqual(['Missing: Selling price', '$14.02']); // 10% off 2499 = 2249; − 342 − 410 − (65 + 30)
+    expect(within(dialog).getByText(/Not like for like yet: the products' own discount differ/)).toBeTruthy();
+
+    const box = (name: string) => within(dialog).getByRole('textbox', { name: new RegExp(`^${name}`) });
+    fireEvent.change(box('Discount'), { target: { value: '0' } });
+    fireEvent.change(box('Advertising cost'), { target: { value: '8' } });
+    expect(row('Contribution before ads')[1]).toBe('$16.45'); // the same terms: 2499 − 342 − 410 − (72 + 30)
+    expect(row('Contribution after ads')[1]).toBe('$8.45');
+    expect(within(dialog).queryByText(/Not like for like yet/)).toBeNull();
+    fireEvent.change(box('Name'), { target: { value: 'Grooming picks' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save comparison' }));
+    await waitFor(() => expect(f.mock.calls.some(([u, i]) => String(u) === '/api/pr/comparisons?store=paws' && i?.method === 'POST')).toBe(true));
+    expect(JSON.parse(String(f.mock.calls.find(([, i]) => i?.method === 'POST')![1]!.body))).toEqual({ name: 'Grooming picks', productIds: ['p1', 'p2'], figures: { discountPct: 0, adCost: 800 } });
+    expect(await within(dialog).findByRole('button', { name: 'Save changes' })).toBeTruthy();
+    expect(within(dialog).getByRole('button', { name: 'Delete Grooming picks' })).toBeTruthy();
+  });
+
   it('Overview shows the base economics per order before ads, excl. what is unknown', async () => {
     const figures = { orderValue: 2999, refunds: 0, netRevenue: 2999, fees: 117, variableCosts: 869, before: 2130, after: null, breakEvenRoas: 1.41 };
     panelApi(detail({ assessment: { ...detail().assessment, economics: { currency: 'USD', result: { missing: [], excluded: ['duties'], figures } } } }));
@@ -449,6 +507,10 @@ describe('Detail panel', () => {
 
     expect(within(panel).getByText('Reports (2)')).toBeTruthy();
     expect(within(panel).getByText('Shortlist for testing')).toBeTruthy();
+    expect(within(panel).getAllByRole('button', { name: /^Move to/ }).map((b) => b.textContent)).toEqual(['Move to Shortlisted']); // never from the demo report
+    fireEvent.click(within(panel).getByRole('button', { name: 'Move to Shortlisted' }));
+    await waitFor(() => expect(calls(f, '/api/pr/products/p1/stage?store=paws')).toHaveLength(1));
+    expect(bodyOf(f, '/stage?')).toMatchObject({ stage: 'shortlisted', reason: expect.stringMatching(/^Report of .+: Shortlist for testing$/) });
     expect(within(panel).getByText('Demo engine · scripted example, not research')).toBeTruthy();
     expect(within(panel).queryByText('Reject')).toBeNull(); // a demo report has no recommendation
     expect(within(panel).getByText('Proposals, not evidence')).toBeTruthy();

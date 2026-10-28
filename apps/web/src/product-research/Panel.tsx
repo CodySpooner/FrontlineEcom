@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { ExternalLink, Eye, Package, X } from 'lucide-react';
 import {
+  PR_COMPARE_MAX,
   PR_DEMAND_LABEL,
   PR_ECON_LABEL,
   PR_DEMAND_LEVEL_LABEL,
@@ -64,6 +65,7 @@ export function DetailPanel({
   onClose,
   onAssigned,
   onResearch,
+  compare,
 }: {
   id: string;
   store: Store | null;
@@ -75,6 +77,8 @@ export function DetailPanel({
   onAssigned: (storeId: string) => void;
   /** Opens Research a Product with this product filled in (store scope). */
   onResearch: (product: { id: string; title: string }) => void;
+  /** Store scope: whether it is in the comparison tray, and adds or removes it. */
+  compare?: { on: boolean; full: boolean; toggle: () => void };
 }) {
   const scope = store?.id ?? null;
   const detail = useProductDetail(id, scope, shipTo);
@@ -99,12 +103,17 @@ export function DetailPanel({
             {tab === 'demand' && <Demand id={id} scope={scope} />}
             {tab === 'suppliers' && <Suppliers id={id} scope={scope} />}
             {tab === 'economics' && <EconomicsTab id={id} store={scope} />}
-            {tab === 'research' && <ResearchTab id={id} store={scope} />}
+            {tab === 'research' && <ResearchTab id={id} store={scope} stage={d!.card.stage} />}
             {tab === 'history' && <History id={id} scope={scope} stores={stores} />}
             <div className="flex flex-wrap gap-2 border-t border-line pt-3">
               {store && (
                 <Button size="sm" variant="primary" onClick={() => onResearch({ id, title: d!.card.title })}>
                   Research with an agent
+                </Button>
+              )}
+              {store && compare && (
+                <Button size="sm" disabled={!compare.on && compare.full} title={!compare.on && compare.full ? `A comparison holds up to ${PR_COMPARE_MAX} products` : undefined} onClick={compare.toggle}>
+                  {compare.on ? 'Remove from comparison' : 'Compare'}
                 </Button>
               )}
               <WatchButton id={id} scope={scope} watched={d!.card.watched} />

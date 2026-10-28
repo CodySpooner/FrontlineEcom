@@ -5,6 +5,7 @@ import { log } from '../log';
 import { runManager } from '../routes/agents';
 import { runtimes } from '../routes/agents-runtimes';
 import { productVisible } from './catalog';
+import { deleteComparison, listComparisons, parseComparison, saveComparison } from './comparisons';
 import { assign, productDemand, productDetail, productHistory, productOffers } from './detail';
 import { discover, parseDiscovery } from './discovery';
 import { parseOverrides, productEconomics, saveEconomics } from './economics';
@@ -206,6 +207,30 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if ('error' in o) return c.json(o, 400);
       saveEconomics(db, store.id, c.req.param('id'), o);
       return c.json(productEconomics(db, store, c.req.param('id')));
+    })
+    // Saved comparisons (PR-19), per store; the page reads each product's own figures again when one is opened.
+    .get('/api/pr/comparisons', (c) => {
+      const store = storeOf(c, db);
+      return store instanceof Response ? store : c.json(listComparisons(db, store.id));
+    })
+    .post('/api/pr/comparisons', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      const i = parseComparison(db, store.id, await c.req.json().catch(() => undefined));
+      return 'error' in i ? c.json(i, 400) : c.json(saveComparison(db, store, i), 201);
+    })
+    .put('/api/pr/comparisons/:id', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      const i = parseComparison(db, store.id, await c.req.json().catch(() => undefined));
+      if ('error' in i) return c.json(i, 400);
+      const saved = saveComparison(db, store, i, c.req.param('id'));
+      return saved ? c.json(saved) : c.json({ error: 'comparison not found' }, 404);
+    })
+    .delete('/api/pr/comparisons/:id', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      return deleteComparison(db, store.id, c.req.param('id')) ? c.json({ ok: true }) : c.json({ error: 'comparison not found' }, 404);
     })
     // Every report on the product in the store, newest first (decision 7).
     .get('/api/pr/products/:id/reports', (c) => {

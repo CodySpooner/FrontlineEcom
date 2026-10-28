@@ -197,8 +197,8 @@ export interface PrCard {
   costShip: number | null;
   /** null: "Not checked yet" (no ship-to). */
   fulfillment: { status: PrFulfillment; reasons: string[]; checkedAt: string | null } | null;
-  /** The conditions the status is for: variant, method, quantity, check date. */
-  conditions: { variant: string | null; method: string | null; quantity: number; checkedAt: string } | null;
+  /** The conditions the status is for: variant, method, quantity, check date, and the offer's supplier and shipping. */
+  conditions: { variant: string | null; method: string | null; quantity: number; checkedAt: string; supplier: string; deliveryMax: number | null; shipsFrom: string | null } | null;
   /** null: "Not checked yet". */
   demand: { cls: PrDemandClass; peakMonth: number | null; platform: string; query: string | null; region: string | null; periodStart: string | null; periodEnd: string | null; scope: PrSignalScope } | null;
   /** Qualifying demand sets (decision 9), the store's own orders included in its scope. */
@@ -583,4 +583,25 @@ export interface PrEconomics {
 /** A scenario's inputs: the derived ones, then the owner's base figures, then that scenario's own. */
 export function econInputs(e: Pick<PrEconomics, 'derived' | 'saved'>, scenario: keyof PrEconOverrides): Record<PrEconField, number | null> {
   return Object.fromEntries(PR_ECON_FIELDS.map((k) => [k, e.saved[scenario][k] ?? e.saved.base[k] ?? e.derived[k].value])) as Record<PrEconField, number | null>;
+}
+
+/** A comparison holds up to this many of a store's products (PR-19). */
+export const PR_COMPARE_MAX = 4;
+/** The economics inputs a comparison sets once for every product; price, supplier cost, shipping, duties and other costs stay each product's own. */
+export const PR_COMPARE_FIELDS = ['discountPct', 'feePercent', 'feePerOrder', 'returnRatePct', 'refundPct', 'returnCost', 'adCost'] as const satisfies readonly PrEconField[];
+export type PrCompareField = (typeof PR_COMPARE_FIELDS)[number];
+/** POST /api/pr/comparisons (PUT …/:id replaces one): the products and the owner's shared figures. */
+export interface PrComparisonInput {
+  name: string;
+  productIds: string[];
+  figures: Partial<Record<PrCompareField, number>>;
+}
+/** A saved comparison: each product's own figures are read again when it is opened. */
+export interface PrComparison extends PrComparisonInput {
+  id: string;
+  /** The store's ship-to and currency when it was saved; every product is compared on the same ones. */
+  destination: string | null;
+  currency: string;
+  createdAt: string;
+  updatedAt: string;
 }
