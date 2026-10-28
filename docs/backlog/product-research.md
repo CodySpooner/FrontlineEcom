@@ -764,7 +764,7 @@ STOP.
   prompt, start, report, reload.
 
 ### Comparison and economics
-- [ ] PR-18 **Unit economics** (decision 13): the pure function with tests, the Economics tab with three scenarios,
+- [x] PR-18 **Unit economics** (decision 13): the pure function with tests, the Economics tab with three scenarios,
   provenance per input, saved assumptions per store and product.
 - [ ] PR-19 **Comparison:** add up to 4 products, one destination, currency, date and assumptions for all, side-by-side
   demand, offers, shipping, fit, risks and economics, missing fields shown as missing. Saved comparisons.
@@ -957,6 +957,18 @@ STOP.
   Differentiation and Risk read the latest real report ("Proposal, not evidence"); evidence confidence counts a real
   report with measured evidence. Start opens the product on its Research tab. Tests: 4 API (one end to end: link,
   existing listing, store, agent, instructions, start, report, restart), 1 roles (T4), 1 page; existing tests updated.
+- 2026-10-28 PR-18 Unit economics: `unitEconomics()` in shared, one pure function for decision 13 (required unknown
+  → no figures; optional unknown → left out and listed; refunds once from revenue; fees on the discounted price, not
+  refunded; contribution before and after advertising; break-even cost per order; break-even ROAS only above zero),
+  with a test per rule. The server derives the base inputs with their provenance (the store's own price when it sells
+  the product, the cheapest Verified offer's cost and shipping to the store's ship-to with its supplier and date, the
+  store's fee settings, no discount, no returns, full refund) and keeps the owner's figures per store and product in
+  `pr_economics` (`GET`/`PUT /api/pr/products/:id/economics`). The panel's Economics tab: Conservative, Base and
+  Optimistic side by side ("same as base" until the owner changes one), "Needs a selling price" or "Incomplete:
+  missing …", the ROAS basis, Not included (unknown optional costs and fixed costs), and an editor per scenario where
+  every input shows Verified, Yours, Assumption or Unknown with its source; Save and Discard. Overview's Economics
+  (base) reads "$x per order before ads, excl. …", and complete base economics count toward evidence confidence.
+  Tests: 6 shared, 3 API, 2 page.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -988,6 +1000,16 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-18 as built.** A store's fees are "not set" when both are 0 (the stores table defaults them to 0, so 0 and 0
+  can't be told from "never entered"): Economics asks for them rather than computing with no fees. The owner can type
+  them per product, or set them in Settings. The store's own price comes from a store product linked to the research
+  product (`pr_outcomes` kind `store_product`). Offers in another currency use the stored rate and its date
+  (`storedRate`, never a fetch), the same as discovery's Rank step. `PUT` replaces the owner's figures: base over the
+  derived inputs, each other scenario over base. The panel's tab row now has `shrink-0`: as a scroll container in the
+  panel's flex column, it collapsed to 0 px under tall content (first seen with Economics). Dev-app check 12:15 local,
+  demo store, nothing saved: the SparkFun product's offers are fixtures, so supplier cost and shipping stay Unknown
+  and every scenario reads Incomplete. Typing $24.99, $3.42, $4.10, 2.9 % and $0.30 gave $16.45 before ads and a
+  1.52× break-even ROAS, which match working it by hand. Screenshots `.agent/shots/pr18-*.png`.
 - **PR-17 as built.** Report fields are snake_case as decision 7 names them (`customer_problem`, `open_questions`…).
   A report is a demo when the scripted engine saved it (`engine = 'scripted'`, set by the fake engine's tool context)
   or its run's runtime is Demo: a run forced onto the fake engine under a Claude config is still labelled. The task

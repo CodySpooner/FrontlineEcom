@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { PrCard, PrDemandTab, PrDiscovery, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
+import type { PrCard, PrDemandTab, PrDiscovery, PrEconomics, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { discoveryQuery } from '../product-research/Filters';
 import { sourceItem } from '../product-research/format';
@@ -237,7 +237,7 @@ describe('Detail panel', () => {
   beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} })); // jsdom has none; the Demand chart tracks its width
   const detail = (o: Partial<PrProductDetail> = {}): PrProductDetail => ({
     card: card({ fixture: false }), currency: 'USD', shipTo: 'US', sku: 'CJ-BRUSH-M', url: 'https://cjdropshipping.com/p/1',
-    assessment: { fit: { fit: 'weak', reasons: ['battery', 'Missing price band'] }, demand: { level: 'moderate', sets: 1, ownOrders: false }, flags: [], confidence: { level: 'low', count: 1, has: { demand: true, offer: false, economics: false, report: false } }, report: null },
+    assessment: { fit: { fit: 'weak', reasons: ['battery', 'Missing price band'] }, demand: { level: 'moderate', sets: 1, ownOrders: false }, flags: [], confidence: { level: 'low', count: 1, has: { demand: true, offer: false, economics: false, report: false } }, economics: null, report: null },
     notes: null, agentEstimates: null, stores: [], ...o,
   });
   const set: PrDemandTab['sets'][number] = {
@@ -269,6 +269,16 @@ describe('Detail panel', () => {
     evidence: [{ claim: 'CJ lists it at $3.42', kind: 'measured', source: '[offer:o1]' }], open_questions: ['Shipping time?'], would_change_if: 'A 20-day delivery.',
     proposals: [{ kind: 'ad_angle', text: 'No more hair on the sofa.' }], unknown_reasons: { supplier_offers: 'No offer verified yet.' },
   };
+  const unknown = (note: string | null = null) => ({ value: null, tag: null, note });
+  const econ: PrEconomics = {
+    currency: 'USD', rateDate: null, updatedAt: null, saved: { base: {}, conservative: {}, optimistic: {} },
+    derived: {
+      price: unknown('Needs a selling price'), discountPct: { value: 0, tag: 'assumption', note: 'No discount' },
+      supplierCost: { value: 342, tag: 'verified', note: 'CJdropshipping · live · checked 2026-10-27' }, shipping: { value: 410, tag: 'verified', note: 'CJdropshipping · live · checked 2026-10-27' },
+      feePercent: { value: 2.9, tag: 'owner', note: 'Store settings' }, feePerOrder: { value: 30, tag: 'owner', note: 'Store settings' }, duties: unknown('Unknown by default'),
+      returnRatePct: { value: 0, tag: 'assumption', note: 'No returns' }, refundPct: { value: 100, tag: 'assumption', note: 'Full refund on a return' }, returnCost: unknown(), otherCosts: unknown(), adCost: unknown(),
+    },
+  };
   const reports: PrReport[] = [
     { id: 'rep2', taskId: 't1', runId: 'r1', conversationId: 'c1', runtime: 'claude', demo: false, createdAt: '2026-10-28T11:00:00Z', body: real },
     { id: 'rep1', taskId: 't0', runId: 'r0', conversationId: 'c0', runtime: 'demo', demo: true, createdAt: '2026-10-27T11:00:00Z', body: { ...real, recommendation: 'reject', summary: 'Demo engine: scripted example.' } },
@@ -281,6 +291,7 @@ describe('Detail panel', () => {
       if (url.includes('/offers?')) return [offer];
       if (url.includes('/history?')) return history;
       if (url.includes('/reports?')) return reports;
+      if (url.includes('/economics?')) return econ;
       if (url.includes('/retry?')) return { ...tasks[1], status: 'queued' };
       if (url.startsWith('/api/pr/tasks?')) return tasks;
       if (url.startsWith('/api/runs/')) return run;
@@ -306,7 +317,7 @@ describe('Detail panel', () => {
     expect(within(panel).getByText('Moderate')).toBeTruthy();
     expect(within(panel).getAllByText('Not assessed yet')).toHaveLength(2); // economics until PR-18, differentiation until a real report
     expect(within(panel).getByText('Evidence confidence: Low')).toBeTruthy();
-    expect(within(panel).queryByRole('tab', { name: 'Economics' })).toBeNull(); // decision 1: absent until PR-18
+    expect(within(panel).getByRole('tab', { name: 'Economics' })).toBeTruthy();
     expect(within(panel).queryByRole('combobox', { name: 'Assign to a store' })).toBeNull(); // store scope
     expect(screen.getByTestId('where').textContent).toContain('product=p1');
     fireEvent.click(within(panel).getByRole('button', { name: 'Research with an agent' }));
@@ -378,6 +389,48 @@ describe('Detail panel', () => {
     fireEvent.click(within(panel).getByRole('button', { name: 'Add note' }));
     await waitFor(() => expect(calls(f, '/api/pr/products/p1/notes?store=paws')).toHaveLength(1));
     expect(bodyOf(f, '/notes?')).toMatchObject({ platform: 'tiktok_creative_center', url: 'https://ads.tiktok.com/business/creativecenter/x', note: '3 creators posted it this week' });
+  });
+
+  it('Economics: three scenarios from one set of inputs, each tagged; a scenario changes only what the owner sets; Save sends the figures', async () => {
+    const f = panelApi();
+    renderApp(<Research />, '/research?store=paws&product=p1&tab=economics');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    const row = (name: string) => within(within(panel).getByRole('row', { name: new RegExp(`^${name}`) })).getAllByRole('cell').map((c) => c.textContent);
+    expect(await within(panel).findByText('Needs a selling price', { selector: 'p' })).toBeTruthy();
+    expect(row('Contribution before ads')).toEqual(['Incomplete', 'Incomplete', 'Incomplete']); // never a 0
+    expect(within(panel).getAllByText('Verified')).toHaveLength(2);
+    const box = (name: string) => within(panel).getByRole('textbox', { name: new RegExp(`^${name.replace(/[()]/g, '\\$&')}`) });
+
+    fireEvent.change(box('Selling price (USD)'), { target: { value: '29.99' } });
+    expect(row('Contribution before ads')).toEqual(['$21.30', '$21.30', '$21.30']); // 2999 − 342 − 410 − (87 + 30)
+    expect(row('Contribution after ads')).toEqual(['Needs ad cost', 'Needs ad cost', 'Needs ad cost']);
+    expect(row('Break-even ROAS')).toEqual(['1.41×', '1.41×', '1.41×']);
+    expect(within(panel).getAllByText('same as base')).toHaveLength(2);
+    expect(within(panel).getByText('Duties, Other variable costs: unknown, so left out (figures are excl. them)')).toBeTruthy();
+
+    fireEvent.click(within(panel).getByRole('radio', { name: 'Conservative' }));
+    fireEvent.change(box('Return rate (%)'), { target: { value: '10' } });
+    fireEvent.change(box('Cost per return (USD)'), { target: { value: '5' } });
+    expect(row('Contribution before ads')).toEqual(['$17.80', '$21.30', '$21.30']); // 300 refunded, 50 a return on average
+    expect(within(panel).getAllByText('same as base')).toHaveLength(1);
+    fireEvent.change(box('Discount (%)'), { target: { value: 'ten' } });
+    expect(within(panel).getByRole('alert').textContent).toBe('Conservative: Discount must be a percentage from 0 to 100');
+    expect((within(panel).getByRole('button', { name: 'Save assumptions' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(box('Discount (%)'), { target: { value: '' } });
+    fireEvent.click(within(panel).getByRole('button', { name: 'Save assumptions' }));
+    await waitFor(() => expect(calls(f, '/api/pr/products/p1/economics?store=paws').some((u) => u)).toBe(true));
+    expect(JSON.parse(String(f.mock.calls.find(([u, i]) => String(u).includes('/economics?') && i?.method === 'PUT')![1]!.body))).toEqual({
+      base: { price: 2999 }, conservative: { returnRatePct: 10, returnCost: 500 }, optimistic: {},
+    });
+  });
+
+  it('Overview shows the base economics per order before ads, excl. what is unknown', async () => {
+    const figures = { orderValue: 2999, refunds: 0, netRevenue: 2999, fees: 117, variableCosts: 869, before: 2130, after: null, breakEvenRoas: 1.41 };
+    panelApi(detail({ assessment: { ...detail().assessment, economics: { currency: 'USD', result: { missing: [], excluded: ['duties'], figures } } } }));
+    renderApp(<Research />, '/research?store=paws&product=p1');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    expect(await within(panel).findByText('$21.30')).toBeTruthy();
+    expect(within(panel).getByText('per order before ads, excl. duties')).toBeTruthy();
   });
 
   it('Research: the latest task with its real activity, Cancel run and Retry, then every report, the demo one labelled', async () => {

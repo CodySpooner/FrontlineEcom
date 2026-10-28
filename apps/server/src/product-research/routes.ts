@@ -7,6 +7,7 @@ import { runtimes } from '../routes/agents-runtimes';
 import { productVisible } from './catalog';
 import { assign, productDemand, productDetail, productHistory, productOffers } from './detail';
 import { discover, parseDiscovery } from './discovery';
+import { parseOverrides, productEconomics, saveEconomics } from './economics';
 import { changeStage, dismissFlag, saveNotes, watchProduct } from './edits';
 import { evaluateStore, refreshProduct } from './evaluate';
 import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
@@ -189,6 +190,22 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if (store instanceof Response) return store;
       const task = getTask(db, c.req.param('id'), store.id);
       return task ? c.json(task) : c.json({ error: 'Research task not found' }, 404);
+    })
+    // Unit economics (decision 13): the inputs with their provenance; the owner's figures per scenario.
+    .get('/api/pr/products/:id/economics', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      return c.json(productEconomics(db, store, c.req.param('id')));
+    })
+    .put('/api/pr/products/:id/economics', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const o = parseOverrides(await c.req.json().catch(() => undefined));
+      if ('error' in o) return c.json(o, 400);
+      saveEconomics(db, store.id, c.req.param('id'), o);
+      return c.json(productEconomics(db, store, c.req.param('id')));
     })
     // Every report on the product in the store, newest first (decision 7).
     .get('/api/pr/products/:id/reports', (c) => {

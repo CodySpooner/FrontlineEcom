@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ConversationConfigInput, PrAgentRow, PrDiscovery, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask } from '@frontline/shared';
+import type { ConversationConfigInput, PrAgentRow, PrDiscovery, PrEconomics, PrEconOverrides, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -96,3 +96,8 @@ export const useTasks = (store: string, product: string) =>
 export const useReports = (store: string, product: string) =>
   useQuery({ queryKey: ['pr', 'reports', store, product], queryFn: () => api<PrReport[]>(`/api/pr/products/${enc(product)}/reports?${scope(store)}`) });
 export const useRetryTask = (store: string) => usePrWrite<{ id: string }, PrTask>((b) => `/api/pr/tasks/${enc(b.id)}/retry?${scope(store)}`);
+
+/** Unit economics (decision 13): the derived inputs and the owner's figures per scenario. */
+export const useEconomics = (store: string, product: string) =>
+  useQuery({ queryKey: ['pr', 'economics', store, product], queryFn: () => api<PrEconomics>(`/api/pr/products/${enc(product)}/economics?${scope(store)}`) });
+export const useSaveEconomics = (store: string, product: string) => usePrWrite<PrEconOverrides, PrEconomics>(() => `/api/pr/products/${enc(product)}/economics?${scope(store)}`, 'PUT');

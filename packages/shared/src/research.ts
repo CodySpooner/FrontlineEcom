@@ -296,6 +296,8 @@ export interface PrProductDetail {
     /** Open flags (store scope) or the rule flags (All stores); null: not checked yet. */
     flags: PrFlag[] | null;
     confidence: { level: 'low' | 'medium' | 'high'; count: number; has: { demand: boolean; offer: boolean; economics: boolean; report: boolean } };
+    /** Store scope: the base scenario (decision 13); null in All stores. */
+    economics: { currency: string; result: PrEconResult } | null;
     /** Store scope: the latest non-demo report's risks and proposals (Risk and Differentiation); null without one. */
     report: { createdAt: string; risks: string[]; proposals: PrReportBody['proposals'] } | null;
   };
@@ -492,4 +494,93 @@ export interface PrReport {
   demo: boolean;
   createdAt: string;
   body: PrReportBody;
+}
+
+/** Unit economics (decision 13): money in minor units of the view's currency, rates in %. null = unknown, never 0. */
+export const PR_ECON_FIELDS = ['price', 'discountPct', 'supplierCost', 'shipping', 'feePercent', 'feePerOrder', 'duties', 'returnRatePct', 'refundPct', 'returnCost', 'otherCosts', 'adCost'] as const;
+export type PrEconField = (typeof PR_ECON_FIELDS)[number];
+export const PR_ECON_PERCENT: PrEconField[] = ['discountPct', 'feePercent', 'returnRatePct', 'refundPct'];
+export const PR_ECON_LABEL: Record<PrEconField, string> = {
+  price: 'Selling price',
+  discountPct: 'Discount',
+  supplierCost: 'Supplier cost',
+  shipping: 'Shipping',
+  feePercent: 'Store fees',
+  feePerOrder: 'Store fee per order',
+  duties: 'Duties',
+  returnRatePct: 'Return rate',
+  refundPct: 'Refunded on a return',
+  returnCost: 'Cost per return',
+  otherCosts: 'Other variable costs',
+  adCost: 'Advertising cost per order',
+};
+/** Unknown → "Incomplete: missing …", no figures. */
+export const PR_ECON_REQUIRED: PrEconField[] = ['price', 'supplierCost', 'shipping', 'feePercent', 'feePerOrder'];
+/** Unknown → left out, the result says "excl. …". */
+export const PR_ECON_OPTIONAL: PrEconField[] = ['duties', 'returnCost', 'otherCosts'];
+/** verified: a live or imported offer (with its date); owner: the owner's figure or store setting; assumption: a default the owner can change. */
+export type PrEconTag = 'verified' | 'owner' | 'assumption';
+export interface PrEconInput {
+  value: number | null;
+  /** null: unknown. */
+  tag: PrEconTag | null;
+  note: string | null;
+}
+export interface PrEconFigures {
+  /** The price after discount: what ad platforms report as order value. */
+  orderValue: number;
+  refunds: number;
+  netRevenue: number;
+  fees: number;
+  variableCosts: number;
+  /** Expected contribution before advertising, also the break-even acquisition cost per order. */
+  before: number;
+  /** null: no advertising cost per order. */
+  after: number | null;
+  /** On order value after discounts, before refunds; null when `before` is not above zero. */
+  breakEvenRoas: number | null;
+}
+export interface PrEconResult {
+  missing: PrEconField[];
+  excluded: PrEconField[];
+  /** null while a required input is unknown. */
+  figures: PrEconFigures | null;
+}
+
+/** Decision 13 for one scenario. Refunds come off revenue once; fees are on the discounted price and not refunded. */
+export function unitEconomics(i: Record<PrEconField, number | null>): PrEconResult {
+  const missing = PR_ECON_REQUIRED.filter((k) => i[k] === null);
+  const returns = (i.returnRatePct ?? 0) / 100;
+  // With no returns, an unknown cost per return changes nothing.
+  const excluded = PR_ECON_OPTIONAL.filter((k) => i[k] === null && !(k === 'returnCost' && returns === 0));
+  if (missing.length) return { missing, excluded, figures: null };
+  const orderValue = Math.round(i.price! * (1 - (i.discountPct ?? 0) / 100));
+  const refunds = Math.round((returns * orderValue * (i.refundPct ?? 100)) / 100);
+  const netRevenue = orderValue - refunds;
+  const fees = Math.round((orderValue * i.feePercent!) / 100) + i.feePerOrder!;
+  const variableCosts = i.supplierCost! + i.shipping! + fees + (i.duties ?? 0) + Math.round(returns * (i.returnCost ?? 0)) + (i.otherCosts ?? 0);
+  const before = netRevenue - variableCosts;
+  return {
+    missing,
+    excluded,
+    figures: { orderValue, refunds, netRevenue, fees, variableCosts, before, after: i.adCost === null ? null : before - i.adCost, breakEvenRoas: before > 0 ? Math.round((orderValue / before) * 100) / 100 : null },
+  };
+}
+
+/** The owner's figures per scenario. Base: over the derived inputs; the others: over base ("same as base" otherwise). */
+export type PrEconOverrides = Record<'base' | 'conservative' | 'optimistic', Partial<Record<PrEconField, number>>>;
+/** GET /api/pr/products/:id/economics. PUT takes a PrEconOverrides that replaces `saved`. */
+export interface PrEconomics {
+  currency: string;
+  /** The stored exchange rate's date when the offer was quoted in another currency. */
+  rateDate: string | null;
+  /** The inputs before the owner's figures, with their provenance. */
+  derived: Record<PrEconField, PrEconInput>;
+  saved: PrEconOverrides;
+  updatedAt: string | null;
+}
+
+/** A scenario's inputs: the derived ones, then the owner's base figures, then that scenario's own. */
+export function econInputs(e: Pick<PrEconomics, 'derived' | 'saved'>, scenario: keyof PrEconOverrides): Record<PrEconField, number | null> {
+  return Object.fromEntries(PR_ECON_FIELDS.map((k) => [k, e.saved[scenario][k] ?? e.saved.base[k] ?? e.derived[k].value])) as Record<PrEconField, number | null>;
 }

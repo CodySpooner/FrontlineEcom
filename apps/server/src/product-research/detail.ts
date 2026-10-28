@@ -4,6 +4,7 @@ import type { Db } from '../db';
 import { listStores } from '../stores';
 import { productVisible } from './catalog';
 import { discover, privateDemand } from './discovery';
+import { baseEconomics } from './economics';
 import { evaluate } from './evaluate';
 import { offerRows, pointsOf } from './facts';
 import { flagsFor } from './flags';
@@ -33,7 +34,8 @@ export function productDetail(db: Db, id: string, store: Store | null, shipTo: s
   } else if (!store && card.flags) flags = flagsFor({ title: card.title, category: card.category });
   const own = store ? privateDemand(db, store.id).has(id) : false;
   const reported = store ? reportAssessment(db, store.id, id) : { report: null, measured: false };
-  const has = { demand: card.demandSets > 0, offer: card.fulfillment?.status === 'verified', economics: false, report: reported.measured }; // economics PR-18
+  const economics = store ? { currency: store.currency, result: baseEconomics(db, store, id) } : null;
+  const has = { demand: card.demandSets > 0, offer: card.fulfillment?.status === 'verified', economics: !!economics?.result.figures, report: reported.measured };
   const count = Object.values(has).filter(Boolean).length;
   const estimates = db
     .prepare(`SELECT transform_json FROM pr_listings WHERE product_id = ? AND origin = 'agent_find' ${store ? 'AND (store_id IS NULL OR store_id = ?)' : 'AND store_id IS NULL'} ORDER BY first_seen_at LIMIT 1`)
@@ -58,6 +60,7 @@ export function productDetail(db: Db, id: string, store: Store | null, shipTo: s
       demand: { level: own || card.demandSets >= 2 ? 'strong' : card.demandSets === 1 ? 'moderate' : 'none', sets: card.demandSets, ownOrders: own },
       flags,
       confidence: { level: count >= 3 ? 'high' : count === 2 ? 'medium' : 'low', count, has },
+      economics,
       report: reported.report,
     },
     notes: str(e?.notes),

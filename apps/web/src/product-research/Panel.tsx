@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { ExternalLink, Eye, Package, X } from 'lucide-react';
 import {
   PR_DEMAND_LABEL,
+  PR_ECON_LABEL,
   PR_DEMAND_LEVEL_LABEL,
   PR_FIT_LABEL,
   PR_FULFILLMENT_LABEL,
@@ -20,12 +21,13 @@ import { AreaChart } from '../components/AreaChart';
 import { Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Tabs } from '../components/ui';
 import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useProductDetail, useProductTab, useSaveNotes, useWatch } from './api';
 import { Pill, TONE } from './Card';
+import { EconomicsTab, incomplete } from './EconomicsTab';
 import { ResearchTab } from './ResearchTab';
 import { conditionsLine, countryName, demandLines, minorMoney, sourceLine } from './format';
 
-export const PANEL_TABS = ['overview', 'demand', 'suppliers', 'research', 'history'] as const;
+export const PANEL_TABS = ['overview', 'demand', 'suppliers', 'economics', 'research', 'history'] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
-const TAB_LABEL: Record<PanelTab, string> = { overview: 'Overview', demand: 'Demand', suppliers: 'Suppliers', research: 'Research', history: 'History' };
+const TAB_LABEL: Record<PanelTab, string> = { overview: 'Overview', demand: 'Demand', suppliers: 'Suppliers', economics: 'Economics', research: 'Research', history: 'History' };
 const PLATFORM: Record<string, string> = { google_trends: 'Google Trends', orders: 'Your orders', tiktok_creative_center: 'TikTok Creative Center' };
 const METRIC: Record<string, string> = { interest_over_time: 'Interest over time', units_sold: 'Paid units per week' };
 const KIND: Record<string, string> = { stage: 'Stage', watch: 'Watch', flag: 'Flag dismissed', merge: 'Merged', separate: 'Separated', offer: 'Offer', evidence: 'Evidence' };
@@ -92,10 +94,11 @@ export function DetailPanel({
           <>
             <Header d={d!} scope={scope} store={store} onClose={onClose} />
             {/* Wraps like the board's tab row: a narrow panel never hides a tab off the edge. */}
-            <Tabs label="Product details" tabs={PANEL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t] }))} value={tab} onChange={setTab} className="flex-wrap [&>button]:px-2.5" />
+            <Tabs label="Product details" tabs={PANEL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t] }))} value={tab} onChange={setTab} className="shrink-0 flex-wrap [&>button]:px-2.5" />
             {tab === 'overview' && <Overview d={d!} store={store} stores={stores} onAssigned={onAssigned} />}
             {tab === 'demand' && <Demand id={id} scope={scope} />}
             {tab === 'suppliers' && <Suppliers id={id} scope={scope} />}
+            {tab === 'economics' && <EconomicsTab id={id} store={scope} />}
             {tab === 'research' && <ResearchTab id={id} store={scope} />}
             {tab === 'history' && <History id={id} scope={scope} stores={stores} />}
             <div className="flex flex-wrap gap-2 border-t border-line pt-3">
@@ -303,7 +306,10 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
         <Row label={`Fulfillment to ${d.shipTo ? countryName(d.shipTo) : 'your country'}`} value={c.fulfillment ? PR_FULFILLMENT_LABEL[c.fulfillment.status] : 'Not checked yet'}>
           {c.fulfillment?.reasons.join('; ')}
         </Row>
-        <Row label="Economics (base)" value="Not assessed yet" />
+        <Row label="Economics (base)" value={!a.economics ? 'Not assessed yet' : a.economics.result.figures ? minorMoney(a.economics.result.figures.before, a.economics.currency) : incomplete(a.economics.result)}>
+          {a.economics?.result.figures &&
+            `per order before ads${a.economics.result.excluded.length ? `, excl. ${a.economics.result.excluded.map((k) => PR_ECON_LABEL[k].toLowerCase()).join(', ')}` : ''}`}
+        </Row>
         {/* The latest non-demo report's proposals and risks (decision 11): ideas to test, never evidence. */}
         <Row label="Differentiation" value={a.report?.proposals.length ? 'Proposal, not evidence' : 'Not assessed yet'}>
           {a.report?.proposals.length ? (
