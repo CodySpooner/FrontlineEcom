@@ -692,7 +692,7 @@ STOP.
   ids kept; `seedResearch` and `research_products` untouched; T6; the Watch ↔ "Saved" mirror; `/api/research*` still
   answering. Tests: an upgraded database keeps every list item; a re-run of boot doesn't re-add an un-watched item; a
   sample row never appears in discovery, counts or sorts; a demo-engine find is not mirrored.
-- [ ] PR-04 **Source framework and pipeline** (decision 4): adapter interface and registry, `pr_sources` health,
+- [x] PR-04 **Source framework and pipeline** (decision 4): adapter interface and registry, `pr_sources` health,
   `pr_jobs` with checkpoints, `pr_calls`, the caps module, the pipeline stages, error classes, bounded retries with
   backoff, schema-change detection, the job timer (off in dev unless `PR_INGEST=1`). Tests with fake adapters for every
   failure class, for resuming from a checkpoint and for every cap.
@@ -828,6 +828,10 @@ STOP.
   list, every agent find into a shared `agent_find` listing with no offers, signals or facts, and only a saved sample
   row into a `legacy_sample` listing; legacy ids kept, `seedResearch` and `research_products` untouched. T6 mirrors a
   real-engine find (`mirrorFind`); Watch ↔ "Saved" mirror (`setWatch`/`mirrorSaved`); `/api/research*` still answers.
+- 2026-10-28 PR-04 source framework: the adapter interface (capabilities, access, connect text, rate and quota) and
+  registry, `pr_sources` health, `pr_jobs` committed page by page with checkpoints, the `pr_calls` ledger, the caps
+  module, error classes with bounded retries (30 s, 2 min, 8 min, then failed), schema-change detection, daily
+  planning and the hourly timer (off in the dev app unless `PR_INGEST=1`). 8 tests with fake adapters.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -855,6 +859,11 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-04, decision 4 as built.** A rate-limit wait counts toward the 3 retries, so a source that keeps refusing
+  ends as a failed job, never a loop. A schema change is a required field missing or fields that were always sent
+  disappearing (a key fingerprint per source); new fields are fine. Two more error classes: `request` (our bug) and
+  `not_found` (an item removed): neither is retried, neither stops the source. A cap refusal leaves the job queued
+  until 00:05 UTC the next day ("waiting"), not failed.
 - **PR-03, decision 2 as built.** Legacy finds are imported as **shared** listings (store NULL): they were never
   per store, and T6 refreshes the shared one when it exists, else makes a private listing for the run's store. A
   "demo-engine find" is a run whose `agent_runs.runtime` is not `claude` or `codex` (the fake engine records none).
