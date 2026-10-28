@@ -1,9 +1,11 @@
-import type { FulfillmentStatus, SupplierProduct } from '@frontline/shared';
+import type { FulfillmentStatus, PrErrorKind, SupplierProduct } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
+import { recordCall, refusal, type CallPurpose } from '../product-research/caps';
+import { SourceError } from '../product-research/sources/adapter';
 
 // CJ Dropshipping API 2.0, read-only first: order status + tracking for orders the owner's stores sent to CJ, catalog search.
-// One account serves every store (global integration). CJ allows one call per second.
+// One account serves every store (global integration). CJ allows one call per second on a free account.
 const API = 'https://developers.cjdropshipping.com/api2.0/v1';
 const ID = 'cj:global';
 /** Orders paid in this window are still worth watching (CJ shipping takes 1–3 weeks). */
@@ -12,35 +14,116 @@ const STATUSES = ['UNSHIPPED', 'SHIPPED', 'DELIVERED'] as const;
 const PAGE_SIZE = 20;
 
 type Fetch = typeof fetch;
-interface CjResponse<T> { code: number; result: boolean; message: string; data: T }
+interface CjResponse<T> { code?: number; result?: boolean; message?: string; data: T; pointsInfo?: { usedToday?: number; remaining?: number; total?: number } }
 interface CjOrder { orderNum: string | null; shopName: string | null; orderStatus: string; trackNumber: string | null }
 
 const RANK: FulfillmentStatus[] = ['unfulfilled', 'fulfilled', 'in_transit', 'delivered'];
 const CJ_STATUS: Record<string, FulfillmentStatus> = { SHIPPED: 'in_transit', DELIVERED: 'delivered' };
 
-let nextCallAt = 0;
-/** Every CJ call (sync, search, token) waits its turn: CJ allows one per second per account. */
-async function call<T>(fetchFn: Fetch, path: string, init: RequestInit, gapMs: number): Promise<T> {
-  const now = Date.now();
-  const at = Math.max(now, nextCallAt);
-  nextCallAt = at + gapMs;
-  if (at > now) await new Promise((r) => setTimeout(r, at - now));
-  const res = await fetchFn(`${API}${path}`, init);
+/** A refused CJ call with CJ's code; the message reads "CJ: <CJ's message>". */
+export class CjError extends SourceError {
+  constructor(kind: PrErrorKind, message: string, readonly code?: number, retryAfterMs?: number) {
+    super(kind, `CJ: ${message}`, retryAfterMs);
+  }
+}
+
+// CJ's error-code table (developers.cjdropshipping.com/en/api/api2/standard/ps-code.html, docs/features/product-research-sources.md).
+const AUTH = [1600001, 1600002, 1600003, 1600004, 1600005, 1600006, 1600014, 1601000];
+const NOT_FOUND = [1602000, 1602001, 1602003];
+const REQUEST = [1600300, 1605002, 16900202, 16900205, 16900403];
+
+export function classifyCj(status: number, code: number | undefined, message: string): PrErrorKind {
+  if (status === 401 || status === 403 || (code !== undefined && AUTH.includes(code))) return 'auth';
+  // The points page shows body code 429 "Insufficient API points…", the code table 16900500: both are the daily quota.
+  if (code === 1600201 || code === 16900500 || /insufficient (api )?points/i.test(message)) return 'quota';
+  if (status === 429 || code === 1600200 || code === 429) return 'rate_limit';
+  if (code !== undefined && NOT_FOUND.includes(code)) return 'not_found';
+  if (code !== undefined && REQUEST.includes(code)) return 'request';
+  return 'server'; // 1600000 busy, 1600100 offline, 1600301 read timed out, 5xx, anything new
+}
+
+// One lane for every CJ call in the process, spaced for CJ's 1 request/second (free accounts). Waiting calls go by
+// priority: order sync, then the owner's own actions, then ingestion and watch checks (decision 4).
+const PRIORITY: Record<CallPurpose, number> = { order_sync: 3, owner: 2, search: 2, token: 2, ingestion: 1, watch: 1 };
+const lane: { prio: number; go: () => void }[] = [];
+let busyUntil = 0;
+let pumping: ReturnType<typeof setTimeout> | undefined;
+function pump(gapMs: number) {
+  if (pumping) return;
+  const wait = busyUntil - Date.now();
+  if (wait > 0) {
+    pumping = setTimeout(() => {
+      pumping = undefined;
+      pump(gapMs);
+    }, wait);
+    return;
+  }
+  lane.sort((a, b) => b.prio - a.prio); // stable: first come, first served within a priority
+  const next = lane.shift();
+  if (!next) return;
+  busyUntil = Date.now() + gapMs;
+  next.go();
+  if (lane.length) pump(gapMs);
+}
+const turn = (purpose: CallPurpose, gapMs: number) => new Promise<void>((go) => (lane.push({ prio: PRIORITY[purpose], go }), pump(gapMs)));
+
+export interface CjCtx { db: Db; fetchFn: Fetch; gapMs: number; purpose: CallPurpose }
+
+/**
+ * One CJ call: checks the caps, waits its turn, times out after 20 s, and records itself in pr_calls. Success is CJ's
+ * documented rule: HTTP 200 and a code of 200 or 0, or no code at all. Throws CjError with the failure's class.
+ */
+async function call<T>(ctx: CjCtx, path: string, init: RequestInit): Promise<T> {
+  const refused = refusal(ctx.db, 'cj', ctx.purpose);
+  if (refused) throw new CjError('quota', refused);
+  await turn(ctx.purpose, ctx.gapMs);
+  let res: Response;
+  try {
+    res = await ctx.fetchFn(`${API}${path}`, { ...init, signal: AbortSignal.timeout(20_000) });
+  } catch (e) {
+    recordCall(ctx.db, 'cj', ctx.purpose, false);
+    const timeout = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
+    throw new CjError(timeout ? 'timeout' : 'server', timeout ? 'no answer within 20 s' : e instanceof Error ? e.message : String(e));
+  }
   const body = (await res.json().catch(() => ({}))) as Partial<CjResponse<T>>;
-  if (!res.ok || !body.result) throw new Error(`CJ: ${body.message ?? `HTTP ${res.status}`}`);
+  const ok = res.ok && (body.code === undefined || body.code === 200 || body.code === 0);
+  recordCall(ctx.db, 'cj', ctx.purpose, ok);
+  if (body.pointsInfo?.remaining !== undefined) {
+    const at = new Date().toISOString();
+    const quota = JSON.stringify({ pointsRemaining: body.pointsInfo.remaining, pointsTotal: body.pointsInfo.total ?? null, at });
+    ctx.db.prepare(`INSERT INTO pr_sources (id, status, quota_json, updated_at) VALUES ('cj', 'ok', ?, ?) ON CONFLICT (id) DO UPDATE SET quota_json = excluded.quota_json`).run(quota, at);
+  }
+  if (!ok) {
+    const message = body.message ?? `HTTP ${res.status}`;
+    const after = Number(res.headers.get('retry-after'));
+    throw new CjError(classifyCj(res.status, body.code, message), message, body.code, after > 0 ? Math.min(after, 600) * 1000 : undefined);
+  }
   return body.data as T;
 }
 
-/** Cached access token, renewed from the API key a day before it expires (CJ serves the same token for 24h anyway). */
-async function accessToken(db: Db, key: Buffer, creds: Record<string, string>, fetchFn: Fetch, now: Date, gapMs: number) {
-  if (creds.accessToken && Number(creds.accessTokenExpiresAt) * 1000 > now.getTime() + 86_400_000) return creds.accessToken;
-  const t = await call<{ accessToken: string; accessTokenExpiryDate: string }>(fetchFn, '/authentication/getAccessToken', {
+/** Cached access token, renewed from the API key a day before it expires (CJ hands out the same token for 24 h). */
+async function accessToken(ctx: CjCtx, key: Buffer, creds: Record<string, string>, now: Date, force = false) {
+  if (!force && creds.accessToken && Number(creds.accessTokenExpiresAt) * 1000 > now.getTime() + 86_400_000) return creds.accessToken;
+  const t = await call<{ accessToken: string; accessTokenExpiryDate: string }>({ ...ctx, purpose: 'token' }, '/authentication/getAccessToken', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ apiKey: creds.apiKey!.trim() }),
-  }, gapMs);
-  updateSecrets(db, key, ID, { accessToken: t.accessToken, accessTokenExpiresAt: String(Math.floor(Date.parse(t.accessTokenExpiryDate) / 1000)) });
+  });
+  const fresh = { accessToken: t.accessToken, accessTokenExpiresAt: String(Math.floor(Date.parse(t.accessTokenExpiryDate) / 1000)) };
+  updateSecrets(ctx.db, key, ID, fresh);
+  Object.assign(creds, fresh);
   return t.accessToken;
+}
+
+/** Runs `fn` with a token. A cached token CJ refuses (1600001) is replaced once, as CJ's development page recommends. */
+async function withToken<T>(ctx: CjCtx, key: Buffer, creds: Record<string, string>, now: Date, fn: (token: string) => Promise<T>): Promise<T> {
+  const cached = !!creds.accessToken;
+  try {
+    return await fn(await accessToken(ctx, key, creds, now));
+  } catch (e) {
+    if (!(cached && e instanceof CjError && e.code === 1600001)) throw e;
+    return fn(await accessToken(ctx, key, creds, now, true));
+  }
 }
 
 const utc = (d: Date) => d.toISOString().slice(0, 19).replace('T', ' ');
@@ -49,12 +132,12 @@ export async function syncCj(db: Db, key: Buffer, _storeId: string, fetchFn: Fet
   const creds = getCredentials(db, key, 'cj');
   if (!creds) return;
   try {
-    const token = await accessToken(db, key, creds, fetchFn, now, gapMs);
+    const ctx: CjCtx = { db, fetchFn, gapMs, purpose: 'order_sync' };
     const orders: CjOrder[] = [];
     for (const status of STATUSES) {
       for (let page = 1; ; page++) {
         const q = new URLSearchParams({ pageNum: String(page), pageSize: String(PAGE_SIZE), status, paymentDateFrom: utc(new Date(now.getTime() - WINDOW_DAYS * 86_400_000)), paymentDateTo: utc(now) });
-        const data = await call<{ total: number; list: CjOrder[] | null }>(fetchFn, `/shopping/order/list?${q}`, { headers: { 'CJ-Access-Token': token } }, gapMs);
+        const data = await withToken(ctx, key, creds, now, (token) => call<{ total: number; list: CjOrder[] | null }>(ctx, `/shopping/order/list?${q}`, { headers: { 'CJ-Access-Token': token } }));
         orders.push(...(data.list ?? []));
         if (!data.list?.length || page * PAGE_SIZE >= data.total) break;
       }
@@ -97,9 +180,9 @@ interface CjProduct { id: string; sku: string; nameEn: string; bigImage?: string
 export async function searchCj(db: Db, key: Buffer, q: string, limit: number, fetchFn: Fetch = fetch, now = new Date(), gapMs = 1100): Promise<SupplierProduct[] | undefined> {
   const creds = getCredentials(db, key, 'cj');
   if (!creds) return undefined;
-  const token = await accessToken(db, key, creds, fetchFn, now, gapMs);
-  const params = new URLSearchParams({ keyWord: q, page: '1', size: String(limit) });
-  const data = await call<{ content?: { productList?: CjProduct[] }[] }>(fetchFn, `/product/listV2?${params}`, { headers: { 'CJ-Access-Token': token } }, gapMs);
+  const ctx: CjCtx = { db, fetchFn, gapMs, purpose: 'search' };
+  const params = new URLSearchParams({ keyWord: q, page: '1', size: String(Math.min(limit, 100)) }); // listV2 takes at most 100
+  const data = await withToken(ctx, key, creds, now, (token) => call<{ content?: { productList?: CjProduct[] }[] }>(ctx, `/product/listV2?${params}`, { headers: { 'CJ-Access-Token': token } }));
   return (data.content ?? []).flatMap((c) => c.productList ?? []).slice(0, limit).map((p) => ({
     supplier: 'cj',
     id: String(p.id),
@@ -110,6 +193,84 @@ export async function searchCj(db: Db, key: Buffer, q: string, limit: number, fe
     price: parseFloat(String(p.sellPrice)) || 0,
     listed: Number(p.listedNum ?? 0),
   }));
+}
+
+// Product Research (decision 4): paged discovery, detail and variants, stock per warehouse and freight quotes. Field
+// names are CJ's documented ones (docs/features/product-research-sources.md); every call is metered and classified.
+
+/** A listV2 product as CJ sends it (only the fields Product Research reads). */
+export interface CjListItem {
+  id: string;
+  nameEn: string;
+  sku?: string;
+  bigImage?: string;
+  sellPrice?: string | number;
+  listedNum?: number;
+  categoryId?: string;
+  oneCategoryName?: string;
+  twoCategoryName?: string;
+  threeCategoryName?: string;
+  warehouseInventoryNum?: number;
+  deliveryCycle?: string | number;
+  supplierName?: string;
+  directMinOrderNum?: number;
+  createAt?: string | number;
+}
+export interface CjVariant {
+  vid: string;
+  variantNameEn?: string;
+  variantSku?: string;
+  barcode?: string;
+  variantKey?: string;
+  variantLength?: number;
+  variantWidth?: number;
+  variantHeight?: number;
+  variantWeight?: number;
+  variantSellPrice?: number | string;
+}
+export interface CjDetail { pid: string; productNameEn?: string; productSku?: string; productWeight?: number; categoryName?: string; entryCode?: string; variants?: CjVariant[] }
+export interface CjStock { countryCode: string; totalInventory?: number; cjInventory?: number; factoryInventory?: number }
+export interface CjFreight { logisticName: string; logisticPrice?: number | string; logisticAging?: string; totalPostageFee?: number | string }
+
+export interface CjDeps { fetchFn?: Fetch; now?: Date; gapMs?: number; purpose: CallPurpose }
+
+/** Calls CJ with the stored key. Throws CjError('auth') when CJ isn't connected, so a job stops instead of retrying. */
+async function cj<T>(db: Db, key: Buffer, d: CjDeps, path: string, init: RequestInit = {}): Promise<T> {
+  const creds = getCredentials(db, key, 'cj');
+  if (!creds?.apiKey) throw new CjError('auth', 'not connected: enter the API key in Integrations');
+  const ctx: CjCtx = { db, fetchFn: d.fetchFn ?? fetch, gapMs: d.gapMs ?? 1100, purpose: d.purpose };
+  return withToken(ctx, key, creds, d.now ?? new Date(), (token) => call<T>(ctx, path, { ...init, headers: { ...(init.headers as Record<string, string>), 'CJ-Access-Token': token } }));
+}
+
+/** One page of CJ's catalog for a keyword (`listV2`, at most 100 a page). `more` is false on the last page. */
+export async function cjListPage(db: Db, key: Buffer, q: { keyWord: string; page: number; size: number }, d: CjDeps) {
+  const params = new URLSearchParams({ keyWord: q.keyWord, page: String(q.page), size: String(Math.min(q.size, 100)) });
+  const data = await cj<{ totalRecords?: number; content?: { productList?: CjListItem[] }[] }>(db, key, d, `/product/listV2?${params}`);
+  const items = (data.content ?? []).flatMap((c) => c.productList ?? []);
+  return { items, total: Number(data.totalRecords ?? items.length), more: items.length > 0 && q.page * q.size < Number(data.totalRecords ?? 0) };
+}
+
+export const cjProduct = (db: Db, key: Buffer, pid: string, d: CjDeps) => cj<CjDetail>(db, key, d, `/product/query?${new URLSearchParams({ pid })}`);
+
+/** Stock for every variant of a product, per country of the warehouse. */
+export async function cjInventory(db: Db, key: Buffer, pid: string, d: CjDeps) {
+  const data = await cj<{ variantInventories?: { vid: string; inventory?: CjStock[] }[] }>(db, key, d, `/product/stock/getInventoryByPid?${new URLSearchParams({ pid })}`);
+  return new Map((data.variantInventories ?? []).map((v) => [String(v.vid), v.inventory ?? []]));
+}
+
+/** Shipping methods, prices (USD) and CJ's delivery estimate for a variant and quantity, from one country to another. */
+export const cjFreight = (db: Db, key: Buffer, q: { from: string; to: string; vid: string; quantity: number }, d: CjDeps) =>
+  cj<CjFreight[]>(db, key, d, '/logistic/freightCalculate', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ startCountryCode: q.from, endCountryCode: q.to, products: [{ quantity: q.quantity, vid: q.vid }] }),
+  });
+
+/** USD → cents. A missing, empty or unparseable price, or a range, is unknown: never 0 (decision 4). */
+export function usdCents(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 ? Math.round(v * 100) : null;
+  if (typeof v !== 'string' || !/^\s*\d+(\.\d+)?\s*$/.test(v)) return null;
+  return Math.round(Number(v) * 100);
 }
 
 /** Zero-credential stand-in: research catalog products matching the query, at their supplier cost. */

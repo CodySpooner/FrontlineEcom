@@ -696,7 +696,7 @@ STOP.
   `pr_jobs` with checkpoints, `pr_calls`, the caps module, the pipeline stages, error classes, bounded retries with
   backoff, schema-change detection, the job timer (off in dev unless `PR_INGEST=1`). Tests with fake adapters for every
   failure class, for resuming from a checkpoint and for every cap.
-- [ ] PR-05 **CJdropshipping adapter** (decision 4): the niche → CJ category map, paged discovery, detail and variants,
+- [x] PR-05 **CJdropshipping adapter** (decision 4): the niche → CJ category map, paged discovery, detail and variants,
   stock, freight, the shared rate lane with priorities, every call in `pr_calls`, token handling, error classification,
   "price not shown". Recorded-response fixtures and tests. The live check runs as soon as the owner's key appears
   (decision 16).
@@ -832,6 +832,13 @@ STOP.
   registry, `pr_sources` health, `pr_jobs` committed page by page with checkpoints, the `pr_calls` ledger, the caps
   module, error classes with bounded retries (30 s, 2 min, 8 min, then failed), schema-change detection, daily
   planning and the hourly timer (off in the dev app unless `PR_INGEST=1`). 8 tests with fake adapters.
+- 2026-10-28 PR-05 CJ adapter: one priority rate lane for every CJ call (order sync > owner and agent searches >
+  ingestion and watches), CJ's documented success rule, error classes from CJ's code table, 20 s timeouts, one token
+  renewal on 1600001, every call (token included) in `pr_calls`, points left in `quota_json`. Paged `listV2`
+  discovery from each store's niche queries (deduped across stores), detail and variants, stock per warehouse and
+  freight quotes into `live` offer rows; "price not shown" is unknown, never 0; no stock or no method is recorded as
+  such. 10 tests on doc-shaped fixtures (`sources/fixtures/cj-doc-examples.json`). **Not live-checked**: no CJ key yet
+  (Blocked); the source stays Credentials required until a real call succeeds.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -859,6 +866,13 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-05, decision 4 as built.** The niche map (`product-research/profile.ts`) is CJ search keywords per niche, not
+  CJ category ids: the ids need a live `/product/getCategory` call, so switch after the live check. Enrichment quotes
+  the cheapest variant in stock, quantity 1, from at most two warehouse countries (the destination's own, then China),
+  for up to 20 new shared listings per store a day, re-checked after 7 days; it shares the ingestion cap. CJ's
+  `logisticAging` is stored as days, an assumption the live check must confirm (sources doc). The fixtures are shaped
+  like CJ's documented examples with made-up values, labelled as such: the live check replaces them with recorded
+  responses. The old `searchCj` keeps reading a price range's first number (agent and owner searches only; not stored).
 - **PR-04, decision 4 as built.** A rate-limit wait counts toward the 3 retries, so a source that keeps refusing
   ends as a failed job, never a loop. A schema change is a required field missing or fields that were always sent
   disappearing (a key fingerprint per source); new fields are fine. Two more error classes: `request` (our bug) and

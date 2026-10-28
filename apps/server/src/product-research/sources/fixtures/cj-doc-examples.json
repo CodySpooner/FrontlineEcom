@@ -1,0 +1,42 @@
+{
+  "_note": "Shaped like the examples in CJ's API docs (developers.cjdropshipping.com/en/api/api2/api/product.html and logistic.html, read 2026-10-28), with made-up values. Not recorded from a live account: replace with recorded responses after the first live check (decision 16).",
+  "token": { "code": 200, "result": true, "message": "Success", "data": { "openId": 1, "accessToken": "doc-token", "accessTokenExpiryDate": "2027-04-26T09:16:33+08:00", "refreshToken": "doc-refresh", "refreshTokenExpiryDate": "2027-04-26T09:16:33+08:00", "createDate": "2026-10-28T09:16:33+08:00" } },
+  "listV2": {
+    "code": 200, "result": true, "message": "Success",
+    "data": {
+      "pageSize": 20, "pageNumber": 1, "totalRecords": 2, "totalPages": 1,
+      "content": [{ "productList": [
+        { "id": "1418234567890", "nameEn": "Silicone Dog Paw Cleaner Cup", "sku": "CJPT104", "spu": "CJPT104", "bigImage": "https://cf.cjdropshipping.com/paw.jpg", "sellPrice": "3.42", "listedNum": 812, "categoryId": "c1", "oneCategoryName": "Pet Supplies", "twoCategoryName": "Dog Supplies", "threeCategoryName": "Grooming", "warehouseInventoryNum": 13640, "deliveryCycle": "3-5", "supplierName": "CJ", "directMinOrderNum": 1 },
+        { "id": "1418234567891", "nameEn": "Lick Mat Slow Feeder", "sku": "CJPT220", "sellPrice": "", "listedNum": 0, "oneCategoryName": "Pet Supplies" }
+      ], "relatedCategoryList": [], "keyWord": "pet grooming" }]
+    },
+    "pointsInfo": { "usedToday": 100, "remaining": 49900, "total": 50000 }
+  },
+  "query": {
+    "code": 200, "result": true, "message": "Success",
+    "data": {
+      "pid": "1418234567890", "productNameEn": "Silicone Dog Paw Cleaner Cup", "productSku": "CJPT104", "productWeight": 180, "categoryName": "Grooming", "entryCode": "3924100000",
+      "variants": [
+        { "vid": "V-M-GREY", "variantNameEn": "Paw Cleaner Cup M Grey", "variantSku": "CJPT104-M-GREY", "barcode": "", "variantKey": "M-Grey", "variantLength": 120, "variantWidth": 80, "variantHeight": 80, "variantWeight": 180, "variantSellPrice": 3.42 },
+        { "vid": "V-L-BLUE", "variantNameEn": "Paw Cleaner Cup L Blue", "variantSku": "CJPT104-L-BLUE", "variantKey": "L-Blue", "variantWeight": 220, "variantSellPrice": 3.1 }
+      ]
+    }
+  },
+  "inventory": {
+    "code": 200, "result": true, "message": "Success",
+    "data": {
+      "inventories": [{ "areaId": 1, "areaEn": "China Warehouse", "countryCode": "CN", "totalInventoryNum": 12400 }, { "areaId": 2, "areaEn": "US Warehouse", "countryCode": "US", "totalInventoryNum": 1240 }],
+      "variantInventories": [
+        { "vid": "V-M-GREY", "inventory": [{ "countryCode": "CN", "totalInventory": 12400, "cjInventory": 12400, "factoryInventory": 0 }, { "countryCode": "US", "totalInventory": 1240, "cjInventory": 1240, "factoryInventory": 0 }] },
+        { "vid": "V-L-BLUE", "inventory": [{ "countryCode": "CN", "totalInventory": 0, "cjInventory": 0, "factoryInventory": 0 }, { "countryCode": "US", "totalInventory": 0 }] }
+      ]
+    }
+  },
+  "freight": {
+    "code": 200, "result": true, "message": "Success",
+    "data": [
+      { "logisticName": "CJPacket Ordinary", "logisticPrice": 4.1, "logisticPriceCn": 29.5, "logisticAging": "6-10", "taxesFee": 0, "clearanceOperationFee": 0, "totalPostageFee": 4.1 },
+      { "logisticName": "USPS+", "logisticPrice": 5.25, "logisticAging": "2-5", "totalPostageFee": 5.25 }
+    ]
+  }
+}
