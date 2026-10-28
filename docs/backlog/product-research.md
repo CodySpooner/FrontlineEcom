@@ -1074,9 +1074,12 @@ STOP.
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
 - **Start the dev app (owner, needed for the next entries):** in PowerShell,
-  `cd C:/Users/Xody2/orca/workspaces/FrontlineEcom/product-research; pnpm dev`, then open
-  http://localhost:5243/integrations. Leave it running while you enter things; the worker notices them at its next
-  item.
+  `cd C:/Users/Xody2/orca/workspaces/FrontlineEcom/product-research; $env:WEB_PORT = '5243'; $env:API_PORT = '8857'; pnpm dev`,
+  then open http://localhost:5243/integrations. The two ports must be set in your own shell: they are only in the
+  worker's session, and without them the web server asks for 5173 (`strictPort`), fails with "Port 5173 is already in
+  use" while another lane's dev server holds it, and takes the API down with it. Leave it running while you enter
+  things. The lane has stopped (`.agent/STOP`), so after entering them delete `.agent/STOP` and ask the worker to "run
+  PR-29, then update the report".
 - **CJdropshipping API key (owner, free):** in CJ (cjdropshipping.com, signed in), open **Apps** in the left
   navigation → Install App → under Others, install **API** (installing it doesn't create a key) → **My CJ →
   Authorization → API** (https://www.cjdropshipping.com/my.html#/authorize/API) → **Add API**, Type **API Key**,
