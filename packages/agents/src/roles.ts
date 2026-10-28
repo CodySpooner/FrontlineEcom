@@ -33,6 +33,7 @@ export type ToolName =
   | 'write_memory'
   | 'request_approval'
   | 'ask_owner'
+  | 'save_finding'
   | 'create_creative'
   | 'search_knowledge'
   | 'recommend_research'

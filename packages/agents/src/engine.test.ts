@@ -329,8 +329,14 @@ describe('Claude engine', () => {
   // What Claude sees: every app tool's zod input must come out of the in-process MCP server as a valid object schema.
   test('serves every app tool over MCP (the research ones in research runs) with an object input schema', async () => {
     const listed = new Set<string>();
-    const runs = [...(Object.keys(ROLES) as AgentRole[]).map((role) => ({ role, mode: undefined })), { role: 'market_analyst' as AgentRole, mode: 'research' as const }];
-    for (const { role, mode } of runs) {
+    // save_finding is there only when the config saves findings (decision 11).
+    const saves = { id: 'cfg', tools: [], knowledge: [], permissions: { saveFindings: 'ask' } } as unknown as AgentConfig;
+    const runs = [
+      ...(Object.keys(ROLES) as AgentRole[]).map((role) => ({ role, mode: undefined, config: undefined })),
+      { role: 'market_analyst' as AgentRole, mode: 'research' as const, config: undefined },
+      { role: 'copywriter' as AgentRole, mode: undefined, config: saves },
+    ];
+    for (const { role, mode, config } of runs) {
       let options: Options | undefined;
       const engine = claudeEngine({
         query: (params) => {
@@ -340,7 +346,7 @@ describe('Claude engine', () => {
           })();
         },
       });
-      await collect(runAgent({ ...input, agent: { ...agent, role }, mode, env: {} as ToolEnv }, engine));
+      await collect(runAgent({ ...input, agent: { ...agent, role }, mode, ...(config ? { config } : {}), env: {} as ToolEnv }, engine));
       const server = (options?.mcpServers?.frontline as McpSdkServerConfigWithInstance).instance;
       const client = new Client({ name: 'test', version: '1.0.0' });
       const [a, b] = InMemoryTransport.createLinkedPair();

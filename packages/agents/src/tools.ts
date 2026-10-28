@@ -9,7 +9,7 @@ import { getPageDraft, listPageDrafts, savePageDraft, unsafeHtml } from './pages
 import { listFlowDrafts, saveFlowDraft } from './flows';
 import { flagOrderIssue, listOrderIssues } from './issues';
 import { createCard, ensureCategoryPath, getCard, kbControls, kbRow } from './kb';
-import { addEvidence, agentCardError, createLink, sameCard } from './kb-links';
+import { addEvidence, agentCardError, captureFinding, createLink, sameCard } from './kb-links';
 import { estimateResearch, type FetchedSource } from './kb-research';
 import { promotedAs, promotionPending } from './kb-promote';
 import { inScope, logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
@@ -1267,6 +1267,46 @@ export const APP_TOOLS: AppTool[] = [
       return answered.status === 'approved' && answered.decisionNote ? `The owner answered: ${answered.decisionNote}` : "The owner didn't answer. Go on with your best judgment and say what you assumed.";
     },
   }),
+  defineTool({
+    name: 'save_finding',
+    description:
+      "Save a finding to this store's knowledge base: something this work showed that should hold beyond this task (what the buyers want, what converts, what didn't work), not the task's own output. Give it as a short claim and a summary, with its evidence tag and the URLs or [kb:<id>] cards behind it. It starts as an unproven Hypothesis. If the knowledge base already says it, it adds to that card. At most 5 per run.",
+    input: {
+      title: z.string().trim().min(5).max(160).describe('the finding as a short claim'),
+      summary: z.string().trim().min(10).max(600),
+      body: z.string().trim().max(4000).default(''),
+      tag: z.enum(['measured', 'research', 'hypothesis', 'untagged']).describe('measured: from the store\'s numbers; research: from pages you read; hypothesis: your judgment'),
+      sources: z.array(z.string().trim().min(1).max(500)).max(8).default([]).describe('the URLs and [kb:<id>] cards it rests on'),
+    },
+    run: async (f, ctx) => {
+      const runId = ctx.runId;
+      const permissions = runId && ctx.db.prepare('SELECT f.permissions_json FROM agent_runs r JOIN agent_configs f ON f.id = r.config_id WHERE r.id = ?').get(runId)?.permissions_json;
+      const mode = permissions ? (JSON.parse(String(permissions)) as AgentConfig['permissions']).saveFindings : 'off';
+      if (!runId || mode === 'off') return 'Not saved: saving findings is off for this conversation.';
+      // Each call commits as it goes, so what's saved stays if the run is cut short. Asked or saved, 5 a run.
+      const used =
+        mode === 'ask'
+          ? ctx.db.prepare(`SELECT count(*) AS n FROM approvals WHERE run_id = ? AND json_extract(action_json, '$.kind') = 'kb.save'`).get(runId)?.n
+          : ctx.db.prepare(`SELECT count(*) AS n FROM kb_evidence WHERE run_id = ? AND kind = 'observed'`).get(runId)?.n;
+      if (Number(used) >= 5) return 'Not saved: a run saves 5 findings at most, and this one has.';
+      if (mode === 'ask') {
+        // It acts on nothing outside the app, so the suggest, autopilot and patience gates don't apply (decision 11).
+        const request = ctx.approvals.create({ storeId: ctx.store.id, agentId: ctx.agent.id, runId, title: f.title, reason: f.summary, action: { kind: 'kb.save', payload: f } });
+        ctx.emit({ type: 'approval_request', approval: request });
+        const decided = await abortable(ctx.approvals.decision(request.id), ctx.signal);
+        if (decided.status !== 'approved') return 'Not saved: the owner skipped it. Go on.';
+      }
+      // A finding read off demo numbers isn't kept once the store went live mid-run (startFresh removed its siblings).
+      const moved = storeMoved(ctx);
+      if (moved) return `Not saved: ${moved}.`;
+      const c = captureFinding(ctx.db, ctx.store.id, f, { agentId: ctx.agent.id, runId, unreviewed: mode === 'auto' });
+      if (c.kind === 'refused') return `Not saved: ${c.reason}.`;
+      if (c.kind === 'general') return `Already in General: ${c.card.title}`;
+      const { id, title, stage, storeId, status } = c.card;
+      ctx.emit({ type: 'kb_written', card: { id, title, stage, storeId, status }, added: c.kind === 'added' });
+      return c.kind === 'added' ? `Added to ${title} (${id})` : `Saved as ${status === 'proposed' ? 'Unreviewed' : 'Active'}: ${title} (${id})`;
+    },
+  }),
   // ---- the knowledge base (knowledge-base lane). The research-only tools act on the task the run is a stage of.
   defineTool({
     name: 'search_knowledge',
@@ -1639,10 +1679,14 @@ export const RESEARCH_TOOLS: ToolName[] = ['fetch_source', 'propose_card', 'add_
  * The app tools a run gets: in research mode the research set, otherwise the role's own without the research-only ones,
  * narrowed to its config's tools when it has one (decision 13). Runs without a config keep the role's.
  */
-export const runTools = (role: Agent['role'], mode?: 'research', config?: Pick<AgentConfig, 'tools'>) =>
+export const runTools = (role: Agent['role'], mode?: 'research', config?: Pick<AgentConfig, 'tools'> & { permissions?: AgentConfig['permissions'] }) =>
   mode === 'research'
     ? APP_TOOLS.filter((t) => RESEARCH_TOOLS.includes(t.name))
-    : toolsFor(role).filter((t) => (t.name === 'search_knowledge' || !RESEARCH_TOOLS.includes(t.name)) && allows(config, t.name));
+    : [
+        ...toolsFor(role).filter((t) => (t.name === 'search_knowledge' || !RESEARCH_TOOLS.includes(t.name)) && allows(config, t.name)),
+        // Off: the tool is absent (decision 11). It's the config's setting, not one of its tools.
+        ...APP_TOOLS.filter((t) => t.name === 'save_finding' && config?.permissions && config.permissions.saveFindings !== 'off'),
+      ];
 
 /** Whether a run on this config may use one of its role's tools, Claude built-ins and external servers (meta_ads) included. */
 export const allows = (config: Pick<AgentConfig, 'tools'> | undefined, name: string) => !config || config.tools.includes(name);

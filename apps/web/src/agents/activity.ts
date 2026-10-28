@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentRunDetail } from '@frontline/shared';
+import type { AgentEvent, AgentRunDetail, KbCardStatus } from '@frontline/shared';
 import { toolName } from '../lib/transcript';
 
 // A reply's activity block: one plain sentence per real transcript event, never the model's reasoning and never
@@ -19,7 +19,12 @@ const host = (url: unknown) => {
 };
 const quoted = (v: unknown) => (typeof v === 'string' && v.trim() ? ` for "${v.trim().slice(0, 60)}"` : '');
 
+/** What a save did, in the words of Save to Knowledge Base's confirmation (decision 11). */
+export const savedText = (r: { result: 'saved' | 'added' | 'general'; card: { title: string; status: KbCardStatus } }) =>
+  r.result === 'saved' ? `Saved as ${r.card.status === 'proposed' ? 'Unreviewed' : 'Active'}: ${r.card.title}` : r.result === 'added' ? `Added to ${r.card.title}` : `Already in General: ${r.card.title}`;
+
 export const PHRASES: Record<string, string | ((input: Input) => string)> = {
+  save_finding: (i) => `Saving a finding: ${String(i.title ?? '').slice(0, 80)}`,
   store_summary: "Read the store's last 30 days",
   compare_stores: 'Compared this store with your other stores',
   metrics_timeseries: (i) => `Read ${Number(i.days) || 30} days of store metrics`,
@@ -81,6 +86,11 @@ export function activitySteps(events: AgentEvent[]): Step[] {
     } else if (e.type === 'tool_result') {
       const step = calls.get(e.id);
       if (step) step.icon = e.isError ? 'failed' : 'done';
+      // A save that didn't write (refused, the cap, skipped) says why; "Already in General" isn't a failure.
+      if (step?.text.startsWith('Saving a finding') && !e.isError) {
+        step.text = e.output.replace(/ \([\w-]+\)$/, '');
+        if (step.text.startsWith('Not saved')) step.icon = 'warning';
+      }
     } else if (e.type === 'approval_request') steps.push({ icon: 'warning', text: `Asked for your approval: ${e.approval.title}` });
     else if (e.type === 'memory_written') steps.push({ icon: 'done', text: `Saved to store memory: ${e.memory.text}` });
     else if (e.type === 'knowledge') steps.push({ icon: 'done', text: `Read ${e.cards.length} knowledge card${e.cards.length === 1 ? '' : 's'}: ${e.cards.map((c) => c.title).join('; ')}` });

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { conversationState, runState, type AgentRun, type AgentRunDetail, type Conversation, type ConversationContext, type ConversationCounts, type ConversationPage, type CreativeKind, type CursorPage, type KbStage, type KnowledgeUse, type RunDeliverable, type Store } from '@frontline/shared';
+import { conversationState, runState, type AgentRun, type AgentRunDetail, type Conversation, type ConversationContext, type ConversationCounts, type ConversationPage, type CreativeKind, type CursorPage, type ConversationFinding, type KbCardStatus, type KbStage, type KnowledgeUse, type RunDeliverable, type Store } from '@frontline/shared';
 import { saveConfig, type AgentType, type ConfigDraft } from './configs';
 import { ftsQuery } from './kb-retrieve';
 import { finalText, getRun } from './runs';
@@ -258,6 +258,17 @@ export function conversationKnowledge(db: DatabaseSync, conversationId: string):
     cards.set(id, card);
   }
   return [...cards.values()];
+}
+
+/** The Knowledge tab's findings: the cards this conversation's runs saved findings to, newest first. */
+export function conversationFindings(db: DatabaseSync, conversationId: string): ConversationFinding[] {
+  return db
+    .prepare(
+      `SELECT k.id, k.title, k.stage, k.store_id, k.status, max(e.created_at) AS at FROM kb_evidence e JOIN kb_cards k ON k.id = e.card_id JOIN agent_runs r ON r.id = e.run_id
+       WHERE r.conversation_id = ? AND e.kind = 'observed' AND k.store_id = r.store_id GROUP BY k.id ORDER BY at DESC`,
+    )
+    .all(conversationId)
+    .map((r) => ({ id: String(r.id), title: String(r.title), stage: r.stage as KbStage, storeId: String(r.store_id), status: r.status as KbCardStatus, at: String(r.at) }));
 }
 
 /** A run's state for the page (decision 5): its approvals waiting on the owner decide between approval and question. */

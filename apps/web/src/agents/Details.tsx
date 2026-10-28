@@ -2,8 +2,9 @@ import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Lock } from 'lucide-react';
 import { AGENT_ROLES, CODEX_TESTED, EFFORT_LABEL, INTEGRATION_KINDS, INTERRUPTED, KB_STAGES, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
-import { useAgents, useAgentTypes, useCaps, useClaudeAccount, useConversation, useConversationKnowledge, useConversationTools, useRuntimes, useThread } from '../api/client';
+import { useAgents, useAgentTypes, useCaps, useClaudeAccount, useConversation, useConversationFindings, useConversationKnowledge, useConversationTools, useRuntimes, useThread } from '../api/client';
 import { FixLink } from '../components/Chat';
+import { STATUS } from '../knowledge/Library';
 import { cx, Dialog, ProgressBar, RUN_STATUS } from '../components/ui';
 import { cents, modelName } from '../lib/format';
 import { isLive } from '../lib/transcript';
@@ -263,23 +264,43 @@ function ActivityTab({ store, c }: { store: Store; c: ConversationDetail }) {
 
 const HOW = { prompt: 'In its prompt', search: 'Searched for', cited: 'Cited' } as const;
 
-/** The cards the latest reply had in its prompt, searched for or cited: this store's, then General's (never another store's). */
+/**
+ * The cards the latest reply had in its prompt, searched for or cited: this store's, then General's (never another
+ * store's). Then the findings this conversation saved.
+ */
 function KnowledgeTab({ store, c }: { store: Store; c: ConversationDetail }) {
   const k = useConversationKnowledge(store.id, c.id).data ?? [];
-  if (!c.config.knowledge.length) return <p className="px-4 py-3.5 text-[12.5px] text-muted">This agent reads no knowledge: its settings leave out the store's and General.</p>;
-  if (!k.length) return <p className="px-4 py-3.5 text-[12.5px] text-muted">No cards yet. The cards a reply has in its prompt, searches for or cites show here.</p>;
+  const saved = useConversationFindings(store.id, c.id).data ?? [];
+  const href = (id: string) => `/knowledge?card=${encodeURIComponent(id)}&ws=${encodeURIComponent(store.id)}`;
+  const findings = saved.length > 0 && (
+    <Section key="saved" title="Saved from this conversation">
+      <ul className="grid gap-2">
+        {saved.map((f) => (
+          <li key={f.id} className="grid gap-0.5 text-[12.5px]">
+            <Link to={href(f.id)} className="text-text hover:text-white hover:underline">
+              {f.title}
+            </Link>
+            <span className="text-xs text-muted">{STATUS[f.status]}</span>
+          </li>
+        ))}
+      </ul>
+    </Section>
+  );
+  if (!c.config.knowledge.length) return [<p key="none" className="px-4 py-3.5 text-[12.5px] text-muted">This agent reads no knowledge: its settings leave out the store's and General.</p>, findings];
+  if (!k.length) return [<p key="none" className="px-4 py-3.5 text-[12.5px] text-muted">No cards yet. The cards a reply has in its prompt, searches for or cites show here.</p>, findings];
   const groups = [
     [`${store.name}'s knowledge`, k.filter((x) => x.storeId !== null)],
     ['General knowledge', k.filter((x) => x.storeId === null)],
   ] as const;
-  return groups.map(
+  return [
+    ...groups.map(
     ([title, list]) =>
       list.length > 0 && (
         <Section key={title} title={title}>
           <ul className="grid gap-2">
             {list.map((card) => (
               <li key={card.id} className="grid gap-0.5 text-[12.5px]">
-                <Link to={`/knowledge?card=${encodeURIComponent(card.id)}&ws=${encodeURIComponent(store.id)}`} className="text-text hover:text-white hover:underline">
+                <Link to={href(card.id)} className="text-text hover:text-white hover:underline">
                   {card.title}
                 </Link>
                 <span className="text-xs text-muted">
@@ -290,5 +311,7 @@ function KnowledgeTab({ store, c }: { store: Store; c: ConversationDetail }) {
           </ul>
         </Section>
       ),
-  );
+    ),
+    findings,
+  ];
 }

@@ -3,7 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ActionLogEntry,
+  ConversationFinding,
+  FindingSaved,
   KnowledgeUse,
+  SaveFindingInput,
   SendMessageInput,
   Agent,
   AgentRun,
@@ -247,6 +250,22 @@ export const useConversationCounts = () => useQuery({ queryKey: ['conversation-c
 /** The Knowledge tab: the cards the latest reply had in its prompt, searched for or cited (refetched with the conversation). */
 export const useConversationKnowledge = (storeId: string, id: string) =>
   useQuery({ queryKey: ['conversation', id, 'knowledge'], queryFn: () => api<KnowledgeUse[]>(`/api/conversations/${id}/knowledge?store=${storeId}`), enabled: !!id });
+
+/** The Knowledge tab's findings: the cards this conversation's runs saved findings to. */
+export const useConversationFindings = (storeId: string, id: string) =>
+  useQuery({ queryKey: ['conversation', id, 'findings'], queryFn: () => api<ConversationFinding[]>(`/api/conversations/${id}/findings?store=${storeId}`), enabled: !!id });
+
+/** Save to Knowledge Base on a finished reply (decision 11). */
+export function useSaveFinding(storeId: string, conversationId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ runId, ...input }: SaveFindingInput & { runId: string }) => api<FindingSaved>(`/api/runs/${runId}/findings?store=${storeId}`, json('POST', input)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['kb'] });
+      qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
+    },
+  });
+}
 
 export const useConversationTools = (storeId: string, id: string) =>
   useQuery({ queryKey: ['conversation-tools', id], queryFn: () => api<ToolGroup[]>(`/api/conversations/${id}/tools?store=${storeId}`), enabled: !!id });

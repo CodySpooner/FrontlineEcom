@@ -423,6 +423,8 @@ function startFresh(db: Db, store: Store, runs: RunManager) {
   const creatives = db.prepare(`DELETE FROM creatives WHERE store_id = ? AND source != 'higgsfield'`).run(store.id).changes;
   // What it shared with its niche came from the same demo numbers, and every store of the niche reads it (AGT-164).
   const shared = db.prepare('DELETE FROM niche_learnings WHERE store_id = ?').run(store.id).changes;
+  // Findings its runs saved to cards that stay (the owner's, web research): they came from demo numbers too.
+  db.prepare(`DELETE FROM kb_evidence WHERE kind = 'observed' AND run_id IN (SELECT id FROM agent_runs WHERE store_id = ?)`).run(store.id);
   const kb = kbGoLive(db, store.id);
   const n = (k: number | bigint, what: string) => k && `${k} ${what}${Number(k) === 1 ? '' : 's'}`;
   const parts = [

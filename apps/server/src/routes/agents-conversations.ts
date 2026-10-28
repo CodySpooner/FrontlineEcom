@@ -1,8 +1,8 @@
 import {
-  agentTypes, archiveCustomRole, conversationCounts, conversationKnowledge, conversationThread, createConversation, createCustomRole, discardConversation, getConfig, getConversation, getCustomRole, getRun, toolGroups, listConversations, listPresets,
-  recap, resolveType, saveConfig, savePreset, setConversationConfig, updateConversation, validateConfig, validateCustomRole, type RunManager,
+  agentTypes, archiveCustomRole, captureFinding, conversationCounts, conversationFindings, conversationKnowledge, conversationThread, createConversation, createCustomRole, discardConversation, getConfig, getConversation, getCustomRole, getRun, toolGroups, listConversations, listPresets,
+  recap, replyBlocks, resolveType, saveConfig, savePreset, setConversationConfig, updateConversation, validateConfig, validateCustomRole, type RunManager,
 } from '@frontline/agents';
-import { ATTACHMENT_TEXT, INTERRUPTED, type AgentRun, type Conversation, type ConversationContext, type CreateConversationInput, type RunAttachment, type RuntimeCapabilities, type SendMessageInput, type Store } from '@frontline/shared';
+import { ATTACHMENT_TEXT, blockFinding, INTERRUPTED, type AgentRun, type FindingSaved, type SaveFindingInput, type Conversation, type ConversationContext, type CreateConversationInput, type RunAttachment, type RuntimeCapabilities, type SendMessageInput, type Store } from '@frontline/shared';
 import { Hono, type Context } from 'hono';
 import { decide, getApproval } from '../approvals';
 import type { Db } from '../db';
@@ -199,6 +199,27 @@ export function conversationRoutes(db: Db, runs: RunManager) {
       if (!a || a.storeId !== c.req.query('store') || a.status !== 'pending' || a.action.kind !== 'question') return c.json({ error: 'That question is no longer waiting for an answer.' }, 409);
       const answered = decide(db, a.id, 'approve', b.text.trim());
       return answered && answered !== 'decided' ? c.json(answered) : c.json({ error: 'That question is no longer waiting for an answer.' }, 409);
+    })
+    // Save to Knowledge Base on a finished reply (decision 11): the block's text, tag and citations, the owner's title and
+    // summary. It follows the workspace's review setting.
+    .post('/api/runs/:id/findings', async (c) => {
+      const run = getRun(db, c.req.param('id'));
+      if (!run || run.storeId !== c.req.query('store')) return missing(c, 'Run');
+      const b = (await c.req.json().catch(() => null)) as SaveFindingInput | null;
+      if (!b || !Number.isInteger(b.block) || !isText(b.title, 5, 160) || !isText(b.summary, 10, 600)) return c.json({ error: 'Expected { block, title (5–160 characters), summary (10–600 characters) }' }, 400);
+      if (run.status === 'queued' || run.status === 'running') return c.json({ error: 'Save a reply once it has finished.' }, 409);
+      const live = db.prepare('SELECT at FROM done_once WHERE ref = ?').get(`activate:${run.storeId}`)?.at;
+      if (live && run.createdAt < String(live)) return c.json({ error: 'That reply came from demo data, before the store went live, so it isn\'t saved.' }, 409);
+      const text = replyBlocks(run.transcript)[b.block];
+      if (!text) return missing(c, 'That part of the reply');
+      const saved = captureFinding(db, run.storeId, { ...blockFinding(text), title: b.title.trim(), summary: b.summary.trim() }, { agentId: run.agentId, runId: run.id });
+      if (saved.kind === 'refused') return c.json({ error: `Not saved: ${saved.reason}.` }, 409);
+      const { id, title, stage, storeId, status } = saved.card;
+      return c.json({ result: saved.kind, card: { id, title, stage, storeId, status } } satisfies FindingSaved, saved.kind === 'saved' ? 201 : 200);
+    })
+    .get('/api/conversations/:id/findings', (c) => {
+      const conversation = mine(c);
+      return conversation ? c.json(conversationFindings(db, conversation.id)) : missing(c);
     })
     .get('/api/conversations/:id/knowledge', (c) => {
       const conversation = mine(c);

@@ -26,8 +26,8 @@ export {
 export { APP_TOOLS, OUTLIVE_RUN, RESEARCH_TOOLS, allows, budgetAddedToday, cash, defaultTools, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
 export { agentTypes, archiveCustomRole, createCustomRole, customRole, getConfig, getCustomRole, listPresets, resolveType, saveConfig, savePreset, seatDefault, toolGroups, validateConfig, validateCustomRole, type AgentType, type ConfigDraft } from './configs';
-export { conversationCounts, conversationKnowledge, conversationPreface, conversationQuery, conversationThread, runDeliverables, setConversationConfig, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
-export { createRunManager, getRun, hasEffects, listRuns, runGist, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
+export { conversationCounts, conversationFindings, conversationKnowledge, conversationPreface, conversationQuery, conversationThread, runDeliverables, setConversationConfig, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';
+export { createRunManager, getRun, hasEffects, listRuns, replyBlocks, runGist, type RunManager, type RunManagerOptions, type StartOptions } from './runs';
 export { CREDITS, saveCreative, listCreatives, deleteCreative, chargeCredits, creditsToday, demoMedia, wrap, type NewCreative } from './creatives';
 export { reviewCampaigns, thresholds, economics, adWindow, uncostedShare, type CampaignStats, type Economics, type Verdict } from './ads';
 export { ADS_JOB, DEFAULT_JOBS, createDefaultJobs, enableDefaultJobs } from './jobs';
@@ -61,6 +61,7 @@ export {
 export {
   addEvidence,
   agentCardError,
+  captureFinding,
   createLink,
   decideLink,
   deleteEvidence,
@@ -76,6 +77,8 @@ export {
   scanCards,
   settleStage,
   suggestLinks,
+  type Captured,
+  type Finding,
   type NewKbEvidence,
 } from './kb-links';
 export { reliabilityOf, saveSource, setSourceReliability, sourceForAgent, untrustedBlock, type NewKbSource } from './kb-sources';

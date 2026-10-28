@@ -1496,7 +1496,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     - a planted 'Ignore previous instructions' line in an attachment arrives quoted inside the nonce block;
     - a follow-up's knowledge block carries the framing sentence;
     - sources.test.ts passes unchanged.
-- [ ] AA-18 **Saving findings:**
+- [x] AA-18 **Saving findings:**
   - `captureFinding` in kb-links.ts (store and General dedupe, observed evidence that doesn't touch `verified_at` or
     write a 'Refreshed' revision, tested on a card past its freshness age, no read source);
   - Save to Knowledge Base on replies (defaults taken from the block, no model call), and automatic or Ask-me saves,
@@ -1705,6 +1705,14 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   composer and Deploy, read into untrusted blocks and resent on retry; the Knowledge tab with its count, and the
   composer's knowledge chip. `untrustedBlock` extracted (sources.test.ts unchanged). 8 new tests, 4 extended, on the scripted
   engine. Checked in headless Chrome at 1440 on a demo-runtime conversation with two demo cards and a document.
+- 2026-10-28 AA-18 Saving findings: `captureFinding` (store and General dedupe, archived or rejected refused, one
+  observed row that leaves `verified_at` and revisions alone); `blockFinding` and `gist` in shared; the `save_finding`
+  tool (Off absent, Ask me through a kb.save approval, Automatically as Unreviewed, a cap of 5) and the `kb_written`
+  event; `POST /api/runs/:id/findings` (the anchored block, the owner's title and summary, the review setting) and
+  `GET /api/conversations/:id/findings`; Save to Knowledge Base under replies, Deploy's "Save findings to knowledge",
+  the Activity step in the confirmation's words, "Saved from this conversation" in the Knowledge tab, the demo-store
+  note; go-live clears the demo store's observed rows. 8 server tests and 3 web tests, on the scripted engine. Checked
+  in headless Chrome at 1440: a reply saved on a demo store, the finding in the Knowledge tab, and Deploy's row.
 
 ## Blocked
 - (AA-15, 2026-10-28) Codex live smoke (AA-25b) needs the owner's sign-in. `codex login status` with the dev server's
@@ -1842,6 +1850,17 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-18, 2026-10-28) For AA-19 and later:
+  - **Save to Knowledge Base is an inline panel** under the reply's actions, not a floating popover: it holds a title,
+    a summary and the demo note, and an inline panel needs no positioning code. Its confirmation replaces it and links
+    the card.
+  - **Which block a reply save takes:** the reply's last text part (`replyBlocks()` splits the final text where an
+    approval request sits). The route takes a block index, so a later per-block button needs no server change.
+  - **A save never refreshes a card:** the observed row is evidence the owner can weigh, not a re-read, so
+    `verified_at`, the stage and revisions stay as they were. A store duplicate gets the row; a General duplicate gets
+    nothing ("Already in General"), so one store's work never edits General.
+  - **Not checked in Chrome:** the demo engine never calls save_finding, so automatic and Ask-me saves are covered
+    by agents-findings.test.ts on the scripted engine only.
 - (AA-17, 2026-10-28) For AA-18 and later:
   - **Follow-up knowledge, verified without a live turn (decision 16):** AA-01 read SDK 0.3.310's types and found the
     default (a bare `systemPrompt` string) records the prompt with the session and resends that record on resume. So

@@ -933,6 +933,64 @@ export interface KnowledgeUse extends KnowledgeRef {
   how: ('prompt' | 'search' | 'cited')[];
 }
 
+/** GET /api/conversations/:id/findings?store= → the cards its runs saved findings to (decision 11), newest first. */
+export interface ConversationFinding extends KnowledgeRef {
+  status: KbCardStatus;
+  at: string;
+}
+
+/** POST /api/runs/:id/findings?store=: Save to Knowledge Base on a reply, anchored on its text block (not the selection). */
+export interface SaveFindingInput {
+  /** The reply's text block: its text split where approval cards sit, empty parts left out. */
+  block: number;
+  /** 5–160 characters. */
+  title: string;
+  /** 10–600 characters. */
+  summary: string;
+}
+
+/** What a save did: a new card (`saved`), a row on the store card that says it (`added`), or nothing (`general`: it's in General). */
+export interface FindingSaved {
+  result: 'saved' | 'added' | 'general';
+  card: KnowledgeRef & { status: KbCardStatus };
+}
+
+/** A finding's evidence tag: its block's first one, else untagged. */
+export type FindingTag = 'measured' | 'research' | 'hypothesis' | 'untagged';
+
+const clip = (s: string, max: number) => (s.length <= max ? s : `${s.slice(0, max - 1).replace(/\s+\S*$/, '')}…`);
+const cleanLine = (l: string) => l.replace(/[*`]|(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, '').replace(/^\s*(?:[-•>]|\d+\.)\s+/, '').trim();
+
+/** The first sentence of the text's first line of prose (headings, rules and list markers skipped), cut to `max`. */
+export function gist(text: string, max = 160): string | undefined {
+  const line = text
+    .split('\n')
+    .map(cleanLine)
+    .find((l) => l && !l.startsWith('#') && !/^[-=|: ]+$/.test(l));
+  if (!line) return undefined;
+  return clip(line.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? line, max);
+}
+
+/**
+ * A reply block as a finding, with no model call (decision 11): the title is its first sentence (160 characters), the
+ * summary its prose (600), the body the block itself; the tag and the URLs and [kb:id]s it cites go in the evidence row.
+ */
+export function blockFinding(text: string): { title: string; summary: string; body: string; tag: FindingTag; sources: string[] } {
+  const tag = (/\[(measured|research|hypothesis)\]/i.exec(text)?.[1]?.toLowerCase() ?? 'untagged') as FindingTag;
+  const urls = (text.match(/https?:\/\/[^\s<>()[\]"']+/g) ?? []).map((u) => u.replace(/[.,;:!?]+$/, ''));
+  const cards = [...text.matchAll(/\[kb:([\w-]+)\]/gi)].map((m) => `[kb:${m[1]}]`);
+  const prose = text
+    .replace(/\[([^\]]+)\]\((?:https?:[^)]+)\)/g, '$1')
+    .replace(/ ?\[(?:kb:[\w-]+|measured|research|hypothesis)\]/gi, '');
+  const summary = prose
+    .split('\n')
+    .map(cleanLine)
+    .filter((l) => l && !/^[-=|: ]+$/.test(l))
+    .map((l) => l.replace(/^#+\s*/, ''))
+    .join(' ');
+  return { title: gist(prose) ?? '', summary: clip(summary, 600), body: text.trim(), tag, sources: [...new Set([...urls, ...cards])] };
+}
+
 export interface StartRunInput {
   task: string;
   /** Continue that run's conversation (chat follow-up). */
@@ -1056,6 +1114,8 @@ export type AgentEvent =
   | { type: 'memory_written'; memory: StoreMemory }
   /** At run start: the knowledge cards placed in its prompt or, on a resumed session, its user turn (decision 11). */
   | { type: 'knowledge'; cards: KnowledgeRef[] }
+  /** save_finding saved a finding: a new card, or (`added`) one more row on the store card that already said it. */
+  | { type: 'kb_written'; card: KnowledgeRef & { status: KbCardStatus }; added: boolean }
   /** A line for the reply's activity, e.g. the run didn't run on what was asked (decision 9). */
   | { type: 'notice'; text: string }
   /** `sessionId` continues the conversation when passed back as `resume`. */

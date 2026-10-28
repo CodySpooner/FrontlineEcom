@@ -51,7 +51,7 @@ function api({ autonomy = 'ask', posts = [] as { url: string; body: unknown }[],
       if (t === 'copywriter')
         return [
           preset('default:copywriter', 'Write store copy', {}, true),
-          preset('p1', 'Short voice', { runtime: 'claude', model: 'claude-sonnet-5-5', effort: 'low', tools: ['store_summary', 'list_products', 'create_creative', 'publish_page'], permissions: { budgetUsd: 2, stopAfterMin: 15, saveFindings: 'off' }, objective: 'Write the spring hero line' }),
+          preset('p1', 'Short voice', { runtime: 'claude', model: 'claude-sonnet-5-5', effort: 'low', tools: ['store_summary', 'list_products', 'create_creative', 'publish_page'], permissions: { budgetUsd: 2, stopAfterMin: 15, saveFindings: 'ask' }, objective: 'Write the spring hero line' }),
           voice,
         ];
       return t === 'cr1' ? [preset('default:cr1', 'Brand voice', {}, true), voice] : [preset(`default:${t}`, 'Plan campaigns', {}, true)];
@@ -138,6 +138,7 @@ test('a preset fills every field; Start sends exactly that config, and a refusal
   expect((screen.getByRole('switch', { name: 'Make creatives' }) as HTMLInputElement).checked).toBe(true);
   expect((screen.getByRole('spinbutton', { name: 'Budget for this run' }) as HTMLInputElement).value).toBe('2');
   expect((screen.getByRole('spinbutton', { name: 'Stop after' }) as HTMLInputElement).value).toBe('15');
+  expect(radio('Save findings to knowledge', 'Ask me').getAttribute('aria-checked')).toBe('true');
   expect((screen.getByRole('textbox', { name: 'Objective' }) as HTMLTextAreaElement).value).toBe('Write the spring hero line');
   expect((screen.getByRole('textbox', { name: /Conversation title/ }) as HTMLInputElement).value).toBe('Write the spring hero line');
   expect(screen.getByText('Suggested')).toBeTruthy();
@@ -154,7 +155,7 @@ test('a preset fills every field; Start sends exactly that config, and a refusal
     type: 'copywriter',
     message: 'Write the spring hero line',
     title: 'Hero line',
-    config: { runtime: 'claude', model: 'claude-sonnet-5-5', effort: 'low', tools: ['store_summary', 'list_products', 'create_creative', 'publish_page'], knowledge: ['store', 'general'], permissions: { budgetUsd: 2, stopAfterMin: 15 } },
+    config: { runtime: 'claude', model: 'claude-sonnet-5-5', effort: 'low', tools: ['store_summary', 'list_products', 'create_creative', 'publish_page'], knowledge: ['store', 'general'], permissions: { budgetUsd: 2, stopAfterMin: 15, saveFindings: 'ask' } },
   });
 });
 
@@ -174,7 +175,7 @@ test('a custom-role preset selects that role, a type change goes back to its Def
   fireEvent.change(screen.getByRole('textbox', { name: 'Preset name' }), { target: { value: 'Haiku voice' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save preset' }));
   await waitFor(() => expect(posts).toHaveLength(1));
-  expect(posts[0]).toEqual({ url: '/api/presets?store=glow', body: { name: 'Haiku voice', type: 'cr1', config: { runtime: 'claude', model: 'claude-haiku-4-5-20251001', knowledge: ['store', 'general'], permissions: {} } } });
+  expect(posts[0]).toEqual({ url: '/api/presets?store=glow', body: { name: 'Haiku voice', type: 'cr1', config: { runtime: 'claude', model: 'claude-haiku-4-5-20251001', knowledge: ['store', 'general'], permissions: { saveFindings: 'off' } } } });
   fireEvent.click(radio('Agent type', /^Ad Strategist/));
   await waitFor(() => expect((screen.getByRole('combobox', { name: 'Start from a preset' }) as HTMLSelectElement).value).toBe('default:ad_strategist'));
   expect(radio('Runtime', 'Demo (free)').getAttribute('aria-checked')).toBe('true');
@@ -237,7 +238,7 @@ test('Codex in Deploy: Set up Codex when signed out, ultra refused with its reas
   fireEvent.change(screen.getByRole('textbox', { name: 'Objective' }), { target: { value: 'Write the hero line' } });
   fireEvent.click(screen.getByRole('button', { name: 'Start conversation' }));
   await waitFor(() => expect(posts).toHaveLength(2));
-  expect((posts[1]!.body as { config: object }).config).toEqual({ runtime: 'codex', model: 'gpt-6.1-sol', effort: 'low', knowledge: ['store', 'general'], permissions: { stopAfterMin: 20 } });
+  expect((posts[1]!.body as { config: object }).config).toEqual({ runtime: 'codex', model: 'gpt-6.1-sol', effort: 'low', knowledge: ['store', 'general'], permissions: { stopAfterMin: 20, saveFindings: 'off' } });
 });
 
 test('Codex shows only when the server reports it; moving a conversation to Codex sends a Stop after', async () => {

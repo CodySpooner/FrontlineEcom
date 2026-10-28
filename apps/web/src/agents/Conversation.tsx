@@ -1,13 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { AlertTriangle, ArrowUp, Check, ChevronDown, ChevronRight, Ellipsis, LoaderCircle, Pencil, Square, X } from 'lucide-react';
-import { AGENT_ROLES, EFFORT_LABEL, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationContext, type ConversationState, type KnowledgeScope, type KbStage, type RunDeliverable, type RuntimeId, type Store } from '@frontline/shared';
-import { useAgentTypes, useAnswer, useApprovals, useCreateConversation, useKbCard, useKbCardsIn, useRetryRun, useRun, useSendMessage, useStopConversation, useThread, useUpdateConversation } from '../api/client';
+import { AGENT_ROLES, blockFinding, EFFORT_LABEL, hasEffects, INTERRUPTED, KB_STAGES, type AgentConfig, type AgentRole, type AgentRunDetail, type ApprovalRequest, type Conversation as ConversationRecord, type ConversationContext, type ConversationState, type KnowledgeScope, type KbStage, type RunDeliverable, type RuntimeId, type Store } from '@frontline/shared';
+import { useAgentTypes, useAnswer, useApprovals, useCreateConversation, useKbCard, useKbCardsIn, useRetryRun, useSaveFinding, useRun, useSendMessage, useStopConversation, useThread, useUpdateConversation } from '../api/client';
 import { ApprovalCard, FixLink, ToolBlock } from '../components/Chat';
 import { Button, cx, ErrorState, LoadingState, RUN_STATUS } from '../components/ui';
 import { cents, modelName } from '../lib/format';
 import { isLive, toBlocks, toolName, type Block } from '../lib/transcript';
-import { activitySteps, activitySummary, type Step } from './activity';
+import { activitySteps, activitySummary, savedText, type Step } from './activity';
 import { AttachButton, attachError, Attachments, toUploads } from './attach';
 import { renderReply } from './markdown';
 import { MenuItem, Popover } from './Popover';
@@ -348,7 +348,9 @@ function Reply({ store, conversationId, run, name, latest, deliverables = [] }: 
   const checked = useKbCardsIn(ids, run.storeId);
   const missing = new Set(ids.filter((_, i) => checked[i]!.isError));
   const html = parts.map((p) => (p.kind === 'text' ? renderReply(p.text, href, cites, missing).html : ''));
-  const text = parts.flatMap((p) => (p.kind === 'text' ? [p.text.trim()] : [])).join('\n\n');
+  const texts = parts.flatMap((p) => (p.kind === 'text' && p.text.trim() ? [p.text.trim()] : []));
+  const text = texts.join('\n\n');
+  const [saving, setSaving] = useState(false);
   const failed = run.status === 'error' && !interrupted(run);
   const said = run.transcript.some((e) => e.type === 'error' && e.message === run.error);
   return (
@@ -392,6 +394,11 @@ function Reply({ store, conversationId, run, name, latest, deliverables = [] }: 
               {copied ? 'Copied' : 'Copy'}
             </button>
           )}
+          {text && conversationId && (
+            <button type="button" aria-expanded={saving} onClick={() => setSaving(!saving)} className="cursor-pointer hover:text-white">
+              Save to Knowledge Base
+            </button>
+          )}
           {latest && conversationId && (
             <button type="button" disabled={retry.isPending} onClick={() => retry.mutate({ runId: run.id, clientRequestId: crypto.randomUUID() })} className="cursor-pointer hover:text-white">
               Retry
@@ -404,6 +411,7 @@ function Reply({ store, conversationId, run, name, latest, deliverables = [] }: 
           )}
         </div>
       )}
+      {saving && conversationId && <SaveFinding store={store} conversationId={conversationId} runId={run.id} blocks={texts} onClose={() => setSaving(false)} />}
     </div>
   );
 }
@@ -682,6 +690,61 @@ function Continue({ store, run, name }: { store: Store; run: AgentRunDetail; nam
             Continue in a new conversation
           </Button>
         </div>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Save to Knowledge Base (decision 11): the reply's last text block, with a title and summary the owner can trim. The
+ * defaults come from the block itself, with no model call. ponytail: an inline panel under the reply, not a floating one.
+ */
+function SaveFinding({ store, conversationId, runId, blocks, onClose }: { store: Store; conversationId: string; runId: string; blocks: string[]; onClose: () => void }) {
+  const [defaults] = useState(() => blockFinding(blocks.at(-1)!));
+  const [title, setTitle] = useState(defaults.title);
+  const [summary, setSummary] = useState(defaults.summary);
+  const save = useSaveFinding(store.id, conversationId);
+  const fits = title.trim().length >= 5 && title.trim().length <= 160 && summary.trim().length >= 10 && summary.trim().length <= 600;
+  const field = 'w-full rounded-md border border-[#26262c] bg-[#0c0c0f] px-2.5 py-1.5 text-[12.5px] text-text outline-none focus:border-[#3a3a42]';
+  if (save.data) {
+    return (
+      <p role="status" className="text-[12px] text-text-2">
+        <Link to={`/knowledge?card=${encodeURIComponent(save.data.card.id)}&ws=${encodeURIComponent(store.id)}`} className="text-[#ff6b76] hover:underline">
+          {savedText(save.data)}
+        </Link>
+      </p>
+    );
+  }
+  return (
+    <form
+      aria-label="Save to Knowledge Base"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (fits) save.mutate({ runId, block: blocks.length - 1, title: title.trim(), summary: summary.trim() });
+      }}
+      className="grid max-w-[520px] gap-2 rounded-lg border border-[#26262c] bg-[#111114] p-3"
+    >
+      <label className="grid gap-1 text-[11.5px] text-muted">
+        Title (5–160 characters)
+        <input value={title} maxLength={160} onChange={(e) => setTitle(e.target.value)} className={field} />
+      </label>
+      <label className="grid gap-1 text-[11.5px] text-muted">
+        Summary (10–600 characters)
+        <textarea rows={3} value={summary} maxLength={600} onChange={(e) => setSummary(e.target.value)} className={cx(field, 'resize-none')} />
+      </label>
+      {!store.connected && <p className="text-[11.5px] text-muted">Findings from demo data are removed when the store goes live.</p>}
+      {save.error && (
+        <p role="alert" className="text-[11.5px] text-red">
+          {save.error.message}
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <Button size="sm" onClick={onClose}>
+          Cancel
+        </Button>
+        <Button size="sm" type="submit" variant="primary" disabled={!fits || save.isPending}>
+          Save
+        </Button>
       </div>
     </form>
   );

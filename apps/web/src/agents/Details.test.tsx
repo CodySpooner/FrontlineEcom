@@ -142,7 +142,7 @@ test('the conversation menu opens the seat settings drawer; a History row opens 
   expect(screen.getByTestId('where').textContent).toBe('/agents?store=glow&run=r9');
 });
 
-test("the Knowledge tab lists the latest reply's cards, the store's then General's, with how each was used and a count", async () => {
+test("the Knowledge tab lists the latest reply's cards, the store's then General's, with how each was used and a count, then the findings saved here", async () => {
   const fetch = api();
   const stub = fetch.getMockImplementation()!;
   fetch.mockImplementation(async (url: string, init?: RequestInit) =>
@@ -151,13 +151,17 @@ test("the Knowledge tab lists the latest reply's cards, the store's then General
           { id: 'k1', title: 'Gift buyers convert', stage: 'supported', storeId: 'glow', how: ['prompt', 'cited'] },
           { id: 'k3', title: 'Hooks in general', stage: 'hypothesis', storeId: null, how: ['search'] },
         ]))
-      : stub(url, init),
+      : url === '/api/conversations/c1/findings?store=glow'
+        ? new Response(JSON.stringify([{ id: 'k9', title: 'Photo strips lift add-to-cart', stage: 'hypothesis', storeId: 'glow', status: 'proposed', at: '2026-10-28T10:00:00Z' }]))
+        : stub(url, init),
   );
   renderApp(<Panel />);
   const tab = await screen.findByRole('tab', { name: 'Knowledge 2' });
   fireEvent.click(tab);
   const panel = screen.getByRole('tabpanel', { name: 'Knowledge' });
-  expect(within(panel).getAllByRole('heading').map((h) => h.textContent)).toEqual(["Glow Haus's knowledge", 'General knowledge']);
+  await within(panel).findByText('Saved from this conversation');
+  expect(within(panel).getAllByRole('heading').map((h) => h.textContent)).toEqual(["Glow Haus's knowledge", 'General knowledge', 'Saved from this conversation']);
+  expect(within(panel).getByRole('link', { name: 'Photo strips lift add-to-cart' }).closest('li')!.textContent).toBe('Photo strips lift add-to-cartUnreviewed');
   expect(within(panel).getByRole('link', { name: 'Gift buyers convert' }).getAttribute('href')).toBe('/knowledge?card=k1&ws=glow');
   expect(within(panel).getByText('Research-Supported · In its prompt · Cited')).toBeTruthy();
   expect(within(panel).getByText('Hypothesis, unproven · Searched for')).toBeTruthy();

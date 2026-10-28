@@ -61,7 +61,8 @@ test("a custom role narrows its base role's tools and adds its instructions to t
 
 test('every app tool is used by some role', () => {
   const used = new Set(ROLE_IDS.flatMap((r) => ROLES[r].tools));
-  expect(APP_TOOLS.map((t) => t.name).filter((t) => !used.has(t))).toEqual([]);
+  // save_finding comes with a config's save-findings setting, not with a role (decision 11).
+  expect(APP_TOOLS.map((t) => t.name).filter((t) => !used.has(t) && t !== 'save_finding')).toEqual([]);
 });
 
 test('every approval kind an agent tool or engine produces has an owner-facing label', () => {

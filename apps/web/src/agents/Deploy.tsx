@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
-import { APPROVAL_KINDS, CODEX_ULTRA, EFFORT_LABEL, type AgentPreset, type AgentTypeInfo, type ConversationDetail, type KnowledgeScope, type RuntimeCapabilities, type RuntimeId, type Store } from '@frontline/shared';
+import { APPROVAL_KINDS, CODEX_ULTRA, EFFORT_LABEL, type AgentPermissions, type AgentPreset, type AgentTypeInfo, type ConversationDetail, type KnowledgeScope, type RuntimeCapabilities, type RuntimeId, type Store } from '@frontline/shared';
 import { useAgents, useAgentTypes, useCaps, useChangeConfig, useCreateConversation, usePresets, useRefreshRuntimes, useRuntimes, useSavePreset, useSetUpCodex, useStores, useTypeTools } from '../api/client';
 import { Button, cx, Dialog, Segmented, Switch } from '../components/ui';
 import { withParams } from '../knowledge/url';
@@ -14,8 +14,7 @@ import { autopilotRules, useAgentSettings } from './settings';
 import { agentsUrl } from './urls';
 
 // Deploy (decision 9): starts a conversation on a type, runtime, model and effort the server checks before anything
-// runs; and "Change runtime or model…" (decision 10), which moves a conversation to a new config. ponytail: attachments
-// (AA-17), "Save findings to knowledge" (AA-18) and the Codex runtime (AA-15) render from those items.
+// runs; and "Change runtime or model…" (decision 10), which moves a conversation to a new config.
 
 const label = 'text-[11px] font-semibold tracking-[.07em] text-muted uppercase';
 const select = 'h-[34px] w-full rounded-lg border border-[#2c2c33] bg-[#0c0c0f] px-2.5 text-[13px] text-[#e6e6ea] focus:border-red/60 focus:outline-none';
@@ -222,6 +221,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
   const [knowledge, setKnowledge] = useState<KnowledgeScope[]>(['store', 'general']);
   const [budget, setBudget] = useState('');
   const [stopAfter, setStopAfter] = useState('');
+  const [saveFindings, setSaveFindings] = useState<AgentPermissions['saveFindings']>('off');
   // Codex requires a Stop after (dollar caps don't apply to it): 20 minutes unless one is set (decision 9).
   useEffect(() => {
     if (choice.runtime === 'codex') setStopAfter((s) => s || '20');
@@ -244,10 +244,10 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
     ...choice.config,
     ...(off.length || compare ? { tools } : {}),
     knowledge,
-    permissions: { ...(choice.runtime === 'claude' && budget ? { budgetUsd: Number(budget) } : {}), ...(stopAfter ? { stopAfterMin: Number(stopAfter) } : {}) },
+    permissions: { ...(choice.runtime === 'claude' && budget ? { budgetUsd: Number(budget) } : {}), ...(stopAfter ? { stopAfterMin: Number(stopAfter) } : {}), saveFindings },
   };
-  const created = fieldErrors(create.error, ['runtime', 'model', 'effort', 'tools', 'knowledge', 'permissions.budgetUsd', 'permissions.stopAfterMin', 'objective', 'attachments']);
-  const saved = fieldErrors(save.error, ['name', 'runtime', 'model', 'effort', 'tools', 'knowledge', 'permissions.budgetUsd', 'permissions.stopAfterMin', 'objective']);
+  const created = fieldErrors(create.error, ['runtime', 'model', 'effort', 'tools', 'knowledge', 'permissions.budgetUsd', 'permissions.stopAfterMin', 'permissions.saveFindings', 'objective', 'attachments']);
+  const saved = fieldErrors(save.error, ['name', 'runtime', 'model', 'effort', 'tools', 'knowledge', 'permissions.budgetUsd', 'permissions.stopAfterMin', 'permissions.saveFindings', 'objective']);
   const said = (field: string) => created.said(field) || saved.said(field);
 
   /** Fills every field from a preset; none is the type's Default. */
@@ -259,6 +259,7 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
     setKnowledge(c?.knowledge ?? ['store', 'general']);
     setBudget(c?.permissions?.budgetUsd ? String(c.permissions.budgetUsd) : '');
     setStopAfter(c?.permissions?.stopAfterMin ? String(c.permissions.stopAfterMin) : '');
+    setSaveFindings(c?.permissions?.saveFindings ?? 'off');
     if (c?.objective) setObjective(c.objective);
   };
   const pickType = (id: string) => {
@@ -490,8 +491,26 @@ export function Deploy({ store: initial, type: preselected, onClose }: { store: 
               </span>
             </label>
           </div>
+          <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12.5px] text-[#c4c4cc]">
+            Save findings to knowledge
+            <span className="ml-auto w-[360px] max-w-full">
+              <Segmented
+                quiet
+                label="Save findings to knowledge"
+                value={saveFindings}
+                onChange={setSaveFindings}
+                options={[
+                  { value: 'ask', label: 'Ask me' },
+                  { value: 'auto', label: 'Automatically (unreviewed)' },
+                  { value: 'off', label: 'Off' },
+                ]}
+              />
+            </span>
+          </div>
+          {saveFindings !== 'off' && !store.connected && <p className="mt-1 text-xs text-muted">Findings from demo data are removed when the store goes live.</p>}
           {said('permissions.budgetUsd')}
           {said('permissions.stopAfterMin')}
+          {said('permissions.saveFindings')}
         </Fold>
       </form>
       {customRole && <CustomRoleForm store={store} open onClose={() => setCustomRole(false)} onCreated={(role) => pickType(role.id)} />}

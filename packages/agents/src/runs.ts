@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, hasEffects, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunAttachment, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
+import { AGENT_ROLES, gist, hasEffects, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunAttachment, type RunStatus, type RunUsage, type RuntimeId, type Store } from '@frontline/shared';
 import { customRole, getConfig } from './configs';
 import { conversationPreface, conversationQuery } from './conversations';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
@@ -581,13 +581,17 @@ export function finalText(transcript: AgentEvent[]): string {
  * Undefined when the run ended without a final answer.
  */
 export function runGist(transcript: AgentEvent[], max = 160): string | undefined {
-  const line = finalText(transcript)
-    .split('\n')
-    .map((l) => l.replace(/[*`]|(?<![\p{L}\p{N}])_+|_+(?![\p{L}\p{N}])/gu, '').replace(/^\s*(?:[-•>]|\d+\.)\s+/, '').trim())
-    .find((l) => l && !l.startsWith('#') && !/^[-=|: ]+$/.test(l));
-  if (!line) return undefined;
-  const sentence = line.match(/^.+?[.!?](?=\s|$)/)?.[0] ?? line;
-  return sentence.length <= max ? sentence : `${sentence.slice(0, max - 1).replace(/\s+\S*$/, '')}…`;
+  return gist(finalText(transcript), max);
+}
+
+/** A reply's text blocks as its page shows them: the text split where it asked for an approval, empty parts left out. */
+export function replyBlocks(transcript: AgentEvent[]): string[] {
+  const parts = [''];
+  for (const e of transcript) {
+    if (e.type === 'text_delta') parts[parts.length - 1] += e.text;
+    else if (e.type === 'approval_request') parts.push('');
+  }
+  return parts.map((p) => p.trim()).filter(Boolean);
 }
 
 export function getRun(db: DatabaseSync, id: string): AgentRunDetail | undefined {

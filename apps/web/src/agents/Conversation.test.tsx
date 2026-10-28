@@ -282,3 +282,38 @@ test('the composer attaches documents and sends them with the message; the chip 
   expect(await screen.findByText('Attachments are up to 10 MB in total per message.')).toBeTruthy();
   expect(sent(fetch, 'POST')).toHaveLength(1);
 });
+
+test('Save to Knowledge Base: the last block gives the defaults, Save waits until both fit, and the confirmation links the card; save_finding steps read the same', async () => {
+  const reply = 'Lead with the photo strip [measured]. It lifted add-to-cart by a fifth: https://shop.example/report.\n\nKeep the price out of the hook.';
+  const fetch = api([
+    run('r1', 'done', {
+      transcript: [
+        { type: 'tool_call', id: 's1', name: 'save_finding', input: { title: 'Gift buyers convert' } },
+        { type: 'kb_written', card: { id: 'k9', title: 'Gift buyers convert', stage: 'hypothesis', storeId: 'glow', status: 'proposed' }, added: false },
+        { type: 'tool_result', id: 's1', output: 'Saved as Unreviewed: Gift buyers convert (k9)', isError: false },
+        { type: 'tool_call', id: 's2', name: 'save_finding', input: { title: 'Discounts cheapen' } },
+        { type: 'tool_result', id: 's2', output: 'Not saved: the owner archived or rejected a card that says this ("Discounts cheapen").', isError: false },
+        { type: 'text_delta', text: reply },
+      ],
+    }),
+  ]);
+  const stub = fetch.getMockImplementation()!;
+  fetch.mockImplementation(async (url: string, init?: RequestInit) =>
+    url === '/api/runs/r1/findings?store=glow' ? new Response(JSON.stringify({ result: 'saved', card: { id: 'k10', title: 'Photo strips lift add-to-cart', stage: 'hypothesis', storeId: 'glow', status: 'proposed' } }), { status: 201 }) : stub(url, init),
+  );
+  show();
+  // One step per save, in the confirmation's words; a refused one is a warning with its reason.
+  expect(await screen.findByText('Saved as Unreviewed: Gift buyers convert')).toBeTruthy();
+  expect(screen.getAllByText('Not saved: the owner archived or rejected a card that says this ("Discounts cheapen").')).toHaveLength(2); // the step, and the raw tool output
+  fireEvent.click(screen.getByRole('button', { name: 'Save to Knowledge Base' }));
+  const form = screen.getByRole('form', { name: 'Save to Knowledge Base' });
+  const title = within(form).getByRole('textbox', { name: /^Title/ }) as HTMLInputElement;
+  expect(title.value).toBe('Lead with the photo strip.');
+  expect((within(form).getByRole('textbox', { name: /^Summary/ }) as HTMLTextAreaElement).value).toBe('Lead with the photo strip. It lifted add-to-cart by a fifth: https://shop.example/report. Keep the price out of the hook.');
+  fireEvent.change(title, { target: { value: 'Hi' } });
+  expect((within(form).getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(title, { target: { value: 'Photo strips lift add-to-cart' } });
+  fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+  expect((await screen.findByRole('link', { name: 'Saved as Unreviewed: Photo strips lift add-to-cart' })).getAttribute('href')).toBe('/knowledge?card=k10&ws=glow');
+  expect(sent(fetch, 'POST')).toEqual([['/api/runs/r1/findings?store=glow', { block: 0, title: 'Photo strips lift add-to-cart', summary: expect.stringMatching(/^Lead with the photo strip\./) }]]);
+});

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import {
   KB_STAGES,
+  type FindingTag,
   type KbCard,
   type KbCardType,
   type KbEvidence,
@@ -15,7 +16,7 @@ import {
   type KbStage,
   type KbWorkspace,
 } from '@frontline/shared';
-import { freshness, getCard, kbScope, revise } from './kb';
+import { createCard, ensureCategoryPath, freshness, getCard, kbControls, kbScope, revise } from './kb';
 
 // Evidence, the confidence ladder, links and the suggester, revisions (knowledge-base lane, decision 11).
 
@@ -446,4 +447,47 @@ export function restoreRevision(db: DatabaseSync, cardId: string, revId: number,
   db.prepare(`UPDATE kb_cards SET ${Object.keys(sets).map((k) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...Object.values(sets), cardId);
   revise(db, cardId, actor, `Restored revision ${revId}`, at);
   return getCard(db, cardId);
+}
+
+// ---- findings from ordinary runs (ai-agents lane, decision 11)
+
+export interface Finding {
+  title: string;
+  summary: string;
+  body?: string;
+  tag: FindingTag;
+  /** URLs and [kb:id]s the finding cites: written into its evidence row as text, never as sources. */
+  sources: string[];
+}
+export type Captured = { kind: 'saved' | 'added' | 'general'; card: KbCard } | { kind: 'refused'; reason: string };
+
+/**
+ * A finding into the run's store: a new hypothesis card, or one more 'observed' row on the live store card that says
+ * it already. A General card that says it takes nothing; an archived or rejected one refuses it. The row doesn't count
+ * as verifying the card (no verified_at, no 'Refreshed' revision) and no read source is made, so it never climbs the
+ * ladder. `unreviewed`: save_finding's Automatically mode, proposed whatever the review setting (no one read the text).
+ */
+export function captureFinding(db: DatabaseSync, storeId: string, f: Finding, by: { agentId: string; runId: string; unreviewed?: boolean }, now = new Date()): Captured {
+  const forbidden = agentCardError({ type: 'hypothesis', stage: 'hypothesis' });
+  if (forbidden) return { kind: 'refused', reason: forbidden };
+  const refused = (id: string) => ({ kind: 'refused' as const, reason: `the owner archived or rejected a card that says this ("${getCard(db, id)?.title}")` });
+  const own = sameCard(db, storeId, f.title, f.summary);
+  if (own && !own.live) return refused(own.id);
+  const general = own ? undefined : sameCard(db, null, f.title, f.summary);
+  if (general) return general.live ? { kind: 'general', card: getCard(db, general.id)! } : refused(general.id);
+  const at = now.toISOString();
+  const cardId =
+    own?.id ??
+    createCard(
+      db,
+      storeId,
+      {
+        categoryId: ensureCategoryPath(db, storeId, ['Findings']), title: f.title, summary: f.summary, body: f.body ?? '', type: 'hypothesis', stage: 'hypothesis',
+        status: by.unreviewed || kbControls(db, storeId).review ? 'proposed' : 'active', authorId: by.agentId, origin: 'agent', runId: by.runId,
+      },
+      now,
+    ).id;
+  const text = [f.tag === 'untagged' ? 'untagged' : `[${f.tag}]`, ...f.sources].join(' ');
+  db.prepare(`INSERT INTO kb_evidence (id, card_id, kind, text, author_id, run_id, created_at) VALUES (?, ?, 'observed', ?, ?, ?, ?)`).run(randomUUID(), cardId, text, by.agentId, by.runId, at);
+  return { kind: own ? 'added' : 'saved', card: getCard(db, cardId)! };
 }
