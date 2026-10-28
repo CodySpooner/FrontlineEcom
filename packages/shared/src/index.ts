@@ -468,6 +468,163 @@ export interface AgentRun {
   parentRunId?: string;
   /** `research:<kb task id>`: a stage of a knowledge-base research task (KB-12), which reports as the task. */
   mode?: string;
+  /** The conversation this run is a turn of. Runs from before conversations, and scheduled or module jobs, have none. */
+  conversationId?: string;
+  /** A team session's step run (a kind-'team' squad mission): never part of a conversation. */
+  teamId?: string;
+  /** The agent_configs row it ran with (immutable), when it had one. */
+  configId?: string;
+  /** What was asked for. */
+  runtime?: RuntimeId;
+  model?: string;
+  effort?: string;
+  /** The Codex CLI version it ran on. */
+  runtimeVersion?: string;
+  /** What actually ran: the init message's model (Claude) or a reroute (Codex). */
+  actualModel?: string;
+  effortApplied?: string;
+  /** Derived from status, error and its pending approvals (decision 5); the API fills it. */
+  state?: RunState;
+}
+
+/** The interrupted run's error text: a run cut off by an app restart. */
+export const INTERRUPTED = 'Interrupted by an app restart';
+
+/** A run's state for the owner: the DB statuses plus approval and question waits and restart interruptions. */
+export type RunState = 'queued' | 'running' | 'awaiting_approval' | 'waiting_for_input' | 'completed' | 'failed' | 'cancelled' | 'interrupted';
+
+/** A conversation's state comes from its runs; `idle` only when it has none. */
+export type ConversationState = RunState | 'idle';
+
+/** `pending`: the action kinds of the run's pending approvals. */
+export function runState(run: { status: RunStatus; error?: string }, pending: string[] = []): RunState {
+  if (run.status === 'running') return pending.some((k) => k !== 'question') ? 'awaiting_approval' : pending.length ? 'waiting_for_input' : 'running';
+  if (run.status === 'error') return run.error === INTERRUPTED ? 'interrupted' : 'failed';
+  return ({ queued: 'queued', done: 'completed', cancelled: 'cancelled' } as const)[run.status];
+}
+
+/** `states`: the conversation's run states, newest first. A running run wins over a newer queued one. */
+export function conversationState(states: RunState[]): ConversationState {
+  return states.find((s) => s === 'running' || s === 'awaiting_approval' || s === 'waiting_for_input') ?? (states.includes('queued') ? 'queued' : (states[0] ?? 'idle'));
+}
+
+export type RuntimeId = 'claude' | 'codex' | 'demo';
+
+export interface RuntimeModel {
+  /** The resolved id runs record (never an alias). */
+  id: string;
+  label: string;
+  description?: string;
+  /** The effort ids this model takes, as its runtime names them; empty when it takes none. */
+  efforts: string[];
+  defaultEffort?: string;
+  /** The runtime's default model on this login. */
+  default?: boolean;
+}
+
+/** GET /api/runtimes: what each runtime can run on this machine, checked without a model turn. */
+export interface RuntimeCapabilities {
+  runtime: RuntimeId;
+  connected: boolean;
+  /** Why it can't be used, as the action the owner takes: "Install the Codex CLI", "Set up Codex". */
+  reason?: string;
+  account?: string;
+  models: RuntimeModel[];
+  /** `registry`: discovery failed or left fields out, so the lists come from the app's registry (`registryVersion`). */
+  source: 'discovered' | 'registry';
+  registryVersion?: string;
+  /** The installed CLI's version (Codex). */
+  version?: string;
+  checkedAt: string;
+}
+
+export type KnowledgeScope = 'store' | 'general';
+
+/** Limits and switches of one configured agent. Empty budget or Stop after: no limit of its own. */
+export interface AgentPermissions {
+  /** USD for one run (Claude only). */
+  budgetUsd?: number;
+  /** Minutes before a run is stopped, not counting owner waits (required for Codex). */
+  stopAfterMin?: number;
+  /** save_finding: absent, asks the owner, or saves as Unreviewed. */
+  saveFindings: 'off' | 'ask' | 'auto';
+}
+
+/**
+ * A configured agent (agent_configs): never edited in place. A conversation points at one; "Change runtime or model"
+ * writes a new one. Names and limits only, never credentials.
+ */
+export interface AgentConfig {
+  id: string;
+  storeId: string;
+  /** The `store:role` seat: its autonomy and daily budget are the ceiling. */
+  agentId: string;
+  /** An agent_custom_roles id or a `builtin:` type. */
+  customRoleId?: string;
+  runtime: RuntimeId;
+  model?: string;
+  effort?: string;
+  /** The run's tools: its type's tools minus switched-off drafts, compare_stores only when opted in. */
+  tools: string[];
+  knowledge: KnowledgeScope[];
+  permissions: AgentPermissions;
+  createdAt: string;
+}
+
+/** A custom role: a name and extra instructions on a built-in role's seat, tools and permissions (narrowing only). */
+export interface CustomRole {
+  id: string;
+  /** Absent: every store. */
+  storeId?: string;
+  baseRole: AgentRole;
+  name: string;
+  description: string;
+  instructions: string;
+  /** Absent: the base role's tools. */
+  tools?: string[];
+  createdAt: string;
+  archivedAt?: string;
+}
+
+/** A saved deploy configuration. The built-in "Default" preset of each type is defined in code and never stored. */
+export interface AgentPreset {
+  id: string;
+  /** Absent: every store. */
+  storeId?: string;
+  name: string;
+  config: {
+    role: AgentRole;
+    customRoleId?: string;
+    runtime?: RuntimeId;
+    model?: string;
+    effort?: string;
+    tools?: string[];
+    knowledge?: KnowledgeScope[];
+    permissions?: AgentPermissions;
+    objective?: string;
+  };
+  builtin?: boolean;
+  createdAt: string;
+}
+
+/** What a module opened the conversation about (decision 14), checked against the conversation's store. */
+export type ConversationContext = { kind: 'campaign'; network: string; id: string; name: string };
+
+/** A named thread with one agent type in one store. Its store never changes; its title can. */
+export interface Conversation {
+  id: string;
+  storeId: string;
+  configId: string;
+  title: string;
+  context?: ConversationContext;
+  pinned: boolean;
+  archivedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  lastActivityAt: string;
+  state: ConversationState;
+  /** Set on a team's own conversation: listed under Teams, never in the type groups. */
+  teamId?: string;
 }
 
 export type KnowledgeKind = 'playbook' | 'platform' | 'niche';
@@ -639,6 +796,29 @@ export interface SquadMission {
   /** `done`: every step is; `blocked`: a step failed or was cancelled and nothing is running any more; `cancelled`: the owner called it off. */
   status: 'running' | 'done' | 'blocked' | 'cancelled';
   steps: SquadMissionStep[];
+  /** 'team': a team session (decision 12). Plain missions leave the team fields out. */
+  kind?: 'team';
+  objective?: string;
+  /** The lead first. `fromConversationId`: the conversation that lent its config and recap. */
+  participants?: { configId: string; fromConversationId?: string }[];
+  /** Counts Claude participants only. */
+  budgetUsd?: number;
+  maxConcurrent?: number;
+  /** Retries per task, 0–2. */
+  retries?: number;
+  /** The team's own conversations row: its pin, archive, title and follow-ups. */
+  conversationId?: string;
+  /** "To: Lead" notes while the team runs; `id` is the note's client_request_id. */
+  ownerNotes?: { id: string; text: string; at: string }[];
+}
+
+/** A team task's shared record, parsed from the fenced JSON its answer ends with. */
+export interface TeamContribution {
+  summary: string;
+  output: string;
+  evidence: string[];
+  openQuestions: string[];
+  disagreesWith: string[];
 }
 
 export interface SquadMissionStep {
@@ -655,6 +835,14 @@ export interface SquadMissionStep {
   deliverable?: string;
   /** Why it couldn't start yet (e.g. today's AI budget is used up); it's tried again as other runs finish. */
   note?: string;
+  /** Team steps only (decision 12). */
+  kind?: 'plan' | 'task' | 'synthesis';
+  configId?: string;
+  expected?: string;
+  attempts?: number;
+  nextTryAt?: string;
+  contribution?: TeamContribution;
+  unresolved?: string[];
 }
 
 export interface NewSquadMission {

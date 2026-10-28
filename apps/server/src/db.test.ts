@@ -100,6 +100,37 @@ test('a database from before gamification was removed loses the XP ledger and ag
   }
 });
 
+test('a database from before conversations keeps its runs and missions, and gains configs, conversations and their search', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'frontline-db-'));
+  try {
+    const file = join(dir, 'frontline.db');
+    const old = new DatabaseSync(file); // the last version without conversations
+    for (const sql of MIGRATIONS.slice(0, 49)) old.exec(sql);
+    old.exec(`PRAGMA user_version = 49;
+      INSERT INTO stores (id, name, platform, niche) VALUES ('x', 'X', 'shopify', 'pet');
+      INSERT INTO agent_runs (id, store_id, agent_id, task, status, created_at) VALUES ('r1', 'x', 'x:copywriter', 'Write it', 'done', '2026-10-27');
+      INSERT INTO squad_missions (id, store_id, title, steps_json, created_at) VALUES ('m1', 'x', 'Launch', '[]', '2026-10-27');`);
+    old.close();
+    const db = openDb(file);
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(MIGRATIONS.length);
+    expect({ ...db.prepare('SELECT task, conversation_id, team_id, config_id, runtime FROM agent_runs').get() }).toEqual({ task: 'Write it', conversation_id: null, team_id: null, config_id: null, runtime: null });
+    expect({ ...db.prepare('SELECT title, kind, conversation_id FROM squad_missions').get() }).toEqual({ title: 'Launch', kind: null, conversation_id: null });
+    db.exec(`INSERT INTO agent_configs (id, store_id, agent_id, runtime, tools_json, knowledge_json, permissions_json, created_at) VALUES ('c1', 'x', 'x:copywriter', 'demo', '[]', '["store","general"]', '{"saveFindings":"off"}', '2026-10-28');
+      INSERT INTO conversations (id, store_id, config_id, title, client_request_id, created_at, updated_at, last_activity_at) VALUES ('v1', 'x', 'c1', 'Spring copy', 'req-1', '2026-10-28', '2026-10-28', '2026-10-28');
+      INSERT INTO agent_runs (id, store_id, agent_id, task, created_at, conversation_id, config_id, client_request_id) VALUES ('r2', 'x', 'x:copywriter', 'Draft the hero line', '2026-10-28', 'v1', 'c1', 'req-2');
+      INSERT INTO conversations_fts (title, text, store_id, conversation_id) VALUES ('Spring copy', 'Draft the hero line', 'x', 'v1');`);
+    expect(() => db.prepare("INSERT INTO conversations (id, store_id, config_id, title, client_request_id, created_at, updated_at, last_activity_at) VALUES ('v2', 'x', 'c1', 'Again', 'req-1', '', '', '')").run()).toThrow(/UNIQUE/);
+    expect(() => db.prepare("INSERT INTO agent_runs (id, store_id, agent_id, task, created_at, conversation_id, client_request_id) VALUES ('r3', 'x', 'x:copywriter', 'Again', '', 'v1', 'req-2')").run()).toThrow(/UNIQUE/);
+    expect(db.prepare("SELECT conversation_id FROM conversations_fts WHERE conversations_fts MATCH 'hero' AND store_id = 'x'").all().map((r) => r.conversation_id)).toEqual(['v1']);
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    db.exec("DELETE FROM stores WHERE id = 'x'"); // the only way a config or conversation goes
+    expect(['agent_configs', 'conversations', 'agent_runs', 'squad_missions'].map((t) => db.prepare(`SELECT count(*) AS n FROM ${t}`).get()?.n)).toEqual([0, 0, 0, 0]);
+    db.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("tests use a temp data folder, never the dev instance's (its Knowledge Base edits, its key)", () => {
   expect(dataDir().startsWith(tmpdir())).toBe(true);
 });

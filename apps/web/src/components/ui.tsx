@@ -2,7 +2,7 @@
 import { cloneElement, useEffect, useId, useRef, useState } from 'react';
 import type { ButtonHTMLAttributes, ComponentProps, HTMLAttributes, InputHTMLAttributes, KeyboardEvent, ReactElement, ReactNode, Ref, TableHTMLAttributes } from 'react';
 import { Inbox, TriangleAlert, X, type LucideIcon } from 'lucide-react';
-import { AGENT_ROLES, type AgentRole, type AgentStatus, type MemoryKind, type RunStatus, type StoreHealthStatus } from '@frontline/shared';
+import { AGENT_ROLES, type AgentRole, type AgentStatus, type ConversationState, type MemoryKind, type RunStatus, type StoreHealthStatus } from '@frontline/shared';
 import { usedShare } from '../lib/usage';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
@@ -212,12 +212,19 @@ export const AGENT_STATUS: Record<AgentStatus, { label: string; tone: keyof type
   offline: { label: 'Offline', tone: 'idle' },
 };
 
-export const RUN_STATUS: Record<RunStatus, { label: string; tone: 'red' | 'good' | 'muted' }> = {
+/** DB statuses and the derived run and conversation states (decision 5), each with a text label. */
+export const RUN_STATUS: Record<RunStatus | ConversationState, { label: string; tone: 'red' | 'good' | 'muted' }> = {
   queued: { label: 'Queued', tone: 'muted' },
   running: { label: 'Running', tone: 'good' },
   done: { label: 'Done', tone: 'muted' },
   error: { label: 'Failed', tone: 'red' },
   cancelled: { label: 'Stopped', tone: 'muted' },
+  awaiting_approval: { label: 'Approval', tone: 'red' },
+  waiting_for_input: { label: 'Needs reply', tone: 'red' },
+  completed: { label: 'Done', tone: 'muted' },
+  failed: { label: 'Failed', tone: 'red' },
+  interrupted: { label: 'Interrupted', tone: 'red' },
+  idle: { label: 'Idle', tone: 'muted' },
 };
 
 /** Store health from shared `storeHealth()`: only losing money gets the alarm color. */

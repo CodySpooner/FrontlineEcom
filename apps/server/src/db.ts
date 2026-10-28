@@ -830,6 +830,79 @@ export const MIGRATIONS = [
   ALTER TABLE agents DROP COLUMN level;
   ALTER TABLE agents DROP COLUMN xp;
   `,
+  /* 50 (ai-agents: AA-02 custom roles, configured agents, presets, conversations, what each run ran with, team sessions) */ `
+  CREATE TABLE agent_custom_roles (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE, -- NULL: every store
+    base_role TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    instructions TEXT NOT NULL DEFAULT '',
+    tools_json TEXT, -- the narrowed tool list; NULL: the base role's tools
+    created_at TEXT NOT NULL,
+    archived_at TEXT
+  );
+  CREATE INDEX agent_custom_roles_by_store ON agent_custom_roles (store_id);
+  CREATE TABLE agent_configs (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    agent_id TEXT NOT NULL, -- the store:role seat (autonomy, daily budget)
+    custom_role_id TEXT, -- an agent_custom_roles id or a builtin: type, checked by validateConfig
+    runtime TEXT NOT NULL,
+    model TEXT,
+    effort TEXT,
+    tools_json TEXT NOT NULL,
+    knowledge_json TEXT NOT NULL,
+    permissions_json TEXT NOT NULL, -- limits, save-findings mode: names and numbers, never credentials
+    created_at TEXT NOT NULL
+  );
+  CREATE INDEX agent_configs_by_store ON agent_configs (store_id);
+  CREATE TABLE agent_presets (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE, -- NULL: every store
+    name TEXT NOT NULL,
+    config_json TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  );
+  CREATE TABLE conversations (
+    id TEXT PRIMARY KEY,
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    config_id TEXT NOT NULL REFERENCES agent_configs(id),
+    title TEXT NOT NULL,
+    context_json TEXT,
+    pinned INTEGER NOT NULL DEFAULT 0,
+    archived_at TEXT,
+    client_request_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    last_activity_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX conversations_request ON conversations (store_id, client_request_id) WHERE client_request_id IS NOT NULL;
+  CREATE INDEX conversations_by_store ON conversations (store_id, archived_at, last_activity_at);
+  CREATE VIRTUAL TABLE conversations_fts USING fts5(title, text, store_id UNINDEXED, conversation_id UNINDEXED, tokenize='porter unicode61');
+  ALTER TABLE agent_runs ADD COLUMN conversation_id TEXT REFERENCES conversations(id);
+  ALTER TABLE agent_runs ADD COLUMN team_id TEXT; -- a kind-'team' squad mission's step run
+  ALTER TABLE agent_runs ADD COLUMN config_id TEXT REFERENCES agent_configs(id);
+  ALTER TABLE agent_runs ADD COLUMN runtime TEXT;
+  ALTER TABLE agent_runs ADD COLUMN model TEXT;
+  ALTER TABLE agent_runs ADD COLUMN effort TEXT;
+  ALTER TABLE agent_runs ADD COLUMN runtime_version TEXT;
+  ALTER TABLE agent_runs ADD COLUMN client_request_id TEXT;
+  ALTER TABLE agent_runs ADD COLUMN actual_model TEXT;
+  ALTER TABLE agent_runs ADD COLUMN effort_applied TEXT;
+  ALTER TABLE agent_runs ADD COLUMN attachments_json TEXT;
+  CREATE INDEX agent_runs_by_conversation ON agent_runs (conversation_id, created_at);
+  CREATE UNIQUE INDEX agent_runs_request ON agent_runs (conversation_id, client_request_id) WHERE client_request_id IS NOT NULL;
+  CREATE UNIQUE INDEX agent_runs_team_request ON agent_runs (team_id, client_request_id) WHERE team_id IS NOT NULL AND client_request_id IS NOT NULL;
+  ALTER TABLE squad_missions ADD COLUMN kind TEXT;
+  ALTER TABLE squad_missions ADD COLUMN objective TEXT;
+  ALTER TABLE squad_missions ADD COLUMN participants_json TEXT;
+  ALTER TABLE squad_missions ADD COLUMN budget_usd REAL;
+  ALTER TABLE squad_missions ADD COLUMN max_concurrent INTEGER;
+  ALTER TABLE squad_missions ADD COLUMN retries INTEGER;
+  ALTER TABLE squad_missions ADD COLUMN conversation_id TEXT REFERENCES conversations(id);
+  ALTER TABLE squad_missions ADD COLUMN owner_notes_json TEXT;
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

@@ -1236,7 +1236,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
   - **Claude resume check:** whether SDK 0.3.310 has an option that rebuilds the system prompt on resume (decision 11).
   - Write a Notes entry: the probe and spike answers; where each new piece will live; the app-server schema answer,
     for the Notes follow-up; and any decision changed and why.
-- [ ] AA-02 **Data model** (decision 3):
+- [x] AA-02 **Data model** (decision 3):
   - the migrations for every table, column and index decision 3 lists, each with an upgrade test that seeds the
     previous version's DB and checks user_version and `PRAGMA foreign_key_check`;
   - the shared types (Conversation, AgentConfig, AgentPreset, CustomRole, TeamSession fields, the derived RunState,
@@ -1605,6 +1605,9 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
 ## Done
 - 2026-10-28 AA-01 audit, baseline (`pnpm check` green: 177 files, 1342 tests), before screenshots in `.agent/before/`,
   Claude probe, Codex spike and resume check; answers under Notes.
+- 2026-10-28 AA-02 migration #50 (custom roles, configs, presets, conversations + FTS, run config columns, team
+  session columns) with its upgrade test; shared Conversation/AgentConfig/AgentPreset/CustomRole/team/runtime types;
+  `runState` and `conversationState` with tests; RUN_STATUS gains the derived states.
 
 ## Blocked
 
@@ -1708,3 +1711,7 @@ CLAUDE.md's "Backlog empty?" rule). Put follow-up ideas under **Notes** for the 
     (activate check), :309 (the `status !== 'done'` guard) and :369 (restart retry); ask.ts:50; kb-sources.ts:124-128;
     tools.ts:1341-1342 (title 5–160, summary 10–600); runGist at runs.ts:431-439; app.ts:48 STARTS and :56 kbGuard;
     Shell.tsx:76 `PageBoundary key={pathname}`; ui.tsx:347 Dialog; OWN_TOOL at tools.ts:1584.
+- (AA-02, 2026-10-28) One migration, #50, holds every table, column and index of decision 3. `conversations_fts` is
+  a plain FTS5 table with no foreign key, so a store delete leaves its rows: AA-05 deletes them where it writes them
+  (with the store, in `stores.ts`), and its search joins `conversations` so a stray row never shows. The derived-state
+  helper already splits `question` waits (waiting_for_input) from other approvals, so AA-16 only adds the kind.

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type Store } from '@frontline/shared';
+import { AGENT_ROLES, INTERRUPTED, type AgentEvent, type AgentRole, type AgentRun, type AgentRunDetail, type RunStatus, type RunUsage, type Store } from '@frontline/shared';
 import { defaultEngine, runAgent, type Engine, type RunInput } from './engine';
 import { researchContext } from './kb-research';
 import { citedCards, logKnowledgeUse, retrieveKnowledge } from './kb-retrieve';
@@ -408,7 +408,7 @@ const addUsage = (a: RunUsage, b: RunUsage): RunUsage => ({
 const ownUsedUp = (usd: number, stopped = false) => `${stopped ? "Stopped: today's" : "Today's"} budget for this agent ($${usd}) is used up. Raise it in its settings.`;
 
 /** The error of a run that was in flight when the app stopped (one from the last 6 hours runs again, as a new run). */
-export const INTERRUPTED = 'Interrupted by an app restart';
+export { INTERRUPTED };
 const OFFLINE = 'This agent is offline. Redeploy it first.';
 
 /**
