@@ -28,7 +28,7 @@ import { BriefDialog } from './Brief';
 import { EconomicsTab, incomplete } from './EconomicsTab';
 import { Alternatives } from './Matches';
 import { ResearchTab } from './ResearchTab';
-import { conditionsLine, countryName, demandLines, minorMoney, sourceLine } from './format';
+import { conditionsLine, countryName, demandLines, joinItems, minorMoney, sourceLine } from './format';
 
 export const PANEL_TABS = ['overview', 'demand', 'suppliers', 'economics', 'research', 'history'] as const;
 export type PanelTab = (typeof PANEL_TABS)[number];
@@ -411,7 +411,7 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
               ))}
             </ul>
           ) : null}
-          {a.report?.risks.length ? <p>{`From the report of ${day(a.report.createdAt)}: ${a.report.risks.join('; ')}`}</p> : null}
+          {a.report?.risks.length ? <p>{`From the report of ${day(a.report.createdAt)}: ${joinItems(a.report.risks)}`}</p> : null}
         </Row>
         <p className="mt-2 text-[11.5px] text-text-2">
           <b className="text-text">{`Evidence confidence: ${CONFIDENCE[a.confidence.level]}`}</b>

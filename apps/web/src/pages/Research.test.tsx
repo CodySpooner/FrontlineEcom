@@ -812,7 +812,7 @@ describe('Detail panel', () => {
   });
 
   it('Research: the latest task with its real activity, Cancel run and Retry, then every report, the demo one labelled', async () => {
-    const f = panelApi(detail({ assessment: { ...detail().assessment, report: { createdAt: '2026-10-28T11:00:00Z', risks: ['Bristles break.'], proposals: real.proposals } } }));
+    const f = panelApi(detail({ assessment: { ...detail().assessment, report: { createdAt: '2026-10-28T11:00:00Z', risks: ['Bristles break.', 'Saturated.'], proposals: real.proposals } } }));
     renderApp(<Research />, '/research?store=paws&product=p1&tab=research');
     const panel = await screen.findByRole('complementary', { name: 'Product details' });
     const activity = await within(panel).findByRole('list', { name: 'Activity' });
@@ -840,7 +840,7 @@ describe('Detail panel', () => {
     fireEvent.click(within(panel).getByRole('tab', { name: 'Overview' }));
     expect(await within(panel).findByText('Proposal, not evidence')).toBeTruthy();
     expect(within(panel).getByText('Ad angle: No more hair on the sofa.')).toBeTruthy();
-    expect(within(panel).getByText('From the report of Oct 28, 2026: Bristles break.')).toBeTruthy();
+    expect(within(panel).getByText('From the report of Oct 28, 2026: Bristles break; Saturated.')).toBeTruthy(); // never ".;"
   });
 
   it("Watch: the card's eye watches without opening the card; All stores' panel watches for all stores", async () => {

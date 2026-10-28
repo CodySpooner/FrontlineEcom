@@ -9,6 +9,9 @@ const digits = (currency: string) => {
   }
 };
 
+/** Items in one line, "; " between them: an item's own closing full stop goes, except the last one's (no ".;"). */
+export const joinItems = (items: string[]) => items.map((t, i) => (i < items.length - 1 ? t.replace(/\.\s*$/, '') : t)).join('; ');
+
 /** Minor units (cents, yen) as money: 752 USD → "$7.52". */
 export const minorMoney = (minor: number, currency: string) => new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(minor / 10 ** digits(currency));
 /** Money typed by the owner ("15", "7.52") in minor units, or null when it isn't an amount. */

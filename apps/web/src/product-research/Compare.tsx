@@ -19,7 +19,7 @@ import {
 } from '@frontline/shared';
 import { Button, cx, Dialog, inputClass } from '../components/ui';
 import { useComparisons, useCompared, useDeleteComparison, useSaveComparison } from './api';
-import { countryName, fromMinor, minorMoney, toMinor } from './format';
+import { countryName, fromMinor, joinItems, minorMoney, toMinor } from './format';
 
 type Figures = Partial<Record<PrCompareField, string>>;
 type Cell = ReactNode | { missing: string };
@@ -153,7 +153,7 @@ function CompareBody({ store, ids, setIds, shipTo, saved, loaded, onLoad }: Prop
         const f = d.assessment.flags;
         if (!f) return { missing: 'Not checked yet' };
         const all = [...f.map((x) => x.label), ...(d.assessment.report?.risks ?? [])];
-        return all.length ? all.join('; ') : 'No flags found (rule checks only), no report risks';
+        return all.length ? joinItems(all) : 'No flags found (rule checks only), no report risks';
       },
     ],
     ['Evidence confidence', (d) => `${d.assessment.confidence.level[0]!.toUpperCase()}${d.assessment.confidence.level.slice(1)} (${d.assessment.confidence.count} of 4)`],

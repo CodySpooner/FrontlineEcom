@@ -814,7 +814,7 @@ STOP.
 - [x] PR-30 **Acceptance:** walk "Done when" and fix what it finds. Fetch origin and check the ai-agents Done list for
   AA-17 to AA-20 and your Inbox requests: build what has shipped since (PR-23, PR-24, `untrustedBlock`), and apply
   decision 1's fallback to any request still open after ai-agents stopped.
-- [ ] PR-31 **Final report and STOP:** write `docs/features/product-research-report.md` with screenshots in
+- [x] PR-31 **Final report and STOP:** write `docs/features/product-research-report.md` with screenshots in
   `docs/reference/product-research-final/`, update `docs/DESIGN.md`'s Research section to the new page, then create
   `.agent/STOP`.
 
@@ -1065,6 +1065,11 @@ STOP.
   file, and long titles with missing images. The dialog's knowledge count now counts active cards only, which is what the
   run gets. `fence` uses AA-17's `untrustedBlock`. `pnpm build` is green, and a click-through of 19 surfaces found no
   dead control. Real ingestion stays Blocked, and Demand on real data stays partial.
+- 2026-10-28 PR-31 Final report: `docs/features/product-research-report.md` ("Status: not complete": real
+  ingestion is Blocked, and Demand on real data is partial), 12 screenshots in
+  `docs/reference/product-research-final/`, and DESIGN.md's Product Research section and data model. One fix found
+  in the screenshots: report risks that end in a full stop were joined as ".;" in Compare and the Overview (now
+  `joinItems`, tested). `pnpm check` (228 files, 1,686 tests) and `pnpm build` are green. `.agent/STOP` is created.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1150,6 +1155,10 @@ STOP.
     10 controls are disabled without a title, each until its form has something to act on: the save, discard and add
     buttons, Fetch preview, Start research, and Watch niche. The agent radio shows a visible "Not ready". Source health
     shows only Close, because no source is connected.
+
+    Correction at PR-31: the first run's All stores audit opened `/research`, which falls back to the first store. It
+    was rerun on `?store=all` and found 0 dead controls. One more control there, Assign, is disabled until a store is
+    picked in the select beside it.
   - **ai-agents:** AA-17 to AA-20 are done. All three Inbox requests are done: the `product` context, agent WebFetch
     through `kbFetch`, and `/api/pr/*` in the AA-23 sweep. So decision 1's fallback isn't needed. PR-23 and PR-24 had
     shipped already. `fence` is now a wrapper over `untrustedBlock`.

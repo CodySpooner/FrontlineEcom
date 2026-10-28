@@ -76,9 +76,22 @@ profile chip's dropdown, which the owner removed on 2026-10-28.
      owner's Resume. Every route, tool and retrieval is scoped to the store.
 3. **Store Analytics** — per store: revenue/profit chart, funnel (sessions → add to cart → checkout → order), top
    products, channel split, ad campaigns table (spend, revenue, ROAS, CPA) colored by health.
-4. **Product Research** — tabs Trending / High Margin / Low Competition / TikTok Viral / Shopify Winners / My Lists;
-   AI Research button (runs that store's Product Hunter); product cards with image, AI Score badge, sell price vs
-   compare-at, margin %, View Details; saved lists; "Add to store" → approval request.
+4. **Product Research** — a product-discovery workspace, one store at a time or All stores (redesigned
+   2026-10-28; spec `docs/features/product-research.md`, report `docs/features/product-research-report.md`).
+   - **Toolbar:** store scope, search, ship-to, sort and Research a Product, then the store's research profile line,
+     filters, and the views All matches / With demand evidence / Newly discovered / Watchlist / Flagged. A source strip
+     and Source health show each source's true state.
+   - **Cards:** cost + ship to the ship-to (excl. duties), fulfillment status with provenance, a demand label traced to
+     stored observations, store fit, flags, stage and watch. Unknown is never zero; fixtures are labelled and never
+     evidence.
+   - **Panel:** Overview (each part of the assessment on its own, notes, owner, outcomes, test brief), Demand,
+     Suppliers (offers, Exact/Similar matches), Economics (three scenarios), Research (tasks, reports, specialists)
+     and History (stage changes with reasons).
+   - **Research a Product:** link, store, eligible agent and instructions make one durable task tied to an AI Agents
+     conversation and run; the agent saves its report through `save_research_report`. Compare, watchlists with
+     alerts, and the test brief's draft products (through an approval) complete the loop.
+   - **Sources:** CJdropshipping (API key), Google Trends CSV, supplier feed CSV, the stores' own orders, Creative
+     Center notes and pasted links through the safe fetcher. Every route is store-scoped.
 5. **Ad Creation / Creative Studio** — tabs Generate Ads / UGC Avatars / Video to Video / Image Studio / Ad Variations /
    Ad Copy; Create Your Ad prompt + Enhance with AI + aspect ratio; **Generate with Higgsfield AI** (shows credit cost);
    integration badges (Higgsfield, Claude, Codex); preview player; Generated Ads gallery; Edit / Variations / Captions /
@@ -138,6 +151,9 @@ apps/desktop (Electron)  ── starts ──>  apps/server (Node: Hono HTTP + W
 - `squad_missions` (multi-agent plans over agent runs)
 - `competitors`, `competitor_snapshots`, `research_products`, `product_lists`, `automation_rules`, `automation_runs`,
   `creatives`
+- `pr_*` (Product Research): the shared catalog (products, listings, variants, offers), evidence sets, sources, jobs
+  and metered calls, store profiles, evaluations, stage history, tasks, reports, economics, comparisons, briefs,
+  outcomes, watches and alerts; `research_products` and `product_lists` were carried over into it once
 
 Profit = revenue − cogs − ad spend. ROAS = revenue ÷ ad spend. AOV = revenue ÷ orders. Deltas compare the selected
 range against the immediately preceding range of the same length.
