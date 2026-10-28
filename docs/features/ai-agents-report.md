@@ -12,7 +12,7 @@ after the owner signed in to Codex.
   app tool, so no Codex run had ever reached the app's tools. The fix is one flag, with a test, and a second turn
   verified it (see "Real services" below).
 - `pnpm check` (typecheck plus every test) passes: 214 test files, 1,622 tests on the last run before this report.
-  `pnpm build` passes. After the AA-25b fix: 214 test files, 1,622 tests.
+  `pnpm build` passes. After the AA-25b fix, rebased on main with the other lanes' work: 218 test files, 1,646 tests.
 - The repo has no linter, so linting doesn't apply. It wasn't run, and this report doesn't claim it passed.
 - Live model turns: one Claude run (AA-25: 13.8 s, $0.112) and two Codex turns (AA-25b), all on a demo store.
   Everything else was tested against the scripted engine, a fake Codex, and stubbed APIs. The two are reported
