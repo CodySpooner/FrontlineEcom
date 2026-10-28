@@ -1242,6 +1242,9 @@ export const MIGRATIONS = [
   CREATE INDEX pr_products_category ON pr_products (category);
   CREATE INDEX pr_watches_by_target ON pr_watches (target_id);
   `,
+  /* 54 (product-research: PR-20 a merge moves listings and remembers where from, so Separate can move them back) */ `
+  ALTER TABLE pr_listings ADD COLUMN merged_from TEXT REFERENCES pr_products(id); -- the product a merge moved it from
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

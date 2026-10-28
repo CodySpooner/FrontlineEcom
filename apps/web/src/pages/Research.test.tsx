@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
+import type { PrCard, PrComparison, PrDemandTab, PrDiscovery, PrEconomics, PrMatches, PrHistoryRow, PrOffer, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStoreProfile, PrTask, Store } from '@frontline/shared';
 import { renderApp, stubApi } from '../test-utils';
 import { discoveryQuery } from '../product-research/Filters';
 import { sourceItem } from '../product-research/format';
@@ -279,6 +279,16 @@ describe('Detail panel', () => {
       returnRatePct: { value: 0, tag: 'assumption', note: 'No returns' }, refundPct: { value: 100, tag: 'assumption', note: 'Full refund on a return' }, returnCost: unknown(), otherCosts: unknown(), adCost: unknown(),
     },
   };
+  const matches: PrMatches = {
+    listings: [{ id: 'l1', title: 'Silicone grooming brush', supplier: 'CJdropshipping', mergedFrom: null }, { id: 'l9', title: 'Grooming brush', supplier: 'Acme', mergedFrom: 'p9' }],
+    candidates: [
+      { listingId: 'l2', productId: 'p2', title: 'Pet deshedding comb', supplier: 'Acme', category: 'Pet Supplies > Grooming', fixture: false, verdict: 'exact', by: 'rule', matching: ['GTIN 0123', 'Category'], differing: ['Title', 'Supplier'], costShip: 550, fulfillment: 'verified' },
+      { listingId: 'l3', productId: 'p3', title: 'Self-cleaning grooming brush', supplier: 'Brushco', category: null, fixture: false, verdict: 'similar', by: 'rule', matching: ['Title words: grooming, brush'], differing: ['Title', 'Supplier'], costShip: null, fulfillment: null },
+      { listingId: 'l4', productId: 'p4', title: 'Grooming glove', supplier: 'Glovy', category: null, fixture: false, verdict: 'separate', by: 'owner', matching: [], differing: ['Title'], costShip: null, fulfillment: null },
+    ],
+    inStore: [{ id: 's1', title: 'Grooming Brush for Dogs', linked: false, matching: ['Title words: grooming, brush'] }],
+    cj: false,
+  };
   const reports: PrReport[] = [
     { id: 'rep2', taskId: 't1', runId: 'r1', conversationId: 'c1', runtime: 'claude', demo: false, createdAt: '2026-10-28T11:00:00Z', body: real },
     { id: 'rep1', taskId: 't0', runId: 'r0', conversationId: 'c0', runtime: 'demo', demo: true, createdAt: '2026-10-27T11:00:00Z', body: { ...real, recommendation: 'reject', summary: 'Demo engine: scripted example.' } },
@@ -294,6 +304,8 @@ describe('Detail panel', () => {
       if (url.includes('/history?')) return history;
       if (url.includes('/reports?')) return reports;
       if (url.includes('/economics?')) return econ;
+      if (url.includes('/matches')) return matches;
+      if (url.includes('/store-products?')) return { ruledOut: true };
       if (url.includes('/retry?')) return { ...tasks[1], status: 'queued' };
       if (url.startsWith('/api/pr/tasks?')) return tasks;
       if (url.startsWith('/api/runs/')) return run;
@@ -480,6 +492,37 @@ describe('Detail panel', () => {
     expect(JSON.parse(String(f.mock.calls.find(([, i]) => i?.method === 'POST')![1]!.body))).toEqual({ name: 'Grooming picks', productIds: ['p1', 'p2'], figures: { discountPct: 0, adCost: 800 } });
     expect(await within(dialog).findByRole('button', { name: 'Save changes' })).toBeTruthy();
     expect(within(dialog).getByRole('button', { name: 'Delete Grooming picks' })).toBeTruthy();
+  });
+
+  it('Suppliers: other suppliers marked Exact match or Similar with what matches and differs; merge, confirm, rule out, separate; and "Already in your store"', async () => {
+    const f = panelApi();
+    renderApp(<Research />, '/research?store=paws&product=p1');
+    const panel = await screen.findByRole('complementary', { name: 'Product details' });
+    const inStore = (await within(panel).findByText('Already in Pawsome Gear')).parentElement!.parentElement!;
+    await within(inStore).findByText('Possibly');
+    expect(inStore.textContent).toContain('Grooming Brush for Dogs (Title words: grooming, brush)');
+    fireEvent.click(within(inStore).getByRole('button', { name: 'Not this one: Grooming Brush for Dogs' }));
+    await waitFor(() => expect(bodyOf(f, '/store-products?')).toEqual({ storeProductId: 's1', same: false }));
+
+    fireEvent.click(within(panel).getByRole('tab', { name: 'Suppliers' }));
+    const others = await within(panel).findByRole('region', { name: 'Other suppliers' });
+    const exact = within(others).getByLabelText('Acme: Pet deshedding comb');
+    expect(within(exact).getByText('Exact match')).toBeTruthy();
+    expect(exact.textContent).toContain('Cost + ship: $5.50 · Fulfillment verified for selected conditions');
+    expect(exact.textContent).toContain('Matching: GTIN 0123, Category. Differing: Title, Supplier.');
+    const similar = within(others).getByLabelText('Brushco: Self-cleaning grooming brush');
+    expect(within(similar).getByText('Similar')).toBeTruthy();
+    expect(within(similar).queryByRole('button', { name: 'Merge into this product' })).toBeNull(); // only an exact match merges
+    expect(within(others).getByText('Not the same product (1)')).toBeTruthy();
+    expect(within(others).getByText('Connect CJdropshipping in Integrations to search its catalog for other suppliers too.')).toBeTruthy();
+
+    const posted = (path: string) => f.mock.calls.filter(([u, i]) => String(u).startsWith(path) && i?.method === 'POST').map(([, i]) => JSON.parse(String(i!.body)));
+    fireEvent.click(within(exact).getByRole('button', { name: 'Merge into this product' }));
+    await waitFor(() => expect(posted('/api/pr/products/p1/matches/l2?store=paws')).toEqual([{ listing: 'l2', action: 'merge' }]));
+    fireEvent.click(within(similar).getByRole('button', { name: 'Same product' }));
+    await waitFor(() => expect(posted('/api/pr/products/p1/matches/l3?store=paws')).toEqual([{ listing: 'l3', action: 'same' }]));
+    fireEvent.click(within(others).getByRole('button', { name: 'Separate' })); // the listing a merge brought in
+    await waitFor(() => expect(posted('/api/pr/products/p1/matches/l9?store=paws')).toEqual([{ listing: 'l9', action: 'split' }]));
   });
 
   it('Overview shows the base economics per order before ads, excl. what is unknown', async () => {

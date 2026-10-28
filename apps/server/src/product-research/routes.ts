@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { PR_MATCH_ACTIONS, type PrMatchAction } from '@frontline/shared';
 import type { Db } from '../db';
 import { publish, subscribe } from '../live';
 import { log } from '../log';
@@ -13,6 +14,7 @@ import { changeStage, dismissFlag, saveNotes, watchProduct } from './edits';
 import { evaluateStore, refreshProduct } from './evaluate';
 import { addNote, linkStoreProduct, NOTE_PLATFORMS } from './evidence';
 import { importFeed } from './feed';
+import { decideMatch, productMatches, searchCjAlternatives } from './matching';
 import { runDue, stoppedReason, syncNow } from './jobs';
 import { cachedImage, listingImageRef, queueImage } from './images';
 import { checkUrl, ownerDetails, preview } from './preview';
@@ -208,6 +210,29 @@ export function prRoutes(db: Db, key: () => Buffer) {
       saveEconomics(db, store.id, c.req.param('id'), o);
       return c.json(productEconomics(db, store, c.req.param('id')));
     })
+    // Supplier matching (PR-20): candidates with the rule's or the owner's verdict, the store's own products, CJ search.
+    .get('/api/pr/products/:id/matches', (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      return c.json(productMatches(db, key(), store, c.req.param('id')));
+    })
+    .post('/api/pr/products/:id/matches/search', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const r = await searchCjAlternatives(db, key(), store, c.req.param('id'));
+      return 'error' in r && !r.calls ? c.json({ error: r.error }, 409) : c.json(r);
+    })
+    .post('/api/pr/products/:id/matches/:listing', async (c) => {
+      const store = storeOf(c, db);
+      if (store instanceof Response) return store;
+      if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
+      const action = ((await c.req.json().catch(() => undefined)) as { action?: unknown } | undefined)?.action as PrMatchAction;
+      if (!PR_MATCH_ACTIONS.includes(action)) return c.json({ error: `action must be one of ${PR_MATCH_ACTIONS.join(', ')}` }, 400);
+      const err = decideMatch(db, store, c.req.param('id'), c.req.param('listing'), action);
+      return err ? c.json({ error: err.error }, err.status) : c.json(productMatches(db, key(), store, c.req.param('id')));
+    })
     // Saved comparisons (PR-19), per store; the page reads each product's own figures again when one is opened.
     .get('/api/pr/comparisons', (c) => {
       const store = storeOf(c, db);
@@ -285,8 +310,14 @@ export function prRoutes(db: Db, key: () => Buffer) {
       const store = storeOf(c, db);
       if (store instanceof Response) return store;
       if (!productVisible(db, c.req.param('id'), store.id)) return c.json({ error: 'product not found' }, 404);
-      const body = (await c.req.json().catch(() => undefined)) as { storeProductId?: unknown } | undefined;
+      const body = (await c.req.json().catch(() => undefined)) as { storeProductId?: unknown; same?: unknown } | undefined;
       if (typeof body?.storeProductId !== 'string') return c.json({ error: 'storeProductId must be one of the store’s products' }, 400);
+      // PR-20: the owner rules out a possible "Already in your store" match; it isn't suggested again.
+      if (body.same === false) {
+        if (!db.prepare('SELECT 1 FROM products WHERE store_id = ? AND id = ?').get(store.id, body.storeProductId)) return c.json({ error: 'store product not found' }, 404);
+        db.prepare(`INSERT OR IGNORE INTO pr_outcomes (id, store_id, product_id, kind, ref_id, created_at) VALUES (?, ?, ?, 'not_store_product', ?, ?)`).run(crypto.randomUUID(), store.id, c.req.param('id'), body.storeProductId, new Date().toISOString());
+        return c.json({ ruledOut: true }, 201);
+      }
       const err = linkStoreProduct(db, store.id, c.req.param('id'), body.storeProductId);
       if (err) return c.json({ error: err }, 404);
       const set = db.prepare(`SELECT id FROM pr_signals WHERE store_id = ? AND product_id = ? AND platform = 'orders'`).get(store.id, c.req.param('id'));

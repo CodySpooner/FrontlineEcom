@@ -1,5 +1,5 @@
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { ConversationConfigInput, PrAgentRow, PrComparison, PrComparisonInput, PrDiscovery, PrEconomics, PrEconOverrides, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask } from '@frontline/shared';
+import type { ConversationConfigInput, PrAgentRow, PrComparison, PrComparisonInput, PrDiscovery, PrEconomics, PrEconOverrides, PrMatchAction, PrMatches, PrOwnerDetails, PrPreview, PrProductDetail, PrReport, PrSourceHealth, PrSourceState, PrStage, PrStoreProfile, PrTask } from '@frontline/shared';
 import { api, json } from '../api/client';
 
 const scope = (store: string | null) => (store ? `store=${encodeURIComponent(store)}` : '');
@@ -117,3 +117,13 @@ export const useCompared = (store: string, ids: string[]) => ({
 export const useSaveComparison = (store: string, id: string | null) =>
   usePrWrite<PrComparisonInput, PrComparison>(() => `/api/pr/comparisons${id ? `/${enc(id)}` : ''}?${scope(store)}`, id ? 'PUT' : 'POST');
 export const useDeleteComparison = (store: string) => usePrWrite<{ id: string }>((b) => `/api/pr/comparisons/${enc(b.id)}?${scope(store)}`, 'DELETE');
+
+/** Supplier matching and "Already in your store" (PR-20); Search CJdropshipping makes at most 3 calls. */
+export const useMatches = (store: string, product: string) =>
+  useQuery({ queryKey: ['pr', 'matches', store, product], queryFn: () => api<PrMatches>(`/api/pr/products/${enc(product)}/matches?${scope(store)}`) });
+export const useMatchAction = (store: string, product: string) =>
+  usePrWrite<{ listing: string; action: PrMatchAction }, PrMatches>((b) => `/api/pr/products/${enc(product)}/matches/${enc(b.listing)}?${scope(store)}`);
+export const useSearchCj = (store: string, product: string) =>
+  usePrWrite<void, { calls: number; stored: number; error?: string }>(() => `/api/pr/products/${enc(product)}/matches/search?${scope(store)}`);
+export const useLinkStoreProduct = (store: string, product: string) =>
+  usePrWrite<{ storeProductId: string; same?: false }>(() => `/api/pr/products/${enc(product)}/store-products?${scope(store)}`);

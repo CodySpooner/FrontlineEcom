@@ -768,7 +768,7 @@ STOP.
   provenance per input, saved assumptions per store and product.
 - [x] PR-19 **Comparison:** add up to 4 products, one destination, currency, date and assumptions for all, side-by-side
   demand, offers, shipping, fit, risks and economics, missing fields shown as missing. Saved comparisons.
-- [ ] PR-20 **Supplier matching and existing-product checks:** alternative suppliers for a product (CJ search by
+- [x] PR-20 **Supplier matching and existing-product checks:** alternative suppliers for a product (CJ search by
   attributes, at most 3 calls a search), **Exact match only on the same SKU, GTIN or MPN, or the owner's confirmation;
   everything else is Similar** with the matching and differing fields; confirm, merge or separate with sources kept;
   and the "Already in your store" check against the store's products with a confirm step for uncertain matches (the
@@ -980,6 +980,15 @@ STOP.
   figures are read again when one is opened, and a comparison saved for another ship-to or currency says so. Also
   decision 5's report button: a real report's recommendation shows "Move to <stage>" (the owner's move, with the
   report as the reason; never from a demo report). Tests: 2 API, 1 page, plus the Move to test.
+- 2026-10-28 PR-20 Supplier matching and existing-product checks: the rule (`judge`) gives Exact only on a shared
+  GTIN, MPN or SKU and Similar otherwise, with the matching and differing fields (title words, category, variants,
+  supplier, codes). The Suppliers tab's Other suppliers lists the candidates with their cost + ship and status: Merge
+  into this product (exact only), Same product (the owner's Exact), Not the same (kept under "Not the same product"
+  with Undo), and Separate on a listing a merge brought in. A merge moves the other product's listings here and keeps
+  every one (`merged_from`, migration 54); Separate moves them back; both go to History. Search CJdropshipping makes
+  at most 3 catalog calls and stores the results as listings. Overview's "Already in <store>" shows the linked store
+  product, or possible ones by title with Same product (the PR-07 link) and Not this one. API: `GET …/matches`,
+  `POST …/matches/search`, `POST …/matches/:listing`, `same: false` on `POST …/store-products`. Tests: 4 API, 1 page.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -1011,6 +1020,18 @@ STOP.
   adapter stays at Approval required.
 
 ## Notes
+- **PR-20 as built.** A candidate shares a code or at least 2 title words (a LIKE prefilter on the product's words,
+  capped at 300 rows; the top 12 shown, exact first). The owner's verdicts are on listing pairs in `pr_matches`, which
+  has no store: whether two listings are the same product is a catalog fact, so it holds for every store; the History
+  row goes to the store the owner acted in. A merge sets `merged_into` and moves the listings; the merged product's
+  own store rows (stage, notes, tasks, reports, watches, economics, comparisons) stay on it, hidden, and come back on
+  Separate. A product that has merged listings of its own can't be merged until those are separated (no chains).
+  Store products carry no SKU or GTIN, so every "Already in your store" match is by title and needs the owner's
+  confirmation; "Not this one" is a `pr_outcomes` row of kind `not_store_product`. **CJ search is mocked-tested only**:
+  the CJ key is Blocked, so no live call was made; without the key the search makes no call and says so. Dev-app check
+  12:45 local on Pawsome Gear, read-only: "collapsible travel bowl" shows "Already in Pawsome Gear: Possibly" with the
+  demo store's "Collapsible Travel Water Bowl"; the demo catalog has no supplier lookalikes, so Other suppliers says
+  none match. Screenshots `.agent/shots/pr20-*.png`.
 - **PR-19 as built.** "One destination, currency and date for all": the store's ship-to and currency (economics and
   offers are per store, so a comparison is too), and today's figures; the saved row keeps the ship-to and currency it
   was saved with. Price, supplier cost, shipping, duties and other costs stay each product's own; the shared figures

@@ -605,3 +605,34 @@ export interface PrComparison extends PrComparisonInput {
   createdAt: string;
   updatedAt: string;
 }
+
+/** PR-20: Exact only on a shared SKU, GTIN or MPN, or the owner's word; Separate is the owner's "not the same product". */
+export type PrMatchVerdict = 'exact' | 'similar' | 'separate';
+/** Another listing that may be this product from another supplier, with what matches and what differs. */
+export interface PrMatch {
+  listingId: string;
+  productId: string;
+  title: string;
+  supplier: string;
+  category: string | null;
+  fixture: boolean;
+  verdict: PrMatchVerdict;
+  by: 'rule' | 'owner';
+  matching: string[];
+  differing: string[];
+  /** Its cost + ship to the store's ship-to (minor units) and fulfillment status; null: unknown. */
+  costShip: number | null;
+  fulfillment: PrFulfillment | null;
+}
+/** GET /api/pr/products/:id/matches (store scope). */
+export interface PrMatches {
+  /** This product's own listings; `mergedFrom` is set on the ones a merge brought in (Separate moves them back). */
+  listings: { id: string; title: string; supplier: string; mergedFrom: string | null }[];
+  candidates: PrMatch[];
+  /** "Already in your store": the linked store products, and possible ones the owner confirms or rules out. */
+  inStore: { id: string; title: string; linked: boolean; matching: string[] }[];
+  /** CJdropshipping is connected, so its catalog can be searched (at most 3 calls a search). */
+  cj: boolean;
+}
+export const PR_MATCH_ACTIONS = ['same', 'not_same', 'undo', 'merge', 'split'] as const;
+export type PrMatchAction = (typeof PR_MATCH_ACTIONS)[number];

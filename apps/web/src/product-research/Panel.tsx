@@ -20,9 +20,10 @@ import {
 } from '@frontline/shared';
 import { AreaChart } from '../components/AreaChart';
 import { Button, cx, EmptyState, ErrorState, inputClass, LoadingState, Tabs } from '../components/ui';
-import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useProductDetail, useProductTab, useSaveNotes, useWatch } from './api';
+import { useAddNote, useAssign, useChangeStage, useDismissFlag, useImportTrends, useLinkSet, useLinkStoreProduct, useMatches, useProductDetail, useProductTab, useSaveNotes, useWatch } from './api';
 import { Pill, TONE } from './Card';
 import { EconomicsTab, incomplete } from './EconomicsTab';
+import { Alternatives } from './Matches';
 import { ResearchTab } from './ResearchTab';
 import { conditionsLine, countryName, demandLines, minorMoney, sourceLine } from './format';
 
@@ -101,7 +102,7 @@ export function DetailPanel({
             <Tabs label="Product details" tabs={PANEL_TABS.map((t) => ({ value: t, label: TAB_LABEL[t] }))} value={tab} onChange={setTab} className="shrink-0 flex-wrap [&>button]:px-2.5" />
             {tab === 'overview' && <Overview d={d!} store={store} stores={stores} onAssigned={onAssigned} />}
             {tab === 'demand' && <Demand id={id} scope={scope} />}
-            {tab === 'suppliers' && <Suppliers id={id} scope={scope} />}
+            {tab === 'suppliers' && <Suppliers id={id} store={store} />}
             {tab === 'economics' && <EconomicsTab id={id} store={scope} />}
             {tab === 'research' && <ResearchTab id={id} store={scope} stage={d!.card.stage} />}
             {tab === 'history' && <History id={id} scope={scope} stores={stores} />}
@@ -319,6 +320,7 @@ function Overview({ d, store, stores, onAssigned }: { d: PrProductDetail; store:
           {a.economics?.result.figures &&
             `per order before ads${a.economics.result.excluded.length ? `, excl. ${a.economics.result.excluded.map((k) => PR_ECON_LABEL[k].toLowerCase()).join(', ')}` : ''}`}
         </Row>
+        {store && <InStore id={c.id} store={store} />}
         {/* The latest non-demo report's proposals and risks (decision 11): ideas to test, never evidence. */}
         <Row label="Differentiation" value={a.report?.proposals.length ? 'Proposal, not evidence' : 'Not assessed yet'}>
           {a.report?.proposals.length ? (
@@ -574,13 +576,42 @@ const STATUS_TONE = { verified: 'good', pending: 'run', insufficient: 'warn', no
 const PROVENANCE: Record<string, string> = { live: 'Live from the supplier', import: 'Imported feed', owner: 'Owner-provided', supplier_claim: 'Supplier claim', fixture: 'Test fixture' };
 const cost = (v: number | null, currency: string | null) => (v === null || !currency ? 'Unknown' : minorMoney(v, currency));
 
-function Suppliers({ id, scope }: { id: string; scope: string | null }) {
-  const tab = useProductTab<PrOffer[]>(id, scope, 'offers', true);
+/** "Already in your store" (PR-20): the linked store product, or possible ones the owner confirms or rules out. */
+function InStore({ id, store }: { id: string; store: Store }) {
+  const q = useMatches(store.id, id);
+  const link = useLinkStoreProduct(store.id, id);
+  const linked = q.data?.inStore.filter((s) => s.linked) ?? [];
+  const possible = linked.length ? [] : (q.data?.inStore ?? []);
+  return (
+    <Row label={`Already in ${store.name}`} value={!q.data ? (q.isError ? 'Unknown' : 'Checking…') : linked.length ? 'Yes' : possible.length ? 'Possibly' : 'Not found'}>
+      {linked.length > 0 && `Linked: ${linked.map((s) => s.title).join(', ')}`}
+      {possible.map((s) => (
+        <span key={s.id} className="mt-1 flex flex-wrap items-center gap-1.5">
+          {`${s.title} (${s.matching.join('; ')})`}
+          <Button size="sm" aria-label={`Same product: ${s.title}`} disabled={link.isPending} onClick={() => link.mutate({ storeProductId: s.id })}>
+            Same product
+          </Button>
+          <Button size="sm" variant="ghost" aria-label={`Not this one: ${s.title}`} disabled={link.isPending} onClick={() => link.mutate({ storeProductId: s.id, same: false })}>
+            Not this one
+          </Button>
+        </span>
+      ))}
+      {link.error && (
+        <span role="alert" className="block text-red">
+          {link.error.message}
+        </span>
+      )}
+    </Row>
+  );
+}
+
+function Suppliers({ id, store }: { id: string; store: Store | null }) {
+  const tab = useProductTab<PrOffer[]>(id, store?.id ?? null, 'offers', true);
   if (tab.isPending) return <LoadingState rows={4} />;
   if (tab.isError) return <ErrorState message={tab.error.message} onRetry={() => void tab.refetch()} />;
-  if (!tab.data.length) return <EmptyState title="No supplier offers yet">Offers appear once a supplier source quotes this product.</EmptyState>;
   return (
     <div className="grid gap-2.5 text-xs">
+      {!tab.data.length && <EmptyState title="No supplier offers yet">Offers appear once a supplier source quotes this product.</EmptyState>}
       {tab.data.map((o) => (
         <section key={o.id} aria-label={`${o.supplier} to ${o.destination ?? 'unknown destination'}`} className="rounded-lg border border-line p-3">
           <div className="flex items-start justify-between gap-2">
@@ -611,7 +642,8 @@ function Suppliers({ id, scope }: { id: string; scope: string | null }) {
           <p className="mt-1.5 text-muted">{`Checked ${day(o.checkedAt)}`}</p>
         </section>
       ))}
-      <p className="text-muted">Duties: Unknown, left out of the figures above.</p>
+      {tab.data.length > 0 && <p className="text-muted">Duties: Unknown, left out of the figures above.</p>}
+      <Alternatives id={id} store={store} />
     </div>
   );
 }
