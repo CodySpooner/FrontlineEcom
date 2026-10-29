@@ -440,3 +440,24 @@ test("TikTok Shop calls are signed at the time they're sent, not the sync's star
   expect(stamps.length).toBeGreaterThan(0);
   for (const t of stamps) expect(Math.abs(t - Date.now() / 1000)).toBeLessThan(60);
 });
+
+test.each(['list', 'report'])('campaign spend survives a failed ad %s read', async (failed) => {
+  const db = setup();
+  const { fetchFn } = fakeTikTok();
+  const partial = (async (url, init) => {
+    const u = new URL(String(url));
+    if (failed === 'list' ? u.pathname.endsWith('/ad/get/') : u.searchParams.get('data_level') === 'AUCTION_AD') {
+      return Response.json({ code: 40002, message: 'Ad details unavailable', data: {} });
+    }
+    return fetchFn(url, init);
+  }) as typeof fetch;
+  await syncTikTokAds(db, key, 'glow', partial, NOW);
+  expect(db.prepare("SELECT spend FROM campaign_daily WHERE network = 'tiktok' AND campaign_id = '401' AND date = '2026-10-25'").get()).toEqual({ spend: 40 });
+  expect(db.prepare("SELECT ad_spend FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ ad_spend: 50 });
+  expect(db.prepare("SELECT status, error, cursor, synced_at FROM integrations WHERE id = 'tiktok_ads:glow'").get()).toEqual({
+    status: 'error', error: 'Campaign spend synced; ad-level sync failed: TikTok Ads: Ad details unavailable', cursor: null, synced_at: null,
+  });
+  const retry = fakeTikTok();
+  await syncTikTokAds(db, key, 'glow', retry.fetchFn, NOW);
+  expect(retry.calls.find((c) => c.searchParams.get('data_level') === 'AUCTION_AD')!.searchParams.get('start_date')).toBe('2024-10-27');
+});

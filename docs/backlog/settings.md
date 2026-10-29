@@ -1228,6 +1228,8 @@ STOP**, the owner may delete `.agent/STOP` and ask for "run ST-47, then update t
 STOP.
 
 ## Inbox
+
+- [ ] (from codex-hardening, CH-18) Forwarding UI Inbox finding to the new Integrations owner: /integrations at 390x900 has 3 px document overflow (scrollWidth 393, clientWidth 390). Repro: pnpm e2e --grep "integrations at 390px". Wrap/shrink content without hiding document overflow; keep the strict route test. This is one of three failures blocking CH-18/20 acceptance; the agent pages are filed to AI Agents.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request>. Settings-scoped requests only (decision 1). -->
 - [~] (deferred to ST-11; not to be picked before it) (from codex-hardening, CH-05; copied from `docs/backlog/core.md`'s
   Inbox "for Settings/timezones")

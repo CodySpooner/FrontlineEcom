@@ -291,3 +291,24 @@ test("an ad account ahead of the computer is asked for its own today (its zone a
   const ranges = next.calls.filter((c) => c.url.pathname.endsWith('/insights')).map((c) => JSON.parse(c.url.searchParams.get('time_range')!));
   expect(ranges.at(-1).until).toBe('2026-10-28');
 });
+
+test.each(['list', 'report'])('campaign spend survives a failed ad %s read', async (failed) => {
+  const { db } = setup();
+  const { fetchFn } = fakeGraph([insight('201', '2026-10-25', '60.00', '210.50')]);
+  const partial = (async (url, init) => {
+    const u = new URL(String(url));
+    if (failed === 'list' ? u.pathname.endsWith('/ads') : u.searchParams.get('level') === 'ad') {
+      return Response.json({ error: { code: 200, message: 'Missing permission for ad details' } }, { status: 403 });
+    }
+    return fetchFn(url, init);
+  }) as typeof fetch;
+  await syncMeta(db, key, 'pawsome', partial, NOW);
+  expect(db.prepare("SELECT spend FROM campaign_daily WHERE network = 'meta' AND campaign_id = '201' AND date = '2026-10-25'").get()).toEqual({ spend: 60 });
+  expect(db.prepare("SELECT ad_spend FROM daily_metrics WHERE store_id = 'pawsome' AND date = '2026-10-25'").get()).toEqual({ ad_spend: 60 });
+  expect(db.prepare("SELECT status, error, cursor, synced_at FROM integrations WHERE id = 'meta_ads:pawsome'").get()).toEqual({
+    status: 'error', error: 'Campaign spend synced; ad-level sync failed: Meta: Missing permission for ad details', cursor: null, synced_at: null,
+  });
+  const retry = fakeGraph([]);
+  await syncMeta(db, key, 'pawsome', retry.fetchFn, NOW);
+  expect(JSON.parse(retry.calls.find((c) => c.url.searchParams.get('level') === 'ad')!.url.searchParams.get('time_range')!).since).toBe('2024-10-27');
+});

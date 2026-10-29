@@ -39,6 +39,8 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
 
 ## Notes (owner questions; work goes on with the default)
 
+- 2026-10-28 Phase E ownership rechecked: Settings and Store Analytics are running. Acknowledged SA-01 claimed revenue helpers and syncTikTokShop; none are edited. CH-20 remains unchecked only for mobile acceptance, while CH-21/22 are active; clarified the phase window in Store Analytics Inbox. Forwarded the CH-18 Integrations overflow to its new Settings owner.
+
 - CH-13 filed to AI Agents Inbox: a nonblocking status warning needs an additive shared field plus UI rendering outside Phase C. Q2 default remains warn; no misuse of the disabling reason field.
 
 - CH-03 filed in `docs/backlog/agents.md` Inbox: durable action execution state with an "unknown after interruption" outcome and owner reconciliation, no automatic replay. An absent marker cannot prove no live write occurred; existing successful ad writes also lack receipts. Default is no recovery behaviour change until that design is implemented.
@@ -52,7 +54,7 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
-- [ ] (from store-analytics) store-analytics claims rebuildRevenue, setOrderItems, setStoreTimezone and forgetPlatform in connectors/common.ts and syncTikTokShop in connectors/tiktok.ts (your Lane keeps hands off what Store Analytics claims). Everything else in your Phase E files stays yours; we file changes to it in this Inbox.
+- [x] (from store-analytics) store-analytics claims rebuildRevenue, setOrderItems, setStoreTimezone and forgetPlatform in connectors/common.ts and syncTikTokShop in connectors/tiktok.ts (your Lane keeps hands off what Store Analytics claims). Everything else in your Phase E files stays yours; we file changes to it in this Inbox.
 
 ## Items
 
@@ -146,7 +148,7 @@ Files: `apps/server/src/connectors/meta.ts`, `google.ts`, `tiktok.ts`, `common.t
 only), `packages/agents/src/kb-perf.ts`, `apps/server/src/kb/performance.ts`, `apps/server/src/kb/experiments.ts`.
 Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
 
-- [ ] CH-21 Ad-level reads (added by KB-20) must not stop spend syncing: in `meta.ts` the `/ads` edge and `level=ad`
+- [x] CH-21 Ad-level reads (added by KB-20) must not stop spend syncing: in `meta.ts` the `/ads` edge and `level=ad`
   insights share the campaign insights' try, and the catch (~169-171) marks the whole integration as an error;
   `google.ts` ~118-125 and `tiktok.ts` ~111-114 await ad-level reads before writing anything. Campaign spend still
   syncs when an ad-level read fails, and the failure stays visible in the integration status. Recorded-response tests.
@@ -164,6 +166,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-21: six failing regressions first. Meta, Google Ads and TikTok now commit campaign spend before optional ad reads/writes; an ad failure remains an integration error and retains the old cursor for complete retry. Existing 40 connector cases plus all six regressions pass. New responses are contract-shaped fakes, not live captures. pnpm check green (235 files / 1,747 tests, 4 workers). Settings and Store Analytics handoff filings included; their claimed functions untouched.
 
 - 2026-10-28 CH-20 flow coverage shipped, acceptance blocked: real-UI seeded approval, fake agent reply, KB card and labelled Research fixture all pass. Two consecutive complete browser runs each have 82 passes / the same 3 CH-18 mobile overflow failures; all 16 accessibility scans pass both times. pnpm check green (234 files / 1,730 tests, 4 workers). Full-green criterion awaits the filed UI fixes.
 

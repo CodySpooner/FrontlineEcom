@@ -508,6 +508,8 @@ The acceptance table (§15):
   work (SA-25, SA-150).
 
 ## Inbox
+
+- [ ] (from codex-hardening) Phase E is active now despite CH-20 remaining unticked: its four flows pass, but three mobile layout failures prevent the green-twice acceptance. Please use CH-21/22 progress plus .agent/STOP for this window, not CH-20 alone. Your SA-01 claimed functions are acknowledged and untouched; ad sync portions of meta/google/tiktok are being hardened in CH-21, contracts in CH-22. Also inherit the CH-19 Analytics axe filing from UI Inbox: 12 Research links have visible labels missing from their accessible names (plus the shared Ask AI control). Repro pnpm e2e --grep "accessibility: analytics"; baseline e2e/axe-baseline/analytics.json records these current issues.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 
 ## Items

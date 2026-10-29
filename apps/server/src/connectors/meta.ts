@@ -97,6 +97,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
   const creds = getCredentials(db, key, 'meta_ads', storeId);
   if (!creds) return;
   const view = syncView(db, id);
+  let campaignSynced = false;
   try {
     const act = adAccount(creds.adAccountId!);
     const token = creds.accessToken!;
@@ -108,13 +109,10 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
     if (money.zone) stateOf<string>(db, AD_ZONES).set(id, money.zone);
     const rateOn = cursor ? () => money.rate : await backfillRate(db, storeId, money.currency, money.rate, fetchFn);
     const campaigns = await edge<CampaignRow>(`${GRAPH}/${act}/campaigns?fields=id,name,effective_status,daily_budget&limit=200`, token, fetchFn);
-    const ads = await edge<AdRow>(`${GRAPH}/${act}/ads?fields=id,name,campaign_id,adset_id,effective_status,creative{body}&limit=200`, token, fetchFn);
-    // Campaign totals (the store's ad spend), then each ad's (KB-20).
-    const rows: InsightRow[] = [];
-    const adRows: InsightRow[] = [];
-    for (let since = start; since <= today; since = addDays(since, CHUNK_DAYS)) {
-      const until = addDays(since, CHUNK_DAYS - 1) < today ? addDays(since, CHUNK_DAYS - 1) : today;
-      for (const [level, into] of [['campaign', rows], ['ad', adRows]] as const) {
+    const insights = async (level: 'campaign' | 'ad') => {
+      const rows: InsightRow[] = [];
+      for (let since = start; since <= today; since = addDays(since, CHUNK_DAYS)) {
+        const until = addDays(since, CHUNK_DAYS - 1) < today ? addDays(since, CHUNK_DAYS - 1) : today;
         const params = new URLSearchParams({
           level,
           time_increment: '1',
@@ -122,9 +120,11 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
           fields: `campaign_id,campaign_name,${level === 'ad' ? 'ad_id,ad_name,adset_id,' : ''}spend,impressions,clicks,actions,action_values`,
           limit: '500',
         });
-        into.push(...(await edge<InsightRow>(`${GRAPH}/${act}/insights?${params}`, token, fetchFn)));
+        rows.push(...(await edge<InsightRow>(`${GRAPH}/${act}/insights?${params}`, token, fetchFn)));
       }
-    }
+      return rows;
+    };
+    const rows = await insights('campaign');
 
     if (syncView(db, id) !== view) return;
     tx(db, () => {
@@ -153,6 +153,14 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       }
       if (!cursor) for (const d of pruneCampaigns(db, storeId, 'meta', [...campaigns.map((c) => c.id), ...rows.map((r) => r.campaign_id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);
+    });
+    campaignSynced = true;
+
+    const ads = await edge<AdRow>(`${GRAPH}/${act}/ads?fields=id,name,campaign_id,adset_id,effective_status,creative{body}&limit=200`, token, fetchFn);
+    const adRows = await insights('ad');
+    if (syncView(db, id) !== view) return;
+    // Keep the cursor until both reads succeed so missing ad history is retried.
+    tx(db, () => {
       saveAds(
         db, storeId, 'meta',
         ads.map((a) => ({ id: a.id, campaignId: a.campaign_id, groupId: a.adset_id, name: a.name, status: a.effective_status.toLowerCase(), copy: a.creative?.body })),
@@ -167,7 +175,8 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
   } catch (e) {
-    setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Meta sync failed');
+    const message = e instanceof Error ? e.message : 'Meta sync failed';
+    setIntegrationStatus(db, id, 'error', campaignSynced ? `Campaign spend synced; ad-level sync failed: ${message}` : message);
   }
 }
 

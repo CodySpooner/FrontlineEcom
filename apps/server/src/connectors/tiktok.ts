@@ -76,6 +76,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
   const creds = getCredentials(db, key, 'tiktok_ads', storeId);
   if (!creds) return;
   const view = syncView(db, id);
+  let campaignSynced = false;
   try {
     const advertiser = creds.advertiserId!.trim();
     if (!/^\d+$/.test(advertiser)) throw new Error('Advertiser ID must be the number shown in TikTok Ads Manager');
@@ -109,14 +110,13 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
       return out;
     };
     const rows = await report<ReportRow>('AUCTION_CAMPAIGN', ['campaign_id', 'stat_time_day']);
-    // Each ad's days and its text (KB-20).
-    const adRows = await report<AdReportRow>('AUCTION_AD', ['ad_id', 'stat_time_day'], ['campaign_id', 'adgroup_id', 'ad_name']);
-    const ads = await pages<AdListRow>('/ad/get/', { advertiser_id: advertiser, fields: JSON.stringify(['ad_id', 'ad_name', 'campaign_id', 'adgroup_id', 'operation_status', 'ad_text']) }, token, fetchFn);
     const campaigns = await pages<CampaignRow>('/campaign/get/', { advertiser_id: advertiser }, token, fetchFn);
     const { currency, zone } = await advertiserInfo(advertiser, token, fetchFn);
     if (zone) stateOf<string>(db, AD_ZONES).set(id, zone);
     const rate = await adRate(db, storeId, currency, fetchFn, 'TikTok Ads');
     const rateOn = cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
+
+    const n = (v: string | undefined) => Number(v) || 0; // TikTok sends "-" for empty metrics
 
     if (syncView(db, id) !== view) return;
     tx(db, () => {
@@ -135,7 +135,6 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
          ON CONFLICT (network, campaign_id, date) DO UPDATE SET spend = excluded.spend, revenue = excluded.revenue, purchases = excluded.purchases,
            clicks = excluded.clicks, impressions = excluded.impressions`,
       );
-      const n = (v: string | undefined) => Number(v) || 0; // TikTok sends "-" for empty metrics
       const dates = new Set<string>();
       for (const { dimensions: d, metrics: m } of rows) {
         const date = d.stat_time_day.slice(0, 10);
@@ -146,6 +145,15 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
       }
       if (!cursor) for (const d of pruneCampaigns(db, storeId, 'tiktok', [...campaigns.map((c) => c.campaign_id), ...rows.map((r) => r.dimensions.campaign_id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);
+    });
+    campaignSynced = true;
+
+    // Each ad's days and its text (KB-20).
+    const adRows = await report<AdReportRow>('AUCTION_AD', ['ad_id', 'stat_time_day'], ['campaign_id', 'adgroup_id', 'ad_name']);
+    const ads = await pages<AdListRow>('/ad/get/', { advertiser_id: advertiser, fields: JSON.stringify(['ad_id', 'ad_name', 'campaign_id', 'adgroup_id', 'operation_status', 'ad_text']) }, token, fetchFn);
+    if (syncView(db, id) !== view) return;
+    // Keep the cursor until both reads succeed so missing ad history is retried.
+    tx(db, () => {
       saveAds(
         db, storeId, 'tiktok',
         ads.map((a) => ({ id: a.ad_id, campaignId: a.campaign_id, groupId: a.adgroup_id, name: a.ad_name, status: a.operation_status === 'ENABLE' ? 'active' : 'paused', ...(a.ad_text ? { copy: a.ad_text } : {}) })),
@@ -161,7 +169,8 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
   } catch (e) {
-    setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'TikTok Ads sync failed');
+    const message = e instanceof Error ? e.message : 'TikTok Ads sync failed';
+    setIntegrationStatus(db, id, 'error', campaignSynced ? `Campaign spend synced; ad-level sync failed: ${message}` : message);
   }
 }
 

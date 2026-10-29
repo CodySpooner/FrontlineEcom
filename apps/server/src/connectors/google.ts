@@ -90,6 +90,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
   const creds = getCredentials(db, key, 'google_ads', storeId);
   if (!creds) return;
   const view = syncView(db, id);
+  let campaignSynced = false;
   try {
     const customer = googleId(creds.customerId!, 'Customer ID', '123-456-7890');
     const token = await accessToken({ grant_type: 'refresh_token', client_id: creds.clientId!, client_secret: creds.clientSecret!, refresh_token: creds.refreshToken! }, fetchFn, 'Google');
@@ -116,13 +117,6 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       `SELECT campaign.id, segments.date, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.clicks, metrics.impressions FROM campaign WHERE segments.date BETWEEN '${start}' AND '${today}'`,
     );
     const campaigns = await search('SELECT campaign.id, campaign.name, campaign.status, campaign_budget.amount_micros, customer.currency_code, customer.time_zone FROM campaign');
-    // Each ad's days and its text (KB-20). ponytail: responsive search ads' descriptions only; Performance Max has asset groups, not ads.
-    const adRows = await search(
-      `SELECT ad_group_ad.ad.id, ad_group.id, campaign.id, segments.date, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.clicks, metrics.impressions FROM ad_group_ad WHERE segments.date BETWEEN '${start}' AND '${today}'`,
-    );
-    const ads = await search(
-      'SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions, ad_group.id, campaign.id FROM ad_group_ad',
-    );
     const currency = campaigns[0]?.customer?.currencyCode;
     const zone = campaigns[0]?.customer?.timeZone;
     if (zone) stateOf<string>(db, AD_ZONES).set(id, zone);
@@ -152,6 +146,19 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       }
       if (!cursor) for (const d of pruneCampaigns(db, storeId, 'google', [...campaigns.map((c) => c.campaign.id), ...rows.map((r) => r.campaign.id)])) dates.add(d);
       rebuildAdSpend(db, storeId, dates);
+    });
+    campaignSynced = true;
+
+    // Each ad's days and its text (KB-20). ponytail: responsive search ads' descriptions only; Performance Max has asset groups, not ads.
+    const adRows = await search(
+      `SELECT ad_group_ad.ad.id, ad_group.id, campaign.id, segments.date, metrics.cost_micros, metrics.conversions, metrics.conversions_value, metrics.clicks, metrics.impressions FROM ad_group_ad WHERE segments.date BETWEEN '${start}' AND '${today}'`,
+    );
+    const ads = await search(
+      'SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group_ad.ad.responsive_search_ad.headlines, ad_group_ad.ad.responsive_search_ad.descriptions, ad_group.id, campaign.id FROM ad_group_ad',
+    );
+    if (syncView(db, id) !== view) return;
+    // Keep the cursor until both reads succeed so missing ad history is retried.
+    tx(db, () => {
       saveAds(
         db, storeId, 'google',
         ads.map(({ adGroupAd: g, adGroup, campaign }) => {
@@ -170,7 +177,8 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
   } catch (e) {
-    setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Google Ads sync failed');
+    const message = e instanceof Error ? e.message : 'Google Ads sync failed';
+    setIntegrationStatus(db, id, 'error', campaignSynced ? `Campaign spend synced; ad-level sync failed: ${message}` : message);
   }
 }
 

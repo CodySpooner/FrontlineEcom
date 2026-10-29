@@ -160,3 +160,26 @@ test('a USD Google Ads account on a euro store: cost, conversion value and budge
   expect({ ...db.prepare("SELECT spend, revenue FROM ad_daily WHERE network = 'google' AND ad_id = '7001'").get() }).toEqual({ spend: 8, revenue: 104.4 });
   expect(db.prepare("SELECT daily_budget AS b FROM campaigns WHERE network = 'google' AND id = '301'").get()?.b).toBe(20);
 });
+
+test.each(['list', 'report'])('campaign spend survives a failed ad %s read', async (failed) => {
+  const { db } = setup();
+  const { fetchFn } = fakeGoogle();
+  const partial = (async (url, init) => {
+    if (String(url).includes('googleads')) {
+      const { query } = JSON.parse(String(init?.body));
+      if (query.includes('FROM ad_group_ad') && query.includes('segments.date') === (failed === 'report')) {
+        return Response.json({ error: { message: 'Permission denied', details: [{ errors: [{ message: 'Ad details unavailable' }] }] } }, { status: 403 });
+      }
+    }
+    return fetchFn(url, init);
+  }) as typeof fetch;
+  await syncGoogleAds(db, key, 'glow', partial, NOW);
+  expect(db.prepare("SELECT spend FROM campaign_daily WHERE network = 'google' AND campaign_id = '301' AND date = '2026-10-25'").get()).toEqual({ spend: 12.34 });
+  expect(db.prepare("SELECT ad_spend FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()).toEqual({ ad_spend: 17.34 });
+  expect(db.prepare("SELECT status, error, cursor, synced_at FROM integrations WHERE id = 'google_ads:glow'").get()).toEqual({
+    status: 'error', error: 'Campaign spend synced; ad-level sync failed: Google Ads: Ad details unavailable', cursor: null, synced_at: null,
+  });
+  const retry = fakeGoogle();
+  await syncGoogleAds(db, key, 'glow', retry.fetchFn, NOW);
+  expect(retry.calls.find((c) => c.body.includes('FROM ad_group_ad') && c.body.includes('segments.date'))!.body).toContain('2024-10-27');
+});
