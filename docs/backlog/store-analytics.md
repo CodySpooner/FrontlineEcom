@@ -706,7 +706,7 @@ connector item afterwards proves its path from source to metric.
     "available (not verified live)".
   - Acceptance: tests: the mark appears; it disappears when the account changes; another store's integration is 404.
 
-- [ ] SA-16 **Sales metrics v1** (spec §9; decisions 8 to 12):
+- [x] SA-16 **Sales metrics v1** (spec §9; decisions 8 to 12):
   - `apps/server/src/store-analytics/sales.ts`: `net_sales`, `gross_sales`, `discounts`, `refunds` (refund day, or
     original order day with `refunds=order_day`), `orders`, `aov`, `units`, `cancelled_orders`, `refund_rate`.
     Canonical orders only: paid, not test, `duplicate_of IS NULL`.
@@ -1573,6 +1573,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-13 `store-analytics/routes.ts`: `readScope` (no store 400, unknown 404, a `stores=` list 400, unknown `metrics=` id 400) and `storeAnalyticsRoutes` with `GET /api/analytics/definitions` (`SA_METRICS`, narrowed by `metrics=`, and `SA_SOURCES`), mounted once in `app.ts` behind the existing `guard` on `/api/analytics/*`. `scope.test.ts`: a row per route, and a sweep that fails on any unlisted `/api/analytics/` route; legacy routes' tests unchanged.
 - 2026-10-28 SA-14 `datasetFreshness` and `sourceRows` in `sources.ts` (per source × dataset: status with a reason where the status alone doesn't say, last success/try, `stale` at 3× the source's sync interval, scrubbed error, covered days; rows add the backoff wait and an Integrations fix link). A demo store reads `demo`; an unconnected platform reads `needs_credentials`, never an empty list. `GET /api/analytics/context` (name, niche, channels, zone label/abbr, currency, demo, history start, freshness) and `GET /api/analytics/sources`; shared `SaFreshness`/`SaSourceRow`/`SaContext`; scope rows added.
 - 2026-10-28 SA-15 `PUT /api/analytics/sources/verified` `{ store, integration, dataset, note }` (`markVerified`): the store's own integration only (404 otherwise), a dataset it reads that has synced, a 1–500 character note; records `verified_at`, the account fingerprint (`accountOf`: shop domain, site URL, seller/marketplace, ad account, property…) and the note. `datasetFreshness` shows `verified` (with the mark) only while the latest read worked and the account still matches, else `available`, labelled "Available (not verified live)" by the new shared `SA_DATASET_STATUSES`. Scope row added.
+- 2026-10-28 SA-16 `store-analytics/sales.ts` `salesMetrics(db, store, from, to, basis)`: the nine sales metrics over canonical orders (`CANONICAL`: paid, not test, `duplicate_of IS NULL`), refunds by refund day or `order_day`, EUR and other currencies at the locked or ECB day rate (`store-analytics/fx.ts` `rateOn`/`convertOn`, a day with no rate left out and listed). Orders without `breakdown_at` count as total − tax (less legacy refund lines), `estimated` with their share; discounts, refunds, cancellations and refund rate are `partial`, or unavailable when no order has money parts; units fall back to `order_items` (estimated); a never-read store is unavailable with the orders dataset's reason. The oracle matches all three periods to the cent.
 
 ## Blocked
 

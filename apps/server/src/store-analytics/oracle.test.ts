@@ -2,7 +2,8 @@
 // Each metric's item replaces its `todo` with a real check (SA-16 sales, SA-19 contribution, SA-20 ads, SA-21 traffic).
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../db';
-import { LEDGER_ORDERS, LEDGER_REFUNDS, LEDGER_STORE, seedLedgerStore } from './fixture';
+import { LEDGER_ORDERS, LEDGER_PERIODS, LEDGER_REFUNDS, LEDGER_STORE, seedLedgerStore } from './fixture';
+import { salesMetrics } from './sales';
 
 /**
  * Canonical orders = paid (status paid or refunded, with a paid time), not test, not a duplicate copy.
@@ -99,7 +100,23 @@ describe('ledger fixture', () => {
 });
 
 describe('oracle (v1)', () => {
-  it.todo('sales metrics: gross_sales, discounts, refunds, net_sales (both refund views), orders, aov, units, cancelled_orders, refund_rate (SA-16)');
+  it('sales metrics: gross_sales, discounts, refunds, net_sales (both refund views), orders, aov, units, cancelled_orders, refund_rate (SA-16)', () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    const cents = (n: number | null) => (n == null ? null : Math.round(n * 100) / 100);
+    for (const p of ['P1', 'P2', 'P3'] as const) {
+      const { from, to } = LEDGER_PERIODS[p];
+      const o: Record<string, number | null> = ORACLE[p];
+      const got = salesMetrics(db, LEDGER_STORE, from, to);
+      for (const id of ['gross_sales', 'discounts', 'refunds', 'net_sales', 'orders', 'aov', 'units', 'cancelled_orders', 'refund_rate'] as const) {
+        if (!(id in o)) continue;
+        const v = got[id];
+        expect([id, id === 'refund_rate' ? v.value : cents(v.value)], p).toEqual([id, id === 'refund_rate' ? o[id] : cents(o[id]!)]);
+        expect([id, v.status], p).toEqual([id, o[id] == null ? 'unavailable' : 'ok']);
+      }
+      if ('net_sales_order_day' in o) expect(salesMetrics(db, LEDGER_STORE, from, to, 'order_day').net_sales.value, p).toBe(o.net_sales_order_day);
+    }
+  });
   it.todo('contribution_before_ads, fees and cost_coverage (SA-19)');
   it.todo('ad_spend, platform_roas and contribution_after_ads (SA-20)');
   it.todo('sessions and site_conversion with day coverage (SA-21)');
