@@ -1,0 +1,52 @@
+// Store Analytics ingestion helpers (SA-12): what each connector read did, per dataset (decision 23).
+import type { SaDataset } from '@frontline/shared';
+import type { Db } from '../db';
+import { scrubError, secretsOf } from '../store-analytics/sources';
+
+/** A read that worked (over the days it covers, when it has days), or failed. */
+export type ReadOutcome = { status: 'available' | 'partial'; from?: string; to?: string } | { status: 'failed'; error: string };
+
+/**
+ * Records one dataset's read in `source_datasets`: the try, and on success the last success and the covered days
+ * (widened, never narrowed: an incremental read covers the days since the last one). A failure keeps both and stores
+ * the error scrubbed of the integration's credentials.
+ */
+export function noteRead(db: Db, key: Buffer, integration: string, dataset: SaDataset, outcome: ReadOutcome, now = new Date()) {
+  const at = now.toISOString();
+  if (outcome.status === 'failed') {
+    db.prepare(
+      `INSERT INTO source_datasets (integration_id, dataset, store_id, status, last_try_at, error) VALUES (?1, ?2, (SELECT store_id FROM integrations WHERE id = ?1), 'failed', ?3, ?4)
+       ON CONFLICT (integration_id, dataset) DO UPDATE SET status = 'failed', last_try_at = excluded.last_try_at, error = excluded.error`,
+    ).run(integration, dataset, at, scrubError(outcome.error, secretsOf(db, key, integration)));
+    return;
+  }
+  db.prepare(
+    `INSERT INTO source_datasets (integration_id, dataset, store_id, status, last_try_at, last_success_at, covered_from, covered_to)
+       VALUES (?1, ?2, (SELECT store_id FROM integrations WHERE id = ?1), ?3, ?4, ?4, ?5, ?6)
+     ON CONFLICT (integration_id, dataset) DO UPDATE SET status = excluded.status, last_try_at = excluded.last_try_at, last_success_at = excluded.last_success_at, error = NULL,
+       covered_from = coalesce(min(covered_from, excluded.covered_from), covered_from, excluded.covered_from),
+       covered_to = coalesce(max(covered_to, excluded.covered_to), covered_to, excluded.covered_to)`,
+  ).run(integration, dataset, outcome.status, at, outcome.from ?? null, outcome.to ?? null);
+}
+
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/**
+ * Notes a read's outcome and passes it on: a failed read is noted, then rethrown (the caller still decides whether it
+ * stops the sync). A read that resolves `undefined` asked nothing this time (a report still being made) and isn't noted.
+ */
+export async function noted<T>(db: Db, key: Buffer, integration: string, dataset: SaDataset, read: Promise<T>, outcome: (v: Exclude<T, undefined>) => ReadOutcome = () => ({ status: 'available' })) {
+  try {
+    const v = await read;
+    if (v !== undefined) noteRead(db, key, integration, dataset, outcome(v as Exclude<T, undefined>));
+    return v;
+  } catch (e) {
+    noteRead(db, key, integration, dataset, { status: 'failed', error: message(e) });
+    throw e;
+  }
+}
+
+/** For a sync's outer catch: the datasets it was still reading failed with its error. */
+export function noteFailed(db: Db, key: Buffer, integration: string, datasets: Iterable<SaDataset>, e: unknown) {
+  for (const d of datasets) noteRead(db, key, integration, d, { status: 'failed', error: message(e) });
+}

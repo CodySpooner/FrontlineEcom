@@ -4,6 +4,7 @@ import { once, tx, type Db } from '../db';
 import { addDays, localDate, midnight } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { adRate, archiveMissing, backfillRate, catalogPassDone, catalogPassDue, rebuildRevenue, setOrderItems, setStoreCurrency, stateOf, switchToReal, syncView, stillAsSynced, syncedPrice } from './common';
+import { noted, noteFailed, noteRead } from './ingest';
 
 // Amazon Selling Partner API, read-only analytics first: daily sales + order counts from the Sales API (one call covers
 // two years, where the Orders API allows about one request a minute). LWA refresh token from a private SP-API app.
@@ -273,6 +274,9 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     // An Amazon store takes its marketplace's currency; Amazon as an extra channel is converted into the store's.
     const currency = body.payload?.find((d) => d.totalSales?.currencyCode)?.totalSales.currencyCode;
     const own = db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform === 'amazon';
+    // Each read below is noted per dataset (store-analytics); a failed one still doesn't stop the sync.
+    const span = { from: start, to: today };
+    if (!own) noteRead(db, key, id, 'orders', { status: 'available', ...span }, now); // daily totals only
     const rate = own ? 1 : await adRate(db, storeId, currency, fetchFn, 'Amazon');
     // A first sync reads two years back: each day at that day's rate, as ad spend's backfill does.
     const dayRate = own || cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
@@ -282,19 +286,21 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const have = db.prepare("SELECT 1 FROM products WHERE store_id = ? AND id GLOB 'amz-*'").get(storeId);
     const full = !have || catalogPassDue(db, id, today);
     const changedSince = full ? undefined : `${addDays(cursor ?? today, -2)}T00:00:00Z`;
-    const listings = !own ? undefined : await listingsOf(fetchFn, host, token, creds.sellerId!.trim(), marketplace, changedSince).catch(() => undefined);
+    const listings = !own ? undefined : await noted(db, key, id, 'catalog', listingsOf(fetchFn, host, token, creds.sellerId!.trim(), marketplace, changedSince), (l) => ({ status: l.complete ? 'available' : 'partial' })).catch(() => undefined);
     // FBA stock the same way (without the Amazon Fulfillment role, FBA listings stay "not tracked").
-    const fba = !own ? undefined : await fbaStock(fetchFn, host, token, marketplace, changedSince).catch(() => undefined);
+    const fba = !own ? undefined : await noted(db, key, id, 'inventory', fbaStock(fetchFn, host, token, marketplace, changedSince)).catch(() => undefined);
     // Sessions for the funnel, unless GA4 is connected (it owns the funnel there).
     const traffic = !own || db.prepare('SELECT 1 FROM integrations WHERE id = ?').get(`ga4:${storeId}`) ? undefined
-      : await trafficOf(db, id, account, fetchFn, host, token, marketplace, today).catch(() => undefined);
+      : await noted(db, key, id, 'traffic', trafficOf(db, id, account, fetchFn, host, token, marketplace, today), (r) => ({ status: 'available', from: r.days[0]?.date, to: r.days.at(-1)?.date })).catch(
+          () => undefined,
+        );
     const reads = stateOf<OrderRead>(db, ORDERS_KEY);
     const read = reads.get(id);
-    const orders = !own ? undefined : await ordersOf(read?.account === account ? read : undefined, fetchFn, host, token, marketplace, now).catch(() => undefined);
+    const orders = !own ? undefined : await noted(db, key, id, 'orders', ordersOf(read?.account === account ? read : undefined, fetchFn, host, token, marketplace, now), () => ({ status: 'available', ...span })).catch(() => undefined);
     // Without the Finance and Accounting role (or on any error) sales stay before refunds.
     const refundReads = stateOf<RefundRead>(db, REFUNDS_KEY);
     const refundRead = refundReads.get(id);
-    const refunds = !own ? undefined : await refundsOf(refundRead?.account === account ? refundRead : undefined, fetchFn, host, token, now).catch(() => undefined);
+    const refunds = !own ? undefined : await noted(db, key, id, 'refunds', refundsOf(refundRead?.account === account ? refundRead : undefined, fetchFn, host, token, now)).catch(() => undefined);
     const looked = (orderId: string) => `amazon-order:${storeId}:${orderId}`;
     const known = db.prepare('SELECT 1 FROM orders WHERE store_id = ? AND id = ?');
     const asked = db.prepare('SELECT 1 FROM done_once WHERE ref = ?');
@@ -390,6 +396,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
   } catch (e) {
+    noteFailed(db, key, id, ['orders'], e); // sign-in or the daily totals: nothing else was read either
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Amazon sync failed');
   }
 }

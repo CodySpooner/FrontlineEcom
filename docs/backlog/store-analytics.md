@@ -667,7 +667,7 @@ connector item afterwards proves its path from source to metric.
     wait 6 hours. The existing manual sync path and a credentials change run at once; one success resets the count.
   - Acceptance: tests with a fake clock for each case; no loop retries faster than the wait.
 
-- [ ] SA-12 **Per-dataset read outcomes** (spec §5 Honest coverage states):
+- [x] SA-12 **Per-dataset read outcomes** (spec §5 Honest coverage states):
   - `apps/server/src/connectors/ingest.ts` `noteRead(db, integration, dataset, outcome)` writes `source_datasets`
     (last try, last success, status, scrubbed error, covered range).
   - Call it in `shopify.ts` (orders, products, the funnel read, whose `() => null` stays but now records the failure),
@@ -1567,6 +1567,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 Inbox (from codex-hardening, CH-22) `SA_SOURCES` now says Google's attribution covers primary conversion actions (not only purchases, fractional counts, never used as purchase counts), TikTok's campaign-level spend leaves out Branded Mission, and Meta's v24.0 retires 2026-11-10 (bump filed to core's Inbox; `meta.ts` is Phase E). Ad connectors untouched; SA-20/SA-58 read these rows.
 - 2026-10-28 SA-10 `store-analytics/sources.ts`: `scrubError` (credential values plain and URL-encoded, token-shaped runs, 300 chars), `startRun`/`endRun`/`recoverRuns`; `sync.ts` logs every syncer run in `sync_runs` (running → done/failed, a thrown syncer is now caught and recorded), marks leftover `running` rows `interrupted` and prunes runs over 90 days at loop start, and its log line carries the scrubbed error. Tests in `sync-runs.test.ts`.
 - 2026-10-28 SA-11 `backoffOf` in `store-analytics/sources.ts` counts consecutive failed `sync_runs` (interrupted runs count as neither): 3 → 30 min, 6 → 6 h from the last failure's end; `startSyncLoop` skips stale-only retries while backed off, but "Sync now" and a credentials change (both bump `updated_at`) run at once, and the wait survives a restart. Fake-clock tests for each; sync.test's recovery case now waits the 30 minutes.
+- 2026-10-28 SA-12 `connectors/ingest.ts`: `noteRead` (try, success, widened covered days, scrubbed error), `noted` (wraps a read, rethrows) and `noteFailed` (the outer catch's still-unread datasets). Shopify notes catalog, orders (backfill/cursor day → today) and the funnel as traffic (its `() => null` keeps swallowing but records why); Amazon notes catalog (partial past the search cap), inventory, traffic (a pending report isn't noted), orders and refunds, each still swallowed; Woo notes orders, refunds and catalog; Etsy orders and catalog. Tests in `connectors/ingest.test.ts`.
 
 ## Blocked
 

@@ -1,10 +1,11 @@
-import type { ProductStatus } from '@frontline/shared';
+import type { ProductStatus, SaDataset } from '@frontline/shared';
 import { logAction } from '../actions';
 import { addDays, localDate } from '../dates';
 import { tx, type Db } from '../db';
 import { convertRate, historicRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, takeTimezone, switchToReal, syncView, hasTag, stillAsSynced, syncedPrice } from './common';
+import { noteFailed, noteRead } from './ingest';
 import { checkNewProducts, type NewProduct, type ProductPage } from './shopify';
 
 // WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
@@ -133,6 +134,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
   const creds = getCredentials(db, key, 'woocommerce', storeId);
   if (!creds) return;
   const view = syncView(db, id);
+  const reading = new Set<SaDataset>(['orders', 'catalog']); // failed if the sync stops before they're read
   try {
     const site = wooSite(creds.siteUrl!);
     const auth = basic(creds);
@@ -160,14 +162,16 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const ordersSince = { ...changed, _fields: ORDER_FIELDS };
     // The default status (any) leaves out the trash: an order trashed after it was counted is read from there.
     const orders = [...(await all<WooOrder>('orders', ordersSince)), ...(await all<WooOrder>('orders', { ...ordersSince, status: 'trash' }))];
+    noteRead(db, key, id, 'orders', { status: 'available', from: since.slice(0, 10), to: localDate(now) }, now);
+    reading.delete('orders');
     // The order list has only each refund's total: a partly refunded order's refunds list says which lines lost what, one
     // request each. Read as amounts (signs vary between versions); a failed read leaves the lines as ordered, and the
     // rest of this sync's too (each failure costs ~30 s of retries).
     const lineRefunds = new Map<number, Map<number, { quantity: number; total: number }>>();
-    let refundsDown = false;
+    let refundsDown: unknown = false;
     for (const o of orders.filter((o) => o.refunds?.length && o.status !== 'refunded' && o.date_paid_gmt)) {
       if (refundsDown) break;
-      const refunds = await all<{ line_items?: { product_id: number; quantity: number; total: string }[] }>(`orders/${o.id}/refunds`, { _fields: 'line_items' }).catch(() => void (refundsDown = true));
+      const refunds = await all<{ line_items?: { product_id: number; quantity: number; total: string }[] }>(`orders/${o.id}/refunds`, { _fields: 'line_items' }).catch((e: unknown) => void (refundsDown = e ?? true));
       const back = new Map<number, { quantity: number; total: number }>();
       for (const li of (refunds ?? []).flatMap((r) => r.line_items ?? [])) {
         const b = back.get(li.product_id) ?? { quantity: 0, total: 0 };
@@ -175,6 +179,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       }
       lineRefunds.set(o.id, back);
     }
+    noteRead(db, key, id, 'refunds', refundsDown ? { status: 'failed', error: refundsDown instanceof Error ? refundsDown.message : 'A refund read failed' } : { status: 'available' }, now);
     // The default status (any) leaves out the trash, where a deleted product goes first; trashing it counts as a change.
     // The first sync and once a day after read every product, however long unchanged (the backfill window is for orders):
     // that refreshes variation stock an order may change without touching its product, and archives deleted products.
@@ -182,6 +187,8 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const full = !cursor || catalogPassDue(db, id, today);
     const productsSince = { ...(full ? { dates_are_gmt: 'true' } : changed), _fields: PRODUCT_FIELDS };
     const products = [...(await all<WooProduct>('products', productsSince)), ...(await all<WooProduct>('products', { ...productsSince, status: 'trash' }))];
+    noteRead(db, key, id, 'catalog', { status: 'available' }, now);
+    reading.delete('catalog');
     // A variable product (sizes, colors) usually counts stock per variation: its stock is theirs, and it's tracked only when
     // every variation counts (an uncounted one can always be bought). A failed read leaves the product as it reads alone.
     // ponytail: one request per variable product read; batch through the Store API if big catalogs make syncs slow. A
@@ -276,6 +283,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(next > since ? next : since, now.toISOString(), id);
     });
   } catch (e) {
+    noteFailed(db, key, id, reading, e);
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'WooCommerce sync failed');
   }
 }

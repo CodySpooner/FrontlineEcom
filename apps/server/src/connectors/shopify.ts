@@ -1,9 +1,10 @@
-import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
+import type { FulfillmentStatus, ProductStatus, SaDataset } from '@frontline/shared';
 import { logAction } from '../actions';
 import { once, tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, takeTimezone, switchToReal, syncView, hasTag, stillAsSynced, syncedPrice } from './common';
+import { noteFailed, noteRead } from './ingest';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -221,6 +222,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
   const creds = getCredentials(db, key, 'shopify', storeId);
   if (!creds) return;
   let view = syncView(db, id);
+  const reading = new Set<SaDataset>(['catalog', 'orders']); // failed if the sync stops before they're read
   try {
     const q = client(db, key, storeId, creds, fetchFn, now);
     const { shop } = await q<{ shop: { currencyCode: string; ianaTimezone: string } }>(SHOP_Q);
@@ -229,6 +231,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const filter = `updated_at:>='${since}'`;
     // The first sync reads every product, however long unchanged; the backfill window is for orders.
     const products = await all((after) => q<{ products: { nodes: ShopifyProduct[]; pageInfo: PageInfo } }>(PRODUCTS_Q, { after, q: cursor ? filter : null }).then((d) => d.products));
+    noteRead(db, key, id, 'catalog', { status: 'available' }, now);
+    reading.delete('catalog');
     // A deleted product just stops coming back, so its delete event archives it here. Failing to read events never stops a sync.
     const deleted = !cursor ? [] : await all((after) =>
       q<{ events: { nodes: { subjectId?: string }[]; pageInfo: PageInfo } }>(DELETED_Q, { after, q: `action:'destroy' AND subject_type:'PRODUCT' AND created_at:>='${since}'` }).then((d) => d.events),
@@ -320,6 +324,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       view = syncView(db, id);
       after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
     } while (after);
+    noteRead(db, key, id, 'orders', { status: 'available', from: since.slice(0, 10), to: today }, now);
+    reading.delete('orders');
 
     // The funnel from Shopify's own analytics for a store without GA4 (GA4 owns it there). It needs read_reports and Level 2
     // customer data access, so without them orders sync on and the funnel stays empty. Bot visits (Shopify's human/bot
@@ -331,8 +337,14 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       const days = db.prepare('SELECT 1 FROM done_once WHERE ref = ?').get(backfilled) ? 3 : BACKFILL_DAYS;
       const query = (where: string) =>
         `FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout${where} TIMESERIES day SINCE -${days}d ORDER BY day ASC`;
-      const read = (where: string) => q<{ shopifyqlQuery?: { tableData: Table } }>(FUNNEL_Q, { q: query(where) }).then((d) => d.shopifyqlQuery?.tableData ?? null, () => null);
+      let failure: unknown = new Error('Shopify returned no session data');
+      const read = (where: string) =>
+        q<{ shopifyqlQuery?: { tableData: Table } }>(FUNNEL_Q, { q: query(where) }).then((d) => d.shopifyqlQuery?.tableData ?? null, (e: unknown) => {
+          failure = e;
+          return null;
+        });
       const table = await read('');
+      noteRead(db, key, id, 'traffic', table ? { status: 'available', from: addDays(today, -days), to: today } : { status: 'failed', error: failure instanceof Error ? failure.message : String(failure) }, now);
       const bots = new Map(funnelDays(table && (await read(" WHERE human_or_bot_session = 'bot'"))).map((d) => [d.date, d]));
       const up = db.prepare(
         `INSERT INTO daily_metrics (store_id, date, sessions, add_to_carts, checkouts) VALUES (?, ?, ?, ?, ?)
@@ -349,6 +361,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     }
     db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(start > since ? start : since, now.toISOString(), id);
   } catch (e) {
+    noteFailed(db, key, id, reading, e);
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Shopify sync failed');
   }
 }

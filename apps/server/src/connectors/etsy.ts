@@ -1,10 +1,11 @@
-import type { ProductStatus } from '@frontline/shared';
+import type { ProductStatus, SaDataset } from '@frontline/shared';
 import { logAction } from '../actions';
 import { tx, type Db } from '../db';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import type { ProductPage } from './shopify';
 import { localDate } from '../dates';
 import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, switchToReal, syncView, stillAsSynced, syncedPrice } from './common';
+import { noteFailed, noteRead } from './ingest';
 
 // Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r, and
 // listings_w for approved listing changes: setEtsyListingPrice, publishEtsyProductPage).
@@ -77,6 +78,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
   const creds = getCredentials(db, key, 'etsy', storeId);
   if (!creds) return;
   const view = syncView(db, id);
+  const reading = new Set<SaDataset>(['orders', 'catalog']); // failed if the sync stops before they're read
   try {
     const { shopId, headers } = await etsyAuth(db, key, id, creds, fetchFn, now);
     const get = async <T>(path: string, params: Record<string, string>) => {
@@ -95,6 +97,8 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       receipts.push(...page.results);
       if (!page.results.length || offset + 100 >= page.count) break;
     }
+    noteRead(db, key, id, 'orders', { status: 'available', from: localDate(new Date(since * 1000)), to: localDate(now) }, now);
+    reading.delete('orders');
     // Listings can't be filtered by change time: page newest-changed first and stop at the first one older than the cursor.
     // The first sync and once a day after read them all, so a listing deleted on Etsy (in no state any more) is archived.
     // ponytail: Etsy's spec says sort_on may only apply to keyword searches; if it's ignored here, changes the early stop
@@ -110,6 +114,8 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         if (!page.results.length || offset + 100 >= page.count || page.results.some((l) => l.updated_timestamp < listedSince)) break;
       }
     }
+    noteRead(db, key, id, 'catalog', { status: 'available' }, now);
+    reading.delete('catalog');
     // Offset pages in change order skip a listing edited (or moved to another state) while they're read: one the full read
     // missed is archived only once Etsy answers 404 for it, and kept as Etsy has it otherwise (on any other error, as is).
     const kept: string[] = [];
@@ -166,6 +172,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(String(next), now.toISOString(), id);
     });
   } catch (e) {
+    noteFailed(db, key, id, reading, e);
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'Etsy sync failed');
   }
 }
