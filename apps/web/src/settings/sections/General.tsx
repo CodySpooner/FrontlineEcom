@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ConfigImpact, ConfigView } from '@frontline/shared';
 import { api, json, useConfig, type ApiError } from '../../api/client';
 import { cx, ErrorState, inputClass, LoadingState } from '../../components/ui';
+import { Checklist } from '../Checklist';
 import { useSettingsForm } from '../form';
 import { SaveBar, SettingRow, SettingsSection } from '../kit';
 
@@ -56,6 +57,7 @@ export function General() {
   const texts = documents.length ? (impact.data?.impacts.map((i) => i.text) ?? []) : [];
   return (
     <>
+      <Checklist />
       <SettingsSection title="Workspace">
         <SettingRow setting="baseCurrency" label="Display currency" htmlFor="base-currency" help="Display currency for totals across stores. It doesn't change any store's selling currency." error={f.error('baseCurrency')} changed={f.dirty.includes('baseCurrency')}>
           <select id="base-currency" data-setting="baseCurrency" value={d.baseCurrency} onChange={(e) => f.set('baseCurrency', e.target.value)} className={cx(inputClass, 'py-1.5')}>

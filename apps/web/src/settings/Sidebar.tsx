@@ -3,15 +3,18 @@ import { Link, useNavigate, useSearchParams } from 'react-router';
 import type { SettingsSection } from '@frontline/shared';
 import { useIntegrations, useStores } from '../api/client';
 import { cx, inputClass } from '../components/ui';
+import { useSetupOpen } from './Checklist';
 import { SECTIONS, type SettingsGroup } from './Layout';
 
 const GROUPS: SettingsGroup[] = ['Personal', 'Workspace', 'AI & Connections', 'Operations'];
 
-/** Badges from real data only: the store count, and integrations whose last sync failed. */
-function useBadges(): Partial<Record<SettingsSection, { text: string; warn?: boolean }>> {
+/** Badges from real data only: the store count, integrations whose last sync failed, and open setup steps (a dot). */
+function useBadges(): Partial<Record<SettingsSection, { text: string; warn?: boolean; dot?: boolean }>> {
   const stores = useStores().data;
   const issues = useIntegrations().data?.filter((i) => i.status === 'error').length ?? 0;
+  const { open } = useSetupOpen();
   return {
+    ...(open > 0 && { general: { text: `${open} setup step${open > 1 ? 's' : ''} left`, dot: true } }),
     ...(stores && { stores: { text: String(stores.length) } }),
     ...(issues > 0 && { integrations: { text: `${issues} issue${issues > 1 ? 's' : ''}`, warn: true } }),
   };
@@ -48,7 +51,12 @@ export function Sidebar({ active }: { active: SettingsSection }) {
                     >
                       <s.icon aria-hidden className={cx('size-4 shrink-0', on ? 'text-text' : 'text-muted')} strokeWidth={1.8} />
                       <span className="min-w-0 truncate">{s.label}</span>
-                      {b && <span className={cx('ml-auto text-[11px] tabular-nums', b.warn ? 'text-amber' : 'text-muted')}>{b.text}</span>}
+                      {b?.dot && (
+                        <span className="ml-auto size-1.5 shrink-0 rounded-full bg-red">
+                          <span className="sr-only">{b.text}</span>
+                        </span>
+                      )}
+                      {b && !b.dot && <span className={cx('ml-auto text-[11px] tabular-nums', b.warn ? 'text-amber' : 'text-muted')}>{b.text}</span>}
                     </Link>
                   </li>
                 );

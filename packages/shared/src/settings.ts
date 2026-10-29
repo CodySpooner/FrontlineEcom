@@ -76,6 +76,15 @@ export interface ConfigImpact {
   storeId?: string;
   text: string;
 }
+/** GET /api/config/checklist (ST-17): one setup step, `done` only when its real condition holds. */
+export interface SetupItem {
+  id: string;
+  title: string;
+  done: boolean;
+  link: string;
+  /** Why it's still open. */
+  detail: string;
+}
 /** GET /api/config/changes: newest first; `next` is the cursor of the page after. */
 export interface ConfigChangesPage {
   changes: ConfigChange[];

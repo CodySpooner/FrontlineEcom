@@ -1,12 +1,14 @@
 // GET /api/config?store= and PATCH /api/config (ST-07): the effective configuration and its versioned writer; Change
-// History and its retries (ST-09); POST /api/config/impact, what a save would touch (ST-10).
+// History and its retries (ST-09); POST /api/config/impact, what a save would touch (ST-10); the setup checklist (ST-17).
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import type { ConfigDoc, ConfigWrite } from '@frontline/shared';
 import type { Db } from '../db';
+import { claudeLogin } from '../routes/agents-runtimes';
 import { getStore } from '../stores';
 import { applyRoutes } from './apply';
 import { changeRoutes, toChange } from './changes';
+import { checklist } from './checklist';
 import { effective } from './effective';
 import { impactOf } from './impact';
 import { ConfigError, currencies, versionOf, writeConfig } from './write';
@@ -38,6 +40,7 @@ export function configRoutes(db: Db) {
     })
     // Settings → General's currency picker (ST-16): the codes PATCH accepts for baseCurrency.
     .get('/api/config/currencies', (c) => c.json(currencies(db)))
+    .get('/api/config/checklist', async (c) => c.json(checklist(db, await claudeLogin())))
     .post('/api/config/impact', async (c) => {
       const docs = documentsOf(await c.req.json().catch(() => undefined), false);
       if (!Array.isArray(docs)) return c.json({ error: docs.error }, docs.status);
