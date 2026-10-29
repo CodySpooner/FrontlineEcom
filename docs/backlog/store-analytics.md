@@ -530,7 +530,7 @@ connector item afterwards proves its path from source to metric.
   - Run `pnpm check` on a clean tree and record the test count under Done.
   - Acceptance: the row and the Inbox line are on origin/main; baseline green.
 
-- [ ] SA-02 **Stage One re-audit, metric inventory and baseline** (spec §1 Stage One, §5, §9):
+- [x] SA-02 **Stage One re-audit, metric inventory and baseline** (spec §1 Stage One, §5, §9):
   - Re-check every claim in `docs/features/store-analytics-codemap.md` against main. Correct the wrong ones in place
     and add a dated "re-checked at <commit>" line.
   - Add a metric inventory table to the codemap: every place that computes a store metric today, its formula, and
@@ -1551,6 +1551,7 @@ then its tab. A tab appears only with its item.
 ## Done
 <!-- dated one-liners, newest last: - YYYY-MM-DD SA-NN <what shipped> (<commit>) -->
 - 2026-10-28 SA-01 claims filed to codex-hardening's Inbox; CLAUDE.md row matches the Owns list (code paths plus "the touch points"); baseline `pnpm check` green at 4d4ec6b3: 234 test files, 1730 tests (typecheck + vitest 69 s).
+- 2026-10-28 SA-02 codemap re-checked at 89aae4a7 (corrections: api() already takes a signal, FX is partly per day already, demo days are machine-local) and a metric inventory table of 18 rows added; no code change.
 
 ## Blocked
 
