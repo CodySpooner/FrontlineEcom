@@ -77,8 +77,8 @@ An Amazon store syncs its own orders; Amazon next to a site gives daily totals o
 | Refunds | supported | yes | Finances financialEvents RefundEventList (charge adjustments by type) | Finance and Accounting | 30 days back, then re-read for 14 days |  |  |
 | Fees | supported | yes | Finances financialEvents ShipmentEventList and RefundEventList fee lists | Finance and Accounting | re-read for 14 days to settle |  |  |
 | Catalog | supported | yes | Listings Items searchListingsItems | Product Listing | current state |  |  |
-| Variants | supported | no | Listings Items (one SKU each) |  |  |  |  |
-| Channel listings | supported | no | Listings Items status and issues |  |  |  |  |
+| Variants | supported | yes | Listings Items searchListingsItems (one SKU each: offers, fulfillmentAvailability); FBA units from getInventorySummaries | Product Listing; Amazon Fulfillment | current state |  | FBA stock is managed by Amazon: shown as FBA, never a cover estimate. |
+| Channel listings | supported | yes | Listings Items summaries.status (BUYABLE, DISCOVERABLE) and ERROR issues | Product Listing | current state |  |  |
 | Inventory | supported | yes | FBA Inventory getInventorySummaries; merchant-fulfilled listing quantity | Amazon Fulfillment | current state |  | FBA stock is managed by Amazon: shown as FBA, never a cover estimate. |
 | Collections | unsupported | no | — |  |  |  | Amazon has no seller collections. |
 | Sessions and funnel | supported | yes | GET_SALES_AND_TRAFFIC_REPORT salesAndTrafficByDate sessions | Selling Partner Insights | 729 days back |  | Amazon's own shoppers: never added to the site's sessions. |

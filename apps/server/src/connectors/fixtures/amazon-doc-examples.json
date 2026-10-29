@@ -1,5 +1,5 @@
 {
-  "_source": "SP-API models (github.com/amzn/selling-partner-api-models, read 2026-10-28): orders_2026-01-01.json (OrderItem orderItemId, quantityOrdered, product.sellerSku, product.price.unitPrice, proceeds.breakdowns types ITEM/SHIPPING/TAX/DISCOUNT) and financesV0.json (ShipmentEvent: AmazonOrderId, PostedDate, ShipmentItemList / ShipmentItemAdjustmentList with ItemChargeList / ItemChargeAdjustmentList by ChargeType, ItemFeeList / ItemFeeAdjustmentList by FeeType, PromotionAdjustmentList; Currency: CurrencyCode, CurrencyAmount; RefundEventList holds ShipmentEvents).",
+  "_source": "SP-API models (github.com/amzn/selling-partner-api-models, read 2026-10-28): orders_2026-01-01.json (OrderItem orderItemId, quantityOrdered, product.sellerSku, product.price.unitPrice, proceeds.breakdowns types ITEM/SHIPPING/TAX/DISCOUNT) and financesV0.json (ShipmentEvent: AmazonOrderId, PostedDate, ShipmentItemList / ShipmentItemAdjustmentList with ItemChargeList / ItemChargeAdjustmentList by ChargeType, ItemFeeList / ItemFeeAdjustmentList by FeeType, PromotionAdjustmentList; Currency: CurrencyCode, CurrencyAmount; RefundEventList holds ShipmentEvents). listingsItems_2021-08-01.json (Item: sku, summaries[marketplaceId, asin, status BUYABLE/DISCOVERABLE, itemName, lastUpdatedDate], offers[offerType, price.amount], fulfillmentAvailability[fulfillmentChannelCode, quantity], issues[code, message, severity ERROR/WARNING/INFO]); fbaInventory getInventorySummaries (sellerSku, inventoryDetails.fulfillableQuantity).",
   "orders": [
     {
       "orderId": "111-1",
@@ -248,6 +248,113 @@
           ]
         }
       ]
+    }
+  ],
+  "listings": [
+    {
+      "sku": "MUG-1",
+      "summaries": [
+        {
+          "marketplaceId": "ATVPDKIKX0DER",
+          "asin": "B0MUG",
+          "status": [
+            "BUYABLE",
+            "DISCOVERABLE"
+          ],
+          "itemName": "Stoneware mug",
+          "lastUpdatedDate": "2026-10-20T10:00:00Z"
+        }
+      ],
+      "offers": [
+        {
+          "offerType": "B2C",
+          "price": {
+            "currencyCode": "USD",
+            "amount": "20.00"
+          }
+        }
+      ],
+      "fulfillmentAvailability": [
+        {
+          "fulfillmentChannelCode": "AMAZON_NA"
+        }
+      ],
+      "issues": []
+    },
+    {
+      "sku": "CUP-1",
+      "summaries": [
+        {
+          "marketplaceId": "ATVPDKIKX0DER",
+          "asin": "B0CUP",
+          "status": [
+            "DISCOVERABLE"
+          ],
+          "itemName": "Espresso cup",
+          "lastUpdatedDate": "2026-10-21T10:00:00Z"
+        }
+      ],
+      "offers": [
+        {
+          "offerType": "B2C",
+          "price": {
+            "currencyCode": "USD",
+            "amount": "16.00"
+          }
+        }
+      ],
+      "fulfillmentAvailability": [
+        {
+          "fulfillmentChannelCode": "DEFAULT",
+          "quantity": 4
+        }
+      ],
+      "issues": [
+        {
+          "code": "90220",
+          "message": "'brand' is required but not supplied.",
+          "severity": "WARNING",
+          "attributeNames": [
+            "brand"
+          ]
+        }
+      ]
+    },
+    {
+      "sku": "TRAY-1",
+      "summaries": [
+        {
+          "marketplaceId": "ATVPDKIKX0DER",
+          "asin": "B0TRAY",
+          "status": [],
+          "itemName": "Serving tray",
+          "lastUpdatedDate": "2026-10-22T10:00:00Z"
+        }
+      ],
+      "fulfillmentAvailability": [
+        {
+          "fulfillmentChannelCode": "DEFAULT"
+        }
+      ],
+      "issues": [
+        {
+          "code": "8541",
+          "message": "The listing is missing a product image.",
+          "severity": "ERROR",
+          "attributeNames": [
+            "main_product_image_locator"
+          ]
+        }
+      ]
+    }
+  ],
+  "fba": [
+    {
+      "sellerSku": "MUG-1",
+      "fnSku": "X00MUG",
+      "inventoryDetails": {
+        "fulfillableQuantity": 37
+      }
     }
   ]
 }

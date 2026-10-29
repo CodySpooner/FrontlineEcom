@@ -25,6 +25,8 @@ interface Listing {
   offers?: { offerType: string; price: { amount: string } }[];
   /** Merchant-fulfilled (DEFAULT) stock has a quantity; FBA (AMAZON_NA, AMAZON_EU, …) stock comes from fbaStock. */
   fulfillmentAvailability?: { fulfillmentChannelCode?: string; quantity?: number }[];
+  /** ERROR issues keep the listing from being bought or shown. */
+  issues?: { severity?: string; message?: string }[];
 }
 
 /**
@@ -248,7 +250,7 @@ async function listingsOf(fetchFn: Fetch, host: string, token: string, sellerId:
     let [pageToken, n] = [undefined as string | undefined, 0];
     do {
       const q = new URLSearchParams({
-        marketplaceIds: marketplace, includedData: 'summaries,offers,fulfillmentAvailability', pageSize: '20', sortBy: 'lastUpdatedDate', sortOrder: 'ASC',
+        marketplaceIds: marketplace, includedData: 'summaries,offers,fulfillmentAvailability,issues', pageSize: '20', sortBy: 'lastUpdatedDate', sortOrder: 'ASC',
         ...(from ? { lastUpdatedAfter: from } : {}), ...(pageToken ? { pageToken } : {}),
       });
       const res = await fetchFn(`https://${host}/listings/2021-08-01/items/${encodeURIComponent(sellerId)}?${q}`, { headers: { 'x-amz-access-token': token } });
@@ -327,6 +329,7 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const full = !have || catalogPassDue(db, id, today);
     const changedSince = full ? undefined : `${addDays(cursor ?? today, -2)}T00:00:00Z`;
     const listings = !own ? undefined : await noted(db, key, id, 'catalog', listingsOf(fetchFn, host, token, creds.sellerId!.trim(), marketplace, changedSince), (l) => ({ status: l.complete ? 'available' : 'partial' })).catch(() => undefined);
+    for (const d of ['variants', 'channel_listings'] as const) if (listings) noteRead(db, key, id, d, { status: listings.complete ? 'available' : 'partial' }, now);
     // FBA stock the same way (without the Amazon Fulfillment role, FBA listings stay "not tracked").
     const fba = !own ? undefined : await noted(db, key, id, 'inventory', fbaStock(fetchFn, host, token, marketplace, changedSince)).catch(() => undefined);
     // Sessions for the funnel, unless GA4 is connected (it owns the funnel there).
@@ -467,6 +470,17 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, status = excluded.status, merchant_stock = excluded.merchant_stock,
            inventory = CASE WHEN ?9 THEN inventory ELSE excluded.inventory END, inventory_tracked = CASE WHEN ?9 THEN inventory_tracked ELSE excluded.inventory_tracked END`,
       );
+      // SA-45: each SKU is its own variant and Amazon listing. Stock Amazon fulfils is Amazon's to manage (decision 27):
+      // policy 'fba', not tracked (no cover), its units kept for showing as FBA.
+      const variant = db.prepare(
+        `INSERT INTO product_variants (store_id, product_id, id, title, sku, price, compare_at, inventory, inventory_tracked, inventory_policy, status, synced_at) VALUES (?1, ?2, ?2, NULL, ?3, ?4, NULL, ?5, ?6, ?7, ?8, ?9)
+         ON CONFLICT (store_id, id) DO UPDATE SET sku = excluded.sku, price = excluded.price, status = excluded.status, synced_at = excluded.synced_at, inventory_tracked = excluded.inventory_tracked,
+           inventory = iif(excluded.inventory_policy = 'fba' AND inventory_policy = 'fba', inventory, excluded.inventory), inventory_policy = excluded.inventory_policy`,
+      );
+      const listing = db.prepare(
+        `INSERT INTO channel_listings (store_id, channel, id, product_id, variant_id, status, error, published_at, synced_at) VALUES (?1, 'amazon', ?2, ?2, ?2, ?3, ?4, NULL, ?5)
+         ON CONFLICT (store_id, channel, id) DO UPDATE SET status = excluded.status, error = excluded.error, synced_at = excluded.synced_at`,
+      );
       for (const l of listings ?? []) {
         const s = l.summaries?.[0];
         const counted = (l.fulfillmentAvailability ?? []).filter((f) => typeof f.quantity === 'number');
@@ -474,10 +488,19 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
         // BUYABLE and/or DISCOVERABLE: live (an out-of-stock listing keeps DISCOVERABLE); neither: not live yet.
         const byAmazon = (l.fulfillmentAvailability ?? []).some((f) => f.fulfillmentChannelCode?.startsWith('AMAZON'));
         prod.run(storeId, `amz-${l.sku}`, s?.itemName ?? l.sku, s?.mainImage?.link ?? null, price, counted.reduce((a, f) => a + f.quantity!, 0), counted.length ? 1 : 0, s?.status?.length ? 'active' : 'draft', byAmazon && !counted.length ? 1 : 0, counted.length ? 1 : 0);
+        const managed = byAmazon && !counted.length;
+        variant.run(storeId, `amz-${l.sku}`, l.sku, l.offers?.some((o) => o.offerType === 'B2C') ? price : null, counted.length ? counted.reduce((a, f) => a + f.quantity!, 0) : null, counted.length ? 1 : 0,
+          managed ? 'fba' : counted.length ? 'deny' : null, s?.status?.length ? 'active' : 'draft', now.toISOString());
+        const errors = (l.issues ?? []).filter((i) => i.severity === 'ERROR' && i.message).map((i) => i.message);
+        listing.run(storeId, `amz-${l.sku}`, s?.status?.length ? 'active' : 'unpublished', errors.join('; ') || null, now.toISOString());
       }
       // A SKU moved to merchant fulfilment can keep an FBA record (0 units): its listing's own count stands.
       const setFba = db.prepare('UPDATE products SET inventory = ?, inventory_tracked = 1 WHERE store_id = ? AND id = ? AND merchant_stock = 0');
-      for (const [sku, units] of fba ?? []) setFba.run(units, storeId, `amz-${sku}`);
+      const fbaVariant = db.prepare("UPDATE product_variants SET inventory = ? WHERE store_id = ? AND id = ? AND inventory_policy = 'fba'");
+      for (const [sku, units] of fba ?? []) {
+        setFba.run(units, storeId, `amz-${sku}`);
+        fbaVariant.run(units, storeId, `amz-${sku}`);
+      }
       // A read cut short by the search cap can't tell gone from unread: it archives nothing (and isn't retried until tomorrow).
       if (listings && full) {
         if (listings.complete) archiveMissing(db, id, storeId, 'amz-*', listings.map((l) => `amz-${l.sku}`), today);
