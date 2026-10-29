@@ -4,7 +4,7 @@ import { createApp } from './app';
 import { approvalsHook } from './approvals';
 import { openDb } from './db';
 import { seedDemo } from './demo';
-import { getSettings, notify, settingsRoutes } from './settings';
+import { getSettings, notify, settingsRoutes, updateSettings } from './settings';
 
 const setup = () => {
   const db = openDb();
@@ -61,6 +61,16 @@ test('notifications: approvals raise one, prefs silence a kind, mark read', asyn
   expect(await (await app.request('/api/notifications/read', send('POST', {}))).json()).toEqual({ updated: 1 });
   expect(await (await app.request('/api/notifications?unread=true')).json()).toEqual([]);
   expect((await app.request('/api/notifications/read', send('POST', { ids: 'all' }))).status).toBe(400);
+});
+
+test('notifications: approvals and agentDone each silence their own kind, and only it', () => {
+  const { db } = setup();
+  updateSettings(db, { notifications: { approvals: false } });
+  expect(notify(db, { kind: 'approval', title: 'Raise the budget' })).toBeUndefined();
+  expect(notify(db, { kind: 'agent_done', title: 'Brief done' })).toBeDefined();
+  updateSettings(db, { notifications: { approvals: true, agentDone: false } });
+  expect(notify(db, { kind: 'approval', title: 'Raise the budget' })).toBeDefined();
+  expect(notify(db, { kind: 'agent_done', title: 'Brief done' })).toBeUndefined();
 });
 
 test('open-data-folder opens the data dir and nothing else', async () => {

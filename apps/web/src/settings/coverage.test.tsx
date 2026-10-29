@@ -1,0 +1,79 @@
+// @vitest-environment jsdom
+// Decision 5 test 2, "no decorative switches": every control on a settings page is tied to a registry entry
+// (`data-setting`), a connector's secret field (`data-secret`) or a named, tested action (`data-action`), and every
+// editable entry renders somewhere unless it's on the allowlist. Controls inside `data-legacy` (panels moved as they
+// were by ST-02) are skipped until the item that replaces them deletes the wrapper.
+import { existsSync, readFileSync } from 'node:fs';
+import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup } from '@testing-library/react';
+import { INTEGRATION_KINDS, SETTINGS, type Settings as SettingsT, type Store, type StoreCaps } from '@frontline/shared';
+import { Settings } from '../pages/Settings';
+import { renderApp, stubApi } from '../test-utils';
+import { SECTIONS } from './Layout';
+
+/** Editable entries with no row outside `data-legacy` yet. The item that renders a row removes its id; ST-48 empties it. */
+const ALLOWLIST = [
+  'profile.name', // ST-12
+  'notifications.approvals', 'notifications.agentDone', 'notifications.errors', 'notifications.digest', 'notifications.researchAlerts', // ST-14b
+  'baseCurrency', // ST-16
+  'caps.agentCostPerDay', // ST-23
+  'caps.adSpendChangePerDay', 'caps.higgsfieldCreditsPerDay', // ST-24b
+  'autopilot.ads.set_budget', 'autopilot.ads.pause_campaign', // ST-30
+  'store.name', 'store.platform', 'store.niche', 'store.nicheDetail', 'store.currency', 'store.timezone', 'store.feePercent', 'store.feePerOrder', // ST-18
+  'kb.autonomous', 'kb.roles', 'kb.triggers', 'kb.taskBudgetUsd', 'kb.dailyBudgetUsd', 'kb.depth', 'kb.approval', 'kb.review', 'kb.trustedDomains', 'kb.blockedDomains', 'kb.freshDays', 'kb.retentionDays', // ST-25
+  'pr.audience', 'pr.priceMax', 'pr.shipTo', 'pr.warehouses', 'pr.maxDeliveryDays', 'pr.includeCategories', 'pr.keywords', // ST-27
+];
+
+/** `data-action` names, each with the test that proves what it does (`path#test name`). */
+const ACTIONS: Record<string, string> = {};
+
+const root = `${process.cwd()}/`; // vitest runs from the repo root
+const CONTROLS = 'input, select, textarea, button, [role="switch"], [role="radio"], [role="checkbox"], [role="tab"], [role="combobox"]';
+const SECRETS = new Set(Object.entries(INTEGRATION_KINDS).flatMap(([kind, k]) => k.fields.filter((f) => f.secret).map((f) => `${kind}.${f.key}`)));
+
+const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true, researchAlerts: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
+const peak = { id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', color: '#ff2a3a', currency: 'USD', timezone: 'UTC', connected: false } as Store;
+const caps: StoreCaps = { storeId: 'peak', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {} };
+
+const rendered = new Set<string>();
+afterEach(cleanup);
+afterAll(() => vi.unstubAllGlobals());
+
+describe('every control on a settings page is real', () => {
+  it.each(SECTIONS.map((s) => [s.slug]))('/settings/%s', async (slug) => {
+    stubApi((url) => {
+      if (url === '/api/settings') return settings;
+      if (url === '/api/stores') return [peak];
+      if (url.startsWith('/api/caps')) return caps;
+      if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };
+    });
+    renderApp(<Settings />, `/settings/${slug}`);
+    const main = () => document.querySelector('section[aria-labelledby="settings-title"]')!;
+    // Every section has at least one control once its data is in.
+    await vi.waitFor(() => expect(main().querySelector(CONTROLS)).not.toBeNull());
+    for (const el of main().querySelectorAll<HTMLElement>(CONTROLS)) {
+      if (el.closest('[data-legacy]')) continue;
+      const tag = el.closest<HTMLElement>('[data-setting], [data-secret], [data-action]');
+      expect(tag, `a control with no data-setting, data-secret or data-action on /settings/${slug}: ${el.outerHTML.slice(0, 160)}`).not.toBeNull();
+      const { setting, secret, action } = tag!.dataset;
+      if (setting) {
+        expect(SETTINGS.some((d) => d.id === setting && !d.locked), `data-setting="${setting}" isn't an editable registry entry`).toBe(true);
+        rendered.add(setting);
+      }
+      if (secret) expect(SECRETS.has(secret), `data-secret="${secret}" isn't a connector's secret field`).toBe(true);
+      if (action) expect(ACTIONS[action], `data-action="${action}" needs a test in ACTIONS`).toBeDefined();
+    }
+  });
+
+  it('every editable entry renders, or is on the allowlist; nothing on the allowlist renders yet', () => {
+    const editable = SETTINGS.filter((d) => !d.locked).map((d) => d.id);
+    expect(ALLOWLIST.filter((id) => !editable.includes(id)), 'allowlisted ids that are no registry entry').toEqual([]);
+    expect(editable.filter((id) => !rendered.has(id) && !ALLOWLIST.includes(id)), 'editable entries with no row: render them or allowlist them').toEqual([]);
+    expect(ALLOWLIST.filter((id) => rendered.has(id)), 'rendered now: remove them from ALLOWLIST').toEqual([]);
+  });
+
+  it.each(Object.entries(ACTIONS))('action %s has its test', (_, proof) => {
+    const [path, name] = proof.split(/#(.*)/s) as [string, string];
+    expect(existsSync(root + path) && readFileSync(root + path, 'utf8').includes(name), proof).toBe(true);
+  });
+});

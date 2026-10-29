@@ -1395,7 +1395,7 @@ STOP.
   - **Done when:** the upgrade test in decision 7 is green in `db.test.ts`. On a version n−1 database with saved
     settings and caps, the `store_caps` rows are unchanged after boot and the effective values before and after are equal.
 
-- [ ] ST-06 **Settings registry and coverage tests** (decisions 3, 5).
+- [x] ST-06 **Settings registry and coverage tests** (decisions 3, 5).
   - **Files:**
     - `packages/shared/src/settings.ts` (types and `SETTINGS`), re-exported from `index.ts`;
     - `validateSetting(def, value)`, shared by the server and the web;
@@ -2369,6 +2369,7 @@ STOP.
 - 2026-10-28 ST-03 `settings/kit.tsx` (SettingsSection with Advanced expander, SettingRow, OriginLine, ScopeSwitch with a keyboard store listbox, SaveBar with saving/saved/applying/applied/error, ImmediateRow, DangerZone), `settings/useDraft.ts` (one draft per section and scope), opt-in `flatButtonClass` in `ui.tsx`, DevGallery entries; `kit.test.tsx` 18 green. DevGallery shot `.agent/st03-kit-1440x2400.png` matches board A1's rows, origin lines, save bar and danger card.
 - 2026-10-28 ST-04 data routers (`main.tsx` `createBrowserRouter`, `renderApp` `createMemoryRouter`, one splat route each; whole web suite green unchanged, 100 files / 538 tests), `api()` errors carry `status`, `code`, `current`, and `settings/form.tsx` `useSettingsForm`: draft + versioned save, Save / Discard / Stay on links, back and store switches (`useBlocker`), `beforeunload` only without `window.desktop`, the 409 dialog (Reload / Keep mine, silent re-apply once when none of my fields changed). `form.test.tsx` 12 green. Route and flow e2e 66 passed; the 2 failures are CH-18's known +46 px at 390 on legacy agent and conversation, same on main's router.
 - 2026-10-28 ST-05 migration 57 (DDL only: `version` on the seven owner tables, `updated_at` on `settings`, `store_caps`, `stores`, `automation_rules`, `settings_changes` with `(at)` and `(store_id, at)` indexes), `config/boot.ts` `bootConfig` from `index.ts` (fill-if-absent under `once()` in one transaction; each filled key is a `migration` change row). `db.test.ts`: the decision 7 upgrade test (`store_caps` rows and every effective value unchanged, `user_version` current, FK check clean, a second boot changes nothing) and fill-never-overwrites, green. Dir (a) upgraded 56→57 with its before-update copy; workspace = machine zone + today's cap defaults.
+- 2026-10-28 ST-06 `SETTINGS` registry + `validateSetting` in `packages/shared/src/settings.ts`: 44 entries (profile name, 5 notification flags, base currency, 3 caps, 2 autopilot kinds, 8 store fields, 12 KB controls, 7 research-profile fields, 3 locked policies), each with owner, consumers and a proof test. `settings.test.ts` (149: every consumer symbol and proof test found, entry shape, inherits, no secrets, locked, enums match the app's lists, validator cases) and `settings/coverage.test.tsx` (the jsdom walk over all 7 sections, allowlist of 41 ids; a removed `data-legacy` wrapper fails it). New proofs: `notifications.approvals`/`agentDone` (server) and the Hero chip name (web). Store-analytics Inbox line filed.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -2409,6 +2410,14 @@ STOP.
 - **ST-05 document shape:** the `workspace` and `personal` rows of `settings` hold flat registry ids
   (`{"timezone": …, "caps.agentCostPerDay": 5}`); `app` and `store_caps` keep their existing shapes, so ST-07's writer
   maps `caps.<key>` to the `store_caps` key. Boot fills don't move `version` (not an owner edit).
+- **ST-06 registry, left for the item that renders the row** (consumer or proof missing today): `store.color` (web-only
+  consumer, no proof) → ST-18; Start with Windows (no desktop test) → ST-33b; `pr.priceMin` (no consumer),
+  `pr.avoidCategories` and `pr.avoidTerms` (no stored-value proof) → ST-27. `pr.priceCurrency` is read-only, not an entry.
+- **ST-06 findings for later items:** `updateCaps` accepts any autopilot kind matching `[a-z0-9_.]` though only the two
+  `APPROVAL_KINDS` with `autopilot: true` can fire (ST-30); the digest flag is checked only by `startDigestLoop`, not
+  `notify()` (the digest is kind `info`); `baseCurrency` accepts lower case and upper-cases it, store `currency` refuses
+  lower case; a manual currency change on a connected store is reset by the next sync's `takeCurrency` (ST-18 shows it
+  read-only); a fee of 0 reads as "not set" in product-research economics.
 - **ST-04 for every later section:** build an explicit-save section on `useSettingsForm` (`settings/form.tsx`) and
   render its `dialogs`. React Router allows one `useBlocker` at a time, so one form per section; a section with two
   documents saves them in one `PATCH /api/config` (decision 6), not two forms.
