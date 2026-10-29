@@ -134,6 +134,8 @@ The app calls Marketing API v26.0, moved from v24.0 on 2026-10-29 ahead of its N
 
 ## Google Analytics 4
 
+Sessions and event counts (add-to-carts, checkouts), never purchasing sessions: a GA4 store shows site conversion as unavailable (decision 14).
+
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Sessions and funnel | supported | yes | Data API runReport sessions, addToCarts, checkouts |  | 730 days back; the last 3 days re-read |  | Carts and checkouts are event counts, not sessions. |

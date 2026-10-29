@@ -303,6 +303,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
   },
   ga4: {
     name: 'Google Analytics 4',
+    note: 'Sessions and event counts (add-to-carts, checkouts), never purchasing sessions: a GA4 store shows site conversion as unavailable (decision 14).',
     datasets: {
       traffic: { support: 'supported', reads: true, field: 'Data API runReport sessions, addToCarts, checkouts', history: '730 days back; the last 3 days re-read', reason: 'Carts and checkouts are event counts, not sessions.' },
       purchase_sessions: UNSUPPORTED('GA4 sends event counts, not purchasing sessions.'),

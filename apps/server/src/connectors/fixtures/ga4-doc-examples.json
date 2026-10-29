@@ -1,0 +1,86 @@
+{
+  "_source": "GA4 Data API v1beta discovery document (https://analyticsdata.googleapis.com/$discovery/rest?version=v1beta, read 2026-10-29): RunReportResponse (dimensionHeaders[name], metricHeaders[name, type], rows[dimensionValues[value], metricValues[value]], rowCount, metadata[currencyCode, timeZone], kind 'analyticsData#runReport'); every value is a string, the date dimension YYYYMMDD. The numbers are test values in those shapes.",
+  "report": {
+    "dimensionHeaders": [
+      {
+        "name": "date"
+      }
+    ],
+    "metricHeaders": [
+      {
+        "name": "sessions",
+        "type": "TYPE_INTEGER"
+      },
+      {
+        "name": "addToCarts",
+        "type": "TYPE_INTEGER"
+      },
+      {
+        "name": "checkouts",
+        "type": "TYPE_INTEGER"
+      }
+    ],
+    "rows": [
+      {
+        "dimensionValues": [
+          {
+            "value": "20261025"
+          }
+        ],
+        "metricValues": [
+          {
+            "value": "1310"
+          },
+          {
+            "value": "104"
+          },
+          {
+            "value": "47"
+          }
+        ]
+      },
+      {
+        "dimensionValues": [
+          {
+            "value": "20261023"
+          }
+        ],
+        "metricValues": [
+          {
+            "value": "1188"
+          },
+          {
+            "value": "91"
+          },
+          {
+            "value": "38"
+          }
+        ]
+      },
+      {
+        "dimensionValues": [
+          {
+            "value": "20261024"
+          }
+        ],
+        "metricValues": [
+          {
+            "value": "1242"
+          },
+          {
+            "value": "97"
+          },
+          {
+            "value": "44"
+          }
+        ]
+      }
+    ],
+    "rowCount": 3,
+    "metadata": {
+      "currencyCode": "USD",
+      "timeZone": "America/Los_Angeles"
+    },
+    "kind": "analyticsData#runReport"
+  }
+}
