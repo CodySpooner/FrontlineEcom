@@ -34,7 +34,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Orders | supported | yes | REST /wc/v3/orders | REST API key (Read) | full history |  |  |
 | Order lines by variant | supported | yes | orders.line_items (variation_id, sku, quantity, subtotal, total, cost_of_goods_sold) | REST API key (Read) | with the orders read |  |  |
-| Refunds | supported | no | /orders/{id}/refunds (id, date_created, amount, line_items) |  |  |  |  |
+| Refunds | supported | yes | /orders/{id}/refunds (id, date_created_gmt, amount, line_items, shipping_lines, fee_lines) | REST API key (Read) | with the orders read |  |  |
 | Fees | unsupported | no | — |  |  |  | The app doesn't read payment or platform fees here (owner question Q21); fees are the store's labelled estimate. |
 | Catalog | supported | yes | REST /wc/v3/products |  | current state |  |  |
 | Variants | supported | no | /products/{id}/variations |  |  |  |  |

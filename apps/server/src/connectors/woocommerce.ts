@@ -70,6 +70,17 @@ function wooTracking(o: WooOrder) {
   return { number, url: url.startsWith('https://') ? url : null };
 }
 
+/** A refund as `/orders/{id}/refunds` gives it: `amount` is the money back (it takes precedence over the lines' totals);
+ * the lines' quantities and totals are negative, without tax. */
+interface WooRefund {
+  id: number;
+  date_created_gmt: string;
+  amount: string;
+  line_items?: { id: number; product_id: number; variation_id?: number; quantity: number; total: string; total_tax?: string }[];
+  shipping_lines?: { id: number; total: string; total_tax?: string }[];
+  fee_lines?: { id: number; total: string; total_tax?: string }[];
+}
+
 interface WooProduct {
   id: number;
   name: string;
@@ -199,11 +210,16 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     // The order list has only each refund's total: a partly refunded order's refunds list says which lines lost what, one
     // request each. Read as amounts (signs vary between versions); a failed read leaves the lines as ordered, and the
     // rest of this sync's too (each failure costs ~30 s of retries).
+    // SA-38: every paid order's refunds (a fully refunded one's too) go into the refunds ledger.
     const lineRefunds = new Map<number, Map<number, { quantity: number; total: number }>>();
+    const wooRefunds = new Map<number, WooRefund[]>();
     let refundsDown: unknown = false;
-    for (const o of orders.filter((o) => o.refunds?.length && o.status !== 'refunded' && o.date_paid_gmt)) {
+    for (const o of orders.filter((o) => o.refunds?.length && o.date_paid_gmt)) {
       if (refundsDown) break;
-      const refunds = await all<{ line_items?: { product_id: number; quantity: number; total: string }[] }>(`orders/${o.id}/refunds`, { _fields: 'line_items' }).catch((e: unknown) => void (refundsDown = e ?? true));
+      const refunds = await all<WooRefund>(`orders/${o.id}/refunds`, { _fields: 'id,date_created_gmt,amount,line_items,shipping_lines,fee_lines' }).catch((e: unknown) => void (refundsDown = e ?? true));
+      // One without its date or amount can't be dated or counted: the order then waits like a failed read.
+      if (refunds?.every((r) => r.date_created_gmt && r.amount != null)) wooRefunds.set(o.id, refunds);
+      if (o.status === 'refunded') continue;
       const back = new Map<number, { quantity: number; total: number }>();
       for (const li of (refunds ?? []).flatMap((r) => r.line_items ?? [])) {
         const b = back.get(li.product_id) ?? { quantity: 0, total: 0 };
@@ -294,6 +310,11 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
          ON CONFLICT (store_id, order_id, line_id) DO UPDATE SET product_id = excluded.product_id, variant_id = excluded.variant_id, sku = excluded.sku, quantity = excluded.quantity,
            gross = excluded.gross, discount = excluded.discount, cost = coalesce(cost, excluded.cost), cost_source = iif(cost IS NULL, excluded.cost_source, cost_source)`,
       );
+      const dropRefunds = db.prepare("DELETE FROM refunds WHERE store_id = ? AND order_id = ? AND source = 'woocommerce'");
+      const refundRow = db.prepare(
+        `INSERT INTO refunds (store_id, id, refund_id, order_id, product_id, variant_id, refunded_at, local_date, merchandise, shipping, tax, other, quantity, restocked, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'woocommerce')`,
+      );
       const days = new Set<string>();
       for (const o of orders) {
         // Unpaid (pending, on-hold bank transfers, failed, drafts) never counts; cancelled or refunded after payment is a refund.
@@ -305,13 +326,41 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         days.add(day);
         const refunded = o.status === 'refunded' || o.status === 'cancelled' || o.status === 'trash';
         const total = rate * Math.max(0, Number(o.total) + (o.refunds ?? []).reduce((a, r) => a + Number(r.total), 0)); // net of partial refunds
-        // A refund gives back its share of the tax. ponytail: pro rata, Woo's order list doesn't split a refund's tax out.
-        const tax = Number(o.total) > 0 ? (rate * Number(o.total_tax ?? 0) * total) / (rate * Number(o.total)) : 0;
-        const tracking = wooTracking(o);
-        // The parts count (breakdown_at) once nothing has come back: refunds reach the ledger with SA-38, so an order
-        // with any stays an estimate until then. The rate stays the order's locked one, as above.
+        // The parts count (breakdown_at) once every refund is in the ledger; a trashed order, or one cancelled with
+        // nothing refunded, stays out. The rate stays the order's locked one, as above.
         const p = wooParts(o);
-        const settled = p && !o.refunds?.length && !refunded;
+        const given = wooRefunds.get(o.id);
+        const settled = p && o.status !== 'trash' && (o.status !== 'cancelled' || given?.length) && (!o.refunds?.length || given);
+        // Decision 9: the as-placed tax once the refunds (and theirs) are in the ledger; before, a refund gives back its
+        // share of it. ponytail: pro rata, Woo's order list doesn't split a refund's tax out.
+        const tax = settled ? rate * p.tax : Number(o.total) > 0 ? (rate * Number(o.total_tax ?? 0) * total) / (rate * Number(o.total)) : 0;
+        const tracking = wooTracking(o);
+        if (given) {
+          // Its lines, shipping and fees as given; what `amount` has beyond them (a refund by amount only) is `other`.
+          dropRefunds.run(storeId, `woo-${o.number}`);
+          const abs = (s?: string) => r2(Math.abs(Number(s ?? 0)));
+          for (const r of given) {
+            const at = gmt(r.date_created_gmt);
+            const [when, rday] = [at.toISOString(), localDate(at, storeZone)];
+            const row = (part: string, product: string | null, variant: string | null, merchandise: number | null, ship: number | null, t: number | null, other: number | null, quantity: number | null) =>
+              refundRow.run(storeId, `${r.id}:${part}`, String(r.id), `woo-${o.number}`, product, variant, when, rday, merchandise, ship, t, other, quantity);
+            let sum = 0;
+            for (const li of r.line_items ?? []) {
+              sum += abs(li.total) + abs(li.total_tax);
+              row(`line:${li.id}`, li.product_id ? `woo-${li.product_id}` : null, li.variation_id ? `woo-${li.variation_id}` : null, abs(li.total), null, abs(li.total_tax), null, Math.abs(li.quantity));
+            }
+            for (const s of r.shipping_lines ?? []) {
+              sum += abs(s.total) + abs(s.total_tax);
+              row(`ship:${s.id}`, null, null, null, abs(s.total), abs(s.total_tax), null, null);
+            }
+            for (const f of r.fee_lines ?? []) {
+              sum += abs(f.total) + abs(f.total_tax);
+              row(`fee:${f.id}`, null, null, null, null, abs(f.total_tax), abs(f.total), null);
+            }
+            const rest = r2(Number(r.amount) - sum);
+            if (Math.abs(rest) >= 0.01) row('other', null, null, null, null, null, rest, null);
+          }
+        }
         ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', tracking.number, Number(o.cost_of_goods_sold?.total_value ?? 0), day, Math.round(tax * 100) / 100, tracking.url, rate,
           String(o.id), o.currency, p?.gross ?? null, p?.discounts ?? null, p?.shipping ?? null, gmt(o.date_paid_gmt).toISOString(), o.date_completed_gmt ? gmt(o.date_completed_gmt).toISOString() : null,
           o.date_modified_gmt ? gmt(o.date_modified_gmt).toISOString() : null, settled ? now.toISOString() : null,

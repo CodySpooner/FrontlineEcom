@@ -1,5 +1,5 @@
 {
-  "_source": "WooCommerce REST API v3 docs, Orders > Order properties and the 'Retrieve an order' example, https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties (source/includes/wp-api-v3/_orders.md, read 2026-10-28). #727 is the example as given (dates moved into the test window); #728 adds a coupon, two fees and prices that include tax; #729 a partial refund. Customer ids and the billing/shipping country codes as the Order, Billing and Shipping properties document them; #728's line reports Woo's cost of goods sold.",
+  "_source": "WooCommerce REST API v3 docs, Orders > Order properties and the 'Retrieve an order' example, https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties (source/includes/wp-api-v3/_orders.md, read 2026-10-28). #727 is the example as given (dates moved into the test window); #728 adds a coupon, two fees and prices that include tax; #729 a partial refund. Customer ids and the billing/shipping country codes as the Order, Billing and Shipping properties document them; #728's line reports Woo's cost of goods sold. Refunds as Order refunds > 'List all refunds' gives them (source/includes/wp-api-v3/_order-refunds.md, read 2026-10-28): #729's is by amount only, like refund 726 (no line items); #731's carries a line like refund 724 (negative quantity and totals) and its shipping.",
   "orders": [
     {
       "id": 727,
@@ -198,6 +198,120 @@
       "shipping": {
         "country": "US"
       }
+    },
+    {
+      "id": 731,
+      "parent_id": 0,
+      "number": "731",
+      "status": "refunded",
+      "currency": "USD",
+      "created_via": "checkout",
+      "date_created": "2026-10-25T12:00:00",
+      "date_created_gmt": "2026-10-25T16:00:00",
+      "date_modified_gmt": "2026-10-26T12:00:00",
+      "discount_total": "0.00",
+      "discount_tax": "0.00",
+      "shipping_total": "5.00",
+      "shipping_tax": "0.00",
+      "cart_tax": "0.00",
+      "total": "14.00",
+      "total_tax": "0.00",
+      "prices_include_tax": false,
+      "customer_id": 0,
+      "date_paid_gmt": "2026-10-25T16:00:05",
+      "date_completed_gmt": null,
+      "billing": {
+        "country": "US"
+      },
+      "shipping": {
+        "country": "US"
+      },
+      "line_items": [
+        {
+          "id": 601,
+          "product_id": 93,
+          "variation_id": 0,
+          "quantity": 1,
+          "subtotal": "9.00",
+          "subtotal_tax": "0.00",
+          "total": "9.00",
+          "total_tax": "0.00",
+          "sku": "",
+          "price": 9
+        }
+      ],
+      "shipping_lines": [
+        {
+          "method_title": "Flat Rate",
+          "total": "5.00",
+          "total_tax": "0.00"
+        }
+      ],
+      "fee_lines": [],
+      "coupon_lines": [],
+      "refunds": [
+        {
+          "id": 732,
+          "reason": "",
+          "total": "-14.00"
+        }
+      ]
     }
-  ]
+  ],
+  "refunds": {
+    "729": [
+      {
+        "id": 730,
+        "date_created": "2026-10-26T10:00:00",
+        "date_created_gmt": "2026-10-26T14:00:00",
+        "amount": "10.00",
+        "reason": "",
+        "refunded_by": 1,
+        "refunded_payment": false,
+        "meta_data": [],
+        "line_items": [],
+        "shipping_lines": [],
+        "fee_lines": []
+      }
+    ],
+    "731": [
+      {
+        "id": 732,
+        "date_created": "2026-10-26T08:00:00",
+        "date_created_gmt": "2026-10-26T12:00:00",
+        "amount": "14.00",
+        "reason": "",
+        "refunded_by": 1,
+        "refunded_payment": false,
+        "meta_data": [],
+        "line_items": [
+          {
+            "id": 801,
+            "name": "Woo Single #1",
+            "product_id": 93,
+            "variation_id": 0,
+            "quantity": -1,
+            "tax_class": "",
+            "subtotal": "-9.00",
+            "subtotal_tax": "0.00",
+            "total": "-9.00",
+            "total_tax": "0.00",
+            "taxes": [],
+            "meta_data": [],
+            "sku": "",
+            "price": -9
+          }
+        ],
+        "shipping_lines": [
+          {
+            "id": 802,
+            "method_title": "Flat Rate",
+            "total": "-5.00",
+            "total_tax": "0.00"
+          }
+        ],
+        "fee_lines": []
+      }
+    ]
+  }
 }

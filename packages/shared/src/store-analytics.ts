@@ -168,7 +168,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
     datasets: {
       orders: { support: 'supported', reads: true, field: 'REST /wc/v3/orders', scopes: 'REST API key (Read)', history: 'full history' },
       order_lines: { support: 'supported', reads: true, field: 'orders.line_items (variation_id, sku, quantity, subtotal, total, cost_of_goods_sold)', scopes: 'REST API key (Read)', history: 'with the orders read' },
-      refunds: NOT_READ('/orders/{id}/refunds (id, date_created, amount, line_items)'),
+      refunds: { support: 'supported', reads: true, field: '/orders/{id}/refunds (id, date_created_gmt, amount, line_items, shipping_lines, fee_lines)', scopes: 'REST API key (Read)', history: 'with the orders read' },
       fees: FEE_ESTIMATE,
       catalog: { support: 'supported', reads: true, field: 'REST /wc/v3/products', history: 'current state' },
       variants: NOT_READ('/products/{id}/variations'),

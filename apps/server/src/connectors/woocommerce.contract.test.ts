@@ -1,4 +1,4 @@
-// SA-36/37: WooCommerce orders, lines and customer refs against the REST docs' shapes (fixtures/woocommerce-doc-examples.json names the page and the date read).
+// SA-36..38: WooCommerce orders, lines, customer refs and refunds against the REST docs' shapes (fixtures/woocommerce-doc-examples.json names the page and the date read).
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -13,12 +13,12 @@ const NOW = new Date('2026-10-26T18:00:00Z');
 const DOC = JSON.parse(readFileSync(new URL('./fixtures/woocommerce-doc-examples.json', import.meta.url), 'utf8'));
 const page = (body: unknown) => Response.json(body, { headers: { 'x-wp-totalpages': '1' } });
 
-function fakeWoo(orders = DOC.orders) {
+function fakeWoo(orders = DOC.orders, { refunds = true } = {}) {
   const fetchFn = (async (url: string) => {
     const u = new URL(url);
     if (u.pathname.endsWith('/settings/general/woocommerce_currency')) return Response.json({ id: 'woocommerce_currency', value: 'USD' });
     if (u.pathname.endsWith('/wp-json/')) return Response.json({ timezone_string: 'America/New_York' });
-    if (u.pathname.endsWith('/refunds')) return page([]);
+    if (u.pathname.endsWith('/refunds')) return refunds ? page(DOC.refunds[u.pathname.split('/').at(-2)!] ?? []) : Response.json({ message: 'Internal Server Error' }, { status: 500 });
     if (u.pathname.endsWith('/orders')) return page(u.searchParams.get('status') === 'trash' ? [] : orders);
     return page([]);
   }) as typeof fetch;
@@ -49,8 +49,8 @@ describe('WooCommerce orders contract (SA-36)', () => {
     // prices with tax in: the lines' subtotals are without it; a gift-wrap fee is gross, a credit fee a discount
     expect(b).toMatchObject({ gross: 35.06, discounts: 5.13, shipping: 4.13, tax: 7.15, total: 41.21, fulfilled_at: '2026-10-26T09:00:00.000Z', parts: 1 });
     for (const o of [a, b]) expect(checkOrderIdentity({ gross: Number(o!.gross), discounts: Number(o!.discounts), shipping: Number(o!.shipping), tax: Number(o!.tax), refunds: 0, total: Number(o!.total) }).ok).toBe(true);
-    // a partial refund: parts as placed, but they count only once its refund is in the ledger (SA-38)
-    expect(c).toMatchObject({ gross: 40, shipping: 5, total: 35, parts: 0 });
+    // a partial refund: parts as placed; they count with its refund in the ledger (SA-38)
+    expect(c).toMatchObject({ gross: 40, shipping: 5, total: 35, parts: 1 });
   });
 
   it('an order missing a documented money field keeps no parts (an estimate, never 0)', async () => {
@@ -72,6 +72,7 @@ describe('WooCommerce lines, customers and country (SA-37)', () => {
       { order_id: 'woo-727', line_id: '316', product_id: 'woo-22', variant_id: 'woo-23', sku: 'Bar3', quantity: 1, gross: 12, discount: 0, cost: null, cost_source: null },
       { order_id: 'woo-728', line_id: '401', product_id: 'woo-93', variant_id: null, sku: null, quantity: 2, gross: 33.06, discount: 4.13, cost: 14, cost_source: 'platform' },
       { order_id: 'woo-729', line_id: '501', product_id: 'woo-22', variant_id: 'woo-23', sku: 'Bar3', quantity: 2, gross: 40, discount: 0, cost: null, cost_source: null },
+      { order_id: 'woo-731', line_id: '601', product_id: 'woo-93', variant_id: null, sku: null, quantity: 1, gross: 9, discount: 0, cost: null, cost_source: null },
     ]);
   });
 
@@ -92,5 +93,37 @@ describe('WooCommerce lines, customers and country (SA-37)', () => {
     await syncWooCommerce(db, key, 'pawsome', ((url: string, init?: RequestInit) => (asked.push(new URL(url)), fetchFn(url, init))) as typeof fetch, NOW);
     const fields = asked.find((u) => u.pathname.endsWith('/orders'))!.searchParams.get('_fields')!.split(',');
     expect(fields.filter((f) => /billing|shipping\b|customer/.test(f))).toEqual(['customer_id', 'billing.country', 'shipping.country']);
+  });
+});
+
+describe('WooCommerce refunds (SA-38)', () => {
+  const ledger = (db: ReturnType<typeof openDb>) =>
+    db.prepare("SELECT id, order_id, product_id, local_date, merchandise, shipping, tax, other, quantity FROM refunds WHERE store_id = 'pawsome' ORDER BY id").all();
+
+  it('a partial refund with no line items gives one other row; lines and shipping as given; the identity holds', async () => {
+    const db = setup();
+    await syncWooCommerce(db, key, 'pawsome', fakeWoo().fetchFn, NOW);
+    expect(ledger(db)).toEqual([
+      { id: '730:other', order_id: 'woo-729', product_id: null, local_date: '2026-10-26', merchandise: null, shipping: null, tax: null, other: 10, quantity: null },
+      { id: '732:line:801', order_id: 'woo-731', product_id: 'woo-93', local_date: '2026-10-26', merchandise: 9, shipping: null, tax: 0, other: null, quantity: 1 },
+      { id: '732:ship:802', order_id: 'woo-731', product_id: null, local_date: '2026-10-26', merchandise: null, shipping: 5, tax: 0, other: null, quantity: null },
+    ]);
+    const settled = db.prepare(
+      `SELECT o.id, o.gross_sales AS g, o.discounts AS d, o.shipping AS s, o.tax, o.total,
+         (SELECT coalesce(sum(coalesce(merchandise, 0) + coalesce(shipping, 0) + coalesce(tax, 0) + coalesce(other, 0)), 0) FROM refunds r WHERE r.store_id = o.store_id AND r.order_id = o.id) AS back
+       FROM orders o WHERE o.store_id = 'pawsome' AND o.breakdown_at IS NOT NULL`,
+    ).all();
+    expect(settled).toHaveLength(4);
+    for (const o of settled) expect([o.id, checkOrderIdentity({ gross: Number(o.g), discounts: Number(o.d), shipping: Number(o.s), tax: Number(o.tax), refunds: Number(o.back), total: Number(o.total) }).ok]).toEqual([o.id, true]);
+  });
+
+  it("a failed refunds read keeps the ledger as it was and the order's parts uncounted", async () => {
+    const db = setup();
+    await syncWooCommerce(db, key, 'pawsome', fakeWoo().fetchFn, NOW);
+    const before = ledger(db);
+    await syncWooCommerce(db, key, 'pawsome', fakeWoo(DOC.orders, { refunds: false }).fetchFn, NOW);
+    expect(ledger(db)).toEqual(before);
+    expect(db.prepare("SELECT breakdown_at IS NOT NULL AS parts FROM orders WHERE store_id = 'pawsome' AND id = 'woo-729'").get()?.parts).toBe(0);
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'woocommerce:pawsome' AND dataset = 'refunds'").get()?.status).toBe('failed');
   });
 });
