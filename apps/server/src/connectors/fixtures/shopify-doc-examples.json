@@ -1,0 +1,115 @@
+{
+  "_source": "Shapes from the Shopify GraphQL Admin API reference, read 2026-10-28 (pages at 2026-10; the app pins 2026-07, where these fields are the same): https://shopify.dev/docs/api/admin-graphql/latest/objects/Order, https://shopify.dev/docs/api/admin-graphql/latest/objects/LineItem, https://shopify.dev/docs/api/admin-graphql/latest/objects/ShippingLine, https://shopify.dev/docs/api/admin-graphql/latest/objects/Fulfillment. The reference's own orders example asks only for ids, so the field values are test values in its shapes.",
+  "shop": { "name": "Contract Test Shop", "currencyCode": "USD", "ianaTimezone": "America/New_York" },
+  "orders": {
+    "nodes": [
+      {
+        "id": "gid://shopify/Order/5501001", "name": "#1001", "createdAt": "2026-10-20T15:00:00Z", "processedAt": "2026-10-20T15:00:00Z", "updatedAt": "2026-10-23T14:05:00Z",
+        "cancelledAt": null, "test": false, "displayFinancialStatus": "PAID", "displayFulfillmentStatus": "FULFILLED", "taxesIncluded": false, "currencyCode": "USD",
+        "sourceName": "web", "sourceIdentifier": null, "app": { "name": "Online Store" },
+        "currentTotalPriceSet": { "shopMoney": { "amount": "82.75" } }, "currentTotalTaxSet": { "shopMoney": { "amount": "5.76" } },
+        "netPaymentSet": { "shopMoney": { "amount": "82.75" } }, "totalTaxSet": { "shopMoney": { "amount": "5.76" } },
+        "shippingLines": { "nodes": [{ "discountedPriceSet": { "shopMoney": { "amount": "4.99" } } }] },
+        "fulfillments": [{ "displayStatus": "DELIVERED", "createdAt": "2026-10-21T10:00:00Z", "deliveredAt": "2026-10-23T14:00:00Z", "trackingInfo": [{ "number": "1Z999AA10123456784", "url": "https://www.ups.com/track?tracknum=1Z999AA10123456784" }] }],
+        "lineItems": {
+          "nodes": [
+            {
+              "id": "gid://shopify/LineItem/9001", "quantity": 2, "currentQuantity": 2, "sku": "SER-30", "product": { "id": "gid://shopify/Product/111" },
+              "originalTotalSet": { "shopMoney": { "amount": "50.00" } }, "discountedUnitPriceAfterAllDiscountsSet": { "shopMoney": { "amount": "22.50" } },
+              "discountAllocations": [{ "allocatedAmountSet": { "shopMoney": { "amount": "5.00" } } }],
+              "variant": { "id": "gid://shopify/ProductVariant/1111", "inventoryItem": { "unitCost": { "amount": "8.00" } } }
+            },
+            {
+              "id": "gid://shopify/LineItem/9002", "quantity": 1, "currentQuantity": 1, "sku": "CRM-50", "product": { "id": "gid://shopify/Product/112" },
+              "originalTotalSet": { "shopMoney": { "amount": "30.00" } }, "discountedUnitPriceAfterAllDiscountsSet": { "shopMoney": { "amount": "27.00" } },
+              "discountAllocations": [{ "allocatedAmountSet": { "shopMoney": { "amount": "3.00" } } }],
+              "variant": { "id": "gid://shopify/ProductVariant/1121", "inventoryItem": { "unitCost": { "amount": "9.50" } } }
+            }
+          ],
+          "pageInfo": { "hasNextPage": false, "endCursor": null }
+        }
+      },
+      {
+        "id": "gid://shopify/Order/5501002", "name": "#1002", "createdAt": "2026-10-21T16:30:00Z", "processedAt": "2026-10-21T16:30:00Z", "updatedAt": "2026-10-21T16:31:00Z",
+        "cancelledAt": null, "test": false, "displayFinancialStatus": "PAID", "displayFulfillmentStatus": "UNFULFILLED", "taxesIncluded": true, "currencyCode": "USD",
+        "sourceName": "web", "sourceIdentifier": null, "app": { "name": "Online Store" },
+        "currentTotalPriceSet": { "shopMoney": { "amount": "114.00" } }, "currentTotalTaxSet": { "shopMoney": { "amount": "19.00" } },
+        "netPaymentSet": { "shopMoney": { "amount": "114.00" } }, "totalTaxSet": { "shopMoney": { "amount": "19.00" } },
+        "shippingLines": { "nodes": [{ "discountedPriceSet": { "shopMoney": { "amount": "6.00" } } }] },
+        "fulfillments": [],
+        "lineItems": {
+          "nodes": [
+            {
+              "id": "gid://shopify/LineItem/9003", "quantity": 1, "currentQuantity": 1, "sku": "MSK-1", "product": { "id": "gid://shopify/Product/113" },
+              "originalTotalSet": { "shopMoney": { "amount": "120.00" } }, "discountedUnitPriceAfterAllDiscountsSet": { "shopMoney": { "amount": "108.00" } },
+              "discountAllocations": [{ "allocatedAmountSet": { "shopMoney": { "amount": "12.00" } } }],
+              "variant": { "id": "gid://shopify/ProductVariant/1131", "inventoryItem": { "unitCost": null } }
+            }
+          ],
+          "pageInfo": { "hasNextPage": false, "endCursor": null }
+        }
+      },
+      {
+        "id": "gid://shopify/Order/5501003", "name": "#1003", "createdAt": "2026-10-22T01:10:00Z", "processedAt": "2026-10-22T01:10:00Z", "updatedAt": "2026-10-22T01:12:00Z",
+        "cancelledAt": null, "test": false, "displayFinancialStatus": "PAID", "displayFulfillmentStatus": "UNFULFILLED", "taxesIncluded": false, "currencyCode": "USD",
+        "sourceName": "4383523", "sourceIdentifier": "577012345678901234", "app": { "name": "TikTok" },
+        "currentTotalPriceSet": { "shopMoney": { "amount": "19.99" } }, "currentTotalTaxSet": { "shopMoney": { "amount": "0.00" } },
+        "netPaymentSet": { "shopMoney": { "amount": "19.99" } }, "totalTaxSet": { "shopMoney": { "amount": "0.00" } },
+        "shippingLines": { "nodes": [] },
+        "fulfillments": [],
+        "lineItems": {
+          "nodes": [
+            {
+              "id": "gid://shopify/LineItem/9004", "quantity": 1, "currentQuantity": 1, "sku": null, "product": { "id": "gid://shopify/Product/111" },
+              "originalTotalSet": { "shopMoney": { "amount": "19.99" } }, "discountedUnitPriceAfterAllDiscountsSet": { "shopMoney": { "amount": "19.99" } },
+              "discountAllocations": [],
+              "variant": { "id": "gid://shopify/ProductVariant/1112", "inventoryItem": { "unitCost": { "amount": "8.00" } } }
+            }
+          ],
+          "pageInfo": { "hasNextPage": false, "endCursor": null }
+        }
+      },
+      {
+        "id": "gid://shopify/Order/5501004", "name": "#1004", "createdAt": "2026-10-22T18:00:00Z", "processedAt": "2026-10-22T18:00:00Z", "updatedAt": "2026-10-22T18:00:30Z",
+        "cancelledAt": null, "test": false, "displayFinancialStatus": "PAID", "displayFulfillmentStatus": "FULFILLED", "taxesIncluded": false, "currencyCode": "USD",
+        "sourceName": "pos", "sourceIdentifier": "1-1004", "app": { "name": "Point of Sale" },
+        "currentTotalPriceSet": { "shopMoney": { "amount": "16.20" } }, "currentTotalTaxSet": { "shopMoney": { "amount": "1.20" } },
+        "netPaymentSet": { "shopMoney": { "amount": "16.20" } }, "totalTaxSet": { "shopMoney": { "amount": "1.20" } },
+        "shippingLines": { "nodes": [] },
+        "fulfillments": [{ "displayStatus": "FULFILLED", "createdAt": "2026-10-22T18:00:10Z", "deliveredAt": null, "trackingInfo": [] }],
+        "lineItems": {
+          "nodes": [
+            {
+              "id": "gid://shopify/LineItem/9005", "quantity": 1, "currentQuantity": 1, "sku": "LIP-1", "product": { "id": "gid://shopify/Product/114" },
+              "originalTotalSet": { "shopMoney": { "amount": "15.00" } }, "discountedUnitPriceAfterAllDiscountsSet": { "shopMoney": { "amount": "15.00" } },
+              "discountAllocations": [],
+              "variant": { "id": "gid://shopify/ProductVariant/1141", "inventoryItem": { "unitCost": { "amount": "4.00" } } }
+            }
+          ],
+          "pageInfo": { "hasNextPage": false, "endCursor": null }
+        }
+      },
+      {
+        "id": "gid://shopify/Order/5501005", "name": "#1005", "createdAt": "2026-10-22T19:00:00Z", "processedAt": "2026-10-22T19:00:00Z", "updatedAt": "2026-10-22T19:00:00Z",
+        "cancelledAt": null, "test": true, "displayFinancialStatus": "PAID", "displayFulfillmentStatus": "UNFULFILLED", "taxesIncluded": false, "currencyCode": "USD",
+        "sourceName": "web", "sourceIdentifier": null, "app": { "name": "Online Store" },
+        "currentTotalPriceSet": { "shopMoney": { "amount": "1.00" } }, "currentTotalTaxSet": { "shopMoney": { "amount": "0.00" } },
+        "netPaymentSet": { "shopMoney": { "amount": "1.00" } }, "totalTaxSet": { "shopMoney": { "amount": "0.00" } },
+        "shippingLines": { "nodes": [] },
+        "fulfillments": [],
+        "lineItems": {
+          "nodes": [
+            {
+              "id": "gid://shopify/LineItem/9006", "quantity": 1, "currentQuantity": 1, "sku": "SER-30", "product": { "id": "gid://shopify/Product/111" },
+              "originalTotalSet": { "shopMoney": { "amount": "1.00" } }, "discountedUnitPriceAfterAllDiscountsSet": { "shopMoney": { "amount": "1.00" } },
+              "discountAllocations": [],
+              "variant": { "id": "gid://shopify/ProductVariant/1111", "inventoryItem": { "unitCost": { "amount": "8.00" } } }
+            }
+          ],
+          "pageInfo": { "hasNextPage": false, "endCursor": null }
+        }
+      }
+    ],
+    "pageInfo": { "hasNextPage": false, "endCursor": "eyJsYXN0X2lkIjo1NTAxMDA1fQ==" }
+  }
+}

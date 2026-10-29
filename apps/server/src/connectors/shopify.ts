@@ -41,7 +41,20 @@ interface ShopifyProduct {
   variants: { nodes: { price: string; compareAtPrice: string | null; inventoryPolicy?: string; inventoryItem: { unitCost: Money } | null }[] };
 }
 
-type LineItem = { quantity: number; currentQuantity: number; product: { id: string } | null; discountedUnitPriceAfterAllDiscountsSet: { shopMoney: { amount: string } }; variant: { inventoryItem: { unitCost: Money } | null } | null };
+type MoneyBag = { shopMoney: { amount: string } };
+type LineItem = {
+  id?: string;
+  quantity: number;
+  currentQuantity: number;
+  sku?: string | null;
+  product: { id: string } | null;
+  /** As placed: unit price × quantity, refunded and removed units included. */
+  originalTotalSet?: MoneyBag;
+  discountedUnitPriceAfterAllDiscountsSet: MoneyBag;
+  /** Order-level discounts are allocated to lines too (shipping discounts go to the shipping lines). */
+  discountAllocations?: { allocatedAmountSet: MoneyBag }[];
+  variant: { id?: string; inventoryItem: { unitCost: Money } | null } | null;
+};
 interface ShopifyOrder {
   id: string;
   name: string;
@@ -51,6 +64,18 @@ interface ShopifyOrder {
   test: boolean;
   displayFinancialStatus: string | null;
   displayFulfillmentStatus: string;
+  processedAt?: string;
+  /** The shop's currency when placed: every amount read is its shopMoney. */
+  currencyCode?: string;
+  /** "web", "pos", "shopify_draft_order", or the app's id for an app's order. */
+  sourceName?: string | null;
+  /** The channel's own order id (TikTok Shop, Amazon...). */
+  sourceIdentifier?: string | null;
+  app?: { name: string } | null;
+  /** Before returns. */
+  totalTaxSet?: MoneyBag | null;
+  /** After their discounts (cart-level free shipping too, since 2024-07); include tax when taxesIncluded. */
+  shippingLines?: { nodes: { discountedPriceSet: MoneyBag }[] };
   /** After returns: Shopify's docs don't say a refund of an amount (no item returned) lowers it. */
   currentTotalPriceSet: { shopMoney: { amount: string } };
   /** Received less refunded. */
@@ -59,7 +84,7 @@ interface ShopifyOrder {
   currentTotalTaxSet?: { shopMoney: { amount: string } };
   /** Prices include tax (VAT stores): line totals then hold it too. */
   taxesIncluded?: boolean;
-  fulfillments: { displayStatus: string | null; trackingInfo: { number: string | null; url?: string | null }[] }[];
+  fulfillments: { displayStatus: string | null; createdAt?: string; deliveredAt?: string | null; trackingInfo: { number: string | null; url?: string | null }[] }[];
   lineItems: { nodes: LineItem[]; pageInfo: PageInfo };
 }
 
@@ -75,19 +100,28 @@ const PRODUCT_IDS_Q = `query ($after: String) { products(first: 250, after: $aft
 const DELETED_Q = `query ($after: String, $q: String) {
   events(first: 250, after: $after, query: $q) { nodes { ... on BasicEvent { subjectId } } pageInfo { hasNextPage endCursor } } }`;
 
-// Shopify prices a query before running it (max 1000): objects 1, connections 2 + first × child. Per order:
-// 1 + total 2 + tax 2 + net payment 2 + fulfillment 2 + lineItems (2 + 10 × 7 + pageInfo 1) = 82, so 12 orders = 985. Products: 2 + 50 × 9 = 452.
-// An order with more line items gets the rest from ORDER_ITEMS_Q (2 + 1 + 100 × 7 + 1 = 704).
-const LINE_ITEM = 'quantity currentQuantity product { id } discountedUnitPriceAfterAllDiscountsSet { shopMoney { amount } } variant { inventoryItem { unitCost { amount } } }';
-const ORDERS_Q = `query ($after: String, $q: String) {
-  orders(first: 12, after: $after, query: $q, sortKey: UPDATED_AT) {
-    nodes { id name createdAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus taxesIncluded
-      currentTotalPriceSet { shopMoney { amount } } currentTotalTaxSet { shopMoney { amount } } netPaymentSet { shopMoney { amount } }
-      fulfillments(first: 1) { displayStatus trackingInfo(first: 1) { number url } }
-      lineItems(first: 10) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } }
+// Shopify prices a query before running it (max 1000): objects 1, connections and sized lists 2 + first × (1 + a node),
+// pageInfo 1 (shopify.contract.test.ts computes every read's cost this way and fails over 1000). A line is 11: product,
+// variant 3, two amounts 2 each, a discount allocation 3. An order is 29 + 12 × lines: amounts 4 × 2, shipping lines
+// 2 + 2 × 3, app, customer and country (SA-32 probes; budgeted even when left out), fulfillment 6, lineItems 3 + 12 ×
+// lines (its own 1 included). 5 lines: 89, so 10 orders = 2 + 10 × 89 + 1 = 893. Products: 2 + 50 × 9 + 1 = 453.
+// An order with more line items gets the rest from ORDER_ITEMS_Q (1 + 2 + 75 × 12 + 1 = 904).
+const MONEY = '{ shopMoney { amount } }';
+const LINE_ITEM = `id quantity currentQuantity sku product { id } originalTotalSet ${MONEY} discountedUnitPriceAfterAllDiscountsSet ${MONEY}
+  discountAllocations { allocatedAmountSet ${MONEY} } variant { id inventoryItem { unitCost { amount } } }`;
+/** SA-27 owns it. `customer` and `country` are switched on by SA-32's probes. */
+export const ordersQuery = (probed: { customer?: boolean; country?: boolean } = {}) => `query ($after: String, $q: String) {
+  orders(first: 10, after: $after, query: $q, sortKey: UPDATED_AT) {
+    nodes { id name createdAt processedAt updatedAt cancelledAt test displayFinancialStatus displayFulfillmentStatus taxesIncluded currencyCode sourceName sourceIdentifier
+      app { name }${probed.customer ? ' customer { id }' : ''}${probed.country ? ' shippingAddress { countryCodeV2 }' : ''}
+      currentTotalPriceSet ${MONEY} currentTotalTaxSet ${MONEY} netPaymentSet ${MONEY} totalTaxSet ${MONEY}
+      shippingLines(first: 2) { nodes { discountedPriceSet ${MONEY} } }
+      fulfillments(first: 1) { displayStatus createdAt deliveredAt trackingInfo(first: 1) { number url } }
+      lineItems(first: 5) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } }
     pageInfo { hasNextPage endCursor } } }`;
+const ORDERS_Q = ordersQuery();
 const ORDER_ITEMS_Q = `query ($id: ID!, $after: String) {
-  order(id: $id) { lineItems(first: 100, after: $after) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } } }`;
+  order(id: $id) { lineItems(first: 75, after: $after) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } } }`;
 
 // productCreate makes one default variant; its price and cost are set right after.
 const CREATE_M = `mutation ($product: ProductCreateInput!) {
@@ -162,6 +196,44 @@ async function all<N>(fetchPage: (after: string | null) => Promise<{ nodes: N[];
 
 const tail = (gid: string) => gid.slice(gid.lastIndexOf('/') + 1);
 const num = (m: Money | string | null | undefined) => Number((typeof m === 'string' ? m : m?.amount) ?? 0);
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Financial statuses of an order that was paid (a refund or a cancel after it doesn't undo that, decision 10). */
+const PAID = new Set(['PAID', 'PARTIALLY_REFUNDED', 'REFUNDED']);
+const MARKETPLACES = new Set(['tiktok_shop', 'amazon', 'etsy', 'walmart', 'ebay']);
+const MARKETPLACE_APPS: [string, string][] = [['tiktok', 'tiktok_shop'], ['amazon', 'amazon'], ['etsy', 'etsy'], ['walmart', 'walmart'], ['ebay', 'ebay']];
+const SITE_SOURCES = new Set(['web', 'shopify_draft_order', 'iphone', 'android']);
+
+/**
+ * Decision 13: the channel an order came from. A marketplace by its app (the mapping SA-51 dedupes with), the store's
+ * own checkouts and draft orders the site, POS its own; any other app 'other' (never auto-deduped).
+ */
+export function shopifyChannel(o: Pick<ShopifyOrder, 'sourceName' | 'app'>) {
+  const app = o.app?.name.toLowerCase() ?? '';
+  const marketplace = MARKETPLACE_APPS.find(([needle]) => app.includes(needle));
+  if (marketplace) return marketplace[1];
+  if (o.sourceName === 'pos') return 'pos';
+  return !o.sourceName || SITE_SOURCES.has(o.sourceName) ? 'site' : 'other';
+}
+
+/**
+ * Decision 9: the as-placed money parts in the shop's currency, so that gross − discounts + shipping + tax is the
+ * total at placement. Merchandise from the lines (before refunds), shipping after its discounts. Where prices include
+ * tax, each part gives up the order's tax share. Null when a line lacks its as-placed total (a response shaped before
+ * SA-27): the order is then read as an estimate. ponytail: one tax rate across lines and shipping; duties and tips
+ * aren't read (an order with them fails the identity and is listed by reconcile).
+ */
+export function orderParts(o: Pick<ShopifyOrder, 'lineItems' | 'shippingLines' | 'totalTaxSet' | 'currentTotalTaxSet' | 'taxesIncluded'>) {
+  if (!o.lineItems.nodes.every((li) => li.originalTotalSet)) return null;
+  const tax = num((o.totalTaxSet ?? o.currentTotalTaxSet)?.shopMoney.amount);
+  const lines = o.lineItems.nodes.reduce((a, li) => a + num(li.originalTotalSet!.shopMoney.amount), 0);
+  const off = o.lineItems.nodes.reduce((a, li) => a + (li.discountAllocations ?? []).reduce((b, d) => b + num(d.allocatedAmountSet.shopMoney.amount), 0), 0);
+  const ship = (o.shippingLines?.nodes ?? []).reduce((a, s) => a + num(s.discountedPriceSet.shopMoney.amount), 0);
+  const placed = lines - off + ship;
+  const share = o.taxesIncluded && placed > 0 ? (placed - tax) / placed : 1;
+  const [gross, discounts] = [r2(lines * share), r2(off * share)];
+  return { gross, discounts, shipping: r2(r2(placed * share) - (gross - discounts)), tax };
+}
 
 export function fulfillmentOf(o: Pick<ShopifyOrder, 'displayFulfillmentStatus' | 'fulfillments'>): FulfillmentStatus {
   const shipment = o.fulfillments[0]?.displayStatus;
@@ -274,9 +346,14 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 
     const ord = db.prepare(
-      `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
+      `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url,
+         source_kind, source_id, channel, channel_order_id, currency, gross_sales, discounts, shipping, paid_at, cancelled_at, fulfilled_at, delivered_at, source_updated_at, breakdown_at)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'shopify', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
-         tracking = coalesce(excluded.tracking, tracking), cogs = iif(cogs > 0, cogs, excluded.cogs), tax = excluded.tax, tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url)`,
+         tracking = coalesce(excluded.tracking, tracking), cogs = iif(cogs > 0, cogs, excluded.cogs), tax = excluded.tax, tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url),
+         source_kind = excluded.source_kind, source_id = excluded.source_id, channel = excluded.channel, channel_order_id = excluded.channel_order_id, currency = excluded.currency,
+         gross_sales = excluded.gross_sales, discounts = excluded.discounts, shipping = excluded.shipping, paid_at = excluded.paid_at, cancelled_at = excluded.cancelled_at,
+         fulfilled_at = excluded.fulfilled_at, delivered_at = excluded.delivered_at, source_updated_at = excluded.source_updated_at, breakdown_at = excluded.breakdown_at`,
     );
     // Not paid yet (cash on delivery, bank transfer, an uncaptured authorization): left out of revenue until it is, and
     // removed if an earlier sync stored it. Its updated_at moves when it's paid, so the next sync brings it back.
@@ -308,7 +385,14 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
           // item returned); the current total otherwise (a return less a restocking fee keeps the fee out of revenue).
           const current = num(o.currentTotalPriceSet.shopMoney.amount);
           const total = o.displayFinancialStatus === 'PARTIALLY_REFUNDED' && o.netPaymentSet ? Math.min(current, num(o.netPaymentSet.shopMoney.amount)) : current;
-          ord.run(storeId, o.name, o.createdAt, total, refunded ? 'refunded' : 'paid', fulfillmentOf(o), o.fulfillments[0]?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day, num(o.currentTotalTaxSet?.shopMoney.amount), o.fulfillments[0]?.trackingInfo[0]?.url ?? null);
+          const p = orderParts(o);
+          const channel = shopifyChannel(o);
+          const f = o.fulfillments[0];
+          ord.run(
+            storeId, o.name, o.createdAt, total, refunded ? 'refunded' : 'paid', fulfillmentOf(o), f?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day, p?.tax ?? num(o.currentTotalTaxSet?.shopMoney.amount), f?.trackingInfo[0]?.url ?? null,
+            tail(o.id), channel, MARKETPLACES.has(channel) ? (o.sourceIdentifier ?? null) : null, o.currencyCode ?? null, p?.gross ?? null, p?.discounts ?? null, p?.shipping ?? null,
+            PAID.has(o.displayFinancialStatus ?? '') ? (o.processedAt ?? o.createdAt) : null, o.cancelledAt, f?.createdAt ?? null, f?.deliveredAt ?? null, o.updatedAt, p ? now.toISOString() : null,
+          );
           // Custom line items (no product) only count toward the order total. Where prices include VAT, each line gives up
           // the order's share of it. ponytail: one rate for all lines; reduced-rate lines come out a little low.
           const net = o.taxesIncluded && total > 0 ? 1 - num(o.currentTotalTaxSet?.shopMoney.amount) / total : 1;
@@ -587,3 +671,6 @@ export async function publishTheme(db: Db, key: Buffer, storeId: string, themeId
     return view(p.theme!);
   });
 }
+
+/** Every read query, for the static cost check in shopify.contract.test.ts (orders with SA-32's probed fields on). */
+export const SHOPIFY_READS = { FUNNEL_Q, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };

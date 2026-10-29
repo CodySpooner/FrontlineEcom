@@ -114,7 +114,7 @@ export function setProductCost(db: Db, storeId: string, productId: string, body:
     db.prepare('UPDATE products SET cost = ? WHERE store_id = ? AND id = ?').run(cost, storeId, productId);
     // Lines with no cost and no unit cost in force on their day; before this cost is recorded, so today's lines lock too.
     db.prepare(
-      `UPDATE order_lines AS l SET cost = round(l.quantity * ?, 2), cost_source = 'owner_backfill' WHERE l.store_id = ? AND l.product_id = ? AND coalesce(l.cost, 0) = 0
+      `UPDATE order_lines AS l SET cost = round(l.quantity * ?, 2), cost_source = 'owner', owner_backfill = 1 WHERE l.store_id = ? AND l.product_id = ? AND coalesce(l.cost, 0) = 0
        AND NOT EXISTS (SELECT 1 FROM unit_costs u JOIN orders o ON o.store_id = l.store_id AND o.id = l.order_id
          WHERE u.store_id = l.store_id AND u.product_id = l.product_id AND (u.variant_id IS NULL OR u.variant_id = l.variant_id) AND u.effective_from <= o.local_date)`,
     ).run(cost, storeId, productId);
