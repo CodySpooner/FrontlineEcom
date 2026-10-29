@@ -167,7 +167,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
     name: 'WooCommerce',
     datasets: {
       orders: { support: 'supported', reads: true, field: 'REST /wc/v3/orders', scopes: 'REST API key (Read)', history: 'full history' },
-      order_lines: NOT_READ('orders.line_items (variation_id, sku, quantity, subtotal, total)'),
+      order_lines: { support: 'supported', reads: true, field: 'orders.line_items (variation_id, sku, quantity, subtotal, total, cost_of_goods_sold)', scopes: 'REST API key (Read)', history: 'with the orders read' },
       refunds: NOT_READ('/orders/{id}/refunds (id, date_created, amount, line_items)'),
       fees: FEE_ESTIMATE,
       catalog: { support: 'supported', reads: true, field: 'REST /wc/v3/products', history: 'current state' },
@@ -178,7 +178,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
       traffic: UNSUPPORTED('WooCommerce has no sessions API; connect GA4 for site traffic.'),
       purchase_sessions: UNSUPPORTED('WooCommerce has no sessions API.'),
       traffic_breakdowns: UNSUPPORTED('WooCommerce has no sessions API; connect GA4.'),
-      customers: NOT_READ('orders.customer_id (0 = guest), billing.country, shipping.country'),
+      customers: { support: 'supported', reads: true, field: 'orders.customer_id (hashed; 0 = guest), shipping.country else billing.country', scopes: 'REST API key (Read)', history: 'with the orders read' },
       product_views: UNSUPPORTED('WooCommerce has no product-view API.'),
     },
   },

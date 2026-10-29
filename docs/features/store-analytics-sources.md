@@ -33,7 +33,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Orders | supported | yes | REST /wc/v3/orders | REST API key (Read) | full history |  |  |
-| Order lines by variant | supported | no | orders.line_items (variation_id, sku, quantity, subtotal, total) |  |  |  |  |
+| Order lines by variant | supported | yes | orders.line_items (variation_id, sku, quantity, subtotal, total, cost_of_goods_sold) | REST API key (Read) | with the orders read |  |  |
 | Refunds | supported | no | /orders/{id}/refunds (id, date_created, amount, line_items) |  |  |  |  |
 | Fees | unsupported | no | — |  |  |  | The app doesn't read payment or platform fees here (owner question Q21); fees are the store's labelled estimate. |
 | Catalog | supported | yes | REST /wc/v3/products |  | current state |  |  |
@@ -44,7 +44,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Sessions and funnel | unsupported | no | — |  |  |  | WooCommerce has no sessions API; connect GA4 for site traffic. |
 | Purchasing sessions | unsupported | no | — |  |  |  | WooCommerce has no sessions API. |
 | Traffic by source, device and country | unsupported | no | — |  |  |  | WooCommerce has no sessions API; connect GA4. |
-| Customer ids and country | supported | no | orders.customer_id (0 = guest), billing.country, shipping.country |  |  |  |  |
+| Customer ids and country | supported | yes | orders.customer_id (hashed; 0 = guest), shipping.country else billing.country | REST API key (Read) | with the orders read |  |  |
 | Product views | unsupported | no | — |  |  |  | WooCommerce has no product-view API. |
 
 ## Etsy

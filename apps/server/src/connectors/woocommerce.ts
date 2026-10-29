@@ -5,7 +5,7 @@ import { tx, type Db } from '../db';
 import { convertRate, historicRate } from '../fx';
 import { getCredentials, setIntegrationStatus } from '../integrations';
 import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, takeTimezone, switchToReal, syncView, hasTag, stillAsSynced, syncedPrice } from './common';
-import { noteFailed, noteRead } from './ingest';
+import { customerRef, noteFailed, noteRead } from './ingest';
 import { checkNewProducts, type NewProduct, type ProductPage } from './shopify';
 
 // WooCommerce REST API v3 with a consumer key/secret (Basic auth, so https only): Read to sync, Read/Write for the
@@ -13,10 +13,11 @@ import { checkNewProducts, type NewProduct, type ProductPage } from './shopify';
 // WordPress pages, written with a WordPress application password (publishWooPage).
 /** First sync pulls this many days of orders (1Y range + the previous year for deltas). */
 const BACKFILL_DAYS = 730;
-// Only what the sync reads (WordPress's `_fields`; one that ignores it sends everything, which still works): an order's
-// billing and shipping (names, emails, addresses) never leave the shop, and a big shop's backfill is a fraction of the size.
+// Only what the sync reads (WordPress's `_fields`; one that ignores it sends everything, which still works): of an order's
+// billing and shipping (names, emails, addresses) only the country codes leave the shop (nested `_fields`, WordPress 5.3+),
+// and a big shop's backfill is a fraction of the size.
 const ORDER_FIELDS =
-  'id,number,status,currency,date_created,date_created_gmt,date_modified_gmt,date_paid_gmt,date_completed_gmt,discount_total,shipping_total,total,total_tax,fee_lines,refunds,line_items,cost_of_goods_sold,meta_data';
+  'id,number,status,currency,date_created,date_created_gmt,date_modified_gmt,date_paid_gmt,date_completed_gmt,discount_total,shipping_total,total,total_tax,fee_lines,refunds,line_items,cost_of_goods_sold,meta_data,customer_id,billing.country,shipping.country';
 const PRODUCT_FIELDS = 'id,name,status,type,price,regular_price,images,stock_quantity,manage_stock,backorders,cost_of_goods_sold';
 
 type Fetch = typeof fetch;
@@ -44,8 +45,13 @@ interface WooOrder {
   total_tax?: string;
   /** Each refund's total is negative, e.g. "-10.00". */
   refunds?: { total: string }[];
-  /** subtotal: before discounts, total: after; both without tax. */
-  line_items?: { product_id: number; quantity: number; subtotal?: string; total: string; cost_of_goods_sold?: { value: number } }[];
+  /** subtotal: before discounts, total: after; both without tax. The cost of goods sold is the line's (all its units). */
+  line_items?: { id?: number; product_id: number; variation_id?: number; sku?: string; quantity: number; subtotal?: string; total: string; cost_of_goods_sold?: { value: number } }[];
+  /** 0 for guests. */
+  customer_id?: number;
+  /** ISO 3166-1 alpha-2; nothing else of either address is asked for. */
+  billing?: { country?: string };
+  shipping?: { country?: string };
   /** Only when the store has WooCommerce's Cost of Goods Sold feature on (Settings → Advanced → Features, Woo 9.5+). */
   cost_of_goods_sold?: { total_value: number };
   meta_data?: { key: string; value: unknown }[];
@@ -188,7 +194,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const ordersSince = { ...changed, _fields: ORDER_FIELDS };
     // The default status (any) leaves out the trash: an order trashed after it was counted is read from there.
     const orders = [...(await all<WooOrder>('orders', ordersSince)), ...(await all<WooOrder>('orders', { ...ordersSince, status: 'trash' }))];
-    noteRead(db, key, id, 'orders', { status: 'available', from: since.slice(0, 10), to: localDate(now) }, now);
+    for (const d of ['orders', 'order_lines', 'customers'] as const) noteRead(db, key, id, d, { status: 'available', from: since.slice(0, 10), to: localDate(now) }, now);
     reading.delete('orders');
     // The order list has only each refund's total: a partly refunded order's refunds list says which lines lost what, one
     // request each. Read as amounts (signs vary between versions); a failed read leaves the lines as ordered, and the
@@ -274,13 +280,19 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking from a tracking plugin.
       const ord = db.prepare(
         `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url, fx_rate,
-           source_kind, source_id, channel, currency, gross_sales, discounts, shipping, paid_at, fulfilled_at, source_updated_at, breakdown_at)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'woocommerce', ?, 'site', ?, ?, ?, ?, ?, ?, ?, ?)
+           source_kind, source_id, channel, currency, gross_sales, discounts, shipping, paid_at, fulfilled_at, source_updated_at, breakdown_at, customer_ref, customer_state, country)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'woocommerce', ?, 'site', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, cogs = excluded.cogs, tax = excluded.tax, fx_rate = excluded.fx_rate,
            tracking = coalesce(excluded.tracking, tracking), tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url),
            source_kind = excluded.source_kind, source_id = excluded.source_id, channel = excluded.channel, currency = excluded.currency, gross_sales = excluded.gross_sales,
            discounts = excluded.discounts, shipping = excluded.shipping, paid_at = excluded.paid_at, fulfilled_at = excluded.fulfilled_at, source_updated_at = excluded.source_updated_at,
-           breakdown_at = excluded.breakdown_at`,
+           breakdown_at = excluded.breakdown_at, customer_ref = excluded.customer_ref, customer_state = excluded.customer_state, country = coalesce(excluded.country, country)`,
+      );
+      // SA-37: each line as placed (without tax); its cost is the one first recorded (decision 15), from Woo's own COGS.
+      const orderLine = db.prepare(
+        `INSERT INTO order_lines (store_id, order_id, line_id, product_id, variant_id, sku, quantity, gross, discount, cost, cost_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, order_id, line_id) DO UPDATE SET product_id = excluded.product_id, variant_id = excluded.variant_id, sku = excluded.sku, quantity = excluded.quantity,
+           gross = excluded.gross, discount = excluded.discount, cost = coalesce(cost, excluded.cost), cost_source = iif(cost IS NULL, excluded.cost_source, cost_source)`,
       );
       const days = new Set<string>();
       for (const o of orders) {
@@ -302,7 +314,15 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         const settled = p && !o.refunds?.length && !refunded;
         ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', tracking.number, Number(o.cost_of_goods_sold?.total_value ?? 0), day, Math.round(tax * 100) / 100, tracking.url, rate,
           String(o.id), o.currency, p?.gross ?? null, p?.discounts ?? null, p?.shipping ?? null, gmt(o.date_paid_gmt).toISOString(), o.date_completed_gmt ? gmt(o.date_completed_gmt).toISOString() : null,
-          o.date_modified_gmt ? gmt(o.date_modified_gmt).toISOString() : null, settled ? now.toISOString() : null);
+          o.date_modified_gmt ? gmt(o.date_modified_gmt).toISOString() : null, settled ? now.toISOString() : null,
+          o.customer_id ? customerRef(storeId, 'woocommerce', String(o.customer_id)) : null, o.customer_id == null ? 'unavailable' : o.customer_id ? 'identified' : 'guest',
+          (o.shipping?.country || o.billing?.country || '').toUpperCase() || null);
+        for (const li of o.line_items ?? []) {
+          if (li.id == null || li.subtotal == null) continue;
+          const cost = Number(li.cost_of_goods_sold?.value ?? 0);
+          orderLine.run(storeId, `woo-${o.number}`, String(li.id), li.product_id ? `woo-${li.product_id}` : null, li.variation_id ? `woo-${li.variation_id}` : null, li.sku || null, li.quantity,
+            r2(Number(li.subtotal)), r2(Number(li.subtotal) - Number(li.total)), cost > 0 ? r2(cost) : null, cost > 0 ? 'platform' : null);
+        }
         // A product's refunds come off its first line(s); cost stays on what was ordered (a refund needn't be a return).
         const back = lineRefunds.get(o.id);
         const items = (o.line_items ?? []).filter((li) => li.product_id).map((li) => {

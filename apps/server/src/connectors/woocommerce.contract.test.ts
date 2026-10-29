@@ -1,4 +1,4 @@
-// SA-36: WooCommerce orders against the REST docs' shapes (fixtures/woocommerce-doc-examples.json names the page and the date read).
+// SA-36/37: WooCommerce orders, lines and customer refs against the REST docs' shapes (fixtures/woocommerce-doc-examples.json names the page and the date read).
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -59,5 +59,38 @@ describe('WooCommerce orders contract (SA-36)', () => {
     delete first.shipping_total;
     await syncWooCommerce(db, key, 'pawsome', fakeWoo([first]).fetchFn, NOW);
     expect(rows(db)[0]).toMatchObject({ id: 'woo-727', gross: null, discounts: null, shipping: null, parts: 0, total: 29.35 });
+  });
+});
+
+describe('WooCommerce lines, customers and country (SA-37)', () => {
+  it('one row per line by variation; the cost only when Woo reports it', async () => {
+    const db = setup();
+    await syncWooCommerce(db, key, 'pawsome', fakeWoo().fetchFn, NOW);
+    const lines = db.prepare("SELECT order_id, line_id, product_id, variant_id, sku, quantity, gross, discount, cost, cost_source FROM order_lines WHERE store_id = 'pawsome' ORDER BY order_id, line_id").all();
+    expect(lines).toEqual([
+      { order_id: 'woo-727', line_id: '315', product_id: 'woo-93', variant_id: null, sku: null, quantity: 2, gross: 6, discount: 0, cost: null, cost_source: null },
+      { order_id: 'woo-727', line_id: '316', product_id: 'woo-22', variant_id: 'woo-23', sku: 'Bar3', quantity: 1, gross: 12, discount: 0, cost: null, cost_source: null },
+      { order_id: 'woo-728', line_id: '401', product_id: 'woo-93', variant_id: null, sku: null, quantity: 2, gross: 33.06, discount: 4.13, cost: 14, cost_source: 'platform' },
+      { order_id: 'woo-729', line_id: '501', product_id: 'woo-22', variant_id: 'woo-23', sku: 'Bar3', quantity: 2, gross: 40, discount: 0, cost: null, cost_source: null },
+    ]);
+  });
+
+  it('a guest order is guest, not a customer; one customer is one ref; the country code only', async () => {
+    const db = setup();
+    await syncWooCommerce(db, key, 'pawsome', fakeWoo().fetchFn, NOW);
+    const [guest, a, b] = db.prepare("SELECT customer_ref AS ref, customer_state AS state, country FROM orders WHERE store_id = 'pawsome' ORDER BY id").all();
+    expect(guest).toEqual({ ref: null, state: 'guest', country: 'US' }); // shipping empty: billing's
+    expect(a).toMatchObject({ state: 'identified', country: 'DE', ref: expect.stringMatching(/^c_[0-9a-f]{24}$/) });
+    expect(b!.ref).toBe(a!.ref);
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'woocommerce:pawsome' AND dataset = 'customers'").get()?.status).toBe('available');
+  });
+
+  it("asks only for the addresses' country codes", async () => {
+    const db = setup();
+    const asked: URL[] = [];
+    const { fetchFn } = fakeWoo();
+    await syncWooCommerce(db, key, 'pawsome', ((url: string, init?: RequestInit) => (asked.push(new URL(url)), fetchFn(url, init))) as typeof fetch, NOW);
+    const fields = asked.find((u) => u.pathname.endsWith('/orders'))!.searchParams.get('_fields')!.split(',');
+    expect(fields.filter((f) => /billing|shipping\b|customer/.test(f))).toEqual(['customer_id', 'billing.country', 'shipping.country']);
   });
 });

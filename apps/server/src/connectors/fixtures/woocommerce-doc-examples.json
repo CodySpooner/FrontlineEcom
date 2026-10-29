@@ -1,5 +1,5 @@
 {
-  "_source": "WooCommerce REST API v3 docs, Orders > Order properties and the 'Retrieve an order' example, https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties (source/includes/wp-api-v3/_orders.md, read 2026-10-28). #727 is the example as given (dates moved into the test window); #728 adds a coupon, two fees and prices that include tax; #729 a partial refund.",
+  "_source": "WooCommerce REST API v3 docs, Orders > Order properties and the 'Retrieve an order' example, https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties (source/includes/wp-api-v3/_orders.md, read 2026-10-28). #727 is the example as given (dates moved into the test window); #728 adds a coupon, two fees and prices that include tax; #729 a partial refund. Customer ids and the billing/shipping country codes as the Order, Billing and Shipping properties document them; #728's line reports Woo's cost of goods sold.",
   "orders": [
     {
       "id": 727,
@@ -61,7 +61,13 @@
       ],
       "fee_lines": [],
       "coupon_lines": [],
-      "refunds": []
+      "refunds": [],
+      "billing": {
+        "country": "US"
+      },
+      "shipping": {
+        "country": ""
+      }
     },
     {
       "id": 728,
@@ -95,7 +101,10 @@
           "total": "28.925620",
           "total_tax": "6.074380",
           "sku": "",
-          "price": 16.528926
+          "price": 16.528926,
+          "cost_of_goods_sold": {
+            "value": 14
+          }
         }
       ],
       "shipping_lines": [
@@ -124,7 +133,13 @@
           "discount_tax": "0.87"
         }
       ],
-      "refunds": []
+      "refunds": [],
+      "billing": {
+        "country": "NL"
+      },
+      "shipping": {
+        "country": "de"
+      }
     },
     {
       "id": 729,
@@ -176,7 +191,13 @@
           "reason": "",
           "total": "-10.00"
         }
-      ]
+      ],
+      "billing": {
+        "country": "US"
+      },
+      "shipping": {
+        "country": "US"
+      }
     }
   ]
 }
