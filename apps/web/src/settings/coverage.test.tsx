@@ -14,8 +14,6 @@ import { SECTIONS } from './Layout';
 
 /** Editable entries with no row outside `data-legacy` yet. The item that renders a row removes its id; ST-48 empties it. */
 const ALLOWLIST = [
-  'notifications.approvals', 'notifications.agentDone', 'notifications.errors', 'notifications.digest', 'notifications.researchAlerts', // ST-14b
-  'notifications.toasts.approvals', 'notifications.toasts.agentDone', 'notifications.toasts.errors', 'notifications.toasts.researchAlerts', 'notifications.toasts.digest', 'notifications.quietHours', 'notifications.mutedStores', // ST-14b
   'baseCurrency', // ST-16
   'caps.agentCostPerDay', // ST-23
   'caps.adSpendChangePerDay', 'caps.higgsfieldCreditsPerDay', // ST-24b
@@ -26,7 +24,9 @@ const ALLOWLIST = [
 ];
 
 /** `data-action` names, each with the test that proves what it does (`path#test name`). */
-const ACTIONS: Record<string, string> = {};
+const ACTIONS: Record<string, string> = {
+  'notifications.test': 'apps/web/src/settings/sections/Notifications.test.tsx#Send test shows what the server decided, and says where toasts appear',
+};
 
 const root = `${process.cwd()}/`; // vitest runs from the repo root
 const CONTROLS = 'input, select, textarea, button, [role="switch"], [role="radio"], [role="checkbox"], [role="tab"], [role="combobox"]';
@@ -44,6 +44,7 @@ describe('every control on a settings page is real', () => {
   it.each(SECTIONS.map((s) => [s.slug]))('/settings/%s', async (slug) => {
     stubApi((url) => {
       if (url === '/api/settings') return settings;
+      if (url === '/api/config') return { values: {}, origins: {}, versions: { app: 1 } };
       if (url === '/api/stores') return [peak];
       if (url.startsWith('/api/caps')) return caps;
       if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };

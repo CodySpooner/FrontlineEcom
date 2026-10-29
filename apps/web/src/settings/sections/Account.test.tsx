@@ -21,6 +21,7 @@ const server = () => {
       return (saved = { ...saved, profile: { ...saved.profile, name: profile.name.trim() }, version: version + 1 });
     }
     if (url === '/api/settings') return saved;
+    if (url === '/api/config') return { values: {}, origins: {}, versions: { app: 1 } };
     if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };
   });
   return { fetch, saved: () => saved };

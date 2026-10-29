@@ -2,7 +2,7 @@
 // wrapper rebuild them with the settings kit. Profile is split: Account saves only the name, General only the currency.
 import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
-import { APPROVAL_KINDS, type SettingsUpdate, type Store, type StoreCaps, type StoreCapsUpdate } from '@frontline/shared';
+import { APPROVAL_KINDS, type Store, type StoreCaps, type StoreCapsUpdate } from '@frontline/shared';
 import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings, useUsage } from '../../api/client';
 import { feeEstimate, nicheName, PLATFORM_NAME, StoreForm } from '../../components/StoreForm';
 import { Badge, Button, ConfirmDelete, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../../components/ui';
@@ -235,39 +235,6 @@ export function BaseCurrency() {
           Save
         </Button>
       </form>
-    </Panel>
-  );
-}
-
-export function Notifications() {
-  const q = useSettings();
-  const update = useUpdateSettings();
-  if (q.isPending) return <Panel title="Notifications"><LoadingState rows={3} /></Panel>;
-  if (q.isError) return <Panel title="Notifications"><ErrorState message="Couldn't load your settings." onRetry={() => q.refetch()} /></Panel>;
-  const s = q.data;
-  const toggle = (label: string, help: string, checked: boolean, patch: (v: boolean) => Omit<SettingsUpdate, 'version'>) => (
-    <label className="flex cursor-pointer items-center justify-between gap-4 py-2">
-      <span>
-        <span className="block text-[13px]">{label}</span>
-        <span className="block text-xs text-muted">{help}</span>
-      </span>
-      <Switch checked={checked} disabled={update.isPending} onChange={(e) => update.mutate({ version: s.version ?? 0, ...patch(e.target.checked) })} />
-    </label>
-  );
-  return (
-    <Panel title="Notifications" sub="What lands in the bell.">
-      <div className="divide-y divide-line">
-        {toggle('Approvals', 'An agent needs your yes or no.', s.notifications.approvals, (v) => ({ notifications: { approvals: v } }))}
-        {toggle('Agent finished', 'A task you started is done.', s.notifications.agentDone, (v) => ({ notifications: { agentDone: v } }))}
-        {toggle('Errors', 'A run or a connector failed.', s.notifications.errors, (v) => ({ notifications: { errors: v } }))}
-        {toggle('Morning digest', "Yesterday's numbers and the approvals waiting, at 8:00.", s.notifications.digest, (v) => ({ notifications: { digest: v } }))}
-        {toggle('Research alerts', 'A watched product, niche or offer changed. Off: alerts still appear on the Watchlist.', s.notifications.researchAlerts, (v) => ({ notifications: { researchAlerts: v } }))}
-      </div>
-      {update.isError && (
-        <p role="alert" className="mt-2 text-xs text-red">
-          {update.error.message}
-        </p>
-      )}
     </Panel>
   );
 }

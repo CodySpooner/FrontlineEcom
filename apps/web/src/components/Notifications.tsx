@@ -1,8 +1,8 @@
 // UI-20 Notification center: the bell in the top bar and its drawer.
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { Bell, CircleAlert, CircleCheck, CircleX, Eye, Info, ShieldCheck, type LucideIcon } from 'lucide-react';
-import { AGENT_ROLES, type AppNotification, type ApprovalRequest, type NotificationKind } from '@frontline/shared';
+import { AGENT_ROLES, settingsUrl, type AppNotification, type ApprovalRequest, type NotificationKind } from '@frontline/shared';
 import { useAgents, useApprovals, useMarkRead, useNotifications } from '../api/client';
 import { expiredWhy } from '../lib/approvals';
 import { ago } from '../lib/format';
@@ -107,7 +107,12 @@ function Drawer({ onClose }: { onClose: () => void }) {
         </section>
       )}
       <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted">{unread ? `${unread} unread` : 'All read'}</span>
+        <span className="text-xs text-muted">
+          {unread ? `${unread} unread` : 'All read'} ·{' '}
+          <Link to={settingsUrl('notifications')} onClick={onClose} className="text-text-2 underline-offset-2 hover:underline">
+            Notification settings
+          </Link>
+        </span>
         <Button size="sm" disabled={!unread || read.isPending} onClick={() => read.mutate(undefined)}>
           Mark all read
         </Button>
