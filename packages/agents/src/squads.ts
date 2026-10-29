@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, type Agent, type AgentRole, type AgentUpdate, type Autonomy, type Store } from '@frontline/shared';
+import { AGENT_ROLES, machineZone, startOfDay, type Agent, type AgentRole, type AgentUpdate, type Autonomy, type Store } from '@frontline/shared';
 import { engineInfo } from './engine';
 import { createDefaultJobs } from './jobs';
 
@@ -40,12 +40,18 @@ export function listAgents(db: DatabaseSync, storeIds?: string[]): Agent[] {
 }
 
 /**
- * What the store's runs (or one agent's) cost today: every run not over before local midnight, so one queued or begun
- * yesterday that spends today counts. ponytail: all of such a run's cost counts today; a cap errs high, never low.
+ * The workspace timezone (settings decision 8): every "today" counter and schedule runs on it. The machine's when the
+ * `workspace` row or its timezone is absent (a fresh DB, a test, a backup restored before boot), never UTC.
+ */
+export const workspaceZone = (db: DatabaseSync): string =>
+  String(db.prepare("SELECT json_extract(value_json, '$.timezone') AS zone FROM settings WHERE key = 'workspace'").get()?.zone ?? '') || machineZone();
+
+/**
+ * What the store's runs (or one agent's) cost today: every run not over before the workspace zone's midnight, so one
+ * queued or begun yesterday that spends today counts. ponytail: all of such a run's cost counts today; a cap errs high, never low.
  */
 export function costToday(db: DatabaseSync, storeId: string, agentId?: string): number {
-  const midnight = new Date();
-  midnight.setHours(0, 0, 0, 0);
+  const midnight = new Date(startOfDay(workspaceZone(db)));
   const row = db
     .prepare(`SELECT coalesce(sum(cost_usd), 0) AS cost FROM agent_runs WHERE store_id = ? AND coalesce(ended_at, iif(status = 'running', '~', created_at)) >= ? ${agentId ? 'AND agent_id = ?' : ''}`)
     .get(storeId, midnight.toISOString(), ...(agentId ? [agentId] : []));

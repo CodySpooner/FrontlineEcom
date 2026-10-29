@@ -4,7 +4,7 @@ export { agentModel, claudeAccount, claudeEngine, claudeModels, claudeRuntime, e
 export { CODEX_FEATURES_OFF, codexEngine, codexError, codexEvents, codexMcp, codexModels, codexSetup, codexStatus, codexWork, featuresChanged, killTree, spawnCodex, type CodexEngineOptions } from './codex';
 export { CODEX_TURN, fakeCodex, type FakeCodexChild } from './fake-codex';
 export { BUILTIN_TYPES, CHECKS_LAST, contractOf, contractText, ROLES, SQUAD_RULES, WORKFLOW_FIRST, type RoleSpec, type ToolName } from './roles';
-export { createSquad, ensureSquads, listAgents, getAgent, updateAgent, agentId, costToday, DEFAULT_AUTONOMY } from './squads';
+export { createSquad, ensureSquads, listAgents, getAgent, updateAgent, agentId, costToday, DEFAULT_AUTONOMY, workspaceZone } from './squads';
 export { assemblePrompt, KB_UNTRUSTED, playbook, platformPack, nichePack, estimateTokens, oneLine, type PromptInput } from './prompt';
 export {
   writeMemory,
@@ -23,7 +23,7 @@ export {
   MEMORY_CAP,
   type NewMemory,
 } from './memory';
-export { APP_TOOLS, OUTLIVE_RUN, RESEARCH_TOOLS, allows, budgetAddedToday, cash, defaultTools, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
+export { APP_TOOLS, OUTLIVE_RUN, RESEARCH_TOOLS, allows, autopilotUsedToday, budgetAddedToday, cash, defaultTools, toolsFor, runTools, callTool, requestApproval, smsSegments, type AppTool, type ExternalMcp, type ToolEnv, type ToolContext } from './tools';
 export { nicheSlug, customNichePack, saveNichePack, draftNichePackTask } from './niche';
 export { agentTypes, archiveCustomRole, createCustomRole, customRole, getConfig, getCustomRole, listPresets, resolveType, saveConfig, savePreset, seatDefault, toolGroups, validateConfig, validateCustomRole, type AgentType, type ConfigDraft } from './configs';
 export { conversationCounts, conversationFindings, conversationKnowledge, conversationPreface, conversationQuery, conversationThread, runDeliverables, setConversationConfig, createConversation, discardConversation, getConversation, indexConversation, listConversations, recap, stateOf, touchConversation, updateConversation, type ConversationQuery } from './conversations';

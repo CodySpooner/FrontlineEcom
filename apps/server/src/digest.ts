@@ -1,10 +1,11 @@
 import { currentWindow, totalsOf } from './analytics';
+import { workspaceZone } from '@frontline/agents';
 import { addDays, localDate } from './dates';
 import type { Db } from './db';
 import { fxFor } from './fx';
 import { getSettings, notify } from './settings';
 
-/** Local hour the digest goes out (or the first check after it, if the app was off then). */
+/** Hour the digest goes out in the workspace timezone (or the first check after it, if the app was off then). */
 const HOUR = 8;
 
 /**
@@ -30,12 +31,13 @@ export function sendDigest(db: Db, now = new Date()) {
   });
 }
 
-/** Sends the digest once a day from 8:00 local while Settings → Notifications → digest is on. Returns stop(). */
+/** Sends the digest once a day from 8:00 in the workspace timezone while Settings → Notifications → digest is on. Returns stop(). */
 export function startDigestLoop(db: Db, everyMs = 10 * 60_000) {
   const check = () => {
     const now = new Date();
-    const today = localDate(now);
-    if (now.getHours() < HOUR || !getSettings(db).notifications.digest) return;
+    const zone = workspaceZone(db); // settings decision 8
+    const today = localDate(now, zone);
+    if (Number(now.toLocaleString('en-GB', { timeZone: zone, hour: 'numeric', hourCycle: 'h23' })) < HOUR || !getSettings(db).notifications.digest) return;
     const sent = db.prepare("SELECT value_json FROM settings WHERE key = 'digest_sent'").get();
     if (sent && JSON.parse(String(sent.value_json)) === today) return;
     db.prepare("INSERT INTO settings (key, value_json) VALUES ('digest_sent', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify(today));

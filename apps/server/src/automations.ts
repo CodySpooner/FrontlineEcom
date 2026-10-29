@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
+import { workspaceZone } from '@frontline/agents';
 import type { AnalyticsRange, AutomationRule, AutomationRun, AutomationRunStatus, AutomationTrigger, MetricTotals } from '@frontline/shared';
 import { loadRows, salesShares, totalsOf } from './analytics';
 import { approvalsHook } from './approvals';
 import { cronDueBetween, nextCronTime, parseCron } from './cron';
-import { addDays, dayFraction, localDate } from './dates';
+import { addDays, dayFraction, localDate, startOfDay } from './dates';
 import { logChanges, NO_VERSION, versionOf } from './config/write';
 import { once, type Db } from './db';
 import { storeZone } from './stores';
@@ -24,11 +25,14 @@ const METRICS: (keyof MetricTotals)[] = ['revenue', 'profit', 'adSpend', 'roas',
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const int = (v: unknown, lo: number, hi: number): v is number => Number.isInteger(v) && (v as number) >= lo && (v as number) <= hi;
 
-/** `withNext` adds nextRunAt for the API (an up-to-8-day minute scan, so the scheduler tick skips it). */
-const toRule = (r: Row, withNext = false): AutomationRule => {
+/**
+ * `zone` (the workspace timezone) adds nextRunAt for the API, worked out in it (an up-to-8-day minute scan, so the
+ * scheduler tick skips it).
+ */
+const toRule = (r: Row, zone?: string): AutomationRule => {
   const trigger = JSON.parse(String(r.trigger_json)) as AutomationTrigger;
   const enabled = r.enabled === 1;
-  const next = withNext && enabled && trigger.type === 'schedule' ? nextCronTime(parseCron(trigger.cron), new Date()) : undefined;
+  const next = zone && enabled && trigger.type === 'schedule' ? nextCronTime(parseCron(trigger.cron), new Date(), 8, zone) : undefined;
   return {
     id: String(r.id),
     storeId: String(r.store_id),
@@ -41,14 +45,14 @@ const toRule = (r: Row, withNext = false): AutomationRule => {
     cooldownHours: Number(r.cooldown_hours),
     createdAt: String(r.created_at),
     ...(r.last_fired_at ? { lastFiredAt: String(r.last_fired_at) } : {}),
-    ...(next ? { nextRunAt: next.toISOString() } : {}),
+    ...(next ? { nextRunAt: next.toISOString(), nextRunZone: zone } : {}),
     version: Number(r.version),
   };
 };
 
 const getRule = (db: Db, id: string) => {
   const r = db.prepare('SELECT * FROM automation_rules WHERE id = ?').get(id);
-  return r ? toRule(r, true) : undefined;
+  return r ? toRule(r, workspaceZone(db)) : undefined;
 };
 
 const toRun = (r: Row): AutomationRun => ({
@@ -160,7 +164,7 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
       db.prepare('INSERT INTO automation_runs (id, rule_id, store_id, fired_at, status, detail, approval_id) VALUES (?, ?, ?, ?, ?, ?, ?)').run(logId, rule.id, rule.storeId, firedAt, status, detail, approvalId ?? null);
     db.prepare('UPDATE automation_rules SET last_fired_at = ? WHERE id = ?').run(firedAt, rule.id);
 
-    const dayStart = new Date(t.getFullYear(), t.getMonth(), t.getDate()).toISOString();
+    const dayStart = new Date(startOfDay(workspaceZone(db), t)).toISOString(); // the workspace zone's day (settings decision 8)
     const today = Number(db.prepare("SELECT count(*) AS n FROM automation_runs WHERE rule_id = ? AND fired_at >= ? AND status IN ('started', 'awaiting_approval')").get(rule.id, dayStart)?.n);
     if (today >= rule.maxRunsPerDay) return log('skipped', `${reason}; daily cap of ${rule.maxRunsPerDay} reached`);
 
@@ -180,6 +184,7 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
 
   const tick = () => {
     const t = now();
+    const zone = workspaceZone(db);
     const check = db.prepare('UPDATE automation_rules SET checked_at = ? WHERE id = ?');
     // A rule that's off moves on too: switched back on, it doesn't replay the slots it was off for.
     db.prepare('UPDATE automation_rules SET checked_at = ? WHERE enabled = 0').run(t.toISOString());
@@ -191,7 +196,13 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
         // a weekly or monthly slot the app was closed through isn't dropped.
         const after = new Date(Math.max(checked.getTime(), t.getTime() - 31 * 86400000));
         check.run(t.toISOString(), rule.id);
-        if (cronDueBetween(parseCron(rule.trigger.cron), after, t)) fire(rule, `scheduled (${rule.trigger.cron})`, t);
+        const cron = parseCron(rule.trigger.cron);
+        if (!cronDueBetween(cron, after, t, zone)) continue;
+        // A timezone set further west brings the day's times round again: a rule with fixed hours runs each of its times
+        // once a day. Hourly rules keep every real hour (25 the night clocks fall back), as cron.ts has them.
+        const slots = cron.sets[1]!.size === 24 ? Infinity : cron.sets[0]!.size * cron.sets[1]!.size;
+        const ran = Number(db.prepare('SELECT count(*) AS n FROM automation_runs WHERE rule_id = ? AND fired_at >= ?').get(rule.id, new Date(startOfDay(zone, t)).toISOString())?.n);
+        if (ran < slots) fire(rule, `scheduled (${rule.trigger.cron})`, t);
         continue;
       }
       if (r.checked_at && t.getTime() - checked.getTime() < metricEveryMs) continue;
@@ -227,7 +238,7 @@ export function automationRoutes(db: Db, pickStores: (q?: string) => string[]) {
     .get('/api/automations', (c) => {
       const ids = pickStores(c.req.query('stores'));
       if (!ids.length) return c.json([]);
-      return c.json(db.prepare(`SELECT * FROM automation_rules WHERE store_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at, rowid`).all(...ids).map((r) => toRule(r, true)));
+      return c.json(db.prepare(`SELECT * FROM automation_rules WHERE store_id IN (${ids.map(() => '?').join(',')}) ORDER BY created_at, rowid`).all(...ids).map((r) => toRule(r, workspaceZone(db))));
     })
     .get('/api/automations/runs', (c) => {
       const ids = pickStores(c.req.query('stores'));

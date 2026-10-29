@@ -1667,6 +1667,8 @@ export interface AutomationRule {
   lastFiredAt?: string;
   /** Schedule rules: next fire time (ISO), when within 8 days. */
   nextRunAt?: string;
+  /** The workspace timezone nextRunAt was worked out in: schedules run on its wall clock (settings decision 8). */
+  nextRunZone?: string;
   /** The row's version: PATCH /api/automations/:id sends it back (409 stale, 428 without it). */
   version?: number;
 }
@@ -2437,3 +2439,4 @@ export * from './runtime-registry';
 export * from './research';
 export * from './store-analytics';
 export * from './settings';
+export * from './dates';

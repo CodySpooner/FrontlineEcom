@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
-import type { AspectRatio, Creative, CreativeKind, Store } from '@frontline/shared';
+import { startOfDay, type AspectRatio, type Creative, type CreativeKind, type Store } from '@frontline/shared';
+import { workspaceZone } from './squads';
 
 // The creatives library lives in `creatives` (agents-lane migration in apps/server/src/db.ts).
 
@@ -39,10 +40,9 @@ export const deleteCreative = (db: DatabaseSync, id: string) => db.prepare('DELE
 export const chargeCredits = (db: DatabaseSync, storeId: string, credits: number) =>
   db.prepare('INSERT INTO creative_credits (store_id, credits, created_at) VALUES (?, ?, ?)').run(storeId, credits, new Date().toISOString());
 
-/** Generation credits the store spent since local midnight. */
+/** Generation credits the store spent since the workspace zone's midnight (settings decision 8). */
 export function creditsToday(db: DatabaseSync, storeId: string): number {
-  const midnight = new Date();
-  midnight.setHours(0, 0, 0, 0);
+  const midnight = new Date(startOfDay(workspaceZone(db)));
   return Number(db.prepare('SELECT coalesce(sum(credits), 0) AS n FROM creative_credits WHERE store_id = ? AND created_at >= ?').get(storeId, midnight.toISOString())?.n ?? 0);
 }
 

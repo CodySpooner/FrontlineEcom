@@ -1,25 +1,14 @@
 // Calendar dates are YYYY-MM-DD strings; math goes through UTC midnight so DST never shifts a day.
+import { midnight } from '@frontline/shared';
+
 const DAY = 86400000;
 
 export const dayNumber = (date: string) => Date.parse(`${date}T00:00:00Z`) / DAY;
 
 export const addDays = (date: string, n: number) => new Date(Date.parse(`${date}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
 
-/** Today on the owner's machine (local timezone), or in IANA `timeZone`, YYYY-MM-DD. */
-/** Hours `timeZone` is ahead of UTC at `t`. */
-export const utcOffset = (timeZone: string, t = Date.now()) =>
-  (Date.parse(`${new Date(t).toLocaleString('sv-SE', { timeZone }).replace(' ', 'T')}Z`) - Math.floor(t / 1000) * 1000) / 3_600_000;
-export const localDate = (now = new Date(), timeZone?: string) => now.toLocaleDateString('en-CA', { timeZone });
-
-/** Epoch ms when `date` starts on the machine, or in IANA `timeZone`. */
-export const midnight = (date: string, timeZone?: string) => {
-  if (!timeZone) return new Date(`${date}T00:00:00`).getTime();
-  const utc = Date.parse(`${date}T00:00:00Z`);
-  const offset = (t: number) => Date.parse(`${new Date(t).toLocaleString('sv-SE', { timeZone }).replace(' ', 'T')}Z`) - t;
-  const t = utc - offset(utc - offset(utc));
-  // Where DST starts at midnight (Santiago, Havana) 00:00 doesn't exist: the day starts at the jump, 01:00.
-  return localDate(new Date(t), timeZone) === date ? t : utc - offset(utc);
-};
+// The machine's zone, a zone's date and its midnight live in packages/shared (settings decision 8), for the agents too.
+export { localDate, machineZone, midnight, startOfDay, utcOffset } from '@frontline/shared';
 
 /** Share of `date` (machine-local, or in `timeZone`) that has passed at `now`: 0 before it starts, 1 once it's over (DST days are 23 or 25 h). */
 export const dayFraction = (date: string, now = Date.now(), timeZone?: string) => {

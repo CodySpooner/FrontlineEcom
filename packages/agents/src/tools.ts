@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import { AGENT_ROLES, isPrivateHost, PR_EVIDENCE_KINDS, PR_RECOMMENDATION_LABEL, PR_RECOMMENDATIONS, PR_REPORT_LISTS, type PrReportBody, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardType, type KbLinkType, type KbStage, type KbWorkspace, type KnowledgeScope, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentConfig, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
+import { AGENT_ROLES, startOfDay, isPrivateHost, PR_EVIDENCE_KINDS, PR_RECOMMENDATION_LABEL, PR_RECOMMENDATIONS, PR_REPORT_LISTS, type PrReportBody, KB_CARD_TYPES, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardType, type KbLinkType, type KbStage, type KbWorkspace, type KnowledgeScope, PRICE_WRITE_PLATFORMS, PRODUCT_PAGE_PLATFORMS, PRODUCT_WRITE_PLATFORMS, RESEARCH_TABS, type Agent, type AgentConfig, type AgentRole, type AgentRun, type AgentEvent, type AnalyticsRange, type AnalyticsSummary, type ApprovalAction, type AspectRatio, type CreativeKind, type ApprovalDecision, type ApprovalsHook, type AdSnapshotData, type Competitor, type Platform, type PriceChange, type ResearchProduct, type ResearchTab, type Store, type StoreCaps, type SupplierProduct, storeHealth } from '@frontline/shared';
 import { z } from 'zod';
 import { economics, IDLE_CAMPAIGN_STATUSES, reviewCampaigns, thresholds, uncostedShare, type CampaignStats } from './ads';
 import { chargeCredits, CREDITS, creditsAsked, creditsToday, demoMedia, listCreatives, saveCreative } from './creatives';
@@ -17,6 +17,7 @@ import { saveSource, sourceForAgent, untrustedBlock } from './kb-sources';
 import { KB_UNTRUSTED } from './prompt';
 import { ROLES, type ExternalMcpKind, type ToolName } from './roles';
 import { runGist } from './runs';
+import { workspaceZone } from './squads';
 
 export interface Theme {
   id: string;
@@ -1660,10 +1661,12 @@ function campaignStats(ctx: ToolContext, days: number): CampaignStats[] {
     .map((r) => ({ network: String(r.network), id: String(r.id), name: String(r.name), status: String(r.status), dailyBudget: Number(r.daily_budget), spend: Number(r.spend), revenue: Number(r.revenue), purchases: Number(r.purchases) }));
 }
 
-/** Daily ad budget added by budget changes approved since local midnight, or still waiting (whenever asked: approving it adds it today). */
+/**
+ * Daily ad budget added by budget changes approved since the workspace zone's midnight (settings decision 8), or still
+ * waiting (whenever asked: approving it adds it today).
+ */
 export function budgetAddedToday(db: DatabaseSync, storeId: string): number {
-  const midnight = new Date();
-  midnight.setHours(0, 0, 0, 0);
+  const midnight = new Date(startOfDay(workspaceZone(db)));
   const row = db
     .prepare(
       `SELECT coalesce(sum(coalesce(json_extract(action_json, '$.payload.addedUsd'), json_extract(action_json, '$.amountUsd'))), 0) AS added FROM approvals
@@ -1673,10 +1676,9 @@ export function budgetAddedToday(db: DatabaseSync, storeId: string): number {
   return Number(row?.added ?? 0);
 }
 
-/** USD autopilot already approved for this store and action kind since local midnight. */
-function autopilotUsedToday(db: DatabaseSync, storeId: string, kind: string): number {
-  const midnight = new Date();
-  midnight.setHours(0, 0, 0, 0);
+/** USD autopilot already approved for this store and action kind since the workspace zone's midnight (settings decision 8). */
+export function autopilotUsedToday(db: DatabaseSync, storeId: string, kind: string): number {
+  const midnight = new Date(startOfDay(workspaceZone(db)));
   const row = db
     .prepare(
       `SELECT coalesce(sum(json_extract(action_json, '$.amountUsd')), 0) AS used FROM approvals
