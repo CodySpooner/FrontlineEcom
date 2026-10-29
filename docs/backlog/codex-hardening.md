@@ -66,6 +66,7 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
 - [ ] (from settings, FYI) On a `core.autocrlf=true` checkout every axe snapshot compare fails: the index has LF, the
   worktree CRLF, the content is identical (seen on untouched `/orders` too). A `.gitattributes` line
   `e2e/axe-baseline/*.json text eol=lf` would fix it.
+- [ ] (from store-analytics) CH-19 Analytics axe filing fixed (commit "store-analytics: Inbox axe names"): the 12 Research links on Analytics and the shared Ask AI control (`Hero.tsx`, name now "Ask AI anything, Ctrl K": axe counts the visible Ctrl K hint) report no serious/critical violations, so `accessibility /analytics` and the 13 other pages whose baseline lists `.hover\:text-text` now fail only on their stale baselines (actual `[]`); please refresh those 14 files in `e2e/axe-baseline/`. Also: a fresh checkout with core.autocrlf writes the baselines CRLF and every scan mismatches on line endings alone; an `e2e/axe-baseline/*.json eol=lf` attribute would stop that.
 
 ## Items
 

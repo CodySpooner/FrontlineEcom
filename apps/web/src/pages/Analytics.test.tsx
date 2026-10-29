@@ -17,7 +17,7 @@ describe('Campaigns', () => {
     stubApi(() => []);
     const c = { network: 'meta', id: 'c1', storeId: 'pawsome', name: 'Spring sale', status: 'active', dailyBudget: 20, spend: 100, revenue: 150, roas: 1.5, purchases: 3, clicks: 40, impressions: 2000 } as CampaignStats;
     renderApp(<Campaigns q={{ data: [c], isPending: false, isError: false } as never} be={1} beOf={() => 1} />);
-    expect(screen.getByRole('link', { name: 'Research Spring sale' }).getAttribute('href')).toBe(
+    expect(screen.getByRole('link', { name: 'Research this: Spring sale' }).getAttribute('href')).toBe(
       '/knowledge?view=research&ws=pawsome&ask=How+to+make+the+%22Spring+sale%22+Meta+campaign+more+profitable',
     );
   });

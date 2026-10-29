@@ -443,8 +443,8 @@ export function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number
                       {NETWORK[c.network]}
                       {name && ` · ${name(c.storeId)}`}
                       {' · '}
-                      <Link aria-label={`Research ${c.name}`} to={researchHref(c.storeId, `How to make the "${c.name}" ${NETWORK[c.network]} campaign more profitable`)} className="hover:text-white hover:underline">
-                        Research this
+                      <Link to={researchHref(c.storeId, `How to make the "${c.name}" ${NETWORK[c.network]} campaign more profitable`)} className="hover:text-white hover:underline">
+                        Research this<span className="sr-only">: {c.name}</span>
                       </Link>
                       {' · '}
                       <AskStrategist c={c} />

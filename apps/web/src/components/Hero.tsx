@@ -47,7 +47,7 @@ function HeroControls() {
       {/* Below 900px it shrinks to an icon button the size of the bell. */}
       <button
         type="button"
-        aria-label="Ask AI anything"
+        aria-label="Ask AI anything, Ctrl K"
         onClick={() => window.dispatchEvent(new Event('frontline:ask'))}
         className="glass grid size-10 cursor-pointer place-items-center rounded-[11px] text-muted transition hover:text-text min-[900px]:flex min-[900px]:h-auto min-[900px]:w-[200px] min-[900px]:gap-2.5 min-[900px]:px-3 min-[900px]:py-[9px] min-[900px]:text-[13px] min-[1100px]:w-[280px]"
       >
