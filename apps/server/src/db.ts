@@ -1248,6 +1248,194 @@ export const MIGRATIONS = [
   /* 55 (product-research: PR-21 a watch keeps its last check's result, which the next check compares with) */ `
   ALTER TABLE pr_watches ADD COLUMN state_json TEXT;
   `,
+  /* 56 (store-analytics: SA-07 ledger, catalog, sources). New columns are NULL = unknown (no defaults). Money columns on
+     orders are the as-placed amounts; refunds live only in the refunds ledger (decision 9). */ `
+  ALTER TABLE orders ADD COLUMN source_kind TEXT;
+  ALTER TABLE orders ADD COLUMN source_id TEXT;
+  ALTER TABLE orders ADD COLUMN channel TEXT;
+  ALTER TABLE orders ADD COLUMN channel_order_id TEXT;
+  ALTER TABLE orders ADD COLUMN duplicate_of TEXT;
+  ALTER TABLE orders ADD COLUMN customer_ref TEXT;
+  ALTER TABLE orders ADD COLUMN customer_state TEXT;
+  ALTER TABLE orders ADD COLUMN country TEXT;
+  ALTER TABLE orders ADD COLUMN currency TEXT;
+  ALTER TABLE orders ADD COLUMN gross_sales REAL;
+  ALTER TABLE orders ADD COLUMN discounts REAL;
+  ALTER TABLE orders ADD COLUMN shipping REAL;
+  ALTER TABLE orders ADD COLUMN paid_at TEXT;
+  ALTER TABLE orders ADD COLUMN cancelled_at TEXT;
+  ALTER TABLE orders ADD COLUMN fulfilled_at TEXT;
+  ALTER TABLE orders ADD COLUMN delivered_at TEXT;
+  ALTER TABLE orders ADD COLUMN source_updated_at TEXT;
+  ALTER TABLE orders ADD COLUMN breakdown_at TEXT;
+  CREATE INDEX orders_by_channel_id ON orders (store_id, channel, channel_order_id) WHERE channel_order_id IS NOT NULL;
+  CREATE INDEX orders_by_customer ON orders (store_id, customer_ref) WHERE customer_ref IS NOT NULL;
+  ALTER TABLE products ADD COLUMN category TEXT;
+  ALTER TABLE products ADD COLUMN handle TEXT;
+  ALTER TABLE products ADD COLUMN synced_at TEXT;
+  ALTER TABLE daily_metrics ADD COLUMN purchase_sessions INTEGER;
+  CREATE TABLE refunds ( -- one row per refund line; no FK to orders: a refund can arrive before its order
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    id TEXT NOT NULL,
+    refund_id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    product_id TEXT,
+    variant_id TEXT,
+    refunded_at TEXT NOT NULL,
+    local_date TEXT NOT NULL,
+    merchandise REAL,
+    shipping REAL,
+    tax REAL,
+    other REAL,
+    quantity INTEGER,
+    restocked INTEGER,
+    source TEXT NOT NULL,
+    PRIMARY KEY (store_id, id)
+  );
+  CREATE INDEX refunds_by_day ON refunds (store_id, local_date);
+  CREATE INDEX refunds_by_order ON refunds (store_id, order_id);
+  CREATE INDEX refunds_by_product ON refunds (store_id, product_id);
+  CREATE TABLE order_fees (
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    order_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    amount REAL NOT NULL,
+    currency TEXT,
+    local_date TEXT,
+    source TEXT NOT NULL,
+    PRIMARY KEY (store_id, order_id, kind, source)
+  );
+  CREATE INDEX order_fees_by_day ON order_fees (store_id, local_date);
+  CREATE TABLE order_lines (
+    store_id TEXT NOT NULL,
+    order_id TEXT NOT NULL,
+    line_id TEXT NOT NULL,
+    product_id TEXT,
+    variant_id TEXT,
+    sku TEXT,
+    quantity INTEGER NOT NULL,
+    gross REAL NOT NULL,
+    discount REAL,
+    cost REAL,
+    cost_source TEXT,
+    owner_backfill INTEGER,
+    PRIMARY KEY (store_id, order_id, line_id),
+    FOREIGN KEY (store_id, order_id) REFERENCES orders (store_id, id) ON DELETE CASCADE
+  );
+  CREATE INDEX order_lines_by_product ON order_lines (store_id, product_id);
+  CREATE INDEX order_lines_by_variant ON order_lines (store_id, variant_id);
+  CREATE TABLE product_variants (
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL,
+    id TEXT NOT NULL,
+    title TEXT,
+    sku TEXT,
+    price REAL,
+    compare_at REAL,
+    inventory INTEGER,
+    inventory_tracked INTEGER,
+    inventory_policy TEXT,
+    status TEXT,
+    synced_at TEXT,
+    PRIMARY KEY (store_id, id)
+  );
+  CREATE INDEX product_variants_by_product ON product_variants (store_id, product_id);
+  CREATE TABLE channel_listings ( -- current state only: no publication history (decision 21)
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL,
+    id TEXT NOT NULL,
+    product_id TEXT,
+    variant_id TEXT,
+    status TEXT,
+    error TEXT,
+    published_at TEXT,
+    synced_at TEXT,
+    PRIMARY KEY (store_id, channel, id)
+  );
+  CREATE INDEX channel_listings_by_product ON channel_listings (store_id, product_id);
+  CREATE TABLE product_links ( -- a channel's product rolled into the store's (decision 22): a platform id or the owner's mapping
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    channel TEXT NOT NULL,
+    channel_product_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    method TEXT NOT NULL CHECK (method IN ('platform_id', 'owner')),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (store_id, channel, channel_product_id)
+  );
+  CREATE TABLE product_collections (
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    collection_id TEXT NOT NULL,
+    product_id TEXT NOT NULL,
+    title TEXT,
+    source TEXT,
+    synced_at TEXT,
+    PRIMARY KEY (store_id, collection_id, product_id)
+  );
+  CREATE INDEX product_collections_by_product ON product_collections (store_id, product_id);
+  CREATE TABLE unit_costs ( -- effective-dated: a new cost never rewrites a past one (decision 15)
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    product_id TEXT NOT NULL,
+    variant_id TEXT,
+    cost REAL NOT NULL,
+    currency TEXT,
+    source TEXT NOT NULL,
+    effective_from TEXT NOT NULL,
+    recorded_at TEXT NOT NULL
+  );
+  CREATE INDEX unit_costs_by_product ON unit_costs (store_id, product_id, effective_from);
+  CREATE TABLE inventory_snapshots ( -- point in time: one value per variant and day, never summed across days
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    variant_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    quantity INTEGER,
+    tracked INTEGER,
+    PRIMARY KEY (store_id, variant_id, date)
+  );
+  CREATE TABLE sync_runs (
+    id INTEGER PRIMARY KEY,
+    integration_id TEXT NOT NULL,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL,
+    error TEXT
+  );
+  CREATE INDEX sync_runs_by_integration ON sync_runs (integration_id, started_at);
+  CREATE INDEX sync_runs_by_store ON sync_runs (store_id, started_at);
+  CREATE TABLE source_datasets (
+    integration_id TEXT NOT NULL,
+    dataset TEXT NOT NULL,
+    store_id TEXT REFERENCES stores(id) ON DELETE CASCADE,
+    status TEXT,
+    last_try_at TEXT,
+    last_success_at TEXT,
+    error TEXT,
+    covered_from TEXT,
+    covered_to TEXT,
+    verified_at TEXT,
+    verified_account TEXT,
+    verified_note TEXT,
+    PRIMARY KEY (integration_id, dataset)
+  );
+  CREATE INDEX source_datasets_by_store ON source_datasets (store_id);
+  CREATE TABLE fx_rates ( -- ECB reference rates per day: EUR → currency (decision 19)
+    date TEXT NOT NULL,
+    currency TEXT NOT NULL,
+    rate REAL NOT NULL,
+    PRIMARY KEY (date, currency)
+  );
+  CREATE TABLE traffic_breakdown_daily (
+    store_id TEXT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    date TEXT NOT NULL,
+    dimension TEXT NOT NULL,
+    value TEXT NOT NULL,
+    sessions INTEGER,
+    purchase_sessions INTEGER,
+    source TEXT,
+    PRIMARY KEY (store_id, date, dimension, value)
+  );
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */

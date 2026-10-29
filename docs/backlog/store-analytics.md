@@ -588,7 +588,7 @@ connector item afterwards proves its path from source to metric.
     0 vs 0; negative baseline; ratio changes in points; a comparison before history is unavailable; `mtd` on the 1st;
     731-day custom refused; today's comparison day cut at the same local time.
 
-- [ ] SA-07 **Ledger and catalog schema (migration 56)** (spec §12 Data model):
+- [x] SA-07 **Ledger and catalog schema (migration 56)** (spec §12 Data model):
   - One migration `/* 56 (store-analytics: SA-07 ledger, catalog, sources) */`. All new columns are nullable with no
     DEFAULT (null means unknown). Every store-scoped table has `store_id ... REFERENCES stores(id) ON DELETE CASCADE`.
   - `orders` gains `source_kind`, `source_id`, `channel`, `channel_order_id`, `duplicate_of`, `customer_ref`,
@@ -1556,6 +1556,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-04 `SA_SOURCES` (10 syncers + demo × 17 datasets, support / reads / field / scopes / history / rate limit / reason) and the generated `docs/features/store-analytics-sources.md`. Docs check 2026-10-28: product views per product — Amazon documented (salesAndTrafficByAsin.pageViews, not read), Shopify / Etsy / TikTok Shop not confirmed in the official references (unsupported); ad-to-product — Meta (product_id breakdown) and Google Ads (shopping_performance_view) documented, not read (decision 16), TikTok Ads not confirmed. `SYNCERS` exported from `sync.ts` for the coverage test.
 - 2026-10-28 SA-05 `SA_METRICS` v1 (18 metrics: formula, unit, additivity, grain, filters, currency, zone, date basis, exclusions, refund treatment, datasets, direction), `saDef`, `renderMetricsDoc` → `docs/features/store-analytics-metrics.md`; `store-analytics.test.ts` checks the doc and a frozen hash per id@version.
 - 2026-10-28 SA-06 shared `SA_PRESETS`, `SA_COMPARES`, `resolvePeriod`, `comparePeriod`, `validateCustom`, `changeOf`, `ratio`, `combineStatus`; `store-analytics/period.ts` `storePeriod` (store zone + ET-style abbreviation, demo label, history start, same-clock cut and day fraction) with tests incl. Feb 29, NY DST start/end, mtd on the 1st, 731 days.
+- 2026-10-28 SA-07 migration 56 (the next free number): order source ids, channel ids, duplicate_of, customer ref and state, country, currency, as-placed money parts, event times, breakdown_at (all nullable, no defaults) with the channel-id and customer partial indexes; products category/handle/synced_at; daily_metrics.purchase_sessions; 13 new tables (refunds, order_fees, order_lines, product_variants, channel_listings, product_links, product_collections, unit_costs, inventory_snapshots, sync_runs, source_datasets, fx_rates, traffic_breakdown_daily). `schema.test.ts`: empty DB, an upgrade of a DB at 55 with rows, cascade on store delete.
 
 ## Blocked
 
