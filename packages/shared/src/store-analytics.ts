@@ -719,3 +719,26 @@ export interface SaContext {
   historyStart: string | null;
   freshness: SaFreshness[];
 }
+
+/** The global filters as sent to the API (SA-22): `filters=` is this object as JSON, e.g. {"channel":["site"]}. */
+export type SaFilters = Partial<Record<SaFilterKey, string[]>>;
+
+/** One metric of a set: its value, the comparison's value and the change between them. */
+export interface SaMetricResult extends SaValue {
+  id: SaMetricId;
+  /** `id@version` (saDef). */
+  def: string;
+  previous: SaValue | null;
+  change: SaChange;
+}
+
+/** GET /api/analytics/metrics: one store's metrics for a period, with one filter scope for the set. */
+export interface SaMetricSet {
+  period: SaPeriod;
+  compare: SaComparePeriod | null;
+  today: string;
+  zoneLabel: string;
+  zoneAbbr: string;
+  metrics: SaMetricResult[];
+  scope: SaFilterScope;
+}

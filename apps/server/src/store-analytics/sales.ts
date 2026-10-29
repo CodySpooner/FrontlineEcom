@@ -1,8 +1,9 @@
 // SA-16: the v1 sales metrics (SA_METRICS, decisions 8 to 12) for one store over [from, to] of its own days.
+import type { SQLInputValue } from 'node:sqlite';
 import { SA_REASONS, combineStatus, ratio, type SaReason, type SaValue } from '@frontline/shared';
 import { addDays, localDate } from '../dates';
 import type { Db } from '../db';
-import { demoParts } from '../demo';
+import { demoParts, demoSoFar } from '../demo';
 import { storeZone } from '../stores';
 import { storeConverter } from './fx';
 import { datasetFreshness } from './sources';
@@ -16,6 +17,38 @@ export type RefundBasis = 'refund_day' | 'order_day';
  * it has a paid time, cancelled or refunded later or not; one synced before them counts as the legacy surfaces do.
  */
 export const CANONICAL = `o.duplicate_of IS NULL AND iif(o.breakdown_at IS NULL, o.status = 'paid', o.paid_at IS NOT NULL AND o.status IN ('paid', 'refunded'))`;
+
+/**
+ * What a computation is narrowed to (SA-22). `cut`: the comparison's last day cut at today's clock time (decision 6):
+ * order-grain rows on that day count up to `at`, day-grain ones scale by `fraction` (estimated). `channels`: the channel
+ * filter, on the order's channel (an order synced before channels were recorded: TikTok Shop's by its id, else the
+ * store's own channel).
+ */
+export type Slice = { cut?: { at: string; fraction: number }; channels?: string[] };
+
+/** ` AND …` conditions narrowing order `o` (and the row's own day and time columns) to a slice, with their params. */
+export function sliceSql(db: Db, storeId: string, s: Slice | undefined, to: string, day = 'o.local_date', time = 'o.created_at') {
+  const sql: string[] = [];
+  const params: SQLInputValue[] = [];
+  if (s?.cut) sql.push(`(${day} < ? OR julianday(${time}) <= julianday(?))`), params.push(to, s.cut.at);
+  if (s?.channels?.length) {
+    const platform = String(db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform);
+    sql.push(`coalesce(o.channel, iif(+o.id GLOB 'tt-*', 'tiktok_shop', ?)) IN (${s.channels.map(() => '?').join(', ')})`);
+    params.push(platform === 'shopify' || platform === 'woocommerce' ? 'site' : platform, ...s.channels);
+  }
+  return { sql: sql.map((x) => ` AND ${x}`).join(''), params };
+}
+
+/** A demo store's daily rows over [from, to]; with a cut, its last day as it stood at that time (`demoSoFar`). */
+export function demoDays(db: Db, storeId: string, from: string, to: string, cut?: Slice['cut']) {
+  return db
+    .prepare('SELECT date, revenue, orders, cogs, sessions, ad_spend AS adSpend FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ? ORDER BY date')
+    .all(storeId, from, to)
+    .map((d) => {
+      const m = cut && d.date === to ? demoSoFar(storeId, to, cut.fraction) : { revenue: Number(d.revenue), orders: Number(d.orders), cogs: Number(d.cogs), sessions: Number(d.sessions), adSpend: Number(d.adSpend) };
+      return { date: String(d.date), revenue: m.revenue, orders: m.orders, cogs: m.cogs, sessions: m.sessions, adSpend: m.adSpend };
+    });
+}
 
 const cents = (n: number) => Math.round(n * 100) / 100;
 const pct = (share: number) => `${Math.round(share * 100)}%`;
@@ -35,17 +68,17 @@ export function unread(db: Db, storeId: string): SaValue | undefined {
  * Decision 30: a demo store's sales from `demoDay`'s parts over the days it has numbers for (today so far), so net
  * sales and orders are Dashboard's. Every value is `demo`; refunds fall on their order's day either way.
  */
-function demoSales(db: Db, storeId: string, from: string, to: string): Record<SalesMetricId, SaValue> {
-  const days = db.prepare('SELECT date, revenue, orders FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?').all(storeId, from, to);
+function demoSales(db: Db, storeId: string, from: string, to: string, cut?: Slice['cut']): Record<SalesMetricId, SaValue> {
+  const days = demoDays(db, storeId, from, to, cut);
   if (!days.length) {
     const none = missing('insufficient_history', 'Before the demo history');
     return { net_sales: none, gross_sales: none, discounts: none, refunds: none, orders: none, aov: none, units: none, cancelled_orders: none, refund_rate: none };
   }
   const s = { revenue: 0, orders: 0, gross: 0, discounts: 0, refunds: 0, units: 0, refundedUnits: 0, cancelled: 0 };
   for (const d of days) {
-    const p = demoParts(storeId, String(d.date), Number(d.revenue));
-    s.revenue += Number(d.revenue);
-    s.orders += Number(d.orders);
+    const p = demoParts(storeId, d.date, d.revenue);
+    s.revenue += d.revenue;
+    s.orders += d.orders;
     for (const k of ['gross', 'discounts', 'refunds', 'units', 'refundedUnits', 'cancelled'] as const) s[k] += p[k];
   }
   const demo = (v: number | null) => (v == null ? value(null, 'unavailable', { note: 'No demo orders in this period' }) : value(v, 'demo'));
@@ -64,12 +97,13 @@ function demoSales(db: Db, storeId: string, from: string, to: string): Record<Sa
   };
 }
 
-export function salesMetrics(db: Db, storeId: string, from: string, to: string, basis: RefundBasis = 'refund_day'): Record<SalesMetricId, SaValue> {
-  if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo) return demoSales(db, storeId, from, to);
+export function salesMetrics(db: Db, storeId: string, from: string, to: string, basis: RefundBasis = 'refund_day', slice?: Slice): Record<SalesMetricId, SaValue> {
+  if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo) return demoSales(db, storeId, from, to, slice?.cut);
   const none = unread(db, storeId);
   if (none) return { net_sales: none, gross_sales: none, discounts: none, refunds: none, orders: none, aov: none, units: none, cancelled_orders: none, refund_rate: none };
   // A day with no rate leaves its orders out of the money (decision 19), listed in the note.
   const { fx, unconverted, note } = storeConverter(db, String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)!.currency));
+  const w = sliceSql(db, storeId, slice, to);
 
   // Orders placed in the period. Those synced before money parts were recorded count as total − tax less their legacy
   // refund lines (TikTok Shop, Amazon), already in the store's currency: an estimate.
@@ -78,10 +112,10 @@ export function salesMetrics(db: Db, storeId: string, from: string, to: string, 
     .prepare(
       `SELECT o.local_date AS day, o.currency AS cur, o.fx_rate AS locked, o.breakdown_at IS NOT NULL AS parts, count(*) AS n, sum(o.gross_sales) AS gross, sum(o.discounts) AS disc,
          sum(o.total - o.tax - coalesce((SELECT sum(r.amount) FROM amazon_refunds r WHERE r.store_id = o.store_id AND r.order_id = o.id), 0)) AS est
-       FROM orders o WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL}
+       FROM orders o WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL}${w.sql}
        GROUP BY 1, 2, 3, 4`,
     )
-    .all(storeId, from, to);
+    .all(storeId, from, to, ...w.params);
   for (const r of placed) {
     const n = Number(r.n);
     orders += n;
@@ -100,44 +134,47 @@ export function salesMetrics(db: Db, storeId: string, from: string, to: string, 
 
   // Merchandise refunds of orders with money parts (the others' are inside their total), each at its own day's rate.
   const dayCol = basis === 'order_day' ? 'o.local_date' : 'r.local_date';
+  const wr = sliceSql(db, storeId, slice, to, dayCol, basis === 'order_day' ? 'o.created_at' : 'r.refunded_at');
+  const wu = sliceSql(db, storeId, slice, to, 'r.local_date', 'r.refunded_at');
   let refunds = 0;
   for (const r of db
     .prepare(
       `SELECT r.local_date AS day, o.currency AS cur, o.fx_rate AS locked, sum(r.merchandise) AS merch FROM refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
-       WHERE r.store_id = ? AND ${dayCol} BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL} GROUP BY 1, 2, 3`,
+       WHERE r.store_id = ? AND ${dayCol} BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wr.sql} GROUP BY 1, 2, 3`,
     )
-    .all(storeId, from, to)) {
+    .all(storeId, from, to, ...wr.params)) {
     const x = fx(String(r.day), r.cur, r.locked, 0);
     if (x != null) refunds += Number(r.merch ?? 0) * x;
   }
   const refundedUnits = Number(
-    db.prepare(`SELECT coalesce(sum(r.quantity), 0) AS q FROM refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id WHERE r.store_id = ? AND r.local_date BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}`).get(storeId, from, to)!.q,
+    db.prepare(`SELECT coalesce(sum(r.quantity), 0) AS q FROM refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id WHERE r.store_id = ? AND r.local_date BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wu.sql}`).get(storeId, from, to, ...wu.params)!.q,
   );
 
   // Decision 12: units from order lines; an order without them falls back to its per-product rows, estimated.
   const lineUnits = db
     .prepare(
       `SELECT coalesce(sum(l.quantity), 0) AS q, count(DISTINCT l.order_id) AS n FROM order_lines l JOIN orders o ON o.store_id = l.store_id AND o.id = l.order_id
-       WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL}`,
+       WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL}${w.sql}`,
     )
-    .get(storeId, from, to)!;
+    .get(storeId, from, to, ...w.params)!;
   const itemUnits = db
     .prepare(
       `SELECT coalesce(sum(i.quantity), 0) AS q FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
-       WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL} AND NOT EXISTS (SELECT 1 FROM order_lines l WHERE l.store_id = o.store_id AND l.order_id = o.id)`,
+       WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL} AND NOT EXISTS (SELECT 1 FROM order_lines l WHERE l.store_id = o.store_id AND l.order_id = o.id)${w.sql}`,
     )
-    .get(storeId, from, to)!;
+    .get(storeId, from, to, ...w.params)!;
   const units = Number(lineUnits.q) + Number(itemUnits.q);
   const linesShare = orders ? Number(lineUnits.n) / orders : 1;
 
   // Paid orders cancelled on a day of the period (the store's days), whenever they were placed.
   const zone = storeZone(db, storeId);
+  const wc = sliceSql(db, storeId, { channels: slice?.channels }, to);
   const cancelled = db
-    .prepare(`SELECT o.cancelled_at AS at FROM orders o WHERE o.store_id = ? AND o.cancelled_at BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}`)
-    .all(storeId, addDays(from, -1), addDays(to, 2))
+    .prepare(`SELECT o.cancelled_at AS at FROM orders o WHERE o.store_id = ? AND o.cancelled_at BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wc.sql}`)
+    .all(storeId, addDays(from, -1), addDays(to, 2), ...wc.params)
     .filter((r) => {
       const day = localDate(new Date(String(r.at)), zone);
-      return day >= from && day <= to;
+      return day >= from && day <= to && !(slice?.cut && day === to && Date.parse(String(r.at)) > Date.parse(slice.cut.at));
     }).length;
 
   // Coverage. Orders without money parts make the totals estimates; what only money parts give (discounts, refunds,

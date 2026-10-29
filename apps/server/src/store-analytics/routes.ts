@@ -1,7 +1,8 @@
 import { SA_METRICS, SA_SOURCES, type SaContext, type SaMetricId, type SaSourceKind } from '@frontline/shared';
 import { Hono } from 'hono';
 import type { Db } from '../db';
-import { historyStart, zoneInfo } from './period';
+import { computeMetricSet, parseFilters } from './metric-set';
+import { historyStart, storePeriod, zoneInfo } from './period';
 import { datasetFreshness, markVerified, sourceRows } from './sources';
 
 export type Scope = { storeId: string; metrics?: SaMetricId[] };
@@ -58,6 +59,18 @@ export function storeAnalyticsRoutes(db: Db) {
     .get('/api/analytics/context', (c) => {
       const s = scoped(c);
       return 'error' in s ? c.json({ error: s.error }, s.status) : c.json(storeContext(db, s.storeId));
+    })
+    // SA-22: one store's metrics for a period with their comparison; every v1 number on the page comes through here.
+    .get('/api/analytics/metrics', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      return c.json(computeMetricSet(db, s, s.metrics ?? (Object.keys(SA_METRICS) as SaMetricId[]), sp, filters, basis));
     })
     .get('/api/analytics/sources', (c) => {
       const s = scoped(c);

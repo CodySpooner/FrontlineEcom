@@ -2,6 +2,7 @@
 import { SA_SOURCES, combineStatus, ratio, settingsUrl, type SaValue } from '@frontline/shared';
 import type { Db } from '../db';
 import { costMetrics } from './costs';
+import { demoDays, type Slice } from './sales';
 
 export type AdMetricId = 'ad_spend' | 'platform_roas' | 'contribution_after_ads';
 /** One network's period: spend in the store's currency and its own attributed ROAS (null with no spend). */
@@ -20,22 +21,31 @@ const value = (v: number | null, status: SaValue['status'], extra: Omit<SaValue,
  * Spend comes from campaign_daily rows of the store's campaigns, already in the store's currency (the connectors convert
  * at sync). ponytail: the account's currency isn't recorded until SA-58, so converted spend can't be told apart and isn't
  * marked estimated. A network counts once it synced; a store with no ad integration has no spend to show, not $0.
+ * Spend is store level, so a slice's channels don't apply; its cut scales the last day (day grain, estimated).
  */
-export function adMetrics(db: Db, storeId: string, from: string, to: string, before = costMetrics(db, storeId, from, to).contribution_before_ads): { values: Record<AdMetricId, SaValue>; networks: NetworkSpend[] } {
+export function adMetrics(
+  db: Db,
+  storeId: string,
+  from: string,
+  to: string,
+  { before, slice }: { before?: SaValue; slice?: Slice } = {},
+): { values: Record<AdMetricId, SaValue>; networks: NetworkSpend[] } {
+  before ??= costMetrics(db, storeId, from, to, 'refund_day', slice).contribution_before_ads;
   const demo = !!db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo;
+  const k = slice?.cut?.fraction ?? 1;
   const networks: NetworkSpend[] = db
     .prepare(
-      `SELECT d.network, sum(d.spend) AS spend, sum(d.revenue) AS revenue FROM campaign_daily d JOIN campaigns c ON c.network = d.network AND c.id = d.campaign_id
-       WHERE c.store_id = ? AND d.date BETWEEN ? AND ? GROUP BY d.network ORDER BY d.network`,
+      `SELECT d.network, sum(d.spend * iif(d.date = ?, ?, 1)) AS spend, sum(d.revenue * iif(d.date = ?, ?, 1)) AS revenue FROM campaign_daily d
+       JOIN campaigns c ON c.network = d.network AND c.id = d.campaign_id WHERE c.store_id = ? AND d.date BETWEEN ? AND ? GROUP BY d.network ORDER BY d.network`,
     )
-    .all(storeId, from, to)
+    .all(to, k, to, k, storeId, from, to)
     .map((r) => ({ network: String(r.network), name: NAME(String(r.network)), spend: cents(Number(r.spend)), roas: ratio(Number(r.revenue), Number(r.spend)), attribution: attribution(String(r.network)) }));
 
   let spend: SaValue;
   if (demo) {
     // Dashboard's demo spend (daily_metrics), so the two never disagree.
-    const d = db.prepare('SELECT count(*) AS n, sum(ad_spend) AS s FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?').get(storeId, from, to)!;
-    spend = Number(d.n) ? value(cents(Number(d.s)), 'demo') : value(null, 'unavailable', { reason: 'insufficient_history', note: 'Before the demo history' });
+    const days = demoDays(db, storeId, from, to, slice?.cut);
+    spend = days.length ? value(cents(days.reduce((a, d) => a + d.adSpend, 0)), 'demo') : value(null, 'unavailable', { reason: 'insufficient_history', note: 'Before the demo history' });
   } else {
     const accounts = db.prepare("SELECT kind, synced_at FROM integrations WHERE store_id = ? AND kind IN ('meta_ads', 'google_ads', 'tiktok_ads') ORDER BY kind").all(storeId);
     const unsynced = accounts.filter((a) => a.synced_at == null).map((a) => SA_SOURCES[a.kind as keyof typeof SA_SOURCES].name);
@@ -44,7 +54,7 @@ export function adMetrics(db: Db, storeId: string, from: string, to: string, bef
       ? value(null, 'unavailable', { reason: 'needs_credentials', note: 'No ad network connected', fix: { label: 'Connect an ad network', href: settingsUrl('integrations', { store: storeId }) } })
       : unsynced.length === accounts.length
         ? value(null, 'unavailable', { reason: 'needs_ingestion', note: `Not synced yet: ${unsynced.join(', ')}` })
-        : value(total, unsynced.length ? 'partial' : 'ok', unsynced.length ? { note: `Not synced yet: ${unsynced.join(', ')}` } : {});
+        : value(total, combineStatus(unsynced.length ? 'partial' : 'ok', slice?.cut ? 'estimated' : 'ok'), unsynced.length ? { note: `Not synced yet: ${unsynced.join(', ')}` } : {});
   }
 
   // Never combined across networks (their attributed sales overlap): one network gives its own figure, several a note.
