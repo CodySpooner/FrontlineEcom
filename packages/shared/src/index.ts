@@ -394,7 +394,9 @@ export type LiveMessage =
   /** A knowledge-base research task started, moved a stage, waits to retry, or ended (knowledge-base lane). */
   | { type: 'kb_task'; task: KbTaskBrief }
   /** Product Research: a research task's run changed (its status is derived from the run). */
-  | { type: 'research_task'; storeId: string; taskId: string; productId: string };
+  | { type: 'research_task'; storeId: string; taskId: string; productId: string }
+  /** Settings: a change row's apply job moved (applying, applied or failed; ST-09). */
+  | { type: 'config_change'; change: import('./settings').ConfigChange };
 
 /** Error body for any non-2xx API response. */
 export interface ApiError {

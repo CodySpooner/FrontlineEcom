@@ -4,6 +4,7 @@
 import { randomUUID } from 'node:crypto';
 import { SETTINGS, validateSetting, type ConfigDoc, type ConfigWrite, type SettingScope } from '@frontline/shared';
 import { tx, type Db } from '../db';
+import { JOBS, runJob } from './apply';
 import { docOf, getPath, pathIn, readDoc } from './effective';
 
 export class ConfigError extends Error {
@@ -102,10 +103,15 @@ export type Moved = [setting: string, before: unknown, after: unknown, scope?: s
 
 /** One change row per setting that moved (`scope` defaults to store). `detail` names the record (a rule) or a secret's fate. */
 export function logChanges(db: Db, o: { at: string; actor: string; requestId?: string; store?: { id: string; name: string } }, moved: Moved[]) {
-  const change = db.prepare('INSERT INTO settings_changes (id, at, request_id, actor, scope, store_id, store_name, setting, before_json, after_json, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  const change = db.prepare('INSERT INTO settings_changes (id, at, request_id, actor, scope, store_id, store_name, setting, before_json, after_json, state, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
   const json = (v: unknown) => (v === undefined ? null : JSON.stringify(v));
-  for (const [id, before, after, scope, detail] of moved)
-    change.run(randomUUID(), o.at, o.requestId ?? null, o.actor, scope ?? 'store', o.store?.id ?? null, o.store?.name ?? null, id, json(before), json(after), detail ?? null);
+  for (const [id, before, after, scope, detail] of moved) {
+    const row = randomUUID();
+    const job = JOBS.has(id); // its effect runs in the background (ST-09)
+    change.run(row, o.at, o.requestId ?? null, o.actor, scope ?? 'store', o.store?.id ?? null, o.store?.name ?? null, id, json(before), json(after), job ? 'applying' : 'saved', detail ?? null);
+    // Once the write has committed: a rolled-back one left no row, and the job does nothing.
+    if (job) setImmediate(() => void runJob(db, row));
+  }
 }
 
 /** A store's owner fields moved (the owner's save, or a sync taking the platform's value): one version bump, a change row each. */

@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useBlocker } from 'react-router';
 import { useMutation } from '@tanstack/react-query';
-import type { ApiError } from '../api/client';
+import type { ConfigChange } from '@frontline/shared';
+import { useSaveChanges, type ApiError } from '../api/client';
 import { Dialog, flatButtonClass } from '../components/ui';
 import { saveState } from './kit';
 import { same, useDraft } from './useDraft';
@@ -20,18 +21,24 @@ export function useSettingsForm<T extends Doc>({ key, saved, labels, save, onSav
   saved: T | undefined;
   /** Row labels, for the conflict dialog. */
   labels: Partial<Record<keyof T, string>>;
-  /** Writes `changes` over `version`; resolves with the document as saved. */
-  save: (changes: Partial<T>, version: number) => Promise<T>;
+  /** Writes `changes` over `version`; resolves with the document as saved, and the change rows it wrote (ST-09). */
+  save: (changes: Partial<T>, version: number) => Promise<T & { changes?: ConfigChange[] }>;
   /** The server's document after a save or a Reload (null: removed elsewhere). Put it where `saved` comes from. */
   onSaved: (doc: T | null) => void;
 }) {
   const d = useDraft(key, saved);
   const dirty = d.dirty.length > 0;
   const [conflict, setConflict] = useState<Conflict<T>>();
+  // The last save's rows with a background job: the bar follows them to applied or failed (decision 6).
+  const [wrote, setWrote] = useState<ConfigChange[]>();
   const m = useMutation({
     mutationFn: ({ changes, version }: { changes: Partial<T>; version: number }) => save(changes, version),
-    onSuccess: (doc) => (onSaved(doc), d.reset()),
+    onSuccess: ({ changes, ...doc }) => (onSaved(doc as unknown as T), d.reset(), setWrote(changes?.some((c) => c.state !== 'saved') ? changes : undefined)),
   });
+  const jobs = useSaveChanges(wrote);
+  const running = (jobs.rows ?? []).filter((c) => c.state !== 'saved');
+  const failed = running.find((c) => c.state === 'failed');
+  const applyState = !dirty && m.isSuccess && running.length ? (failed ? 'failed' : running.some((c) => c.state === 'applying') ? 'applying' : 'applied') : undefined;
 
   /** Saves the draft over `base`. On a 409 that touched none of the draft's fields it re-applies once on the new version. */
   const submit = async (base: T, again = true): Promise<T> => {
@@ -69,8 +76,9 @@ export function useSettingsForm<T extends Doc>({ key, saved, labels, save, onSav
     /** SaveBar props, less the section's `scope` and `impact`. */
     bar: {
       count: d.dirty.length,
-      state: saveState(m, d.dirty.length),
-      error: err?.status === 409 ? undefined : err?.message,
+      state: applyState ?? saveState(m, d.dirty.length),
+      error: applyState === 'failed' ? failed?.detail : err?.status === 409 ? undefined : err?.message,
+      onRetry: () => void jobs.retry().catch(() => {}), // refused or offline: still Couldn't apply, Retry again
       onCancel: d.reset,
       onSave: () => void submit(saved!).catch(() => {}),
     },

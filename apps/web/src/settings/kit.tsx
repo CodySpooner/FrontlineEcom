@@ -230,7 +230,7 @@ export function ScopeSwitch({ variant = 'defaults', stores, value, onChange }: {
   );
 }
 
-export type SaveState = 'idle' | 'saving' | 'saved' | 'applying' | 'applied' | 'error';
+export type SaveState = 'idle' | 'saving' | 'saved' | 'applying' | 'applied' | 'failed' | 'error';
 
 /** The state a mutation implies: "Saved" only once the server has answered, never before. */
 export const saveState = (m: { isPending: boolean; isError: boolean; isSuccess: boolean }, dirty: number): SaveState =>
@@ -238,11 +238,12 @@ export const saveState = (m: { isPending: boolean; isError: boolean; isSuccess: 
 
 /**
  * The sticky bar under an explicit-save section: "N unsaved changes · <scope> · <impact>", Cancel and Save changes. It
- * stays up while saving, and says Saved, Applying… or Applied (a background job) once the server says so.
+ * stays up while saving, and says Saved, Applying… or Applied (a background job) once the server says so, or Couldn't
+ * apply with the job's reason (`error`) and Retry.
  */
-export function SaveBar({ count, scope, impact, state, error, onCancel, onSave }: { count: number; scope: string; impact?: ReactNode; state: SaveState; error?: string; onCancel: () => void; onSave: () => void }) {
+export function SaveBar({ count, scope, impact, state, error, onCancel, onSave, onRetry }: { count: number; scope: string; impact?: ReactNode; state: SaveState; error?: string; onCancel: () => void; onSave: () => void; onRetry?: () => void }) {
   if (!count && (state === 'idle' || state === 'error')) return null;
-  const dot = state === 'error' ? 'bg-red' : state === 'saved' || state === 'applied' ? 'bg-good' : state === 'applying' ? 'bg-amber' : 'bg-[#7fb2ff]';
+  const dot = state === 'error' || state === 'failed' ? 'bg-red' : state === 'saved' || state === 'applied' ? 'bg-good' : state === 'applying' ? 'bg-amber' : 'bg-[#7fb2ff]';
   const line =
     count > 0 ? (
       <>
@@ -256,7 +257,7 @@ export function SaveBar({ count, scope, impact, state, error, onCancel, onSave }
         </span>
       </>
     ) : (
-      <b className="font-semibold">{state === 'saving' ? 'Saving…' : state === 'applying' ? 'Saved · applying…' : state === 'applied' ? 'Saved · applied' : 'Saved'}</b>
+      <b className="font-semibold">{state === 'saving' ? 'Saving…' : state === 'applying' ? 'Saved · applying…' : state === 'applied' ? 'Saved · applied' : state === 'failed' ? "Saved · couldn't apply" : 'Saved'}</b>
     );
   return (
     <div className="sticky bottom-[22px] z-10 flex flex-wrap items-center gap-2.5 rounded-xl border border-line-2 bg-[#16161a] py-2.5 pr-3 pl-4 text-[13px] shadow-[0_10px_30px_-10px_rgba(0,0,0,.7)]">
@@ -264,7 +265,13 @@ export function SaveBar({ count, scope, impact, state, error, onCancel, onSave }
       <span role="status" className="min-w-0 flex-1">
         {line}
         {state === 'error' && error && <span className="block text-xs text-red">Couldn't save: {error}</span>}
+        {state === 'failed' && <span className="block text-xs text-red">Couldn't apply{error ? `: ${error}` : ''}</span>}
       </span>
+      {state === 'failed' && onRetry && (
+        <button type="button" onClick={onRetry} className={flatButtonClass('ghost')}>
+          Retry
+        </button>
+      )}
       {count > 0 && (
         <>
           <button type="button" onClick={onCancel} disabled={state === 'saving'} className={flatButtonClass('ghost')}>

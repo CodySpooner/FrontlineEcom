@@ -5,6 +5,7 @@ import { startBackupLoop } from './backups';
 import { startDigestLoop } from './digest';
 import { startFxLoop } from './fx';
 import { seedCompetitors, startCompetitorWatch } from './competitors';
+import { resumeJobs } from './config/apply';
 import { bootConfig } from './config/boot';
 import { dataDir, dbFile, openDb } from './db';
 import { seedCreatives, seedDemo } from './demo';
@@ -29,6 +30,7 @@ process.on('uncaughtExceptionMonitor', (e) => log('error', 'crash', { error: e.s
 process.on('unhandledRejection', (e) => log('error', 'unhandled rejection', { error: e instanceof Error ? (e.stack ?? e.message) : String(e) }));
 const db = openDb(dbFile());
 bootConfig(db);
+resumeJobs(db); // settings: apply jobs a quit or crash left running (ST-09)
 seedDemo(db);
 seedCreatives(db);
 seedResearch(db);

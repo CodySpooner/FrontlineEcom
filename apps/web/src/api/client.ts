@@ -81,6 +81,8 @@ import type {
   KnowledgeDoc,
   KnowledgeKind,
   LiveMessage,
+  ConfigChange,
+  ConfigChangesPage,
   MemoryInput,
   NicheLearning,
   OAuthStart,
@@ -235,6 +237,30 @@ export function catchUp(r: AgentRunDetail): AgentRunDetail {
   if (rest.length) held.set(r.id, rest);
   else held.delete(r.id);
   return out;
+}
+
+/**
+ * Settings (ST-09): the change rows one save wrote, as their apply jobs move. The live socket moves them, and they're
+ * polled while one applies. ponytail: polled even with the socket up, since its message can beat the save's own answer;
+ * jobs are rare. `retry` runs the failed ones again.
+ */
+export function useSaveChanges(saved: ConfigChange[] | undefined) {
+  const qc = useQueryClient();
+  const id = saved?.[0]?.requestId;
+  const key = ['config', 'request', id];
+  const q = useQuery({
+    queryKey: key,
+    queryFn: () => api<ConfigChangesPage>(`/api/config/changes?request=${encodeURIComponent(id!)}`).then((p) => p.changes),
+    initialData: saved,
+    enabled: !!id,
+    staleTime: Infinity,
+    refetchInterval: (q) => (q.state.data?.some((c) => c.state === 'applying') ? 2000 : false),
+  });
+  const retry = () =>
+    Promise.all((q.data ?? []).filter((c) => c.state === 'failed').map((c) => api<ConfigChange>(`/api/config/changes/${c.id}/retry${c.storeId ? `?store=${encodeURIComponent(c.storeId)}` : ''}`, { method: 'POST' }))).then((again) =>
+      qc.setQueryData<ConfigChange[]>(key, (old) => old?.map((c) => again.find((a) => a.id === c.id) ?? c)),
+    );
+  return { rows: id ? q.data : undefined, retry };
 }
 
 /** Whether the live socket is open (useLive keeps it). */
@@ -1145,6 +1171,11 @@ export function useLive() {
       } else if (m.type === 'kb_task') qc.invalidateQueries({ queryKey: ['kb'] }); // the task, the task lists, and the cards it filed
       else if (m.type === 'research_task') qc.invalidateQueries({ queryKey: ['pr'] }); // Product Research: its status, the cards and panel
       else if (m.type === 'mission' && m.mission.kind === 'team') qc.setQueryData(['team', m.mission.id], m.mission);
+      else if (m.type === 'config_change') {
+        // Settings (ST-09): an apply job moved. The save that wrote it follows (useSaveChanges); Change History refetches.
+        qc.setQueryData<ConfigChange[]>(['config', 'request', m.change.requestId], (old) => old?.map((c) => (c.id === m.change.id ? m.change : c)));
+        qc.invalidateQueries({ queryKey: ['config', 'changes'] });
+      }
       if (m.type === 'approval' || m.type === 'run') {
         qc.invalidateQueries({ queryKey: ['conversation-counts'] });
         // Automation fires start runs or ask for approval; the log and "last fired" follow.

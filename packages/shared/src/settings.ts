@@ -40,6 +40,35 @@ export interface ConfigView {
   values: Record<string, unknown>;
   origins: Record<string, SettingOrigin>;
   versions: Partial<Record<'app' | 'personal' | 'workspace' | `store_caps:${string}`, number>>;
+  /** PATCH /api/config only: the change rows this save wrote, for the save bar's applying… / applied (ST-09). */
+  changes?: ConfigChange[];
+}
+/** A change row's state (decision 6): `saved` took effect when committed; a background job's row goes `applying`, then `applied` or `failed`. */
+export type ChangeState = 'saved' | 'applying' | 'applied' | 'failed';
+/** One Change History row (`settings_changes`, decision 15). Never a secret value: a secret's row says only `replaced` or `removed`. */
+export interface ConfigChange {
+  id: string;
+  at: string;
+  /** Every row one save wrote shares it. */
+  requestId?: string;
+  /** `owner`, `import`, `migration`, `sync:<kind>` or `system`. */
+  actor: string;
+  scope: string;
+  storeId?: string;
+  /** Kept after the store is deleted. */
+  storeName?: string;
+  setting: string;
+  /** Absent for a secret (and on the side a row has none of). */
+  before?: unknown;
+  after?: unknown;
+  state: ChangeState;
+  /** An automation's name, a secret's `replaced`/`removed`, or why a job couldn't apply. */
+  detail?: string;
+}
+/** GET /api/config/changes: newest first; `next` is the cursor of the page after. */
+export interface ConfigChangesPage {
+  changes: ConfigChange[];
+  next?: string;
 }
 /** PATCH /api/config: every document in one transaction; `unset` deletes an override key (back to inheriting). */
 export interface ConfigWrite {

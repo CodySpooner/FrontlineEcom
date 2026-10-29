@@ -112,7 +112,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .use('/api/pr/*', guard) // product-research: every /api/pr route
     .use('/api/teams/*', guard)
     .use('/api/analytics/*', guard) // store-analytics: its own records' writes
-    .use('/api/config', guard) // settings: the config writer
+    .use('/api/config/*', guard) // settings: the config writer and change retries (the bare path too)
     .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))
     .get('/api/stores/:id', (c) => {
