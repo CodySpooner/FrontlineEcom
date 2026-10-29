@@ -542,7 +542,7 @@ connector item afterwards proves its path from source to metric.
     (codex-owned, unchanged).
   - Acceptance: codemap updated; no code change.
 
-- [ ] SA-03 **Shared contracts** (spec §4, §5):
+- [x] SA-03 **Shared contracts** (spec §4, §5):
   - `packages/shared/src/store-analytics.ts` with `SaDatasetStatus`, `SaReason`, `SaValue`, `SaCoverage`,
     `SaFilterKey`, `SaFilterScope` exactly as decision 4, re-exported from `packages/shared/src/index.ts`.
   - `apps/web/src/analytics/Unavailable.tsx`: renders a value's reason text, note and fix link; never a number.
@@ -1552,6 +1552,7 @@ then its tab. A tab appears only with its item.
 <!-- dated one-liners, newest last: - YYYY-MM-DD SA-NN <what shipped> (<commit>) -->
 - 2026-10-28 SA-01 claims filed to codex-hardening's Inbox; CLAUDE.md row matches the Owns list (code paths plus "the touch points"); baseline `pnpm check` green at 4d4ec6b3: 234 test files, 1730 tests (typecheck + vitest 69 s).
 - 2026-10-28 SA-02 codemap re-checked at 89aae4a7 (corrections: api() already takes a signal, FX is partly per day already, demo days are machine-local) and a metric inventory table of 18 rows added; no code change.
+- 2026-10-28 SA-03 shared `SaDatasetStatus`, `SaReason` (+ `SA_REASONS` text), `SaValue`, `SaCoverage`, `SaFilterKey`, `SaFilterScope` in `packages/shared/src/store-analytics.ts`; `analytics/Unavailable.tsx` and `FilterScope.tsx` with tests (11).
 
 ## Blocked
 
