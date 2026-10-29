@@ -12,6 +12,7 @@ import type { Db } from './db';
 import { publish } from './live';
 import { log } from './log';
 import { notify } from './settings';
+import { snapshotInventory } from './store-analytics/inventory';
 import { backoffOf, endRun, recoverRuns, startRun } from './store-analytics/sources';
 
 type Syncer = (db: Db, key: Buffer, storeId: string, fetchFn: typeof fetch) => Promise<void>;
@@ -129,6 +130,7 @@ export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs =
         const after = db.prepare('SELECT status, error FROM integrations WHERE id = ?').get(id);
         const error = endRun(db, key, run, id, thrown ?? (after?.status === 'error' ? String(after.error ?? 'Sync failed') : undefined));
         if (!after) return;
+        if (!error && r.store_id != null) snapshotInventory(db, String(r.store_id), id, now); // SA-50: the day's first good catalog read
         log(after.status === 'error' || thrown ? 'warn' : 'info', 'sync', { id, ms: Date.now() - now.getTime(), status: after.status, ...(error ? { error } : {}) });
         notifyChange(db, r.kind as IntegrationKind, r.store_id == null ? null : String(r.store_id), String(r.status), String(after.status), after.error == null ? null : String(after.error));
       });
