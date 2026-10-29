@@ -8,7 +8,7 @@ import { addEvidence } from './kb-links';
 // approved changes' outcomes become evidence on the cards their run cited. One path for every analyzer. The numbers and
 // the verdict are the app's, never an agent's.
 
-export type Lift = { ratio: number; low: number; high: number; z: number };
+export type Lift = { ratio: number; low: number; high: number; z: number; p: number };
 
 /**
  * `value` against `baseline`: the ratio, its 95% range, and z (the gap in standard errors). Each side is taken as noisy
@@ -18,7 +18,13 @@ export type Lift = { ratio: number; low: number; high: number; z: number };
 export function lift(value: number, k: number, baseline: number, kBase: number): Lift {
   const ln = Math.log(value / baseline);
   const se = Math.sqrt(1 / k + 1 / kBase);
-  return { ratio: value / baseline, low: Math.exp(ln - 1.96 * se), high: Math.exp(ln + 1.96 * se), z: ln / se };
+  const z = ln / se;
+  const x = Math.abs(z);
+  const t = 1 / (1 + 0.2316419 * x);
+  // Normal two-sided tail (A&S 26.2.17); error below 1.5e-7. Invalid readings cannot be significant.
+  const p = Number.isFinite(z) ? Math.min(1, 2 * Math.exp(-x * x / 2) / Math.sqrt(2 * Math.PI) * t *
+    (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))) : 1;
+  return { ratio: value / baseline, low: Math.exp(ln - 1.96 * se), high: Math.exp(ln + 1.96 * se), z, p };
 }
 
 /** One reading of a store's numbers: what, over which days, against what. */
@@ -55,12 +61,12 @@ const pct = (r: number) => `${r >= 1 ? '+' : '-'}${Math.round(Math.abs(r - 1) * 
 const OPEN = new Set(['active', 'proposed']);
 
 /**
- * Records a reading once. Inside the noise (|z| under 1.96) it stays an observation. Otherwise it's evidence on the
+ * Records a reading once. Inside the noise or above the batch p-value cutoff it stays an observation. Otherwise it's evidence on the
  * lesson it made before, for the same thing going the same way: measured when nothing else differed, observed when
  * something did. A measured reading is also evidence against the lesson going the other way, which moves that one down
  * and opens a conflict. A reading with no lesson yet makes its card (createCard runs the link suggester).
  */
-export function learn(db: DatabaseSync, r: Reading, now = new Date()): 'lesson' | 'evidence' | 'noted' | undefined {
+export function learn(db: DatabaseSync, r: Reading, now = new Date(), maxP = 0.05): 'lesson' | 'evidence' | 'noted' | undefined {
   const id = randomUUID();
   const fresh = db
     .prepare(
@@ -70,7 +76,7 @@ export function learn(db: DatabaseSync, r: Reading, now = new Date()): 'lesson' 
     .run(id, r.storeId, r.ref, r.subject, r.metric, r.value, r.baseline, r.from, r.to, JSON.stringify({ k: r.k, kBase: r.kBase, n: r.n }), now.toISOString()).changes;
   if (!fresh) return undefined;
   const l = lift(r.value, r.k, r.baseline, r.kBase);
-  if (!(Math.abs(l.z) >= 1.96)) return 'noted'; // NaN too: two averages with no spread, the same
+  if (!(Math.abs(l.z) >= 1.96 && l.p <= maxP)) return 'noted'; // NaN too: two averages with no spread, the same
   const up = r.value > r.baseline;
   const measured = !r.confounds.length;
   const text = (

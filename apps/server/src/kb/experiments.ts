@@ -11,6 +11,7 @@ import { storeDay, synced } from '../routes/agents-outcomes';
 
 /** Days a window's ad numbers keep changing: the syncs re-pull 28 (Meta) to 30 (Google) days. */
 const SETTLE = 30;
+const MIN_SAMPLE = 30;
 type Totals = { spend: number; revenue: number; purchases: number; clicks: number; impressions: number };
 const KEYS = ['spend', 'revenue', 'purchases', 'clicks', 'impressions'] as const;
 const pct2 = (v: number) => `${(v * 100).toFixed(2)}%`;
@@ -47,7 +48,7 @@ export function parseExperiment(db: Db, storeId: string, b: Record<string, unkno
   const isDate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
   if (!isDate(b.from) || !isDate(b.to) || b.from > b.to) return 'from and to must be dates (YYYY-MM-DD), from first';
   if (b.to < storeDay(db, storeId)) return 'A test is planned before its window ends: pick an end date from today on';
-  if (!Number.isInteger(b.minSample) || (b.minSample as number) < 1 || (b.minSample as number) > 1_000_000) return 'minSample must be a whole number from 1';
+  if (!Number.isInteger(b.minSample) || (b.minSample as number) < MIN_SAMPLE || (b.minSample as number) > 1_000_000) return `minSample must be a whole number from ${MIN_SAMPLE}`;
   if (!Array.isArray(b.variants) || b.variants.length !== 2) return 'variants must be [A, B]';
   const campaigns = new Set(db.prepare(`SELECT network || ':' || id AS k FROM campaigns WHERE store_id = ?`).all(storeId).map((r) => String(r.k)));
   const creatives = new Set(db.prepare('SELECT id FROM creatives WHERE store_id = ?').all(storeId).map((r) => String(r.id)));
@@ -95,6 +96,14 @@ function totals(db: Db, storeId: string, v: KbTestVariant, from: string, to: str
   return Object.fromEntries(KEYS.map((k) => [k, Number(a[k]) + Number(b[k])])) as Totals;
 }
 
+/** Benjamini-Hochberg at 10% for a complete comparison family; callers also retain their 95% gate. */
+export function significanceCutoff(pValues: number[]) {
+  const sorted = [...pValues].sort((a, b) => a - b);
+  let cutoff = 0;
+  for (let i = 0; i < sorted.length; i++) if (sorted[i]! <= 0.1 * (i + 1) / sorted.length) cutoff = sorted[i]!;
+  return cutoff;
+}
+
 const KIND = { worked: 'measured', failed: 'conflict', inconclusive: 'observed' } as const;
 
 /**
@@ -104,21 +113,31 @@ const KIND = { worked: 'measured', failed: 'conflict', inconclusive: 'observed' 
  * (observed). Demo stores wait: nothing is learned from demo numbers.
  */
 export function evaluateExperiments(db: Db, now = new Date()) {
-  for (const e of listExperiments(db, { status: 'planned' })) {
-    if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(e.storeId)?.demo || !synced(db, e.storeId, e.due)) continue;
-    const m = METRIC[e.metric];
-    const [a, b] = e.variants.map((v) => totals(db, e.storeId, v, e.from, e.to)) as [Totals, Totals];
-    const [va, vb, ka, kb] = [m.value(a), m.value(b), m.k(a), m.k(b)];
+  const readings = listExperiments(db, { status: 'planned' })
+    .filter((e) => !db.prepare('SELECT demo FROM stores WHERE id = ?').get(e.storeId)?.demo && synced(db, e.storeId, e.due))
+    .map((e) => {
+      const m = METRIC[e.metric];
+      const [a, b] = e.variants.map((v) => totals(db, e.storeId, v, e.from, e.to)) as [Totals, Totals];
+      const [va, vb, ka, kb] = [m.value(a), m.value(b), m.k(a), m.k(b)];
+      return { e, m, va, vb, ka, kb, l: lift(vb, kb, va, ka), minSample: Math.max(MIN_SAMPLE, e.minSample), family: JSON.stringify([e.storeId, e.from, e.to]) };
+    });
+  const families = new Map<string, number[]>();
+  for (const r of readings) {
+    const values = families.get(r.family) ?? [];
+    values.push(Math.min(r.ka, r.kb) >= r.minSample ? r.l.p : 1);
+    families.set(r.family, values);
+  }
+  const cutoffs = new Map([...families].map(([family, values]) => [family, significanceCutoff(values)]));
+  for (const { e, m, va, vb, ka, kb, l, minSample, family } of readings) {
     const [A, B] = e.variants.map((v) => `"${v.label}"`);
     const head = `Test of ${B} against ${A}, ${e.from} to ${e.to}: ${m.label} ${m.show(vb)} vs ${m.show(va)}`;
     let status: keyof typeof KIND = 'inconclusive';
-    let text = `${head}. Inconclusive: each side needed ${e.minSample} ${m.unit}; ${A} had ${ka}, ${B} ${kb}.`;
-    if (Math.min(ka, kb) >= e.minSample) {
-      const l = lift(vb, kb, va, ka);
-      if (Math.abs(l.z) >= 1.96) status = vb > va ? 'worked' : 'failed'; // NaN (a side with no spend or clicks) stays inconclusive
+    let text = `${head}. Inconclusive: each side needed ${minSample} ${m.unit}; ${A} had ${ka}, ${B} ${kb}.`;
+    if (Math.min(ka, kb) >= minSample) {
+      if (Math.abs(l.z) >= 1.96 && l.p <= cutoffs.get(family)!) status = vb > va ? 'worked' : 'failed'; // NaN (a side with no spend or clicks) stays inconclusive
       text =
         `${head}: ${pct(l.ratio)} (95% range ${pct(l.low)} to ${pct(l.high)}), on ${kb} and ${ka} ${m.unit}. ` +
-        { worked: `${B} did better: it worked.`, failed: `${B} did worse: the claim failed here.`, inconclusive: 'Inside the noise: inconclusive.' }[status];
+        { worked: `${B} did better: it worked.`, failed: `${B} did worse: the claim failed here.`, inconclusive: 'Inside the noise or multiple-comparison threshold: inconclusive.' }[status];
     }
     tx(db, () => {
       const value = Number.isFinite(vb) ? vb : undefined;

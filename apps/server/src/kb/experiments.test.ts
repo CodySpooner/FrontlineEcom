@@ -80,7 +80,7 @@ describe('planning a test', () => {
     ['a metric it has', { metric: 'cpm' }, 'metric must be one of roas, ctr, cvr'],
     ['dates in order', { from: addDays(new Date().toISOString().slice(0, 10), 9), to: addDays(new Date().toISOString().slice(0, 10), 2) }, 'from and to must be dates (YYYY-MM-DD), from first'],
     ['a window not over yet', { from: '2026-01-01', to: '2026-01-28' }, 'A test is planned before its window ends: pick an end date from today on'],
-    ['a minimum sample', { minSample: 0 }, 'minSample must be a whole number from 1'],
+    ['a minimum sample', { minSample: 0 }, 'minSample must be a whole number from 30'],
     ['two sides', { variants: [{ label: 'A', campaigns: ['meta:dog'] }] }, 'variants must be [A, B]'],
     ['labels', { variants: [{ label: ' ', campaigns: ['meta:broad'] }, { label: 'B', campaigns: ['meta:dog'] }] }, 'each variant needs a label (up to 40 characters)'],
     ['short labels', { variants: [{ label: 'x'.repeat(41), campaigns: ['meta:broad'] }, { label: 'B', campaigns: ['meta:dog'] }] }, 'each variant needs a label (up to 40 characters)'],
@@ -148,7 +148,7 @@ describe('evaluating a test', () => {
   });
 
   test('inside the noise, or short of its minimum sample: inconclusive, observed evidence', async () => {
-    expect((await evaluate({ ...DOG, revenue: 4600 }, BROAD)).e).toMatchObject({ status: 'inconclusive', result: expect.stringMatching(/Inside the noise: inconclusive\.$/) });
+    expect((await evaluate({ ...DOG, revenue: 4600 }, BROAD)).e).toMatchObject({ status: 'inconclusive', result: expect.stringMatching(/Inside the noise or multiple-comparison threshold: inconclusive\.$/) });
     db.prepare('DELETE FROM campaign_daily').run();
     const short = await evaluate(DOG, BROAD, { minSample: 61 });
     expect(short.e.result).toBe(`Test of "Dog car" against "Broad", ${W().from} to ${W().to}: ROAS 3.00 vs 1.50. Inconclusive: each side needed 61 purchases; "Broad" had 60, "Dog car" 60.`);
@@ -184,13 +184,13 @@ describe('evaluating a test', () => {
     campaign('broad', BROAD);
     ad('a1', 'broad', hook, { spend: 1000, revenue: 9000, purchases: 50 }); // in a campaign on the other side: still its own
     ad('a2', 'mixed', hook, { spend: 1000, revenue: 3000, purchases: 20 });
-    ad('a3', 'mixed', plain, { spend: 1000, revenue: 1000, purchases: 20 });
+    ad('a3', 'mixed', plain, { spend: 1000, revenue: 1000, purchases: 30 });
     const c = card();
-    await plan(c.id, { variants: [{ label: 'Product shot', campaigns: [], creatives: [plain] }, { label: 'Problem-first', campaigns: ['meta:broad'], creatives: [hook] }], minSample: 10 });
+    await plan(c.id, { variants: [{ label: 'Product shot', campaigns: [], creatives: [plain] }, { label: 'Problem-first', campaigns: ['meta:broad'], creatives: [hook] }], minSample: 30 });
     syncedAfter(30);
     evaluateExperiments(db);
     // B = campaign broad (2800 → 4200) + a2 (a1 is inside broad): 6200 / 3800; A = a3: 1.00.
-    expect(listEvidence(db, c.id)[0]!.text).toMatch(/ROAS 1\.89 vs 1\.00: \+89% .*on 80 and 20 purchases/);
+    expect(listEvidence(db, c.id)[0]!.text).toMatch(/ROAS 1\.89 vs 1\.00: \+89% .*on 80 and 30 purchases/);
   });
 });
 
@@ -233,4 +233,22 @@ describe('the Campaigns library', () => {
     expect(((await req('/api/kb/campaigns?ws=all')).body as KbCampaign[]).some((x) => x.storeId === 'pawsome')).toBe(true);
     expect((await req('/api/kb/campaigns?ws=nope')).status).toBe(400);
   });
+});
+
+
+test.each([1, 29])('planning refuses a minimum sample of %s', async (minSample) => {
+  campaign('dog', DOG); campaign('broad', BROAD);
+  expect(await plan(card().id, { minSample })).toMatchObject({ status: 400, body: { error: 'minSample must be a whole number from 30' } });
+});
+
+test('a legacy minimum of one cannot turn a tiny sample into measured evidence', async () => {
+  campaign('dog', { spend: 10, revenue: 100, purchases: 20 });
+  campaign('broad', { spend: 10, revenue: 1, purchases: 1 });
+  const c = card();
+  const e = (await plan(c.id)).body as KbExperiment;
+  const row = db.prepare('SELECT plan_json FROM kb_experiments WHERE id = ?').get(e.id)!;
+  db.prepare('UPDATE kb_experiments SET plan_json = ? WHERE id = ?').run(JSON.stringify({ ...JSON.parse(String(row.plan_json)), minSample: 1 }), e.id);
+  syncedAfter(30);
+  evaluateExperiments(db);
+  expect(listEvidence(db, c.id)[0]).toMatchObject({ kind: 'observed', text: expect.stringContaining('each side needed 30 purchases') });
 });

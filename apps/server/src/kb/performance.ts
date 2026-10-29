@@ -1,4 +1,4 @@
-import { learn, once, type Reading } from '@frontline/agents';
+import { learn, lift, once, type Reading } from '@frontline/agents';
 import type { KbPerformance } from '@frontline/shared';
 import { addDays } from '../dates';
 import type { Db } from '../db';
@@ -6,7 +6,7 @@ import { newSince, productSales, restTrend, storeDay, storeFunnel, synced } from
 import { listStores } from '../stores';
 import { autoDeps, autonomousResearch } from './autonomy';
 import { maintain } from './maintenance';
-import { evaluateExperiments } from './experiments';
+import { evaluateExperiments, significanceCutoff } from './experiments';
 
 // Performance learning (knowledge-base lane, KB-19, decision 13). Each real store's settled 28-day periods are read
 // against baselines: campaign by campaign, ad by ad and creative trait by trait (KB-20), the store's funnel, product by
@@ -45,7 +45,9 @@ export function learnFromPerformance(db: Db, today?: string) {
     if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(s.id)?.demo) continue;
     for (const p of settledPeriods(today ?? storeDay(db, s.id))) {
       if (!synced(db, s.id, addDays(p.to, SETTLE)) || !once(db, `kb-perf:${s.id}:${p.from}`)) continue;
-      for (const r of [...campaignReadings(db, s.id, p), ...adReadings(db, s.id, p), ...storeReadings(db, s.id, s.currency, p), ...productReadings(db, s.id, p)]) learn(db, r);
+      const readings = [...campaignReadings(db, s.id, p), ...adReadings(db, s.id, p), ...storeReadings(db, s.id, s.currency, p), ...productReadings(db, s.id, p)];
+      const cutoff = significanceCutoff(readings.map((r) => lift(r.value, r.k, r.baseline, r.kBase).p));
+      for (const r of readings) learn(db, r, new Date(), cutoff);
     }
   }
 }
