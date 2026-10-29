@@ -176,10 +176,12 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   floor (today it can be 1, ~50). Keep KB-26's acceptance test passing with a realistic effect.
 
 ### Wrap-up
-- [ ] CH-24 Report `docs/features/codex-hardening-report.md`: per phase what was found, fixed (commit), filed (where)
+- [x] CH-24 Report `docs/features/codex-hardening-report.md`: per phase what was found, fixed (commit), filed (where)
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-24: published docs/features/codex-hardening-report.md with phase findings, shipped commits, owner filings, Q1-Q3 defaults and remaining steps. Verified all local links and 26 referenced commits. pnpm check green (246 files / 1,850 passed, 4 upstream todo). CH-13/16/18/20 remain explicitly blocked; latest expanded browser run is 106/109 with three documented mobile overflows, all flows/axe comparisons passing. After ship/vault logging, this finite lane creates .agent/STOP; no new items.
 
 - 2026-10-28 CH-18/19 Inbox follow-up: added six shipped Settings section routes to smoke only (22 routes x 4 widths), renamed the Integrations baseline for /settings/integrations, and scoped LF attributes inside e2e/axe-baseline. Reviewed the upstream ecd3a3bc fix and all baseline differences: 27 fixed targets removed, no new target accepted; 21 serious remain (KB 17, four agent store switches), zero critical. All 16 normal axe checks and four flows pass. Complete pnpm e2e: 106 passed / 3 failed; Integrations now passes all widths, while the newly covered /settings/data has +239 px mobile overflow alongside the two known +46 px agent pages. Filed the new Settings finding; kept strict assertions. pnpm check green (243 files / 1,816 passed, 4 upstream todo).
 
