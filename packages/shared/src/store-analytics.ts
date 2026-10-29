@@ -742,3 +742,27 @@ export interface SaMetricSet {
   metrics: SaMetricResult[];
   scope: SaFilterScope;
 }
+
+/** One point of a series: a day, or a week over long periods, with the comparison's aligned point (same day offset). */
+export interface SaSeriesPoint {
+  from: string;
+  to: string;
+  /** null: nothing reported for it (never drawn as 0). */
+  value: number | null;
+  status: SaValue['status'];
+  previous: number | null;
+  /** The point that holds today: today so far. */
+  partial?: true;
+}
+
+/** GET /api/analytics/series: one metric over the period; `total` is /metrics' value for the same scope. */
+export interface SaSeries {
+  metric: SaMetricId;
+  def: string;
+  grain: 'day' | 'week';
+  period: SaPeriod;
+  compare: SaComparePeriod | null;
+  points: SaSeriesPoint[];
+  total: SaMetricResult;
+  scope: SaFilterScope;
+}

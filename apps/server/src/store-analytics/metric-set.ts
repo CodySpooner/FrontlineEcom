@@ -1,5 +1,6 @@
 // SA-22: one store's metric set for a period: every v1 metric computed here, with its comparison and one filter scope.
-import { SA_FILTERS, SA_METRICS, changeOf, saDef, type SaFilterKey, type SaFilterScope, type SaFilters, type SaMetricId, type SaMetricSet, type SaValue } from '@frontline/shared';
+import { SA_FILTERS, SA_METRICS, changeOf, saDef, type SaFilterKey, type SaFilterScope, type SaFilters, type SaMetricId, type SaMetricSet, type SaSeries, type SaSeriesPoint, type SaValue } from '@frontline/shared';
+import { addDays } from '../dates';
 import type { Db } from '../db';
 import { adMetrics } from './ads';
 import { costMetrics } from './costs';
@@ -37,14 +38,20 @@ function ignoredBecause(id: SaMetricId, key: SaFilterKey, demo: boolean) {
   if (!APPLIED.includes(key)) return 'Not applied to this metric yet';
 }
 
-export function computeMetricSet(db: Db, scope: Scope, ids: SaMetricId[], sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaMetricSet {
-  const demo = !!db.prepare('SELECT demo FROM stores WHERE id = ?').get(scope.storeId)?.demo;
+/** The filters' slice, the comparison's dates and its last-day cut: what a set and a series share. */
+function setup(db: Db, storeId: string, sp: StorePeriod, filters: SaFilters) {
+  const demo = !!db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo;
   const active = (Object.keys(filters) as SaFilterKey[]).filter((k) => filters[k]?.length);
   const slice: Slice = filters.channel?.length && !demo ? { channels: filters.channel } : {};
-  const cur = valuesOf(db, scope.storeId, ids, sp.period.from, sp.period.to, basis, slice);
   const compare = sp.compare && 'from' in sp.compare ? sp.compare : undefined;
   // With today in the period, the comparison's last day stops at the same clock time (decision 6).
   const cut = sp.period.partial && sp.cut && sp.fraction != null ? { at: sp.cut, fraction: sp.fraction } : undefined;
+  return { demo, active, slice, compare, cut };
+}
+
+export function computeMetricSet(db: Db, scope: Scope, ids: SaMetricId[], sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaMetricSet {
+  const { demo, active, slice, compare, cut } = setup(db, scope.storeId, sp, filters);
+  const cur = valuesOf(db, scope.storeId, ids, sp.period.from, sp.period.to, basis, slice);
   const prev = compare && valuesOf(db, scope.storeId, ids, compare.from, compare.to, basis, { ...slice, ...(cut && { cut }) });
 
   const out: SaFilterScope = { applied: [], ignored: [] };
@@ -63,6 +70,37 @@ export function computeMetricSet(db: Db, scope: Scope, ids: SaMetricId[], sp: St
     return { ...value, id, def: saDef(id), previous, change: changeOf(value.value, previous?.value ?? null, SA_METRICS[id].unit) };
   });
   return { period: sp.period, compare: sp.compare ?? null, today: sp.today, zoneLabel: sp.zoneLabel, zoneAbbr: sp.zoneAbbr, metrics, scope: out };
+}
+
+/**
+ * SA-23: one metric's points over the period, days (weeks past 120 days) in the store's zone, so a 25-hour DST day is
+ * one point. Each comparison point sits at the same day offset; the one holding the comparison's last day is cut like
+ * the set's. ponytail: every point is its own computation; one grouped pass per day when SA-25's plans ask for it.
+ */
+export function computeSeries(db: Db, scope: Scope, id: SaMetricId, sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaSeries {
+  const set = computeMetricSet(db, scope, [id], sp, filters, basis);
+  const { active, slice, compare, cut } = setup(db, scope.storeId, sp, filters);
+  const blocked = id === 'contribution_after_ads' && active.length > 0;
+  const step = sp.period.days > 120 ? 7 : 1;
+  const min = (a: string, b: string) => (a < b ? a : b);
+  const points: SaSeriesPoint[] = [];
+  for (let i = 0; i * step < sp.period.days; i++) {
+    const from = addDays(sp.period.from, i * step);
+    const to = min(addDays(from, step - 1), sp.period.to);
+    const v = valuesOf(db, scope.storeId, [id], from, to, basis, slice)[id];
+    const pf = compare && addDays(compare.from, i * step);
+    const pt = compare && pf! <= compare.to ? min(addDays(pf!, step - 1), compare.to) : undefined;
+    const p = pt ? valuesOf(db, scope.storeId, [id], pf!, pt, basis, { ...slice, ...(cut && pt === compare!.to && { cut }) })[id] : undefined;
+    points.push({
+      from,
+      to,
+      value: blocked ? null : v.value,
+      status: blocked ? 'unavailable' : v.status,
+      previous: blocked ? null : (p?.value ?? null),
+      ...(sp.period.partial && to === sp.period.to && { partial: true as const }),
+    });
+  }
+  return { metric: id, def: saDef(id), grain: step === 1 ? 'day' : 'week', period: sp.period, compare: sp.compare ?? null, points, total: set.metrics[0]!, scope: set.scope };
 }
 
 /** `filters=` JSON → SaFilters, or an error message. */
