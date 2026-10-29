@@ -114,7 +114,8 @@ export function costMetrics(db: Db, storeId: string, from: string, to: string, b
     const x = r.parts ? fx(String(r.day), r.cur, r.locked, 0) : 1;
     if (x == null) continue;
     const sales = (Number(r.gross ?? 0) - Number(r.discounts ?? 0)) * x;
-    const charged = r.parts ? sales + (Number(r.shipping ?? 0) + Number(r.tax ?? 0)) * x : Number(r.total);
+    // orders.tax and total are legacy columns in the store's currency; the money parts are in the order's.
+    const charged = r.parts ? sales + Number(r.shipping ?? 0) * x + Number(r.tax ?? 0) : Number(r.total);
     fees += r.channel === 'amazon' ? AMAZON_REFERRAL * sales : (Number(store.pct) / 100) * charged + Number(store.per);
   }
 

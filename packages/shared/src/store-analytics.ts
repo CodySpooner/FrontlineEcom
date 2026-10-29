@@ -766,3 +766,25 @@ export interface SaSeries {
   total: SaMetricResult;
   scope: SaFilterScope;
 }
+
+/** One line of the reconciliation: what it moves (store currency) and how many orders or refund lines it covers. */
+export interface SaReconcileLine {
+  key: string;
+  label: string;
+  amount: number;
+  count: number;
+  /** The orders behind it, for the identity line. */
+  ids?: string[];
+}
+
+/** GET /api/analytics/reconcile: Dashboard's revenue to v1 net sales; `unexplained` is what no line accounts for. */
+export interface SaReconcile {
+  from: string;
+  to: string;
+  legacy: number;
+  net_sales: SaValue;
+  lines: SaReconcileLine[];
+  /** Left out of both sides (duplicates, test orders) or counted nowhere yet: shown, but they move nothing. */
+  info: SaReconcileLine[];
+  unexplained: number;
+}

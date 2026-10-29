@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Db } from '../db';
 import { computeMetricSet, computeSeries, parseFilters } from './metric-set';
 import { historyStart, storePeriod, zoneInfo } from './period';
+import { reconcile } from './reconcile';
 import { datasetFreshness, markVerified, sourceRows } from './sources';
 
 export type Scope = { storeId: string; metrics?: SaMetricId[] };
@@ -85,6 +86,16 @@ export function storeAnalyticsRoutes(db: Db) {
       const basis = c.req.query('refunds') ?? 'refund_day';
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       return c.json(computeSeries(db, s, metric as SaMetricId, sp, filters, basis));
+    })
+    // SA-24: Dashboard's revenue to v1 net sales for the period, line by line.
+    .get('/api/analytics/reconcile', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      return c.json(reconcile(db, s.storeId, sp.period.from, sp.period.to, basis));
     })
     .get('/api/analytics/sources', (c) => {
       const s = scoped(c);
