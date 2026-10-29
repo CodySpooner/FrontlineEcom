@@ -186,8 +186,8 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
     name: 'Etsy',
     datasets: {
       orders: { support: 'supported', reads: true, field: 'Open API v3 getShopReceipts', scopes: 'transactions_r', history: '730 days back', rateLimit: '5 to 10 calls a second, 5k to 10k a day' },
-      order_lines: NOT_READ('receipt.transactions'),
-      refunds: NOT_READ('receipt.refunds'),
+      order_lines: { support: 'supported', reads: true, field: 'receipt.transactions (product_id, sku, quantity, price, shop_coupon, buyer_coupon)', scopes: 'transactions_r', history: 'with the orders read' },
+      refunds: { support: 'supported', reads: true, field: 'receipt.refunds (amount, created_timestamp)', scopes: 'transactions_r', history: 'with the orders read', reason: 'Etsy names no refund lines: merchandise up to the receipt\'s, the rest other (Q30).' },
       fees: FEE_ESTIMATE,
       catalog: { support: 'supported', reads: true, field: 'getListingsByShop', scopes: 'listings_r', history: 'current state' },
       variants: NOT_READ('getListingInventory (products, offerings)', { rateLimit: 'one call per listing: at most 50 a sync (Q10)' }),
@@ -197,7 +197,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
       traffic: UNSUPPORTED("Etsy's Open API has no shop sessions."),
       purchase_sessions: UNSUPPORTED("Etsy's Open API has no sessions."),
       traffic_breakdowns: UNSUPPORTED("Etsy's Open API has no traffic sources."),
-      customers: NOT_READ('receipt.buyer_user_id, receipt.country_iso'),
+      customers: { support: 'supported', reads: true, field: 'receipt.buyer_user_id (hashed), receipt.country_iso', scopes: 'transactions_r', history: 'with the orders read' },
       product_views: UNSUPPORTED(
         "Etsy's reference wasn't confirmed to carry a listing view count, and a lifetime count couldn't be split by period anyway.",
         'https://developers.etsy.com/documentation/reference/#operation/getListing (checked 2026-10-28)',

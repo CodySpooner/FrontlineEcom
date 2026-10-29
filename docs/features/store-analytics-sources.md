@@ -52,8 +52,8 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Orders | supported | yes | Open API v3 getShopReceipts | transactions_r | 730 days back | 5 to 10 calls a second, 5k to 10k a day |  |
-| Order lines by variant | supported | no | receipt.transactions |  |  |  |  |
-| Refunds | supported | no | receipt.refunds |  |  |  |  |
+| Order lines by variant | supported | yes | receipt.transactions (product_id, sku, quantity, price, shop_coupon, buyer_coupon) | transactions_r | with the orders read |  |  |
+| Refunds | supported | yes | receipt.refunds (amount, created_timestamp) | transactions_r | with the orders read |  | Etsy names no refund lines: merchandise up to the receipt's, the rest other (Q30). |
 | Fees | unsupported | no | — |  |  |  | The app doesn't read payment or platform fees here (owner question Q21); fees are the store's labelled estimate. |
 | Catalog | supported | yes | getListingsByShop | listings_r | current state |  |  |
 | Variants | supported | no | getListingInventory (products, offerings) |  |  | one call per listing: at most 50 a sync (Q10) |  |
@@ -63,7 +63,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Sessions and funnel | unsupported | no | — |  |  |  | Etsy's Open API has no shop sessions. |
 | Purchasing sessions | unsupported | no | — |  |  |  | Etsy's Open API has no sessions. |
 | Traffic by source, device and country | unsupported | no | — |  |  |  | Etsy's Open API has no traffic sources. |
-| Customer ids and country | supported | no | receipt.buyer_user_id, receipt.country_iso |  |  |  |  |
+| Customer ids and country | supported | yes | receipt.buyer_user_id (hashed), receipt.country_iso | transactions_r | with the orders read |  |  |
 | Product views | unsupported | no | — |  |  |  | Etsy's reference wasn't confirmed to carry a listing view count, and a lifetime count couldn't be split by period anyway. Docs: https://developers.etsy.com/documentation/reference/#operation/getListing (checked 2026-10-28) |
 
 ## Amazon

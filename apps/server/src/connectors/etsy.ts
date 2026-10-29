@@ -5,7 +5,7 @@ import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrat
 import type { ProductPage } from './shopify';
 import { localDate } from '../dates';
 import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, switchToReal, syncView, stillAsSynced, syncedPrice } from './common';
-import { noteFailed, noteRead } from './ingest';
+import { customerRef, noteFailed, noteRead } from './ingest';
 
 // Etsy Open API v3: app keystring + shared secret, and the shop owner's OAuth tokens (scopes transactions_r listings_r, and
 // listings_w for approved listing changes: setEtsyListingPrice, publishEtsyProductPage).
@@ -26,13 +26,22 @@ interface Receipt {
   is_shipped: boolean;
   create_timestamp: number;
   updated_timestamp: number;
-  /** As placed: refunds don't lower it. Includes the sales tax and VAT below. */
+  /** As placed: refunds don't lower it. total_price − the coupon discount + tax and shipping (the reference's words). */
   grandtotal: Money;
+  /** The listings' price × quantity, before discounts; discount_amt leaves out free-shipping coupons. */
+  total_price?: Money;
+  discount_amt?: Money;
+  total_shipping_cost?: Money;
+  gift_wrap_price?: Money;
   total_tax_cost?: Money;
   total_vat_cost?: Money;
-  refunds?: { amount: Money }[];
+  /** The buyer's Etsy user id (hashed into a ref) and the shipping country: nothing else of the buyer is kept. */
+  buyer_user_id?: number | null;
+  country_iso?: string | null;
+  /** Name no lines. */
+  refunds?: { amount: Money; created_timestamp?: number }[];
   shipments?: { tracking_code?: string | null }[];
-  transactions?: { listing_id: number; quantity: number; price: Money }[];
+  transactions?: { transaction_id?: number; listing_id: number; product_id?: number | null; sku?: string | null; quantity: number; price: Money; paid_timestamp?: number | null; shop_coupon?: number; buyer_coupon?: number }[];
 }
 
 interface Listing {
@@ -47,6 +56,36 @@ interface Listing {
 }
 
 const money = (m: Money | undefined) => (m ? m.amount / m.divisor : 0);
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Decision 9: a receipt's as-placed parts in the shop's currency, from the documented totals. Null unless they add up
+ * to its grand total (± 0.01); gift wrap, which the reference leaves out of the sum, counts as gross when it's what
+ * closes the gap.
+ */
+export function etsyParts(r: Receipt) {
+  if (!r.total_price || !r.total_shipping_cost) return null;
+  const p = { gross: r2(money(r.total_price)), discounts: r2(money(r.discount_amt)), shipping: r2(money(r.total_shipping_cost)), tax: r2(money(r.total_tax_cost) + money(r.total_vat_cost)) };
+  const gap = money(r.grandtotal) - (p.gross - p.discounts + p.shipping + p.tax);
+  if (Math.abs(gap) <= 0.01) return p;
+  return Math.abs(gap - money(r.gift_wrap_price)) <= 0.01 ? { ...p, gross: r2(p.gross + money(r.gift_wrap_price)) } : null;
+}
+
+/**
+ * Etsy's refunds name no lines (owner question Q30): oldest first, each counts as merchandise up to what the receipt's
+ * merchandise (gross − discounts) has left, the rest (shipping, tax) as other.
+ */
+export function etsyRefunds(r: Receipt, merchandise: number) {
+  let left = merchandise;
+  return [...(r.refunds ?? [])]
+    .sort((a, b) => (a.created_timestamp ?? 0) - (b.created_timestamp ?? 0))
+    .map((x, i) => {
+      const amount = money(x.amount);
+      const m = r2(Math.min(amount, Math.max(0, left)));
+      left -= m;
+      return { id: `${r.receipt_id}:${x.created_timestamp}:${i}`, at: x.created_timestamp!, merchandise: m, other: r2(amount - m) || null };
+    });
+}
 /** Sold out is still a live listing, at 0 stock (like a Shopify product at 0); the rest are off the shop. */
 const LISTING_STATUS: Record<string, ProductStatus> = { active: 'active', sold_out: 'active', draft: 'draft' };
 
@@ -97,7 +136,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       receipts.push(...page.results);
       if (!page.results.length || offset + 100 >= page.count) break;
     }
-    noteRead(db, key, id, 'orders', { status: 'available', from: localDate(new Date(since * 1000)), to: localDate(now) }, now);
+    for (const d of ['orders', 'order_lines', 'refunds', 'customers'] as const) noteRead(db, key, id, d, { status: 'available', from: localDate(new Date(since * 1000)), to: localDate(now) }, now);
     reading.delete('orders');
     // Listings can't be filtered by change time: page newest-changed first and stop at the first one older than the cursor.
     // The first sync and once a day after read them all, so a listing deleted on Etsy (in no state any more) is archived.
@@ -146,8 +185,24 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       for (const l of listings) prod.run(storeId, `etsy-${l.listing_id}`, l.title, photo(l), money(l.price), l.state === 'sold_out' ? 0 : l.quantity, LISTING_STATUS[l.state] ?? 'archived');
       // Etsy has no unit costs: lines cost the owner's unit cost for the product (setOrderItems), else nothing.
       const ord = db.prepare(
-        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking), tax = excluded.tax`,
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax,
+           source_kind, source_id, channel, currency, gross_sales, discounts, shipping, paid_at, source_updated_at, breakdown_at, customer_ref, customer_state, country)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, 'etsy', ?, 'etsy', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking), tax = excluded.tax,
+           source_kind = excluded.source_kind, source_id = excluded.source_id, channel = excluded.channel, currency = excluded.currency, gross_sales = excluded.gross_sales, discounts = excluded.discounts,
+           shipping = excluded.shipping, paid_at = excluded.paid_at, source_updated_at = excluded.source_updated_at, breakdown_at = excluded.breakdown_at,
+           customer_ref = excluded.customer_ref, customer_state = excluded.customer_state, country = coalesce(excluded.country, country)`,
+      );
+      const dropRefunds = db.prepare("DELETE FROM refunds WHERE store_id = ? AND order_id = ? AND source = 'etsy'");
+      const refundRow = db.prepare(
+        `INSERT INTO refunds (store_id, id, refund_id, order_id, product_id, variant_id, refunded_at, local_date, merchandise, shipping, tax, other, quantity, restocked, source)
+         VALUES (?, ?, ?, ?, NULL, NULL, ?, ?, ?, NULL, NULL, ?, NULL, NULL, 'etsy')`,
+      );
+      // SA-41: each transaction as placed; Etsy has no unit costs (the owner's come with SA-26's backfill).
+      const orderLine = db.prepare(
+        `INSERT INTO order_lines (store_id, order_id, line_id, product_id, variant_id, sku, quantity, gross, discount, cost, cost_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+         ON CONFLICT (store_id, order_id, line_id) DO UPDATE SET product_id = excluded.product_id, variant_id = excluded.variant_id, sku = excluded.sku, quantity = excluded.quantity,
+           gross = excluded.gross, discount = excluded.discount`,
       );
       const days = new Set<string>();
       for (const r of receipts) {
@@ -157,10 +212,29 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         days.add(day);
         const refunded = r.status === 'canceled' || r.status === 'fully refunded';
         const total = Math.max(0, money(r.grandtotal) - (r.refunds ?? []).reduce((a, x) => a + money(x.amount), 0)); // net of partial refunds
-        // A refund gives back its share of the tax (pro rata: Etsy doesn't split a refund's tax out).
+        // SA-41: the parts count once paid at a known time, every refund dated (a canceled receipt only with its refund).
+        // Then the tax is as placed (decision 9); else a refund gives back its share (pro rata: Etsy doesn't split it out).
         const gross = money(r.grandtotal);
-        const tax = gross > 0 ? ((money(r.total_tax_cost) + money(r.total_vat_cost)) * total) / gross : 0;
-        ord.run(storeId, `etsy-${r.receipt_id}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', r.is_shipped ? 'fulfilled' : 'unfulfilled', r.shipments?.[0]?.tracking_code || null, day, Math.round(tax * 100) / 100);
+        const p = etsyParts(r);
+        const paid = Math.min(...(r.transactions ?? []).map((t) => t.paid_timestamp || Infinity));
+        const settled = p && Number.isFinite(paid) && (r.refunds ?? []).every((x) => x.created_timestamp) && (r.status !== 'canceled' || r.refunds?.length);
+        const tax = settled ? p.tax : gross > 0 ? ((money(r.total_tax_cost) + money(r.total_vat_cost)) * total) / gross : 0;
+        const oid = `etsy-${r.receipt_id}`;
+        ord.run(storeId, oid, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', r.is_shipped ? 'fulfilled' : 'unfulfilled', r.shipments?.[0]?.tracking_code || null, day, Math.round(tax * 100) / 100,
+          String(r.receipt_id), r.grandtotal.currency_code ?? null, p?.gross ?? null, p?.discounts ?? null, p?.shipping ?? null, Number.isFinite(paid) ? new Date(paid * 1000).toISOString() : null,
+          new Date(r.updated_timestamp * 1000).toISOString(), settled ? now.toISOString() : null,
+          r.buyer_user_id ? customerRef(storeId, 'etsy', String(r.buyer_user_id)) : null, r.buyer_user_id == null ? 'unavailable' : r.buyer_user_id ? 'identified' : 'guest', r.country_iso?.toUpperCase() || null);
+        if (settled) {
+          dropRefunds.run(storeId, oid);
+          for (const x of etsyRefunds(r, p.gross - p.discounts)) {
+            const at = new Date(x.at * 1000);
+            refundRow.run(storeId, x.id, x.id, oid, at.toISOString(), dayOf.format(at), x.merchandise || null, x.other);
+          }
+        }
+        for (const t of r.transactions ?? []) {
+          if (t.transaction_id == null) continue;
+          orderLine.run(storeId, oid, String(t.transaction_id), `etsy-${t.listing_id}`, t.product_id ? `etsy-${t.product_id}` : null, t.sku || null, t.quantity, r2(money(t.price) * t.quantity), r2((t.shop_coupon ?? 0) + (t.buyer_coupon ?? 0)));
+        }
         // ponytail: a partial refund names no lines, so each keeps its share of what the buyer kept (a shipping-only refund
         // lowers them too); Woo's refunds list lines (CORE-65).
         const kept = gross > 0 ? total / gross : 1;

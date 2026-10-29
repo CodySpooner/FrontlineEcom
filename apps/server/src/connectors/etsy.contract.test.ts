@@ -1,0 +1,69 @@
+// SA-41: Etsy receipts against the Open API spec's shapes (fixtures/etsy-doc-examples.json names the spec and the date read).
+import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { describe, expect, it } from 'vitest';
+import { openDb } from '../db';
+import { seedDemo } from '../demo';
+import { saveIntegration } from '../integrations';
+import { checkOrderIdentity } from '../store-analytics/reconcile';
+import { syncEtsy } from './etsy';
+
+const key = randomBytes(32);
+const NOW = new Date('2026-10-26T18:00:00Z');
+const DOC = JSON.parse(readFileSync(new URL('./fixtures/etsy-doc-examples.json', import.meta.url), 'utf8'));
+
+function fakeEtsy(receipts = DOC.receipts) {
+  return (async (url: string) => {
+    const u = new URL(url);
+    if (u.pathname === '/v3/public/oauth/token') return Response.json({ access_token: '123.at_not-a-real-token', refresh_token: '123.rt_not-a-real-token', expires_in: 3600 });
+    if (u.pathname.endsWith('/receipts')) return Response.json({ count: receipts.length, results: Number(u.searchParams.get('offset')) ? [] : receipts });
+    return Response.json({ count: 0, results: [] });
+  }) as typeof fetch;
+}
+
+function setup() {
+  const db = openDb();
+  seedDemo(db, '2026-10-26');
+  saveIntegration(db, key, { kind: 'etsy', storeId: 'pawsome', values: { shopId: '4455', apiKey: 'keystr-not-real', sharedSecret: 'not-a-real-secret', accessToken: '123.at_old', refreshToken: '123.rt_old' } });
+  return db;
+}
+const orders = (db: ReturnType<typeof openDb>) =>
+  db.prepare(
+    `SELECT o.id, o.source_id, o.channel, o.currency, o.gross_sales AS gross, o.discounts, o.shipping, o.tax, o.total, o.paid_at, o.breakdown_at IS NOT NULL AS parts,
+       o.customer_ref AS ref, o.customer_state AS state, o.country,
+       (SELECT coalesce(sum(coalesce(merchandise, 0) + coalesce(other, 0)), 0) FROM refunds r WHERE r.store_id = o.store_id AND r.order_id = o.id) AS back
+     FROM orders o WHERE o.store_id = 'pawsome' ORDER BY o.id`,
+  ).all();
+
+describe('Etsy receipts contract (SA-41)', () => {
+  it('money parts from the documented totals, refunds dated by the refund; the identity holds', async () => {
+    const db = setup();
+    await syncEtsy(db, key, 'pawsome', fakeEtsy(), NOW);
+    const [a, b, c, d, e] = orders(db);
+    expect(a).toMatchObject({ id: 'etsy-1001', source_id: '1001', channel: 'etsy', currency: 'USD', gross: 50, discounts: 5, shipping: 6, tax: 3.6, total: 54.6, paid_at: '2026-10-25T14:00:30.000Z', parts: 1 });
+    expect(b).toMatchObject({ gross: 30, shipping: 4, tax: 2, total: 26, parts: 1 });
+    expect(c).toMatchObject({ gross: 20, shipping: 5, total: 0, parts: 1 }); // canceled with its refund
+    expect(d).toMatchObject({ gross: 18, parts: 1 }); // gift wrap closes the gap
+    expect(e).toMatchObject({ gross: null, parts: 0, total: 99 }); // parts that don't add up: an estimate, never a guess
+    for (const o of [a, b, c, d]) {
+      expect(checkOrderIdentity({ gross: Number(o!.gross), discounts: Number(o!.discounts), shipping: Number(o!.shipping), tax: Number(o!.tax), refunds: Number(o!.back), total: Number(o!.total) }).ok).toBe(true);
+    }
+    expect(db.prepare("SELECT order_id, local_date, merchandise, other FROM refunds WHERE store_id = 'pawsome' ORDER BY order_id").all()).toEqual([
+      { order_id: 'etsy-1002', local_date: '2026-10-26', merchandise: 10, other: null },
+      { order_id: 'etsy-1003', local_date: '2026-10-26', merchandise: 20, other: 5 }, // merchandise up to the receipt's, the rest other (Q30)
+    ]);
+  });
+
+  it('transactions are lines; the buyer is a ref (0 = guest); the country code only', async () => {
+    const db = setup();
+    await syncEtsy(db, key, 'pawsome', fakeEtsy(), NOW);
+    expect(db.prepare("SELECT order_id, line_id, product_id, variant_id, sku, quantity, gross, discount, cost FROM order_lines WHERE store_id = 'pawsome' AND order_id = 'etsy-1001' ORDER BY line_id").all()).toEqual([
+      { order_id: 'etsy-1001', line_id: '5001', product_id: 'etsy-11', variant_id: 'etsy-501', sku: 'MUG-W', quantity: 1, gross: 25, discount: 5, cost: null },
+      { order_id: 'etsy-1001', line_id: '5002', product_id: 'etsy-12', variant_id: 'etsy-502', sku: null, quantity: 2, gross: 25, discount: 0, cost: null },
+    ]);
+    const [a, b, guest] = orders(db);
+    expect(a).toMatchObject({ state: 'identified', country: 'US', ref: expect.stringMatching(/^c_[0-9a-f]{24}$/) });
+    expect(b!.ref).toBe(a!.ref);
+    expect(guest).toMatchObject({ ref: null, state: 'guest', country: 'GB' });
+  });
+});
