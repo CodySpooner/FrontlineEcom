@@ -1,9 +1,10 @@
 import { createHmac } from 'node:crypto';
-import type { FulfillmentStatus, ProductStatus } from '@frontline/shared';
+import type { FulfillmentStatus, ProductStatus, SaDataset } from '@frontline/shared';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { logAction } from '../actions';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
+import { customerRef, noteFailed, noteRead } from './ingest';
 import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, saveAds, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange, stillAsSynced, syncedBudget, syncedPrice } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
@@ -195,8 +196,16 @@ interface ShopOrder {
   update_time: number;
   is_sample_order?: boolean;
   tracking_number?: string;
-  /** total_amount includes `tax` (product + shipping tax the buyer paid). */
-  payment?: { total_amount?: string; currency?: string; tax?: string };
+  paid_time?: number;
+  /** Buyer user ID: only its hash is kept (decision 20). */
+  user_id?: string;
+  recipient_address?: { region_code?: string };
+  /**
+   * Strings in the shop's currency (Get Order List 202309, partner docs via the generated spec read 2026-10-29):
+   * sub_total = original_total_product_price − seller_discount − platform_discount; total_amount = sub_total +
+   * shipping_fee + tax + retail_delivery_fee; `tax` is product + shipping tax.
+   */
+  payment?: { total_amount?: string; currency?: string; tax?: string; sub_total?: string; shipping_fee?: string; seller_discount?: string; platform_discount?: string; retail_delivery_fee?: string };
   /** One entry per unit unless `quantity` says otherwise; `sale_price` is per unit. */
   line_items?: { product_id: string; sale_price?: string; quantity?: number }[];
 }
@@ -208,8 +217,11 @@ interface ShopReturn {
   /** REFUND, RETURN_AND_REFUND or REPLACEMENT (no money back). */
   return_type?: string;
   return_status: string;
+  update_time?: number;
   /** Strings in the shop's currency; refund_total includes refund_tax. */
-  refund_amount?: { refund_total?: string; refund_tax?: string };
+  refund_amount?: { refund_total?: string; refund_tax?: string; refund_subtotal?: string; refund_shipping_fee?: string };
+  /** One per unit, as order lines are. */
+  return_line_items?: unknown[];
 }
 const REFUNDED = new Set(['RETURN_OR_REFUND_REQUEST_SUCCESS', 'RETURN_OR_REFUND_REQUEST_COMPLETE']);
 /** Settings row: where each TikTok Shop integration's returns read got to, and for which shop. */
@@ -222,6 +234,25 @@ type ShopPerformance = { latest_available_date?: string; performance?: { interva
 export function signTikTokShop(secret: string, path: string, params: Record<string, string>, body = '') {
   const pairs = Object.keys(params).filter((k) => k !== 'sign' && k !== 'access_token').sort().map((k) => k + params[k]).join('');
   return createHmac('sha256', secret).update(secret + path + pairs + body + secret).digest('hex');
+}
+
+/**
+ * SA-54: an order's as-placed parts from its payment fields, or undefined without them. Decision 18: TikTok funds the
+ * platform discount, so it's in the seller's gross, not in `discounts`; the order's total is then what the buyer paid
+ * plus it. Colorado's retail delivery fee goes to the state, as tax does.
+ * ponytail: other markets' buyer fees (small order, service, handling, insurance) aren't parts: their orders fail the
+ * identity and are listed there.
+ */
+export function shopParts(p: ShopOrder['payment']) {
+  if (p?.sub_total == null || p.seller_discount == null) return;
+  const n = (s?: string) => Number(s ?? 0);
+  return {
+    gross: cents(n(p.sub_total) + n(p.seller_discount) + n(p.platform_discount)),
+    discounts: n(p.seller_discount),
+    shipping: n(p.shipping_fee),
+    tax: cents(n(p.tax) + n(p.retail_delivery_fee)),
+    total: cents(n(p.total_amount) + n(p.platform_discount)),
+  };
 }
 
 const PRODUCT_STATUS: Record<string, ProductStatus> = { ACTIVATE: 'active', DRAFT: 'draft', PENDING: 'draft', FAILED: 'draft' };
@@ -281,6 +312,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
   const creds = getCredentials(db, key, 'tiktok_shop', storeId);
   if (!creds) return;
   const view = syncView(db, id);
+  const reading = new Set<SaDataset>(['orders']); // failed if the sync stops before they're read
   try {
     const { api, shop } = await shopClient(db, key, id, creds, fetchFn, now);
     const search = async <T>(path: string, list: string, query: Record<string, string>, body: object) => {
@@ -301,12 +333,17 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     const full = !cursor || catalogPassDue(db, id, today);
     const products = await search<ShopProduct>('/product/202309/products/search', 'products', {}, full ? {} : { update_time_ge: since });
     const orders = await search<ShopOrder>('/order/202309/orders/search', 'orders', { sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: since });
+    for (const d of ['orders', 'customers'] as const) noteRead(db, key, id, d, { status: 'available', from: localDate(new Date(since * 1000)), to: localDate(now) }, now);
+    reading.delete('orders');
     // Refunds and returns need the Return & Refund Basic scope. Without it (or on any error) this read is skipped and
     // tried again next sync from where it last got to; revenue then nets cancellations only.
     const returnReads = stateOf<{ shop: string; since: number }>(db, RETURNS_KEY);
     const lastReturns = returnReads.get(id);
     const returnsSince = lastReturns?.shop === shop.cipher ? lastReturns.since : Math.floor(now.getTime() / 1000) - BACKFILL_DAYS * 86400;
-    const returns = await search<ShopReturn>('/return_refund/202309/returns/search', 'return_orders', { page_size: '50', sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: returnsSince }).catch(() => undefined);
+    const returns = await search<ShopReturn>('/return_refund/202309/returns/search', 'return_orders', { page_size: '50', sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: returnsSince }).then(
+      (r) => (noteRead(db, key, id, 'refunds', { status: 'available', from: localDate(new Date(returnsSince * 1000)), to: localDate(now) }, now), r),
+      (e: unknown) => void noteRead(db, key, id, 'refunds', { status: 'failed', error: e instanceof Error ? e.message : String(e) }, now),
+    );
     const store = db.prepare('SELECT timezone, platform FROM stores WHERE id = ?').get(storeId);
     // Product-page visitors a day are a TikTok Shop store's funnel sessions (TikTok Shop Analytics scope), unless GA4 is
     // connected (it owns the funnel there). A TikTok Shop alongside another platform leaves that one's sessions alone.
@@ -343,9 +380,16 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         prod.run(storeId, `tt-${p.id}`, p.title, Number(price?.sale_price ?? price?.tax_exclusive_price ?? 0), inventory, PRODUCT_STATUS[p.status] ?? 'archived');
       }
       // TikTok has no unit costs: lines cost the owner's unit cost for the product (setOrderItems), else nothing.
+      // SA-54: the as-placed parts (shopParts) once paid at a known time; a cancelled order has none (its refund isn't a
+      // return), so it's left out of v1 as legacy leaves it out.
       const ord = db.prepare(
-        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking), tax = excluded.tax`,
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax,
+           source_kind, source_id, channel, channel_order_id, currency, gross_sales, discounts, shipping, paid_at, source_updated_at, breakdown_at, customer_ref, customer_state, country)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, 'tiktok_shop', ?, 'tiktok_shop', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, tracking = coalesce(excluded.tracking, tracking), tax = excluded.tax,
+           source_kind = excluded.source_kind, source_id = excluded.source_id, channel = excluded.channel, channel_order_id = excluded.channel_order_id, currency = excluded.currency,
+           gross_sales = excluded.gross_sales, discounts = excluded.discounts, shipping = excluded.shipping, paid_at = excluded.paid_at, source_updated_at = excluded.source_updated_at,
+           breakdown_at = excluded.breakdown_at, customer_ref = excluded.customer_ref, customer_state = excluded.customer_state, country = coalesce(excluded.country, country)`,
       );
       const days = new Set<string>();
       for (const o of orders) {
@@ -353,7 +397,13 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         const created = new Date(o.create_time * 1000);
         const day = dayOf.format(created);
         days.add(day);
-        ord.run(storeId, `tt-${o.id}`, created.toISOString(), Number(o.payment?.total_amount ?? 0), o.status === 'CANCELLED' ? 'refunded' : 'paid', shopFulfillment(o.status), o.tracking_number || null, day, Number(o.payment?.tax ?? 0));
+        const p = shopParts(o.payment);
+        const settled = p && o.paid_time && o.status !== 'CANCELLED';
+        const region = o.recipient_address?.region_code?.toUpperCase();
+        ord.run(storeId, `tt-${o.id}`, created.toISOString(), p?.total ?? Number(o.payment?.total_amount ?? 0), o.status === 'CANCELLED' ? 'refunded' : 'paid', shopFulfillment(o.status), o.tracking_number || null, day,
+          p?.tax ?? Number(o.payment?.tax ?? 0), o.id, o.id, o.payment?.currency ?? null, p?.gross ?? null, p?.discounts ?? null, p?.shipping ?? null,
+          o.paid_time ? new Date(o.paid_time * 1000).toISOString() : null, new Date(o.update_time * 1000).toISOString(), settled ? now.toISOString() : null,
+          o.user_id ? customerRef(storeId, 'tiktok_shop', o.user_id) : null, o.user_id ? 'identified' : 'unavailable', region && /^[A-Z]{2}$/.test(region) ? region : null);
         setOrderItems(db, storeId, `tt-${o.id}`, (o.line_items ?? []).map((li) => ({ productId: `tt-${li.product_id}`, quantity: li.quantity ?? 1, revenue: Number(li.sale_price ?? 0) * (li.quantity ?? 1), cost: 0 })));
       }
       // At 1D an interval is one day, so its daily average is that day's count. Days after latest_available_date aren't in yet.
@@ -374,11 +424,28 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         );
         const onlyProduct = db.prepare('SELECT min(product_id) AS product FROM order_items WHERE store_id = ? AND order_id = ? HAVING count(DISTINCT product_id) = 1');
         const orderDay = db.prepare('SELECT local_date FROM orders WHERE store_id = ? AND id = ?');
+        // SA-54: the refunds ledger too, one line per granted return, dated when first seen granted (its update time then).
+        // ponytail: a return first read once already complete is dated by that later update; its records read would date it.
+        const ledger = db.prepare(
+          `INSERT INTO refunds (store_id, id, refund_id, order_id, product_id, variant_id, refunded_at, local_date, merchandise, shipping, tax, other, quantity, restocked, source)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, NULL, 'tiktok_shop')
+           ON CONFLICT (store_id, id) DO UPDATE SET product_id = excluded.product_id, merchandise = excluded.merchandise, shipping = excluded.shipping, tax = excluded.tax, other = excluded.other, quantity = excluded.quantity`,
+        );
+        const unGrant = db.prepare("DELETE FROM refunds WHERE store_id = ? AND id = ? AND source = 'tiktok_shop'");
         for (const r of returns) {
           const a = r.refund_amount;
           const paid = REFUNDED.has(r.return_status) && r.return_type !== 'REPLACEMENT';
           const tax = paid ? cents(Number(a?.refund_tax ?? 0)) : 0;
-          refund.run(storeId, `tt-${r.return_id}`, `tt-${r.order_id}`, paid ? cents(Number(a?.refund_total ?? 0) - tax) : 0, tax, onlyProduct.get(storeId, `tt-${r.order_id}`)?.product ?? null);
+          const product = onlyProduct.get(storeId, `tt-${r.order_id}`)?.product ?? null;
+          refund.run(storeId, `tt-${r.return_id}`, `tt-${r.order_id}`, paid ? cents(Number(a?.refund_total ?? 0) - tax) : 0, tax, product);
+          if (!paid) unGrant.run(storeId, `tt-${r.return_id}`);
+          else {
+            const at = new Date((r.update_time ?? now.getTime() / 1000) * 1000);
+            const ship = a?.refund_shipping_fee != null ? cents(Number(a.refund_shipping_fee)) : null;
+            const merch = a?.refund_subtotal != null ? cents(Number(a.refund_subtotal)) : cents(Number(a?.refund_total ?? 0) - tax - (ship ?? 0));
+            const other = cents(Number(a?.refund_total ?? 0) - merch - tax - (ship ?? 0)); // fees refunded, e.g. a retail delivery fee
+            ledger.run(storeId, `tt-${r.return_id}`, r.return_id, `tt-${r.order_id}`, product, at.toISOString(), dayOf.format(at), merch, ship, tax || null, other || null, r.return_line_items?.length || null);
+          }
           const day = orderDay.get(storeId, `tt-${r.order_id}`)?.local_date;
           if (day) days.add(String(day));
         }
@@ -411,6 +478,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       setImage.run(url?.startsWith('https://') ? url : '', storeId, String(r.id));
     }
   } catch (e) {
+    noteFailed(db, key, id, reading, e);
     setIntegrationStatus(db, id, 'error', e instanceof Error ? e.message : 'TikTok Shop sync failed');
   }
 }

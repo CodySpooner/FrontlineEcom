@@ -91,9 +91,9 @@ An Amazon store syncs its own orders; Amazon next to a site gives daily totals o
 
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Orders | supported | yes | Order API /order/202309/orders/search | Order read | 730 days back |  |  |
+| Orders | supported | yes | Order API /order/202309/orders/search payment (sub_total, seller_discount, platform_discount, shipping_fee, tax, retail_delivery_fee, total_amount), paid_time | Order read | 730 days back |  | TikTok funds the platform discount: it's in gross sales, never in discounts (decision 18). |
 | Order lines by variant | supported | no | order.line_items (sku_id, seller_sku) |  |  |  |  |
-| Refunds | supported | no | Return and Refund API returns search | Return & Refund Basic |  |  |  |
+| Refunds | supported | yes | Return and Refund API /return_refund/202309/returns/search refund_amount (refund_subtotal, refund_shipping_fee, refund_tax, refund_total) | Return & Refund Basic | 730 days back, then from the last read |  | A granted return, dated when the app first sees it granted; a replacement refunds nothing. Cancellations before shipping are left out with their order. Docs: https://partner.tiktokshop.com/docv2 (via its generated OpenAPI spec, read 2026-10-29; the current version is 202602) |
 | Fees | unsupported | no | — |  |  |  | The app doesn't read payment or platform fees here (owner question Q21); fees are the store's labelled estimate. |
 | Catalog | supported | yes | Product API /product/202309/products/search | Product read | current state |  |  |
 | Variants | supported | no | product.skus |  |  |  |  |
@@ -103,7 +103,7 @@ An Amazon store syncs its own orders; Amazon next to a site gives daily totals o
 | Sessions and funnel | supported | yes | Analytics shop performance avg_visitors | TikTok Shop Analytics | about 30 days |  | TikTok Shop's own visitors: never added to the site's sessions. |
 | Purchasing sessions | unsupported | no | — |  |  |  | TikTok Shop reports visitors, not purchasing sessions. |
 | Traffic by source, device and country | unsupported | no | — |  |  |  | TikTok Shop's shop performance read has no source or device split. |
-| Customer ids and country | supported | no | order.user_id |  |  |  |  |
+| Customer ids and country | supported | yes | order.user_id (hashed), recipient_address.region_code | Order read | with the orders read |  |  |
 | Product views | unsupported | no | — |  |  |  | No per-product view count found in TikTok Shop's Partner API reference (only third-party tools claim one). Docs: https://partner.tiktokshop.com/docv2 (searched 2026-10-28) |
 
 ## Meta Ads

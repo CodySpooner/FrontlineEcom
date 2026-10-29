@@ -9,7 +9,8 @@ const cents = (n: number) => Math.round(n * 100) / 100 + 0; // + 0: no -0
 
 /**
  * Decision 9: an order's as-placed parts less every refund line make its platform's current total, to the cent.
- * All in one currency. Platforms whose totals aren't net of refunds (TikTok Shop, Amazon) pass with no refund lines.
+ * All in one currency. A platform whose totals aren't net of refunds (TikTok Shop) passes against its total less the
+ * refund lines legacy takes off.
  */
 export function checkOrderIdentity(o: { gross: number; discounts: number; shipping: number; tax: number; refunds: number; total: number }, tolerance = 0.01) {
   const expected = o.gross - o.discounts + o.shipping + o.tax - o.refunds;
@@ -86,9 +87,11 @@ export function reconcile(db: Db, storeId: string, from: string, to: string, bas
     }
     if (tax) add('tax', 'Tax in current totals', -tax);
     if (ship) add('shipping', 'Shipping in current totals', -ship * x);
-    if (Number(o.refunded)) add('refunds_netted', 'Refunds already taken off current totals (v1 dates them instead)', Number(o.refunded) * x);
+    // TikTok Shop's totals aren't net of refunds: legacy takes its refund lines off instead, so they aren't netted twice.
+    const notNet = String(o.id).startsWith('tt-');
+    if (Number(o.refunded) && !notNet) add('refunds_netted', 'Refunds already taken off current totals (v1 dates them instead)', Number(o.refunded) * x);
     if (amz) add('legacy_refund_lines', 'Refund lines legacy took off (TikTok Shop, Amazon)', amz);
-    const id = checkOrderIdentity({ gross: gross * x, discounts: disc * x, shipping: ship * x, tax, refunds: Number(o.refunded) * x, total });
+    const id = checkOrderIdentity({ gross: gross * x, discounts: disc * x, shipping: ship * x, tax, refunds: Number(o.refunded) * x, total: notNet ? total - amz : total });
     if (!id.ok) add('identity', 'Orders failing the identity (parts − refunds ≠ current total)', id.diff, String(o.id));
   }
   const channel = db.prepare('SELECT coalesce(sum(revenue), 0) AS r, coalesce(sum(orders), 0) AS n FROM channel_daily WHERE store_id = ? AND date BETWEEN ? AND ?').get(storeId, from, to)!;

@@ -1,0 +1,87 @@
+{
+  "_source": "TikTok Shop Partner API: Get Order List (/order/202309/orders/search) and Search Returns (/return_refund/202602/returns/search) response examples, field names and formulas from the partner docs (https://partner.tiktokshop.com/docv2) via the OpenAPI spec generated from them (github.com/isaackogan/TikTok-Shop-Api-SDKs, version 2026.10.28), read 2026-10-29. The docs' example amounts are placeholders that don't add up, so the amounts here follow the documented formulas.",
+  "orders": [
+    {
+      "id": "576461413038785752",
+      "status": "COMPLETED",
+      "create_time": 1792936800,
+      "paid_time": 1792936830,
+      "update_time": 1793016000,
+      "tracking_number": "JX12345",
+      "user_id": "7021436810468230477",
+      "is_sample_order": false,
+      "is_replacement_order": false,
+      "commerce_platform": "TIKTOK_SHOP",
+      "recipient_address": { "region_code": "US" },
+      "payment": {
+        "currency": "USD",
+        "original_total_product_price": "50.00",
+        "seller_discount": "6.00",
+        "platform_discount": "4.00",
+        "sub_total": "40.00",
+        "original_shipping_fee": "7.99",
+        "shipping_fee_seller_discount": "0",
+        "shipping_fee_platform_discount": "2.00",
+        "shipping_fee_cofunded_discount": "0",
+        "shipping_fee": "5.99",
+        "product_tax": "2.80",
+        "shipping_fee_tax": "0.40",
+        "tax": "3.20",
+        "retail_delivery_fee": "0.28",
+        "total_amount": "49.47"
+      },
+      "line_items": [
+        { "id": "577086512123755123", "sku_id": "2729382476852921560", "seller_sku": "ice_roller_blue", "product_id": "1729582718312380123", "original_price": "25.00", "seller_discount": "3.00", "platform_discount": "2.00", "sale_price": "20.00", "currency": "USD", "is_gift": false },
+        { "id": "577086512123755124", "sku_id": "2729382476852921560", "seller_sku": "ice_roller_blue", "product_id": "1729582718312380123", "original_price": "25.00", "seller_discount": "3.00", "platform_discount": "2.00", "sale_price": "20.00", "currency": "USD", "is_gift": false }
+      ]
+    },
+    {
+      "id": "576461413038785753",
+      "status": "DELIVERED",
+      "create_time": 1792940400,
+      "paid_time": 1792940410,
+      "update_time": 1793026000,
+      "user_id": "7021436810468230478",
+      "recipient_address": { "region_code": "US" },
+      "payment": { "currency": "USD", "original_total_product_price": "20.00", "seller_discount": "0", "platform_discount": "0", "sub_total": "20.00", "shipping_fee": "0", "tax": "1.60", "total_amount": "21.60" },
+      "line_items": [
+        { "id": "577086512123755200", "sku_id": "2729382476852921999", "seller_sku": "gua_sha", "product_id": "1729582718312380999", "original_price": "20.00", "seller_discount": "0", "platform_discount": "0", "sale_price": "20.00", "currency": "USD", "is_gift": false }
+      ]
+    },
+    {
+      "id": "576461413038785754",
+      "status": "CANCELLED",
+      "create_time": 1792944000,
+      "paid_time": 1792944010,
+      "update_time": 1792946000,
+      "user_id": "7021436810468230479",
+      "payment": { "currency": "USD", "original_total_product_price": "15.00", "seller_discount": "0", "platform_discount": "0", "sub_total": "15.00", "shipping_fee": "0", "tax": "0", "total_amount": "15.00" },
+      "line_items": [
+        { "id": "577086512123755300", "sku_id": "2729382476852921999", "product_id": "1729582718312380999", "original_price": "15.00", "seller_discount": "0", "platform_discount": "0", "sale_price": "15.00", "currency": "USD" }
+      ]
+    }
+  ],
+  "returns": [
+    {
+      "return_id": "4035318504086604100",
+      "order_id": "576461413038785753",
+      "return_type": "REFUND",
+      "return_status": "RETURN_OR_REFUND_REQUEST_COMPLETE",
+      "create_time": 1793016000,
+      "update_time": 1793026800,
+      "refund_amount": { "currency": "USD", "refund_total": "10.80", "refund_subtotal": "10.00", "refund_shipping_fee": "0", "refund_tax": "0.80" },
+      "return_line_items": [
+        { "return_line_item_id": "4035227657962164811", "order_line_item_id": "577086512123755200", "sku_id": "2729382476852921999", "seller_sku": "gua_sha", "refund_amount": { "currency": "USD", "refund_total": "10.80", "refund_subtotal": "10.00", "refund_shipping_fee": "0", "refund_tax": "0.80" } }
+      ]
+    },
+    {
+      "return_id": "4035318504086604101",
+      "order_id": "576461413038785752",
+      "return_type": "RETURN_AND_REFUND",
+      "return_status": "RETURN_OR_REFUND_REQUEST_PENDING",
+      "create_time": 1793026000,
+      "update_time": 1793026000,
+      "refund_amount": { "currency": "USD", "refund_total": "21.74", "refund_subtotal": "20.00", "refund_shipping_fee": "0", "refund_tax": "1.60", "retail_delivery_fee": "0.14" }
+    }
+  ]
+}
