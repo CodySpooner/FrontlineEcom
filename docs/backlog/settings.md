@@ -1383,7 +1383,7 @@ STOP.
 
 ### Scope and persistence foundation
 
-- [ ] ST-05 **Data model and boot fills** (decisions 6, 7, 15).
+- [x] ST-05 **Data model and boot fills** (decisions 6, 7, 15).
   - **The ST-05 migration** (next free number, n), `/* n (settings: ST-05 versions on config rows; settings change
     history) */`:
     - `version` on the seven owner tables;
@@ -2368,6 +2368,7 @@ STOP.
 - 2026-10-28 ST-02 `/settings/<section>` frame (Hero, 248 px sidebar, 860 px column, section select below 900 px), `settingsUrl` in shared, `/integrations` → `/settings/integrations` (query kept), Integrations page moved to `settings/integrations/`, today's panels moved into account/general/notifications/stores/usage/data behind `data-legacy`, every web and server link rebuilt with `settingsUrl`. `pnpm check` green (234 files, 1748 tests; first run timed out only in the Research scale test, rerun with `VITEST_MAX_WORKERS=4`). `pnpm e2e --grep settings|integrations`: route smoke 8/8 green at 390–1920 px; both axe compares fail only on CRLF line endings (Notes). Shots: `.agent/st02-1280.png`, 390×844 overflow 0.
 - 2026-10-28 ST-03 `settings/kit.tsx` (SettingsSection with Advanced expander, SettingRow, OriginLine, ScopeSwitch with a keyboard store listbox, SaveBar with saving/saved/applying/applied/error, ImmediateRow, DangerZone), `settings/useDraft.ts` (one draft per section and scope), opt-in `flatButtonClass` in `ui.tsx`, DevGallery entries; `kit.test.tsx` 18 green. DevGallery shot `.agent/st03-kit-1440x2400.png` matches board A1's rows, origin lines, save bar and danger card.
 - 2026-10-28 ST-04 data routers (`main.tsx` `createBrowserRouter`, `renderApp` `createMemoryRouter`, one splat route each; whole web suite green unchanged, 100 files / 538 tests), `api()` errors carry `status`, `code`, `current`, and `settings/form.tsx` `useSettingsForm`: draft + versioned save, Save / Discard / Stay on links, back and store switches (`useBlocker`), `beforeunload` only without `window.desktop`, the 409 dialog (Reload / Keep mine, silent re-apply once when none of my fields changed). `form.test.tsx` 12 green. Route and flow e2e 66 passed; the 2 failures are CH-18's known +46 px at 390 on legacy agent and conversation, same on main's router.
+- 2026-10-28 ST-05 migration 57 (DDL only: `version` on the seven owner tables, `updated_at` on `settings`, `store_caps`, `stores`, `automation_rules`, `settings_changes` with `(at)` and `(store_id, at)` indexes), `config/boot.ts` `bootConfig` from `index.ts` (fill-if-absent under `once()` in one transaction; each filled key is a `migration` change row). `db.test.ts`: the decision 7 upgrade test (`store_caps` rows and every effective value unchanged, `user_version` current, FK check clean, a second boot changes nothing) and fill-never-overwrites, green. Dir (a) upgraded 56→57 with its before-update copy; workspace = machine zone + today's cap defaults.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -2405,6 +2406,9 @@ STOP.
   the new section routes are filed to codex-hardening (CH-18 is unticked), not committed here.
   `e2e/setup.ts` makes its data dir under `os.tmpdir()`: run it with `TEMP`/`TMP` set to `.agent/tmp` so that dir is
   under `.agent/` (decision 18).
+- **ST-05 document shape:** the `workspace` and `personal` rows of `settings` hold flat registry ids
+  (`{"timezone": …, "caps.agentCostPerDay": 5}`); `app` and `store_caps` keep their existing shapes, so ST-07's writer
+  maps `caps.<key>` to the `store_caps` key. Boot fills don't move `version` (not an owner edit).
 - **ST-04 for every later section:** build an explicit-save section on `useSettingsForm` (`settings/form.tsx`) and
   render its `dialogs`. React Router allows one `useBlocker` at a time, so one form per section; a section with two
   documents saves them in one `PATCH /api/config` (decision 6), not two forms.

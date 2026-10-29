@@ -4,7 +4,9 @@ import { join } from 'node:path';
 import { expect, test } from 'vitest';
 import { DatabaseSync } from 'node:sqlite';
 import { listBackups } from './backups';
+import { bootConfig } from './config/boot';
 import { dataDir, MIGRATIONS, openDb } from './db';
+import { getCaps, getSettings } from './settings';
 
 test('migrations create the Phase 1 tables and set user_version', () => {
   const db = openDb();
@@ -171,4 +173,72 @@ test('a database from before Product Research keeps its lists and finds, and gai
 
 test("tests use a temp data folder, never the dev instance's (its Knowledge Base edits, its key)", () => {
   expect(dataDir().startsWith(tmpdir())).toBe(true);
+});
+
+test('settings (ST-05): an upgraded database keeps every saved setting and cap; boot only fills what is absent, once', () => {
+  const n = MIGRATIONS.findIndex((m) => m.includes('CREATE TABLE settings_changes')) + 1;
+  const app = '{"profile":{"name":"Sam","plan":"Pro Plan"},"notifications":{"approvals":true,"agentDone":false,"errors":true,"digest":true,"researchAlerts":true},"baseCurrency":"EUR"}';
+  const dir = mkdtempSync(join(tmpdir(), 'frontline-db-'));
+  try {
+    const file = join(dir, 'frontline.db');
+    const old = new DatabaseSync(file); // the last version before Settings' versions
+    for (const sql of MIGRATIONS.slice(0, n - 1)) old.exec(sql);
+    old.exec(`PRAGMA user_version = ${n - 1};
+      INSERT INTO stores (id, name, platform, niche) VALUES ('a', 'A', 'shopify', 'pet'), ('b', 'B', 'etsy', 'home'), ('c', 'C', 'shopify', 'pet');
+      INSERT INTO settings (key, value_json) VALUES ('app', '${app}');
+      INSERT INTO store_caps (store_id, value_json) VALUES
+        ('a', '{"adSpendChangePerDay":100,"higgsfieldCreditsPerDay":50,"agentCostPerDay":5,"autopilot":{"ads.set_budget":{"enabled":true,"maxPerDay":20}}}'),
+        ('b', '{"agentCostPerDay":12}');
+      INSERT INTO automation_rules (id, store_id, name, trigger_json, action_json, created_at) VALUES ('r', 'a', 'Nightly', '{}', '{}', '2026-10-01');`);
+    const rows = (db: DatabaseSync, sql: string) => db.prepare(sql).all().map((r) => ({ ...r }));
+    const effective = (db: DatabaseSync) => ({ app: getSettings(db), caps: ['a', 'b', 'c'].map((id) => getCaps(db, id)) });
+    const before = { caps: rows(old, 'SELECT store_id, value_json FROM store_caps ORDER BY store_id'), effective: effective(old) };
+    old.close();
+
+    const db = openDb(file);
+    bootConfig(db, 'Asia/Tokyo');
+    expect(db.prepare('PRAGMA user_version').get()?.user_version).toBe(MIGRATIONS.length);
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+    expect(rows(db, 'SELECT store_id, value_json FROM store_caps ORDER BY store_id')).toEqual(before.caps); // every override, as it was
+    expect(effective(db)).toEqual(before.effective);
+    // Existing rows start at version 1; the app row is untouched; the workspace gets this machine's zone and today's cap defaults.
+    for (const t of ['settings', 'store_caps', 'stores', 'automation_rules']) expect(rows(db, `SELECT DISTINCT version FROM ${t}`)).toEqual([{ version: 1 }]);
+    const settings = Object.fromEntries(rows(db, 'SELECT key, value_json FROM settings').map((r) => [r.key, JSON.parse(String(r.value_json))]));
+    expect(settings).toEqual({
+      app: JSON.parse(app),
+      workspace: { timezone: 'Asia/Tokyo', 'caps.adSpendChangePerDay': 100, 'caps.higgsfieldCreditsPerDay': 200, 'caps.agentCostPerDay': 5 },
+      personal: {},
+    });
+    expect(rows(db, 'SELECT actor, scope, setting, before_json, after_json, state FROM settings_changes ORDER BY setting')).toEqual(
+      ['caps.adSpendChangePerDay', 'caps.agentCostPerDay', 'caps.higgsfieldCreditsPerDay', 'timezone'].map((setting) => ({
+        actor: 'migration',
+        scope: 'workspace',
+        setting,
+        before_json: null,
+        after_json: JSON.stringify(settings.workspace[setting]),
+        state: 'saved',
+      })),
+    );
+
+    // A second boot (another day, the machine in another zone) changes nothing.
+    const all = (db: DatabaseSync) => ['settings', 'store_caps', 'settings_changes', 'done_once'].map((t) => rows(db, `SELECT * FROM ${t} ORDER BY 1`));
+    const once = all(db);
+    db.close();
+    const again = openDb(file);
+    bootConfig(again, 'Europe/Paris');
+    expect(all(again)).toEqual(once);
+    again.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('settings (ST-05): boot adds only the absent workspace keys and never overwrites one that is there', () => {
+  const db = openDb();
+  db.exec(`INSERT INTO settings (key, value_json, version) VALUES ('workspace', '{"timezone":"Europe/Paris","caps.agentCostPerDay":9}', 3)`);
+  bootConfig(db, 'Asia/Tokyo');
+  const r = db.prepare("SELECT value_json, version FROM settings WHERE key = 'workspace'").get()!;
+  expect(JSON.parse(String(r.value_json))).toEqual({ timezone: 'Europe/Paris', 'caps.agentCostPerDay': 9, 'caps.adSpendChangePerDay': 100, 'caps.higgsfieldCreditsPerDay': 200 });
+  expect(r.version).toBe(3); // a fill isn't an owner edit: an open form doesn't go stale
+  expect(db.prepare("SELECT setting FROM settings_changes WHERE scope = 'workspace' ORDER BY setting").all().map((c) => c.setting)).toEqual(['caps.adSpendChangePerDay', 'caps.higgsfieldCreditsPerDay']);
 });

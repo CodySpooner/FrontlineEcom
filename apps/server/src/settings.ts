@@ -16,7 +16,7 @@ const DEFAULT_SETTINGS: Omit<Settings, 'dataDir'> = {
   baseCurrency: 'USD',
 };
 
-const DEFAULT_CAPS: Omit<StoreCaps, 'storeId'> = { adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {} };
+export const DEFAULT_CAPS: Omit<StoreCaps, 'storeId'> = { adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {} };
 
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const extra = (o: Obj, allowed: string[]) => Object.keys(o).find((k) => !allowed.includes(k));

@@ -5,6 +5,7 @@ import { startBackupLoop } from './backups';
 import { startDigestLoop } from './digest';
 import { startFxLoop } from './fx';
 import { seedCompetitors, startCompetitorWatch } from './competitors';
+import { bootConfig } from './config/boot';
 import { dataDir, dbFile, openDb } from './db';
 import { seedCreatives, seedDemo } from './demo';
 import { startDemoEmitter } from './live';
@@ -27,6 +28,7 @@ process.on('uncaughtExceptionMonitor', (e) => log('error', 'crash', { error: e.s
 // agent run in progress. Thrown exceptions still exit (logged above), and the desktop app starts the API again.
 process.on('unhandledRejection', (e) => log('error', 'unhandled rejection', { error: e instanceof Error ? (e.stack ?? e.message) : String(e) }));
 const db = openDb(dbFile());
+bootConfig(db);
 seedDemo(db);
 seedCreatives(db);
 seedResearch(db);

@@ -1436,6 +1436,37 @@ export const MIGRATIONS = [
     PRIMARY KEY (store_id, date, dimension, value)
   );
   `,
+  /* 57 (settings: ST-05 versions on config rows; settings change history). DDL only: values are filled at boot
+     (config/boot.ts). `version` moves only when an owner-editable field changes; existing rows start at 1, a missing
+     row reads as 0. `updated_at` is NULL where unknown. Change rows have no FK, so they outlive a deleted store. */ `
+  ALTER TABLE settings ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE store_caps ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE stores ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE kb_controls ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE pr_store_profiles ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE automation_rules ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE integrations ADD COLUMN version INTEGER NOT NULL DEFAULT 1;
+  ALTER TABLE settings ADD COLUMN updated_at TEXT;
+  ALTER TABLE store_caps ADD COLUMN updated_at TEXT;
+  ALTER TABLE stores ADD COLUMN updated_at TEXT;
+  ALTER TABLE automation_rules ADD COLUMN updated_at TEXT;
+  CREATE TABLE settings_changes (
+    id TEXT PRIMARY KEY,
+    at TEXT NOT NULL,
+    request_id TEXT,
+    actor TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    store_id TEXT,
+    store_name TEXT,
+    setting TEXT NOT NULL,
+    before_json TEXT,
+    after_json TEXT,
+    state TEXT NOT NULL DEFAULT 'saved' CHECK (state IN ('saved', 'applying', 'applied', 'failed')),
+    detail TEXT
+  );
+  CREATE INDEX settings_changes_at ON settings_changes (at);
+  CREATE INDEX settings_changes_store ON settings_changes (store_id, at);
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
