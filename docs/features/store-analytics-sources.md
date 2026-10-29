@@ -95,9 +95,9 @@ An Amazon store syncs its own orders; Amazon next to a site gives daily totals o
 | Order lines by variant | supported | no | order.line_items (sku_id, seller_sku) |  |  |  |  |
 | Refunds | supported | yes | Return and Refund API /return_refund/202309/returns/search refund_amount (refund_subtotal, refund_shipping_fee, refund_tax, refund_total) | Return & Refund Basic | 730 days back, then from the last read |  | A granted return, dated when the app first sees it granted; a replacement refunds nothing. Cancellations before shipping are left out with their order. Docs: https://partner.tiktokshop.com/docv2 (via its generated OpenAPI spec, read 2026-10-29; the current version is 202602) |
 | Fees | unsupported | no | — |  |  |  | The app doesn't read payment or platform fees here (owner question Q21); fees are the store's labelled estimate. |
-| Catalog | supported | yes | Product API /product/202309/products/search | Product read | current state |  |  |
-| Variants | supported | no | product.skus |  |  |  |  |
-| Channel listings | supported | no | product.status and audit failure reasons |  |  |  |  |
+| Catalog | supported | yes | Product API /product/202309/products/search; Get Product category_chains and external_product_id (up to 50 products a sync) | Product read | current state |  | A TikTok product rolls into the store's own only through Get Product's external_product_id (decision 22). |
+| Variants | supported | yes | product.skus (id, seller_sku, price, inventory) | Product read | current state |  |  |
+| Channel listings | supported | yes | product.status; Get Product audit_failed_reasons | Product read | current state |  |  |
 | Inventory | supported | yes | product.skus inventory |  | current state |  |  |
 | Collections | unsupported | no | — |  |  |  | TikTok Shop's API has no seller collections the app reads. |
 | Sessions and funnel | supported | yes | Analytics shop performance avg_visitors | TikTok Shop Analytics | about 30 days |  | TikTok Shop's own visitors: never added to the site's sessions. |

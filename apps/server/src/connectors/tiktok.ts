@@ -186,7 +186,35 @@ interface ShopProduct {
   title: string;
   status: string;
   update_time: number;
-  skus?: { price?: { sale_price?: string; tax_exclusive_price?: string }; inventory?: { quantity: number }[] }[];
+  skus?: { id?: string; seller_sku?: string; price?: { sale_price?: string; tax_exclusive_price?: string }; inventory?: { quantity: number }[] }[];
+}
+
+/**
+ * Get Product (202309; partner docs via the generated spec, read 2026-10-29): the category tree, audit failures and the
+ * id the product has on the seller's own platform ("used to associate the product between TikTok Shop and the
+ * external ecommerce platform").
+ */
+interface ShopProductDetail {
+  main_images?: { urls?: string[] }[];
+  category_chains?: { id: string; parent_id: string; local_name: string }[];
+  audit_failed_reasons?: { listing_platform?: string; reasons?: string[] }[];
+  external_product_id?: string;
+}
+
+/** TikTok's product status as a channel listing's (SA-55): live, failed audit, under audit, or not listed. */
+const LISTING_STATUS: Record<string, string> = { ACTIVATE: 'active', FAILED: 'failed', PENDING: 'pending' };
+
+/** A category chain, root first ("Beauty & Personal Care > Skincare Tools"), from its parent ids; null without one. */
+export function categoryPath(chain: ShopProductDetail['category_chains'] = []) {
+  const names: string[] = [];
+  let at = '0';
+  for (let i = 0; i < chain.length; i++) {
+    const c = chain.find((x) => x.parent_id === at);
+    if (!c) break;
+    names.push(c.local_name);
+    at = c.id;
+  }
+  return names.join(' > ') || null;
 }
 
 interface ShopOrder {
@@ -312,7 +340,7 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
   const creds = getCredentials(db, key, 'tiktok_shop', storeId);
   if (!creds) return;
   const view = syncView(db, id);
-  const reading = new Set<SaDataset>(['orders']); // failed if the sync stops before they're read
+  const reading = new Set<SaDataset>(['catalog', 'orders']); // failed if the sync stops before they're read
   try {
     const { api, shop } = await shopClient(db, key, id, creds, fetchFn, now);
     const search = async <T>(path: string, list: string, query: Record<string, string>, body: object) => {
@@ -332,6 +360,8 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     const today = localDate(now);
     const full = !cursor || catalogPassDue(db, id, today);
     const products = await search<ShopProduct>('/product/202309/products/search', 'products', {}, full ? {} : { update_time_ge: since });
+    for (const d of ['catalog', 'variants', 'channel_listings'] as const) noteRead(db, key, id, d, { status: 'available' }, now);
+    reading.delete('catalog');
     const orders = await search<ShopOrder>('/order/202309/orders/search', 'orders', { sort_field: 'update_time', sort_order: 'ASC' }, { update_time_ge: since });
     for (const d of ['orders', 'customers'] as const) noteRead(db, key, id, d, { status: 'available', from: localDate(new Date(since * 1000)), to: localDate(now) }, now);
     reading.delete('orders');
@@ -374,10 +404,28 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
         `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, status) VALUES (?, ?, ?, NULL, ?, NULL, 0, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, price = excluded.price, inventory = excluded.inventory, status = excluded.status`,
       );
+      // SA-55: each SKU a variant (TikTok counts stock and can't oversell it), and the product's TikTok Shop listing; an
+      // audit failure's reason comes with Get Product below.
+      const variant = db.prepare(
+        `INSERT INTO product_variants (store_id, product_id, id, title, sku, price, compare_at, inventory, inventory_tracked, inventory_policy, status, synced_at) VALUES (?, ?, ?, NULL, ?, ?, NULL, ?, 1, 'deny', ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET product_id = excluded.product_id, sku = excluded.sku, price = excluded.price, inventory = excluded.inventory, inventory_tracked = 1,
+           inventory_policy = 'deny', status = excluded.status, synced_at = excluded.synced_at`,
+      );
+      const listing = db.prepare(
+        `INSERT INTO channel_listings (store_id, channel, id, product_id, status, synced_at) VALUES (?1, 'tiktok_shop', ?2, ?2, ?3, ?4)
+         ON CONFLICT (store_id, channel, id) DO UPDATE SET status = excluded.status, error = iif(excluded.status = 'failed', error, NULL), synced_at = excluded.synced_at`,
+      );
       for (const p of products) {
         const price = p.skus?.[0]?.price;
         const inventory = (p.skus ?? []).flatMap((k) => k.inventory ?? []).reduce((a, i) => a + i.quantity, 0);
-        prod.run(storeId, `tt-${p.id}`, p.title, Number(price?.sale_price ?? price?.tax_exclusive_price ?? 0), inventory, PRODUCT_STATUS[p.status] ?? 'archived');
+        const status = PRODUCT_STATUS[p.status] ?? 'archived';
+        prod.run(storeId, `tt-${p.id}`, p.title, Number(price?.sale_price ?? price?.tax_exclusive_price ?? 0), inventory, status);
+        for (const k of p.skus ?? []) {
+          if (!k.id) continue;
+          const at = k.price?.sale_price ?? k.price?.tax_exclusive_price;
+          variant.run(storeId, `tt-${p.id}`, `tt-${k.id}`, k.seller_sku || null, at != null ? Number(at) : null, (k.inventory ?? []).reduce((a, i) => a + i.quantity, 0), status, now.toISOString());
+        }
+        listing.run(storeId, `tt-${p.id}`, LISTING_STATUS[p.status] ?? 'unpublished', now.toISOString());
       }
       // TikTok has no unit costs: lines cost the owner's unit cost for the product (setOrderItems), else nothing.
       // SA-54: the as-placed parts (shopParts) once paid at a known time; a cancelled order has none (its refund isn't a
@@ -460,9 +508,22 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
     // Search results carry no images; Get Product does (main_images[].urls). Up to 50 a sync for products still without
     // one, and '' marks "looked, none" so a product with no gallery isn't asked again. A signed link (x-expires, seconds)
     // is read again within a day of expiring, and a product edited since the last sync (a new main image), first.
+    // SA-55: the same read gives the category, the audit failure's reasons and the link to the store's own product; a
+    // product that failed audit is read first so its listing shows why.
+    // ponytail: a category or link changes only with an edit, so an unedited product isn't read again for them.
     const setImage = db.prepare('UPDATE products SET image = ? WHERE store_id = ? AND id = ?');
+    const setCategory = db.prepare('UPDATE products SET category = ? WHERE store_id = ? AND id = ?');
+    const setReason = db.prepare("UPDATE channel_listings SET error = ? WHERE store_id = ? AND channel = 'tiktok_shop' AND id = ? AND status = 'failed'");
+    // Decision 22: only the documented platform id links, and only to a product of the store's own platform that exists.
+    const ownProduct = db.prepare(
+      `SELECT p.id FROM products p JOIN stores s ON s.id = p.store_id WHERE p.store_id = ? AND p.id = iif(s.platform = 'woocommerce', 'woo-' || ?2, iif(s.platform = 'shopify', ?2, NULL))`,
+    );
+    const link = db.prepare(
+      `INSERT INTO product_links (store_id, channel, channel_product_id, product_id, method, created_at) VALUES (?, 'tiktok_shop', ?, ?, 'platform_id', ?)
+       ON CONFLICT (store_id, channel, channel_product_id) DO UPDATE SET product_id = excluded.product_id WHERE method = 'platform_id'`,
+    );
     const expiring = (url: string) => Number(URL.canParse(url) && new URL(url).searchParams.get('x-expires')) < now.getTime() / 1000 + 86_400;
-    const edited = JSON.stringify(full ? [] : products.map((p) => `tt-${p.id}`));
+    const edited = JSON.stringify([...(full ? [] : products), ...products.filter((p) => p.status === 'FAILED')].map((p) => `tt-${p.id}`));
     const unread = db
       .prepare(
         `SELECT id, image, id IN (SELECT value FROM json_each(?2)) AS edited FROM products WHERE store_id = ?1 AND id GLOB 'tt-*' AND status != 'archived'
@@ -472,10 +533,15 @@ export async function syncTikTokShop(db: Db, key: Buffer, storeId: string, fetch
       .filter((r) => r.edited || r.image == null || expiring(String(r.image)))
       .slice(0, 50);
     for (const r of unread) {
-      const d = await api<{ main_images?: { urls?: string[] }[] }>('GET', `/product/202309/products/${String(r.id).slice(3)}`, { shop_cipher: shop.cipher }).catch(() => undefined);
+      const d = await api<ShopProductDetail>('GET', `/product/202309/products/${String(r.id).slice(3)}`, { shop_cipher: shop.cipher }).catch(() => undefined);
       if (!d) continue; // asked again next sync
       const url = d.main_images?.[0]?.urls?.[0];
       setImage.run(url?.startsWith('https://') ? url : '', storeId, String(r.id));
+      setCategory.run(categoryPath(d.category_chains), storeId, String(r.id));
+      const reasons = (d.audit_failed_reasons ?? []).filter((a) => (a.listing_platform ?? 'TIKTOK_SHOP') === 'TIKTOK_SHOP').flatMap((a) => a.reasons ?? []);
+      if (reasons.length) setReason.run(reasons.join('; '), storeId, String(r.id));
+      const own = d.external_product_id ? ownProduct.get(storeId, d.external_product_id)?.id : undefined;
+      if (own) link.run(storeId, String(r.id), String(own), now.toISOString());
     }
   } catch (e) {
     noteFailed(db, key, id, reading, e);

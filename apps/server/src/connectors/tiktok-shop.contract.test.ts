@@ -1,4 +1,4 @@
-// SA-54: TikTok Shop orders and returns against the partner docs' shapes (fixtures/tiktok-shop-doc-examples.json names the source and the date read).
+// SA-54/55: TikTok Shop orders, returns, SKUs and listings against the partner docs' shapes (fixtures/tiktok-shop-doc-examples.json names the source and the date read).
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -6,6 +6,7 @@ import { openDb } from '../db';
 import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
 import { checkOrderIdentity, reconcile } from '../store-analytics/reconcile';
+import { switchToReal } from './common';
 import { customerRef } from './ingest';
 import { syncTikTokShop } from './tiktok';
 
@@ -21,7 +22,10 @@ function fakeShop(returns: unknown = DOC.returns) {
     if (u.pathname === '/authorization/202309/shops') return ok({ shops: [{ cipher: 'CIPHER', name: 'Glow Haus TT' }] });
     if (u.pathname === '/order/202309/orders/search') return ok({ orders: DOC.orders, next_page_token: '' });
     if (u.pathname === '/return_refund/202309/returns/search') return returns ? ok({ return_orders: returns, next_page_token: '' }) : Response.json({ code: 105005, message: 'Access denied: scope' });
-    return ok({ products: [], next_page_token: '' });
+    if (u.pathname === '/product/202309/products/search') return ok({ products: DOC.products, next_page_token: '' });
+    const detail = /^\/product\/202309\/products\/(\d+)$/.exec(u.pathname)?.[1];
+    if (detail) return ok(DOC.product_details[detail]);
+    return ok({});
   }) as typeof fetch;
 }
 
@@ -64,7 +68,7 @@ describe('TikTok Shop orders contract (SA-54)', () => {
       // the granted return only; the pending one adds nothing yet
       { id: 'tt-4035318504086604100', refund_id: '4035318504086604100', order_id: 'tt-576461413038785753', refunded_at: '2026-10-26T15:00:00.000Z', local_date: '2026-10-26', merchandise: 10, shipping: 0, tax: 0.8, other: null, quantity: 1, source: 'tiktok_shop' },
     ]);
-    expect(db.prepare("SELECT dataset, status, covered_to FROM source_datasets WHERE integration_id = 'tiktok_shop:glow' ORDER BY dataset").all()).toEqual([
+    expect(db.prepare("SELECT dataset, status, covered_to FROM source_datasets WHERE integration_id = 'tiktok_shop:glow' AND covered_to IS NOT NULL ORDER BY dataset").all()).toEqual([
       { dataset: 'customers', status: 'available', covered_to: '2026-10-27' },
       { dataset: 'orders', status: 'available', covered_to: '2026-10-27' },
       { dataset: 'refunds', status: 'available', covered_to: '2026-10-27' },
@@ -84,5 +88,53 @@ describe('TikTok Shop orders contract (SA-54)', () => {
     const denied = setup();
     await syncTikTokShop(denied, key, 'glow', fakeShop(null), NOW);
     expect(denied.prepare("SELECT status, error FROM source_datasets WHERE integration_id = 'tiktok_shop:glow' AND dataset = 'refunds'").get()).toEqual({ status: 'failed', error: 'TikTok Shop: Access denied: scope' });
+  });
+});
+
+describe('TikTok Shop SKUs, listings and category contract (SA-55)', () => {
+  const real = () => {
+    const db = setup();
+    switchToReal(db, 'glow'); // the demo catalog out, so the store's own Shopify products can be set up first
+    db.prepare("INSERT INTO products (store_id, id, title, price, cost, inventory, status) VALUES ('glow', '8001', 'Ice Roller (Shopify)', 25, 0, 10, 'active'), ('glow', '8002', 'Roller set', 40, 0, 1, 'active')").run();
+    return db;
+  };
+
+  it("SKUs are variants; a failed listing shows its reason; the category and the documented link to the store's product", async () => {
+    const db = real();
+    await syncTikTokShop(db, key, 'glow', fakeShop(), NOW);
+    expect(db.prepare("SELECT product_id, id, sku, price, inventory, inventory_tracked AS tracked, inventory_policy AS policy, status FROM product_variants WHERE store_id = 'glow' ORDER BY id").all()).toEqual([
+      { product_id: 'tt-1729582718312380123', id: 'tt-2729382476852921560', sku: 'ice_roller_blue', price: 25, inventory: 10, tracked: 1, policy: 'deny', status: 'active' },
+      { product_id: 'tt-1729582718312380123', id: 'tt-2729382476852921561', sku: 'ice_roller_pink', price: 25, inventory: 0, tracked: 1, policy: 'deny', status: 'active' },
+      { product_id: 'tt-1729582718312380999', id: 'tt-2729382476852921999', sku: 'gua_sha', price: 20, inventory: 12, tracked: 1, policy: 'deny', status: 'draft' },
+    ]);
+    expect(db.prepare("SELECT id, status, error FROM channel_listings WHERE store_id = 'glow' AND channel = 'tiktok_shop' ORDER BY id").all()).toEqual([
+      { id: 'tt-1729582718312380123', status: 'active', error: null },
+      { id: 'tt-1729582718312380999', status: 'failed', error: 'The main image is under 600 px' }, // TikTok Shop's own audit; Tokopedia's left out
+    ]);
+    expect(db.prepare("SELECT id, category FROM products WHERE store_id = 'glow' AND id GLOB 'tt-*' ORDER BY id").all()).toEqual([
+      { id: 'tt-1729582718312380123', category: 'Beauty & Personal Care > Skincare Tools' },
+      { id: 'tt-1729582718312380999', category: 'Beauty & Personal Care' },
+    ]);
+    // Decision 22: only the documented platform id, and only to a product the store has; never by SKU or title.
+    expect(db.prepare("SELECT channel_product_id, product_id, method FROM product_links WHERE store_id = 'glow'").all()).toEqual([
+      { channel_product_id: 'tt-1729582718312380123', product_id: '8001', method: 'platform_id' },
+    ]);
+    expect(db.prepare("SELECT dataset FROM source_datasets WHERE integration_id = 'tiktok_shop:glow' AND status = 'available' ORDER BY dataset").all().map((r) => r.dataset)).toEqual(
+      ['catalog', 'channel_listings', 'customers', 'orders', 'refunds', 'variants'],
+    );
+  });
+
+  it("an owner's mapping is never overwritten; a listing that passes audit loses its old reason", async () => {
+    const db = real();
+    db.prepare("INSERT INTO product_links (store_id, channel, channel_product_id, product_id, method, created_at) VALUES ('glow', 'tiktok_shop', 'tt-1729582718312380123', '8002', 'owner', '2026-10-20')").run();
+    await syncTikTokShop(db, key, 'glow', fakeShop(), NOW);
+    expect(db.prepare("SELECT product_id, method FROM product_links WHERE store_id = 'glow'").get()).toEqual({ product_id: '8002', method: 'owner' });
+    DOC.products[1].status = 'ACTIVATE';
+    try {
+      await syncTikTokShop(db, key, 'glow', fakeShop(), NOW);
+    } finally {
+      DOC.products[1].status = 'FAILED';
+    }
+    expect(db.prepare("SELECT status, error FROM channel_listings WHERE store_id = 'glow' AND id = 'tt-1729582718312380999'").get()).toEqual({ status: 'active', error: null });
   });
 });
