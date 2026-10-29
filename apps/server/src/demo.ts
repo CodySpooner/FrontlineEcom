@@ -71,7 +71,42 @@ export function demoDay(storeId: string, date: string) {
     const clicks = Math.round(spend / (0.6 + 0.8 * r()));
     return { id: `${storeId}-c${i + 1}`, network: c.network, spend: cents(spend), revenue: cents(rev), purchases: Math.round(rev / p.aov), clicks, impressions: Math.round(clicks * (60 + 40 * r())) };
   });
-  return { date, revenue: cents(revenue), adSpend: cents(adSpend), cogs: cents(cogs), orders, sessions, addToCarts, checkouts, campaigns };
+  // SA-17 (decision 30): the day's sales parts, drawn after everything above so those numbers don't move. Net sales
+  // (gross − discounts − refunds) is the day's revenue to the cent; shipping and tax are on top.
+  const discounts = cents(revenue * (0.04 + 0.05 * r()));
+  const refunds = cents(revenue * (0.01 + 0.03 * r()));
+  const units = orders + Math.round(orders * (0.15 + 0.2 * r()));
+  const parts = {
+    gross: cents(cents(revenue) + discounts + refunds),
+    discounts,
+    refunds,
+    shipping: cents(orders * (1.5 + 2 * r())),
+    tax: cents(revenue * (0.05 + 0.03 * r())),
+    units,
+    refundedUnits: Math.round((units * refunds) / revenue),
+    purchaseSessions: Math.max(1, orders - Math.round(orders * 0.06 * r())),
+    cancelled: r() < 0.25 ? 1 : 0,
+  };
+  return { date, revenue: cents(revenue), adSpend: cents(adSpend), cogs: cents(cogs), orders, sessions, addToCarts, checkouts, campaigns, parts };
+}
+
+/** A demo day's sales parts for `revenue` of it (the whole day's, or so far), scaled so net sales is that revenue. */
+export function demoParts(storeId: string, date: string, revenue: number) {
+  const { revenue: full, parts: p } = demoDay(storeId, date);
+  const k = full ? revenue / full : 0;
+  const [discounts, refunds] = [cents(p.discounts * k), cents(p.refunds * k)];
+  const n = (x: number) => Math.round(x * k);
+  return {
+    gross: cents(revenue + discounts + refunds),
+    discounts,
+    refunds,
+    shipping: cents(p.shipping * k),
+    tax: cents(p.tax * k),
+    units: n(p.units),
+    refundedUnits: n(p.refundedUnits),
+    purchaseSessions: n(p.purchaseSessions),
+    cancelled: n(p.cancelled),
+  };
 }
 
 /** A demo day `frac` of the way through: traffic and ad spend accrue with the clock, sales step with whole orders. */
@@ -90,6 +125,7 @@ export function demoSoFar(storeId: string, date: string, frac: number) {
     sessions: t(m.sessions),
     addToCarts: t(m.addToCarts),
     checkouts: t(m.checkouts),
+    parts: demoParts(storeId, date, cents(m.revenue * sold)),
     campaigns: m.campaigns.map((c) => ({ ...c, spend: cents(c.spend * frac), revenue: cents(c.revenue * sold), purchases: Math.floor(c.purchases * sold), clicks: t(c.clicks), impressions: t(c.impressions) })),
   };
 }

@@ -1,6 +1,7 @@
 // SA-16: sales metrics beyond the oracle: estimates, never-read stores, missing rates.
 import { describe, expect, it } from 'vitest';
 import { openDb, type Db } from '../db';
+import { DEMO_STORES, demoDay, seedDemo } from '../demo';
 import { insertStore } from '../stores';
 import { LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
 import { salesMetrics } from './sales';
@@ -62,5 +63,35 @@ describe('salesMetrics', () => {
     // #1001 counts as total − tax (69.80 − 4.80 = 65, its shipping included): 28 + 42 + 65
     expect(m.gross_sales).toMatchObject({ value: 135, status: 'estimated', coverage: { share: 2 / 3 } });
     expect(m.discounts).toMatchObject({ value: 0, status: 'partial', coverage: { share: 2 / 3 } });
+  });
+});
+
+describe('demo stores (SA-17)', () => {
+  it("demoDay's parts net to the day's revenue, the same every call", () => {
+    for (const { id } of DEMO_STORES)
+      for (const date of ['2025-03-02', '2026-10-21', '2026-10-25']) {
+        const { revenue, parts } = demoDay(id, date);
+        expect(demoDay(id, date).parts).toEqual(parts);
+        expect(Math.round((parts.gross - parts.discounts - parts.refunds) * 100)).toBe(Math.round(revenue * 100));
+        expect(parts.units).toBeGreaterThanOrEqual(demoDay(id, date).orders);
+      }
+  });
+
+  it("every value is demo, net sales and orders are Dashboard's, and two calls agree", () => {
+    const db = openDb();
+    seedDemo(db, '2026-10-26');
+    for (const { id } of DEMO_STORES) {
+      const m = salesMetrics(db, id, '2026-10-19', '2026-10-25');
+      expect(salesMetrics(db, id, '2026-10-19', '2026-10-25')).toEqual(m);
+      expect(new Set(Object.values(m).map((v) => v.status))).toEqual(new Set(['demo']));
+      const legacy = db.prepare("SELECT sum(revenue) AS r, sum(orders) AS n FROM daily_metrics WHERE store_id = ? AND date BETWEEN '2026-10-19' AND '2026-10-25'").get(id)!;
+      expect(m.net_sales.value).toBe(Math.round(Number(legacy.r) * 100) / 100);
+      expect(m.orders.value).toBe(Number(legacy.n));
+      expect(m.gross_sales.value! - m.discounts.value! - m.refunds.value!).toBeCloseTo(m.net_sales.value!, 1);
+    }
+    // Today so far (the seed day) nets to its partial revenue; before the history there is nothing, not 0.
+    const today = db.prepare("SELECT revenue FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-26'").get()!;
+    expect(salesMetrics(db, 'glow', '2026-10-26', '2026-10-26').net_sales.value).toBe(Number(today.revenue));
+    expect(salesMetrics(db, 'glow', '2020-01-01', '2020-01-07').net_sales).toMatchObject({ value: null, status: 'unavailable', reason: 'insufficient_history' });
   });
 });

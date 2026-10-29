@@ -2,6 +2,7 @@
 import { SA_REASONS, combineStatus, ratio, type SaReason, type SaValue } from '@frontline/shared';
 import { addDays, localDate } from '../dates';
 import type { Db } from '../db';
+import { demoParts } from '../demo';
 import { storeZone } from '../stores';
 import { convertOn } from './fx';
 import { datasetFreshness } from './sources';
@@ -30,7 +31,41 @@ function unread(db: Db, storeId: string): SaValue | undefined {
   return missing(reason, rows.find((f) => f.error)?.error ?? undefined);
 }
 
+/**
+ * Decision 30: a demo store's sales from `demoDay`'s parts over the days it has numbers for (today so far), so net
+ * sales and orders are Dashboard's. Every value is `demo`; refunds fall on their order's day either way.
+ */
+function demoSales(db: Db, storeId: string, from: string, to: string): Record<SalesMetricId, SaValue> {
+  const days = db.prepare('SELECT date, revenue, orders FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?').all(storeId, from, to);
+  if (!days.length) {
+    const none = missing('insufficient_history', 'Before the demo history');
+    return { net_sales: none, gross_sales: none, discounts: none, refunds: none, orders: none, aov: none, units: none, cancelled_orders: none, refund_rate: none };
+  }
+  const s = { revenue: 0, orders: 0, gross: 0, discounts: 0, refunds: 0, units: 0, refundedUnits: 0, cancelled: 0 };
+  for (const d of days) {
+    const p = demoParts(storeId, String(d.date), Number(d.revenue));
+    s.revenue += Number(d.revenue);
+    s.orders += Number(d.orders);
+    for (const k of ['gross', 'discounts', 'refunds', 'units', 'refundedUnits', 'cancelled'] as const) s[k] += p[k];
+  }
+  const demo = (v: number | null) => (v == null ? value(null, 'unavailable', { note: 'No demo orders in this period' }) : value(v, 'demo'));
+  const aov = ratio(s.gross - s.discounts, s.orders);
+  const rate = ratio(s.refundedUnits, s.units);
+  return {
+    net_sales: demo(cents(s.revenue)),
+    gross_sales: demo(cents(s.gross)),
+    discounts: demo(cents(s.discounts)),
+    refunds: demo(cents(s.refunds)),
+    orders: demo(s.orders),
+    aov: demo(aov == null ? null : cents(aov)),
+    units: demo(s.units),
+    cancelled_orders: demo(s.cancelled),
+    refund_rate: demo(rate),
+  };
+}
+
 export function salesMetrics(db: Db, storeId: string, from: string, to: string, basis: RefundBasis = 'refund_day'): Record<SalesMetricId, SaValue> {
+  if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo) return demoSales(db, storeId, from, to);
   const none = unread(db, storeId);
   if (none) return { net_sales: none, gross_sales: none, discounts: none, refunds: none, orders: none, aov: none, units: none, cancelled_orders: none, refund_rate: none };
   const storeCur = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)!.currency);
