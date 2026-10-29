@@ -1,9 +1,10 @@
 // UI-11 Store Analytics: where the money comes from (trend, funnel, channels, products, campaigns). The Overview tab of
-// the new page (SA-62) for the store it has picked, until the v1 Overview replaces it (SA-79).
+// the new page (SA-62) for the store it has picked, until the v1 Overview replaces it (SA-79). Its panels read store
+// totals, so one note names every active filter (SA-68).
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { settingsUrl, storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Platform, type Product, type TopProduct } from '@frontline/shared';
+import { SA_FILTERS, settingsUrl, storeHealth, type SaFilterKey, type SaFilters, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Platform, type Product, type TopProduct } from '@frontline/shared';
 import { useCampaigns, useMissingCosts, useSetCost, useStartConversation, useSummary, useTopProducts } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
@@ -14,6 +15,7 @@ import { breakEvenRoas, byNetwork, noFeeEstimate, rate, roasTone, times } from '
 import { PERIOD, RANGES, weekly } from '../lib/chart';
 import { cents, fmtDay, money, noBaseline, pct, signedPct } from '../lib/format';
 import { stockLeft } from '../lib/stock';
+import { FilterScope } from './FilterScope';
 
 type Metric = 'revenue' | 'profit' | 'adSpend';
 const METRICS: { value: Metric; label: string }[] = [
@@ -25,7 +27,7 @@ const NETWORK: Record<AdNetwork, string> = { meta: 'Meta', tiktok: 'TikTok', goo
 const TONE = { bad: 'text-red', ok: 'text-text', good: 'text-good' };
 const num = (n: number) => n.toLocaleString('en-US');
 
-export function LegacyOverview({ store }: { store: string }) {
+export function LegacyOverview({ store, filters = {} }: { store: string; filters?: SaFilters }) {
   const [range, setRange] = useState<AnalyticsRange>(30);
   const { name } = useStoreSelection();
   const ids = [store];
@@ -43,6 +45,9 @@ export function LegacyOverview({ store }: { store: string }) {
           <Segmented label="Date range" options={RANGES} value={range} onChange={setRange} />
         </div>
         <UnconvertedNote codes={s?.unconverted} />
+      </div>
+      <div className="mb-3.5 empty:hidden">
+        <FilterScope scope={{ applied: [], ignored: (Object.keys(SA_FILTERS) as SaFilterKey[]).filter((k) => filters[k]?.length).map((key) => ({ key, reason: 'these panels show store totals' })) }} />
       </div>
       {summary.isError ? (
         <ErrorState message="Couldn't load analytics." onRetry={() => summary.refetch()} />

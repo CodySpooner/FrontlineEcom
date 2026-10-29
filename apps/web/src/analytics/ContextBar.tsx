@@ -1,6 +1,5 @@
 // SA-63: what the page is showing, unmistakably (spec §4): the store, the period and comparison, the zone and currency,
-// and how fresh the active tab's data is (its ⓘ opens the Data sources panel). Filters arrive with SA-68 (decision 33:
-// no button before it does anything).
+// the filters (SA-68) and how fresh the active tab's data is (its ⓘ opens the Data sources panel).
 import { useSearchParams } from 'react-router';
 import { ChevronsUpDown, Info } from 'lucide-react';
 import { resolvePeriod, SA_DATASET_STATUSES, SA_DATASETS, SA_SOURCES, type SaContext, type SaDataset, type SaFreshness } from '@frontline/shared';
@@ -10,19 +9,15 @@ import { PLATFORM_NAME } from '../components/StoreForm';
 import { cx, StatusDot, Tooltip } from '../components/ui';
 import { ago } from '../lib/format';
 import { DataSources } from './DataSources';
+import { channelsOf, FilterChips, FiltersButton } from './Filters';
 import { ComparePicker, PeriodPicker } from './Pickers';
 import type { useAnalyticsState } from './state';
-
-const SALES = new Set(['shopify', 'woocommerce', 'etsy', 'amazon', 'tiktok_shop']);
-const SITES = new Set(['shopify', 'woocommerce']);
 
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
 
 /** "Beauty · Shopify site + TikTok Shop": the niche, then the store's own platform and its other sales channels. */
 export function storeLine(ctx: Pick<SaContext, 'niche' | 'platform' | 'channels'>) {
-  const own = PLATFORM_NAME[ctx.platform as Store['platform']] ?? ctx.platform;
-  const channels = [SITES.has(ctx.platform) ? `${own} site` : own, ...ctx.channels.filter((c) => SALES.has(c.kind) && c.kind !== ctx.platform).map((c) => c.name)];
-  return `${ctx.niche.charAt(0).toUpperCase()}${ctx.niche.slice(1)} · ${channels.join(' + ')}`;
+  return `${ctx.niche.charAt(0).toUpperCase()}${ctx.niche.slice(1)} · ${channelsOf(ctx).map((c) => c.label).join(' + ')}`;
 }
 
 /** The freshness of these datasets: the oldest last success among the sources reading them (never synced is oldest). */
@@ -65,6 +60,7 @@ export function ContextBar({ s, ctx, datasets }: { s: ReturnType<typeof useAnaly
       </Popover>
       <PeriodPicker key={`${s.period}:${s.from}:${s.to}`} s={s} set={s.set} today={today} period={period} />
       <ComparePicker s={s} set={s.set} period={period} historyStart={ctx?.historyStart ?? undefined} />
+      <FiltersButton s={s} ctx={ctx} />
       <span className="text-[11.5px] whitespace-nowrap text-muted min-[1100px]:ml-auto">{ctx ? `${ctx.zoneAbbr} · ${ctx.currency}` : ''}</span>
       <span className="inline-flex items-center gap-1">
         {fresh && (
@@ -80,6 +76,7 @@ export function ContextBar({ s, ctx, datasets }: { s: ReturnType<typeof useAnaly
         </button>
       </span>
       <DataSources s={s} open={params.get('panel') === 'sources'} onClose={() => panel(false)} />
+      <FilterChips s={s} ctx={ctx} />
     </div>
   );
 }
