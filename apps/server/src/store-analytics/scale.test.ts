@@ -5,6 +5,7 @@ import { SA_METRICS, type SaMetricId } from '@frontline/shared';
 import { describe, expect, it } from 'vitest';
 import { openDb, type Db } from '../db';
 import { LEDGER_NOW, LEDGER_STORE, SCALE_STORE, seedLedgerStore, seedScaleStore } from './fixture';
+import { listings } from './listings';
 import { computeMetricSet, computeSeries } from './metric-set';
 import { storePeriod, type StorePeriod } from './period';
 import { reconcile } from './reconcile';
@@ -73,6 +74,9 @@ function run(db: Db, storeId: string, now: number) {
   reconcile(db, storeId, last30.from, last30.to, 'order_day');
   sourceRows(db, storeId, now);
   storeContext(db, storeId, now);
+  listings(db, storeId, {}, period({ period: 'last30' }));
+  listings(db, storeId, { sort: 'net_sales', page: '2' }, period({ period: 'last365' }), {}, 'order_day');
+  listings(db, storeId, { sort: 'refunds', q: 'GH', status: 'all' }, period({ period: 'last30' }), { channel: ['site'], collection: ['c-best'] });
 }
 
 describe('query plans', () => {

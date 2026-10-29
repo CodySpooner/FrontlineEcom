@@ -846,3 +846,53 @@ export interface SaReconcile {
   /** SA-52: real stores only. */
   dedupe?: SaDedupe;
 }
+
+/** SA-66: the Listings tab's statuses (the platform's other product states count in `all`) and sort keys. */
+export const SA_LISTING_STATUSES = ['active', 'draft', 'archived', 'all'] as const;
+export type SaListingStatus = (typeof SA_LISTING_STATUSES)[number];
+export const SA_LISTING_SORTS = ['units', 'net_sales', 'refunds', 'title', 'price', 'stock'] as const;
+export type SaListingSort = (typeof SA_LISTING_SORTS)[number];
+
+/** One product on the Listings tab: its state now, and its sales over the period (the v1 functions, product-sliced). */
+export interface SaListingRow {
+  id: string;
+  title: string;
+  image: string | null;
+  /** The platform's product status now. */
+  status: string;
+  category: string | null;
+  /** Its SKU when it has one variant. */
+  sku: string | null;
+  /** A product with no variant rows is its own variant. */
+  variants: number;
+  /** Tracked variants at 0 or below. */
+  variantsOut: number;
+  price: number;
+  compareAt: number | null;
+  /** In stock now; null when its stock isn't tracked. */
+  stock: number | null;
+  channels: { channel: string; status: string; error: string | null }[];
+  syncedAt: string | null;
+  netSales: SaValue;
+  units: SaValue;
+  refunds: SaValue;
+  contribution: SaValue;
+}
+
+/** GET /api/analytics/listings: one page (25) of the store's matching products, sorted over all of them. */
+export interface SaListings {
+  period: SaPeriod;
+  status: SaListingStatus;
+  /** `<key>:asc|desc`. */
+  sort: string;
+  page: number;
+  pageSize: number;
+  /** Matching products in this status. */
+  total: number;
+  /** Matching products per status (search and filters applied). */
+  counts: Record<SaListingStatus, number>;
+  variants: number;
+  channelListings: number;
+  rows: SaListingRow[];
+  scope: SaFilterScope;
+}

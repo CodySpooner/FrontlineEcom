@@ -52,12 +52,15 @@ describe('computeMetricSet', () => {
     expect(byId(computeMetricSet(db, { storeId: LEDGER_STORE }, ['orders'], period(db, { period: 'custom', from: P1.from, to: P1.to }), { channel: ['site'] })).orders!.value).toBe(8);
   });
 
-  it('a filter the computation does not apply yet is named, not silently dropped', () => {
+  it('the product filter counts only its lines (SA-66); a filter not applied yet is named, not silently dropped', () => {
     const db = openDb();
     seedLedgerStore(db);
-    const set = computeMetricSet(db, { storeId: LEDGER_STORE }, ['net_sales'], period(db, { period: 'custom', from: P1.from, to: P1.to }), { product: ['8001'] });
-    expect(set.metrics[0]!.value).toBe(405.4);
-    expect(set.scope).toEqual({ applied: [], ignored: [{ key: 'product', reason: 'Not applied to this metric yet', metric: 'net_sales' }] });
+    const p1 = period(db, { period: 'custom', from: P1.from, to: P1.to });
+    const set = computeMetricSet(db, { storeId: LEDGER_STORE }, ['net_sales'], p1, { product: ['8001'], market: ['US'] });
+    expect(set.metrics[0]!.value).toBe(179.2); // the serum's lines 28.8 + 32 + 86.4 + 32 + 32 (not #1009, a copy), less the 32 refunded Oct 29
+    expect(set.scope).toEqual({ applied: ['product'], ignored: [{ key: 'market', reason: 'Not applied to this metric yet', metric: 'net_sales' }] });
+    // with a collection too, only the picked products in it: the cream isn't a best seller
+    expect(computeMetricSet(db, { storeId: LEDGER_STORE }, ['net_sales'], p1, { product: ['8001', '8002'], collection: ['c-best'] }).metrics[0]!.value).toBe(179.2);
   });
 
   it("today so far is compared with yesterday up to the same clock time", () => {

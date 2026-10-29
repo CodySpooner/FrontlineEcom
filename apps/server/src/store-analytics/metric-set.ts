@@ -14,7 +14,7 @@ const COSTS: SaMetricId[] = ['contribution_before_ads', 'cost_coverage', 'fees']
 const ADS: SaMetricId[] = ['ad_spend', 'platform_roas', 'contribution_after_ads'];
 const TRAFFIC: SaMetricId[] = ['sessions', 'site_conversion'];
 /** The metrics' filters the computation applies today; the registry's others are named as not applied yet. */
-const APPLIED: SaFilterKey[] = ['channel', 'collection'];
+const APPLIED: SaFilterKey[] = ['channel', 'product', 'collection'];
 
 /** Every metric in `ids` over [from, to], computing only the groups they need. */
 function valuesOf(db: Db, storeId: string, ids: SaMetricId[], from: string, to: string, basis: RefundBasis, slice: Slice): Record<SaMetricId, SaValue> {
@@ -43,11 +43,14 @@ function ignoredBecause(id: SaMetricId, key: SaFilterKey, demo: boolean, collect
 function setup(db: Db, storeId: string, sp: StorePeriod, filters: SaFilters) {
   const demo = !!db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo;
   const active = (Object.keys(filters) as SaFilterKey[]).filter((k) => filters[k]?.length);
-  // A product is in when it's in any selected collection (SA-47); collections never synced apply nothing.
+  // A product is in when it's in any selected collection (SA-47); collections never synced apply nothing. With the
+  // product filter too (SA-66), only the picked products in those collections.
   const collections = !!db.prepare('SELECT 1 FROM product_collections WHERE store_id = ? LIMIT 1').get(storeId);
-  const products = filters.collection?.length && collections && !demo
+  const inCollections = filters.collection?.length && collections && !demo
     ? db.prepare('SELECT DISTINCT product_id AS p FROM product_collections WHERE store_id = ? AND collection_id IN (SELECT value FROM json_each(?))').all(storeId, JSON.stringify(filters.collection)).map((r) => String(r.p))
     : undefined;
+  const picked = filters.product?.length && !demo ? filters.product : undefined;
+  const products = picked && inCollections ? picked.filter((p) => inCollections.includes(p)) : (picked ?? inCollections);
   const slice: Slice = { ...(filters.channel?.length && !demo ? { channels: filters.channel } : {}), ...(products ? { products } : {}) };
   const compare = sp.compare && 'from' in sp.compare ? sp.compare : undefined;
   // With today in the period, the comparison's last day stops at the same clock time (decision 6).
