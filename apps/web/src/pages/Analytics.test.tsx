@@ -7,7 +7,7 @@ import { Analytics, TABS } from './Analytics';
 function stub(stores: unknown[]) {
   const fetch = vi.fn(async (url: string) => {
     if (url === '/api/stores') return reply(stores);
-    if (url.startsWith('/api/analytics/context')) return reply({ storeId: 'a', name: 'Store A', demo: true });
+    if (url.startsWith('/api/analytics/context')) return reply({ storeId: 'a', name: 'Store A', niche: 'beauty', platform: 'shopify', currency: 'USD', demo: true, channels: [], zone: null, zoneLabel: '', zoneAbbr: 'ET', historyStart: null, freshness: [] });
     return new Promise<Response>(() => {}); // the legacy view's reads stay loading
   });
   vi.stubGlobal('fetch', fetch);

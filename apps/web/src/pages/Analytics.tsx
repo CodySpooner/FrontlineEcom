@@ -2,16 +2,19 @@
 // listed only once its content ships (decision 33); Overview is the legacy view until SA-79.
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
-import { settingsUrl } from '@frontline/shared';
+import { settingsUrl, type SaDataset } from '@frontline/shared';
 import { useSaContext } from '../analytics/api';
+import { ContextBar } from '../analytics/ContextBar';
 import { LegacyOverview } from '../analytics/legacy';
 import { useAnalyticsState } from '../analytics/state';
 import { Hero } from '../components/Hero';
 import { buttonClass, EmptyState, ErrorState, LoadingState, Tabs } from '../components/ui';
 import { NAV } from '../nav';
 
-/** The registered tabs, in the board's order. */
-export const TABS: { value: string; label: string; render: (store: string) => ReactNode }[] = [{ value: 'overview', label: 'Overview', render: (store) => <LegacyOverview store={store} /> }];
+/** The registered tabs, in the board's order, with the datasets their freshness chip reads. */
+export const TABS: { value: string; label: string; datasets: SaDataset[]; render: (store: string) => ReactNode }[] = [
+  { value: 'overview', label: 'Overview', datasets: ['orders', 'refunds', 'catalog', 'inventory', 'traffic', 'ad_spend'], render: (store) => <LegacyOverview store={store} /> },
+];
 
 export function Analytics() {
   const nav = NAV[2]!;
@@ -30,7 +33,7 @@ export function Analytics() {
   else
     body = (
       <>
-        {/* SA-63: the context bar */}
+        <ContextBar s={s} ctx={ctx.data} datasets={tab.datasets} />
         <Tabs variant="underline" label="Store Analytics sections" tabs={TABS} value={tab.value} onChange={(v) => s.set({ tab: v })} className="mb-3.5" />
         <div role="tabpanel" aria-label={tab.label}>
           {tab.render(s.store)}
