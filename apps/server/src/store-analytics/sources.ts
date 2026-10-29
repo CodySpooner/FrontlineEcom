@@ -128,7 +128,7 @@ export function datasetFreshness(db: Db, storeId: string, now = Date.now()): SaF
         : d.support !== 'supported' ? [d.support]
         : !integration ? ['needs_credentials', 'needs_credentials']
         : !d.reads ? ['not_tracked', 'not_tracked']
-        : row ? [row.status as SaDatasetStatus]
+        : row ? [row.status as SaDatasetStatus, row.status === 'needs_permission' ? 'needs_permission' : undefined]
         : integration.status === 'error' ? ['failed', 'failed']
         : ['not_tracked', 'needs_ingestion'];
       const lastSuccess = row?.last_success_at == null ? null : String(row.last_success_at);

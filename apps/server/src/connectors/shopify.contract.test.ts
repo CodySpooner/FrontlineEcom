@@ -1,4 +1,4 @@
-// SA-27/28/29: Shopify orders, refunds and variants against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
+// SA-27..31: Shopify orders, refunds, variants, lines and publications against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
 // read), and the static cost of every Shopify read.
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -8,6 +8,7 @@ import { seedDemo } from '../demo';
 import { saveIntegration } from '../integrations';
 import { checkOrderIdentity } from '../store-analytics/reconcile';
 import { salesMetrics } from '../store-analytics/sales';
+import { sourceRows } from '../store-analytics/sources';
 import { SHOPIFY_READS, syncShopify } from './shopify';
 
 const key = randomBytes(32);
@@ -48,13 +49,17 @@ function fieldCost(f: Field): number {
 }
 const queryCost = (query: string) => sum(parse(query));
 
-function fakeShopify(orders = DOC.orders) {
+function fakeShopify(orders = DOC.orders, { denyPublications = false } = {}) {
   const asked: string[] = [];
   const fetchFn = (async (_url: string, init: RequestInit) => {
     const { query, variables } = JSON.parse(String(init.body)) as { query: string; variables: { id?: string } };
     asked.push(query);
     const json = (data: unknown) => Response.json({ data });
     if (query.includes('shop {')) return json({ shop: DOC.shop });
+    if (query.includes('resourcePublications(')) {
+      if (denyPublications) return Response.json({ errors: [{ message: 'Access denied for resourcePublications field. Required access: `read_publications` access scope.', extensions: { code: 'ACCESS_DENIED' } }] });
+      return json({ products: DOC.publications });
+    }
     if (query.includes('productVariants(')) return json({ productVariants: DOC.variants });
     if (query.includes('products(')) return json({ products: DOC.products });
     if (query.includes('events(')) return json({ events: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
@@ -217,5 +222,34 @@ describe('Shopify order lines contract (SA-30)', () => {
     await syncShopify(db, key, 'glow', fakeShopify(later).fetchFn, NOW);
     expect(lines(db).find((l) => l.line_id === '9001')).toMatchObject({ cost: 16, cost_source: 'platform' });
     expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'order_lines'").get()?.status).toBe('available');
+  });
+});
+
+describe('Shopify publications contract (SA-31)', () => {
+  const listings = (db: ReturnType<typeof openDb>) =>
+    db.prepare("SELECT channel, id, product_id, status, published_at FROM channel_listings WHERE store_id = 'glow' ORDER BY channel").all();
+  const dataset = (db: ReturnType<typeof openDb>, d: string) => db.prepare("SELECT status, error FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = ?").get(d);
+
+  it("each sales channel's current state; since only from Shopify's publish date", async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify().fetchFn, NOW);
+    expect(listings(db)).toEqual([
+      { channel: 'google_youtube', id: '120', product_id: '120', status: 'scheduled', published_at: '2026-11-01T00:00:00Z' },
+      { channel: 'pos', id: '120', product_id: '120', status: 'unpublished', published_at: null },
+      { channel: 'site', id: '120', product_id: '120', status: 'active', published_at: '2026-09-01T12:00:00Z' },
+      { channel: 'tiktok_shop', id: '120', product_id: '120', status: 'active', published_at: '2026-10-01T09:00:00Z' },
+    ]);
+    expect(dataset(db, 'channel_listings')).toEqual({ status: 'available', error: null });
+  });
+
+  it('a denied read records needs_permission and nothing else changes', async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify().fetchFn, NOW);
+    const before = { listings: listings(db), orders: rows(db), variants: db.prepare("SELECT * FROM product_variants WHERE store_id = 'glow'").all() };
+    await syncShopify(db, key, 'glow', fakeShopify(DOC.orders, { denyPublications: true }).fetchFn, NOW);
+    expect({ listings: listings(db), orders: rows(db), variants: db.prepare("SELECT * FROM product_variants WHERE store_id = 'glow'").all() }).toEqual(before);
+    expect(dataset(db, 'channel_listings')).toMatchObject({ status: 'needs_permission', error: expect.stringContaining('read_publications') });
+    expect(dataset(db, 'orders')?.status).toBe('available');
+    expect(sourceRows(db, 'glow').find((r) => r.source === 'shopify' && r.dataset === 'channel_listings')).toMatchObject({ status: 'needs_permission', reason: 'needs_permission' });
   });
 });

@@ -3,8 +3,8 @@ import type { SaDataset } from '@frontline/shared';
 import type { Db } from '../db';
 import { scrubError, secretsOf } from '../store-analytics/sources';
 
-/** A read that worked (over the days it covers, when it has days), or failed. */
-export type ReadOutcome = { status: 'available' | 'partial'; from?: string; to?: string } | { status: 'failed'; error: string };
+/** A read that worked (over the days it covers, when it has days), failed, or was refused for a missing optional scope. */
+export type ReadOutcome = { status: 'available' | 'partial'; from?: string; to?: string } | { status: 'failed' | 'needs_permission'; error: string };
 
 /**
  * Records one dataset's read in `source_datasets`: the try, and on success the last success and the covered days
@@ -13,11 +13,11 @@ export type ReadOutcome = { status: 'available' | 'partial'; from?: string; to?:
  */
 export function noteRead(db: Db, key: Buffer, integration: string, dataset: SaDataset, outcome: ReadOutcome, now = new Date()) {
   const at = now.toISOString();
-  if (outcome.status === 'failed') {
+  if ('error' in outcome) {
     db.prepare(
-      `INSERT INTO source_datasets (integration_id, dataset, store_id, status, last_try_at, error) VALUES (?1, ?2, (SELECT store_id FROM integrations WHERE id = ?1), 'failed', ?3, ?4)
-       ON CONFLICT (integration_id, dataset) DO UPDATE SET status = 'failed', last_try_at = excluded.last_try_at, error = excluded.error`,
-    ).run(integration, dataset, at, scrubError(outcome.error, secretsOf(db, key, integration)));
+      `INSERT INTO source_datasets (integration_id, dataset, store_id, status, last_try_at, error) VALUES (?1, ?2, (SELECT store_id FROM integrations WHERE id = ?1), ?5, ?3, ?4)
+       ON CONFLICT (integration_id, dataset) DO UPDATE SET status = excluded.status, last_try_at = excluded.last_try_at, error = excluded.error`,
+    ).run(integration, dataset, at, scrubError(outcome.error, secretsOf(db, key, integration)), outcome.status);
     return;
   }
   db.prepare(

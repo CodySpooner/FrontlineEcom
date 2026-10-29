@@ -113,6 +113,17 @@ type ShopifyVariant = {
   product: { id: string; status: string };
   inventoryItem: { tracked: boolean; unitCost: Money } | null;
 };
+// SA-31: each product's state on every sales channel. Its own read: read_publications is optional.
+// 2 + 25 × (1 + resourcePublications 2 + 10 × (1 + publication 2)) + 1 = 828.
+const PUBLICATIONS_Q = `query ($after: String, $q: String) {
+  products(first: 25, after: $after, query: $q) {
+    nodes { id resourcePublications(first: 10, onlyPublished: false) { nodes { isPublished publishDate publication { id catalog { title } } } } }
+    pageInfo { hasNextPage endCursor } } }`;
+type ShopifyPublications = {
+  id: string;
+  /** isPublished is true when scheduled too; publishDate is the epoch when not published. */
+  resourcePublications?: { nodes: { isPublished: boolean; publishDate: string; publication: { id: string; catalog: { title: string } | null } }[] };
+};
 const PRODUCT_IDS_Q = `query ($after: String) { products(first: 250, after: $after) { nodes { id } pageInfo { hasNextPage endCursor } } }`;
 const DELETED_Q = `query ($after: String, $q: String) {
   events(first: 250, after: $after, query: $q) { nodes { ... on BasicEvent { subjectId } } pageInfo { hasNextPage endCursor } } }`;
@@ -250,6 +261,16 @@ export function shopifyChannel(o: Pick<ShopifyOrder, 'sourceName' | 'app'>) {
   return !o.sourceName || SITE_SOURCES.has(o.sourceName) ? 'site' : 'other';
 }
 
+/** A sales channel's publication: the channel kinds orders use where they match, else its title as a key. */
+export function publicationChannel(title: string) {
+  const t = title.toLowerCase();
+  const marketplace = MARKETPLACE_APPS.find(([needle]) => t.includes(needle));
+  if (marketplace) return marketplace[1];
+  if (t === 'online store') return 'site';
+  if (t === 'point of sale') return 'pos';
+  return t.replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
 /**
  * Decision 9: the as-placed money parts in the shop's currency, so that gross − discounts + shipping + tax is the
  * total at placement. Merchandise from the lines (before refunds), shipping after its discounts. Where prices include
@@ -340,6 +361,15 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const products = await all((after) => q<{ products: { nodes: ShopifyProduct[]; pageInfo: PageInfo } }>(PRODUCTS_Q, { after, q: cursor ? filter : null }).then((d) => d.products));
     noteRead(db, key, id, 'catalog', { status: 'available' }, now);
     reading.delete('catalog');
+    // A denied publications read (no read_publications) reads needs_permission; it never stops the sync.
+    const publications = await all((after) => q<{ products: { nodes: ShopifyPublications[]; pageInfo: PageInfo } }>(PUBLICATIONS_Q, { after, q: cursor ? filter : null }).then((d) => d.products)).then(
+      (nodes) => (noteRead(db, key, id, 'channel_listings', { status: 'available' }, now), nodes),
+      (e: unknown) => {
+        const error = e instanceof Error ? e.message : String(e);
+        noteRead(db, key, id, 'channel_listings', { status: /access denied/i.test(error) ? 'needs_permission' : 'failed', error }, now);
+        return [];
+      },
+    );
     // A failed variants read is noted and never stops the sync: the products' summary columns still come.
     const variants = await noted(db, key, id, 'variants', all((after) => q<{ productVariants: { nodes: ShopifyVariant[]; pageInfo: PageInfo } }>(VARIANTS_Q, { after, q: cursor ? filter : null }).then((d) => d.productVariants))).catch(() => []);
     // A deleted product just stops coming back, so its delete event archives it here. Failing to read events never stops a sync.
@@ -383,6 +413,18 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         const [pid, vid, unit] = [tail(v.product.id), tail(v.id), num(v.inventoryItem?.unitCost)];
         variant.run(storeId, pid, vid, v.title, v.sku, num(v.price), v.compareAtPrice ? num(v.compareAtPrice) : null, v.inventoryQuantity, v.inventoryItem?.tracked === false || v.inventoryPolicy === 'CONTINUE' ? 0 : 1, v.inventoryPolicy.toLowerCase(), v.product.status.toLowerCase(), now.toISOString());
         if (unit > 0) recordUnitCost(db, storeId, pid, vid, unit, 'shopify', today, now);
+      }
+      const listing = db.prepare(
+        `INSERT INTO channel_listings (store_id, channel, id, product_id, status, published_at, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, channel, id) DO UPDATE SET product_id = excluded.product_id, status = excluded.status, published_at = excluded.published_at, synced_at = excluded.synced_at`,
+      );
+      // Decision 21: current state only; "since" only from Shopify's publish date.
+      for (const p of publications) {
+        for (const rp of p.resourcePublications?.nodes ?? []) {
+          const at = Date.parse(rp.publishDate) > 0 ? rp.publishDate : null;
+          const status = !rp.isPublished ? 'unpublished' : at && Date.parse(at) > now.getTime() ? 'scheduled' : 'active';
+          listing.run(storeId, publicationChannel(rp.publication.catalog?.title ?? rp.publication.id), tail(p.id), tail(p.id), status, rp.isPublished ? at : null, now.toISOString());
+        }
       }
       const archive = db.prepare("UPDATE products SET status = 'archived' WHERE store_id = ? AND id = ?");
       for (const e of deleted) if (e.subjectId) archive.run(storeId, tail(e.subjectId));
@@ -759,4 +801,4 @@ export async function publishTheme(db: Db, key: Buffer, storeId: string, themeId
 }
 
 /** Every read query, for the static cost check in shopify.contract.test.ts (orders with SA-32's probed fields on). */
-export const SHOPIFY_READS = { FUNNEL_Q, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, REFUNDS_Q, VARIANTS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };
+export const SHOPIFY_READS = { FUNNEL_Q, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, REFUNDS_Q, VARIANTS_Q, PUBLICATIONS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };

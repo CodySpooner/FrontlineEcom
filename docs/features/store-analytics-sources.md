@@ -19,7 +19,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Fees | unsupported | no | — |  |  |  | The app doesn't read payment or platform fees here (owner question Q21); fees are the store's labelled estimate. |
 | Catalog | supported | yes | GraphQL Admin products | read_products | current state |  |  |
 | Variants | supported | yes | productVariants (sku, price, compareAtPrice, inventoryQuantity, inventoryPolicy, inventoryItem.tracked) | read_products, read_inventory | current state |  |  |
-| Channel listings | supported | no | products.resourcePublications | read_publications (optional) |  |  |  |
+| Channel listings | supported | yes | products.resourcePublications (isPublished, publishDate, publication.catalog.title) | read_publications (optional) | current state |  |  |
 | Inventory | supported | yes | variant inventoryQuantity, inventoryItem.tracked | read_inventory | current state; daily snapshots from SA-50 |  |  |
 | Collections | supported | no | collections (paged) | read_products |  |  |  |
 | Sessions and funnel | supported | yes | ShopifyQL sessions (shopifyqlQuery) | read_reports + Level 2 customer data | 730 days back |  | Only when GA4 is not connected (GA4 owns traffic there). |

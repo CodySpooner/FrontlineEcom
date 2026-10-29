@@ -589,5 +589,60 @@
       "hasNextPage": false,
       "endCursor": null
     }
+  },
+  "publications": {
+    "nodes": [
+      {
+        "id": "gid://shopify/Product/120",
+        "resourcePublications": {
+          "nodes": [
+            {
+              "isPublished": true,
+              "publishDate": "2026-09-01T12:00:00Z",
+              "publication": {
+                "id": "gid://shopify/Publication/1",
+                "catalog": {
+                  "title": "Online Store"
+                }
+              }
+            },
+            {
+              "isPublished": true,
+              "publishDate": "2026-10-01T09:00:00Z",
+              "publication": {
+                "id": "gid://shopify/Publication/2",
+                "catalog": {
+                  "title": "TikTok"
+                }
+              }
+            },
+            {
+              "isPublished": false,
+              "publishDate": "1970-01-01T00:00:00Z",
+              "publication": {
+                "id": "gid://shopify/Publication/3",
+                "catalog": {
+                  "title": "Point of Sale"
+                }
+              }
+            },
+            {
+              "isPublished": true,
+              "publishDate": "2026-11-01T00:00:00Z",
+              "publication": {
+                "id": "gid://shopify/Publication/4",
+                "catalog": {
+                  "title": "Google & YouTube"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": null
+    }
   }
 }
