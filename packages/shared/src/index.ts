@@ -1492,7 +1492,19 @@ export interface Settings {
   profile: { name: string; plan: string };
   /** Which events create notifications. */
   /** `digest`: a morning summary (8:00 local) of yesterday across stores and the approvals waiting. */
-  notifications: { approvals: boolean; agentDone: boolean; errors: boolean; digest: boolean; researchAlerts: boolean };
+  notifications: {
+    approvals: boolean;
+    agentDone: boolean;
+    errors: boolean;
+    digest: boolean;
+    researchAlerts: boolean;
+    /** Windows toast per category (settings decision 12); absent or true: on. */
+    toasts?: Partial<Record<import('./settings').NotificationCategory, boolean>>;
+    /** No Windows toasts from `from` to `to` (whole hours, the workspace timezone); null: none. */
+    quietHours?: { from: number; to: number } | null;
+    /** Stores whose notifications are dropped (info excepted). */
+    mutedStores?: string[];
+  };
   /** ISO code that multi-store totals are converted to (default USD). */
   baseCurrency: string;
   /** Read-only: where the local database and key live (plus logs/ and backups/). POST /api/settings/open-data-folder → 204 opens it in Explorer. */
@@ -1547,6 +1559,8 @@ export interface AppNotification {
   link?: string;
   createdAt: string;
   readAt?: string;
+  /** From notify() only: false means no Windows toast (toasts off for its category, or quiet hours). */
+  toast?: boolean;
 }
 
 /** What server code passes to notify(). */

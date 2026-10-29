@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { initialBounds, type WindowState } from './bounds';
 import { loadKey } from './key';
 import { stablePort } from './port';
+import { shouldToast } from './toast';
 
 // Set FRONTLINE_DEV_URL (e.g. http://localhost:5173 with `pnpm dev` running) to load Vite with HMR; UI and API then
 // come from the dev servers. Otherwise the app starts its own API, which also serves the web build.
@@ -141,9 +142,9 @@ const toasts = new Set<Notification>();
 function toastNotifications(url: string) {
   const ws = new WebSocket(`${url.replace(/^http/, 'ws')}/api/live`);
   ws.onmessage = (m) => {
-    const msg = JSON.parse(String(m.data)) as { type: string; notification?: { title: string; body?: string; link?: string } };
+    const msg = JSON.parse(String(m.data)) as { type: string; notification?: { title: string; body?: string; link?: string; toast?: boolean } };
     const n = msg.notification;
-    if (msg.type !== 'notification' || !n || (win?.isVisible() && win.isFocused())) return;
+    if (msg.type !== 'notification' || !n || !shouldToast(n, !!(win?.isVisible() && win.isFocused()))) return;
     const toast = new Notification({ title: n.title, body: n.body ?? '', icon: ICON });
     const done = () => toasts.delete(toast);
     toast.on('click', () => {

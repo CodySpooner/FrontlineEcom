@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Hono, type Context } from 'hono';
-import type { AppNotification, NewNotification, NotificationKind, Settings, StoreCaps } from '@frontline/shared';
+import { workspaceZone } from '@frontline/agents';
+import { NOTIFICATION_CATEGORIES, settingsUrl, type AppNotification, type NewNotification, type NotificationCategory, type NotificationKind, type Settings, type StoreCaps } from '@frontline/shared';
 import { effective, readDoc } from './config/effective';
 import { ConfigError, NO_VERSION, versionOf, writeConfig } from './config/write';
 import { dataDir, type Db } from './db';
@@ -147,13 +148,33 @@ const toNotification = (r: Row): AppNotification => ({
   ...(r.read_at ? { readAt: String(r.read_at) } : {}),
 });
 
-const PREF: Record<NotificationKind, keyof Settings['notifications'] | undefined> = { approval: 'approvals', agent_done: 'agentDone', error: 'errors', info: undefined, research_alert: 'researchAlerts' };
+const CATEGORY: Record<NotificationKind, NotificationCategory | undefined> = { approval: 'approvals', agent_done: 'agentDone', error: 'errors', info: undefined, research_alert: 'researchAlerts' };
 
-/** Stores + broadcasts a notification unless the owner turned that kind off. */
-export function notify(db: Db, n: NewNotification): AppNotification | undefined {
-  const pref = PREF[n.kind];
-  if (pref && !getSettings(db).notifications[pref]) return;
-  const out: AppNotification = { id: randomUUID(), ...n, createdAt: new Date().toISOString() };
+/** Why a notification of `category` gets no Windows toast now, or undefined: its toast switch, then quiet hours (decision 12). */
+export function toastBlock(db: Db, category: NotificationCategory | undefined, now = new Date()): string | undefined {
+  const s = getSettings(db).notifications;
+  if (category && s.toasts?.[category] === false) return `toasts off for ${NOTIFICATION_CATEGORIES[category]}`;
+  const q = s.quietHours;
+  if (typeof q?.from !== 'number' || typeof q.to !== 'number' || q.from === q.to) return;
+  const h = Number(now.toLocaleString('en-GB', { timeZone: workspaceZone(db), hour: 'numeric', hourCycle: 'h23' })); // settings decision 8
+  if (q.from < q.to ? h >= q.from && h < q.to : h >= q.from || h < q.to) return `quiet hours until ${String(q.to).padStart(2, '0')}:00`;
+}
+
+/**
+ * Stores and broadcasts a notification, unless its category is off or its store muted (info always shows), or an
+ * identical unread one came in the last 10 minutes (never for approvals: each is its own request). `toast` says whether
+ * the desktop app may show it as a Windows toast. `category` names one its kind doesn't (the digest is `info`); `test`
+ * (Send a test) skips the drops and the dedupe, not the toast rules.
+ */
+export function notify(db: Db, n: NewNotification, o: { category?: NotificationCategory; test?: boolean } = {}): AppNotification | undefined {
+  const category = o.category ?? CATEGORY[n.kind];
+  const s = getSettings(db).notifications;
+  if (!o.test && category && !s[category]) return;
+  if (!o.test && n.kind !== 'info' && n.storeId && s.mutedStores?.includes(n.storeId)) return;
+  const now = new Date();
+  const repeat = 'SELECT 1 FROM notifications WHERE kind = ? AND title = ? AND body IS ? AND store_id IS ? AND link IS ? AND read_at IS NULL AND created_at > ?';
+  if (!o.test && n.kind !== 'approval' && db.prepare(repeat).get(n.kind, n.title, n.body ?? null, n.storeId ?? null, n.link ?? null, new Date(now.getTime() - 600_000).toISOString())) return;
+  const out: AppNotification = { id: randomUUID(), ...n, createdAt: now.toISOString(), toast: !toastBlock(db, category, now) };
   db.prepare('INSERT INTO notifications (id, kind, title, body, store_id, link, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
     out.id, out.kind, out.title, out.body ?? null, out.storeId ?? null, out.link ?? null, out.createdAt,
   );
@@ -183,6 +204,14 @@ export function settingsRoutes(db: Db, open = openFolder) {
       const storeId = c.req.param('storeId');
       if (!getStore(db, storeId)) return c.json({ error: 'store not found' }, 404);
       return versioned(c, (body, version) => updateCaps(db, storeId, body, version));
+    })
+    // Settings → Notifications → Send a test (decision 12): one info notification through notify()'s toast rules.
+    .post('/api/notifications/test', async (c) => {
+      const { category } = ((await c.req.json().catch(() => null)) ?? {}) as { category?: unknown };
+      if (typeof category !== 'string' || !Object.hasOwn(NOTIFICATION_CATEGORIES, category)) return c.json({ error: `category must be one of ${Object.keys(NOTIFICATION_CATEGORIES).join(', ')}`, field: 'category' }, 400);
+      const why = toastBlock(db, category as NotificationCategory);
+      notify(db, { kind: 'info', title: 'Test notification', body: `${NOTIFICATION_CATEGORIES[category as NotificationCategory]}, sent from Settings → Notifications.`, link: settingsUrl('notifications') }, { category: category as NotificationCategory, test: true });
+      return c.json({ bell: 'Bell: added', toast: why ? `Windows toast: not sent (${why})` : 'Windows toast: requested' });
     })
     .get('/api/notifications', (c) => {
       const unread = c.req.query('unread') === 'true';

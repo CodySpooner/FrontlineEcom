@@ -28,7 +28,7 @@ export function sendDigest(db: Db, now = new Date()) {
     title: `Yesterday: ${money(y.revenue)} revenue, ${money(y.profit)} profit`,
     body: `${y.orders} orders${change}. ${waiting ? `${waiting} approval${waiting === 1 ? '' : 's'} waiting.` : 'No approvals waiting.'}`,
     link: '/',
-  });
+  }, { category: 'digest' }); // its own Windows toast switch (settings ST-14a)
 }
 
 /** Sends the digest once a day from 8:00 in the workspace timezone while Settings → Notifications → digest is on. Returns stop(). */

@@ -15,6 +15,7 @@ import { SECTIONS } from './Layout';
 /** Editable entries with no row outside `data-legacy` yet. The item that renders a row removes its id; ST-48 empties it. */
 const ALLOWLIST = [
   'notifications.approvals', 'notifications.agentDone', 'notifications.errors', 'notifications.digest', 'notifications.researchAlerts', // ST-14b
+  'notifications.toasts.approvals', 'notifications.toasts.agentDone', 'notifications.toasts.errors', 'notifications.toasts.researchAlerts', 'notifications.toasts.digest', 'notifications.quietHours', 'notifications.mutedStores', // ST-14b
   'baseCurrency', // ST-16
   'caps.agentCostPerDay', // ST-23
   'caps.adSpendChangePerDay', 'caps.higgsfieldCreditsPerDay', // ST-24b

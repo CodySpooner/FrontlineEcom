@@ -113,6 +113,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .use('/api/teams/*', guard)
     .use('/api/analytics/*', guard) // store-analytics: its own records' writes
     .use('/api/config/*', guard) // settings: the config writer and change retries (the bare path too)
+    .use('/api/notifications/test', guard) // settings: Send a test writes a bell row
     .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))
     .get('/api/stores/:id', (c) => {

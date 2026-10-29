@@ -20,6 +20,10 @@ export const SETTINGS_SECTIONS = [
 ] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
+/** Settings → Notifications categories (decision 12): each can be off, and each has its own Windows toast switch. */
+export type NotificationCategory = 'approvals' | 'agentDone' | 'errors' | 'researchAlerts' | 'digest';
+export const NOTIFICATION_CATEGORIES: Record<NotificationCategory, string> = { approvals: 'Approvals', agentDone: 'Agent finished', errors: 'Errors', researchAlerts: 'Research alerts', digest: 'Morning digest' };
+
 /** `/settings/<section>[/<id>][?store=<id>][#<setting>]`: the only way to link into Settings. */
 export function settingsUrl(section: SettingsSection, o: { id?: string; store?: string; setting?: string } = {}) {
   return `/settings/${section}${o.id ? `/${encodeURIComponent(o.id)}` : ''}${o.store ? `?store=${encodeURIComponent(o.store)}` : ''}${o.setting ? `#${o.setting}` : ''}`;
@@ -167,6 +171,7 @@ const autopilot = (kind: string, label: string, proof: string): SettingDef => ({
 });
 const store = (field: string, d: Without<SettingDef, 'id' | 'section' | 'scopes' | 'owner' | 'export'>) =>
   ({ id: `store.${field}`, section: 'stores', scopes: ['store'], owner: 'apps/server/src/stores.ts#parseStoreInput', export: true, ...d }) as SettingDef;
+const NOTIFY = 'apps/server/src/config/notifications.test.ts';
 const PROMPT = 'packages/agents/src/prompt.test.ts';
 const COMMON = 'apps/server/src/connectors/common.test.ts';
 
@@ -174,11 +179,17 @@ export const SETTINGS: SettingDef[] = [
   { id: 'profile.name', section: 'account', type: 'string', maxLength: 40, label: 'Display name', help: 'Shown on the profile chip.', scopes: ['personal'], default: 'Cody', owner: 'apps/server/src/settings.ts#updateSettings', applies: 'now', export: true, consumers: ['apps/web/src/components/Hero.tsx#HeroControls'], proof: 'apps/web/src/settings/sections/Account.test.tsx#a rename persists across a refetch and shows on the chip' },
   { id: 'appearance.motion', section: 'appearance', type: 'string', enum: ['system', 'reduce'], label: 'Motion', help: "Follow Windows' setting, or always reduce animation.", synonyms: ['animation', 'reduced motion'], scopes: ['personal'], default: 'system', owner: 'apps/server/src/config/write.ts#writeConfig', applies: 'now', export: true, consumers: ['apps/web/src/index.css#data-motion', 'apps/web/src/ecosystem/renderer.ts#reducedMotion'], proof: 'apps/web/src/settings/sections/Appearance.test.tsx#Always reduce sets <html data-motion> only once the server confirms; a refusal leaves it; Follow Windows clears it' },
 
-  notif('approvals', 'Requests to approve', 'When an agent asks before it acts.', 'apps/server/src/settings.test.ts#notifications: approvals and agentDone each silence their own kind, and only it', ['apps/server/src/settings.ts#PREF'], true),
-  notif('agentDone', 'Finished work', 'When an agent finishes a task.', 'apps/server/src/settings.test.ts#notifications: approvals and agentDone each silence their own kind, and only it', ['apps/server/src/settings.ts#PREF']),
-  notif('errors', 'Errors', 'A failed sync, backup or run.', 'apps/server/src/settings.test.ts#notifications: approvals raise one, prefs silence a kind, mark read', ['apps/server/src/settings.ts#PREF'], true),
+  notif('approvals', 'Requests to approve', 'When an agent asks before it acts.', 'apps/server/src/settings.test.ts#notifications: approvals and agentDone each silence their own kind, and only it', ['apps/server/src/settings.ts#CATEGORY'], true),
+  notif('agentDone', 'Finished work', 'When an agent finishes a task.', 'apps/server/src/settings.test.ts#notifications: approvals and agentDone each silence their own kind, and only it', ['apps/server/src/settings.ts#CATEGORY']),
+  notif('errors', 'Errors', 'A failed sync, backup or run.', 'apps/server/src/settings.test.ts#notifications: approvals raise one, prefs silence a kind, mark read', ['apps/server/src/settings.ts#CATEGORY'], true),
   notif('digest', 'Daily digest', 'One summary a day.', 'apps/server/src/digest.test.ts#the loop sends one digest a day from 8:00, and none while it is turned off', ['apps/server/src/digest.ts#startDigestLoop']),
   notif('researchAlerts', 'Research alerts', 'A watched product changed.', 'apps/server/src/product-research/alerts.test.ts#scheduled checks: the first records the result, a later change alerts once, never twice; with research alerts off it is stored but not notified', ['apps/server/src/product-research/alerts.ts#checkWatch']),
+  ...(Object.entries(NOTIFICATION_CATEGORIES) as [NotificationCategory, string][]).map(([key, name]): SettingDef => ({
+    id: `notifications.toasts.${key}`, section: 'notifications', type: 'boolean', label: `Windows toast: ${name}`, help: "Also as a Windows toast when Frontline isn't the focused window.", scopes: ['personal'], default: true, owner: 'apps/server/src/config/write.ts#writeConfig', applies: 'now', export: true,
+    consumers: ['apps/server/src/settings.ts#toastBlock', 'apps/desktop/src/toast.ts#shouldToast'], proof: `${NOTIFY}#toasts off for a category, or quiet hours across midnight in the workspace zone, store with toast: false`,
+  })),
+  { id: 'notifications.quietHours', section: 'notifications', type: 'map', keys: ['from', 'to'], min: 0, max: 23, integer: true, nullable: true, label: 'Quiet hours', help: 'No Windows toasts from the first hour to the second, in the workspace timezone; they are not sent, not held. The bell still gets everything.', scopes: ['personal'], default: null, owner: 'apps/server/src/config/write.ts#writeConfig', applies: 'now', export: true, consumers: ['apps/server/src/settings.ts#toastBlock'], proof: `${NOTIFY}#toasts off for a category, or quiet hours across midnight in the workspace zone, store with toast: false` },
+  { id: 'notifications.mutedStores', section: 'notifications', type: 'list', maxItems: 500, maxLength: 64, label: 'Stores to notify me about', help: "The stores you untick are left out. Off: not kept; turning it back on doesn't bring them back.", scopes: ['personal'], default: [], owner: 'apps/server/src/config/write.ts#writeConfig', applies: 'now', export: true, consumers: ['apps/server/src/settings.ts#notify'], proof: `${NOTIFY}#a category turned off or a muted store stores nothing; info always shows` },
 
   { id: 'baseCurrency', section: 'general', type: 'string', pattern: '^[A-Za-z]{3}$', label: 'Base currency', help: 'Totals across stores are converted to this. One store shows its own currency.', scopes: ['workspace'], default: 'USD', owner: 'apps/server/src/settings.ts#updateSettings', applies: 'job', export: true, consumers: ['apps/server/src/fx.ts#fxFor', 'apps/server/src/product-research/facts.ts#factKeys'], proof: 'apps/server/src/fx.test.ts#multi-store analytics convert to the base currency; one store keeps its own' },
 
