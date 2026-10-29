@@ -45,10 +45,10 @@ test('budget and pause writes per network', async () => {
   await setCampaignBudget(db, key, 'glow', 'meta', IDS.meta, 45.5, fetchFn);
   await pauseCampaign(db, key, 'glow', 'meta', IDS.meta, fetchFn);
   expect(calls.map((c) => [c.url, c.headers.get('authorization'), c.body])).toEqual([
-    ['https://graph.facebook.com/v24.0/act_1?fields=currency,timezone_name', 'Bearer meta-token', ''],
-    ['https://graph.facebook.com/v24.0/120210000000001?fields=daily_budget', 'Bearer meta-token', ''],
-    ['https://graph.facebook.com/v24.0/120210000000001', 'Bearer meta-token', 'daily_budget=4550'],
-    ['https://graph.facebook.com/v24.0/120210000000001', 'Bearer meta-token', 'status=PAUSED'],
+    ['https://graph.facebook.com/v26.0/act_1?fields=currency,timezone_name', 'Bearer meta-token', ''],
+    ['https://graph.facebook.com/v26.0/120210000000001?fields=daily_budget', 'Bearer meta-token', ''],
+    ['https://graph.facebook.com/v26.0/120210000000001', 'Bearer meta-token', 'daily_budget=4550'],
+    ['https://graph.facebook.com/v26.0/120210000000001', 'Bearer meta-token', 'status=PAUSED'],
   ]);
 
   calls.length = 0;

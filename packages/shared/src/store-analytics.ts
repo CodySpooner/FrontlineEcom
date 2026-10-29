@@ -249,7 +249,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
   },
   meta_ads: {
     name: 'Meta Ads',
-    note: 'The app reads Marketing API v24.0, which Meta retires on November 10, 2026 (changelog, checked 2026-10-28 by codex-hardening CH-22); the version bump is filed with core.',
+    note: 'The app calls Marketing API v26.0, moved from v24.0 on 2026-10-29 ahead of its November 10, 2026 retirement; none of the calls the app makes changed in v25.0 or v26.0 (changelogs checked 2026-10-29).',
     datasets: {
       ad_spend: { support: 'supported', reads: true, field: 'Insights API spend by campaign and day', scopes: 'ads_read', history: '730 days back; the last 28 days re-read' },
       attribution: { support: 'supported', reads: true, field: 'Insights actions and action_values (purchase)', reason: "Meta's own attribution; the window setting isn't recorded yet (SA-58)." },

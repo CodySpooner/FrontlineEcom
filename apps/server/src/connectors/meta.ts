@@ -4,7 +4,7 @@ import { getCredentials, setIntegrationStatus } from '../integrations';
 import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, saveAds, stateOf, switchToReal, syncView, stillAsSynced, syncedBudget, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
-export const META_API_VERSION = 'v24.0';
+export const META_API_VERSION = 'v26.0';
 const GRAPH = `https://graph.facebook.com/${META_API_VERSION}`;
 /** First sync pulls this many days; later syncs re-pull the attribution window so late conversions land. */
 const BACKFILL_DAYS = 730;
