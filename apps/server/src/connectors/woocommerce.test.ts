@@ -558,5 +558,5 @@ test("Woo reads ask only for the fields the sync uses: no customer addresses or 
   expect(fields('/orders')).not.toContain('billing');
   expect(fields('/products')).toEqual(expect.arrayContaining(['id', 'name', 'price', 'images', 'stock_quantity']));
   expect(fields('/products')).not.toContain('description');
-  expect(fields('/variations')).toEqual(['manage_stock', 'stock_quantity', 'backorders']);
+  expect(fields('/variations')).toEqual(['id', 'sku', 'status', 'price', 'regular_price', 'attributes', 'stock_quantity', 'manage_stock', 'backorders']); // SA-39's variants
 });

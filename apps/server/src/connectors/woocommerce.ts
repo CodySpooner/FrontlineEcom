@@ -18,7 +18,9 @@ const BACKFILL_DAYS = 730;
 // and a big shop's backfill is a fraction of the size.
 const ORDER_FIELDS =
   'id,number,status,currency,date_created,date_created_gmt,date_modified_gmt,date_paid_gmt,date_completed_gmt,discount_total,shipping_total,total,total_tax,fee_lines,refunds,line_items,cost_of_goods_sold,meta_data,customer_id,billing.country,shipping.country';
-const PRODUCT_FIELDS = 'id,name,status,type,price,regular_price,images,stock_quantity,manage_stock,backorders,cost_of_goods_sold';
+const PRODUCT_FIELDS = 'id,name,status,type,sku,price,regular_price,images,stock_quantity,manage_stock,backorders,cost_of_goods_sold';
+// SA-39: a variation's own row in product_variants.
+const VARIATION_FIELDS = 'id,sku,status,price,regular_price,attributes,stock_quantity,manage_stock,backorders';
 
 type Fetch = typeof fetch;
 
@@ -94,6 +96,7 @@ interface WooProduct {
   /** 'notify' or 'yes': keeps selling at 0, so it can't sell out. */
   backorders?: string;
   type?: string;
+  sku?: string;
   images?: { src: string }[];
   date_modified_gmt: string;
   cost_of_goods_sold?: { total_value: number };
@@ -116,6 +119,19 @@ export function wooParts(o: WooOrder) {
   };
 }
 const r2 = (n: number) => Math.round(n * 100) / 100;
+
+/** A variation of a variable product; `manage_stock` 'parent' counts the parent's stock. */
+interface WooVariation {
+  id: number;
+  sku?: string;
+  status?: string;
+  price?: string;
+  regular_price?: string;
+  attributes?: { name: string; option: string }[];
+  stock_quantity: number | null;
+  manage_stock: boolean | 'parent';
+  backorders?: string;
+}
 
 const basic = (creds: Record<string, string>) => `Basic ${Buffer.from(`${creds.consumerKey!.trim()}:${creds.consumerSecret!.trim()}`).toString('base64')}`;
 
@@ -235,20 +251,26 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const full = !cursor || catalogPassDue(db, id, today);
     const productsSince = { ...(full ? { dates_are_gmt: 'true' } : changed), _fields: PRODUCT_FIELDS };
     const products = [...(await all<WooProduct>('products', productsSince)), ...(await all<WooProduct>('products', { ...productsSince, status: 'trash' }))];
-    noteRead(db, key, id, 'catalog', { status: 'available' }, now);
+    for (const d of ['catalog', 'channel_listings'] as const) noteRead(db, key, id, d, { status: 'available' }, now);
     reading.delete('catalog');
     // A variable product (sizes, colors) usually counts stock per variation: its stock is theirs, and it's tracked only when
     // every variation counts (an uncounted one can always be bought). A failed read leaves the product as it reads alone.
     // ponytail: one request per variable product read; batch through the Store API if big catalogs make syncs slow. A
     // parent that counts stock while some variations count their own reads as the parent's count.
     const variationStock = new Map<number, { stock: number; tracked: boolean }>();
+    const variations = new Map<number, WooVariation[]>();
+    let variationsMissed = 0;
     for (const p of products) {
-      if (p.type !== 'variable' || p.manage_stock || p.status === 'trash') continue;
-      const vs = await all<{ manage_stock: boolean | 'parent'; stock_quantity: number | null; backorders?: string }>(`products/${p.id}/variations`, { _fields: 'manage_stock,stock_quantity,backorders' }).catch(() => []);
+      if (p.type !== 'variable' || p.status === 'trash') continue;
+      const vs = await all<WooVariation>(`products/${p.id}/variations`, { _fields: VARIATION_FIELDS }).catch(() => void variationsMissed++);
+      if (!vs) continue;
+      variations.set(p.id, vs);
+      if (p.manage_stock) continue;
       const counted = vs.filter((v) => v.manage_stock === true);
       const tracked = counted.length === vs.length && vs.every((v) => (v.backorders ?? 'no') === 'no');
       if (counted.length) variationStock.set(p.id, { stock: counted.reduce((a, v) => a + (v.stock_quantity ?? 0), 0), tracked });
     }
+    noteRead(db, key, id, 'variants', { status: variationsMissed ? 'partial' : 'available' }, now);
     // The shop's own currency (Settings → General), else the newest order's. A multi-currency plugin's orders in another
     // currency are converted into it at today's ECB rate; one with no rate is left out rather than counted at par.
     const setting = await fetchFn(`${site}/wp-json/wc/v3/settings/general/woocommerce_currency`, { headers: { authorization: auth } })
@@ -287,11 +309,34 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
          ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
            cost = CASE WHEN excluded.cost > 0 THEN excluded.cost ELSE cost END, inventory = excluded.inventory, inventory_tracked = excluded.inventory_tracked, status = excluded.status`,
       );
+      const variant = db.prepare(
+        `INSERT INTO product_variants (store_id, product_id, id, title, sku, price, compare_at, inventory, inventory_tracked, inventory_policy, status, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET product_id = excluded.product_id, title = excluded.title, sku = excluded.sku, price = excluded.price, compare_at = excluded.compare_at,
+           inventory = excluded.inventory, inventory_tracked = excluded.inventory_tracked, inventory_policy = excluded.inventory_policy, status = excluded.status, synced_at = excluded.synced_at`,
+      );
+      const listing = db.prepare(
+        `INSERT INTO channel_listings (store_id, channel, id, product_id, status, published_at, synced_at) VALUES (?, 'site', ?, ?, ?, NULL, ?)
+         ON CONFLICT (store_id, channel, id) DO UPDATE SET product_id = excluded.product_id, status = excluded.status, published_at = NULL, synced_at = excluded.synced_at`,
+      );
       for (const p of products) {
         const price = Number(p.price || p.regular_price || 0);
         const regular = Number(p.regular_price || 0);
         const status: ProductStatus = p.status === 'publish' ? 'active' : p.status === 'trash' ? 'archived' : 'draft';
         prod.run(storeId, `woo-${p.id}`, p.name, p.images?.[0]?.src ?? null, price, regular > price ? regular : null, Number(p.cost_of_goods_sold?.total_value ?? 0), variationStock.get(p.id)?.stock ?? p.stock_quantity ?? 0, (variationStock.get(p.id)?.tracked ?? (p.manage_stock !== false && (p.backorders ?? 'no') === 'no')) ? 1 : 0, status);
+        // SA-39: the site listing, current state only (Woo documents no publish date, so no "since"); a scheduled post is
+        // `future`. Each variation is a variant; any other product is its own single variant.
+        listing.run(storeId, `woo-${p.id}`, `woo-${p.id}`, p.status === 'publish' ? 'active' : p.status === 'future' ? 'scheduled' : 'unpublished', now.toISOString());
+        const rows: (WooVariation & { title: string | null })[] =
+          p.type === 'variable' ? (variations.get(p.id) ?? []).map((v) => ({ ...v, title: v.attributes?.map((a) => a.option).join(' / ') || null }))
+            : [{ ...p, manage_stock: p.manage_stock !== false, title: null }];
+        for (const v of rows) {
+          const stock = v.manage_stock === 'parent' ? p : v; // 'parent': the parent's count and its backorders
+          const counts = stock === p ? p.manage_stock === true : v.manage_stock === true;
+          const [vp, vr] = [v.price ? Number(v.price) : v.regular_price ? Number(v.regular_price) : null, Number(v.regular_price || 0)];
+          variant.run(storeId, `woo-${p.id}`, `woo-${v.id}`, v.title, v.sku || null, vp, vp != null && vr > vp ? vr : null, counts ? (stock.stock_quantity ?? 0) : null,
+            counts && (stock.backorders ?? 'no') === 'no' ? 1 : 0, (stock.backorders ?? 'no') === 'no' ? 'deny' : 'continue',
+            status === 'active' && v.status && v.status !== 'publish' ? 'draft' : status, now.toISOString());
+        }
       }
       // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking from a tracking plugin.
       const ord = db.prepare(

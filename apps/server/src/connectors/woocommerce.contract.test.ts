@@ -1,4 +1,4 @@
-// SA-36..38: WooCommerce orders, lines, customer refs and refunds against the REST docs' shapes (fixtures/woocommerce-doc-examples.json names the page and the date read).
+// SA-36..39: WooCommerce orders, lines, customer refs, refunds, variants and listings against the REST docs' shapes (fixtures/woocommerce-doc-examples.json names the page and the date read).
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -20,6 +20,8 @@ function fakeWoo(orders = DOC.orders, { refunds = true } = {}) {
     if (u.pathname.endsWith('/wp-json/')) return Response.json({ timezone_string: 'America/New_York' });
     if (u.pathname.endsWith('/refunds')) return refunds ? page(DOC.refunds[u.pathname.split('/').at(-2)!] ?? []) : Response.json({ message: 'Internal Server Error' }, { status: 500 });
     if (u.pathname.endsWith('/orders')) return page(u.searchParams.get('status') === 'trash' ? [] : orders);
+    if (u.pathname.endsWith('/variations')) return page(DOC.variations[u.pathname.split('/').at(-2)!] ?? []);
+    if (u.pathname.endsWith('/products')) return page(u.searchParams.get('status') === 'trash' ? [] : DOC.products);
     return page([]);
   }) as typeof fetch;
   return { fetchFn };
@@ -125,5 +127,26 @@ describe('WooCommerce refunds (SA-38)', () => {
     expect(ledger(db)).toEqual(before);
     expect(db.prepare("SELECT breakdown_at IS NOT NULL AS parts FROM orders WHERE store_id = 'pawsome' AND id = 'woo-729'").get()?.parts).toBe(0);
     expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'woocommerce:pawsome' AND dataset = 'refunds'").get()?.status).toBe('failed');
+  });
+});
+
+describe('WooCommerce variants and listings (SA-39)', () => {
+  it('a variation is a variant, a simple product its own; parent-counted stock; the site listing state', async () => {
+    const db = setup();
+    await syncWooCommerce(db, key, 'pawsome', fakeWoo().fetchFn, NOW);
+    expect(db.prepare("SELECT product_id, id, title, sku, price, compare_at, inventory, inventory_tracked AS tracked, inventory_policy AS policy, status FROM product_variants WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
+      { product_id: 'woo-22', id: 'woo-23', title: 'Black / M Test', sku: 'Bar3', price: 12, compare_at: null, inventory: 4, tracked: 1, policy: 'deny', status: 'active' },
+      { product_id: 'woo-22', id: 'woo-24', title: 'Green / S Test', sku: null, price: 10, compare_at: 14, inventory: 5, tracked: 0, policy: 'continue', status: 'active' }, // the parent's count, which backorders
+      { product_id: 'woo-22', id: 'woo-25', title: 'Red', sku: 'Bar5', price: null, compare_at: null, inventory: null, tracked: 0, policy: 'deny', status: 'draft' }, // stock not counted: unknown, not 0
+      { product_id: 'woo-40', id: 'woo-40', title: null, sku: null, price: 15, compare_at: null, inventory: null, tracked: 0, policy: 'deny', status: 'draft' },
+      { product_id: 'woo-93', id: 'woo-93', title: null, sku: 'WS-1', price: 3, compare_at: 4, inventory: 12, tracked: 1, policy: 'deny', status: 'active' },
+    ]);
+    expect(db.prepare("SELECT channel, id, status, published_at FROM channel_listings WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
+      { channel: 'site', id: 'woo-22', status: 'active', published_at: null },
+      { channel: 'site', id: 'woo-40', status: 'scheduled', published_at: null },
+      { channel: 'site', id: 'woo-93', status: 'active', published_at: null },
+    ]);
+    const datasets = db.prepare("SELECT dataset, status FROM source_datasets WHERE integration_id = 'woocommerce:pawsome' AND dataset IN ('variants', 'channel_listings') ORDER BY dataset").all();
+    expect(datasets).toEqual([{ dataset: 'channel_listings', status: 'available' }, { dataset: 'variants', status: 'available' }]);
   });
 });

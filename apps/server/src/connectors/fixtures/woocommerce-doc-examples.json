@@ -1,5 +1,5 @@
 {
-  "_source": "WooCommerce REST API v3 docs, Orders > Order properties and the 'Retrieve an order' example, https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties (source/includes/wp-api-v3/_orders.md, read 2026-10-28). #727 is the example as given (dates moved into the test window); #728 adds a coupon, two fees and prices that include tax; #729 a partial refund. Customer ids and the billing/shipping country codes as the Order, Billing and Shipping properties document them; #728's line reports Woo's cost of goods sold. Refunds as Order refunds > 'List all refunds' gives them (source/includes/wp-api-v3/_order-refunds.md, read 2026-10-28): #729's is by amount only, like refund 726 (no line items); #731's carries a line like refund 724 (negative quantity and totals) and its shipping.",
+  "_source": "WooCommerce REST API v3 docs, Orders > Order properties and the 'Retrieve an order' example, https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties (source/includes/wp-api-v3/_orders.md, read 2026-10-28). #727 is the example as given (dates moved into the test window); #728 adds a coupon, two fees and prices that include tax; #729 a partial refund. Customer ids and the billing/shipping country codes as the Order, Billing and Shipping properties document them; #728's line reports Woo's cost of goods sold. Refunds as Order refunds > 'List all refunds' gives them (source/includes/wp-api-v3/_order-refunds.md, read 2026-10-28): #729's is by amount only, like refund 726 (no line items); #731's carries a line like refund 724 (negative quantity and totals) and its shipping. Products and variations as Products > Product properties and Product variations > Product variation properties give them (source/includes/wp-api-v3/_products.md and _product-variations.md, read 2026-10-28): a simple product, a variable one with a stock-counting, a parent-counting and a draft variation, and a scheduled one.",
   "orders": [
     {
       "id": 727,
@@ -311,6 +311,112 @@
           }
         ],
         "fee_lines": []
+      }
+    ]
+  },
+  "products": [
+    {
+      "id": 93,
+      "name": "Woo Single #1",
+      "status": "publish",
+      "type": "simple",
+      "sku": "WS-1",
+      "price": "3.00",
+      "regular_price": "4.00",
+      "images": [],
+      "stock_quantity": 12,
+      "manage_stock": true,
+      "backorders": "no"
+    },
+    {
+      "id": 22,
+      "name": "Ship Your Idea",
+      "status": "publish",
+      "type": "variable",
+      "sku": "",
+      "price": "12.00",
+      "regular_price": "",
+      "images": [],
+      "stock_quantity": 5,
+      "manage_stock": true,
+      "backorders": "notify"
+    },
+    {
+      "id": 40,
+      "name": "Holiday Mug",
+      "status": "future",
+      "type": "simple",
+      "sku": "",
+      "price": "15.00",
+      "regular_price": "15.00",
+      "images": [],
+      "stock_quantity": null,
+      "manage_stock": false,
+      "backorders": "no"
+    }
+  ],
+  "variations": {
+    "22": [
+      {
+        "id": 23,
+        "sku": "Bar3",
+        "status": "publish",
+        "price": "12.00",
+        "regular_price": "12.00",
+        "attributes": [
+          {
+            "id": 6,
+            "name": "Color",
+            "option": "Black"
+          },
+          {
+            "id": 0,
+            "name": "Size",
+            "option": "M Test"
+          }
+        ],
+        "stock_quantity": 4,
+        "manage_stock": true,
+        "backorders": "no"
+      },
+      {
+        "id": 24,
+        "sku": "",
+        "status": "publish",
+        "price": "10.00",
+        "regular_price": "14.00",
+        "attributes": [
+          {
+            "id": 6,
+            "name": "Color",
+            "option": "Green"
+          },
+          {
+            "id": 0,
+            "name": "Size",
+            "option": "S Test"
+          }
+        ],
+        "stock_quantity": null,
+        "manage_stock": "parent",
+        "backorders": "no"
+      },
+      {
+        "id": 25,
+        "sku": "Bar5",
+        "status": "private",
+        "price": "",
+        "regular_price": "",
+        "attributes": [
+          {
+            "id": 6,
+            "name": "Color",
+            "option": "Red"
+          }
+        ],
+        "stock_quantity": null,
+        "manage_stock": false,
+        "backorders": "no"
       }
     ]
   }

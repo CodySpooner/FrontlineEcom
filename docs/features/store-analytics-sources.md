@@ -37,8 +37,8 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Refunds | supported | yes | /orders/{id}/refunds (id, date_created_gmt, amount, line_items, shipping_lines, fee_lines) | REST API key (Read) | with the orders read |  |  |
 | Fees | unsupported | no | — |  |  |  | The app doesn't read payment or platform fees here (owner question Q21); fees are the store's labelled estimate. |
 | Catalog | supported | yes | REST /wc/v3/products |  | current state |  |  |
-| Variants | supported | no | /products/{id}/variations |  |  |  |  |
-| Channel listings | supported | no | products.status (the site listing) |  |  |  |  |
+| Variants | supported | yes | /products/{id}/variations (sku, price, attributes, stock); a simple product is its own variant | REST API key (Read) | current state |  |  |
+| Channel listings | supported | yes | products.status (the site listing; no publish date) | REST API key (Read) | current state |  |  |
 | Inventory | supported | yes | products.stock_quantity, manage_stock |  | current state |  |  |
 | Collections | supported | no | products.categories |  |  |  |  |
 | Sessions and funnel | unsupported | no | — |  |  |  | WooCommerce has no sessions API; connect GA4 for site traffic. |
