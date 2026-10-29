@@ -149,6 +149,8 @@ export interface PrStoreProfile {
   includeCategories: string[];
   keywords: string[];
   updatedAt: string | null;
+  /** The profile row's version (0 before the first save): PUT /api/pr/profile sends it back (409 stale, 428 without). */
+  version?: number;
 }
 
 /** A research report's conclusion (spec §9). */

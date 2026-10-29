@@ -45,7 +45,7 @@ export function ResearchControls({ ws }: { ws: string }) {
   );
 }
 
-function ControlsForm({ ws, c, onDone }: { ws: string; c: KbControls; onDone: () => void }) {
+function ControlsForm({ ws, c, onDone }: { ws: string; c: KbControls & { version?: number }; onDone: () => void }) {
   const store = ws !== 'general';
   const save = useSaveKbControls();
   const top = (useKbCategories(ws).data ?? []).filter((k) => k.parentId === null && k.storeId === (store ? ws : null));
@@ -67,7 +67,7 @@ function ControlsForm({ ws, c, onDone }: { ws: string; c: KbControls; onDone: ()
     e.preventDefault();
     const sites = { trustedDomains: lines(trusted), blockedDomains: lines(blocked), freshDays: fresh, retentionDays: keep };
     const own = { autonomous: on, approval, triggers: (Object.keys(KB_TRIGGERS) as KbTrigger[]).filter((t) => triggers.has(t)), roles, taskBudgetUsd: task, dailyBudgetUsd: daily, depth };
-    save.mutate({ ws, review, ...sites, ...(store ? own : {}) }, { onSuccess: onDone });
+    save.mutate({ ws, version: c.version ?? 0, review, ...sites, ...(store ? own : {}) }, { onSuccess: onDone });
   };
   return (
     <form aria-label="Research controls" onSubmit={submit} className="grid gap-2.5 rounded-lg border border-line-2 bg-panel p-3 text-xs">

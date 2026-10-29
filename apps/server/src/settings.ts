@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { Hono, type Context } from 'hono';
 import type { AppNotification, NewNotification, NotificationKind, Settings, StoreCaps } from '@frontline/shared';
 import { effective, readDoc } from './config/effective';
-import { ConfigError, writeConfig } from './config/write';
+import { ConfigError, NO_VERSION, versionOf, writeConfig } from './config/write';
 import { dataDir, type Db } from './db';
 import { publish } from './live';
 import { getStore, listStores } from './stores';
@@ -119,10 +119,11 @@ export function updateCaps(db: Db, storeId: string, body: unknown, version?: num
 async function versioned(c: Context, write: (body: Obj, version: number) => string | object) {
   const body: unknown = await c.req.json().catch(() => undefined);
   if (!isObj(body)) return c.json({ error: 'body must be a JSON object' }, 400);
-  const { version, ...rest } = body;
-  if (!Number.isInteger(version) || (version as number) < 0) return c.json({ error: 'Send the version you read (version).' }, 428);
+  const { version: _, ...rest } = body;
+  const version = versionOf(body);
+  if (version === undefined) return c.json(NO_VERSION, 428);
   try {
-    const out = write(rest, version as number);
+    const out = write(rest, version);
     return typeof out === 'string' ? c.json({ error: out }, 400) : c.json(out);
   } catch (e) {
     if (e instanceof ConfigError) return c.json(e.body, e.status);

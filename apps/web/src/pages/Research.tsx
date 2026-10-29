@@ -173,7 +173,7 @@ export function Research() {
             aria-label="Ship to"
             value={shipTo ?? ''}
             disabled={!!store && (!profile.data || saveShipTo.isPending)}
-            onChange={(e) => (store ? saveShipTo.mutate({ shipTo: e.target.value }) : setAllShipTo(e.target.value))}
+            onChange={(e) => (store ? saveShipTo.mutate({ shipTo: e.target.value, version: profile.data?.version ?? 0 }) : setAllShipTo(e.target.value))}
             className={SELECT}
           >
             {!shipTo && <option value="">Not set: pick it in the profile</option>}

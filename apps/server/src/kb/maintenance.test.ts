@@ -15,7 +15,13 @@ beforeEach(() => {
 });
 const DAY = 86_400_000;
 const ago = (n: number) => new Date(Date.now() - n * DAY).toISOString();
+/** PUT /api/kb/controls sends the version it read (settings ST-08b). */
+const withVersion = async (method: string, path: string, body: unknown) =>
+  method === 'PUT' && path.startsWith('/api/kb/controls') && body && typeof body === 'object' && !Array.isArray(body) && !('version' in body)
+    ? { ...body, version: ((await (await app.request(path)).json()) as { version?: number }).version ?? 0 }
+    : body;
 const ok = async <T,>(method: string, path: string, body?: unknown, status = 200): Promise<T> => {
+  body = await withVersion(method, path, body);
   const res = await app.request(path, { method, ...(body === undefined ? {} : { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }) });
   const json = res.status === 204 ? undefined : await res.json();
   expect(res.status, JSON.stringify(json)).toBe(status);
@@ -40,11 +46,11 @@ describe('freshness by category', () => {
     await ok('PUT', '/api/kb/controls?ws=pawsome', { freshDays: { [categoryId('pawsome', 'Advertising')]: 14 } });
     expect(await days('pawsome')).toMatchObject({ Advertising: 14, 'Video hooks': 14, Pricing: 90 });
     expect(await days('general')).toMatchObject({ Advertising: 45 }); // General's own
-    expect(await ok('PUT', '/api/kb/controls?ws=pawsome', { freshDays: { [categoryId('pawsome', 'Video hooks')]: 30 } }, 400)).toEqual({
+    expect(await ok('PUT', '/api/kb/controls?ws=pawsome', { freshDays: { [categoryId('pawsome', 'Video hooks')]: 30 } }, 400)).toMatchObject({
       error: "freshDays must map this workspace's top-level categories to 7-730 days",
     });
     expect(await ok('PUT', '/api/kb/controls?ws=pawsome', { freshDays: { [categoryId('pawsome', 'Pricing')]: 3 } }, 400)).toMatchObject({ error: expect.stringMatching(/^freshDays/) });
-    expect(await ok('PUT', '/api/kb/controls?ws=pawsome', { retentionDays: 5 }, 400)).toEqual({ error: 'retentionDays must be 30-3650 days, or null to keep everything' });
+    expect(await ok('PUT', '/api/kb/controls?ws=pawsome', { retentionDays: 5 }, 400)).toMatchObject({ error: 'retentionDays must be 30-3650 days, or null to keep everything' });
   });
 
   test('needs refresh and Knowledge gaps follow it, and each card says when it needs checking again', async () => {

@@ -76,7 +76,7 @@ describe('ResearchControls', () => {
     await waitFor(() =>
       expect(sent).toEqual([
         ['PUT', '/api/kb/controls?ws=pawsome', {
-          autonomous: true, approval: false, review: false, triggers: ['conflict', 'anomaly', 'gap'], roles: { ad_strategist: ['p-ads'] }, taskBudgetUsd: 0.5, dailyBudgetUsd: 2, depth: 'quick',
+          version: 0, autonomous: true, approval: false, review: false, triggers: ['conflict', 'anomaly', 'gap'], roles: { ad_strategist: ['p-ads'] }, taskBudgetUsd: 0.5, dailyBudgetUsd: 2, depth: 'quick',
           trustedDomains: ['ads.tiktok.com', 'business.facebook.com'], blockedDomains: ['reddit.com'], freshDays: { 'p-ads': 30 }, retentionDays: 90,
         }],
       ]),
@@ -140,7 +140,7 @@ describe('ResearchControls', () => {
     expect((await within(form).findByRole('group', { name: 'Needs refresh after' })).querySelectorAll('select')).toHaveLength(1); // General's own categories
     fireEvent.click(within(form).getByLabelText('Findings wait for my review'));
     fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(sent).toEqual([['PUT', '/api/kb/controls?ws=general', { review: false, trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null }]]));
+    await waitFor(() => expect(sent).toEqual([['PUT', '/api/kb/controls?ws=general', { version: 0, review: false, trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null }]]));
   });
 
   it('All workspaces has none of its own', async () => {

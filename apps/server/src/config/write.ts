@@ -15,6 +15,13 @@ export class ConfigError extends Error {
   }
 }
 
+/** The `version` a write body sent back (decision 6), or undefined: the route answers 428 with NO_VERSION. */
+export const versionOf = (body: unknown) => {
+  const v = (body as { version?: unknown } | null)?.version;
+  return Number.isInteger(v) && (v as number) >= 0 ? (v as number) : undefined;
+};
+export const NO_VERSION = { error: 'Send the version you read (version).' };
+
 export type DocWrite = Omit<ConfigWrite['documents'][number], 'version'> & { version?: number };
 export interface WriteOptions {
   actor?: string;

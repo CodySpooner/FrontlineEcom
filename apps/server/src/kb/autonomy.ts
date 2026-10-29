@@ -9,6 +9,7 @@ import {
   type KbTrigger, type KbWorkspace,
 } from '@frontline/shared';
 import { approvalsHook } from '../approvals';
+import { ConfigError, logChanges } from '../config/write';
 import type { Db } from '../db';
 import { advanceKbResearch } from '../routes/agents';
 import { getStore } from '../stores';
@@ -43,29 +44,34 @@ export function reservedUsd(db: Db, storeId: string, now = new Date()): number {
   return Math.round((tasks + waiting) * 100) / 100;
 }
 
-export const controlsState = (db: Db, ws: KbWorkspace): KbControlsState => ({ ...kbControls(db, ws), reservedUsd: ws === null ? 0 : reservedUsd(db, ws) });
+const row = (db: Db, ws: KbWorkspace) => db.prepare(`SELECT version FROM kb_controls WHERE coalesce(store_id, '') = ?`).get(ws ?? '');
+/** With the row's version (0 before the first save): a PUT sends it back (settings decision 6). */
+export const controlsState = (db: Db, ws: KbWorkspace): KbControlsState => ({ ...kbControls(db, ws), reservedUsd: ws === null ? 0 : reservedUsd(db, ws), version: Number(row(db, ws)?.version ?? 0) });
 
-/** A PUT body over the workspace's controls now: the clean controls, or what's wrong. */
-export function parseControls(db: Db, ws: KbWorkspace, body: unknown): KbControls | string {
-  if (!isObj(body)) return 'body must be an object';
+/** A PUT body over the workspace's controls now: the clean controls, or what's wrong (with the body key, when one is). */
+export function parseControls(db: Db, ws: KbWorkspace, body: unknown): KbControls | { error: string; field?: keyof KbControls } {
+  const bad = (error: string, field?: keyof KbControls) => (field ? { error, field } : { error });
+  if (!isObj(body)) return bad('body must be an object');
   const b = { ...kbControls(db, ws), ...Object.fromEntries(Object.entries(body).filter(([k]) => Object.hasOwn(KB_CONTROLS, k))) } as Obj;
-  if (![b.autonomous, b.approval, b.review].every((v) => typeof v === 'boolean')) return 'autonomous, approval and review must be true or false';
+  const flag = (['autonomous', 'approval', 'review'] as const).find((k) => typeof b[k] !== 'boolean');
+  if (flag) return bad('autonomous, approval and review must be true or false', flag);
   if (!isObj(b.roles) || !Object.entries(b.roles).every(([r, ids]) => Object.hasOwn(AGENT_ROLES, r) && Array.isArray(ids) && ids.every((id) => typeof id === 'string')))
-    return 'roles must map agent roles to category ids';
+    return bad('roles must map agent roles to category ids', 'roles');
   const top = db.prepare(`SELECT 1 FROM kb_categories WHERE id = ? AND coalesce(store_id, '') = ? AND parent_id IS NULL`);
-  if (!Object.values(b.roles as Record<string, string[]>).every((ids) => ids.every((id) => top.get(id, ws ?? '')))) return "roles' categories must be this workspace's top-level categories";
-  if (!Array.isArray(b.triggers) || !b.triggers.every((t) => Object.hasOwn(KB_TRIGGERS, t))) return `triggers must be some of ${Object.keys(KB_TRIGGERS).join(', ')}`;
-  if (typeof b.taskBudgetUsd !== 'number' || !(b.taskBudgetUsd >= 0.25 && b.taskBudgetUsd <= 5)) return 'taskBudgetUsd must be between $0.25 and $5';
-  if (typeof b.dailyBudgetUsd !== 'number' || !(b.dailyBudgetUsd >= b.taskBudgetUsd && b.dailyBudgetUsd <= 50)) return 'dailyBudgetUsd must be between the task budget and $50';
-  if (!Object.hasOwn(KB_RESEARCH_DEPTHS, String(b.depth))) return 'depth must be quick, standard or deep';
+  if (!Object.values(b.roles as Record<string, string[]>).every((ids) => ids.every((id) => top.get(id, ws ?? '')))) return bad("roles' categories must be this workspace's top-level categories", 'roles');
+  if (!Array.isArray(b.triggers) || !b.triggers.every((t) => Object.hasOwn(KB_TRIGGERS, t))) return bad(`triggers must be some of ${Object.keys(KB_TRIGGERS).join(', ')}`, 'triggers');
+  if (typeof b.taskBudgetUsd !== 'number' || !(b.taskBudgetUsd >= 0.25 && b.taskBudgetUsd <= 5)) return bad('taskBudgetUsd must be between $0.25 and $5', 'taskBudgetUsd');
+  if (typeof b.dailyBudgetUsd !== 'number' || !(b.dailyBudgetUsd >= b.taskBudgetUsd && b.dailyBudgetUsd <= 50)) return bad('dailyBudgetUsd must be between the task budget and $50', 'dailyBudgetUsd');
+  if (!Object.hasOwn(KB_RESEARCH_DEPTHS, String(b.depth))) return bad('depth must be quick, standard or deep', 'depth');
   const domains = (v: unknown) => (Array.isArray(v) && v.length <= 50 && v.every((d) => typeof d === 'string') ? [...new Set(v.map((d: string) => d.trim().toLowerCase()))] : undefined);
   const [trusted, blocked] = [domains(b.trustedDomains), domains(b.blockedDomains)];
-  if (!trusted || !blocked || ![...trusted, ...blocked].every((d) => DOMAIN.test(d))) return 'trustedDomains and blockedDomains must be domain names, like example.com';
+  if (!trusted || !blocked || ![...trusted, ...blocked].every((d) => DOMAIN.test(d)))
+    return bad('trustedDomains and blockedDomains must be domain names, like example.com', !trusted || !trusted.every((d) => DOMAIN.test(d)) ? 'trustedDomains' : 'blockedDomains');
   if (!isObj(b.freshDays) || !Object.entries(b.freshDays).every(([id, d]) => Number.isInteger(d) && (d as number) >= 7 && (d as number) <= 730 && top.get(id, ws ?? '')))
-    return "freshDays must map this workspace's top-level categories to 7-730 days";
+    return bad("freshDays must map this workspace's top-level categories to 7-730 days", 'freshDays');
   if (b.retentionDays !== null && !(Number.isInteger(b.retentionDays) && (b.retentionDays as number) >= 30 && (b.retentionDays as number) <= 3650))
-    return 'retentionDays must be 30-3650 days, or null to keep everything';
-  if (ws === null && b.autonomous) return 'Self-directed research runs on a store: its agents and AI budget. Turn it on for a store.';
+    return bad('retentionDays must be 30-3650 days, or null to keep everything', 'retentionDays');
+  if (ws === null && b.autonomous) return bad('Self-directed research runs on a store: its agents and AI budget. Turn it on for a store.', 'autonomous');
   return {
     autonomous: b.autonomous as boolean, roles: Object.fromEntries(Object.entries(b.roles).map(([r, ids]) => [r, [...new Set(ids as string[])]])),
     triggers: (Object.keys(KB_TRIGGERS) as KbTrigger[]).filter((t) => (b.triggers as string[]).includes(t)), taskBudgetUsd: b.taskBudgetUsd, dailyBudgetUsd: b.dailyBudgetUsd,
@@ -74,9 +80,22 @@ export function parseControls(db: Db, ws: KbWorkspace, body: unknown): KbControl
   };
 }
 
-export function saveControls(db: Db, ws: KbWorkspace, c: KbControls) {
-  db.prepare(`DELETE FROM kb_controls WHERE coalesce(store_id, '') = ?`).run(ws ?? '');
-  db.prepare('INSERT INTO kb_controls (store_id, settings_json, updated_at) VALUES (?, ?, ?)').run(ws, JSON.stringify(c), new Date().toISOString());
+/**
+ * Saves a workspace's controls. `version` (as read, 0 before the first save) is checked when given: a stale one throws
+ * ConfigError (409) and nothing is written (settings decision 6). Each control that moved writes a change row.
+ */
+export function saveControls(db: Db, ws: KbWorkspace, c: KbControls, version?: number) {
+  const before = kbControls(db, ws);
+  const cur = Number(row(db, ws)?.version ?? 0);
+  if (version !== undefined && version !== cur)
+    throw new ConfigError(409, { error: 'These controls were saved somewhere else while you were editing.', code: version === 0 ? 'exists' : 'stale', current: controlsState(db, ws) });
+  const at = new Date().toISOString();
+  const json = JSON.stringify(c);
+  if (cur) db.prepare(`UPDATE kb_controls SET settings_json = ?, updated_at = ?, version = version + 1 WHERE coalesce(store_id, '') = ? AND version = ?`).run(json, at, ws ?? '', cur);
+  else db.prepare('INSERT INTO kb_controls (store_id, settings_json, updated_at) VALUES (?, ?, ?)').run(ws, json, at);
+  const moved = (Object.keys(c) as (keyof KbControls)[]).filter((k) => JSON.stringify(before[k]) !== JSON.stringify(c[k])).map((k) => [`kb.${k}`, before[k], c[k]] as [string, unknown, unknown]);
+  const store = ws === null ? undefined : getStore(db, ws);
+  if (moved.length) logChanges(db, { at, actor: 'owner', store: store && { id: store.id, name: store.name } }, moved.map(([k, b, a]) => [k, b, a, store ? 'store' : 'workspace']));
 }
 
 interface Ask {

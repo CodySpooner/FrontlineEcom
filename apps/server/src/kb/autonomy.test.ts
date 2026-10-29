@@ -26,7 +26,13 @@ afterEach(() => vi.useRealTimers());
 const DAY = 86_400_000;
 const deps = () => ({ engineAvailable: () => claude, advance });
 const scan = () => autonomousResearch(db, deps());
+/** PUT /api/kb/controls sends the version it read (settings ST-08b). */
+const withVersion = async (method: string, path: string, body: unknown) =>
+  method === 'PUT' && path.startsWith('/api/kb/controls') && body && typeof body === 'object' && !Array.isArray(body) && !('version' in body)
+    ? { ...body, version: ((await (await app.request(path)).json()) as { version?: number }).version ?? 0 }
+    : body;
 const req = async (method: string, path: string, body?: unknown) => {
+  body = await withVersion(method, path, body);
   const res = await app.request(path, { method, ...(body !== undefined ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
   return { status: res.status, body: res.status === 204 ? undefined : await res.json() };
 };
@@ -53,7 +59,7 @@ describe('the controls', () => {
   test('a workspace starts with self-directed research off, findings to review, and nothing reserved', async () => {
     expect((await req('GET', '/api/kb/controls?ws=peak')).body).toEqual({
       autonomous: false, roles: {}, triggers: ['conflict', 'anomaly', 'gap', 'stale'], taskBudgetUsd: 1, dailyBudgetUsd: 3, depth: 'standard', approval: true, review: true,
-      trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null, reservedUsd: 0,
+      trustedDomains: [], blockedDomains: [], freshDays: {}, retentionDays: null, reservedUsd: 0, version: 0,
     });
     expect((await req('GET', '/api/kb/controls?ws=all')).status).toBe(400);
   });
@@ -79,7 +85,7 @@ describe('the controls', () => {
     ['a store, for General', { autonomous: true }, 'Self-directed research runs on a store: its agents and AI budget. Turn it on for a store.', 'general'],
   ];
   test.each(bad)('needs %s', async (_, body, error, ws = 'peak') => {
-    expect(await req('PUT', `/api/kb/controls?ws=${ws}`, body)).toEqual({ status: 400, body: { error } });
+    expect(await req('PUT', `/api/kb/controls?ws=${ws}`, body)).toMatchObject({ status: 400, body: { error } });
   });
 
   test('General keeps its review and domains', async () => {

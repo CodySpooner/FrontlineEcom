@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { PR_MATCH_ACTIONS, type PrMatchAction } from '@frontline/shared';
+import { ConfigError, NO_VERSION, versionOf } from '../config/write';
 import type { Db } from '../db';
 import { publish, subscribe } from '../live';
 import { log } from '../log';
@@ -111,8 +112,16 @@ export function prRoutes(db: Db, key: () => Buffer) {
       if (store instanceof Response) return store;
       const body = (await c.req.json().catch(() => undefined)) as Record<string, unknown> | undefined;
       if (!body || typeof body !== 'object' || Array.isArray(body)) return c.json({ error: 'body must be a JSON object of profile fields' }, 400);
+      const version = versionOf(body); // settings decision 6: the version read comes back (checked before saveProfile writes)
+      if (version === undefined) return c.json(NO_VERSION, 428);
       const before = getProfile(db, store).shipTo;
-      const p = saveProfile(db, store, body);
+      let p;
+      try {
+        p = saveProfile(db, store, body, new Date(), version);
+      } catch (e) {
+        if (e instanceof ConfigError) return c.json(e.body, e.status);
+        throw e;
+      }
       if ('error' in p) return c.json(p, 400);
       evaluateStore(db, store, { rerank: p.shipTo !== before });
       return c.json(p);

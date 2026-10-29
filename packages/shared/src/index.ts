@@ -2385,6 +2385,8 @@ export interface KbControls {
 /** GET /api/kb/controls?ws= (general or a store): the controls, and what self-directed research reserved in the last 24 hours. PUT takes any of KbControls' fields. */
 export interface KbControlsState extends KbControls {
   reservedUsd: number;
+  /** The controls row's version (0 before the first save): PUT /api/kb/controls sends it back (409 stale, 428 without). */
+  version?: number;
 }
 
 export interface KbPerformance {

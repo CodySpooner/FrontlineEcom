@@ -20,7 +20,13 @@ beforeEach(() => {
   ({ productId: p } = upsertListing(db, { source: 'cj', sourceRef: '1', title: 'Dog travel water bowl', category: 'Pet Supplies > Travel', origin: 'ingest' }));
   refreshProduct(db, p, new Date());
 });
+/** PUT /api/pr/profile sends the version it read (settings ST-08b). */
+const withVersion = async (method: string, path: string, body: unknown) =>
+  method === 'PUT' && path.startsWith('/api/pr/profile') && body && typeof body === 'object' && !Array.isArray(body) && !('version' in body)
+    ? { ...body, version: ((await (await app.request(path)).json()) as { version?: number }).version ?? 0 }
+    : body;
 const send = async <T>(method: string, path: string, body?: unknown) => {
+  body = await withVersion(method, path, body);
   const r = await app.request(path, { method, headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   return { status: r.status, body: (await r.json()) as T };
 };

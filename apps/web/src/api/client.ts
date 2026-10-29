@@ -657,7 +657,8 @@ export const useKbControls = (ws: string | undefined) => useQuery({ queryKey: ['
 export function useSaveKbControls() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ ws, ...c }: Partial<KbControls> & { ws: string }) => api<KbControlsState>(`/api/kb/controls?${wsq(ws)}`, json('PUT', c)),
+    /** `version`: the one read (0 before the first save), settings decision 6. */
+    mutationFn: ({ ws, ...c }: Partial<KbControls> & { ws: string; version: number }) => api<KbControlsState>(`/api/kb/controls?${wsq(ws)}`, json('PUT', c)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['kb'] }),
   });
 }

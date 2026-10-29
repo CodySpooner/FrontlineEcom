@@ -1,4 +1,5 @@
 import type { Niche, PrStoreProfile, Store } from '@frontline/shared';
+import { ConfigError, logChanges } from '../config/write';
 import type { Db } from '../db';
 
 /** A store's default ship-to (decision 5): its currency's main country, else none until the owner picks one. */
@@ -87,57 +88,71 @@ export function getProfile(db: Db, store: Store): PrStoreProfile {
     includeCategories: json(r?.include_categories_json),
     keywords: json(r?.keywords_json),
     updatedAt: r?.updated_at == null ? null : String(r.updated_at),
+    version: r ? Number(r.version) : 0,
   };
 }
 
 const LISTS = ['warehouses', 'avoidCategories', 'avoidTerms', 'includeCategories', 'keywords'] as const;
 
-/** Saves the fields present in `body` (the rest stay). The price band is in the store's currency. */
-export function saveProfile(db: Db, store: Store, body: Record<string, unknown>, now = new Date()): PrStoreProfile | { error: string } {
+type Bad = { error: string; field: keyof PrStoreProfile };
+
+/**
+ * Saves the fields present in `body` (the rest stay). The price band is in the store's currency. `version` (as read, 0
+ * before the first save) is checked when given: a stale one throws ConfigError (409) and nothing is written (settings
+ * decision 6). Each field that moved writes a change row.
+ */
+export function saveProfile(db: Db, store: Store, body: Record<string, unknown>, now = new Date(), version?: number): PrStoreProfile | Bad {
   const p = getProfile(db, store);
   const next = { ...p, shipTo: p.shipToDefault ? null : p.shipTo };
   const has = (k: string) => Object.hasOwn(body, k);
   if (has('audience')) {
     const v = body.audience;
-    if (v !== null && (typeof v !== 'string' || v.length > 500)) return { error: 'audience must be text up to 500 characters, or null' };
+    if (v !== null && (typeof v !== 'string' || v.length > 500)) return { error: 'audience must be text up to 500 characters, or null', field: 'audience' };
     next.audience = typeof v === 'string' && v.trim() ? v.trim() : null;
   }
   for (const k of ['priceMin', 'priceMax'] as const) {
     if (!has(k)) continue;
     const v = body[k];
-    if (v !== null && !(Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 1e9)) return { error: `${k} must be a whole amount in minor units (cents), or null` };
+    if (v !== null && !(Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 1e9)) return { error: `${k} must be a whole amount in minor units (cents), or null`, field: k };
     next[k] = v as number | null;
   }
-  if (next.priceMin !== null && next.priceMax !== null && next.priceMin > next.priceMax) return { error: 'priceMin must be at most priceMax' };
+  if (next.priceMin !== null && next.priceMax !== null && next.priceMin > next.priceMax) return { error: 'priceMin must be at most priceMax', field: has('priceMin') ? 'priceMin' : 'priceMax' };
   if (has('shipTo')) {
     const v = body.shipTo;
-    if (v !== null && (typeof v !== 'string' || !/^[A-Za-z]{2}$/.test(v))) return { error: 'shipTo must be a two-letter country code, or null for the default' };
+    if (v !== null && (typeof v !== 'string' || !/^[A-Za-z]{2}$/.test(v))) return { error: 'shipTo must be a two-letter country code, or null for the default', field: 'shipTo' };
     next.shipTo = typeof v === 'string' ? v.toUpperCase() : null;
   }
   if (has('maxDeliveryDays')) {
     const v = body.maxDeliveryDays;
-    if (v !== null && !(Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 120)) return { error: 'maxDeliveryDays must be 1–120, or null' };
+    if (v !== null && !(Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 120)) return { error: 'maxDeliveryDays must be 1–120, or null', field: 'maxDeliveryDays' };
     next.maxDeliveryDays = v as number | null;
   }
   for (const k of LISTS) {
     if (!has(k)) continue;
     const v = body[k];
-    if (!Array.isArray(v) || v.length > 50 || v.some((x) => typeof x !== 'string' || !x.trim() || x.length > 80)) return { error: `${k} must be a list of up to 50 short texts` };
+    if (!Array.isArray(v) || v.length > 50 || v.some((x) => typeof x !== 'string' || !x.trim() || x.length > 80)) return { error: `${k} must be a list of up to 50 short texts`, field: k };
     const seen = new Set<string>();
     const out = (v as string[]).map((x) => (k === 'warehouses' ? x.trim().toUpperCase() : x.trim())).filter((x) => !seen.has(x.toLowerCase()) && !!seen.add(x.toLowerCase()));
-    if (k === 'warehouses' && out.some((c) => !/^[A-Z]{2}$/.test(c))) return { error: 'warehouses must be two-letter country codes' };
+    if (k === 'warehouses' && out.some((c) => !/^[A-Z]{2}$/.test(c))) return { error: 'warehouses must be two-letter country codes', field: 'warehouses' };
     next[k] = out;
   }
+  if (version !== undefined && version !== p.version)
+    throw new ConfigError(409, { error: 'This profile was saved somewhere else while you were editing.', code: version === 0 ? 'exists' : 'stale', current: p });
   db.prepare(
     `INSERT INTO pr_store_profiles (store_id, audience, price_min_minor, price_max_minor, price_currency, ship_to, warehouses_json, max_delivery_days, avoid_categories_json, avoid_terms_json, include_categories_json, keywords_json, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (store_id) DO UPDATE SET audience = excluded.audience, price_min_minor = excluded.price_min_minor, price_max_minor = excluded.price_max_minor,
        price_currency = excluded.price_currency, ship_to = excluded.ship_to, warehouses_json = excluded.warehouses_json, max_delivery_days = excluded.max_delivery_days,
        avoid_categories_json = excluded.avoid_categories_json, avoid_terms_json = excluded.avoid_terms_json, include_categories_json = excluded.include_categories_json,
-       keywords_json = excluded.keywords_json, updated_at = excluded.updated_at`,
+       keywords_json = excluded.keywords_json, updated_at = excluded.updated_at, version = pr_store_profiles.version + 1`,
   ).run(
     store.id, next.audience, next.priceMin, next.priceMax, store.currency, next.shipTo, JSON.stringify(next.warehouses), next.maxDeliveryDays,
     JSON.stringify(next.avoidCategories), JSON.stringify(next.avoidTerms), JSON.stringify(next.includeCategories), JSON.stringify(next.keywords), now.toISOString(),
   );
+  const was = { ...p, shipTo: p.shipToDefault ? null : p.shipTo }; // the stored ship-to: null is the default
+  const moved = (['audience', 'priceMin', 'priceMax', 'shipTo', 'maxDeliveryDays', ...LISTS] as const)
+    .filter((k) => JSON.stringify(was[k]) !== JSON.stringify(next[k]))
+    .map((k) => [`pr.${k}`, was[k], next[k]] as [string, unknown, unknown]);
+  logChanges(db, { at: now.toISOString(), actor: 'owner', store: { id: store.id, name: store.name } }, moved);
   return getProfile(db, store);
 }

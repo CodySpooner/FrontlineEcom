@@ -172,7 +172,7 @@ describe('Product Research page', () => {
     const [url, init] = f.mock.calls.find(([, i]) => i?.method === 'PUT')!;
     expect(url).toBe('/api/pr/profile?store=paws');
     expect(JSON.parse(String(init!.body))).toEqual({
-      audience: 'US dog owners', priceMin: 1500, priceMax: 3999, shipTo: null, maxDeliveryDays: 12,
+      version: 0, audience: 'US dog owners', priceMin: 1500, priceMax: 3999, shipTo: null, maxDeliveryDays: 12,
       warehouses: ['US'], includeCategories: [], avoidCategories: ['batteries'], avoidTerms: ['airtag', 'Airtag', 'lithium'], keywords: [],
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Edit research profile' }));

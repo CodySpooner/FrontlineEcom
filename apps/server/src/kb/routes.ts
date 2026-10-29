@@ -39,6 +39,7 @@ import {
 } from '@frontline/agents';
 import { AGENT_ROLES, type KbPromotion, KB_CARD_TYPES, KB_RESEARCH_DEPTHS, KB_LINK_TYPES, KB_SOURCE_RELIABILITY, KB_STAGES, type KbCardPatch, type KbEvidenceInput, type KbCardQuery, type KbCardStatus, type KbSourceBrief, type KbResearchDepth, type KbSourceReliability, type KbView, type KbWorkspace } from '@frontline/shared';
 import { getApproval } from '../approvals';
+import { ConfigError, NO_VERSION, versionOf } from '../config/write';
 import { tx, type Db } from '../db';
 import { publish } from '../live';
 import { advanceKbResearch, runManager } from '../routes/agents';
@@ -324,9 +325,17 @@ export function kbRoutes(db: Db) {
     .put('/api/kb/controls', async (c) => {
       const ws = wsOf(db, c.req.query('ws'));
       if (ws === undefined) return c.json({ error: WS_ERROR }, 400);
-      const next = parseControls(db, ws, await c.req.json().catch(() => null));
-      if (typeof next === 'string') return c.json({ error: next }, 400);
-      saveControls(db, ws, next);
+      const body: unknown = await c.req.json().catch(() => null);
+      const next = parseControls(db, ws, body);
+      if ('error' in next) return c.json(next, 400);
+      const version = versionOf(body); // settings decision 6: the version read comes back
+      if (version === undefined) return c.json(NO_VERSION, 428);
+      try {
+        saveControls(db, ws, next, version);
+      } catch (e) {
+        if (e instanceof ConfigError) return c.json(e.body, e.status);
+        throw e;
+      }
       return c.json(controlsState(db, ws));
     })
     .get('/api/kb/research/tasks', (c) => {

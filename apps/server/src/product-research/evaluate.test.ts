@@ -62,8 +62,12 @@ test('money converts between minor units with the stored ECB rates, never fetchi
 // --- the Evaluate and Rank steps over the API
 
 const HEADER = 'Title,SKU,Currency,Product_Ref,Unit_Cost,Shipping_Cost,Destination,Delivery_Days_Max,Stock,MOQ,Ships_From,Category,Checked_At';
-const send = (app: ReturnType<typeof createApp>, method: string, path: string, body?: unknown) =>
-  app.request(path, { method, headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+/** PUT /api/pr/profile sends the version it read (settings ST-08b). */
+const send = async (app: ReturnType<typeof createApp>, method: string, path: string, body?: unknown) => {
+  if (method === 'PUT' && path.startsWith('/api/pr/profile') && body && typeof body === 'object' && !('version' in body))
+    body = { ...body, version: ((await (await app.request(path)).json()) as { version?: number }).version ?? 0 };
+  return app.request(path, { method, headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+};
 const facts = (db: Db, product: string, destination = 'US', currency = 'USD') =>
   ({ ...db.prepare('SELECT fulfillment_status, fulfillment_checked_at, cost_ship_minor FROM pr_product_facts WHERE product_id = ? AND destination = ? AND currency = ?').get(product, destination, currency) });
 const evaluation = (db: Db, store: string, product: string) => {

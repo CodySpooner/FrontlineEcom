@@ -38,6 +38,7 @@ export function ProfileDialog({ open, onClose, store, storeName, profile }: { op
     setBad('');
     save.mutate(
       {
+        version: profile.version ?? 0,
         audience: f.audience!.trim() || null,
         priceMin: min,
         priceMax: max,

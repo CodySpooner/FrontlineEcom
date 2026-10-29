@@ -22,7 +22,8 @@ export const useProfile = (store: string | null) =>
 export function useSaveProfile(store: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<PrStoreProfile>) => api<PrStoreProfile>(`/api/pr/profile?${scope(store)}`, json('PUT', body)),
+    /** `version`: the one read (0 before the first save), settings decision 6. */
+    mutationFn: (body: Partial<PrStoreProfile> & { version: number }) => api<PrStoreProfile>(`/api/pr/profile?${scope(store)}`, json('PUT', body)),
     // A save re-evaluates the store: its fit, scope and (with a new ship-to) costs all change.
     onSuccess: (p) => (qc.setQueryData(['pr', 'profile', store], p), qc.invalidateQueries({ queryKey: ['pr', 'products'] })),
   });

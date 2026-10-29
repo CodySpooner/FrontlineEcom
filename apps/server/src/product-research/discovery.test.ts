@@ -123,7 +123,7 @@ test("scopes: a store sees shared rows and its own, never another store's; All s
   expect(all).toMatchObject({ privateTo: 'uk', source: { label: 'Your link', host: 'shop.example.com', origin: 'owner_link' }, stage: null, fit: null, category: null });
 
   // Store scope keeps the included categories and every unknown category; out-of-scope rows leave its counts too.
-  await app.request('/api/pr/profile?store=uk', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ includeCategories: ['Grooming'] }) });
+  await app.request('/api/pr/profile?store=uk', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ includeCategories: ['Grooming'], version: 0 }) }); // the first save (settings ST-08b)
   const uk = (await get(app, 'store=uk&sort=recent')).body;
   expect(ids(uk).sort()).toEqual(['Cat Window Perch', 'Paw Cleaner Cup']);
   expect(uk.counts.all).toBe(2);
@@ -140,7 +140,7 @@ test('cards: cost + ship, fulfillment conditions, fit, flags and demand, with th
   const header = 'Title,SKU,Currency,Product_Ref,Variant,Unit_Cost,Shipping_Cost,Destination,Delivery_Days_Max,Stock,MOQ,Ships_From,Category,Checked_At';
   const csv = [header, 'Paw Cleaner Cup,PC-M,USD,PC,Medium,3.42,4.10,US,10,1200,1,CN,Pet Supplies > Grooming,2026-10-25', 'Rechargeable Lint Remover,LR-1,USD,LR,,6.00,,US,12,40,1,CN,Pet Supplies > Grooming,2026-10-25', ''].join('\n');
   expect((await app.request('/api/pr/imports/feed', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ supplier: 'Acme', csv }) })).status).toBe(201);
-  await app.request('/api/pr/profile?store=paws', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ priceMax: 2500 }) });
+  await app.request('/api/pr/profile?store=paws', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ priceMax: 2500, version: 0 }) }); // the first save (settings ST-08b)
   const d = (await get(app, 'store=paws')).body;
   expect(ids(d)).toEqual(['Paw Cleaner Cup', 'Rechargeable Lint Remover']); // Strong before Weak
   const [cup, lint] = d.items as [PrCard, PrCard];
