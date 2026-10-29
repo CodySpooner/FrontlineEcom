@@ -1240,7 +1240,7 @@ STOP.
 
 ### Configuration audit
 
-- [ ] ST-01 **Audit, baseline and corrections** (decisions 1, 2, 3).
+- [x] ST-01 **Audit, baseline and corrections** (decisions 1, 2, 3).
   - **First:** check the lane set-up files are present (Lane). Copy any missing one as described there, or put it under
     Blocked.
   - Run `pnpm install`, then `pnpm check`. Record the baseline under Done: files, tests and time.
@@ -2360,6 +2360,7 @@ STOP.
   - Then create `.agent/STOP`.
 
 ## Done
+- 2026-10-28 ST-01 set-up files present; baseline `pnpm check` green at 65531883: 234 test files, 1730 tests, 86 s (typecheck + vitest). `.agent/` tools copied, before shots in `.agent/before/` (dir (a), demo only). Code map: Corrections and Registry plan appended. No decision changed.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -2387,6 +2388,7 @@ STOP.
     tested with fakes only.
 
 ## Notes
+- **ST-01 decision check (65531883):** no decision changed. Code between cc80fbac and HEAD touched only Codex tests and one `codex.ts` line. One precision for decision 2/12: `approvals.ts` links an approval to `/`, except a `question`, which links to its conversation; ST-02/ST-14 keep that. `pnpm e2e` exists on main (codex-hardening CH-17/18), so ST-02 runs it before pushing.
 - **Seen in passing, not this lane's to fix:** the `startScheduler` docstring says catch-up goes 24 h back, but the
   code uses 31 days.
 - **Left machine-local on purpose (decision 8):** connectors' "today" (Shopify, Woo, Etsy, TikTok Shop), the
