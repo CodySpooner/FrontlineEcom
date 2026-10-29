@@ -22,6 +22,7 @@ function fakeEtsy(receipts = DOC.receipts, listings = DOC.listings, asked: strin
       const results = listings.filter((l: { state: string }) => l.state === u.searchParams.get('state'));
       return Response.json({ count: results.length, results: Number(u.searchParams.get('offset')) ? [] : results });
     }
+    if (u.pathname.endsWith('/sections')) return Response.json(DOC.sections);
     if (u.pathname === '/v3/public/oauth/token') return Response.json({ access_token: '123.at_not-a-real-token', refresh_token: '123.rt_not-a-real-token', expires_in: 3600 });
     if (u.pathname.endsWith('/receipts')) return Response.json({ count: receipts.length, results: Number(u.searchParams.get('offset')) ? [] : receipts });
     return Response.json({ count: 0, results: [] });
@@ -105,5 +106,17 @@ describe('Etsy variants and listings (SA-42)', () => {
     await syncEtsy(db, key, 'pawsome', fakeEtsy([], many, next), new Date(NOW.getTime() + 120_000));
     expect(next.filter((p) => p.endsWith('/inventory'))).toHaveLength(2);
     expect(dataset()).toEqual({ status: 'available', error: null });
+  });
+});
+
+describe('Etsy shop sections (SA-47)', () => {
+  it("a listing's shop section is its collection; one with none is in none", async () => {
+    const db = setup();
+    await syncEtsy(db, key, 'pawsome', fakeEtsy(), NOW);
+    expect(db.prepare("SELECT collection_id, product_id, title, source FROM product_collections WHERE store_id = 'pawsome' ORDER BY product_id").all()).toEqual([
+      { collection_id: 'etsy-section-31', product_id: 'etsy-11', title: 'Mugs', source: 'etsy' },
+      { collection_id: 'etsy-section-32', product_id: 'etsy-12', title: 'Table linen', source: 'etsy' },
+    ]);
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'etsy:pawsome' AND dataset = 'collections'").get()).toEqual({ status: 'available' });
   });
 });

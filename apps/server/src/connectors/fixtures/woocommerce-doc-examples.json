@@ -1,5 +1,5 @@
 {
-  "_source": "WooCommerce REST API v3 docs, Orders > Order properties and the 'Retrieve an order' example, https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties (source/includes/wp-api-v3/_orders.md, read 2026-10-28). #727 is the example as given (dates moved into the test window); #728 adds a coupon, two fees and prices that include tax; #729 a partial refund. Customer ids and the billing/shipping country codes as the Order, Billing and Shipping properties document them; #728's line reports Woo's cost of goods sold. Refunds as Order refunds > 'List all refunds' gives them (source/includes/wp-api-v3/_order-refunds.md, read 2026-10-28): #729's is by amount only, like refund 726 (no line items); #731's carries a line like refund 724 (negative quantity and totals) and its shipping. Products and variations as Products > Product properties and Product variations > Product variation properties give them (source/includes/wp-api-v3/_products.md and _product-variations.md, read 2026-10-28): a simple product, a variable one with a stock-counting, a parent-counting and a draft variation, and a scheduled one.",
+  "_source": "WooCommerce REST API v3 docs, Orders > Order properties and the 'Retrieve an order' example, https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties (source/includes/wp-api-v3/_orders.md, read 2026-10-28). #727 is the example as given (dates moved into the test window); #728 adds a coupon, two fees and prices that include tax; #729 a partial refund. Customer ids and the billing/shipping country codes as the Order, Billing and Shipping properties document them; #728's line reports Woo's cost of goods sold. Refunds as Order refunds > 'List all refunds' gives them (source/includes/wp-api-v3/_order-refunds.md, read 2026-10-28): #729's is by amount only, like refund 726 (no line items); #731's carries a line like refund 724 (negative quantity and totals) and its shipping. Products and variations as Products > Product properties and Product variations > Product variation properties give them (source/includes/wp-api-v3/_products.md and _product-variations.md, read 2026-10-28): a simple product, a variable one with a stock-counting, a parent-counting and a draft variation, and a scheduled one. Product categories: Product > categories (id, name, slug).",
   "orders": [
     {
       "id": 727,
@@ -39,7 +39,7 @@
         },
         {
           "id": 316,
-          "name": "Ship Your Idea – Color: Black, Size: M Test",
+          "name": "Ship Your Idea \u2013 Color: Black, Size: M Test",
           "product_id": 22,
           "variation_id": 23,
           "quantity": 1,
@@ -326,7 +326,19 @@
       "images": [],
       "stock_quantity": 12,
       "manage_stock": true,
-      "backorders": "no"
+      "backorders": "no",
+      "categories": [
+        {
+          "id": 9,
+          "name": "Clothing",
+          "slug": "clothing"
+        },
+        {
+          "id": 14,
+          "name": "T-shirts",
+          "slug": "t-shirts"
+        }
+      ]
     },
     {
       "id": 22,
@@ -339,7 +351,14 @@
       "images": [],
       "stock_quantity": 5,
       "manage_stock": true,
-      "backorders": "notify"
+      "backorders": "notify",
+      "categories": [
+        {
+          "id": 9,
+          "name": "Clothing",
+          "slug": "clothing"
+        }
+      ]
     },
     {
       "id": 40,
@@ -352,7 +371,8 @@
       "images": [],
       "stock_quantity": null,
       "manage_stock": false,
-      "backorders": "no"
+      "backorders": "no",
+      "categories": []
     }
   ],
   "variations": {

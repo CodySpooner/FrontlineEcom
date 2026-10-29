@@ -67,6 +67,9 @@ interface ShopifyProduct {
   totalInventory: number | null;
   tracksInventory: boolean;
   featuredMedia: { preview: { image: { url: string } | null } | null } | null;
+  handle?: string;
+  /** Shopify's product taxonomy, "Home & Garden > … > Pillowcases". */
+  category?: { fullName: string } | null;
   /** inventoryPolicy CONTINUE keeps selling at 0 (common when dropshipping). */
   variants: { nodes: { price: string; compareAtPrice: string | null; inventoryPolicy?: string; inventoryItem: { unitCost: Money } | null }[] };
 }
@@ -125,7 +128,7 @@ const SHOP_Q = `{ shop { name currencyCode ianaTimezone } }`;
 
 const PRODUCTS_Q = `query ($after: String, $q: String) {
   products(first: 50, after: $after, query: $q) {
-    nodes { id title status updatedAt totalInventory tracksInventory
+    nodes { id title handle status updatedAt totalInventory tracksInventory category { fullName }
       featuredMedia { preview { image { url(transform: { maxWidth: 480 }) } } }
       variants(first: 1) { nodes { price compareAtPrice inventoryPolicy inventoryItem { unitCost { amount } } } } }
     pageInfo { hasNextPage endCursor } } }`;
@@ -157,6 +160,12 @@ type ShopifyPublications = {
   /** isPublished is true when scheduled too; publishDate is the epoch when not published. */
   resourcePublications?: { nodes: { isPublished: boolean; publishDate: string; publication: { id: string; catalog: { title: string } | null } }[] };
 };
+// SA-47: every collection's products, read with the daily catalog pass (joining a collection doesn't change a product's
+// updatedAt). 2 + 4 × (1 + products 2 + 200 + 1) + 1 = 819; a longer collection pages on: 1 + 2 + 250 + 1 = 254.
+const COLLECTIONS_Q = `query ($after: String) {
+  collections(first: 4, after: $after) { nodes { id title products(first: 200) { nodes { id } pageInfo { hasNextPage endCursor } } } pageInfo { hasNextPage endCursor } } }`;
+const COLLECTION_PRODUCTS_Q = `query ($id: ID!, $after: String) { collection(id: $id) { products(first: 250, after: $after) { nodes { id } pageInfo { hasNextPage endCursor } } } }`;
+type ShopifyCollection = { id: string; title: string; products: { nodes: { id: string }[]; pageInfo: PageInfo } };
 const PRODUCT_IDS_Q = `query ($after: String) { products(first: 250, after: $after) { nodes { id } pageInfo { hasNextPage endCursor } } }`;
 const DELETED_Q = `query ($after: String, $q: String) {
   events(first: 250, after: $after, query: $q) { nodes { ... on BasicEvent { subjectId } } pageInfo { hasNextPage endCursor } } }`;
@@ -165,7 +174,7 @@ const DELETED_Q = `query ($after: String, $q: String) {
 // pageInfo 1 (shopify.contract.test.ts computes every read's cost this way and fails over 1000). A line is 11: product,
 // variant 3, two amounts 2 each, a discount allocation 3. An order is 29 + 12 × lines: amounts 4 × 2, shipping lines
 // 2 + 2 × 3, app, customer and country (SA-32 probes; budgeted even when left out), fulfillment 6, lineItems 3 + 12 ×
-// lines (its own 1 included). 5 lines: 89, so 10 orders = 2 + 10 × 89 + 1 = 893. Products: 2 + 50 × 9 + 1 = 453.
+// lines (its own 1 included). 5 lines: 89, so 10 orders = 2 + 10 × 89 + 1 = 893. Products: 2 + 50 × 10 + 1 = 503.
 // An order with more line items gets the rest from ORDER_ITEMS_Q (1 + 2 + 75 × 12 + 1 = 904).
 const MONEY = '{ shopMoney { amount } }';
 const LINE_ITEM = `id quantity currentQuantity sku product { id } originalTotalSet ${MONEY} discountedUnitPriceAfterAllDiscountsSet ${MONEY}
@@ -415,6 +424,17 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const today = localDate(now);
     const catalog = !cursor || !catalogPassDue(db, id, today) ? undefined
       : await all((after) => q<{ products: { nodes: { id: string }[]; pageInfo: PageInfo } }>(PRODUCT_IDS_Q, { after }).then((d) => d.products)).catch(() => undefined);
+    const collections = cursor && !catalogPassDue(db, id, today) ? undefined : await noted(db, key, id, 'collections', (async () => {
+      const out = await all((after) => q<{ collections: { nodes: ShopifyCollection[]; pageInfo: PageInfo } }>(COLLECTIONS_Q, { after }).then((d) => d.collections));
+      for (const c of out) {
+        let page = c.products;
+        while (page.pageInfo.hasNextPage) {
+          page = (await q<{ collection: { products: ShopifyCollection['products'] } }>(COLLECTION_PRODUCTS_Q, { id: c.id, after: page.pageInfo.endCursor })).collection.products;
+          c.products.nodes.push(...page.nodes);
+        }
+      }
+      return out;
+    })()).catch(() => undefined);
     // A page's resume point never passes the sync start, so a product edited while orders page in is fetched again.
     const start = cursorAt(now).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
@@ -426,15 +446,15 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       takeTimezone(db, storeId, 'shopify', shop.ianaTimezone);
 
       const prod = db.prepare(
-        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at,
+        `INSERT INTO products (store_id, id, title, image, price, compare_at, cost, inventory, inventory_tracked, status, handle, category) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET title = excluded.title, image = excluded.image, price = excluded.price, compare_at = excluded.compare_at, handle = excluded.handle, category = excluded.category,
            cost = CASE WHEN excluded.cost > 0 THEN excluded.cost ELSE cost END, inventory = excluded.inventory, inventory_tracked = excluded.inventory_tracked, status = excluded.status`,
       );
       for (const p of products) {
         // ponytail: the first variant stands for all (price, cost, inventory policy).
         const v = p.variants.nodes[0];
         const compareAt = v?.compareAtPrice ? num(v.compareAtPrice) : null;
-        prod.run(storeId, tail(p.id), p.title, p.featuredMedia?.preview?.image?.url ?? null, num(v?.price), compareAt, num(v?.inventoryItem?.unitCost), p.totalInventory ?? 0, p.tracksInventory === false || v?.inventoryPolicy === 'CONTINUE' ? 0 : 1, p.status.toLowerCase() as ProductStatus);
+        prod.run(storeId, tail(p.id), p.title, p.featuredMedia?.preview?.image?.url ?? null, num(v?.price), compareAt, num(v?.inventoryItem?.unitCost), p.totalInventory ?? 0, p.tracksInventory === false || v?.inventoryPolicy === 'CONTINUE' ? 0 : 1, p.status.toLowerCase() as ProductStatus, p.handle ?? null, p.category?.fullName ?? null);
         if (num(v?.inventoryItem?.unitCost) > 0) recordUnitCost(db, storeId, tail(p.id), null, num(v?.inventoryItem?.unitCost), 'shopify', today, now);
       }
       const variant = db.prepare(
@@ -459,6 +479,12 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
           const status = !rp.isPublished ? 'unpublished' : at && Date.parse(at) > now.getTime() ? 'scheduled' : 'active';
           listing.run(storeId, publicationChannel(rp.publication.catalog?.title ?? rp.publication.id), tail(p.id), tail(p.id), status, rp.isPublished ? at : null, now.toISOString());
         }
+      }
+      // SA-47: a full read replaces the store's Shopify collections.
+      if (collections) {
+        db.prepare("DELETE FROM product_collections WHERE store_id = ? AND source = 'shopify'").run(storeId);
+        const member = db.prepare("INSERT OR IGNORE INTO product_collections (store_id, collection_id, product_id, title, source, synced_at) VALUES (?, ?, ?, ?, 'shopify', ?)");
+        for (const c of collections) for (const p of c.products.nodes) member.run(storeId, tail(c.id), tail(p.id), c.title, now.toISOString());
       }
       const archive = db.prepare("UPDATE products SET status = 'archived' WHERE store_id = ? AND id = ?");
       for (const e of deleted) if (e.subjectId) archive.run(storeId, tail(e.subjectId));
@@ -907,4 +933,4 @@ export async function publishTheme(db: Db, key: Buffer, storeId: string, themeId
 }
 
 /** Every read query, for the static cost check in shopify.contract.test.ts (orders with SA-32's probed fields on). */
-export const SHOPIFY_READS = { FUNNEL_Q, ...PROBES, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, REFUNDS_Q, VARIANTS_Q, PUBLICATIONS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };
+export const SHOPIFY_READS = { FUNNEL_Q, ...PROBES, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, REFUNDS_Q, VARIANTS_Q, PUBLICATIONS_Q, COLLECTIONS_Q, COLLECTION_PRODUCTS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };

@@ -119,6 +119,9 @@ export function seedLedgerStore(db: Db) {
   const listing = db.prepare('INSERT INTO channel_listings (store_id, channel, id, product_id, status, error, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
   for (const p of ['8001', '8002', '8003']) listing.run(LEDGER_STORE, 'site', p, p, 'active', null, synced);
   listing.run(LEDGER_STORE, 'tiktok_shop', 'tt-9001', 'tt-9001', 'failed', 'Main image is under 600 px', synced);
+  // Collections (SA-47): the serum is in two, so a filter on both must count it once.
+  const member = db.prepare("INSERT INTO product_collections (store_id, collection_id, product_id, title, source, synced_at) VALUES (?, ?, ?, ?, 'shopify', ?)");
+  for (const [c, p, t] of [['c-face', '8001', 'Face care'], ['c-face', '8002', 'Face care'], ['c-lips', '8003', 'Lip care'], ['c-best', '8001', 'Best sellers'], ['c-best', '8003', 'Best sellers']] as const) member.run(LEDGER_STORE, c, p, t, synced);
   // Unit cost history: the serum's went 9 → 11 on Oct 29; the mask and the TikTok product have none.
   const cost = db.prepare('INSERT INTO unit_costs (store_id, product_id, variant_id, cost, currency, source, effective_from, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
   cost.run(LEDGER_STORE, '8001', '8001-1', 9, 'USD', 'shopify', '2026-01-01', '2026-01-01T00:00:00Z');

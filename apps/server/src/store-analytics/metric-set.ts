@@ -14,7 +14,7 @@ const COSTS: SaMetricId[] = ['contribution_before_ads', 'cost_coverage', 'fees']
 const ADS: SaMetricId[] = ['ad_spend', 'platform_roas', 'contribution_after_ads'];
 const TRAFFIC: SaMetricId[] = ['sessions', 'site_conversion'];
 /** The metrics' filters the computation applies today; the registry's others are named as not applied yet. */
-const APPLIED: SaFilterKey[] = ['channel'];
+const APPLIED: SaFilterKey[] = ['channel', 'collection'];
 
 /** Every metric in `ids` over [from, to], computing only the groups they need. */
 function valuesOf(db: Db, storeId: string, ids: SaMetricId[], from: string, to: string, basis: RefundBasis, slice: Slice): Record<SaMetricId, SaValue> {
@@ -31,10 +31,11 @@ function valuesOf(db: Db, storeId: string, ids: SaMetricId[], from: string, to: 
 }
 
 /** Why `id` doesn't apply filter `key`, or undefined when it does (decision 4). */
-function ignoredBecause(id: SaMetricId, key: SaFilterKey, demo: boolean) {
+function ignoredBecause(id: SaMetricId, key: SaFilterKey, demo: boolean, collections: boolean) {
   if (id === 'contribution_after_ads') return "Ad spend isn't allocated: store level only";
   if (!SA_METRICS[id].filters.includes(key)) return `Store level: not split by ${SA_FILTERS[key].toLowerCase()}`;
   if (demo) return `Demo data isn't split by ${SA_FILTERS[key].toLowerCase()}`;
+  if (key === 'collection' && !collections) return "Collections aren't synced for this store yet";
   if (!APPLIED.includes(key)) return 'Not applied to this metric yet';
 }
 
@@ -42,15 +43,20 @@ function ignoredBecause(id: SaMetricId, key: SaFilterKey, demo: boolean) {
 function setup(db: Db, storeId: string, sp: StorePeriod, filters: SaFilters) {
   const demo = !!db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo;
   const active = (Object.keys(filters) as SaFilterKey[]).filter((k) => filters[k]?.length);
-  const slice: Slice = filters.channel?.length && !demo ? { channels: filters.channel } : {};
+  // A product is in when it's in any selected collection (SA-47); collections never synced apply nothing.
+  const collections = !!db.prepare('SELECT 1 FROM product_collections WHERE store_id = ? LIMIT 1').get(storeId);
+  const products = filters.collection?.length && collections && !demo
+    ? db.prepare('SELECT DISTINCT product_id AS p FROM product_collections WHERE store_id = ? AND collection_id IN (SELECT value FROM json_each(?))').all(storeId, JSON.stringify(filters.collection)).map((r) => String(r.p))
+    : undefined;
+  const slice: Slice = { ...(filters.channel?.length && !demo ? { channels: filters.channel } : {}), ...(products ? { products } : {}) };
   const compare = sp.compare && 'from' in sp.compare ? sp.compare : undefined;
   // With today in the period, the comparison's last day stops at the same clock time (decision 6).
   const cut = sp.period.partial && sp.cut && sp.fraction != null ? { at: sp.cut, fraction: sp.fraction } : undefined;
-  return { demo, active, slice, compare, cut };
+  return { demo, collections, active, slice, compare, cut };
 }
 
 export function computeMetricSet(db: Db, scope: Scope, ids: SaMetricId[], sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaMetricSet {
-  const { demo, active, slice, compare, cut } = setup(db, scope.storeId, sp, filters);
+  const { demo, collections, active, slice, compare, cut } = setup(db, scope.storeId, sp, filters);
   const cur = valuesOf(db, scope.storeId, ids, sp.period.from, sp.period.to, basis, slice);
   const prev = compare && valuesOf(db, scope.storeId, ids, compare.from, compare.to, basis, { ...slice, ...(cut && { cut }) });
 
@@ -58,7 +64,7 @@ export function computeMetricSet(db: Db, scope: Scope, ids: SaMetricId[], sp: St
   const metrics = ids.map((id) => {
     let value = cur[id];
     for (const key of active) {
-      const reason = ignoredBecause(id, key, demo);
+      const reason = ignoredBecause(id, key, demo, collections);
       if (!reason) {
         if (!out.applied.includes(key)) out.applied.push(key);
         continue;

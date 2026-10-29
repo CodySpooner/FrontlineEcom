@@ -1,4 +1,4 @@
-import { SA_METRICS, SA_SOURCES, type SaContext, type SaMetricId, type SaSourceKind } from '@frontline/shared';
+import { SA_METRICS, SA_SOURCES, type SaCollection, type SaContext, type SaMetricId, type SaSourceKind } from '@frontline/shared';
 import { Hono } from 'hono';
 import type { Db } from '../db';
 import { computeMetricSet, computeSeries, parseFilters } from './metric-set';
@@ -96,6 +96,13 @@ export function storeAnalyticsRoutes(db: Db) {
       const basis = c.req.query('refunds') ?? 'refund_day';
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       return c.json(reconcile(db, s.storeId, sp.period.from, sp.period.to, basis));
+    })
+    // SA-47: the store's collections for the filter (Shopify collections, WooCommerce categories, Etsy shop sections).
+    .get('/api/analytics/collections', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const rows = db.prepare('SELECT collection_id AS id, max(title) AS title, source, count(*) AS n FROM product_collections WHERE store_id = ? GROUP BY collection_id, source ORDER BY 2 COLLATE NOCASE, 1').all(s.storeId);
+      return c.json(rows.map((r): SaCollection => ({ id: String(r.id), title: r.title == null ? null : String(r.title), source: String(r.source), products: Number(r.n) })));
     })
     .get('/api/analytics/sources', (c) => {
       const s = scoped(c);

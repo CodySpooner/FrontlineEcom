@@ -21,7 +21,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Variants | supported | yes | productVariants (sku, price, compareAtPrice, inventoryQuantity, inventoryPolicy, inventoryItem.tracked) | read_products, read_inventory | current state |  |  |
 | Channel listings | supported | yes | products.resourcePublications (isPublished, publishDate, publication.catalog.title) | read_publications (optional) | current state |  |  |
 | Inventory | supported | yes | variant inventoryQuantity, inventoryItem.tracked | read_inventory | current state; daily snapshots from SA-50 |  |  |
-| Collections | supported | no | collections (paged) | read_products |  |  |  |
+| Collections | supported | yes | GraphQL Admin collections (paged: id, title, products); Product.handle, Product.category.fullName | read_products | current state, read with the daily catalog pass |  |  |
 | Sessions and funnel | supported | yes | ShopifyQL sessions (shopifyqlQuery) | read_reports + Level 2 customer data | 730 days back |  | Only when GA4 is not connected (GA4 owns traffic there). |
 | Purchasing sessions | supported | yes | ShopifyQL sessions.sessions_that_completed_checkout | read_reports + Level 2 customer data | 730 days back |  | Only when GA4 is not connected (GA4 owns traffic there). |
 | Traffic by source, device and country | supported | yes | ShopifyQL sessions GROUP BY day, referrer_source / session_device_type / session_country_code | read_reports + Level 2 customer data | 730 days back |  | Only when GA4 is not connected (GA4 owns traffic there). |
@@ -40,7 +40,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Variants | supported | yes | /products/{id}/variations (sku, price, attributes, stock); a simple product is its own variant | REST API key (Read) | current state |  |  |
 | Channel listings | supported | yes | products.status (the site listing; no publish date) | REST API key (Read) | current state |  |  |
 | Inventory | supported | yes | products.stock_quantity, manage_stock |  | current state |  |  |
-| Collections | supported | no | products.categories |  |  |  |  |
+| Collections | supported | yes | REST /wc/v3/products categories (id, name) |  | current state |  |  |
 | Sessions and funnel | unsupported | no | — |  |  |  | WooCommerce has no sessions API; connect GA4 for site traffic. |
 | Purchasing sessions | unsupported | no | — |  |  |  | WooCommerce has no sessions API. |
 | Traffic by source, device and country | unsupported | no | — |  |  |  | WooCommerce has no sessions API; connect GA4. |
@@ -59,7 +59,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Variants | supported | yes | getListingInventory (products, offerings; a listing without inventory records is its own variant) | listings_r | current state | one call per listing: at most 50 a sync (Q10) |  |
 | Channel listings | supported | yes | listing.state, state_timestamp | listings_r | current state |  |  |
 | Inventory | supported | yes | listing.quantity |  | current state |  |  |
-| Collections | supported | no | getShopSections |  |  |  |  |
+| Collections | supported | yes | getShopSections; listing.shop_section_id | listings_r | current state |  |  |
 | Sessions and funnel | unsupported | no | — |  |  |  | Etsy's Open API has no shop sessions. |
 | Purchasing sessions | unsupported | no | — |  |  |  | Etsy's Open API has no sessions. |
 | Traffic by source, device and country | unsupported | no | — |  |  |  | Etsy's Open API has no traffic sources. |

@@ -60,6 +60,8 @@ function fakeShopify(orders = DOC.orders, { denyPublications = false, deny = [] 
       if (denyPublications) return Response.json({ errors: [{ message: 'Access denied for resourcePublications field. Required access: `read_publications` access scope.', extensions: { code: 'ACCESS_DENIED' } }] });
       return json({ products: DOC.publications });
     }
+    if (query.includes('collections(')) return json({ collections: DOC.collections.page });
+    if (query.includes('collection(id')) return json({ collection: { products: DOC.collections.more[variables.id!] } });
     if (query.includes('productVariants(')) return json({ productVariants: DOC.variants });
     if (query.includes('products(')) return json({ products: DOC.products });
     if (query.includes('events(')) return json({ events: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
@@ -103,7 +105,7 @@ describe('Shopify orders contract (SA-27)', () => {
     const costs = Object.fromEntries(Object.entries(SHOPIFY_READS).map(([name, q]) => [name, queryCost(q)]));
     expect(Object.entries(costs).filter(([, c]) => c > 1000)).toEqual([]);
     // the arithmetic in shopify.ts's comment
-    expect([costs.ORDERS_Q, costs.ORDER_ITEMS_Q, costs.PRODUCTS_Q]).toEqual([893, 904, 453]);
+    expect([costs.ORDERS_Q, costs.ORDER_ITEMS_Q, costs.PRODUCTS_Q, costs.COLLECTIONS_Q, costs.COLLECTION_PRODUCTS_Q]).toEqual([893, 904, 503, 819, 254]);
     expect(queryCost('{ a(first: 3) { nodes { b { c } } pageInfo { hasNextPage } } }')).toBe(2 + 3 * 2 + 1);
   });
 
@@ -392,5 +394,21 @@ describe('Shopify traffic breakdowns (SA-34)', () => {
     expect(split(db, 'source')).toEqual(before);
     expect(db.prepare("SELECT sessions FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-24'").get()?.sessions).toBe(400);
     expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'traffic_breakdowns'").get()?.status).toBe('failed');
+  });
+});
+
+describe('Shopify collections, handles and categories (SA-47)', () => {
+  it("pages every collection and a long one's products; a product keeps its handle and category", async () => {
+    const db = setup();
+    const { fetchFn, asked } = fakeShopify();
+    await syncShopify(db, key, 'glow', fetchFn, NOW);
+    expect(db.prepare("SELECT collection_id, product_id, title, source FROM product_collections WHERE store_id = 'glow' ORDER BY collection_id, product_id").all()).toEqual([
+      { collection_id: '301', product_id: '120', title: 'Bedroom', source: 'shopify' },
+      { collection_id: '301', product_id: '121', title: 'Bedroom', source: 'shopify' }, // its second page
+      { collection_id: '302', product_id: '120', title: 'Gifts under $50', source: 'shopify' },
+    ]);
+    expect(asked.filter((q) => q.includes('collection(id'))).toHaveLength(1);
+    expect(db.prepare("SELECT handle, category FROM products WHERE store_id = 'glow' AND id = '120'").get()).toEqual({ handle: 'silk-pillowcase', category: 'Home & Garden > Linens & Bedding > Bedding > Pillowcases' });
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'collections'").get()).toEqual({ status: 'available' });
   });
 });

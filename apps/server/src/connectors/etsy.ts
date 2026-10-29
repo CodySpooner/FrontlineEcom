@@ -58,6 +58,7 @@ interface Listing {
   /** The last state change, in epoch seconds: an active listing's "since". */
   state_timestamp?: number;
   skus?: string[];
+  shop_section_id?: number | null;
 }
 
 const money = (m: Money | undefined) => (m ? m.amount / m.divisor : 0);
@@ -160,6 +161,11 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
     }
     for (const d of ['catalog', 'channel_listings'] as const) noteRead(db, key, id, d, { status: 'available' }, now);
     reading.delete('catalog');
+    // SA-47: shop sections are the collections (one call); each listing names its own. A failed read leaves them as they are.
+    const sections = await get<{ shop_section_id: number; title: string }>(`/shops/${shopId}/sections`, {}).then(
+      (p) => (noteRead(db, key, id, 'collections', { status: 'available' }, now), new Map(p.results.map((s) => [s.shop_section_id, s.title]))),
+      (e: unknown) => void noteRead(db, key, id, 'collections', { status: 'failed', error: e instanceof Error ? e.message : String(e) }, now),
+    );
     // Offset pages in change order skip a listing edited (or moved to another state) while they're read: one the full read
     // missed is archived only once Etsy answers 404 for it, and kept as Etsy has it otherwise (on any other error, as is).
     const kept: string[] = [];
@@ -219,6 +225,16 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
          ON CONFLICT (store_id, id) DO UPDATE SET product_id = excluded.product_id, title = excluded.title, sku = excluded.sku, price = excluded.price, inventory = excluded.inventory,
            status = excluded.status, synced_at = excluded.synced_at`,
       );
+      if (sections) {
+        const drop = db.prepare("DELETE FROM product_collections WHERE store_id = ? AND product_id = ? AND source = 'etsy'");
+        const member = db.prepare("INSERT INTO product_collections (store_id, collection_id, product_id, title, source, synced_at) VALUES (?, ?, ?, ?, 'etsy', ?)");
+        for (const l of listings) {
+          drop.run(storeId, `etsy-${l.listing_id}`);
+          if (l.shop_section_id) member.run(storeId, `etsy-section-${l.shop_section_id}`, `etsy-${l.listing_id}`, sections.get(l.shop_section_id) ?? null, now.toISOString());
+        }
+        const rename = db.prepare("UPDATE product_collections SET title = ? WHERE store_id = ? AND collection_id = ? AND source = 'etsy'");
+        for (const [n, title] of sections) rename.run(title, storeId, `etsy-section-${n}`);
+      }
       const dropVariants = db.prepare('DELETE FROM product_variants WHERE store_id = ? AND product_id = ?');
       const byId = new Map(listings.map((l) => [l.listing_id, l]));
       const state = db.prepare('SELECT status, price, inventory, title FROM products WHERE store_id = ? AND id = ?');

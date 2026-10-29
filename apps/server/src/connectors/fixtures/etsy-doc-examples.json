@@ -1,5 +1,5 @@
 {
-  "_source": "Etsy Open API v3 spec (https://www.etsy.com/openapi/generated/oas/3.0.0.json, read 2026-10-28): ShopReceipt (grandtotal = total_price minus the coupon discount plus tax and shipping; discount_amt leaves out free-shipping coupons), ShopRefund (amount, created_timestamp) and ShopReceiptTransaction (product_id, sku, quantity, price, paid_timestamp, shop_coupon, buyer_coupon). Timestamps are epoch seconds; Money is amount / divisor. Personal fields the API also sends are left out here. Listings (ShopListing: state, state_timestamp, updated_timestamp, quantity, price) and getListingInventory (ListingInventory > products: product_id, sku, is_deleted, property_values, offerings: quantity, is_enabled, is_deleted, price); 'Listings you did not edit using the Etsy.com inventory tools have no inventory records'.",
+  "_source": "Etsy Open API v3 spec (https://www.etsy.com/openapi/generated/oas/3.0.0.json, read 2026-10-28): ShopReceipt (grandtotal = total_price minus the coupon discount plus tax and shipping; discount_amt leaves out free-shipping coupons), ShopRefund (amount, created_timestamp) and ShopReceiptTransaction (product_id, sku, quantity, price, paid_timestamp, shop_coupon, buyer_coupon). Timestamps are epoch seconds; Money is amount / divisor. Personal fields the API also sends are left out here. Listings (ShopListing: state, state_timestamp, updated_timestamp, quantity, price) and getListingInventory (ListingInventory > products: product_id, sku, is_deleted, property_values, offerings: quantity, is_enabled, is_deleted, price); 'Listings you did not edit using the Etsy.com inventory tools have no inventory records'. getShopSections (ShopSections: count, results > ShopSection: shop_section_id, title, rank, user_id, active_listing_count); ShopListing.shop_section_id (nullable).",
   "receipts": [
     {
       "receipt_id": 1001,
@@ -415,7 +415,8 @@
       "skus": [
         "MUG-W",
         "MUG-B"
-      ]
+      ],
+      "shop_section_id": 31
     },
     {
       "listing_id": 12,
@@ -429,7 +430,8 @@
       },
       "updated_timestamp": 1792936800,
       "state_timestamp": 1792764000,
-      "skus": []
+      "skus": [],
+      "shop_section_id": 32
     },
     {
       "listing_id": 13,
@@ -445,7 +447,8 @@
       "state_timestamp": 1792850400,
       "skus": [
         "GC"
-      ]
+      ],
+      "shop_section_id": null
     }
   ],
   "inventory": {
@@ -623,5 +626,24 @@
       "quantity_on_property": [],
       "sku_on_property": []
     }
+  },
+  "sections": {
+    "count": 2,
+    "results": [
+      {
+        "shop_section_id": 31,
+        "title": "Mugs",
+        "rank": 1,
+        "user_id": 5001,
+        "active_listing_count": 1
+      },
+      {
+        "shop_section_id": 32,
+        "title": "Table linen",
+        "rank": 2,
+        "user_id": 5001,
+        "active_listing_count": 0
+      }
+    ]
   }
 }

@@ -16,7 +16,7 @@ Gross merchandise sales − seller discounts of orders placed in the period − 
 - **Currency:** The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.
 - **Timezone:** The store's timezone (a demo store: this computer's).
 - **Date basis:** Sales on the order placement day; refunds on the refund day (or on their order's day with refunds=order_day, labelled).
-- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count.
+- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count; a product is in a collection filter when it is in any selected collection.
 - **Refunds and cancellations:** A refund lowers the period it is made in, so past periods stay put. Refunded shipping and tax are not merchandise and are left out.
 - **Datasets:** Orders, Order lines by variant, Refunds
 
@@ -31,7 +31,7 @@ Gross merchandise sales − seller discounts of orders placed in the period − 
 - **Currency:** The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.
 - **Timezone:** The store's timezone (a demo store: this computer's).
 - **Date basis:** Order placement day.
-- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count.
+- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count; a product is in a collection filter when it is in any selected collection.
 - **Refunds and cancellations:** Not affected by refunds or cancellations (the as-placed amount).
 - **Datasets:** Orders, Order lines by variant
 
@@ -46,7 +46,7 @@ Gross merchandise sales − seller discounts of orders placed in the period − 
 - **Currency:** The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.
 - **Timezone:** The store's timezone (a demo store: this computer's).
 - **Date basis:** Order placement day.
-- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count.
+- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count; a product is in a collection filter when it is in any selected collection.
 - **Refunds and cancellations:** Not affected by refunds.
 - **Datasets:** Orders, Order lines by variant
 
@@ -61,7 +61,7 @@ Gross merchandise sales − seller discounts of orders placed in the period − 
 - **Currency:** The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.
 - **Timezone:** The store's timezone (a demo store: this computer's).
 - **Date basis:** Refund day (or the original order day with refunds=order_day, labelled).
-- **Exclusions:** Refunds on test orders and duplicate channel copies are left out. With a product or collection filter, only the matching lines count.
+- **Exclusions:** Refunds on test orders and duplicate channel copies are left out. With a product or collection filter, only the matching lines count; a product is in a collection filter when it is in any selected collection.
 - **Refunds and cancellations:** A partial refund counts its amount; a cancellation after payment is a refund on the cancel day.
 - **Datasets:** Refunds
 
@@ -91,7 +91,7 @@ Count of distinct canonical paid orders placed in the period.
 - **Currency:** The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.
 - **Timezone:** The store's timezone (a demo store: this computer's).
 - **Date basis:** Order placement day (one cohort for both sides).
-- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count.
+- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count; a product is in a collection filter when it is in any selected collection.
 - **Refunds and cancellations:** Unaffected by later refunds: refund-day net sales and placement-day orders are different cohorts (decision 11).
 - **Datasets:** Orders, Order lines by variant
 
@@ -106,7 +106,7 @@ Count of distinct canonical paid orders placed in the period.
 - **Currency:** The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.
 - **Timezone:** The store's timezone (a demo store: this computer's).
 - **Date basis:** Order placement day.
-- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count.
+- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count; a product is in a collection filter when it is in any selected collection.
 - **Refunds and cancellations:** Units ordered: refunded units are counted in the refund rate, not taken off here.
 - **Datasets:** Order lines by variant
 
@@ -136,7 +136,7 @@ Count of canonical paid orders whose cancellation is dated in the period.
 - **Currency:** The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.
 - **Timezone:** The store's timezone (a demo store: this computer's).
 - **Date basis:** Refunded units by refund day, units by order day.
-- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. Refunds with no units (amount-only adjustments) don't count. With a product or collection filter, only the matching lines count.
+- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. Refunds with no units (amount-only adjustments) don't count. With a product or collection filter, only the matching lines count; a product is in a collection filter when it is in any selected collection.
 - **Refunds and cancellations:** This is the refund measure; changes are in percentage points.
 - **Datasets:** Order lines by variant, Refunds
 
@@ -211,7 +211,7 @@ Net sales of lines with a known unit cost − their product cost − fees (recor
 - **Currency:** The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.
 - **Timezone:** The store's timezone (a demo store: this computer's).
 - **Date basis:** As net sales; a line's cost is the cost recorded when it was sold (never today's).
-- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. Uncosted lines are left out, never costed at 0. With a product or collection filter, only the matching lines count.
+- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. Uncosted lines are left out, never costed at 0. With a product or collection filter, only the matching lines count; a product is in a collection filter when it is in any selected collection.
 - **Refunds and cancellations:** Refunded merchandise comes off as in net sales; its product cost still counts unless the refund line was restocked.
 - **Datasets:** Orders, Order lines by variant, Refunds, Fees
 
@@ -241,7 +241,7 @@ Contribution before ads − ad spend, at store level only. Not net profit: overh
 - **Currency:** None (a share).
 - **Timezone:** The store's timezone (a demo store: this computer's).
 - **Date basis:** Order placement day.
-- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count.
+- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. With a product or collection filter, only the matching lines count; a product is in a collection filter when it is in any selected collection.
 - **Refunds and cancellations:** Not affected by refunds.
 - **Datasets:** Order lines by variant
 
@@ -256,7 +256,7 @@ Recorded fees where the platform reports them (Amazon's settled fees); otherwise
 - **Currency:** The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.
 - **Timezone:** The store's timezone (a demo store: this computer's).
 - **Date basis:** Order placement day (a recorded fee on its own day).
-- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. An estimate is labelled as one.
+- **Exclusions:** Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out. An estimate is labelled as one. With a product or collection filter, each order's fee is pro-rated by its matching lines' share of its sales.
 - **Refunds and cancellations:** Not reversed on refunds: processors keep their fee.
 - **Datasets:** Orders, Fees
 

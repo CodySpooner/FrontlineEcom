@@ -1,5 +1,5 @@
 {
-  "_source": "Shapes from the Shopify GraphQL Admin API reference, read 2026-10-28 (pages at 2026-10; the app pins 2026-07, where these fields are the same): https://shopify.dev/docs/api/admin-graphql/latest/objects/Order, https://shopify.dev/docs/api/admin-graphql/latest/objects/LineItem, https://shopify.dev/docs/api/admin-graphql/latest/objects/ShippingLine, https://shopify.dev/docs/api/admin-graphql/latest/objects/Fulfillment. The reference's own orders example asks only for ids, so the field values are test values in its shapes.",
+  "_source": "Shapes from the Shopify GraphQL Admin API reference, read 2026-10-28 (pages at 2026-10; the app pins 2026-07, where these fields are the same): https://shopify.dev/docs/api/admin-graphql/latest/objects/Order, https://shopify.dev/docs/api/admin-graphql/latest/objects/LineItem, https://shopify.dev/docs/api/admin-graphql/latest/objects/ShippingLine, https://shopify.dev/docs/api/admin-graphql/latest/objects/Fulfillment. The reference's own orders example asks only for ids, so the field values are test values in its shapes. Collections: https://shopify.dev/docs/api/admin-graphql/latest/objects/Collection (id, title, products) and Product.handle, Product.category (TaxonomyCategory.fullName).",
   "shop": { "name": "Contract Test Shop", "currencyCode": "USD", "ianaTimezone": "America/New_York" },
   "orders": {
     "nodes": [
@@ -505,6 +505,8 @@
       {
         "id": "gid://shopify/Product/120",
         "title": "Silk Pillowcase",
+        "handle": "silk-pillowcase",
+        "category": { "fullName": "Home & Garden > Linens & Bedding > Bedding > Pillowcases" },
         "status": "ACTIVE",
         "updatedAt": "2026-10-20T10:00:00Z",
         "totalInventory": 45,
@@ -647,6 +649,70 @@
     "pageInfo": {
       "hasNextPage": false,
       "endCursor": null
+    }
+  },
+  "collections": {
+    "page": {
+      "nodes": [
+        {
+          "id": "gid://shopify/Collection/301",
+          "title": "Bedroom",
+          "products": {
+            "nodes": [
+              {
+                "id": "gid://shopify/Product/120"
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": true,
+              "endCursor": "c301-p1"
+            }
+          }
+        },
+        {
+          "id": "gid://shopify/Collection/302",
+          "title": "Gifts under $50",
+          "products": {
+            "nodes": [
+              {
+                "id": "gid://shopify/Product/120"
+              }
+            ],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          }
+        },
+        {
+          "id": "gid://shopify/Collection/303",
+          "title": "Coming soon",
+          "products": {
+            "nodes": [],
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            }
+          }
+        }
+      ],
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": null
+      }
+    },
+    "more": {
+      "gid://shopify/Collection/301": {
+        "nodes": [
+          {
+            "id": "gid://shopify/Product/121"
+          }
+        ],
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": null
+        }
+      }
     }
   },
   "sessions": {

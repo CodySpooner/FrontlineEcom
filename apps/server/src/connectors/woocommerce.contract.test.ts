@@ -150,3 +150,25 @@ describe('WooCommerce variants and listings (SA-39)', () => {
     expect(datasets).toEqual([{ dataset: 'channel_listings', status: 'available' }, { dataset: 'variants', status: 'available' }]);
   });
 });
+
+describe('WooCommerce categories (SA-47)', () => {
+  it("a product's categories are its collections; a re-read rewrites them", async () => {
+    const db = setup();
+    await syncWooCommerce(db, key, 'pawsome', fakeWoo().fetchFn, NOW);
+    const members = () => db.prepare("SELECT collection_id, product_id, title FROM product_collections WHERE store_id = 'pawsome' ORDER BY collection_id, product_id").all();
+    expect(members()).toEqual([
+      { collection_id: 'woo-cat-14', product_id: 'woo-93', title: 'T-shirts' },
+      { collection_id: 'woo-cat-9', product_id: 'woo-22', title: 'Clothing' },
+      { collection_id: 'woo-cat-9', product_id: 'woo-93', title: 'Clothing' },
+    ]);
+    const before = DOC.products[0].categories;
+    DOC.products[0].categories = [{ id: 9, name: 'Clothing', slug: 'clothing' }];
+    try {
+      db.prepare("UPDATE integrations SET cursor = NULL WHERE id = 'woocommerce:pawsome'").run();
+      await syncWooCommerce(db, key, 'pawsome', fakeWoo().fetchFn, NOW);
+    } finally {
+      DOC.products[0].categories = before;
+    }
+    expect(members().map((m) => `${m.collection_id}/${m.product_id}`)).toEqual(['woo-cat-9/woo-22', 'woo-cat-9/woo-93']);
+  });
+});

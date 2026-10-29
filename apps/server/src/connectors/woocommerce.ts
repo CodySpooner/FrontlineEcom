@@ -18,7 +18,7 @@ const BACKFILL_DAYS = 730;
 // and a big shop's backfill is a fraction of the size.
 const ORDER_FIELDS =
   'id,number,status,currency,date_created,date_created_gmt,date_modified_gmt,date_paid_gmt,date_completed_gmt,discount_total,shipping_total,total,total_tax,fee_lines,refunds,line_items,cost_of_goods_sold,meta_data,customer_id,billing.country,shipping.country';
-const PRODUCT_FIELDS = 'id,name,status,type,sku,price,regular_price,images,stock_quantity,manage_stock,backorders,cost_of_goods_sold';
+const PRODUCT_FIELDS = 'id,name,status,type,sku,price,regular_price,images,stock_quantity,manage_stock,backorders,cost_of_goods_sold,categories';
 // SA-39: a variation's own row in product_variants.
 const VARIATION_FIELDS = 'id,sku,status,price,regular_price,attributes,stock_quantity,manage_stock,backorders';
 
@@ -97,6 +97,8 @@ interface WooProduct {
   backorders?: string;
   type?: string;
   sku?: string;
+  /** SA-47: the store's collections. */
+  categories?: { id: number; name: string }[];
   images?: { src: string }[];
   date_modified_gmt: string;
   cost_of_goods_sold?: { total_value: number };
@@ -251,7 +253,7 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
     const full = !cursor || catalogPassDue(db, id, today);
     const productsSince = { ...(full ? { dates_are_gmt: 'true' } : changed), _fields: PRODUCT_FIELDS };
     const products = [...(await all<WooProduct>('products', productsSince)), ...(await all<WooProduct>('products', { ...productsSince, status: 'trash' }))];
-    for (const d of ['catalog', 'channel_listings'] as const) noteRead(db, key, id, d, { status: 'available' }, now);
+    for (const d of ['catalog', 'channel_listings', 'collections'] as const) noteRead(db, key, id, d, { status: 'available' }, now);
     reading.delete('catalog');
     // A variable product (sizes, colors) usually counts stock per variation: its stock is theirs, and it's tracked only when
     // every variation counts (an uncounted one can always be bought). A failed read leaves the product as it reads alone.
@@ -318,7 +320,14 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         `INSERT INTO channel_listings (store_id, channel, id, product_id, status, published_at, synced_at) VALUES (?, 'site', ?, ?, ?, NULL, ?)
          ON CONFLICT (store_id, channel, id) DO UPDATE SET product_id = excluded.product_id, status = excluded.status, published_at = NULL, synced_at = excluded.synced_at`,
       );
+      // SA-47: categories are the collections; each product read rewrites its own.
+      const dropCategories = db.prepare("DELETE FROM product_collections WHERE store_id = ? AND product_id = ? AND source = 'woocommerce'");
+      const category = db.prepare("INSERT OR IGNORE INTO product_collections (store_id, collection_id, product_id, title, source, synced_at) VALUES (?, ?, ?, ?, 'woocommerce', ?)");
       for (const p of products) {
+        if (Array.isArray(p.categories)) {
+          dropCategories.run(storeId, `woo-${p.id}`);
+          for (const c of p.categories) category.run(storeId, `woo-cat-${c.id}`, `woo-${p.id}`, c.name, now.toISOString());
+        }
         const price = Number(p.price || p.regular_price || 0);
         const regular = Number(p.regular_price || 0);
         const status: ProductStatus = p.status === 'publish' ? 'active' : p.status === 'trash' ? 'archived' : 'draft';

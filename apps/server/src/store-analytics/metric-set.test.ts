@@ -115,3 +115,50 @@ describe('GET /api/analytics/metrics', () => {
     expect(parseFilters('[1]')).toBe('filters must be an object of lists');
   });
 });
+
+describe('the collection filter (SA-47)', () => {
+  const ids: SaMetricId[] = ['orders', 'gross_sales', 'discounts', 'refunds', 'net_sales', 'aov', 'units', 'refund_rate', 'fees', 'sessions'];
+  const p1 = (db: ReturnType<typeof openDb>) => period(db, { period: 'custom', from: P1.from, to: P1.to });
+
+  it('counts only the matching lines; store-level metrics say they ignore it', () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    const set = computeMetricSet(db, { storeId: LEDGER_STORE }, ids, p1(db), { collection: ['c-lips'] });
+    const v = Object.fromEntries(set.metrics.map((m) => [m.id, m.value]));
+    // #1003's mask line only: 2 × 18 less its 3.60, one refunded (16.20) on Oct 28
+    expect(v).toMatchObject({ orders: 1, gross_sales: 36, discounts: 3.6, refunds: 16.2, net_sales: 16.2, aov: 32.4, units: 2, refund_rate: 0.5 });
+    // #1003's estimated fee (2.9% of 71.09 + 0.30) × the mask's 32.40 of its 61.20
+    expect(v.fees).toBe(1.25);
+    expect(byId(set).fees!.note).toContain("Pro-rated by the matching lines' share");
+    expect(set.scope.applied).toEqual(['collection']);
+    expect(set.scope.ignored).toEqual([{ key: 'collection', reason: 'Store level: not split by collection', metric: 'sessions' }]);
+  });
+
+  it('a product in two selected collections counts once', () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    const m = byId(computeMetricSet(db, { storeId: LEDGER_STORE }, ['orders', 'units', 'gross_sales'], p1(db), { collection: ['c-lips', 'c-best'] }));
+    // serum or mask: #1003 (68), #1005 (32), #1008 (96), #1013, #1014 (32 each); #1009 and #1010 are copies
+    expect([m.orders!.value, m.units!.value, m.gross_sales!.value]).toEqual([5, 9, 260]);
+  });
+
+  it("collections never synced: the filter isn't applied and says why", () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    db.prepare('DELETE FROM product_collections').run();
+    const set = computeMetricSet(db, { storeId: LEDGER_STORE }, ['net_sales'], p1(db), { collection: ['c-lips'] });
+    expect(set.metrics[0]!.value).toBe(405.4);
+    expect(set.scope).toEqual({ applied: [], ignored: [{ key: 'collection', reason: "Collections aren't synced for this store yet", metric: 'net_sales' }] });
+  });
+
+  it('GET /api/analytics/collections lists them with their product counts', async () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    const app = createApp(db);
+    expect(await (await app.request(`/api/analytics/collections?store=${LEDGER_STORE}`)).json()).toEqual([
+      { id: 'c-best', title: 'Best sellers', source: 'shopify', products: 2 },
+      { id: 'c-face', title: 'Face care', source: 'shopify', products: 2 },
+      { id: 'c-lips', title: 'Lip care', source: 'shopify', products: 1 },
+    ]);
+  });
+});

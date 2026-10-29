@@ -67,6 +67,15 @@ export type SaFilterKey = 'channel' | 'product' | 'collection' | 'market' | 'seg
 export const SA_FILTERS: Record<SaFilterKey, string> = { channel: 'Channel', product: 'Product', collection: 'Collection', market: 'Market', segment: 'Segment' };
 
 /** Which of the active filters a panel's numbers apply, and why it leaves out the others. */
+/** SA-47: one of the store's collections, for the collection filter (GET /api/analytics/collections). */
+export interface SaCollection {
+  id: string;
+  title: string | null;
+  /** The platform it came from: shopify, woocommerce or etsy. */
+  source: string;
+  products: number;
+}
+
 export interface SaFilterScope {
   applied: SaFilterKey[];
   ignored: { key: SaFilterKey; reason: string; metric?: string }[];
@@ -152,7 +161,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
       variants: { support: 'supported', reads: true, field: 'productVariants (sku, price, compareAtPrice, inventoryQuantity, inventoryPolicy, inventoryItem.tracked)', scopes: 'read_products, read_inventory', history: 'current state' },
       channel_listings: { support: 'supported', reads: true, field: 'products.resourcePublications (isPublished, publishDate, publication.catalog.title)', scopes: 'read_publications (optional)', history: 'current state' },
       inventory: { support: 'supported', reads: true, field: 'variant inventoryQuantity, inventoryItem.tracked', scopes: 'read_inventory', history: 'current state; daily snapshots from SA-50' },
-      collections: NOT_READ('collections (paged)', { scopes: 'read_products' }),
+      collections: { support: 'supported', reads: true, field: 'GraphQL Admin collections (paged: id, title, products); Product.handle, Product.category.fullName', scopes: 'read_products', history: 'current state, read with the daily catalog pass' },
       traffic: { support: 'supported', reads: true, field: 'ShopifyQL sessions (shopifyqlQuery)', scopes: 'read_reports + Level 2 customer data', history: '730 days back', reason: 'Only when GA4 is not connected (GA4 owns traffic there).' },
       purchase_sessions: { support: 'supported', reads: true, field: 'ShopifyQL sessions.sessions_that_completed_checkout', scopes: 'read_reports + Level 2 customer data', history: '730 days back', reason: 'Only when GA4 is not connected (GA4 owns traffic there).' },
       traffic_breakdowns: { support: 'supported', reads: true, field: 'ShopifyQL sessions GROUP BY day, referrer_source / session_device_type / session_country_code', scopes: 'read_reports + Level 2 customer data', history: '730 days back', reason: 'Only when GA4 is not connected (GA4 owns traffic there).' },
@@ -174,7 +183,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
       variants: { support: 'supported', reads: true, field: '/products/{id}/variations (sku, price, attributes, stock); a simple product is its own variant', scopes: 'REST API key (Read)', history: 'current state' },
       channel_listings: { support: 'supported', reads: true, field: 'products.status (the site listing; no publish date)', scopes: 'REST API key (Read)', history: 'current state' },
       inventory: { support: 'supported', reads: true, field: 'products.stock_quantity, manage_stock', history: 'current state' },
-      collections: NOT_READ('products.categories'),
+      collections: { support: 'supported', reads: true, field: 'REST /wc/v3/products categories (id, name)', history: 'current state' },
       traffic: UNSUPPORTED('WooCommerce has no sessions API; connect GA4 for site traffic.'),
       purchase_sessions: UNSUPPORTED('WooCommerce has no sessions API.'),
       traffic_breakdowns: UNSUPPORTED('WooCommerce has no sessions API; connect GA4.'),
@@ -193,7 +202,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
       variants: { support: 'supported', reads: true, field: 'getListingInventory (products, offerings; a listing without inventory records is its own variant)', scopes: 'listings_r', history: 'current state', rateLimit: 'one call per listing: at most 50 a sync (Q10)' },
       channel_listings: { support: 'supported', reads: true, field: 'listing.state, state_timestamp', scopes: 'listings_r', history: 'current state' },
       inventory: { support: 'supported', reads: true, field: 'listing.quantity', history: 'current state' },
-      collections: NOT_READ('getShopSections'),
+      collections: { support: 'supported', reads: true, field: 'getShopSections; listing.shop_section_id', scopes: 'listings_r', history: 'current state' },
       traffic: UNSUPPORTED("Etsy's Open API has no shop sessions."),
       purchase_sessions: UNSUPPORTED("Etsy's Open API has no sessions."),
       traffic_breakdowns: UNSUPPORTED("Etsy's Open API has no traffic sources."),
@@ -401,7 +410,7 @@ const ORDER_FILTERS: SaFilterKey[] = ['channel', 'product', 'collection', 'marke
 const STORE_CURRENCY = "The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.";
 const STORE_ZONE = "The store's timezone (a demo store: this computer's).";
 const CANONICAL = 'Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out.';
-const LINE_FILTER = 'With a product or collection filter, only the matching lines count.';
+const LINE_FILTER = 'With a product or collection filter, only the matching lines count; a product is in a collection filter when it is in any selected collection.';
 
 const m = (x: Omit<SaMetric, 'currency' | 'timezone'> & Partial<Pick<SaMetric, 'currency' | 'timezone'>>): SaMetric => ({ currency: STORE_CURRENCY, timezone: STORE_ZONE, ...x });
 
@@ -512,7 +521,7 @@ export const SA_METRICS: Record<SaMetricId, SaMetric> = {
   fees: m({
     id: 'fees', version: 1, label: 'Fees', line: 'Recorded where read, else estimated', unit: 'money', additive: true, direction: 'down',
     formula: "Recorded fees where the platform reports them (Amazon's settled fees); otherwise an estimate: the store's fee % × the amount charged (gross − discounts + shipping + tax) + its per-order fee × orders. Amazon as a channel: 15% referral on its sales.",
-    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Order placement day (a recorded fee on its own day).', exclusions: `${CANONICAL} An estimate is labelled as one.`,
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Order placement day (a recorded fee on its own day).', exclusions: `${CANONICAL} An estimate is labelled as one. With a product or collection filter, each order's fee is pro-rated by its matching lines' share of its sales.`,
     refunds: 'Not reversed on refunds: processors keep their fee.', datasets: ['orders', 'fees'],
   }),
   stock_cover: m({

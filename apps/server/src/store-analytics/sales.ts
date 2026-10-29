@@ -24,7 +24,8 @@ export const CANONICAL = `o.duplicate_of IS NULL AND iif(o.breakdown_at IS NULL,
  * filter, on the order's channel (an order synced before channels were recorded: TikTok Shop's by its id, else the
  * store's own channel).
  */
-export type Slice = { cut?: { at: string; fraction: number }; channels?: string[] };
+/** `products`: orders holding one of these products' lines, counting only those lines (SA-47's collection filter). */
+export type Slice = { cut?: { at: string; fraction: number }; channels?: string[]; products?: string[] };
 
 /** ` AND …` conditions narrowing order `o` (and the row's own day and time columns) to a slice, with their params. */
 export function sliceSql(db: Db, storeId: string, s: Slice | undefined, to: string, day = 'o.local_date', time = 'o.created_at') {
@@ -36,7 +37,17 @@ export function sliceSql(db: Db, storeId: string, s: Slice | undefined, to: stri
     sql.push(`coalesce(o.channel, iif(+o.id GLOB 'tt-*', 'tiktok_shop', ?)) IN (${s.channels.map(() => '?').join(', ')})`);
     params.push(platform === 'shopify' || platform === 'woocommerce' ? 'site' : platform, ...s.channels);
   }
+  if (s?.products) {
+    const holds = (t: string) => `EXISTS (SELECT 1 FROM ${t} x WHERE x.store_id = o.store_id AND x.order_id = o.id AND x.product_id IN (SELECT value FROM json_each(?)))`;
+    sql.push(`(${holds('order_lines')} OR ${holds('order_items')})`);
+    params.push(JSON.stringify(s.products), JSON.stringify(s.products));
+  }
   return { sql: sql.map((x) => ` AND ${x}`).join(''), params };
+}
+
+/** ` AND <col> IN (the slice's products)` and its param, or nothing without a product set. */
+export function inProducts(s: Slice | undefined, col: string): { sql: string; params: SQLInputValue[] } {
+  return s?.products ? { sql: ` AND ${col} IN (SELECT value FROM json_each(?))`, params: [JSON.stringify(s.products)] } : { sql: '', params: [] };
 }
 
 /** A demo store's daily rows over [from, to]; with a cut, its last day as it stood at that time (`demoSoFar`). */
@@ -107,15 +118,19 @@ export function salesMetrics(db: Db, storeId: string, from: string, to: string, 
 
   // Orders placed in the period. Those synced before money parts were recorded count as total − tax less their legacy
   // refund lines (TikTok Shop, Amazon), already in the store's currency: an estimate.
+  // With a product set only the matching lines' money counts; an order without money parts, its matching per-product rows.
   let [orders, estimated, counted, gross, discounts, est] = [0, 0, 0, 0, 0, 0];
+  const [pl, pi, pr] = [inProducts(slice, 'l.product_id'), inProducts(slice, 'i.product_id'), inProducts(slice, 'r.product_id')];
+  const lines = (col: string) => `(SELECT sum(${col}) FROM order_lines l WHERE l.store_id = o.store_id AND l.order_id = o.id${pl.sql})`;
   const placed = db
     .prepare(
-      `SELECT o.local_date AS day, o.currency AS cur, o.fx_rate AS locked, o.breakdown_at IS NOT NULL AS parts, count(*) AS n, sum(o.gross_sales) AS gross, sum(o.discounts) AS disc,
-         sum(o.total - o.tax - coalesce((SELECT sum(r.amount) FROM amazon_refunds r WHERE r.store_id = o.store_id AND r.order_id = o.id), 0)) AS est
+      `SELECT o.local_date AS day, o.currency AS cur, o.fx_rate AS locked, o.breakdown_at IS NOT NULL AS parts, count(*) AS n,
+         sum(${slice?.products ? lines('l.gross') : 'o.gross_sales'}) AS gross, sum(${slice?.products ? lines('coalesce(l.discount, 0)') : 'o.discounts'}) AS disc,
+         sum(${slice?.products ? `(SELECT sum(i.revenue) FROM order_items i WHERE i.store_id = o.store_id AND i.order_id = o.id${pi.sql})` : 'o.total - o.tax - coalesce((SELECT sum(r.amount) FROM amazon_refunds r WHERE r.store_id = o.store_id AND r.order_id = o.id), 0)'}) AS est
        FROM orders o WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL}${w.sql}
        GROUP BY 1, 2, 3, 4`,
     )
-    .all(storeId, from, to, ...w.params);
+    .all(...(slice?.products ? [...pl.params, ...pl.params, ...pi.params] : []), storeId, from, to, ...w.params);
   for (const r of placed) {
     const n = Number(r.n);
     orders += n;
@@ -140,35 +155,35 @@ export function salesMetrics(db: Db, storeId: string, from: string, to: string, 
   for (const r of db
     .prepare(
       `SELECT r.local_date AS day, o.currency AS cur, o.fx_rate AS locked, sum(r.merchandise) AS merch FROM refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id
-       WHERE r.store_id = ? AND ${dayCol} BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wr.sql} GROUP BY 1, 2, 3`,
+       WHERE r.store_id = ? AND ${dayCol} BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wr.sql}${pr.sql} GROUP BY 1, 2, 3`,
     )
-    .all(storeId, from, to, ...wr.params)) {
+    .all(storeId, from, to, ...wr.params, ...pr.params)) {
     const x = fx(String(r.day), r.cur, r.locked, 0);
     if (x != null) refunds += Number(r.merch ?? 0) * x;
   }
   const refundedUnits = Number(
-    db.prepare(`SELECT coalesce(sum(r.quantity), 0) AS q FROM refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id WHERE r.store_id = ? AND r.local_date BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wu.sql}`).get(storeId, from, to, ...wu.params)!.q,
+    db.prepare(`SELECT coalesce(sum(r.quantity), 0) AS q FROM refunds r JOIN orders o ON o.store_id = r.store_id AND o.id = r.order_id WHERE r.store_id = ? AND r.local_date BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wu.sql}${pr.sql}`).get(storeId, from, to, ...wu.params, ...pr.params)!.q,
   );
 
   // Decision 12: units from order lines; an order without them falls back to its per-product rows, estimated.
   const lineUnits = db
     .prepare(
       `SELECT coalesce(sum(l.quantity), 0) AS q, count(DISTINCT l.order_id) AS n FROM order_lines l JOIN orders o ON o.store_id = l.store_id AND o.id = l.order_id
-       WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL}${w.sql}`,
+       WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL}${w.sql}${pl.sql}`,
     )
-    .get(storeId, from, to, ...w.params)!;
+    .get(storeId, from, to, ...w.params, ...pl.params)!;
   const itemUnits = db
     .prepare(
       `SELECT coalesce(sum(i.quantity), 0) AS q FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
-       WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL} AND NOT EXISTS (SELECT 1 FROM order_lines l WHERE l.store_id = o.store_id AND l.order_id = o.id)${w.sql}`,
+       WHERE o.store_id = ? AND o.local_date BETWEEN ? AND ? AND ${CANONICAL} AND NOT EXISTS (SELECT 1 FROM order_lines l WHERE l.store_id = o.store_id AND l.order_id = o.id)${w.sql}${pi.sql}`,
     )
-    .get(storeId, from, to, ...w.params)!;
+    .get(storeId, from, to, ...w.params, ...pi.params)!;
   const units = Number(lineUnits.q) + Number(itemUnits.q);
   const linesShare = orders ? Number(lineUnits.n) / orders : 1;
 
   // Paid orders cancelled on a day of the period (the store's days), whenever they were placed.
   const zone = storeZone(db, storeId);
-  const wc = sliceSql(db, storeId, { channels: slice?.channels }, to);
+  const wc = sliceSql(db, storeId, { channels: slice?.channels, products: slice?.products }, to);
   const cancelled = db
     .prepare(`SELECT o.cancelled_at AS at FROM orders o WHERE o.store_id = ? AND o.cancelled_at BETWEEN ? AND ? AND o.breakdown_at IS NOT NULL AND ${CANONICAL}${wc.sql}`)
     .all(storeId, addDays(from, -1), addDays(to, 2), ...wc.params)
