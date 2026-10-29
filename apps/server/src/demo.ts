@@ -349,9 +349,46 @@ export function demoEvent(storeIds: string[], rand: () => number, at: Date): Sto
   return { id: randomUUID(), storeId, type, amount: cents(paramsFor(storeId).aov * (lo + (hi - lo) * rand())), at: at.toISOString() };
 }
 
+/**
+ * SA-18 (decision 30): a demo store's catalog structure for Store Analytics: variants (one product with three, one with
+ * two of which one is out of stock), a listing per product on the store's own channel, TikTok Shop listings too for
+ * the board's niche (beauty), one owner-mapped product on a second channel and two collections. Demo stores only,
+ * idempotent; no ledger, stock snapshot or customer rows.
+ */
+export function seedDemoCatalog(db: Db, storeId: string, today = localDate()) {
+  const s = db.prepare('SELECT name, niche, platform, demo FROM stores WHERE id = ?').get(storeId);
+  if (!s?.demo) return;
+  const products = db.prepare('SELECT id, title, price, compare_at, inventory, inventory_tracked, status FROM products WHERE store_id = ? ORDER BY rowid').all(storeId);
+  const initials = (x: unknown) => String(x).split(/\s+/).map((w) => w.replace(/[^A-Za-z0-9]/g, '')[0] ?? '').join('').toUpperCase();
+  const variant = db.prepare('INSERT OR IGNORE INTO product_variants (store_id, product_id, id, title, sku, price, compare_at, inventory, inventory_tracked, inventory_policy, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  const listing = db.prepare('INSERT OR IGNORE INTO channel_listings (store_id, channel, id, product_id, status, published_at) VALUES (?, ?, ?, ?, ?, ?)');
+  const own = s.platform === 'shopify' || s.platform === 'woocommerce' ? 'site' : String(s.platform);
+  const other = own === 'tiktok_shop' ? 'site' : 'tiktok_shop';
+  products.forEach((pr, i) => {
+    const [id, n, status] = [String(pr.id), Number(pr.inventory), String(pr.status)];
+    const sku = `${initials(s.name)}-${initials(pr.title)}`;
+    const split: [string, number][] = i === 2 ? [['Black', Math.floor(n * 0.5)], ['White', Math.floor(n * 0.45)], ['Grey', n - Math.floor(n * 0.5) - Math.floor(n * 0.45)]] : i === 1 ? [['Standard', n], ['XL', 0]] : [['Default', n]];
+    split.forEach(([title, stock], v) => variant.run(storeId, id, `${id}-v${v + 1}`, title, split.length > 1 ? `${sku}-${initials(title)}` : sku, Number(pr.price), pr.compare_at == null ? null : Number(pr.compare_at), stock, Number(pr.inventory_tracked), 'deny', status));
+    listing.run(storeId, own, id, id, status, addDays(today, -(120 + 30 * i)));
+    if (s.niche === 'beauty' && other === 'tiktok_shop' && i > 0 && i < 4) listing.run(storeId, other, `tt-${id}`, id, status, addDays(today, -(40 + 10 * i)));
+  });
+  const first = products[0];
+  if (first) {
+    const [pid, linked] = [String(first.id), `${other === 'site' ? 'site' : 'tt'}-${String(first.id)}`];
+    listing.run(storeId, other, linked, pid, String(first.status), addDays(today, -30));
+    db.prepare("INSERT OR IGNORE INTO product_links (store_id, channel, channel_product_id, product_id, method, created_at) VALUES (?, ?, ?, ?, 'owner', ?)").run(storeId, other, linked, pid, `${addDays(today, -30)}T12:00:00.000Z`);
+  }
+  const collection = db.prepare("INSERT OR IGNORE INTO product_collections (store_id, collection_id, product_id, title, source) VALUES (?, ?, ?, ?, 'demo')");
+  products.forEach((pr, i) => {
+    if (i < 3) collection.run(storeId, `${storeId}-best-sellers`, String(pr.id), 'Best sellers');
+    if (Number(pr.price) < 30) collection.run(storeId, `${storeId}-under-30`, String(pr.id), 'Under $30');
+  });
+}
+
 /** Gives a just-created demo store (no credentials yet) campaigns and 2 years of history. Call inside a transaction. */
 export function seedDemoStore(db: Db, storeId: string, today = localDate()) {
   seedCatalog(db, storeId, today);
+  seedDemoCatalog(db, storeId, today);
   topUp(db, storeId, today);
 }
 
@@ -372,7 +409,10 @@ export function seedDemo(db: Db, today = localDate()) {
     // Seeded requests still waiting get the current wording and payload (earlier seeds had kinds nothing executes).
     const fix = db.prepare("UPDATE approvals SET title = ?, action_json = ? WHERE id = ? AND status = 'pending' AND store_id IN (SELECT id FROM stores WHERE demo = 1)");
     approvals(db).forEach((a, i) => fix.run(a.title, JSON.stringify(a.action), `demo-appr-${i + 1}`));
-    for (const { id } of db.prepare('SELECT id FROM stores WHERE demo = 1').all()) topUp(db, String(id), today);
+    for (const { id } of db.prepare('SELECT id FROM stores WHERE demo = 1').all()) {
+      seedDemoCatalog(db, String(id), today);
+      topUp(db, String(id), today);
+    }
   });
 }
 

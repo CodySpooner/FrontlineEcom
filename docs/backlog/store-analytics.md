@@ -724,7 +724,7 @@ connector item afterwards proves its path from source to metric.
   - The v1 functions read the demo path for demo stores; every value has status `demo`.
   - Acceptance: tests: two calls give identical numbers; the legacy pins (SA-09) are unchanged; every value is `demo`.
 
-- [ ] SA-18 **Demo catalog seeding** (decision 30):
+- [x] SA-18 **Demo catalog seeding** (decision 30):
   - In `seedCatalog` / `seedDemoStore`: variants, channel listings (site and TikTok Shop for the board's niche
     stores), one product link and two collections for each demo store, under the demo flag, idempotent. No ledger,
     snapshot or customer rows.
@@ -1575,6 +1575,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-15 `PUT /api/analytics/sources/verified` `{ store, integration, dataset, note }` (`markVerified`): the store's own integration only (404 otherwise), a dataset it reads that has synced, a 1–500 character note; records `verified_at`, the account fingerprint (`accountOf`: shop domain, site URL, seller/marketplace, ad account, property…) and the note. `datasetFreshness` shows `verified` (with the mark) only while the latest read worked and the account still matches, else `available`, labelled "Available (not verified live)" by the new shared `SA_DATASET_STATUSES`. Scope row added.
 - 2026-10-28 SA-16 `store-analytics/sales.ts` `salesMetrics(db, store, from, to, basis)`: the nine sales metrics over canonical orders (`CANONICAL`: paid, not test, `duplicate_of IS NULL`), refunds by refund day or `order_day`, EUR and other currencies at the locked or ECB day rate (`store-analytics/fx.ts` `rateOn`/`convertOn`, a day with no rate left out and listed). Orders without `breakdown_at` count as total − tax (less legacy refund lines), `estimated` with their share; discounts, refunds, cancellations and refund rate are `partial`, or unavailable when no order has money parts; units fall back to `order_items` (estimated); a never-read store is unavailable with the orders dataset's reason. The oracle matches all three periods to the cent.
 - 2026-10-28 SA-17 `demoDay` gains `parts` (gross, discounts, refunds, shipping, tax, units, refunded units, purchasing sessions, cancellations) drawn after every existing draw, net to the day's revenue to the cent; `demoParts` scales them to a so-far day (`demoSoFar` uses it). `salesMetrics` reads demo stores through `demoSales` over their `daily_metrics` days: net sales and orders are Dashboard's, every value `demo`, before the history `insufficient_history`. Legacy pins unchanged. Units per product stay with `demoTopProducts`' fixed weights until the listings demo path (SA-67). Inbox: ST-06 settings consumers noted.
+- 2026-10-28 SA-18 `seedDemoCatalog` (called by `seedDemoStore` and every `seedDemo` top-up, demo stores only, `INSERT OR IGNORE`): variants (product 3 in three, product 2 in two with one out of stock, stock adding up to the product's), a listing per product on the store's own channel (site, or TikTok Shop for Peak Fit), TikTok Shop listings for four products in the board's niche (beauty: Glow Haus), one owner-mapped product on a second channel with its `product_links` row, and two collections (Best sellers, Under $30). No ledger, snapshot or customer rows. Tests: two seeds give the same rows; a real store gets none.
 
 ## Blocked
 
