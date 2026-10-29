@@ -115,7 +115,7 @@ describe('Account and General each save only their own field', () => {
     renderApp(<Settings />, '/settings/account');
     fireEvent.change(await screen.findByLabelText('Your name'), { target: { value: ' Sam ' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await vi.waitFor(() => expect(sent(fetch, 'PATCH')).toEqual([['/api/settings', { profile: { name: 'Sam' } }]]));
+    await vi.waitFor(() => expect(sent(fetch, 'PATCH')).toEqual([['/api/settings', { version: 0, profile: { name: 'Sam' } }]]));
   });
 
   it('a saved name shows in the Hero chip at once', async () => {
@@ -137,7 +137,7 @@ describe('Account and General each save only their own field', () => {
     renderApp(<Settings />, '/settings/general');
     fireEvent.change(await screen.findByLabelText(/^Base currency/), { target: { value: 'gbp' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await vi.waitFor(() => expect(sent(fetch, 'PATCH')).toEqual([['/api/settings', { baseCurrency: 'GBP' }]]));
+    await vi.waitFor(() => expect(sent(fetch, 'PATCH')).toEqual([['/api/settings', { version: 0, baseCurrency: 'GBP' }]]));
   });
 });
 
@@ -171,6 +171,14 @@ describe('caps form (moved, ST-24b)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save caps' }));
     await vi.waitFor(() => expect(sent(fetch, 'PUT')).toHaveLength(1));
     expect(sent(fetch, 'PUT')[0]![1].autopilot['ads.set_budget']).toEqual({ enabled: false, maxUsdPerDay: 0 });
+  });
+
+  it('sends only what changed, with the version read: untouched caps keep following the workspace', async () => {
+    const fetch = stubApi((_url, init) => (init?.method === 'PUT' ? { ...caps, agentCostPerDay: 2, version: 4 } : undefined));
+    renderApp(<CapsForm caps={{ ...caps, version: 3 }} />);
+    fireEvent.change(screen.getByLabelText(/^AI usage/), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save caps' }));
+    await vi.waitFor(() => expect(sent(fetch, 'PUT')).toEqual([['/api/caps/peak', { version: 3, agentCostPerDay: 2 }]]));
   });
 
   it('says caps come with a store instead of loading forever', async () => {

@@ -24,6 +24,7 @@ import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
 import { prRoutes } from './product-research/routes';
 import { settingsRoutes } from './settings';
+import { configRoutes } from './config/routes';
 import { agentRoutes, runManager } from './routes/agents';
 import { listeningOn } from './routes/agents-runtimes';
 import { wrongStore } from './routes/agents-scope';
@@ -110,6 +111,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .use('/api/pr/*', guard) // product-research: every /api/pr route
     .use('/api/teams/*', guard)
     .use('/api/analytics/*', guard) // store-analytics: its own records' writes
+    .use('/api/config', guard) // settings: the config writer
     .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))
     .get('/api/stores/:id', (c) => {
@@ -226,6 +228,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .route('/', competitorRoutes(db, (q) => pickStores(db, q)))
     .route('/', automationRoutes(db, (q) => pickStores(db, q)))
     .route('/', settingsRoutes(db))
+    .route('/', configRoutes(db))
     .route('/', agentRoutes(db))
     .route('/', kbRoutes(db))
     .route('/', ecosystemRoutes(db))

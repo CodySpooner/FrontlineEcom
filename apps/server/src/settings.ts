@@ -1,8 +1,10 @@
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import type { AppNotification, NewNotification, NotificationKind, Settings, StoreCaps } from '@frontline/shared';
+import { effective, readDoc } from './config/effective';
+import { ConfigError, writeConfig } from './config/write';
 import { dataDir, type Db } from './db';
 import { publish } from './live';
 import { getStore, listStores } from './stores';
@@ -16,13 +18,11 @@ const DEFAULT_SETTINGS: Omit<Settings, 'dataDir'> = {
   baseCurrency: 'USD',
 };
 
-export const DEFAULT_CAPS: Omit<StoreCaps, 'storeId'> = { adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {} };
-
 const isObj = (v: unknown): v is Obj => !!v && typeof v === 'object' && !Array.isArray(v);
 const extra = (o: Obj, allowed: string[]) => Object.keys(o).find((k) => !allowed.includes(k));
 
 export function getSettings(db: Db): Settings {
-  const r = db.prepare("SELECT value_json FROM settings WHERE key = 'app'").get();
+  const r = db.prepare("SELECT value_json, version FROM settings WHERE key = 'app'").get();
   const saved: Partial<Settings> = r ? JSON.parse(String(r.value_json)) : {};
   // Fresh objects every call (callers mutate), defaults fill keys added after the row was saved.
   return {
@@ -30,27 +30,31 @@ export function getSettings(db: Db): Settings {
     notifications: { ...DEFAULT_SETTINGS.notifications, ...saved.notifications },
     baseCurrency: saved.baseCurrency ?? DEFAULT_SETTINGS.baseCurrency,
     dataDir: resolve(dataDir()),
+    version: r ? Number(r.version) : 0,
   };
 }
 
-/** Validates and merges a SettingsUpdate. Returns an error message or the new Settings. */
-export function updateSettings(db: Db, body: unknown): string | Settings {
+/**
+ * Validates a SettingsUpdate and saves only the keys it sends, through the config writer. Returns an error message or
+ * the new Settings. `version` (the `app` row's, as read) is checked when given: a stale one throws ConfigError (409).
+ */
+export function updateSettings(db: Db, body: unknown, version?: number): string | Settings {
   if (!isObj(body)) return 'body must be a JSON object';
   const bad = extra(body, ['profile', 'notifications', 'baseCurrency']);
   if (bad) return `unknown setting ${bad}`;
-  const { dataDir: _, ...cur } = getSettings(db);
+  const set: Obj = {};
   if (body.profile !== undefined) {
     if (!isObj(body.profile) || extra(body.profile, ['name', 'plan'])) return 'profile takes name and plan';
     for (const k of ['name', 'plan'] as const) {
       const v = body.profile[k];
       if (v === undefined) continue;
       if (typeof v !== 'string' || !v.trim() || v.trim().length > 40) return `profile.${k} must be 1-40 characters`;
-      cur.profile[k] = v.trim();
+      set[`profile.${k}`] = v.trim();
     }
   }
   if (body.baseCurrency !== undefined) {
     if (typeof body.baseCurrency !== 'string' || !/^[A-Za-z]{3}$/.test(body.baseCurrency.trim())) return 'baseCurrency must be a 3-letter ISO code';
-    cur.baseCurrency = body.baseCurrency.trim().toUpperCase();
+    set.baseCurrency = body.baseCurrency.trim().toUpperCase();
   }
   if (body.notifications !== undefined) {
     const keys = Object.keys(DEFAULT_SETTINGS.notifications) as (keyof Settings['notifications'])[];
@@ -59,31 +63,43 @@ export function updateSettings(db: Db, body: unknown): string | Settings {
       const v = body.notifications[k];
       if (v === undefined) continue;
       if (typeof v !== 'boolean') return `notifications.${k} must be true or false`;
-      cur.notifications[k] = v;
+      set[`notifications.${k}`] = v;
     }
   }
-  db.prepare("INSERT INTO settings (key, value_json) VALUES ('app', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify(cur));
+  writeConfig(db, [{ doc: 'app', version, set }], { trusted: true, current: () => getSettings(db) });
   return getSettings(db);
 }
 
+/** A store's effective caps: its overrides, else the workspace defaults, else the built-in ones (decision 4). */
 export function getCaps(db: Db, storeId: string): StoreCaps {
-  const r = db.prepare('SELECT value_json FROM store_caps WHERE store_id = ?').get(storeId);
-  const saved: Partial<StoreCaps> = r ? JSON.parse(String(r.value_json)) : {};
-  return { storeId, ...DEFAULT_CAPS, ...saved, autopilot: { ...saved.autopilot } };
+  const { values } = effective(db, { storeId });
+  const row = readDoc(db, 'store_caps', storeId);
+  const num = (k: string) => Number(values[`caps.${k}`]);
+  return {
+    storeId,
+    adSpendChangePerDay: num('adSpendChangePerDay'),
+    higgsfieldCreditsPerDay: num('higgsfieldCreditsPerDay'),
+    agentCostPerDay: num('agentCostPerDay'),
+    autopilot: { ...(row.json.autopilot as StoreCaps['autopilot']) },
+    version: row.version,
+  };
 }
 
-/** Validates and merges a StoreCapsUpdate (autopilot merges per action kind). */
-export function updateCaps(db: Db, storeId: string, body: unknown): string | StoreCaps {
+/**
+ * Validates a StoreCapsUpdate and saves only the keys it sends as store overrides (autopilot per action kind), so an
+ * inherited cap is never copied into the store's row. `version` as for updateSettings.
+ */
+export function updateCaps(db: Db, storeId: string, body: unknown, version?: number): string | StoreCaps {
   if (!isObj(body)) return 'body must be a JSON object';
   const numbers = ['adSpendChangePerDay', 'higgsfieldCreditsPerDay', 'agentCostPerDay'] as const;
   const bad = extra(body, [...numbers, 'autopilot']);
   if (bad) return `unknown cap ${bad}`;
   const okNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1e6;
-  const { storeId: _, ...caps } = getCaps(db, storeId);
+  const set: Obj = {};
   for (const k of numbers) {
     if (body[k] === undefined) continue;
     if (!okNum(body[k])) return `${k} must be a number from 0 to 1000000`;
-    caps[k] = body[k];
+    set[`caps.${k}`] = body[k];
   }
   if (body.autopilot !== undefined) {
     if (!isObj(body.autopilot)) return 'autopilot must be an object of action kind → { enabled, maxUsdPerDay }';
@@ -92,11 +108,26 @@ export function updateCaps(db: Db, storeId: string, body: unknown): string | Sto
       if (!isObj(rule) || typeof rule.enabled !== 'boolean' || !okNum(rule.maxUsdPerDay) || extra(rule, ['enabled', 'maxUsdPerDay'])) {
         return `autopilot.${kind} must be { enabled: boolean, maxUsdPerDay: number }`;
       }
-      caps.autopilot[kind] = { enabled: rule.enabled, maxUsdPerDay: rule.maxUsdPerDay };
+      set[`autopilot.${kind}`] = { enabled: rule.enabled, maxUsdPerDay: rule.maxUsdPerDay };
     }
   }
-  db.prepare('INSERT INTO store_caps (store_id, value_json) VALUES (?, ?) ON CONFLICT (store_id) DO UPDATE SET value_json = excluded.value_json').run(storeId, JSON.stringify(caps));
+  writeConfig(db, [{ doc: 'store_caps', storeId, version, set }], { trusted: true, current: () => getCaps(db, storeId) });
   return getCaps(db, storeId);
+}
+
+/** A config write route: 400 without a JSON object, 428 without the `version` read, 409 when it's stale (decision 6). */
+async function versioned(c: Context, write: (body: Obj, version: number) => string | object) {
+  const body: unknown = await c.req.json().catch(() => undefined);
+  if (!isObj(body)) return c.json({ error: 'body must be a JSON object' }, 400);
+  const { version, ...rest } = body;
+  if (!Number.isInteger(version) || (version as number) < 0) return c.json({ error: 'Send the version you read (version).' }, 428);
+  try {
+    const out = write(rest, version as number);
+    return typeof out === 'string' ? c.json({ error: out }, 400) : c.json(out);
+  } catch (e) {
+    if (e instanceof ConfigError) return c.json(e.body, e.status);
+    throw e;
+  }
 }
 
 const toNotification = (r: Row): AppNotification => ({
@@ -136,10 +167,7 @@ export function settingsRoutes(db: Db, open = openFolder) {
       open(getSettings(db).dataDir);
       return c.body(null, 204);
     })
-    .patch('/api/settings', async (c) => {
-      const s = updateSettings(db, await c.req.json().catch(() => undefined));
-      return typeof s === 'string' ? c.json({ error: s }, 400) : c.json(s);
-    })
+    .patch('/api/settings', (c) => versioned(c, (body, version) => updateSettings(db, body, version)))
     .get('/api/caps', (c) => {
       const want = c.req.query('stores')?.split(',').filter(Boolean);
       const ids = listStores(db).map((s) => s.id).filter((id) => !want?.length || want.includes(id));
@@ -148,8 +176,7 @@ export function settingsRoutes(db: Db, open = openFolder) {
     .put('/api/caps/:storeId', async (c) => {
       const storeId = c.req.param('storeId');
       if (!getStore(db, storeId)) return c.json({ error: 'store not found' }, 404);
-      const caps = updateCaps(db, storeId, await c.req.json().catch(() => undefined));
-      return typeof caps === 'string' ? c.json({ error: caps }, 400) : c.json(caps);
+      return versioned(c, (body, version) => updateCaps(db, storeId, body, version));
     })
     .get('/api/notifications', (c) => {
       const unread = c.req.query('unread') === 'true';

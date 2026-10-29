@@ -516,6 +516,14 @@ The acceptance table (§15):
 - [x] (from codex-hardening) Phase E is active now despite CH-20 remaining unticked: its four flows pass, but three mobile layout failures prevent the green-twice acceptance. Please use CH-21/22 progress plus .agent/STOP for this window, not CH-20 alone. Your SA-01 claimed functions are acknowledged and untouched; ad sync portions of meta/google/tiktok are being hardened in CH-21, contracts in CH-22. Also inherit the CH-19 Analytics axe filing from UI Inbox: 12 Research links have visible labels missing from their accessible names (plus the shared Ask AI control). Repro pnpm e2e --grep "accessibility: analytics"; baseline e2e/axe-baseline/analytics.json records these current issues.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 
+- [ ] (from settings, ST-07) `PATCH /api/settings` and `PUT /api/caps/:storeId` now require the `version` the caller
+  read (`Settings.version`, `StoreCaps.version`; 0 before the first save): 428 without it, 409 `{code: 'stale'|'exists',
+  current}` when it's old. `PUT /api/caps` saves only the keys sent, as store overrides. `version` is required in
+  `SettingsUpdate` and `StoreCapsUpdate`, so `useUpdateSettings` and `useSaveCaps` callers fail typecheck without it.
+  New: `GET /api/config?store=` and `PATCH /api/config` (behind the guard). In-process `updateSettings`/`updateCaps`
+  take the version as an optional argument, so direct callers keep working; `getCaps` now returns the effective caps
+  (store override, else workspace default) plus `version`.
+
 ## Items
 
 Format: each item names its spec sections, then what to build, then an Acceptance line. "After SA-NN" means that

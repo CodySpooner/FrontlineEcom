@@ -1419,7 +1419,7 @@ STOP.
     - every rendered control outside `data-legacy` carries `data-setting`, `data-secret` (checked against the
       connector's fields) or `data-action` (with a named test), and every editable entry not on the allowlist renders.
 
-- [ ] ST-07 **Effective configuration and the config API** (decisions 4, 6, 10).
+- [x] ST-07 **Effective configuration and the config API** (decisions 4, 6, 10).
   - **Server files:**
     - `config/effective.ts`: `effective(db, { storeId? })` → values, origins (store \| workspace \| default \| env \|
       locked \| demo) and versions. It falls back to the workspace value only when the entry's `inherits` is
@@ -2370,6 +2370,7 @@ STOP.
 - 2026-10-28 ST-04 data routers (`main.tsx` `createBrowserRouter`, `renderApp` `createMemoryRouter`, one splat route each; whole web suite green unchanged, 100 files / 538 tests), `api()` errors carry `status`, `code`, `current`, and `settings/form.tsx` `useSettingsForm`: draft + versioned save, Save / Discard / Stay on links, back and store switches (`useBlocker`), `beforeunload` only without `window.desktop`, the 409 dialog (Reload / Keep mine, silent re-apply once when none of my fields changed). `form.test.tsx` 12 green. Route and flow e2e 66 passed; the 2 failures are CH-18's known +46 px at 390 on legacy agent and conversation, same on main's router.
 - 2026-10-28 ST-05 migration 57 (DDL only: `version` on the seven owner tables, `updated_at` on `settings`, `store_caps`, `stores`, `automation_rules`, `settings_changes` with `(at)` and `(store_id, at)` indexes), `config/boot.ts` `bootConfig` from `index.ts` (fill-if-absent under `once()` in one transaction; each filled key is a `migration` change row). `db.test.ts`: the decision 7 upgrade test (`store_caps` rows and every effective value unchanged, `user_version` current, FK check clean, a second boot changes nothing) and fill-never-overwrites, green. Dir (a) upgraded 56→57 with its before-update copy; workspace = machine zone + today's cap defaults.
 - 2026-10-28 ST-06 `SETTINGS` registry + `validateSetting` in `packages/shared/src/settings.ts`: 44 entries (profile name, 5 notification flags, base currency, 3 caps, 2 autopilot kinds, 8 store fields, 12 KB controls, 7 research-profile fields, 3 locked policies), each with owner, consumers and a proof test. `settings.test.ts` (149: every consumer symbol and proof test found, entry shape, inherits, no secrets, locked, enums match the app's lists, validator cases) and `settings/coverage.test.tsx` (the jsdom walk over all 7 sections, allowlist of 41 ids; a removed `data-legacy` wrapper fails it). New proofs: `notifications.approvals`/`agentDone` (server) and the Hero chip name (web). Store-analytics Inbox line filed.
+- 2026-10-28 ST-07 `config/effective.ts` (store → workspace → default, `inherits: 'none'` never falls back, locked policies shown as `locked`, versions per document, 0 without a row), `config/write.ts` (one transaction for every document; version check in the UPDATE; registry, scope and locked checks with `{error, field}`; `unset`; change rows with before/after, scope and store), `GET`/`PATCH /api/config` behind the guard. `updateSettings`/`updateCaps` go through the writer (trusted: their own validation and messages stay) and set only the keys sent; `PATCH /api/settings` and `PUT /api/caps/:id` answer 428 without a version, 409 `stale`/`exists` with the current document; `getCaps` reads the effective caps; boot fills the cap defaults from the registry (`DEFAULT_CAPS` removed). Web: `version` required in `SettingsUpdate`/`StoreCapsUpdate`, the legacy forms send it, `CapsForm` sends only changed keys. `config/config.test.ts` (8 tests) covers every Done-when line; caller tests updated (`settings.test.ts`, `agents-missions.test.ts`, `db.test.ts`'s pre-upgrade baseline, web `Settings.test.tsx`). Dir (a): `GET /api/config?store=pawsome` shows `caps.*` as `workspace`, notifications `default`, policies `locked`; a `PUT /api/caps/pawsome` without a version got 428, with version 0 it created the row and `caps.agentCostPerDay` reads `store`.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -2431,3 +2432,9 @@ STOP.
   - backing up `knowledge/` and `packs/niche/` alongside the database;
   - a business-data export;
   - keeping onboarding and filters server-side, so a port change can't reset them.
+- **ST-07:** the `app` row keeps personal keys (`profile.*`, `notifications.*`) and the workspace key `baseCurrency`
+  under one version, so a stale name save also refuses a currency save made from the same read; change rows take each
+  entry's own scope. A version-0 write against a row that exists answers 409 `exists` (a fresh read is needed), a
+  positive version against a missing row 409 `stale` with `current: null` (never recreated silently). No registry entry
+  lives in the `personal` row yet; the tests write it with a synthetic id. `updateCaps` stays trusted, so the
+  any-autopilot-kind finding above still holds until ST-30.

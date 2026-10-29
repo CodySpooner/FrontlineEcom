@@ -1491,9 +1491,12 @@ export interface Settings {
   baseCurrency: string;
   /** Read-only: where the local database and key live (plus logs/ and backups/). POST /api/settings/open-data-folder → 204 opens it in Explorer. */
   dataDir: string;
+  /** The `app` row's version (0 before the first save): PATCH sends it back (decision 6). */
+  version?: number;
 }
 
-export type SettingsUpdate = { profile?: Partial<Settings['profile']>; notifications?: Partial<Settings['notifications']>; baseCurrency?: string };
+/** `version`: the one read; a stale one gets 409 `{code: 'stale', current}`, none gets 428. */
+export type SettingsUpdate = { version: number; profile?: Partial<Settings['profile']>; notifications?: Partial<Settings['notifications']>; baseCurrency?: string };
 
 /**
  * Per-store hard caps the agents must respect. GET /api/caps?stores= → StoreCaps[] (defaults until saved);
@@ -1509,9 +1512,12 @@ export interface StoreCaps {
   agentCostPerDay: number;
   /** Autopilot per action kind (e.g. 'ads.pause_adsets'): auto-approve within maxUsdPerDay. Absent = ask. */
   autopilot: Record<string, { enabled: boolean; maxUsdPerDay: number }>;
+  /** The store's override row version (0: no overrides yet, every cap from the workspace). PUT sends it back. */
+  version?: number;
 }
 
-export type StoreCapsUpdate = Partial<Omit<StoreCaps, 'storeId'>>;
+/** Only the keys sent become store overrides; `version` as for SettingsUpdate. */
+export type StoreCapsUpdate = Partial<Omit<StoreCaps, 'storeId' | 'version'>> & { version: number };
 
 /** Today's usage (since local midnight) against the store's caps: the same counters that block a run, a render or a budget change. */
 export interface StoreUsage {

@@ -18,6 +18,8 @@ beforeEach(() => {
 const send = (method: string, path: string, body?: unknown) =>
   app.request(path, { method, headers: { 'content-type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 const get = async <T>(path: string) => (await (await send('GET', path)).json()) as T;
+/** PUT /api/caps sends the version it read (settings ST-07, decision 6). */
+const putCaps = async (body: object) => send('PUT', '/api/caps/glow', { ...body, version: (await get<{ version: number }[]>('/api/caps?stores=glow'))[0]!.version });
 const create = async (m: Omit<NewSquadMission, 'storeId'>) => (await (await send('POST', '/api/squad-missions', { storeId: 'glow', ...m })).json()) as SquadMission;
 /** Waits until the mission stops moving: each finished run can start the next steps. */
 async function settle(id: string) {
@@ -119,11 +121,11 @@ test("a step turned down for the store's AI budget starts once the owner raises 
     db = openDb();
     seedDemo(db);
     app = createApp(db); // its minute tick runs on the fake clock
-    await send('PUT', '/api/caps/glow', { agentCostPerDay: 0.5 });
+    await putCaps({ agentCostPerDay: 0.5 });
     db.prepare(`INSERT INTO agent_runs (id, store_id, agent_id, task, status, cost_usd, created_at) VALUES ('spent', 'glow', 'glow:ad_strategist', 't', 'done', 1, ?)`).run(new Date().toISOString());
     const created = await create({ title: 'Budget wait', steps: [{ id: 'numbers', role: 'market_analyst', task: 'Pull the numbers for the plan.' }] });
     expect(created.steps[0]).toMatchObject({ status: 'waiting', note: "Today's AI budget for this store ($0.5) is used up. Raise it in Settings." });
-    await send('PUT', '/api/caps/glow', { agentCostPerDay: 50 });
+    await putCaps({ agentCostPerDay: 50 });
     vi.advanceTimersByTime(60_000);
     expect((await settle(created.id)).status).toBe('done');
   } finally {
@@ -132,7 +134,7 @@ test("a step turned down for the store's AI budget starts once the owner raises 
 });
 
 test('a step whose budget ran out while it was queued waits, and starts once the owner raises the cap', async () => {
-  await send('PUT', '/api/caps/glow', { agentCostPerDay: 1 });
+  await putCaps({ agentCostPerDay: 1 });
   runManager(db).start('glow:market_analyst', 'Something else first.'); // the step queues behind it
   const created = await create({ title: 'Budget queue', steps: [{ id: 'numbers', role: 'market_analyst', task: 'Pull the numbers for the plan.' }] });
   expect(created.steps[0]!.status).toBe('queued');
@@ -141,7 +143,7 @@ test('a step whose budget ran out while it was queued waits, and starts once the
   await runManager(db).idle();
   const waiting = await get<SquadMission>(`/api/squad-missions/${created.id}`);
   expect([waiting.status, waiting.steps[0]!.status, waiting.steps[0]!.note]).toEqual(['running', 'waiting', "Today's AI budget for this store ($1) is used up. Raise it in Settings."]);
-  await send('PUT', '/api/caps/glow', { agentCostPerDay: 50 });
+  await putCaps({ agentCostPerDay: 50 });
   await send('PATCH', '/api/agents/glow:copywriter', { autonomy: 'ask' }); // any pass over the missions, like the minute tick
   expect((await settle(created.id)).status).toBe('done');
 });

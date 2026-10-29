@@ -69,6 +69,13 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
   worktree CRLF, the content is identical (seen on untouched `/orders` too). A `.gitattributes` line
   `e2e/axe-baseline/*.json text eol=lf` would fix it.
 - [x] (from store-analytics) CH-19 Analytics axe filing fixed (commit "store-analytics: Inbox axe names"): the 12 Research links on Analytics and the shared Ask AI control (`Hero.tsx`, name now "Ask AI anything, Ctrl K": axe counts the visible Ctrl K hint) report no serious/critical violations, so `accessibility /analytics` and the 13 other pages whose baseline lists `.hover\:text-text` now fail only on their stale baselines (actual `[]`); please refresh those 14 files in `e2e/axe-baseline/`. Also: a fresh checkout with core.autocrlf writes the baselines CRLF and every scan mismatches on line endings alone; an `e2e/axe-baseline/*.json eol=lf` attribute would stop that.
+- [ ] (from settings, ST-07) `PATCH /api/settings` and `PUT /api/caps/:storeId` now require the `version` the caller
+  read (`Settings.version`, `StoreCaps.version`; 0 before the first save): 428 without it, 409 `{code: 'stale'|'exists',
+  current}` when it's old. `PUT /api/caps` saves only the keys sent, as store overrides. `version` is required in
+  `SettingsUpdate` and `StoreCapsUpdate`, so `useUpdateSettings` and `useSaveCaps` callers fail typecheck without it.
+  New: `GET /api/config?store=` and `PATCH /api/config` (behind the guard). In-process `updateSettings`/`updateCaps`
+  take the version as an optional argument, so direct callers keep working; `getCaps` now returns the effective caps
+  (store override, else workspace default) plus `version`.
 
 ## Items
 

@@ -30,6 +30,21 @@ export function settingsUrl(section: SettingsSection, o: { id?: string; store?: 
 // `consumers` and `proof` path still exists. Moved or renamed a consumer? Update its entry here: any lane may.
 
 export type SettingScope = 'personal' | 'workspace' | 'store' | 'device';
+/** Where an effective value came from (decision 4). App and personal values the owner saved read as `workspace`. */
+export type SettingOrigin = 'store' | 'workspace' | 'default' | 'env' | 'locked' | 'demo';
+/** The documents `/api/config` reads and writes: `store_caps` is one store's override document. */
+export type ConfigDoc = 'app' | 'personal' | 'workspace' | 'store_caps';
+
+/** GET /api/config?store=: effective values by registry id, where each came from, and each document's version (0: no row). */
+export interface ConfigView {
+  values: Record<string, unknown>;
+  origins: Record<string, SettingOrigin>;
+  versions: Partial<Record<'app' | 'personal' | 'workspace' | `store_caps:${string}`, number>>;
+}
+/** PATCH /api/config: every document in one transaction; `unset` deletes an override key (back to inheriting). */
+export interface ConfigWrite {
+  documents: { doc: ConfigDoc; storeId?: string; version: number; set?: Record<string, unknown>; unset?: string[] }[];
+}
 /** When a saved value takes effect; drives the copy. `job`: Saved → Applying → Applied (a background job). */
 export type SettingApplies = 'now' | 'new runs' | 'next tick' | 'next hourly pass' | 'next sync' | 'next daily plan' | 'job';
 

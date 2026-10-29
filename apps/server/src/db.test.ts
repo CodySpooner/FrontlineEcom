@@ -191,8 +191,23 @@ test('settings (ST-05): an upgraded database keeps every saved setting and cap; 
         ('b', '{"agentCostPerDay":12}');
       INSERT INTO automation_rules (id, store_id, name, trigger_json, action_json, created_at) VALUES ('r', 'a', 'Nightly', '{}', '{}', '2026-10-01');`);
     const rows = (db: DatabaseSync, sql: string) => db.prepare(sql).all().map((r) => ({ ...r }));
-    const effective = (db: DatabaseSync) => ({ app: getSettings(db), caps: ['a', 'b', 'c'].map((id) => getCaps(db, id)) });
-    const before = { caps: rows(old, 'SELECT store_id, value_json FROM store_caps ORDER BY store_id'), effective: effective(old) };
+    // What the code before the upgrade resolved: its built-in defaults under the saved JSON.
+    const legacy = (db: DatabaseSync) => {
+      const saved = (sql: string, ...a: string[]) => JSON.parse(String(db.prepare(sql).get(...a)?.value_json ?? '{}'));
+      const app = saved("SELECT value_json FROM settings WHERE key = 'app'");
+      return {
+        app: { profile: { name: 'Cody', plan: 'Pro Plan', ...app.profile }, notifications: { approvals: true, agentDone: true, errors: true, digest: true, researchAlerts: true, ...app.notifications }, baseCurrency: app.baseCurrency ?? 'USD' },
+        caps: ['a', 'b', 'c'].map((id) => {
+          const c = saved('SELECT value_json FROM store_caps WHERE store_id = ?', id);
+          return { storeId: id, adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, ...c, autopilot: { ...c.autopilot } };
+        }),
+      };
+    };
+    const effective = (db: DatabaseSync) => {
+      const { dataDir: _, version: __, ...app } = getSettings(db);
+      return { app, caps: ['a', 'b', 'c'].map((id) => (({ version: _, ...c }) => c)(getCaps(db, id))) };
+    };
+    const before = { caps: rows(old, 'SELECT store_id, value_json FROM store_caps ORDER BY store_id'), effective: legacy(old) };
     old.close();
 
     const db = openDb(file);

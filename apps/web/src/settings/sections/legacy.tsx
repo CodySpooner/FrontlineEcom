@@ -2,7 +2,7 @@
 // wrapper rebuild them with the settings kit. Profile is split: Account saves only the name, General only the currency.
 import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
-import { APPROVAL_KINDS, type Store, type StoreCaps } from '@frontline/shared';
+import { APPROVAL_KINDS, type SettingsUpdate, type Store, type StoreCaps, type StoreCapsUpdate } from '@frontline/shared';
 import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings, useUsage } from '../../api/client';
 import { feeEstimate, nicheName, PLATFORM_NAME, StoreForm } from '../../components/StoreForm';
 import { Badge, Button, ConfirmDelete, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../../components/ui';
@@ -134,8 +134,17 @@ export function CapsForm({ caps }: { caps: StoreCaps }) {
   );
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const { storeId: _, ...update } = draft;
-    save.mutate(update, { onSuccess: () => setSaved(true) });
+    // Only what changed becomes this store's own value: the rest keeps following the workspace.
+    const update: StoreCapsUpdate = { version: caps.version ?? 0 };
+    for (const k of ['adSpendChangePerDay', 'higgsfieldCreditsPerDay', 'agentCostPerDay'] as const) if (draft[k] !== caps[k]) update[k] = draft[k];
+    const autopilot = Object.fromEntries(Object.entries(draft.autopilot).filter(([k, r]) => JSON.stringify(r) !== JSON.stringify(caps.autopilot[k])));
+    if (Object.keys(autopilot).length) update.autopilot = autopilot;
+    save.mutate(update, {
+      onSuccess: (c) => {
+        setDraft(c);
+        setSaved(true);
+      },
+    });
   };
   return (
     <form onSubmit={submit} onChange={() => setSaved(false)} className="grid gap-5">
@@ -211,7 +220,7 @@ function ProfileField({ title, kind }: { title: string; kind: 'name' | 'baseCurr
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          update.mutate(kind === 'name' ? { profile: { name: shown.trim() } } : { baseCurrency: shown.trim().toUpperCase() }, { onSuccess: () => setValue(undefined) });
+          update.mutate({ version: s.version ?? 0, ...(kind === 'name' ? { profile: { name: shown.trim() } } : { baseCurrency: shown.trim().toUpperCase() }) }, { onSuccess: () => setValue(undefined) });
         }}
         className="grid gap-3"
       >
@@ -247,13 +256,13 @@ export function Notifications() {
   if (q.isPending) return <Panel title="Notifications"><LoadingState rows={3} /></Panel>;
   if (q.isError) return <Panel title="Notifications"><ErrorState message="Couldn't load your settings." onRetry={() => q.refetch()} /></Panel>;
   const s = q.data;
-  const toggle = (label: string, help: string, checked: boolean, patch: (v: boolean) => Parameters<typeof update.mutate>[0]) => (
+  const toggle = (label: string, help: string, checked: boolean, patch: (v: boolean) => Omit<SettingsUpdate, 'version'>) => (
     <label className="flex cursor-pointer items-center justify-between gap-4 py-2">
       <span>
         <span className="block text-[13px]">{label}</span>
         <span className="block text-xs text-muted">{help}</span>
       </span>
-      <Switch checked={checked} disabled={update.isPending} onChange={(e) => update.mutate(patch(e.target.checked))} />
+      <Switch checked={checked} disabled={update.isPending} onChange={(e) => update.mutate({ version: s.version ?? 0, ...patch(e.target.checked) })} />
     </label>
   );
   return (

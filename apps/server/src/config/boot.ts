@@ -1,19 +1,14 @@
 // Boot fills for the Settings documents (ST-05, decision 7). Each runs once per data dir and only adds keys that are
 // absent, so nothing the owner set is overwritten and no schedule moves at upgrade. `store_caps` is never touched.
 import { randomUUID } from 'node:crypto';
+import { SETTINGS } from '@frontline/shared';
 import { once, tx, type Db } from '../db';
-import { DEFAULT_CAPS } from '../settings';
 
 export function bootConfig(db: Db, zone = Intl.DateTimeFormat().resolvedOptions().timeZone) {
   // The workspace clock starts as this machine's zone at the first boot, and the cap defaults as today's built-in ones.
   tx(db, () =>
     once(db, 'settings:fill-workspace') &&
-    fill(db, 'workspace', {
-      timezone: zone,
-      'caps.adSpendChangePerDay': DEFAULT_CAPS.adSpendChangePerDay,
-      'caps.higgsfieldCreditsPerDay': DEFAULT_CAPS.higgsfieldCreditsPerDay,
-      'caps.agentCostPerDay': DEFAULT_CAPS.agentCostPerDay,
-    }),
+    fill(db, 'workspace', { timezone: zone, ...Object.fromEntries(SETTINGS.filter((d) => d.id.startsWith('caps.')).map((d) => [d.id, d.default])) }),
   );
   tx(db, () => once(db, 'settings:fill-personal') && fill(db, 'personal', {}));
 }
