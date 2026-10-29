@@ -52,6 +52,7 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
 
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
+- [ ] (from store-analytics) store-analytics claims rebuildRevenue, setOrderItems, setStoreTimezone and forgetPlatform in connectors/common.ts and syncTikTokShop in connectors/tiktok.ts (your Lane keeps hands off what Store Analytics claims). Everything else in your Phase E files stays yours; we file changes to it in this Inbox.
 
 ## Items
 

@@ -520,7 +520,7 @@ item must be ticked first. Line numbers in this file drift; re-find each symbol 
 The metric layer comes before the connectors on purpose: it reads only migration-56 columns and the fixture, so each
 connector item afterwards proves its path from source to metric.
 
-- [ ] SA-01 **Lane setup: claims, CLAUDE.md row and touch points** (spec §1 Stage Four, §16):
+- [x] SA-01 **Lane setup: claims, CLAUDE.md row and touch points** (spec §1 Stage Four, §16):
   - The `store-analytics` row in the CLAUDE.md lanes table was added by the lane setup commit. Check it matches the
     Owns list in Lane; fix the row if it doesn't.
   - Append to `docs/backlog/codex-hardening.md` Inbox: `- [ ] (from store-analytics) store-analytics claims
@@ -1550,6 +1550,7 @@ then its tab. A tab appears only with its item.
 
 ## Done
 <!-- dated one-liners, newest last: - YYYY-MM-DD SA-NN <what shipped> (<commit>) -->
+- 2026-10-28 SA-01 claims filed to codex-hardening's Inbox; CLAUDE.md row matches the Owns list (code paths plus "the touch points"); baseline `pnpm check` green at 4d4ec6b3: 234 test files, 1730 tests (typecheck + vitest 69 s).
 
 ## Blocked
 
