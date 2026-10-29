@@ -1,23 +1,22 @@
 // SA-63: what the page is showing, unmistakably (spec §4): the store, the period and comparison, the zone and currency,
-// and how fresh the active tab's data is. The period and compare controls open in SA-65, Filters arrive with SA-68 and
-// the freshness chip's panel with SA-64 (decision 33: until then they're labels, not buttons).
+// and how fresh the active tab's data is (its ⓘ opens the Data sources panel). Filters arrive with SA-68 (decision 33:
+// no button before it does anything).
 import { useSearchParams } from 'react-router';
-import { CalendarDays, ChevronsUpDown, Info } from 'lucide-react';
-import { comparePeriod, resolvePeriod, SA_COMPARES, SA_DATASET_STATUSES, SA_DATASETS, SA_PRESETS, SA_SOURCES, type SaContext, type SaDataset, type SaFreshness } from '@frontline/shared';
+import { ChevronsUpDown, Info } from 'lucide-react';
+import { resolvePeriod, SA_DATASET_STATUSES, SA_DATASETS, SA_SOURCES, type SaContext, type SaDataset, type SaFreshness } from '@frontline/shared';
 import type { Store } from '@frontline/shared';
 import { MenuItem, Popover } from '../agents/Popover';
 import { PLATFORM_NAME } from '../components/StoreForm';
 import { cx, StatusDot, Tooltip } from '../components/ui';
-import { ago, fmtDay } from '../lib/format';
+import { ago } from '../lib/format';
 import { DataSources } from './DataSources';
+import { ComparePicker, PeriodPicker } from './Pickers';
 import type { useAnalyticsState } from './state';
 
 const SALES = new Set(['shopify', 'woocommerce', 'etsy', 'amazon', 'tiktok_shop']);
 const SITES = new Set(['shopify', 'woocommerce']);
-const ctl = 'inline-flex items-center gap-[7px] rounded-lg border border-line-2 bg-bg-2 px-2.5 py-1.5 text-[12.5px] whitespace-nowrap';
 
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
-const range = (from: string, to: string) => (from === to ? fmtDay(from) : `${fmtDay(from)} – ${fmtDay(to)}`);
 
 /** "Beauty · Shopify site + TikTok Shop": the niche, then the store's own platform and its other sales channels. */
 export function storeLine(ctx: Pick<SaContext, 'niche' | 'platform' | 'channels'>) {
@@ -41,7 +40,6 @@ export function ContextBar({ s, ctx, datasets }: { s: ReturnType<typeof useAnaly
   const stores = s.stores.data ?? [];
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: ctx?.zone ?? undefined }).format(new Date());
   const period = resolvePeriod(s.period, today, s.from !== undefined ? { from: s.from, to: s.to ?? '' } : undefined);
-  const compare = typeof period === 'string' ? undefined : comparePeriod(period, s.compare, ctx?.historyStart ?? undefined);
   const fresh = ctx && freshness(ctx.freshness, datasets);
   const name = ctx?.name ?? stores.find((x) => x.id === s.store)?.name ?? s.store ?? '';
   // The Data sources panel opens by URL, so a reload or a link keeps it open.
@@ -65,27 +63,22 @@ export function ContextBar({ s, ctx, datasets }: { s: ReturnType<typeof useAnaly
           </MenuItem>
         ))}
       </Popover>
-      <span className={ctl}>
-        <CalendarDays aria-hidden className="size-3.5 text-muted" />
-        {SA_PRESETS.find((p) => p.id === s.period)!.label}
-        <small className="text-[11.5px] text-muted">{typeof period === 'string' ? period : `${range(period.from, period.to)} · ${period.partial ? 'today so far' : 'full days'}`}</small>
-      </span>
-      <span className={ctl}>
-        {SA_COMPARES.find((c) => c.id === s.compare)!.label}
-        {compare && <small className="text-[11.5px] text-muted">{'unavailable' in compare ? compare.unavailable : range(compare.from, compare.to)}</small>}
-      </span>
+      <PeriodPicker key={`${s.period}:${s.from}:${s.to}`} s={s} set={s.set} today={today} period={period} />
+      <ComparePicker s={s} set={s.set} period={period} historyStart={ctx?.historyStart ?? undefined} />
       <span className="text-[11.5px] whitespace-nowrap text-muted min-[1100px]:ml-auto">{ctx ? `${ctx.zoneAbbr} · ${ctx.currency}` : ''}</span>
-      {fresh && (
-        <Tooltip tip={<span className="block whitespace-pre-line">{fresh.lines.join('\n') || 'No source reads this tab’s data yet'}</span>}>
-          <span tabIndex={0} className={cx('inline-flex items-center gap-1.5 text-[11.5px] whitespace-nowrap', fresh.tone === 'red' ? 'text-red' : 'text-muted')}>
-            <StatusDot tone={fresh.tone} />
-            {fresh.label}
-          </span>
-        </Tooltip>
-      )}
-      <button type="button" aria-label="Data sources" onClick={() => panel(true)} className="-ml-1 cursor-pointer rounded-md p-1 text-muted hover:text-white">
-        <Info aria-hidden className="size-3.5" />
-      </button>
+      <span className="inline-flex items-center gap-1">
+        {fresh && (
+          <Tooltip tip={<span className="block whitespace-pre-line">{fresh.lines.join('\n') || 'No source reads this tab’s data yet'}</span>}>
+            <span tabIndex={0} className={cx('inline-flex items-center gap-1.5 text-[11.5px] whitespace-nowrap', fresh.tone === 'red' ? 'text-red' : 'text-muted')}>
+              <StatusDot tone={fresh.tone} />
+              {fresh.label}
+            </span>
+          </Tooltip>
+        )}
+        <button type="button" aria-label="Data sources" onClick={() => panel(true)} className="cursor-pointer rounded-md p-1 text-muted hover:text-white">
+          <Info aria-hidden className="size-3.5" />
+        </button>
+      </span>
       <DataSources s={s} open={params.get('panel') === 'sources'} onClose={() => panel(false)} />
     </div>
   );

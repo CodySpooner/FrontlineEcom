@@ -15,7 +15,7 @@ export const hidePopover = (id: string) => document.getElementById(id)?.hidePopo
 
 /**
  * A menu or picker on the native Popover API (decision 15): Esc and a click outside close it. It opens under the
- * button whose `popoverTarget` is `id`, keeps within the window's height (scrolling inside), and focuses its current
+ * button whose `popoverTarget` is `id`, keeps within the window (scrolling inside), and focuses its current
  * `[data-item]` (or the first). ↑/↓ move through the items.
  */
 export function Popover({ id, label, align = 'start', className, children }: { id: string; label: string; align?: 'start' | 'end'; className?: string; children: ReactNode }) {
@@ -32,7 +32,7 @@ export function Popover({ id, label, align = 'start', className, children }: { i
         const b = document.querySelector(`[popovertarget="${id}"]`)?.getBoundingClientRect();
         if (b) {
           el.style.top = `${b.bottom + 4}px`;
-          el.style.left = `${Math.max(8, align === 'start' ? b.left : b.right - el.offsetWidth)}px`;
+          el.style.left = `${Math.max(8, Math.min(document.documentElement.clientWidth - el.offsetWidth - 8, align === 'start' ? b.left : b.right - el.offsetWidth))}px`;
           el.style.maxHeight = `${window.innerHeight - b.bottom - 12}px`;
         }
         (el.querySelector<HTMLElement>('[data-item][aria-current]') ?? el.querySelector<HTMLElement>('[data-item]'))?.focus();

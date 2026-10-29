@@ -49,12 +49,12 @@ describe('Context bar (SA-63)', () => {
     renderApp(<Analytics />, '/analytics?store=a');
     expect(await screen.findByText('Beauty · Shopify site + TikTok Shop')).toBeTruthy();
     expect(screen.getByText('ET · USD')).toBeTruthy();
-    expect(screen.getByText('Sep 28 – Oct 27 · full days')).toBeTruthy(); // the board's dates
-    expect(screen.getByText('Aug 29 – Sep 27')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Last 30 days Sep 28 – Oct 27 · full days' })).toBeTruthy(); // the board's dates
+    expect(screen.getByRole('button', { name: 'vs previous period Aug 29 – Sep 27' })).toBeTruthy();
     cleanup();
     renderApp(<Analytics />, '/analytics?store=a&period=mtd&compare=year');
-    expect(await screen.findByText('Oct 1 – Oct 28 · today so far')).toBeTruthy();
-    expect(screen.getByText('Oct 1 – Oct 28')).toBeTruthy(); // a year earlier
+    expect(await screen.findByRole('button', { name: 'Month to date Oct 1 – Oct 28 · today so far' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'vs same period last year Oct 1 – Oct 28, 2025' })).toBeTruthy(); // a year earlier
     expect(storeLine({ niche: 'pet', platform: 'amazon', channels: [] })).toBe('Pet · Amazon');
   });
 
