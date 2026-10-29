@@ -658,3 +658,48 @@ const STATUS_RANK: SaValue['status'][] = ['ok', 'partial', 'estimated', 'demo', 
 /** The weakest of several values' statuses: one unavailable input makes the result unavailable. */
 export const combineStatus = (...s: SaValue['status'][]): SaValue['status'] =>
   s.reduce<SaValue['status']>((a, b) => (STATUS_RANK.indexOf(b) > STATUS_RANK.indexOf(a) ? b : a), 'ok');
+
+/** One source × dataset's state for a store (SA-14): what the coverage, context and every metric's freshness read. */
+export interface SaFreshness {
+  source: SaSourceKind;
+  dataset: SaDataset;
+  status: SaDatasetStatus;
+  /** Why it isn't available yet, when the status alone doesn't say ("Not synced yet"). */
+  reason?: SaReason;
+  lastSuccess: string | null;
+  lastTry: string | null;
+  /** Read before, but no success for 3× the source's sync interval (decision 4: a flag, not a status). */
+  stale: boolean;
+  /** The last read's error, scrubbed of credentials (decision 23). */
+  error: string | null;
+  coveredFrom: string | null;
+  coveredTo: string | null;
+}
+
+/** A row of the Data sources panel. */
+export interface SaSourceRow extends SaFreshness {
+  name: string;
+  label: string;
+  field: string;
+  note?: string;
+  /** When a source failing over and over is next tried (decision 26). */
+  backoffUntil: string | null;
+  fix?: { label: string; href: string };
+}
+
+/** GET /api/analytics/context: the selected store, unmistakable (spec §4). */
+export interface SaContext {
+  storeId: string;
+  name: string;
+  niche: string;
+  platform: string;
+  currency: string;
+  demo: boolean;
+  /** The store's own integrations, sales channels and ad networks alike. */
+  channels: { kind: SaSourceKind; name: string; status: 'connected' | 'error' }[];
+  zone: string | null;
+  zoneLabel: string;
+  zoneAbbr: string;
+  historyStart: string | null;
+  freshness: SaFreshness[];
+}

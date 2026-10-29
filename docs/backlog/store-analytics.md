@@ -687,7 +687,7 @@ connector item afterwards proves its path from source to metric.
     items add their rows.
   - Acceptance: both tests; the legacy routes' tests unchanged.
 
-- [ ] SA-14 **Coverage and context endpoints** (spec §4, §5):
+- [x] SA-14 **Coverage and context endpoints** (spec §4, §5):
   - `datasetFreshness(db, storeId)` in `sources.ts`: per dataset the status, last success, `stale` (no success for
     3× its sync interval), and the scrubbed error.
   - `GET /api/analytics/context?store=`: name, niche, channels (from the store's integrations), zone label and
@@ -1569,6 +1569,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-11 `backoffOf` in `store-analytics/sources.ts` counts consecutive failed `sync_runs` (interrupted runs count as neither): 3 → 30 min, 6 → 6 h from the last failure's end; `startSyncLoop` skips stale-only retries while backed off, but "Sync now" and a credentials change (both bump `updated_at`) run at once, and the wait survives a restart. Fake-clock tests for each; sync.test's recovery case now waits the 30 minutes.
 - 2026-10-28 SA-12 `connectors/ingest.ts`: `noteRead` (try, success, widened covered days, scrubbed error), `noted` (wraps a read, rethrows) and `noteFailed` (the outer catch's still-unread datasets). Shopify notes catalog, orders (backfill/cursor day → today) and the funnel as traffic (its `() => null` keeps swallowing but records why); Amazon notes catalog (partial past the search cap), inventory, traffic (a pending report isn't noted), orders and refunds, each still swallowed; Woo notes orders, refunds and catalog; Etsy orders and catalog. Tests in `connectors/ingest.test.ts`.
 - 2026-10-28 SA-13 `store-analytics/routes.ts`: `readScope` (no store 400, unknown 404, a `stores=` list 400, unknown `metrics=` id 400) and `storeAnalyticsRoutes` with `GET /api/analytics/definitions` (`SA_METRICS`, narrowed by `metrics=`, and `SA_SOURCES`), mounted once in `app.ts` behind the existing `guard` on `/api/analytics/*`. `scope.test.ts`: a row per route, and a sweep that fails on any unlisted `/api/analytics/` route; legacy routes' tests unchanged.
+- 2026-10-28 SA-14 `datasetFreshness` and `sourceRows` in `sources.ts` (per source × dataset: status with a reason where the status alone doesn't say, last success/try, `stale` at 3× the source's sync interval, scrubbed error, covered days; rows add the backoff wait and an Integrations fix link). A demo store reads `demo`; an unconnected platform reads `needs_credentials`, never an empty list. `GET /api/analytics/context` (name, niche, channels, zone label/abbr, currency, demo, history start, freshness) and `GET /api/analytics/sources`; shared `SaFreshness`/`SaSourceRow`/`SaContext`; scope rows added.
 
 ## Blocked
 

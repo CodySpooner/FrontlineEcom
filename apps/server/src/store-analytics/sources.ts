@@ -1,3 +1,4 @@
+import { SA_DATASETS, SA_SOURCES, settingsUrl, type SaDataset, type SaDatasetStatus, type SaFreshness, type SaReason, type SaSourceDataset, type SaSourceKind, type SaSourceRow } from '@frontline/shared';
 import type { Db } from '../db';
 import { decrypt } from '../secrets';
 
@@ -63,4 +64,87 @@ export function endRun(db: Db, key: Buffer, runId: number, integrationId: string
   const scrubbed = error === undefined ? null : scrubError(error, secretsOf(db, key, integrationId));
   db.prepare('UPDATE sync_runs SET finished_at = ?, status = ?, error = ? WHERE id = ?').run(now.toISOString(), scrubbed === null ? 'done' : 'failed', scrubbed, runId);
   return scrubbed;
+}
+
+/** startSyncLoop's intervals (its fastMs for Shopify and WooCommerce, staleMs otherwise); Amazon asks for its traffic report once a day. */
+const intervalMs = (kind: SaSourceKind, dataset: SaDataset) =>
+  kind === 'amazon' && dataset === 'traffic' ? 86_400_000 : kind === 'shopify' || kind === 'woocommerce' ? 2 * 60_000 : 10 * 60_000;
+
+type Integration = { id: string; kind: SaSourceKind; status: string; error: string | null };
+
+/** The sources a store's numbers come from: its demo generator, or its own platform and every integration it has. */
+function storeSources(db: Db, storeId: string): { kind: SaSourceKind; integration?: Integration }[] {
+  const store = db.prepare('SELECT platform, demo FROM stores WHERE id = ?').get(storeId);
+  if (!store) return [];
+  if (store.demo) return [{ kind: 'demo' }];
+  const integrations = db
+    .prepare('SELECT id, kind, status, error FROM integrations WHERE store_id = ? ORDER BY id')
+    .all(storeId)
+    .filter((r) => String(r.kind) in SA_SOURCES)
+    .map((r) => ({ id: String(r.id), kind: r.kind as SaSourceKind, status: String(r.status), error: r.error == null ? null : String(r.error) }));
+  const platform = String(store.platform) as SaSourceKind;
+  return [...(platform in SA_SOURCES && !integrations.some((i) => i.kind === platform) ? [{ kind: platform }] : []), ...integrations.map((i) => ({ kind: i.kind, integration: i }))];
+}
+
+/**
+ * Per source and dataset of the store: its status, last success and try, `stale`, the scrubbed error and the days it
+ * covers (decision 23). Never empty for a store: an unconnected platform's datasets read `needs_credentials`.
+ */
+export function datasetFreshness(db: Db, storeId: string, now = Date.now()): SaFreshness[] {
+  const read = db.prepare('SELECT status, last_try_at, last_success_at, error, covered_from, covered_to FROM source_datasets WHERE integration_id = ? AND dataset = ?');
+  return storeSources(db, storeId).flatMap(({ kind, integration }) =>
+    (Object.entries(SA_SOURCES[kind].datasets) as [SaDataset, SaSourceDataset][]).map(([dataset, d]) => {
+      const row = integration && d.support === 'supported' && d.reads ? read.get(integration.id, dataset) : undefined;
+      const [status, reason]: [SaDatasetStatus, SaReason?] =
+        kind === 'demo' ? [d.support === 'unsupported' ? 'unsupported' : 'demo']
+        : d.support !== 'supported' ? [d.support]
+        : !integration ? ['needs_credentials', 'needs_credentials']
+        : !d.reads ? ['not_tracked', 'not_tracked']
+        : row ? [row.status as SaDatasetStatus]
+        : integration.status === 'error' ? ['failed', 'failed']
+        : ['not_tracked', 'needs_ingestion'];
+      const lastSuccess = row?.last_success_at == null ? null : String(row.last_success_at);
+      // ponytail: an integration's own error is scrubbed of token-shaped strings only (connectors keep credentials out of it).
+      const error = row?.error != null ? String(row.error) : !row && status === 'failed' && integration?.error ? scrubError(integration.error) : null;
+      return {
+        source: kind,
+        dataset,
+        status,
+        ...(reason ? { reason } : {}),
+        lastSuccess,
+        lastTry: row?.last_try_at == null ? null : String(row.last_try_at),
+        stale: !!lastSuccess && now - Date.parse(lastSuccess) > 3 * intervalMs(kind, dataset),
+        error,
+        coveredFrom: row?.covered_from == null ? null : String(row.covered_from),
+        coveredTo: row?.covered_to == null ? null : String(row.covered_to),
+      };
+    }),
+  );
+}
+
+/** The Data sources panel: every row of datasetFreshness with what it reads, its backoff wait and a fix link. */
+export function sourceRows(db: Db, storeId: string, now = Date.now()): SaSourceRow[] {
+  const waits = new Map<string, string | null>();
+  const wait = (kind: SaSourceKind) => {
+    const id = `${kind}:${storeId}`;
+    if (!waits.has(id)) {
+      const until = backoffOf(db, id)?.until;
+      waits.set(id, until && Date.parse(until) > now ? until : null);
+    }
+    return waits.get(id)!;
+  };
+  return datasetFreshness(db, storeId, now).map((f) => {
+    const s = SA_SOURCES[f.source];
+    const d = s.datasets[f.dataset]!;
+    const fixable = f.status === 'needs_credentials' || f.status === 'needs_permission' || f.status === 'failed' || f.stale;
+    return {
+      ...f,
+      name: s.name,
+      label: SA_DATASETS[f.dataset],
+      field: d.field,
+      ...(d.reason ? { note: d.reason } : {}),
+      backoffUntil: f.source === 'demo' ? null : wait(f.source),
+      ...(fixable ? { fix: { label: f.status === 'needs_credentials' ? `Connect ${s.name}` : `Check ${s.name}`, href: settingsUrl('integrations', { store: storeId }) } } : {}),
+    };
+  });
 }

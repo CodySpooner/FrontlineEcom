@@ -27,6 +27,8 @@ const ROUTES: Row[] = [
   { method: 'GET', path: '/api/analytics/campaigns', legacy: true },
   { method: 'GET', path: '/api/analytics/top-products', legacy: true },
   { method: 'GET', path: '/api/analytics/definitions' },
+  { method: 'GET', path: '/api/analytics/context' },
+  { method: 'GET', path: '/api/analytics/sources' },
 ];
 
 const send = (r: Row, query: string, id = 'x') =>
