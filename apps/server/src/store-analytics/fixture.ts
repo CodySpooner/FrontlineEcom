@@ -4,8 +4,9 @@
 // oracle.test.ts works the expected numbers out by hand from the comments here. Times are UTC; the store is in New
 // York, which leaves daylight time on Nov 1 2026 (a 25-hour day).
 import { addDays } from '../dates';
-import type { Db } from '../db';
+import { tx, type Db } from '../db';
 import { rebuildAdSpend, rebuildRevenue } from '../connectors/common';
+import { mulberry32 } from '../demo';
 import { insertStore } from '../stores';
 
 export const LEDGER_STORE = 'ledger';
@@ -165,4 +166,86 @@ export function seedLedgerStore(db: Db) {
   const traffic = db.prepare('UPDATE daily_metrics SET sessions = 100, add_to_carts = 12, checkouts = 5, purchase_sessions = ? WHERE store_id = ? AND date = ?');
   for (const d of days) traffic.run(d === '2026-10-27' ? null : 2, LEDGER_STORE, d);
   return LEDGER_STORE;
+}
+
+export const SCALE_STORE = 'scale';
+
+/**
+ * SA-25 (decision 38): a large real store for timing, deterministic. Two years to LAST of orders (about 250,000 by
+ * default) with 1 to 3 lines each, 20,000 products in 60,000 variants (most with a unit cost), 5% refunded, 30% with a
+ * recorded fee, a sixth on TikTok Shop, 2% channel copies, Meta campaigns and daily traffic.
+ */
+export function seedScaleStore(db: Db, { orders = 250_000, products = 20_000 } = {}) {
+  const r = mulberry32(0x5ca1e);
+  const days = 730;
+  const first = addDays(LAST, 1 - days);
+  insertStore(db, { id: SCALE_STORE, name: 'Scale Test Store', platform: 'shopify', niche: 'beauty', currency: 'USD', timezone: 'America/New_York', color: '#ff2a3a', connected: true, feePercent: 2.9, feePerOrder: 0.3 });
+  tx(db, () => {
+    const synced = '2026-11-09T16:55:00.000Z';
+    const integ = db.prepare("INSERT INTO integrations (id, kind, store_id, status, settings_json, encrypted_credentials, updated_at, synced_at) VALUES (?, ?, ?, 'connected', '{}', '', ?, ?)");
+    integ.run(`shopify:${SCALE_STORE}`, 'shopify', SCALE_STORE, synced, synced);
+    integ.run(`meta_ads:${SCALE_STORE}`, 'meta_ads', SCALE_STORE, synced, synced);
+    const prod = db.prepare("INSERT INTO products (store_id, id, title, price, compare_at, cost, inventory, inventory_tracked, status) VALUES (?, ?, ?, ?, NULL, ?, ?, 1, 'active')");
+    const variant = db.prepare("INSERT INTO product_variants (store_id, product_id, id, title, sku, price, inventory, inventory_tracked, inventory_policy, status) VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'deny', 'active')");
+    const cost = db.prepare("INSERT INTO unit_costs (store_id, product_id, variant_id, cost, currency, source, effective_from, recorded_at) VALUES (?, ?, ?, ?, 'USD', 'shopify', ?, ?)");
+    const price: number[] = [];
+    for (let p = 0; p < products; p++) {
+      price.push(Math.round((8 + 90 * r()) * 100) / 100);
+      prod.run(SCALE_STORE, `p${p}`, `Product ${p}`, price[p]!, price[p]! * 0.3, Math.floor(200 * r()));
+      for (let v = 0; v < 3; v++) {
+        variant.run(SCALE_STORE, `p${p}`, `p${p}-${v}`, `Option ${v}`, `SC-${p}-${v}`, price[p]!, Math.floor(80 * r()));
+        if (r() < 0.85) cost.run(SCALE_STORE, `p${p}`, `p${p}-${v}`, Math.round(price[p]! * (0.2 + 0.2 * r()) * 100) / 100, first, `${first}T00:00:00Z`);
+      }
+    }
+    const ord = db.prepare(
+      `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, cogs, local_date, tax, source_kind, source_id, channel, channel_order_id, duplicate_of,
+         currency, gross_sales, discounts, shipping, paid_at, cancelled_at, source_updated_at, breakdown_at) VALUES (?, ?, ?, ?, ?, 'fulfilled', 0, ?, ?, 'shopify', ?, ?, ?, ?, 'USD', ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const line = db.prepare('INSERT INTO order_lines (store_id, order_id, line_id, product_id, variant_id, sku, quantity, gross, discount, cost, cost_source) VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)');
+    const refund = db.prepare("INSERT INTO refunds (store_id, id, refund_id, order_id, product_id, variant_id, refunded_at, local_date, merchandise, shipping, tax, other, quantity, restocked, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, NULL, 1, ?, 'shopify')");
+    const fee = db.prepare("INSERT INTO order_fees (store_id, order_id, kind, amount, currency, local_date, source) VALUES (?, ?, 'payment', ?, 'USD', ?, 'shopify')");
+    for (let n = 0; n < orders; n++) {
+      const day = addDays(first, Math.floor((n / orders) * days));
+      const at = `${day}T${String(13 + Math.floor(10 * r())).padStart(2, '0')}:${String(Math.floor(60 * r())).padStart(2, '0')}:00.000Z`;
+      const id = `#${100000 + n}`;
+      const lines = 1 + Math.floor(r() * r() * 3);
+      let gross = 0;
+      const ls: [string, string, number, number, number | null][] = [];
+      for (let k = 0; k < lines; k++) {
+        const p = Math.floor(r() * r() * products);
+        const v = Math.floor(3 * r());
+        const q = r() < 0.85 ? 1 : 2;
+        ls.push([`p${p}`, `p${p}-${v}`, q, price[p]! * q, r() < 0.8 ? Math.round(price[p]! * q * 0.3 * 100) / 100 : null]);
+        gross += price[p]! * q;
+      }
+      gross = Math.round(gross * 100) / 100;
+      const [disc, ship] = [r() < 0.2 ? Math.round(gross * 0.1 * 100) / 100 : 0, r() < 0.4 ? 4.99 : 0];
+      const tax = Math.round((gross - disc) * 0.08 * 100) / 100;
+      const refunded = r() < 0.05;
+      const merch = refunded ? Math.round(ls[0]![3] / ls[0]![2] * 100) / 100 : 0;
+      const refundTax = Math.round(merch * 0.08 * 100) / 100;
+      const total = Math.round((gross - disc + ship + tax - merch - refundTax) * 100) / 100;
+      const tt = r() < 1 / 6;
+      const copy = tt && r() < 0.12;
+      ord.run(SCALE_STORE, id, at, total, 'paid', day, tax, id.slice(1), tt ? 'tiktok_shop' : 'site', tt ? `57${n}` : null, null, gross, disc, ship, at, null, at, synced);
+      ls.forEach(([p, v, q, g, c], k) => line.run(SCALE_STORE, id, `l${k}`, p, v, q, g, k === 0 ? disc : 0, c, c == null ? null : 'platform'));
+      if (copy) {
+        ord.run(SCALE_STORE, `${id}-c`, at, total, 'paid', day, tax, `${id.slice(1)}c`, 'tiktok_shop', `57${n}`, id, gross, disc, ship, at, null, at, synced);
+      }
+      if (refunded) {
+        const rday = addDays(day, Math.floor(1 + 20 * r()));
+        if (rday <= LAST) refund.run(SCALE_STORE, `r${n}`, `R${n}`, id, ls[0]![0], ls[0]![1], `${rday}T15:00:00.000Z`, rday, merch, refundTax, r() < 0.5 ? 1 : 0);
+      }
+      if (r() < 0.3) fee.run(SCALE_STORE, id, Math.round(((gross - disc + ship + tax) * 0.029 + 0.3) * 100) / 100, day);
+    }
+    db.prepare("INSERT INTO campaigns (network, id, store_id, name, status, daily_budget) VALUES ('meta', 's1', ?, 'Prospecting', 'active', 300)").run(SCALE_STORE);
+    const camp = db.prepare("INSERT INTO campaign_daily (network, campaign_id, date, spend, revenue, purchases, clicks, impressions) VALUES ('meta', 's1', ?, ?, ?, 10, 400, 20000)");
+    const list: string[] = [];
+    for (let d = first; d <= LAST; d = addDays(d, 1)) list.push(d), camp.run(d, Math.round(250 * (0.8 + 0.4 * r())), Math.round(700 * (0.8 + 0.4 * r())));
+    rebuildRevenue(db, SCALE_STORE, list);
+    rebuildAdSpend(db, SCALE_STORE, list);
+    const traffic = db.prepare('UPDATE daily_metrics SET sessions = ?, add_to_carts = 0, checkouts = 0, purchase_sessions = ? WHERE store_id = ? AND date = ?');
+    for (const d of list) traffic.run(9000, 300, SCALE_STORE, d);
+  });
+  return SCALE_STORE;
 }
