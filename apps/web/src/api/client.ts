@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { keepPreviousData, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
   ActionLogEntry,
+  ConfigView,
+  ConfigWrite,
   AgentEvent,
   CreateTeamInput,
   SquadMission,
@@ -237,6 +239,21 @@ export function catchUp(r: AgentRunDetail): AgentRunDetail {
   if (rest.length) held.set(r.id, rest);
   else held.delete(r.id);
   return out;
+}
+
+/** Settings: the effective configuration (GET /api/config, ST-07), its values, origins and each document's version. */
+export function useConfig(store?: string) {
+  return useQuery({ queryKey: ['config', 'view', store ?? null], queryFn: () => api<ConfigView>(`/api/config${store ? `?store=${encodeURIComponent(store)}` : ''}`) });
+}
+
+/** PATCH /api/config over the versions read: the answer is the new view. Refused (a 409 among them), it reads again. */
+export function useSaveConfig(store?: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (w: ConfigWrite) => api<ConfigView>('/api/config', json('PATCH', w)),
+    onSuccess: (view) => qc.setQueryData(['config', 'view', store ?? null], view),
+    onError: () => qc.invalidateQueries({ queryKey: ['config', 'view'] }),
+  });
 }
 
 /**

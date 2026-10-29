@@ -83,6 +83,11 @@ body {
     transition: none !important;
   }
 }
+/* Settings → Appearance → Always reduce (ST-13): each rule above again, whatever Windows says. */
+[data-motion='reduce'] *, [data-motion='reduce'] ::before, [data-motion='reduce'] ::after {
+  animation: none !important;
+  transition: none !important;
+}
 
 /* Windows contrast themes (forced colors) drop background colors, and a background is all that marks the picked chip,
    range, tab or page, a switch's knob and state, and a bar's fill: paint those in the theme's own highlight colors. */

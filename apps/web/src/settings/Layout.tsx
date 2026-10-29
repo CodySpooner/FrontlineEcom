@@ -1,11 +1,12 @@
 // Settings frame (ST-02, board A1): the settings sidebar and a main column of at most 860 px under the page's Hero.
 import type { ComponentType } from 'react';
-import { Bell, Database, Gauge, Plug, Settings as Gear, Store, User, type LucideIcon } from 'lucide-react';
+import { Bell, Database, Gauge, Palette, Plug, Settings as Gear, Store, User, type LucideIcon } from 'lucide-react';
 import type { SettingsSection } from '@frontline/shared';
 import { Hero } from '../components/Hero';
 import { NAV } from '../nav';
 import { Integrations } from './integrations/Integrations';
 import { Account } from './sections/Account';
+import { Appearance } from './sections/Appearance';
 import { BaseCurrency, Caps, Notifications, Stores, YourData } from './sections/legacy';
 import { Sidebar } from './Sidebar';
 
@@ -24,6 +25,7 @@ export interface SectionDef {
 /** The sections with content, in sidebar order. A section is listed in the same commit as its content (decision 1). */
 export const SECTIONS: SectionDef[] = [
   { slug: 'account', group: 'Personal', label: 'Account', icon: User, sub: 'Your name as Frontline shows it.', Page: Account },
+  { slug: 'appearance', group: 'Personal', label: 'Appearance', icon: Palette, sub: 'Motion, and what follows Windows.', Page: Appearance },
   { slug: 'notifications', group: 'Personal', label: 'Notifications', icon: Bell, sub: 'What lands in the bell.', Page: () => <div data-legacy="ST-14b"><Notifications /></div> },
   { slug: 'general', group: 'Workspace', label: 'General', icon: Gear, sub: 'Preferences shared by every store.', Page: () => <div data-legacy="ST-16"><BaseCurrency /></div> },
   { slug: 'stores', group: 'Workspace', label: 'Stores', icon: Store, sub: 'Each store gets its own squad that learns its niche.', Page: () => <div data-legacy="ST-18"><Stores /></div> },

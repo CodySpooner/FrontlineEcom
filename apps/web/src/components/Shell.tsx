@@ -9,11 +9,13 @@ import { BrandLogo } from './BrandLogo';
 import { Onboarding } from './Onboarding';
 import { useStoreSelection } from './StoreFilter';
 import { UpdatePrompt } from './UpdatePrompt';
+import { useMotion } from '../settings/motion';
 import { Button, buttonClass, Card, LoadingState, ProgressBar, StatusDot, cx } from './ui';
 
 export function Shell() {
   const online = useLive();
   useGoLiveRefresh();
+  useMotion(); // Settings → Appearance → Always reduce, on <html> (settings ST-13)
   const { pathname } = useLocation();
   const title = pageTitle(pathname, useStoreSelection().name);
   // AI Agents stays lit on its conversation and team URLs; Integrations on /settings/integrations/*, Settings on the rest.

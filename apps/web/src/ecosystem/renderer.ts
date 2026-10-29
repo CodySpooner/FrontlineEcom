@@ -13,6 +13,7 @@ import { hubTelemetry } from './hub';
 import { ambientOffice } from './ambient';
 import { CITY_URL, cityBackdrop } from './backdrop';
 import { departmentPlacards } from './placards';
+import { reducedMotion } from '../settings/motion';
 
 export async function createOffice(host: HTMLElement, onDesk: (id: string) => void) {
   const [logoTexture, cityTexture] = await Promise.all([Assets.load<Texture>(LOGO_URL), Assets.load<Texture>(CITY_URL)]);
@@ -53,7 +54,8 @@ export async function createOffice(host: HTMLElement, onDesk: (id: string) => vo
   const hub=iso(MEETING), hologram = createHologram(logoTexture); hologram.root.position.set(hub.x,hub.y-98); world.addChild(hologram.root);
   const platforms = platformHolograms(world);
   const ambient = ambientOffice(world);
-  const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  // Windows' reduced motion, or Settings → Appearance → Always reduce (settings ST-13): read each frame.
+  const reduced = reducedMotion(matchMedia('(prefers-reduced-motion: reduce)'));
   let lowPower = false, autoLow = false;
   app.ticker.maxFPS = 60;
   const workers = workerSprites(world, (desk, id) => { if (!dragged) { clickedWorker = id; selectDesk(desk); } });
