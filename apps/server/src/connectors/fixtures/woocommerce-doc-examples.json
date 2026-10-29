@@ -1,0 +1,182 @@
+{
+  "_source": "WooCommerce REST API v3 docs, Orders > Order properties and the 'Retrieve an order' example, https://woocommerce.github.io/woocommerce-rest-api-docs/#order-properties (source/includes/wp-api-v3/_orders.md, read 2026-10-28). #727 is the example as given (dates moved into the test window); #728 adds a coupon, two fees and prices that include tax; #729 a partial refund.",
+  "orders": [
+    {
+      "id": 727,
+      "parent_id": 0,
+      "number": "727",
+      "status": "processing",
+      "currency": "USD",
+      "created_via": "rest-api",
+      "date_created": "2026-10-25T15:28:02",
+      "date_created_gmt": "2026-10-25T19:28:02",
+      "date_modified_gmt": "2026-10-25T19:28:08",
+      "discount_total": "0.00",
+      "discount_tax": "0.00",
+      "shipping_total": "10.00",
+      "shipping_tax": "0.00",
+      "cart_tax": "1.35",
+      "total": "29.35",
+      "total_tax": "1.35",
+      "prices_include_tax": false,
+      "customer_id": 0,
+      "date_paid_gmt": "2026-10-25T19:28:08",
+      "date_completed_gmt": null,
+      "line_items": [
+        {
+          "id": 315,
+          "name": "Woo Single #1",
+          "product_id": 93,
+          "variation_id": 0,
+          "quantity": 2,
+          "tax_class": "",
+          "subtotal": "6.00",
+          "subtotal_tax": "0.45",
+          "total": "6.00",
+          "total_tax": "0.45",
+          "sku": "",
+          "price": 3
+        },
+        {
+          "id": 316,
+          "name": "Ship Your Idea – Color: Black, Size: M Test",
+          "product_id": 22,
+          "variation_id": 23,
+          "quantity": 1,
+          "tax_class": "",
+          "subtotal": "12.00",
+          "subtotal_tax": "0.90",
+          "total": "12.00",
+          "total_tax": "0.90",
+          "sku": "Bar3",
+          "price": 12
+        }
+      ],
+      "shipping_lines": [
+        {
+          "method_title": "Flat Rate",
+          "total": "10.00",
+          "total_tax": "0.00"
+        }
+      ],
+      "fee_lines": [],
+      "coupon_lines": [],
+      "refunds": []
+    },
+    {
+      "id": 728,
+      "parent_id": 0,
+      "number": "728",
+      "status": "completed",
+      "currency": "USD",
+      "created_via": "checkout",
+      "date_created": "2026-10-25T10:00:00",
+      "date_created_gmt": "2026-10-25T14:00:00",
+      "date_modified_gmt": "2026-10-26T09:00:00",
+      "discount_total": "4.13",
+      "discount_tax": "0.87",
+      "shipping_total": "4.13",
+      "shipping_tax": "0.87",
+      "cart_tax": "6.07",
+      "total": "41.21",
+      "total_tax": "7.15",
+      "prices_include_tax": true,
+      "customer_id": 12,
+      "date_paid_gmt": "2026-10-25T14:00:30",
+      "date_completed_gmt": "2026-10-26T09:00:00",
+      "line_items": [
+        {
+          "id": 401,
+          "product_id": 93,
+          "variation_id": 0,
+          "quantity": 2,
+          "subtotal": "33.057851",
+          "subtotal_tax": "6.942149",
+          "total": "28.925620",
+          "total_tax": "6.074380",
+          "sku": "",
+          "price": 16.528926
+        }
+      ],
+      "shipping_lines": [
+        {
+          "method_title": "Flat Rate",
+          "total": "4.13",
+          "total_tax": "0.87"
+        }
+      ],
+      "fee_lines": [
+        {
+          "name": "Gift wrap",
+          "total": "2.00",
+          "total_tax": "0.42"
+        },
+        {
+          "name": "Loyalty credit",
+          "total": "-1.00",
+          "total_tax": "-0.21"
+        }
+      ],
+      "coupon_lines": [
+        {
+          "code": "save5",
+          "discount": "4.13",
+          "discount_tax": "0.87"
+        }
+      ],
+      "refunds": []
+    },
+    {
+      "id": 729,
+      "parent_id": 0,
+      "number": "729",
+      "status": "processing",
+      "currency": "USD",
+      "created_via": "checkout",
+      "date_created": "2026-10-25T11:00:00",
+      "date_created_gmt": "2026-10-25T15:00:00",
+      "date_modified_gmt": "2026-10-26T10:00:00",
+      "discount_total": "0.00",
+      "discount_tax": "0.00",
+      "shipping_total": "5.00",
+      "shipping_tax": "0.00",
+      "cart_tax": "0.00",
+      "total": "45.00",
+      "total_tax": "0.00",
+      "prices_include_tax": false,
+      "customer_id": 12,
+      "date_paid_gmt": "2026-10-25T15:00:10",
+      "date_completed_gmt": null,
+      "line_items": [
+        {
+          "id": 501,
+          "product_id": 22,
+          "variation_id": 23,
+          "quantity": 2,
+          "subtotal": "40.00",
+          "subtotal_tax": "0.00",
+          "total": "40.00",
+          "total_tax": "0.00",
+          "sku": "Bar3",
+          "price": 20
+        }
+      ],
+      "shipping_lines": [
+        {
+          "method_title": "Flat Rate",
+          "total": "5.00",
+          "total_tax": "0.00"
+        }
+      ],
+      "fee_lines": [],
+      "coupon_lines": [],
+      "refunds": [
+        {
+          "id": 730,
+          "reason": "",
+          "total": "-10.00"
+        }
+      ]
+    }
+  ]
+}

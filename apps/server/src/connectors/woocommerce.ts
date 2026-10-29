@@ -15,7 +15,8 @@ import { checkNewProducts, type NewProduct, type ProductPage } from './shopify';
 const BACKFILL_DAYS = 730;
 // Only what the sync reads (WordPress's `_fields`; one that ignores it sends everything, which still works): an order's
 // billing and shipping (names, emails, addresses) never leave the shop, and a big shop's backfill is a fraction of the size.
-const ORDER_FIELDS = 'id,number,status,currency,date_created,date_created_gmt,date_paid_gmt,total,total_tax,refunds,line_items,cost_of_goods_sold,meta_data';
+const ORDER_FIELDS =
+  'id,number,status,currency,date_created,date_created_gmt,date_modified_gmt,date_paid_gmt,date_completed_gmt,discount_total,shipping_total,total,total_tax,fee_lines,refunds,line_items,cost_of_goods_sold,meta_data';
 const PRODUCT_FIELDS = 'id,name,status,type,price,regular_price,images,stock_quantity,manage_stock,backorders,cost_of_goods_sold';
 
 type Fetch = typeof fetch;
@@ -31,13 +32,20 @@ interface WooOrder {
   date_created_gmt: string;
   date_modified_gmt: string;
   date_paid_gmt: string | null;
+  date_completed_gmt?: string | null;
   /** As placed: refunds don't lower it. */
   total: string;
+  /** Without tax, like the lines' subtotals (their tax is in total_tax). */
+  discount_total?: string;
+  shipping_total?: string;
+  /** A charge (gift wrap) or, negative, a discount; without its tax. */
+  fee_lines?: { total: string }[];
   /** The tax in `total`. */
   total_tax?: string;
   /** Each refund's total is negative, e.g. "-10.00". */
   refunds?: { total: string }[];
-  line_items?: { product_id: number; quantity: number; total: string; cost_of_goods_sold?: { value: number } }[];
+  /** subtotal: before discounts, total: after; both without tax. */
+  line_items?: { product_id: number; quantity: number; subtotal?: string; total: string; cost_of_goods_sold?: { value: number } }[];
   /** Only when the store has WooCommerce's Cost of Goods Sold feature on (Settings → Advanced → Features, Woo 9.5+). */
   cost_of_goods_sold?: { total_value: number };
   meta_data?: { key: string; value: unknown }[];
@@ -73,6 +81,24 @@ interface WooProduct {
   date_modified_gmt: string;
   cost_of_goods_sold?: { total_value: number };
 }
+
+/**
+ * Decision 9: an order's as-placed money parts in its own currency, from the documented fields (null when one is
+ * missing). Woo's grand total = line subtotals − discount_total + shipping_total + fees + total_tax: a fee that
+ * charges is gross, a negative one a discount.
+ */
+export function wooParts(o: WooOrder) {
+  if (o.discount_total == null || o.shipping_total == null || !o.line_items || o.line_items.some((li) => li.subtotal == null)) return null;
+  const fees = (o.fee_lines ?? []).map((f) => Number(f.total));
+  const plus = (ns: number[]) => ns.reduce((a, n) => a + n, 0);
+  return {
+    gross: r2(plus(o.line_items.map((li) => Number(li.subtotal))) + plus(fees.filter((f) => f > 0))),
+    discounts: r2(Number(o.discount_total) - plus(fees.filter((f) => f < 0))),
+    shipping: r2(Number(o.shipping_total)),
+    tax: r2(Number(o.total_tax ?? 0)),
+  };
+}
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 const basic = (creds: Record<string, string>) => `Basic ${Buffer.from(`${creds.consumerKey!.trim()}:${creds.consumerSecret!.trim()}`).toString('base64')}`;
 
@@ -247,9 +273,14 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
       }
       // Costs come from Woo's own Cost of Goods Sold feature when it's on (cogs 0 otherwise); tracking from a tracking plugin.
       const ord = db.prepare(
-        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url, fx_rate) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url, fx_rate,
+           source_kind, source_id, channel, currency, gross_sales, discounts, shipping, paid_at, fulfilled_at, source_updated_at, breakdown_at)
+         VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'woocommerce', ?, 'site', ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status, cogs = excluded.cogs, tax = excluded.tax, fx_rate = excluded.fx_rate,
-           tracking = coalesce(excluded.tracking, tracking), tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url)`,
+           tracking = coalesce(excluded.tracking, tracking), tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url),
+           source_kind = excluded.source_kind, source_id = excluded.source_id, channel = excluded.channel, currency = excluded.currency, gross_sales = excluded.gross_sales,
+           discounts = excluded.discounts, shipping = excluded.shipping, paid_at = excluded.paid_at, fulfilled_at = excluded.fulfilled_at, source_updated_at = excluded.source_updated_at,
+           breakdown_at = excluded.breakdown_at`,
       );
       const days = new Set<string>();
       for (const o of orders) {
@@ -265,7 +296,13 @@ export async function syncWooCommerce(db: Db, key: Buffer, storeId: string, fetc
         // A refund gives back its share of the tax. ponytail: pro rata, Woo's order list doesn't split a refund's tax out.
         const tax = Number(o.total) > 0 ? (rate * Number(o.total_tax ?? 0) * total) / (rate * Number(o.total)) : 0;
         const tracking = wooTracking(o);
-        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', tracking.number, Number(o.cost_of_goods_sold?.total_value ?? 0), day, Math.round(tax * 100) / 100, tracking.url, rate);
+        // The parts count (breakdown_at) once nothing has come back: refunds reach the ledger with SA-38, so an order
+        // with any stays an estimate until then. The rate stays the order's locked one, as above.
+        const p = wooParts(o);
+        const settled = p && !o.refunds?.length && !refunded;
+        ord.run(storeId, `woo-${o.number}`, created.toISOString(), Math.round(total * 100) / 100, refunded ? 'refunded' : 'paid', o.status === 'completed' ? 'fulfilled' : 'unfulfilled', tracking.number, Number(o.cost_of_goods_sold?.total_value ?? 0), day, Math.round(tax * 100) / 100, tracking.url, rate,
+          String(o.id), o.currency, p?.gross ?? null, p?.discounts ?? null, p?.shipping ?? null, gmt(o.date_paid_gmt).toISOString(), o.date_completed_gmt ? gmt(o.date_completed_gmt).toISOString() : null,
+          o.date_modified_gmt ? gmt(o.date_modified_gmt).toISOString() : null, settled ? now.toISOString() : null);
         // A product's refunds come off its first line(s); cost stays on what was ordered (a refund needn't be a return).
         const back = lineRefunds.get(o.id);
         const items = (o.line_items ?? []).filter((li) => li.product_id).map((li) => {
