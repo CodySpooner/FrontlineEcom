@@ -156,7 +156,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
       traffic: { support: 'supported', reads: true, field: 'ShopifyQL sessions (shopifyqlQuery)', scopes: 'read_reports + Level 2 customer data', history: '730 days back', reason: 'Only when GA4 is not connected (GA4 owns traffic there).' },
       purchase_sessions: NOT_READ('ShopifyQL sessions dataset', { scopes: 'read_reports + Level 2 customer data' }),
       traffic_breakdowns: NOT_READ('ShopifyQL sessions by referrer source, device type and country', { scopes: 'read_reports + Level 2 customer data' }),
-      customers: NOT_READ('orders.customer.id, shippingAddress.countryCodeV2', { scopes: 'Level 2 protected customer data (optional)' }),
+      customers: { support: 'supported', reads: true, field: 'orders.customer.id (hashed), shippingAddress.countryCodeV2', scopes: 'Level 2 protected customer data (optional, probed daily)', history: 'with the orders read' },
       product_views: UNSUPPORTED(
         "Shopify's reference for the ShopifyQL products dataset names no product-view column (a view count appears only in community answers), so per-product views are not read.",
         'https://shopify.dev/api/shopifyql/datasets/products-dataset (checked 2026-10-28)',

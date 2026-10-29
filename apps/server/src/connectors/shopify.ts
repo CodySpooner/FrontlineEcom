@@ -4,7 +4,7 @@ import { once, tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, takeTimezone, switchToReal, syncView, hasTag, stillAsSynced, syncedPrice } from './common';
-import { noted, noteFailed, noteRead, recordUnitCost } from './ingest';
+import { customerRef, noted, noteFailed, noteRead, probeField, recordUnitCost } from './ingest';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -72,6 +72,9 @@ interface ShopifyOrder {
   /** The channel's own order id (TikTok Shop, Amazon...). */
   sourceIdentifier?: string | null;
   app?: { name: string } | null;
+  /** Read only when SA-32's probe allows it: the id (hashed into a ref) and the ISO-2 country, nothing personal. */
+  customer?: { id: string } | null;
+  shippingAddress?: { countryCodeV2: string | null } | null;
   /** Before returns. */
   totalTaxSet?: MoneyBag | null;
   /** After their discounts (cart-level free shipping too, since 2024-07); include tax when taxesIncluded. */
@@ -147,7 +150,8 @@ export const ordersQuery = (probed: { customer?: boolean; country?: boolean } = 
       fulfillments(first: 1) { displayStatus createdAt deliveredAt trackingInfo(first: 1) { number url } }
       lineItems(first: 5) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } }
     pageInfo { hasNextPage endCursor } } }`;
-const ORDERS_Q = ordersQuery();
+// SA-32: a one-order query asking only for an optional field, once a day; denied, ORDERS_Q leaves the field out.
+const PROBES = { customer: '{ orders(first: 1) { nodes { customer { id } } } }', country: '{ orders(first: 1) { nodes { shippingAddress { countryCodeV2 } } } }' };
 // SA-28: an order's refunds, read only when money went back and Shopify changed the order since the last read.
 // 1 + refunds 2 + 5 × (1 + lines 82 + shipping 12 + adjustments 17) = 563. ponytail: more than 5 refunds, 10 lines a
 // refund or 2 shipping lines leave the rest unread; that order then fails the identity and reconcile lists it.
@@ -437,17 +441,25 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
 
     const ord = db.prepare(
       `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url,
-         source_kind, source_id, channel, channel_order_id, currency, gross_sales, discounts, shipping, paid_at, cancelled_at, fulfilled_at, delivered_at, source_updated_at, breakdown_at)
-       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'shopify', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         source_kind, source_id, channel, channel_order_id, currency, gross_sales, discounts, shipping, paid_at, cancelled_at, fulfilled_at, delivered_at, source_updated_at, breakdown_at,
+         customer_ref, customer_state, country)
+       VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, 'shopify', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
          tracking = coalesce(excluded.tracking, tracking), cogs = iif(cogs > 0, cogs, excluded.cogs), tax = excluded.tax, tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url),
          source_kind = excluded.source_kind, source_id = excluded.source_id, channel = excluded.channel, channel_order_id = excluded.channel_order_id, currency = excluded.currency,
          gross_sales = excluded.gross_sales, discounts = excluded.discounts, shipping = excluded.shipping, paid_at = excluded.paid_at, cancelled_at = excluded.cancelled_at,
-         fulfilled_at = excluded.fulfilled_at, delivered_at = excluded.delivered_at, source_updated_at = excluded.source_updated_at, breakdown_at = excluded.breakdown_at`,
+         fulfilled_at = excluded.fulfilled_at, delivered_at = excluded.delivered_at, source_updated_at = excluded.source_updated_at, breakdown_at = excluded.breakdown_at,
+         customer_state = iif(excluded.customer_state = 'unavailable', coalesce(customer_state, 'unavailable'), excluded.customer_state),
+         customer_ref = iif(excluded.customer_state = 'unavailable', customer_ref, excluded.customer_ref), country = coalesce(excluded.country, country)`,
     );
     // Not paid yet (cash on delivery, bank transfer, an uncaptured authorization): left out of revenue until it is, and
     // removed if an earlier sync stored it. Its updated_at moves when it's paid, so the next sync brings it back.
     const UNPAID = new Set(['PENDING', 'AUTHORIZED', 'PARTIALLY_PAID']);
+    const probed = {
+      customer: await probeField(db, id, 'customer', today, () => q(PROBES.customer)),
+      country: await probeField(db, id, 'country', today, () => q(PROBES.country)),
+    };
+    const ORDERS_Q = ordersQuery(probed);
     const MONEY_BACK = new Set(['PARTIALLY_REFUNDED', 'REFUNDED', 'VOIDED']);
     const seen = db.prepare('SELECT source_updated_at AS at FROM orders WHERE store_id = ? AND id = ?');
     const refundRow = db.prepare(
@@ -499,6 +511,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
             storeId, o.name, o.createdAt, total, refunded ? 'refunded' : 'paid', fulfillmentOf(o), f?.trackingInfo[0]?.number ?? null, Math.round(cogs * 100) / 100, day, p?.tax ?? num(o.currentTotalTaxSet?.shopMoney.amount), f?.trackingInfo[0]?.url ?? null,
             tail(o.id), channel, MARKETPLACES.has(channel) ? (o.sourceIdentifier ?? null) : null, o.currencyCode ?? null, p?.gross ?? null, p?.discounts ?? null, p?.shipping ?? null,
             PAID.has(o.displayFinancialStatus ?? '') ? (o.processedAt ?? o.createdAt) : null, o.cancelledAt, f?.createdAt ?? null, f?.deliveredAt ?? null, o.updatedAt, p ? now.toISOString() : null,
+            o.customer ? customerRef(storeId, 'shopify', tail(o.customer.id)) : null, !probed.customer ? 'unavailable' : o.customer ? 'identified' : 'guest', o.shippingAddress?.countryCodeV2 ?? null,
           );
           // SA-30: every line as placed (custom items too, so they add up to the order); its cost is the one first
           // recorded, quantity × the variant's unit cost then (decision 15).
@@ -538,6 +551,9 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     } while (after);
     noteRead(db, key, id, 'orders', { status: 'available', from: since.slice(0, 10), to: today }, now);
     for (const d of ['order_lines', 'refunds'] as const) noteRead(db, key, id, d, { status: 'available', from: since.slice(0, 10), to: today }, now);
+    const denied = Object.entries(probed).filter(([, ok]) => !ok).map(([f]) => f);
+    noteRead(db, key, id, 'customers', denied.length === 2 ? { status: 'needs_permission', error: 'Shopify denied the customer id and the shipping country (Level 2 protected customer data)' }
+      : { status: denied.length ? 'partial' : 'available', from: since.slice(0, 10), to: today }, now);
     for (const d of ['orders', 'order_lines', 'refunds'] as const) reading.delete(d);
 
     // The funnel from Shopify's own analytics for a store without GA4 (GA4 owns it there). It needs read_reports and Level 2
@@ -801,4 +817,4 @@ export async function publishTheme(db: Db, key: Buffer, storeId: string, themeId
 }
 
 /** Every read query, for the static cost check in shopify.contract.test.ts (orders with SA-32's probed fields on). */
-export const SHOPIFY_READS = { FUNNEL_Q, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, REFUNDS_Q, VARIANTS_Q, PUBLICATIONS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };
+export const SHOPIFY_READS = { FUNNEL_Q, ...PROBES, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, REFUNDS_Q, VARIANTS_Q, PUBLICATIONS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };

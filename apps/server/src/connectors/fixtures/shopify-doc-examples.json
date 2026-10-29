@@ -6,6 +6,7 @@
       {
         "id": "gid://shopify/Order/5501001", "name": "#1001", "createdAt": "2026-10-20T15:00:00Z", "processedAt": "2026-10-20T15:00:00Z", "updatedAt": "2026-10-23T14:05:00Z",
         "cancelledAt": null, "test": false, "displayFinancialStatus": "PAID", "displayFulfillmentStatus": "FULFILLED", "taxesIncluded": false, "currencyCode": "USD",
+        "customer": { "id": "gid://shopify/Customer/7701" }, "shippingAddress": { "countryCodeV2": "US" },
         "sourceName": "web", "sourceIdentifier": null, "app": { "name": "Online Store" },
         "currentTotalPriceSet": { "shopMoney": { "amount": "82.75" } }, "currentTotalTaxSet": { "shopMoney": { "amount": "5.76" } },
         "netPaymentSet": { "shopMoney": { "amount": "82.75" } }, "totalTaxSet": { "shopMoney": { "amount": "5.76" } },
@@ -32,6 +33,7 @@
       {
         "id": "gid://shopify/Order/5501002", "name": "#1002", "createdAt": "2026-10-21T16:30:00Z", "processedAt": "2026-10-21T16:30:00Z", "updatedAt": "2026-10-21T16:31:00Z",
         "cancelledAt": null, "test": false, "displayFinancialStatus": "PAID", "displayFulfillmentStatus": "UNFULFILLED", "taxesIncluded": true, "currencyCode": "USD",
+        "customer": { "id": "gid://shopify/Customer/7701" }, "shippingAddress": { "countryCodeV2": "DE" },
         "sourceName": "web", "sourceIdentifier": null, "app": { "name": "Online Store" },
         "currentTotalPriceSet": { "shopMoney": { "amount": "114.00" } }, "currentTotalTaxSet": { "shopMoney": { "amount": "19.00" } },
         "netPaymentSet": { "shopMoney": { "amount": "114.00" } }, "totalTaxSet": { "shopMoney": { "amount": "19.00" } },
@@ -52,6 +54,7 @@
       {
         "id": "gid://shopify/Order/5501003", "name": "#1003", "createdAt": "2026-10-22T01:10:00Z", "processedAt": "2026-10-22T01:10:00Z", "updatedAt": "2026-10-22T01:12:00Z",
         "cancelledAt": null, "test": false, "displayFinancialStatus": "PAID", "displayFulfillmentStatus": "UNFULFILLED", "taxesIncluded": false, "currencyCode": "USD",
+        "customer": null, "shippingAddress": { "countryCodeV2": "US" },
         "sourceName": "4383523", "sourceIdentifier": "577012345678901234", "app": { "name": "TikTok" },
         "currentTotalPriceSet": { "shopMoney": { "amount": "19.99" } }, "currentTotalTaxSet": { "shopMoney": { "amount": "0.00" } },
         "netPaymentSet": { "shopMoney": { "amount": "19.99" } }, "totalTaxSet": { "shopMoney": { "amount": "0.00" } },
@@ -72,6 +75,7 @@
       {
         "id": "gid://shopify/Order/5501004", "name": "#1004", "createdAt": "2026-10-22T18:00:00Z", "processedAt": "2026-10-22T18:00:00Z", "updatedAt": "2026-10-22T18:00:30Z",
         "cancelledAt": null, "test": false, "displayFinancialStatus": "PAID", "displayFulfillmentStatus": "FULFILLED", "taxesIncluded": false, "currencyCode": "USD",
+        "customer": { "id": "gid://shopify/Customer/7702" }, "shippingAddress": null,
         "sourceName": "pos", "sourceIdentifier": "1-1004", "app": { "name": "Point of Sale" },
         "currentTotalPriceSet": { "shopMoney": { "amount": "16.20" } }, "currentTotalTaxSet": { "shopMoney": { "amount": "1.20" } },
         "netPaymentSet": { "shopMoney": { "amount": "16.20" } }, "totalTaxSet": { "shopMoney": { "amount": "1.20" } },

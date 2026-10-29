@@ -125,7 +125,7 @@ test('first sync switches the store from demo to real data', async () => {
   await syncShopify(db, key, 'glow', fetchFn, NOW);
 
   expect(calls.every((c) => c.url === 'https://glow-haus.myshopify.com/admin/api/2026-07/graphql.json' && c.token === TOKEN)).toBe(true);
-  expect(calls.find((c) => c.body.query.includes('orders('))!.body.variables.q).toBe("updated_at:>='2024-10-26T00:00:00Z'");
+  expect(calls.find((c) => c.body.query.includes('sortKey: UPDATED_AT'))!.body.variables.q).toBe("updated_at:>='2024-10-26T00:00:00Z'");
 
   const store = (await (await app.request('/api/stores/glow')).json()) as Store;
   expect(store).toMatchObject({ connected: true, currency: 'EUR', timezone: 'Europe/Berlin' });
@@ -164,7 +164,7 @@ test('later syncs are incremental and update changed orders in place', async () 
   const refunded = order('#1001', '2026-10-25T09:00:00Z', '0.00', { updatedAt: '2026-10-26T12:00:00Z', displayFinancialStatus: 'REFUNDED' });
   const second = fakeShopify([refunded]);
   await syncShopify(db, key, 'glow', second.fetchFn, NOW);
-  expect(second.calls.find((c) => c.body.query.includes('orders('))!.body.variables.q).toBe("updated_at:>='2026-10-26T17:55:00Z'");
+  expect(second.calls.find((c) => c.body.query.includes('sortKey: UPDATED_AT'))!.body.variables.q).toBe("updated_at:>='2026-10-26T17:55:00Z'");
   expect(second.calls.find((c) => c.body.query.includes('products(first: 50'))!.body.variables.q).toBe("updated_at:>='2026-10-26T17:55:00Z'");
   // Thumbnails, not the multi-megabyte originals.
   expect(second.calls.find((c) => c.body.query.includes('products('))!.body.query).toContain('url(transform: { maxWidth: 480 })');
@@ -449,7 +449,7 @@ test('a throttled query waits for the cost bucket to refill and runs again inste
   const shop = fakeShopify([order('#1001', '2026-10-25T09:00:00Z', '100.00')]).fetchFn;
   let throttled = 0;
   const fetchFn = (async (url: string, init: RequestInit) => {
-    if (!String(init.body).includes('orders(') || throttled++) return shop(url, init);
+    if (!String(init.body).includes('sortKey: UPDATED_AT') || throttled++) return shop(url, init);
     return Response.json({
       errors: [{ message: 'Throttled', extensions: { code: 'THROTTLED' } }],
       extensions: { cost: { requestedQueryCost: 938, actualQueryCost: null, throttleStatus: { maximumAvailable: 2000, currentlyAvailable: 638, restoreRate: 100 } } },
@@ -484,7 +484,7 @@ test('a first sync that stops partway keeps the order pages it saved, and the ne
 
   const { fetchFn, calls } = fakeShopify(orders.slice(1));
   await syncShopify(db, key, 'glow', fetchFn, NOW);
-  expect(calls.find((c) => c.body.query.includes('orders('))!.body.variables.q).toBe("updated_at:>='2026-10-21T09:00:00Z'");
+  expect(calls.find((c) => c.body.query.includes('sortKey: UPDATED_AT'))!.body.variables.q).toBe("updated_at:>='2026-10-21T09:00:00Z'");
   expect(db.prepare("SELECT count(*) AS n FROM orders WHERE store_id = 'glow'").get()?.n).toBe(3);
   expect(db.prepare("SELECT status, cursor FROM integrations WHERE id = 'shopify:glow'").get()).toMatchObject({ status: 'connected', cursor: '2026-10-26T17:55:00Z' });
   expect(await backfill()).toEqual({ through: '2026-10-26', done: true });
@@ -605,7 +605,7 @@ test("a Shopify order's tax counts against profit, revenue stays the order total
   const { fetchFn, calls } = fakeShopify([order('#1001', '2026-10-25T09:00:00Z', '120.00', { currentTotalTaxSet: { shopMoney: money('20.00') } })]);
   await syncShopify(db, key, 'glow', fetchFn, NOW);
   expect(db.prepare("SELECT error FROM integrations WHERE id = 'shopify:glow'").get()?.error).toBeNull();
-  expect(calls.find((c) => c.body.query.includes('orders('))!.body.query).toContain('currentTotalTaxSet');
+  expect(calls.find((c) => c.body.query.includes('sortKey: UPDATED_AT'))!.body.query).toContain('currentTotalTaxSet');
   const day = db.prepare("SELECT revenue, cogs FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-25'").get()!;
   const itemCost = Number(db.prepare("SELECT cogs FROM orders WHERE store_id = 'glow' AND id = '#1001'").get()?.cogs);
   expect(db.prepare("SELECT total, tax FROM orders WHERE store_id = 'glow' AND id = '#1001'").get()).toEqual({ total: 120, tax: 20 });

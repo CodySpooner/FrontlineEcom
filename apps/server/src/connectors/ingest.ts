@@ -1,6 +1,7 @@
 // Store Analytics ingestion helpers (SA-12): what each connector read did, per dataset (decision 23).
+import { createHash } from 'node:crypto';
 import type { SaDataset } from '@frontline/shared';
-import type { Db } from '../db';
+import { once, type Db } from '../db';
 import { scrubError, secretsOf } from '../store-analytics/sources';
 
 /** A read that worked (over the days it covers, when it has days), failed, or was refused for a missing optional scope. */
@@ -62,4 +63,20 @@ export function recordUnitCost(db: Db, storeId: string, productId: string, varia
     storeId, productId, variantId, cost, storeId, source, effectiveFrom, now.toISOString(),
   );
   return true;
+}
+
+/**
+ * Decision 20: a store-scoped customer ref. The platform's customer id is hashed with the store and platform, so the
+ * same buyer is one ref within a store and unrelated across stores; nothing personal is kept.
+ */
+export const customerRef = (storeId: string, kind: string, platformId: string) => `c_${createHash('sha256').update(`${storeId}|${kind}|${platformId}`).digest('hex').slice(0, 24)}`;
+
+/**
+ * SA-32: whether an optional field may be read, probed once a day per integration with `probe` (a one-order query
+ * asking only for it). Any failure counts as denied until tomorrow's probe; the verdict is kept in `done_once`.
+ */
+export async function probeField(db: Db, integration: string, field: string, today: string, probe: () => Promise<unknown>) {
+  const ref = `sa-probe:${integration}:${field}:${today}`;
+  if (once(db, ref)) await probe().catch(() => once(db, `${ref}:denied`));
+  return !db.prepare('SELECT 1 FROM done_once WHERE ref = ?').get(`${ref}:denied`);
 }

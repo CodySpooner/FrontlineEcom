@@ -1,4 +1,4 @@
-// SA-27..31: Shopify orders, refunds, variants, lines and publications against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
+// SA-27..32: Shopify orders, refunds, variants, lines, publications and customer refs against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
 // read), and the static cost of every Shopify read.
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -49,7 +49,7 @@ function fieldCost(f: Field): number {
 }
 const queryCost = (query: string) => sum(parse(query));
 
-function fakeShopify(orders = DOC.orders, { denyPublications = false } = {}) {
+function fakeShopify(orders = DOC.orders, { denyPublications = false, deny = [] as ('customer' | 'country')[] } = {}) {
   const asked: string[] = [];
   const fetchFn = (async (_url: string, init: RequestInit) => {
     const { query, variables } = JSON.parse(String(init.body)) as { query: string; variables: { id?: string } };
@@ -65,7 +65,16 @@ function fakeShopify(orders = DOC.orders, { denyPublications = false } = {}) {
     if (query.includes('events(')) return json({ events: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
     if (query.includes('shopifyqlQuery')) return Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });
     if (query.includes('refunds(')) return json({ order: { refunds: DOC.refunds[variables.id!] ?? [] } });
-    return json({ orders });
+    const [customer, country] = [query.includes('customer {'), query.includes('shippingAddress {')];
+    if ((customer && deny.includes('customer')) || (country && deny.includes('country'))) {
+      return Response.json({ errors: [{ message: 'This app is not approved to access the Customer object.', extensions: { code: 'ACCESS_DENIED' } }] });
+    }
+    // Shopify sends only the fields asked for
+    const only = (o: Record<string, unknown>) => {
+      const { customer: c, shippingAddress: s, ...rest } = o;
+      return { ...rest, ...(customer ? { customer: c ?? null } : {}), ...(country ? { shippingAddress: s ?? null } : {}) };
+    };
+    return json({ orders: { ...orders, nodes: orders.nodes.map(only) } });
   }) as typeof fetch;
   return { fetchFn, asked };
 }
@@ -95,7 +104,7 @@ describe('Shopify orders contract (SA-27)', () => {
     const db = setup();
     const { fetchFn, asked } = fakeShopify();
     await syncShopify(db, key, 'glow', fetchFn, NOW);
-    expect(asked.find((q) => q.includes('orders('))).not.toContain('customer {'); // SA-32 probes it first
+    expect(asked.find((q) => q.includes('sortKey: UPDATED_AT'))).toContain('customer { id }'); // SA-32's probes allowed it
     const synced = NOW.toISOString();
     expect(rows(db)).toEqual([
       {
@@ -251,5 +260,63 @@ describe('Shopify publications contract (SA-31)', () => {
     expect(dataset(db, 'channel_listings')).toMatchObject({ status: 'needs_permission', error: expect.stringContaining('read_publications') });
     expect(dataset(db, 'orders')?.status).toBe('available');
     expect(sourceRows(db, 'glow').find((r) => r.source === 'shopify' && r.dataset === 'channel_listings')).toMatchObject({ status: 'needs_permission', reason: 'needs_permission' });
+  });
+});
+
+describe('Shopify customer refs and country (SA-32)', () => {
+  const customers = (db: ReturnType<typeof openDb>, store = 'glow') =>
+    db.prepare('SELECT id, customer_ref AS ref, customer_state AS state, country FROM orders WHERE store_id = ? ORDER BY id').all(store);
+  const probes = (asked: string[]) => asked.filter((q) => q.startsWith('{ orders(first: 1)'));
+
+  it('the same customer is one ref within a store and another on a different store; guests and countries', async () => {
+    const db = setup();
+    const { fetchFn, asked } = fakeShopify();
+    await syncShopify(db, key, 'glow', fetchFn, NOW);
+    expect(probes(asked)).toHaveLength(2);
+    const [a, b, guest, pos] = customers(db);
+    expect(a).toMatchObject({ id: '#1001', state: 'identified', country: 'US', ref: expect.stringMatching(/^c_[0-9a-f]{24}$/) });
+    expect(b).toMatchObject({ id: '#1002', state: 'identified', country: 'DE', ref: a!.ref });
+    expect(guest).toEqual({ id: '#1003', ref: null, state: 'guest', country: 'US' });
+    expect(pos).toMatchObject({ state: 'identified', country: null });
+    expect(pos!.ref).not.toBe(a!.ref);
+
+    saveIntegration(db, key, { kind: 'shopify', storeId: 'pawsome', values: { shopDomain: 'contract-test-2.myshopify.com', accessToken: TOKEN } });
+    await syncShopify(db, key, 'pawsome', fakeShopify().fetchFn, NOW);
+    expect(customers(db, 'pawsome')[0]!.ref).not.toBe(a!.ref);
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'customers'").get()?.status).toBe('available');
+
+    // probed once a day
+    const again = fakeShopify();
+    await syncShopify(db, key, 'glow', again.fetchFn, NOW);
+    expect(probes(again.asked)).toEqual([]);
+  });
+
+  it('a denied probe never fails the order sync: the field is left out and the dataset reads needs_permission', async () => {
+    const db = setup();
+    const { fetchFn, asked } = fakeShopify(DOC.orders, { deny: ['customer', 'country'] });
+    await syncShopify(db, key, 'glow', fetchFn, NOW);
+    expect(db.prepare("SELECT error FROM integrations WHERE id = 'shopify:glow'").get()?.error).toBeNull();
+    expect(asked.find((q) => q.includes('sortKey: UPDATED_AT'))).not.toMatch(/customer \{|shippingAddress \{/);
+    expect(customers(db).map((c) => c.state)).toEqual(['unavailable', 'unavailable', 'unavailable', 'unavailable']);
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'customers'").get()?.status).toBe('needs_permission');
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'orders'").get()?.status).toBe('available');
+  });
+
+  it("a ref read once stays when a later day's probe is denied", async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify().fetchFn, NOW);
+    const before = customers(db);
+    const tomorrow = new Date(NOW.getTime() + 86_400_000);
+    const touched = { ...DOC.orders, nodes: DOC.orders.nodes.map((o: { updatedAt: string }) => ({ ...o, updatedAt: '2026-10-27T12:00:00Z' })) };
+    await syncShopify(db, key, 'glow', fakeShopify(touched, { deny: ['customer'] }).fetchFn, tomorrow);
+    expect(customers(db)).toEqual(before);
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'customers'").get()?.status).toBe('partial');
+  });
+
+  it('no column anywhere holds personal data (decision 20)', () => {
+    const db = openDb();
+    const pii = /e_?mail|phone|first_?name|last_?name|full_?name|customer_name|buyer|address|street|city|postal|zip|ip_addr|refund_reason|note/i;
+    const columns = db.prepare("SELECT m.name AS t, p.name AS c FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type = 'table'").all().map((r) => `${r.t}.${r.c}`);
+    expect(columns.filter((c) => /^(orders|order_lines|refunds|order_fees)\./.test(c) && pii.test(c))).toEqual([]);
   });
 });
