@@ -11,7 +11,7 @@ import { join } from 'node:path';
 
 const MAIN = 'C:/dev/FrontlineEcom';
 const WORKSPACES = 'C:/Users/Xody2/orca/workspaces/FrontlineEcom';
-const LANES = { ui: 'claude', core: 'claude', agents: 'claude', ecosystem: 'codex', 'image-generation': 'codex', 'knowledge-base': 'claude', 'ai-agents': 'claude', 'product-research': 'claude' };
+const LANES = { ui: 'claude', core: 'claude', agents: 'claude', ecosystem: 'codex', 'image-generation': 'codex', 'knowledge-base': 'claude', 'ai-agents': 'claude', 'product-research': 'claude', settings: 'claude', 'codex-hardening': 'codex', 'store-analytics': 'claude' };
 const EVERY_MS = 2 * 60_000;
 const IDLE_MS = { claude: 10 * 60_000, codex: 2 * 60_000 };
 const once = process.argv.includes('--once');
@@ -25,7 +25,7 @@ const act = (what, ...args) => (dry ? log(`[dry] ${what}`) : (log(what), orca(..
 const nudge = (lane) =>
   `Watchdog: you went idle. Keep going: continue the Worker loop in CLAUDE.md with the next item in docs/backlog/${lane}.md. Do not stop and do not ask questions.`;
 const brief = (lane) =>
-  `You are the Frontline Ecom "${lane}" worker, restarted by the watchdog. One of the agents building this app in Orca (lanes: ${Object.keys(LANES).join(', ')}). The owner is away: do not ask questions, keep working nonstop. Read CLAUDE.md and docs/backlog/${lane}.md, check git log for what you already shipped, then continue the Worker loop.`;
+  `You are the Frontline Ecom ${lane} worker, restarted by the watchdog. One of the agents building this app in Orca (lanes: ${Object.keys(LANES).join(', ')}). The owner is away: do not ask questions, keep working nonstop. Read CLAUDE.md and docs/backlog/${lane}.md, check git log for what you already shipped, then continue the Worker loop.`;
 
 function check() {
   const worktrees = orca('worktree', 'ps').worktrees;
