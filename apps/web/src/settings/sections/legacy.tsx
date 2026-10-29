@@ -2,78 +2,13 @@
 // wrapper rebuild them with the settings kit.
 import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
-import { APPROVAL_KINDS, type Store, type StoreCaps, type StoreCapsUpdate } from '@frontline/shared';
-import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUsage } from '../../api/client';
-import { feeEstimate, nicheName, PLATFORM_NAME, StoreForm } from '../../components/StoreForm';
-import { Badge, Button, ConfirmDelete, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../../components/ui';
+import { APPROVAL_KINDS, type StoreCaps, type StoreCapsUpdate } from '@frontline/shared';
+import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStores, useUsage } from '../../api/client';
+import { Badge, Button, cx, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../../components/ui';
 import { cents, money } from '../../lib/format';
 
 // Only kinds with a $ amount can be checked against a daily cap.
 const AUTOPILOT = Object.entries(APPROVAL_KINDS).flatMap(([kind, k]) => (k.autopilot ? [{ kind, label: k.label }] : []));
-
-export function Stores() {
-  const q = useStores();
-  const [editing, setEditing] = useState<Store | 'new'>();
-  return (
-    <Panel
-      title="Stores"
-      sub="Each store gets its own squad that learns its niche."
-      action={
-        <Button size="sm" variant="primary" onClick={() => setEditing('new')}>
-          Add store
-        </Button>
-      }
-    >
-      {q.isPending ? (
-        <LoadingState rows={3} />
-      ) : q.isError ? (
-        <ErrorState message="Couldn't load your stores." onRetry={() => q.refetch()} />
-      ) : (
-        <ul className="grid gap-2">
-          {q.data.map((s) => (
-            <StoreRow key={s.id} s={s} onEdit={() => setEditing(s)} />
-          ))}
-        </ul>
-      )}
-      <Dialog open={!!editing} onClose={() => setEditing(undefined)} title={editing === 'new' ? 'Add a store' : `Edit ${editing?.name ?? 'store'}`} side="right">
-        {editing && <StoreForm key={editing === 'new' ? 'new' : editing.id} store={editing === 'new' ? undefined : editing} onDone={() => setEditing(undefined)} />}
-      </Dialog>
-    </Panel>
-  );
-}
-
-function StoreRow({ s, onEdit }: { s: Store; onEdit: () => void }) {
-  const { remove } = useStoreActions();
-  return (
-    <li className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-bg-2 px-3 py-2.5">
-      <i aria-hidden className="size-3 shrink-0 rounded-full" style={{ background: s.color }} />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <b className="text-[14px]">{s.name}</b>
-          <Badge tone={s.connected ? 'good' : 'muted'}>{s.connected ? 'Connected' : 'Demo data'}</Badge>
-        </div>
-        <p className="text-xs text-muted">{[PLATFORM_NAME[s.platform], nicheName(s.niche), s.nicheDetail, s.currency, feeEstimate(s)].filter(Boolean).join(' · ')}</p>
-        {remove.isError && (
-          <p role="alert" className="mt-1 text-xs text-red">
-            {remove.error.message}
-          </p>
-        )}
-      </div>
-      <span className="flex flex-wrap items-center gap-3 text-xs">
-        <button type="button" onClick={onEdit} className="cursor-pointer text-text-2 hover:text-white">
-          Edit
-        </button>
-        <ConfirmDelete question={`Delete ${s.name}? This can't be undone.`} confirm="Delete store" busy={remove.isPending} onConfirm={() => remove.mutate(s.id)}>
-          {(open, ref) => (
-            <button ref={ref} type="button" onClick={open} className="cursor-pointer text-muted hover:text-red">
-              Delete
-            </button>
-          )}
-        </ConfirmDelete>
-      </span>
-    </li>
-  );
-}
 
 /** The store comes from `?store=`, so a deep link opens its caps. */
 export function Caps() {

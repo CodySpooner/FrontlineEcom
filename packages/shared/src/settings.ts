@@ -24,6 +24,9 @@ export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 export type NotificationCategory = 'approvals' | 'agentDone' | 'errors' | 'researchAlerts' | 'digest' | 'usageAlerts';
 export const NOTIFICATION_CATEGORIES: Record<NotificationCategory, string> = { approvals: 'Approvals', agentDone: 'Agent finished', errors: 'Errors', researchAlerts: 'Research alerts', digest: 'Morning digest', usageAlerts: 'Usage alerts' };
 
+/** The connections whose every sync sets a store's currency or timezone: the store page shows those read-only (ST-18). */
+export const SET_BY_SYNC: Record<'currency' | 'timezone', readonly string[]> = { currency: ['shopify', 'tiktok_shop', 'etsy', 'amazon', 'woocommerce'], timezone: ['shopify', 'woocommerce'] };
+
 /** `/settings/<section>[/<id>][?store=<id>][#<setting>]`: the only way to link into Settings. */
 export function settingsUrl(section: SettingsSection, o: { id?: string; store?: string; setting?: string } = {}) {
   return `/settings/${section}${o.id ? `/${encodeURIComponent(o.id)}` : ''}${o.store ? `?store=${encodeURIComponent(o.store)}` : ''}${o.setting ? `#${o.setting}` : ''}`;
@@ -215,7 +218,8 @@ export const SETTINGS: SettingDef[] = [
   autopilot('ads.set_budget', 'Change ad budgets', 'apps/server/src/routes/agents-approvals.test.ts#approves on its own within the store cap for that kind, then asks'),
   autopilot('ads.pause_campaign', 'Pause campaigns', 'apps/server/src/routes/agents-approvals.test.ts#pauses and cuts count the budget they touch against their autopilot cap; only raises count as added spend'),
 
-  // Store fields. `color` (a web-only consumer, no proof yet) comes with ST-18's store page.
+  // Store fields.
+  store('color', { type: 'string', pattern: '^#[0-9a-fA-F]{6}$', label: 'Color', help: 'Marks the store across the app.', synonyms: ['colour'], default: '#ff2a3a', applies: 'now', consumers: ['apps/web/src/components/StoreFilter.tsx#StoreFilter', 'apps/web/src/settings/sections/Stores.tsx#StoreList'], proof: "apps/web/src/settings/sections/Stores.test.tsx#the list shows each store's color, platform, data, currency and fees, and opens its page" }),
   store('name', { type: 'string', maxLength: 80, label: 'Name', help: "Agents see it in their store profile.", fill: 'chosen when the store is added', applies: 'new runs', consumers: ['packages/agents/src/prompt.ts#assemblePrompt'], proof: `${PROMPT}#Glow Haus Analytics Specialist: role → playbook → Shopify → beauty → profile → memory → date` }),
   store('platform', { type: 'string', enum: ['shopify', 'tiktok_shop', 'etsy', 'amazon', 'woocommerce', 'walmart'], label: 'Platform', help: 'Where the store sells.', fill: 'chosen when the store is added', applies: 'new runs', consumers: ['packages/agents/src/prompt.ts#storeWrites'], proof: `${PROMPT}#a connected store is told what the app can change there on approval` }),
   store('niche', { type: 'string', enum: ['beauty', 'pet', 'tech', 'fitness', 'home', 'fashion', 'kids', 'outdoor', 'other'], label: 'Niche', help: "Picks the agents' niche pack.", fill: 'chosen when the store is added', applies: 'job', consumers: ['packages/agents/src/prompt.ts#assemblePrompt'], proof: `${PROMPT}#Peak Fit Ad Strategist gets TikTok Shop + fitness, live data` }),

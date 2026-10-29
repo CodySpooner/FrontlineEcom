@@ -353,7 +353,8 @@ export interface StoreInput {
 }
 
 /** PATCH /api/stores/:id body. Response: the updated Store. */
-export type StoreUpdate = Partial<StoreInput>;
+/** `nicheDetail: null` clears it. */
+export type StoreUpdate = Partial<Omit<StoreInput, 'nicheDetail'>> & { nicheDetail?: string | null };
 
 /** GET /api/events?stores=a,b&limit=20 → StoreEvent[] newest first (default limit 20, max 200). */
 export type EventsResponse = StoreEvent[];

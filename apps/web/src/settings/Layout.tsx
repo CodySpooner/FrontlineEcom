@@ -8,8 +8,9 @@ import { Integrations } from './integrations/Integrations';
 import { Account } from './sections/Account';
 import { Appearance } from './sections/Appearance';
 import { General } from './sections/General';
-import { Caps, Stores, YourData } from './sections/legacy';
+import { Caps, YourData } from './sections/legacy';
 import { Notifications } from './sections/Notifications';
+import { Stores } from './sections/Stores';
 import { Sidebar } from './Sidebar';
 
 export type SettingsGroup = 'Personal' | 'Workspace' | 'AI & Connections' | 'Operations';
@@ -30,7 +31,7 @@ export const SECTIONS: SectionDef[] = [
   { slug: 'appearance', group: 'Personal', label: 'Appearance', icon: Palette, sub: 'Motion, and what follows Windows.', Page: Appearance },
   { slug: 'notifications', group: 'Personal', label: 'Notifications', icon: Bell, sub: 'What lands in the bell.', Page: Notifications },
   { slug: 'general', group: 'Workspace', label: 'General', icon: Gear, sub: 'Preferences shared by every store.', Page: General },
-  { slug: 'stores', group: 'Workspace', label: 'Stores', icon: Store, sub: 'Each store gets its own squad that learns its niche.', Page: () => <div data-legacy="ST-18"><Stores /></div> },
+  { slug: 'stores', group: 'Workspace', label: 'Stores', icon: Store, sub: 'Each store gets its own squad that learns its niche.', Page: Stores },
   {
     slug: 'integrations',
     group: 'AI & Connections',

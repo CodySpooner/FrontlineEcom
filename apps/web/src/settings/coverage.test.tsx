@@ -17,7 +17,6 @@ const ALLOWLIST = [
   'caps.agentCostPerDay', // ST-23
   'caps.adSpendChangePerDay', 'caps.higgsfieldCreditsPerDay', // ST-24b
   'autopilot.ads.set_budget', 'autopilot.ads.pause_campaign', // ST-30
-  'store.name', 'store.platform', 'store.niche', 'store.nicheDetail', 'store.currency', 'store.timezone', 'store.feePercent', 'store.feePerOrder', // ST-18
   'kb.autonomous', 'kb.roles', 'kb.triggers', 'kb.taskBudgetUsd', 'kb.dailyBudgetUsd', 'kb.depth', 'kb.approval', 'kb.review', 'kb.trustedDomains', 'kb.blockedDomains', 'kb.freshDays', 'kb.retentionDays', // ST-25
   'pr.audience', 'pr.priceMax', 'pr.shipTo', 'pr.warehouses', 'pr.maxDeliveryDays', 'pr.includeCategories', 'pr.keywords', // ST-27
 ];
@@ -25,6 +24,7 @@ const ALLOWLIST = [
 /** `data-action` names, each with the test that proves what it does (`path#test name`). */
 const ACTIONS: Record<string, string> = {
   'notifications.test': 'apps/web/src/settings/sections/Notifications.test.tsx#Send test shows what the server decided, and says where toasts appear',
+  'stores.add': "apps/web/src/settings/sections/Stores.test.tsx#Add store says what adding does, then opens the new store's page",
 };
 
 const root = `${process.cwd()}/`; // vitest runs from the repo root
@@ -40,7 +40,8 @@ afterEach(cleanup);
 afterAll(() => vi.unstubAllGlobals());
 
 describe('every control on a settings page is real', () => {
-  it.each(SECTIONS.map((s) => [s.slug]))('/settings/%s', async (slug) => {
+  // Plus the pages under a section: a store's (ST-18).
+  it.each([...SECTIONS.map((s) => s.slug), 'stores/peak'].map((s) => [s]))('/settings/%s', async (slug) => {
     stubApi((url) => {
       if (url === '/api/settings') return settings;
       if (url === '/api/config') return { values: {}, origins: {}, versions: { app: 1 } };

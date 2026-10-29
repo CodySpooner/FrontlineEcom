@@ -192,15 +192,14 @@ describe('data and backups (moved, ST-31)', () => {
   });
 });
 
-describe('deleting a store (moved, ST-18)', () => {
+describe('deleting a store (on its page since ST-18; ST-19 rebuilds it)', () => {
   it('asks with focus on Keep, and Keep hands focus back to Delete', async () => {
     stubApi((url) => (url === '/api/stores' ? [peak] : url === '/api/settings' ? settings : undefined));
-    renderApp(<Settings />, '/settings/stores');
-    await screen.findByText('Peak Fit');
-    fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+    renderApp(<Settings />, '/settings/stores/peak');
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete store' }));
     expect(screen.getByText("Delete Peak Fit? This can't be undone.")).toBeTruthy();
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Keep' }));
     fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete store' }));
   });
 });

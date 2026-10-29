@@ -1,4 +1,4 @@
-import { NICHES, PLATFORMS, type Store, type StoreInput, type StoreUpdate } from '@frontline/shared';
+import { INTEGRATION_KINDS, NICHES, PLATFORMS, SET_BY_SYNC, type IntegrationKind, type Store, type StoreInput, type StoreUpdate } from '@frontline/shared';
 import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { dataDir, once, tx, type Db } from './db';
@@ -67,7 +67,8 @@ export function parseStoreInput(body: unknown, partial: boolean): StoreInputErro
   if (b.niche !== undefined && !NICHES.includes(b.niche as Store['niche'])) return bad(`niche must be one of ${NICHES.join(', ')}`, 'niche');
   if (b.platform !== undefined) out.platform = b.platform as Store['platform'];
   if (b.niche !== undefined) out.niche = b.niche as Store['niche'];
-  if (!str('nicheDetail', 120)) return bad('nicheDetail must be 1-120 characters', 'nicheDetail');
+  if (b.nicheDetail === null) out.nicheDetail = null; // cleared (settings ST-18)
+  else if (!str('nicheDetail', 120)) return bad('nicheDetail must be 1-120 characters', 'nicheDetail');
   if (!str('currency', 3) || (out.currency && !/^[A-Z]{3}$/.test(out.currency))) return bad('currency must be a 3-letter ISO code', 'currency');
   if (!str('timezone', 64)) return bad('timezone must be an IANA name', 'timezone');
   if (out.timezone) {
@@ -117,9 +118,17 @@ export function createStore(db: Db, input: StoreInput): Store {
   });
 }
 
+/** The store's connection that sets `field` on every sync, if one is saved (settings ST-18): its own platform's for the
+ * currency (`takeCurrency`, Amazon's `setStoreCurrency`), Shopify's or WooCommerce's for the timezone (`takeTimezone`). */
+export function setBySync(db: Db, storeId: string, field: 'currency' | 'timezone'): string | undefined {
+  const r = db.prepare('SELECT kind FROM integrations WHERE store_id = ? AND kind IN (SELECT value FROM json_each(?)) ORDER BY kind').get(storeId, JSON.stringify(SET_BY_SYNC[field]));
+  return r && INTEGRATION_KINDS[r.kind as IntegrationKind].name;
+}
+
 /**
  * The owner's edit of a store. `version` (as read) is checked when given: a stale one throws ConfigError (409). One
- * version bump per save, and a change row for each field that moved.
+ * version bump per save, and a change row for each field that moved. A connected store keeps its platform, and a value
+ * a sync sets can't be edited (400, settings ST-18).
  */
 export function updateStore(db: Db, id: string, u: StoreUpdate, version?: number): Store | undefined {
   const cols: Record<keyof StoreInput, string> = {
@@ -131,6 +140,14 @@ export function updateStore(db: Db, id: string, u: StoreUpdate, version?: number
     const before = getStore(db, id);
     if (!before) return undefined;
     if (version !== undefined && version !== before.version) throw new ConfigError(409, { error: 'This store was saved somewhere else while you were editing.', code: 'stale', current: before });
+    const refuse = (k: keyof StoreInput, error: string) => {
+      throw new ConfigError(400, { error, field: `store.${k}` });
+    };
+    if (u.platform && u.platform !== before.platform && before.connected) refuse('platform', `${before.name} is live: its platform can't change. Add the other platform as a store of its own.`);
+    for (const k of ['currency', 'timezone'] as const) {
+      const by = u[k] && u[k] !== before[k] ? setBySync(db, id, k) : undefined;
+      if (by) refuse(k, `Set by ${by} on every sync.`);
+    }
     if (keys.length) db.prepare(`UPDATE stores SET ${keys.map((k) => `${cols[k]} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => u[k]!), id);
     if (u.timezone) setStoreTimezone(db, id, u.timezone); // re-dates a real store's orders
     if (u.currency) setStoreCurrency(db, id, u.currency, null); // closes requests priced in the old one

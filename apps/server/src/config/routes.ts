@@ -5,12 +5,13 @@ import { Hono } from 'hono';
 import type { ConfigDoc, ConfigWrite } from '@frontline/shared';
 import type { Db } from '../db';
 import { claudeLogin } from '../routes/agents-runtimes';
-import { getStore } from '../stores';
+import { getStore, parseStoreInput } from '../stores';
 import { applyRoutes } from './apply';
 import { changeRoutes, toChange } from './changes';
 import { checklist } from './checklist';
 import { effective } from './effective';
 import { impactOf } from './impact';
+import { storeImpact } from './store-impact';
 import { ConfigError, currencies, versionOf, writeConfig } from './write';
 
 const DOCS: ConfigDoc[] = ['app', 'personal', 'workspace', 'store_caps'];
@@ -46,6 +47,15 @@ export function configRoutes(db: Db) {
       if (!Array.isArray(docs)) return c.json({ error: docs.error }, docs.status);
       if (docs.some((d) => d.storeId && !getStore(db, d.storeId))) return c.json({ error: 'store not found' }, 404);
       return c.json({ impacts: impactOf(db, docs) });
+    })
+    // The store form's (ST-18): `{ storeId?, set }`, set as PATCH /api/stores/:id takes it; no storeId: a store being added.
+    .post('/api/config/store-impact', async (c) => {
+      const body = (await c.req.json().catch(() => undefined)) as { storeId?: unknown; set?: unknown } | undefined;
+      const set = parseStoreInput(body?.set, true);
+      if ('error' in set) return c.json(set, 400);
+      const storeId = typeof body?.storeId === 'string' ? body.storeId : undefined;
+      if (storeId && !getStore(db, storeId)) return c.json({ error: 'store not found' }, 404);
+      return c.json({ impacts: storeImpact(db, storeId, set) });
     })
     .patch('/api/config', async (c) => {
       const docs = documentsOf(await c.req.json().catch(() => undefined), true);
