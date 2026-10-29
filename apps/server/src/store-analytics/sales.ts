@@ -4,7 +4,7 @@ import { addDays, localDate } from '../dates';
 import type { Db } from '../db';
 import { demoParts } from '../demo';
 import { storeZone } from '../stores';
-import { convertOn } from './fx';
+import { storeConverter } from './fx';
 import { datasetFreshness } from './sources';
 
 export type SalesMetricId = 'net_sales' | 'gross_sales' | 'discounts' | 'refunds' | 'orders' | 'aov' | 'units' | 'cancelled_orders' | 'refund_rate';
@@ -23,7 +23,7 @@ const value = (v: number | null, status: SaValue['status'], extra: Omit<SaValue,
 const missing = (reason: SaReason, note?: string): SaValue => value(null, 'unavailable', { reason, ...(note ? { note } : {}) });
 
 /** Unavailable (with the orders dataset's reason) while the store's orders were never read: never a 0. */
-function unread(db: Db, storeId: string): SaValue | undefined {
+export function unread(db: Db, storeId: string): SaValue | undefined {
   if (db.prepare('SELECT 1 FROM orders WHERE store_id = ? LIMIT 1').get(storeId)) return;
   const rows = datasetFreshness(db, storeId).filter((f) => f.dataset === 'orders');
   if (rows.some((f) => f.status === 'available' || f.status === 'partial' || f.status === 'verified')) return;
@@ -68,14 +68,8 @@ export function salesMetrics(db: Db, storeId: string, from: string, to: string, 
   if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo) return demoSales(db, storeId, from, to);
   const none = unread(db, storeId);
   if (none) return { net_sales: none, gross_sales: none, discounts: none, refunds: none, orders: none, aov: none, units: none, cancelled_orders: none, refund_rate: none };
-  const storeCur = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)!.currency);
   // A day with no rate leaves its orders out of the money (decision 19), listed in the note.
-  const unconverted = new Map<string, number>();
-  const fx = (day: string, cur: unknown, locked: unknown, n: number) => {
-    const x = locked != null ? Number(locked) : convertOn(db, day, cur == null ? storeCur : String(cur), storeCur);
-    if (x == null) unconverted.set(`${String(cur)} on ${day}`, (unconverted.get(`${String(cur)} on ${day}`) ?? 0) + n);
-    return x;
-  };
+  const { fx, unconverted, note } = storeConverter(db, String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)!.currency));
 
   // Orders placed in the period. Those synced before money parts were recorded count as total − tax less their legacy
   // refund lines (TikTok Shop, Amazon), already in the store's currency: an estimate.
@@ -150,7 +144,7 @@ export function salesMetrics(db: Db, storeId: string, from: string, to: string, 
   // cancellations) is partial, or unavailable when no order in the period has them.
   const partsShare = orders ? (orders - estimated) / orders : 1;
   const estNote = estimated ? `${pct(estimated / orders)} of orders synced before money parts were recorded` : undefined;
-  const fxNote = unconverted.size ? `Left out, no exchange rate: ${[...unconverted].map(([k, n]) => (n ? `${n} order${n === 1 ? '' : 's'} in ${k}` : `refunds in ${k}`)).join('; ')}` : undefined;
+  const fxNote = note();
   const notes = (...n: (string | undefined)[]) => (n.some(Boolean) ? { note: n.filter(Boolean).join('. ') } : {});
   const fxStatus: SaValue['status'] = unconverted.size ? 'partial' : 'ok';
   const partsCoverage = estimated ? { coverage: { share: partsShare, of: 'orders with money parts' } } : {};

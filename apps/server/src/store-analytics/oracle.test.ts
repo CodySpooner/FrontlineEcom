@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../db';
 import { LEDGER_ORDERS, LEDGER_PERIODS, LEDGER_REFUNDS, LEDGER_STORE, seedLedgerStore } from './fixture';
+import { costMetrics } from './costs';
 import { salesMetrics } from './sales';
 
 /**
@@ -117,7 +118,21 @@ describe('oracle (v1)', () => {
       if ('net_sales_order_day' in o) expect(salesMetrics(db, LEDGER_STORE, from, to, 'order_day').net_sales.value, p).toBe(o.net_sales_order_day);
     }
   });
-  it.todo('contribution_before_ads, fees and cost_coverage (SA-19)');
+  it('contribution_before_ads, fees and cost_coverage (SA-19)', () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    for (const p of ['P1', 'P2', 'P3'] as const) {
+      const { from, to } = LEDGER_PERIODS[p];
+      const o: Record<string, number | null> = ORACLE[p];
+      const got = costMetrics(db, LEDGER_STORE, from, to);
+      expect(got.contribution_before_ads.value, p).toBe(o.contribution_before_ads);
+      if (o.cost_coverage == null) expect(got.cost_coverage, p).toMatchObject({ value: null, status: 'unavailable' });
+      else expect(got.cost_coverage.value, p).toBeCloseTo(o.cost_coverage, 10);
+      if ('fees' in o) expect(got.fees, p).toMatchObject({ value: o.fees, status: 'estimated' });
+    }
+    // P1 is costed for 11 of 14 units and its fees are estimates; P2 is fully costed.
+    expect(costMetrics(db, LEDGER_STORE, LEDGER_PERIODS.P1.from, LEDGER_PERIODS.P1.to).contribution_before_ads).toMatchObject({ status: 'estimated', coverage: { share: 11 / 14, of: 'units with a unit cost' } });
+  });
   it.todo('ad_spend, platform_roas and contribution_after_ads (SA-20)');
   it.todo('sessions and site_conversion with day coverage (SA-21)');
 });

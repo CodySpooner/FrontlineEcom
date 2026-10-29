@@ -99,7 +99,7 @@ export function summarize(rows: MetricRow[], { range, to, storeIds, todayFractio
 }
 
 /** Amazon's referral fee on most categories, for its sales next to a store's site. ponytail: FBA fees aren't estimated. */
-const AMAZON_REFERRAL = 0.15;
+export const AMAZON_REFERRAL = 0.15;
 
 /**
  * Loads both periods for the given stores from daily_metrics, plus `pad` days either side. `cogs` also carries the store's
