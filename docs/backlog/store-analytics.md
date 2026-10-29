@@ -622,7 +622,7 @@ connector item afterwards proves its path from source to metric.
   - Acceptance: a test applies migrations to an empty database and to a database at 55 with rows; the whole suite
     stays green.
 
-- [ ] SA-08 **Claimed common.ts functions (Phase E gate)** (spec §5 Avoid duplicated orders, §9):
+- [x] SA-08 **Claimed common.ts functions (Phase E gate)** (spec §5 Avoid duplicated orders, §9):
   - Check the Phase E window first; inside it, move this item to Blocked ("waits for CH-22") and go on.
   - `rebuildRevenue`: add `AND duplicate_of IS NULL` to the paid-orders branch and `AND o.duplicate_of IS NULL` to
     the `amazon_refunds` branch.
@@ -1557,6 +1557,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-05 `SA_METRICS` v1 (18 metrics: formula, unit, additivity, grain, filters, currency, zone, date basis, exclusions, refund treatment, datasets, direction), `saDef`, `renderMetricsDoc` → `docs/features/store-analytics-metrics.md`; `store-analytics.test.ts` checks the doc and a frozen hash per id@version.
 - 2026-10-28 SA-06 shared `SA_PRESETS`, `SA_COMPARES`, `resolvePeriod`, `comparePeriod`, `validateCustom`, `changeOf`, `ratio`, `combineStatus`; `store-analytics/period.ts` `storePeriod` (store zone + ET-style abbreviation, demo label, history start, same-clock cut and day fraction) with tests incl. Feb 29, NY DST start/end, mtd on the 1st, 731 days.
 - 2026-10-28 SA-07 migration 56 (the next free number): order source ids, channel ids, duplicate_of, customer ref and state, country, currency, as-placed money parts, event times, breakdown_at (all nullable, no defaults) with the channel-id and customer partial indexes; products category/handle/synced_at; daily_metrics.purchase_sessions; 13 new tables (refunds, order_fees, order_lines, product_variants, channel_listings, product_links, product_collections, unit_costs, inventory_snapshots, sync_runs, source_datasets, fx_rates, traffic_breakdown_daily). `schema.test.ts`: empty DB, an upgrade of a DB at 55 with rows, cascade on store delete.
+- 2026-10-28 SA-08 outside the Phase E window (CH-20 open on main): `rebuildRevenue` leaves `duplicate_of` copies and their refund lines out; `setOrderItems` keeps a known line cost on re-sync; `setStoreTimezone` re-dates `refunds` by refund time and `order_fees` by their order's day (snapshots keep theirs); `forgetPlatform` also clears that platform's ledger, catalog, link and `source_datasets` rows. Tests in `store-analytics/claimed.test.ts`; connector tests unchanged (161 green).
 
 ## Blocked
 

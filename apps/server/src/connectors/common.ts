@@ -221,6 +221,14 @@ export function setStoreTimezone(db: Db, storeId: string, zone: string) {
     set.run(day, storeId, String(o.id));
     days.add(day).add(String(o.local_date));
   }
+  // The refunds ledger is dated by each refund's own time, a fee by its order's day. Inventory snapshots keep theirs:
+  // they are the day they were taken, and re-dating could put two on one day.
+  const refund = db.prepare('UPDATE refunds SET local_date = ? WHERE store_id = ? AND id = ?');
+  for (const r of db.prepare('SELECT id, refunded_at, local_date FROM refunds WHERE store_id = ?').all(storeId)) {
+    const day = dayOf.format(new Date(String(r.refunded_at)));
+    if (day !== r.local_date) refund.run(day, storeId, String(r.id));
+  }
+  db.prepare('UPDATE order_fees SET local_date = (SELECT o.local_date FROM orders o WHERE o.store_id = order_fees.store_id AND o.id = order_fees.order_id) WHERE store_id = ? AND order_id IN (SELECT id FROM orders WHERE store_id = ?)').run(storeId, storeId);
   rebuildRevenue(db, storeId, days);
   db.prepare("UPDATE integrations SET cursor = NULL WHERE store_id = ? AND kind = 'amazon'").run(storeId);
 }
@@ -237,12 +245,13 @@ export function rebuildRevenue(db: Db, storeId: string, dates: Iterable<string>)
     // against a paid order: a cancelled one is out already. A line's tax comes off revenue and off the costs (the order's
     // tax is one); its amount is net of that tax, as per-product revenue is. CROSS JOIN keeps the day's orders as the outer
     // loop: driven from the refund lines, a first sync's 730 days took ~7 s on a 100k-order store (now ~0.1 s).
+    // A channel's copy of an order (duplicate_of: store-analytics' dedupe) counts once, on the channel's own row.
     `SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(cogs), 0) AS cogs, coalesce(sum(n), 0) AS n FROM (
        SELECT iif(id GLOB 'amz-*', 0, total) AS revenue, cogs + tax AS cogs, iif(id GLOB 'amz-*', 0, 1) AS n
-       FROM orders WHERE store_id = ?1 AND local_date = ?2 AND status = 'paid'
+       FROM orders WHERE store_id = ?1 AND local_date = ?2 AND status = 'paid' AND duplicate_of IS NULL
        UNION ALL SELECT revenue, 0, orders FROM channel_daily WHERE store_id = ?1 AND date = ?2
        UNION ALL SELECT -(r.amount + r.tax), -r.tax, 0 FROM orders o CROSS JOIN amazon_refunds r ON r.store_id = o.store_id AND r.order_id = o.id
-         WHERE o.store_id = ?1 AND o.local_date = ?2 AND o.status = 'paid')`,
+         WHERE o.store_id = ?1 AND o.local_date = ?2 AND o.status = 'paid' AND o.duplicate_of IS NULL)`,
   );
   const up = db.prepare(
     `INSERT INTO daily_metrics (store_id, date, revenue, cogs, orders) VALUES (?, ?, ?, ?, ?)
@@ -275,6 +284,14 @@ export function forgetPlatform(db: Db, storeId: string, kind: IntegrationKind) {
   // Its refund lines, by their order's id (left, Amazon would look the old seller's orders up on the new one).
   db.prepare(`DELETE FROM amazon_refunds WHERE store_id = ? AND ${where.replaceAll('id GLOB', 'order_id GLOB')}`).run(storeId, ...args);
   db.prepare('DELETE FROM channel_daily WHERE store_id = ? AND channel = ?').run(storeId, kind);
+  // Store Analytics' ledger and catalog rows carry the same ids (variants their platform's prefix too). A product link
+  // goes when either side was this platform's.
+  const by = (col: string) => where.replaceAll('id GLOB', `${col} GLOB`);
+  for (const [t, col] of [['refunds', 'order_id'], ['order_fees', 'order_id'], ['order_lines', 'order_id'], ['product_variants', 'product_id'], ['channel_listings', 'product_id'],
+    ['product_collections', 'product_id'], ['unit_costs', 'product_id'], ['inventory_snapshots', 'variant_id']] as const)
+    db.prepare(`DELETE FROM ${t} WHERE store_id = ? AND ${by(col)}`).run(storeId, ...args);
+  db.prepare(`DELETE FROM product_links WHERE store_id = ? AND ((${by('product_id')}) OR (${by('channel_product_id')}))`).run(storeId, ...args, ...args);
+  db.prepare('DELETE FROM source_datasets WHERE integration_id = ?').run(`${kind}:${storeId}`);
   rebuildRevenue(db, storeId, dates);
 }
 
@@ -313,9 +330,13 @@ export interface OrderItem {
 /**
  * Replaces an order's line items, summed per product (an order can hold several variants of one product). A line the
  * platform gave no cost for (Etsy, TikTok Shop, Woo without COGS) takes the owner's unit cost, and an order with no
- * cogs of its own gets its lines' costs.
+ * cogs of its own gets its lines' costs. A line whose cost was already known keeps it: a later cost change (the owner's
+ * or the platform's) never rewrites a past sale (store-analytics decision 15).
  */
 export function setOrderItems(db: Db, storeId: string, orderId: string, items: OrderItem[]) {
+  const known = new Map(
+    db.prepare('SELECT product_id, cost FROM order_items WHERE store_id = ? AND order_id = ? AND cost > 0').all(storeId, orderId).map((r) => [String(r.product_id), Number(r.cost)]),
+  );
   db.prepare('DELETE FROM order_items WHERE store_id = ? AND order_id = ?').run(storeId, orderId);
   const byProduct = new Map<string, OrderItem>();
   for (const i of items) {
@@ -325,7 +346,7 @@ export function setOrderItems(db: Db, storeId: string, orderId: string, items: O
   const ins = db.prepare('INSERT INTO order_items (store_id, order_id, product_id, quantity, revenue, cost) VALUES (?, ?, ?, ?, ?, ?)');
   const unit = db.prepare('SELECT cost FROM products WHERE store_id = ? AND id = ?');
   for (const i of byProduct.values()) {
-    const cost = i.cost || i.quantity * Number(unit.get(storeId, i.productId)?.cost ?? 0);
+    const cost = known.get(i.productId) || i.cost || i.quantity * Number(unit.get(storeId, i.productId)?.cost ?? 0);
     ins.run(storeId, orderId, i.productId, i.quantity, Math.round(i.revenue * 100) / 100, Math.round(cost * 100) / 100);
   }
   db.prepare('UPDATE orders SET cogs = (SELECT round(coalesce(sum(cost), 0), 2) FROM order_items WHERE store_id = ?1 AND order_id = ?2) WHERE store_id = ?1 AND id = ?2 AND cogs = 0').run(storeId, orderId);
