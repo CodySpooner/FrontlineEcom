@@ -11,3 +11,7 @@ These tests stay separate from `pnpm check` and GitHub Actions. The harness foll
 The 2026-10-28 baseline uses Edge, axe 4.14.0 and 1280x900 on all 16 routes, including labelled Product Research fixtures and one sample Knowledge Base card. `axe-baseline/*.json` records serious/critical rule IDs and exact node selectors; any difference fails the ordinary run. Full axe results are attached to each test. Known findings are filed in the UI, AI Agents and Knowledge Base backlogs. No critical violations were found. These snapshots cover existing findings, not the separate mobile overflow failures.
 
 After reviewing a real fix or intentional fixture change, update only the affected baseline with `pnpm e2e --grep "accessibility <route>" --update-snapshots` and review the diff. Do not use snapshot updates to accept new violations without filing and review.
+
+## Known route failures
+
+On 2026-10-28, two complete runs each had 82 passes and three failures: Integrations at 390 px overflows by 3 px, and the legacy-agent and conversation routes at 390 px overflow by 46 px. These strict tests remain enabled; `pnpm e2e` currently exits 1 until the owning UI/AI Agents lanes fix them. The four fake-engine flow tests and all 16 accessibility baseline checks pass. To run only the user flows: `pnpm e2e --grep "flow:"`.

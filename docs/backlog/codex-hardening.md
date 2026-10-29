@@ -165,6 +165,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
 
 ## Done
 
+- 2026-10-28 CH-20 flow coverage shipped, acceptance blocked: real-UI seeded approval, fake agent reply, KB card and labelled Research fixture all pass. Two consecutive complete browser runs each have 82 passes / the same 3 CH-18 mobile overflow failures; all 16 accessibility scans pass both times. pnpm check green (234 files / 1,730 tests, 4 workers). Full-green criterion awaits the filed UI fixes.
+
 - 2026-10-28 CH-19: axe scans all 16 routes at 1280x900, with labelled PR fixtures and a sample KB card. Reviewed selector-level baseline in e2e/axe-baseline: 48 serious label-content-name-mismatch targets across routes (shared controls repeat), zero critical, Ecosystem empty. Filed UI/Analytics/shared header, agent store switches and KB categories to their owners. Normal verification passes all 16 scans; any baseline difference fails. pnpm check green (234 files / 1,730 tests, 4 workers).
 
 - 2026-10-28 CH-18 coverage shipped, acceptance blocked: 13 nav routes plus legacy agent/conversation/team at 390/1280/1440/1920 px. Real API seeds the sessions. 61/64 route cases and the harness pass; three 390px overflow failures are filed under Blocked and kept failing. Focused rerun confirms console/page/API checks pass on those three too. pnpm check green (234 files / 1,730 tests, 4 workers).
@@ -213,6 +215,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   - Creative generation: used + pending credit cap → approval, recheck and synchronous charge before render → creative or failure with credits retained. CJ: refusal before queue, HTTP fetch, then `pr_calls` → simultaneous callers can overbook the daily cap (CH-04).
 
 ## Blocked
+
+- 2026-10-28 CH-20: all four requested flows pass (demo approval, fake chat reply, KB card, Research product). Two complete pnpm e2e runs each finish 82 passed / 3 failed, exclusively the CH-18 mobile overflows. Whole-suite green twice remains blocked on those UI/AI Agents fixes; no exclusions, expected failures or threshold changes were added.
 
 - 2026-10-28 CH-18: all route/width checks are implemented, but three strict mobile overflow assertions fail: Integrations +3 px, legacy agent and conversation +46 px at 390x900. Filed to UI and AI Agents Inbox with reproductions. No skipped/expected failures or relaxed thresholds; these app bugs also block CH-20's whole-suite green-twice criterion.
 
