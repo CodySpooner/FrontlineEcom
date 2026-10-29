@@ -739,6 +739,8 @@ export interface SaSourceRow extends SaFreshness {
   /** When a source failing over and over is next tried (decision 26). */
   backoffUntil: string | null;
   fix?: { label: string; href: string };
+  /** SA-60, the orders row while the one history re-pull runs: the share of the store's orders with money parts. */
+  rereading?: number;
 }
 
 /** GET /api/analytics/context: the selected store, unmistakable (spec §4). */

@@ -1,6 +1,7 @@
 import { SA_DATASETS, SA_SOURCES, settingsUrl, type SaDataset, type SaDatasetStatus, type SaFreshness, type SaReason, type SaSourceDataset, type SaSourceKind, type SaSourceRow } from '@frontline/shared';
 import type { Db } from '../db';
 import { decrypt } from '../secrets';
+import { CANONICAL } from './sales';
 
 /** Long runs of key characters (API tokens, JWT segments, signed ids), with a "Bearer " before them. */
 const TOKENISH = /(?:bearer\s+)?[A-Za-z0-9_-]{24,}(?:\.[A-Za-z0-9_-]+)*/gi;
@@ -194,6 +195,20 @@ export function sourceRows(db: Db, storeId: string, now = Date.now()): SaSourceR
       ...(d.reason ? { note: d.reason } : {}),
       backoffUntil: f.source === 'demo' ? null : wait(f.source),
       ...(fixable ? { fix: { label: f.status === 'needs_credentials' ? `Connect ${s.name}` : `Check ${s.name}`, href: settingsUrl('integrations', { store: storeId }) } } : {}),
+      ...rereading(db, storeId, f),
     };
   });
+}
+
+/**
+ * SA-60: from migration 58's reset until the source's orders are next read, the share of the store's canonical orders
+ * (its own, or legacy ones of unknown source) that have money parts. ponytail: orders past the platform's history limit
+ * stay estimated, so the share can end below 1; the row stops showing it once the re-read is done.
+ */
+function rereading(db: Db, storeId: string, f: SaFreshness): { rereading?: number } {
+  if (f.dataset !== 'orders') return {};
+  const at = db.prepare('SELECT at FROM done_once WHERE ref = ?').get(`sa-repull:${f.source}:${storeId}`)?.at;
+  if (at == null || (f.lastSuccess != null && f.lastSuccess >= String(at))) return {};
+  const r = db.prepare(`SELECT count(*) AS n, count(o.breakdown_at) AS parts FROM orders o WHERE o.store_id = ? AND coalesce(o.source_kind, ?) = ? AND ${CANONICAL}`).get(storeId, f.source, f.source);
+  return { rereading: Number(r?.n) ? Number(r!.parts) / Number(r!.n) : 1 };
 }

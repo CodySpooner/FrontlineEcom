@@ -1467,6 +1467,12 @@ export const MIGRATIONS = [
   CREATE INDEX settings_changes_at ON settings_changes (at);
   CREATE INDEX settings_changes_store ON settings_changes (store_id, at);
   `,
+  /* 58 (store-analytics: SA-60 the one history re-pull). Shopify, WooCommerce, Etsy and Amazon read history again from
+     their next sync, within each platform's limits, filling money parts, lines, refunds and customers. The done_once row
+     dates the reset: the Data sources panel says how far the re-read is until that source's orders are read again. */ `
+  INSERT OR IGNORE INTO done_once (ref, at) SELECT 'sa-repull:' || id, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM integrations WHERE kind IN ('shopify', 'woocommerce', 'etsy', 'amazon');
+  UPDATE integrations SET cursor = NULL WHERE kind IN ('shopify', 'woocommerce', 'etsy', 'amazon');
+  `,
 ];
 
 /** Opens (or creates) the DB and runs pending migrations. Default is in-memory, which is what tests use. */
