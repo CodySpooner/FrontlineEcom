@@ -6,6 +6,7 @@ import { LEDGER_ORDERS, LEDGER_PERIODS, LEDGER_REFUNDS, LEDGER_STORE, seedLedger
 import { adMetrics } from './ads';
 import { costMetrics } from './costs';
 import { salesMetrics } from './sales';
+import { trafficMetrics } from './traffic';
 
 /**
  * Canonical orders = paid (status paid or refunded, with a paid time), not test, not a duplicate copy.
@@ -147,5 +148,19 @@ describe('oracle (v1)', () => {
       if ('platform_roas' in o) expect(values.platform_roas, p).toMatchObject({ value: o.platform_roas, note: "Meta's own attribution · attribution setting not recorded" });
     }
   });
-  it.todo('sessions and site_conversion with day coverage (SA-21)');
+  it('sessions and site_conversion with day coverage (SA-21)', () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    for (const p of ['P1', 'P2'] as const) {
+      const { from, to } = LEDGER_PERIODS[p];
+      const o: Record<string, number | null> = ORACLE[p];
+      const got = trafficMetrics(db, LEDGER_STORE, from, to);
+      expect(got.sessions, p).toMatchObject({ value: o.sessions, status: 'ok' });
+      expect(got.site_conversion.value, p).toBeCloseTo(o.site_conversion!, 10);
+    }
+    // P1: Oct 27's purchasing sessions weren't reported: that day is left out and counted in coverage.
+    expect(trafficMetrics(db, LEDGER_STORE, LEDGER_PERIODS.P1.from, LEDGER_PERIODS.P1.to).site_conversion).toMatchObject({
+      status: 'partial', coverage: { share: ORACLE.P1.site_conversion_days / 7, of: 'days' }, note: '6 of 7 days reported',
+    });
+  });
 });
