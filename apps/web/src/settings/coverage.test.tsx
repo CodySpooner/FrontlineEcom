@@ -14,7 +14,6 @@ import { SECTIONS } from './Layout';
 
 /** Editable entries with no row outside `data-legacy` yet. The item that renders a row removes its id; ST-48 empties it. */
 const ALLOWLIST = [
-  'baseCurrency', // ST-16
   'caps.agentCostPerDay', // ST-23
   'caps.adSpendChangePerDay', 'caps.higgsfieldCreditsPerDay', // ST-24b
   'autopilot.ads.set_budget', 'autopilot.ads.pause_campaign', // ST-30

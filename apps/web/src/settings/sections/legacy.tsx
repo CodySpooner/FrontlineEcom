@@ -1,9 +1,9 @@
 // Today's Settings panels, moved unchanged into their sections (ST-02) until the items named in each `data-legacy`
-// wrapper rebuild them with the settings kit. Profile is split: Account saves only the name, General only the currency.
+// wrapper rebuild them with the settings kit.
 import { useState, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router';
 import { APPROVAL_KINDS, type Store, type StoreCaps, type StoreCapsUpdate } from '@frontline/shared';
-import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUpdateSettings, useUsage } from '../../api/client';
+import { useBackupNow, useBackups, useCaps, useHealth, useOpenDataFolder, useRestoreBackup, useSaveCaps, useSettings, useStoreActions, useStores, useUsage } from '../../api/client';
 import { feeEstimate, nicheName, PLATFORM_NAME, StoreForm } from '../../components/StoreForm';
 import { Badge, Button, ConfirmDelete, cx, Dialog, ErrorState, Field, inputClass, LoadingState, Panel, Switch, UsageMeter } from '../../components/ui';
 import { cents, money } from '../../lib/format';
@@ -205,40 +205,6 @@ export function CapsForm({ caps }: { caps: StoreCaps }) {
 }
 
 /** One field of the old Profile panel (Account: the name; General: the base currency): each saves only its own field. */
-export function BaseCurrency() {
-  const q = useSettings();
-  const update = useUpdateSettings();
-  const [value, setValue] = useState<string>();
-  if (q.isPending) return <Panel title="Currency"><LoadingState rows={2} /></Panel>;
-  if (q.isError) return <Panel title="Currency"><ErrorState message="Couldn't load your settings." onRetry={() => q.refetch()} /></Panel>;
-  const s = q.data;
-  const shown = value ?? s.baseCurrency;
-  return (
-    <Panel title="Currency">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          update.mutate({ version: s.version ?? 0, baseCurrency: shown.trim().toUpperCase() }, { onSuccess: () => setValue(undefined) });
-        }}
-        className="grid gap-3"
-      >
-        <Field label="Base currency">
-          <input value={shown} onChange={(e) => setValue(e.target.value)} required pattern="[A-Za-z]{3}" maxLength={3} placeholder="USD" className={cx(inputClass, 'uppercase')} />
-          <span className="text-[11px] text-muted">Totals across stores are converted to this. One store shows its own currency.</span>
-        </Field>
-        {update.isError && (
-          <p role="alert" className="text-xs text-red">
-            {update.error.message}
-          </p>
-        )}
-        <Button type="submit" variant="primary" className="justify-self-end" disabled={shown.toUpperCase() === s.baseCurrency || !shown.trim() || update.isPending}>
-          Save
-        </Button>
-      </form>
-    </Panel>
-  );
-}
-
 export function YourData() {
   const q = useSettings();
   const [copied, setCopied] = useState(false);

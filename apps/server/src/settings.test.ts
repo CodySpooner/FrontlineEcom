@@ -36,8 +36,8 @@ test('settings have defaults, merge nested updates, and reject bad input', async
     expect((await app.request('/api/settings', send('PATCH', { version: upd.version, ...body }))).status, JSON.stringify(body)).toBe(400);
   }
   // Every write sends the version it read: none is 428; the 0 read before the first save is 409 now, with the settings as they are.
-  expect((await app.request('/api/settings', send('PATCH', { baseCurrency: 'EUR' }))).status).toBe(428);
-  const stale = await app.request('/api/settings', send('PATCH', { version: s.version, baseCurrency: 'EUR' }));
+  expect((await app.request('/api/settings', send('PATCH', { baseCurrency: 'USD' }))).status).toBe(428);
+  const stale = await app.request('/api/settings', send('PATCH', { version: s.version, baseCurrency: 'USD' }));
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({ code: 'exists', current: { baseCurrency: 'USD', version: upd.version } });
   expect(((await (await app.request('/api/settings')).json()) as Settings).baseCurrency).toBe('USD');

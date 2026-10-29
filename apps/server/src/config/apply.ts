@@ -3,12 +3,19 @@
 // write has committed, then marks the row `applied` or `failed` (its reason in `detail`) and says so on the live socket.
 import { Hono } from 'hono';
 import type { ConfigChange } from '@frontline/shared';
-import type { Db } from '../db';
+import { tx, type Db } from '../db';
 import { publish } from '../live';
+import { rank } from '../product-research/facts';
 import { toChange } from './changes';
 
 /** The background job of each setting id that has one. ST-16 and ST-28 add theirs; a job must be safe to run twice. */
 export const JOBS = new Map<string, (db: Db, change: ConfigChange) => void | Promise<void>>();
+
+/** Products whose facts Product Research keeps (not merged into another). */
+export const rankedProducts = (db: Db) => db.prepare('SELECT id FROM pr_products WHERE merged_into IS NULL ORDER BY id').all().map((r) => String(r.id));
+
+// The display currency moved (ST-16): All-stores facts are kept in it (facts.ts factKeys), so every product ranks again.
+JOBS.set('baseCurrency', (db) => tx(db, () => rankedProducts(db).forEach((id) => rank(db, id))));
 
 /** Keyed by change row: one run at a time per row. */
 const running = new Set<string>();

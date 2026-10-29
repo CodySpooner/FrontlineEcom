@@ -9,7 +9,7 @@ import { applyRoutes } from './apply';
 import { changeRoutes, toChange } from './changes';
 import { effective } from './effective';
 import { impactOf } from './impact';
-import { ConfigError, versionOf, writeConfig } from './write';
+import { ConfigError, currencies, versionOf, writeConfig } from './write';
 
 const DOCS: ConfigDoc[] = ['app', 'personal', 'workspace', 'store_caps'];
 
@@ -36,6 +36,8 @@ export function configRoutes(db: Db) {
       if (storeId && !getStore(db, storeId)) return c.json({ error: 'store not found' }, 404);
       return c.json(effective(db, { storeId }));
     })
+    // Settings → General's currency picker (ST-16): the codes PATCH accepts for baseCurrency.
+    .get('/api/config/currencies', (c) => c.json(currencies(db)))
     .post('/api/config/impact', async (c) => {
       const docs = documentsOf(await c.req.json().catch(() => undefined), false);
       if (!Array.isArray(docs)) return c.json({ error: docs.error }, docs.status);

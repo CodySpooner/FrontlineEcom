@@ -21,6 +21,7 @@ const api = (extra: (url: string) => unknown = () => undefined) =>
   stubApi((url, init) => {
     if (init?.method === 'PATCH' && url === '/api/settings') return settings;
     if (url === '/api/settings') return settings;
+    if (url === '/api/config') return { values: { baseCurrency: 'EUR', timezone: 'UTC' }, origins: {}, versions: { app: 1, workspace: 1 } };
     if (url === '/api/stores') return [peak, glow];
     if (url.startsWith('/api/caps')) return { ...caps, storeId: new URL(url, 'http://x').searchParams.get('stores') ?? 'peak' };
     return extra(url) ?? (url === '/api/health' ? { ok: true, uptimeSec: 1, version: 'dev', connectors: [] } : undefined);
@@ -32,11 +33,11 @@ afterEach(() => {
 });
 
 describe('routes and deep links', () => {
-  it('/settings lands on General, showing the base currency', async () => {
+  it('/settings lands on General, showing the display currency', async () => {
     api();
     renderApp(<Settings />, '/settings');
     expect(screen.getByTestId('where').textContent).toBe('/settings/general');
-    expect(((await screen.findByLabelText(/^Base currency/)) as HTMLInputElement).value).toBe('EUR');
+    expect(((await screen.findByLabelText('Display currency')) as HTMLSelectElement).value).toBe('EUR');
   });
 
   it('a section with no content yet is absent from the sidebar and lands on General, keeping the query', async () => {
@@ -106,16 +107,6 @@ describe('inside the app shell', () => {
     fireEvent.click(within(sidebar).getByRole('link', { name: 'General' }));
     await titled('General');
     expect(screen.getByRole('navigation', { name: 'Settings' })).toBe(sidebar);
-  });
-});
-
-describe('General saves only its own field', () => {
-  it('General saves the base currency', async () => {
-    const fetch = api();
-    renderApp(<Settings />, '/settings/general');
-    fireEvent.change(await screen.findByLabelText(/^Base currency/), { target: { value: 'gbp' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await vi.waitFor(() => expect(sent(fetch, 'PATCH')).toEqual([['/api/settings', { version: 0, baseCurrency: 'GBP' }]]));
   });
 });
 

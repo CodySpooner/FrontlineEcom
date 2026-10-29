@@ -93,7 +93,7 @@ test('PUT /api/caps saves only the keys it sends: the rest keep inheriting (orig
 
 test('versions: 0 creates a row; a stale one gets 409 with the current document and writes nothing; none gets 428', async () => {
   const { db, app } = setup();
-  expect((await send(app, 'PATCH', '/api/settings', { version: 0, baseCurrency: 'gbp' })).status).toBe(200); // a fresh database's app row
+  expect((await send(app, 'PATCH', '/api/settings', { version: 0, baseCurrency: 'usd' })).status).toBe(200); // a fresh database's app row
   expect((await patch(app, [{ doc: 'store_caps', storeId: 'a', version: 0, set: { 'caps.agentCostPerDay': 4 } }])).status).toBe(200);
   expect((await config(app, 'a')).versions).toEqual({ app: 1, personal: 1, workspace: 1, 'store_caps:a': 1 });
   await patch(app, [{ doc: 'store_caps', storeId: 'a', version: 1, set: { 'caps.agentCostPerDay': 6 } }]);

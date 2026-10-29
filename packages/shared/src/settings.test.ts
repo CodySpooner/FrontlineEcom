@@ -82,7 +82,7 @@ describe('validateSetting', () => {
     ['notifications.digest', false, null],
     ['notifications.digest', 'no', 'Daily digest must be on or off'],
     ['baseCurrency', 'eur', null],
-    ['baseCurrency', 'EURO', 'Base currency must be valid text'],
+    ['baseCurrency', 'EURO', 'Display currency must be valid text'],
     ['store.platform', 'ebay', 'Platform must be one of shopify, tiktok_shop, etsy, amazon, woocommerce, walmart'],
     ['store.nicheDetail', null, null],
     ['store.name', null, "Name can't be empty"],

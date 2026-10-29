@@ -1,8 +1,13 @@
 // Impact previews (ST-10, spec §7): what a config save would touch, said only with counts from real queries. One
 // function per setting; ST-20 and later items add theirs. Nothing here writes.
-import type { ConfigImpact, ConfigWrite } from '@frontline/shared';
+import { costToday, workspaceZone } from '@frontline/agents';
+import { startOfDay, type ConfigImpact, type ConfigWrite } from '@frontline/shared';
+import { nextCronTime, parseCron } from '../cron';
 import type { Db } from '../db';
+import { getCaps } from '../settings';
+import { rankedProducts } from './apply';
 import { effective, pathIn } from './effective';
+import { validZone } from './write';
 
 type DocWrite = ConfigWrite['documents'][number];
 /** One setting's sentences for one document's change (`value` undefined: unset, back to inheriting). */
@@ -44,7 +49,42 @@ const runsStopping: ImpactOf = (db, w, id, value) => {
   });
 };
 
+/** The display currency moved: its apply job ranks every product again for All stores. */
+const rerank: ImpactOf = (db, w, id, value) => {
+  const n = rankedProducts(db).length;
+  return w.doc === 'app' && value !== undefined && n ? [{ setting: id, text: `Re-ranks All-stores facts for ${count(n, 'product')}` }] : [];
+};
+
+// Times on screen are this computer's clock (decision 8).
+const here = (d: Date) => d.toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+const usd = (n: number) => `$${n.toFixed(2)}`;
+
+/** The workspace timezone moved: each enabled schedule's next run, before → after, and where today's counters restart. */
+const zoneMoved: ImpactOf = (db, w, id, value) => {
+  const was = workspaceZone(db);
+  if (w.doc !== 'workspace' || typeof value !== 'string' || value === was || !validZone(value)) return [];
+  const now = new Date();
+  const next = (cron: string, zone: string) => {
+    const at = nextCronTime(parseCron(cron), now, 8, zone);
+    return at ? here(at) : 'none within a week';
+  };
+  const rules = db.prepare('SELECT r.name, r.trigger_json, s.name AS store FROM automation_rules r JOIN stores s ON s.id = r.store_id WHERE r.enabled = 1 ORDER BY s.name, r.name').all();
+  const schedules = rules.flatMap((r) => {
+    const t = JSON.parse(String(r.trigger_json)) as { type: string; cron?: string };
+    return t.type === 'schedule' && t.cron ? [{ setting: id, text: `${r.name} on ${r.store}: next run ${next(t.cron, was)} → ${next(t.cron, value)}` }] : [];
+  });
+  const usage = db.prepare('SELECT id, name FROM stores ORDER BY name').all().flatMap((s) => {
+    const [before, after] = [costToday(db, String(s.id), undefined, was), costToday(db, String(s.id), undefined, value)];
+    return before === after ? [] : [`AI usage today becomes ${usd(after)} of ${usd(getCaps(db, String(s.id)).agentCostPerDay)} on ${s.name}`];
+  });
+  // ponytail: a day later's midnight is the next one, except across a DST change at midnight itself.
+  const restart = new Date(startOfDay(value, new Date(now.getTime() + 86_400_000)));
+  return [...schedules, { setting: id, text: `Today's usage counters restart at ${here(restart)} (midnight ${value})${usage.length ? `: ${usage.join('; ')}` : ''}` }];
+};
+
 export const IMPACTS: Record<string, ImpactOf[]> = {
+  baseCurrency: [rerank],
+  timezone: [zoneMoved],
   'caps.agentCostPerDay': [runsStopping, workspaceDefault],
   'caps.adSpendChangePerDay': [workspaceDefault],
   'caps.higgsfieldCreditsPerDay': [workspaceDefault],

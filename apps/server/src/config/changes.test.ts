@@ -74,6 +74,8 @@ test('a setting with a job saves as applying, then the job marks it applied or f
   const heard: LiveMessage[] = [];
   const stop = subscribe((m) => heard.push(m));
   const ran: string[] = [];
+  db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?)").run(JSON.stringify({ date: '2026-10-27', rates: { EUR: 1, GBP: 0.86, JPY: 162, USD: 1.08 } })); // codes the picker offers (ST-16)
+  const real = JOBS.get('baseCurrency')!;
   JOBS.set('baseCurrency', (_db, c) => {
     ran.push(String(c.after));
     if (c.after === 'GBP') throw new Error('FX rates unavailable');
@@ -89,8 +91,9 @@ test('a setting with a job saves as applying, then the job marks it applied or f
   expect(heard.filter((m) => m.type === 'config_change').map((m) => (m as { change: ConfigChange }).change.state)).toEqual(['applied', 'failed']);
   expect(ran).toEqual(['EUR', 'GBP']);
 
-  JOBS.delete('baseCurrency'); // a setting without a job (every one until ST-16 and ST-28) is saved, nothing more
+  JOBS.delete('baseCurrency'); // a setting without a job is saved, nothing more
   expect((await saveBase(app, 'JPY')).changes).toMatchObject([{ setting: 'baseCurrency', state: 'saved' }]);
+  JOBS.set('baseCurrency', real);
   stop();
 });
 

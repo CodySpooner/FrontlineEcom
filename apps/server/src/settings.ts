@@ -5,7 +5,7 @@ import { Hono, type Context } from 'hono';
 import { workspaceZone } from '@frontline/agents';
 import { NOTIFICATION_CATEGORIES, settingsUrl, type AppNotification, type NewNotification, type NotificationCategory, type NotificationKind, type Settings, type StoreCaps } from '@frontline/shared';
 import { effective, readDoc } from './config/effective';
-import { ConfigError, NO_VERSION, versionOf, writeConfig } from './config/write';
+import { ConfigError, currencyRefusal, NO_VERSION, versionOf, writeConfig } from './config/write';
 import { dataDir, type Db } from './db';
 import { publish } from './live';
 import { getStore, listStores } from './stores';
@@ -57,6 +57,8 @@ export function updateSettings(db: Db, body: unknown, version?: number): string 
   if (body.baseCurrency !== undefined) {
     if (typeof body.baseCurrency !== 'string' || !/^[A-Za-z]{3}$/.test(body.baseCurrency.trim())) return 'baseCurrency must be a 3-letter ISO code';
     set.baseCurrency = body.baseCurrency.trim().toUpperCase();
+    const refused = currencyRefusal(db, set.baseCurrency);
+    if (refused) return { error: refused, field: 'baseCurrency' };
   }
   if (body.notifications !== undefined) {
     const keys = Object.keys(DEFAULT_SETTINGS.notifications) as (keyof Settings['notifications'])[];

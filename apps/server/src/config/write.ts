@@ -37,7 +37,28 @@ const SCOPES: Record<ConfigDoc, SettingScope[]> = { app: ['personal', 'workspace
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
-function check(doc: ConfigDoc, id: string, value?: unknown) {
+/** The display currencies (ST-16): the stored rates' codes, every store's own and the current one. */
+export function currencies(db: Db): string[] {
+  const fx = db.prepare("SELECT value_json FROM settings WHERE key = 'fx'").get();
+  const rates = Object.keys(fx ? (JSON.parse(String(fx.value_json)).rates ?? {}) : {});
+  const own = db.prepare('SELECT DISTINCT currency FROM stores').all().map((r) => String(r.currency));
+  const current = db.prepare("SELECT json_extract(value_json, '$.baseCurrency') AS c FROM settings WHERE key = 'app'").get()?.c;
+  return [...new Set([...rates, ...own, String(current ?? 'USD')])].sort();
+}
+
+/** Why `code` can't be the display currency, or undefined: any other has no rate to convert totals with. */
+export const currencyRefusal = (db: Db, code: unknown) => (currencies(db).includes(code as string) ? undefined : `${String(code)} has no stored exchange rate, so totals couldn't be converted to it`);
+
+export const validZone = (zone: string) => {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+function check(db: Db, doc: ConfigDoc, id: string, value?: unknown) {
   const def = SETTINGS.find((d) => d.id === id);
   if (!def) throw new ConfigError(400, { error: `There's no setting ${id}`, field: id });
   if (def.locked) throw new ConfigError(400, { error: `${def.label} is a workspace policy: nothing can change it`, field: id });
@@ -47,6 +68,8 @@ function check(doc: ConfigDoc, id: string, value?: unknown) {
   // An autopilot rule's two fields have their own types (the map check covers its keys only).
   const rule = id.startsWith('autopilot.') && value !== null && (!isObj(value) || typeof value.enabled !== 'boolean' || typeof value.maxUsdPerDay !== 'number' || value.maxUsdPerDay < 0 || value.maxUsdPerDay > 1e6);
   if (bad || rule) throw new ConfigError(400, { error: bad ?? `${def.label} must be { enabled, maxUsdPerDay from 0 to 1000000 }`, field: id });
+  const refused = id === 'baseCurrency' ? currencyRefusal(db, value) : id === 'timezone' && !validZone(value as string) ? `${String(value)} isn't a timezone` : undefined;
+  if (refused) throw new ConfigError(400, { error: refused, field: id });
 }
 
 function setPath(o: Record<string, unknown>, path: string[], value: unknown) {
@@ -75,11 +98,11 @@ function writeDoc(db: Db, w: DocWrite, o: WriteOptions) {
     moved.push([id, before, value]);
   };
   for (const [id, value] of Object.entries(w.set ?? {})) {
-    if (!o.trusted) check(w.doc, id, value);
+    if (!o.trusted) check(db, w.doc, id, value);
     apply(id, value);
   }
   for (const id of w.unset ?? []) {
-    if (!o.trusted) check(w.doc, id);
+    if (!o.trusted) check(db, w.doc, id);
     apply(id, undefined);
   }
   if (!moved.length) return; // nothing the owner edits changed: the version stays

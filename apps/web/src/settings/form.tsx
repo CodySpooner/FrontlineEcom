@@ -21,8 +21,8 @@ export function useSettingsForm<T extends Doc>({ key, saved, labels, save, onSav
   saved: T | undefined;
   /** Row labels, for the conflict dialog. */
   labels: Partial<Record<keyof T, string>>;
-  /** Writes `changes` over `version`; resolves with the document as saved, and the change rows it wrote (ST-09). */
-  save: (changes: Partial<T>, version: number) => Promise<T & { changes?: ConfigChange[] }>;
+  /** Writes `changes` over `version` (`base`'s; a section over two documents reads its other version there); resolves with the document as saved, and the change rows it wrote (ST-09). */
+  save: (changes: Partial<T>, version: number, base: T) => Promise<T & { changes?: ConfigChange[] }>;
   /** The server's document after a save or a Reload (null: removed elsewhere). Put it where `saved` comes from. */
   onSaved: (doc: T | null) => void;
 }) {
@@ -32,7 +32,7 @@ export function useSettingsForm<T extends Doc>({ key, saved, labels, save, onSav
   // The last save's rows with a background job: the bar follows them to applied or failed (decision 6).
   const [wrote, setWrote] = useState<ConfigChange[]>();
   const m = useMutation({
-    mutationFn: ({ changes, version }: { changes: Partial<T>; version: number }) => save(changes, version),
+    mutationFn: ({ changes, base }: { changes: Partial<T>; base: T }) => save(changes, base.version, base),
     onSuccess: ({ changes, ...doc }) => (onSaved(doc as unknown as T), d.reset(), setWrote(changes?.some((c) => c.state !== 'saved') ? changes : undefined)),
   });
   const jobs = useSaveChanges(wrote);
@@ -44,7 +44,7 @@ export function useSettingsForm<T extends Doc>({ key, saved, labels, save, onSav
   const submit = async (base: T, again = true): Promise<T> => {
     const changes = d.changes();
     try {
-      return await m.mutateAsync({ changes, version: base.version });
+      return await m.mutateAsync({ changes, base });
     } catch (e) {
       const err = e as ApiError;
       if (err.status !== 409) throw e;

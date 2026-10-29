@@ -1,6 +1,7 @@
 // Account (ST-12, decision 17): the one owner's display name, and what Frontline doesn't have on this computer.
 import { useQueryClient } from '@tanstack/react-query';
-import { machineZone, type Settings } from '@frontline/shared';
+import { Link } from 'react-router';
+import { machineZone, settingsUrl, type Settings } from '@frontline/shared';
 import { useSettings, useUpdateSettings, type ApiError } from '../../api/client';
 import { cx, ErrorState, inputClass, LoadingState } from '../../components/ui';
 import { useSettingsForm } from '../form';
@@ -32,7 +33,18 @@ export function Account() {
         <SettingRow setting="profile.name" label="Display name" htmlFor="profile-name" help="Shown on the profile chip. 1–40 characters." error={f.error('profile.name')} changed={f.dirty.includes('profile.name')}>
           <input id="profile-name" data-setting="profile.name" value={f.draft!['profile.name']} onChange={(e) => f.set('profile.name', e.target.value)} maxLength={40} className={cx(inputClass, 'w-full min-[600px]:w-[260px]')} />
         </SettingRow>
-        <SettingRow label="Timezone" help={`Times on screen use this computer's timezone (${machineZone()}). Schedules use the workspace timezone.`} />
+        <SettingRow
+          label="Timezone"
+          help={
+            <>
+              Times on screen use this computer's timezone ({machineZone()}). Schedules use the{' '}
+              <Link to={settingsUrl('general', { setting: 'timezone' })} className="text-text-2 underline underline-offset-2 hover:text-white">
+                workspace timezone
+              </Link>
+              .
+            </>
+          }
+        />
       </SettingsSection>
       <SettingsSection title="On this computer">
         <SettingRow label="Sign-in" help="Frontline has one owner on this computer: there's no sign-in, team or billing." />

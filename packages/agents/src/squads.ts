@@ -50,8 +50,8 @@ export const workspaceZone = (db: DatabaseSync): string =>
  * What the store's runs (or one agent's) cost today: every run not over before the workspace zone's midnight, so one
  * queued or begun yesterday that spends today counts. ponytail: all of such a run's cost counts today; a cap errs high, never low.
  */
-export function costToday(db: DatabaseSync, storeId: string, agentId?: string): number {
-  const midnight = new Date(startOfDay(workspaceZone(db)));
+export function costToday(db: DatabaseSync, storeId: string, agentId?: string, zone = workspaceZone(db)): number {
+  const midnight = new Date(startOfDay(zone)); // `zone`: Settings → General's preview of another one (ST-16)
   const row = db
     .prepare(`SELECT coalesce(sum(cost_usd), 0) AS cost FROM agent_runs WHERE store_id = ? AND coalesce(ended_at, iif(status = 'running', '~', created_at)) >= ? ${agentId ? 'AND agent_id = ?' : ''}`)
     .get(storeId, midnight.toISOString(), ...(agentId ? [agentId] : []));
