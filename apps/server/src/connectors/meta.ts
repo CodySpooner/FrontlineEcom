@@ -1,6 +1,7 @@
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
+import { noteAdReads } from './ingest';
 import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, saveAds, stateOf, switchToReal, syncView, stillAsSynced, syncedBudget, type CampaignChange } from './common';
 
 // Meta Marketing API (Graph). System-user token with ads_read on the ad account.
@@ -30,6 +31,18 @@ interface InsightRow {
   clicks?: string;
   actions?: Action[];
   action_values?: Action[];
+  /** level=campaign rows (SA-58): the window its ad sets are set to, e.g. "7d_click_1d_view". */
+  attribution_setting?: string;
+}
+
+/**
+ * SA-58: the windows the app's insights use. It reads without action_attribution_windows, so Meta's documented default
+ * applies ("7d_click", "1d_view"; Ad Account Insights reference, read 2026-10-29); the ad sets' own setting, which Ads
+ * Manager reports with, is named when it differs.
+ */
+export function metaAttribution(rows: InsightRow[]) {
+  const own = [...new Set(rows.map((r) => r.attribution_setting).filter((s): s is string => !!s && s !== '7d_click_1d_view'))];
+  return `7-day click or 1-day view (the Insights API default)${own.length ? `; the ad sets are set to ${own.join(', ')}, which Ads Manager uses` : ''}`;
 }
 
 interface AdRow {
@@ -117,7 +130,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
           level,
           time_increment: '1',
           time_range: JSON.stringify({ since, until }),
-          fields: `campaign_id,campaign_name,${level === 'ad' ? 'ad_id,ad_name,adset_id,' : ''}spend,impressions,clicks,actions,action_values`,
+          fields: `campaign_id,campaign_name,${level === 'ad' ? 'ad_id,ad_name,adset_id,' : 'attribution_setting,'}spend,impressions,clicks,actions,action_values`,
           limit: '500',
         });
         rows.push(...(await edge<InsightRow>(`${GRAPH}/${act}/insights?${params}`, token, fetchFn)));
@@ -155,6 +168,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       rebuildAdSpend(db, storeId, dates);
     });
     campaignSynced = true;
+    noteAdReads(db, key, id, { from: start, to: today }, money.currency, metaAttribution(rows), now);
 
     const ads = await edge<AdRow>(`${GRAPH}/${act}/ads?fields=id,name,campaign_id,adset_id,effective_status,creative{body}&limit=200`, token, fetchFn);
     const adRows = await insights('ad');

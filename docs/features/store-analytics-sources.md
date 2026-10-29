@@ -113,7 +113,7 @@ The app calls Marketing API v26.0, moved from v24.0 on 2026-10-29 ahead of its N
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Ad spend | supported | yes | Insights API spend by campaign and day | ads_read | 730 days back; the last 28 days re-read |  |  |
-| Platform-attributed results | supported | yes | Insights actions and action_values (purchase) |  |  |  | Meta's own attribution; the window setting isn't recorded yet (SA-58). |
+| Platform-attributed results | supported | yes | Insights actions and action_values (purchase); attribution_setting |  |  |  | Meta's own attribution at the Insights API's default windows (7-day click, 1-day view); the ad sets' own setting is recorded when it differs. |
 | Ad results by product | supported | no | Insights breakdown product_id (catalog ads, estimated values) |  |  |  | Not read: ad spend is never allocated to products (decision 16). Docs: https://developers.facebook.com/documentation/ads-commerce/marketing-api/insights/breakdowns.md (checked 2026-10-28) |
 
 ## Google Ads
@@ -121,7 +121,7 @@ The app calls Marketing API v26.0, moved from v24.0 on 2026-10-29 ahead of its N
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Ad spend | supported | yes | GAQL campaign metrics.cost_micros by segments.date |  | 730 days back; the last 30 days re-read |  |  |
-| Platform-attributed results | supported | yes | metrics.conversions_value |  |  |  | Google's own attribution over the account's primary conversion actions, which need not be purchases, and its conversion counts can be fractional: never used as purchase counts. The conversion setting isn't recorded yet (SA-58). Docs: https://developers.google.com/google-ads/api/fields/v26/metrics (checked 2026-10-28 by codex-hardening CH-22) |
+| Platform-attributed results | supported | yes | metrics.conversions_value |  |  |  | Google's own attribution over the account's primary conversion actions, which need not be purchases, and its conversion counts can be fractional: never used as purchase counts. Each counted conversion action's model and lookback windows are recorded (conversion_action). Docs: https://developers.google.com/google-ads/api/fields/v26/metrics (checked 2026-10-28 by codex-hardening CH-22) |
 | Ad results by product | supported | no | shopping_performance_view segments.product_item_id |  |  |  | Not read: ad spend is never allocated to products (decision 16). Docs: https://developers.google.com/google-ads/api/docs/shopping-ads/reporting (checked 2026-10-28) |
 
 ## TikTok Ads
@@ -129,7 +129,7 @@ The app calls Marketing API v26.0, moved from v24.0 on 2026-10-29 ahead of its N
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Ad spend | supported | yes | Marketing API integrated report, campaign level by day |  | 730 days back; the last 28 days re-read | 30 days per request | Campaign-level reports leave out Branded Mission spend, which TikTok reports at advertiser level only. Docs: https://business-api.tiktok.com/gateway/docs/index?doc_id=1751443956638721 (checked 2026-10-28 by codex-hardening CH-22) |
-| Platform-attributed results | supported | yes | complete_payment value |  |  |  | TikTok's own attribution; the window setting isn't recorded yet (SA-58). |
+| Platform-attributed results | supported | yes | complete_payment value; ad group click/view attribution windows |  |  |  | TikTok's own attribution; each ad group's windows are recorded as TikTok sends them. |
 | Ad results by product | unsupported | no | — |  |  |  | No product dimension confirmed in TikTok's Marketing API reference for the reports the app reads. Docs: https://business-api.tiktok.com/portal/docs (searched 2026-10-28) |
 
 ## Google Analytics 4

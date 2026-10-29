@@ -2,7 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
-import { noteRead } from './ingest';
+import { noteAdReads, noteRead } from './ingest';
 import { adZone, AD_ZONES, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, saveAds, stateOf, switchToReal, syncView, stillAsSynced, syncedBudget, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
@@ -27,6 +27,8 @@ interface AdsRow {
   segments?: { date: string };
   metrics?: { costMicros?: string; conversions?: number; conversionsValue?: number; clicks?: string; impressions?: string };
   customer?: { currencyCode?: string; timeZone?: string };
+  /** FROM conversion_action rows only (SA-58). */
+  conversionAction?: { name?: string; attributionModelSettings?: { attributionModel?: string }; clickThroughLookbackWindowDays?: string; viewThroughLookbackWindowDays?: string };
 }
 
 const STATUS: Record<string, string> = { ENABLED: 'active', PAUSED: 'paused', REMOVED: 'archived' };
@@ -84,6 +86,21 @@ const adsHeaders = (token: string, creds: Record<string, string>) => ({
   ...(creds.managerId ? { 'login-customer-id': googleId(creds.managerId, 'Manager account ID', '123-456-7890') } : {}),
 });
 
+/**
+ * SA-58: the conversion actions in metrics.conversions (enabled, include_in_conversions_metric) with their attribution
+ * model and lookback windows (conversion_action fields, v26 reference read 2026-10-29); undefined with none.
+ * ponytail: the first three are named, then a count.
+ */
+export function googleAttribution(rows: AdsRow[]) {
+  const named = rows.flatMap(({ conversionAction: c }) => {
+    if (!c) return [];
+    const model = (c.attributionModelSettings?.attributionModel ?? 'UNSPECIFIED').replace(/^GOOGLE_(SEARCH_ATTRIBUTION|ADS)_/, '').toLowerCase().replace(/_/g, '-');
+    return [`${c.name ?? 'Unnamed'} (${model}, ${c.clickThroughLookbackWindowDays ?? '?'}-day click, ${c.viewThroughLookbackWindowDays ?? '?'}-day view)`];
+  });
+  if (!named.length) return;
+  return `Conversion actions: ${named.slice(0, 3).join('; ')}${named.length > 3 ? `; and ${named.length - 3} more` : ''}`;
+}
+
 const cursorOf = (db: Db, id: string) => db.prepare('SELECT cursor FROM integrations WHERE id = ?').get(id)?.cursor as string | null;
 
 export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
@@ -123,6 +140,9 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
     if (zone) stateOf<string>(db, AD_ZONES).set(id, zone);
     const rate = await adRate(db, storeId, currency, fetchFn, 'Google Ads');
     const rateOn = await backfillRate(db, storeId, currency, rate, fetchFn, !cursor);
+    const actions = await search(
+      "SELECT conversion_action.name, conversion_action.attribution_model_settings.attribution_model, conversion_action.click_through_lookback_window_days, conversion_action.view_through_lookback_window_days FROM conversion_action WHERE conversion_action.status = 'ENABLED' AND conversion_action.include_in_conversions_metric = TRUE",
+    ).catch(() => []);
 
     if (syncView(db, id) !== view) return;
     tx(db, () => {
@@ -149,6 +169,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
       rebuildAdSpend(db, storeId, dates);
     });
     campaignSynced = true;
+    noteAdReads(db, key, id, { from: start, to: today }, currency, googleAttribution(actions), now);
 
     // Each ad's days and its text (KB-20). ponytail: responsive search ads' descriptions only; Performance Max has asset groups, not ads.
     const adRows = await search(

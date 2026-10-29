@@ -56,6 +56,18 @@ export function noteFailed(db: Db, key: Buffer, integration: string, datasets: I
  * SA-26 (decision 15): a product's (or variant's) unit cost from a day on, in the store's currency. Append-only: a new
  * cost never rewrites a past one, and the same cost again records nothing. True when a row was added.
  */
+/**
+ * SA-58: an ad account's spend read, noted with the account's currency (spend converts into the store's at each day's
+ * rate, SA-53), and its attributed revenue with the attribution setting the network reports it under; partial when
+ * that setting couldn't be read.
+ */
+export function noteAdReads(db: Db, key: Buffer, integration: string, span: { from: string; to: string }, currency: string | undefined, attribution: string | undefined, now = new Date()) {
+  const store = String(db.prepare('SELECT s.currency FROM integrations i JOIN stores s ON s.id = i.store_id WHERE i.id = ?').get(integration)?.currency);
+  const cur = currency ?? store;
+  noteRead(db, key, integration, 'ad_spend', { status: 'available', ...span, note: cur === store ? `Account currency ${cur}, the store's` : `Account currency ${cur}, converted into ${store} at each day's ECB rate` }, now);
+  noteRead(db, key, integration, 'attribution', attribution ? { status: 'available', ...span, note: attribution } : { status: 'partial', ...span, note: "The attribution setting couldn't be read" }, now);
+}
+
 export function recordUnitCost(db: Db, storeId: string, productId: string, variantId: string | null, cost: number, source: string, effectiveFrom: string, now = new Date()) {
   const last = db.prepare('SELECT cost FROM unit_costs WHERE store_id = ? AND product_id = ? AND variant_id IS ? ORDER BY effective_from DESC, recorded_at DESC LIMIT 1').get(storeId, productId, variantId);
   if (last && Number(last.cost) === cost) return false;

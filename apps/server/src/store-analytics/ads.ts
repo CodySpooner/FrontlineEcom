@@ -11,16 +11,19 @@ export type NetworkSpend = { network: string; name: string; spend: number; roas:
 /** campaigns.network → its integration kind. */
 const KINDS = { meta: 'meta_ads', google: 'google_ads', tiktok: 'tiktok_ads' } as const;
 const NAME = (network: string) => (network in KINDS ? SA_SOURCES[KINDS[network as keyof typeof KINDS]].name : network);
-// ponytail: SA-58 records each account's attribution window; until then every network says so.
-const attribution = (network: string) => `${NAME(network).replace(/ Ads$/, '')}'s own attribution · attribution setting not recorded`;
+/** SA-58: the setting the network's last read recorded (noteAdReads), else that it isn't recorded. */
+const attribution = (db: Db, storeId: string, network: string) => {
+  const note = network in KINDS ? db.prepare("SELECT error FROM source_datasets WHERE integration_id = ? AND dataset = 'attribution' AND status = 'available'").get(`${KINDS[network as keyof typeof KINDS]}:${storeId}`)?.error : null;
+  return `${NAME(network).replace(/ Ads$/, '')}'s own attribution · ${note ?? 'attribution setting not recorded'}`;
+};
 
 const cents = (n: number) => Math.round(n * 100) / 100;
 const value = (v: number | null, status: SaValue['status'], extra: Omit<SaValue, 'value' | 'status'> = {}): SaValue => ({ value: v, status, ...extra });
 
 /**
  * Spend comes from campaign_daily rows of the store's campaigns, already in the store's currency (the connectors convert
- * at sync). ponytail: the account's currency isn't recorded until SA-58, so converted spend can't be told apart and isn't
- * marked estimated. A network counts once it synced; a store with no ad integration has no spend to show, not $0.
+ * at sync, each day at its ECB rate; the account's currency is in its ad_spend note, SA-58). A network counts once it
+ * synced; a store with no ad integration has no spend to show, not $0.
  * Spend is store level, so a slice's channels don't apply; its cut scales the last day (day grain, estimated).
  */
 export function adMetrics(
@@ -39,7 +42,7 @@ export function adMetrics(
        JOIN campaigns c ON c.network = d.network AND c.id = d.campaign_id WHERE c.store_id = ? AND d.date BETWEEN ? AND ? GROUP BY d.network ORDER BY d.network`,
     )
     .all(to, k, to, k, storeId, from, to)
-    .map((r) => ({ network: String(r.network), name: NAME(String(r.network)), spend: cents(Number(r.spend)), roas: ratio(Number(r.revenue), Number(r.spend)), attribution: attribution(String(r.network)) }));
+    .map((r) => ({ network: String(r.network), name: NAME(String(r.network)), spend: cents(Number(r.spend)), roas: ratio(Number(r.revenue), Number(r.spend)), attribution: attribution(db, storeId, String(r.network)) }));
 
   let spend: SaValue;
   if (demo) {

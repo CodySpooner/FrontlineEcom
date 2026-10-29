@@ -4,7 +4,7 @@ import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { logAction } from '../actions';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
-import { customerRef, noteFailed, noteRead } from './ingest';
+import { customerRef, noteAdReads, noteFailed, noteRead } from './ingest';
 import { adZone, AD_ZONES, archiveUnlisted, claimCampaigns, adRate, archiveMissing, backfillRate, catalogPassDue, cents, cursorAt, pruneCampaigns, rebuildAdSpend, saveAds, rebuildRevenue, setOrderItems, takeCurrency, stateOf, switchToReal, syncView, type CampaignChange, stillAsSynced, syncedBudget, syncedPrice } from './common';
 
 // TikTok API for Business (Marketing API). Long-lived advertiser access token with Ads Management + Reporting.
@@ -118,6 +118,12 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
     if (zone) stateOf<string>(db, AD_ZONES).set(id, zone);
     const rate = await adRate(db, storeId, currency, fetchFn, 'TikTok Ads');
     const rateOn = await backfillRate(db, storeId, currency, rate, fetchFn, !cursor);
+    // SA-58: each ad group's attribution windows (ad group fields in TikTok's Business API SDK; their values aren't
+    // documented there, so they're shown as sent).
+    type Group = { click_attribution_window?: string; view_attribution_window?: string };
+    const groups = await pages<Group>('/adgroup/get/', { advertiser_id: advertiser, fields: JSON.stringify(['adgroup_id', 'click_attribution_window', 'view_attribution_window']) }, token, fetchFn).catch(() => []);
+    const say = (w?: string) => (w ?? 'not set').toLowerCase().replace(/_/g, ' ');
+    const windows = [...new Set(groups.filter((g) => g.click_attribution_window || g.view_attribution_window).map((g) => `click ${say(g.click_attribution_window)}, view ${say(g.view_attribution_window)}`))];
 
     const n = (v: string | undefined) => Number(v) || 0; // TikTok sends "-" for empty metrics
 
@@ -150,6 +156,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
       rebuildAdSpend(db, storeId, dates);
     });
     campaignSynced = true;
+    noteAdReads(db, key, id, { from: start, to: today }, currency, windows.length ? `Ad groups: ${windows.join('; ')}` : undefined, now);
 
     // Each ad's days and its text (KB-20).
     const adRows = await report<AdReportRow>('AUCTION_AD', ['ad_id', 'stat_time_day'], ['campaign_id', 'adgroup_id', 'ad_name']);
