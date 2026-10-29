@@ -197,11 +197,11 @@ export function platformSplit(db: Db, storeIds: string[], from: string, to: stri
   const { rate } = fxFor(db, storeIds);
   const platform = db.prepare('SELECT platform FROM stores WHERE id = ?');
   const totals = db.prepare('SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(orders), 0) AS orders FROM daily_metrics WHERE store_id = ? AND date BETWEEN ? AND ?');
-  const orderSales = db.prepare("SELECT coalesce(sum(total), 0) AS revenue, count(*) AS orders FROM orders WHERE store_id = ? AND id GLOB ? AND status = 'paid' AND local_date BETWEEN ? AND ?");
+  const orderSales = db.prepare("SELECT coalesce(sum(total), 0) AS revenue, count(*) AS orders FROM orders WHERE store_id = ? AND id GLOB ? AND status = 'paid' AND duplicate_of IS NULL AND local_date BETWEEN ? AND ?");
   const amazonSales = db.prepare("SELECT coalesce(sum(revenue), 0) AS revenue, coalesce(sum(orders), 0) AS orders FROM channel_daily WHERE store_id = ? AND channel = 'amazon' AND date BETWEEN ? AND ?");
   const refunds = db.prepare(
     `SELECT coalesce(sum(r.amount + r.tax), 0) AS amount FROM orders o JOIN amazon_refunds r ON r.store_id = o.store_id AND r.order_id = o.id
-     WHERE o.store_id = ? AND o.id GLOB ? AND o.status = 'paid' AND o.local_date BETWEEN ? AND ?`,
+     WHERE o.store_id = ? AND o.id GLOB ? AND o.status = 'paid' AND o.duplicate_of IS NULL AND o.local_date BETWEEN ? AND ?`,
   );
   const out = new Map<Platform, { revenue: number; orders: number }>();
   const add = (p: Platform, revenue: number, orders: number) => {
