@@ -91,6 +91,7 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
   write to `stores`, `automation_rules`, `store_caps`, `kb_controls`, `pr_store_profiles` or `integrations` that
   neither moves `version` nor is listed in it: a bookkeeping column (status, cursor, timestamps, sync or test results)
   goes in its BOOKKEEPING list, an owner field goes through the owner helper. Either is a tiny edit any lane may make.
+- [ ] (from store-analytics, SA-62) The /analytics page now lives in apps/web/src/analytics/ (pages/Analytics.tsx is a thin shell; the old page is analytics/legacy.tsx and shows as the Overview tab until SA-79). Its tabs grow item by item (a tab exists only once its content ships); the route stays /analytics.
 
 ## Items
 

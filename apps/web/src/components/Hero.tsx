@@ -15,7 +15,7 @@ export function Hero({ title, subtitle, icon: Icon, compact, children }: { title
       <header className="titlebar relative -mx-[22px] flex h-[52px] items-center justify-between gap-4 border-b border-line bg-[#0a0a0c] px-5">
         <div className="flex min-w-0 items-center gap-3">
           {Icon && <Icon aria-hidden className="size-4 shrink-0 text-red drop-shadow-[0_0_10px_rgba(255,42,58,.65)]" strokeWidth={2.2} />}
-          <h1 className="font-display text-[15px] font-semibold whitespace-nowrap tracking-[.08em] uppercase">{title}</h1>
+          <h1 className="truncate font-display text-[15px] font-semibold tracking-[.08em] uppercase">{title}</h1>
           {children}
         </div>
         <HeroControls />
