@@ -17,7 +17,8 @@ const setup = () => {
   seedDemo(db);
   return { db, app: createApp(db, key) };
 };
-const put = (body: unknown) => ({ method: 'PUT', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+/** A new connection sends version 0 (settings ST-08c); an update passes the version it read. */
+const put = (body: object, version = 0) => ({ method: 'PUT', body: JSON.stringify({ version, ...body }), headers: { 'content-type': 'application/json' } });
 const TOKEN = 'shpat_super_secret_123';
 
 test('encrypt/decrypt round-trips and rejects tampering, wrong row, wrong key', () => {
@@ -60,7 +61,7 @@ test('saving an integration stores secrets encrypted and never returns them', as
 test('updating keeps omitted secrets; global integrations need no store; delete works', async () => {
   const { db, app } = setup();
   await app.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'a.myshopify.com', accessToken: TOKEN } }));
-  const upd = (await (await app.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'b.myshopify.com' } }))).json()) as Integration;
+  const upd = (await (await app.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'b.myshopify.com' } }, 1))).json()) as Integration;
   expect(upd.settings.shopDomain).toBe('b.myshopify.com');
   expect(getCredentials(db, key, 'shopify', 'glow')?.accessToken).toBe(TOKEN);
 
@@ -97,7 +98,7 @@ test('credentials saved under another key read as an error to re-enter, never a 
   expect(db.prepare('SELECT status FROM integrations').get()).toEqual({ status: 'error' });
   // keeping the old token is impossible, so it must be entered again
   expect((await reset.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com' } }))).status).toBe(400);
-  const res = await reset.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', accessToken: TOKEN } }));
+  const res = await reset.request('/api/integrations', put({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', accessToken: TOKEN } }, 1));
   expect(await res.json()).toMatchObject({ status: 'connected', secretsSet: ['accessToken'] });
 });
 

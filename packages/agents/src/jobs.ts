@@ -94,6 +94,16 @@ const FORMER_TASKS: Record<string, string[]> = {
 };
 const taskHash = (task: string) => createHash('sha256').update(task).digest('hex').slice(0, 12);
 
+/**
+ * A system edit of a rule's owner field: a change row (the server's settings_changes, decision 6), the rule's name in
+ * detail. The caller's UPDATE bumps the version in the same statement.
+ * ponytail: the server's config/write.ts#logChanges, in SQL here (this package doesn't import the server).
+ */
+function logRuleChange(db: DatabaseSync, r: Record<string, unknown>, setting: string, before: unknown, after: unknown, at: string) {
+  db.prepare(`INSERT INTO settings_changes (id, at, actor, scope, store_id, store_name, setting, before_json, after_json, detail) SELECT ?, ?, 'system', 'store', id, name, ?, ?, ?, ? FROM stores WHERE id = ?`)
+    .run(randomUUID(), at, setting, JSON.stringify(before), JSON.stringify(after), String(r.name), String(r.store_id));
+}
+
 /** Has nothing to review until the store has campaigns (an ad account synced); a run a day on none spends Claude usage. */
 export const ADS_JOB = 'Daily campaign review';
 
@@ -103,12 +113,13 @@ export const ADS_JOB = 'Daily campaign review';
  */
 export function enableDefaultJobs(db: DatabaseSync, storeId: string, names = DEFAULT_JOBS.map((j) => j.name), now = new Date()): number {
   // Checked as of now: the scheduler skips rules while they're off, so an old check would run today's earlier slots at once.
-  return Number(
-    db
-      .prepare(`UPDATE automation_rules SET enabled = 1, checked_at = ? WHERE store_id = ? AND enabled = 0 AND name IN (${names.map(() => '?').join(',')})
-                 AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'rule-edited:' || automation_rules.id)`)
-      .run(now.toISOString(), storeId, ...names).changes,
-  );
+  const at = now.toISOString();
+  const on = db
+    .prepare(`UPDATE automation_rules SET enabled = 1, checked_at = ?, version = version + 1, updated_at = ? WHERE store_id = ? AND enabled = 0 AND name IN (${names.map(() => '?').join(',')})
+               AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'rule-edited:' || automation_rules.id) RETURNING store_id, name`)
+    .all(at, at, storeId, ...names);
+  for (const r of on) logRuleChange(db, r, 'automation.enabled', false, true, at);
+  return on.length;
 }
 
 /**
@@ -118,10 +129,13 @@ export function enableDefaultJobs(db: DatabaseSync, storeId: string, names = DEF
  * move to the current task text. Returns the names added.
  */
 export function createDefaultJobs(db: DatabaseSync, storeId: string, now = new Date()): string[] {
-  const setTask = db.prepare(`UPDATE automation_rules SET action_json = json_set(action_json, '$.task', ?) WHERE id = ?`);
-  for (const r of db.prepare(`SELECT id, name, json_extract(action_json, '$.task') AS task FROM automation_rules WHERE store_id = ?`).all(storeId)) {
+  const setTask = db.prepare(`UPDATE automation_rules SET action_json = json_set(action_json, '$.task', ?), version = version + 1, updated_at = ? WHERE id = ?`);
+  for (const r of db.prepare(`SELECT id, store_id, name, action_json, json_extract(action_json, '$.task') AS task FROM automation_rules WHERE store_id = ?`).all(storeId)) {
     const job = DEFAULT_JOBS.find((j) => j.name === r.name);
-    if (job && FORMER_TASKS[job.name]?.includes(taskHash(String(r.task)))) setTask.run(job.task, String(r.id));
+    if (!job || !FORMER_TASKS[job.name]?.includes(taskHash(String(r.task)))) continue;
+    setTask.run(job.task, now.toISOString(), String(r.id));
+    const action = JSON.parse(String(r.action_json));
+    logRuleChange(db, r, 'automation.action', action, { ...action, task: job.task }, now.toISOString());
   }
   const store = db.prepare('SELECT connected, platform FROM stores WHERE id = ?').get(storeId);
   // A live store gets it on, unless its platform can't take the job's work (as activation's job gates decide).

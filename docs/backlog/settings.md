@@ -1502,7 +1502,7 @@ STOP.
   - **Done when:** tests are green for a stale write, a missing version and a `field` on each route, and the change
     rows. The KB stale test saves twice with the same version read once and expects 409 on the second save.
 
-- [ ] ST-08c **Versions and change rows: automation rules and integrations; the writer sweep** (decision 6).
+- [x] ST-08c **Versions and change rows: automation rules and integrations; the writer sweep** (decision 6).
   - **Routes:** `PATCH /api/automations/:id` and `PUT /api/integrations` require the version (409 stale, 428 missing).
     `POST /api/automations` is exempt; a new connection sends version 0 (decision 6). Secret fields write change rows
     saying "replaced" or "removed".
@@ -2373,6 +2373,7 @@ STOP.
 - 2026-10-28 ST-07 `config/effective.ts` (store → workspace → default, `inherits: 'none'` never falls back, locked policies shown as `locked`, versions per document, 0 without a row), `config/write.ts` (one transaction for every document; version check in the UPDATE; registry, scope and locked checks with `{error, field}`; `unset`; change rows with before/after, scope and store), `GET`/`PATCH /api/config` behind the guard. `updateSettings`/`updateCaps` go through the writer (trusted: their own validation and messages stay) and set only the keys sent; `PATCH /api/settings` and `PUT /api/caps/:id` answer 428 without a version, 409 `stale`/`exists` with the current document; `getCaps` reads the effective caps; boot fills the cap defaults from the registry (`DEFAULT_CAPS` removed). Web: `version` required in `SettingsUpdate`/`StoreCapsUpdate`, the legacy forms send it, `CapsForm` sends only changed keys. `config/config.test.ts` (8 tests) covers every Done-when line; caller tests updated (`settings.test.ts`, `agents-missions.test.ts`, `db.test.ts`'s pre-upgrade baseline, web `Settings.test.tsx`). Dir (a): `GET /api/config?store=pawsome` shows `caps.*` as `workspace`, notifications `default`, policies `locked`; a `PUT /api/caps/pawsome` without a version got 428, with version 0 it created the row and `caps.agentCostPerDay` reads `store`.
 - 2026-10-28 ST-08a stores carry `version` (GET, list, create); `PATCH /api/stores/:id` answers 428 without it and 409 `stale` with the current store; `updateStore` checks it, bumps once per save and writes an `owner` change row per moved field (`store.<key>`); `parseStoreInput` 400s carry `field`. `setStoreCurrency` takes the actor (`takeCurrency` passes `sync:<kind>`, Amazon's direct call logs `system`, the owner's save passes null and logs it with the rest), `takeTimezone` logs `sync:<kind>`; status, cursor and `connected` writes move nothing. Web: `useStoreActions().save` requires `version` with an `id`, `StoreForm` sends it. `config/stores.test.ts` (3 tests: stale/428/create, `field`, a fake Shopify sync's two `sync:shopify` rows and a no-change resync), `stores.test.ts` sends the version it reads, `StoreForm.test.tsx` pins edit vs create.
 - 2026-10-28 ST-08b `PUT /api/kb/controls` and `PUT /api/pr/profile` require the version (428 without, 409 `exists`/`stale` with the current controls or profile); their GETs carry it (0 without a row). `saveControls` updates in place with `version = version + 1 … AND version = ?` and inserts only when no row exists (no more delete-and-insert); `saveProfile`'s upsert bumps it. Both write `owner` change rows (`kb.<control>` with scope store or workspace for General, `pr.<field>`); `parseControls` and `saveProfile` 400s carry `field`. Shared `versionOf`/`NO_VERSION` in `config/write.ts`, used by every versioned route. Web: `useSaveKbControls` and `useSaveProfile` require `version`; `Controls.tsx`, `ProfileDialog` and the Research ship-to switch send it. `config/owners.test.ts` (2 tests: the KB double save on one read → 409, stale, 428, `field`, change rows; the same for the profile); caller tests send the version they read (`kb/{autonomy,maintenance}`, `product-research/{discovery,evaluate,pipeline}`, web `Controls`, `Research`).
+- 2026-10-28 ST-08c automation rules and integrations carry `version`. `PATCH /api/automations/:id` and `PUT /api/integrations` answer 428 without it and 409 `stale`/`exists` with the current rule or connection; `POST /api/automations` is exempt, a new connection sends 0, and a version above 0 for a disconnected row is 409 `stale` with `current: null` and recreates nothing. `parseRule` and `putIntegration` (new; `saveIntegration` is its in-process string wrapper) return `field`. Change rows: `automation.<field>` (detail: the rule's name), `<kind>.<field>` for connections, a secret's saying only `replaced` or `removed` (also on disconnect). `enableDefaultJobs`, the task rewrite and the job-gates pass bump the version and log `system`; `updateSecrets`, status, cursor and timestamp writes move nothing. `config/sweep.test.ts` checks every write to the six owner tables and the `app`/`workspace`/`personal` settings keys. Web: `useAutomationActions().save`/`.toggle` and `useIntegrationActions().save` require `version`. 400 `field`s for stores, KB controls and research profiles corrected to registry ids (`store.currency`, `kb.<key>`, `pr.<key>`). Tests: `config/records.test.ts` 3, `config/sweep.test.ts` 2 (a mutation that drops the job-gates bump fails it), Automation page toggle sends the version.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -2440,11 +2441,24 @@ STOP.
   positive version against a missing row 409 `stale` with `current: null` (never recreated silently). No registry entry
   lives in the `personal` row yet; the tests write it with a synthetic id. `updateCaps` stays trusted, so the
   any-autopilot-kind finding above still holds until ST-30.
-- **ST-08a:** a store 400's `field` is the body key (`currency`), which is what `useSettingsForm`'s `error(field)` matches;
-  the change row's `setting` is the registry id (`store.currency`). `createStore` now returns the saved row (with its
+- **ST-08a:** a store 400's `field` is the registry id (`store.currency`), as decision 6 says (ST-08c corrected the
+  body key ST-08a first sent); the change row's `setting` is the same id. `createStore` now returns the saved row (with its
   version). Finding for ST-18: `StoreForm` drops a blank niche detail and `parseStoreInput` refuses an empty one, so a
   saved niche detail can't be cleared today.
 - **ST-08b:** the KB route parses first and then checks the version; the profile route checks the version first,
   because `saveProfile` validates and writes in one call. Both bump the version on every accepted save, even one that
   changes nothing (no change row then). In-process `saveControls` callers (ST-25's category cleanup) pass no version.
   Caller tests that pinned a 400 body exactly now match `{ error }` (the body also has `field`).
+- **ST-08c:**
+  - `field` follows decision 6: a registry id where an entry exists (`store.*`, `kb.*`, `pr.*`); for automation rules
+    and connections, which have no entries, the body key (`approval`, `trigger`) or the integration field (`apiKey`). An
+    ad account another store holds names its account field. Shopify's "client ID and secret, or a token" has none.
+  - A connection's version moves only when a setting or a secret changes: a re-save that changes nothing keeps it, so a
+    form left open stays valid. `putIntegration` checks the body before the version, so a bad body still gets its 400.
+  - The sweep has a fourth list the item didn't name, `VIA_STORE_CHANGED`: the store writers (`updateStore`,
+    `setStoreCurrency`, `setStoreTimezone`) set their column and `storeChanged` moves the version in the same
+    transaction, once per save, not in the same statement. Bumping in each statement would move it two or three times
+    for one save. `encrypted_credentials` is bookkeeping (token rotation); the owner's own secret edits go through
+    `putIntegration`'s upsert, which bumps. The sweep reads string literals that start with the statement; SQL built
+    another way isn't seen (a `ponytail:` note in the test says so).
+  - `deleteIntegration` takes the key (optional) to write the `removed` rows; ST-40 adds the version on DELETE.

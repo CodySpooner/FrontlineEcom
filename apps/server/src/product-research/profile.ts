@@ -94,7 +94,8 @@ export function getProfile(db: Db, store: Store): PrStoreProfile {
 
 const LISTS = ['warehouses', 'avoidCategories', 'avoidTerms', 'includeCategories', 'keywords'] as const;
 
-type Bad = { error: string; field: keyof PrStoreProfile };
+/** `field`: `pr.<key>`, the registry id where the key has one (settings decision 6). */
+type Bad = { error: string; field: `pr.${keyof PrStoreProfile}` };
 
 /**
  * Saves the fields present in `body` (the rest stay). The price band is in the store's currency. `version` (as read, 0
@@ -107,33 +108,33 @@ export function saveProfile(db: Db, store: Store, body: Record<string, unknown>,
   const has = (k: string) => Object.hasOwn(body, k);
   if (has('audience')) {
     const v = body.audience;
-    if (v !== null && (typeof v !== 'string' || v.length > 500)) return { error: 'audience must be text up to 500 characters, or null', field: 'audience' };
+    if (v !== null && (typeof v !== 'string' || v.length > 500)) return { error: 'audience must be text up to 500 characters, or null', field: 'pr.audience' };
     next.audience = typeof v === 'string' && v.trim() ? v.trim() : null;
   }
   for (const k of ['priceMin', 'priceMax'] as const) {
     if (!has(k)) continue;
     const v = body[k];
-    if (v !== null && !(Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 1e9)) return { error: `${k} must be a whole amount in minor units (cents), or null`, field: k };
+    if (v !== null && !(Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 1e9)) return { error: `${k} must be a whole amount in minor units (cents), or null`, field: `pr.${k}` };
     next[k] = v as number | null;
   }
-  if (next.priceMin !== null && next.priceMax !== null && next.priceMin > next.priceMax) return { error: 'priceMin must be at most priceMax', field: has('priceMin') ? 'priceMin' : 'priceMax' };
+  if (next.priceMin !== null && next.priceMax !== null && next.priceMin > next.priceMax) return { error: 'priceMin must be at most priceMax', field: has('priceMin') ? 'pr.priceMin' : 'pr.priceMax' };
   if (has('shipTo')) {
     const v = body.shipTo;
-    if (v !== null && (typeof v !== 'string' || !/^[A-Za-z]{2}$/.test(v))) return { error: 'shipTo must be a two-letter country code, or null for the default', field: 'shipTo' };
+    if (v !== null && (typeof v !== 'string' || !/^[A-Za-z]{2}$/.test(v))) return { error: 'shipTo must be a two-letter country code, or null for the default', field: 'pr.shipTo' };
     next.shipTo = typeof v === 'string' ? v.toUpperCase() : null;
   }
   if (has('maxDeliveryDays')) {
     const v = body.maxDeliveryDays;
-    if (v !== null && !(Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 120)) return { error: 'maxDeliveryDays must be 1–120, or null', field: 'maxDeliveryDays' };
+    if (v !== null && !(Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 120)) return { error: 'maxDeliveryDays must be 1–120, or null', field: 'pr.maxDeliveryDays' };
     next.maxDeliveryDays = v as number | null;
   }
   for (const k of LISTS) {
     if (!has(k)) continue;
     const v = body[k];
-    if (!Array.isArray(v) || v.length > 50 || v.some((x) => typeof x !== 'string' || !x.trim() || x.length > 80)) return { error: `${k} must be a list of up to 50 short texts`, field: k };
+    if (!Array.isArray(v) || v.length > 50 || v.some((x) => typeof x !== 'string' || !x.trim() || x.length > 80)) return { error: `${k} must be a list of up to 50 short texts`, field: `pr.${k}` };
     const seen = new Set<string>();
     const out = (v as string[]).map((x) => (k === 'warehouses' ? x.trim().toUpperCase() : x.trim())).filter((x) => !seen.has(x.toLowerCase()) && !!seen.add(x.toLowerCase()));
-    if (k === 'warehouses' && out.some((c) => !/^[A-Z]{2}$/.test(c))) return { error: 'warehouses must be two-letter country codes', field: 'warehouses' };
+    if (k === 'warehouses' && out.some((c) => !/^[A-Z]{2}$/.test(c))) return { error: 'warehouses must be two-letter country codes', field: 'pr.warehouses' };
     next[k] = out;
   }
   if (version !== undefined && version !== p.version)

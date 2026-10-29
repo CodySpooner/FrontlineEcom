@@ -530,6 +530,15 @@ The acceptance table (§15):
   type. In `connectors/common.ts`, `setStoreCurrency` takes an optional actor (default `system`) and, like
   `takeCurrency` (`sync:<kind>`) and `takeTimezone`, bumps the store's version and writes a `settings_changes` row
   when the value moves; status, cursor and `connected` writes don't. `setStoreTimezone` is unchanged.
+- [ ] (from settings, ST-08c) `PATCH /api/automations/:id` and `PUT /api/integrations` now require the `version` the
+  caller read (`AutomationRule.version`, `Integration.version`; a new connection sends 0): 428 without it, 409
+  `{code: 'stale'|'exists', current}` when it's old. `POST /api/automations` is exempt. Their 400s carry `field`, and
+  a store 400's `field` is now the registry id (`store.currency`), not the body key the ST-08a line said. In-process
+  `saveIntegration` is unchanged (no version). `enableDefaultJobs`, `createDefaultJobs`' task rewrite and the job-gates
+  pass bump the rule's version and write `system` change rows. New `apps/server/src/config/sweep.test.ts` fails on any
+  write to `stores`, `automation_rules`, `store_caps`, `kb_controls`, `pr_store_profiles` or `integrations` that
+  neither moves `version` nor is listed in it: a bookkeeping column (status, cursor, timestamps, sync or test results)
+  goes in its BOOKKEEPING list, an owner field goes through the owner helper. Either is a tiny edit any lane may make.
 
 ## Items
 

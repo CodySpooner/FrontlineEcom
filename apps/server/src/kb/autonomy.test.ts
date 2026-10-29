@@ -268,7 +268,7 @@ describe('schedules', () => {
   test('an automation can research, under the same controls', async () => {
     const r = await rule();
     expect(r).toMatchObject({ status: 201, body: { action: { type: 'kb_research', agentId: 'peak:market_analyst', task: 'What is new in home fitness this week?' } } });
-    expect((await req('POST', '/api/automations', { storeId: 'peak', name: 'x', trigger: { type: 'schedule', cron: '0 9 * * 1' }, action: { type: 'kb_research', agentId: 'peak:market_analyst', task: 'no' } })).body).toEqual({ error: 'action.task must be 3-500 characters for research' });
+    expect((await req('POST', '/api/automations', { storeId: 'peak', name: 'x', trigger: { type: 'schedule', cron: '0 9 * * 1' }, action: { type: 'kb_research', agentId: 'peak:market_analyst', task: 'no' } })).body).toMatchObject({ error: 'action.task must be 3-500 characters for research' }); // the body also has `field` (settings ST-08c)
     const id = (r.body as { id: string }).id;
     expect(scheduledResearch(db, id, 'scheduled (0 9 * * 1)', deps())).toEqual({ status: 'skipped', detail: 'Self-directed research is off for Peak Fit' });
     await on();

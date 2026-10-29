@@ -65,5 +65,19 @@ describe('the rule editor', () => {
     await vi.waitFor(() => expect(fetch.mock.calls.find(([, i]) => i?.method === 'PATCH')?.[1]?.body).toBeTruthy());
     expect(JSON.parse(String(fetch.mock.calls.find(([, i]) => i?.method === 'PATCH')![1]!.body)).action).toEqual({ type: 'kb_research', agentId: 'peak:market_analyst', task: 'What is new in home fitness?' });
   });
+
+  it('switches a rule off with the version it read (settings ST-08c)', async () => {
+    const daily = { ...rule, trigger: { type: 'schedule', cron: '0 9 * * *' }, approval: 'ask', maxRunsPerDay: 3, cooldownHours: 24, version: 3 } as AutomationRule;
+    const fetch = stubApi((url, init) => {
+      if (init?.method === 'PATCH') return { ...daily, enabled: false, version: 4 };
+      if (url === '/api/automations') return [daily];
+      if (url.startsWith('/api/stores')) return [{ id: 'peak', name: 'Peak Fit', currency: 'USD' }];
+    });
+    renderApp(<Automation />, '/automation');
+    fireEvent.click(await screen.findByRole('switch', { name: 'Weekly ad review on' }));
+    await vi.waitFor(() => expect(fetch.mock.calls.find(([, i]) => i?.method === 'PATCH')).toBeTruthy());
+    const [url, init] = fetch.mock.calls.find(([, i]) => i?.method === 'PATCH')!;
+    expect([url, JSON.parse(String(init!.body))]).toEqual(['/api/automations/r1', { enabled: false, version: 3 }]);
+  });
 });
 });

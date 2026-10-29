@@ -77,7 +77,7 @@ test("a job switched on at go-live waits for its next slot instead of running fo
 
 test('a job the owner edited in Automation keeps their on/off when the store goes live or gets campaigns', async () => {
   const report = (await rules('glow')).find((r) => r.name === 'Weekly report')!;
-  expect((await app.request(`/api/automations/${report.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: false }) })).status).toBe(200);
+  expect((await app.request(`/api/automations/${report.id}`, { method: 'PATCH', body: JSON.stringify({ enabled: false, version: report.version }) })).status).toBe(200); // the version read (settings ST-08c)
   expect(enableDefaultJobs(db, 'glow')).toBe(DEFAULT_JOBS.length - 1);
   expect((await rules('glow')).filter((r) => !r.enabled).map((r) => r.name)).toEqual(['Weekly report']);
 });

@@ -2,7 +2,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { CalendarClock, History, Plus, TrendingDown, Zap } from 'lucide-react';
-import { AGENT_ROLES, type ActionKind, type AgentRole, type AutomationRule, type AutomationRunStatus, type AutomationTrigger, type MetricTotals } from '@frontline/shared';
+import { AGENT_ROLES, type ActionKind, type AgentRole, type AutomationRule, type AutomationRuleInput, type AutomationRunStatus, type AutomationTrigger, type MetricTotals } from '@frontline/shared';
 import { useActionLog, useApprovals, useAutomationActions, useAutomationRuns, useAutomations } from '../api/client';
 import { ApprovalCard } from '../components/Chat';
 import { DemoJobsNote } from '../components/DemoJobsNote';
@@ -125,7 +125,7 @@ function RuleRow({ r, onEdit }: { r: AutomationRule; onEdit: () => void }) {
       </div>
       <label className="flex h-fit cursor-pointer">
         <span className="sr-only">{r.name} on</span>
-        <Switch checked={r.enabled} disabled={toggle.isPending} onChange={(e) => toggle.mutate({ id: r.id, enabled: e.target.checked })} />
+        <Switch checked={r.enabled} disabled={toggle.isPending} onChange={(e) => toggle.mutate({ id: r.id, enabled: e.target.checked, version: r.version ?? 0 })} />
       </label>
     </li>
   );
@@ -253,19 +253,16 @@ function RuleEditor({ rule, onDone }: { rule?: AutomationRule; onDone: () => voi
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate(
-      {
-        id: rule?.id,
-        storeId,
-        name: name.trim(),
-        trigger: kind === 'schedule' ? { type: 'schedule', cron: cron.trim() } : metric,
-        action: { type: rule?.action.type ?? 'agent_task', agentId: `${storeId}:${role}`, task: task.trim() }, // a research rule (KB-22) stays one
-        approval,
-        maxRunsPerDay,
-        cooldownHours,
-      },
-      { onSuccess: onDone },
-    );
+    const fields: AutomationRuleInput = {
+      storeId,
+      name: name.trim(),
+      trigger: kind === 'schedule' ? { type: 'schedule', cron: cron.trim() } : metric,
+      action: { type: rule?.action.type ?? 'agent_task', agentId: `${storeId}:${role}`, task: task.trim() }, // a research rule (KB-22) stays one
+      approval,
+      maxRunsPerDay,
+      cooldownHours,
+    };
+    save.mutate(rule ? { ...fields, id: rule.id, version: rule.version ?? 0 } : fields, { onSuccess: onDone });
   };
 
   return (

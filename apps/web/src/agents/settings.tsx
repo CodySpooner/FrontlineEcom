@@ -415,7 +415,7 @@ function Schedule({ agent }: { agent: Agent }) {
                 </span>
                 <label className="flex shrink-0 cursor-pointer">
                   <span className="sr-only">{r.name} on</span>
-                  <Switch checked={r.enabled} disabled={toggle.isPending} onChange={(e) => toggle.mutate({ id: r.id, enabled: e.target.checked })} />
+                  <Switch checked={r.enabled} disabled={toggle.isPending} onChange={(e) => toggle.mutate({ id: r.id, enabled: e.target.checked, version: r.version ?? 0 })} />
                 </label>
               </li>
             ))}

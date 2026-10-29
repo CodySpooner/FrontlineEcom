@@ -14,8 +14,9 @@ const setup = () => {
 };
 const send = (method: string, body: unknown) => ({ method, body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
 const get = async (app: ReturnType<typeof createApp>, id: string) => (await (await app.request(`/api/stores/${id}`)).json()) as Store;
+/** The store's own fields' change rows (connecting an integration writes its own). */
 const changes = (db: Db, store: string) =>
-  db.prepare('SELECT actor, scope, store_name, setting, before_json, after_json FROM settings_changes WHERE store_id = ? ORDER BY rowid').all(store).map((r) => ({ ...r }));
+  db.prepare("SELECT actor, scope, store_name, setting, before_json, after_json FROM settings_changes WHERE store_id = ? AND setting LIKE 'store.%' ORDER BY rowid").all(store).map((r) => ({ ...r }));
 
 test('PATCH /api/stores/:id: the version read saves (one bump, a change row per moved field); a stale one 409s, none 428s; POST needs none', async () => {
   const { db, app } = setup();
@@ -39,16 +40,16 @@ test('PATCH /api/stores/:id: the version read saves (one bump, a change row per 
   expect(changes(db, 'glow')).toHaveLength(3);
 });
 
-test("a 400 names the field parseStoreInput refused", async () => {
+test("a 400 names the setting parseStoreInput refused, by its registry id", async () => {
   const { app } = setup();
   const v = (await get(app, 'glow')).version;
   for (const [body, field] of [
-    [{ name: '' }, 'name'],
-    [{ platform: 'ebay' }, 'platform'],
-    [{ currency: 'usd' }, 'currency'],
-    [{ timezone: 'Mars/Base' }, 'timezone'],
-    [{ color: 'red' }, 'color'],
-    [{ feePerOrder: -1 }, 'feePerOrder'],
+    [{ name: '' }, 'store.name'],
+    [{ platform: 'ebay' }, 'store.platform'],
+    [{ currency: 'usd' }, 'store.currency'],
+    [{ timezone: 'Mars/Base' }, 'store.timezone'],
+    [{ color: 'red' }, 'store.color'],
+    [{ feePerOrder: -1 }, 'store.feePerOrder'],
   ] as const) {
     const res = await app.request('/api/stores/glow', send('PATCH', { version: v, ...body }));
     expect([res.status, ((await res.json()) as { field?: string }).field], field).toEqual([400, field]);
@@ -57,7 +58,7 @@ test("a 400 names the field parseStoreInput refused", async () => {
 
 test('a Shopify sync that changes the currency writes a sync:shopify change row and bumps the version; a sync that changes nothing leaves it', async () => {
   const { db, app } = setup();
-  await app.request('/api/integrations', send('PUT', { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', accessToken: 'tok_not-a-real-secret' } }));
+  await app.request('/api/integrations', send('PUT', { kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', accessToken: 'tok_not-a-real-secret' }, version: 0 }));
   const page = { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } };
   const shopify = (async (_url: string, init: RequestInit) => {
     const { query } = JSON.parse(String(init.body)) as { query: string };

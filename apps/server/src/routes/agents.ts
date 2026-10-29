@@ -68,6 +68,7 @@ import { convertRate, fxFor } from '../fx';
 import { approvalsHook, decide } from '../approvals';
 import { listCompetitors, priceChanges, publicFetch, watchCompetitorPrices } from '../competitors';
 import { localDate } from '../dates';
+import { logChanges } from '../config/write';
 import { dataDir, type Db } from '../db';
 import { log } from '../log';
 import { askKnowledge } from '../kb/ask';
@@ -542,8 +543,14 @@ function activateConnectedStores(db: Db, runs: RunManager) {
         j.name === ADS_JOB && !ads ? 'no running ad campaigns; it switches back on once an ad account has one'
         : j.platforms && !j.platforms.includes(store.platform) ? (j.elsewhere?.(store.platform) ?? '')
         : '';
-      const off = DEFAULT_JOBS.filter((j) => why(j) && db.prepare(`UPDATE automation_rules SET enabled = 0 WHERE store_id = ? AND name = ? AND enabled = 1
-        AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'rule-edited:' || automation_rules.id)`).run(store.id, j.name).changes);
+      const at = new Date().toISOString();
+      const off = DEFAULT_JOBS.filter((j) => {
+        if (!why(j)) return false;
+        const r = db.prepare(`UPDATE automation_rules SET enabled = 0, version = version + 1, updated_at = ? WHERE store_id = ? AND name = ? AND enabled = 1
+          AND NOT EXISTS (SELECT 1 FROM done_once WHERE ref = 'rule-edited:' || automation_rules.id) RETURNING name`).get(at, store.id, j.name);
+        if (r) logChanges(db, { at, actor: 'system', store: { id: store.id, name: store.name } }, [['automation.enabled', true, false, 'store', j.name]]);
+        return !!r;
+      });
       if (off.some((j) => j.name === ADS_JOB)) once(db, `ads-job-wait:${store.id}`);
       if (off.length) notify(db, { kind: 'info', title: `${store.name}: ${new Intl.ListFormat('en').format(off.map((j) => j.name.toLowerCase()))} switched off`, body: `${off.map((j) => `${j.name}: ${why(j)}.`).join(' ')} You can switch jobs back on in Automation.`, storeId: store.id, link: '/automation' });
     }

@@ -8,7 +8,7 @@ import { docOf, getPath, pathIn, readDoc } from './effective';
 
 export class ConfigError extends Error {
   constructor(
-    readonly status: 400 | 404 | 409,
+    readonly status: 400 | 404 | 409 | 428,
     readonly body: { error: string; field?: string; code?: 'stale' | 'exists'; current?: unknown },
   ) {
     super(body.error);
@@ -98,13 +98,14 @@ function writeDoc(db: Db, w: DocWrite, o: WriteOptions) {
   logChanges(db, { at, actor: o.actor ?? 'owner', requestId: o.requestId, store: store && { id: String(store.id), name: String(store.name) } }, moved.map(([id, before, after]) => [id, before, after, scope(id)]));
 }
 
-type Moved = [setting: string, before: unknown, after: unknown, scope?: string];
+export type Moved = [setting: string, before: unknown, after: unknown, scope?: string, detail?: string];
 
-/** One change row per setting that moved (`scope` defaults to store when a store is given). */
+/** One change row per setting that moved (`scope` defaults to store). `detail` names the record (a rule) or a secret's fate. */
 export function logChanges(db: Db, o: { at: string; actor: string; requestId?: string; store?: { id: string; name: string } }, moved: Moved[]) {
-  const change = db.prepare('INSERT INTO settings_changes (id, at, request_id, actor, scope, store_id, store_name, setting, before_json, after_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+  const change = db.prepare('INSERT INTO settings_changes (id, at, request_id, actor, scope, store_id, store_name, setting, before_json, after_json, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
   const json = (v: unknown) => (v === undefined ? null : JSON.stringify(v));
-  for (const [id, before, after, scope] of moved) change.run(randomUUID(), o.at, o.requestId ?? null, o.actor, scope ?? 'store', o.store?.id ?? null, o.store?.name ?? null, id, json(before), json(after));
+  for (const [id, before, after, scope, detail] of moved)
+    change.run(randomUUID(), o.at, o.requestId ?? null, o.actor, scope ?? 'store', o.store?.id ?? null, o.store?.name ?? null, id, json(before), json(after), detail ?? null);
 }
 
 /** A store's owner fields moved (the owner's save, or a sync taking the platform's value): one version bump, a change row each. */

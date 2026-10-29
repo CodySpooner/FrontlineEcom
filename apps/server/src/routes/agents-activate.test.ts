@@ -165,9 +165,9 @@ test('a store that went live before the job rules gets them once: jobs with noth
 test('jobs the owner switched on in Automation before the store went live stay on through the gates', async () => {
   const res = await app.request('/api/stores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Tok', platform: 'tiktok_shop', niche: 'home' }) });
   const store = (await res.json()) as Store;
-  const rule = (name: string) => db.prepare('SELECT id, enabled FROM automation_rules WHERE store_id = ? AND name = ?').get(store.id, name)!;
+  const rule = (name: string) => db.prepare('SELECT id, enabled, version FROM automation_rules WHERE store_id = ? AND name = ?').get(store.id, name)!;
   for (const name of [ADS_JOB, 'Weekly page refresh']) {
-    const patch = await app.request(`/api/automations/${rule(name).id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: true }) });
+    const patch = await app.request(`/api/automations/${rule(name).id}`, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ enabled: true, version: rule(name).version }) }); // the version read (settings ST-08c)
     expect(patch.status).toBe(200);
   }
   switchToReal(db, store.id); // no campaigns, and the app can't publish TikTok Shop pages

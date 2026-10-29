@@ -25,16 +25,19 @@ const setup = () => {
     return rule;
   };
   const runs = async () => (await (await app.request('/api/automations/runs')).json()) as AutomationRun[];
-  return { db, app, calls, scheduler, create, runs, setClock: (d: Date) => (clock = d) };
+  /** PATCH sends the version it read (settings ST-08c). */
+  const patch = (id: string, body: Record<string, unknown>) =>
+    app.request(`/api/automations/${id}`, send('PATCH', { version: Number(db.prepare('SELECT version FROM automation_rules WHERE id = ?').get(id)?.version ?? 0), ...body }));
+  return { db, app, calls, scheduler, create, runs, patch, setClock: (d: Date) => (clock = d) };
 };
 
 test('CRUD with defaults, nextRunAt and validation', async () => {
-  const { app, create } = setup();
+  const { app, create, patch } = setup();
   const rule = await create({ trigger: { type: 'schedule', cron: '0 9 * * *' } });
   expect(rule).toMatchObject({ storeId: 'glow', enabled: true, approval: 'ask', maxRunsPerDay: 3, cooldownHours: 24, trigger: { type: 'schedule', cron: '0 9 * * *' } });
   expect(new Date(rule.nextRunAt!).getHours()).toBe(9);
 
-  const upd = (await (await app.request(`/api/automations/${rule.id}`, send('PATCH', { enabled: false, approval: 'auto' }))).json()) as AutomationRule;
+  const upd = (await (await patch(rule.id, { enabled: false, approval: 'auto' })).json()) as AutomationRule;
   expect(upd).toMatchObject({ enabled: false, approval: 'auto', name: 'Daily brief' });
   expect(upd.nextRunAt).toBeUndefined();
 
@@ -48,7 +51,7 @@ test('CRUD with defaults, nextRunAt and validation', async () => {
     { ...base, maxRunsPerDay: 0 },
     { ...base, storeId: 'nope' },
   ]) expect((await app.request('/api/automations', send('POST', bad))).status, JSON.stringify(bad)).toBe(400);
-  expect((await app.request(`/api/automations/${rule.id}`, send('PATCH', { storeId: 'peak' }))).status).toBe(400);
+  expect((await patch(rule.id, { storeId: 'peak' })).status).toBe(400);
   expect((await app.request(`/api/automations/${rule.id}`, { method: 'DELETE' })).status).toBe(204);
   expect((await app.request(`/api/automations/${rule.id}`, { method: 'DELETE' })).status).toBe(404);
 });
@@ -73,19 +76,19 @@ test('schedule rules fire once per matching minute, catch up after downtime, and
 });
 
 test("a rule switched back on doesn't replay what it was off for; a weekly slot missed while the app was closed fires once", async () => {
-  const { app, db, calls, scheduler, create, setClock } = setup();
+  const { db, calls, scheduler, create, patch, setClock } = setup();
   const daily = await create({ trigger: { type: 'schedule', cron: '0 9 * * *' }, approval: 'auto' });
   await create({ name: 'Weekly review', trigger: { type: 'schedule', cron: '0 9 * * 2' }, approval: 'auto' }); // Tuesdays
   setClock(at(26, 8, 30));
   const s = scheduler();
-  await app.request(`/api/automations/${daily.id}`, send('PATCH', { enabled: false }));
+  await patch(daily.id, { enabled: false });
   // The owner touched it: agents switching default jobs on leave it alone.
   expect(db.prepare('SELECT 1 FROM done_once WHERE ref = ?').get(`rule-edited:${daily.id}`)).toBeTruthy();
   setClock(at(26, 9, 30));
   s.tick();
   setClock(at(26, 15, 0));
   s.tick();
-  await app.request(`/api/automations/${daily.id}`, send('PATCH', { enabled: true }));
+  await patch(daily.id, { enabled: true });
   setClock(at(26, 15, 1));
   s.tick();
   expect(calls).toHaveLength(0); // this morning's 09:00 passed while it was off
@@ -200,12 +203,12 @@ test("a metric rule's oldest day gives up only the share of sales its orders had
 });
 
 test('an approved run starts the agent and task the owner approved, even if the rule was edited meanwhile (or the app restarted)', async () => {
-  const { app, calls, scheduler, create, runs, setClock } = setup();
+  const { app, calls, scheduler, create, runs, patch, setClock } = setup();
   const rule = await create({ trigger: { type: 'schedule', cron: '0 9 * * *' } });
   setClock(at(26, 9, 0));
   const s = scheduler();
   const edit = (task: string) =>
-    app.request(`/api/automations/${rule.id}`, send('PATCH', { action: { type: 'agent_task', agentId: 'glow:ad_strategist', task } }));
+    patch(rule.id, { action: { type: 'agent_task', agentId: 'glow:ad_strategist', task } });
 
   const [first] = await runs();
   expect((await edit('Pause every campaign')).status).toBe(200);

@@ -885,7 +885,8 @@ export function useIntegrationActions() {
   const qc = useQueryClient();
   const refresh = () => ['integrations', 'health'].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   return {
-    save: useMutation({ mutationFn: (i: IntegrationInput) => api<Integration>('/api/integrations', json('PUT', i)), onSuccess: refresh }),
+    /** `version`: the connection's, as read; 0 for a new one (settings decision 6). */
+    save: useMutation({ mutationFn: (i: IntegrationInput & { version: number }) => api<Integration>('/api/integrations', json('PUT', i)), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/integrations/${id}`, { method: 'DELETE' }), onSuccess: refresh }),
   };
 }
@@ -916,11 +917,12 @@ export function useAutomationActions() {
   const refresh = () => qc.invalidateQueries({ queryKey: ['automations'] });
   return {
     save: useMutation({
-      mutationFn: ({ id, ...r }: AutomationRuleInput & { id?: string }) =>
+      /** An edit (with `id`) sends the version it read; a create has neither (settings decision 6). */
+      mutationFn: ({ id, ...r }: AutomationRuleInput & ({ id?: undefined } | { id: string; version: number })) =>
         api<AutomationRule>(id ? `/api/automations/${id}` : '/api/automations', json(id ? 'PATCH' : 'POST', r)),
       onSuccess: refresh,
     }),
-    toggle: useMutation({ mutationFn: ({ id, enabled }: { id: string; enabled: boolean }) => api<AutomationRule>(`/api/automations/${id}`, json('PATCH', { enabled })), onSuccess: refresh }),
+    toggle: useMutation({ mutationFn: ({ id, ...r }: { id: string; enabled: boolean; version: number }) => api<AutomationRule>(`/api/automations/${id}`, json('PATCH', r)), onSuccess: refresh }),
     remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/automations/${id}`, { method: 'DELETE' }), onSuccess: refresh }),
   };
 }

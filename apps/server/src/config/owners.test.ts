@@ -29,7 +29,7 @@ test('KB controls: the first save sends 0; a second save on the same read is 409
   expect(((await later.json()) as KbControlsState).version).toBe(2);
   expect((await send(app, 'PUT', path, { version: 1, depth: 'quick' })).status).toBe(409); // stale
   expect((await send(app, 'PUT', path, { depth: 'quick' })).status).toBe(428);
-  for (const [body, field] of [[{ depth: 'abyss' }, 'depth'], [{ approval: 'yes' }, 'approval'], [{ blockedDomains: ['https://x'] }, 'blockedDomains'], [{ retentionDays: 5 }, 'retentionDays']] as const) {
+  for (const [body, field] of [[{ depth: 'abyss' }, 'kb.depth'], [{ approval: 'yes' }, 'kb.approval'], [{ blockedDomains: ['https://x'] }, 'kb.blockedDomains'], [{ retentionDays: 5 }, 'kb.retentionDays']] as const) {
     const res = await send(app, 'PUT', path, { version: 2, ...body });
     expect([res.status, ((await res.json()) as { field?: string }).field]).toEqual([400, field]);
   }
@@ -56,7 +56,7 @@ test('research profile: the version read saves; a stale one is 409 and writes no
   expect(await stale.json()).toMatchObject({ code: 'exists', current: { priceMax: 2500, version: 1 } });
   expect((await send(app, 'PUT', path, { version: 2, priceMax: 9900 })).status).toBe(409);
   expect((await send(app, 'PUT', path, { priceMax: 9900 })).status).toBe(428);
-  for (const [body, field] of [[{ priceMax: 19.99 }, 'priceMax'], [{ shipTo: 'USA' }, 'shipTo'], [{ warehouses: ['China'] }, 'warehouses'], [{ priceMin: 3000 }, 'priceMin']] as const) {
+  for (const [body, field] of [[{ priceMax: 19.99 }, 'pr.priceMax'], [{ shipTo: 'USA' }, 'pr.shipTo'], [{ warehouses: ['China'] }, 'pr.warehouses'], [{ priceMin: 3000 }, 'pr.priceMin']] as const) {
     const res = await send(app, 'PUT', path, { version: 1, ...body });
     expect([res.status, ((await res.json()) as { field?: string }).field], JSON.stringify(body)).toEqual([400, field]);
   }

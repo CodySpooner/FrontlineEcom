@@ -269,7 +269,7 @@ export function ConnectForm({ kind, store, current, onDone }: { kind: Integratio
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (viaConnect && !current) connect();
-    else save.mutate({ kind, storeId: store?.id, values: filled() }, { onSuccess: onDone });
+    else save.mutate({ kind, storeId: store?.id, values: filled(), version: current?.version ?? 0 }, { onSuccess: onDone });
   };
 
   // Loopback: the provider sends the browser back to the API, which saves the integration; watch for it.

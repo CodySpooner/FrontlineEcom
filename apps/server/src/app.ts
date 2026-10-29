@@ -19,7 +19,7 @@ import { listOrders, listProducts, setProductCost } from './catalog';
 import { competitorRoutes } from './competitors';
 import { dataDir, type Db } from './db';
 import { addDays } from './dates';
-import { deleteIntegration, health, listIntegrations, saveIntegration } from './integrations';
+import { deleteIntegration, health, listIntegrations, putIntegration } from './integrations';
 import { listEvents, subscribe } from './live';
 import { researchRoutes } from './research';
 import { prRoutes } from './product-research/routes';
@@ -188,14 +188,21 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     })
     .get('/api/integrations', (c) => c.json(listIntegrations(db, key(), pickStores(db, c.req.query('stores')))))
     .put('/api/integrations', async (c) => {
-      const saved = saveIntegration(db, key(), await json(c.req.raw));
-      return typeof saved === 'string' ? c.json({ error: saved }, 400) : c.json(saved);
+      const body = await json(c.req.raw);
+      try {
+        // settings decision 6: the version read comes back (0 for a new connection); none is 428 once the body is valid.
+        const saved = putIntegration(db, key(), body, versionOf(body) ?? null);
+        return 'id' in saved ? c.json(saved) : c.json(saved, 400);
+      } catch (e) {
+        if (e instanceof ConfigError) return c.json(e.body, e.status);
+        throw e;
+      }
     })
     .route('/', backupRoutes(db))
     .route('/', actionRoutes(db, (q) => pickStores(db, q)))
     .get('/api/integrations/oauth', (c) => c.json(oauthKinds()))
     .route('/', oauthRoutes(db, key))
-    .delete('/api/integrations/:id', (c) => (deleteIntegration(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'integration not found' }, 404)))
+    .delete('/api/integrations/:id', (c) => (deleteIntegration(db, c.req.param('id'), key()) ? c.body(null, 204) : c.json({ error: 'integration not found' }, 404)))
     // Marked changed, like a re-save: the sync loop runs it on its next tick (30 s at most).
     .post('/api/integrations/:id/sync', (c) =>
       db.prepare('UPDATE integrations SET updated_at = ? WHERE id = ?').run(new Date().toISOString(), c.req.param('id')).changes ? c.json({}, 202) : c.json({ error: 'integration not found' }, 404))

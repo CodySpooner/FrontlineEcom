@@ -1354,6 +1354,8 @@ export interface Integration {
    * timezone than its store's, so its daily spend or sessions and the store's daily sales cover different hours.
    */
   notice?: string;
+  /** The row's version: PUT /api/integrations sends it back (0 for a new connection; 409 stale, 428 without it). */
+  version?: number;
 }
 
 /**
@@ -1663,6 +1665,8 @@ export interface AutomationRule {
   lastFiredAt?: string;
   /** Schedule rules: next fire time (ISO), when within 8 days. */
   nextRunAt?: string;
+  /** The row's version: PATCH /api/automations/:id sends it back (409 stale, 428 without it). */
+  version?: number;
 }
 
 export interface AutomationRuleInput {

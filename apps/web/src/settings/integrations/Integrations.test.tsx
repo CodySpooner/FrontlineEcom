@@ -26,7 +26,7 @@ describe('connect form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await vi.waitFor(() => expect(onDone).toHaveBeenCalled());
-    expect(sent(fetch)).toEqual({ kind: 'cj', values: { email: 'buyer@shop.test' } });
+    expect(sent(fetch)).toEqual({ kind: 'cj', values: { email: 'buyer@shop.test' }, version: saved.version ?? 0 });
   });
 
   it("warns that Amazon on a Shopify store that imports its Amazon orders would count them twice", () => {
@@ -51,7 +51,7 @@ describe('connect form', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Connect CJ Dropshipping' }));
 
     expect((await screen.findByRole('alert')).textContent).toContain('CJ rejected the API key');
-    expect(sent(fetch)).toEqual({ kind: 'cj', values: { email: 'ops@shop.test', apiKey: 'test-key-1' } });
+    expect(sent(fetch)).toEqual({ kind: 'cj', values: { email: 'ops@shop.test', apiKey: 'test-key-1' }, version: 0 });
   });
 });
 

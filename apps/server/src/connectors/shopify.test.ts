@@ -61,7 +61,7 @@ const setup = async () => {
   const db = openDb();
   seedDemo(db, '2026-10-26');
   const app = createApp(db, key);
-  await app.request('/api/integrations', { method: 'PUT', body: JSON.stringify({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'https://Glow-Haus.myshopify.com/', accessToken: TOKEN } }), headers: { 'content-type': 'application/json' } });
+  await app.request('/api/integrations', { method: 'PUT', body: JSON.stringify({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'https://Glow-Haus.myshopify.com/', accessToken: TOKEN } , version: 0 }), headers: { 'content-type': 'application/json' } });
   return { db, app };
 };
 
@@ -290,7 +290,7 @@ test('a Dev Dashboard app connects with client credentials; the 24 h token is ca
   const db = openDb();
   seedDemo(db, '2026-10-26');
   const app = createApp(db, key);
-  const res = await app.request('/api/integrations', { method: 'PUT', body: JSON.stringify({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', clientId: 'cid', clientSecret: 'shpss_1' } }), headers: { 'content-type': 'application/json' } });
+  const res = await app.request('/api/integrations', { method: 'PUT', body: JSON.stringify({ kind: 'shopify', storeId: 'glow', values: { shopDomain: 'glow-haus.myshopify.com', clientId: 'cid', clientSecret: 'shpss_1' } , version: 0 }), headers: { 'content-type': 'application/json' } });
   expect(res.status).toBe(200);
   const shop = fakeShopify([]);
   const grants: string[] = [];

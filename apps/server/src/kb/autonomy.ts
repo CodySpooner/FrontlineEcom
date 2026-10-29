@@ -48,9 +48,9 @@ const row = (db: Db, ws: KbWorkspace) => db.prepare(`SELECT version FROM kb_cont
 /** With the row's version (0 before the first save): a PUT sends it back (settings decision 6). */
 export const controlsState = (db: Db, ws: KbWorkspace): KbControlsState => ({ ...kbControls(db, ws), reservedUsd: ws === null ? 0 : reservedUsd(db, ws), version: Number(row(db, ws)?.version ?? 0) });
 
-/** A PUT body over the workspace's controls now: the clean controls, or what's wrong (with the body key, when one is). */
-export function parseControls(db: Db, ws: KbWorkspace, body: unknown): KbControls | { error: string; field?: keyof KbControls } {
-  const bad = (error: string, field?: keyof KbControls) => (field ? { error, field } : { error });
+/** A PUT body over the workspace's controls now: the clean controls, or what's wrong (with its registry id, `kb.<key>`). */
+export function parseControls(db: Db, ws: KbWorkspace, body: unknown): KbControls | { error: string; field?: `kb.${keyof KbControls}` } {
+  const bad = (error: string, field?: keyof KbControls) => (field ? { error, field: `kb.${field}` as const } : { error });
   if (!isObj(body)) return bad('body must be an object');
   const b = { ...kbControls(db, ws), ...Object.fromEntries(Object.entries(body).filter(([k]) => Object.hasOwn(KB_CONTROLS, k))) } as Obj;
   const flag = (['autonomous', 'approval', 'review'] as const).find((k) => typeof b[k] !== 'boolean');

@@ -5,12 +5,15 @@ import { loadRows, salesShares, totalsOf } from './analytics';
 import { approvalsHook } from './approvals';
 import { cronDueBetween, nextCronTime, parseCron } from './cron';
 import { addDays, dayFraction, localDate } from './dates';
+import { logChanges, NO_VERSION, versionOf } from './config/write';
 import { once, type Db } from './db';
 import { storeZone } from './stores';
 
 type Row = Record<string, unknown>;
 type Obj = Record<string, unknown>;
-type Fields = Omit<AutomationRule, 'id' | 'createdAt' | 'lastFiredAt' | 'nextRunAt'>;
+type Fields = Omit<AutomationRule, 'id' | 'createdAt' | 'lastFiredAt' | 'nextRunAt' | 'version'>;
+/** `field`: the body key it's about (rules have no registry entries, settings decision 6). */
+type Bad = { error: string; field?: keyof Fields };
 
 /** Starts an agent run (the agents lane's run manager). Returns the run, or an error message. */
 export type RunTask = (agentId: string, task: string) => { id: string } | string;
@@ -39,6 +42,7 @@ const toRule = (r: Row, withNext = false): AutomationRule => {
     createdAt: String(r.created_at),
     ...(r.last_fired_at ? { lastFiredAt: String(r.last_fired_at) } : {}),
     ...(next ? { nextRunAt: next.toISOString() } : {}),
+    version: Number(r.version),
   };
 };
 
@@ -58,43 +62,44 @@ const toRun = (r: Row): AutomationRun => ({
   ...(r.approval_id ? { approvalId: String(r.approval_id) } : {}),
 });
 
-/** Validates a create body, or a PATCH body merged over `base`. Returns an error message or the clean fields. */
-export function parseRule(db: Db, body: unknown, base?: Fields): string | Fields {
-  if (!isObj(body)) return 'body must be a JSON object';
+/** Validates a create body, or a PATCH body merged over `base`. Returns the error (and its field) or the clean fields. */
+export function parseRule(db: Db, body: unknown, base?: Fields): Bad | Fields {
+  const bad = (error: string, field?: keyof Fields): Bad => (field ? { error, field } : { error });
+  if (!isObj(body)) return bad('body must be a JSON object');
   const b = { enabled: true, approval: 'ask', maxRunsPerDay: 3, cooldownHours: 24, ...base, ...body } as Obj;
-  if (typeof b.storeId !== 'string' || !db.prepare('SELECT 1 FROM stores WHERE id = ?').get(b.storeId)) return 'storeId must be an existing store';
-  if (base && b.storeId !== base.storeId) return 'storeId cannot change';
-  if (typeof b.name !== 'string' || !b.name.trim() || b.name.trim().length > 80) return 'name must be 1-80 characters';
-  if (typeof b.enabled !== 'boolean') return 'enabled must be true or false';
-  if (b.approval !== 'auto' && b.approval !== 'ask') return 'approval must be auto or ask';
-  if (!int(b.maxRunsPerDay, 1, 100)) return 'maxRunsPerDay must be a whole number 1-100';
-  if (!int(b.cooldownHours, 0, 720)) return 'cooldownHours must be a whole number 0-720';
+  if (typeof b.storeId !== 'string' || !db.prepare('SELECT 1 FROM stores WHERE id = ?').get(b.storeId)) return bad('storeId must be an existing store', 'storeId');
+  if (base && b.storeId !== base.storeId) return bad('storeId cannot change', 'storeId');
+  if (typeof b.name !== 'string' || !b.name.trim() || b.name.trim().length > 80) return bad('name must be 1-80 characters', 'name');
+  if (typeof b.enabled !== 'boolean') return bad('enabled must be true or false', 'enabled');
+  if (b.approval !== 'auto' && b.approval !== 'ask') return bad('approval must be auto or ask', 'approval');
+  if (!int(b.maxRunsPerDay, 1, 100)) return bad('maxRunsPerDay must be a whole number 1-100', 'maxRunsPerDay');
+  if (!int(b.cooldownHours, 0, 720)) return bad('cooldownHours must be a whole number 0-720', 'cooldownHours');
 
   const t = b.trigger;
-  if (!isObj(t)) return 'trigger is required';
+  if (!isObj(t)) return bad('trigger is required', 'trigger');
   let trigger: AutomationTrigger;
   if (t.type === 'schedule') {
-    if (typeof t.cron !== 'string') return 'trigger.cron is required';
+    if (typeof t.cron !== 'string') return bad('trigger.cron is required', 'trigger');
     try {
       parseCron(t.cron);
     } catch (e) {
-      return (e as Error).message;
+      return bad((e as Error).message, 'trigger');
     }
     trigger = { type: 'schedule', cron: t.cron.trim() };
   } else if (t.type === 'metric') {
-    if (!METRICS.includes(t.metric as keyof MetricTotals)) return `trigger.metric must be one of ${METRICS.join(', ')}`;
-    if (t.op !== '<' && t.op !== '>') return 'trigger.op must be < or >';
-    if (typeof t.value !== 'number' || !Number.isFinite(t.value)) return 'trigger.value must be a number';
-    if (!int(t.windowDays, 1, 90)) return 'trigger.windowDays must be a whole number 1-90';
+    if (!METRICS.includes(t.metric as keyof MetricTotals)) return bad(`trigger.metric must be one of ${METRICS.join(', ')}`, 'trigger');
+    if (t.op !== '<' && t.op !== '>') return bad('trigger.op must be < or >', 'trigger');
+    if (typeof t.value !== 'number' || !Number.isFinite(t.value)) return bad('trigger.value must be a number', 'trigger');
+    if (!int(t.windowDays, 1, 90)) return bad('trigger.windowDays must be a whole number 1-90', 'trigger');
     trigger = { type: 'metric', metric: t.metric as keyof MetricTotals, op: t.op, value: t.value, windowDays: t.windowDays };
-  } else return 'trigger.type must be schedule or metric';
+  } else return bad('trigger.type must be schedule or metric', 'trigger');
 
   const a = b.action;
-  if (!isObj(a) || (a.type !== 'agent_task' && a.type !== 'kb_research')) return "action must be { type: 'agent_task', agentId, task }";
-  if (typeof a.agentId !== 'string' || !db.prepare('SELECT 1 FROM agents WHERE id = ? AND store_id = ?').get(a.agentId, b.storeId)) return "action.agentId must be one of this store's agents";
+  if (!isObj(a) || (a.type !== 'agent_task' && a.type !== 'kb_research')) return bad("action must be { type: 'agent_task', agentId, task }", 'action');
+  if (typeof a.agentId !== 'string' || !db.prepare('SELECT 1 FROM agents WHERE id = ? AND store_id = ?').get(a.agentId, b.storeId)) return bad("action.agentId must be one of this store's agents", 'action');
   // Research (KB-22) is a topic, and the store's research controls decide whether it waits for approval.
-  if (a.type === 'kb_research' && !(typeof a.task === 'string' && a.task.trim().length >= 3 && a.task.trim().length <= 500)) return 'action.task must be 3-500 characters for research';
-  if (typeof a.task !== 'string' || !a.task.trim() || a.task.length > 4000) return 'action.task must be 1-4000 characters';
+  if (a.type === 'kb_research' && !(typeof a.task === 'string' && a.task.trim().length >= 3 && a.task.trim().length <= 500)) return bad('action.task must be 3-500 characters for research', 'action');
+  if (typeof a.task !== 'string' || !a.task.trim() || a.task.length > 4000) return bad('action.task must be 1-4000 characters', 'action');
 
   return { storeId: b.storeId, name: b.name.trim(), enabled: b.enabled, trigger, action: { type: a.type, agentId: a.agentId, task: a.task.trim() }, approval: b.approval, maxRunsPerDay: b.maxRunsPerDay, cooldownHours: b.cooldownHours };
 }
@@ -209,10 +214,15 @@ export function startScheduler(db: Db, runTask: RunTask, { everyMs = 60_000, met
 }
 
 export function automationRoutes(db: Db, pickStores: (q?: string) => string[]) {
-  const write = (id: string, f: Fields) =>
-    db
-      .prepare('UPDATE automation_rules SET name = ?, enabled = ?, trigger_json = ?, action_json = ?, approval = ?, max_runs_per_day = ?, cooldown_hours = ? WHERE id = ?')
-      .run(f.name, f.enabled ? 1 : 0, JSON.stringify(f.trigger), JSON.stringify(f.action), f.approval, f.maxRunsPerDay, f.cooldownHours, id);
+  // The owner's edit, on the version they read (settings decision 6): one bump, a change row per field that moved.
+  const write = (cur: AutomationRule, f: Fields) => {
+    const at = new Date().toISOString();
+    db.prepare('UPDATE automation_rules SET name = ?, enabled = ?, trigger_json = ?, action_json = ?, approval = ?, max_runs_per_day = ?, cooldown_hours = ?, version = version + 1, updated_at = ? WHERE id = ? AND version = ?')
+      .run(f.name, f.enabled ? 1 : 0, JSON.stringify(f.trigger), JSON.stringify(f.action), f.approval, f.maxRunsPerDay, f.cooldownHours, at, cur.id, cur.version!);
+    const moved = (Object.keys(f) as (keyof Fields)[]).filter((k) => JSON.stringify(cur[k]) !== JSON.stringify(f[k]));
+    const store = db.prepare('SELECT name FROM stores WHERE id = ?').get(cur.storeId);
+    logChanges(db, { at, actor: 'owner', store: { id: cur.storeId, name: String(store?.name) } }, moved.map((k) => [`automation.${k}`, cur[k], f[k], 'store', f.name]));
+  };
   return new Hono()
     .get('/api/automations', (c) => {
       const ids = pickStores(c.req.query('stores'));
@@ -231,7 +241,7 @@ export function automationRoutes(db: Db, pickStores: (q?: string) => string[]) {
     })
     .post('/api/automations', async (c) => {
       const f = parseRule(db, await c.req.json().catch(() => undefined));
-      if (typeof f === 'string') return c.json({ error: f }, 400);
+      if ('error' in f) return c.json(f, 400);
       const id = randomUUID();
       db.prepare('INSERT INTO automation_rules (id, store_id, name, enabled, trigger_json, action_json, approval, max_runs_per_day, cooldown_hours, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
         id, f.storeId, f.name, f.enabled ? 1 : 0, JSON.stringify(f.trigger), JSON.stringify(f.action), f.approval, f.maxRunsPerDay, f.cooldownHours, new Date().toISOString(),
@@ -241,9 +251,13 @@ export function automationRoutes(db: Db, pickStores: (q?: string) => string[]) {
     .patch('/api/automations/:id', async (c) => {
       const cur = getRule(db, c.req.param('id'));
       if (!cur) return c.json({ error: 'automation not found' }, 404);
-      const f = parseRule(db, await c.req.json().catch(() => undefined), cur);
-      if (typeof f === 'string') return c.json({ error: f }, 400);
-      write(cur.id, f);
+      const body: unknown = await c.req.json().catch(() => undefined);
+      const f = parseRule(db, body, cur);
+      if ('error' in f) return c.json(f, 400);
+      const version = versionOf(body);
+      if (version === undefined) return c.json(NO_VERSION, 428);
+      if (version !== cur.version) return c.json({ error: 'This automation was saved somewhere else while you were editing.', code: version === 0 ? 'exists' : 'stale', current: cur }, 409);
+      write(cur, f);
       once(db, `rule-edited:${cur.id}`); // the owner's call now: agents switching default jobs on leave this one alone
       return c.json(getRule(db, cur.id));
     })

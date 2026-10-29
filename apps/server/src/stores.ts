@@ -45,11 +45,12 @@ export function insertStore(db: Db, s: Store, demo = false) {
   ).run(s.id, s.name, s.platform, s.niche, s.nicheDetail ?? null, s.currency, s.timezone, s.color, s.connected ? 1 : 0, demo ? 1 : 0, s.feePercent ?? 0, s.feePerOrder ?? 0);
 }
 
-export type StoreInputError = { error: string; field?: keyof StoreInput };
+/** `field` is the registry id (`store.<key>`, settings decision 6). */
+export type StoreInputError = { error: string; field?: `store.${keyof StoreInput}` };
 
-/** Validates a create/update body at the API boundary; returns the error (with the body key it's about) or the clean fields. */
+/** Validates a create/update body at the API boundary; returns the error (with the setting it's about) or the clean fields. */
 export function parseStoreInput(body: unknown, partial: boolean): StoreInputError | StoreUpdate {
-  const bad = (error: string, field?: keyof StoreInput): StoreInputError => (field ? { error, field } : { error });
+  const bad = (error: string, field?: keyof StoreInput): StoreInputError => (field ? { error, field: `store.${field}` } : { error });
   if (!body || typeof body !== 'object') return bad('body must be a JSON object');
   const b = body as Record<string, unknown>;
   const out: StoreUpdate = {};
