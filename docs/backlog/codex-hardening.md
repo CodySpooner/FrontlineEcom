@@ -164,6 +164,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
 
 ## Done
 
+- 2026-10-28 CH-18 coverage shipped, acceptance blocked: 13 nav routes plus legacy agent/conversation/team at 390/1280/1440/1920 px. Real API seeds the sessions. 61/64 route cases and the harness pass; three 390px overflow failures are filed under Blocked and kept failing. Focused rerun confirms console/page/API checks pass on those three too. pnpm check green (234 files / 1,730 tests, 4 workers).
+
 - 2026-10-28 CH-17: added Playwright/axe dev dependencies and pnpm e2e, Edge channel without downloads, built UI plus real HTTP/WebSocket server on port 0, temporary data/Codex work, fake engines, disabled server fetches and browser external requests, and teardown. One harness test passes; pnpm check green (234 files / 1,730 tests, 4 workers). Orca dashboard screenshot compared with reference: existing dark/red layout and plain header render correctly; no app UI changes. No CI wiring.
 
 - 2026-10-28 CH-15: closed AGT-19 as superseded by codex.ts and the CH-14 MCP theme coverage. Documentation only; pnpm check green (234 files / 1,730 tests, 4 workers).
@@ -208,6 +210,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   - Creative generation: used + pending credit cap → approval, recheck and synchronous charge before render → creative or failure with credits retained. CJ: refusal before queue, HTTP fetch, then `pr_calls` → simultaneous callers can overbook the daily cap (CH-04).
 
 ## Blocked
+
+- 2026-10-28 CH-18: all route/width checks are implemented, but three strict mobile overflow assertions fail: Integrations +3 px, legacy agent and conversation +46 px at 390x900. Filed to UI and AI Agents Inbox with reproductions. No skipped/expected failures or relaxed thresholds; these app bugs also block CH-20's whole-suite green-twice criterion.
 
 - 2026-10-28 CH-16: no FRONTLINE_DATA_DIR override is set and this worktree has no .data/codex-home directory or auth.json. No live model turn, resume, login or personal-home access was attempted. Owner step: run this worktree app with WEB_PORT=5303 and API_PORT=8923 and no forced FRONTLINE_AGENT_ENGINE; in AI Agents -> Deploy an agent choose Codex -> Set up Codex and complete the browser sign-in (app home: C:/Users/Xody2/orca/workspaces/FrontlineEcom/codex-hardening/.data/codex-home). Then authorize/capture one demo-store turn asking only for store_summary and one short follow-up on that session. Replace the source-labelled CODEX_TURN lines with the captured, sanitized completed turn and resume; retain separate source-shaped coverage for rare events. Existing fixtures remain honestly labelled recorded/source. Installed CLI is 0.163.0; its isolated features list matches the recorded fixture and exec resume flags match the adapter.
 
