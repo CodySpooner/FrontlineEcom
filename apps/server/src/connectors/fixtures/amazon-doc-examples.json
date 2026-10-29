@@ -1,0 +1,253 @@
+{
+  "_source": "SP-API models (github.com/amzn/selling-partner-api-models, read 2026-10-28): orders_2026-01-01.json (OrderItem orderItemId, quantityOrdered, product.sellerSku, product.price.unitPrice, proceeds.breakdowns types ITEM/SHIPPING/TAX/DISCOUNT) and financesV0.json (ShipmentEvent: AmazonOrderId, PostedDate, ShipmentItemList / ShipmentItemAdjustmentList with ItemChargeList / ItemChargeAdjustmentList by ChargeType, ItemFeeList / ItemFeeAdjustmentList by FeeType, PromotionAdjustmentList; Currency: CurrencyCode, CurrencyAmount; RefundEventList holds ShipmentEvents).",
+  "orders": [
+    {
+      "orderId": "111-1",
+      "createdTime": "2026-10-24T15:00:00Z",
+      "salesChannel": {
+        "marketplaceId": "ATVPDKIKX0DER"
+      },
+      "fulfillment": {
+        "fulfillmentStatus": "SHIPPED",
+        "fulfilledBy": "AMAZON"
+      },
+      "proceeds": {
+        "grandTotal": {
+          "amount": "54.00",
+          "currencyCode": "USD"
+        }
+      },
+      "orderItems": [
+        {
+          "orderItemId": "OI-1",
+          "quantityOrdered": 2,
+          "product": {
+            "asin": "B0MUG",
+            "sellerSku": "MUG-1",
+            "price": {
+              "unitPrice": {
+                "amount": "20.00",
+                "currencyCode": "USD"
+              }
+            }
+          },
+          "proceeds": {
+            "proceedsTotal": {
+              "amount": "38.00"
+            },
+            "breakdowns": [
+              {
+                "type": "ITEM",
+                "subtotal": {
+                  "amount": "40.00"
+                }
+              },
+              {
+                "type": "DISCOUNT",
+                "subtotal": {
+                  "amount": "-2.00"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "orderItemId": "OI-2",
+          "quantityOrdered": 1,
+          "product": {
+            "asin": "B0CUP",
+            "sellerSku": "CUP-1",
+            "price": {
+              "unitPrice": {
+                "amount": "16.00",
+                "currencyCode": "USD"
+              }
+            }
+          },
+          "proceeds": {
+            "proceedsTotal": {
+              "amount": "16.00"
+            },
+            "breakdowns": [
+              {
+                "type": "ITEM",
+                "subtotal": {
+                  "amount": "16.00"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "orderId": "111-2",
+      "createdTime": "2026-10-24T16:00:00Z",
+      "salesChannel": {
+        "marketplaceId": "ATVPDKIKX0DER"
+      },
+      "fulfillment": {
+        "fulfillmentStatus": "UNSHIPPED",
+        "fulfilledBy": "MERCHANT"
+      },
+      "proceeds": {
+        "grandTotal": {
+          "amount": "20.00",
+          "currencyCode": "USD"
+        }
+      },
+      "orderItems": [
+        {
+          "orderItemId": "OI-3",
+          "quantityOrdered": 1,
+          "product": {
+            "sellerSku": "MUG-1",
+            "price": {
+              "unitPrice": {
+                "amount": "20.00"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "shipments": [
+    {
+      "AmazonOrderId": "111-1",
+      "PostedDate": "2026-10-25T08:00:00Z",
+      "MarketplaceName": "Amazon.com",
+      "ShipmentItemList": [
+        {
+          "SellerSKU": "MUG-1",
+          "OrderItemId": "OI-1",
+          "QuantityShipped": 2,
+          "ItemChargeList": [
+            {
+              "ChargeType": "Principal",
+              "ChargeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": 40
+              }
+            },
+            {
+              "ChargeType": "Tax",
+              "ChargeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": 3.2
+              }
+            }
+          ],
+          "ItemFeeList": [
+            {
+              "FeeType": "Commission",
+              "FeeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": -6.0
+              }
+            },
+            {
+              "FeeType": "FBAPerUnitFulfillmentFee",
+              "FeeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": -7.5
+              }
+            }
+          ]
+        },
+        {
+          "SellerSKU": "CUP-1",
+          "OrderItemId": "OI-2",
+          "QuantityShipped": 1,
+          "ItemChargeList": [
+            {
+              "ChargeType": "Principal",
+              "ChargeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": 16
+              }
+            }
+          ],
+          "ItemFeeList": [
+            {
+              "FeeType": "Commission",
+              "FeeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": -2.4
+              }
+            },
+            {
+              "FeeType": "FBAPerUnitFulfillmentFee",
+              "FeeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": -3.25
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "refunds": [
+    {
+      "AmazonOrderId": "111-1",
+      "PostedDate": "2026-10-26T09:30:00Z",
+      "MarketplaceName": "Amazon.com",
+      "ShipmentItemAdjustmentList": [
+        {
+          "SellerSKU": "MUG-1",
+          "OrderAdjustmentItemId": "ADJ-1",
+          "QuantityShipped": 1,
+          "ItemChargeAdjustmentList": [
+            {
+              "ChargeType": "Principal",
+              "ChargeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": -20
+              }
+            },
+            {
+              "ChargeType": "Tax",
+              "ChargeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": -1.6
+              }
+            },
+            {
+              "ChargeType": "ShippingCharge",
+              "ChargeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": -2
+              }
+            }
+          ],
+          "PromotionAdjustmentList": [
+            {
+              "PromotionType": "PromotionMetaDataDefinitionValue",
+              "PromotionAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": 1
+              }
+            }
+          ],
+          "ItemFeeAdjustmentList": [
+            {
+              "FeeType": "Commission",
+              "FeeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": 3.0
+              }
+            },
+            {
+              "FeeType": "RefundCommission",
+              "FeeAmount": {
+                "CurrencyCode": "USD",
+                "CurrencyAmount": -0.6
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

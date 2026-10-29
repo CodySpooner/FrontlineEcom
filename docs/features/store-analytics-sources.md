@@ -73,9 +73,9 @@ An Amazon store syncs its own orders; Amazon next to a site gives daily totals o
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Orders | supported | yes | Orders API getOrders; GET_SALES_AND_TRAFFIC_REPORT daily totals | Inventory and Order Tracking; Selling Partner Insights | 729 days back | per-operation SP-API rate limits |  |
-| Order lines by variant | supported | no | Orders API getOrderItems |  |  |  |  |
-| Refunds | supported | no | Finances financialEvents RefundEventList | Finance and Accounting |  |  |  |
-| Fees | supported | no | Finances financialEvents ShipmentEventList fee lists | Finance and Accounting | re-read for 14 days to settle |  |  |
+| Order lines by variant | supported | yes | Orders API orderItems (orderItemId, sellerSku, quantityOrdered, unitPrice, DISCOUNT proceeds) | Inventory and Order Tracking | with the orders read |  |  |
+| Refunds | supported | yes | Finances financialEvents RefundEventList (charge adjustments by type) | Finance and Accounting | 30 days back, then re-read for 14 days |  |  |
+| Fees | supported | yes | Finances financialEvents ShipmentEventList and RefundEventList fee lists | Finance and Accounting | re-read for 14 days to settle |  |  |
 | Catalog | supported | yes | Listings Items searchListingsItems | Product Listing | current state |  |  |
 | Variants | supported | no | Listings Items (one SKU each) |  |  |  |  |
 | Channel listings | supported | no | Listings Items status and issues |  |  |  |  |

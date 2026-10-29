@@ -524,13 +524,13 @@ The acceptance table (§15):
   take the version as an optional argument, so direct callers keep working; `getCaps` now returns the effective caps
   (store override, else workspace default) plus `version`.
 
-- [ ] (from settings, ST-08a) `PATCH /api/stores/:id` now requires the `version` the caller read (`Store.version`,
+- [x] (from settings, ST-08a) `PATCH /api/stores/:id` now requires the `version` the caller read (`Store.version`,
   on every store response): 428 without it, 409 `{code: 'stale', current}` when it's old; `POST /api/stores` is exempt.
   A store 400 now carries `field` (the body key). `useStoreActions().save` with an `id` requires `version` in its input
   type. In `connectors/common.ts`, `setStoreCurrency` takes an optional actor (default `system`) and, like
   `takeCurrency` (`sync:<kind>`) and `takeTimezone`, bumps the store's version and writes a `settings_changes` row
   when the value moves; status, cursor and `connected` writes don't. `setStoreTimezone` is unchanged.
-- [ ] (from settings, ST-08c) `PATCH /api/automations/:id` and `PUT /api/integrations` now require the `version` the
+- [x] (from settings, ST-08c) `PATCH /api/automations/:id` and `PUT /api/integrations` now require the `version` the
   caller read (`AutomationRule.version`, `Integration.version`; a new connection sends 0): 428 without it, 409
   `{code: 'stale'|'exists', current}` when it's old. `POST /api/automations` is exempt. Their 400s carry `field`, and
   a store 400's `field` is now the registry id (`store.currency`), not the body key the ST-08a line said. In-process
@@ -929,7 +929,7 @@ reads: no new write scope, no write call.
   only.
   - Acceptance: comparison under Done; mark recorded.
 
-- [ ] SA-44 **Amazon lines, refunds and fees** (spec §8 Profitability; decision 17):
+- [x] SA-44 **Amazon lines, refunds and fees** (spec §8 Profitability; decision 17):
   - `ordersOf` lines into `order_lines`; the refund events `refundsOf` already reads into `refunds` (`amazon_refunds`
     stays for `rebuildRevenue`); the `ShipmentEventList` from the same `financialEvents` pages (no extra calls) into
     `order_fees` per order and fee type. Settled fees replace estimates for those orders; `SETTLE_DAYS` keeps
@@ -1622,10 +1622,12 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-39 WooCommerce variants and listings: each variable product's variations (now read for every variable product, with the documented `id,sku,status,price,regular_price,attributes` beside the stock fields) are its variants in `product_variants` (title from the attribute options; `manage_stock` 'parent' takes the parent's count and backorders; an uncounted stock is unknown, not 0; policy deny / continue from backorders; a non-published variation reads draft); any other product is its own single variant (`PRODUCT_FIELDS` gains `sku`). The site listing goes into `channel_listings` (channel `site`: publish → active, future → scheduled, else unpublished; no `published_at`, since Woo documents no publish date). `variants` (partial when a variations read fails) and `channel_listings` datasets noted; registry marks them read (sources doc regenerated). Contract test from the docs' product and variation shapes.
 - 2026-10-28 SA-41 Etsy receipts: `etsyParts` takes the documented `total_price` (gross), `discount_amt`, `total_shipping_cost` and `total_tax_cost` + `total_vat_cost`; they must add up to `grandtotal` ± 0.01 (gift wrap, which the reference leaves out of the sum, counts as gross when it closes the gap), else no parts (an estimate). Written with source ids, channel `etsy`, currency, `paid_at` (the transactions' first `paid_timestamp`), `source_updated_at`; parts count once paid at a known time with every refund dated (a canceled receipt only with its refund), and then `tax` is as placed. Refunds into `refunds` dated by `created_timestamp` in the store's zone; Etsy names no lines, so each is merchandise up to what the receipt's merchandise has left and the rest `other` (owner question Q30, default recorded). Transactions into `order_lines` (listing, Etsy product id as variant, SKU, quantity, price × quantity, shop + buyer coupon; no costs). `buyer_user_id` hashed into `customer_ref` (0 = guest), `country_iso`. Grand total minus refunds stays `orders.total`. Registry marks Etsy lines, refunds and customers read (sources doc regenerated). Contract tests from the spec's shapes: identity holds on every counted receipt; a total that doesn't add up keeps no parts; lines, refs and guests. Blocked: SA-40 (no WooCommerce store connected).
 - 2026-10-28 SA-42 Etsy variants and listings: a listing's inventory is read when it was never read or changed since its variants were synced, at most 50 a sync (Q10); its non-deleted products are its variants in `product_variants` (Etsy product id, title from the property values, SKU, the first live offering's price, enabled offerings' quantity; no enabled offering reads draft; the list replaced each read). A listing without inventory records (404, as the reference says) is its own variant. The listing state goes into `channel_listings` (channel `etsy`: active and sold out are listed, since `state_timestamp`; the rest unpublished). Past the cap, `variants` reads partial with "N listings' variants pending" (`ReadOutcome` partial takes a note) and the rest come next sync. Registry marks Etsy variants and listings read (sources doc regenerated). Contract tests from the spec's shapes: variants, 404, deleted and disabled offerings, listing states; 52 listings give 50 reads, then 2.
+- 2026-10-29 SA-44 Amazon order items into `order_lines` (orderItemId, SKU, quantity × unitPrice, DISCOUNT proceeds; no proceeds → discount unknown, not 0); refund events into the `refunds` ledger by part (Principal/Discount/promotion give-backs merchandise, ShippingCharge shipping, *Tax* tax, the rest other; `amazon_refunds` unchanged for `rebuildRevenue`); shipment and refund event fee lists from the same `financialEvents` pages into `order_fees` per order, fee type and event (a re-read replaces, never adds; refund give-backs negative), dated by the order's day; the finance read now re-reads `SETTLE_DAYS` (14) back; `fees` dataset noted with the refunds read; registry order_lines/refunds/fees supported. Contract test + `fixtures/amazon-doc-examples.json` (SP-API models). Also: ST-08a/ST-08c inbox items acknowledged (no caller in this lane). Blocked: SA-43 (no Etsy shop connected).
 
 ## Blocked
 - 2026-10-28 SA-35 Live check: Shopify. No Shopify store is connected (no `shopify:*` integration in this data dir). Needs: the owner connects a store (ideally the one also selling on TikTok Shop) on the Integrations screen; optional scopes `read_publications` and Level 2 customer data. Then compare 30 full days and five orders, read-only.
 - 2026-10-28 SA-40 Live check: WooCommerce. No WooCommerce store is connected. Needs: the owner connects one with a Read REST key on the Integrations screen; then compare 30 full days and five orders with WooCommerce's own reports, GET only.
+- 2026-10-28 SA-43 Live check: Etsy. No Etsy shop is connected. Needs: the owner connects Etsy (OAuth, transactions_r listings_r) on the Integrations screen; then compare 30 full days and five receipts with Etsy's own reports, GET only.
 
 ## Notes
 

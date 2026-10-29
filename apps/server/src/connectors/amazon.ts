@@ -59,7 +59,13 @@ interface AmazonOrder {
   fulfillment?: { fulfillmentStatus?: string; fulfilledBy?: string };
   /** With includedData PROCEEDS. */
   proceeds?: { grandTotal?: { amount: string } };
-  orderItems?: { quantityOrdered: number; product?: { sellerSku?: string; price?: { unitPrice?: { amount: string } } } }[];
+  orderItems?: {
+    orderItemId?: string;
+    quantityOrdered: number;
+    product?: { sellerSku?: string; price?: { unitPrice?: { amount: string } } };
+    /** With PROCEEDS: ITEM, SHIPPING, GIFT_WRAP, COD_FEE, OTHER, TAX and DISCOUNT subtotals. */
+    proceeds?: { breakdowns?: { type?: string; subtotal?: { amount: string } }[] };
+  }[];
   /** Merchant-fulfilled orders only, with includedData PACKAGES. */
   packages?: { trackingNumber?: string }[];
 }
@@ -107,35 +113,69 @@ async function refundedOrders(ids: string[], fetchFn: Fetch, host: string, token
   return { found, settled };
 }
 
+type Money = { CurrencyCode?: string; CurrencyAmount?: number };
+type Fees = { FeeType?: string; FeeAmount?: Money }[];
+/** A shipment or refund event (Finances v0 ShipmentEvent): charges are what the buyer paid (negative on a refund), fees negative. */
 interface RefundEvent {
   AmazonOrderId?: string;
   PostedDate?: string;
-  ShipmentItemAdjustmentList?: { SellerSKU?: string; OrderAdjustmentItemId?: string; ItemChargeAdjustmentList?: { ChargeType?: string; ChargeAmount?: { CurrencyAmount?: number } }[] }[];
+  ShipmentFeeList?: Fees;
+  ShipmentFeeAdjustmentList?: Fees;
+  OrderFeeList?: Fees;
+  OrderFeeAdjustmentList?: Fees;
+  ShipmentItemList?: { SellerSKU?: string; ItemFeeList?: Fees }[];
+  ShipmentItemAdjustmentList?: {
+    SellerSKU?: string;
+    OrderAdjustmentItemId?: string;
+    QuantityShipped?: number;
+    ItemChargeAdjustmentList?: { ChargeType?: string; ChargeAmount?: Money }[];
+    ItemFeeAdjustmentList?: Fees;
+    PromotionAdjustmentList?: { PromotionAmount?: Money }[];
+  }[];
 }
 /** Where the last refunds read ended (its PostedBefore), for one seller account. */
 type RefundRead = { account?: string; to: string };
 
 /**
- * Refund events (Finances API v0, Finance and Accounting role): the last 30 days at first, then from two days before the
- * last read ended (events can post late), at most hourly. The API lists every financial event, 100 a page at 0.5 pages a
+ * Refund and shipment events (Finances API v0, Finance and Accounting role): the last 30 days at first, then from
+ * SETTLE_DAYS before the last read ended (events post late, and an order's fees settle over days), at most hourly.
+ * Re-read events replace their rows, never add to them. The API lists every financial event, 100 a page at 0.5 pages a
  * second, so a busy seller's read takes a while. Undefined when the last read is under an hour old.
  */
 async function refundsOf(read: RefundRead | undefined, fetchFn: Fetch, host: string, token: string, now: Date) {
   if (read && now.getTime() - Date.parse(read.to) < 3_600_000) return;
   const to = new Date(now.getTime() - 5 * 60_000).toISOString(); // Amazon wants it over two minutes ago
-  const back = read ? Date.parse(read.to) - 2 * 86_400_000 : now.getTime() - 30 * 86_400_000;
+  const back = read ? Date.parse(read.to) - SETTLE_DAYS * 86_400_000 : now.getTime() - 30 * 86_400_000;
   const from = new Date(Math.max(back, now.getTime() - 179 * 86_400_000)).toISOString(); // a window is 180 days at most
   const refunds: RefundEvent[] = [];
+  const shipments: RefundEvent[] = [];
   let next: string | undefined;
   do {
     const q = new URLSearchParams({ PostedAfter: from, PostedBefore: to, MaxResultsPerPage: '100', ...(next ? { NextToken: next } : {}) });
     const res = await fetchFn(`https://${host}/finances/v0/financialEvents?${q}`, { headers: { 'x-amz-access-token': token } });
-    const body = (await res.json().catch(() => ({}))) as { payload?: { NextToken?: string; FinancialEvents?: { RefundEventList?: RefundEvent[] } }; errors?: { message: string }[] };
+    const body = (await res.json().catch(() => ({}))) as { payload?: { NextToken?: string; FinancialEvents?: { RefundEventList?: RefundEvent[]; ShipmentEventList?: RefundEvent[] } }; errors?: { message: string }[] };
     if (!res.ok) throw new Error(`Amazon finances: ${body.errors?.[0]?.message ?? `HTTP ${res.status}`}`);
     refunds.push(...(body.payload?.FinancialEvents?.RefundEventList ?? []));
+    shipments.push(...(body.payload?.FinancialEvents?.ShipmentEventList ?? []));
     next = body.payload?.NextToken;
   } while (next);
-  return { refunds, next: { to } };
+  return { refunds, shipments, next: { to } };
+}
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
+/** A refunded charge's part (decision 9): the selling price and its discounts are merchandise, then shipping, taxes, other. */
+const chargePart = (type = ''): 'merchandise' | 'shipping' | 'tax' | 'other' =>
+  type === 'Principal' || type === 'Discount' ? 'merchandise' : type === 'ShippingCharge' ? 'shipping' : /Tax/.test(type) ? 'tax' : 'other';
+/** An event's fees by type, as costs (Amazon sends them negative; a refund's give-backs come out negative here). */
+function feesOf(e: RefundEvent) {
+  const by = new Map<string, { amount: number; currency: string | null }>();
+  const lists = [e.ShipmentFeeList, e.ShipmentFeeAdjustmentList, e.OrderFeeList, e.OrderFeeAdjustmentList, ...(e.ShipmentItemList ?? []).map((i) => i.ItemFeeList), ...(e.ShipmentItemAdjustmentList ?? []).map((i) => i.ItemFeeAdjustmentList)];
+  for (const f of lists.flatMap((l) => l ?? [])) {
+    if (!f.FeeType) continue;
+    const b = by.get(f.FeeType) ?? { amount: 0, currency: f.FeeAmount?.CurrencyCode ?? null };
+    by.set(f.FeeType, { ...b, amount: b.amount - Number(f.FeeAmount?.CurrencyAmount ?? 0) });
+  }
+  return by;
 }
 
 const TRAFFIC_KEY = 'amazon_traffic';
@@ -300,7 +340,10 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     // Without the Finance and Accounting role (or on any error) sales stay before refunds.
     const refundReads = stateOf<RefundRead>(db, REFUNDS_KEY);
     const refundRead = refundReads.get(id);
-    const refunds = !own ? undefined : await noted(db, key, id, 'refunds', refundsOf(refundRead?.account === account ? refundRead : undefined, fetchFn, host, token, now)).catch(() => undefined);
+    const refunds = !own ? undefined : await noted(db, key, id, 'refunds', refundsOf(refundRead?.account === account ? refundRead : undefined, fetchFn, host, token, now)).catch(
+      (e: unknown) => void noteRead(db, key, id, 'fees', { status: 'failed', error: e instanceof Error ? e.message : String(e) }, now),
+    );
+    if (refunds) noteRead(db, key, id, 'fees', { status: 'available' }, now); // the same pages' shipment events
     const looked = (orderId: string) => `amazon-order:${storeId}:${orderId}`;
     const known = db.prepare('SELECT 1 FROM orders WHERE store_id = ? AND id = ?');
     const asked = db.prepare('SELECT 1 FROM done_once WHERE ref = ?');
@@ -338,6 +381,13 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
          ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
            supplier = excluded.supplier, tracking = coalesce(excluded.tracking, tracking)`,
       );
+      // SA-44: each item as ordered (Amazon has no unit costs: the owner's come with SA-26's backfill); a fee keeps its order's day.
+      const orderLine = db.prepare(
+        `INSERT INTO order_lines (store_id, order_id, line_id, product_id, variant_id, sku, quantity, gross, discount, cost, cost_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+         ON CONFLICT (store_id, order_id, line_id) DO UPDATE SET product_id = excluded.product_id, variant_id = excluded.variant_id, sku = excluded.sku, quantity = excluded.quantity,
+           gross = excluded.gross, discount = excluded.discount`,
+      );
+      const feeDay = db.prepare('UPDATE order_fees SET local_date = ? WHERE store_id = ? AND order_id = ?');
       for (const o of [...(orders?.orders ?? []), ...(older?.found ?? [])]) {
         const s = o.fulfillment?.fulfillmentStatus;
         if (s === 'PENDING' || s === 'PENDING_AVAILABILITY') continue; // not paid for yet
@@ -350,6 +400,15 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
         );
         setOrderItems(db, storeId, `amz-${o.orderId}`, items);
         days.add(localDate(created, timeZone));
+        feeDay.run(localDate(created, timeZone), storeId, `amz-${o.orderId}`);
+        for (const [n, i] of (o.orderItems ?? []).entries()) {
+          const sku = i.product?.sellerSku;
+          const unit = i.product?.price?.unitPrice?.amount;
+          if (!sku || unit == null) continue;
+          const off = i.proceeds?.breakdowns?.find((b) => b.type === 'DISCOUNT')?.subtotal?.amount;
+          orderLine.run(storeId, `amz-${o.orderId}`, i.orderItemId ?? String(n), `amz-${sku}`, `amz-${sku}`, sku, i.quantityOrdered, r2(Number(unit) * i.quantityOrdered),
+            i.proceeds?.breakdowns ? r2(Math.abs(Number(off ?? 0))) : null);
+        }
       }
       // A refunded line's selling price (Principal: what Amazon's sales total counts) comes off its order's day. It counts
       // only once its order is one of the store's: another marketplace's never is, and an order read later brings it in.
@@ -365,6 +424,37 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
           refund.run(storeId, item.OrderAdjustmentItemId ?? `${e.AmazonOrderId}:${e.PostedDate}:${i}`, orderId, amount, item.SellerSKU ? `amz-${item.SellerSKU}` : null);
           const day = dayOf.get(storeId, orderId)?.local_date;
           if (day) days.add(String(day));
+        }
+      }
+      // SA-44: the refunds ledger too (amazon_refunds stays for rebuildRevenue), each refunded charge in its part.
+      const ledger = db.prepare(
+        `INSERT INTO refunds (store_id, id, refund_id, order_id, product_id, variant_id, refunded_at, local_date, merchandise, shipping, tax, other, quantity, restocked, source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 'amazon')
+         ON CONFLICT (store_id, id) DO UPDATE SET refunded_at = excluded.refunded_at, local_date = excluded.local_date, merchandise = excluded.merchandise, shipping = excluded.shipping,
+           tax = excluded.tax, other = excluded.other, quantity = excluded.quantity`,
+      );
+      for (const e of refunds?.refunds ?? []) {
+        if (!e.AmazonOrderId || !e.PostedDate) continue;
+        for (const [i, item] of (e.ShipmentItemAdjustmentList ?? []).entries()) {
+          const back = { merchandise: 0, shipping: 0, tax: 0, other: 0 };
+          for (const c of item.ItemChargeAdjustmentList ?? []) back[chargePart(c.ChargeType)] -= Number(c.ChargeAmount?.CurrencyAmount ?? 0);
+          for (const p of item.PromotionAdjustmentList ?? []) back.merchandise -= Number(p.PromotionAmount?.CurrencyAmount ?? 0);
+          const rid = item.OrderAdjustmentItemId ?? `${e.AmazonOrderId}:${e.PostedDate}:${i}`;
+          const sku = item.SellerSKU ? `amz-${item.SellerSKU}` : null;
+          ledger.run(storeId, rid, rid, `amz-${e.AmazonOrderId}`, sku, sku, e.PostedDate, localDate(new Date(e.PostedDate), timeZone),
+            r2(back.merchandise) || null, r2(back.shipping) || null, r2(back.tax) || null, r2(back.other) || null, item.QuantityShipped ?? null);
+        }
+      }
+      // Decision 17: recorded fees, per order and fee type, one row per event (its posted time in the source), so a
+      // re-read replaces it and an order shipped in parts keeps each part's.
+      const fee = db.prepare(
+        `INSERT INTO order_fees (store_id, order_id, kind, amount, currency, local_date, source) VALUES (?1, ?2, ?3, ?4, ?5, coalesce((SELECT local_date FROM orders WHERE store_id = ?1 AND id = ?2), ?6), ?7)
+         ON CONFLICT (store_id, order_id, kind, source) DO UPDATE SET amount = excluded.amount, currency = excluded.currency, local_date = excluded.local_date`,
+      );
+      for (const [events, tag] of [[refunds?.shipments, 'amazon'], [refunds?.refunds, 'amazon-refund']] as const) {
+        for (const e of events ?? []) {
+          if (!e.AmazonOrderId || !e.PostedDate) continue;
+          for (const [kind, f] of feesOf(e)) if (r2(f.amount)) fee.run(storeId, `amz-${e.AmazonOrderId}`, kind, r2(f.amount), f.currency, localDate(new Date(e.PostedDate), timeZone), `${tag}:${e.PostedDate}`);
         }
       }
       for (const o of older?.settled ?? []) once(db, looked(o));

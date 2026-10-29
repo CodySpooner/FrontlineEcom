@@ -209,9 +209,9 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
     note: 'An Amazon store syncs its own orders; Amazon next to a site gives daily totals only (channel_daily).',
     datasets: {
       orders: { support: 'supported', reads: true, field: 'Orders API getOrders; GET_SALES_AND_TRAFFIC_REPORT daily totals', scopes: 'Inventory and Order Tracking; Selling Partner Insights', history: '729 days back', rateLimit: 'per-operation SP-API rate limits' },
-      order_lines: NOT_READ('Orders API getOrderItems'),
-      refunds: NOT_READ('Finances financialEvents RefundEventList', { scopes: 'Finance and Accounting' }),
-      fees: NOT_READ('Finances financialEvents ShipmentEventList fee lists', { scopes: 'Finance and Accounting', history: 're-read for 14 days to settle' }),
+      order_lines: { support: 'supported', reads: true, field: 'Orders API orderItems (orderItemId, sellerSku, quantityOrdered, unitPrice, DISCOUNT proceeds)', scopes: 'Inventory and Order Tracking', history: 'with the orders read' },
+      refunds: { support: 'supported', reads: true, field: 'Finances financialEvents RefundEventList (charge adjustments by type)', scopes: 'Finance and Accounting', history: '30 days back, then re-read for 14 days' },
+      fees: { support: 'supported', reads: true, field: 'Finances financialEvents ShipmentEventList and RefundEventList fee lists', scopes: 'Finance and Accounting', history: 're-read for 14 days to settle' },
       catalog: { support: 'supported', reads: true, field: 'Listings Items searchListingsItems', scopes: 'Product Listing', history: 'current state' },
       variants: NOT_READ('Listings Items (one SKU each)'),
       channel_listings: NOT_READ('Listings Items status and issues'),

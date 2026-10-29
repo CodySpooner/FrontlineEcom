@@ -510,8 +510,8 @@ test("refunds of an Amazon store's own orders come off the order's day (Finances
   await syncAmazon(db, key, 'peak', fetchFn, new Date(NOW.getTime() + 10 * 60_000));
   expect(finances).toHaveLength(2); // read at most hourly
   await syncAmazon(db, key, 'peak', fetchFn, new Date(NOW.getTime() + 2 * 3_600_000));
-  // Two days back from where the last read ended: late and released events are picked up, the ones seen already aren't added again.
-  expect(finances[2]!.get('PostedAfter')).toBe('2026-10-24T17:55:00.000Z');
+  // SETTLE_DAYS back from where the last read ended: late events and settling fees are picked up, the ones seen already aren't added again.
+  expect(finances[2]!.get('PostedAfter')).toBe('2026-10-12T17:55:00.000Z');
   expect(revenue()).toBe(395);
 });
 
