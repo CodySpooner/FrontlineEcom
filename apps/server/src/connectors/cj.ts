@@ -75,8 +75,8 @@ const redact = (ctx: CjCtx, init: RequestInit, text: string) =>
 
 /**
  * One CJ call: reserves its cap slot, waits its turn, times out after 60 s (the live check saw listV2 take 25 s), and
- * updates its pr_calls result. Success is CJ's documented rule: HTTP 200 and a code of 200 or 0, or no code at all. Throws
- * CjError with the failure's class.
+ * updates its pr_calls result. A successful envelope has data and no explicit failure. Existing 0/no-code response
+ * compatibility is retained alongside documented code 200. Throws CjError with the failure's class.
  */
 async function call<T>(ctx: CjCtx, path: string, init: RequestInit): Promise<T> {
   const refused = refusal(ctx.db, 'cj', ctx.purpose);
@@ -90,8 +90,9 @@ async function call<T>(ctx: CjCtx, path: string, init: RequestInit): Promise<T> 
     const timeout = e instanceof Error && (e.name === 'TimeoutError' || e.name === 'AbortError');
     throw new CjError(timeout ? 'timeout' : 'server', timeout ? 'no answer within 60 s' : redact(ctx, init, e instanceof Error ? e.message : String(e)));
   }
-  const body = (await res.json().catch(() => ({}))) as Partial<CjResponse<T>>;
-  const ok = res.ok && (body.code === undefined || body.code === 200 || body.code === 0);
+  const parsed: unknown = await res.json().catch(() => undefined);
+  const body = (parsed && typeof parsed === 'object' ? parsed : {}) as Partial<CjResponse<T>>;
+  const ok = res.ok && body.result !== false && 'data' in body && (body.code === undefined || body.code === 200 || body.code === 0);
   ctx.db.prepare('UPDATE pr_calls SET ok = ? WHERE id = ?').run(ok ? 1 : 0, reserved);
   if (body.pointsInfo?.remaining !== undefined) {
     const at = new Date().toISOString();
@@ -99,7 +100,7 @@ async function call<T>(ctx: CjCtx, path: string, init: RequestInit): Promise<T> 
     ctx.db.prepare(`INSERT INTO pr_sources (id, status, quota_json, updated_at) VALUES ('cj', 'ok', ?, ?) ON CONFLICT (id) DO UPDATE SET quota_json = excluded.quota_json`).run(quota, at);
   }
   if (!ok) {
-    const message = redact(ctx, init, body.message ?? `HTTP ${res.status}`);
+    const message = redact(ctx, init, body.message ?? (res.ok ? 'Unsuccessful or invalid response' : `HTTP ${res.status}`));
     const after = Number(res.headers.get('retry-after'));
     throw new CjError(classifyCj(res.status, body.code, message), message, body.code, after > 0 ? Math.min(after, 600) * 1000 : undefined);
   }
@@ -256,10 +257,11 @@ async function cj<T>(db: Db, key: Buffer, d: CjDeps, path: string, init: Request
  */
 export async function cjListPage(db: Db, key: Buffer, q: ({ keyWord: string } | { categoryId: string }) & { page: number; size: number }, d: CjDeps) {
   const by: Record<string, string> = 'keyWord' in q ? { keyWord: q.keyWord } : { categoryId: q.categoryId };
-  const params = new URLSearchParams({ ...by, page: String(q.page), size: String(Math.min(q.size, 100)), features: 'enable_category' });
+  const size = Math.min(q.size, 100);
+  const params = new URLSearchParams({ ...by, page: String(q.page), size: String(size), features: 'enable_category' });
   const data = await cj<{ totalRecords?: number; content?: { productList?: CjListItem[] }[] }>(db, key, d, `/product/listV2?${params}`);
   const items = (data.content ?? []).flatMap((c) => c.productList ?? []);
-  return { items, total: Number(data.totalRecords ?? items.length), more: items.length > 0 && q.page * q.size < Number(data.totalRecords ?? 0) };
+  return { items, total: Number(data.totalRecords ?? items.length), more: items.length > 0 && q.page * size < Number(data.totalRecords ?? 0) };
 }
 
 /** CJ's second-level categories (`getCategory`, one call for the whole tree), each with its "First > Second" path. */

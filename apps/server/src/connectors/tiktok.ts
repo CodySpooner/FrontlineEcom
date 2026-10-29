@@ -97,6 +97,8 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
               report_type: 'BASIC',
               data_level,
               dimensions: JSON.stringify(dimensions),
+              // Reports otherwise omit deleted entities and their historical spend.
+              filtering: JSON.stringify([{ field_name: data_level === 'AUCTION_CAMPAIGN' ? 'campaign_status' : 'ad_status', filter_type: 'IN', filter_value: '["STATUS_ALL"]' }]),
               // ponytail: purchase value = complete_payment_roas × spend; the direct "total value" metric is ambiguously named in TikTok's docs
               metrics: JSON.stringify([...extra, 'spend', 'impressions', 'clicks', 'complete_payment', 'complete_payment_roas']),
               start_date: from,

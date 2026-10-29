@@ -4,9 +4,9 @@ import type { SupplierProduct } from '@frontline/shared';
 import { createApp } from '../app';
 import { openDb } from '../db';
 import { seedDemo } from '../demo';
-import { getCredentials, saveIntegration } from '../integrations';
+import { getCredentials, saveIntegration, updateSecrets } from '../integrations';
 import { seedResearch } from '../research';
-import { searchCj, syncCj } from './cj';
+import { cjProduct, cjListPage, searchCj, syncCj } from './cj';
 
 const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
@@ -168,4 +168,41 @@ test("CJ's tracking number replaces the platform's link only when it's another p
     { id: '#2001', tracking: 'CJPKL7', tracking_url: null }, // shown through 17track
     { id: 'tt-5761', tracking: 'CJPKL9', tracking_url: 'https://carrier.example/CJPKL9' },
   ]);
+});
+
+// Contract-shaped response regressions, not live captures; CJ Interface Definition, checked 2026-10-28.
+test.each([
+  ['explicit failure', () => Response.json({ code: 200, result: false, message: 'Request refused', data: {} })],
+  ['invalid JSON', () => new Response('<html>upstream failed</html>')],
+  ['null', () => Response.json(null)],
+  ['missing data', () => Response.json({ code: 200, result: true })],
+] as const)('CJ never records %s as a successful read', async (_name, response) => {
+  const db = setup();
+  updateSecrets(db, key, 'cj:global', { accessToken: 'cached-test', accessTokenExpiresAt: String(Date.now() / 1000 + 172800) });
+  try {
+    await expect(cjProduct(db, key, 'test', { purpose: 'owner', gapMs: 0, fetchFn: async () => response() })).rejects.toMatchObject({ kind: 'server' });
+    expect(db.prepare('SELECT ok FROM pr_calls').all()).toEqual([{ ok: 0 }]);
+  } finally { db.close(); }
+});
+
+test('CJ pagination uses the actual capped page size to detect remaining products', async () => {
+  const db = setup();
+  updateSecrets(db, key, 'cj:global', { accessToken: 'cached-test', accessTokenExpiresAt: String(Date.now() / 1000 + 172800) });
+  const fetchFn: typeof fetch = async (url) => {
+    expect(new URL(String(url)).searchParams.get('size')).toBe('100');
+    return Response.json({ code: 200, result: true, data: { totalRecords: 150, content: [{ productList: Array.from({ length: 100 }, (_, i) => ({ id: String(i), nameEn: 'Fixture', sku: String(i), sellPrice: '2' })) }] } });
+  };
+  try {
+    expect(await cjListPage(db, key, { keyWord: 'test', page: 1, size: 200 }, { purpose: 'owner', gapMs: 0, fetchFn })).toMatchObject({ total: 150, more: true });
+  } finally { db.close(); }
+});
+
+
+test.each([undefined, 0, 200])('CJ retains the existing success-code compatibility: %s', async (code) => {
+  const db = setup();
+  updateSecrets(db, key, 'cj:global', { accessToken: 'cached-test', accessTokenExpiresAt: String(Date.now() / 1000 + 172800) });
+  try {
+    expect(await cjProduct(db, key, 'test', { purpose: 'owner', gapMs: 0, fetchFn: async () => Response.json({ code, data: { pid: 'test' } }) })).toEqual({ pid: 'test' });
+    expect(db.prepare('SELECT ok FROM pr_calls').all()).toEqual([{ ok: 1 }]);
+  } finally { db.close(); }
 });

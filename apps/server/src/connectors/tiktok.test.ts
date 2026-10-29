@@ -461,3 +461,31 @@ test.each(['list', 'report'])('campaign spend survives a failed ad %s read', asy
   await syncTikTokAds(db, key, 'glow', retry.fetchFn, NOW);
   expect(retry.calls.find((c) => c.searchParams.get('data_level') === 'AUCTION_AD')!.searchParams.get('start_date')).toBe('2024-10-27');
 });
+
+// Contract-shaped responses: TikTok BASIC reports exclude deleted entities unless STATUS_ALL is requested.
+test.each(['AUCTION_CAMPAIGN', 'AUCTION_AD'])('historical %s reports include deleted entities', async (level) => {
+  const db = setup();
+  const { fetchFn } = fakeTikTok();
+  const filtered = (async (url, init) => {
+    const u = new URL(String(url));
+    if (u.searchParams.get('data_level') === level) {
+      const field = level === 'AUCTION_CAMPAIGN' ? 'campaign_status' : 'ad_status';
+      const all = JSON.parse(u.searchParams.get('filtering') ?? '[]').some((f: { field_name: string; filter_type: string; filter_value: string }) =>
+        f.field_name === field && f.filter_type === 'IN' && f.filter_value === '["STATUS_ALL"]');
+      const row = level === 'AUCTION_CAMPAIGN' ? report('499', '2026-10-25', '10', '2') : {
+        dimensions: { ad_id: '999', stat_time_day: '2026-10-25 00:00:00' },
+        metrics: { campaign_id: '401', adgroup_id: '501', ad_name: 'Deleted ad', spend: '10', complete_payment: '3', complete_payment_roas: '2' },
+      };
+      return Response.json({ code: 0, data: { list: all ? [row] : [], page_info: { page: 1, total_page: 1 } } });
+    }
+    return fetchFn(url, init);
+  }) as typeof fetch;
+  try {
+    await syncTikTokAds(db, key, 'glow', filtered, NOW);
+    const row = level === 'AUCTION_CAMPAIGN'
+      ? db.prepare("SELECT spend FROM campaign_daily WHERE network = 'tiktok' AND campaign_id = '499'").get()
+      : db.prepare("SELECT spend FROM ad_daily WHERE network = 'tiktok' AND ad_id = '999'").get();
+    expect(row).toEqual({ spend: 10 });
+    expect(db.prepare("SELECT status FROM integrations WHERE id = 'tiktok_ads:glow'").get()).toEqual({ status: 'connected' });
+  } finally { db.close(); }
+});
