@@ -578,7 +578,7 @@ connector item afterwards proves its path from source to metric.
   - Frozen formulas: the test keeps a hash per `id@version`; changing a formula without a new version fails.
   - Acceptance: both tests; the doc is committed.
 
-- [ ] SA-06 **Period, comparison and value helpers** (spec §4, §9):
+- [x] SA-06 **Period, comparison and value helpers** (spec §4, §9):
   - Shared, pure: `SA_PRESETS`, `resolvePeriod`, `comparePeriod`, `validateCustom` (at most 730 days, not after the
     store's today, start not after end), `changeOf`, `ratio`, `combineStatus`, per decisions 6 and 7.
   - `apps/server/src/store-analytics/period.ts`: wraps them with the store zone (`stores.timezone`; a demo store uses
@@ -1555,6 +1555,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-03 shared `SaDatasetStatus`, `SaReason` (+ `SA_REASONS` text), `SaValue`, `SaCoverage`, `SaFilterKey`, `SaFilterScope` in `packages/shared/src/store-analytics.ts`; `analytics/Unavailable.tsx` and `FilterScope.tsx` with tests (11).
 - 2026-10-28 SA-04 `SA_SOURCES` (10 syncers + demo × 17 datasets, support / reads / field / scopes / history / rate limit / reason) and the generated `docs/features/store-analytics-sources.md`. Docs check 2026-10-28: product views per product — Amazon documented (salesAndTrafficByAsin.pageViews, not read), Shopify / Etsy / TikTok Shop not confirmed in the official references (unsupported); ad-to-product — Meta (product_id breakdown) and Google Ads (shopping_performance_view) documented, not read (decision 16), TikTok Ads not confirmed. `SYNCERS` exported from `sync.ts` for the coverage test.
 - 2026-10-28 SA-05 `SA_METRICS` v1 (18 metrics: formula, unit, additivity, grain, filters, currency, zone, date basis, exclusions, refund treatment, datasets, direction), `saDef`, `renderMetricsDoc` → `docs/features/store-analytics-metrics.md`; `store-analytics.test.ts` checks the doc and a frozen hash per id@version.
+- 2026-10-28 SA-06 shared `SA_PRESETS`, `SA_COMPARES`, `resolvePeriod`, `comparePeriod`, `validateCustom`, `changeOf`, `ratio`, `combineStatus`; `store-analytics/period.ts` `storePeriod` (store zone + ET-style abbreviation, demo label, history start, same-clock cut and day fraction) with tests incl. Feb 29, NY DST start/end, mtd on the 1st, 731 days.
 
 ## Blocked
 

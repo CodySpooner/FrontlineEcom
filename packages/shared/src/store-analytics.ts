@@ -527,3 +527,119 @@ export function renderMetricsDoc(metrics = SA_METRICS): string {
   }
   return out.join('\n');
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Periods, comparisons and changes (SA-06, decisions 6 and 7). Pure: dates are YYYY-MM-DD in the store's zone; the
+// server wrapper (store-analytics/period.ts) supplies "today", the history start and the partial-day cut.
+
+export type SaPreset = 'today' | 'yesterday' | 'last7' | 'last30' | 'last90' | 'last365' | 'mtd' | 'last_month' | 'ytd' | 'custom';
+export type SaCompare = 'previous' | 'year' | 'none';
+
+export const SA_PRESETS: { id: SaPreset; label: string; includesToday: boolean }[] = [
+  { id: 'today', label: 'Today', includesToday: true },
+  { id: 'yesterday', label: 'Yesterday', includesToday: false },
+  { id: 'last7', label: 'Last 7 days', includesToday: false },
+  { id: 'last30', label: 'Last 30 days', includesToday: false },
+  { id: 'last90', label: 'Last 90 days', includesToday: false },
+  { id: 'last365', label: 'Last 365 days', includesToday: false },
+  { id: 'mtd', label: 'Month to date', includesToday: true },
+  { id: 'last_month', label: 'Last month', includesToday: false },
+  { id: 'ytd', label: 'Year to date', includesToday: true },
+  { id: 'custom', label: 'Custom range', includesToday: false },
+];
+
+export const SA_COMPARES: { id: SaCompare; label: string }[] = [
+  { id: 'previous', label: 'vs previous period' },
+  { id: 'year', label: 'vs same period last year' },
+  { id: 'none', label: 'No comparison' },
+];
+
+/** Longest custom range, in days. */
+export const SA_MAX_DAYS = 730;
+
+export interface SaPeriod {
+  preset: SaPreset;
+  from: string;
+  to: string;
+  days: number;
+  /** True when `to` is today: the last day is "today so far". */
+  partial: boolean;
+}
+
+/** The comparison's dates, or why there is none. */
+export type SaComparePeriod = { from: string; to: string; days: number } | { unavailable: string };
+
+const DAY_MS = 86_400_000;
+const dayNo = (d: string) => Date.parse(`${d}T00:00:00Z`) / DAY_MS;
+const plusDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * DAY_MS).toISOString().slice(0, 10);
+const span = (from: string, to: string) => dayNo(to) - dayNo(from) + 1;
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+const isDate = (d: string) => ISO.test(d) && plusDays(d, 0) === d;
+
+/** Why a custom range can't be used, or undefined when it can. */
+export function validateCustom(from: string, to: string, today: string): string | undefined {
+  if (!isDate(from) || !isDate(to)) return 'Dates must be YYYY-MM-DD.';
+  if (from > to) return 'The start is after the end.';
+  if (to > today) return 'The range ends after today.';
+  if (span(from, to) > SA_MAX_DAYS) return `A range can be at most ${SA_MAX_DAYS} days.`;
+}
+
+/** The dates a preset covers on the store's `today`; an error message for a bad custom range. */
+export function resolvePeriod(preset: SaPreset, today: string, custom?: { from: string; to: string }): SaPeriod | string {
+  const yesterday = plusDays(today, -1);
+  const last = (n: number): [string, string] => [plusDays(today, -n), yesterday];
+  const month = today.slice(0, 8);
+  const range: [string, string] | string =
+    preset === 'today' ? [today, today]
+    : preset === 'yesterday' ? [yesterday, yesterday]
+    : preset === 'last7' ? last(7)
+    : preset === 'last30' ? last(30)
+    : preset === 'last90' ? last(90)
+    : preset === 'last365' ? last(365)
+    : preset === 'mtd' ? [`${month}01`, today]
+    : preset === 'last_month' ? [`${plusDays(`${month}01`, -1).slice(0, 8)}01`, plusDays(`${month}01`, -1)]
+    : preset === 'ytd' ? [`${today.slice(0, 4)}-01-01`, today]
+    : !custom ? 'A custom range needs a start and an end.'
+    : (validateCustom(custom.from, custom.to, today) ?? [custom.from, custom.to]);
+  if (typeof range === 'string') return range;
+  const [from, to] = range;
+  return { preset, from, to, days: span(from, to), partial: to === today };
+}
+
+/** The same date a year earlier; Feb 29 becomes Feb 28. */
+const yearBefore = (d: string) => {
+  const y = `${Number(d.slice(0, 4)) - 1}${d.slice(4)}`;
+  return isDate(y) ? y : `${y.slice(0, 8)}28`;
+};
+
+/** The comparison period: the same number of days just before, or the same dates a year earlier. None before history. */
+export function comparePeriod(p: Pick<SaPeriod, 'from' | 'to' | 'days'>, compare: SaCompare, historyStart?: string): SaComparePeriod | undefined {
+  if (compare === 'none') return;
+  const [from, to] = compare === 'previous' ? [plusDays(p.from, -p.days), plusDays(p.from, -1)] : [yearBefore(p.from), yearBefore(p.to)];
+  if (!historyStart) return { unavailable: 'No history yet' };
+  if (from < historyStart) return { unavailable: `History starts ${historyStart}` };
+  return { from, to, days: span(from, to) };
+}
+
+/** A change between two values (decision 7). */
+export type SaChange = { kind: 'pct' | 'points'; value: number } | { kind: 'new' } | { kind: 'unavailable' };
+
+/**
+ * Percent change, or percentage points for ratios (unit 'ratio', values 0 to 1). A zero baseline with a non-zero
+ * current is "new"; 0 vs 0 is no change; a negative baseline divides by its size; a missing side has no change.
+ */
+export function changeOf(cur: number | null, prev: number | null, unit: SaMetric['unit']): SaChange {
+  if (cur == null || prev == null) return { kind: 'unavailable' };
+  if (unit === 'ratio') return { kind: 'points', value: (cur - prev) * 100 };
+  if (prev === 0) return cur === 0 ? { kind: 'pct', value: 0 } : { kind: 'new' };
+  return { kind: 'pct', value: ((cur - prev) / Math.abs(prev)) * 100 };
+}
+
+/** num ÷ den from summed parts; null when there is nothing to divide by. */
+export const ratio = (num: number | null, den: number | null) => (num == null || den == null || den === 0 ? null : num / den);
+
+const STATUS_RANK: SaValue['status'][] = ['ok', 'partial', 'estimated', 'demo', 'unavailable'];
+
+/** The weakest of several values' statuses: one unavailable input makes the result unavailable. */
+export const combineStatus = (...s: SaValue['status'][]): SaValue['status'] =>
+  s.reduce<SaValue['status']>((a, b) => (STATUS_RANK.indexOf(b) > STATUS_RANK.indexOf(a) ? b : a), 'ok');
