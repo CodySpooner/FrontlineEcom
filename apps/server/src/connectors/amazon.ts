@@ -320,8 +320,8 @@ export async function syncAmazon(db: Db, key: Buffer, storeId: string, fetchFn: 
     const span = { from: start, to: today };
     if (!own) noteRead(db, key, id, 'orders', { status: 'available', ...span }, now); // daily totals only
     const rate = own ? 1 : await adRate(db, storeId, currency, fetchFn, 'Amazon');
-    // A first sync reads two years back: each day at that day's rate, as ad spend's backfill does.
-    const dayRate = own || cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
+    // Each day at its day's rate (SA-53), as ad spend's; a first sync reads two years back.
+    const dayRate = own ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn, !cursor);
     // The whole catalog until the store has Amazon products (so adding the Product Listing role later still pulls it all)
     // and once a day after (archiving listings that are gone); otherwise what changed since two days before the last sync.
     // Without the role (or on any error) sales sync on and the catalog is left as it is.

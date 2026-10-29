@@ -1,10 +1,12 @@
 import { addDays } from './dates';
-import type { Db } from './db';
+import { tx, type Db } from './db';
 import { log } from './log';
 import { getSettings } from './settings';
+import { convertOn } from './store-analytics/fx';
 
 // ECB euro reference rates (published ~16:00 CET on working days), cached in settings so totals work offline.
 const ECB = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml';
+const ECB_HISTORY = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml';
 
 type Fetch = typeof fetch;
 interface Rates {
@@ -12,6 +14,8 @@ interface Rates {
   fetchedAt?: string;
   /** Units of each currency per 1 EUR. */
   rates: Record<string, number>;
+  /** SA-53: the ECB's history is in fx_rates. */
+  history?: boolean;
 }
 
 export function parseEcb(xml: string): Rates {
@@ -43,9 +47,35 @@ export async function refreshFx(db: Db, fetchFn: Fetch = fetch) {
   const res = await fetchFn(ECB);
   if (!res.ok) throw new Error(`ECB rates: HTTP ${res.status}`);
   const ecb = parseEcb(await res.text());
-  const fx = { ...ecb, rates: { ...(await moreRates(fetchFn)), ...ecb.rates }, fetchedAt: new Date().toISOString() };
+  // SA-53 (decision 19): each day's rates kept by date (the second feed's under the ECB's day); the first run also loads
+  // the history the ECB publishes. A failed history read is tried again on the next refresh.
+  const fx: Rates = { ...ecb, rates: { ...(await moreRates(fetchFn)), ...ecb.rates }, fetchedAt: new Date().toISOString(), history: cached(db)?.history };
+  storeRates(db, [[fx.date, fx.rates]]);
+  if (!fx.history)
+    fx.history = await ecbHistory(fetchFn).then(
+      (days) => (storeRates(db, days), true),
+      (e: unknown) => void log('warn', 'fx history failed', { error: e instanceof Error ? e.message : String(e) }),
+    );
   db.prepare("INSERT INTO settings (key, value_json) VALUES ('fx', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify(fx));
   return fx;
+}
+
+/** Rates per day into fx_rates; a day already stored keeps its rates (the daily file and the history agree). */
+function storeRates(db: Db, days: Iterable<readonly [string, Record<string, number>]>) {
+  const put = db.prepare('INSERT OR IGNORE INTO fx_rates (date, currency, rate) VALUES (?, ?, ?)');
+  tx(db, () => {
+    for (const [date, rates] of days) for (const [cur, rate] of Object.entries(rates)) if (cur !== 'EUR') put.run(date, cur, rate);
+  });
+}
+
+/** Every day the ECB has published since 1999, per euro. One download (about 1 MB compressed). */
+async function ecbHistory(fetchFn: Fetch) {
+  const res = await fetchFn(ECB_HISTORY);
+  if (!res.ok) throw new Error(`ECB rate history: HTTP ${res.status}`);
+  return new Map((await res.text()).split('<Cube time=').slice(1).map((day) => {
+    const { date, rates } = parseEcb(`time=${day}`);
+    return [date, rates] as const;
+  }));
 }
 
 /**
@@ -59,9 +89,14 @@ export function fxFor(db: Db, storeIds: string[]) {
   );
   const currency = storeIds.length === 1 ? (stores.get(storeIds[0]!) ?? 'USD') : getSettings(db).baseCurrency;
   const rates = [...stores.values()].some((c) => c !== currency) ? cached(db)?.rates : undefined;
-  const rate = (storeId: string) => {
+  // SA-53: with a day, that day's stored rate (or the last within 7 days).
+  // ponytail: a day with no stored rate (a second-feed currency before its first fetch, or before the history loads)
+  // takes the latest, as before: leaving it out needs `unconverted` per day in the summary.
+  const rate = (storeId: string, day?: string) => {
     const from = stores.get(storeId) ?? currency;
     if (from === currency) return 1;
+    const onDay = day ? convertOn(db, day, from, currency) : null;
+    if (onDay) return onDay;
     return rates?.[from] && rates[currency] ? rates[currency] / rates[from] : 0;
   };
   const unconverted = [...new Set(storeIds.filter((id) => !rate(id)).map((id) => stores.get(id)!))];
@@ -91,12 +126,7 @@ export async function convertRate(db: Db, from: string, to: string, fetchFn: Fet
  * one published in the week before. Undefined when there's none. One download (about 1 MB compressed).
  */
 export async function historicRate(from: string, to: string, fetchFn: Fetch = fetch) {
-  const res = await fetchFn('https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml');
-  if (!res.ok) throw new Error(`ECB rate history: HTTP ${res.status}`);
-  const days = new Map((await res.text()).split('<Cube time=').slice(1).map((day) => {
-    const { date, rates } = parseEcb(`time=${day}`);
-    return [date, rates] as const;
-  }));
+  const days = await ecbHistory(fetchFn);
   return (day: string) => {
     for (let i = 0; i < 7; i++) {
       const r = days.get(addDays(day, -i));

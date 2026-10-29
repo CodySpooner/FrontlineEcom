@@ -121,7 +121,7 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
     const zone = campaigns[0]?.customer?.timeZone;
     if (zone) stateOf<string>(db, AD_ZONES).set(id, zone);
     const rate = await adRate(db, storeId, currency, fetchFn, 'Google Ads');
-    const rateOn = cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
+    const rateOn = await backfillRate(db, storeId, currency, rate, fetchFn, !cursor);
 
     if (syncView(db, id) !== view) return;
     tx(db, () => {

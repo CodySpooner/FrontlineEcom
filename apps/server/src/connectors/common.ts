@@ -3,6 +3,7 @@ import { expireRequests } from '../approvals';
 import { storeChanged } from '../config/write';
 import type { Db } from '../db';
 import { convertRate, historicRate } from '../fx';
+import { convertOn } from '../store-analytics/fx';
 
 /**
  * A store platform's sync takes its currency for the store, unless the store's own platform (e.g. Shopify for a Shopify
@@ -376,14 +377,15 @@ export async function adRate(db: Db, storeId: string, accountCurrency: string | 
 }
 
 /**
- * The factor for each day of a first sync, which reads two years back: that day's ECB rate, so old spend isn't priced
- * at today's. `rate` (today's) for a day the history lacks, or when it can't be read.
- * ponytail: later syncs re-read only the last few days and keep today's rate for them.
+ * The factor for each day: its stored ECB rate (SA-53, decision 19), so spend isn't priced at today's; on a first sync
+ * (`history`, it reads two years back) else that day's rate from the ECB's history; else `rate` (today's).
+ * ponytail: the history is downloaded on each first sync even when fx_rates holds it, as before SA-53.
  */
-export async function backfillRate(db: Db, storeId: string, accountCurrency: string | undefined, rate: number, fetchFn: typeof fetch) {
+export async function backfillRate(db: Db, storeId: string, accountCurrency: string | undefined, rate: number, fetchFn: typeof fetch, history = true) {
   const store = String(db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency);
-  const on = accountCurrency && accountCurrency !== store ? await historicRate(accountCurrency, store, fetchFn).catch(() => undefined) : undefined;
-  return (day: string) => on?.(day) ?? rate;
+  if (!accountCurrency || accountCurrency === store) return () => rate;
+  const on = history ? await historicRate(accountCurrency, store, fetchFn).catch(() => undefined) : undefined;
+  return (day: string) => convertOn(db, day, accountCurrency, store) ?? on?.(day) ?? rate;
 }
 
 /** An integration's entry in a settings row that maps integration ids to read state. Each write re-reads the row: syncs of

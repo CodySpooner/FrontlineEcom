@@ -11,7 +11,7 @@ import { getSettings, updateSettings } from './settings';
 const XML = `<?xml version="1.0" encoding="UTF-8"?><gesmes:Envelope><Cube><Cube time='2026-10-23'>
   <Cube currency='USD' rate='1.25'/><Cube currency='GBP' rate='0.8'/></Cube></Cube></gesmes:Envelope>`;
 
-const ecbOnly = (url: string) => url.includes('eurofxref');
+const ecbOnly = (url: string) => url.includes('eurofxref-daily');
 
 const fakeEcb = () => {
   const calls: string[] = [];
@@ -54,6 +54,7 @@ test("currencies the ECB doesn't publish come from a second daily feed; the ECB'
     'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml',
     'https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@latest/v1/currencies/eur.json',
     'https://latest.currency-api.pages.dev/v1/currencies/eur.json',
+    'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.xml', // SA-53: the first refresh loads the ECB's history
   ]);
   expect(rates).toEqual({ EUR: 1, USD: 1.25, GBP: 0.8, AED: 4.59 }); // ECB's USD wins; non-codes and non-numbers dropped
   expect(fxFor(db, ['pawsome', 'glow']).unconverted).toEqual([]);

@@ -116,7 +116,7 @@ export async function syncTikTokAds(db: Db, key: Buffer, storeId: string, fetchF
     const { currency, zone } = await advertiserInfo(advertiser, token, fetchFn);
     if (zone) stateOf<string>(db, AD_ZONES).set(id, zone);
     const rate = await adRate(db, storeId, currency, fetchFn, 'TikTok Ads');
-    const rateOn = cursor ? () => rate : await backfillRate(db, storeId, currency, rate, fetchFn);
+    const rateOn = await backfillRate(db, storeId, currency, rate, fetchFn, !cursor);
 
     const n = (v: string | undefined) => Number(v) || 0; // TikTok sends "-" for empty metrics
 

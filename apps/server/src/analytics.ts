@@ -146,7 +146,7 @@ export function loadRows(db: Db, storeIds: string[], range: AnalyticsRange, to: 
     }))
     // A store with no exchange rate is left out (the summary lists its currency in `unconverted`).
     .flatMap((r) => {
-      const x = rate(r.storeId);
+      const x = rate(r.storeId, r.date); // SA-53: each day at its own rate
       return !x ? [] : x === 1 ? [r] : [{ ...r, revenue: r.revenue * x, adSpend: r.adSpend * x, cogs: r.cogs * x }];
     });
 }
@@ -209,7 +209,9 @@ export function platformSplit(db: Db, storeIds: string[], from: string, to: stri
     out.set(p, { revenue: o.revenue + revenue, orders: o.orders + orders });
   };
   for (const [id, f, t] of ownDays(storeIds, from, to, shift)) {
-    const x = rate(id);
+    // ponytail: the split converts at the period's last day's rate, the totals (loadRows) per day (SA-53); per day here
+    // needs each query by day. Campaigns and best sellers keep the latest rate.
+    const x = rate(id, t);
     if (!x) continue;
     const own = platform.get(id)!.platform as Platform;
     const all = totals.get(id, f, t)!;

@@ -107,7 +107,7 @@ export async function syncMeta(db: Db, key: Buffer, storeId: string, fetchFn: Fe
 
     const money = await accountMoney(db, storeId, act, token, fetchFn);
     if (money.zone) stateOf<string>(db, AD_ZONES).set(id, money.zone);
-    const rateOn = cursor ? () => money.rate : await backfillRate(db, storeId, money.currency, money.rate, fetchFn);
+    const rateOn = await backfillRate(db, storeId, money.currency, money.rate, fetchFn, !cursor);
     const campaigns = await edge<CampaignRow>(`${GRAPH}/${act}/campaigns?fields=id,name,effective_status,daily_budget&limit=200`, token, fetchFn);
     const insights = async (level: 'campaign' | 'ad') => {
       const rows: InsightRow[] = [];
