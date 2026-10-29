@@ -566,7 +566,7 @@ connector item afterwards proves its path from source to metric.
   - Acceptance: a test fails when a `SYNCERS` key has no `SA_SOURCES` row; the doc lists every `unsupported` dataset
     with its reason.
 
-- [ ] SA-05 **Metric definition registry v1** (spec §9):
+- [x] SA-05 **Metric definition registry v1** (spec §9):
   - `SA_METRICS` (decision 5) for: `net_sales`, `gross_sales`, `discounts`, `refunds`, `orders`, `aov`, `units`,
     `cancelled_orders`, `refund_rate`, `sessions`, `site_conversion`, `ad_spend`, `platform_roas`,
     `contribution_before_ads`, `contribution_after_ads`, `cost_coverage`, `fees`, `stock_cover`. Later items add
@@ -1554,6 +1554,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-02 codemap re-checked at 89aae4a7 (corrections: api() already takes a signal, FX is partly per day already, demo days are machine-local) and a metric inventory table of 18 rows added; no code change.
 - 2026-10-28 SA-03 shared `SaDatasetStatus`, `SaReason` (+ `SA_REASONS` text), `SaValue`, `SaCoverage`, `SaFilterKey`, `SaFilterScope` in `packages/shared/src/store-analytics.ts`; `analytics/Unavailable.tsx` and `FilterScope.tsx` with tests (11).
 - 2026-10-28 SA-04 `SA_SOURCES` (10 syncers + demo × 17 datasets, support / reads / field / scopes / history / rate limit / reason) and the generated `docs/features/store-analytics-sources.md`. Docs check 2026-10-28: product views per product — Amazon documented (salesAndTrafficByAsin.pageViews, not read), Shopify / Etsy / TikTok Shop not confirmed in the official references (unsupported); ad-to-product — Meta (product_id breakdown) and Google Ads (shopping_performance_view) documented, not read (decision 16), TikTok Ads not confirmed. `SYNCERS` exported from `sync.ts` for the coverage test.
+- 2026-10-28 SA-05 `SA_METRICS` v1 (18 metrics: formula, unit, additivity, grain, filters, currency, zone, date basis, exclusions, refund treatment, datasets, direction), `saDef`, `renderMetricsDoc` → `docs/features/store-analytics-metrics.md`; `store-analytics.test.ts` checks the doc and a frozen hash per id@version.
 
 ## Blocked
 

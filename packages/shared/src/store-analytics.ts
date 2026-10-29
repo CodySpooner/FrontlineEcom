@@ -319,3 +319,211 @@ export function renderSourcesDoc(sources = SA_SOURCES): string {
   }
   return out.join('\n');
 }
+
+// ---------------------------------------------------------------------------------------------------------------
+// Metric registry (SA-05, decision 5). One definition per metric; computation lives only in
+// apps/server/src/store-analytics/. An id@version's formula is frozen: any change is a new version.
+
+export type SaMetricId =
+  | 'net_sales'
+  | 'gross_sales'
+  | 'discounts'
+  | 'refunds'
+  | 'orders'
+  | 'aov'
+  | 'units'
+  | 'cancelled_orders'
+  | 'refund_rate'
+  | 'sessions'
+  | 'site_conversion'
+  | 'ad_spend'
+  | 'platform_roas'
+  | 'contribution_before_ads'
+  | 'contribution_after_ads'
+  | 'cost_coverage'
+  | 'fees'
+  | 'stock_cover';
+
+export interface SaMetric {
+  id: SaMetricId;
+  version: number;
+  label: string;
+  /** The KPI tile's definition line. */
+  line: string;
+  formula: string;
+  /** money: the store's currency; ratio: a share shown as %, whose change is in points; multiple: e.g. ROAS 2.4×. */
+  unit: 'money' | 'count' | 'ratio' | 'multiple' | 'days';
+  /** True when daily values sum to the period's (a series of it adds up to the total). */
+  additive: boolean;
+  grain: string;
+  /** The global filters it applies; any other active filter is named in its scope note. */
+  filters: SaFilterKey[];
+  currency: string;
+  timezone: string;
+  dateBasis: string;
+  exclusions: string;
+  refunds: string;
+  datasets: SaDataset[];
+  /** Which way is better, for colouring a change; neutral = neither (ad spend). */
+  direction: 'up' | 'down' | 'neutral';
+}
+
+const ORDER_FILTERS: SaFilterKey[] = ['channel', 'product', 'collection', 'market', 'segment'];
+const STORE_CURRENCY = "The store's currency. Orders in another currency convert at their locked rate or the ECB rate of their day; a day with no rate is left out and listed.";
+const STORE_ZONE = "The store's timezone (a demo store: this computer's).";
+const CANONICAL = 'Test orders, unpaid or voided orders and duplicate channel copies (decision 13) are left out.';
+const LINE_FILTER = 'With a product or collection filter, only the matching lines count.';
+
+const m = (x: Omit<SaMetric, 'currency' | 'timezone'> & Partial<Pick<SaMetric, 'currency' | 'timezone'>>): SaMetric => ({ currency: STORE_CURRENCY, timezone: STORE_ZONE, ...x });
+
+export const SA_METRICS: Record<SaMetricId, SaMetric> = {
+  net_sales: m({
+    id: 'net_sales', version: 1, label: 'Net sales', line: 'Excl. tax and shipping, after refunds', unit: 'money', additive: true, direction: 'up',
+    formula: 'Gross merchandise sales − seller discounts of orders placed in the period − merchandise refunds dated in the period. Tax and shipping are left out.',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Sales on the order placement day; refunds on the refund day (or on their order\'s day with refunds=order_day, labelled).',
+    exclusions: `${CANONICAL} ${LINE_FILTER}`,
+    refunds: 'A refund lowers the period it is made in, so past periods stay put. Refunded shipping and tax are not merchandise and are left out.',
+    datasets: ['orders', 'order_lines', 'refunds'],
+  }),
+  gross_sales: m({
+    id: 'gross_sales', version: 1, label: 'Gross sales', line: 'Merchandise before discounts and refunds', unit: 'money', additive: true, direction: 'up',
+    formula: 'Σ merchandise price × quantity of orders placed in the period, before discounts, excluding tax and shipping.',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Order placement day.', exclusions: `${CANONICAL} ${LINE_FILTER}`,
+    refunds: 'Not affected by refunds or cancellations (the as-placed amount).', datasets: ['orders', 'order_lines'],
+  }),
+  discounts: m({
+    id: 'discounts', version: 1, label: 'Discounts', line: 'Seller-funded discounts', unit: 'money', additive: true, direction: 'down',
+    formula: 'Σ seller discounts on orders placed in the period. A platform-funded discount (TikTok Shop\'s platform discount) is not a seller discount and is left out.',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Order placement day.', exclusions: `${CANONICAL} ${LINE_FILTER}`,
+    refunds: 'Not affected by refunds.', datasets: ['orders', 'order_lines'],
+  }),
+  refunds: m({
+    id: 'refunds', version: 1, label: 'Refunds', line: 'Merchandise refunded, by refund day', unit: 'money', additive: true, direction: 'down',
+    formula: 'Σ merchandise refunded on refund lines dated in the period (shipping, tax and other adjustments are shown apart).',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Refund day (or the original order day with refunds=order_day, labelled).',
+    exclusions: `Refunds on test orders and duplicate channel copies are left out. ${LINE_FILTER}`,
+    refunds: 'A partial refund counts its amount; a cancellation after payment is a refund on the cancel day.', datasets: ['refunds'],
+  }),
+  orders: m({
+    id: 'orders', version: 1, label: 'Orders', line: 'Paid, deduped across channels', unit: 'count', additive: true, direction: 'up',
+    formula: 'Count of distinct canonical paid orders placed in the period.',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Order placement day.', exclusions: `${CANONICAL} With a product or collection filter, orders holding a matching line.`,
+    refunds: 'Later refunds never remove an order. An order cancelled after payment still counts on its placement day (its money back is a refund on the cancel day).',
+    datasets: ['orders'],
+  }),
+  aov: m({
+    id: 'aov', version: 1, label: 'Avg. order value', line: 'Order value ÷ orders, before refunds', unit: 'money', additive: false, direction: 'up',
+    formula: 'Σ (gross merchandise − seller discounts) of orders placed in the period ÷ those orders. Tax and shipping are left out.',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Order placement day (one cohort for both sides).', exclusions: `${CANONICAL} ${LINE_FILTER}`,
+    refunds: 'Unaffected by later refunds: refund-day net sales and placement-day orders are different cohorts (decision 11).', datasets: ['orders', 'order_lines'],
+  }),
+  units: m({
+    id: 'units', version: 1, label: 'Units', line: 'Units ordered', unit: 'count', additive: true, direction: 'up',
+    formula: 'Σ quantity on the lines of orders placed in the period.',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Order placement day.', exclusions: `${CANONICAL} ${LINE_FILTER}`,
+    refunds: 'Units ordered: refunded units are counted in the refund rate, not taken off here.', datasets: ['order_lines'],
+  }),
+  cancelled_orders: m({
+    id: 'cancelled_orders', version: 1, label: 'Cancelled orders', line: 'Paid orders cancelled, by cancel day', unit: 'count', additive: true, direction: 'down',
+    formula: 'Count of canonical paid orders whose cancellation is dated in the period.',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Cancel day.', exclusions: CANONICAL,
+    refunds: 'The order still counts in orders on its placement day; its money back is a refund.', datasets: ['orders'],
+  }),
+  refund_rate: m({
+    id: 'refund_rate', version: 1, label: 'Refund rate', line: 'Units refunded ÷ units ordered', unit: 'ratio', additive: false, direction: 'down',
+    formula: 'Σ units on refund lines dated in the period ÷ Σ units ordered in the period, from summed counts.',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Refunded units by refund day, units by order day.', exclusions: `${CANONICAL} Refunds with no units (amount-only adjustments) don't count. ${LINE_FILTER}`,
+    refunds: 'This is the refund measure; changes are in percentage points.', datasets: ['order_lines', 'refunds'],
+  }),
+  sessions: m({
+    id: 'sessions', version: 1, label: 'Sessions', line: 'Site sessions (Shopify or GA4)', unit: 'count', additive: true, direction: 'up', currency: 'None (a count).',
+    formula: "Σ the store site's sessions on the days its traffic source reported them. TikTok Shop visitors and Amazon sessions are other channels' traffic and are never added.",
+    grain: 'day', filters: ['market'], dateBasis: "The traffic source's report day.", exclusions: 'Days with no report are left out and counted in coverage, never read as 0.',
+    refunds: 'Not applicable.', datasets: ['traffic'],
+  }),
+  site_conversion: m({
+    id: 'site_conversion', version: 1, label: 'Site conversion', line: 'Shopify site sessions only', unit: 'ratio', additive: false, direction: 'up', currency: 'None (a ratio).',
+    formula: 'Σ purchasing sessions ÷ Σ sessions, over the days where both are reported. Orders are never divided by sessions.',
+    grain: 'day', filters: ['market'], dateBasis: "The traffic source's report day.",
+    exclusions: 'Days missing either side are left out and counted in coverage. GA4 sends event counts, not purchasing sessions, so a GA4 store has no conversion.',
+    refunds: 'Not applicable; changes are in percentage points.', datasets: ['traffic', 'purchase_sessions'],
+  }),
+  ad_spend: m({
+    id: 'ad_spend', version: 1, label: 'Ad spend', line: 'Connected ad networks', unit: 'money', additive: true, direction: 'neutral',
+    formula: "Σ spend of the store's campaigns on every connected ad network, each day converted at that day's rate.",
+    grain: 'day', filters: [], timezone: "Each ad account's own report day.", dateBasis: 'Spend day as the network reports it.',
+    exclusions: 'Never allocated to products, collections, channels or markets: a filter leaves it as the store total, said in the scope note.',
+    refunds: 'Not applicable.', datasets: ['ad_spend'],
+  }),
+  platform_roas: m({
+    id: 'platform_roas', version: 1, label: 'Platform ROAS', line: "Each network's own attribution", unit: 'multiple', additive: false, direction: 'up',
+    formula: "Per network: the network's own attributed purchase value ÷ its spend over the same days. Never combined across networks: their attributed sales overlap and aren't store revenue.",
+    grain: 'day', filters: [], timezone: "Each ad account's own report day.", dateBasis: "The network's attribution day (late conversions are re-read for its window).",
+    exclusions: 'Spend with no attributed value counts in the denominator.', refunds: "The network's own figure; store refunds don't touch it.", datasets: ['ad_spend', 'attribution'],
+  }),
+  contribution_before_ads: m({
+    id: 'contribution_before_ads', version: 1, label: 'Contribution before ads', line: 'Costed sales − product cost − fees', unit: 'money', additive: true, direction: 'up',
+    formula: 'Net sales of lines with a known unit cost − their product cost − fees (recorded where read, else the store\'s estimate). Lines with no cost are left out and shown as coverage.',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'As net sales; a line\'s cost is the cost recorded when it was sold (never today\'s).',
+    exclusions: `${CANONICAL} Uncosted lines are left out, never costed at 0. ${LINE_FILTER}`,
+    refunds: 'Refunded merchandise comes off as in net sales; its product cost still counts unless the refund line was restocked.', datasets: ['orders', 'order_lines', 'refunds', 'fees'],
+  }),
+  contribution_after_ads: m({
+    id: 'contribution_after_ads', version: 1, label: 'Contribution after ads', line: 'Before ads − ad spend, store level', unit: 'money', additive: true, direction: 'up',
+    formula: 'Contribution before ads − ad spend, at store level only. Not net profit: overhead and other expenses aren\'t tracked.',
+    grain: 'day', filters: [], dateBasis: 'As its two parts.', exclusions: 'Ad spend is not allocated: with any filter this is unavailable.',
+    refunds: 'As contribution before ads.', datasets: ['orders', 'order_lines', 'refunds', 'fees', 'ad_spend'],
+  }),
+  cost_coverage: m({
+    id: 'cost_coverage', version: 1, label: 'Cost coverage', line: 'Units sold with a unit cost', unit: 'ratio', additive: false, direction: 'up', currency: 'None (a share).',
+    formula: 'Σ units on lines with a known unit cost ÷ Σ units ordered in the period.',
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Order placement day.', exclusions: `${CANONICAL} ${LINE_FILTER}`,
+    refunds: 'Not affected by refunds.', datasets: ['order_lines'],
+  }),
+  fees: m({
+    id: 'fees', version: 1, label: 'Fees', line: 'Recorded where read, else estimated', unit: 'money', additive: true, direction: 'down',
+    formula: "Recorded fees where the platform reports them (Amazon's settled fees); otherwise an estimate: the store's fee % × the amount charged (gross − discounts + shipping + tax) + its per-order fee × orders. Amazon as a channel: 15% referral on its sales.",
+    grain: 'day', filters: ORDER_FILTERS, dateBasis: 'Order placement day (a recorded fee on its own day).', exclusions: `${CANONICAL} An estimate is labelled as one.`,
+    refunds: 'Not reversed on refunds: processors keep their fee.', datasets: ['orders', 'fees'],
+  }),
+  stock_cover: m({
+    id: 'stock_cover', version: 1, label: 'Stock cover', line: 'Days of tracked stock at the recent rate', unit: 'days', additive: false, direction: 'up', currency: 'None (days).',
+    formula: 'Tracked stock now ÷ units sold per day over the last 14 full days, whatever period is selected.',
+    grain: 'product or variant, now', filters: ['channel'], dateBasis: 'Stock is current state; the sales rate is the last 14 full days.',
+    exclusions: 'Untracked, sells-when-out, made-to-order, FBA-managed and supplier-managed stock gets no cover. No sales in 14 days: no estimate.',
+    refunds: 'Units ordered, as units.', datasets: ['inventory', 'order_lines'],
+  }),
+};
+
+/** `id@version` for each metric, e.g. net_sales@1. */
+export const saDef = (id: SaMetricId) => `${id}@${SA_METRICS[id].version}`;
+
+/** The metrics doc (`docs/features/store-analytics-metrics.md`), generated from SA_METRICS. */
+export function renderMetricsDoc(metrics = SA_METRICS): string {
+  const out = [
+    '# Store Analytics — metric definitions',
+    '',
+    'Generated from `SA_METRICS` in `packages/shared/src/store-analytics.ts` (SA-05); edit that, then regenerate with',
+    '`UPDATE_METRICS_DOC=1 pnpm exec vitest run packages/shared/src/store-analytics.test.ts`. An `id@version` formula is',
+    'frozen: changing one means a new version. Cards, charts, drilldowns, exports, reports, alerts and agent tools all',
+    'compute these in `apps/server/src/store-analytics/`.',
+    '',
+  ];
+  for (const x of Object.values(metrics)) {
+    out.push(`## ${x.label} (\`${x.id}@${x.version}\`)`, '', x.formula, '');
+    out.push(
+      `- **Tile line:** ${x.line}`,
+      `- **Unit:** ${x.unit}${x.additive ? ' (daily values add up)' : ''}; better when ${x.direction === 'neutral' ? 'neither (context)' : x.direction}`,
+      `- **Grain:** ${x.grain}`,
+      `- **Filters applied:** ${x.filters.length ? x.filters.map((f) => SA_FILTERS[f]).join(', ') : 'none (any active filter is named in the scope note)'}`,
+      `- **Currency:** ${x.currency}`,
+      `- **Timezone:** ${x.timezone}`,
+      `- **Date basis:** ${x.dateBasis}`,
+      `- **Exclusions:** ${x.exclusions}`,
+      `- **Refunds and cancellations:** ${x.refunds}`,
+      `- **Datasets:** ${x.datasets.map((d) => SA_DATASETS[d]).join(', ')}`,
+      '',
+    );
+  }
+  return out.join('\n');
+}
