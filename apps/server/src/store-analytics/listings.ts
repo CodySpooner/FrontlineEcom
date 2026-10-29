@@ -4,6 +4,7 @@
 import type { SQLInputValue } from 'node:sqlite';
 import { SA_LISTING_SORTS, SA_LISTING_STATUSES, type SaFilterScope, type SaFilters, type SaListingRow, type SaListings, type SaListingSort, type SaListingStatus, type SaValue } from '@frontline/shared';
 import type { Db } from '../db';
+import { hash, mulberry32 } from '../demo';
 import { costMetrics } from './costs';
 import { storeConverter } from './fx';
 import type { StorePeriod } from './period';
@@ -63,6 +64,28 @@ function totals(db: Db, storeId: string, from: string, to: string, basis: Refund
   return t;
 }
 
+type Sales = Record<'net_sales' | 'units' | 'refunds' | 'contribution', SaValue>;
+const cents = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * SA-67 (decision 30): a demo store's period totals (`demoDay`'s parts, through the v1 functions) split across its active
+ * products by Dashboard's fixed per-product weights (`demoTopProducts`), so the rows add up to the store's numbers and
+ * don't move between loads. Every value is `demo`; a draft or archived product sold nothing.
+ */
+function demoSplit(db: Db, storeId: string, from: string, to: string, basis: RefundBasis) {
+  const s = salesMetrics(db, storeId, from, to, basis);
+  const c = costMetrics(db, storeId, from, to, basis).contribution_before_ads;
+  const part = (k: number): Sales => {
+    const of = (v: SaValue, round: (n: number) => number): SaValue => (v.value == null ? v : { ...v, value: round(v.value * k) });
+    return { net_sales: of(s.net_sales, cents), units: of(s.units, Math.round), refunds: of(s.refunds, cents), contribution: of(c, cents) };
+  };
+  const products = db.prepare("SELECT id FROM products WHERE store_id = ? AND status = 'active' AND price > 0").all(storeId).map((p) => String(p.id));
+  const weights = products.map((id) => 0.2 + mulberry32(hash(`${storeId}:${id}`))());
+  const total = weights.reduce((a, w) => a + w, 0);
+  const rows = new Map(products.map((id, i) => [id, part(weights[i]! / total)]));
+  return (id: string) => rows.get(id) ?? part(0);
+}
+
 export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod, filters: SaFilters = {}, basis: RefundBasis = 'refund_day'): SaListings | string {
   const status = (query.status || 'active') as SaListingStatus;
   if (!SA_LISTING_STATUSES.includes(status)) return `status must be one of ${SA_LISTING_STATUSES.join(', ')}`;
@@ -107,8 +130,11 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
 
   // ponytail: the whole matching set is sorted in memory (20,000 products in the scale fixture); SQL ORDER BY when it isn't enough.
   const all = db.prepare(`SELECT p.id, p.title, p.price, iif(p.inventory_tracked, p.inventory, NULL) AS stock FROM products p WHERE ${where.join(' AND ')}`).all(...params);
+  const demoSales = demo ? demoSplit(db, storeId, sp.period.from, sp.period.to, basis) : undefined;
   const t = METRIC_SORTS.has(key) && !demo ? totals(db, storeId, sp.period.from, sp.period.to, basis, channels) : undefined;
-  const sortKey = (r: (typeof all)[number]): number | string | null => (t ? (t.get(String(r.id))?.[key as 'units'] ?? 0) : key === 'title' ? String(r.title).toLowerCase() : key === 'price' ? Number(r.price) : key === 'stock' ? (r.stock as number | null) : 0);
+  const m = key as 'units' | 'net_sales' | 'refunds';
+  const sortKey = (r: (typeof all)[number]): number | string | null =>
+    METRIC_SORTS.has(key) ? (demoSales ? (demoSales(String(r.id))[m].value ?? 0) : (t!.get(String(r.id))?.[m] ?? 0)) : key === 'title' ? String(r.title).toLowerCase() : key === 'price' ? Number(r.price) : (r.stock as number | null);
   const sign = dir === 'asc' ? 1 : -1;
   const sorted = all
     .map((r) => ({ r, k: sortKey(r) }))
@@ -127,12 +153,11 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
      FROM products p WHERE p.store_id = ? AND p.id = ?`,
   );
   const listed = db.prepare('SELECT channel, status, error FROM channel_listings WHERE store_id = ? AND product_id = ? ORDER BY channel, id');
-  const split: SaValue = { value: null, status: 'unavailable', note: "Demo data isn't split by product" };
   const rows = ids.map((id): SaListingRow => {
     const p = product.get(storeId, id)!;
     const slice = { ...(channels && { channels }), products: [id] };
-    const sales = demo ? undefined : salesMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
-    const costs = demo ? undefined : costMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
+    const sales = demoSales ? undefined : salesMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
+    const d = demoSales?.(id) ?? { net_sales: sales!.net_sales, units: sales!.units, refunds: sales!.refunds, contribution: costMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice).contribution_before_ads };
     return {
       id,
       title: String(p.title),
@@ -147,10 +172,10 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
       stock: p.stock == null ? null : Number(p.stock),
       channels: listed.all(storeId, id).map((c) => ({ channel: String(c.channel), status: String(c.status), error: c.error == null ? null : String(c.error) })),
       syncedAt: p.synced == null ? null : String(p.synced),
-      netSales: sales?.net_sales ?? split,
-      units: sales?.units ?? split,
-      refunds: sales?.refunds ?? split,
-      contribution: costs?.contribution_before_ads ?? split,
+      netSales: d.net_sales,
+      units: d.units,
+      refunds: d.refunds,
+      contribution: d.contribution,
     };
   });
 

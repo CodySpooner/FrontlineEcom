@@ -104,12 +104,22 @@ describe('listings (SA-66)', () => {
     expect(list(db, {}, { collection: ['c-best'] })).toMatchObject({ total: 60, scope: { ignored: [{ key: 'collection', reason: "Collections aren't synced for this store yet" }] } });
   });
 
-  it("a demo store's rows never show the store's totals as a product's", () => {
+  it("SA-67: a demo store lists its seeded catalog with the period's demo sales split across it, adding up to the store's", () => {
     const db = openDb();
     seedDemo(db, '2026-10-26');
-    const l = listings(db, 'glow', {}, storePeriod(db, 'glow', () => undefined, Date.parse('2026-10-26T15:00:00Z')) as StorePeriod) as SaListings;
-    expect(l.total).toBeGreaterThan(0);
-    expect(l.rows[0]!.netSales).toMatchObject({ value: null, status: 'unavailable' });
+    const sp = storePeriod(db, 'glow', () => undefined, Date.parse('2026-10-26T15:00:00Z')) as StorePeriod;
+    const l = listings(db, 'glow', {}, sp) as SaListings;
+    expect(l.total).toBe(Number(db.prepare("SELECT count(*) AS n FROM products WHERE store_id = 'glow' AND status = 'active'").get()!.n));
+    expect(l.rows.find((r) => r.variants === 3)).toMatchObject({ variantsOut: 0, channels: [{ channel: 'site', status: 'active', error: null }, { channel: 'tiktok_shop', status: 'active', error: null }] });
+    for (const r of l.rows) for (const v of [r.netSales, r.units, r.refunds, r.contribution]) expect(v.status).toBe('demo');
+    const store = salesMetrics(db, 'glow', sp.period.from, sp.period.to);
+    const sum = (f: (r: SaListings['rows'][number]) => number | null) => l.rows.reduce((a, r) => a + f(r)!, 0);
+    expect(sum((r) => r.netSales.value)).toBeCloseTo(store.net_sales.value!, 0);
+    expect(Math.abs(sum((r) => r.units.value) - store.units.value!)).toBeLessThanOrEqual(l.rows.length);
+    const units = l.rows.map((r) => r.units.value!);
+    expect(units).toEqual([...units].sort((a, b) => b - a));
+    expect(listings(db, 'glow', { sort: 'net_sales' }, sp)).toEqual(listings(db, 'glow', { sort: 'net_sales' }, sp)); // stable between loads
+    expect(listings(db, 'glow', {}, sp, { channel: ['site'] })).toMatchObject({ scope: { applied: [], ignored: [{ key: 'channel', reason: "Demo data isn't split by channel" }] } });
   });
 
   it('GET /api/analytics/listings: the page, and 400 for a bad status, sort or page', async () => {
