@@ -1,0 +1,14 @@
+[
+  {
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "targets": [
+      [
+        ".bg-\\[\\#111114\\]"
+      ],
+      [
+        ".hover\\:text-text"
+      ]
+    ]
+  }
+]

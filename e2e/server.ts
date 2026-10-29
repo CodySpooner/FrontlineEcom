@@ -6,12 +6,14 @@ const { seedDemo, seedCreatives } = await import('../apps/server/src/demo');
 const { seedCompetitors } = await import('../apps/server/src/competitors');
 const { seedResearch } = await import('../apps/server/src/research');
 const { importLegacy } = await import('../apps/server/src/product-research/legacy');
+const { loadFixtures } = await import('../apps/server/src/product-research/dev-fixtures');
 const db = openDb(dbFile());
 seedDemo(db);
 seedCreatives(db);
 seedCompetitors(db);
 seedResearch(db);
 importLegacy(db);
+loadFixtures(db);
 const server = startServer(db, 0, (port) => {
   const url = `http://127.0.0.1:${port}`;
   console.log(`E2E server: ${url}`);

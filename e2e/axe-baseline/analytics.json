@@ -1,0 +1,47 @@
+[
+  {
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "targets": [
+      [
+        ".hover\\:text-text"
+      ],
+      [
+        "tr:nth-child(1) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Prospecting · Broad\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(10) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Shopping · Brand\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(11) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Shopping · Brand\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(12) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Shopping · Brand\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(2) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Prospecting · Broad\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(3) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Prospecting · Broad\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(4) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Spark Ads · UGC\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(5) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Retargeting · 30D\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(6) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Spark Ads · UGC\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(7) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Spark Ads · UGC\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(8) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Retargeting · 30D\"][data-discover=\"true\"]"
+      ],
+      [
+        "tr:nth-child(9) > .whitespace-nowrap > .text-xs.text-muted > .hover\\:underline[aria-label=\"Research Retargeting · 30D\"][data-discover=\"true\"]"
+      ]
+    ]
+  }
+]

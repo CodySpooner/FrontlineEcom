@@ -1,0 +1,62 @@
+[
+  {
+    "id": "label-content-name-mismatch",
+    "impact": "serious",
+    "targets": [
+      [
+        ".h-\\[26px\\].pr-1\\.5.text-\\[12\\.5px\\]:nth-child(11)"
+      ],
+      [
+        ".hover\\:text-text"
+      ],
+      [
+        "button[aria-label=\"Advertising 0\"]"
+      ],
+      [
+        "button[aria-label=\"Analytics & Data 0\"]"
+      ],
+      [
+        "button[aria-label=\"Automation & AI Workflows 0\"]"
+      ],
+      [
+        "button[aria-label=\"Branding 0\"]"
+      ],
+      [
+        "button[aria-label=\"Browser checks 1\"]"
+      ],
+      [
+        "button[aria-label=\"Business Strategy 0\"]"
+      ],
+      [
+        "button[aria-label=\"Competitor Research 0\"]"
+      ],
+      [
+        "button[aria-label=\"Consumer Psychology 0\"]"
+      ],
+      [
+        "button[aria-label=\"Conversion Optimization 0\"]"
+      ],
+      [
+        "button[aria-label=\"Creative Strategy 0\"]"
+      ],
+      [
+        "button[aria-label=\"Customer Retention 0\"]"
+      ],
+      [
+        "button[aria-label=\"E-Commerce Operations 0\"]"
+      ],
+      [
+        "button[aria-label=\"Marketing 0\"]"
+      ],
+      [
+        "button[aria-label=\"Product Research 0\"]"
+      ],
+      [
+        "button[aria-label=\"Sales & Pricing 0\"]"
+      ],
+      [
+        "button[aria-label=\"SEO 0\"]"
+      ]
+    ]
+  }
+]

@@ -135,7 +135,7 @@ Files: new `e2e/**`, `playwright.config.ts`, root `package.json` (scripts + devD
 - [ ] CH-18 Route smoke: every `nav.ts` route plus `/agents/:id`, `/agents/c/:id`, `/agents/t/:id`, at 390, 1280,
   1440 and 1920 px: no console errors, no 4xx/5xx `/api` responses, no error fallback, no sideways scroll. Assert
   structure, not numbers (the demo emitter is random).
-- [ ] CH-19 Axe scan per route: serious and critical findings fail, with today's issues in a baseline file (filed to
+- [x] CH-19 Axe scan per route: serious and critical findings fail, with today's issues in a baseline file (filed to
   the owning lanes, not fixed here).
 - [ ] CH-20 Fake-engine flows end to end: approve a seeded approval, message an agent and see the fake reply, open a
   Knowledge Base card, open a Research product. Done = `pnpm e2e` green twice in a row.
@@ -163,6 +163,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
   and left; answers to Q1-Q3 as defaults taken; the owner's remaining steps. Then `.agent/STOP` and stop.
 
 ## Done
+
+- 2026-10-28 CH-19: axe scans all 16 routes at 1280x900, with labelled PR fixtures and a sample KB card. Reviewed selector-level baseline in e2e/axe-baseline: 48 serious label-content-name-mismatch targets across routes (shared controls repeat), zero critical, Ecosystem empty. Filed UI/Analytics/shared header, agent store switches and KB categories to their owners. Normal verification passes all 16 scans; any baseline difference fails. pnpm check green (234 files / 1,730 tests, 4 workers).
 
 - 2026-10-28 CH-18 coverage shipped, acceptance blocked: 13 nav routes plus legacy agent/conversation/team at 390/1280/1440/1920 px. Real API seeds the sessions. 61/64 route cases and the harness pass; three 390px overflow failures are filed under Blocked and kept failing. Focused rerun confirms console/page/API checks pass on those three too. pnpm check green (234 files / 1,730 tests, 4 workers).
 

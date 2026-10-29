@@ -5,5 +5,6 @@ export default defineConfig({
   globalSetup: './e2e/setup.ts',
   workers: 1,
   retries: 0,
+  snapshotPathTemplate: '{testDir}/axe-baseline/{arg}{ext}',
   use: { channel: 'msedge', headless: true, trace: 'retain-on-failure', screenshot: 'only-on-failure' },
 });
