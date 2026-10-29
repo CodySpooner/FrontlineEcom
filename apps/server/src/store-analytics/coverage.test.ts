@@ -39,7 +39,8 @@ describe('sources', () => {
     expect(row('tiktok_shop', 'orders')).toMatchObject({ status: 'available', stale: false, coveredFrom: '2026-10-24', coveredTo: '2026-11-08' });
     expect(row('tiktok_shop', 'orders')!.fix).toBeUndefined();
     expect(row('shopify', 'orders')).toMatchObject({ status: 'not_tracked', reason: 'needs_ingestion' });
-    expect(row('shopify', 'order_lines')).toMatchObject({ status: 'not_tracked', reason: 'not_tracked' }); // not read yet (SA-30)
+    expect(row('shopify', 'order_lines')).toMatchObject({ status: 'not_tracked', reason: 'needs_ingestion' }); // read since SA-30, not synced here
+    expect(row('shopify', 'collections')).toMatchObject({ status: 'not_tracked', reason: 'not_tracked' }); // not read yet
     expect(row('shopify', 'customers')?.status).not.toBe('available');
     // 35 minutes later TikTok Shop (a 10-minute source) has had no success for over 3 intervals
     expect(row('tiktok_shop', 'orders', LEDGER_NOW + 35 * MIN)).toMatchObject({ status: 'available', stale: true, fix: { label: 'Check TikTok Shop' } });

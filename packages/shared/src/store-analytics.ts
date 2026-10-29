@@ -145,7 +145,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
     name: 'Shopify',
     datasets: {
       orders: { support: 'supported', reads: true, field: 'GraphQL Admin orders', scopes: 'read_orders, read_all_orders', history: '730 days back on the first sync', rateLimit: 'GraphQL cost budget (1,000 points a query)' },
-      order_lines: NOT_READ('orders.lineItems (variant, sku, discountAllocations)', { scopes: 'read_orders' }),
+      order_lines: { support: 'supported', reads: true, field: 'orders.lineItems (variant, sku, originalTotalSet, discountAllocations)', scopes: 'read_orders', history: 'with the orders read' },
       refunds: { support: 'supported', reads: true, field: 'order.refunds (refundLineItems, refundShippingLines, orderAdjustments)', scopes: 'read_orders', history: 'the refunds of the orders read, when money went back' },
       fees: FEE_ESTIMATE,
       catalog: { support: 'supported', reads: true, field: 'GraphQL Admin products', scopes: 'read_products', history: 'current state' },

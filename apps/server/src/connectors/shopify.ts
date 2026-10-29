@@ -260,13 +260,14 @@ export function shopifyChannel(o: Pick<ShopifyOrder, 'sourceName' | 'app'>) {
 export function orderParts(o: Pick<ShopifyOrder, 'lineItems' | 'shippingLines' | 'totalTaxSet' | 'currentTotalTaxSet' | 'taxesIncluded'>) {
   if (!o.lineItems.nodes.every((li) => li.originalTotalSet)) return null;
   const tax = num((o.totalTaxSet ?? o.currentTotalTaxSet)?.shopMoney.amount);
-  const lines = o.lineItems.nodes.reduce((a, li) => a + num(li.originalTotalSet!.shopMoney.amount), 0);
-  const off = o.lineItems.nodes.reduce((a, li) => a + (li.discountAllocations ?? []).reduce((b, d) => b + num(d.allocatedAmountSet.shopMoney.amount), 0), 0);
+  const raw = o.lineItems.nodes.map((li) => ({ li, gross: num(li.originalTotalSet!.shopMoney.amount), discount: (li.discountAllocations ?? []).reduce((b, d) => b + num(d.allocatedAmountSet.shopMoney.amount), 0) }));
   const ship = (o.shippingLines?.nodes ?? []).reduce((a, s) => a + num(s.discountedPriceSet.shopMoney.amount), 0);
-  const placed = lines - off + ship;
+  const placed = raw.reduce((a, l) => a + l.gross - l.discount, 0) + ship;
   const share = o.taxesIncluded && placed > 0 ? (placed - tax) / placed : 1;
-  const [gross, discounts] = [r2(lines * share), r2(off * share)];
-  return { gross, discounts, shipping: r2(r2(placed * share) - (gross - discounts)), tax };
+  // The order's parts are its lines' sums, so the lines always add up to them (SA-30).
+  const lines = raw.map((l) => ({ li: l.li, gross: r2(l.gross * share), discount: r2(l.discount * share) }));
+  const [gross, discounts] = [r2(lines.reduce((a, l) => a + l.gross, 0)), r2(lines.reduce((a, l) => a + l.discount, 0))];
+  return { gross, discounts, shipping: r2(r2(placed * share) - (gross - discounts)), tax, lines };
 }
 
 export function fulfillmentOf(o: Pick<ShopifyOrder, 'displayFulfillmentStatus' | 'fulfillments'>): FulfillmentStatus {
@@ -328,7 +329,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
   const creds = getCredentials(db, key, 'shopify', storeId);
   if (!creds) return;
   let view = syncView(db, id);
-  const reading = new Set<SaDataset>(['catalog', 'orders', 'refunds']); // failed if the sync stops before they're read
+  const reading = new Set<SaDataset>(['catalog', 'orders', 'order_lines', 'refunds']); // failed if the sync stops before they're read
   try {
     const q = client(db, key, storeId, creds, fetchFn, now);
     const { shop } = await q<{ shop: { currencyCode: string; ianaTimezone: string } }>(SHOP_Q);
@@ -413,6 +414,11 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
        ON CONFLICT (store_id, id) DO UPDATE SET refunded_at = excluded.refunded_at, local_date = excluded.local_date, merchandise = excluded.merchandise, shipping = excluded.shipping,
          tax = excluded.tax, other = excluded.other, quantity = excluded.quantity, restocked = excluded.restocked`,
     );
+    const orderLine = db.prepare(
+      `INSERT INTO order_lines (store_id, order_id, line_id, product_id, variant_id, sku, quantity, gross, discount, cost, cost_source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (store_id, order_id, line_id) DO UPDATE SET product_id = excluded.product_id, variant_id = excluded.variant_id, sku = excluded.sku, quantity = excluded.quantity,
+         gross = excluded.gross, discount = excluded.discount, cost = coalesce(cost, excluded.cost), cost_source = iif(cost IS NULL, excluded.cost_source, cost_source)`,
+    );
     const dropItems = db.prepare('DELETE FROM order_items WHERE store_id = ? AND order_id = ?');
     const drop = db.prepare('DELETE FROM orders WHERE store_id = ? AND id = ?');
     let after: string | null = null;
@@ -452,6 +458,12 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
             tail(o.id), channel, MARKETPLACES.has(channel) ? (o.sourceIdentifier ?? null) : null, o.currencyCode ?? null, p?.gross ?? null, p?.discounts ?? null, p?.shipping ?? null,
             PAID.has(o.displayFinancialStatus ?? '') ? (o.processedAt ?? o.createdAt) : null, o.cancelledAt, f?.createdAt ?? null, f?.deliveredAt ?? null, o.updatedAt, p ? now.toISOString() : null,
           );
+          // SA-30: every line as placed (custom items too, so they add up to the order); its cost is the one first
+          // recorded, quantity × the variant's unit cost then (decision 15).
+          for (const l of p?.lines ?? []) {
+            const unit = num(l.li.variant?.inventoryItem?.unitCost);
+            orderLine.run(storeId, o.name, tail(l.li.id!), l.li.product ? tail(l.li.product.id) : null, l.li.variant?.id ? tail(l.li.variant.id) : null, l.li.sku ?? null, l.li.quantity, l.gross, l.discount, unit > 0 ? r2(l.li.quantity * unit) : null, unit > 0 ? 'platform' : null);
+          }
           // Decision 9: one row per refund line, shipping line and adjustment, on the refund's day. Where prices include
           // tax, the refunded amounts do too (ponytail: assumed like the order's prices) and give their tax up.
           const ex = (amount: MoneyBag, tax: MoneyBag) => r2(num(amount.shopMoney.amount) - (o.taxesIncluded ? num(tax.shopMoney.amount) : 0));
@@ -483,9 +495,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
     } while (after);
     noteRead(db, key, id, 'orders', { status: 'available', from: since.slice(0, 10), to: today }, now);
-    noteRead(db, key, id, 'refunds', { status: 'available', from: since.slice(0, 10), to: today }, now);
-    reading.delete('orders');
-    reading.delete('refunds');
+    for (const d of ['order_lines', 'refunds'] as const) noteRead(db, key, id, d, { status: 'available', from: since.slice(0, 10), to: today }, now);
+    for (const d of ['orders', 'order_lines', 'refunds'] as const) reading.delete(d);
 
     // The funnel from Shopify's own analytics for a store without GA4 (GA4 owns it there). It needs read_reports and Level 2
     // customer data access, so without them orders sync on and the funnel stays empty. Bot visits (Shopify's human/bot

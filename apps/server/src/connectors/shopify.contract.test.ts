@@ -186,3 +186,36 @@ describe('Shopify variants contract (SA-29)', () => {
     expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'variants'").get()?.status).toBe('available');
   });
 });
+
+describe('Shopify order lines contract (SA-30)', () => {
+  const lines = (db: ReturnType<typeof openDb>) =>
+    db.prepare("SELECT order_id, line_id, product_id, variant_id, sku, quantity, gross, discount, cost, cost_source FROM order_lines WHERE store_id = 'glow' ORDER BY order_id, line_id").all();
+
+  it('one row per line by variant; the line sums equal the order gross and discounts', async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify().fetchFn, NOW);
+    expect(lines(db).filter((l) => l.order_id === '#1001')).toEqual([
+      { order_id: '#1001', line_id: '9001', product_id: '111', variant_id: '1111', sku: 'SER-30', quantity: 2, gross: 50, discount: 5, cost: 16, cost_source: 'platform' },
+      { order_id: '#1001', line_id: '9002', product_id: '112', variant_id: '1121', sku: 'CRM-50', quantity: 1, gross: 30, discount: 3, cost: 9.5, cost_source: 'platform' },
+    ]);
+    // no unit cost in Shopify: unknown, not 0; prices include VAT: the line gives its tax share up like the order
+    expect(lines(db).find((l) => l.order_id === '#1002')).toMatchObject({ gross: 100, discount: 10, cost: null, cost_source: null });
+    const sums = db.prepare(
+      `SELECT o.id, o.gross_sales, o.discounts, round(sum(l.gross), 2) AS g, round(sum(l.discount), 2) AS d FROM orders o JOIN order_lines l ON l.store_id = o.store_id AND l.order_id = o.id
+       WHERE o.store_id = 'glow' GROUP BY o.id`,
+    ).all();
+    expect(sums).toHaveLength(4);
+    for (const s of sums) expect([s.id, s.g, s.d]).toEqual([s.id, s.gross_sales, s.discounts]);
+  });
+
+  it("a line's first recorded cost is never overwritten by a later unit cost", async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify().fetchFn, NOW);
+    const later = structuredClone(DOC.orders);
+    later.nodes[0].updatedAt = '2026-10-26T12:00:00Z';
+    later.nodes[0].lineItems.nodes[0].variant.inventoryItem.unitCost.amount = '9.00';
+    await syncShopify(db, key, 'glow', fakeShopify(later).fetchFn, NOW);
+    expect(lines(db).find((l) => l.line_id === '9001')).toMatchObject({ cost: 16, cost_source: 'platform' });
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'order_lines'").get()?.status).toBe('available');
+  });
+});

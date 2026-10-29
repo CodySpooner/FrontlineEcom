@@ -14,7 +14,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Orders | supported | yes | GraphQL Admin orders | read_orders, read_all_orders | 730 days back on the first sync | GraphQL cost budget (1,000 points a query) |  |
-| Order lines by variant | supported | no | orders.lineItems (variant, sku, discountAllocations) | read_orders |  |  |  |
+| Order lines by variant | supported | yes | orders.lineItems (variant, sku, originalTotalSet, discountAllocations) | read_orders | with the orders read |  |  |
 | Refunds | supported | yes | order.refunds (refundLineItems, refundShippingLines, orderAdjustments) | read_orders | the refunds of the orders read, when money went back |  |  |
 | Fees | unsupported | no | — |  |  |  | The app doesn't read payment or platform fees here (owner question Q21); fees are the store's labelled estimate. |
 | Catalog | supported | yes | GraphQL Admin products | read_products | current state |  |  |
