@@ -161,7 +161,7 @@ export function toastBlock(db: Db, category: NotificationCategory | undefined, n
 }
 
 /**
- * Stores and broadcasts a notification, unless its category is off or its store muted (info always shows), or an
+ * Stores and broadcasts a notification, unless its category is off or its store muted (info without a category always shows), or an
  * identical unread one came in the last 10 minutes (never for approvals: each is its own request). `toast` says whether
  * the desktop app may show it as a Windows toast. `category` names one its kind doesn't (the digest is `info`); `test`
  * (Send a test) skips the drops and the dedupe, not the toast rules.
@@ -169,8 +169,8 @@ export function toastBlock(db: Db, category: NotificationCategory | undefined, n
 export function notify(db: Db, n: NewNotification, o: { category?: NotificationCategory; test?: boolean } = {}): AppNotification | undefined {
   const category = o.category ?? CATEGORY[n.kind];
   const s = getSettings(db).notifications;
-  if (!o.test && category && !s[category]) return;
-  if (!o.test && n.kind !== 'info' && n.storeId && s.mutedStores?.includes(n.storeId)) return;
+  if (!o.test && category && s[category] === false) return;
+  if (!o.test && (n.kind !== 'info' || o.category) && n.storeId && s.mutedStores?.includes(n.storeId)) return;
   const now = new Date();
   const repeat = 'SELECT 1 FROM notifications WHERE kind = ? AND title = ? AND body IS ? AND store_id IS ? AND link IS ? AND read_at IS NULL AND created_at > ?';
   if (!o.test && n.kind !== 'approval' && db.prepare(repeat).get(n.kind, n.title, n.body ?? null, n.storeId ?? null, n.link ?? null, new Date(now.getTime() - 600_000).toISOString())) return;

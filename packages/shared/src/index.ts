@@ -1504,6 +1504,12 @@ export interface Settings {
     quietHours?: { from: number; to: number } | null;
     /** Stores whose notifications are dropped (info excepted). */
     mutedStores?: string[];
+    /** Absent: on. */
+    usageAlerts?: boolean;
+    /** Share of a daily cap (50–100) that sends a usage alert; absent: 80. */
+    usageAlertPct?: number;
+    /** Hour the digest goes, in the workspace timezone; absent: 8. */
+    digestHour?: number;
   };
   /** ISO code that multi-store totals are converted to (default USD). */
   baseCurrency: string;

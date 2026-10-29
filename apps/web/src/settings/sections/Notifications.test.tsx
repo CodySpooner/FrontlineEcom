@@ -12,9 +12,9 @@ afterEach(() => {
 });
 afterAll(() => vi.unstubAllGlobals());
 
-const CATS = ['approvals', 'agentDone', 'errors', 'researchAlerts', 'digest'];
+const CATS = ['approvals', 'agentDone', 'errors', 'researchAlerts', 'digest', 'usageAlerts'];
 const view: ConfigView = {
-  values: { ...Object.fromEntries(CATS.flatMap((c) => [[`notifications.${c}`, true], [`notifications.toasts.${c}`, true]])), 'notifications.quietHours': null, 'notifications.mutedStores': [] },
+  values: { ...Object.fromEntries(CATS.flatMap((c) => [[`notifications.${c}`, true], [`notifications.toasts.${c}`, true]])), 'notifications.quietHours': null, 'notifications.mutedStores': [], 'notifications.digestHour': 8, 'notifications.usageAlertPct': 80 },
   origins: {},
   versions: { app: 3 },
 };
@@ -39,7 +39,10 @@ test('each row says what it covers and what Off does', async () => {
   expect(row('notifications.agentDone')).toContain("An agent's task, Knowledge research, a mission or a team finished.");
   expect(row('notifications.errors')).toContain("a store stopped syncing; the daily backup failed; or an approved live change didn't go through.");
   expect(row('notifications.researchAlerts')).toContain('the Watchlist shows them either way.');
-  expect(row('notifications.digest')).toContain('once a day from 8:00 in the workspace timezone.');
+  expect(row('notifications.digest')).toContain('once a day around the digest time below.');
+  expect(row('notifications.usageAlerts')).toContain("A store's AI spend or generation credits today reached the share of its daily cap set below.");
+  expect(row('notifications.digestHour')).toContain('Around this hour in the workspace timezone: the check runs every 10 minutes');
+  expect(row('notifications.usageAlertPct')).toContain("The share of a store's daily AI budget or credit cap that sends a usage alert, from 50 to 100%.");
   for (const c of CATS) expect(row(`notifications.${c}`)).toContain(off);
   expect(row('notifications.mutedStores')).toContain(off);
   expect(row('notifications.quietHours')).toContain("They're not sent, not held; the bell still gets everything.");
@@ -60,6 +63,18 @@ test('a save sends only what changed, over the version read', async () => {
     expect(sent(fetch, '/api/config')).toEqual([
       { documents: [{ doc: 'app', version: 3, set: { 'notifications.errors': false, 'notifications.toasts.agentDone': false, 'notifications.quietHours': { from: 23, to: 7 }, 'notifications.mutedStores': ['peak'] } }] },
     ]),
+  );
+});
+
+test('the digest time and the usage alert share save as whole numbers', async () => {
+  const fetch = server();
+  renderApp(<Settings />, '/settings/notifications');
+  fireEvent.change(await screen.findByLabelText('Digest time'), { target: { value: '9' } });
+  fireEvent.change(screen.getByLabelText('Usage alert at'), { target: { value: '90' } });
+  fireEvent.click(screen.getByRole('switch', { name: 'Usage alerts' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+  await vi.waitFor(() =>
+    expect(sent(fetch, '/api/config')).toEqual([{ documents: [{ doc: 'app', version: 3, set: { 'notifications.digestHour': 9, 'notifications.usageAlertPct': 90, 'notifications.usageAlerts': false } }] }]),
   );
 });
 

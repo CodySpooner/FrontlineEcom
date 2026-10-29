@@ -21,8 +21,8 @@ export const SETTINGS_SECTIONS = [
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 /** Settings → Notifications categories (decision 12): each can be off, and each has its own Windows toast switch. */
-export type NotificationCategory = 'approvals' | 'agentDone' | 'errors' | 'researchAlerts' | 'digest';
-export const NOTIFICATION_CATEGORIES: Record<NotificationCategory, string> = { approvals: 'Approvals', agentDone: 'Agent finished', errors: 'Errors', researchAlerts: 'Research alerts', digest: 'Morning digest' };
+export type NotificationCategory = 'approvals' | 'agentDone' | 'errors' | 'researchAlerts' | 'digest' | 'usageAlerts';
+export const NOTIFICATION_CATEGORIES: Record<NotificationCategory, string> = { approvals: 'Approvals', agentDone: 'Agent finished', errors: 'Errors', researchAlerts: 'Research alerts', digest: 'Morning digest', usageAlerts: 'Usage alerts' };
 
 /** `/settings/<section>[/<id>][?store=<id>][#<setting>]`: the only way to link into Settings. */
 export function settingsUrl(section: SettingsSection, o: { id?: string; store?: string; setting?: string } = {}) {
@@ -172,6 +172,7 @@ const autopilot = (kind: string, label: string, proof: string): SettingDef => ({
 const store = (field: string, d: Without<SettingDef, 'id' | 'section' | 'scopes' | 'owner' | 'export'>) =>
   ({ id: `store.${field}`, section: 'stores', scopes: ['store'], owner: 'apps/server/src/stores.ts#parseStoreInput', export: true, ...d }) as SettingDef;
 const NOTIFY = 'apps/server/src/config/notifications.test.ts';
+const USAGE = 'apps/server/src/config/usage-alerts.test.ts';
 const PROMPT = 'packages/agents/src/prompt.test.ts';
 const COMMON = 'apps/server/src/connectors/common.test.ts';
 
@@ -184,6 +185,9 @@ export const SETTINGS: SettingDef[] = [
   notif('errors', 'Errors', 'A failed sync, backup or run.', 'apps/server/src/settings.test.ts#notifications: approvals raise one, prefs silence a kind, mark read', ['apps/server/src/settings.ts#CATEGORY'], true),
   notif('digest', 'Daily digest', 'One summary a day.', 'apps/server/src/digest.test.ts#the loop sends one digest a day from 8:00, and none while it is turned off', ['apps/server/src/digest.ts#startDigestLoop']),
   notif('researchAlerts', 'Research alerts', 'A watched product changed.', 'apps/server/src/product-research/alerts.test.ts#scheduled checks: the first records the result, a later change alerts once, never twice; with research alerts off it is stored but not notified', ['apps/server/src/product-research/alerts.ts#checkWatch']),
+  { id: 'notifications.digestHour', section: 'notifications', type: 'number', min: 0, max: 23, integer: true, label: 'Digest time', help: 'The hour the morning digest goes, in the workspace timezone.', synonyms: ['morning digest'], scopes: ['personal'], default: 8, owner: 'apps/server/src/config/write.ts#writeConfig', applies: 'now', export: true, consumers: ['apps/server/src/digest.ts#startDigestLoop'], proof: `${USAGE}#the digest goes at the hour set, in the workspace zone; turned on after that hour, it still goes that day` },
+  { id: 'notifications.usageAlerts', section: 'notifications', type: 'boolean', label: 'Usage alerts', help: "A store's AI spend or generation credits today reached a share of its daily cap.", scopes: ['personal'], default: true, owner: 'apps/server/src/config/write.ts#writeConfig', applies: 'now', export: true, consumers: ['apps/server/src/config/usage-alerts.ts#usageAlert'], proof: `${USAGE}#a usage alert fires once at 80% of a cap, not again that day, again the next day; with alerts off, none` },
+  { id: 'notifications.usageAlertPct', section: 'notifications', type: 'number', min: 50, max: 100, integer: true, label: 'Usage alert share', help: 'The share of a daily cap that sends the alert.', scopes: ['personal'], default: 80, owner: 'apps/server/src/config/write.ts#writeConfig', applies: 'now', export: true, consumers: ['apps/server/src/config/usage-alerts.ts#usageAlert'], proof: `${USAGE}#a usage alert fires once at 80% of a cap, not again that day, again the next day; with alerts off, none` },
   ...(Object.entries(NOTIFICATION_CATEGORIES) as [NotificationCategory, string][]).map(([key, name]): SettingDef => ({
     id: `notifications.toasts.${key}`, section: 'notifications', type: 'boolean', label: `Windows toast: ${name}`, help: "Also as a Windows toast when Frontline isn't the focused window.", scopes: ['personal'], default: true, owner: 'apps/server/src/config/write.ts#writeConfig', applies: 'now', export: true,
     consumers: ['apps/server/src/settings.ts#toastBlock', 'apps/desktop/src/toast.ts#shouldToast'], proof: `${NOTIFY}#toasts off for a category, or quiet hours across midnight in the workspace zone, store with toast: false`,

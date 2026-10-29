@@ -97,6 +97,7 @@ import { loadKey } from '../secrets';
 import { getCaps, notify } from '../settings';
 import { getStore, listStores } from '../stores';
 import { publish } from '../live';
+import { usageAlert } from '../config/usage-alerts';
 
 /** Approved ad changes → the store's ad account (core's Meta / Google / TikTok writers). */
 const writeAd =
@@ -166,6 +167,7 @@ export const toolEnv = (db: Db, key: () => Buffer = () => loadKey(dataDir())): T
   approvals: approvalsHook(db),
   decide: (id, decision) => decide(db, id, decision),
   caps: (storeId) => getCaps(db, storeId),
+  onCredits: (storeId) => usageAlert(db, storeId), // settings ST-15
   toUsd: async (amount, currency) => {
     const rate = await convertRate(db, currency, 'USD');
     return rate && amount * rate;
@@ -293,6 +295,7 @@ export const runHooks = (db: Db): Pick<RunManagerOptions, 'onRun' | 'onEvent' | 
     publish({ type: 'run', run });
     touchConversation(db, run);
     const ended = run.status === 'done' || run.status === 'error' || run.status === 'cancelled';
+    if (ended) usageAlert(db, run.storeId); // settings ST-15
     // A research stage reports as its task (advanceKbResearch): no notification for each stage.
     if (run.mode?.startsWith('research:')) return void (ended && advanceKbResearch(db));
     if (ended) advanceSquadMissions(db);

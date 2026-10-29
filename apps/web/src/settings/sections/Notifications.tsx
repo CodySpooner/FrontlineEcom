@@ -16,9 +16,10 @@ const HELP: Record<NotificationCategory, string> = {
   agentDone: "An agent's task, Knowledge research, a mission or a team finished.",
   errors: "An agent run, research, a mission or a team failed or got stuck; a store stopped syncing; the daily backup failed; or an approved live change didn't go through.",
   researchAlerts: 'A watched product, niche or offer changed; the Watchlist shows them either way.',
-  digest: "Yesterday's numbers and the approvals waiting, once a day from 8:00 in the workspace timezone.",
+  digest: "Yesterday's numbers and the approvals waiting, once a day around the digest time below.",
+  usageAlerts: "A store's AI spend or generation credits today reached the share of its daily cap set below. Once per store, cap and day.",
 };
-const IDS = [...CATEGORIES.flatMap((c) => [`notifications.${c}`, `notifications.toasts.${c}`]), 'notifications.quietHours', 'notifications.mutedStores'];
+const IDS = [...CATEGORIES.flatMap((c) => [`notifications.${c}`, `notifications.toasts.${c}`]), 'notifications.quietHours', 'notifications.mutedStores', 'notifications.digestHour', 'notifications.usageAlertPct'];
 const HOURS = Array.from({ length: 24 }, (_, h) => h);
 const hh = (h: number) => `${String(h).padStart(2, '0')}:00`;
 
@@ -33,7 +34,11 @@ export function Notifications() {
   const f = useSettingsForm<Form>({
     key: 'notifications',
     saved: q.data && toForm(q.data),
-    labels: Object.fromEntries(CATEGORIES.flatMap((c) => [[`notifications.${c}`, NOTIFICATION_CATEGORIES[c]], [`notifications.toasts.${c}`, `${NOTIFICATION_CATEGORIES[c]}: Windows toast`]])),
+    labels: {
+      ...Object.fromEntries(CATEGORIES.flatMap((c) => [[`notifications.${c}`, NOTIFICATION_CATEGORIES[c]], [`notifications.toasts.${c}`, `${NOTIFICATION_CATEGORIES[c]}: Windows toast`]])),
+      'notifications.digestHour': 'Digest time',
+      'notifications.usageAlertPct': 'Usage alert at',
+    },
     save: (changes, version) =>
       api<ConfigView>('/api/config', json('PATCH', { documents: [{ doc: 'app', version, set: changes }] })).then(
         (v) => (qc.setQueryData(['config', 'view', null], v), { ...toForm(v), changes: v.changes }),
@@ -70,6 +75,17 @@ export function Notifications() {
         })}
       </SettingsSection>
       <SettingsSection title="When and where">
+        <SettingRow {...row('notifications.digestHour')} label="Digest time" htmlFor="digest-hour" help="Around this hour in the workspace timezone: the check runs every 10 minutes, or the first check after it if Frontline was closed.">
+          <select id="digest-hour" data-setting="notifications.digestHour" value={d['notifications.digestHour'] as number} onChange={(e) => f.set('notifications.digestHour', Number(e.target.value))} className={cx(inputClass, 'py-1.5')}>
+            {HOURS.map((h) => <option key={h} value={h}>{hh(h)}</option>)}
+          </select>
+        </SettingRow>
+        <SettingRow {...row('notifications.usageAlertPct')} label="Usage alert at" htmlFor="usage-alert-pct" help="The share of a store's daily AI budget or credit cap that sends a usage alert, from 50 to 100%.">
+          <span data-setting="notifications.usageAlertPct" className="flex items-center gap-1.5 text-xs text-text-2">
+            <input id="usage-alert-pct" type="number" min={50} max={100} value={d['notifications.usageAlertPct'] as number} onChange={(e) => f.set('notifications.usageAlertPct', e.target.valueAsNumber)} className={cx(inputClass, 'w-20 py-1.5')} />
+            %
+          </span>
+        </SettingRow>
         <SettingRow {...row('notifications.quietHours')} label="Quiet hours" help="No Windows toasts between these hours, in the workspace timezone. They're not sent, not held; the bell still gets everything.">
           <div data-setting="notifications.quietHours" className="flex flex-wrap items-center gap-2 text-xs text-text-2">
             {quiet && (

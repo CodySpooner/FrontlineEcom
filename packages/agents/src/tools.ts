@@ -40,6 +40,8 @@ export interface ToolEnv {
   decide?: (id: string, decision: ApprovalDecision) => unknown;
   /** Core's per-store caps; `autopilot[kind]` is the owner's autopilot rule for that action kind. */
   caps?: (storeId: string) => StoreCaps;
+  /** Core's usage alert check, after credits are charged (settings ST-15). */
+  onCredits?: (storeId: string) => void;
   /** Core's exchange rate: `amount` of `currency` in USD (caps are USD); undefined when there's no rate. */
   toUsd?: (amount: number, currency: string) => Promise<number | undefined>;
   /** Core's competitor tracking for a store: who, their recent price moves, and ads seen lately. */
@@ -655,6 +657,7 @@ export const APP_TOOLS: AppTool[] = [
       // ponytail: charged before the render, so a failure after Higgsfield took it (timeout, download) still counts; a
       // request it refused counts too, on the cap's side.
       chargeCredits(ctx.db, ctx.store.id, credits);
+      ctx.onCredits?.(ctx.store.id);
       let mediaUrl: string | undefined;
       try {
         mediaUrl = await ctx.generateMedia?.({ kind, aspect, prompt }, ctx.signal);

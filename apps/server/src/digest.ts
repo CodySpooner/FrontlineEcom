@@ -5,9 +5,6 @@ import type { Db } from './db';
 import { fxFor } from './fx';
 import { getSettings, notify } from './settings';
 
-/** Hour the digest goes out in the workspace timezone (or the first check after it, if the app was off then). */
-const HOUR = 8;
-
 /**
  * One notification: yesterday across every store vs the day before (each store's own, in its day zone), and how many
  * approvals are waiting. Once a store is real, only real stores: demo stores' sample numbers would pass for real ones.
@@ -31,13 +28,17 @@ export function sendDigest(db: Db, now = new Date()) {
   }, { category: 'digest' }); // its own Windows toast switch (settings ST-14a)
 }
 
-/** Sends the digest once a day from 8:00 in the workspace timezone while Settings → Notifications → digest is on. Returns stop(). */
+/**
+ * Sends the digest once a day from Settings → Notifications → Digest time (8:00 unless set) in the workspace timezone, or at
+ * the first check after it if the app was off then, while the digest is on. Returns stop().
+ */
 export function startDigestLoop(db: Db, everyMs = 10 * 60_000) {
   const check = () => {
     const now = new Date();
     const zone = workspaceZone(db); // settings decision 8
     const today = localDate(now, zone);
-    if (Number(now.toLocaleString('en-GB', { timeZone: zone, hour: 'numeric', hourCycle: 'h23' })) < HOUR || !getSettings(db).notifications.digest) return;
+    const { digest, digestHour = 8 } = getSettings(db).notifications;
+    if (Number(now.toLocaleString('en-GB', { timeZone: zone, hour: 'numeric', hourCycle: 'h23' })) < digestHour || !digest) return;
     const sent = db.prepare("SELECT value_json FROM settings WHERE key = 'digest_sent'").get();
     if (sent && JSON.parse(String(sent.value_json)) === today) return;
     db.prepare("INSERT INTO settings (key, value_json) VALUES ('digest_sent', ?) ON CONFLICT (key) DO UPDATE SET value_json = excluded.value_json").run(JSON.stringify(today));
