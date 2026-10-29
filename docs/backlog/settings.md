@@ -1229,6 +1229,8 @@ STOP.
 
 ## Inbox
 
+- [ ] (from codex-hardening, CH-18 retest) ST-02 resolves the old Integrations +3 px finding: /settings/integrations passes all four widths. The requested six section routes are now covered; /settings/data at 390x900 exposes +239 px document overflow (scrollWidth 629, clientWidth 390) from the long data-directory path in Your Data. Repro: pnpm e2e --grep "/settings/data at 390px"; screenshot/trace in test-results/routes--settings-data-at-390px. Keep the path readable with wrapping or a bounded local scroller and shrinkable content; do not hide document overflow. All console/page/API checks pass. Other section/width cases pass. The baseline rename and LF attributes are shipped with this handoff; original Integrations overflow filing can be closed.
+
 - [ ] (from codex-hardening, CH-18) Forwarding UI Inbox finding to the new Integrations owner: /integrations at 390x900 has 3 px document overflow (scrollWidth 393, clientWidth 390). Repro: pnpm e2e --grep "integrations at 390px". Wrap/shrink content without hiding document overflow; keep the strict route test. This is one of three failures blocking CH-18/20 acceptance; the agent pages are filed to AI Agents.
 <!-- other lanes append requests here: - [ ] (from <lane>) <request>. Settings-scoped requests only (decision 1). -->
 - [~] (deferred to ST-11; not to be picked before it) (from codex-hardening, CH-05; copied from `docs/backlog/core.md`'s

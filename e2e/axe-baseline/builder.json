@@ -1,11 +1,1 @@
-[
-  {
-    "id": "label-content-name-mismatch",
-    "impact": "serious",
-    "targets": [
-      [
-        ".hover\\:text-text"
-      ]
-    ]
-  }
-]
+[]

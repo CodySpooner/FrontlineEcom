@@ -5,9 +5,6 @@
     "targets": [
       [
         ".hover\\:border-line-2"
-      ],
-      [
-        ".hover\\:text-text"
       ]
     ]
   }

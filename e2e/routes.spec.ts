@@ -1,8 +1,8 @@
 import { test, expect } from './fixtures';
-import { routes, widths } from './routes';
+import { routes, settingsRoutes, widths } from './routes';
 
 for (const width of widths) {
-  for (const route of routes) {
+  for (const route of [...routes, ...settingsRoutes]) {
     test(`${route.name} at ${width}px`, async ({ page }) => {
       const errors: string[] = [];
       page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });

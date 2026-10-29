@@ -59,16 +59,16 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 - [x] (from store-analytics) store-analytics claims rebuildRevenue, setOrderItems, setStoreTimezone and forgetPlatform in connectors/common.ts and syncTikTokShop in connectors/tiktok.ts (your Lane keeps hands off what Store Analytics claims). Everything else in your Phase E files stays yours; we file changes to it in this Inbox.
-- [ ] (from settings, ST-02) Settings is now `/settings/<section>`, and the app-nav Integrations item points at
+- [x] (from settings, ST-02) Settings is now `/settings/<section>`, and the app-nav Integrations item points at
   `/settings/integrations` (`/integrations` redirects there with its query). The route smoke follows `NAV`, so it now
   visits `/settings/integrations`, and its axe snapshot is named `settings-integrations.json`: same single finding as
   `integrations.json` (the shared Hero's `.hover\:text-text`), so a rename. Please also add the shipped `SECTIONS`
   routes (`apps/web/src/settings/Layout.tsx`: `/settings/{account,notifications,general,stores,usage,data}`) to the route
   smoke only. Later Settings items add slugs; ST-37b will file `/settings/integrations/:id`.
-- [ ] (from settings, FYI) On a `core.autocrlf=true` checkout every axe snapshot compare fails: the index has LF, the
+- [x] (from settings, FYI) On a `core.autocrlf=true` checkout every axe snapshot compare fails: the index has LF, the
   worktree CRLF, the content is identical (seen on untouched `/orders` too). A `.gitattributes` line
   `e2e/axe-baseline/*.json text eol=lf` would fix it.
-- [ ] (from store-analytics) CH-19 Analytics axe filing fixed (commit "store-analytics: Inbox axe names"): the 12 Research links on Analytics and the shared Ask AI control (`Hero.tsx`, name now "Ask AI anything, Ctrl K": axe counts the visible Ctrl K hint) report no serious/critical violations, so `accessibility /analytics` and the 13 other pages whose baseline lists `.hover\:text-text` now fail only on their stale baselines (actual `[]`); please refresh those 14 files in `e2e/axe-baseline/`. Also: a fresh checkout with core.autocrlf writes the baselines CRLF and every scan mismatches on line endings alone; an `e2e/axe-baseline/*.json eol=lf` attribute would stop that.
+- [x] (from store-analytics) CH-19 Analytics axe filing fixed (commit "store-analytics: Inbox axe names"): the 12 Research links on Analytics and the shared Ask AI control (`Hero.tsx`, name now "Ask AI anything, Ctrl K": axe counts the visible Ctrl K hint) report no serious/critical violations, so `accessibility /analytics` and the 13 other pages whose baseline lists `.hover\:text-text` now fail only on their stale baselines (actual `[]`); please refresh those 14 files in `e2e/axe-baseline/`. Also: a fresh checkout with core.autocrlf writes the baselines CRLF and every scan mismatches on line endings alone; an `e2e/axe-baseline/*.json eol=lf` attribute would stop that.
 
 ## Items
 
@@ -181,6 +181,8 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
 
 ## Done
 
+- 2026-10-28 CH-18/19 Inbox follow-up: added six shipped Settings section routes to smoke only (22 routes x 4 widths), renamed the Integrations baseline for /settings/integrations, and scoped LF attributes inside e2e/axe-baseline. Reviewed the upstream ecd3a3bc fix and all baseline differences: 27 fixed targets removed, no new target accepted; 21 serious remain (KB 17, four agent store switches), zero critical. All 16 normal axe checks and four flows pass. Complete pnpm e2e: 106 passed / 3 failed; Integrations now passes all widths, while the newly covered /settings/data has +239 px mobile overflow alongside the two known +46 px agent pages. Filed the new Settings finding; kept strict assertions. pnpm check green (243 files / 1,816 passed, 4 upstream todo).
+
 - 2026-10-28 CH-23: five failing regressions first (two null simulations, two invalid minima and one legacy-plan evaluation). Fixed-seed 42 independent Poisson(100) purchases with equal spend/$1 orders: false measured performance readings fall from 22/400 (5.5%) to 0/400; experiments from 7/200 (3.5%) to 0/200. BH at 10% is computed before recording the batch, with the existing 95% gate retained and invalid p-values failing closed. Experiments enforce 30 per side at parse and evaluation, including old plans. Normal-tail quantiles and BH's largest passing rank are tested. KB-26's unchanged realistic-effect acceptance passes; one older aggregation fixture now supplies the required 30 purchases without changing its ROAS. Method reference: [R stats p.adjust](https://stat.ethz.ch/R-manual/R-devel/library/stats/html/p.adjust.html); normal-tail approximation A&S 26.2.17 (two-sided error below 1.5e-7). This one deterministic null batch is a regression measurement, not a universal false-discovery guarantee. pnpm check green (243 files / 1,816 passed, 4 upstream todo).
 
 - 2026-10-28 CH-22 contract audit (no live calls; existing fixtures retained). Seven failing CJ/TikTok regressions first, then 74 focused connector tests and pnpm check pass (240 files / 1,786 tests). New regressions are contract-shaped fakes, not live captures. Official references checked today:
@@ -242,9 +244,9 @@ Not the Shopify/WooCommerce writers, not `connectors/ads.ts` (money path).
 
 ## Blocked
 
-- 2026-10-28 CH-20: all four requested flows pass (demo approval, fake chat reply, KB card, Research product). Two complete pnpm e2e runs each finish 82 passed / 3 failed, exclusively the CH-18 mobile overflows. Whole-suite green twice remains blocked on those UI/AI Agents fixes; no exclusions, expected failures or threshold changes were added.
+- 2026-10-28 CH-20: all four requested flows pass. Original two complete runs were 82 passed / 3 failed. The expanded Settings handoff run is 106 passed / 3 failed (two agent pages and /settings/data at 390px). Whole-suite green twice remains blocked on Settings/AI Agents layout fixes; no exclusions, expected failures or threshold changes were added.
 
-- 2026-10-28 CH-18: all route/width checks are implemented, but three strict mobile overflow assertions fail: Integrations +3 px, legacy agent and conversation +46 px at 390x900. Filed to UI and AI Agents Inbox with reproductions. No skipped/expected failures or relaxed thresholds; these app bugs also block CH-20's whole-suite green-twice criterion.
+- 2026-10-28 CH-18 current state after Settings handoff: 85/88 route/width cases pass. At 390x900, legacy agent and conversation still overflow +46 px, and newly covered /settings/data overflows +239 px because of the long data-directory path. Filed to AI Agents and Settings. Integrations' prior +3 px overflow is resolved by ST-02 and passes all four widths. Console/page/API checks pass in every route case; strict overflow assertions still block CH-20.
 
 - 2026-10-28 CH-16: no FRONTLINE_DATA_DIR override is set and this worktree has no .data/codex-home directory or auth.json. No live model turn, resume, login or personal-home access was attempted. Owner step: run this worktree app with WEB_PORT=5303 and API_PORT=8923 and no forced FRONTLINE_AGENT_ENGINE; in AI Agents -> Deploy an agent choose Codex -> Set up Codex and complete the browser sign-in (app home: C:/Users/Xody2/orca/workspaces/FrontlineEcom/codex-hardening/.data/codex-home). Then authorize/capture one demo-store turn asking only for store_summary and one short follow-up on that session. Replace the source-labelled CODEX_TURN lines with the captured, sanitized completed turn and resume; retain separate source-shaped coverage for rare events. Existing fixtures remain honestly labelled recorded/source. Installed CLI is 0.163.0; its isolated features list matches the recorded fixture and exec resume flags match the adapter.
 

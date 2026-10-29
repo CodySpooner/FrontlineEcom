@@ -14,4 +14,8 @@ After reviewing a real fix or intentional fixture change, update only the affect
 
 ## Known route failures
 
-On 2026-10-28, two complete runs each had 82 passes and three failures: Integrations at 390 px overflows by 3 px, and the legacy-agent and conversation routes at 390 px overflow by 46 px. These strict tests remain enabled; `pnpm e2e` currently exits 1 until the owning UI/AI Agents lanes fix them. The four fake-engine flow tests and all 16 accessibility baseline checks pass. To run only the user flows: `pnpm e2e --grep "flow:"`.
+On 2026-10-28, the expanded suite has 106 passes and three failures: legacy-agent and conversation routes overflow by 46 px at 390 px, and `/settings/data` overflows by 239 px with the test data-folder path. The Settings move resolved the earlier 3 px Integrations overflow. These strict tests remain enabled and `pnpm e2e` exits 1 until the Settings/AI Agents owners fix the remaining layouts. All console/page/API checks, four fake-engine flows and 16 normal accessibility baseline checks pass.
+
+Smoke covers the 16 navigation/agent routes plus six shipped Settings sections, each at four widths. Axe remains on the original 16-route set. After the upstream shared-header and Analytics link fixes, the reviewed baseline has 21 serious targets (17 KB category controls and four agent store switches), zero critical. `axe-baseline/.gitattributes` keeps JSON LF on Windows checkouts. To run only user flows: `pnpm e2e --grep "flow:"`.
+
+Before the Settings handoff, two complete runs each had 82 passes and the old three mobile failures; CH-20's requirement for two completely green runs remains unmet.

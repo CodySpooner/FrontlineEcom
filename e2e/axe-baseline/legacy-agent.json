@@ -4,9 +4,6 @@
     "impact": "serious",
     "targets": [
       [
-        ".hover\\:text-text"
-      ],
-      [
         "button[popovertarget=\"store-switcher\"]"
       ]
     ]
