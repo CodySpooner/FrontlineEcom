@@ -18,7 +18,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Refunds | supported | yes | order.refunds (refundLineItems, refundShippingLines, orderAdjustments) | read_orders | the refunds of the orders read, when money went back |  |  |
 | Fees | unsupported | no | — |  |  |  | The app doesn't read payment or platform fees here (owner question Q21); fees are the store's labelled estimate. |
 | Catalog | supported | yes | GraphQL Admin products | read_products | current state |  |  |
-| Variants | supported | no | products.variants (sku, price, compareAtPrice, inventoryQuantity, inventoryPolicy) | read_products, read_inventory |  |  |  |
+| Variants | supported | yes | productVariants (sku, price, compareAtPrice, inventoryQuantity, inventoryPolicy, inventoryItem.tracked) | read_products, read_inventory | current state |  |  |
 | Channel listings | supported | no | products.resourcePublications | read_publications (optional) |  |  |  |
 | Inventory | supported | yes | variant inventoryQuantity, inventoryItem.tracked | read_inventory | current state; daily snapshots from SA-50 |  |  |
 | Collections | supported | no | collections (paged) | read_products |  |  |  |

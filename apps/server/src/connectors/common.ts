@@ -48,7 +48,10 @@ export function takeTimezone(db: Db, storeId: string, kind: IntegrationKind, zon
 /** Wipes a demo store's generated rows and marks it connected. Called by the first successful real sync of any connector. */
 export function switchToReal(db: Db, storeId: string) {
   if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo !== 1) return;
-  for (const t of ['daily_metrics', 'products', 'orders', 'campaigns', 'events']) db.prepare(`DELETE FROM ${t} WHERE store_id = ?`).run(storeId);
+  // The demo catalog's variants, listings, links and collections too (seedDemoCatalog, SA-18).
+  for (const t of ['daily_metrics', 'products', 'orders', 'campaigns', 'events', 'product_variants', 'channel_listings', 'product_links', 'product_collections']) {
+    db.prepare(`DELETE FROM ${t} WHERE store_id = ?`).run(storeId);
+  }
   // The seeded sample requests would act on the live store if approved now (e.g. add 3 products).
   db.prepare("DELETE FROM approvals WHERE store_id = ? AND id LIKE 'demo-appr-%' AND status = 'pending'").run(storeId);
   // Their made-up prices would steer price tests on the live store (snapshots cascade).

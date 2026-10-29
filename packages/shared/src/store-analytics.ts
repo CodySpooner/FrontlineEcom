@@ -149,7 +149,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
       refunds: { support: 'supported', reads: true, field: 'order.refunds (refundLineItems, refundShippingLines, orderAdjustments)', scopes: 'read_orders', history: 'the refunds of the orders read, when money went back' },
       fees: FEE_ESTIMATE,
       catalog: { support: 'supported', reads: true, field: 'GraphQL Admin products', scopes: 'read_products', history: 'current state' },
-      variants: NOT_READ('products.variants (sku, price, compareAtPrice, inventoryQuantity, inventoryPolicy)', { scopes: 'read_products, read_inventory' }),
+      variants: { support: 'supported', reads: true, field: 'productVariants (sku, price, compareAtPrice, inventoryQuantity, inventoryPolicy, inventoryItem.tracked)', scopes: 'read_products, read_inventory', history: 'current state' },
       channel_listings: NOT_READ('products.resourcePublications', { scopes: 'read_publications (optional)' }),
       inventory: { support: 'supported', reads: true, field: 'variant inventoryQuantity, inventoryItem.tracked', scopes: 'read_inventory', history: 'current state; daily snapshots from SA-50' },
       collections: NOT_READ('collections (paged)', { scopes: 'read_products' }),

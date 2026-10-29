@@ -1,4 +1,4 @@
-// SA-27/28: Shopify orders and refunds against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
+// SA-27/28/29: Shopify orders, refunds and variants against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
 // read), and the static cost of every Shopify read.
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -55,7 +55,9 @@ function fakeShopify(orders = DOC.orders) {
     asked.push(query);
     const json = (data: unknown) => Response.json({ data });
     if (query.includes('shop {')) return json({ shop: DOC.shop });
-    if (query.includes('products(') || query.includes('events(')) return json({ [query.includes('events(') ? 'events' : 'products']: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
+    if (query.includes('productVariants(')) return json({ productVariants: DOC.variants });
+    if (query.includes('products(')) return json({ products: DOC.products });
+    if (query.includes('events(')) return json({ events: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
     if (query.includes('shopifyqlQuery')) return Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });
     if (query.includes('refunds(')) return json({ order: { refunds: DOC.refunds[variables.id!] ?? [] } });
     return json({ orders });
@@ -158,5 +160,29 @@ describe('Shopify refunds ledger contract (SA-28)', () => {
     await syncShopify(db, key, 'glow', third.fetchFn, NOW);
     expect(third.asked.filter((q) => q.includes('refunds('))).toHaveLength(3);
     expect(ledger(db)).toEqual(before);
+  });
+});
+
+describe('Shopify variants contract (SA-29)', () => {
+  it('a 3-variant product gives three variant rows and one products row; each variant cost is recorded once', async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify().fetchFn, NOW);
+    expect(db.prepare("SELECT id, price, compare_at, cost, inventory, inventory_tracked, status FROM products WHERE store_id = 'glow'").all()).toEqual([
+      { id: '120', price: 39, compare_at: 49, cost: 11, inventory: 45, inventory_tracked: 1, status: 'active' },
+    ]);
+    const synced = NOW.toISOString();
+    expect(db.prepare("SELECT product_id, id, title, sku, price, compare_at, inventory, inventory_tracked, inventory_policy, status, synced_at FROM product_variants WHERE store_id = 'glow' ORDER BY id").all()).toEqual([
+      { product_id: '120', id: '1201', title: 'Ivory', sku: 'SLK-IVR', price: 39, compare_at: 49, inventory: 30, inventory_tracked: 1, inventory_policy: 'deny', status: 'active', synced_at: synced },
+      { product_id: '120', id: '1202', title: 'Black', sku: 'SLK-BLK', price: 39, compare_at: null, inventory: 15, inventory_tracked: 1, inventory_policy: 'deny', status: 'active', synced_at: synced },
+      // sells at 0 and isn't tracked: untracked, like the products row reads it
+      { product_id: '120', id: '1203', title: 'Rose', sku: 'SLK-RSE', price: 42, compare_at: null, inventory: 0, inventory_tracked: 0, inventory_policy: 'continue', status: 'active', synced_at: synced },
+    ]);
+    await syncShopify(db, key, 'glow', fakeShopify().fetchFn, NOW);
+    expect(db.prepare("SELECT variant_id, cost FROM unit_costs WHERE store_id = 'glow' AND product_id = '120' ORDER BY variant_id").all()).toEqual([
+      { variant_id: null, cost: 11 },
+      { variant_id: '1201', cost: 11 },
+      { variant_id: '1202', cost: 11.5 },
+    ]);
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'variants'").get()?.status).toBe('available');
   });
 });

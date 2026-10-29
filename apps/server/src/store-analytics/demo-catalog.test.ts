@@ -1,5 +1,6 @@
 // SA-18: the demo stores' catalog structure (decision 30).
 import { describe, expect, it } from 'vitest';
+import { switchToReal } from '../connectors/common';
 import { openDb, type Db } from '../db';
 import { seedDemo, seedDemoCatalog } from '../demo';
 import { insertStore } from '../stores';
@@ -44,5 +45,13 @@ describe('seedDemoCatalog', () => {
     db.prepare("INSERT INTO products (store_id, id, title, price, compare_at, cost, inventory, status) VALUES ('real', 'r1', 'Serum', 30, 40, 8, 10, 'active')").run();
     seedDemoCatalog(db, 'real');
     for (const t of TABLES) expect(db.prepare(`SELECT count(*) AS n FROM ${t}`).get()!.n, t).toBe(0);
+  });
+
+  it("switching a demo store to real data clears its demo catalog", () => {
+    const db = openDb();
+    seedDemo(db, '2026-10-26');
+    switchToReal(db, 'glow');
+    for (const t of TABLES) expect(db.prepare(`SELECT count(*) AS n FROM ${t} WHERE store_id = 'glow'`).get()!.n, t).toBe(0);
+    expect(db.prepare("SELECT count(*) AS n FROM product_variants WHERE store_id = 'pawsome'").get()!.n).toBeGreaterThan(0);
   });
 });

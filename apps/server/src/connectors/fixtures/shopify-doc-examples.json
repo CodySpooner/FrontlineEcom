@@ -495,5 +495,99 @@
         }
       }
     ]
+  },
+  "products": {
+    "nodes": [
+      {
+        "id": "gid://shopify/Product/120",
+        "title": "Silk Pillowcase",
+        "status": "ACTIVE",
+        "updatedAt": "2026-10-20T10:00:00Z",
+        "totalInventory": 45,
+        "tracksInventory": true,
+        "featuredMedia": null,
+        "variants": {
+          "nodes": [
+            {
+              "price": "39.00",
+              "compareAtPrice": "49.00",
+              "inventoryPolicy": "DENY",
+              "inventoryItem": {
+                "unitCost": {
+                  "amount": "11.00"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ],
+    "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": null
+    }
+  },
+  "variants": {
+    "nodes": [
+      {
+        "id": "gid://shopify/ProductVariant/1201",
+        "title": "Ivory",
+        "sku": "SLK-IVR",
+        "price": "39.00",
+        "compareAtPrice": "49.00",
+        "inventoryQuantity": 30,
+        "inventoryPolicy": "DENY",
+        "product": {
+          "id": "gid://shopify/Product/120",
+          "status": "ACTIVE"
+        },
+        "inventoryItem": {
+          "tracked": true,
+          "unitCost": {
+            "amount": "11.00"
+          }
+        }
+      },
+      {
+        "id": "gid://shopify/ProductVariant/1202",
+        "title": "Black",
+        "sku": "SLK-BLK",
+        "price": "39.00",
+        "compareAtPrice": null,
+        "inventoryQuantity": 15,
+        "inventoryPolicy": "DENY",
+        "product": {
+          "id": "gid://shopify/Product/120",
+          "status": "ACTIVE"
+        },
+        "inventoryItem": {
+          "tracked": true,
+          "unitCost": {
+            "amount": "11.50"
+          }
+        }
+      },
+      {
+        "id": "gid://shopify/ProductVariant/1203",
+        "title": "Rose",
+        "sku": "SLK-RSE",
+        "price": "42.00",
+        "compareAtPrice": null,
+        "inventoryQuantity": 0,
+        "inventoryPolicy": "CONTINUE",
+        "product": {
+          "id": "gid://shopify/Product/120",
+          "status": "ACTIVE"
+        },
+        "inventoryItem": {
+          "tracked": false,
+          "unitCost": null
+        }
+      }
+    ],
+    "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": null
+    }
   }
 }

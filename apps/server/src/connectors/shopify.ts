@@ -4,7 +4,7 @@ import { once, tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, takeTimezone, switchToReal, syncView, hasTag, stillAsSynced, syncedPrice } from './common';
-import { noteFailed, noteRead, recordUnitCost } from './ingest';
+import { noted, noteFailed, noteRead, recordUnitCost } from './ingest';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -96,6 +96,23 @@ const PRODUCTS_Q = `query ($after: String, $q: String) {
       featuredMedia { preview { image { url(transform: { maxWidth: 480 }) } } }
       variants(first: 1) { nodes { price compareAtPrice inventoryPolicy inventoryItem { unitCost { amount } } } } }
     pageInfo { hasNextPage endCursor } } }`;
+// SA-29: every variant, paged on its own (the products page keeps its first variant for the summary columns).
+// 2 + 200 × (1 + product 1 + inventoryItem 2) + 1 = 803.
+const VARIANTS_Q = `query ($after: String, $q: String) {
+  productVariants(first: 200, after: $after, query: $q) {
+    nodes { id title sku price compareAtPrice inventoryQuantity inventoryPolicy product { id status } inventoryItem { tracked unitCost { amount } } }
+    pageInfo { hasNextPage endCursor } } }`;
+type ShopifyVariant = {
+  id: string;
+  title: string;
+  sku: string | null;
+  price: string;
+  compareAtPrice: string | null;
+  inventoryQuantity: number | null;
+  inventoryPolicy: string;
+  product: { id: string; status: string };
+  inventoryItem: { tracked: boolean; unitCost: Money } | null;
+};
 const PRODUCT_IDS_Q = `query ($after: String) { products(first: 250, after: $after) { nodes { id } pageInfo { hasNextPage endCursor } } }`;
 const DELETED_Q = `query ($after: String, $q: String) {
   events(first: 250, after: $after, query: $q) { nodes { ... on BasicEvent { subjectId } } pageInfo { hasNextPage endCursor } } }`;
@@ -322,6 +339,8 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const products = await all((after) => q<{ products: { nodes: ShopifyProduct[]; pageInfo: PageInfo } }>(PRODUCTS_Q, { after, q: cursor ? filter : null }).then((d) => d.products));
     noteRead(db, key, id, 'catalog', { status: 'available' }, now);
     reading.delete('catalog');
+    // A failed variants read is noted and never stops the sync: the products' summary columns still come.
+    const variants = await noted(db, key, id, 'variants', all((after) => q<{ productVariants: { nodes: ShopifyVariant[]; pageInfo: PageInfo } }>(VARIANTS_Q, { after, q: cursor ? filter : null }).then((d) => d.productVariants))).catch(() => []);
     // A deleted product just stops coming back, so its delete event archives it here. Failing to read events never stops a sync.
     const deleted = !cursor ? [] : await all((after) =>
       q<{ events: { nodes: { subjectId?: string }[]; pageInfo: PageInfo } }>(DELETED_Q, { after, q: `action:'destroy' AND subject_type:'PRODUCT' AND created_at:>='${since}'` }).then((d) => d.events),
@@ -352,6 +371,17 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         const compareAt = v?.compareAtPrice ? num(v.compareAtPrice) : null;
         prod.run(storeId, tail(p.id), p.title, p.featuredMedia?.preview?.image?.url ?? null, num(v?.price), compareAt, num(v?.inventoryItem?.unitCost), p.totalInventory ?? 0, p.tracksInventory === false || v?.inventoryPolicy === 'CONTINUE' ? 0 : 1, p.status.toLowerCase() as ProductStatus);
         if (num(v?.inventoryItem?.unitCost) > 0) recordUnitCost(db, storeId, tail(p.id), null, num(v?.inventoryItem?.unitCost), 'shopify', today, now);
+      }
+      const variant = db.prepare(
+        `INSERT INTO product_variants (store_id, product_id, id, title, sku, price, compare_at, inventory, inventory_tracked, inventory_policy, status, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET product_id = excluded.product_id, title = excluded.title, sku = excluded.sku, price = excluded.price, compare_at = excluded.compare_at,
+           inventory = excluded.inventory, inventory_tracked = excluded.inventory_tracked, inventory_policy = excluded.inventory_policy, status = excluded.status, synced_at = excluded.synced_at`,
+      );
+      // ponytail: a variant deleted in Shopify stays until its product is archived (no variant delete events are read).
+      for (const v of variants) {
+        const [pid, vid, unit] = [tail(v.product.id), tail(v.id), num(v.inventoryItem?.unitCost)];
+        variant.run(storeId, pid, vid, v.title, v.sku, num(v.price), v.compareAtPrice ? num(v.compareAtPrice) : null, v.inventoryQuantity, v.inventoryItem?.tracked === false || v.inventoryPolicy === 'CONTINUE' ? 0 : 1, v.inventoryPolicy.toLowerCase(), v.product.status.toLowerCase(), now.toISOString());
+        if (unit > 0) recordUnitCost(db, storeId, pid, vid, unit, 'shopify', today, now);
       }
       const archive = db.prepare("UPDATE products SET status = 'archived' WHERE store_id = ? AND id = ?");
       for (const e of deleted) if (e.subjectId) archive.run(storeId, tail(e.subjectId));
@@ -718,4 +748,4 @@ export async function publishTheme(db: Db, key: Buffer, storeId: string, themeId
 }
 
 /** Every read query, for the static cost check in shopify.contract.test.ts (orders with SA-32's probed fields on). */
-export const SHOPIFY_READS = { FUNNEL_Q, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, REFUNDS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };
+export const SHOPIFY_READS = { FUNNEL_Q, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, REFUNDS_Q, VARIANTS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };
