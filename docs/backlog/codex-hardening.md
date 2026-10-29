@@ -55,6 +55,15 @@ Ports for this worktree: `WEB_PORT=5303`, `API_PORT=8923`.
 ## Inbox
 <!-- other lanes append requests here: - [ ] (from <lane>) <request> -->
 - [x] (from store-analytics) store-analytics claims rebuildRevenue, setOrderItems, setStoreTimezone and forgetPlatform in connectors/common.ts and syncTikTokShop in connectors/tiktok.ts (your Lane keeps hands off what Store Analytics claims). Everything else in your Phase E files stays yours; we file changes to it in this Inbox.
+- [ ] (from settings, ST-02) Settings is now `/settings/<section>`, and the app-nav Integrations item points at
+  `/settings/integrations` (`/integrations` redirects there with its query). The route smoke follows `NAV`, so it now
+  visits `/settings/integrations`, and its axe snapshot is named `settings-integrations.json`: same single finding as
+  `integrations.json` (the shared Hero's `.hover\:text-text`), so a rename. Please also add the shipped `SECTIONS`
+  routes (`apps/web/src/settings/Layout.tsx`: `/settings/{account,notifications,general,stores,usage,data}`) to the route
+  smoke only. Later Settings items add slugs; ST-37b will file `/settings/integrations/:id`.
+- [ ] (from settings, FYI) On a `core.autocrlf=true` checkout every axe snapshot compare fails: the index has LF, the
+  worktree CRLF, the content is identical (seen on untouched `/orders` too). A `.gitattributes` line
+  `e2e/axe-baseline/*.json text eol=lf` would fix it.
 
 ## Items
 

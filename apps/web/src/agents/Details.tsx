@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Check, Lock, X } from 'lucide-react';
-import { AGENT_ROLES, CODEX_TESTED, EFFORT_LABEL, INTEGRATION_KINDS, INTERRUPTED, KB_STAGES, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
+import { AGENT_ROLES, CODEX_TESTED, EFFORT_LABEL, INTEGRATION_KINDS, INTERRUPTED, KB_STAGES, settingsUrl, type AgentRole, type AgentRunDetail, type AgentTypeInfo, type ConversationDetail, type IntegrationKind, type Store, type ToolGroup } from '@frontline/shared';
 import { useAgents, useAgentTypes, useCaps, useClaudeAccount, useConversation, useConversationFindings, useConversationKnowledge, useConversationTools, useRuntimes, useThread } from '../api/client';
 import { FixLink } from '../components/Chat';
 import { STATUS } from '../knowledge/Library';
@@ -191,7 +191,7 @@ function DetailsTab({ store, c }: { store: Store; c: ConversationDetail }) {
                     ) : g.integration && !g.integration.connected ? (
                       <>
                         Not connected ·{' '}
-                        <Link to="/integrations" className="text-[#ff6b76] hover:underline">
+                        <Link to={settingsUrl('integrations')} className="text-[#ff6b76] hover:underline">
                           Set up
                         </Link>
                       </>

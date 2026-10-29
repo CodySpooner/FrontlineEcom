@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Platform, type Product, type TopProduct } from '@frontline/shared';
+import { settingsUrl, storeHealth, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Platform, type Product, type TopProduct } from '@frontline/shared';
 import { useCampaigns, useMissingCosts, useSetCost, useStartConversation, useSummary, useTopProducts } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Hero } from '../components/Hero';
@@ -103,7 +103,7 @@ function Trend({ s, be }: { s: AnalyticsSummary; be: number }) {
       {metric === 'profit' && noFees.length > 0 && (
         <p className="mb-2 text-xs text-muted">
           Leaves out platform and payment fees for {noFees.map((x) => x.name).join(', ')}: no fee estimate.{' '}
-          <Link to="/settings" className="text-red hover:underline">
+          <Link to={settingsUrl('stores')} className="text-red hover:underline">
             Set one in Settings
           </Link>
         </p>
@@ -179,7 +179,7 @@ export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
       {!f.sessions ? (
         <p className="text-[13px] text-muted">
           Sessions, carts and checkouts come from Google Analytics.{' '}
-          <Link to="/integrations" className="text-red hover:underline">
+          <Link to={settingsUrl('integrations')} className="text-red hover:underline">
             Connect GA4
           </Link>{' '}
           to see where shoppers drop off.

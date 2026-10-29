@@ -2420,3 +2420,4 @@ export interface KbOverview {
 export * from './runtime-registry';
 export * from './research';
 export * from './store-analytics';
+export * from './settings';

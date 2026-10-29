@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen } from '@testing-library/react';
 import type { Integration, Store } from '@frontline/shared';
-import { renderApp, reply, stubApi } from '../test-utils';
+import { renderApp, reply, stubApi } from '../../test-utils';
 import { ClaudeCard, ConnectForm, Connection, Integrations } from './Integrations';
 
 const saved: Integration = { id: 'i1', kind: 'cj', status: 'connected', settings: { email: 'ops@shop.test' }, secretsSet: ['apiKey'], updatedAt: '2026-10-26T08:00:00Z' };
@@ -130,9 +130,9 @@ describe('a second sales platform on a store', () => {
 describe('Integrations with no stores', () => {
   it("says to add a store first, rather than dropping the store and ad sections without a word", async () => {
     stubApi((url) => (url.startsWith('/api/stores') || url.startsWith('/api/integrations') ? [] : undefined));
-    renderApp(<Integrations />, '/integrations');
+    renderApp(<Integrations />, '/settings/integrations');
     expect(await screen.findByText('No stores yet')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Add a store' }).getAttribute('href')).toBe('/settings');
+    expect(screen.getByRole('link', { name: 'Add a store' }).getAttribute('href')).toBe('/settings/stores');
   });
 });
 

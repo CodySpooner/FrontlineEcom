@@ -22,7 +22,7 @@ export const NAV: NavItem[] = [
   { path: '/orders', label: 'Orders & Fulfillment', icon: Package, title: 'Orders & Fulfillment', subtitle: 'Every order. Out the door.', item: 'UI-12' },
   { path: '/competitors', label: 'Competitor Intel', icon: Eye, title: 'Competitor Intel', subtitle: 'Know their next move.', item: 'UI-13' },
   { path: '/automation', label: 'Automation', icon: Zap, title: 'Automation', subtitle: 'Rules that run while you sleep.', item: 'UI-14' },
-  { path: '/integrations', label: 'Integrations', icon: Plug, title: 'Integrations', subtitle: 'Plug in your stores, ads and AI.', item: 'UI-15' },
+  { path: '/settings/integrations', label: 'Integrations', icon: Plug, title: 'Integrations', subtitle: 'Plug in your stores, ads and AI.', item: 'UI-15' },
   { path: '/knowledge', label: 'Knowledge Base', icon: BookOpen, title: 'Knowledge Base', subtitle: 'What your squad knows.', item: 'UI-16' },
   { path: '/settings', label: 'Settings', icon: Settings, title: 'Settings', subtitle: 'Stores, caps and preferences.', item: 'UI-17' },
   { path: '/ecosystem', label: 'AI Ecosystem', icon: Bot, title: 'AI Ecosystem', subtitle: 'A LIVING WORKFORCE OF ECOMMERCE AGENTS', item: 'ECO-02' },
@@ -32,6 +32,9 @@ export const NAV: NavItem[] = [
 export function pageTitle(pathname: string, storeName = (id: string) => id) {
   const [storeId, role] = /^\/agents\/([^/]+)$/.exec(pathname)?.[1]?.replace(/%3a/i, ':').split(':') ?? [];
   if (storeId && role && Object.hasOwn(AGENT_ROLES, role)) return `${AGENT_ROLES[role as AgentRole].name} · ${storeName(storeId)} · Frontline Ecom`;
-  const n = NAV.find((x) => x.path === pathname || (x.path !== '/' && pathname.startsWith(`${x.path}/`)));
+  const n = navFor(pathname);
   return n ? `${n.label} · Frontline Ecom` : 'Frontline Ecom';
 }
+
+/** The app-nav item a path belongs to. Integrations (/settings/integrations) is listed before Settings, so it wins there. */
+export const navFor = (pathname: string) => NAV.find((x) => x.path === pathname || (x.path !== '/' && pathname.startsWith(`${x.path}/`)));

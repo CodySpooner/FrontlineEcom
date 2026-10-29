@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, useOutletContext } from 'react-router';
 import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { ArrowRight, Check, CreditCard, RotateCcw, ShoppingBag, ShoppingCart } from 'lucide-react';
-import { AGENT_ROLES, APPROVAL_KINDS, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type Store, type StoreEventType } from '@frontline/shared';
+import { AGENT_ROLES, APPROVAL_KINDS, settingsUrl, type AgentStatus, type AnalyticsRange, type AnalyticsSummary, type ApprovalRequest, type Store, type StoreEventType } from '@frontline/shared';
 import { useAgents, useApprovals, useDecide, useEvents, useIntegrations, useMissingCosts, useSummary } from '../api/client';
 import { AreaChart } from '../components/AreaChart';
 import { Portrait } from '../components/Art';
@@ -133,7 +133,7 @@ function Kpis({ q }: { q: UseQueryResult<AnalyticsSummary> }) {
           ) : (
             noFees.length > 0 && (
               <Link
-                to="/settings"
+                to={settingsUrl('stores')}
                 title={`No fee estimate for ${noFees.map((x) => x.name).join(', ')}: profit leaves out platform and payment fees. Set one in Settings.`}
                 className="text-red hover:underline"
               >
@@ -271,7 +271,7 @@ function AgentsStrip() {
         <EmptyState
           title="No agents yet"
           action={
-            <Link to="/settings" className={buttonClass('primary')}>
+            <Link to={settingsUrl('stores')} className={buttonClass('primary')}>
               Add a store
             </Link>
           }

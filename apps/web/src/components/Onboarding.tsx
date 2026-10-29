@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { Compass, Store as StoreIcon } from 'lucide-react';
-import { AGENT_ROLES, type Store } from '@frontline/shared';
+import { AGENT_ROLES, settingsUrl, type Store } from '@frontline/shared';
 import { useAgents, useKnowledge } from '../api/client';
 import { nicheKey } from '../lib/niche';
 import { Portrait } from './Art';
@@ -117,11 +117,11 @@ function Squad({ store, onDone }: { store: Store; onDone: (to?: string) => void 
       <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
         {/* Until it's connected the squad works on demo numbers. */}
         <Link
-          to="/integrations"
+          to={settingsUrl('integrations')}
           className={buttonClass('ghost')}
           onClick={(e) => {
             e.preventDefault();
-            onDone('/integrations');
+            onDone(settingsUrl('integrations'));
           }}
         >
           Connect {PLATFORM_NAME[store.platform]}

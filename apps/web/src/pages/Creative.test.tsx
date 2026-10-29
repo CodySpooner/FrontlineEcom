@@ -47,6 +47,6 @@ describe('Claude integration chip', () => {
   it('flags a signed-out Claude login on a live store', async () => {
     api('claude', false);
     renderApp(<Creative />, '/creative?tab=copy');
-    expect((await screen.findByText(/needs attention/)).closest('a')?.getAttribute('href')).toBe('/integrations');
+    expect((await screen.findByText(/needs attention/)).closest('a')?.getAttribute('href')).toBe('/settings/integrations');
   });
 });

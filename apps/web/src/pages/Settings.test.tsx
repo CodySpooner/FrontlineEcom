@@ -1,20 +1,142 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen } from '@testing-library/react';
-import type { Settings as SettingsT, StoreCaps } from '@frontline/shared';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { settingsUrl, type Settings as SettingsT, type Store, type StoreCaps } from '@frontline/shared';
+import { App } from '../App';
+import { budgetFix } from '../lib/usage';
+import { SECTIONS } from '../settings/Layout';
+import { Backups, CapsForm } from '../settings/sections/legacy';
 import { renderApp, stubApi } from '../test-utils';
-import { Backups, CapsForm, Settings } from './Settings';
+import { Settings } from './Settings';
 
+const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true, researchAlerts: true }, baseCurrency: 'EUR', dataDir: 'C:/data' };
+const peak = { id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', color: '#ff2a3a', currency: 'USD', timezone: 'UTC', connected: false } as Store;
+const glow = { ...peak, id: 'glow', name: 'Glow Haus' } as Store;
 const caps: StoreCaps = { storeId: 'peak', adSpendChangePerDay: 100, higgsfieldCreditsPerDay: 200, agentCostPerDay: 5, autopilot: {} };
+/** The section title (Settings' own h2, not a panel's). */
+const titled = (label: string) => vi.waitFor(() => expect(document.getElementById('settings-title')?.textContent).toBe(label));
 const amount = () => screen.getByLabelText('Change ad budgets: most per day in dollars');
-const puts = (fetch: ReturnType<typeof stubApi>) => fetch.mock.calls.filter(([, init]) => init?.method === 'PUT');
+const sent = (fetch: ReturnType<typeof stubApi>, method: string) => fetch.mock.calls.filter(([, init]) => init?.method === method).map(([url, init]) => [url, JSON.parse(String(init!.body))]);
+const api = (extra: (url: string) => unknown = () => undefined) =>
+  stubApi((url, init) => {
+    if (init?.method === 'PATCH' && url === '/api/settings') return settings;
+    if (url === '/api/settings') return settings;
+    if (url === '/api/stores') return [peak, glow];
+    if (url.startsWith('/api/caps')) return { ...caps, storeId: new URL(url, 'http://x').searchParams.get('stores') ?? 'peak' };
+    return extra(url) ?? (url === '/api/health' ? { ok: true, uptimeSec: 1, version: 'dev', connectors: [] } : undefined);
+  });
 
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
 
-describe('caps form', () => {
+describe('routes and deep links', () => {
+  it('/settings lands on General, showing the base currency', async () => {
+    api();
+    renderApp(<Settings />, '/settings');
+    expect(screen.getByTestId('where').textContent).toBe('/settings/general');
+    expect(((await screen.findByLabelText(/^Base currency/)) as HTMLInputElement).value).toBe('EUR');
+  });
+
+  it('a section with no content yet is absent from the sidebar and lands on General, keeping the query', async () => {
+    api();
+    renderApp(<Settings />, '/settings/agents?store=peak');
+    expect(screen.getByTestId('where').textContent).toBe('/settings/general?store=peak');
+    const nav = await screen.findByRole('navigation', { name: 'Settings' });
+    await within(nav).findByRole('link', { name: 'Stores2' });
+    expect(within(nav).queryByRole('link', { name: /Agents/ })).toBeNull();
+    expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Account', 'Notifications', 'General', 'Stores2', 'Integrations', 'Usage & Limits', 'Data & Backups']);
+  });
+
+  it.each(SECTIONS.map((s) => [s.slug, s.label]))('/settings/%s renders its section', async (slug, label) => {
+    api();
+    renderApp(<Settings />, `/settings/${slug}`);
+    await titled(label);
+    expect(within(screen.getByRole('navigation', { name: 'Settings' })).getByRole('link', { name: new RegExp(`^${label}`) }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('/integrations moves to /settings/integrations, keeping its query', async () => {
+    api();
+    renderApp(<App />, '/integrations?x=1');
+    await titled('Integrations');
+    expect(screen.getByTestId('where').textContent).toBe('/settings/integrations?x=1');
+  });
+
+  it('a deep link opens its section with its store selected, and the store carries over to other sections', async () => {
+    api();
+    renderApp(<Settings />, settingsUrl('usage', { store: 'glow', setting: 'caps.agentCostPerDay' }));
+    expect(((await screen.findByRole('combobox', { name: 'Store' })) as HTMLSelectElement).value).toBe('glow');
+    expect(screen.getByRole('link', { name: 'Stores2' }).getAttribute('href')).toBe('/settings/stores?store=glow');
+  });
+
+  it('links into Settings point at the section that holds their content', () => {
+    expect(settingsUrl('integrations', { id: 'x', setting: 'y' })).toBe('/settings/integrations/x#y');
+    expect(settingsUrl('usage', { store: 'a b' })).toBe('/settings/usage?store=a%20b');
+    expect(budgetFix("Today's AI budget for this store ($5) is used up. Raise it in Settings.", 'glow:copywriter')?.to).toBe('/settings/usage?store=glow#caps.agentCostPerDay');
+    expect(budgetFix("Claude isn't signed in on this computer.", 'glow:copywriter')?.to).toBe('/settings/integrations');
+  });
+
+  it('the Hero chip opens Account', async () => {
+    api();
+    renderApp(<Settings />, '/settings/general');
+    expect((await screen.findByRole('link', { name: /Cody/ })).getAttribute('href')).toBe('/settings/account');
+  });
+});
+
+describe('inside the app shell', () => {
+  it('lights Integrations on its routes and Settings on the rest', async () => {
+    api();
+    renderApp(<App />, '/settings/integrations');
+    await titled('Integrations');
+    const main = screen.getByRole('navigation', { name: 'Main' });
+    const lit = () => within(main).getAllByRole('link').filter((a) => a.getAttribute('aria-current') === 'page').map((a) => a.textContent);
+    expect(lit()).toEqual(['Integrations']);
+    expect(within(main).getByRole('link', { name: 'Integrations' }).getAttribute('href')).toBe('/settings/integrations');
+    fireEvent.click(await within(screen.getByRole('navigation', { name: 'Settings' })).findByRole('link', { name: 'Stores2' }));
+    await titled('Stores');
+    expect(lit()).toEqual(['Settings']);
+  });
+
+  it('keeps one Settings element mounted across sections', async () => {
+    api();
+    renderApp(<App />, '/settings/account');
+    await titled('Account');
+    const sidebar = screen.getByRole('navigation', { name: 'Settings' });
+    fireEvent.click(within(sidebar).getByRole('link', { name: 'General' }));
+    await titled('General');
+    expect(screen.getByRole('navigation', { name: 'Settings' })).toBe(sidebar);
+  });
+});
+
+describe('Account and General each save only their own field', () => {
+  it('Account saves the name', async () => {
+    const fetch = api();
+    renderApp(<Settings />, '/settings/account');
+    fireEvent.change(await screen.findByLabelText('Your name'), { target: { value: ' Sam ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await vi.waitFor(() => expect(sent(fetch, 'PATCH')).toEqual([['/api/settings', { profile: { name: 'Sam' } }]]));
+  });
+
+  it('General saves the base currency', async () => {
+    const fetch = api();
+    renderApp(<Settings />, '/settings/general');
+    fireEvent.change(await screen.findByLabelText(/^Base currency/), { target: { value: 'gbp' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await vi.waitFor(() => expect(sent(fetch, 'PATCH')).toEqual([['/api/settings', { baseCurrency: 'GBP' }]]));
+  });
+});
+
+describe('sidebar badges come from real data', () => {
+  it('counts stores, and shows integration issues only when a sync failed', async () => {
+    api((url) => (url === '/api/integrations' ? [{ id: 'shopify:peak', kind: 'shopify', storeId: 'peak', status: 'error', settings: {}, secretsSet: [], updatedAt: '' }] : undefined));
+    renderApp(<Settings />, '/settings/general');
+    expect(await screen.findByRole('link', { name: 'Integrations1 issue' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Stores2' })).toBeTruthy();
+  });
+});
+
+describe('caps form (moved, ST-24b)', () => {
   it("won't send an autopilot rule with a blank amount", async () => {
     const fetch = stubApi(() => undefined);
     renderApp(<CapsForm caps={caps} />);
@@ -22,7 +144,7 @@ describe('caps form', () => {
     fireEvent.change(amount(), { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save caps' }));
     await new Promise((r) => setTimeout(r, 50));
-    expect(puts(fetch)).toHaveLength(0);
+    expect(sent(fetch, 'PUT')).toHaveLength(0);
   });
 
   it('turning a rule off with a blank amount saves it as 0', async () => {
@@ -33,12 +155,18 @@ describe('caps form', () => {
     fireEvent.change(amount(), { target: { value: '' } });
     fireEvent.click(rule);
     fireEvent.click(screen.getByRole('button', { name: 'Save caps' }));
-    await vi.waitFor(() => expect(puts(fetch)).toHaveLength(1));
-    expect(JSON.parse(String(puts(fetch)[0]![1]!.body)).autopilot['ads.set_budget']).toEqual({ enabled: false, maxUsdPerDay: 0 });
+    await vi.waitFor(() => expect(sent(fetch, 'PUT')).toHaveLength(1));
+    expect(sent(fetch, 'PUT')[0]![1].autopilot['ads.set_budget']).toEqual({ enabled: false, maxUsdPerDay: 0 });
+  });
+
+  it('says caps come with a store instead of loading forever', async () => {
+    stubApi((url) => (url === '/api/stores' ? [] : url === '/api/settings' ? settings : undefined));
+    renderApp(<Settings />, '/settings/usage');
+    expect(await screen.findByText('Caps are set per store: add a store above, then set its limits here.')).toBeTruthy();
   });
 });
 
-describe('backups', () => {
+describe('data and backups (moved, ST-31)', () => {
   it('marks the copy taken before an update', async () => {
     stubApi((url) =>
       url === '/api/backups'
@@ -51,24 +179,21 @@ describe('backups', () => {
     renderApp(<Backups />);
     expect(await screen.findAllByText('Before update')).toHaveLength(1);
   });
-});
 
-describe('your data', () => {
-  const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true, researchAlerts: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
   it.each([
     ['0.1.3', 'Version 0.1.3'],
     ['dev', 'Development build'],
   ])('shows the running version %s', async (version, text) => {
-    stubApi((url) => (url === '/api/settings' ? settings : url === '/api/health' ? { ok: true, uptimeSec: 1, version, connectors: [] } : undefined));
-    renderApp(<Settings />, '/settings');
+    api((url) => (url === '/api/health' ? { ok: true, uptimeSec: 1, version, connectors: [] } : undefined));
+    renderApp(<Settings />, '/settings/data');
     expect(await screen.findByText(text)).toBeTruthy();
   });
 
   it("opens the data folder through the desktop app when it's there, and shows Windows' error", async () => {
-    const fetch = stubApi((url) => (url === '/api/settings' ? settings : undefined));
+    const fetch = api();
     const openDataFolder = vi.fn(async () => 'The system cannot find the path specified.');
     vi.stubGlobal('desktop', { openDataFolder });
-    renderApp(<Settings />, '/settings');
+    renderApp(<Settings />, '/settings/data');
     fireEvent.click(await screen.findByRole('button', { name: 'Open folder' }));
     expect((await screen.findByRole('alert')).textContent).toContain('cannot find the path');
     expect(openDataFolder).toHaveBeenCalledOnce();
@@ -76,21 +201,10 @@ describe('your data', () => {
   });
 });
 
-describe('Caps with no stores', () => {
-  it('says caps come with a store instead of loading forever', async () => {
-    const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true, researchAlerts: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
-    stubApi((url) => (url === '/api/stores' ? [] : url === '/api/settings' ? settings : undefined));
-    renderApp(<Settings />, '/settings');
-    expect(await screen.findByText('Caps are set per store: add a store above, then set its limits here.')).toBeTruthy();
-  });
-});
-
-describe('deleting a store', () => {
+describe('deleting a store (moved, ST-18)', () => {
   it('asks with focus on Keep, and Keep hands focus back to Delete', async () => {
-    const settings: SettingsT = { profile: { name: 'Cody', plan: 'Pro Plan' }, notifications: { approvals: true, agentDone: true, errors: true, digest: true, researchAlerts: true }, baseCurrency: 'USD', dataDir: 'C:/data' };
-    const store = { id: 'peak', name: 'Peak Fit', platform: 'shopify', niche: 'fitness', color: '#ff2a3a', currency: 'USD', timezone: 'UTC', connected: false };
-    stubApi((url) => (url === '/api/stores' ? [store] : url === '/api/settings' ? settings : undefined));
-    renderApp(<Settings />, '/settings');
+    stubApi((url) => (url === '/api/stores' ? [peak] : url === '/api/settings' ? settings : undefined));
+    renderApp(<Settings />, '/settings/stores');
     await screen.findByText('Peak Fit');
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
     expect(screen.getByText("Delete Peak Fit? This can't be undone.")).toBeTruthy();

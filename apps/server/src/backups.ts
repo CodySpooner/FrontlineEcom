@@ -2,7 +2,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, s
 import { join } from 'node:path';
 import { backup, DatabaseSync } from 'node:sqlite';
 import { Hono } from 'hono';
-import type { Backup } from '@frontline/shared';
+import { settingsUrl, type Backup } from '@frontline/shared';
 import { dataDir, dbFile, MIGRATIONS, type Db } from './db';
 import { log } from './log';
 import { notify } from './settings';
@@ -69,12 +69,12 @@ export function startBackupLoop(db: Db, dir = backupDir()) {
     running = true;
     try {
       await backupNow(db, dir);
-      if (failing) notify(db, { kind: 'info', title: 'Backups are working again', link: '/settings' });
+      if (failing) notify(db, { kind: 'info', title: 'Backups are working again', link: settingsUrl('data') });
       failing = false;
     } catch (e) {
       const error = e instanceof Error ? e.message : String(e);
       log('error', 'backup failed', { error });
-      if (!failing) notify(db, { kind: 'error', title: 'The daily backup failed', body: `${error}. Check free disk space and the data folder (Settings).`, link: '/settings' });
+      if (!failing) notify(db, { kind: 'error', title: 'The daily backup failed', body: `${error}. Check free disk space and the data folder (Settings).`, link: settingsUrl('data') });
       failing = true;
     } finally {
       running = false;

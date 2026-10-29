@@ -1267,7 +1267,7 @@ STOP.
 
 ### Approved interface
 
-- [ ] ST-02 **Settings frame, routes and deep links** (The design: frame; decisions 1, 11, 12, 16).
+- [x] ST-02 **Settings frame, routes and deep links** (The design: frame; decisions 1, 11, 12, 16).
   - Files: `pages/Settings.tsx`, `settings/Layout.tsx`, `settings/Sidebar.tsx`, `packages/shared/src/settings.ts`
     (`settingsUrl` and the section slugs), `App.tsx`, `nav.ts`, `components/Shell.tsx`, `apps/server/src/backups.ts`,
     `apps/server/src/sync.ts`.
@@ -2363,6 +2363,7 @@ STOP.
 
 ## Done
 - 2026-10-28 ST-01 set-up files present; baseline `pnpm check` green at 65531883: 234 test files, 1730 tests, 86 s (typecheck + vitest). `.agent/` tools copied, before shots in `.agent/before/` (dir (a), demo only). Code map: Corrections and Registry plan appended. No decision changed.
+- 2026-10-28 ST-02 `/settings/<section>` frame (Hero, 248 px sidebar, 860 px column, section select below 900 px), `settingsUrl` in shared, `/integrations` → `/settings/integrations` (query kept), Integrations page moved to `settings/integrations/`, today's panels moved into account/general/notifications/stores/usage/data behind `data-legacy`, every web and server link rebuilt with `settingsUrl`. `pnpm check` green (234 files, 1748 tests; first run timed out only in the Research scale test, rerun with `VITEST_MAX_WORKERS=4`). `pnpm e2e --grep settings|integrations`: route smoke 8/8 green at 390–1920 px; both axe compares fail only on CRLF line endings (Notes). Shots: `.agent/st02-1280.png`, 390×844 overflow 0.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -2390,6 +2391,14 @@ STOP.
     tested with fakes only.
 
 ## Notes
+- **ST-02:** Settings uses the compact Hero (the board's 52 px title strip). At 390 px the compact strip clips the title
+  ("SETTI…") beside the Ask/bell/profile controls, the same as AI Agents' compact strip today; ST-46 looks at it. The
+  section title is the h2 under the Hero's h1. The Hero names the lit app-nav item: "Integrations" on
+  `/settings/integrations`, "Settings" elsewhere (the e2e route smoke expects that h1).
+- **e2e (2026-10-28):** `pnpm e2e` exists. On this worktree (`core.autocrlf=true`) every axe snapshot compare fails on
+  line endings alone (untouched `/orders` too); filed to codex-hardening's Inbox with the `.gitattributes` fix. The
+  renamed `settings-integrations` snapshot has the same single shared-Hero finding as `integrations.json`; the rename and
+  the new section routes are filed to codex-hardening (CH-18 is unticked), not committed here.
 - **ST-01 decision check (65531883):** no decision changed. Code between cc80fbac and HEAD touched only Codex tests and one `codex.ts` line. One precision for decision 2/12: `approvals.ts` links an approval to `/`, except a `question`, which links to its conversation; ST-02/ST-14 keep that. `pnpm e2e` exists on main (codex-hardening CH-17/18), so ST-02 runs it before pushing.
 - **Seen in passing, not this lane's to fix:** the `startScheduler` docstring says catch-up goes 24 h back, but the
   code uses 31 days.

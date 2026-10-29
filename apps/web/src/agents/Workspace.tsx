@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, Navigate, useLocation, useOutletContext, useParams, useSearchParams } from 'react-router';
 import { Bot, List, PanelRight, Plus, SearchX, Users } from 'lucide-react';
-import { AGENT_ROLES, type Store } from '@frontline/shared';
+import { AGENT_ROLES, settingsUrl, type Store } from '@frontline/shared';
 import { useConversation, useConversations, useRun, useStores } from '../api/client';
 import { Hero } from '../components/Hero';
 import { useStoreSelection } from '../components/StoreFilter';
@@ -40,7 +40,7 @@ export function Workspace() {
   else if (stores.isError) body = <ErrorState message="Couldn't load your stores." onRetry={() => stores.refetch()} />;
   else if (!stores.data.length)
     body = (
-      <EmptyState icon={Users} title="No stores yet" action={<Link to="/settings" className={buttonClass('primary')}>Add a store</Link>}>
+      <EmptyState icon={Users} title="No stores yet" action={<Link to={settingsUrl('stores')} className={buttonClass('primary')}>Add a store</Link>}>
         Each store gets its own agents and conversations.
       </EmptyState>
     );

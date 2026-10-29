@@ -3,6 +3,7 @@ import { createContext, useContext, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { TriangleAlert } from 'lucide-react';
+import { settingsUrl } from '@frontline/shared';
 import { useStores } from '../api/client';
 import { Chip, StatusDot } from './ui';
 
@@ -81,7 +82,7 @@ export function DemoMixNote() {
       <StatusDot tone="idle" />
       <span>
         {new Intl.ListFormat('en').format(demo.map((s) => s.name))} {demo.length > 1 ? 'show' : 'shows'} demo numbers until connected, and these totals include them.{' '}
-        <Link to="/settings" className="text-red hover:underline">
+        <Link to={settingsUrl('stores')} className="text-red hover:underline">
           Manage stores
         </Link>
       </span>

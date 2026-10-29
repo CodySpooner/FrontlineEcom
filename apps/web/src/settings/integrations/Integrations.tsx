@@ -1,15 +1,13 @@
-// UI-15 Integrations: connect store platforms, ad accounts, analytics, suppliers and creative tools.
+// UI-15 Integrations (Settings → Integrations since ST-02): connect store platforms, ad accounts, analytics, suppliers and creative tools.
 // Secrets go in and never come back out: the API only says which secret fields are set.
 import { Fragment, useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
-import { anotherShop, INTEGRATION_KINDS, type Integration, type IntegrationCategory, type IntegrationKind, type OAuthStart, type Store } from '@frontline/shared';
-import { useClaudeAccount, useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds, useStores, useSyncIntegration } from '../api/client';
-import { Hero } from '../components/Hero';
-import { StoreFilter, useStoreSelection } from '../components/StoreFilter';
-import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot, useFocusBack } from '../components/ui';
-import { ago, fmtDay } from '../lib/format';
-import { importing } from '../lib/sync';
-import { NAV } from '../nav';
+import { anotherShop, INTEGRATION_KINDS, settingsUrl, type Integration, type IntegrationCategory, type IntegrationKind, type OAuthStart, type Store } from '@frontline/shared';
+import { useClaudeAccount, useIntegrationActions, useIntegrations, useOAuth, useOAuthKinds, useStores, useSyncIntegration } from '../../api/client';
+import { StoreFilter, useStoreSelection } from '../../components/StoreFilter';
+import { Button, buttonClass, cx, Dialog, EmptyState, ErrorState, Field, inputClass, LoadingState, Panel, StatusDot, useFocusBack } from '../../components/ui';
+import { ago, fmtDay } from '../../lib/format';
+import { importing } from '../../lib/sync';
 
 const CATEGORIES: Record<IntegrationCategory, { title: string; sub: string }> = {
   platform: { title: 'Store Platforms', sub: 'Orders, products and sales sync from each store.' },
@@ -26,7 +24,6 @@ const ONE_OF: Partial<Record<IntegrationKind, { from: string; keys: string[]; no
 const keyOf = (kind: IntegrationKind, store?: Store) => `${kind}:${store?.id ?? ''}`;
 
 export function Integrations() {
-  const nav = NAV.find((n) => n.path === '/integrations')!;
   const { stores, has } = useStoreSelection();
   const q = useIntegrations();
   const [open, setOpen] = useState<{ kind: IntegrationKind; store?: Store }>();
@@ -43,7 +40,6 @@ export function Integrations() {
 
   return (
     <>
-      <Hero title={nav.title} subtitle={nav.subtitle} icon={nav.icon} />
       <div className="mb-3.5">
         <StoreFilter />
       </div>
@@ -62,7 +58,7 @@ export function Integrations() {
               <EmptyState
                 title="No stores yet"
                 action={
-                  <Link to="/settings" className={buttonClass('primary')}>
+                  <Link to={settingsUrl('stores')} className={buttonClass('primary')}>
                     Add a store
                   </Link>
                 }

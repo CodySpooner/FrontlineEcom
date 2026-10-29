@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
-import { APPROVAL_KINDS, CODEX_ULTRA, EFFORT_LABEL, type AgentPermissions, type AgentPreset, type AgentTypeInfo, type ConversationDetail, type ConversationConfigInput, type KnowledgeScope, type RuntimeCapabilities, type RuntimeId, type Store } from '@frontline/shared';
+import { APPROVAL_KINDS, CODEX_ULTRA, EFFORT_LABEL, settingsUrl, type AgentPermissions, type AgentPreset, type AgentTypeInfo, type ConversationDetail, type ConversationConfigInput, type KnowledgeScope, type RuntimeCapabilities, type RuntimeId, type Store } from '@frontline/shared';
 import { useAgents, useAgentTypes, useCaps, useChangeConfig, useCreateConversation, usePresets, useRefreshRuntimes, useRuntimes, useSavePreset, useSetUpCodex, useStores, useTypeTools } from '../api/client';
 import { Button, cx, Dialog, Segmented, Switch } from '../components/ui';
 import { withParams } from '../knowledge/url';
@@ -419,7 +419,7 @@ export function Deploy({ store: initial, type: preselected, onClose, lockStore, 
                   ) : g.integration && !g.integration.connected ? (
                     <>
                       Not connected ·{' '}
-                      <Link to="/integrations" className="text-[#ff6b76] hover:underline">
+                      <Link to={settingsUrl('integrations')} className="text-[#ff6b76] hover:underline">
                         Set up
                       </Link>
                     </>

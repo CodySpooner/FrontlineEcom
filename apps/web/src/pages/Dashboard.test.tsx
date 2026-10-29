@@ -92,7 +92,7 @@ describe('demo numbers in real totals', () => {
     stores(true, false, false);
     renderApp(<DemoMixNote />);
     const note = await screen.findByText(/Pawsome Gear and Glow Haus show demo numbers/);
-    expect(note.querySelector('a')?.getAttribute('href')).toBe('/settings');
+    expect(note.querySelector('a')?.getAttribute('href')).toBe('/settings/stores');
   });
 
   it.each([[[false, false]], [[true]]])('stays out of the way when every store is the same kind (%j)', async (connected) => {

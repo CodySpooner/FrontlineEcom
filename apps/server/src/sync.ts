@@ -1,4 +1,4 @@
-import { INTEGRATION_KINDS, type IntegrationKind, type StoreEvent } from '@frontline/shared';
+import { INTEGRATION_KINDS, settingsUrl, type IntegrationKind, type StoreEvent } from '@frontline/shared';
 import { syncAmazon } from './connectors/amazon';
 import { retrying } from './connectors/common';
 import { syncCj } from './connectors/cj';
@@ -23,7 +23,7 @@ function notifyChange(db: Db, kind: IntegrationKind, storeId: string | null, bef
   if ((before === 'error') === (status === 'error')) return;
   const store = storeId == null ? undefined : (db.prepare('SELECT name FROM stores WHERE id = ?').get(storeId)?.name as string | undefined);
   const what = `${INTEGRATION_KINDS[kind].name}${store ? ` for ${store}` : ''}`;
-  const where = { link: '/integrations', ...(store ? { storeId: storeId! } : {}) };
+  const where = { link: settingsUrl('integrations'), ...(store ? { storeId: storeId! } : {}) };
   if (status === 'error') notify(db, { kind: 'error', title: `${what} stopped syncing`, body: `${error ?? 'Sync failed'}. Fix it in Integrations.`, ...where });
   else notify(db, { kind: 'info', title: `${what} is syncing again`, ...where });
 }

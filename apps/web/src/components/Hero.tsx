@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Search, type LucideIcon } from 'lucide-react';
+import { settingsUrl } from '@frontline/shared';
 import { useSettings } from '../api/client';
 import { NotificationBell } from './Notifications';
 
@@ -56,7 +57,7 @@ function HeroControls() {
         <kbd className="ml-auto hidden rounded border border-line-2 px-1.5 font-sans text-[11px] text-muted min-[1100px]:inline">Ctrl K</kbd>
       </button>
       <NotificationBell />
-      <Link to="/settings" className="glass flex items-center gap-2.5 rounded-[13px] py-[5px] pr-2.5 pl-[5px]">
+      <Link to={settingsUrl('account')} className="glass flex items-center gap-2.5 rounded-[13px] py-[5px] pr-2.5 pl-[5px]">
         <span className="grid size-8 place-items-center rounded-full border border-red bg-[radial-gradient(circle_at_50%_35%,#45121a,#120507)] font-display text-sm font-bold">{profile.name.charAt(0).toUpperCase()}</span>
         <span>
           <span className="block text-[13px] leading-tight font-semibold">{profile.name}</span>

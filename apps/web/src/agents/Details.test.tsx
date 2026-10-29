@@ -88,7 +88,7 @@ test('Details: runtime, tools with access and connection state, the approval lin
   expect(within(await screen.findByText('Store data').then((e) => e.closest('li')!)).getByText('Read')).toBeTruthy();
   expect(within(tool('Drafts and changes')).getByText('Drafts need approval')).toBeTruthy();
   expect(tool('Meta Ads (MCP)').textContent).toBe('Meta Ads (MCP)Not connected · Set up');
-  expect(within(tool('Meta Ads (MCP)')).getByRole('link', { name: 'Set up' }).getAttribute('href')).toBe('/integrations');
+  expect(within(tool('Meta Ads (MCP)')).getByRole('link', { name: 'Set up' }).getAttribute('href')).toBe('/settings/integrations');
   expect(screen.getByText('Spending always asks you first.')).toBeTruthy();
   expect(screen.getByText('This run $0.42 of $3.00')).toBeTruthy();
   expect(screen.getByText('No limit')).toBeTruthy(); // Stop after

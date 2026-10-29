@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Captions, Copy, Download, PenLine, Sparkles, Trash2, Wand2, Zap } from 'lucide-react';
-import { CREDITS, type AgentRole, type AspectRatio, type Creative as CreativeT, type CreativeKind } from '@frontline/shared';
+import { CREDITS, settingsUrl, type AgentRole, type AspectRatio, type Creative as CreativeT, type CreativeKind } from '@frontline/shared';
 import { useAgents, useCaps, useClaudeAccount, useCreatives, useDeleteCreative, useIntegrations, useStartRun } from '../api/client';
 import { FixLink } from '../components/Chat';
 import { Hero } from '../components/Hero';
@@ -135,7 +135,7 @@ export function Creative() {
             <div className="flex flex-wrap items-center gap-2 border-t border-line pt-3 text-xs text-muted">
               Integration
               <Link
-                to="/integrations"
+                to={settingsUrl('integrations')}
                 title={hf === 'connected' ? 'Renders images and video' : 'Connect Higgsfield for real renders'}
                 className="inline-flex items-center gap-1.5 rounded-md border border-line bg-bg-2 px-2 py-1 text-text-2 hover:text-white"
               >
@@ -143,7 +143,7 @@ export function Creative() {
                 Higgsfield AI{hf !== 'connected' && <span className="text-muted">{hf === 'error' ? ' · needs attention' : ' · demo renders'}</span>}
               </Link>
               <Link
-                to="/integrations"
+                to={settingsUrl('integrations')}
                 title={claude === 'demo' ? 'Demo stores get scripted answers' : 'Writes the copy and the briefs'}
                 className="inline-flex items-center gap-1.5 rounded-md border border-line bg-bg-2 px-2 py-1 text-text-2 hover:text-white"
               >

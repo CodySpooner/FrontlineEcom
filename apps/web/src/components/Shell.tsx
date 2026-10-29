@@ -1,8 +1,9 @@
 import { Component, Suspense, useEffect, type ReactNode } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { Link, Outlet, useLocation } from 'react-router';
 import { TriangleAlert } from 'lucide-react';
+import { settingsUrl } from '@frontline/shared';
 import { useAgents, useClaudeAccount, useGoLiveRefresh, useHealth, useLive } from '../api/client';
-import { NAV, pageTitle } from '../nav';
+import { NAV, navFor, pageTitle } from '../nav';
 import { AskPalette } from './AskPalette';
 import { BrandLogo } from './BrandLogo';
 import { Onboarding } from './Onboarding';
@@ -15,6 +16,8 @@ export function Shell() {
   useGoLiveRefresh();
   const { pathname } = useLocation();
   const title = pageTitle(pathname, useStoreSelection().name);
+  // AI Agents stays lit on its conversation and team URLs; Integrations on /settings/integrations/*, Settings on the rest.
+  const active = navFor(pathname);
   useEffect(() => {
     document.title = title;
   }, [title]);
@@ -52,22 +55,19 @@ export function Shell() {
         </div>
         <nav aria-label="Main" className="flex flex-col gap-0.5">
           {NAV.map((n) => (
-            <NavLink
+            <Link
               key={n.path}
               to={n.path}
-              // AI Agents stays lit on its conversation and team URLs.
-              end={n.path === '/'}
               title={n.label}
-              className={({ isActive }) =>
-                cx(
-                  'flex items-center justify-center gap-3 rounded-[9px] p-2.5 text-sm font-medium whitespace-nowrap transition duration-150 min-[900px]:justify-start min-[900px]:px-3 min-[900px]:py-[9px]',
-                  isActive ? 'bg-linear-to-r from-red-2 to-red text-white shadow-glow-lg' : 'text-text-2 hover:bg-panel-2 hover:text-white',
-                )
-              }
+              aria-current={n === active ? 'page' : undefined}
+              className={cx(
+                'flex items-center justify-center gap-3 rounded-[9px] p-2.5 text-sm font-medium whitespace-nowrap transition duration-150 min-[900px]:justify-start min-[900px]:px-3 min-[900px]:py-[9px]',
+                n === active ? 'bg-linear-to-r from-red-2 to-red text-white shadow-glow-lg' : 'text-text-2 hover:bg-panel-2 hover:text-white',
+              )}
             >
               <n.icon className="size-[18px] shrink-0" strokeWidth={1.8} />
               <span className="sr-only min-[900px]:not-sr-only">{n.label}</span>
-            </NavLink>
+            </Link>
           ))}
         </nav>
         <SystemStatus online={online} />
@@ -122,7 +122,7 @@ export function SystemStatus({ online }: { online: boolean }) {
         <div role="status" className="mt-1.5 mb-[9px] flex items-center gap-2 text-[13px]">
           {dot}
           {online && !isError && (claudeOut || (!down && failing)) ? (
-            <Link to="/integrations" className="hover:underline">
+            <Link to={settingsUrl('integrations')} className="hover:underline">
               {text}
             </Link>
           ) : (

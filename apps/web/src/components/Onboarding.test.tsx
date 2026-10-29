@@ -93,7 +93,7 @@ describe('onboarding', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add store' }));
     fireEvent.click(await screen.findByRole('link', { name: 'Connect Shopify' }));
     expect(dialog().open).toBe(false);
-    expect(screen.getByTestId('where').textContent).toBe('/integrations');
+    expect(screen.getByTestId('where').textContent).toBe('/settings/integrations');
     expect(JSON.parse(localStorage.getItem('fe.stores')!)).toEqual(['trail-co']);
   });
 });

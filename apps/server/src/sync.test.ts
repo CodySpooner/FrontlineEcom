@@ -47,11 +47,11 @@ test('a connection that breaks raises one error notification, and one when it re
   await vi.advanceTimersByTimeAsync(0);
   await vi.advanceTimersByTimeAsync(61_000 * 2); // two failed retries
   expect(shopify).toHaveBeenCalledTimes(3);
-  expect(notes()).toEqual([['error', 'Shopify for Glow Haus stopped syncing', 'Shopify refused the token. Fix it in Integrations.', 'glow', '/integrations']]);
+  expect(notes()).toEqual([['error', 'Shopify for Glow Haus stopped syncing', 'Shopify refused the token. Fix it in Integrations.', 'glow', '/settings/integrations']]);
 
   fail = false;
   await vi.advanceTimersByTimeAsync(61_000);
-  expect(notes()[0]).toEqual(['info', 'Shopify for Glow Haus is syncing again', null, 'glow', '/integrations']);
+  expect(notes()[0]).toEqual(['info', 'Shopify for Glow Haus is syncing again', null, 'glow', '/settings/integrations']);
   expect(notes()).toHaveLength(2);
   stop();
 });

@@ -169,7 +169,7 @@ test('no stores: the workspace says how to add one', async () => {
   api([]);
   renderAt('/agents');
   expect(await screen.findByText('No stores yet')).toBeTruthy();
-  expect(screen.getByRole('link', { name: 'Add a store' }).getAttribute('href')).toBe('/settings');
+  expect(screen.getByRole('link', { name: 'Add a store' }).getAttribute('href')).toBe('/settings/stores');
 });
 
 test('/ focuses the list search unless typing; ↑/↓ move through the list', async () => {

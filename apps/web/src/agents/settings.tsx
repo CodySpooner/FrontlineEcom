@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router';
 import { Brain, Trash2 } from 'lucide-react';
-import { AGENT_ROLES, APPROVAL_KINDS, type Agent, type AgentRole, type Autonomy, type MemoryKind, type StoreCaps } from '@frontline/shared';
+import { AGENT_ROLES, APPROVAL_KINDS, settingsUrl, type Agent, type AgentRole, type Autonomy, type MemoryKind, type StoreCaps } from '@frontline/shared';
 import { useAddMemory, useAgents, useApprovals, useAutomationActions, useAutomations, useCaps, useForgetMemory, useMemory, useRun, useRuns, useStores, useUpdateAgent, useUsage } from '../api/client';
 import { ApprovalCard } from '../components/Chat';
 import { DemoJobsNote } from '../components/DemoJobsNote';
@@ -303,7 +303,7 @@ function AgentSettings({ agent }: { agent: Agent }) {
             </p>
           )}
         </Panel>
-        <Panel title="Store caps" sub="Hard limits every agent on this store respects." action={<Link to="/settings" className={buttonClass('ghost', 'sm')}>Edit caps</Link>}>
+        <Panel title="Store caps" sub="Hard limits every agent on this store respects." action={<Link to={settingsUrl('usage', { store: agent.storeId, setting: 'caps.agentCostPerDay' })} className={buttonClass('ghost', 'sm')}>Edit caps</Link>}>
           {!caps ? (
             <LoadingState rows={3} />
           ) : (
