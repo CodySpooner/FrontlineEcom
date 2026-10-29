@@ -155,7 +155,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
       collections: NOT_READ('collections (paged)', { scopes: 'read_products' }),
       traffic: { support: 'supported', reads: true, field: 'ShopifyQL sessions (shopifyqlQuery)', scopes: 'read_reports + Level 2 customer data', history: '730 days back', reason: 'Only when GA4 is not connected (GA4 owns traffic there).' },
       purchase_sessions: { support: 'supported', reads: true, field: 'ShopifyQL sessions.sessions_that_completed_checkout', scopes: 'read_reports + Level 2 customer data', history: '730 days back', reason: 'Only when GA4 is not connected (GA4 owns traffic there).' },
-      traffic_breakdowns: NOT_READ('ShopifyQL sessions by referrer source, device type and country', { scopes: 'read_reports + Level 2 customer data' }),
+      traffic_breakdowns: { support: 'supported', reads: true, field: 'ShopifyQL sessions GROUP BY day, referrer_source / session_device_type / session_country_code', scopes: 'read_reports + Level 2 customer data', history: '730 days back', reason: 'Only when GA4 is not connected (GA4 owns traffic there).' },
       customers: { support: 'supported', reads: true, field: 'orders.customer.id (hashed), shippingAddress.countryCodeV2', scopes: 'Level 2 protected customer data (optional, probed daily)', history: 'with the orders read' },
       product_views: UNSUPPORTED(
         "Shopify's reference for the ShopifyQL products dataset names no product-view column (a view count appears only in community answers), so per-product views are not read.",

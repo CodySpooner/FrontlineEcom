@@ -520,7 +520,7 @@ test("without GA4, the funnel comes from Shopify's analytics; without its scope,
   const ql = (c: { body: { query: string; variables: Record<string, unknown> } }[]) => c.filter((x) => x.body.query.includes('shopifyqlQuery')).map((x) => x.body.variables.q);
   const { fetchFn, calls } = fakeShopify([], 200, true);
   await syncShopify(db, key, 'glow', fetchFn, NOW);
-  expect(ql(calls)).toEqual([
+  expect(ql(calls).slice(0, 3)).toEqual([ // then SA-34's breakdowns
     'FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout TIMESERIES day SINCE -730d ORDER BY day ASC',
     "FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout WHERE human_or_bot_session = 'bot' TIMESERIES day SINCE -730d ORDER BY day ASC",
     'FROM sessions SHOW sessions_that_completed_checkout TIMESERIES day SINCE -730d ORDER BY day ASC', // SA-33

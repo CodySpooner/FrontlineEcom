@@ -1,4 +1,4 @@
-// SA-27..33: Shopify orders, refunds, variants, lines, publications, customer refs and purchasing sessions against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
+// SA-27..34: Shopify orders, refunds, variants, lines, publications, customer refs, purchasing sessions and traffic breakdowns against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
 // read), and the static cost of every Shopify read.
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -49,7 +49,7 @@ function fieldCost(f: Field): number {
 }
 const queryCost = (query: string) => sum(parse(query));
 
-function fakeShopify(orders = DOC.orders, { denyPublications = false, deny = [] as ('customer' | 'country')[], funnel = false, purchases = true } = {}) {
+function fakeShopify(orders = DOC.orders, { denyPublications = false, deny = [] as ('customer' | 'country')[], funnel = false, purchases = true, breakdowns = true } = {}) {
   const asked: string[] = [];
   const fetchFn = (async (_url: string, init: RequestInit) => {
     const { query, variables } = JSON.parse(String(init.body)) as { query: string; variables: { id?: string } };
@@ -66,6 +66,8 @@ function fakeShopify(orders = DOC.orders, { denyPublications = false, deny = [] 
     if (query.includes('shopifyqlQuery')) {
       const q = String((variables as { q?: string }).q);
       if (!funnel || (q.includes('sessions_that_completed_checkout') && !purchases)) return Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });
+      const by = Object.keys(DOC.sessions.breakdowns).find((f) => q.includes(`GROUP BY day, ${f},`));
+      if (by) return breakdowns ? json({ shopifyqlQuery: { parseErrors: [], tableData: DOC.sessions.breakdowns[by] } }) : Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });
       if (q.includes('sessions_that_completed_checkout')) return json({ shopifyqlQuery: { parseErrors: [], tableData: DOC.sessions.purchases } });
       return json({ shopifyqlQuery: { parseErrors: [], tableData: q.includes("'bot'") ? { columns: DOC.sessions.funnel.columns, rows: [] } : DOC.sessions.funnel } });
     }
@@ -354,5 +356,41 @@ describe('Shopify purchasing sessions (SA-33)', () => {
 
   it('a day without the value is left out, never 0', () => {
     expect(purchaseDays({ columns: [{ name: 'day' }, { name: 'sessions_that_completed_checkout' }], rows: [['2026-10-24', '3'], ['2026-10-25', null], ['x', '1']] })).toEqual([{ date: '2026-10-24', purchases: 3 }]);
+  });
+});
+
+describe('Shopify traffic breakdowns (SA-34)', () => {
+  const split = (db: ReturnType<typeof openDb>, dimension: string) =>
+    db.prepare("SELECT date, value, sessions, purchase_sessions AS ps FROM traffic_breakdown_daily WHERE store_id = 'glow' AND dimension = ? AND date IN ('2026-10-24', '2026-10-25') ORDER BY date, value").all(dimension);
+
+  it("each dimension's day adds up to the day's sessions; a gap is an unknown row, bot rows are dropped", async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify(DOC.orders, { funnel: true }).fetchFn, NOW);
+    expect(split(db, 'source')).toEqual([
+      { date: '2026-10-24', value: 'direct', sessions: 150, ps: 3 },
+      { date: '2026-10-24', value: 'search', sessions: 250, ps: 6 },
+      { date: '2026-10-25', value: 'unknown', sessions: 380, ps: 7 }, // a day with sessions but no split
+    ]);
+    expect(split(db, 'device').filter((r) => r.date === '2026-10-24')).toEqual([
+      { date: '2026-10-24', value: 'Desktop', sessions: 80, ps: 2 },
+      { date: '2026-10-24', value: 'Mobile', sessions: 300, ps: 6 },
+      { date: '2026-10-24', value: 'unknown', sessions: 20, ps: 1 },
+    ]);
+    expect(split(db, 'country').filter((r) => r.date === '2026-10-24')).toEqual([{ date: '2026-10-24', value: 'US', sessions: 400, ps: 9 }]);
+    for (const dimension of ['source', 'device', 'country']) {
+      const sums = db.prepare("SELECT b.date, sum(b.sessions) AS s, d.sessions AS total FROM traffic_breakdown_daily b JOIN daily_metrics d USING (store_id, date) WHERE b.store_id = 'glow' AND b.dimension = ? GROUP BY b.date").all(dimension);
+      for (const s of sums) expect(s.s).toBe(s.total);
+    }
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'traffic_breakdowns'").get()?.status).toBe('available');
+  });
+
+  it("a failed breakdown read leaves the funnel and earlier rows as they are", async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify(DOC.orders, { funnel: true }).fetchFn, NOW);
+    const before = split(db, 'source');
+    await syncShopify(db, key, 'glow', fakeShopify(DOC.orders, { funnel: true, breakdowns: false }).fetchFn, NOW);
+    expect(split(db, 'source')).toEqual(before);
+    expect(db.prepare("SELECT sessions FROM daily_metrics WHERE store_id = 'glow' AND date = '2026-10-24'").get()?.sessions).toBe(400);
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'traffic_breakdowns'").get()?.status).toBe('failed');
   });
 });

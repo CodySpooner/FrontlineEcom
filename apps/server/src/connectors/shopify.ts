@@ -32,6 +32,25 @@ export function funnelDays(t: Table) {
     .filter((d) => DAY.test(d.date));
 }
 
+/** SA-34: the documented sessions dimensions read per day, each into `traffic_breakdown_daily` under its own name. */
+export const BREAKDOWNS = { source: 'referrer_source', device: 'session_device_type', country: 'session_country_code' } as const;
+
+/** Daily sessions by one dimension's value, bot rows dropped (days Shopify never classified keep theirs). */
+export function breakdownDays(t: Table, field: string) {
+  const rows = new Map<string, { date: string; value: string; sessions: number; purchases: number | null }>();
+  for (const at of cells(t)) {
+    const [date, value] = [String(at('day')).slice(0, 10), at(field)];
+    if (!DAY.test(date) || value == null || value === '' || String(at('human_or_bot_session')).toLowerCase() === 'bot') continue;
+    const k = `${date}|${value}`;
+    const r = rows.get(k) ?? { date, value: String(value), sessions: 0, purchases: null };
+    const bought = at('sessions_that_completed_checkout');
+    r.sessions += Number(at('sessions')) || 0;
+    if (bought != null && bought !== '') r.purchases = (r.purchases ?? 0) + Number(bought);
+    rows.set(k, r);
+  }
+  return [...rows.values()];
+}
+
 /** SA-33: daily purchasing sessions (`sessions_that_completed_checkout`); a day without the value is left out, never 0. */
 export function purchaseDays(t: Table) {
   return cells(t)
@@ -617,6 +636,45 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         tx(db, () => {
           for (const d of purchases) set.run(storeId, d.date, d.purchases);
           once(db, bought);
+        });
+      }
+
+      // SA-34: sessions by source, device and country over the funnel's days. Each day's values are checked against its
+      // sessions: what they don't cover is written as an `unknown` row, so a gap shows instead of vanishing.
+      // ponytail: a table Shopify cuts short reads as a larger unknown row; page with LIMIT/OFFSET if that shows up.
+      const split: [string, ReturnType<typeof breakdownDays>][] = [];
+      for (const [dimension, field] of Object.entries(BREAKDOWNS)) {
+        const show = `sessions${purchases ? ', sessions_that_completed_checkout' : ''}`;
+        const t = await q<{ shopifyqlQuery?: { tableData: Table } }>(FUNNEL_Q, { q: `FROM sessions SHOW ${show} GROUP BY day, ${field}, human_or_bot_session SINCE -${days}d ORDER BY day ASC` }).then(
+          (d) => d.shopifyqlQuery?.tableData ?? null,
+          () => null,
+        );
+        if (t) split.push([dimension, breakdownDays(t, field)]);
+      }
+      noteRead(db, key, id, 'traffic_breakdowns', split.length === 3 ? { status: 'available', from: addDays(today, -days), to: today }
+        : split.length ? { status: 'partial', from: addDays(today, -days), to: today } : { status: 'failed', error: 'Shopify returned no session breakdowns' }, now);
+      if (split.length && syncView(db, id) === view) {
+        const totals = new Map(db.prepare('SELECT date, sessions, purchase_sessions AS ps FROM daily_metrics WHERE store_id = ? AND date >= ?').all(storeId, addDays(today, -days)).map((d) => [String(d.date), d]));
+        const clear = db.prepare("DELETE FROM traffic_breakdown_daily WHERE store_id = ? AND dimension = ? AND source = 'shopify' AND date >= ?");
+        const put = db.prepare(
+          `INSERT INTO traffic_breakdown_daily (store_id, date, dimension, value, sessions, purchase_sessions, source) VALUES (?, ?, ?, ?, ?, ?, 'shopify')
+           ON CONFLICT (store_id, date, dimension, value) DO UPDATE SET sessions = excluded.sessions, purchase_sessions = excluded.purchase_sessions, source = excluded.source`,
+        );
+        tx(db, () => {
+          for (const [dimension, rows] of split) {
+            clear.run(storeId, dimension, addDays(today, -days));
+            const sums = new Map<string, { sessions: number; purchases: number }>();
+            for (const r of rows) {
+              put.run(storeId, r.date, dimension, r.value, r.sessions, r.purchases);
+              const s = sums.get(r.date) ?? { sessions: 0, purchases: 0 };
+              sums.set(r.date, { sessions: s.sessions + r.sessions, purchases: s.purchases + (r.purchases ?? 0) });
+            }
+            for (const [date, day] of totals) {
+              const s = sums.get(date) ?? { sessions: 0, purchases: 0 };
+              const gap = Number(day.sessions) - s.sessions;
+              if (gap > 0) put.run(storeId, date, dimension, 'unknown', gap, day.ps == null || !purchases ? null : Math.max(0, Number(day.ps) - s.purchases));
+            }
+          }
         });
       }
     }

@@ -700,6 +700,21 @@
           "7"
         ]
       ]
+    },
+    "breakdowns": {
+      "_source": "ShopifyQL GROUP BY reference https://shopify.dev/docs/api/shopifyql/2026-04/syntax/group-by (GROUP BY day, session_device_type) and the sessions schema dimensions referrer_source, session_device_type, session_country_code, human_or_bot_session (read 2026-10-28)",
+      "referrer_source": {
+        "columns": [{"name": "day"}, {"name": "referrer_source"}, {"name": "human_or_bot_session"}, {"name": "sessions"}, {"name": "sessions_that_completed_checkout"}],
+        "rows": [["2026-10-24", "search", "Human", "250", "6"], ["2026-10-24", "direct", "Human", "150", "3"]]
+      },
+      "session_device_type": {
+        "columns": [{"name": "day"}, {"name": "session_device_type"}, {"name": "human_or_bot_session"}, {"name": "sessions"}, {"name": "sessions_that_completed_checkout"}],
+        "rows": [["2026-10-24", "Mobile", "Human", "300", "6"], ["2026-10-24", "Desktop", "Human", "80", "2"], ["2026-10-24", null, "Human", "20", "1"]]
+      },
+      "session_country_code": {
+        "columns": [{"name": "day"}, {"name": "session_country_code"}, {"name": "human_or_bot_session"}, {"name": "sessions"}, {"name": "sessions_that_completed_checkout"}],
+        "rows": [["2026-10-24", "US", "Human", "400", "9"], ["2026-10-24", "CN", "Bot", "500", "0"]]
+      }
     }
   }
 }
