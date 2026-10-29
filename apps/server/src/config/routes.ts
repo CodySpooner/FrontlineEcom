@@ -1,5 +1,5 @@
 // GET /api/config?store= and PATCH /api/config (ST-07): the effective configuration and its versioned writer; Change
-// History and its retries (ST-09).
+// History and its retries (ST-09); POST /api/config/impact, what a save would touch (ST-10).
 import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import type { ConfigDoc, ConfigWrite } from '@frontline/shared';
@@ -8,9 +8,24 @@ import { getStore } from '../stores';
 import { applyRoutes } from './apply';
 import { changeRoutes, toChange } from './changes';
 import { effective } from './effective';
+import { impactOf } from './impact';
 import { ConfigError, versionOf, writeConfig } from './write';
 
 const DOCS: ConfigDoc[] = ['app', 'personal', 'workspace', 'store_caps'];
+
+/** The body's documents, or why not: 400 for a malformed one, 428 for one without its version (a write needs it). */
+function documentsOf(body: Partial<ConfigWrite> | undefined, write: boolean): ConfigWrite['documents'] | { error: string; status: 400 | 428 } {
+  const docs = body?.documents;
+  if (!Array.isArray(docs) || !docs.length) return { error: 'documents must be a list of { doc, storeId?, version, set?, unset? }', status: 400 };
+  for (const d of docs) {
+    if (!d || !DOCS.includes(d.doc)) return { error: `doc must be one of ${DOCS.join(', ')}`, status: 400 };
+    if ((d.doc === 'store_caps') !== (typeof d.storeId === 'string')) return { error: 'storeId goes with store_caps, and only with it', status: 400 };
+    if (d.set !== undefined && (!d.set || typeof d.set !== 'object' || Array.isArray(d.set))) return { error: 'set must be an object of setting → value', status: 400 };
+    if (d.unset !== undefined && (!Array.isArray(d.unset) || !d.unset.every((k) => typeof k === 'string'))) return { error: 'unset must be a list of setting ids', status: 400 };
+    if (write && versionOf(d) === undefined) return { error: 'Send the version you read with each document (version).', status: 428 };
+  }
+  return docs;
+}
 
 export function configRoutes(db: Db) {
   return new Hono()
@@ -21,17 +36,15 @@ export function configRoutes(db: Db) {
       if (storeId && !getStore(db, storeId)) return c.json({ error: 'store not found' }, 404);
       return c.json(effective(db, { storeId }));
     })
+    .post('/api/config/impact', async (c) => {
+      const docs = documentsOf(await c.req.json().catch(() => undefined), false);
+      if (!Array.isArray(docs)) return c.json({ error: docs.error }, docs.status);
+      if (docs.some((d) => d.storeId && !getStore(db, d.storeId))) return c.json({ error: 'store not found' }, 404);
+      return c.json({ impacts: impactOf(db, docs) });
+    })
     .patch('/api/config', async (c) => {
-      const body = (await c.req.json().catch(() => undefined)) as Partial<ConfigWrite> | undefined;
-      const docs = body?.documents;
-      if (!Array.isArray(docs) || !docs.length) return c.json({ error: 'documents must be a list of { doc, storeId?, version, set?, unset? }' }, 400);
-      for (const d of docs) {
-        if (!d || !DOCS.includes(d.doc)) return c.json({ error: `doc must be one of ${DOCS.join(', ')}` }, 400);
-        if ((d.doc === 'store_caps') !== (typeof d.storeId === 'string')) return c.json({ error: 'storeId goes with store_caps, and only with it' }, 400);
-        if (d.set !== undefined && (!d.set || typeof d.set !== 'object' || Array.isArray(d.set))) return c.json({ error: 'set must be an object of setting → value' }, 400);
-        if (d.unset !== undefined && (!Array.isArray(d.unset) || !d.unset.every((k) => typeof k === 'string'))) return c.json({ error: 'unset must be a list of setting ids' }, 400);
-        if (versionOf(d) === undefined) return c.json({ error: 'Send the version you read with each document (version).' }, 428);
-      }
+      const docs = documentsOf(await c.req.json().catch(() => undefined), true);
+      if (!Array.isArray(docs)) return c.json({ error: docs.error }, docs.status);
       const requestId = randomUUID();
       try {
         writeConfig(db, docs, { requestId, current: (w) => effective(db, { storeId: w.storeId }) });

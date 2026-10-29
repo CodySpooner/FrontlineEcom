@@ -65,6 +65,13 @@ export interface ConfigChange {
   /** An automation's name, a secret's `replaced`/`removed`, or why a job couldn't apply. */
   detail?: string;
 }
+/** POST /api/config/impact (ST-10): one sentence a save would earn, its counts from real queries. */
+export interface ConfigImpact {
+  setting: string;
+  /** The store it's about, when it's one store's. */
+  storeId?: string;
+  text: string;
+}
 /** GET /api/config/changes: newest first; `next` is the cursor of the page after. */
 export interface ConfigChangesPage {
   changes: ConfigChange[];
