@@ -168,7 +168,8 @@ export function useStoreActions() {
   const qc = useQueryClient();
   return {
     save: useMutation({
-      mutationFn: ({ id, ...st }: StoreInput & { id?: string }) => api<Store>(id ? `/api/stores/${id}` : '/api/stores', json(id ? 'PATCH' : 'POST', st)),
+      /** An edit (with `id`) sends the version it read; a create has neither. */
+      mutationFn: ({ id, ...st }: StoreInput & ({ id?: undefined } | { id: string; version: number })) => api<Store>(id ? `/api/stores/${id}` : '/api/stores', json(id ? 'PATCH' : 'POST', st)),
       onSuccess: () => ['stores', 'agents'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
     }),
     // A store shows up in nearly every query, so drop them all.

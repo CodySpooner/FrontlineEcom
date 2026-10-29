@@ -38,6 +38,8 @@ export interface Store {
   feePercent?: number;
   /** Fixed fee per order in the store's currency (e.g. 0.25 on Etsy, 0.30 with Shopify Payments). Omitted = 0. */
   feePerOrder?: number;
+  /** The row's version: PATCH /api/stores/:id sends it back (409 when stale, 428 without it). */
+  version?: number;
 }
 
 export type AgentRole =

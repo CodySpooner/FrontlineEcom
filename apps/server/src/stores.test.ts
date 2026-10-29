@@ -14,6 +14,9 @@ const setup = () => {
   return { db, app: createApp(db) };
 };
 const send = (method: string, body: unknown) => ({ method, body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+/** PATCH /api/stores/:id sends the version it read (settings ST-08a). */
+const patch = async (app: ReturnType<typeof createApp>, id: string, body: object) =>
+  app.request(`/api/stores/${id}`, send('PATCH', { version: ((await (await app.request(`/api/stores/${id}`)).json()) as Store).version ?? 0, ...body }));
 
 test("a store made after one was deleted never takes its id, so it starts clear of the old one's sync history", async () => {
   const { app } = setup();
@@ -30,7 +33,7 @@ test('create → get → update → delete a store', async () => {
   const res = await app.request('/api/stores', send('POST', { name: 'Glow Haus', platform: 'etsy', niche: 'beauty', nicheDetail: 'K-beauty' }));
   expect(res.status).toBe(201);
   const store = (await res.json()) as Store;
-  expect(store).toEqual({ id: 'glow-haus', name: 'Glow Haus', platform: 'etsy', niche: 'beauty', nicheDetail: 'K-beauty', currency: 'USD', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, color: '#ff2a3a', connected: false });
+  expect(store).toEqual({ id: 'glow-haus', name: 'Glow Haus', platform: 'etsy', niche: 'beauty', nicheDetail: 'K-beauty', currency: 'USD', timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, color: '#ff2a3a', connected: false, version: 1 });
   const squad = (await (await app.request('/api/agents?stores=glow-haus')).json()) as Agent[];
   expect(squad).toHaveLength(8);
 
@@ -38,7 +41,7 @@ test('create → get → update → delete a store', async () => {
   expect(dup.id).toBe('glow-haus-2');
 
   expect(await (await app.request('/api/stores/glow-haus')).json()).toEqual(store);
-  const upd = await app.request('/api/stores/glow-haus', send('PATCH', { name: 'Glow Haus EU', color: '#00ff88' }));
+  const upd = await patch(app, 'glow-haus', { name: 'Glow Haus EU', color: '#00ff88' });
   expect(await upd.json()).toMatchObject({ id: 'glow-haus', name: 'Glow Haus EU', color: '#00ff88', platform: 'etsy' });
 
   expect((await app.request('/api/stores/glow-haus', { method: 'DELETE' })).status).toBe(204);
@@ -71,9 +74,9 @@ test('invalid store bodies are rejected with a message', async () => {
     expect(((await res.json()) as { error: string }).error).toBeTruthy();
   }
   expect((await app.request('/api/stores', { method: 'POST', body: 'not json' })).status).toBe(400);
-  expect((await app.request('/api/stores/nope', send('PATCH', { name: 'Y' }))).status).toBe(404);
-  expect((await app.request('/api/stores/pawsome', send('PATCH', { niche: 'cars' }))).status).toBe(400);
-  for (const fee of [{ feePercent: 80 }, { feePercent: '5' }, { feePerOrder: -1 }]) expect((await app.request('/api/stores/pawsome', send('PATCH', fee))).status).toBe(400);
+  expect((await patch(app, 'nope', { name: 'Y' })).status).toBe(404);
+  expect((await patch(app, 'pawsome', { niche: 'cars' })).status).toBe(400);
+  for (const fee of [{ feePercent: 80 }, { feePercent: '5' }, { feePerOrder: -1 }]) expect((await patch(app, 'pawsome', fee)).status).toBe(400);
 });
 
 test('deleting a store removes its metrics', async () => {
@@ -113,7 +116,7 @@ test("the owner's fee estimate is saved on the store and comes off its profit", 
   const { app } = setup();
   const summary = async () => ((await (await app.request('/api/analytics/summary?stores=pawsome&range=30')).json()) as AnalyticsSummary).totals;
   const before = await summary();
-  const res = await app.request('/api/stores/pawsome', send('PATCH', { feePercent: 9.5, feePerOrder: 0.25 }));
+  const res = await patch(app, 'pawsome', { feePercent: 9.5, feePerOrder: 0.25 });
   expect(await res.json()).toMatchObject({ id: 'pawsome', feePercent: 9.5, feePerOrder: 0.25 });
   const after = await summary();
   expect(after.revenue).toBe(before.revenue);
@@ -121,11 +124,11 @@ test("the owner's fee estimate is saved on the store and comes off its profit", 
 
   const top = async () => ((await (await app.request('/api/analytics/top-products?stores=pawsome&range=30&limit=1')).json()) as TopProduct[])[0]!;
   const product = await top();
-  await app.request('/api/stores/pawsome', send('PATCH', { feePercent: 0 }));
+  await patch(app, 'pawsome', { feePercent: 0 });
   const gross = await top();
   expect(product.profit).toBeCloseTo(gross.profit - gross.revenue * 0.095, 1); // per product: the % only
 
-  const reset = await app.request('/api/stores/pawsome', send('PATCH', { feePercent: 0, feePerOrder: 0 }));
+  const reset = await patch(app, 'pawsome', { feePercent: 0, feePerOrder: 0 });
   expect(await reset.json()).not.toHaveProperty('feePercent');
   expect((await summary()).profit).toBe(before.profit);
 });

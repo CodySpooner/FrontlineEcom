@@ -56,6 +56,22 @@ describe('store form fees', () => {
   });
 });
 
+describe('store form versions (settings ST-08a)', () => {
+  it('an edit sends the version it read; a new store sends none', async () => {
+    const store = { id: 'clay', name: 'Clay Co', platform: 'etsy', niche: 'home', currency: 'USD', timezone: 'UTC', color: '#ff2a3a', connected: true, version: 7 } as Store;
+    const fetch = stubApi((_url, init) => (init?.method === 'PATCH' ? store : { id: 's1' }));
+    renderApp(<StoreForm store={store} onDone={() => {}} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Save store' }));
+    await vi.waitFor(() => expect(sent(fetch)[0]?.[1]).toMatchObject({ version: 7 }));
+    cleanup();
+    renderApp(<StoreForm onDone={() => {}} />);
+    fireEvent.change(screen.getByLabelText('Store name'), { target: { value: 'Trail Co' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add store' }));
+    await vi.waitFor(() => expect(sent(fetch)).toHaveLength(2));
+    expect(sent(fetch)[1]![1]).not.toHaveProperty('version');
+  });
+});
+
 describe('feeEstimate', () => {
   it('reads the estimate back the way the form takes it, nothing when unset', () => {
     expect(feeEstimate({ feePercent: 9.5, feePerOrder: 0.25 })).toBe('Fees 9.5% + 0.25 per order');

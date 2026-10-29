@@ -4,7 +4,6 @@
 import { randomUUID } from 'node:crypto';
 import { SETTINGS, validateSetting, type ConfigDoc, type ConfigWrite, type SettingScope } from '@frontline/shared';
 import { tx, type Db } from '../db';
-import { getStore } from '../stores';
 import { docOf, getPath, pathIn, readDoc } from './effective';
 
 export class ConfigError extends Error {
@@ -50,7 +49,7 @@ function setPath(o: Record<string, unknown>, path: string[], value: unknown) {
 }
 
 function writeDoc(db: Db, w: DocWrite, o: WriteOptions) {
-  const store = w.doc === 'store_caps' ? getStore(db, w.storeId ?? '') : undefined;
+  const store = w.doc === 'store_caps' ? db.prepare('SELECT id, name FROM stores WHERE id = ?').get(w.storeId ?? '') : undefined;
   if (w.doc === 'store_caps' && !store) throw new ConfigError(404, { error: 'store not found' });
   const cur = readDoc(db, w.doc, w.storeId);
   // A missing row reads as version 0; 0 creates it. A row deleted elsewhere is never recreated silently.
@@ -88,11 +87,25 @@ function writeDoc(db: Db, w: DocWrite, o: WriteOptions) {
         : db.prepare('INSERT INTO settings (key, value_json, version, updated_at) VALUES (?, ?, 1, ?)').run(w.doc, value, at)
       ).changes === 1;
   if (!ok) throw new ConfigError(409, { error: 'This was saved somewhere else while you were editing.', code: 'stale', current: o.current(w) });
+  const scope = (id: string) => (w.doc === 'store_caps' ? 'store' : w.doc === 'app' ? (SETTINGS.find((d) => d.id === id)?.scopes[0] ?? 'personal') : w.doc);
+  logChanges(db, { at, actor: o.actor ?? 'owner', requestId: o.requestId, store: store && { id: String(store.id), name: String(store.name) } }, moved.map(([id, before, after]) => [id, before, after, scope(id)]));
+}
+
+type Moved = [setting: string, before: unknown, after: unknown, scope?: string];
+
+/** One change row per setting that moved (`scope` defaults to store when a store is given). */
+export function logChanges(db: Db, o: { at: string; actor: string; requestId?: string; store?: { id: string; name: string } }, moved: Moved[]) {
   const change = db.prepare('INSERT INTO settings_changes (id, at, request_id, actor, scope, store_id, store_name, setting, before_json, after_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
-  for (const [id, before, after] of moved) {
-    const scope = w.doc === 'store_caps' ? 'store' : w.doc === 'app' ? (SETTINGS.find((d) => d.id === id)?.scopes[0] ?? 'personal') : w.doc;
-    change.run(randomUUID(), at, o.requestId ?? null, o.actor ?? 'owner', scope, store?.id ?? null, store?.name ?? null, id, before === undefined ? null : JSON.stringify(before), after === undefined ? null : JSON.stringify(after));
-  }
+  const json = (v: unknown) => (v === undefined ? null : JSON.stringify(v));
+  for (const [id, before, after, scope] of moved) change.run(randomUUID(), o.at, o.requestId ?? null, o.actor, scope ?? 'store', o.store?.id ?? null, o.store?.name ?? null, id, json(before), json(after));
+}
+
+/** A store's owner fields moved (the owner's save, or a sync taking the platform's value): one version bump, a change row each. */
+export function storeChanged(db: Db, storeId: string, actor: string, moved: Moved[]) {
+  if (!moved.length) return;
+  const at = new Date().toISOString();
+  const r = db.prepare('UPDATE stores SET version = version + 1, updated_at = ? WHERE id = ? RETURNING name').get(at, storeId);
+  if (r) logChanges(db, { at, actor, store: { id: storeId, name: String(r.name) } }, moved);
 }
 
 /** Writes every document or none. */

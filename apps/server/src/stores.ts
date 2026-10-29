@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { dataDir, once, tx, type Db } from './db';
 import { seedDemoStore } from './demo';
 import { setStoreCurrency, setStoreTimezone } from './connectors/common';
+import { ConfigError, storeChanged } from './config/write';
 
 type Row = Record<string, unknown>;
 
@@ -19,6 +20,7 @@ const toStore = (r: Row): Store => ({
   connected: r.connected === 1,
   ...(Number(r.fee_percent) ? { feePercent: Number(r.fee_percent) } : {}),
   ...(Number(r.fee_per_order) ? { feePerOrder: Number(r.fee_per_order) } : {}),
+  version: Number(r.version),
 });
 
 export const listStores = (db: Db) => db.prepare('SELECT * FROM stores ORDER BY created_at, rowid').all().map(toStore);
@@ -43,9 +45,12 @@ export function insertStore(db: Db, s: Store, demo = false) {
   ).run(s.id, s.name, s.platform, s.niche, s.nicheDetail ?? null, s.currency, s.timezone, s.color, s.connected ? 1 : 0, demo ? 1 : 0, s.feePercent ?? 0, s.feePerOrder ?? 0);
 }
 
-/** Validates a create/update body at the API boundary; returns an error message or the clean fields. */
-export function parseStoreInput(body: unknown, partial: boolean): string | StoreUpdate {
-  if (!body || typeof body !== 'object') return 'body must be a JSON object';
+export type StoreInputError = { error: string; field?: keyof StoreInput };
+
+/** Validates a create/update body at the API boundary; returns the error (with the body key it's about) or the clean fields. */
+export function parseStoreInput(body: unknown, partial: boolean): StoreInputError | StoreUpdate {
+  const bad = (error: string, field?: keyof StoreInput): StoreInputError => (field ? { error, field } : { error });
+  if (!body || typeof body !== 'object') return bad('body must be a JSON object');
   const b = body as Record<string, unknown>;
   const out: StoreUpdate = {};
   const str = (k: keyof StoreInput, max: number) => {
@@ -55,27 +60,27 @@ export function parseStoreInput(body: unknown, partial: boolean): string | Store
     (out as Record<string, string>)[k] = v.trim();
     return true;
   };
-  if (!partial && (b.name === undefined || b.platform === undefined || b.niche === undefined)) return 'name, platform and niche are required';
-  if (!str('name', 80)) return 'name must be 1-80 characters';
-  if (b.platform !== undefined && !PLATFORMS.includes(b.platform as Store['platform'])) return `platform must be one of ${PLATFORMS.join(', ')}`;
-  if (b.niche !== undefined && !NICHES.includes(b.niche as Store['niche'])) return `niche must be one of ${NICHES.join(', ')}`;
+  if (!partial && (b.name === undefined || b.platform === undefined || b.niche === undefined)) return bad('name, platform and niche are required');
+  if (!str('name', 80)) return bad('name must be 1-80 characters', 'name');
+  if (b.platform !== undefined && !PLATFORMS.includes(b.platform as Store['platform'])) return bad(`platform must be one of ${PLATFORMS.join(', ')}`, 'platform');
+  if (b.niche !== undefined && !NICHES.includes(b.niche as Store['niche'])) return bad(`niche must be one of ${NICHES.join(', ')}`, 'niche');
   if (b.platform !== undefined) out.platform = b.platform as Store['platform'];
   if (b.niche !== undefined) out.niche = b.niche as Store['niche'];
-  if (!str('nicheDetail', 120)) return 'nicheDetail must be 1-120 characters';
-  if (!str('currency', 3) || (out.currency && !/^[A-Z]{3}$/.test(out.currency))) return 'currency must be a 3-letter ISO code';
-  if (!str('timezone', 64)) return 'timezone must be an IANA name';
+  if (!str('nicheDetail', 120)) return bad('nicheDetail must be 1-120 characters', 'nicheDetail');
+  if (!str('currency', 3) || (out.currency && !/^[A-Z]{3}$/.test(out.currency))) return bad('currency must be a 3-letter ISO code', 'currency');
+  if (!str('timezone', 64)) return bad('timezone must be an IANA name', 'timezone');
   if (out.timezone) {
     try {
       new Intl.DateTimeFormat('en-US', { timeZone: out.timezone });
     } catch {
-      return 'timezone must be an IANA name';
+      return bad('timezone must be an IANA name', 'timezone');
     }
   }
-  if (!str('color', 7) || (out.color && !/^#[0-9a-fA-F]{6}$/.test(out.color))) return 'color must be #rrggbb';
+  if (!str('color', 7) || (out.color && !/^#[0-9a-fA-F]{6}$/.test(out.color))) return bad('color must be #rrggbb', 'color');
   for (const [k, max, msg] of [['feePercent', 50, '% of revenue'], ['feePerOrder', 100, 'per order, in the store currency']] as const) {
     const v = b[k];
     if (v === undefined) continue;
-    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max) return `${k} must be a number from 0 to ${max} (${msg})`;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > max) return bad(`${k} must be a number from 0 to ${max} (${msg})`, k);
     out[k] = Math.round(v * 100) / 100;
   }
   return out;
@@ -107,20 +112,30 @@ export function createStore(db: Db, input: StoreInput): Store {
     };
     insertStore(db, store, true);
     seedDemoStore(db, id);
-    return store;
+    return getStore(db, id)!; // with its version
   });
 }
 
-export function updateStore(db: Db, id: string, u: StoreUpdate): Store | undefined {
+/**
+ * The owner's edit of a store. `version` (as read) is checked when given: a stale one throws ConfigError (409). One
+ * version bump per save, and a change row for each field that moved.
+ */
+export function updateStore(db: Db, id: string, u: StoreUpdate, version?: number): Store | undefined {
   const cols: Record<keyof StoreInput, string> = {
     name: 'name', platform: 'platform', niche: 'niche', nicheDetail: 'niche_detail', currency: 'currency', timezone: 'timezone', color: 'color',
     feePercent: 'fee_percent', feePerOrder: 'fee_per_order',
   };
   const keys = (Object.keys(u) as (keyof StoreInput)[]).filter((k) => k !== 'timezone' && k !== 'currency');
   return tx(db, () => {
+    const before = getStore(db, id);
+    if (!before) return undefined;
+    if (version !== undefined && version !== before.version) throw new ConfigError(409, { error: 'This store was saved somewhere else while you were editing.', code: 'stale', current: before });
     if (keys.length) db.prepare(`UPDATE stores SET ${keys.map((k) => `${cols[k]} = ?`).join(', ')} WHERE id = ?`).run(...keys.map((k) => u[k]!), id);
     if (u.timezone) setStoreTimezone(db, id, u.timezone); // re-dates a real store's orders
-    if (u.currency) setStoreCurrency(db, id, u.currency); // closes requests priced in the old one
+    if (u.currency) setStoreCurrency(db, id, u.currency, null); // closes requests priced in the old one
+    const after = getStore(db, id)!;
+    const moved = (Object.keys(u) as (keyof StoreInput)[]).filter((k) => before[k] !== after[k]);
+    storeChanged(db, id, 'owner', moved.map((k) => [`store.${k}`, before[k], after[k]]));
     return getStore(db, id);
   });
 }

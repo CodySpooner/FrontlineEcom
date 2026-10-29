@@ -524,6 +524,13 @@ The acceptance table (§15):
   take the version as an optional argument, so direct callers keep working; `getCaps` now returns the effective caps
   (store override, else workspace default) plus `version`.
 
+- [ ] (from settings, ST-08a) `PATCH /api/stores/:id` now requires the `version` the caller read (`Store.version`,
+  on every store response): 428 without it, 409 `{code: 'stale', current}` when it's old; `POST /api/stores` is exempt.
+  A store 400 now carries `field` (the body key). `useStoreActions().save` with an `id` requires `version` in its input
+  type. In `connectors/common.ts`, `setStoreCurrency` takes an optional actor (default `system`) and, like
+  `takeCurrency` (`sync:<kind>`) and `takeTimezone`, bumps the store's version and writes a `settings_changes` row
+  when the value moves; status, cursor and `connected` writes don't. `setStoreTimezone` is unchanged.
+
 ## Items
 
 Format: each item names its spec sections, then what to build, then an Acceptance line. "After SA-NN" means that

@@ -25,6 +25,7 @@ import { researchRoutes } from './research';
 import { prRoutes } from './product-research/routes';
 import { settingsRoutes } from './settings';
 import { configRoutes } from './config/routes';
+import { ConfigError } from './config/write';
 import { agentRoutes, runManager } from './routes/agents';
 import { listeningOn } from './routes/agents-runtimes';
 import { wrongStore } from './routes/agents-scope';
@@ -120,16 +121,25 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     })
     .post('/api/stores', async (c) => {
       const input = parseStoreInput(await json(c.req.raw), false);
-      if (typeof input === 'string') return c.json({ error: input }, 400);
+      if ('error' in input) return c.json(input, 400);
       const store = createStore(db, input as StoreInput);
       createSquad(db, store);
       return c.json(store, 201);
     })
     .patch('/api/stores/:id', async (c) => {
-      const input = parseStoreInput(await json(c.req.raw), true);
-      if (typeof input === 'string') return c.json({ error: input }, 400);
-      const store = updateStore(db, c.req.param('id'), input);
-      return store ? c.json(store) : c.json({ error: 'store not found' }, 404);
+      const body = await json(c.req.raw);
+      const input = parseStoreInput(body, true);
+      if ('error' in input) return c.json(input, 400);
+      // settings decision 6: the version read comes back, so a save over someone else's is refused (POST is exempt).
+      const version = (body as { version?: unknown }).version;
+      if (!Number.isInteger(version) || (version as number) < 0) return c.json({ error: 'Send the version you read (version).' }, 428);
+      try {
+        const store = updateStore(db, c.req.param('id'), input, version as number);
+        return store ? c.json(store) : c.json({ error: 'store not found' }, 404);
+      } catch (e) {
+        if (e instanceof ConfigError) return c.json(e.body, e.status);
+        throw e;
+      }
     })
     .delete('/api/stores/:id', (c) => {
       runManager(db).cancelStore(c.req.param('id')); // its runs would otherwise wait forever on requests deleted with it

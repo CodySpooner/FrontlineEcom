@@ -1,5 +1,6 @@
 import { INTEGRATION_KINDS, PLATFORMS, type AdNetwork, type IntegrationKind } from '@frontline/shared';
 import { expireRequests } from '../approvals';
+import { storeChanged } from '../config/write';
 import type { Db } from '../db';
 import { convertRate, historicRate } from '../fx';
 
@@ -14,7 +15,7 @@ export function takeCurrency(db: Db, storeId: string, kind: IntegrationKind, cur
   const own = String(store?.platform);
   const ownSynced = own !== kind && db.prepare('SELECT 1 FROM integrations WHERE id = ? AND synced_at IS NOT NULL').get(`${own}:${storeId}`);
   if (!ownSynced) {
-    setStoreCurrency(db, storeId, currency);
+    setStoreCurrency(db, storeId, currency, `sync:${kind}`);
     if (kind !== own || currency === store?.currency) return;
     // The store's own platform, in another currency than a second platform that synced first set: that one's orders are
     // in the old currency. They go rather than add up as the new one; its next sync says to make it a store of its own.
@@ -37,9 +38,11 @@ export function takeCurrency(db: Db, storeId: string, kind: IntegrationKind, cur
  */
 export function takeTimezone(db: Db, storeId: string, kind: IntegrationKind, zone: string) {
   if (!knownZone(zone)) return;
-  const own = String(db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)?.platform);
+  const store = db.prepare('SELECT platform, timezone FROM stores WHERE id = ?').get(storeId);
+  const own = String(store?.platform);
   if (own !== kind && db.prepare('SELECT 1 FROM integrations WHERE id = ? AND synced_at IS NOT NULL').get(`${own}:${storeId}`)) return;
   setStoreTimezone(db, storeId, zone);
+  if (store && store.timezone !== zone) storeChanged(db, storeId, `sync:${kind}`, [['store.timezone', store.timezone, zone]]);
 }
 
 /** Wipes a demo store's generated rows and marks it connected. Called by the first successful real sync of any connector. */
@@ -56,10 +59,13 @@ export function switchToReal(db: Db, storeId: string) {
 /**
  * Sets a store's currency (as its platform reports it, or from the store form). A change re-syncs the store's ad accounts
  * and Amazon from scratch: their history was converted into the old currency (e.g. an ad account that synced before the
- * platform's first sync).
+ * platform's first sync). `actor` writes the change row (settings decision 6); null: the caller writes it, as the owner's
+ * store save does for all its fields.
  */
-export function setStoreCurrency(db: Db, storeId: string, currency: string) {
+export function setStoreCurrency(db: Db, storeId: string, currency: string, actor: string | null = 'system') {
+  const before = db.prepare('SELECT currency FROM stores WHERE id = ?').get(storeId)?.currency;
   if (!db.prepare('UPDATE stores SET currency = ? WHERE id = ? AND currency != ?').run(currency, storeId, currency).changes) return;
+  if (actor) storeChanged(db, storeId, actor, [['store.currency', before, currency]]);
   db.prepare('UPDATE orders SET fx_rate = NULL WHERE store_id = ?').run(storeId); // they were into the old currency
   db.prepare("UPDATE integrations SET cursor = NULL WHERE store_id = ? AND kind IN ('meta_ads', 'google_ads', 'tiktok_ads', 'amazon')").run(storeId);
   if (db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo !== 0) return;

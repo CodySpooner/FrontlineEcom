@@ -32,10 +32,8 @@ export function StoreForm({ store, onDone }: { store?: Store; onDone: (saved?: S
   const [zones] = useState(() => [...new Set([timezone, ...Intl.supportedValuesOf('timeZone')])]);
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    save.mutate(
-      { id: store?.id, name: name.trim(), platform, niche, ...(nicheDetail.trim() && { nicheDetail: nicheDetail.trim() }), currency: currency.trim().toUpperCase(), timezone, color, feePercent: Number(feePercent) || 0, feePerOrder: Number(feePerOrder) || 0 },
-      { onSuccess: (saved) => onDone(saved) },
-    );
+    const fields = { name: name.trim(), platform, niche, ...(nicheDetail.trim() && { nicheDetail: nicheDetail.trim() }), currency: currency.trim().toUpperCase(), timezone, color, feePercent: Number(feePercent) || 0, feePerOrder: Number(feePerOrder) || 0 };
+    save.mutate(store ? { ...fields, id: store.id, version: store.version ?? 0 } : fields, { onSuccess: (saved) => onDone(saved) });
   };
   return (
     <form onSubmit={submit} className="grid gap-4">
