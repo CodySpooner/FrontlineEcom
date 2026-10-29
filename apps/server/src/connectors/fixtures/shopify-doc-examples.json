@@ -111,5 +111,389 @@
       }
     ],
     "pageInfo": { "hasNextPage": false, "endCursor": "eyJsYXN0X2lkIjo1NTAxMDA1fQ==" }
+  },
+  "refundOrders": {
+    "nodes": [
+      {
+        "id": "gid://shopify/Order/5501006",
+        "name": "#1006",
+        "createdAt": "2026-10-21T15:00:00Z",
+        "processedAt": "2026-10-21T15:00:00Z",
+        "updatedAt": "2026-10-24T15:01:00Z",
+        "cancelledAt": null,
+        "test": false,
+        "displayFinancialStatus": "PARTIALLY_REFUNDED",
+        "displayFulfillmentStatus": "FULFILLED",
+        "taxesIncluded": false,
+        "currencyCode": "USD",
+        "sourceName": "web",
+        "sourceIdentifier": null,
+        "app": {
+          "name": "Online Store"
+        },
+        "currentTotalPriceSet": {
+          "shopMoney": {
+            "amount": "32.00"
+          }
+        },
+        "currentTotalTaxSet": {
+          "shopMoney": {
+            "amount": "4.00"
+          }
+        },
+        "netPaymentSet": {
+          "shopMoney": {
+            "amount": "32.00"
+          }
+        },
+        "totalTaxSet": {
+          "shopMoney": {
+            "amount": "4.00"
+          }
+        },
+        "shippingLines": {
+          "nodes": [
+            {
+              "discountedPriceSet": {
+                "shopMoney": {
+                  "amount": "5.00"
+                }
+              }
+            }
+          ]
+        },
+        "fulfillments": [],
+        "lineItems": {
+          "nodes": [
+            {
+              "id": "gid://shopify/LineItem/9101",
+              "quantity": 2,
+              "currentQuantity": 1,
+              "sku": null,
+              "product": {
+                "id": "gid://shopify/Product/111"
+              },
+              "originalTotalSet": {
+                "shopMoney": {
+                  "amount": "50.00"
+                }
+              },
+              "discountedUnitPriceAfterAllDiscountsSet": {
+                "shopMoney": {
+                  "amount": "25.00"
+                }
+              },
+              "discountAllocations": [],
+              "variant": {
+                "id": "gid://shopify/ProductVariant/1111",
+                "inventoryItem": {
+                  "unitCost": {
+                    "amount": "8.00"
+                  }
+                }
+              }
+            }
+          ],
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          }
+        }
+      },
+      {
+        "id": "gid://shopify/Order/5501007",
+        "name": "#1007",
+        "createdAt": "2026-10-21T16:00:00Z",
+        "processedAt": "2026-10-21T16:00:00Z",
+        "updatedAt": "2026-10-25T13:01:00Z",
+        "cancelledAt": null,
+        "test": false,
+        "displayFinancialStatus": "REFUNDED",
+        "displayFulfillmentStatus": "FULFILLED",
+        "taxesIncluded": false,
+        "currencyCode": "USD",
+        "sourceName": "web",
+        "sourceIdentifier": null,
+        "app": {
+          "name": "Online Store"
+        },
+        "currentTotalPriceSet": {
+          "shopMoney": {
+            "amount": "0.00"
+          }
+        },
+        "currentTotalTaxSet": {
+          "shopMoney": {
+            "amount": "3.20"
+          }
+        },
+        "netPaymentSet": {
+          "shopMoney": {
+            "amount": "0.00"
+          }
+        },
+        "totalTaxSet": {
+          "shopMoney": {
+            "amount": "3.20"
+          }
+        },
+        "shippingLines": {
+          "nodes": [
+            {
+              "discountedPriceSet": {
+                "shopMoney": {
+                  "amount": "6.00"
+                }
+              }
+            }
+          ]
+        },
+        "fulfillments": [],
+        "lineItems": {
+          "nodes": [
+            {
+              "id": "gid://shopify/LineItem/9102",
+              "quantity": 1,
+              "currentQuantity": 0,
+              "sku": null,
+              "product": {
+                "id": "gid://shopify/Product/112"
+              },
+              "originalTotalSet": {
+                "shopMoney": {
+                  "amount": "40.00"
+                }
+              },
+              "discountedUnitPriceAfterAllDiscountsSet": {
+                "shopMoney": {
+                  "amount": "40.00"
+                }
+              },
+              "discountAllocations": [],
+              "variant": {
+                "id": "gid://shopify/ProductVariant/1121",
+                "inventoryItem": {
+                  "unitCost": {
+                    "amount": "8.00"
+                  }
+                }
+              }
+            }
+          ],
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          }
+        }
+      },
+      {
+        "id": "gid://shopify/Order/5501008",
+        "name": "#1008",
+        "createdAt": "2026-10-21T17:00:00Z",
+        "processedAt": "2026-10-21T17:00:00Z",
+        "updatedAt": "2026-10-25T16:01:00Z",
+        "cancelledAt": null,
+        "test": false,
+        "displayFinancialStatus": "PARTIALLY_REFUNDED",
+        "displayFulfillmentStatus": "FULFILLED",
+        "taxesIncluded": false,
+        "currencyCode": "USD",
+        "sourceName": "web",
+        "sourceIdentifier": null,
+        "app": {
+          "name": "Online Store"
+        },
+        "currentTotalPriceSet": {
+          "shopMoney": {
+            "amount": "64.80"
+          }
+        },
+        "currentTotalTaxSet": {
+          "shopMoney": {
+            "amount": "4.80"
+          }
+        },
+        "netPaymentSet": {
+          "shopMoney": {
+            "amount": "54.80"
+          }
+        },
+        "totalTaxSet": {
+          "shopMoney": {
+            "amount": "4.80"
+          }
+        },
+        "shippingLines": {
+          "nodes": []
+        },
+        "fulfillments": [],
+        "lineItems": {
+          "nodes": [
+            {
+              "id": "gid://shopify/LineItem/9103",
+              "quantity": 1,
+              "currentQuantity": 1,
+              "sku": null,
+              "product": {
+                "id": "gid://shopify/Product/113"
+              },
+              "originalTotalSet": {
+                "shopMoney": {
+                  "amount": "60.00"
+                }
+              },
+              "discountedUnitPriceAfterAllDiscountsSet": {
+                "shopMoney": {
+                  "amount": "60.00"
+                }
+              },
+              "discountAllocations": [],
+              "variant": {
+                "id": "gid://shopify/ProductVariant/1131",
+                "inventoryItem": {
+                  "unitCost": {
+                    "amount": "8.00"
+                  }
+                }
+              }
+            }
+          ],
+          "pageInfo": {
+            "hasNextPage": false,
+            "endCursor": null
+          }
+        }
+      }
+    ],
+    "pageInfo": {
+      "hasNextPage": false,
+      "endCursor": null
+    }
+  },
+  "refunds": {
+    "gid://shopify/Order/5501006": [
+      {
+        "id": "gid://shopify/Refund/7001",
+        "createdAt": "2026-10-24T15:00:00Z",
+        "updatedAt": "2026-10-24T15:00:00Z",
+        "refundLineItems": {
+          "nodes": [
+            {
+              "quantity": 1,
+              "restocked": false,
+              "lineItem": {
+                "id": "gid://shopify/LineItem/9101",
+                "product": {
+                  "id": "gid://shopify/Product/111"
+                },
+                "variant": {
+                  "id": "gid://shopify/ProductVariant/1111"
+                }
+              },
+              "subtotalSet": {
+                "shopMoney": {
+                  "amount": "25.00"
+                }
+              },
+              "totalTaxSet": {
+                "shopMoney": {
+                  "amount": "2.00"
+                }
+              }
+            }
+          ]
+        },
+        "refundShippingLines": {
+          "nodes": []
+        },
+        "orderAdjustments": {
+          "nodes": []
+        }
+      }
+    ],
+    "gid://shopify/Order/5501007": [
+      {
+        "id": "gid://shopify/Refund/7002",
+        "createdAt": "2026-10-25T13:00:00Z",
+        "updatedAt": "2026-10-25T13:00:00Z",
+        "refundLineItems": {
+          "nodes": [
+            {
+              "quantity": 1,
+              "restocked": true,
+              "lineItem": {
+                "id": "gid://shopify/LineItem/9102",
+                "product": {
+                  "id": "gid://shopify/Product/112"
+                },
+                "variant": {
+                  "id": "gid://shopify/ProductVariant/1121"
+                }
+              },
+              "subtotalSet": {
+                "shopMoney": {
+                  "amount": "40.00"
+                }
+              },
+              "totalTaxSet": {
+                "shopMoney": {
+                  "amount": "3.20"
+                }
+              }
+            }
+          ]
+        },
+        "refundShippingLines": {
+          "nodes": [
+            {
+              "id": "gid://shopify/RefundShippingLine/7102",
+              "subtotalAmountSet": {
+                "shopMoney": {
+                  "amount": "6.00"
+                }
+              },
+              "taxAmountSet": {
+                "shopMoney": {
+                  "amount": "0.00"
+                }
+              }
+            }
+          ]
+        },
+        "orderAdjustments": {
+          "nodes": []
+        }
+      }
+    ],
+    "gid://shopify/Order/5501008": [
+      {
+        "id": "gid://shopify/Refund/7003",
+        "createdAt": "2026-10-25T16:00:00Z",
+        "updatedAt": "2026-10-25T16:00:00Z",
+        "refundLineItems": {
+          "nodes": []
+        },
+        "refundShippingLines": {
+          "nodes": []
+        },
+        "orderAdjustments": {
+          "nodes": [
+            {
+              "id": "gid://shopify/OrderAdjustment/7203",
+              "amountSet": {
+                "shopMoney": {
+                  "amount": "-10.00"
+                }
+              },
+              "taxAmountSet": {
+                "shopMoney": {
+                  "amount": "0.00"
+                }
+              }
+            }
+          ]
+        }
+      }
+    ]
   }
 }

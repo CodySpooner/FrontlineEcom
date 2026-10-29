@@ -41,6 +41,7 @@ function fakeShopify(orders: ReturnType<typeof order>[], status = 200, funnel = 
     const json = (data: unknown) => Response.json({ data });
     if (body.query.includes('shop {')) return json({ shop: { name: 'Glow Haus', currencyCode: 'EUR', ianaTimezone: 'Europe/Berlin' } });
     if (body.query.includes('products(')) return json({ products: { nodes: [PRODUCT], pageInfo: { hasNextPage: false, endCursor: null } } });
+    if (body.query.includes('refunds(')) return json({ order: { refunds: [] } });
     if (body.query.includes('events(')) return json({ events: { nodes: deleted.map((subjectId) => ({ subjectId })), pageInfo: { hasNextPage: false, endCursor: null } } });
     if (body.query.includes('shopifyqlQuery')) {
       if (!funnel) return Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });

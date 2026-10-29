@@ -120,6 +120,23 @@ export const ordersQuery = (probed: { customer?: boolean; country?: boolean } = 
       lineItems(first: 5) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } }
     pageInfo { hasNextPage endCursor } } }`;
 const ORDERS_Q = ordersQuery();
+// SA-28: an order's refunds, read only when money went back and Shopify changed the order since the last read.
+// 1 + refunds 2 + 5 × (1 + lines 82 + shipping 12 + adjustments 17) = 563. ponytail: more than 5 refunds, 10 lines a
+// refund or 2 shipping lines leave the rest unread; that order then fails the identity and reconcile lists it.
+const REFUNDS_Q = `query ($id: ID!) {
+  order(id: $id) { refunds(first: 5) { id createdAt updatedAt
+    refundLineItems(first: 10) { nodes { quantity restocked lineItem { id product { id } variant { id } } subtotalSet ${MONEY} totalTaxSet ${MONEY} } }
+    refundShippingLines(first: 2) { nodes { id subtotalAmountSet ${MONEY} taxAmountSet ${MONEY} } }
+    orderAdjustments(first: 3) { nodes { id amountSet ${MONEY} taxAmountSet ${MONEY} } } } } }`;
+type ShopifyRefund = {
+  id: string;
+  createdAt: string | null;
+  updatedAt: string;
+  refundLineItems: { nodes: { quantity: number; restocked: boolean; lineItem: { id: string; product: { id: string } | null; variant: { id: string } | null }; subtotalSet: MoneyBag; totalTaxSet: MoneyBag }[] };
+  refundShippingLines: { nodes: { id: string; subtotalAmountSet: MoneyBag; taxAmountSet: MoneyBag }[] };
+  /** Refund discrepancies: negative when more went back than the lines (an amount refunded with no item returned). */
+  orderAdjustments: { nodes: { id: string; amountSet: MoneyBag; taxAmountSet: MoneyBag }[] };
+};
 const ORDER_ITEMS_Q = `query ($id: ID!, $after: String) {
   order(id: $id) { lineItems(first: 75, after: $after) { nodes { ${LINE_ITEM} } pageInfo { hasNextPage endCursor } } } }`;
 
@@ -294,7 +311,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
   const creds = getCredentials(db, key, 'shopify', storeId);
   if (!creds) return;
   let view = syncView(db, id);
-  const reading = new Set<SaDataset>(['catalog', 'orders']); // failed if the sync stops before they're read
+  const reading = new Set<SaDataset>(['catalog', 'orders', 'refunds']); // failed if the sync stops before they're read
   try {
     const q = client(db, key, storeId, creds, fetchFn, now);
     const { shop } = await q<{ shop: { currencyCode: string; ianaTimezone: string } }>(SHOP_Q);
@@ -358,6 +375,14 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     // Not paid yet (cash on delivery, bank transfer, an uncaptured authorization): left out of revenue until it is, and
     // removed if an earlier sync stored it. Its updated_at moves when it's paid, so the next sync brings it back.
     const UNPAID = new Set(['PENDING', 'AUTHORIZED', 'PARTIALLY_PAID']);
+    const MONEY_BACK = new Set(['PARTIALLY_REFUNDED', 'REFUNDED', 'VOIDED']);
+    const seen = db.prepare('SELECT source_updated_at AS at FROM orders WHERE store_id = ? AND id = ?');
+    const refundRow = db.prepare(
+      `INSERT INTO refunds (store_id, id, refund_id, order_id, product_id, variant_id, refunded_at, local_date, merchandise, shipping, tax, other, quantity, restocked, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'shopify')
+       ON CONFLICT (store_id, id) DO UPDATE SET refunded_at = excluded.refunded_at, local_date = excluded.local_date, merchandise = excluded.merchandise, shipping = excluded.shipping,
+         tax = excluded.tax, other = excluded.other, quantity = excluded.quantity, restocked = excluded.restocked`,
+    );
     const dropItems = db.prepare('DELETE FROM order_items WHERE store_id = ? AND order_id = ?');
     const drop = db.prepare('DELETE FROM orders WHERE store_id = ? AND id = ?');
     let after: string | null = null;
@@ -366,6 +391,10 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       for (const o of page.nodes.filter((o) => o.lineItems.pageInfo.hasNextPage)) {
         const rest = await all((after) => q<{ order: { lineItems: { nodes: LineItem[]; pageInfo: PageInfo } } }>(ORDER_ITEMS_Q, { id: o.id, after: after ?? o.lineItems.pageInfo.endCursor }).then((d) => d.order.lineItems));
         o.lineItems.nodes.push(...rest);
+      }
+      const refunds = new Map<string, ShopifyRefund[]>();
+      for (const o of page.nodes.filter((o) => !o.test && (o.cancelledAt || MONEY_BACK.has(o.displayFinancialStatus ?? '')) && seen.get(storeId, o.name)?.at !== o.updatedAt)) {
+        refunds.set(o.name, await q<{ order: { refunds: ShopifyRefund[] } }>(REFUNDS_Q, { id: o.id }).then((d) => d.order.refunds));
       }
       if (syncView(db, id) !== view) return;
       tx(db, () => {
@@ -393,6 +422,20 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
             tail(o.id), channel, MARKETPLACES.has(channel) ? (o.sourceIdentifier ?? null) : null, o.currencyCode ?? null, p?.gross ?? null, p?.discounts ?? null, p?.shipping ?? null,
             PAID.has(o.displayFinancialStatus ?? '') ? (o.processedAt ?? o.createdAt) : null, o.cancelledAt, f?.createdAt ?? null, f?.deliveredAt ?? null, o.updatedAt, p ? now.toISOString() : null,
           );
+          // Decision 9: one row per refund line, shipping line and adjustment, on the refund's day. Where prices include
+          // tax, the refunded amounts do too (ponytail: assumed like the order's prices) and give their tax up.
+          const ex = (amount: MoneyBag, tax: MoneyBag) => r2(num(amount.shopMoney.amount) - (o.taxesIncluded ? num(tax.shopMoney.amount) : 0));
+          for (const r of refunds.get(o.name) ?? []) {
+            const [rid, at] = [tail(r.id), r.createdAt ?? r.updatedAt];
+            const rday = dayOf.format(new Date(at));
+            for (const l of r.refundLineItems.nodes) {
+              refundRow.run(storeId, `${rid}:line:${tail(l.lineItem.id)}`, rid, o.name, l.lineItem.product ? tail(l.lineItem.product.id) : null, l.lineItem.variant ? tail(l.lineItem.variant.id) : null, at, rday, ex(l.subtotalSet, l.totalTaxSet), null, num(l.totalTaxSet.shopMoney.amount), null, l.quantity, l.restocked ? 1 : 0);
+            }
+            for (const s of r.refundShippingLines.nodes) refundRow.run(storeId, `${rid}:ship:${tail(s.id)}`, rid, o.name, null, null, at, rday, null, ex(s.subtotalAmountSet, s.taxAmountSet), num(s.taxAmountSet.shopMoney.amount), null, null, null);
+            for (const a of r.orderAdjustments.nodes) {
+              refundRow.run(storeId, `${rid}:adj:${tail(a.id)}`, rid, o.name, null, null, at, rday, null, null, -num(a.taxAmountSet.shopMoney.amount) || 0, -ex(a.amountSet, a.taxAmountSet) || 0, null, null);
+            }
+          }
           // Custom line items (no product) only count toward the order total. Where prices include VAT, each line gives up
           // the order's share of it. ponytail: one rate for all lines; reduced-rate lines come out a little low.
           const net = o.taxesIncluded && total > 0 ? 1 - num(o.currentTotalTaxSet?.shopMoney.amount) / total : 1;
@@ -410,7 +453,9 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
       after = page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null;
     } while (after);
     noteRead(db, key, id, 'orders', { status: 'available', from: since.slice(0, 10), to: today }, now);
+    noteRead(db, key, id, 'refunds', { status: 'available', from: since.slice(0, 10), to: today }, now);
     reading.delete('orders');
+    reading.delete('refunds');
 
     // The funnel from Shopify's own analytics for a store without GA4 (GA4 owns it there). It needs read_reports and Level 2
     // customer data access, so without them orders sync on and the funnel stays empty. Bot visits (Shopify's human/bot
@@ -673,4 +718,4 @@ export async function publishTheme(db: Db, key: Buffer, storeId: string, themeId
 }
 
 /** Every read query, for the static cost check in shopify.contract.test.ts (orders with SA-32's probed fields on). */
-export const SHOPIFY_READS = { FUNNEL_Q, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };
+export const SHOPIFY_READS = { FUNNEL_Q, SHOP_Q, PRODUCTS_Q, PRODUCT_IDS_Q, DELETED_Q, ORDERS_Q: ordersQuery({ customer: true, country: true }), ORDER_ITEMS_Q, REFUNDS_Q, VARIANT_IDS_Q, THEMES_Q, THEME_Q, THEME_FILES_Q };

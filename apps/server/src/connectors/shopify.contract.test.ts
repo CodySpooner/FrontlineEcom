@@ -1,4 +1,4 @@
-// SA-27: Shopify orders against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
+// SA-27/28: Shopify orders and refunds against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
 // read), and the static cost of every Shopify read.
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -48,16 +48,17 @@ function fieldCost(f: Field): number {
 }
 const queryCost = (query: string) => sum(parse(query));
 
-function fakeShopify() {
+function fakeShopify(orders = DOC.orders) {
   const asked: string[] = [];
   const fetchFn = (async (_url: string, init: RequestInit) => {
-    const { query } = JSON.parse(String(init.body)) as { query: string };
+    const { query, variables } = JSON.parse(String(init.body)) as { query: string; variables: { id?: string } };
     asked.push(query);
     const json = (data: unknown) => Response.json({ data });
     if (query.includes('shop {')) return json({ shop: DOC.shop });
     if (query.includes('products(') || query.includes('events(')) return json({ [query.includes('events(') ? 'events' : 'products']: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
     if (query.includes('shopifyqlQuery')) return Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });
-    return json({ orders: DOC.orders });
+    if (query.includes('refunds(')) return json({ order: { refunds: DOC.refunds[variables.id!] ?? [] } });
+    return json({ orders });
   }) as typeof fetch;
   return { fetchFn, asked };
 }
@@ -116,5 +117,46 @@ describe('Shopify orders contract (SA-27)', () => {
     expect(salesMetrics(db, 'glow', '2026-10-22', '2026-10-22').net_sales).toMatchObject({ value: 15, status: 'estimated' });
     await syncShopify(db, key, 'glow', fetchFn, NOW);
     expect(salesMetrics(db, 'glow', '2026-10-22', '2026-10-22').net_sales).toMatchObject({ value: 15, status: 'ok' });
+  });
+});
+
+describe('Shopify refunds ledger contract (SA-28)', () => {
+  const ledger = (db: ReturnType<typeof openDb>) =>
+    db.prepare("SELECT id, refund_id, order_id, product_id, variant_id, local_date, merchandise, shipping, tax, other, quantity, restocked FROM refunds WHERE store_id = 'glow' ORDER BY id").all();
+
+  it('a partial refund, a full refund with its shipping and a restock, and an amount refunded give the right rows; the identity holds', async () => {
+    const db = setup();
+    const { fetchFn, asked } = fakeShopify(DOC.refundOrders);
+    await syncShopify(db, key, 'glow', fetchFn, NOW);
+    expect(asked.filter((q) => q.includes('refunds('))).toHaveLength(3);
+    expect(ledger(db)).toEqual([
+      { id: '7001:line:9101', refund_id: '7001', order_id: '#1006', product_id: '111', variant_id: '1111', local_date: '2026-10-24', merchandise: 25, shipping: null, tax: 2, other: null, quantity: 1, restocked: 0 },
+      { id: '7002:line:9102', refund_id: '7002', order_id: '#1007', product_id: '112', variant_id: '1121', local_date: '2026-10-25', merchandise: 40, shipping: null, tax: 3.2, other: null, quantity: 1, restocked: 1 },
+      { id: '7002:ship:7102', refund_id: '7002', order_id: '#1007', product_id: null, variant_id: null, local_date: '2026-10-25', merchandise: null, shipping: 6, tax: 0, other: null, quantity: null, restocked: null },
+      { id: '7003:adj:7203', refund_id: '7003', order_id: '#1008', product_id: null, variant_id: null, local_date: '2026-10-25', merchandise: null, shipping: null, tax: 0, other: 10, quantity: null, restocked: null },
+    ]);
+    const back = db.prepare("SELECT coalesce(sum(coalesce(merchandise, 0) + coalesce(shipping, 0) + coalesce(tax, 0) + coalesce(other, 0)), 0) AS n FROM refunds WHERE store_id = 'glow' AND order_id = ?");
+    for (const o of rows(db)) {
+      const id = checkOrderIdentity({ gross: Number(o.gross_sales), discounts: Number(o.discounts), shipping: Number(o.shipping), tax: Number(o.tax), refunds: Number(back.get(String(o.id))!.n), total: Number(o.total) });
+      expect([o.id, id]).toEqual([o.id, expect.objectContaining({ ok: true })]);
+    }
+    // v1: the three orders on their day (refunded ones too), the merchandise refunds on theirs
+    expect(salesMetrics(db, 'glow', '2026-10-21', '2026-10-21').net_sales.value).toBe(150);
+    expect(salesMetrics(db, 'glow', '2026-10-24', '2026-10-25').refunds.value).toBe(65);
+    expect(db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = 'refunds'").get()?.status).toBe('available');
+  });
+
+  it('re-running is a no-op: unchanged orders ask nothing, a changed one rewrites the same rows', async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify(DOC.refundOrders).fetchFn, NOW);
+    const before = ledger(db);
+    const again = fakeShopify(DOC.refundOrders);
+    await syncShopify(db, key, 'glow', again.fetchFn, NOW);
+    expect(again.asked.filter((q) => q.includes('refunds('))).toEqual([]);
+    const touched = { ...DOC.refundOrders, nodes: DOC.refundOrders.nodes.map((o: { updatedAt: string }) => ({ ...o, updatedAt: '2026-10-26T12:00:00Z' })) };
+    const third = fakeShopify(touched);
+    await syncShopify(db, key, 'glow', third.fetchFn, NOW);
+    expect(third.asked.filter((q) => q.includes('refunds('))).toHaveLength(3);
+    expect(ledger(db)).toEqual(before);
   });
 });
