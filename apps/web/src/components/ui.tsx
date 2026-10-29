@@ -72,6 +72,20 @@ export const buttonClass = (variant: 'primary' | 'ghost' = 'ghost', size: 'sm' |
       : 'border-line-2 bg-panel-2 text-text-2',
   );
 
+/** Opt-in: the Settings boards' flatter buttons (12.5px medium, no glow); `danger` is outlined red. */
+export const flatButtonClass = (variant: 'default' | 'primary' | 'ghost' | 'danger' = 'default', size: 'sm' | 'md' = 'md') =>
+  cx(
+    'inline-flex cursor-pointer items-center justify-center gap-[7px] rounded-lg border font-medium whitespace-nowrap transition duration-150 hover:brightness-115 disabled:cursor-not-allowed disabled:opacity-45',
+    size === 'sm' ? 'px-[9px] py-1 text-xs' : 'px-3 py-1.5 text-[12.5px]',
+    variant === 'primary'
+      ? 'border-red-fill bg-red-fill text-white'
+      : variant === 'ghost'
+        ? 'border-transparent bg-transparent text-text-2 hover:text-white'
+        : variant === 'danger'
+          ? 'border-red/50 bg-transparent text-[#ff6b77]'
+          : 'border-line-2 bg-panel-2 text-text',
+  );
+
 export function Button({ variant, size, className, type = 'button', ...p }: ButtonProps) {
   return <button type={type} className={cx(buttonClass(variant, size), className)} {...p} />;
 }

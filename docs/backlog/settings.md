@@ -1328,7 +1328,7 @@ STOP.
     - `.agent/st02-1280.png` shows the frame with the board's proportions, and a CDP shot of `/settings/general` at
       390×844 has `scrollWidth <= clientWidth`.
 
-- [ ] ST-03 **Row kit and save bar** (The design: frame items 3–6; decision 6).
+- [x] ST-03 **Row kit and save bar** (The design: frame items 3–6; decision 6).
   - **Files:**
     - `settings/kit.tsx`, with:
       - `SettingsSection`: title, help and an optional Advanced expander;
@@ -2364,6 +2364,7 @@ STOP.
 ## Done
 - 2026-10-28 ST-01 set-up files present; baseline `pnpm check` green at 65531883: 234 test files, 1730 tests, 86 s (typecheck + vitest). `.agent/` tools copied, before shots in `.agent/before/` (dir (a), demo only). Code map: Corrections and Registry plan appended. No decision changed.
 - 2026-10-28 ST-02 `/settings/<section>` frame (Hero, 248 px sidebar, 860 px column, section select below 900 px), `settingsUrl` in shared, `/integrations` → `/settings/integrations` (query kept), Integrations page moved to `settings/integrations/`, today's panels moved into account/general/notifications/stores/usage/data behind `data-legacy`, every web and server link rebuilt with `settingsUrl`. `pnpm check` green (234 files, 1748 tests; first run timed out only in the Research scale test, rerun with `VITEST_MAX_WORKERS=4`). `pnpm e2e --grep settings|integrations`: route smoke 8/8 green at 390–1920 px; both axe compares fail only on CRLF line endings (Notes). Shots: `.agent/st02-1280.png`, 390×844 overflow 0.
+- 2026-10-28 ST-03 `settings/kit.tsx` (SettingsSection with Advanced expander, SettingRow, OriginLine, ScopeSwitch with a keyboard store listbox, SaveBar with saving/saved/applying/applied/error, ImmediateRow, DangerZone), `settings/useDraft.ts` (one draft per section and scope), opt-in `flatButtonClass` in `ui.tsx`, DevGallery entries; `kit.test.tsx` 18 green. DevGallery shot `.agent/st03-kit-1440x2400.png` matches board A1's rows, origin lines, save bar and danger card.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->

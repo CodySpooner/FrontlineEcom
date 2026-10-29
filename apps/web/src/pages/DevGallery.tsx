@@ -5,7 +5,8 @@ import { AGENT_ROLES, type AgentRole, type AgentRunDetail } from '@frontline/sha
 import { Portrait } from '../components/Art';
 import { Transcript } from '../components/Chat';
 import { Hero } from '../components/Hero';
-import { AGENT_STATUS, Badge, Button, Card, Chip, Dialog, EmptyState, ErrorState, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Table, Tooltip } from '../components/ui';
+import { AGENT_STATUS, Badge, Button, Card, Chip, Dialog, EmptyState, ErrorState, flatButtonClass, inputClass, LoadingState, Panel, ProgressBar, Segmented, StatusDot, Table, Tooltip } from '../components/ui';
+import { DangerZone, ImmediateRow, SaveBar, ScopeSwitch, SettingRow, SettingsSection } from '../settings/kit';
 
 export function DevGallery() {
   const [seg, setSeg] = useState('30D');
@@ -117,11 +118,56 @@ export function DevGallery() {
             ))}
           </div>
         </Panel>
+        <Panel title="Settings kit (ST-03, board A1)" sub="Example states, not real settings." className="min-[1100px]:col-span-2">
+          <SettingsKit />
+        </Panel>
         <Panel title="Chat transcript (fixture)" className="min-[1100px]:col-span-2">
           <Transcript run={SAMPLE_RUN} role="ad_strategist" />
         </Panel>
       </div>
     </>
+  );
+}
+
+const KIT_STORES = [
+  { id: 'glow', name: 'Glow Haus', color: '#ff8f98' },
+  { id: 'peak', name: 'Peak Fit', color: '#9a9aa3' },
+];
+
+/** The settings row kit with the board's example states, for a side-by-side check against settings-workspace.png. */
+function SettingsKit() {
+  const [scope, setScope] = useState<string | null>('glow');
+  const [limit, setLimit] = useState('8.00');
+  return (
+    <div className="grid max-w-[860px] gap-[18px]">
+      <div className="flex items-end gap-4">
+        <div className="flex-1">
+          <h2 className="text-[20px] font-semibold">Agents &amp; Providers</h2>
+          <p className="text-[12.5px] text-muted">The AI runtimes your squads can use and the defaults every new run starts from.</p>
+        </div>
+        <ScopeSwitch stores={KIT_STORES} value={scope} onChange={setScope} />
+      </div>
+      <SettingsSection title="Defaults for new runs" help="Applies to runs started after you save. Runs already going keep the settings they started with." advanced={{ summary: 'retries, runs at once', children: <SettingRow label="Retries for transient errors" help="0–2" /> }}>
+        <SettingRow label="Runtime" origin={{ kind: 'workspace' }}>
+          <select aria-label="Runtime" className={inputClass}>
+            <option>Claude</option>
+          </select>
+        </SettingRow>
+        <SettingRow label="Stop a run after" help="New conversations only" origin={{ kind: 'workspace' }} />
+        <SettingRow label="If the runtime fails" help="Stop and notify me · Frontline never switches provider or model on its own" />
+      </SettingsSection>
+      <SettingsSection title="Glow Haus limits" help="Enforced before each step. An estimate from usage, not a cap set at the provider.">
+        <SettingRow label="AI usage per day" htmlFor="kit-limit" changed origin={{ kind: 'store', workspace: '$5.00', onUse: () => setLimit('5.00') }} error={Number(limit) > 1000 ? 'Must be 0–1,000' : undefined}>
+          <input id="kit-limit" value={limit} onChange={(e) => setLimit(e.target.value)} className={inputClass} />
+        </SettingRow>
+        <SettingRow label="Spending, publishing, live-store edits" origin={{ kind: 'policy', text: 'always asks you first' }} />
+        <ImmediateRow label="Reduce motion" help="Fewer animations" state="saved" />
+      </SettingsSection>
+      <DangerZone title="Disconnect" action={<button type="button" className={flatButtonClass('danger')}>Disconnect…</button>}>
+        Example: the impact sentence is built from real counts.
+      </DangerZone>
+      <SaveBar count={2} scope="Glow Haus" impact="applies to new runs" state="idle" onCancel={() => {}} onSave={() => {}} />
+    </div>
   );
 }
 
