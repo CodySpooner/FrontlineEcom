@@ -1,13 +1,15 @@
 // SA-63: what the page is showing, unmistakably (spec §4): the store, the period and comparison, the zone and currency,
 // and how fresh the active tab's data is. The period and compare controls open in SA-65, Filters arrive with SA-68 and
 // the freshness chip's panel with SA-64 (decision 33: until then they're labels, not buttons).
-import { CalendarDays, ChevronsUpDown } from 'lucide-react';
+import { useSearchParams } from 'react-router';
+import { CalendarDays, ChevronsUpDown, Info } from 'lucide-react';
 import { comparePeriod, resolvePeriod, SA_COMPARES, SA_DATASET_STATUSES, SA_DATASETS, SA_PRESETS, SA_SOURCES, type SaContext, type SaDataset, type SaFreshness } from '@frontline/shared';
 import type { Store } from '@frontline/shared';
 import { MenuItem, Popover } from '../agents/Popover';
 import { PLATFORM_NAME } from '../components/StoreForm';
 import { cx, StatusDot, Tooltip } from '../components/ui';
 import { ago, fmtDay } from '../lib/format';
+import { DataSources } from './DataSources';
 import type { useAnalyticsState } from './state';
 
 const SALES = new Set(['shopify', 'woocommerce', 'etsy', 'amazon', 'tiktok_shop']);
@@ -42,6 +44,9 @@ export function ContextBar({ s, ctx, datasets }: { s: ReturnType<typeof useAnaly
   const compare = typeof period === 'string' ? undefined : comparePeriod(period, s.compare, ctx?.historyStart ?? undefined);
   const fresh = ctx && freshness(ctx.freshness, datasets);
   const name = ctx?.name ?? stores.find((x) => x.id === s.store)?.name ?? s.store ?? '';
+  // The Data sources panel opens by URL, so a reload or a link keeps it open.
+  const [params, setParams] = useSearchParams();
+  const panel = (open: boolean) => setParams((p) => (open ? p.set('panel', 'sources') : p.delete('panel'), p));
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2.5">
       <button type="button" popoverTarget="sa-store" aria-label={`Store: ${name}. Switch store`} className="inline-flex max-w-full cursor-pointer items-center gap-2.5 rounded-[10px] border border-line-2 bg-bg-2 py-[5px] pr-2.5 pl-[5px] text-left hover:border-muted/60">
@@ -78,6 +83,10 @@ export function ContextBar({ s, ctx, datasets }: { s: ReturnType<typeof useAnaly
           </span>
         </Tooltip>
       )}
+      <button type="button" aria-label="Data sources" onClick={() => panel(true)} className="-ml-1 cursor-pointer rounded-md p-1 text-muted hover:text-white">
+        <Info aria-hidden className="size-3.5" />
+      </button>
+      <DataSources s={s} open={params.get('panel') === 'sources'} onClose={() => panel(false)} />
     </div>
   );
 }
