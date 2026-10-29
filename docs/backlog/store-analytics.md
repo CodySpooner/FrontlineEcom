@@ -677,7 +677,7 @@ connector item afterwards proves its path from source to metric.
   - Acceptance: recorded-response tests: a failed Amazon traffic read marks traffic `failed` while orders stay
     `available`; a Shopify funnel error marks traffic `failed` with a scrubbed message.
 
-- [ ] SA-13 **Router, scope, guard and route sweeps** (spec §13, §9):
+- [x] SA-13 **Router, scope, guard and route sweeps** (spec §13, §9):
   - `apps/server/src/store-analytics/routes.ts` `storeAnalyticsRoutes(db)`, mounted once in `app.ts`, with
     `.use('/api/analytics/*', guard)` (the existing `kbGuard()` instance). The legacy routes keep their paths.
   - `readScope(db, query)` per decision 3. `GET /api/analytics/definitions` returns `SA_METRICS` and `SA_SOURCES`.
@@ -1568,6 +1568,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-10 `store-analytics/sources.ts`: `scrubError` (credential values plain and URL-encoded, token-shaped runs, 300 chars), `startRun`/`endRun`/`recoverRuns`; `sync.ts` logs every syncer run in `sync_runs` (running → done/failed, a thrown syncer is now caught and recorded), marks leftover `running` rows `interrupted` and prunes runs over 90 days at loop start, and its log line carries the scrubbed error. Tests in `sync-runs.test.ts`.
 - 2026-10-28 SA-11 `backoffOf` in `store-analytics/sources.ts` counts consecutive failed `sync_runs` (interrupted runs count as neither): 3 → 30 min, 6 → 6 h from the last failure's end; `startSyncLoop` skips stale-only retries while backed off, but "Sync now" and a credentials change (both bump `updated_at`) run at once, and the wait survives a restart. Fake-clock tests for each; sync.test's recovery case now waits the 30 minutes.
 - 2026-10-28 SA-12 `connectors/ingest.ts`: `noteRead` (try, success, widened covered days, scrubbed error), `noted` (wraps a read, rethrows) and `noteFailed` (the outer catch's still-unread datasets). Shopify notes catalog, orders (backfill/cursor day → today) and the funnel as traffic (its `() => null` keeps swallowing but records why); Amazon notes catalog (partial past the search cap), inventory, traffic (a pending report isn't noted), orders and refunds, each still swallowed; Woo notes orders, refunds and catalog; Etsy orders and catalog. Tests in `connectors/ingest.test.ts`.
+- 2026-10-28 SA-13 `store-analytics/routes.ts`: `readScope` (no store 400, unknown 404, a `stores=` list 400, unknown `metrics=` id 400) and `storeAnalyticsRoutes` with `GET /api/analytics/definitions` (`SA_METRICS`, narrowed by `metrics=`, and `SA_SOURCES`), mounted once in `app.ts` behind the existing `guard` on `/api/analytics/*`. `scope.test.ts`: a row per route, and a sweep that fails on any unlisted `/api/analytics/` route; legacy routes' tests unchanged.
 
 ## Blocked
 

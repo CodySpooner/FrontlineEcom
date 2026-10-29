@@ -29,6 +29,7 @@ import { listeningOn } from './routes/agents-runtimes';
 import { wrongStore } from './routes/agents-scope';
 import { ecosystemRoutes } from './routes/ecosystem';
 import { loadKey } from './secrets';
+import { storeAnalyticsRoutes } from './store-analytics/routes';
 import { createStore, deleteStore, getStore, listStores, parseStoreInput, updateStore } from './stores';
 
 /** `?stores=a,b` → known store ids in store order; missing/empty = all stores. */
@@ -108,6 +109,7 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .use('/api/research/*', guard)
     .use('/api/pr/*', guard) // product-research: every /api/pr route
     .use('/api/teams/*', guard)
+    .use('/api/analytics/*', guard) // store-analytics: its own records' writes
     .get('/api/health', (c) => c.json(health(db)))
     .get('/api/stores', (c) => c.json(listStores(db)))
     .get('/api/stores/:id', (c) => {
@@ -226,7 +228,8 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
     .route('/', settingsRoutes(db))
     .route('/', agentRoutes(db))
     .route('/', kbRoutes(db))
-    .route('/', ecosystemRoutes(db));
+    .route('/', ecosystemRoutes(db))
+    .route('/', storeAnalyticsRoutes(db));
 };
 
 /**
