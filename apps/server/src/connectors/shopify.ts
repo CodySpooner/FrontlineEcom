@@ -21,12 +21,23 @@ interface PageInfo { hasNextPage: boolean; endCursor: string | null }
 type Table = { columns: { name: string }[]; rows: unknown } | null;
 const FUNNEL_Q = `query ($q: String!) { shopifyqlQuery(query: $q) { parseErrors tableData { columns { name } rows } } }`;
 
+/** A ShopifyQL table's rows, each as a lookup by column name. */
+const cells = (t: Table) => (Array.isArray(t?.rows) ? t.rows : []).map((r) => (name: string) => (Array.isArray(r) ? r[t!.columns.findIndex((c) => c.name === name)] : (r as Record<string, unknown>)?.[name]));
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 /** Daily funnel rows from a ShopifyQL sessions table. */
 export function funnelDays(t: Table) {
-  const at = (r: unknown, name: string) => (Array.isArray(r) ? r[t!.columns.findIndex((c) => c.name === name)] : (r as Record<string, unknown>)?.[name]);
-  return (Array.isArray(t?.rows) ? t.rows : [])
-    .map((r) => ({ date: String(at(r, 'day')).slice(0, 10), sessions: Number(at(r, 'sessions')) || 0, carts: Number(at(r, 'sessions_with_cart_additions')) || 0, checkouts: Number(at(r, 'sessions_that_reached_checkout')) || 0 }))
-    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date));
+  return cells(t)
+    .map((at) => ({ date: String(at('day')).slice(0, 10), sessions: Number(at('sessions')) || 0, carts: Number(at('sessions_with_cart_additions')) || 0, checkouts: Number(at('sessions_that_reached_checkout')) || 0 }))
+    .filter((d) => DAY.test(d.date));
+}
+
+/** SA-33: daily purchasing sessions (`sessions_that_completed_checkout`); a day without the value is left out, never 0. */
+export function purchaseDays(t: Table) {
+  return cells(t)
+    .map((at) => ({ date: String(at('day')).slice(0, 10), value: at('sessions_that_completed_checkout') }))
+    .filter((d) => DAY.test(d.date) && d.value != null && d.value !== '' && Number.isFinite(Number(d.value)))
+    .map((d) => ({ date: d.date, purchases: Number(d.value) }));
 }
 
 interface ShopifyProduct {
@@ -587,6 +598,27 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         }
         if (table) once(db, backfilled);
       });
+
+      // SA-33: purchasing sessions for site conversion (decision 14), a read of its own: its failure leaves the funnel's
+      // sessions as they are. ponytail: bots aren't taken off (they don't complete checkouts).
+      const bought = `shopify-purchase-sessions:${storeId}:${shopHost(creds.shopDomain!)}`;
+      const back = db.prepare('SELECT 1 FROM done_once WHERE ref = ?').get(bought) ? 3 : BACKFILL_DAYS;
+      const purchases = await q<{ shopifyqlQuery?: { tableData: Table } }>(FUNNEL_Q, { q: `FROM sessions SHOW sessions_that_completed_checkout TIMESERIES day SINCE -${back}d ORDER BY day ASC` }).then(
+        (d) => {
+          if (!d.shopifyqlQuery?.tableData) throw new Error('Shopify returned no purchasing sessions');
+          return purchaseDays(d.shopifyqlQuery.tableData);
+        },
+      ).then(
+        (days) => (noteRead(db, key, id, 'purchase_sessions', { status: 'available', from: addDays(today, -back), to: today }, now), days),
+        (e: unknown) => (noteRead(db, key, id, 'purchase_sessions', { status: 'failed', error: e instanceof Error ? e.message : String(e) }, now), undefined),
+      );
+      if (purchases && syncView(db, id) === view) {
+        const set = db.prepare('INSERT INTO daily_metrics (store_id, date, purchase_sessions) VALUES (?, ?, ?) ON CONFLICT (store_id, date) DO UPDATE SET purchase_sessions = excluded.purchase_sessions');
+        tx(db, () => {
+          for (const d of purchases) set.run(storeId, d.date, d.purchases);
+          once(db, bought);
+        });
+      }
     }
     db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(start > since ? start : since, now.toISOString(), id);
   } catch (e) {

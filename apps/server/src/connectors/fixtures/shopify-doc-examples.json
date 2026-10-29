@@ -648,5 +648,58 @@
       "hasNextPage": false,
       "endCursor": null
     }
+  },
+  "sessions": {
+    "_source": "ShopifyQL sessions schema, https://shopify.dev/docs/api/shopifyql/2026-07/schemas/sessions_and_behavior/sessions (read 2026-10-28): sessions, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout by day",
+    "funnel": {
+      "columns": [
+        {
+          "name": "day"
+        },
+        {
+          "name": "sessions"
+        },
+        {
+          "name": "sessions_with_cart_additions"
+        },
+        {
+          "name": "sessions_that_reached_checkout"
+        }
+      ],
+      "rows": [
+        [
+          "2026-10-24",
+          "400",
+          "40",
+          "18"
+        ],
+        [
+          "2026-10-25",
+          "380",
+          "36",
+          "15"
+        ]
+      ]
+    },
+    "purchases": {
+      "columns": [
+        {
+          "name": "day"
+        },
+        {
+          "name": "sessions_that_completed_checkout"
+        }
+      ],
+      "rows": [
+        [
+          "2026-10-24",
+          "9"
+        ],
+        [
+          "2026-10-25",
+          "7"
+        ]
+      ]
+    }
   }
 }

@@ -523,6 +523,7 @@ test("without GA4, the funnel comes from Shopify's analytics; without its scope,
   expect(ql(calls)).toEqual([
     'FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout TIMESERIES day SINCE -730d ORDER BY day ASC',
     "FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout WHERE human_or_bot_session = 'bot' TIMESERIES day SINCE -730d ORDER BY day ASC",
+    'FROM sessions SHOW sessions_that_completed_checkout TIMESERIES day SINCE -730d ORDER BY day ASC', // SA-33
   ]);
   const again = fakeShopify([], 200, true);
   await syncShopify(db, key, 'glow', again.fetchFn, NOW);

@@ -1,4 +1,4 @@
-// SA-27..32: Shopify orders, refunds, variants, lines, publications and customer refs against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
+// SA-27..33: Shopify orders, refunds, variants, lines, publications, customer refs and purchasing sessions against the reference's shapes (fixtures/shopify-doc-examples.json names the pages and the date
 // read), and the static cost of every Shopify read.
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -9,7 +9,7 @@ import { saveIntegration } from '../integrations';
 import { checkOrderIdentity } from '../store-analytics/reconcile';
 import { salesMetrics } from '../store-analytics/sales';
 import { sourceRows } from '../store-analytics/sources';
-import { SHOPIFY_READS, syncShopify } from './shopify';
+import { purchaseDays, SHOPIFY_READS, syncShopify } from './shopify';
 
 const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
@@ -49,7 +49,7 @@ function fieldCost(f: Field): number {
 }
 const queryCost = (query: string) => sum(parse(query));
 
-function fakeShopify(orders = DOC.orders, { denyPublications = false, deny = [] as ('customer' | 'country')[] } = {}) {
+function fakeShopify(orders = DOC.orders, { denyPublications = false, deny = [] as ('customer' | 'country')[], funnel = false, purchases = true } = {}) {
   const asked: string[] = [];
   const fetchFn = (async (_url: string, init: RequestInit) => {
     const { query, variables } = JSON.parse(String(init.body)) as { query: string; variables: { id?: string } };
@@ -63,7 +63,12 @@ function fakeShopify(orders = DOC.orders, { denyPublications = false, deny = [] 
     if (query.includes('productVariants(')) return json({ productVariants: DOC.variants });
     if (query.includes('products(')) return json({ products: DOC.products });
     if (query.includes('events(')) return json({ events: { nodes: [], pageInfo: { hasNextPage: false, endCursor: null } } });
-    if (query.includes('shopifyqlQuery')) return Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });
+    if (query.includes('shopifyqlQuery')) {
+      const q = String((variables as { q?: string }).q);
+      if (!funnel || (q.includes('sessions_that_completed_checkout') && !purchases)) return Response.json({ errors: [{ message: 'Access denied for shopifyqlQuery field.' }] });
+      if (q.includes('sessions_that_completed_checkout')) return json({ shopifyqlQuery: { parseErrors: [], tableData: DOC.sessions.purchases } });
+      return json({ shopifyqlQuery: { parseErrors: [], tableData: q.includes("'bot'") ? { columns: DOC.sessions.funnel.columns, rows: [] } : DOC.sessions.funnel } });
+    }
     if (query.includes('refunds(')) return json({ order: { refunds: DOC.refunds[variables.id!] ?? [] } });
     const [customer, country] = [query.includes('customer {'), query.includes('shippingAddress {')];
     if ((customer && deny.includes('customer')) || (country && deny.includes('country'))) {
@@ -318,5 +323,36 @@ describe('Shopify customer refs and country (SA-32)', () => {
     const pii = /e_?mail|phone|first_?name|last_?name|full_?name|customer_name|buyer|address|street|city|postal|zip|ip_addr|refund_reason|note/i;
     const columns = db.prepare("SELECT m.name AS t, p.name AS c FROM sqlite_master m JOIN pragma_table_info(m.name) p WHERE m.type = 'table'").all().map((r) => `${r.t}.${r.c}`);
     expect(columns.filter((c) => /^(orders|order_lines|refunds|order_fees)\./.test(c) && pii.test(c))).toEqual([]);
+  });
+});
+
+describe('Shopify purchasing sessions (SA-33)', () => {
+  const days = (db: ReturnType<typeof openDb>) =>
+    db.prepare("SELECT date, sessions, add_to_carts, checkouts, purchase_sessions FROM daily_metrics WHERE store_id = 'glow' AND date IN ('2026-10-24', '2026-10-25') ORDER BY date").all();
+  const dataset = (db: ReturnType<typeof openDb>, d: string) => db.prepare("SELECT status FROM source_datasets WHERE integration_id = 'shopify:glow' AND dataset = ?").get(d)?.status;
+
+  it("writes each day's purchasing sessions next to the funnel's", async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify(DOC.orders, { funnel: true }).fetchFn, NOW);
+    expect(days(db)).toEqual([
+      { date: '2026-10-24', sessions: 400, add_to_carts: 40, checkouts: 18, purchase_sessions: 9 },
+      { date: '2026-10-25', sessions: 380, add_to_carts: 36, checkouts: 15, purchase_sessions: 7 },
+    ]);
+    expect([dataset(db, 'traffic'), dataset(db, 'purchase_sessions')]).toEqual(['available', 'available']);
+    expect(db.prepare("SELECT count(*) AS n FROM done_once WHERE ref = 'shopify-purchase-sessions:glow:contract-test.myshopify.com'").get()?.n).toBe(1);
+  });
+
+  it("a failure here leaves the funnel's sessions untouched and conversion unreported", async () => {
+    const db = setup();
+    await syncShopify(db, key, 'glow', fakeShopify(DOC.orders, { funnel: true, purchases: false }).fetchFn, NOW);
+    expect(days(db)).toEqual([
+      { date: '2026-10-24', sessions: 400, add_to_carts: 40, checkouts: 18, purchase_sessions: null },
+      { date: '2026-10-25', sessions: 380, add_to_carts: 36, checkouts: 15, purchase_sessions: null },
+    ]);
+    expect([dataset(db, 'traffic'), dataset(db, 'purchase_sessions')]).toEqual(['available', 'failed']);
+  });
+
+  it('a day without the value is left out, never 0', () => {
+    expect(purchaseDays({ columns: [{ name: 'day' }, { name: 'sessions_that_completed_checkout' }], rows: [['2026-10-24', '3'], ['2026-10-25', null], ['x', '1']] })).toEqual([{ date: '2026-10-24', purchases: 3 }]);
   });
 });

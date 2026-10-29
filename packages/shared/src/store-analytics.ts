@@ -154,7 +154,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
       inventory: { support: 'supported', reads: true, field: 'variant inventoryQuantity, inventoryItem.tracked', scopes: 'read_inventory', history: 'current state; daily snapshots from SA-50' },
       collections: NOT_READ('collections (paged)', { scopes: 'read_products' }),
       traffic: { support: 'supported', reads: true, field: 'ShopifyQL sessions (shopifyqlQuery)', scopes: 'read_reports + Level 2 customer data', history: '730 days back', reason: 'Only when GA4 is not connected (GA4 owns traffic there).' },
-      purchase_sessions: NOT_READ('ShopifyQL sessions dataset', { scopes: 'read_reports + Level 2 customer data' }),
+      purchase_sessions: { support: 'supported', reads: true, field: 'ShopifyQL sessions.sessions_that_completed_checkout', scopes: 'read_reports + Level 2 customer data', history: '730 days back', reason: 'Only when GA4 is not connected (GA4 owns traffic there).' },
       traffic_breakdowns: NOT_READ('ShopifyQL sessions by referrer source, device type and country', { scopes: 'read_reports + Level 2 customer data' }),
       customers: { support: 'supported', reads: true, field: 'orders.customer.id (hashed), shippingAddress.countryCodeV2', scopes: 'Level 2 protected customer data (optional, probed daily)', history: 'with the orders read' },
       product_views: UNSUPPORTED(

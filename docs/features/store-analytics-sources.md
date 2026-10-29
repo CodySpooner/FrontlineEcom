@@ -23,7 +23,7 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Inventory | supported | yes | variant inventoryQuantity, inventoryItem.tracked | read_inventory | current state; daily snapshots from SA-50 |  |  |
 | Collections | supported | no | collections (paged) | read_products |  |  |  |
 | Sessions and funnel | supported | yes | ShopifyQL sessions (shopifyqlQuery) | read_reports + Level 2 customer data | 730 days back |  | Only when GA4 is not connected (GA4 owns traffic there). |
-| Purchasing sessions | supported | no | ShopifyQL sessions dataset | read_reports + Level 2 customer data |  |  |  |
+| Purchasing sessions | supported | yes | ShopifyQL sessions.sessions_that_completed_checkout | read_reports + Level 2 customer data | 730 days back |  | Only when GA4 is not connected (GA4 owns traffic there). |
 | Traffic by source, device and country | supported | no | ShopifyQL sessions by referrer source, device type and country | read_reports + Level 2 customer data |  |  |  |
 | Customer ids and country | supported | yes | orders.customer.id (hashed), shippingAddress.countryCodeV2 | Level 2 protected customer data (optional, probed daily) | with the orders read |  |  |
 | Product views | unsupported | no | — |  |  |  | Shopify's reference for the ShopifyQL products dataset names no product-view column (a view count appears only in community answers), so per-product views are not read. Docs: https://shopify.dev/api/shopifyql/datasets/products-dataset (checked 2026-10-28) |
