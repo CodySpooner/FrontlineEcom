@@ -18,6 +18,7 @@ const server = (extra: (url: string, init?: RequestInit) => unknown = () => unde
     if (r !== undefined) return r;
     if (url === '/api/stores') return [peak, glow];
     if (url === '/api/integrations') return [shopify];
+    if (url.endsWith('/impact')) return { removes: [], keeps: [] };
     if (url === '/api/config/store-impact') return { impacts: [{ setting: 'store.feePercent', text: 'Recomputes profit for all 412 orders, past ones included' }] };
     if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };
   });
@@ -109,4 +110,33 @@ test("the store page links to the store's knowledge, niche pack, research profil
     ['Research profile and ship-to', '/research?store=peak'],
     ['Integrations', '/settings/integrations?store=peak'],
   ]);
+});
+
+test("Delete stays off until the store's name is typed, says what goes and what stays, and sends the name", async () => {
+  const impact = {
+    removes: [{ count: 8, text: '8 agents' }, { count: 0, text: '0 queued runs' }, { count: 412, text: '412 orders' }],
+    keeps: [{ count: 3, text: '3 action log entries' }, { count: 0, text: '0 change history entries' }],
+    codexFolder: 'C:/codex-work/peak',
+  };
+  let gone = false; // after the DELETE the list no longer has it, so the store page unmounts
+  const fetch = server((url, init) => {
+    if (url === '/api/stores/peak/impact') return impact;
+    if (url.startsWith('/api/stores/peak?') && init?.method === 'DELETE') return (gone = true), new Response(null, { status: 204 });
+    if (url === '/api/stores' && gone) return [glow];
+  });
+  // Another refetch after the delete is slower than the store list, as in the app.
+  const answer = fetch.getMockImplementation()!;
+  fetch.mockImplementation(async (url: string, init?: RequestInit) => (gone && url === '/api/integrations' && (await new Promise((r) => setTimeout(r, 200))), answer(url, init)));
+  renderApp(<Settings />, '/settings/stores/peak');
+  const zone = (await screen.findByRole('heading', { name: 'Delete this store' })).closest('section')!;
+  expect(await within(zone).findByText('Removes: 8 agents, 412 orders.')).toBeTruthy();
+  expect(within(zone).getByText('Stays: 3 action log entries.')).toBeTruthy();
+  expect(within(zone).getByText('Its Codex work folder stays on disk: C:/codex-work/peak')).toBeTruthy();
+  const button = within(zone).getByRole('button', { name: 'Delete store' }) as HTMLButtonElement;
+  fireEvent.change(within(zone).getByLabelText('Type Peak Fit to confirm'), { target: { value: 'peak fit' } });
+  expect(button.disabled).toBe(true);
+  fireEvent.change(within(zone).getByLabelText('Type Peak Fit to confirm'), { target: { value: 'Peak Fit' } });
+  fireEvent.click(button);
+  await vi.waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/settings/stores'));
+  expect(fetch.mock.calls.filter(([, i]) => i?.method === 'DELETE').map(([u]) => u)).toEqual(['/api/stores/peak?confirm=Peak%20Fit']);
 });

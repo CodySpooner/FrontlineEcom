@@ -176,8 +176,8 @@ export function useStoreActions() {
       mutationFn: ({ id, ...st }: StoreInput & ({ id?: undefined } | { id: string; version: number })) => api<Store>(id ? `/api/stores/${id}` : '/api/stores', json(id ? 'PATCH' : 'POST', st)),
       onSuccess: () => ['stores', 'agents'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })),
     }),
-    // A store shows up in nearly every query, so drop them all.
-    remove: useMutation({ mutationFn: (id: string) => api<void>(`/api/stores/${id}`, { method: 'DELETE' }), onSuccess: () => qc.invalidateQueries() }),
+    // A store shows up in nearly every query, so drop them all. `confirm` is the store's name as the owner typed it (settings ST-19).
+    remove: useMutation({ mutationFn: ({ id, confirm }: { id: string; confirm: string }) => api<void>(`/api/stores/${id}?confirm=${encodeURIComponent(confirm)}`, { method: 'DELETE' }), onSuccess: () => qc.invalidateQueries() }),
   };
 }
 

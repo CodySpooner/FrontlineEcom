@@ -33,7 +33,7 @@ test('a store deleted and created again under the same name gets its jobs, and t
   await app.request('/api/agents');
   expect(jobsOn(first.id)).toBe(DEFAULT_JOBS.length - 1); // no campaigns yet: the campaign review waits
   await runManager(db).idle();
-  expect((await app.request(`/api/stores/${first.id}`, { method: 'DELETE' })).status).toBe(204);
+  expect((await app.request(`/api/stores/${first.id}?confirm=Acme`, { method: 'DELETE' })).status).toBe(204);
 
   const again = await create();
   expect(again.id).not.toBe(first.id); // a deleted store's id is never reused (CORE-91)

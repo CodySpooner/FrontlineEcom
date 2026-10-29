@@ -88,6 +88,14 @@ export interface SetupItem {
   /** Why it's still open. */
   detail: string;
 }
+/** GET /api/stores/:id/impact (ST-19): what deleting the store removes, and what stays. */
+export interface StoreDeleteImpact {
+  /** e.g. `{ count: 8, text: '8 agents' }`. */
+  removes: { count: number; text: string }[];
+  keeps: { count: number; text: string }[];
+  /** Its Codex work folder, when Codex has run for it: it stays on disk. */
+  codexFolder?: string;
+}
 /** GET /api/config/changes: newest first; `next` is the cursor of the page after. */
 export interface ConfigChangesPage {
   changes: ConfigChange[];

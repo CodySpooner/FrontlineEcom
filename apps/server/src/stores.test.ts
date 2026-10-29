@@ -22,9 +22,9 @@ test("a store made after one was deleted never takes its id, so it starts clear 
   const { app } = setup();
   const make = async () => ((await (await app.request('/api/stores', send('POST', { name: 'Volt Lab', platform: 'shopify', niche: 'tech' }))).json()) as Store).id;
   expect(await make()).toBe('volt-lab');
-  await app.request('/api/stores/volt-lab', { method: 'DELETE' });
+  await app.request('/api/stores/volt-lab?confirm=Volt%20Lab', { method: 'DELETE' });
   expect(await make()).toBe('volt-lab-2');
-  await app.request('/api/stores/peak', { method: 'DELETE' }); // a showcase store too
+  await app.request('/api/stores/peak?confirm=Peak%20Fit', { method: 'DELETE' }); // a showcase store too
   expect(((await (await app.request('/api/stores', send('POST', { name: 'Peak', platform: 'shopify', niche: 'fitness' }))).json()) as Store).id).toBe('peak-2');
 });
 
@@ -44,9 +44,9 @@ test('create → get → update → delete a store', async () => {
   const upd = await patch(app, 'glow-haus', { name: 'Glow Haus EU', color: '#00ff88' });
   expect(await upd.json()).toMatchObject({ id: 'glow-haus', name: 'Glow Haus EU', color: '#00ff88', platform: 'etsy' });
 
-  expect((await app.request('/api/stores/glow-haus', { method: 'DELETE' })).status).toBe(204);
+  expect((await app.request('/api/stores/glow-haus?confirm=Glow%20Haus%20EU', { method: 'DELETE' })).status).toBe(204);
   expect((await app.request('/api/stores/glow-haus')).status).toBe(404);
-  expect((await app.request('/api/stores/glow-haus', { method: 'DELETE' })).status).toBe(404);
+  expect((await app.request('/api/stores/glow-haus?confirm=Glow%20Haus%20EU', { method: 'DELETE' })).status).toBe(404);
 });
 
 test('a new store starts in demo mode with analytics history', async () => {
@@ -81,7 +81,7 @@ test('invalid store bodies are rejected with a message', async () => {
 
 test('deleting a store removes its metrics', async () => {
   const { db, app } = setup();
-  await app.request('/api/stores/peak', { method: 'DELETE' });
+  await app.request('/api/stores/peak?confirm=Peak%20Fit', { method: 'DELETE' });
   expect(db.prepare("SELECT count(*) AS n FROM daily_metrics WHERE store_id = 'peak'").get()?.n).toBe(0);
 });
 

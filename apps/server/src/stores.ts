@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { dataDir, once, tx, type Db } from './db';
 import { seedDemoStore } from './demo';
 import { setStoreCurrency, setStoreTimezone } from './connectors/common';
+import { forgetStore } from './config/store-delete';
 import { ConfigError, storeChanged } from './config/write';
 
 type Row = Record<string, unknown>;
@@ -164,6 +165,7 @@ export function deleteStore(db: Db, id: string, mediaDir = join(dataDir(), 'crea
     .map((r) => String(r.media_url ?? '').match(/^\/api\/creatives\/media\/([\w-]+\.(?:jpg|png|webp|mp4))$/)?.[1]);
   if (!db.prepare('DELETE FROM stores WHERE id = ?').run(id).changes) return false;
   db.prepare('DELETE FROM conversations_fts WHERE store_id = ?').run(id); // a virtual table: no cascade
+  forgetStore(db, id); // its connections' settings rows (settings ST-19)
   once(db, `deleted-store:${id}`); // see createStore
   for (const f of files) {
     try {

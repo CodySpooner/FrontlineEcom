@@ -143,8 +143,12 @@ export const createApp = (db: Db, secretKey?: Buffer) => {
       }
     })
     .delete('/api/stores/:id', (c) => {
-      runManager(db).cancelStore(c.req.param('id')); // its runs would otherwise wait forever on requests deleted with it
-      return deleteStore(db, c.req.param('id')) ? c.body(null, 204) : c.json({ error: 'store not found' }, 404);
+      const store = getStore(db, c.req.param('id'));
+      if (!store) return c.json({ error: 'store not found' }, 404);
+      // settings ST-19: the owner typed the store's name to confirm.
+      if (c.req.query('confirm') !== store.name) return c.json({ error: `Type the store's name, ${store.name}, to delete it.`, field: 'confirm' }, 400);
+      runManager(db).cancelStore(store.id); // its runs would otherwise wait forever on requests deleted with it
+      return deleteStore(db, store.id) ? c.body(null, 204) : c.json({ error: 'store not found' }, 404);
     })
     .get('/api/events', (c) => {
       const limit = Math.min(200, Math.max(1, Number(c.req.query('limit')) || 20));

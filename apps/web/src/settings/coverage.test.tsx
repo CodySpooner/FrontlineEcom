@@ -25,6 +25,7 @@ const ALLOWLIST = [
 const ACTIONS: Record<string, string> = {
   'notifications.test': 'apps/web/src/settings/sections/Notifications.test.tsx#Send test shows what the server decided, and says where toasts appear',
   'stores.add': "apps/web/src/settings/sections/Stores.test.tsx#Add store says what adding does, then opens the new store's page",
+  'stores.delete': "apps/web/src/settings/sections/Stores.test.tsx#Delete stays off until the store's name is typed, says what goes and what stays, and sends the name",
 };
 
 const root = `${process.cwd()}/`; // vitest runs from the repo root
@@ -46,6 +47,7 @@ describe('every control on a settings page is real', () => {
       if (url === '/api/settings') return settings;
       if (url === '/api/config') return { values: {}, origins: {}, versions: { app: 1 } };
       if (url === '/api/stores') return [peak];
+      if (url === '/api/stores/peak/impact') return { removes: [], keeps: [] };
       if (url.startsWith('/api/caps')) return caps;
       if (url === '/api/health') return { ok: true, uptimeSec: 1, version: 'dev', connectors: [] };
     });

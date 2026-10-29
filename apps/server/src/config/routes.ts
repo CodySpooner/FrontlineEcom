@@ -11,6 +11,7 @@ import { changeRoutes, toChange } from './changes';
 import { checklist } from './checklist';
 import { effective } from './effective';
 import { impactOf } from './impact';
+import { deleteImpact } from './store-delete';
 import { storeImpact } from './store-impact';
 import { ConfigError, currencies, versionOf, writeConfig } from './write';
 
@@ -48,6 +49,8 @@ export function configRoutes(db: Db) {
       if (docs.some((d) => d.storeId && !getStore(db, d.storeId))) return c.json({ error: 'store not found' }, 404);
       return c.json({ impacts: impactOf(db, docs) });
     })
+    // What deleting a store takes with it (ST-19).
+    .get('/api/stores/:id/impact', (c) => (getStore(db, c.req.param('id')) ? c.json(deleteImpact(db, c.req.param('id'))) : c.json({ error: 'store not found' }, 404)))
     // The store form's (ST-18): `{ storeId?, set }`, set as PATCH /api/stores/:id takes it; no storeId: a store being added.
     .post('/api/config/store-impact', async (c) => {
       const body = (await c.req.json().catch(() => undefined)) as { storeId?: unknown; set?: unknown } | undefined;

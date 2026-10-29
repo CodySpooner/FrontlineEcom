@@ -4,10 +4,10 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router';
-import { NICHES, PLATFORMS, SET_BY_SYNC, settingsUrl, type ConfigImpact, type Niche, type Platform, type Store, type StoreUpdate } from '@frontline/shared';
+import { NICHES, PLATFORMS, SET_BY_SYNC, settingsUrl, type ConfigImpact, type Niche, type Platform, type Store, type StoreDeleteImpact, type StoreUpdate } from '@frontline/shared';
 import { api, json, useIntegrations, useStoreActions, useStores, type ApiError } from '../../api/client';
 import { feeEstimate, nicheName, PLATFORM_NAME, StoreForm } from '../../components/StoreForm';
-import { Badge, Button, ConfirmDelete, cx, Dialog, ErrorState, inputClass, LoadingState } from '../../components/ui';
+import { Badge, Button, cx, Dialog, ErrorState, inputClass, LoadingState } from '../../components/ui';
 import { nicheKey } from '../../lib/niche';
 import { useSettingsForm } from '../form';
 import { SaveBar, SettingRow, SettingsSection } from '../kit';
@@ -91,8 +91,6 @@ function StorePage({ id }: { id: string }) {
   const q = useStores();
   const store = q.data?.find((s) => s.id === id);
   const qc = useQueryClient();
-  const navigate = useNavigate();
-  const { remove } = useStoreActions();
   const connections = useIntegrations().data?.filter((i) => i.storeId === id) ?? [];
   const setBy = (field: keyof typeof SET_BY_SYNC) => {
     const i = connections.find((c) => SET_BY_SYNC[field].includes(c.kind));
@@ -219,24 +217,47 @@ function StorePage({ id }: { id: string }) {
         </ul>
       </SettingsSection>
 
-      {/* ST-19 rebuilds deletion as a danger zone with its impact. */}
-      <div data-legacy="ST-19" className="flex items-center gap-3 text-xs">
-        <ConfirmDelete question={`Delete ${store.name}? This can't be undone.`} confirm="Delete store" busy={remove.isPending} onConfirm={() => remove.mutate(id, { onSuccess: () => navigate(settingsUrl('stores')) })}>
-          {(open, ref) => (
-            <button ref={ref} type="button" onClick={open} className="cursor-pointer text-muted hover:text-red">
-              Delete store
-            </button>
-          )}
-        </ConfirmDelete>
-        {remove.isError && (
-          <span role="alert" className="text-red">
-            {remove.error.message}
-          </span>
-        )}
-      </div>
+      <DeleteStore store={store} />
 
       <SaveBar {...f.bar} scope={store.name} impact={texts.length ? texts.map((t) => <span key={t} className="mt-0.5 block text-xs">{t}</span>) : undefined} />
       {f.dialogs}
     </>
+  );
+}
+
+
+/** The danger zone (ST-19): what goes and what stays, from real counts; Delete only once the store's name is typed. */
+function DeleteStore({ store }: { store: Store }) {
+  const { remove } = useStoreActions();
+  const navigate = useNavigate();
+  const [typed, setTyped] = useState('');
+  // mutateAsync: the refetched list drops the store and unmounts this page first, which would skip mutate's onSuccess.
+  const impact = useQuery({ queryKey: ['stores', store.id, 'delete-impact'], queryFn: () => api<StoreDeleteImpact>(`/api/stores/${encodeURIComponent(store.id)}/impact`) });
+  const goes = impact.data?.removes.filter((r) => r.count > 0) ?? [];
+  const stays = impact.data?.keeps.filter((r) => r.count > 0) ?? [];
+  return (
+    <SettingsSection title="Delete this store" help="Removes the store and what's listed here. This can't be undone.">
+      {impact.data && (
+        <div className="grid gap-1.5 border-t border-line px-[18px] py-3 text-xs text-text-2">
+          <p>Removes: {goes.length ? goes.map((r) => r.text).join(', ') : 'only the store itself'}.</p>
+          {stays.length > 0 && <p>Stays: {stays.map((r) => r.text).join(', ')}.</p>}
+          {impact.data.codexFolder && <p>Its Codex work folder stays on disk: {impact.data.codexFolder}</p>}
+        </div>
+      )}
+      <div data-action="stores.delete" className="flex flex-wrap items-center gap-3 border-t border-line px-[18px] py-3">
+        <label htmlFor="delete-confirm" className="text-[13px]">
+          Type <b>{store.name}</b> to confirm
+        </label>
+        <input id="delete-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" className={cx(inputClass, 'w-full min-[600px]:w-[220px]')} />
+        <Button variant="primary" disabled={typed !== store.name || remove.isPending} onClick={() => void remove.mutateAsync({ id: store.id, confirm: typed }).then(() => navigate(settingsUrl('stores')), () => {})}>
+          Delete store
+        </Button>
+        {remove.isError && (
+          <p role="alert" className="basis-full text-xs text-red">
+            {remove.error.message}
+          </p>
+        )}
+      </div>
+    </SettingsSection>
   );
 }
