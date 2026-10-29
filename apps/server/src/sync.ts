@@ -12,6 +12,7 @@ import type { Db } from './db';
 import { publish } from './live';
 import { log } from './log';
 import { notify } from './settings';
+import { endRun, recoverRuns, startRun } from './store-analytics/sources';
 
 type Syncer = (db: Db, key: Buffer, storeId: string, fetchFn: typeof fetch) => Promise<void>;
 
@@ -94,6 +95,7 @@ const FAST = new Set<IntegrationKind>(['shopify', 'woocommerce']);
 export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs = 10 * 60_000, fastMs = 2 * 60_000, syncers = SYNCERS } = {}) {
   const lastTry = new Map<string, string>();
   const running = new Set<string>();
+  recoverRuns(db);
   const tick = () => {
     const now = new Date();
     const kinds = Object.keys(syncers);
@@ -109,15 +111,21 @@ export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs =
       const store = r.store_id == null ? undefined : db.prepare('SELECT demo, currency FROM stores WHERE id = ?').get(r.store_id);
       const before = store?.demo === 0 ? orderValues(db, String(r.store_id), now) : undefined;
       const had = store?.demo === 0 ? recentPaid(db, String(r.store_id), now) : undefined;
-      syncers[r.kind as IntegrationKind]!(db, key, String(r.store_id), retrying(fetch)).finally(() => {
+      // Every run is logged in sync_runs (store-analytics), its error scrubbed of credentials.
+      const run = startRun(db, id, r.store_id == null ? null : String(r.store_id), String(r.kind), now);
+      let thrown: string | undefined;
+      syncers[r.kind as IntegrationKind]!(db, key, String(r.store_id), retrying(fetch)).catch((e: unknown) => {
+        thrown = e instanceof Error ? e.message : String(e);
+      }).finally(() => {
         running.delete(id);
         if (had) announceOrders(db, String(r.store_id), had, new Date());
         // A sync that switched the store's currency re-priced every order in it: lower totals there aren't refunds.
         const sameCurrency = db.prepare('SELECT currency FROM stores WHERE id = ?').get(String(r.store_id))?.currency === store?.currency;
         if (before && sameCurrency) announceRefunds(db, String(r.store_id), before, new Date());
         const after = db.prepare('SELECT status, error FROM integrations WHERE id = ?').get(id);
+        const error = endRun(db, key, run, id, thrown ?? (after?.status === 'error' ? String(after.error ?? 'Sync failed') : undefined));
         if (!after) return;
-        log(after.status === 'error' ? 'warn' : 'info', 'sync', { id, ms: Date.now() - now.getTime(), status: after.status, ...(after.error ? { error: after.error } : {}) });
+        log(after.status === 'error' || thrown ? 'warn' : 'info', 'sync', { id, ms: Date.now() - now.getTime(), status: after.status, ...(error ? { error } : {}) });
         notifyChange(db, r.kind as IntegrationKind, r.store_id == null ? null : String(r.store_id), String(r.status), String(after.status), after.error == null ? null : String(after.error));
       });
     }

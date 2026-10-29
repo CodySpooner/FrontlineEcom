@@ -654,7 +654,7 @@ connector item afterwards proves its path from source to metric.
   - Acceptance: the fixture seeds; the oracle file exists with every metric from SA-16 to SA-21 marked `todo` until
     its item ships; pins committed.
 
-- [ ] SA-10 **Sync-run log** (spec §12 Processing pipeline, §13):
+- [x] SA-10 **Sync-run log** (spec §12 Processing pipeline, §13):
   - `apps/server/src/store-analytics/sources.ts` `scrubError(text, secrets)`: removes every credential value and
     token-shaped string, cuts to 300 characters. It is the only way a source error leaves the server (decision 23).
   - In `sync.ts`, wrap each syncer run in a `sync_runs` row (running → done or failed with the scrubbed error). A run
@@ -1565,6 +1565,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-09 `store-analytics/fixture.ts` `seedLedgerStore`: a New York Shopify store with TikTok Shop (synced Oct 24 – Nov 8) and Meta, 16 orders and 5 refund lines covering every listed case; `oracle.test.ts` holds the hand-worked P1/P2/P3 values with a comment per number, metrics `todo` until SA-16..SA-21; `pins.test.ts` snapshots `summarize`/`platformSplit`/`topProducts` for the three demo stores and the fixture.
 - 2026-10-28 Inbox (from codex-hardening) Phase E read as CH-21/22 + its STOP from now on (SA-08's claimed-function edits landed before CH-21). CH-19 axe filing: Analytics' 12 Research links keep their visible "Research this" with the campaign as sr-only text, the shared Ask AI control's name now includes its visible Ctrl K hint; axe on /analytics and /orders reports no serious/critical issues; baseline refresh filed to codex-hardening (it owns `e2e/**`).
 - 2026-10-28 Inbox (from codex-hardening, CH-22) `SA_SOURCES` now says Google's attribution covers primary conversion actions (not only purchases, fractional counts, never used as purchase counts), TikTok's campaign-level spend leaves out Branded Mission, and Meta's v24.0 retires 2026-11-10 (bump filed to core's Inbox; `meta.ts` is Phase E). Ad connectors untouched; SA-20/SA-58 read these rows.
+- 2026-10-28 SA-10 `store-analytics/sources.ts`: `scrubError` (credential values plain and URL-encoded, token-shaped runs, 300 chars), `startRun`/`endRun`/`recoverRuns`; `sync.ts` logs every syncer run in `sync_runs` (running → done/failed, a thrown syncer is now caught and recorded), marks leftover `running` rows `interrupted` and prunes runs over 90 days at loop start, and its log line carries the scrubbed error. Tests in `sync-runs.test.ts`.
 
 ## Blocked
 
