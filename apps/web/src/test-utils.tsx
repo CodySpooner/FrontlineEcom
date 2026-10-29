@@ -1,7 +1,7 @@
 // Component-test helpers (jsdom): the app's providers and a fake API. Import from `*.test.tsx` files only.
 import type { ReactNode } from 'react';
 import { configure, render } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router';
+import { createMemoryRouter, RouterProvider, useLocation } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import { StoreSelectionProvider } from './components/StoreFilter';
@@ -29,15 +29,29 @@ export function stubApi(handle: (url: string, init?: RequestInit) => unknown) {
   return fetch;
 }
 
-/** Renders inside the app's providers, starting at `path`. `screen.getByTestId('where')` shows the current path + query. */
+/**
+ * Renders inside the app's providers, starting at `path`, under a data router like main.tsx's (so `useBlocker` works).
+ * `screen.getByTestId('where')` shows the current path + query.
+ */
 export function renderApp(ui: ReactNode, path = '/') {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '*',
+        element: (
+          <>
+            {ui}
+            <Where />
+          </>
+        ),
+      },
+    ],
+    { initialEntries: [path] },
+  );
   return render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <StoreSelectionProvider>
-        <MemoryRouter initialEntries={[path]}>
-          {ui}
-          <Where />
-        </MemoryRouter>
+        <RouterProvider router={router} />
       </StoreSelectionProvider>
     </QueryClientProvider>,
   );

@@ -112,6 +112,9 @@ import { agentsUrl } from '../agents/urls';
 import { apiUp, waitForApi } from '../lib/restart';
 import { importing } from '../lib/sync';
 import { applyRunEvent, isLive } from '../lib/transcript';
+/** What `api()` throws: `field` names the form field a refusal is about; a 409 carries `code` and the `current` document. */
+export type ApiError = Error & { status?: number; field?: string; code?: string; current?: unknown };
+
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   // fetch rejects only when nothing answered: say that, not the browser's "Failed to fetch" (mutations show the message).
   const r = await fetch(path, init).catch(() => {
@@ -120,8 +123,15 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (r.status === 204) return undefined as T;
   if (!r.ok) {
     // A form's refusal names its field (validateConfig, validateCustomRole): the form shows it there.
-    const body = (await r.json().catch(() => null)) as { error?: string; field?: string } | null;
-    throw Object.assign(new Error(body?.error ?? `The app's server couldn't do that (error ${r.status}). Try again in a moment.`), body?.field ? { field: body.field } : {});
+    // A stale save (409) says why (`code`) and sends the document as it is now (`current`, null when it was removed).
+    const body = (await r.json().catch(() => null)) as { error?: string; field?: string; code?: string; current?: unknown } | null;
+    throw Object.assign(
+      new Error(body?.error ?? `The app's server couldn't do that (error ${r.status}). Try again in a moment.`),
+      { status: r.status },
+      body?.field ? { field: body.field } : {},
+      body?.code ? { code: body.code } : {},
+      body && 'current' in body ? { current: body.current } : {},
+    ) as ApiError;
   }
   return (await r.json()) as T;
 }

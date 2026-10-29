@@ -1354,7 +1354,7 @@ STOP.
 
     A DevGallery screenshot is compared with board A1.
 
-- [ ] ST-04 **Leaving with unsaved changes, and conflicts** (spec §5; decisions 2, 6).
+- [x] ST-04 **Leaving with unsaved changes, and conflicts** (spec §5; decisions 2, 6).
   - **The Save / Discard / Stay prompt** appears for:
     - any in-app navigation: settings sidebar, app nav, links, back;
     - a store switch inside a section;
@@ -2365,6 +2365,7 @@ STOP.
 - 2026-10-28 ST-01 set-up files present; baseline `pnpm check` green at 65531883: 234 test files, 1730 tests, 86 s (typecheck + vitest). `.agent/` tools copied, before shots in `.agent/before/` (dir (a), demo only). Code map: Corrections and Registry plan appended. No decision changed.
 - 2026-10-28 ST-02 `/settings/<section>` frame (Hero, 248 px sidebar, 860 px column, section select below 900 px), `settingsUrl` in shared, `/integrations` → `/settings/integrations` (query kept), Integrations page moved to `settings/integrations/`, today's panels moved into account/general/notifications/stores/usage/data behind `data-legacy`, every web and server link rebuilt with `settingsUrl`. `pnpm check` green (234 files, 1748 tests; first run timed out only in the Research scale test, rerun with `VITEST_MAX_WORKERS=4`). `pnpm e2e --grep settings|integrations`: route smoke 8/8 green at 390–1920 px; both axe compares fail only on CRLF line endings (Notes). Shots: `.agent/st02-1280.png`, 390×844 overflow 0.
 - 2026-10-28 ST-03 `settings/kit.tsx` (SettingsSection with Advanced expander, SettingRow, OriginLine, ScopeSwitch with a keyboard store listbox, SaveBar with saving/saved/applying/applied/error, ImmediateRow, DangerZone), `settings/useDraft.ts` (one draft per section and scope), opt-in `flatButtonClass` in `ui.tsx`, DevGallery entries; `kit.test.tsx` 18 green. DevGallery shot `.agent/st03-kit-1440x2400.png` matches board A1's rows, origin lines, save bar and danger card.
+- 2026-10-28 ST-04 data routers (`main.tsx` `createBrowserRouter`, `renderApp` `createMemoryRouter`, one splat route each; whole web suite green unchanged, 100 files / 538 tests), `api()` errors carry `status`, `code`, `current`, and `settings/form.tsx` `useSettingsForm`: draft + versioned save, Save / Discard / Stay on links, back and store switches (`useBlocker`), `beforeunload` only without `window.desktop`, the 409 dialog (Reload / Keep mine, silent re-apply once when none of my fields changed). `form.test.tsx` 12 green. Route and flow e2e 66 passed; the 2 failures are CH-18's known +46 px at 390 on legacy agent and conversation, same on main's router.
 
 ## Blocked
 <!-- Keep these until the owner's input arrives, then move them to Done. Each says exactly what the owner does. -->
@@ -2400,6 +2401,11 @@ STOP.
   line endings alone (untouched `/orders` too); filed to codex-hardening's Inbox with the `.gitattributes` fix. The
   renamed `settings-integrations` snapshot has the same single shared-Hero finding as `integrations.json`; the rename and
   the new section routes are filed to codex-hardening (CH-18 is unticked), not committed here.
+  `e2e/setup.ts` makes its data dir under `os.tmpdir()`: run it with `TEMP`/`TMP` set to `.agent/tmp` so that dir is
+  under `.agent/` (decision 18).
+- **ST-04 for every later section:** build an explicit-save section on `useSettingsForm` (`settings/form.tsx`) and
+  render its `dialogs`. React Router allows one `useBlocker` at a time, so one form per section; a section with two
+  documents saves them in one `PATCH /api/config` (decision 6), not two forms.
 - **ST-01 decision check (65531883):** no decision changed. Code between cc80fbac and HEAD touched only Codex tests and one `codex.ts` line. One precision for decision 2/12: `approvals.ts` links an approval to `/`, except a `question`, which links to its conversation; ST-02/ST-14 keep that. `pnpm e2e` exists on main (codex-hardening CH-17/18), so ST-02 runs it before pushing.
 - **Seen in passing, not this lane's to fix:** the `startScheduler` docstring says catch-up goes 24 h back, but the
   code uses 31 days.

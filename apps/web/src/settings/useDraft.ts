@@ -2,7 +2,7 @@
 // `key` (another store, another scope) starts clean, so a draft is never carried from one store to another.
 import { useState } from 'react';
 
-const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+export const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 export function useDraft<T extends object>(key: string, saved: T | undefined) {
   const [state, setState] = useState<{ key: string; patch: Partial<T> }>({ key, patch: {} });
