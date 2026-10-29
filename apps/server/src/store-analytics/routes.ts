@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import type { Db } from '../db';
 import { computeMetricSet, computeSeries, parseFilters } from './metric-set';
 import { listings } from './listings';
+import { overview } from './overview';
 import { historyStart, storePeriod, zoneInfo } from './period';
 import { reconcile } from './reconcile';
 import { datasetFreshness, markVerified, sourceRows } from './sources';
@@ -97,6 +98,18 @@ export function storeAnalyticsRoutes(db: Db) {
       const basis = c.req.query('refunds') ?? 'refund_day';
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       return c.json(reconcile(db, s.storeId, sp.period.from, sp.period.to, basis));
+    })
+    // SA-69: the Overview's KPIs and channel split in one call.
+    .get('/api/analytics/overview', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      return c.json(overview(db, s, sp, filters, basis));
     })
     // SA-66: one page of the store's products with their state now and their period sales, sorted over all of them.
     .get('/api/analytics/listings', (c) => {

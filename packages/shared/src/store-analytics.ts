@@ -896,3 +896,14 @@ export interface SaListings {
   rows: SaListingRow[];
   scope: SaFilterScope;
 }
+
+/** SA-69: the Overview's six KPI tiles, in the board's order. */
+export const SA_OVERVIEW_KPIS: SaMetricId[] = ['net_sales', 'orders', 'aov', 'site_conversion', 'ad_spend', 'contribution_after_ads'];
+
+/** GET /api/analytics/overview: the six KPIs (as /metrics gives them for the same scope) and the channel split. */
+export interface SaOverview extends SaMetricSet {
+  /** Each sales channel with orders in the period (the channel filter's ids), by net sales. */
+  channels: { channel: string; net_sales: SaValue; orders: SaValue }[];
+  /** Why there is no split (a demo store's sales aren't split by channel). */
+  channelsNote?: string;
+}
