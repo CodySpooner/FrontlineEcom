@@ -1,6 +1,7 @@
 // SA-24: reconcile v1 net sales against the legacy revenue Dashboard shows, line by line (spec §9 Reconciliation).
 import type { SaReconcile, SaReconcileLine } from '@frontline/shared';
 import type { Db } from '../db';
+import { dedupeSummary } from './dedupe';
 import { storeConverter } from './fx';
 import { CANONICAL, salesMetrics, type RefundBasis } from './sales';
 
@@ -111,5 +112,8 @@ export function reconcile(db: Db, storeId: string, from: string, to: string, bas
   const stale = cents(recomputed - stored);
   const all = [...(Math.abs(stale) >= 0.01 ? [{ key: 'stale', label: "Dashboard's stored daily totals predate the latest sync", amount: stale, count: 0 }] : []), ...lines.values()].map((l) => ({ ...l, amount: cents(l.amount) }));
   const bridged = stored + all.reduce((a, l) => a + l.amount, 0);
-  return { from, to, legacy: stored, net_sales: net, lines: all, info: [...info.values()].map((l) => ({ ...l, amount: cents(l.amount) })), unexplained: cents((net.value ?? 0) - bridged) };
+  return {
+    from, to, legacy: stored, net_sales: net, lines: all, info: [...info.values()].map((l) => ({ ...l, amount: cents(l.amount) })), unexplained: cents((net.value ?? 0) - bridged),
+    dedupe: dedupeSummary(db, storeId, from, to),
+  };
 }

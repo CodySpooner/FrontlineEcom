@@ -787,6 +787,22 @@ export interface SaReconcileLine {
   ids?: string[];
 }
 
+/** SA-52: what dedupe did over a period, per marketplace channel (decision 13); `lines` worded per Q1's default. */
+export interface SaDedupe {
+  channels: {
+    channel: string;
+    /** Copies left out whose marketplace order the app has. */
+    matched: number;
+    /** Copies left out inside the covered days without their marketplace order. */
+    unmatched: number;
+    /** The store platform's record of a marketplace order, counted: outside the days that marketplace has synced. */
+    outside: number;
+  }[];
+  /** Orders from a sales-channel app with no marketplace mapping: never auto-marked, they may duplicate. */
+  unmapped: number;
+  lines: string[];
+}
+
 /** GET /api/analytics/reconcile: Dashboard's revenue to v1 net sales; `unexplained` is what no line accounts for. */
 export interface SaReconcile {
   from: string;
@@ -797,4 +813,6 @@ export interface SaReconcile {
   /** Left out of both sides (duplicates, test orders) or counted nowhere yet: shown, but they move nothing. */
   info: SaReconcileLine[];
   unexplained: number;
+  /** SA-52: real stores only. */
+  dedupe?: SaDedupe;
 }
