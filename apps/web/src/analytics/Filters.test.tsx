@@ -27,7 +27,7 @@ beforeEach(() => {
       if (q.get('filters')?.includes('8001')) return { rows: [row('8001', 'Vitamin C Glow Serum')] };
       return { rows: [] };
     }
-    if (url.startsWith('/api/analytics/summary')) return new Response('{}', { status: 500 });
+    if (url.startsWith('/api/analytics/summary') || url.startsWith('/api/analytics/overview')) return new Response('{}', { status: 500 });
     return [];
   });
 });
@@ -78,7 +78,7 @@ describe('Filters (SA-68)', () => {
       if (url === '/api/stores') return [{ id: 'a', name: 'Glow Haus' }];
       if (url.startsWith('/api/analytics/context')) return { storeId: 'a', name: 'Glow Haus', niche: 'beauty', platform: 'shopify', currency: 'USD', demo: false, channels: [], zone: null, zoneLabel: '', zoneAbbr: 'ET', historyStart: null, freshness: [] };
       if (url.startsWith('/api/analytics/collections')) return [];
-      if (url.startsWith('/api/analytics/summary')) return new Response('{}', { status: 500 });
+      if (url.startsWith('/api/analytics/summary') || url.startsWith('/api/analytics/overview')) return new Response('{}', { status: 500 });
       return [];
     });
     renderApp(<Analytics />, '/analytics?store=a&page=3');

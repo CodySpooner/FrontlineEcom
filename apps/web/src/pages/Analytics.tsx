@@ -6,6 +6,7 @@ import { settingsUrl, type SaDataset } from '@frontline/shared';
 import { useSaContext } from '../analytics/api';
 import { ContextBar } from '../analytics/ContextBar';
 import { LegacyOverview } from '../analytics/legacy';
+import { Overview } from '../analytics/Overview';
 import { useAnalyticsState, type AnalyticsState } from '../analytics/state';
 import { Hero } from '../components/Hero';
 import { buttonClass, EmptyState, ErrorState, LoadingState, Tabs } from '../components/ui';
@@ -13,7 +14,17 @@ import { NAV } from '../nav';
 
 /** The registered tabs, in the board's order, with the datasets their freshness chip reads. */
 export const TABS: { value: string; label: string; datasets: SaDataset[]; render: (s: AnalyticsState & { store: string }) => ReactNode }[] = [
-  { value: 'overview', label: 'Overview', datasets: ['orders', 'refunds', 'catalog', 'inventory', 'traffic', 'ad_spend'], render: (s) => <LegacyOverview store={s.store} filters={s.filters} /> },
+  {
+    value: 'overview',
+    label: 'Overview',
+    datasets: ['orders', 'refunds', 'catalog', 'inventory', 'traffic', 'ad_spend'],
+    render: (s) => (
+      <>
+        <Overview s={s} tabs={TABS.map((t) => t.value)} />
+        <LegacyOverview store={s.store} filters={s.filters} />
+      </>
+    ),
+  },
 ];
 
 export function Analytics() {

@@ -3,7 +3,7 @@
 // screen only while the store is the same, so a switch shows loading, never the last store's numbers.
 // ponytail: no definitions hook; the page reads the shared registry (SA_METRICS, SA_SOURCES) it is built from.
 import { useQuery } from '@tanstack/react-query';
-import type { SaCollection, SaContext, SaListings, SaMetricId, SaMetricSet, SaReconcile, SaSeries, SaSourceRow } from '@frontline/shared';
+import type { SaCollection, SaContext, SaListings, SaMetricId, SaMetricSet, SaOverview, SaReconcile, SaSeries, SaSourceRow } from '@frontline/shared';
 import { api } from '../api/client';
 import { periodParams, type AnalyticsState } from './state';
 
@@ -26,4 +26,5 @@ export const useSaCollections = (store?: string) => useSa<SaCollection[]>(store,
 export const useSaListings = (store: string | undefined, params: Params) => useSa<SaListings>(store, 'listings', params);
 export const useSaMetrics = (s: AnalyticsState, metrics?: SaMetricId[]) => useSa<SaMetricSet>(s.store, 'metrics', { ...periodParams(s), metrics: metrics?.join(',') });
 export const useSaSeries = (s: AnalyticsState, metric: SaMetricId) => useSa<SaSeries>(s.store, 'series', { ...periodParams(s), metric });
+export const useSaOverview = (s: AnalyticsState) => useSa<SaOverview>(s.store, 'overview', periodParams(s));
 export const useSaReconcile = (s: AnalyticsState) => useSa<SaReconcile>(s.store, 'reconcile', { ...periodParams(s), filters: undefined });
