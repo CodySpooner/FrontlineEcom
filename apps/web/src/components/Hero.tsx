@@ -41,7 +41,7 @@ export function Hero({ title, subtitle, icon: Icon, compact, children }: { title
 
 /** Ask AI, the bell and the profile chip. */
 function HeroControls() {
-  const profile = useSettings().data?.profile ?? { name: 'Owner', plan: '' };
+  const profile = useSettings().data?.profile ?? { name: 'Owner' };
   return (
     <div className="flex items-center gap-3">
       {/* Below 900px it shrinks to an icon button the size of the bell. */}
@@ -61,7 +61,8 @@ function HeroControls() {
         <span className="grid size-8 place-items-center rounded-full border border-red bg-[radial-gradient(circle_at_50%_35%,#45121a,#120507)] font-display text-sm font-bold">{profile.name.charAt(0).toUpperCase()}</span>
         <span>
           <span className="block text-[13px] leading-tight font-semibold">{profile.name}</span>
-          <span className="block text-[11px] text-muted">{profile.plan || 'Owner'}</span>
+          {/* No plan: nothing enforces one (settings decision 17). */}
+          <span className="block text-[11px] text-muted">Owner</span>
         </span>
       </Link>
     </div>

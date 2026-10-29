@@ -205,50 +205,39 @@ export function CapsForm({ caps }: { caps: StoreCaps }) {
 }
 
 /** One field of the old Profile panel (Account: the name; General: the base currency): each saves only its own field. */
-function ProfileField({ title, kind }: { title: string; kind: 'name' | 'baseCurrency' }) {
+export function BaseCurrency() {
   const q = useSettings();
   const update = useUpdateSettings();
   const [value, setValue] = useState<string>();
-  if (q.isPending) return <Panel title={title}><LoadingState rows={2} /></Panel>;
-  if (q.isError) return <Panel title={title}><ErrorState message="Couldn't load your settings." onRetry={() => q.refetch()} /></Panel>;
+  if (q.isPending) return <Panel title="Currency"><LoadingState rows={2} /></Panel>;
+  if (q.isError) return <Panel title="Currency"><ErrorState message="Couldn't load your settings." onRetry={() => q.refetch()} /></Panel>;
   const s = q.data;
-  const saved = kind === 'name' ? s.profile.name : s.baseCurrency;
-  const shown = value ?? saved;
-  const dirty = kind === 'name' ? shown.trim() !== saved : shown.toUpperCase() !== saved;
+  const shown = value ?? s.baseCurrency;
   return (
-    <Panel title={title}>
+    <Panel title="Currency">
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          update.mutate({ version: s.version ?? 0, ...(kind === 'name' ? { profile: { name: shown.trim() } } : { baseCurrency: shown.trim().toUpperCase() }) }, { onSuccess: () => setValue(undefined) });
+          update.mutate({ version: s.version ?? 0, baseCurrency: shown.trim().toUpperCase() }, { onSuccess: () => setValue(undefined) });
         }}
         className="grid gap-3"
       >
-        {kind === 'name' ? (
-          <Field label="Your name">
-            <input value={shown} onChange={(e) => setValue(e.target.value)} required maxLength={40} className={inputClass} />
-          </Field>
-        ) : (
-          <Field label="Base currency">
-            <input value={shown} onChange={(e) => setValue(e.target.value)} required pattern="[A-Za-z]{3}" maxLength={3} placeholder="USD" className={cx(inputClass, 'uppercase')} />
-            <span className="text-[11px] text-muted">Totals across stores are converted to this. One store shows its own currency.</span>
-          </Field>
-        )}
+        <Field label="Base currency">
+          <input value={shown} onChange={(e) => setValue(e.target.value)} required pattern="[A-Za-z]{3}" maxLength={3} placeholder="USD" className={cx(inputClass, 'uppercase')} />
+          <span className="text-[11px] text-muted">Totals across stores are converted to this. One store shows its own currency.</span>
+        </Field>
         {update.isError && (
           <p role="alert" className="text-xs text-red">
             {update.error.message}
           </p>
         )}
-        <Button type="submit" variant="primary" className="justify-self-end" disabled={!dirty || !shown.trim() || update.isPending}>
+        <Button type="submit" variant="primary" className="justify-self-end" disabled={shown.toUpperCase() === s.baseCurrency || !shown.trim() || update.isPending}>
           Save
         </Button>
       </form>
     </Panel>
   );
 }
-
-export const AccountName = () => <ProfileField title="Profile" kind="name" />;
-export const BaseCurrency = () => <ProfileField title="Currency" kind="baseCurrency" />;
 
 export function Notifications() {
   const q = useSettings();

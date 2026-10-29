@@ -171,7 +171,7 @@ const PROMPT = 'packages/agents/src/prompt.test.ts';
 const COMMON = 'apps/server/src/connectors/common.test.ts';
 
 export const SETTINGS: SettingDef[] = [
-  { id: 'profile.name', section: 'account', type: 'string', maxLength: 40, label: 'Your name', help: 'Shown on the profile chip.', scopes: ['personal'], default: 'Cody', owner: 'apps/server/src/settings.ts#updateSettings', applies: 'now', export: true, consumers: ['apps/web/src/components/Hero.tsx#HeroControls'], proof: 'apps/web/src/pages/Settings.test.tsx#a saved name shows in the Hero chip at once' },
+  { id: 'profile.name', section: 'account', type: 'string', maxLength: 40, label: 'Display name', help: 'Shown on the profile chip.', scopes: ['personal'], default: 'Cody', owner: 'apps/server/src/settings.ts#updateSettings', applies: 'now', export: true, consumers: ['apps/web/src/components/Hero.tsx#HeroControls'], proof: 'apps/web/src/settings/sections/Account.test.tsx#a rename persists across a refetch and shows on the chip' },
 
   notif('approvals', 'Requests to approve', 'When an agent asks before it acts.', 'apps/server/src/settings.test.ts#notifications: approvals and agentDone each silence their own kind, and only it', ['apps/server/src/settings.ts#PREF'], true),
   notif('agentDone', 'Finished work', 'When an agent finishes a task.', 'apps/server/src/settings.test.ts#notifications: approvals and agentDone each silence their own kind, and only it', ['apps/server/src/settings.ts#PREF']),

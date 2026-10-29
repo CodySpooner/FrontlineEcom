@@ -38,7 +38,7 @@ export function getSettings(db: Db): Settings {
  * Validates a SettingsUpdate and saves only the keys it sends, through the config writer. Returns an error message or
  * the new Settings. `version` (the `app` row's, as read) is checked when given: a stale one throws ConfigError (409).
  */
-export function updateSettings(db: Db, body: unknown, version?: number): string | Settings {
+export function updateSettings(db: Db, body: unknown, version?: number): string | { error: string; field: string } | Settings {
   if (!isObj(body)) return 'body must be a JSON object';
   const bad = extra(body, ['profile', 'notifications', 'baseCurrency']);
   if (bad) return `unknown setting ${bad}`;
@@ -48,7 +48,8 @@ export function updateSettings(db: Db, body: unknown, version?: number): string 
     for (const k of ['name', 'plan'] as const) {
       const v = body.profile[k];
       if (v === undefined) continue;
-      if (typeof v !== 'string' || !v.trim() || v.trim().length > 40) return `profile.${k} must be 1-40 characters`;
+      // The name's refusal is shown under its row in Settings → Account (ST-12).
+      if (typeof v !== 'string' || !v.trim() || v.trim().length > 40) return k === 'name' ? { error: 'Your display name must be 1–40 characters.', field: 'profile.name' } : `profile.${k} must be 1-40 characters`;
       set[`profile.${k}`] = v.trim();
     }
   }
@@ -115,7 +116,10 @@ export function updateCaps(db: Db, storeId: string, body: unknown, version?: num
   return getCaps(db, storeId);
 }
 
-/** A config write route: 400 without a JSON object, 428 without the `version` read, 409 when it's stale (decision 6). */
+/**
+ * A config write route: 400 without a JSON object, 428 without the `version` read, 409 when it's stale (decision 6). A
+ * refusal is a message, or `{ error, field }` naming the setting.
+ */
 async function versioned(c: Context, write: (body: Obj, version: number) => string | object) {
   const body: unknown = await c.req.json().catch(() => undefined);
   if (!isObj(body)) return c.json({ error: 'body must be a JSON object' }, 400);
@@ -124,7 +128,8 @@ async function versioned(c: Context, write: (body: Obj, version: number) => stri
   if (version === undefined) return c.json(NO_VERSION, 428);
   try {
     const out = write(rest, version);
-    return typeof out === 'string' ? c.json({ error: out }, 400) : c.json(out);
+    if (typeof out === 'string') return c.json({ error: out }, 400);
+    return 'error' in out ? c.json(out, 400) : c.json(out);
   } catch (e) {
     if (e instanceof ConfigError) return c.json(e.body, e.status);
     throw e;

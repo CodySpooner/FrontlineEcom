@@ -2,7 +2,8 @@
 // Decision 5 test 2, "no decorative switches": every control on a settings page is tied to a registry entry
 // (`data-setting`), a connector's secret field (`data-secret`) or a named, tested action (`data-action`), and every
 // editable entry renders somewhere unless it's on the allowlist. Controls inside `data-legacy` (panels moved as they
-// were by ST-02) are skipped until the item that replaces them deletes the wrapper.
+// were by ST-02) are skipped until the item that replaces them deletes the wrapper. So are a `<dialog>`'s: the form's
+// leave and conflict prompts (Stay, Discard, Save, Reload, Keep mine), proven in form.test.tsx.
 import { existsSync, readFileSync } from 'node:fs';
 import { afterAll, afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
@@ -13,7 +14,6 @@ import { SECTIONS } from './Layout';
 
 /** Editable entries with no row outside `data-legacy` yet. The item that renders a row removes its id; ST-48 empties it. */
 const ALLOWLIST = [
-  'profile.name', // ST-12
   'notifications.approvals', 'notifications.agentDone', 'notifications.errors', 'notifications.digest', 'notifications.researchAlerts', // ST-14b
   'baseCurrency', // ST-16
   'caps.agentCostPerDay', // ST-23
@@ -52,7 +52,7 @@ describe('every control on a settings page is real', () => {
     // Every section has at least one control once its data is in.
     await vi.waitFor(() => expect(main().querySelector(CONTROLS)).not.toBeNull());
     for (const el of main().querySelectorAll<HTMLElement>(CONTROLS)) {
-      if (el.closest('[data-legacy]')) continue;
+      if (el.closest('[data-legacy], dialog')) continue;
       const tag = el.closest<HTMLElement>('[data-setting], [data-secret], [data-action]');
       expect(tag, `a control with no data-setting, data-secret or data-action on /settings/${slug}: ${el.outerHTML.slice(0, 160)}`).not.toBeNull();
       const { setting, secret, action } = tag!.dataset;

@@ -109,29 +109,7 @@ describe('inside the app shell', () => {
   });
 });
 
-describe('Account and General each save only their own field', () => {
-  it('Account saves the name', async () => {
-    const fetch = api();
-    renderApp(<Settings />, '/settings/account');
-    fireEvent.change(await screen.findByLabelText('Your name'), { target: { value: ' Sam ' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await vi.waitFor(() => expect(sent(fetch, 'PATCH')).toEqual([['/api/settings', { version: 0, profile: { name: 'Sam' } }]]));
-  });
-
-  it('a saved name shows in the Hero chip at once', async () => {
-    let saved = settings;
-    stubApi((url, init) => {
-      if (url === '/api/settings') return init?.method === 'PATCH' ? (saved = { ...saved, profile: { ...saved.profile, ...(JSON.parse(String(init.body)) as SettingsT).profile } }) : saved;
-      return url === '/api/health' ? { ok: true, uptimeSec: 1, version: 'dev', connectors: [] } : undefined;
-    });
-    renderApp(<Settings />, '/settings/account');
-    expect(await screen.findByRole('link', { name: /Cody/ })).toBeTruthy();
-    fireEvent.change(await screen.findByLabelText('Your name'), { target: { value: 'Sam' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(await screen.findByRole('link', { name: /Sam/ })).toBeTruthy();
-    expect(screen.queryByRole('link', { name: /Cody/ })).toBeNull();
-  });
-
+describe('General saves only its own field', () => {
   it('General saves the base currency', async () => {
     const fetch = api();
     renderApp(<Settings />, '/settings/general');

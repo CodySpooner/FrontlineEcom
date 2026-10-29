@@ -13,6 +13,15 @@ const setup = () => {
 };
 const send = (method: string, body?: unknown) => ({ method, body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
 
+test('a display name is 1-40 characters: 41 is refused, naming the field, and changes nothing', async () => {
+  const { db, app } = setup();
+  const { version } = getSettings(db);
+  const res = await app.request('/api/settings', send('PATCH', { version, profile: { name: 'x'.repeat(41) } }));
+  expect([res.status, await res.json()]).toEqual([400, { error: 'Your display name must be 1–40 characters.', field: 'profile.name' }]);
+  expect(getSettings(db)).toMatchObject({ profile: { name: 'Cody' }, version });
+  expect((await app.request('/api/settings', send('PATCH', { version, profile: { name: 'x'.repeat(40) } }))).status).toBe(200);
+});
+
 test('settings have defaults, merge nested updates, and reject bad input', async () => {
   const { app } = setup();
   const s = (await (await app.request('/api/settings')).json()) as Settings;
