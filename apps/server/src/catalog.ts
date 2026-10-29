@@ -1,5 +1,7 @@
 import type { FulfillmentStatus, Order, OrderStatus, Page, Product, ProductStatus } from '@frontline/shared';
 import { rebuildRevenue } from './connectors/common';
+import { recordUnitCost } from './connectors/ingest';
+import { localDate } from './dates';
 import { tx, type Db } from './db';
 
 type Row = Record<string, unknown>;
@@ -95,9 +97,9 @@ const ORDERS: ListSpec = {
 export const listProducts = (db: Db, storeIds: string[], q: Query) => list(db, PRODUCTS, storeIds, q, toProduct);
 
 /**
- * The owner's unit cost for a product whose platform has none (Etsy, TikTok Shop, Woo without COGS). Its past lines
- * without a platform cost (0, or the previous owner cost) are re-priced, with their orders' cogs and days. Undefined =
- * no such product; a string = bad input.
+ * The owner's unit cost for a product whose platform has none (Etsy, TikTok Shop, Woo without COGS), from today on.
+ * Past lines with no cost yet take it (order lines flagged `owner_backfill`), with their orders' cogs and days; a known
+ * past cost is never rewritten (decision 15). Undefined = no such product; a string = bad input.
  */
 export function setProductCost(db: Db, storeId: string, productId: string, body: unknown): string | Product | undefined {
   const cost = (body as { cost?: unknown } | undefined)?.cost;
@@ -107,22 +109,26 @@ export function setProductCost(db: Db, storeId: string, productId: string, body:
   if (store?.platform === 'shopify' && store.connected && /^\d+$/.test(productId)) {
     return 'Shopify keeps unit costs: set "Cost per item" on the product in Shopify and the next sync brings it here';
   }
-  const old = db.prepare('SELECT cost FROM products WHERE store_id = ? AND id = ?').get(storeId, productId);
-  if (!old) return undefined;
+  if (!db.prepare('SELECT 1 FROM products WHERE store_id = ? AND id = ?').get(storeId, productId)) return undefined;
   tx(db, () => {
     db.prepare('UPDATE products SET cost = ? WHERE store_id = ? AND id = ?').run(cost, storeId, productId);
+    // Lines with no cost and no unit cost in force on their day; before this cost is recorded, so today's lines lock too.
+    db.prepare(
+      `UPDATE order_lines AS l SET cost = round(l.quantity * ?, 2), cost_source = 'owner_backfill' WHERE l.store_id = ? AND l.product_id = ? AND coalesce(l.cost, 0) = 0
+       AND NOT EXISTS (SELECT 1 FROM unit_costs u JOIN orders o ON o.store_id = l.store_id AND o.id = l.order_id
+         WHERE u.store_id = l.store_id AND u.product_id = l.product_id AND (u.variant_id IS NULL OR u.variant_id = l.variant_id) AND u.effective_from <= o.local_date)`,
+    ).run(cost, storeId, productId);
+    // ponytail: 0 isn't recorded as a unit cost (0 reads as "not known" everywhere else).
+    if (cost > 0) recordUnitCost(db, storeId, productId, null, cost, 'owner', localDate(new Date(), String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC')));
     const lines = db
-      .prepare(
-        `SELECT i.order_id, i.quantity, i.cost, o.local_date FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id
-         WHERE i.store_id = ? AND i.product_id = ? AND (i.cost = 0 OR abs(i.cost - i.quantity * ?) < 0.005)`,
-      )
-      .all(storeId, productId, Number(old.cost));
+      .prepare(`SELECT i.order_id, i.quantity, o.local_date FROM order_items i JOIN orders o ON o.store_id = i.store_id AND o.id = i.order_id WHERE i.store_id = ? AND i.product_id = ? AND i.cost = 0`)
+      .all(storeId, productId);
     const line = db.prepare('UPDATE order_items SET cost = ? WHERE store_id = ? AND order_id = ? AND product_id = ?');
-    const order = db.prepare('UPDATE orders SET cogs = round(max(0, cogs + ?), 2) WHERE store_id = ? AND id = ?');
+    const order = db.prepare('UPDATE orders SET cogs = round(cogs + ?, 2) WHERE store_id = ? AND id = ?');
     for (const l of lines) {
       const next = r2(Number(l.quantity) * cost);
       line.run(next, storeId, String(l.order_id), productId);
-      order.run(next - Number(l.cost), storeId, String(l.order_id));
+      order.run(next, storeId, String(l.order_id));
     }
     rebuildRevenue(db, storeId, new Set(lines.map((l) => String(l.local_date))));
   });

@@ -77,8 +77,8 @@ test("the owner's unit cost fills order lines the platform gave no cost for, now
   const patch = (cost: unknown, store = 'peak', id = 'tt-1') => app.request(`/api/products/${store}/${id}`, { method: 'PATCH', body: JSON.stringify({ cost }), headers: { 'content-type': 'application/json' } });
   expect(((await (await patch(7.5)).json()) as Product).cost).toBe(7.5);
   expect([cogs('tt-a'), day()]).toEqual([15, 15]);
-  await patch(8); // changed again: lines priced at the old cost follow
-  expect([cogs('tt-a'), day()]).toEqual([16, 16]);
+  await patch(8); // changed again: a past line keeps the cost it had (decision 15)
+  expect([cogs('tt-a'), day()]).toEqual([15, 15]);
 
   order.run('tt-b'); // a later sync: the line takes the owner's cost
   setOrderItems(db, 'peak', 'tt-b', [{ productId: 'tt-1', quantity: 1, revenue: 30, cost: 0 }]);

@@ -4,7 +4,7 @@ import { once, tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus, updateSecrets } from '../integrations';
 import { archiveMissing, catalogPassDue, cursorAt, rebuildRevenue, setOrderItems, takeCurrency, takeTimezone, switchToReal, syncView, hasTag, stillAsSynced, syncedPrice } from './common';
-import { noteFailed, noteRead } from './ingest';
+import { noteFailed, noteRead, recordUnitCost } from './ingest';
 
 // Shopify Admin GraphQL, custom-app access token. Scopes: read_products, read_inventory, read_orders, read_all_orders;
 // write_products to add products the owner approved (createProducts) or publish product pages (publishProductPage);
@@ -262,6 +262,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
         const v = p.variants.nodes[0];
         const compareAt = v?.compareAtPrice ? num(v.compareAtPrice) : null;
         prod.run(storeId, tail(p.id), p.title, p.featuredMedia?.preview?.image?.url ?? null, num(v?.price), compareAt, num(v?.inventoryItem?.unitCost), p.totalInventory ?? 0, p.tracksInventory === false || v?.inventoryPolicy === 'CONTINUE' ? 0 : 1, p.status.toLowerCase() as ProductStatus);
+        if (num(v?.inventoryItem?.unitCost) > 0) recordUnitCost(db, storeId, tail(p.id), null, num(v?.inventoryItem?.unitCost), 'shopify', today, now);
       }
       const archive = db.prepare("UPDATE products SET status = 'archived' WHERE store_id = ? AND id = ?");
       for (const e of deleted) if (e.subjectId) archive.run(storeId, tail(e.subjectId));
@@ -275,7 +276,7 @@ export async function syncShopify(db: Db, key: Buffer, storeId: string, fetchFn:
     const ord = db.prepare(
       `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax, tracking_url) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)
        ON CONFLICT (store_id, id) DO UPDATE SET total = excluded.total, status = excluded.status, fulfillment_status = excluded.fulfillment_status,
-         tracking = coalesce(excluded.tracking, tracking), cogs = excluded.cogs, tax = excluded.tax, tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url)`,
+         tracking = coalesce(excluded.tracking, tracking), cogs = iif(cogs > 0, cogs, excluded.cogs), tax = excluded.tax, tracking_url = iif(excluded.tracking IS NULL, tracking_url, excluded.tracking_url)`,
     );
     // Not paid yet (cash on delivery, bank transfer, an uncaptured authorization): left out of revenue until it is, and
     // removed if an earlier sync stored it. Its updated_at moves when it's paid, so the next sync brings it back.

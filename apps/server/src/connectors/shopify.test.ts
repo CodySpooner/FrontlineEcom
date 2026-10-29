@@ -81,6 +81,18 @@ test("Shopify next to a store's own platform dates its orders on the store's day
   expect(lone.prepare("SELECT status FROM integrations WHERE id = 'shopify:glow'").get()?.status).toBe('connected');
 });
 
+test("a re-sync after Shopify's unit cost changed keeps the order's stored cogs; the new cost is recorded once (SA-26)", async () => {
+  const { db } = await setup();
+  await syncShopify(db, key, 'glow', fakeShopify([order('#1001', '2026-10-25T09:00:00Z', '100.00')]).fetchFn, NOW);
+  const cogs = () => db.prepare("SELECT cogs FROM orders WHERE store_id = 'glow' AND id = '#1001'").get()?.cogs;
+  expect(cogs()).toBe(10);
+  const later = order('#1001', '2026-10-25T09:00:00Z', '100.00', { updatedAt: '2026-10-26T12:00:00Z' });
+  later.lineItems.nodes[0]!.variant = { inventoryItem: { unitCost: money('7.00') } };
+  await syncShopify(db, key, 'glow', fakeShopify([later]).fetchFn, NOW);
+  expect(cogs()).toBe(10);
+  expect(db.prepare("SELECT cost, source, effective_from FROM unit_costs WHERE store_id = 'glow' AND product_id = '111'").all()).toEqual([{ cost: 28, source: 'shopify', effective_from: '2026-10-26' }]);
+});
+
 test('shopHost normalizes and only allows myshopify.com hosts', () => {
   expect(shopHost(' https://Glow-Haus.myshopify.com/admin ')).toBe('glow-haus.myshopify.com');
   // The address the Shopify admin shows today names the shop too.

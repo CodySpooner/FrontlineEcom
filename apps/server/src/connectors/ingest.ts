@@ -50,3 +50,16 @@ export async function noted<T>(db: Db, key: Buffer, integration: string, dataset
 export function noteFailed(db: Db, key: Buffer, integration: string, datasets: Iterable<SaDataset>, e: unknown) {
   for (const d of datasets) noteRead(db, key, integration, d, { status: 'failed', error: message(e) });
 }
+
+/**
+ * SA-26 (decision 15): a product's (or variant's) unit cost from a day on, in the store's currency. Append-only: a new
+ * cost never rewrites a past one, and the same cost again records nothing. True when a row was added.
+ */
+export function recordUnitCost(db: Db, storeId: string, productId: string, variantId: string | null, cost: number, source: string, effectiveFrom: string, now = new Date()) {
+  const last = db.prepare('SELECT cost FROM unit_costs WHERE store_id = ? AND product_id = ? AND variant_id IS ? ORDER BY effective_from DESC, recorded_at DESC LIMIT 1').get(storeId, productId, variantId);
+  if (last && Number(last.cost) === cost) return false;
+  db.prepare('INSERT INTO unit_costs (store_id, product_id, variant_id, cost, currency, source, effective_from, recorded_at) VALUES (?, ?, ?, ?, (SELECT currency FROM stores WHERE id = ?), ?, ?, ?)').run(
+    storeId, productId, variantId, cost, storeId, source, effectiveFrom, now.toISOString(),
+  );
+  return true;
+}
