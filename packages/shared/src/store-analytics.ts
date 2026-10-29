@@ -15,6 +15,20 @@ export type SaDatasetStatus =
   | 'unsupported'
   | 'demo';
 
+/** The words every surface shows for a dataset status. A synced dataset is never "verified" until a recorded live comparison (decision 24). */
+export const SA_DATASET_STATUSES: Record<SaDatasetStatus, string> = {
+  verified: 'Live verified',
+  available: 'Available (not verified live)',
+  partial: 'Partly available',
+  needs_credentials: 'Awaiting connection',
+  needs_permission: 'Needs permission',
+  import: 'Import',
+  failed: 'Sync failed',
+  not_tracked: 'Not tracked',
+  unsupported: 'Not supported',
+  demo: 'Demo data',
+};
+
 /** Why a value is missing or qualified. */
 export type SaReason = 'not_tracked' | 'needs_credentials' | 'needs_permission' | 'needs_ingestion' | 'insufficient_history' | 'unsupported' | 'failed' | 'stale';
 
@@ -674,6 +688,8 @@ export interface SaFreshness {
   error: string | null;
   coveredFrom: string | null;
   coveredTo: string | null;
+  /** The owner's recorded live comparison, while the integration is still on the account it was made on. */
+  verified?: { at: string; account: string; note: string };
 }
 
 /** A row of the Data sources panel. */

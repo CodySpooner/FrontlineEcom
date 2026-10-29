@@ -18,9 +18,14 @@ type Row = {
   path: string;
   /** The legacy Dashboard routes (decision 31): they keep pickStores and aren't swept for scope. */
   legacy?: true;
-  /** For a route with a record id: one of pawsome's, made here; asked for with ?store=glow it must be 404. */
+  /** For a route with a record id: one of pawsome's, made here; asked for with store=glow it must be 404. */
   record?: (db: Db) => string;
-  body?: unknown;
+  /** A write's body (the record id goes in it); the scope fields (store, stores) are added from the case. */
+  body?: (id: string) => Record<string, unknown>;
+};
+const pawsomeShopify = (db: Db) => {
+  db.prepare("INSERT INTO integrations (id, kind, store_id, status, settings_json, encrypted_credentials, updated_at) VALUES ('shopify:pawsome', 'shopify', 'pawsome', 'connected', '{\"shopDomain\":\"pawsome.myshopify.com\"}', '', '2026-10-26')").run();
+  return 'shopify:pawsome';
 };
 const ROUTES: Row[] = [
   { method: 'GET', path: '/api/analytics/summary', legacy: true },
@@ -29,10 +34,17 @@ const ROUTES: Row[] = [
   { method: 'GET', path: '/api/analytics/definitions' },
   { method: 'GET', path: '/api/analytics/context' },
   { method: 'GET', path: '/api/analytics/sources' },
+  { method: 'PUT', path: '/api/analytics/sources/verified', record: pawsomeShopify, body: (id) => ({ integration: id, dataset: 'orders', note: 'Matched the platform report' }) },
 ];
 
 const send = (r: Row, query: string, id = 'x') =>
-  app.request(`${r.path.replace(/:\w+/, id)}${query}`, { method: r.method, headers: { 'content-type': 'application/json' }, ...(r.body === undefined ? {} : { body: JSON.stringify(r.body) }) });
+  r.method === 'GET'
+    ? app.request(`${r.path.replace(/:\w+/, id)}${query}`)
+    : app.request(r.path.replace(/:\w+/, id), {
+        method: r.method,
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...r.body?.(id), ...Object.fromEntries(new URLSearchParams(query.slice(1))) }),
+      });
 
 describe('store scope', () => {
   it('every /api/analytics route has a row here', () => {
@@ -46,7 +58,7 @@ describe('store scope', () => {
       expect((await send(r, '', id)).status).toBe(400);
       expect((await send(r, '?store=nope', id)).status).toBe(404);
       expect((await send(r, '?stores=glow,peak', id)).status).toBe(400);
-      expect((await send(r, '?store=glow&metrics=net_sales,profit', id)).status).toBe(400);
+      if (r.method === 'GET') expect((await send(r, '?store=glow&metrics=net_sales,profit', id)).status).toBe(400);
       if (id) expect((await send(r, '?store=glow', id)).status).toBe(404); // pawsome's record
     });
   }

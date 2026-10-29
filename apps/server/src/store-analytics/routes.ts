@@ -2,7 +2,7 @@ import { SA_METRICS, SA_SOURCES, type SaContext, type SaMetricId, type SaSourceK
 import { Hono } from 'hono';
 import type { Db } from '../db';
 import { historyStart, zoneInfo } from './period';
-import { datasetFreshness, sourceRows } from './sources';
+import { datasetFreshness, markVerified, sourceRows } from './sources';
 
 export type Scope = { storeId: string; metrics?: SaMetricId[] };
 
@@ -62,5 +62,14 @@ export function storeAnalyticsRoutes(db: Db) {
     .get('/api/analytics/sources', (c) => {
       const s = scoped(c);
       return 'error' in s ? c.json({ error: s.error }, s.status) : c.json(sourceRows(db, s.storeId));
+    })
+    // The owner's recorded live comparison (decision 24): the app never marks a dataset verified on its own.
+    .put('/api/analytics/sources/verified', async (c) => {
+      const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!body || typeof body !== 'object') return c.json({ error: 'a JSON body is required' }, 400);
+      const s = readScope(db, (k) => (typeof body[k] === 'string' ? (body[k] as string) : undefined));
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const r = markVerified(db, s.storeId, body.integration, body.dataset, body.note);
+      return 'refused' in r ? c.json({ error: r.refused }, r.status) : c.json(r);
     });
 }

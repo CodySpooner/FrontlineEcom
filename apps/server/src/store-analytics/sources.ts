@@ -70,7 +70,28 @@ export function endRun(db: Db, key: Buffer, runId: number, integrationId: string
 const intervalMs = (kind: SaSourceKind, dataset: SaDataset) =>
   kind === 'amazon' && dataset === 'traffic' ? 86_400_000 : kind === 'shopify' || kind === 'woocommerce' ? 2 * 60_000 : 10 * 60_000;
 
-type Integration = { id: string; kind: SaSourceKind; status: string; error: string | null };
+type Integration = { id: string; kind: SaSourceKind; status: string; error: string | null; settings: string };
+
+/** The settings that say which account an integration reads: a verified mark holds only while they stay the same. */
+const ACCOUNT_KEYS: Partial<Record<SaSourceKind, string[]>> = {
+  shopify: ['shopDomain'],
+  woocommerce: ['siteUrl'],
+  etsy: ['shopId'],
+  amazon: ['sellerId', 'marketplaceId'],
+  // ponytail: an app key can authorize several shops; `shop` names one only when the owner set it.
+  tiktok_shop: ['shop', 'appKey'],
+  meta_ads: ['adAccountId'],
+  google_ads: ['customerId'],
+  tiktok_ads: ['advertiserId'],
+  ga4: ['propertyId'],
+};
+
+/** "glow-haus.myshopify.com", "a1seller / atvpdkikx0der": the account an integration's settings name, if any. */
+export function accountOf(kind: SaSourceKind, settingsJson: string) {
+  const s = JSON.parse(settingsJson || '{}') as Record<string, unknown>;
+  const parts = (ACCOUNT_KEYS[kind] ?? []).map((k) => String(s[k] ?? '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/+$/, '')).filter(Boolean);
+  return parts.length ? parts.join(' / ') : undefined;
+}
 
 /** The sources a store's numbers come from: its demo generator, or its own platform and every integration it has. */
 function storeSources(db: Db, storeId: string): { kind: SaSourceKind; integration?: Integration }[] {
@@ -78,10 +99,10 @@ function storeSources(db: Db, storeId: string): { kind: SaSourceKind; integratio
   if (!store) return [];
   if (store.demo) return [{ kind: 'demo' }];
   const integrations = db
-    .prepare('SELECT id, kind, status, error FROM integrations WHERE store_id = ? ORDER BY id')
+    .prepare('SELECT id, kind, status, error, settings_json FROM integrations WHERE store_id = ? ORDER BY id')
     .all(storeId)
     .filter((r) => String(r.kind) in SA_SOURCES)
-    .map((r) => ({ id: String(r.id), kind: r.kind as SaSourceKind, status: String(r.status), error: r.error == null ? null : String(r.error) }));
+    .map((r) => ({ id: String(r.id), kind: r.kind as SaSourceKind, status: String(r.status), error: r.error == null ? null : String(r.error), settings: String(r.settings_json ?? '{}') }));
   const platform = String(store.platform) as SaSourceKind;
   return [...(platform in SA_SOURCES && !integrations.some((i) => i.kind === platform) ? [{ kind: platform }] : []), ...integrations.map((i) => ({ kind: i.kind, integration: i }))];
 }
@@ -91,11 +112,18 @@ function storeSources(db: Db, storeId: string): { kind: SaSourceKind; integratio
  * covers (decision 23). Never empty for a store: an unconnected platform's datasets read `needs_credentials`.
  */
 export function datasetFreshness(db: Db, storeId: string, now = Date.now()): SaFreshness[] {
-  const read = db.prepare('SELECT status, last_try_at, last_success_at, error, covered_from, covered_to FROM source_datasets WHERE integration_id = ? AND dataset = ?');
+  const read = db.prepare(
+    'SELECT status, last_try_at, last_success_at, error, covered_from, covered_to, verified_at, verified_account, verified_note FROM source_datasets WHERE integration_id = ? AND dataset = ?',
+  );
   return storeSources(db, storeId).flatMap(({ kind, integration }) =>
     (Object.entries(SA_SOURCES[kind].datasets) as [SaDataset, SaSourceDataset][]).map(([dataset, d]) => {
       const row = integration && d.support === 'supported' && d.reads ? read.get(integration.id, dataset) : undefined;
+      // Decision 24: Live verified only while the latest read worked and the integration is on the account it was checked on.
+      const verified = row?.status === 'available' && row.verified_at != null && row.verified_account === accountOf(kind, integration!.settings)
+        ? { at: String(row.verified_at), account: String(row.verified_account), note: String(row.verified_note ?? '') }
+        : undefined;
       const [status, reason]: [SaDatasetStatus, SaReason?] =
+        verified ? ['verified'] :
         kind === 'demo' ? [d.support === 'unsupported' ? 'unsupported' : 'demo']
         : d.support !== 'supported' ? [d.support]
         : !integration ? ['needs_credentials', 'needs_credentials']
@@ -117,9 +145,30 @@ export function datasetFreshness(db: Db, storeId: string, now = Date.now()): SaF
         error,
         coveredFrom: row?.covered_from == null ? null : String(row.covered_from),
         coveredTo: row?.covered_to == null ? null : String(row.covered_to),
+        ...(verified ? { verified } : {}),
       };
     }),
   );
+}
+
+/**
+ * Records the owner's live comparison of one dataset (PUT /api/analytics/sources/verified), tied to the account the
+ * integration reads now. Only the store's own integration (404 otherwise), a dataset it reads and has synced, and a note.
+ */
+export function markVerified(db: Db, storeId: string, integration: unknown, dataset: unknown, note: unknown, now = new Date()): { refused: string; status: 400 | 404 } | SaFreshness {
+  const i = typeof integration === 'string' ? db.prepare('SELECT kind, settings_json FROM integrations WHERE id = ? AND store_id = ?').get(integration, storeId) : undefined;
+  if (!i || !(String(i.kind) in SA_SOURCES)) return { refused: 'integration not found', status: 404 };
+  const kind = i.kind as SaSourceKind;
+  const d = typeof dataset === 'string' ? SA_SOURCES[kind].datasets[dataset as SaDataset] : undefined;
+  if (!d || d.support !== 'supported' || !d.reads) return { refused: `${SA_SOURCES[kind].name} has no dataset ${String(dataset)} the app reads`, status: 400 };
+  if (typeof note !== 'string' || !note.trim() || note.length > 500) return { refused: 'note: what was compared, 1 to 500 characters', status: 400 };
+  const account = accountOf(kind, String(i.settings_json ?? '{}'));
+  if (!account) return { refused: `${SA_SOURCES[kind].name}'s settings name no account to tie the mark to`, status: 400 };
+  const ok = db
+    .prepare("UPDATE source_datasets SET verified_at = ?, verified_account = ?, verified_note = ? WHERE integration_id = ? AND dataset = ? AND last_success_at IS NOT NULL")
+    .run(now.toISOString(), account, note.trim(), String(integration), String(dataset)).changes;
+  if (!ok) return { refused: 'Not synced yet: verify a dataset after a successful read', status: 400 };
+  return datasetFreshness(db, storeId, now.getTime()).find((f) => f.source === kind && f.dataset === dataset)!;
 }
 
 /** The Data sources panel: every row of datasetFreshness with what it reads, its backoff wait and a fix link. */

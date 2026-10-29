@@ -75,3 +75,39 @@ describe('context', () => {
     expect(((await (await app.request('/api/analytics/sources?store=glow')).json()) as unknown[]).length).toBeGreaterThan(0);
   });
 });
+
+describe('live-verified mark (SA-15)', () => {
+  const put = (app: ReturnType<typeof createApp>, body: Record<string, unknown>) =>
+    app.request('/api/analytics/sources/verified', { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+
+  it('appears after a recorded comparison and goes when the integration moves to another account', async () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    const app = createApp(db);
+    const orders = () => sourceRows(db, LEDGER_STORE, LEDGER_NOW).find((r) => r.source === 'shopify' && r.dataset === 'orders')!;
+    const mark = { store: LEDGER_STORE, integration: 'shopify:ledger', dataset: 'orders', note: 'Nov 1–7 matched the Shopify sales report' };
+    expect((await put(app, mark)).status).toBe(400); // not synced yet: nothing to verify
+    db.prepare("INSERT INTO source_datasets (integration_id, dataset, store_id, status, last_try_at, last_success_at) VALUES ('shopify:ledger', 'orders', 'ledger', 'available', '2026-11-09T16:55:00.000Z', '2026-11-09T16:55:00.000Z')").run();
+    expect(orders()).toMatchObject({ status: 'available' });
+    expect(orders().verified).toBeUndefined();
+
+    const res = await put(app, mark);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ status: 'verified', verified: { account: 'ledger-test.myshopify.com', note: 'Nov 1–7 matched the Shopify sales report' } });
+    expect(orders()).toMatchObject({ status: 'verified' });
+
+    db.prepare(`UPDATE integrations SET settings_json = '{"shopDomain":"another-shop.myshopify.com"}' WHERE id = 'shopify:ledger'`).run();
+    expect(orders()).toMatchObject({ status: 'available' });
+    expect(orders().verified).toBeUndefined();
+  });
+
+  it("refuses another store's integration (404), a dataset the app doesn't read, and a missing note", async () => {
+    const db = openDb();
+    seedDemo(db, '2026-10-26');
+    seedLedgerStore(db);
+    const app = createApp(db);
+    expect((await put(app, { store: 'glow', integration: 'shopify:ledger', dataset: 'orders', note: 'x' })).status).toBe(404);
+    expect((await put(app, { store: LEDGER_STORE, integration: 'shopify:ledger', dataset: 'customers', note: 'x' })).status).toBe(400);
+    expect((await put(app, { store: LEDGER_STORE, integration: 'tiktok_shop:ledger', dataset: 'orders', note: ' ' })).status).toBe(400);
+  });
+});
