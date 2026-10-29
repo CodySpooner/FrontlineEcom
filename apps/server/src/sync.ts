@@ -16,7 +16,7 @@ import { notify } from './settings';
 type Syncer = (db: Db, key: Buffer, storeId: string, fetchFn: typeof fetch) => Promise<void>;
 
 /** Connectors that pull data on a schedule. */
-const SYNCERS: Partial<Record<IntegrationKind, Syncer>> = { shopify: syncShopify, meta_ads: syncMeta, google_ads: syncGoogleAds, ga4: syncGa4, tiktok_ads: syncTikTokAds, tiktok_shop: syncTikTokShop, etsy: syncEtsy, amazon: syncAmazon, cj: syncCj, woocommerce: syncWooCommerce };
+export const SYNCERS: Partial<Record<IntegrationKind, Syncer>> = { shopify: syncShopify, meta_ads: syncMeta, google_ads: syncGoogleAds, ga4: syncGa4, tiktok_ads: syncTikTokAds, tiktok_shop: syncTikTokShop, etsy: syncEtsy, amazon: syncAmazon, cj: syncCj, woocommerce: syncWooCommerce };
 
 /** One notification when a connection breaks (not one per retry), and one when it works again. */
 function notifyChange(db: Db, kind: IntegrationKind, storeId: string | null, before: string, status: string, error: string | null) {

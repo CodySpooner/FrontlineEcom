@@ -551,7 +551,7 @@ connector item afterwards proves its path from source to metric.
   - Acceptance: tests: a `null` value renders its reason for each `SaReason` and no "0" or "$0"; `FilterScope` with
     an empty `ignored` renders nothing.
 
-- [ ] SA-04 **Source capability record and sources doc** (spec §5 Source capability assessment):
+- [x] SA-04 **Source capability record and sources doc** (spec §5 Source capability assessment):
   - `SA_SOURCES` in the shared file: for each source kind the app syncs (every key of `SYNCERS` in `sync.ts`, plus
     `demo`) and each dataset (orders, order lines, refunds, fees, catalog, variants, channel listings, inventory,
     collections, traffic, purchasing sessions, traffic breakdowns, customers, ad spend, attribution): `supported`,
@@ -1553,7 +1553,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 SA-01 claims filed to codex-hardening's Inbox; CLAUDE.md row matches the Owns list (code paths plus "the touch points"); baseline `pnpm check` green at 4d4ec6b3: 234 test files, 1730 tests (typecheck + vitest 69 s).
 - 2026-10-28 SA-02 codemap re-checked at 89aae4a7 (corrections: api() already takes a signal, FX is partly per day already, demo days are machine-local) and a metric inventory table of 18 rows added; no code change.
 - 2026-10-28 SA-03 shared `SaDatasetStatus`, `SaReason` (+ `SA_REASONS` text), `SaValue`, `SaCoverage`, `SaFilterKey`, `SaFilterScope` in `packages/shared/src/store-analytics.ts`; `analytics/Unavailable.tsx` and `FilterScope.tsx` with tests (11).
-- 2026-10-28 SA-03 x
+- 2026-10-28 SA-04 `SA_SOURCES` (10 syncers + demo × 17 datasets, support / reads / field / scopes / history / rate limit / reason) and the generated `docs/features/store-analytics-sources.md`. Docs check 2026-10-28: product views per product — Amazon documented (salesAndTrafficByAsin.pageViews, not read), Shopify / Etsy / TikTok Shop not confirmed in the official references (unsupported); ad-to-product — Meta (product_id breakdown) and Google Ads (shopping_performance_view) documented, not read (decision 16), TikTok Ads not confirmed. `SYNCERS` exported from `sync.ts` for the coverage test.
 
 ## Blocked
 
