@@ -108,6 +108,8 @@ An Amazon store syncs its own orders; Amazon next to a site gives daily totals o
 
 ## Meta Ads
 
+The app reads Marketing API v24.0, which Meta retires on November 10, 2026 (changelog, checked 2026-10-28 by codex-hardening CH-22); the version bump is filed with core.
+
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Ad spend | supported | yes | Insights API spend by campaign and day | ads_read | 730 days back; the last 28 days re-read |  |  |
@@ -119,14 +121,14 @@ An Amazon store syncs its own orders; Amazon next to a site gives daily totals o
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Ad spend | supported | yes | GAQL campaign metrics.cost_micros by segments.date |  | 730 days back; the last 30 days re-read |  |  |
-| Platform-attributed results | supported | yes | metrics.conversions_value |  |  |  | Google's own attribution; the conversion setting isn't recorded yet (SA-58). |
+| Platform-attributed results | supported | yes | metrics.conversions_value |  |  |  | Google's own attribution over the account's primary conversion actions, which need not be purchases, and its conversion counts can be fractional: never used as purchase counts. The conversion setting isn't recorded yet (SA-58). Docs: https://developers.google.com/google-ads/api/fields/v26/metrics (checked 2026-10-28 by codex-hardening CH-22) |
 | Ad results by product | supported | no | shopping_performance_view segments.product_item_id |  |  |  | Not read: ad spend is never allocated to products (decision 16). Docs: https://developers.google.com/google-ads/api/docs/shopping-ads/reporting (checked 2026-10-28) |
 
 ## TikTok Ads
 
 | Dataset | Support | Reads | Field | Scopes | History | Rate limit | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Ad spend | supported | yes | Marketing API integrated report, campaign level by day |  | 730 days back; the last 28 days re-read | 30 days per request |  |
+| Ad spend | supported | yes | Marketing API integrated report, campaign level by day |  | 730 days back; the last 28 days re-read | 30 days per request | Campaign-level reports leave out Branded Mission spend, which TikTok reports at advertiser level only. Docs: https://business-api.tiktok.com/gateway/docs/index?doc_id=1751443956638721 (checked 2026-10-28 by codex-hardening CH-22) |
 | Platform-attributed results | supported | yes | complete_payment value |  |  |  | TikTok's own attribution; the window setting isn't recorded yet (SA-58). |
 | Ad results by product | unsupported | no | — |  |  |  | No product dimension confirmed in TikTok's Marketing API reference for the reports the app reads. Docs: https://business-api.tiktok.com/portal/docs (searched 2026-10-28) |
 

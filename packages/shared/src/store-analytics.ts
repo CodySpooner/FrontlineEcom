@@ -235,6 +235,7 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
   },
   meta_ads: {
     name: 'Meta Ads',
+    note: 'The app reads Marketing API v24.0, which Meta retires on November 10, 2026 (changelog, checked 2026-10-28 by codex-hardening CH-22); the version bump is filed with core.',
     datasets: {
       ad_spend: { support: 'supported', reads: true, field: 'Insights API spend by campaign and day', scopes: 'ads_read', history: '730 days back; the last 28 days re-read' },
       attribution: { support: 'supported', reads: true, field: 'Insights actions and action_values (purchase)', reason: "Meta's own attribution; the window setting isn't recorded yet (SA-58)." },
@@ -248,7 +249,13 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
     name: 'Google Ads',
     datasets: {
       ad_spend: { support: 'supported', reads: true, field: 'GAQL campaign metrics.cost_micros by segments.date', history: '730 days back; the last 30 days re-read' },
-      attribution: { support: 'supported', reads: true, field: 'metrics.conversions_value', reason: "Google's own attribution; the conversion setting isn't recorded yet (SA-58)." },
+      attribution: {
+        support: 'supported',
+        reads: true,
+        field: 'metrics.conversions_value',
+        reason: "Google's own attribution over the account's primary conversion actions, which need not be purchases, and its conversion counts can be fractional: never used as purchase counts. The conversion setting isn't recorded yet (SA-58).",
+        docs: 'https://developers.google.com/google-ads/api/fields/v26/metrics (checked 2026-10-28 by codex-hardening CH-22)',
+      },
       ad_product_links: NOT_READ('shopping_performance_view segments.product_item_id', {
         docs: 'https://developers.google.com/google-ads/api/docs/shopping-ads/reporting (checked 2026-10-28)',
         reason: 'Not read: ad spend is never allocated to products (decision 16).',
@@ -258,7 +265,15 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
   tiktok_ads: {
     name: 'TikTok Ads',
     datasets: {
-      ad_spend: { support: 'supported', reads: true, field: 'Marketing API integrated report, campaign level by day', history: '730 days back; the last 28 days re-read', rateLimit: '30 days per request' },
+      ad_spend: {
+        support: 'supported',
+        reads: true,
+        field: 'Marketing API integrated report, campaign level by day',
+        history: '730 days back; the last 28 days re-read',
+        rateLimit: '30 days per request',
+        reason: 'Campaign-level reports leave out Branded Mission spend, which TikTok reports at advertiser level only.',
+        docs: 'https://business-api.tiktok.com/gateway/docs/index?doc_id=1751443956638721 (checked 2026-10-28 by codex-hardening CH-22)',
+      },
       attribution: { support: 'supported', reads: true, field: 'complete_payment value', reason: "TikTok's own attribution; the window setting isn't recorded yet (SA-58)." },
       ad_product_links: UNSUPPORTED("No product dimension confirmed in TikTok's Marketing API reference for the reports the app reads.", 'https://business-api.tiktok.com/portal/docs (searched 2026-10-28)'),
     },
