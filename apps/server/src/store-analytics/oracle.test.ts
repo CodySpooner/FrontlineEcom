@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { openDb } from '../db';
 import { LEDGER_ORDERS, LEDGER_PERIODS, LEDGER_REFUNDS, LEDGER_STORE, seedLedgerStore } from './fixture';
+import { adMetrics } from './ads';
 import { costMetrics } from './costs';
 import { salesMetrics } from './sales';
 
@@ -133,6 +134,18 @@ describe('oracle (v1)', () => {
     // P1 is costed for 11 of 14 units and its fees are estimates; P2 is fully costed.
     expect(costMetrics(db, LEDGER_STORE, LEDGER_PERIODS.P1.from, LEDGER_PERIODS.P1.to).contribution_before_ads).toMatchObject({ status: 'estimated', coverage: { share: 11 / 14, of: 'units with a unit cost' } });
   });
-  it.todo('ad_spend, platform_roas and contribution_after_ads (SA-20)');
+  it('ad_spend, platform_roas and contribution_after_ads (SA-20)', () => {
+    const db = openDb();
+    seedLedgerStore(db);
+    for (const p of ['P1', 'P2', 'P3'] as const) {
+      const { from, to } = LEDGER_PERIODS[p];
+      const o: Record<string, number | null> = ORACLE[p];
+      const { values, networks } = adMetrics(db, LEDGER_STORE, from, to);
+      expect(values.ad_spend, p).toMatchObject({ value: o.ad_spend, status: 'ok' });
+      expect(values.contribution_after_ads.value, p).toBe(o.contribution_after_ads);
+      expect(networks, p).toEqual([{ network: 'meta', name: 'Meta Ads', spend: 140, roas: 2.5, attribution: "Meta's own attribution · attribution setting not recorded" }]);
+      if ('platform_roas' in o) expect(values.platform_roas, p).toMatchObject({ value: o.platform_roas, note: "Meta's own attribution · attribution setting not recorded" });
+    }
+  });
   it.todo('sessions and site_conversion with day coverage (SA-21)');
 });
