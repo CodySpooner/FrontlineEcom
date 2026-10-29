@@ -215,7 +215,7 @@ describe('Product Research page', () => {
     c.focus();
     fireEvent.keyDown(c, { key: 'ArrowDown' });
     expect(document.activeElement).toBe(screen.getByRole('article', { name: 'Product 201' }));
-  });
+  }, 20_000); // 10,000 cards: over 5 s under the full parallel suite
 
   it('a research profile that fails to load says so and retries; an empty view offers all matches', async () => {
     let down = true;
