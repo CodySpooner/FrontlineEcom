@@ -1,5 +1,5 @@
 {
-  "_source": "GA4 Data API v1beta discovery document (https://analyticsdata.googleapis.com/$discovery/rest?version=v1beta, read 2026-10-29): RunReportResponse (dimensionHeaders[name], metricHeaders[name, type], rows[dimensionValues[value], metricValues[value]], rowCount, metadata[currencyCode, timeZone], kind 'analyticsData#runReport'); every value is a string, the date dimension YYYYMMDD. The numbers are test values in those shapes.",
+  "_source": "GA4 Data API v1beta discovery document (https://analyticsdata.googleapis.com/$discovery/rest?version=v1beta, read 2026-10-29): RunReportResponse (dimensionHeaders[name], metricHeaders[name, type], rows[dimensionValues[value], metricValues[value]], rowCount, metadata[currencyCode, timeZone], kind 'analyticsData#runReport'); every value is a string, the date dimension YYYYMMDD. The numbers are test values in those shapes. SA-57: the session splits use the Data API schema's dimensions sessionDefaultChannelGroup, deviceCategory and countryId (ISO 3166-1 alpha-2), checked 2026-10-29 at https://developers.google.com/analytics/devguides/reporting/data/v1/api-schema.",
   "report": {
     "dimensionHeaders": [
       {
@@ -82,5 +82,214 @@
       "timeZone": "America/Los_Angeles"
     },
     "kind": "analyticsData#runReport"
+  },
+  "breakdowns": {
+    "sessionDefaultChannelGroup": {
+      "dimensionHeaders": [
+        {
+          "name": "date"
+        },
+        {
+          "name": "sessionDefaultChannelGroup"
+        }
+      ],
+      "metricHeaders": [
+        {
+          "name": "sessions",
+          "type": "TYPE_INTEGER"
+        }
+      ],
+      "rows": [
+        {
+          "dimensionValues": [
+            {
+              "value": "20261025"
+            },
+            {
+              "value": "Organic Search"
+            }
+          ],
+          "metricValues": [
+            {
+              "value": "600"
+            }
+          ]
+        },
+        {
+          "dimensionValues": [
+            {
+              "value": "20261025"
+            },
+            {
+              "value": "Direct"
+            }
+          ],
+          "metricValues": [
+            {
+              "value": "400"
+            }
+          ]
+        },
+        {
+          "dimensionValues": [
+            {
+              "value": "20261025"
+            },
+            {
+              "value": "Paid Social"
+            }
+          ],
+          "metricValues": [
+            {
+              "value": "300"
+            }
+          ]
+        },
+        {
+          "dimensionValues": [
+            {
+              "value": "20261025"
+            },
+            {
+              "value": "(not set)"
+            }
+          ],
+          "metricValues": [
+            {
+              "value": "10"
+            }
+          ]
+        }
+      ],
+      "rowCount": 4,
+      "metadata": {
+        "currencyCode": "USD",
+        "timeZone": "America/Chicago"
+      },
+      "kind": "analyticsData#runReport"
+    },
+    "deviceCategory": {
+      "dimensionHeaders": [
+        {
+          "name": "date"
+        },
+        {
+          "name": "deviceCategory"
+        }
+      ],
+      "metricHeaders": [
+        {
+          "name": "sessions",
+          "type": "TYPE_INTEGER"
+        }
+      ],
+      "rows": [
+        {
+          "dimensionValues": [
+            {
+              "value": "20261025"
+            },
+            {
+              "value": "mobile"
+            }
+          ],
+          "metricValues": [
+            {
+              "value": "760"
+            }
+          ]
+        },
+        {
+          "dimensionValues": [
+            {
+              "value": "20261025"
+            },
+            {
+              "value": "desktop"
+            }
+          ],
+          "metricValues": [
+            {
+              "value": "500"
+            }
+          ]
+        },
+        {
+          "dimensionValues": [
+            {
+              "value": "20261025"
+            },
+            {
+              "value": "tablet"
+            }
+          ],
+          "metricValues": [
+            {
+              "value": "50"
+            }
+          ]
+        }
+      ],
+      "rowCount": 3,
+      "metadata": {
+        "currencyCode": "USD",
+        "timeZone": "America/Chicago"
+      },
+      "kind": "analyticsData#runReport"
+    },
+    "countryId": {
+      "dimensionHeaders": [
+        {
+          "name": "date"
+        },
+        {
+          "name": "countryId"
+        }
+      ],
+      "metricHeaders": [
+        {
+          "name": "sessions",
+          "type": "TYPE_INTEGER"
+        }
+      ],
+      "rows": [
+        {
+          "dimensionValues": [
+            {
+              "value": "20261025"
+            },
+            {
+              "value": "US"
+            }
+          ],
+          "metricValues": [
+            {
+              "value": "1000"
+            }
+          ]
+        },
+        {
+          "dimensionValues": [
+            {
+              "value": "20261025"
+            },
+            {
+              "value": "GB"
+            }
+          ],
+          "metricValues": [
+            {
+              "value": "300"
+            }
+          ]
+        }
+      ],
+      "rowCount": 2,
+      "metadata": {
+        "currencyCode": "USD",
+        "timeZone": "America/Chicago"
+      },
+      "kind": "analyticsData#runReport"
+    }
   }
 }

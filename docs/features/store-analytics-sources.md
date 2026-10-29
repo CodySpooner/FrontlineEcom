@@ -140,7 +140,7 @@ Sessions and event counts (add-to-carts, checkouts), never purchasing sessions: 
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Sessions and funnel | supported | yes | Data API runReport sessions, addToCarts, checkouts |  | 730 days back; the last 3 days re-read |  | Carts and checkouts are event counts, not sessions. |
 | Purchasing sessions | unsupported | no | — |  |  |  | GA4 sends event counts, not purchasing sessions. |
-| Traffic by source, device and country | supported | no | runReport by sessionDefaultChannelGroup, deviceCategory, country |  |  |  |  |
+| Traffic by source, device and country | supported | yes | Data API runReport sessions by sessionDefaultChannelGroup, deviceCategory, countryId |  | 730 days back; the last 3 days re-read |  | "(not set)" and any shortfall against the day's sessions show as unknown; no purchasing sessions (decision 14). |
 
 ## CJ Dropshipping
 

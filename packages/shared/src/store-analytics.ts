@@ -329,7 +329,13 @@ export const SA_SOURCES: Record<SaSourceKind, { name: string; note?: string; dat
     datasets: {
       traffic: { support: 'supported', reads: true, field: 'Data API runReport sessions, addToCarts, checkouts', history: '730 days back; the last 3 days re-read', reason: 'Carts and checkouts are event counts, not sessions.' },
       purchase_sessions: UNSUPPORTED('GA4 sends event counts, not purchasing sessions.'),
-      traffic_breakdowns: NOT_READ('runReport by sessionDefaultChannelGroup, deviceCategory, country'),
+      traffic_breakdowns: {
+        support: 'supported',
+        reads: true,
+        field: 'Data API runReport sessions by sessionDefaultChannelGroup, deviceCategory, countryId',
+        history: '730 days back; the last 3 days re-read',
+        reason: '"(not set)" and any shortfall against the day\'s sessions show as unknown; no purchasing sessions (decision 14).',
+      },
     },
   },
   cj: {

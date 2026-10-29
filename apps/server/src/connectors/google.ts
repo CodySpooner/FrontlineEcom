@@ -2,6 +2,7 @@ import { sign } from 'node:crypto';
 import { tx, type Db } from '../db';
 import { addDays, localDate } from '../dates';
 import { getCredentials, setIntegrationStatus } from '../integrations';
+import { noteRead } from './ingest';
 import { adZone, AD_ZONES, claimCampaigns, adRate, backfillRate, cents, pruneCampaigns, rebuildAdSpend, saveAds, stateOf, switchToReal, syncView, stillAsSynced, syncedBudget, type CampaignChange } from './common';
 
 // Google Ads API (REST + GAQL) with an OAuth refresh token; GA4 Data API with a service account (read-only scope).
@@ -182,6 +183,15 @@ export async function syncGoogleAds(db: Db, key: Buffer, storeId: string, fetchF
   }
 }
 
+/**
+ * SA-57: the session dimensions read per day (Data API schema, checked 2026-10-29), each into `traffic_breakdown_daily`
+ * under the name Shopify's use (BREAKDOWNS in shopify.ts). countryId is ISO 3166-1 alpha-2, as Shopify's country code.
+ */
+const GA4_BREAKDOWNS = { source: 'sessionDefaultChannelGroup', device: 'deviceCategory', country: 'countryId' } as const;
+
+type Ga4Report = { rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[]; metadata?: { timeZone?: string } };
+const ga4Day = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`; // YYYYMMDD
+
 /** GA4 owns the funnel columns (sessions, add to carts, checkouts) in daily_metrics. */
 export async function syncGa4(db: Db, key: Buffer, storeId: string, fetchFn: Fetch = fetch, now = new Date()) {
   const id = `ga4:${storeId}`;
@@ -194,17 +204,29 @@ export async function syncGa4(db: Db, key: Buffer, storeId: string, fetchFn: Fet
     const today = localDate(now, adZone(db, id)); // the account's day (its zone as last seen; the machine's at first)
     const cursor = cursorOf(db, id);
     const start = cursor ? addDays(cursor, -GA4_SETTLE_DAYS) : addDays(today, 1 - BACKFILL_DAYS);
-    const report = await call<{ rows?: { dimensionValues: { value: string }[]; metricValues: { value: string }[] }[]; metadata?: { timeZone?: string } }>(
-      `https://analyticsdata.googleapis.com/v1beta/properties/${property}:runReport`,
-      {
-        method: 'POST',
-        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ dateRanges: [{ startDate: start, endDate: today }], dimensions: [{ name: 'date' }], metrics: [{ name: 'sessions' }, { name: 'addToCarts' }, { name: 'checkouts' }], limit: 100000 }),
-      },
-      fetchFn,
-      'Google Analytics',
-    );
+    const run = (dimensions: string[], metrics: string[]) =>
+      call<Ga4Report>(
+        `https://analyticsdata.googleapis.com/v1beta/properties/${property}:runReport`,
+        {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ dateRanges: [{ startDate: start, endDate: today }], dimensions: dimensions.map((name) => ({ name })), metrics: metrics.map((name) => ({ name })), limit: 100000 }),
+        },
+        fetchFn,
+        'Google Analytics',
+      );
+    const report = await run(['date'], ['sessions', 'addToCarts', 'checkouts']);
+    noteRead(db, key, id, 'traffic', { status: 'available', from: start, to: today }, now);
     if (report.metadata?.timeZone) stateOf<string>(db, AD_ZONES).set(id, report.metadata.timeZone);
+    // A failed split is left as it was and tried again next sync; the funnel still syncs.
+    // ponytail: a dimension past 100k rows (two years of countries) is cut short; its shortfall reads as unknown.
+    const split: [string, Ga4Report][] = [];
+    for (const [dimension, field] of Object.entries(GA4_BREAKDOWNS)) {
+      const r = await run(['date', field], ['sessions']).catch(() => null);
+      if (r) split.push([dimension, r]);
+    }
+    noteRead(db, key, id, 'traffic_breakdowns', split.length === 3 ? { status: 'available', from: start, to: today }
+      : split.length ? { status: 'partial', from: start, to: today, note: 'Some session splits failed; tried again next sync' } : { status: 'failed', error: 'Google Analytics returned no session splits' }, now);
 
     if (syncView(db, id) !== view) return;
     tx(db, () => {
@@ -213,10 +235,30 @@ export async function syncGa4(db: Db, key: Buffer, storeId: string, fetchFn: Fet
         `INSERT INTO daily_metrics (store_id, date, sessions, add_to_carts, checkouts) VALUES (?, ?, ?, ?, ?)
          ON CONFLICT (store_id, date) DO UPDATE SET sessions = excluded.sessions, add_to_carts = excluded.add_to_carts, checkouts = excluded.checkouts`,
       );
+      const totals = new Map<string, number>();
       for (const r of report.rows ?? []) {
-        const d = r.dimensionValues[0]!.value; // YYYYMMDD
         const [sessions, carts, checkouts] = r.metricValues.map((m) => Number(m.value));
-        up.run(storeId, `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`, sessions ?? 0, carts ?? 0, checkouts ?? 0);
+        totals.set(ga4Day(r.dimensionValues[0]!.value), sessions ?? 0);
+        up.run(storeId, ga4Day(r.dimensionValues[0]!.value), sessions ?? 0, carts ?? 0, checkouts ?? 0);
+      }
+      // GA4 has no purchasing sessions (decision 14): they stay unknown. "(not set)" and any shortfall against the day's
+      // sessions read as unknown.
+      const clear = db.prepare("DELETE FROM traffic_breakdown_daily WHERE store_id = ? AND dimension = ? AND source = 'ga4' AND date >= ?");
+      const put = db.prepare(
+        `INSERT INTO traffic_breakdown_daily (store_id, date, dimension, value, sessions, purchase_sessions, source) VALUES (?, ?, ?, ?, ?, NULL, 'ga4')
+         ON CONFLICT (store_id, date, dimension, value) DO UPDATE SET sessions = excluded.sessions, purchase_sessions = NULL, source = excluded.source`,
+      );
+      for (const [dimension, r] of split) {
+        clear.run(storeId, dimension, start);
+        const sums = new Map<string, number>();
+        for (const row of r.rows ?? []) {
+          const [date, value] = [ga4Day(row.dimensionValues[0]!.value), row.dimensionValues[1]?.value];
+          const sessions = Number(row.metricValues[0]?.value) || 0;
+          if (!value || value === '(not set)') continue;
+          put.run(storeId, date, dimension, value, sessions);
+          sums.set(date, (sums.get(date) ?? 0) + sessions);
+        }
+        for (const [date, total] of totals) if (total - (sums.get(date) ?? 0) > 0) put.run(storeId, date, dimension, 'unknown', total - (sums.get(date) ?? 0));
       }
       db.prepare("UPDATE integrations SET cursor = ?, synced_at = ?, status = 'connected', error = NULL WHERE id = ?").run(today, now.toISOString(), id);
     });
