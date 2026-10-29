@@ -15,6 +15,8 @@ const TOKEN_URL = 'https://api.etsy.com/v3/public/oauth/token';
 const BACKFILL_DAYS = 730;
 // A listing that sells out or expires leaves 'active' for its own state, so those are pulled too or it would stay in stock here.
 const LISTING_STATES = ['active', 'draft', 'inactive', 'sold_out', 'expired'];
+/** Q10: listing-inventory reads per sync; the rest wait for the next one. */
+const INVENTORY_READS = 50;
 
 type Fetch = typeof fetch;
 type Money = { amount: number; divisor: number; currency_code?: string };
@@ -53,6 +55,9 @@ interface Listing {
   /** With includes=Images; rank 1 is the listing's main photo. */
   images?: { rank?: number; url_570xN?: string }[];
   updated_timestamp: number;
+  /** The last state change, in epoch seconds: an active listing's "since". */
+  state_timestamp?: number;
+  skus?: string[];
 }
 
 const money = (m: Money | undefined) => (m ? m.amount / m.divisor : 0);
@@ -153,7 +158,7 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         if (!page.results.length || offset + 100 >= page.count || page.results.some((l) => l.updated_timestamp < listedSince)) break;
       }
     }
-    noteRead(db, key, id, 'catalog', { status: 'available' }, now);
+    for (const d of ['catalog', 'channel_listings'] as const) noteRead(db, key, id, d, { status: 'available' }, now);
     reading.delete('catalog');
     // Offset pages in change order skip a listing edited (or moved to another state) while they're read: one the full read
     // missed is archived only once Etsy answers 404 for it, and kept as Etsy has it otherwise (on any other error, as is).
@@ -169,6 +174,23 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
         else if (!l) kept.push(String(r.id));
       }
     }
+    // SA-42: each listing's inventory (its products are the variants) when never read or changed since, at most
+    // INVENTORY_READS a sync. A listing never edited with Etsy's inventory tools has none (404): it's its own variant.
+    // ponytail: a changed listing past the cap that doesn't change again waits for the daily full read to be due again.
+    const read = new Map(db.prepare("SELECT product_id AS p, min(synced_at) AS at FROM product_variants WHERE store_id = ? AND product_id GLOB 'etsy-*' GROUP BY product_id").all(storeId).map((r) => [String(r.p), Date.parse(String(r.at))]));
+    const unread = db.prepare("SELECT id FROM products WHERE store_id = ? AND id GLOB 'etsy-*' AND status != 'archived'").all(storeId).map((r) => Number(String(r.id).slice(5)));
+    const due = [...new Set([...listings.filter((l) => (read.get(`etsy-${l.listing_id}`) ?? 0) < l.updated_timestamp * 1000).map((l) => l.listing_id), ...unread.filter((n) => !read.has(`etsy-${n}`))])];
+    const inventories = new Map<number, Inventory | null>();
+    for (const n of due.slice(0, INVENTORY_READS)) {
+      const res = await fetchFn(`${API}/listings/${n}/inventory`, { headers }).catch(() => undefined);
+      if (res?.status === 404) inventories.set(n, null);
+      else if (res?.ok) {
+        const inv = (await res.json().catch(() => undefined)) as Inventory | undefined;
+        if (Array.isArray(inv?.products)) inventories.set(n, inv);
+      }
+    }
+    const pending = due.length - inventories.size;
+    noteRead(db, key, id, 'variants', pending ? { status: 'partial', note: `${pending} listings' variants pending (at most ${INVENTORY_READS} inventory reads a sync)` } : { status: 'available' }, now);
     const dayOf = new Intl.DateTimeFormat('en-CA', { timeZone: String(db.prepare('SELECT timezone FROM stores WHERE id = ?').get(storeId)?.timezone ?? 'UTC') });
 
     if (syncView(db, id) !== view) return;
@@ -183,6 +205,40 @@ export async function syncEtsy(db: Db, key: Buffer, storeId: string, fetchFn: Fe
       );
       const photo = (l: Listing) => [...(l.images ?? [])].sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))[0]?.url_570xN ?? null;
       for (const l of listings) prod.run(storeId, `etsy-${l.listing_id}`, l.title, photo(l), money(l.price), l.state === 'sold_out' ? 0 : l.quantity, LISTING_STATUS[l.state] ?? 'archived');
+      // Decision 21: the listing's current state on Etsy; "since" from its last state change while active.
+      const listing = db.prepare(
+        `INSERT INTO channel_listings (store_id, channel, id, product_id, status, published_at, synced_at) VALUES (?, 'etsy', ?, ?, ?, ?, ?)
+         ON CONFLICT (store_id, channel, id) DO UPDATE SET product_id = excluded.product_id, status = excluded.status, published_at = excluded.published_at, synced_at = excluded.synced_at`,
+      );
+      for (const l of listings) {
+        const live = l.state === 'active' || l.state === 'sold_out';
+        listing.run(storeId, `etsy-${l.listing_id}`, `etsy-${l.listing_id}`, live ? 'active' : 'unpublished', live && l.state_timestamp ? new Date(l.state_timestamp * 1000).toISOString() : null, now.toISOString());
+      }
+      const variant = db.prepare(
+        `INSERT INTO product_variants (store_id, product_id, id, title, sku, price, compare_at, inventory, inventory_tracked, inventory_policy, status, synced_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 1, 'deny', ?, ?)
+         ON CONFLICT (store_id, id) DO UPDATE SET product_id = excluded.product_id, title = excluded.title, sku = excluded.sku, price = excluded.price, inventory = excluded.inventory,
+           status = excluded.status, synced_at = excluded.synced_at`,
+      );
+      const dropVariants = db.prepare('DELETE FROM product_variants WHERE store_id = ? AND product_id = ?');
+      const byId = new Map(listings.map((l) => [l.listing_id, l]));
+      const state = db.prepare('SELECT status, price, inventory, title FROM products WHERE store_id = ? AND id = ?');
+      for (const [n, inv] of inventories) {
+        const pid = `etsy-${n}`;
+        const l = byId.get(n);
+        const parent = state.get(storeId, pid);
+        const status = l ? (LISTING_STATUS[l.state] ?? 'archived') : String(parent?.status ?? 'archived');
+        dropVariants.run(storeId, pid); // the inventory is the whole list: a deleted product goes
+        if (!inv) {
+          variant.run(storeId, pid, pid, null, l?.skus?.[0] || null, l ? money(l.price) : Number(parent?.price ?? 0), l ? (l.state === 'sold_out' ? 0 : l.quantity) : Number(parent?.inventory ?? 0), status, now.toISOString());
+          continue;
+        }
+        for (const p of inv.products.filter((p) => !p.is_deleted && p.product_id)) {
+          const offers = p.offerings.filter((o) => !o.is_deleted);
+          const title = p.property_values.map((v) => v.values.join(' ')).filter(Boolean).join(' / ') || null;
+          variant.run(storeId, pid, `etsy-${p.product_id}`, title, p.sku || null, offers[0] ? money(offers[0].price) : null, offers.filter((o) => o.is_enabled).reduce((a, o) => a + o.quantity, 0),
+            offers.some((o) => o.is_enabled) ? status : 'draft', now.toISOString());
+        }
+      }
       // Etsy has no unit costs: lines cost the owner's unit cost for the product (setOrderItems), else nothing.
       const ord = db.prepare(
         `INSERT INTO orders (store_id, id, created_at, total, status, fulfillment_status, supplier, tracking, cogs, local_date, tax,
@@ -288,6 +344,8 @@ export function htmlToText(html: string) {
 
 interface Inventory {
   products: {
+    /** Read-only: the id an order's transaction names (its variant). */
+    product_id?: number;
     sku: string;
     is_deleted?: boolean;
     property_values: { property_id: number; property_name?: string | null; scale_id?: number | null; value_ids: number[]; values: string[] }[];

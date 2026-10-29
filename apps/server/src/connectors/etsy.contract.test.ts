@@ -1,4 +1,4 @@
-// SA-41: Etsy receipts against the Open API spec's shapes (fixtures/etsy-doc-examples.json names the spec and the date read).
+// SA-41/42: Etsy receipts, variants and listings against the Open API spec's shapes (fixtures/etsy-doc-examples.json names the spec and the date read).
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
@@ -12,9 +12,16 @@ const key = randomBytes(32);
 const NOW = new Date('2026-10-26T18:00:00Z');
 const DOC = JSON.parse(readFileSync(new URL('./fixtures/etsy-doc-examples.json', import.meta.url), 'utf8'));
 
-function fakeEtsy(receipts = DOC.receipts) {
+function fakeEtsy(receipts = DOC.receipts, listings = DOC.listings, asked: string[] = []) {
   return (async (url: string) => {
     const u = new URL(url);
+    asked.push(u.pathname);
+    const inv = /\/listings\/(\d+)\/inventory$/.exec(u.pathname)?.[1];
+    if (inv) return DOC.inventory[inv] ? Response.json(DOC.inventory[inv]) : Response.json({ error: 'Listing has no inventory records' }, { status: 404 });
+    if (u.pathname.endsWith('/listings')) {
+      const results = listings.filter((l: { state: string }) => l.state === u.searchParams.get('state'));
+      return Response.json({ count: results.length, results: Number(u.searchParams.get('offset')) ? [] : results });
+    }
     if (u.pathname === '/v3/public/oauth/token') return Response.json({ access_token: '123.at_not-a-real-token', refresh_token: '123.rt_not-a-real-token', expires_in: 3600 });
     if (u.pathname.endsWith('/receipts')) return Response.json({ count: receipts.length, results: Number(u.searchParams.get('offset')) ? [] : receipts });
     return Response.json({ count: 0, results: [] });
@@ -65,5 +72,38 @@ describe('Etsy receipts contract (SA-41)', () => {
     expect(a).toMatchObject({ state: 'identified', country: 'US', ref: expect.stringMatching(/^c_[0-9a-f]{24}$/) });
     expect(b!.ref).toBe(a!.ref);
     expect(guest).toMatchObject({ ref: null, state: 'guest', country: 'GB' });
+  });
+});
+
+describe('Etsy variants and listings (SA-42)', () => {
+  it("an inventory's products are the variants; no inventory records: the listing is its own; the listing state", async () => {
+    const db = setup();
+    await syncEtsy(db, key, 'pawsome', fakeEtsy(), NOW);
+    expect(db.prepare("SELECT product_id, id, title, sku, price, inventory, status FROM product_variants WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
+      { product_id: 'etsy-13', id: 'etsy-13', title: null, sku: 'GC', price: 50, inventory: 1, status: 'draft' }, // 404: the listing itself
+      { product_id: 'etsy-11', id: 'etsy-501', title: 'White', sku: 'MUG-W', price: 25, inventory: 4, status: 'active' },
+      { product_id: 'etsy-12', id: 'etsy-502', title: null, sku: null, price: 12.5, inventory: 0, status: 'active' },
+      { product_id: 'etsy-11', id: 'etsy-503', title: 'Blue', sku: 'MUG-B', price: 27, inventory: 3, status: 'active' }, // a deleted offering left out
+      { product_id: 'etsy-11', id: 'etsy-505', title: 'Green', sku: null, price: 25, inventory: 0, status: 'draft' }, // no enabled offering
+    ]);
+    expect(db.prepare("SELECT channel, id, status, published_at FROM channel_listings WHERE store_id = 'pawsome' ORDER BY id").all()).toEqual([
+      { channel: 'etsy', id: 'etsy-11', status: 'active', published_at: '2026-09-25T14:00:00.000Z' },
+      { channel: 'etsy', id: 'etsy-12', status: 'active', published_at: '2026-10-23T14:00:00.000Z' }, // sold out is still listed
+      { channel: 'etsy', id: 'etsy-13', status: 'unpublished', published_at: null },
+    ]);
+  });
+
+  it('at most 50 inventory reads a sync; the rest show as pending and come next sync', async () => {
+    const db = setup();
+    const many = Array.from({ length: 52 }, (_, i) => ({ ...DOC.listings[0], listing_id: 100 + i }));
+    const asked: string[] = [];
+    await syncEtsy(db, key, 'pawsome', fakeEtsy([], many, asked), NOW);
+    expect(asked.filter((p) => p.endsWith('/inventory'))).toHaveLength(50);
+    const dataset = () => db.prepare("SELECT status, error FROM source_datasets WHERE integration_id = 'etsy:pawsome' AND dataset = 'variants'").get();
+    expect(dataset()).toEqual({ status: 'partial', error: "2 listings' variants pending (at most 50 inventory reads a sync)" });
+    const next: string[] = [];
+    await syncEtsy(db, key, 'pawsome', fakeEtsy([], many, next), new Date(NOW.getTime() + 120_000));
+    expect(next.filter((p) => p.endsWith('/inventory'))).toHaveLength(2);
+    expect(dataset()).toEqual({ status: 'available', error: null });
   });
 });

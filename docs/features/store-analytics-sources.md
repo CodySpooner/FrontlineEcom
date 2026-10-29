@@ -56,8 +56,8 @@ Generated from `SA_SOURCES` in `packages/shared/src/store-analytics.ts` (SA-04);
 | Refunds | supported | yes | receipt.refunds (amount, created_timestamp) | transactions_r | with the orders read |  | Etsy names no refund lines: merchandise up to the receipt's, the rest other (Q30). |
 | Fees | unsupported | no | — |  |  |  | The app doesn't read payment or platform fees here (owner question Q21); fees are the store's labelled estimate. |
 | Catalog | supported | yes | getListingsByShop | listings_r | current state |  |  |
-| Variants | supported | no | getListingInventory (products, offerings) |  |  | one call per listing: at most 50 a sync (Q10) |  |
-| Channel listings | supported | no | listing.state |  |  |  |  |
+| Variants | supported | yes | getListingInventory (products, offerings; a listing without inventory records is its own variant) | listings_r | current state | one call per listing: at most 50 a sync (Q10) |  |
+| Channel listings | supported | yes | listing.state, state_timestamp | listings_r | current state |  |  |
 | Inventory | supported | yes | listing.quantity |  | current state |  |  |
 | Collections | supported | no | getShopSections |  |  |  |  |
 | Sessions and funnel | unsupported | no | — |  |  |  | Etsy's Open API has no shop sessions. |

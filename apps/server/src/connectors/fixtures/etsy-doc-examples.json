@@ -1,5 +1,5 @@
 {
-  "_source": "Etsy Open API v3 spec (https://www.etsy.com/openapi/generated/oas/3.0.0.json, read 2026-10-28): ShopReceipt (grandtotal = total_price minus the coupon discount plus tax and shipping; discount_amt leaves out free-shipping coupons), ShopRefund (amount, created_timestamp) and ShopReceiptTransaction (product_id, sku, quantity, price, paid_timestamp, shop_coupon, buyer_coupon). Timestamps are epoch seconds; Money is amount / divisor. Personal fields the API also sends are left out here.",
+  "_source": "Etsy Open API v3 spec (https://www.etsy.com/openapi/generated/oas/3.0.0.json, read 2026-10-28): ShopReceipt (grandtotal = total_price minus the coupon discount plus tax and shipping; discount_amt leaves out free-shipping coupons), ShopRefund (amount, created_timestamp) and ShopReceiptTransaction (product_id, sku, quantity, price, paid_timestamp, shop_coupon, buyer_coupon). Timestamps are epoch seconds; Money is amount / divisor. Personal fields the API also sends are left out here. Listings (ShopListing: state, state_timestamp, updated_timestamp, quantity, price) and getListingInventory (ListingInventory > products: product_id, sku, is_deleted, property_values, offerings: quantity, is_enabled, is_deleted, price); 'Listings you did not edit using the Etsy.com inventory tools have no inventory records'.",
   "receipts": [
     {
       "receipt_id": 1001,
@@ -398,5 +398,230 @@
         }
       ]
     }
-  ]
+  ],
+  "listings": [
+    {
+      "listing_id": 11,
+      "title": "Wheel-thrown mug",
+      "state": "active",
+      "quantity": 7,
+      "price": {
+        "amount": 2500,
+        "divisor": 100,
+        "currency_code": "USD"
+      },
+      "updated_timestamp": 1792936800,
+      "state_timestamp": 1790344800,
+      "skus": [
+        "MUG-W",
+        "MUG-B"
+      ]
+    },
+    {
+      "listing_id": 12,
+      "title": "Linen napkins",
+      "state": "sold_out",
+      "quantity": 0,
+      "price": {
+        "amount": 1250,
+        "divisor": 100,
+        "currency_code": "USD"
+      },
+      "updated_timestamp": 1792936800,
+      "state_timestamp": 1792764000,
+      "skus": []
+    },
+    {
+      "listing_id": 13,
+      "title": "Gift card",
+      "state": "draft",
+      "quantity": 1,
+      "price": {
+        "amount": 5000,
+        "divisor": 100,
+        "currency_code": "USD"
+      },
+      "updated_timestamp": 1792936800,
+      "state_timestamp": 1792850400,
+      "skus": [
+        "GC"
+      ]
+    }
+  ],
+  "inventory": {
+    "11": {
+      "products": [
+        {
+          "product_id": 501,
+          "sku": "MUG-W",
+          "is_deleted": false,
+          "property_values": [
+            {
+              "property_id": 200,
+              "property_name": "Primary color",
+              "scale_id": null,
+              "value_ids": [
+                1
+              ],
+              "values": [
+                "White"
+              ]
+            }
+          ],
+          "offerings": [
+            {
+              "offering_id": 25004,
+              "quantity": 4,
+              "is_enabled": true,
+              "is_deleted": false,
+              "price": {
+                "amount": 2500,
+                "divisor": 100,
+                "currency_code": "USD"
+              }
+            }
+          ]
+        },
+        {
+          "product_id": 503,
+          "sku": "MUG-B",
+          "is_deleted": false,
+          "property_values": [
+            {
+              "property_id": 200,
+              "property_name": "Primary color",
+              "scale_id": null,
+              "value_ids": [
+                1
+              ],
+              "values": [
+                "Blue"
+              ]
+            }
+          ],
+          "offerings": [
+            {
+              "offering_id": 27003,
+              "quantity": 3,
+              "is_enabled": true,
+              "is_deleted": false,
+              "price": {
+                "amount": 2700,
+                "divisor": 100,
+                "currency_code": "USD"
+              }
+            },
+            {
+              "offering_id": 27009,
+              "quantity": 9,
+              "is_enabled": true,
+              "is_deleted": true,
+              "price": {
+                "amount": 2700,
+                "divisor": 100,
+                "currency_code": "USD"
+              }
+            }
+          ]
+        },
+        {
+          "product_id": 504,
+          "sku": "MUG-R",
+          "is_deleted": true,
+          "property_values": [
+            {
+              "property_id": 200,
+              "property_name": "Primary color",
+              "scale_id": null,
+              "value_ids": [
+                1
+              ],
+              "values": [
+                "Red"
+              ]
+            }
+          ],
+          "offerings": [
+            {
+              "offering_id": 25000,
+              "quantity": 0,
+              "is_enabled": true,
+              "is_deleted": false,
+              "price": {
+                "amount": 2500,
+                "divisor": 100,
+                "currency_code": "USD"
+              }
+            }
+          ]
+        },
+        {
+          "product_id": 505,
+          "sku": "",
+          "is_deleted": false,
+          "property_values": [
+            {
+              "property_id": 200,
+              "property_name": "Primary color",
+              "scale_id": null,
+              "value_ids": [
+                1
+              ],
+              "values": [
+                "Green"
+              ]
+            }
+          ],
+          "offerings": [
+            {
+              "offering_id": 25005,
+              "quantity": 5,
+              "is_enabled": false,
+              "is_deleted": false,
+              "price": {
+                "amount": 2500,
+                "divisor": 100,
+                "currency_code": "USD"
+              }
+            }
+          ]
+        }
+      ],
+      "price_on_property": [
+        200
+      ],
+      "quantity_on_property": [
+        200
+      ],
+      "sku_on_property": [
+        200
+      ]
+    },
+    "12": {
+      "products": [
+        {
+          "product_id": 502,
+          "sku": "",
+          "is_deleted": false,
+          "property_values": [],
+          "offerings": [
+            {
+              "offering_id": 12500,
+              "quantity": 0,
+              "is_enabled": true,
+              "is_deleted": false,
+              "price": {
+                "amount": 1250,
+                "divisor": 100,
+                "currency_code": "USD"
+              }
+            }
+          ]
+        }
+      ],
+      "price_on_property": [],
+      "quantity_on_property": [],
+      "sku_on_property": []
+    }
+  }
 }
