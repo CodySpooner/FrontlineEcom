@@ -662,7 +662,7 @@ connector item afterwards proves its path from source to metric.
   - Acceptance: tests: success, failure, an interrupted run, and an error that contains the integration's token comes
     out without it.
 
-- [ ] SA-11 **Bounded backoff** (spec §1, §5; decision 26):
+- [x] SA-11 **Bounded backoff** (spec §1, §5; decision 26):
   - In `startSyncLoop`, count consecutive failed runs per integration from `sync_runs`: 3 → wait 30 minutes, 6 →
     wait 6 hours. The existing manual sync path and a credentials change run at once; one success resets the count.
   - Acceptance: tests with a fake clock for each case; no loop retries faster than the wait.
@@ -1566,6 +1566,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-28 Inbox (from codex-hardening) Phase E read as CH-21/22 + its STOP from now on (SA-08's claimed-function edits landed before CH-21). CH-19 axe filing: Analytics' 12 Research links keep their visible "Research this" with the campaign as sr-only text, the shared Ask AI control's name now includes its visible Ctrl K hint; axe on /analytics and /orders reports no serious/critical issues; baseline refresh filed to codex-hardening (it owns `e2e/**`).
 - 2026-10-28 Inbox (from codex-hardening, CH-22) `SA_SOURCES` now says Google's attribution covers primary conversion actions (not only purchases, fractional counts, never used as purchase counts), TikTok's campaign-level spend leaves out Branded Mission, and Meta's v24.0 retires 2026-11-10 (bump filed to core's Inbox; `meta.ts` is Phase E). Ad connectors untouched; SA-20/SA-58 read these rows.
 - 2026-10-28 SA-10 `store-analytics/sources.ts`: `scrubError` (credential values plain and URL-encoded, token-shaped runs, 300 chars), `startRun`/`endRun`/`recoverRuns`; `sync.ts` logs every syncer run in `sync_runs` (running → done/failed, a thrown syncer is now caught and recorded), marks leftover `running` rows `interrupted` and prunes runs over 90 days at loop start, and its log line carries the scrubbed error. Tests in `sync-runs.test.ts`.
+- 2026-10-28 SA-11 `backoffOf` in `store-analytics/sources.ts` counts consecutive failed `sync_runs` (interrupted runs count as neither): 3 → 30 min, 6 → 6 h from the last failure's end; `startSyncLoop` skips stale-only retries while backed off, but "Sync now" and a credentials change (both bump `updated_at`) run at once, and the wait survives a restart. Fake-clock tests for each; sync.test's recovery case now waits the 30 minutes.
 
 ## Blocked
 

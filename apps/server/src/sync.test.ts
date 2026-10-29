@@ -50,7 +50,7 @@ test('a connection that breaks raises one error notification, and one when it re
   expect(notes()).toEqual([['error', 'Shopify for Glow Haus stopped syncing', 'Shopify refused the token. Fix it in Integrations.', 'glow', '/settings/integrations']]);
 
   fail = false;
-  await vi.advanceTimersByTimeAsync(61_000);
+  await vi.advanceTimersByTimeAsync(30 * 60_000); // three failures in a row back off 30 minutes (SA-11)
   expect(notes()[0]).toEqual(['info', 'Shopify for Glow Haus is syncing again', null, 'glow', '/settings/integrations']);
   expect(notes()).toHaveLength(2);
   stop();

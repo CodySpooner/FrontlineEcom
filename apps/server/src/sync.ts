@@ -12,7 +12,7 @@ import type { Db } from './db';
 import { publish } from './live';
 import { log } from './log';
 import { notify } from './settings';
-import { endRun, recoverRuns, startRun } from './store-analytics/sources';
+import { backoffOf, endRun, recoverRuns, startRun } from './store-analytics/sources';
 
 type Syncer = (db: Db, key: Buffer, storeId: string, fetchFn: typeof fetch) => Promise<void>;
 
@@ -90,7 +90,8 @@ const FAST = new Set<IntegrationKind>(['shopify', 'woocommerce']);
 
 /**
  * Every `everyMs`, syncs each data integration that was never tried, was last tried over `staleMs` ago (`fastMs` for
- * FAST kinds), or whose credentials changed since the last try. Returns stop().
+ * FAST kinds), or whose credentials changed since the last try. One failing over and over backs off (backoffOf), but
+ * "Sync now" or new credentials still run it at once. Returns stop().
  */
 export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs = 10 * 60_000, fastMs = 2 * 60_000, syncers = SYNCERS } = {}) {
   const lastTry = new Map<string, string>();
@@ -103,8 +104,11 @@ export function startSyncLoop(db: Db, key: Buffer, { everyMs = 30_000, staleMs =
     for (const r of rows) {
       const id = String(r.id);
       const tried = lastTry.get(id);
-      const due = !tried || now.getTime() - Date.parse(tried) > (FAST.has(r.kind as IntegrationKind) ? fastMs : staleMs) || String(r.updated_at) > tried;
-      if (!due || running.has(id)) continue;
+      const wait = backoffOf(db, id);
+      // "Sync now" and a credentials change bump updated_at.
+      const changed = String(r.updated_at) > (tried ?? wait?.since ?? '');
+      const due = !tried || now.getTime() - Date.parse(tried) > (FAST.has(r.kind as IntegrationKind) ? fastMs : staleMs) || changed;
+      if (!due || (wait && now.toISOString() < wait.until && !changed) || running.has(id)) continue;
       lastTry.set(id, now.toISOString());
       running.add(id);
       // Demo stores have no real orders yet; their first real sync replaces the demo ones without announcing history.

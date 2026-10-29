@@ -68,3 +68,58 @@ describe('scrubError', () => {
     expect(scrubError('x'.repeat(10) + ' ' + 'y '.repeat(400))).toHaveLength(300);
   });
 });
+
+describe('bounded backoff (SA-11)', () => {
+  const MIN = 60_000;
+  const loop = (db: ReturnType<typeof openDb>, key: Buffer, fail: () => boolean) => {
+    const shopify = vi.fn(async () => setIntegrationStatus(db, 'shopify:glow', fail() ? 'error' : 'connected', fail() ? 'Shopify is down' : undefined));
+    return { shopify, stop: startSyncLoop(db, key, { everyMs: 1000, staleMs: MIN, fastMs: MIN, syncers: { shopify } }) };
+  };
+
+  it('waits 30 minutes after 3 failures in a row and 6 hours after 6, never retrying sooner', async () => {
+    const { db, key } = setup();
+    const { shopify, stop } = loop(db, key, () => true);
+    await vi.advanceTimersByTimeAsync(2 * 61_000); // failures 2 and 3, the last at 2:02
+    expect(shopify).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(30 * MIN - 2000);
+    expect(shopify).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(shopify).toHaveBeenCalledTimes(4); // 30 minutes after the third: fails again, waits 30 more
+    await vi.advanceTimersByTimeAsync(2 * (30 * MIN + 1000));
+    expect(shopify).toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(6 * 60 * MIN - 3000); // the sixth failed at 13:32:02; now 19:32:01
+    expect(shopify).toHaveBeenCalledTimes(6);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(shopify).toHaveBeenCalledTimes(7);
+    stop();
+  });
+
+  it('runs at once on "Sync now" or new credentials while backed off, and one success resets the count', async () => {
+    const { db, key } = setup();
+    let failing = true;
+    const { shopify, stop } = loop(db, key, () => failing);
+    await vi.advanceTimersByTimeAsync(2 * 61_000);
+    await vi.advanceTimersByTimeAsync(5 * MIN);
+    expect(shopify).toHaveBeenCalledTimes(3);
+    failing = false;
+    db.prepare("UPDATE integrations SET updated_at = ? WHERE id = 'shopify:glow'").run(new Date().toISOString()); // what POST /sync does
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(shopify).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(61_000); // back on the normal interval
+    expect(shopify).toHaveBeenCalledTimes(5);
+    stop();
+  });
+
+  it('keeps waiting across a restart', async () => {
+    const { db, key } = setup();
+    const add = db.prepare("INSERT INTO sync_runs (integration_id, store_id, kind, started_at, finished_at, status) VALUES ('shopify:glow', 'glow', 'shopify', ?, ?, 'failed')");
+    for (const at of ['11:40', '11:50', '11:55']) add.run(`2026-10-26T${at}:00.000Z`, `2026-10-26T${at}:05.000Z`);
+    db.prepare("UPDATE integrations SET updated_at = '2026-10-26T11:00:00.000Z'").run(); // saved before the failures
+    const { shopify, stop } = loop(db, key, () => true);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(shopify).not.toHaveBeenCalled(); // 12:00, waiting until 12:25:05
+    await vi.advanceTimersByTimeAsync(26 * MIN);
+    expect(shopify).toHaveBeenCalledTimes(1);
+    stop();
+  });
+});

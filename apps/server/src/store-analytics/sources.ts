@@ -26,6 +26,25 @@ export function secretsOf(db: Db, key: Buffer, integrationId: string): string[] 
 }
 
 const RUN_DAYS = 90;
+const BACKOFF = [
+  { failures: 6, ms: 6 * 3_600_000 },
+  { failures: 3, ms: 30 * 60_000 },
+];
+
+/**
+ * Decision 26: after 3 failed runs in a row an integration waits 30 minutes from the last one's end, after 6 it waits 6
+ * hours; one success resets the count (an interrupted run counts as neither). Undefined: no wait. `since` is when the
+ * last failure ended, so a credentials change or "Sync now" after it can still run at once.
+ */
+export function backoffOf(db: Db, integrationId: string) {
+  const runs = db
+    .prepare("SELECT status, coalesce(finished_at, started_at) AS at FROM sync_runs WHERE integration_id = ? AND status IN ('done', 'failed') ORDER BY id DESC LIMIT 6")
+    .all(integrationId);
+  const failures = runs.findIndex((r) => r.status !== 'failed');
+  const n = failures === -1 ? runs.length : failures;
+  const step = BACKOFF.find((b) => n >= b.failures);
+  return step && { failures: n, since: String(runs[0]!.at), until: new Date(Date.parse(String(runs[0]!.at)) + step.ms).toISOString() };
+}
 
 /** At server start: runs the last process left `running` were cut off, and runs older than 90 days go. */
 export function recoverRuns(db: Db, now = new Date()) {
