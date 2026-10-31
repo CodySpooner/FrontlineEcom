@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { changeOf, saDef, type SaInsights, type SaListingRow, type SaMoved } from '@frontline/shared';
 import { Analytics } from '../pages/Analytics';
@@ -175,5 +175,43 @@ describe('Top products (SA-78)', () => {
     const url = decodeURIComponent(String(fetch.mock.calls.find((c) => String(c[0]).startsWith('/api/analytics/listings'))![0]));
     expect(url).toContain('status=active');
     expect(url).toContain('sort=net_sales:desc');
+  });
+});
+
+describe('Overview assembly (SA-79)', () => {
+  const SERIES = { metric: 'net_sales', def: saDef('net_sales'), grain: 'day', period: PERIOD, compare: COMPARE, points: [{ from: '2026-10-01', to: '2026-10-01', value: 5, status: 'ok', previous: 4 }],
+    total: { id: 'net_sales', def: saDef('net_sales'), value: 5, status: 'ok', previous: { value: 4, status: 'ok' }, change: changeOf(5, 4, 'money') }, scope: { applied: [], ignored: [] } };
+  const OK: Record<string, unknown> = {
+    context: { storeId: 'a', name: 'Glow Haus', niche: 'beauty', platform: 'shopify', currency: 'USD', demo: false, channels: [], zone: null, zoneLabel: '', zoneAbbr: 'ET', historyStart: null, freshness: [] },
+    series: SERIES, annotations: [], contributions: MOVED, insights: INSIGHTS, listings: { rows: [], scope: { applied: [], ignored: [] } } };
+  const PANELS: [string, string][] = [
+    ['series', "Couldn't load the trend."],
+    ['annotations', "Couldn't load the chart's markers."],
+    ['contributions', "Couldn't load what moved."],
+    ['insights', "Couldn't load the flags."],
+    ['listings', "Couldn't load the top products."],
+  ];
+
+  it.each(PANELS)('a 502 from %s shows that panel\'s error with a retry; the others render', async (failing, message) => {
+    let fail = true;
+    stubApi((url) => {
+      if (url === '/api/stores') return [{ id: 'a', name: 'Glow Haus' }];
+      if (url.startsWith('/api/analytics/overview'))
+        return {
+          period: PERIOD, compare: COMPARE, today: '2026-10-30', zoneLabel: 'Eastern Time', zoneAbbr: 'ET', scope: { applied: [], ignored: [] }, channels: [], annotations: 0, attention: 5,
+          metrics: (['net_sales', 'orders', 'aov', 'site_conversion', 'ad_spend', 'contribution_after_ads'] as const).map((id) => ({ id, def: saDef(id), value: 10, status: 'ok', previous: { value: 9, status: 'ok' }, change: changeOf(10, 9, 'count') })),
+        };
+      const key = /^\/api\/analytics\/(\w+)/.exec(url)?.[1] ?? '';
+      if (key === failing && fail) return new Response('{}', { status: 502 });
+      return key in OK ? OK[key] : [];
+    });
+    renderApp(<Analytics />, '/analytics?store=a');
+    const error = await screen.findByText(message);
+    for (const h of ['What moved net sales', 'Needs attention', 'Top products']) expect(screen.getByRole('heading', { name: h })).toBeTruthy();
+    if (failing !== 'series') expect(await screen.findByRole('img', { name: /^Net sales/ })).toBeTruthy(); // the chart drew
+    if (failing !== 'contributions') expect(await screen.findByText('Hydra Barrier Night Cream')).toBeTruthy();
+    fail = false;
+    fireEvent.click(within(error.parentElement!.parentElement!).getByRole('button', { name: /^(Try again|Retry)$/ }));
+    await waitFor(() => expect(screen.queryByText(message)).toBeNull());
   });
 });

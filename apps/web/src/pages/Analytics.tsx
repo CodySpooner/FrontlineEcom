@@ -1,11 +1,11 @@
 // SA-62: Store Analytics, one store at a time (decision 2): the title strip, the context bar and the tabs. A tab is
-// listed only once its content ships (decision 33); Overview is the legacy view until SA-79.
+// listed only once its content ships (decision 33). The legacy Unit costs panel sits under the Overview until SA-92.
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { settingsUrl, type SaDataset } from '@frontline/shared';
 import { useSaContext } from '../analytics/api';
 import { ContextBar } from '../analytics/ContextBar';
-import { LegacyOverview } from '../analytics/legacy';
+import { UnitCosts } from '../analytics/legacy';
 import { Overview } from '../analytics/Overview';
 import { useAnalyticsState, type AnalyticsPage } from '../analytics/state';
 import { Hero } from '../components/Hero';
@@ -21,7 +21,7 @@ export const TABS: { value: string; label: string; datasets: SaDataset[]; render
     render: (s) => (
       <>
         <Overview s={s} tabs={TABS.map((t) => t.value)} />
-        <LegacyOverview store={s.store} filters={s.filters} />
+        <UnitCosts ids={[s.store]} multi={false} />
       </>
     ),
   },

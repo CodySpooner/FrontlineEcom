@@ -5,6 +5,7 @@ import { SA_METRICS, type SaMetricId } from '@frontline/shared';
 import { describe, expect, it } from 'vitest';
 import { openDb, type Db } from '../db';
 import { LEDGER_NOW, LEDGER_STORE, SCALE_STORE, seedLedgerStore, seedScaleStore } from './fixture';
+import { annotations } from './annotations';
 import { listings } from './listings';
 import { computeMetricSet, computeSeries } from './metric-set';
 import { overview } from './overview';
@@ -81,6 +82,7 @@ function run(db: Db, storeId: string, now: number) {
   overview(db, { storeId }, period({ period: 'last30' }));
   contributions(db, { storeId }, period({ period: 'last30' }));
   insights(db, storeId, period({ period: 'last30' }), now);
+  annotations(db, storeId, period({ period: 'last30' }));
   contributions(db, { storeId }, period({ period: 'today' }), { channel: ['site'] }, 'order_day');
   listings(db, storeId, { sort: 'net_sales', page: '2' }, period({ period: 'last365' }), {}, 'order_day');
   listings(db, storeId, { sort: 'refunds', q: 'GH', status: 'all' }, period({ period: 'last30' }), { channel: ['site'], collection: ['c-best'] });
@@ -111,6 +113,18 @@ describe.skipIf(!process.env.SA_SCALE)('scale store (SA_SCALE=1)', () => {
     t = performance.now();
     run(r.db, SCALE_STORE, LEDGER_NOW);
     console.log(`all entry points once: ${Math.round(performance.now() - t)} ms`);
+    // SA-79: what the Overview tab asks for, each timed once
+    const sp = storePeriod(base, SCALE_STORE, (k) => ({ period: 'last30' })[k], LEDGER_NOW) as StorePeriod;
+    const tab: [string, () => unknown][] = [
+      ['overview', () => overview(base, { storeId: SCALE_STORE }, sp)],
+      ['series', () => computeSeries(base, { storeId: SCALE_STORE }, 'net_sales', sp)],
+      ['annotations', () => annotations(base, SCALE_STORE, sp)],
+      ['contributions', () => contributions(base, { storeId: SCALE_STORE }, sp)],
+      ['insights', () => insights(base, SCALE_STORE, sp, LEDGER_NOW)],
+      ['listings', () => listings(base, SCALE_STORE, { status: 'active', sort: 'net_sales:desc' }, sp)],
+    ];
+    const took = (f: () => unknown) => ((s) => (f(), Math.round(performance.now() - s)))(performance.now());
+    console.log(`Overview tab, last 30 days: ${tab.map(([name, f]) => `${name} ${took(f)} ms`).join(', ')}`);
     const timings = r.queries().map((q) => {
       const ms: number[] = [];
       for (let i = 0; i < 5; i++) {

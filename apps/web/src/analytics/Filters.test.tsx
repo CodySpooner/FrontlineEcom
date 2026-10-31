@@ -62,9 +62,8 @@ describe('Filters (SA-68)', () => {
     expect(chips.getByText('Collection: Best sellers')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Filters' }).className).toContain('border-red/50');
 
-    // each panel applies a filter or names it: the current Overview names every one
-    const note = await screen.findByText(/^Not applied here:/);
-    for (const f of ['Channel', 'Product', 'Collection']) expect(within(note).getByText(f)).toBeTruthy();
+    // the panels send the filters: the server applies each or names it in their scope (FilterScope)
+    await waitFor(() => expect(calls.some((u) => u.startsWith('/api/analytics/overview') && decodeURIComponent(u).includes('filters={"channel":["tiktok_shop"],"product":["8001"],"collection":["c-best"]}'))).toBe(true));
 
     fireEvent.click(chips.getByRole('button', { name: 'Remove Channel: TikTok Shop' }));
     await waitFor(() => expect(where()).toContain('filters={"product":["8001"],"collection":["c-best"]}'));

@@ -247,7 +247,12 @@ function TopProducts({ s, ctx }: { s: AnalyticsPage; ctx?: SaContext }) {
   const rows = q.data?.rows?.slice(0, 4);
   const val = (v: SaValue, f: (n: number) => string) => (v.value == null ? '–' : f(v.value));
   return (
-    <Panel title="Top products" sub="by net sales" className="flex flex-col">
+    // the board's header: "by net sales" beside the title
+    <section className="card flex min-w-0 flex-col p-4">
+      <div className="mb-3 flex items-baseline gap-2">
+        <h2 className="font-display text-base font-semibold tracking-[.02em]">Top products</h2>
+        <span className="text-xs text-muted">by net sales</span>
+      </div>
       {q.isError ? (
         <ErrorState message="Couldn't load the top products." onRetry={() => q.refetch()} />
       ) : !rows ? (
@@ -284,7 +289,7 @@ function TopProducts({ s, ctx }: { s: AnalyticsPage; ctx?: SaContext }) {
       <div className="mt-auto pt-2">
         <FilterScope scope={q.data?.scope} />
       </div>
-    </Panel>
+    </section>
   );
 }
 
@@ -317,7 +322,7 @@ export function Overview({ s, tabs }: { s: AnalyticsPage; tabs: string[] }) {
         <TrendPanel s={s} ctx={ctx.data} o={o.data} chart={chart} onChart={setChart} />
         <MovedPanel s={s} ctx={ctx.data} />
       </div>
-      <div className="grid items-start gap-3.5 min-[1180px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+      <div className="grid items-stretch gap-3.5 min-[1180px]:grid-cols-[minmax(0,1.1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
         <AttentionPanel s={s} onChart={setChart} />
         <TopProducts s={s} ctx={ctx.data} />
         <Finding s={s} onChart={setChart} />

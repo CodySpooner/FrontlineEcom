@@ -1,125 +1,22 @@
-// UI-11 Store Analytics: where the money comes from (trend, funnel, channels, products, campaigns). The Overview tab of
-// the new page (SA-62) for the store it has picked, until the v1 Overview replaces it (SA-79). Its panels read store
-// totals, so one note names every active filter (SA-68).
+// UI-11 Store Analytics' old panels. The v1 Overview replaced the view (SA-79); only Unit costs is still on the page,
+// under it, until SA-92 removes this file.
 import { useState } from 'react';
 import { Link } from 'react-router';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { SA_FILTERS, settingsUrl, storeHealth, type SaFilterKey, type SaFilters, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Platform, type Product, type TopProduct } from '@frontline/shared';
-import { useCampaigns, useMissingCosts, useSetCost, useStartConversation, useSummary, useTopProducts } from '../api/client';
-import { AreaChart } from '../components/AreaChart';
-import { UnconvertedNote, useStoreSelection } from '../components/StoreFilter';
+import { settingsUrl, type AdNetwork, type AnalyticsRange, type AnalyticsSummary, type CampaignStats, type Platform, type Product, type TopProduct } from '@frontline/shared';
+import { useMissingCosts, useSetCost, useStartConversation, useTopProducts } from '../api/client';
+import { useStoreSelection } from '../components/StoreFilter';
 import { PLATFORM_NAME } from '../components/StoreForm';
-import { Badge, Button, ErrorState, inputClass, LoadingState, Panel, Segmented, STORE_HEALTH, Table, cx } from '../components/ui';
+import { Badge, Button, ErrorState, inputClass, LoadingState, Panel, Table, cx } from '../components/ui';
 import { researchHref } from '../knowledge/url';
-import { breakEvenRoas, byNetwork, noFeeEstimate, rate, roasTone, times } from '../lib/analytics';
-import { PERIOD, RANGES, weekly } from '../lib/chart';
-import { cents, fmtDay, money, noBaseline, pct, signedPct } from '../lib/format';
+import { rate, roasTone, times } from '../lib/analytics';
+import { PERIOD } from '../lib/chart';
+import { cents, money, pct } from '../lib/format';
 import { stockLeft } from '../lib/stock';
-import { FilterScope } from './FilterScope';
 
-type Metric = 'revenue' | 'profit' | 'adSpend';
-const METRICS: { value: Metric; label: string }[] = [
-  { value: 'revenue', label: 'Revenue' },
-  { value: 'profit', label: 'Profit' },
-  { value: 'adSpend', label: 'Ad spend' },
-];
 const NETWORK: Record<AdNetwork, string> = { meta: 'Meta', tiktok: 'TikTok', google: 'Google' };
 const TONE = { bad: 'text-red', ok: 'text-text', good: 'text-good' };
 const num = (n: number) => n.toLocaleString('en-US');
-
-export function LegacyOverview({ store, filters = {} }: { store: string; filters?: SaFilters }) {
-  const [range, setRange] = useState<AnalyticsRange>(30);
-  const { name } = useStoreSelection();
-  const ids = [store];
-  const summary = useSummary(ids, range);
-  const s = summary.data;
-  return (
-    <>
-      <div className="mb-3.5 flex flex-wrap items-center gap-x-3.5 gap-y-2.5">
-        {s && (
-          <span className="text-xs text-muted">
-            {fmtDay(s.from)} – {fmtDay(s.to)} · changes vs the {PERIOD[range].replace('last', 'previous')}
-          </span>
-        )}
-        <div className="min-[620px]:ml-auto">
-          <Segmented label="Date range" options={RANGES} value={range} onChange={setRange} />
-        </div>
-        <UnconvertedNote codes={s?.unconverted} />
-      </div>
-      <div className="mb-3.5 empty:hidden">
-        <FilterScope scope={{ applied: [], ignored: (Object.keys(SA_FILTERS) as SaFilterKey[]).filter((k) => filters[k]?.length).map((key) => ({ key, reason: 'these panels show store totals' })) }} />
-      </div>
-      {summary.isError ? (
-        <ErrorState message="Couldn't load analytics." onRetry={() => summary.refetch()} />
-      ) : !s ? (
-        <LoadingState rows={6} />
-      ) : (
-        <Report s={s} ids={ids} name={name} dim={summary.isPlaceholderData} />
-      )}
-    </>
-  );
-}
-
-function Report({ s, ids, name, dim }: { s: AnalyticsSummary; ids: string[]; name: (id: string) => string; dim: boolean }) {
-  const campaigns = useCampaigns(ids, s.range);
-  const be = breakEvenRoas(s.totals);
-  const multi = s.byStore.length > 1;
-  return (
-    <div className={cx('grid gap-3.5 transition-opacity', dim && 'opacity-60')}>
-      <div className="grid gap-3.5 min-[1100px]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-        <Trend s={s} be={be} />
-        <FunnelPanel s={s} />
-      </div>
-      <div className="grid gap-3.5 min-[1100px]:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-        <Channels q={campaigns} be={be} cur={s.currency} />
-        <TopProducts ids={ids} range={s.range} name={multi ? name : undefined} cur={s.currency} />
-      </div>
-      <UnitCosts ids={ids} multi={multi} />
-      <Campaigns q={campaigns} be={be} beOf={(id) => breakEvenRoas(s.byStore.find((b) => b.storeId === id)?.totals ?? s.totals)} name={multi ? name : undefined} cur={s.currency} />
-      {multi && <ByStore s={s} name={name} />}
-    </div>
-  );
-}
-
-function Trend({ s, be }: { s: AnalyticsSummary; be: number }) {
-  const [metric, setMetric] = useState<Metric>('revenue');
-  const { stores, has } = useStoreSelection();
-  const noFees = noFeeEstimate(stores.filter((x) => has(x.id)));
-  const daily = s.series.map((d) => ({ date: d.date, value: d[metric] }));
-  const d = s.deltas[metric];
-  const fresh = noBaseline(s.previous[metric], s.totals[metric]);
-  const tone = fresh || metric === 'adSpend' || Math.abs(d) < 0.05 ? 'text-muted' : d > 0 ? 'text-good' : 'text-red';
-  const label = METRICS.find((m) => m.value === metric)!.label;
-  return (
-    <Panel
-      title="Revenue & Profit"
-      sub={`${PERIOD[s.range]} · ${s.range === 365 ? 'weekly' : 'daily'}`}
-      action={<Segmented label="Metric" options={METRICS} value={metric} onChange={setMetric} />}
-    >
-      <p className="mb-2 flex items-baseline gap-2">
-        <b className="font-display text-2xl tabular-nums">{money(s.totals[metric], s.currency)}</b>
-        <span className={cx('text-xs font-semibold tabular-nums', tone)}>{fresh ? 'New' : signedPct(d)}</span>
-        <span className="text-xs text-muted">{fresh ? 'nothing in the previous period' : 'vs previous period'}</span>
-      </p>
-      {metric === 'profit' && noFees.length > 0 && (
-        <p className="mb-2 text-xs text-muted">
-          Leaves out platform and payment fees for {noFees.map((x) => x.name).join(', ')}: no fee estimate.{' '}
-          <Link to={settingsUrl('stores')} className="text-red hover:underline">
-            Set one in Settings
-          </Link>
-        </p>
-      )}
-      <AreaChart points={s.range === 365 ? weekly(daily) : daily} weekly={s.range === 365} partial currency={s.currency} label={`${label}, ${PERIOD[s.range]}: ${money(s.totals[metric], s.currency)} total`} />
-      <dl className="mt-3 grid grid-cols-2 gap-3 border-t border-line pt-3 text-[13px] min-[620px]:grid-cols-4">
-        <Stat label="ROAS" value={times(s.totals.roas, s.totals.adSpend)} />
-        <Stat label="Break-even ROAS" value={Number.isFinite(be) ? times(be) : 'n/a'} />
-        <Stat label="Orders" value={num(s.totals.orders)} />
-        <Stat label="Avg. order" value={money(s.totals.aov, s.currency)} />
-      </dl>
-      <PlatformSplit s={s} />
-    </Panel>
-  );
-}
 
 /** Sales by platform: a store with a second channel (a TikTok Shop or Amazon next to its site), or stores on different ones. */
 export function PlatformSplit({ s }: { s: AnalyticsSummary }) {
@@ -149,13 +46,6 @@ export function PlatformSplit({ s }: { s: AnalyticsSummary }) {
     </div>
   );
 }
-
-const Stat = ({ label, value }: { label: string; value: string }) => (
-  <div>
-    <dt className="text-xs text-muted">{label}</dt>
-    <dd className="font-semibold tabular-nums">{value}</dd>
-  </div>
-);
 
 export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
   const f = s.funnel;
@@ -224,42 +114,6 @@ export function FunnelPanel({ s }: { s: AnalyticsSummary }) {
 }
 
 type Campaigns = UseQueryResult<CampaignStats[]>;
-
-function Channels({ q, be, cur }: { q: Campaigns; be: number; cur?: string }) {
-  const ch = byNetwork(q.data ?? []);
-  const top = Math.max(1, ...ch.map((c) => c.revenue));
-  return (
-    <Panel title="Channels" sub="Ad-attributed revenue by network">
-      {q.isPending ? (
-        <LoadingState rows={3} />
-      ) : q.isError ? (
-        <ErrorState message="Couldn't load campaigns." onRetry={() => q.refetch()} />
-      ) : !ch.length ? (
-        <p className="text-[13px] text-muted">No ad campaigns in this period.</p>
-      ) : (
-        <ul className="grid gap-4">
-          {ch.map((c) => (
-            <li key={c.network}>
-              <div className="mb-1.5 flex items-baseline justify-between text-[13px]">
-                <span className="font-semibold">{NETWORK[c.network]}</span>
-                <b className="tabular-nums">{money(c.revenue, cur)}</b>
-              </div>
-              <div className="h-2 rounded-full bg-white/5">
-                <div className="h-full rounded-full bg-red" style={{ width: `${rate(c.revenue, top)}%` }} />
-              </div>
-              <div className="mt-1 flex justify-between text-xs text-muted tabular-nums">
-                <span>
-                  {money(c.spend, cur)} spend · {num(c.purchases)} purchases
-                </span>
-                <span className={c.spend ? TONE[roasTone(c.roas, be)] : undefined}>{times(c.roas, c.spend)} ROAS</span>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </Panel>
-  );
-}
 
 export function TopProducts({ ids, range, name, cur }: { ids: string[]; range: AnalyticsRange; name?: (id: string) => string; cur?: string }) {
   const q = useTopProducts(ids, range, 5);
@@ -486,53 +340,6 @@ export function Campaigns({ q, be, beOf, name, cur }: { q: Campaigns; be: number
           </p>
         </>
       )}
-    </Panel>
-  );
-}
-
-function ByStore({ s, name }: { s: AnalyticsSummary; name: (id: string) => string }) {
-  return (
-    <Panel title="By Store" sub={`Each store, ${PERIOD[s.range]}`}>
-      <Table>
-        <thead>
-          <tr>
-            <th>Store</th>
-            <th>Health</th>
-            <th className="text-right!">Revenue</th>
-            <th className="text-right!">Change</th>
-            <th className="text-right!">Profit</th>
-            <th className="text-right!">Ad spend</th>
-            <th className="text-right!">ROAS</th>
-            <th className="text-right!">Orders</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[...s.byStore]
-            .sort((a, b) => b.totals.revenue - a.totals.revenue)
-            .map(({ storeId, totals: t, previous: p, deltas: d }) => {
-              const h = storeHealth(t);
-              return (
-                <tr key={storeId}>
-                  <td>{name(storeId)}</td>
-                  <td>
-                    <span className="flex items-center gap-2 whitespace-nowrap">
-                      <Badge tone={STORE_HEALTH[h.status].tone}>{STORE_HEALTH[h.status].label}</Badge>
-                      <span className="text-xs text-muted">{h.marginPct < 0 ? '−' : ''}{Math.abs(h.marginPct)}% net margin</span>
-                    </span>
-                  </td>
-                  <td className="text-right">{money(t.revenue, s.currency)}</td>
-                  <td className={cx('text-right', noBaseline(p.revenue, t.revenue) || Math.abs(d.revenue) < 0.05 ? 'text-muted' : d.revenue > 0 ? 'text-good' : 'text-red')}>
-                    {noBaseline(p.revenue, t.revenue) ? 'New' : signedPct(d.revenue)}
-                  </td>
-                  <td className="text-right">{money(t.profit, s.currency)}</td>
-                  <td className="text-right">{money(t.adSpend, s.currency)}</td>
-                  <td className="text-right">{times(t.roas, t.adSpend)}</td>
-                  <td className="text-right">{num(t.orders)}</td>
-                </tr>
-              );
-            })}
-        </tbody>
-      </Table>
     </Panel>
   );
 }
