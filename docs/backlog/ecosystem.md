@@ -88,6 +88,8 @@ Anything else in another lane → append to that lane's backlog **Inbox** (`- [ 
 ## Blocked
 
 ## Done
+- 2026-10-31 ECO-50: Recomposed headquarters around a layered octagonal atrium and stepped projector base; differentiated technical/reading/industrial rooflines, upper glazing and structural cornices, with foreground braces outside the walk grid. Darker corridors and quieter skyline separate room, foreground and background. Existing desk IDs/routes and real equipment retained. Orca and 30-worker fit/close views (.agent/eco-50-*.png), web build and pnpm check green (336 files, 2595 passed, 1 skipped).
+
 - 2026-10-31 ECO-49: All eight roles now use original field-specialist costumes, instruments and layered materials, retaining deterministic saved cosmetics and distinct human/synthetic head treatments. Explicit agent roles drive matching scene/profile/feed/deploy/editor portraits; legacy unknown-role fallback retained. All-role pose bounds, legacy tests, browser cast/fit/close review (.agent/eco-49-*.png), web build and pnpm check pass (336 files, 2595 passed, 1 skipped).
 
 - 2026-10-31 ECO-48: Original procedural Product Hunter rebuilt with long survey coat, layered fabric/metal, smaller face, scanner, sample satchel and articulated limbs. Integrated all ten poses/four directions, shared atlas and portrait. Live selection/focus/approval and 30-worker demo inspected (.agent/eco-48-*.png); web build and pnpm check pass (336 files, 2591 passed, 1 skipped). An unrelated analytics timeout under concurrent checks passed with six workers.
@@ -281,7 +283,7 @@ Items (stages from brief §11):
   fit zoom, rewarding close up, every state animated, matches the lighting. Before/after.
 - [x] ECO-49 Stage 3 — Full cast: all eight roles get original, role-coherent characters (silhouette, gear, posture,
   role tools) with per-agent variation; old saved appearances still load; portraits match.
-- [ ] ECO-50 Stage 3 — World concept and composition: clear focal point, readable regions, pathways, foreground/main/
+- [x] ECO-50 Stage 3 — World concept and composition: clear focal point, readable regions, pathways, foreground/main/
   background depth; role spaces functional only where a real feature backs them.
 - [ ] ECO-51 Stage 3 — Detail at three scales (distance, normal, close-up), restrained Easter eggs, no invented numbers.
 - [ ] ECO-52 Stage 4 — Motion language: ambient, interaction and event tiers; role-specific idles; varied timing, no

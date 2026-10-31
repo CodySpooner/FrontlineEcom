@@ -9,7 +9,7 @@ export function trafficPosition(elapsed: number, index: number, width: number, h
 }
 
 export function cityBackdrop(stage: Container, texture: Texture) {
-  const root = new Container(), city = new Sprite(texture); city.anchor.set(.5); city.alpha = .8; root.addChild(city); stage.addChild(root);
+  const root = new Container(), city = new Sprite(texture); city.anchor.set(.5); city.alpha = .58; root.addChild(city); stage.addChild(root);
   const traffic = Array.from({ length: 4 }, (_, i) => {
     const color = i % 2 ? '#ff779c' : '#7ae4f3';
     const car = new Graphics().rect(-38, 2, 28, 2).fill({ color, alpha: .12 }).rect(-26, 2, 16, 2).fill({ color, alpha: .25 })

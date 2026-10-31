@@ -42,7 +42,7 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
   poly(corners.flatMap((p) => [p.x,p.y+50]),'#030309');
   for (let y = 0; y < OFFICE_GRID.height; y++) for (let x = 0; x < OFFICE_GRID.width; x++) {
     const p = iso({x,y}); const room = ROOMS.find((r) => x >= r.x && x < r.x+ROOM_SIZE && y >= r.y && y < r.y+ROOM_SIZE);
-    diamond(p.x,p.y,24,12,room ? theme.floor[(x+y)%2]! : (x+y)%2 ? '#1d202a' : '#22252e',room ? '#3c3b45' : '#292d39');
+    diamond(p.x,p.y,24,12,room ? theme.floor[(x+y)%2]! : (x+y)%2 ? '#171e28' : '#1a222d',room ? '#353944' : '#242e3b');
     if (room) {
       if (room.id === 'copywriting' || room.id === 'executive') {
         poly([p.x-18,p.y+10,p.x,p.y+19,p.x+18,p.y+10,p.x+18,p.y+11,p.x,p.y+20,p.x-18,p.y+11],'#54434a');
@@ -56,6 +56,20 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
       }
     }
     if (!room && (x%16===15 || y%16===15)) { rect(p.x-4,p.y+10,8,2,'#713b51'); }
+  }
+  // The atrium is a layered architectural floor, not an obstacle or an activity indicator.
+  const atrium = iso({x:31,y:24});
+  const terrace = (w: number, h: number, y: number, fill: string, edge: string) => {
+    poly([atrium.x-w*.65,atrium.y-h+y,atrium.x+w*.25,atrium.y-h+y,atrium.x+w,atrium.y-h*.25+y,atrium.x+w,atrium.y+h*.35+y,atrium.x+w*.35,atrium.y+h+y,atrium.x-w*.35,atrium.y+h+y,atrium.x-w,atrium.y+h*.35+y,atrium.x-w,atrium.y-h*.25+y],fill,edge);
+  };
+  terrace(278,139,10,'#0b111d','#1f3547');
+  terrace(264,132,5,'#354452','#53677a');
+  terrace(252,126,0,'#172331','#71808b');
+  terrace(228,114,0,'#202b38','#324857');
+  terrace(208,104,0,'#17222f','#3d5364');
+  for(const side of [-1,1]) for(let i=0;i<8;i++) {
+    const x=atrium.x+side*(165+i*10), y=atrium.y+55-i*5;
+    poly([x,y,x+side*5,y-3,x+side*5,y+1,x,y+4],i%3===0?theme.rail:'#728597');
   }
   // Recessed circulation lights are floor decoration, never simulated task traffic.
   const lanes = [
@@ -128,6 +142,26 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
         } else {
           rect(p.x-2,p.y-61,4,60,'#4b4d5b'); rect(p.x-1,p.y-49,2,12,room.color);
         }
+      }
+    }
+    // Different roofline profiles establish readable wings while keeping the existing walk grid.
+    const technical=['research','analytics','development','integrations'].includes(room.id);
+    const archive=room.id==='copywriting'||room.id==='retention';
+    const crown=technical ? 92 : archive ? 78 : 84;
+    for(const side of [0,1]) {
+      const a=iso({x:room.x,y:room.y}), b=iso({x:room.x+(side?0:ROOM_SIZE),y:room.y+(side?ROOM_SIZE:0)});
+      poly([a.x,a.y-crown,b.x,b.y-crown,b.x,b.y-crown+13,a.x,a.y-crown+13],technical?'#334a5b':archive?'#51474a':'#414350','#71808d');
+      poly([a.x,a.y-crown,b.x,b.y-crown,b.x+6,b.y-crown-4,a.x+6,a.y-crown-4],'#7c8c96');
+      poly([a.x,a.y-crown+12,b.x,b.y-crown+12,b.x,b.y-crown+14,a.x,a.y-crown+14],room.color);
+      for(const offset of [0,4,8,12]) {
+        const q=iso({x:room.x+(side?0:offset),y:room.y+(side?offset:0)});
+        rect(q.x-3,q.y-crown+12,6,crown-14,'#273544');rect(q.x-3,q.y-crown+14,2,crown-22,'#7b8b99');
+        if(technical){rect(q.x-6,q.y-crown+20,12,7,'#101c2a');rect(q.x-4,q.y-crown+22,8,2,room.color);}
+      }
+      if(technical) for(const offset of [2,6,10]) {
+        const q=iso({x:room.x+(side?0:offset),y:room.y+(side?offset:0)}), dx=side?-18:18;
+        poly([q.x,q.y-71,q.x+dx,q.y-62,q.x+dx,q.y-49,q.x,q.y-58],'#315366','#6e9eaa');
+        poly([q.x+dx*.2,q.y-69,q.x+dx*.35,q.y-67,q.x+dx*.8,q.y-51,q.x+dx*.65,q.y-53],'#6893a0');
       }
     }
     const sign = iso({x:room.x+5,y:room.y+0.5});
@@ -259,13 +293,21 @@ export function paintOffice(theme: OfficeTheme = OFFICE_THEMES.frontline) {
   }
   const hub = iso(MEETING);
   props.push({depth:hub.y,draw:()=> {
-    diamond(hub.x,hub.y-45,100,50,'#472735','#7e2a40');
+    diamond(hub.x,hub.y-55,132,66,'#0d1725','#687a88');
+    box(hub.x,hub.y-40,114,57,10,'#364956','#21313f','#142431');
+    diamond(hub.x,hub.y-47,101,50,'#2b2331','#e2637a');
+    for(const side of [-1,1]) {box(hub.x+side*102,hub.y+6,12,6,30,'#8998a2','#344753','#23333e');rect(hub.x+side*102-6,hub.y-18,12,3,theme.rail);}
+    diamond(hub.x,hub.y-45,91,45,'#472735','#7e2a40');
     box(hub.x,hub.y-18,70,35,22,'#38343f','#31232f','#241c27');
     diamond(hub.x,hub.y-41,59,30,'#7a2038','#ff6074'); diamond(hub.x,hub.y-35,48,24,'#1e1726','#ff385d');
     diamond(hub.x,hub.y-35,29,14,'#f66986','#ffe2ec'); diamond(hub.x,hub.y-31,18,8,'#fff1f6','#ff9db2');
     for (const x of [-46,46]) { rect(hub.x+x-4,hub.y-14,8,4,'#ffe1e9'); rect(hub.x+x-5,hub.y-17,10,2,'#ff385d'); }
     rect(hub.x-3,hub.y+7,6,18,'#ff405e');
   }});
+  // Foreground edge braces frame the scene, never hiding an entrance or a workstation.
+  for(const tile of [{x:-1,y:46},{x:64,y:46},{x:64,y:1}]) {
+    const p=iso(tile);props.push({depth:p.y+40,draw:()=>{box(p.x,p.y+18,18,9,66,'#627380','#263642','#152431');rect(p.x-10,p.y-31,6,28,'#85929b');rect(p.x+3,p.y-25,4,21,'#152230');rect(p.x-12,p.y-36,24,3,theme.rail);}});
+  }
   props.sort((a,b)=>a.depth-b.depth).forEach((p)=>p.draw());
   return canvas;
 }
