@@ -1,11 +1,12 @@
-// SA-74: the rule engine's core rules, their minimum samples, and a stale source turning a rule into data health.
+// SA-74, SA-75: the rule engine's rules, their minimum samples, and a stale source turning a rule into data health.
+import { readFileSync } from 'node:fs';
 import type { SaInsights, SaOverview } from '@frontline/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { openDb, type Db } from '../db';
 import { seedDemo } from '../demo';
 import { LEDGER_NOW, LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
-import { insights, RULES } from './insights';
+import { insights, LATE_HOURS, RULES } from './insights';
 import { storePeriod, type StorePeriod } from './period';
 
 const { P1 } = LEDGER_PERIODS;
@@ -66,25 +67,27 @@ describe('insight rules (SA-74)', () => {
     ]);
   });
 
-  it('a stale orders source: the order rules say they were not checked instead of flagging; a failing one says why', () => {
+  it('a stale orders source: a rule that would flag on it is held back as data health; one with nothing to say stays quiet', () => {
     const { db, run } = setup();
     stock(db, '8001', 3); // would flag on fresh data
     expect(of(run(), 'source_health@1')).toEqual([]);
     db.prepare("UPDATE source_datasets SET last_success_at = '2026-11-09T07:00:00.000Z' WHERE integration_id = 'tiktok_shop:ledger' AND dataset = 'orders'").run();
     const list = run();
-    expect(list.filter((i) => i.kind === 'business').map((i) => i.rule)).toEqual(['listing_sync@1']);
-    expect(of(list, 'stock_cover@1')).toEqual([{ rule: 'stock_cover@1', kind: 'data_health', tone: 'red', title: 'Low stock cover not checked', detail: 'TikTok Shop orders out of date', evidence: { sources: 1 }, target: { kind: 'sources' } }]);
-    expect(of(list, 'refund_rate@1')[0]!.kind).toBe('data_health');
+    expect(list.filter((i) => i.kind === 'business').map((i) => i.rule)).toEqual(['listing_sync@1', 'variant_out@1']); // they read no orders
+    expect(of(list, 'stock_cover@1')).toEqual([{ rule: 'stock_cover@1', kind: 'data_health', tone: 'red', title: 'Low stock cover held back', detail: '1 flag waiting for TikTok Shop orders (out of date)', evidence: { flags: 1, sources: 1 }, target: { kind: 'sources' } }]);
     expect(of(list, 'unit_cost@1')[0]!.kind).toBe('data_health');
+    expect(of(list, 'refund_rate@1')).toEqual([]); // nothing to hold back
     expect(of(list, 'source_health@1')).toEqual([{ rule: 'source_health@1', kind: 'data_health', tone: 'red', title: "TikTok Shop hasn't synced for 10 h", detail: 'orders', evidence: { datasets: 1, lastSuccess: '2026-11-09T07:00:00.000Z' }, target: { kind: 'sources' } }]);
 
     db.prepare("UPDATE source_datasets SET status = 'failed', error = 'TikTok Shop said 429: too many requests' WHERE integration_id = 'tiktok_shop:ledger'").run();
     expect(of(run(), 'source_health@1')[0]).toMatchObject({ title: 'TikTok Shop sync failing', detail: 'orders · TikTok Shop said 429: too many requests' });
-    expect(of(run(), 'stock_cover@1')[0]!.detail).toBe('TikTok Shop orders failing to sync');
+    expect(of(run(), 'stock_cover@1')[0]!.detail).toBe('1 flag waiting for TikTok Shop orders (failing to sync)');
   });
 
   it('every rule is listed with its threshold, sample and datasets; a demo store runs; the route and the Overview count', async () => {
-    expect(RULES.map((r) => r.id)).toEqual(['stock_cover@1', 'refund_rate@1', 'unit_cost@1', 'listing_sync@1', 'source_health@1']);
+    expect(RULES.map((r) => r.id)).toEqual([
+      'stock_cover@1', 'refund_rate@1', 'unit_cost@1', 'listing_sync@1', 'product_down@1', 'ads_contribution@1', 'conversion_down@1', 'late_fulfillment@1', 'variant_out@1', 'unmapped_orders@1', 'source_health@1',
+    ]);
     expect(RULES[0]).toMatchObject({ when: "Tracked stock covers under 10 days at the last 14 full days' sales rate", minSample: '5 units sold in those 14 days' });
     vi.useFakeTimers({ now: LEDGER_NOW, toFake: ['Date'] });
     const db = openDb();
@@ -95,9 +98,73 @@ describe('insight rules (SA-74)', () => {
     const body = (await (await app.request(`/api/analytics/insights?${q}`)).json()) as SaInsights;
     expect(body.rules.map((r) => r.id)).toEqual(RULES.map((r) => r.id));
     expect(body.rules[0]).not.toHaveProperty('run');
-    expect(body.insights.map((i) => i.rule)).toEqual(['unit_cost@1', 'listing_sync@1']);
-    expect(((await (await app.request(`/api/analytics/overview?${q}`)).json()) as SaOverview).attention).toBe(2);
+    expect(body.insights.map((i) => i.rule)).toEqual(['unit_cost@1', 'listing_sync@1', 'variant_out@1']);
+    expect(((await (await app.request(`/api/analytics/overview?${q}`)).json()) as SaOverview).attention).toBe(3);
     expect((await app.request('/api/analytics/insights?store=glow&period=last30')).status).toBe(200);
     expect(JSON.stringify(body)).not.toMatch(/score|confidence/i);
+  });
+});
+
+describe('insight rules (SA-75)', () => {
+  it('product sales down: 30% or more against the comparison, from 20 units sold there', () => {
+    const { db, run } = setup();
+    expect(of(run(), 'product_down@1')).toEqual([]);
+    order(db, '#2101', '2026-10-21', '8002', 30, 42); // the cream: $1,302 and 31 units in P2, $180 in P1
+    order(db, '#2102', '2026-10-21', '8003', 10, 18); // the mask: down 91%, but 10 units: under the sample
+    expect(of(run(), 'product_down@1')).toEqual([
+      { rule: 'product_down@1', kind: 'business', tone: 'warn', title: 'Hydra Barrier Night Cream: net sales down 86%', detail: '$180 vs $1,302 · 31 units before', evidence: { net_sales: 180, previous: 1302, previousUnits: 31 }, target: { kind: 'product', id: '8002' } },
+    ]);
+  });
+
+  it('ad spend up while contribution after ads fell', () => {
+    const { db, run } = setup();
+    expect(of(run(), 'ads_contribution@1')).toEqual([]); // $20 a day in both weeks
+    db.prepare("UPDATE campaign_daily SET spend = 60 WHERE campaign_id = 'm1' AND date BETWEEN ? AND ?").run(P1.from, P1.to);
+    const [i] = of(run(), 'ads_contribution@1');
+    expect(i).toMatchObject({ kind: 'business', evidence: { ad_spend: 420, previousAdSpend: 140 }, target: { kind: 'metric', id: 'contribution_after_ads' } });
+    expect(i!.title).toMatch(/^Ad spend up 200\.0% while contribution after ads fell /);
+    expect(i!.evidence.contribution as number).toBeLessThan(i!.evidence.previousContribution as number);
+  });
+
+  it('conversion down 15% or more, only with 500 sessions in each period', () => {
+    const { db, run } = setup();
+    expect(of(run(), 'conversion_down@1')).toEqual([]);
+    db.prepare('UPDATE daily_metrics SET purchase_sessions = 1 WHERE store_id = ? AND date BETWEEN ? AND ?').run(LEDGER_STORE, P1.from, P1.to);
+    expect(of(run(), 'conversion_down@1')).toEqual([
+      { rule: 'conversion_down@1', kind: 'business', tone: 'warn', title: 'Site conversion down to 1.00% from 2.00%', detail: '1.00 pts lower · 700 sessions', evidence: { site_conversion: 0.01, previous: 0.02, sessions: 700, previousSessions: 700 }, target: { kind: 'metric', id: 'site_conversion' } },
+    ]);
+    db.prepare('UPDATE daily_metrics SET sessions = 50 WHERE store_id = ?').run(LEDGER_STORE);
+    expect(of(run(), 'conversion_down@1')).toEqual([]); // 350 sessions a week
+  });
+
+  it("late fulfillment: paid and not shipped after the Orders page's 48 hours", () => {
+    expect(LATE_HOURS).toBe(Number(/LATE_HOURS = (\d+)/.exec(readFileSync(new URL('../../../web/src/lib/orders.ts', import.meta.url), 'utf8'))![1]));
+    const { db, run } = setup();
+    order(db, '#3001', '2026-11-06', '8001', 1, 32); // Nov 6 15:00 UTC: 74 h before now
+    order(db, '#3002', '2026-11-09', '8001', 1, 32); // 2 h before now
+    db.prepare("UPDATE orders SET fulfillment_status = 'unfulfilled' WHERE id IN ('#3001', '#3002')").run();
+    db.prepare("UPDATE orders SET created_at = '2026-11-09T15:00:00Z' WHERE id = '#3002'").run();
+    expect(of(run(), 'late_fulfillment@1')).toEqual([
+      { rule: 'late_fulfillment@1', kind: 'business', tone: 'red', title: '1 order not shipped after 48 h', detail: '#3001, placed Nov 6', evidence: { orders: 1, hours: 48 }, target: { kind: 'orders' } },
+    ]);
+  });
+
+  it('a variant out of stock, or a one-variant product', () => {
+    const { db, run } = setup();
+    db.prepare("UPDATE product_variants SET inventory = 0 WHERE store_id = ? AND id = '8002-1'").run(LEDGER_STORE);
+    expect(of(run(), 'variant_out@1').map((i) => [i.title, i.detail])).toEqual([
+      ['Hydra Barrier Night Cream: out of stock', 'Tracked stock at 0'],
+      ['Overnight Lip Mask: Mint out of stock', '1 of 3 variants'],
+    ]);
+  });
+
+  it('orders from an unmapped sales-channel app may duplicate: data health', () => {
+    const { db, run } = setup();
+    expect(of(run(), 'unmapped_orders@1')).toEqual([]);
+    order(db, '#4001', '2026-10-28', '8001', 1, 32);
+    db.prepare("UPDATE orders SET channel = 'other' WHERE id = '#4001'").run();
+    expect(of(run(), 'unmapped_orders@1')).toEqual([
+      { rule: 'unmapped_orders@1', kind: 'data_health', tone: 'warn', title: '1 order from other sales-channel apps may be counted twice', detail: 'Shopify recorded it for an app the store has no integration for; never matched automatically', evidence: { orders: 1 }, target: { kind: 'sources' } },
+    ]);
   });
 });

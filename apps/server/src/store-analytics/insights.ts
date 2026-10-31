@@ -1,12 +1,13 @@
 // SA-74 (decision 28): the one rule engine. Each rule has an id@version, named thresholds, a minimum sample and the
-// datasets it reads; its insights are Observed only, never scored. A business rule whose datasets come from a stale or
-// failed source isn't run: it says it wasn't checked and why (a data-health insight), never a business alert.
+// datasets it reads; its insights are Observed only, never scored. A rule that flags on datasets from a stale or failed
+// source is held back: one data-health insight says so and why, never a business alert (`source_health` names the source).
 import { SA_SOURCES, type SaDataset, type SaFreshness, type SaInsight, type SaInsights, type SaRule, type SaSourceKind } from '@frontline/shared';
 import { addDays } from '../dates';
 import type { Db } from '../db';
 import { LINE_COST } from './costs';
 import { demoShares, totals } from './listings';
 import type { StorePeriod } from './period';
+import { computeMetricSet, setup } from './metric-set';
 import { CANONICAL, salesMetrics } from './sales';
 import { datasetFreshness } from './sources';
 
@@ -19,8 +20,19 @@ export const COVER_MIN_UNITS = 5;
 export const REFUND_MULTIPLE = 2;
 /** …once it ordered at least this many units in the period. */
 export const REFUND_MIN_UNITS = 30;
+/** A product's net sales down by this share of the comparison's flags… */
+export const DOWN_SHARE = 0.3;
+/** …when it sold at least this many units in the comparison. */
+export const DOWN_MIN_UNITS = 20;
+/** Ad spend up by this share while contribution after ads fell. */
+export const AD_UP = 0.1;
+/** Site conversion down by this share of the comparison's flags, with at least this many sessions in each period. */
+export const CONVERSION_DOWN = 0.15;
+export const CONVERSION_MIN_SESSIONS = 500;
+/** Paid and not shipped after this many hours: `LATE_HOURS` in apps/web/src/lib/orders.ts (insights.test.ts holds them equal). */
+export const LATE_HOURS = 48;
 
-type Ctx = { db: Db; storeId: string; sp: StorePeriod; demo: boolean; freshness: SaFreshness[]; now: number };
+type Ctx = { db: Db; storeId: string; sp: StorePeriod; demo: boolean; freshness: SaFreshness[]; now: number; money: (v: number) => string };
 type Rule = SaRule & { run: (c: Ctx) => SaInsight[] };
 
 const pct = (x: number, digits = 1) => `${(x * 100).toFixed(digits)}%`;
@@ -119,6 +131,108 @@ function listingSync({ db, storeId }: Ctx): SaInsight[] {
   }));
 }
 
+function productDown({ db, storeId, sp, demo, money }: Ctx): SaInsight[] {
+  const { compare, cut } = setup(db, storeId, sp, {});
+  if (!compare || demo) return []; // ponytail: a demo store's products move with the store; the KPI already says so
+  const cur = totals(db, storeId, sp.period.from, sp.period.to, 'refund_day');
+  const prev = totals(db, storeId, compare.from, compare.to, 'refund_day', cut && { cut });
+  const title = db.prepare('SELECT title FROM products WHERE store_id = ? AND id = ?');
+  return [...prev].flatMap(([id, was]): SaInsight[] => {
+    const now = cur.get(id)?.net_sales ?? 0;
+    if (was.units < DOWN_MIN_UNITS || was.net_sales <= 0 || (was.net_sales - now) / was.net_sales < DOWN_SHARE) return [];
+    return [{
+      rule: 'product_down@1', kind: 'business', tone: 'warn',
+      title: `${title.get(storeId, id)?.title ?? `Product ${id}`}: net sales down ${pct((was.net_sales - now) / was.net_sales, 0)}`,
+      detail: `${money(now)} vs ${money(was.net_sales)} · ${was.units} units before`,
+      evidence: { net_sales: now, previous: was.net_sales, previousUnits: was.units },
+      target: { kind: 'product', id },
+    }];
+  });
+}
+
+function adsUpContributionDown({ db, storeId, sp, money }: Ctx): SaInsight[] {
+  const [ads, after] = computeMetricSet(db, { storeId }, ['ad_spend', 'contribution_after_ads'], sp).metrics;
+  const [a, a0, c, c0] = [ads!.value, ads!.previous?.value, after!.value, after!.previous?.value];
+  if (a == null || !a0 || c == null || c0 == null || a / a0 - 1 < AD_UP || c >= c0) return [];
+  return [{
+    rule: 'ads_contribution@1', kind: 'business', tone: 'warn',
+    title: `Ad spend up ${pct(a / a0 - 1)} while contribution after ads fell ${c0 > 0 ? pct((c0 - c) / c0) : `by ${money(c0 - c)}`}`,
+    detail: `Ad spend ${money(a)} vs ${money(a0)} · contribution ${money(c)} vs ${money(c0)}`,
+    evidence: { ad_spend: a, previousAdSpend: a0, contribution: c, previousContribution: c0 },
+    target: { kind: 'metric', id: 'contribution_after_ads' },
+  }];
+}
+
+function conversionDown({ db, storeId, sp }: Ctx): SaInsight[] {
+  const [conv, sessions] = computeMetricSet(db, { storeId }, ['site_conversion', 'sessions'], sp).metrics;
+  const [v, v0, s, s0] = [conv!.value, conv!.previous?.value, sessions!.value, sessions!.previous?.value];
+  if (v == null || !v0 || s == null || s0 == null || Math.min(s, s0) < CONVERSION_MIN_SESSIONS || 1 - v / v0 < CONVERSION_DOWN) return [];
+  return [{
+    rule: 'conversion_down@1', kind: 'business', tone: 'warn',
+    title: `Site conversion down to ${pct(v, 2)} from ${pct(v0, 2)}`,
+    detail: `${((v0 - v) * 100).toFixed(2)} pts lower · ${s.toLocaleString('en-US')} sessions`,
+    evidence: { site_conversion: v, previous: v0, sessions: s, previousSessions: s0 },
+    target: { kind: 'metric', id: 'site_conversion' },
+  }];
+}
+
+function lateFulfillment({ db, storeId, now }: Ctx): SaInsight[] {
+  const late = db
+    .prepare(
+      `SELECT o.id, o.local_date AS day FROM orders o WHERE o.store_id = ? AND o.duplicate_of IS NULL AND o.status = 'paid' AND o.cancelled_at IS NULL
+       AND o.fulfillment_status = 'unfulfilled' AND julianday(o.created_at) < julianday(?) ORDER BY o.created_at`,
+    )
+    .all(storeId, new Date(now - LATE_HOURS * 3_600_000).toISOString());
+  if (!late.length) return [];
+  const placed = new Date(`${late[0]!.day}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  return [{
+    rule: 'late_fulfillment@1', kind: 'business', tone: 'red',
+    title: `${plural(late.length, 'order')} not shipped after ${LATE_HOURS} h`,
+    detail: `${late.length === 1 ? '' : 'Oldest '}${late[0]!.id}, placed ${placed}`,
+    evidence: { orders: late.length, hours: LATE_HOURS },
+    target: { kind: 'orders' },
+  }];
+}
+
+function variantOut({ db, storeId }: Ctx): SaInsight[] {
+  return db
+    .prepare(
+      `SELECT p.id, p.title, count(*) AS n, group_concat(coalesce(v.title, v.sku, v.id), ', ') AS out,
+         (SELECT count(*) FROM product_variants w WHERE w.store_id = p.store_id AND w.product_id = p.id) AS variants
+       FROM product_variants v JOIN products p ON p.store_id = v.store_id AND p.id = v.product_id
+       WHERE v.store_id = ? AND p.status = 'active' AND v.inventory_tracked AND v.inventory <= 0 GROUP BY p.id ORDER BY p.title`,
+    )
+    .all(storeId)
+    .map((r): SaInsight => {
+      const many = Number(r.variants) > 1;
+      return {
+        rule: 'variant_out@1', kind: 'business', tone: 'warn',
+        title: `${r.title}: ${many ? `${r.out} out of stock` : 'out of stock'}`,
+        detail: many ? `${r.n} of ${r.variants} variants` : 'Tracked stock at 0',
+        evidence: { variants: Number(r.variants), out: Number(r.n) },
+        target: { kind: 'product', id: String(r.id) },
+      };
+    });
+}
+
+function unmappedOrders({ db, storeId, sp }: Ctx): SaInsight[] {
+  const platform = String(db.prepare('SELECT platform FROM stores WHERE id = ?').get(storeId)!.platform);
+  // dedupe.ts's warning: an unmapped sales-channel app's orders are never matched automatically
+  const n = Number(
+    db
+      .prepare(`SELECT count(*) AS n FROM orders o WHERE o.store_id = ? AND o.source_kind = ? AND o.channel = 'other' AND o.local_date BETWEEN ? AND ? AND ${CANONICAL}`)
+      .get(storeId, platform, sp.period.from, sp.period.to)!.n,
+  );
+  if (!n) return [];
+  return [{
+    rule: 'unmapped_orders@1', kind: 'data_health', tone: 'warn',
+    title: `${plural(n, 'order')} from other sales-channel apps may be counted twice`,
+    detail: `${sourceName(platform)} recorded ${n === 1 ? 'it' : 'them'} for an app the store has no integration for; never matched automatically`,
+    evidence: { orders: n },
+    target: { kind: 'sources' },
+  }];
+}
+
 function sourceHealth({ freshness, now }: Ctx): SaInsight[] {
   return [...groupBy(freshness.filter(bad), (f) => f.source)].map(([source, rows]): SaInsight => {
     const failed = rows.some((f) => f.status === 'failed');
@@ -152,6 +266,30 @@ export const RULES: Rule[] = [
     when: "A sales channel's last sync of a listing failed", minSample: 'None: every failure counts',
   },
   {
+    id: 'product_down@1', name: 'Product sales down', datasets: ['orders', 'order_lines', 'refunds'], run: productDown,
+    when: `A product's net sales fell ${pct(DOWN_SHARE, 0)} or more against the comparison`, minSample: `${DOWN_MIN_UNITS} units sold in the comparison`,
+  },
+  {
+    id: 'ads_contribution@1', name: 'Ad spend up, contribution down', datasets: ['ad_spend', 'orders', 'order_lines'], run: adsUpContributionDown,
+    when: `Ad spend rose ${pct(AD_UP, 0)} or more against the comparison while contribution after ads fell`, minSample: 'Ad spend and contribution in both periods',
+  },
+  {
+    id: 'conversion_down@1', name: 'Conversion down', datasets: ['traffic', 'purchase_sessions'], run: conversionDown,
+    when: `Site conversion fell ${pct(CONVERSION_DOWN, 0)} or more against the comparison (only where it is tracked)`, minSample: `${CONVERSION_MIN_SESSIONS} sessions in each period`,
+  },
+  {
+    id: 'late_fulfillment@1', name: 'Late fulfillment', datasets: ['orders'], run: lateFulfillment,
+    when: `A paid order not shipped ${LATE_HOURS} hours after it was placed`, minSample: 'None: every late order counts',
+  },
+  {
+    id: 'variant_out@1', name: 'Out of stock', datasets: ['variants', 'inventory'], run: variantOut,
+    when: "An active product's tracked variant at 0 or below", minSample: 'None',
+  },
+  {
+    id: 'unmapped_orders@1', name: 'Orders that may duplicate', datasets: ['orders'], run: unmappedOrders,
+    when: 'Orders the store platform recorded for a sales-channel app with no integration here, in the period', minSample: 'None',
+  },
+  {
     id: 'source_health@1', name: 'Stale or failed source', datasets: [], run: sourceHealth,
     when: "A source's last sync of a dataset failed, or it hasn't synced for 3 of its sync intervals", minSample: 'None',
   },
@@ -159,15 +297,18 @@ export const RULES: Rule[] = [
 
 export function insights(db: Db, storeId: string, sp: StorePeriod, now = Date.now()): SaInsights {
   const freshness = datasetFreshness(db, storeId, now);
-  const ctx: Ctx = { db, storeId, sp, now, freshness, demo: !!db.prepare('SELECT demo FROM stores WHERE id = ?').get(storeId)?.demo };
+  const store = db.prepare('SELECT demo, currency FROM stores WHERE id = ?').get(storeId)!;
+  const money = (v: number) => (v < 0 ? '−' : '') + new Intl.NumberFormat('en-US', { style: 'currency', currency: String(store.currency), maximumFractionDigits: 0 }).format(Math.abs(v));
+  const ctx: Ctx = { db, storeId, sp, now, freshness, money, demo: !!store.demo };
   const out = RULES.flatMap((r): SaInsight[] => {
+    const found = r.run(ctx);
     const stale = freshness.filter((f) => bad(f) && r.datasets.includes(f.dataset));
-    if (!stale.length) return r.run(ctx);
+    if (!stale.length || !found.length) return found;
     return [{
       rule: r.id, kind: 'data_health', tone: 'red',
-      title: `${r.name} not checked`,
-      detail: `${stale.map((f) => `${sourceName(f.source)} ${f.dataset.replaceAll('_', ' ')}`).join(', ')} ${stale.some((f) => f.status === 'failed') ? 'failing to sync' : 'out of date'}`,
-      evidence: { sources: stale.length },
+      title: `${r.name} held back`,
+      detail: `${plural(found.length, 'flag')} waiting for ${stale.map((f) => `${sourceName(f.source)} ${f.dataset.replaceAll('_', ' ')}`).join(', ')} (${stale.some((f) => f.status === 'failed') ? 'failing to sync' : 'out of date'})`,
+      evidence: { flags: found.length, sources: stale.length },
       target: { kind: 'sources' },
     }];
   });

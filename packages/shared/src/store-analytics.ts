@@ -924,7 +924,13 @@ export interface SaRule {
 }
 
 /** What an insight's row opens. */
-export type SaInsightTarget = { kind: 'product'; id: string } | { kind: 'products'; ids: string[] } | { kind: 'listings'; channel: string } | { kind: 'sources' };
+export type SaInsightTarget =
+  | { kind: 'product'; id: string }
+  | { kind: 'products'; ids: string[] }
+  | { kind: 'listings'; channel: string }
+  | { kind: 'sources' }
+  | { kind: 'metric'; id: SaMetricId }
+  | { kind: 'orders' };
 
 /** A rule's finding: always Observed, never scored. A business rule whose inputs are stale or failed says so instead (`data_health`). */
 export interface SaInsight {
