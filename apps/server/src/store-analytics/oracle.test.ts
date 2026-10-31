@@ -1,8 +1,10 @@
 // SA-09: the v1 values for the ledger fixture (fixture.ts), worked out by hand here, never by the code under test.
 // Each metric's item replaces its `todo` with a real check (SA-16 sales, SA-19 contribution, SA-20 ads, SA-21 traffic).
-import { describe, expect, it } from 'vitest';
+import type { SaSalesReport } from '@frontline/shared';
+import { describe, expect, it, vi } from 'vitest';
+import { createApp } from '../app';
 import { openDb } from '../db';
-import { LEDGER_ORDERS, LEDGER_PERIODS, LEDGER_REFUNDS, LEDGER_STORE, seedLedgerStore } from './fixture';
+import { LEDGER_NOW, LEDGER_ORDERS, LEDGER_PERIODS, LEDGER_REFUNDS, LEDGER_STORE, seedLedgerStore } from './fixture';
 import { adMetrics } from './ads';
 import { costMetrics } from './costs';
 import { salesMetrics } from './sales';
@@ -164,3 +166,40 @@ describe('oracle (v1)', () => {
     });
   });
 });
+
+describe('oracle: sales report (SA-95)', () => {
+  it('the bridge with tax and shipping apart, and its rows by day, week and month', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(LEDGER_NOW);
+    const db = openDb();
+    seedLedgerStore(db);
+    const app = createApp(db);
+    const { from, to } = LEDGER_PERIODS.P1;
+    const get = async (q = '') => (await app.request(`/api/analytics/sales?store=${LEDGER_STORE}&period=custom&from=${from}&to=${to}${q}`)).json() as Promise<SaSalesReport>;
+    const r = await get();
+    const o = ORACLE.P1;
+    expect(r.grain).toBe('day');
+    expect(Object.fromEntries(r.metrics.map((m) => [m.id, m.value]))).toEqual({ gross_sales: o.gross_sales, discounts: o.discounts, refunds: o.refunds, net_sales: o.net_sales, orders: o.orders, aov: o.aov, units: o.units, cancelled_orders: o.cancelled_orders });
+    // tax 4.90 + 6.72 + 2.56 + 6.91 + 2.40 + 0 (€) + 3.36 + 2.56 + 2.56; shipping #1003 4.99 + #1005 5 (both before refunds)
+    expect([r.tax, r.shipping]).toEqual([{ value: 31.97, status: 'ok' }, { value: 9.99, status: 'ok' }]);
+    const col = (x: SaSalesReport, id: keyof SaSalesReport['rows'][number]['values']) => x.rows.map((row) => row.values[id].value);
+    expect(r.rows.map((row) => row.from)).toEqual(['2026-10-26', '2026-10-27', '2026-10-28', '2026-10-29', '2026-10-30', '2026-10-31', '2026-11-01']);
+    // Oct 28: #1005's 32 less #1003's refund 16.20; Oct 29: 96 − 9.60 − #1005's refund 32; Oct 30: 30 + 54 (€) + 42
+    expect(col(r, 'net_sales')).toEqual([61.2, 84, 15.8, 54.4, 126, 0, 64]);
+    expect(col(r, 'orders')).toEqual([1, 1, 1, 1, 3, 0, 2]);
+    expect(col(r, 'units')).toEqual([3, 2, 1, 3, 3, 0, 2]);
+    expect(col(r, 'cancelled_orders')).toEqual([0, 0, 0, 1, 0, 0, 0]);
+    expect(r.rows[5]!.values.aov).toEqual({ value: null, status: 'unavailable' }); // Oct 31: no orders, no average
+    expect((await get('&grain=week')).rows.map((row) => [row.from, row.to, row.values.net_sales.value])).toEqual([['2026-10-26', '2026-11-01', 405.4]]);
+    expect((await get('&grain=month')).rows.map((row) => [row.from, row.to, row.values.net_sales.value])).toEqual([['2026-10-26', '2026-10-31', 341.4], ['2026-11-01', '2026-11-01', 64]]);
+    expect((await get('&refunds=order_day')).metrics.find((m) => m.id === 'net_sales')!.value).toBe(o.net_sales_order_day);
+    // TikTok Shop's own order alone; a product filter can't split order-level tax and shipping
+    const tt = await get(`&filters=${encodeURIComponent('{"channel":["tiktok_shop"]}')}`);
+    expect([tt.tax.value, tt.shipping.value]).toEqual([2.4, 0]);
+    expect((await get(`&filters=${encodeURIComponent('{"product":["8001"]}')}`)).tax).toEqual({ value: null, status: 'unavailable', note: 'Order level: not split by product' });
+    expect(((await (await app.request(`/api/analytics/sales?store=${LEDGER_STORE}&period=custom&from=2026-04-01&to=2026-11-08`)).json()) as SaSalesReport).grain).toBe('week');
+    for (const q of ['&grain=year', '&grain=day&period=custom&from=2025-01-01&to=2026-11-08']) expect((await app.request(`/api/analytics/sales?store=${LEDGER_STORE}${q}`)).status).toBe(400);
+    vi.useRealTimers();
+  });
+});
+

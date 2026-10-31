@@ -36,6 +36,7 @@ const ROUTES: Row[] = [
   { method: 'GET', path: '/api/analytics/sources' },
   { method: 'GET', path: '/api/analytics/metrics' },
   { method: 'GET', path: '/api/analytics/series' },
+  { method: 'GET', path: '/api/analytics/sales' },
   { method: 'GET', path: '/api/analytics/reconcile' },
   { method: 'GET', path: '/api/analytics/collections' },
   { method: 'GET', path: '/api/analytics/listings' },

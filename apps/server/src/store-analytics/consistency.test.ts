@@ -1,8 +1,8 @@
 // SA-69: one number, one value everywhere. Each surface that shows a v1 number has a row here holding it equal to
 // /metrics (or to the surface it's drawn from) for the same scope, on the ledger fixture and on a demo store. Later
 // surfaces add a row.
-import type { SaListings, SaMetricSet, SaOverview, SaProductDetail } from '@frontline/shared';
-import { SA_OVERVIEW_KPIS } from '@frontline/shared';
+import type { SaListings, SaMetricSet, SaOverview, SaProductDetail, SaSalesReport } from '@frontline/shared';
+import { SA_OVERVIEW_KPIS, SA_SALES_REPORT } from '@frontline/shared';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../app';
 import { openDb } from '../db';
@@ -41,6 +41,19 @@ for (const scope of SCOPES) {
         expect(o.metrics.map((x) => x.id)).toEqual(SA_OVERVIEW_KPIS);
         expect(o.metrics).toEqual(m.metrics);
         expect([o.period, o.compare, o.scope]).toEqual([m.period, m.compare, m.scope]);
+      }
+    });
+
+    it("the sales report's totals = /metrics for the same scope; its rows add up to them (SA-95)", async () => {
+      const a = app();
+      for (const v of VARIANTS) {
+        const q = `store=${scope.store}&${scope.period}${v}`;
+        const [{ grain, tax, shipping, rows, ...set }, m] = await Promise.all([get<SaSalesReport>(a, `sales?${q}`), get<SaMetricSet>(a, `metrics?${q}&metrics=${SA_SALES_REPORT.join(',')}`)]);
+        expect(set).toEqual(m);
+        for (const id of SA_SALES_REPORT.filter((x) => x !== 'aov')) {
+          expect(rows.reduce((s, r) => s + (r.values[id].value ?? 0), 0), `${id}${v}`).toBeCloseTo(m.metrics.find((x) => x.id === id)!.value!, 2);
+        }
+        void [grain, tax, shipping];
       }
     });
 

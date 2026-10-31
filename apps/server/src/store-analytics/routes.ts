@@ -1,4 +1,4 @@
-import { SA_METRICS, SA_SOURCES, type SaCollection, type SaContext, type SaMetricId, type SaSourceKind } from '@frontline/shared';
+import { SA_METRICS, SA_SALES_GRAINS, SA_SOURCES, type SaCollection, type SaContext, type SaMetricId, type SaSalesGrain, type SaSourceKind } from '@frontline/shared';
 import { Hono } from 'hono';
 import type { Db } from '../db';
 import { annotations } from './annotations';
@@ -13,6 +13,7 @@ import { overview } from './overview';
 import { productDetail } from './product';
 import { historyStart, storePeriod, zoneInfo } from './period';
 import { reconcile } from './reconcile';
+import { salesReport } from './sales-report';
 import { datasetFreshness, markVerified, sourceRows } from './sources';
 
 export type Scope = { storeId: string; metrics?: SaMetricId[] };
@@ -95,6 +96,21 @@ export function storeAnalyticsRoutes(db: Db) {
       const basis = c.req.query('refunds') ?? 'refund_day';
       if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
       return c.json(computeSeries(db, s, metric as SaMetricId, sp, filters, basis));
+    })
+    // SA-95: the sales report: the net sales bridge with tax and shipping apart, and its metrics by day, week or month.
+    .get('/api/analytics/sales', (c) => {
+      const s = scoped(c);
+      if ('error' in s) return c.json({ error: s.error }, s.status);
+      const sp = storePeriod(db, s.storeId, (k) => c.req.query(k));
+      if (typeof sp === 'string') return c.json({ error: sp }, 400);
+      const filters = parseFilters(c.req.query('filters'));
+      if (typeof filters === 'string') return c.json({ error: filters }, 400);
+      const basis = c.req.query('refunds') ?? 'refund_day';
+      if (basis !== 'refund_day' && basis !== 'order_day') return c.json({ error: 'refunds must be refund_day or order_day' }, 400);
+      const grain = (c.req.query('grain') ?? (sp.period.days > 120 ? 'week' : 'day')) as SaSalesGrain;
+      if (!SA_SALES_GRAINS.includes(grain)) return c.json({ error: 'grain must be day, week or month' }, 400);
+      if (grain === 'day' && sp.period.days > 400) return c.json({ error: 'Days cover up to 400 days: pick week or month' }, 400);
+      return c.json(salesReport(db, s, sp, filters, basis, grain));
     })
     // SA-24: Dashboard's revenue to v1 net sales for the period, line by line.
     .get('/api/analytics/reconcile', (c) => {

@@ -783,6 +783,29 @@ export interface SaMetricSet {
   scope: SaFilterScope;
 }
 
+/** SA-95 (spec §8 Sales and order performance): the sales report's metrics, the net sales bridge first. */
+export const SA_SALES_REPORT = ['gross_sales', 'discounts', 'refunds', 'net_sales', 'orders', 'aov', 'units', 'cancelled_orders'] as const satisfies readonly SaMetricId[];
+export const SA_SALES_GRAINS = ['day', 'week', 'month'] as const;
+export type SaSalesGrain = (typeof SA_SALES_GRAINS)[number];
+
+/** One day, week (from the period's first day) or calendar month of the report, clipped to the period. */
+export interface SaSalesRow {
+  from: string;
+  to: string;
+  /** The row that holds today: today so far. */
+  partial?: true;
+  values: Record<(typeof SA_SALES_REPORT)[number], { value: number | null; status: SaValue['status'] }>;
+}
+
+/** `GET /api/analytics/sales`: /metrics' set for SA_SALES_REPORT, tax and shipping apart, and its rows. */
+export interface SaSalesReport extends SaMetricSet {
+  grain: SaSalesGrain;
+  /** Charged on the period's orders, before refunds: never part of net sales. */
+  tax: SaValue;
+  shipping: SaValue;
+  rows: SaSalesRow[];
+}
+
 /** One point of a series: a day, or a week over long periods, with the comparison's aligned point (same day offset). */
 export interface SaSeriesPoint {
   from: string;
