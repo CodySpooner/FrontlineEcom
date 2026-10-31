@@ -845,6 +845,33 @@ export interface SaOrders {
   scope: SaFilterScope;
 }
 
+/** SA-100 (spec §8 Traffic and conversion): the site funnel's steps, in order. */
+export const SA_FUNNEL_STEPS = ['sessions', 'add_to_carts', 'checkouts', 'purchase_sessions'] as const;
+export type SaFunnelStepId = (typeof SA_FUNNEL_STEPS)[number];
+export interface SaFunnelStep {
+  id: SaFunnelStepId;
+  label: string;
+  /** Sessions (Shopify) or event counts (GA4's carts and checkouts): a step rate only between steps of one unit. */
+  unit: 'sessions' | 'events';
+  value: SaValue;
+}
+/** SA-100: the session dimensions `traffic_breakdown_daily` holds. */
+export const SA_TRAFFIC_BREAKDOWNS = ['source', 'device', 'country'] as const;
+export type SaTrafficBy = (typeof SA_TRAFFIC_BREAKDOWNS)[number];
+/** Sessions by one value, as the traffic source names it; `unknown` is what the values don't cover. */
+export interface SaTrafficRow {
+  value: string;
+  sessions: number;
+  /** Null when a day of it wasn't reported (GA4 never reports them). */
+  purchase_sessions: number | null;
+}
+/** A marketplace's own traffic (TikTok Shop visitors, Amazon sessions): never added to the site's sessions (decision 14). */
+export interface SaChannelTraffic {
+  channel: SaSourceKind;
+  label: string;
+  value: SaValue;
+}
+
 /** SA-96: what `GET /api/analytics/sales/breakdown?by=` splits net sales and units by. */
 export const SA_BREAKDOWNS = ['channel', 'product', 'collection', 'country'] as const;
 export type SaBreakdownBy = (typeof SA_BREAKDOWNS)[number];
