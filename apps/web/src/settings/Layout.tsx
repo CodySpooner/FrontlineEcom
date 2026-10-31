@@ -54,7 +54,8 @@ export function SettingsLayout({ section }: { section: SectionDef }) {
       <div className="-mx-[22px] -mb-8 flex min-h-[calc(100dvh-52px)] flex-col min-[900px]:flex-row">
         <Sidebar active={section.slug} />
         <section aria-labelledby="settings-title" className="min-w-0 flex-1">
-          <div className="grid max-w-[860px] gap-[18px] px-4 pt-5 pb-16 min-[900px]:px-9 min-[900px]:pt-[26px]">
+          {/* minmax(0, 1fr): a page's nowrap text (the data folder's path) can't widen the column past the screen. */}
+          <div className="grid max-w-[860px] grid-cols-[minmax(0,1fr)] gap-[18px] px-4 pt-5 pb-16 min-[900px]:px-9 min-[900px]:pt-[26px]">
             <header>
               <h2 id="settings-title" className="text-[20px] font-semibold tracking-[-.01em]">
                 {section.label}

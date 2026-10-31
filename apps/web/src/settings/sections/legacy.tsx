@@ -154,8 +154,8 @@ export function YourData() {
       sub="The database and encryption key live on this computer."
       action={version && <span className="shrink-0 text-xs text-muted tabular-nums">{version === 'dev' ? 'Development build' : `Version ${version}`}</span>}
     >
-      <div className="flex items-center gap-2">
-        <code className="min-w-0 flex-1 truncate rounded-md border border-line bg-bg-2 px-2.5 py-1.5 font-mono text-xs text-text-2" title={s.dataDir}>
+      <div className="flex flex-wrap items-center gap-2">
+        <code className="min-w-0 flex-[1_1_220px] rounded-md border border-line bg-bg-2 px-2.5 py-1.5 font-mono text-xs break-all text-text-2" title={s.dataDir}>
           {s.dataDir}
         </code>
         <Button size="sm" onClick={() => navigator.clipboard.writeText(s.dataDir).then(() => setCopied(true))}>
@@ -196,7 +196,7 @@ export function Backups() {
       ) : !q.data.length ? (
         <p className="text-xs text-muted">No backups yet. One is made every day; the newest 7 are kept.</p>
       ) : (
-        <ul className="grid gap-1 text-xs">
+        <ul className="grid grid-cols-[minmax(0,1fr)] gap-1 text-xs">
           {q.data.map((b) =>
             confirm === b.name ? (
               <li key={b.name} className="flex flex-wrap items-center gap-2 rounded-lg border border-line-2 bg-bg-2 px-2.5 py-2">
@@ -220,13 +220,13 @@ export function Backups() {
                   {when(b.createdAt)}
                 </span>
                 {b.name.endsWith('-before-update.db') && <Badge>Before update</Badge>}
-                <span className="ml-auto text-muted tabular-nums">{(b.size / 1e6).toFixed(1)} MB</span>
+                <span className="ml-auto shrink-0 text-muted tabular-nums">{(b.size / 1e6).toFixed(1)} MB</span>
                 <button
                   type="button"
                   disabled={restore.isPending}
                   onClick={() => setConfirm(b.name)}
                   aria-label={`Restore the backup from ${when(b.createdAt)}`}
-                  className="cursor-pointer text-muted hover:text-white disabled:cursor-default disabled:opacity-50"
+                  className="shrink-0 cursor-pointer text-muted hover:text-white disabled:cursor-default disabled:opacity-50"
                 >
                   Restore
                 </button>
