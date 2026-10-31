@@ -36,13 +36,16 @@ export const SUPPLIER_DAYS = 30;
 const SUPPLIED = (via: string) =>
   `EXISTS (SELECT 1 FROM ${via} x JOIN orders o ON o.store_id = x.store_id AND o.id = x.order_id WHERE x.store_id = p.store_id AND x.product_id = p.id AND o.supplier IS NOT NULL AND o.local_date >= ?)`;
 
+/** SA-82: days of tracked stock left at the cover window's rate; none for FBA, untracked or out, or under `COVER_MIN_UNITS` sold. */
+const coverOf = (p: Record<string, unknown>, sold: number) => (!p.fba && p.tracked && Number(p.inv) > 0 && sold >= COVER_MIN_UNITS ? Number(p.inv) / (sold / COVER_WINDOW) : undefined);
+
 /** SA-80: a product's stock now. FBA stock is Amazon's, a supplier's is theirs, untracked stock has no count: none is judged. */
 function stockState(p: Record<string, unknown>, sold: number): SaStockState {
   if (p.fba) return 'fba';
   if (p.supplier) return 'supplier';
   if (!p.tracked) return 'not_tracked';
   if (Number(p.inv) <= 0) return 'out';
-  return sold >= COVER_MIN_UNITS && Number(p.inv) / (sold / COVER_WINDOW) < COVER_DAYS ? 'low' : 'in_stock';
+  return (coverOf(p, sold) ?? Infinity) < COVER_DAYS ? 'low' : 'in_stock';
 }
 
 /** A product with no unit cost for itself, and none for one of its variants (or it has no variant rows). */
@@ -100,7 +103,7 @@ export function totals(db: Db, storeId: string, from: string, to: string, basis:
   return t;
 }
 
-type Sales = Record<'net_sales' | 'units' | 'refunds' | 'contribution', SaValue>;
+type Sales = Record<'net_sales' | 'units' | 'refunds' | 'refund_rate' | 'contribution', SaValue>;
 const cents = (n: number) => Math.round(n * 100) / 100;
 
 /**
@@ -113,7 +116,8 @@ function demoSplit(db: Db, storeId: string, from: string, to: string, basis: Ref
   const c = costMetrics(db, storeId, from, to, basis, slice).contribution_before_ads;
   const part = (k: number): Sales => {
     const of = (v: SaValue, round: (n: number) => number): SaValue => (v.value == null ? v : { ...v, value: round(v.value * k) });
-    return { net_sales: of(s.net_sales, cents), units: of(s.units, Math.round), refunds: of(s.refunds, cents), contribution: of(c, cents) };
+    // a share doesn't change a rate; a product that sold nothing has none
+    return { net_sales: of(s.net_sales, cents), units: of(s.units, Math.round), refunds: of(s.refunds, cents), refund_rate: k ? s.refund_rate : { ...s.refund_rate, value: null }, contribution: of(c, cents) };
   };
   const rows = new Map([...demoShares(db, storeId)].map(([id, k]) => [id, part(k)]));
   return (id: string) => rows.get(id) ?? part(0);
@@ -164,7 +168,12 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
   else if (filters.channel?.length) scope.ignored.push({ key: 'channel', reason: "Demo data isn't split by channel" });
   for (const k of ['market', 'segment'] as const) if (filters[k]?.length) scope.ignored.push({ key: k, reason: 'Not applied to listings yet' });
   if (query.cost === 'missing') where.push(demo ? 'coalesce(p.cost, 0) = 0' : MISSING_COST); // a demo store's costs are its catalog's
-  if (query.sync === 'failed') where.push("EXISTS (SELECT 1 FROM channel_listings c WHERE c.store_id = p.store_id AND c.product_id = p.id AND c.status = 'failed')");
+  if (query.sync === 'failed') {
+    // SA-82: with a channel filter, a failed listing on one of those channels (Needs attention's listing-sync link)
+    const on = filters.channel?.length ? ' AND c.channel IN (SELECT value FROM json_each(?))' : '';
+    where.push(`EXISTS (SELECT 1 FROM channel_listings c WHERE c.store_id = p.store_id AND c.product_id = p.id AND c.status = 'failed'${on})`);
+    if (on) params.push(JSON.stringify(filters.channel));
+  }
 
   // ponytail: the whole matching set is filtered and sorted in memory (20,000 products in the scale fixture); SQL when it isn't enough.
   const matched = db
@@ -219,7 +228,8 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
     const p = product.get(storeId, id)!;
     const slice = { ...(channels && { channels }), products: [id] };
     const sales = demoSales ? undefined : salesMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice);
-    const d = demoSales?.(id) ?? { net_sales: sales!.net_sales, units: sales!.units, refunds: sales!.refunds, contribution: costMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice).contribution_before_ads };
+    const d = demoSales?.(id) ?? { ...sales!, contribution: costMetrics(db, storeId, sp.period.from, sp.period.to, basis, slice).contribution_before_ads };
+    const cover = coverOf(byId.get(id)!, sold.get(id) ?? 0);
     const before = compare && (demoBefore?.(id).net_sales ?? salesMetrics(db, storeId, compare.from, compare.to, basis, { ...slice, ...(cut && { cut }) }).net_sales);
     return {
       id,
@@ -234,11 +244,13 @@ export function listings(db: Db, storeId: string, query: Query, sp: StorePeriod,
       compareAt: p.compare_at == null ? null : Number(p.compare_at),
       stock: p.stock == null ? null : Number(p.stock),
       stockState: state(byId.get(id)!),
+      ...(cover !== undefined && { coverDays: Math.round(cover * 10) / 10 }),
       channels: listed.all(storeId, id).map((c) => ({ channel: String(c.channel), status: String(c.status), error: c.error == null ? null : String(c.error) })),
       syncedAt: p.synced == null ? null : String(p.synced),
       netSales: d.net_sales,
       units: d.units,
       refunds: d.refunds,
+      refundRate: d.refund_rate,
       contribution: d.contribution,
       ...(before && { previousNetSales: before }),
     };

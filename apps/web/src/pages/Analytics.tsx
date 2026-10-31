@@ -5,6 +5,7 @@ import { Link } from 'react-router';
 import { settingsUrl, type SaDataset } from '@frontline/shared';
 import { useSaContext } from '../analytics/api';
 import { ContextBar } from '../analytics/ContextBar';
+import { ListingsTab } from '../analytics/ListingsTab';
 import { UnitCosts } from '../analytics/legacy';
 import { Overview } from '../analytics/Overview';
 import { useAnalyticsState, type AnalyticsPage } from '../analytics/state';
@@ -25,6 +26,7 @@ export const TABS: { value: string; label: string; datasets: SaDataset[]; render
       </>
     ),
   },
+  { value: 'listings', label: 'Listings & Products', datasets: ['catalog', 'inventory', 'orders', 'refunds'], render: (s) => <ListingsTab s={s} /> },
 ];
 
 export function Analytics() {

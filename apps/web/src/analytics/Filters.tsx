@@ -25,7 +25,7 @@ export function channelsOf(ctx: Pick<SaContext, 'platform' | 'channels'>) {
 
 const any = (f: SaFilters) => Object.values(f).some((v) => v?.length);
 
-function useFilters(s: S) {
+export function useFilters(s: S) {
   const toggle = (k: SaFilterKey, v: string) => {
     const cur = s.filters[k] ?? [];
     const next = cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v];
@@ -34,12 +34,13 @@ function useFilters(s: S) {
   return { toggle, has: (k: SaFilterKey, v: string) => !!s.filters[k]?.includes(v) };
 }
 
-function Option({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+/** A menu's checkable item; `radio` for a pick-one menu (the Listings tab's Stock and Sales). */
+export function Option({ on, onClick, radio, children }: { on: boolean; onClick: () => void; radio?: boolean; children: ReactNode }) {
   return (
     <button
       type="button"
       data-item
-      role="menuitemcheckbox"
+      role={radio ? 'menuitemradio' : 'menuitemcheckbox'}
       aria-checked={on}
       onClick={onClick}
       className={cx('flex w-full cursor-pointer items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] outline-none hover:bg-panel-2 hover:text-white focus-visible:bg-panel-2 focus-visible:text-white', on ? 'text-white' : 'text-text-2')}

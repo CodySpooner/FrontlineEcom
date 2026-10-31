@@ -7,7 +7,7 @@ import { seedDemo } from '../demo';
 import { costMetrics } from './costs';
 import { LEDGER_NOW, LEDGER_PERIODS, LEDGER_STORE, seedLedgerStore } from './fixture';
 import { contributions } from './contributions';
-import { listings } from './listings';
+import { COVER_WINDOW, coverUnits, listings } from './listings';
 import { computeMetricSet } from './metric-set';
 import { storePeriod, type StorePeriod } from './period';
 import { salesMetrics } from './sales';
@@ -77,7 +77,7 @@ describe('listings (SA-66)', () => {
       const rows = list(db, {}, {}, basis).rows.slice(0, 4);
       for (const r of rows) {
         const s = salesMetrics(db, LEDGER_STORE, P1.from, P1.to, basis, { products: [r.id] });
-        expect([r.netSales, r.units, r.refunds, r.contribution]).toEqual([s.net_sales, s.units, s.refunds, costMetrics(db, LEDGER_STORE, P1.from, P1.to, basis, { products: [r.id] }).contribution_before_ads]);
+        expect([r.netSales, r.units, r.refunds, r.refundRate, r.contribution]).toEqual([s.net_sales, s.units, s.refunds, s.refund_rate, costMetrics(db, LEDGER_STORE, P1.from, P1.to, basis, { products: [r.id] }).contribution_before_ads]);
       }
       for (const sort of ['units', 'net_sales', 'refunds'] as const) {
         const values = list(db, { sort }, {}, basis).rows.map((r) => ({ units: r.units, net_sales: r.netSales, refunds: r.refunds })[sort].value!);
@@ -171,6 +171,9 @@ describe('listings (SA-66)', () => {
     expect(Object.fromEntries(picked.rows.map((r) => [r.id, [r.stockState, r.variantsOut]]))).toEqual({
       '8001': ['low', 0], '8002': ['out', 1], '8003': ['in_stock', 1], 'tt-9001': ['in_stock', 0], x1: ['fba', 0], x2: ['not_tracked', 0], x3: ['in_stock', 0],
     });
+    const sold = coverUnits(db, LEDGER_STORE, p1(db).today, false);
+    const cover = (id: string, stock: number) => Math.round((stock / (sold.get(id)! / COVER_WINDOW)) * 10) / 10;
+    expect(Object.fromEntries(picked.rows.map((r) => [r.id, r.coverDays]))).toEqual({ '8001': cover('8001', 3), '8002': undefined, '8003': undefined, 'tt-9001': undefined, x1: undefined, x2: undefined, x3: undefined }); // SA-82: only with a rate (the mask sold 2)
     expect(ids(q({ stock: 'low' }))).toEqual(['8001']);
     expect(ids(q({ stock: 'out' }))).toEqual(['8002']);
     expect(ids(q({ stock: 'fba' }))).toEqual(['x1']);
@@ -185,6 +188,8 @@ describe('listings (SA-66)', () => {
     db.prepare("INSERT INTO unit_costs (store_id, product_id, variant_id, cost, currency, source, effective_from, recorded_at) VALUES (?, 'tt-9001', NULL, 4, 'USD', 'owner', '2026-10-01', '2026-10-01')").run(LEDGER_STORE);
     expect(ids(list(db, { status: 'all', cost: 'missing' }, { product: ['8001', '8002', '8003', 'tt-9001'] }))).toEqual(['8003']);
     expect(ids(q({ sync: 'failed' }))).toEqual(['tt-9001']);
+    expect(ids(list(db, { status: 'all', sync: 'failed' }, { channel: ['tiktok_shop'] }))).toEqual(['tt-9001']); // SA-82: on that channel
+    expect(list(db, { status: 'all', sync: 'failed' }, { channel: ['site'] }).total).toBe(0);
     expect(list(db, { stock: 'in_stock', sales: 'with' })).toMatchObject({ total: 2, counts: { active: 2, draft: 0, archived: 0, all: 2 }, variants: 4, channelListings: 2 });
 
     expect(list(db, { stock: 'wet' })).toBe('stock must be one of in_stock, low, out, not_tracked, fba, supplier, variants_out');

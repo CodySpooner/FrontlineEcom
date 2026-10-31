@@ -168,6 +168,12 @@ function useInvestigate(s: AnalyticsPage, onChart: (k: string) => void) {
     if (t.kind === 'sources') return { onClick: () => setParams((p) => (p.set('panel', 'sources'), p)), title: 'Open Data sources' };
     if (t.kind === 'metric') return { onClick: () => onChart(t.id === 'contribution_after_ads' ? 'contribution' : t.id), title: `Chart ${SA_METRICS[t.id].label.toLowerCase()}` };
     if (t.kind === 'orders') return { to: '/orders' };
+    // SA-82: that channel's failed listings, whatever their status (the rule counts them all)
+    if (t.kind === 'listings')
+      return {
+        onClick: () => setParams((p) => (p.set('tab', 'listings'), p.set('status', 'all'), p.set('sync', 'failed'), p.set('filters', JSON.stringify({ channel: [t.channel] })), p.delete('page'), p)),
+        title: 'Show the failed listings',
+      };
   };
 }
 
@@ -244,6 +250,10 @@ const TH = 'pb-1.5 text-right font-medium';
 /** SA-78: the period's four best sellers by net sales: the Listings table's own rows (listings API), so the numbers agree. */
 function TopProducts({ s, ctx }: { s: AnalyticsPage; ctx?: SaContext }) {
   const q = useSaListings(s.store, { ...periodParams(s), status: 'active', sort: 'net_sales:desc' });
+  const [params] = useSearchParams();
+  const all = new URLSearchParams(params);
+  all.set('tab', 'listings');
+  all.delete('page');
   const rows = q.data?.rows?.slice(0, 4);
   const val = (v: SaValue, f: (n: number) => string) => (v.value == null ? '–' : f(v.value));
   return (
@@ -252,6 +262,11 @@ function TopProducts({ s, ctx }: { s: AnalyticsPage; ctx?: SaContext }) {
       <div className="mb-3 flex items-baseline gap-2">
         <h2 className="font-display text-base font-semibold tracking-[.02em]">Top products</h2>
         <span className="text-xs text-muted">by net sales</span>
+        {q.data?.counts && (
+          <Link to={`?${all}`} className="ml-auto text-[11.5px] whitespace-nowrap underline decoration-line-3 underline-offset-[3px] hover:text-white">
+            All {q.data.counts.active.toLocaleString('en-US')} active listings
+          </Link>
+        )}
       </div>
       {q.isError ? (
         <ErrorState message="Couldn't load the top products." onRetry={() => q.refetch()} />

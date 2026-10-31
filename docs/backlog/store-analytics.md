@@ -1222,6 +1222,7 @@ reads: no new write scope, no write call.
     look doesn't change). Tabs Performance, Variants, Channels, Costs, Refunds, Insights; `product=` in the URL;
     focus returns to the row on close (`useFocusBack`).
   - Needs attention's product rows (SA-76) open the drawer instead of filtering the page to the product.
+  - `ListingsTab` already takes `onOpen(id)` (SA-82): pass it from `TABS` in `pages/Analytics.tsx` to make rows open.
   - Acceptance: tests: Esc closes and focus returns; the existing `Dialog` tests unchanged.
 
 - [ ] SA-89 **Performance tab** (the Listings board):
@@ -1658,6 +1659,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-30 SA-79 (shipped, unticked: the scale timing is under Blocked) The Overview tab is the board's grid: KPI strip; trend and What moved; Needs attention, Top products and the finding card (equal heights, Top products' "by net sales" beside its title as on the board). The legacy view is gone: the page renders only the legacy `UnitCosts` under the grid until SA-92 (`LegacyOverview` and the helpers only it used removed; the panels legacy.test.tsx covers stay with the file). `Overview.test.tsx`: a 502 from each of series, annotations, contributions, insights and listings shows that panel's error and retry while the others render, and the retry clears it. Filters.test now checks the filters reach the panels' requests (the legacy note that named every filter is gone). Browser at 1440×900 and 390 against `store-analytics-overview.png`: differences under Notes. scale.test.ts now times the Overview tab's six calls under `SA_SCALE=1` (annotations also joined the plan check).
 - 2026-10-31 SA-80 Listings API: each row's `stockState` (shared `SA_STOCK_STATES`: fba (a variant with inventory_policy fba: Amazon's stock), not_tracked, out (0 or below), low (under `COVER_DAYS` of cover at the last `COVER_WINDOW` full days' rate, from `COVER_MIN_UNITS` sold), in_stock; `variantsOut` stays the "<n> out" count). The cover constants and `coverUnits` moved from insights.ts to listings.ts, so the stock-cover rule and the state share them. New query filters (`SA_LISTING_FILTERS`, 400 with the allowed values otherwise): stock (a state or variants_out), sales (any, with, none: units in the period), cost=missing (no unit cost for the product and none for one of its variants; a demo store's catalog cost), sync=failed (a failed channel listing); channel and collection were already there. The whole matching set is filtered in memory before the sort, and the status counts, variants and channel listings follow every filter. Tests: each state (FBA ahead of tracked, the minimum sample), each filter, a combination with its counts, bad values, a demo store's costs (mutation-checked). Supplier-managed is SA-81.
 - 2026-10-31 SA-81 Supplier-managed stock: `supplier` joins `SA_STOCK_STATES` (and the stock filter). An untracked product with an order in the last `SUPPLIER_DAYS` (30) that names a supplier (through its order lines or per-product rows) is supplier-managed: stock null, no cover; a tracked product keeps its count whatever filled it, and an older or unnamed order leaves it not tracked. Test: each case and the filter (mutation-checked).
+- 2026-10-31 SA-82 Listings table (shipped, unticked: the browser check is under Blocked): `analytics/ListingsTab.tsx` as the "Listings & Products" tab. Quiet status Segmented with the API's counts, search, chips Channel and Collection (the page's filters), Stock, Sales and + More (missing unit cost, failed sync), the current-vs-period note, the board's default columns sorted by their headers (Units ↓ by default, `aria-sort`), and the footer with Previous and Next; each change goes back to page 1. Rows carry new `coverDays` ("38 · ~5 d") and `refundRate` (the refund rate metric, "$78 2.1%"). Rows open through an `onOpen` prop (↑/↓ between rows, Enter or a click) that SA-88 passes: until then they aren't interactive (decision 33). Needs attention's listing-sync row opens Listings with that channel's failed listings in every status (`sync=failed` now honours the channel filter), and Top products gets "All <n> active listings". Tests: every listing reached by paging, each cell, keyboard rows, the filters, sort, status and search reaching the API from page 1 (mutation-checked).
 
 ## Blocked
 - 2026-10-28 SA-35 Live check: Shopify. No Shopify store is connected (no `shopify:*` integration in this data dir). Needs: the owner connects a store (ideally the one also selling on TikTok Shop) on the Integrations screen; optional scopes `read_publications` and Level 2 customer data. Then compare 30 full days and five orders, read-only.
@@ -1668,6 +1670,7 @@ then its tab. A tab appears only with its item.
 - 2026-10-29 SA-56 Live check: TikTok Shop and dedupe. No TikTok Shop is connected (no `tiktok_shop:*` integration in this data dir). Needs: the owner connects TikTok Shop on a store whose site (Shopify or WooCommerce) is also connected; then compare 30 days with Seller Center and read the dedupe counts (reconcile's `dedupe`), GET only.
 - 2026-10-29 SA-59 Live check: ad networks. No Meta, Google Ads or TikTok Ads account is connected. Needs: the owner connects one; then compare 7 days of spend per network with its own report (GET only, never a write call) and record the marks.
 - 2026-10-30 SA-79 `SA_SCALE=1` timing of the Overview tab's calls. The run was stopped by Claude Code for low system memory while it seeded the scale store (with the dev servers), before any timing printed. Needs: enough free memory for the scale store; then `SA_SCALE=1 npx vitest run apps/server/src/store-analytics/scale.test.ts` from the root, record its "Overview tab, last 30 days" line in SA-79's Done line, and tick SA-79.
+- 2026-10-31 SA-82 browser check at 1440x900 (and 390 px) against `store-analytics-listings.png`: Claude Code stopped this worktree's Vite (5313) and API (8933) servers for low system memory on 2026-10-30 and they stay off until the owner asks for them again. Needs: the dev servers; then screenshot `/analytics?tab=listings` on a demo store, compare with the board, fix what differs and tick SA-82. Later UI items join this line until then.
 
 ## Notes
 
@@ -1737,6 +1740,14 @@ then its tab. A tab appears only with its item.
 - The demo stores show no channel split, no chart markers and one flag (an out-of-stock variant): that's their data, not
   missing UI. Their products all move by the store's change, since demo sales split by fixed shares (decision 30).
 - The legacy Unit costs panel sits under the grid (only when products lack a cost) until SA-92.
+
+### The Listings table against the board (SA-82)
+
+- No checkbox column, Columns or Export until SA-84 and SA-85; no expanded variant rows until SA-83; no highlighted
+  drawer row until SA-88 opens one (decision 33).
+- The tab label has no count: it would cost a listings request on every tab. Add it if the owner wants it.
+- "TikTok Shop only · 1 variant" waits for SA-91's product links; a red refund cell ("$348 9.1%") waits for the
+  refund-rate flag on the row (SA-93), so refunds read plain until then.
 
 ### Critic findings rejected or partly taken (with reasons)
 

@@ -94,8 +94,9 @@ const INSIGHTS: SaInsights = {
 };
 
 describe('Needs attention (SA-76)', () => {
-  it('the count, the rows by tone, and each row opening its record; a listing row waits for Listings', async () => {
-    const fetch = render(() => MOVED, () => INSIGHTS);
+  it("the count, the rows by tone, and each row opening its record; a listing row opens that channel's failed listings", async () => {
+    const page = { period: PERIOD, status: 'all', sort: 'units:desc', page: 1, pageSize: 25, total: 0, counts: { active: 0, draft: 0, archived: 0, all: 0 }, variants: 0, channelListings: 0, rows: [], scope: { applied: [], ignored: [] } };
+    const fetch = render(() => MOVED, () => INSIGHTS, () => page);
     const p = (await screen.findByRole('heading', { name: 'Needs attention' })).closest('section')!;
     const rows = await within(p).findAllByRole('listitem');
     expect(p.textContent).toContain('5 flags');
@@ -108,8 +109,6 @@ describe('Needs attention (SA-76)', () => {
     ]);
     expect(rows.map((r) => r.querySelector('i')!.className.match(/bg-\S+/)![0])).toEqual(['bg-amber', 'bg-red', 'bg-[#7fb2ff]', 'bg-red', 'bg-amber']);
     expect(within(rows[1]!).getByRole('link').getAttribute('href')).toBe('/orders');
-    expect(within(rows[2]!).queryByRole('link')).toBeNull();
-    expect(within(rows[2]!).queryByRole('button')).toBeNull(); // no Listings tab yet: no dead link
 
     fireEvent.click(within(rows[4]!).getByRole('button'));
     expect(await screen.findByRole('heading', { name: 'Contribution after ads' })).toBeTruthy(); // the chart shows it
@@ -124,6 +123,11 @@ describe('Needs attention (SA-76)', () => {
     await within(p).findAllByRole('listitem');
     expect(calls().some((u) => u.startsWith('/api/analytics/overview') && u.includes('"product":["8002"]'))).toBe(true);
     expect(calls().filter((u) => u.startsWith('/api/analytics/insights')).every((u) => !u.includes('filters'))).toBe(true); // the rules read the whole store
+
+    fireEvent.click(within((await within(p).findAllByRole('listitem'))[2]!).getByRole('button', { name: /TikTok Shop listing/ }));
+    const where = decodeURIComponent(screen.getByTestId('where').textContent!);
+    for (const kv of ['tab=listings', 'status=all', 'sync=failed', 'filters={"channel":["tiktok_shop"]}']) expect(where).toContain(kv); // the product filter goes
+    expect(await screen.findByRole('tabpanel', { name: 'Listings & Products' })).toBeTruthy();
   });
 
   it('How flags work lists every rule with its threshold, sample and datasets; nothing flagged says so; a failed load retries', async () => {
@@ -163,7 +167,7 @@ describe('Top products (SA-78)', () => {
   const ROWS = [row('8001', 'Vitamin C Glow Serum', 318, 10812, 7892), row('8002', 'Hydra Barrier Night Cream', 201, 8442, 9700), row('8003', 'Overnight Lip Mask', 274, 4932, 0), row('8004', 'Jade Facial Roller', null, null, 120), row('8005', 'Fifth', 1, 1, 1)];
 
   it("the listings API's first four by net sales, its own numbers: units, net sales and the change vs the comparison", async () => {
-    const fetch = render(() => MOVED, undefined, () => ({ rows: ROWS, scope: { applied: [], ignored: [] } }));
+    const fetch = render(() => MOVED, undefined, () => ({ rows: ROWS, counts: { active: 64, draft: 7, archived: 23, all: 94 }, scope: { applied: [], ignored: [] } }));
     const p = (await screen.findByRole('heading', { name: 'Top products' })).closest('section')!;
     const rows = (await within(p).findAllByRole('row')).slice(1);
     expect(rows.map((r) => [...r.querySelectorAll('td')].map((td) => td.textContent))).toEqual([
@@ -175,6 +179,7 @@ describe('Top products (SA-78)', () => {
     const url = decodeURIComponent(String(fetch.mock.calls.find((c) => String(c[0]).startsWith('/api/analytics/listings'))![0]));
     expect(url).toContain('status=active');
     expect(url).toContain('sort=net_sales:desc');
+    expect(within(p).getByRole('link', { name: 'All 64 active listings' }).getAttribute('href')).toBe('/analytics?store=a&tab=listings'); // SA-82
   });
 });
 

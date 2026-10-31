@@ -882,11 +882,15 @@ export interface SaListingRow {
   stock: number | null;
   /** SA-80. */
   stockState: SaStockState;
+  /** SA-82: days of stock left at the last 14 full days' rate; absent with no rate (untracked, FBA, out, too few sold). */
+  coverDays?: number;
   channels: { channel: string; status: string; error: string | null }[];
   syncedAt: string | null;
   netSales: SaValue;
   units: SaValue;
   refunds: SaValue;
+  /** SA-82: the refund rate metric's (refunded units ÷ units ordered) for this product. */
+  refundRate: SaValue;
   contribution: SaValue;
   /** SA-78: net sales over the comparison period, its last day cut like the KPI's; absent with no comparison. */
   previousNetSales?: SaValue;
